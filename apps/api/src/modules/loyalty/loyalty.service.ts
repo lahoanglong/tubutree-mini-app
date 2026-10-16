@@ -60,9 +60,14 @@ export class LoyaltyService {
    * Đối xứng với reverseOrderPoints.
    *
    * Lần cộng có thể tới muộn (DeliveredEffectsResyncCron chạy lại khi đường chính lỗi sau commit), nên trong tx khoá dòng đơn
-   * TRƯỚC rồi mới đọc trạng thái: đơn đã trả/huỷ thì lần đảo đã chạy mà không có gì để thu hồi — cộng lúc này là cho khách giữ
-   * điểm của đơn đã trả. Phần đã duyệt trả một phần lúc chưa cộng (lần trả đó không thu hồi được gì) cũng trừ ra. Khoá đơn rồi
-   * mới tới dòng users, cùng thứ tự với duyệt trả và lật trạng thái, nên không thêm chu trình khoá.
+   * TRƯỚC rồi mới đọc trạng thái, chủ đơn và số điểm: đơn đã trả/huỷ thì lần đảo đã chạy mà không có gì để thu hồi — cộng lúc
+   * này là cho khách giữ điểm của đơn đã trả; gộp phiên khách commit sau lần đọc ngoài tx thì đơn đã sang tài khoản thật, cộng
+   * cho dòng khách là mất hẳn (unique (reason, refId) chặn cộng lại). Phần đã duyệt trả một phần lúc chưa cộng (lần trả đó không
+   * thu hồi được gì) cũng trừ ra.
+   *
+   * Thứ tự khoá: dòng đơn rồi mới tới dòng users (FK của dòng sổ + cộng số dư). Mọi tx vừa ghi đơn vừa ghi users của cùng
+   * khách phải khoá theo chiều đó — duyệt trả, lật trạng thái, gộp phiên khách, xoá tài khoản (khoá đơn trước users); đường nào
+   * khoá users rồi mới ghi đơn của chính khách đó sẽ deadlock với lần cộng này.
    */
   async creditOrderPoints(orderId: string): Promise<boolean> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -73,40 +78,42 @@ export class LoyaltyService {
       await this.recalcTier(order.userId);
       return false;
     }
-    const reason = `ORDER_DELIVERED:${order.code}`;
 
-    const existed = await this.prisma.pointsTransaction.findFirst({
-      where: { userId: order.userId, reason },
-    });
+    // Theo đúng khoá của unique index (reason, refId), không theo userId: dòng sổ đi theo đơn khi gộp phiên khách.
+    const creditedRow = (code: string) =>
+      this.prisma.pointsTransaction.findFirst({ where: { reason: `ORDER_DELIVERED:${code}`, refId: order.id }, select: { userId: true } });
+    const existed = await creditedRow(order.code);
     if (existed) {
       // Đã cộng điểm ở lần gọi trước nhưng có thể đã crash TRƯỚC KHI recalcTier (dòng cuối
       // hàm này) kịp chạy — recalc lại ở đây để không kẹt vĩnh viễn không có tier.
-      await this.recalcTier(order.userId);
+      await this.recalcTier(existed.userId);
       return false;
     }
 
     const expiresAt = await this.pointsExpiresAt(new Date());
 
+    let owner = order.userId;
     let credited: boolean;
     try {
       credited = await this.prisma.$transaction(async (tx) => {
-        const [locked] = await tx.$queryRaw<{ status: string }[]>`
-          SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${order.id} FOR SHARE`;
-        if (locked?.status !== 'DELIVERED') return false;
-        const delta = order.pointsEarned - (await partialReturnTotals(tx, order.id)).pointsEarnedBack;
+        const [locked] = await tx.$queryRaw<{ status: string; userId: string; code: string; pointsEarned: number }[]>`
+          SELECT "status"::text AS "status", "userId", "code", "pointsEarned" FROM "orders" WHERE "id" = ${order.id} FOR SHARE`;
+        if (!locked || locked.status !== 'DELIVERED') return false;
+        owner = locked.userId;
+        const delta = locked.pointsEarned - (await partialReturnTotals(tx, order.id)).pointsEarnedBack;
         if (delta <= 0) return false;
         await tx.pointsTransaction.create({
           data: {
-            userId: order.userId,
+            userId: locked.userId,
             delta,
-            reason,
+            reason: `ORDER_DELIVERED:${locked.code}`,
             refType: 'ORDER',
             refId: order.id,
             expiresAt,
           },
         });
         await tx.user.update({
-          where: { id: order.userId },
+          where: { id: locked.userId },
           data: { pointsBalance: { increment: delta } },
         });
         return true;
@@ -117,24 +124,21 @@ export class LoyaltyService {
       // đã tồn tại (kẻ thắng race đã commit). P2002 từ constraint KHÁC (vd unique mới thêm sau này
       // trên cùng tx) → bản ghi reason vẫn chưa có → re-throw, KHÔNG nuốt lỗi thật làm mất điểm âm thầm.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        const already = await this.prisma.pointsTransaction.findFirst({
-          where: { userId: order.userId, reason },
-          select: { id: true },
-        });
+        const already = await creditedRow(order.code);
         if (already) {
           this.logger.debug(`creditOrderPoints idempotent skip order=${order.code}`);
           // Kẻ thắng race đã commit điểm nhưng có thể chưa/không kịp recalcTier — recalc ở
           // đây để bail idempotent không kéo theo mất tier vĩnh viễn.
-          await this.recalcTier(order.userId);
+          await this.recalcTier(already.userId);
           return false;
         }
         this.logger.error(
-          `creditOrderPoints P2002 KHÔNG khớp idempotency (reason=${reason}) order=${order.code} — re-throw`,
+          `creditOrderPoints P2002 KHÔNG khớp idempotency (reason=ORDER_DELIVERED:${order.code}) order=${order.code} — re-throw`,
         );
       }
       throw err;
     }
-    await this.recalcTier(order.userId);
+    await this.recalcTier(owner);
     return credited;
   }
 

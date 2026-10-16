@@ -1,7 +1,7 @@
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
 import { OpsEmailService } from '../../src/modules/ops/ops-email.service';
-import { createOrder, createUser, setConfig } from './helpers';
+import { createOrder, createUser, markDeliveredEffectsDone, setConfig } from './helpers';
 
 /**
  * r8-email-alerts trên Postgres THẬT: email là kênh thứ hai của báo động vận hành, gửi đúng những lần webhook gửi (cùng trí
@@ -84,6 +84,7 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
   });
 
   beforeEach(async () => {
+    await markDeliveredEffectsDone(prisma);
     notify.mockClear();
     fetchMock.mockReset().mockResolvedValue({ ok: true, status: 200 });
     sendMail.mockReset().mockResolvedValue({});
@@ -95,7 +96,6 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
     await prisma.opsHealthState.deleteMany({});
     await prisma.pancakeWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
     await prisma.gomdonWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
-    await prisma.order.updateMany({ where: { status: 'DELIVERED', deliveredEffectsAt: null }, data: { deliveredEffectsAt: new Date() } });
     await prisma.order.updateMany({ where: { id: { in: created } }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
   });
 

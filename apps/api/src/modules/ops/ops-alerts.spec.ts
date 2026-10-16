@@ -25,7 +25,7 @@ const healthy: ProblemInput = {
     attentionRefs: [],
   },
   queues: { ok: true, items: [{ name: 'pancake-push', failedLastHour: 0 }] },
-  orders: { deliveredEffectsPending: 0, deliveredEffectsRefs: [], graceMinutes: 10 },
+  orders: { deliveredEffectsPending: 0, deliveredEffectsRefs: [], deliveredEffectsStale: 0, graceMinutes: 10, windowDays: 14 },
 };
 
 describe('opsProblems (PLATFORM-5)', () => {
@@ -128,22 +128,38 @@ describe('lời báo động nêu việc cụ thể (R2-PLATFORM-1, R2-GOMDON-4)
     expect(p).toMatchObject({ key: 'pancake.attention', items: { count: 3, refs: ['TUBU1', 'TUBU2', 'TUBU3'] } });
   });
 
-  it('đơn đã giao chưa xong việc sau giao → một sự cố kèm mã đơn, kể cả khi Pancake/Gomdon chưa cấu hình; không phải hàng việc (không báo lại mỗi đơn mới)', () => {
-    const problems = opsProblems(
-      {
-        ...healthy,
-        pancake: { ...healthy.pancake, configured: false },
-        gomdon: { ...healthy.gomdon, configured: false },
-        orders: { deliveredEffectsPending: 2, deliveredEffectsRefs: ['TUBU7', 'TUBU8'], graceMinutes: 10 },
-      },
-      T,
-    );
+  it('đơn đã giao chưa xong việc sau giao → một sự cố kèm mã đơn, kể cả khi Pancake/Gomdon chưa cấu hình; nói thật đơn nào cron tự chạy lại, đơn nào phải chạy tay', () => {
+    const input = (pending: number, stale: number, refs: string[]): ProblemInput => ({
+      ...healthy,
+      pancake: { ...healthy.pancake, configured: false },
+      gomdon: { ...healthy.gomdon, configured: false },
+      orders: { deliveredEffectsPending: pending, deliveredEffectsRefs: refs, deliveredEffectsStale: stale, graceMinutes: 10, windowDays: 14 },
+    });
+    const problems = opsProblems(input(2, 0, ['TUBU7', 'TUBU8']), T);
     expect(problems).toHaveLength(1);
     const [p] = problems;
     expect(p?.key).toBe('orders.delivered_effects');
     expect(p?.message).toContain('2 đơn đã giao chưa xong việc sau giao');
     expect(p?.message).toContain('quá 10 phút: TUBU7, TUBU8');
-    expect(p?.items).toBeUndefined();
+    expect(p?.message).toContain('tự chạy lại mỗi 10 phút');
+    expect(p?.message).not.toContain('KHÔNG tự chạy lại');
+    expect(p?.items).toEqual({ count: 2, refs: ['TUBU7', 'TUBU8'] });
+
+    const [old] = opsProblems(input(1, 1, ['TUBU1']), T);
+    expect(old?.message).not.toContain('tự chạy lại mỗi 10 phút');
+    expect(old?.message).toContain('quá 14 ngày hệ thống KHÔNG tự chạy lại nữa');
+    expect(old?.message).toContain('/resync-delivered-effects');
+  });
+
+  it('đơn mới kẹt việc sau giao trong lúc sự cố còn mở → báo lại ngay (hàng việc), không chờ giờ nhắc', () => {
+    const t0 = new Date('2026-10-16T01:00:00.000Z');
+    const at = (min: number) => new Date(t0.getTime() + min * 60_000);
+    const problem = (refs: string[]) =>
+      opsProblems({ ...healthy, orders: { deliveredEffectsPending: refs.length, deliveredEffectsRefs: refs, deliveredEffectsStale: 0, graceMinutes: 10, windowDays: 14 } }, T);
+    const first = decideAlert(null, problem(['TUBU1']), at(0), 6);
+    expect(first.send).toBe('ALERT');
+    expect(decideAlert(first.next, problem(['TUBU1']), at(5), 6).send).toBeNull();
+    expect(decideAlert(first.next, problem(['TUBU1', 'TUBU2']), at(5), 6).send).toBe('ALERT');
   });
 });
 

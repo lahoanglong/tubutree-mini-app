@@ -135,7 +135,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         update: jest.fn(),
       },
       membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
-      $queryRaw: jest.fn().mockResolvedValue([{ status: lockedStatus }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ status: lockedStatus, ...(order as object) }]),
     };
     const txn = jest.fn(async (cb: (t: unknown) => unknown) => cb(prisma));
     prisma.$transaction = txn;
@@ -161,6 +161,14 @@ describe('LoyaltyService.creditOrderPoints', () => {
     await expect(new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1')).resolves.toBe(true);
     expect(txn).toHaveBeenCalledTimes(1);
     expect(created(prisma)).toEqual([expect.objectContaining({ delta: 50, reason: 'ORDER_DELIVERED:C1' })]);
+  });
+
+  it('chủ đơn đọc dưới khoá dòng đơn (gộp phiên khách commit sau lần đọc ngoài tx) → cộng cho chủ hiện tại', async () => {
+    const { prisma } = prismaFor({ id: 'o1', code: 'C1', userId: 'guest', pointsEarned: 50 });
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ status: 'DELIVERED', id: 'o1', code: 'C1', userId: 'target', pointsEarned: 50 }]);
+    await expect(new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1')).resolves.toBe(true);
+    expect(created(prisma)).toEqual([expect.objectContaining({ userId: 'target', delta: 50 })]);
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'target' } }));
   });
 
   it('cộng muộn (cron chạy lại) mà đơn đã trả/huỷ → không cộng: lần đảo đã chạy khi chưa có gì để thu hồi', async () => {

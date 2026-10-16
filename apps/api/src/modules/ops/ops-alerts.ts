@@ -57,7 +57,10 @@ export interface ProblemInput {
     /** Đơn đã giao quá thời gian chờ mà việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) chưa xong. */
     deliveredEffectsPending: number;
     deliveredEffectsRefs: string[];
+    /** Phần trong số trên giao quá `windowDays` ngày: cron không tự chạy lại nữa, phải chạy lại tay. */
+    deliveredEffectsStale: number;
     graceMinutes: number;
+    windowDays: number;
   };
 }
 
@@ -143,13 +146,21 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
       });
     }
   }
-  if (s.orders.deliveredEffectsPending > 0) {
+  const o = s.orders;
+  if (o.deliveredEffectsPending > 0) {
+    const recent = o.deliveredEffectsPending - o.deliveredEffectsStale;
+    const how = [
+      recent > 0 ? `${recent} đơn giao trong ${o.windowDays} ngày hệ thống tự chạy lại mỗi 10 phút, còn mãi thì xem log lỗi của đơn` : '',
+      o.deliveredEffectsStale > 0
+        ? `${o.deliveredEffectsStale} đơn giao quá ${o.windowDays} ngày hệ thống KHÔNG tự chạy lại nữa — chạy lại tay: POST /admin/orders/<mã>/resync-delivered-effects`
+        : '',
+    ].filter(Boolean);
     out.push({
       key: 'orders.delivered_effects',
       message:
-        `${s.orders.deliveredEffectsPending} đơn đã giao chưa xong việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) ` +
-        `quá ${s.orders.graceMinutes} phút${refList(s.orders.deliveredEffectsRefs, s.orders.deliveredEffectsPending)} — hệ thống tự chạy lại ` +
-        'mỗi 10 phút; còn mãi thì xem log lỗi của đơn',
+        `${o.deliveredEffectsPending} đơn đã giao chưa xong việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) ` +
+        `quá ${o.graceMinutes} phút${refList(o.deliveredEffectsRefs, o.deliveredEffectsPending)} — ${how.join('; ')}`,
+      items: { count: o.deliveredEffectsPending, refs: o.deliveredEffectsRefs },
     });
   }
   if (!s.queues.ok) {

@@ -215,18 +215,18 @@ export class RewardPointsService {
     ]);
     if (!(reward > 0)) return false;
 
-    const granted = await this.prisma.$transaction(async (tx): Promise<boolean | 'STALE'> => {
+    const granted = await this.prisma.$transaction(async (tx): Promise<boolean | 'STALE' | 'ALREADY'> => {
       await lockReferee(tx, refereeId);
       // Gộp khách đổi referredById của người được mời dưới khoá này: người mời đọc ở trên có thể là dòng khách vừa gộp.
       const fresh = await tx.user.findUnique({ where: { id: refereeId }, select: { referredById: true } });
       if ((fresh?.referredById ? await resolveMergedUserId(tx, fresh.referredById) : null) !== referrerId) return 'STALE';
       if (await hasReferralEntry(tx, [`${REFERRAL_ORDER2_PREFIX}${refereeId}`, `${LEGACY_REFERRAL_CASHBACK_PREFIX}${refereeId}`])) {
-        return false;
+        return 'ALREADY';
       }
       // Đơn nhận về từ một phiên khách đã gộp có thể đã dùng để thưởng dưới id khách. Cùng người mời
       // ⇒ đó là cùng một người được mời đã được thưởng; khác người mời thì chỉ bỏ các đơn đó ra.
       const rewardedOrders = await findReferralRewardedOrders(tx, refereeId);
-      if (rewardedOrders.some((r) => r.referrerId === referrerId)) return false;
+      if (rewardedOrders.some((r) => r.referrerId === referrerId)) return 'ALREADY';
       // Hai đơn đầu tiên (createdAt, id) không bị loại; đọc theo trang (keyset) và dừng khi đủ hai, để chi phí trong lúc
       // giữ khoá người được mời không tăng theo số đơn của họ.
       const picked: { id: string; createdAt: Date }[] = [];
@@ -268,8 +268,10 @@ export class RewardPointsService {
       return ok;
     });
     if (granted === 'STALE') return retried ? false : this.grantReferralOrderReward(refereeId, true);
-    if (granted) await this.awardReferralMilestones(referrerId);
-    return granted;
+    // Đã thưởng từ trước vẫn xét mốc: lần cấp trước có thể đã commit thưởng mà lỗi ở bước mốc (chạy riêng tx), và lần gọi lại
+    // (cron chạy lại việc sau giao) là cơ hội duy nhất để cấp bù. Mốc idempotent theo reason từng đời.
+    if (granted === true || granted === 'ALREADY') await this.awardReferralMilestones(referrerId);
+    return granted === true;
   }
 
   /**

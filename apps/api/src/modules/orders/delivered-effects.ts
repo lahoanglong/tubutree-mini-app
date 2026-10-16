@@ -14,6 +14,15 @@ export function deliveredEffectsPendingWhere(now: Date): Prisma.OrderWhereInput 
   };
 }
 
+/** Đơn chưa xong việc sau giao mà đã ra khỏi cửa sổ cron: chỉ còn chạy lại tay (POST /admin/orders/:id/resync-delivered-effects). */
+export function deliveredEffectsStaleWhere(now: Date): Prisma.OrderWhereInput {
+  return {
+    status: 'DELIVERED',
+    deliveredEffectsAt: null,
+    deliveredAt: { lt: new Date(now.getTime() - DELIVERED_EFFECTS_WINDOW_DAYS * 86_400_000) },
+  };
+}
+
 /** Phần cron tự sửa: như trên, giới hạn trong cửa sổ ngày. */
 export function deliveredEffectsResyncWhere(now: Date): Prisma.OrderWhereInput {
   return {

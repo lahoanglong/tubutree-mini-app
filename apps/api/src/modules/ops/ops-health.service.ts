@@ -16,7 +16,12 @@ import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/p
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
-import { DELIVERED_EFFECTS_GRACE_MINUTES, deliveredEffectsPendingWhere } from '../orders/delivered-effects';
+import {
+  DELIVERED_EFFECTS_GRACE_MINUTES,
+  DELIVERED_EFFECTS_WINDOW_DAYS,
+  deliveredEffectsPendingWhere,
+  deliveredEffectsStaleWhere,
+} from '../orders/delivered-effects';
 import {
   alertWebhookBody,
   decideAlert,
@@ -180,7 +185,9 @@ export class OpsHealthService {
         orders: {
           deliveredEffectsPending: orders.deliveredEffectsPending,
           deliveredEffectsRefs: refs(orders.deliveredEffectsOrders, (o) => o.code),
+          deliveredEffectsStale: orders.deliveredEffectsStale,
           graceMinutes: DELIVERED_EFFECTS_GRACE_MINUTES,
+          windowDays: DELIVERED_EFFECTS_WINDOW_DAYS,
         },
       },
       t,
@@ -375,8 +382,9 @@ export class OpsHealthService {
 
   private async orderHealth(now: Date) {
     const where = deliveredEffectsPendingWhere(now);
-    const [deliveredEffectsPending, deliveredEffectsOrders] = await Promise.all([
+    const [deliveredEffectsPending, deliveredEffectsStale, deliveredEffectsOrders] = await Promise.all([
       this.prisma.order.count({ where }),
+      this.prisma.order.count({ where: deliveredEffectsStaleWhere(now) }),
       this.prisma.order.findMany({
         where,
         orderBy: { deliveredAt: 'asc' },
@@ -384,7 +392,7 @@ export class OpsHealthService {
         select: { id: true, code: true, deliveredAt: true },
       }),
     ]);
-    return { deliveredEffectsPending, deliveredEffectsOrders };
+    return { deliveredEffectsPending, deliveredEffectsStale, deliveredEffectsOrders };
   }
 
   private async queueHealth(now: Date): Promise<QueueHealth> {

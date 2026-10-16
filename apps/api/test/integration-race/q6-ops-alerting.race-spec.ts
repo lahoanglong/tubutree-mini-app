@@ -6,7 +6,7 @@ import { PancakeEventsReconcileService } from '../../src/modules/integrations/pa
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { GomdonReconcileService } from '../../src/modules/integrations/gomdon/gomdon-reconcile.service';
 import { GomdonWebhookService } from '../../src/modules/integrations/gomdon/gomdon-webhook.service';
-import { createOrder, createUser, setConfig } from './helpers';
+import { createOrder, createUser, markDeliveredEffectsDone, setConfig } from './helpers';
 
 /**
  * q6-platform-ops trên Postgres THẬT: báo động webhook lỗi nêu mã đơn và không tự "đã ổn" sau 24 giờ khi sự kiện còn
@@ -62,6 +62,7 @@ describe('q6 báo động vận hành (real Postgres)', () => {
   });
 
   beforeEach(async () => {
+    await markDeliveredEffectsDone(prisma);
     notify.mockClear();
     fetchMock.mockReset();
     queueAdd.mockClear();

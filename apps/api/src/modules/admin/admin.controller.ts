@@ -544,6 +544,15 @@ export class AdminController {
     return this.admin.orderStatusHistory(id);
   }
 
+  /**
+   * Chạy lại việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) của một đơn DELIVERED chưa xong — kể cả đơn
+   * giao quá cửa sổ cron. Chỉ ADMIN (kế thừa class), idempotent: đơn đã xong trả ALREADY_DONE.
+   */
+  @Post('orders/:id/resync-delivered-effects')
+  resyncDeliveredEffects(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.admin.resyncDeliveredEffects(adminId, id);
+  }
+
   /** "Đã nhận tiền" cho đơn chuyển khoản lẻ: UNPAID → PAID (PENDING_PAYMENT → CONFIRMED), idempotent. */
   @Post('orders/:id/confirm-payment')
   confirmOrderPayment(

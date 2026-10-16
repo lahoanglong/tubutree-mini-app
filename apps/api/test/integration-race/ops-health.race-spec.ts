@@ -2,7 +2,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
 import { OpsInboxService } from '../../src/modules/ops/ops-inbox.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
-import { createOrder, createUser, setConfig } from './helpers';
+import { createOrder, createUser, markDeliveredEffectsDone, setConfig } from './helpers';
 
 /**
  * PLATFORM-5 + "Việc cần xử lý" trên Postgres THẬT: ảnh chụp sức khoẻ thấy đơn kẹt chưa lên Pancake, webhook lỗi,
@@ -58,6 +58,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
   });
 
   beforeEach(async () => {
+    await markDeliveredEffectsDone(prisma);
     notify.mockClear();
     fetchMock.mockClear();
     await prisma.opsHealthState.deleteMany({});

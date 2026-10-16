@@ -92,9 +92,11 @@ export class DeliveredEffectsResyncCron {
           const res = await this.orderStatus.resyncDeliveredEffects(o.id);
           if (res.outcome === 'DONE') {
             repaired += 1;
+            // Đơn do pod cũ giao trong lúc triển khai (chưa ghi mốc) cũng qua đây với mọi việc đã xong: lời báo nói rõ lần này
+            // có làm gì không, không mặc định là có sự cố.
             this.logger.warn(
-              `Đơn ${o.code} giao lúc ${o.deliveredAt?.toISOString()} chưa xong việc sau giao — đã chạy lại ` +
-                `(cộng điểm: ${res.pointsCredited ? 'có' : 'không/đã có'}, khoá hoa hồng: ${res.commissionsLocked}).`,
+              `Chạy lại việc sau giao cho đơn ${o.code} (giao lúc ${o.deliveredAt?.toISOString()}): ` +
+                `cộng điểm ${res.pointsCredited ? 'vừa cộng' : 'đã có từ trước/không có'}, khoá hoa hồng ${res.commissionsLocked} dòng.`,
             );
           } else if (res.outcome === 'INCOMPLETE') {
             failed += 1;

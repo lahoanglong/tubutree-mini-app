@@ -22,7 +22,7 @@ import { DeliveredEffectsResyncCron } from '../../src/modules/orders/delivered-e
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
-import { createOrder, createUser, setConfig, sleep, summarize, warmPool } from './helpers';
+import { createOrder, createUser, markDeliveredEffectsDone, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const EARNED = 30;
 const REWARD = 5;
@@ -123,8 +123,8 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
   });
 
   beforeEach(async () => {
-    // DB dùng chung: đơn DELIVERED của spec khác (dựng thẳng, không qua setStatus) không phải việc của spec này.
-    await prisma.order.updateMany({ where: { status: 'DELIVERED', deliveredEffectsAt: null }, data: { deliveredEffectsAt: new Date() } });
+    // DB dùng chung: đơn DELIVERED chưa xong việc của spec khác không phải việc của spec này.
+    await markDeliveredEffectsDone(prisma);
     await prisma.opsHealthState.deleteMany({});
   });
 
@@ -262,9 +262,42 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
     await expectAllEffectsOnce(s);
   });
 
+  it('mốc thưởng giới thiệu lỗi sau khi thưởng đơn 2 đã ghi → chưa có mốc xong; cron xét lại mốc: +5 và +7 đúng một lần', async () => {
+    const sysConfig = moduleRef.get(SystemConfigService);
+    const MILESTONE = 7;
+    await setConfig(prisma, 'referral.milestones_points', [{ count: 1, bonusPoints: MILESTONE }]);
+    (sysConfig as unknown as { cache: Map<string, unknown> }).cache.delete('referral.milestones_points');
+    try {
+      const s = await scenario();
+      const rewards = moduleRef.get(RewardPointsService);
+      spy(rewards as unknown as { awardReferralMilestones: () => Promise<void> }, 'awardReferralMilestones').mockRejectedValueOnce(
+        new Error('deadlock detected'),
+      );
+      await orderStatus.setStatus(s.order.id, 'DELIVERED');
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).deliveredEffectsAt).toBeNull();
+      const referrerRows = () =>
+        prisma.pointsTransaction.findMany({ where: { userId: s.referrer.id }, select: { reason: true, delta: true }, orderBy: { delta: 'asc' } });
+      expect(await referrerRows()).toEqual([{ reason: `${REFERRAL_ORDER2_PREFIX}${s.customer.id}`, delta: REWARD }]);
+
+      await expect(cron.resyncPending(later(15))).resolves.toMatchObject({ repaired: 1, failed: 0 });
+      const after = await referrerRows();
+      expect(after.map((r) => r.delta)).toEqual([REWARD, MILESTONE]);
+      expect(after[1]?.reason.startsWith('REFERRAL_MILESTONE:')).toBe(true);
+      expect(await ledgerMatches(s.referrer.id)).toBe(REWARD + MILESTONE);
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).deliveredEffectsAt).not.toBeNull();
+
+      await expect(cron.resyncPending(later(25))).resolves.toMatchObject({ scanned: 0 });
+      await orderStatus.setStatus(s.order.id, 'DELIVERED');
+      expect(await referrerRows()).toEqual(after);
+    } finally {
+      await setConfig(prisma, 'referral.milestones_points', []);
+      (sysConfig as unknown as { cache: Map<string, unknown> }).cache.delete('referral.milestones_points');
+    }
+  });
+
   it('chết giữa chừng sau commit (lật xong, chưa việc nào chạy) → cron sửa; gọi lại DELIVERED cũng sửa ngay', async () => {
     const crashed = async () => {
-      const s = await scenario({ status: 'DELIVERED', deliveredAt: new Date(Date.now() - 30 * MIN) });
+      const s = await scenario({ status: 'DELIVERED', deliveredEffectsAt: null, deliveredAt: new Date(Date.now() - 30 * MIN) });
       await expectNoEffects(s);
       return s;
     };
@@ -328,9 +361,9 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
   });
 
   it('chỉ đơn giao trong 14 ngày, quá 10 phút, chưa có mốc: đơn cũ hơn, đơn đã có mốc, đơn vừa giao không bị đụng', async () => {
-    const old = await scenario({ status: 'DELIVERED', deliveredAt: new Date(Date.now() - 20 * DAY) });
+    const old = await scenario({ status: 'DELIVERED', deliveredEffectsAt: null, deliveredAt: new Date(Date.now() - 20 * DAY) });
     const marked = await scenario({ status: 'DELIVERED', deliveredAt: new Date(Date.now() - DAY), deliveredEffectsAt: new Date(Date.now() - DAY) });
-    const fresh = await scenario({ status: 'DELIVERED', deliveredAt: new Date(Date.now() - 2 * MIN) });
+    const fresh = await scenario({ status: 'DELIVERED', deliveredEffectsAt: null, deliveredAt: new Date(Date.now() - 2 * MIN) });
     const returned = await scenario({ status: 'RETURNED', deliveredAt: new Date(Date.now() - DAY) });
 
     const resync = spy(orderStatus, 'resyncDeliveredEffects');
@@ -343,7 +376,13 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
     // Đơn quá cửa sổ cron không tự sửa nữa nên vẫn hiện ở Sức khoẻ hệ thống cho người xử lý.
     const snap = await health.snapshot();
     expect(snap.orders.deliveredEffectsOrders.map((o) => o.code)).toEqual([old.order.code]);
-    await prisma.order.update({ where: { id: old.order.id }, data: { deliveredEffectsAt: new Date() } });
+    expect(snap.orders.deliveredEffectsStale).toBe(1);
+    expect(snap.problems.find((p) => p.key === PROBLEM)?.message).toContain('KHÔNG tự chạy lại');
+    // Đường chạy lại tay (endpoint admin) không giới hạn cửa sổ ngày.
+    await expect(orderStatus.resyncDeliveredEffects(old.order.id)).resolves.toMatchObject({ outcome: 'DONE', pointsCredited: true, commissionsLocked: 1 });
+    await expect(orderStatus.resyncDeliveredEffects(old.order.code)).resolves.toEqual({ outcome: 'ALREADY_DONE' });
+    expect(await ledgerMatches(old.customer.id)).toBe(EARNED);
+    expect((await health.snapshot()).orders.deliveredEffectsPending).toBe(0);
   });
 
   it('đơn đã trả/huỷ không bao giờ được cộng điểm muộn; đơn đã duyệt trả một phần chỉ được cộng phần còn lại', async () => {
@@ -352,7 +391,7 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
     await orderStatus.resyncDeliveredEffects(returned.order.id);
     expect(await prisma.pointsTransaction.count({ where: { userId: returned.customer.id } })).toBe(0);
 
-    const partial = await scenario({ status: 'DELIVERED', deliveredAt: new Date(Date.now() - DAY) });
+    const partial = await scenario({ status: 'DELIVERED', deliveredEffectsAt: null, deliveredAt: new Date(Date.now() - DAY) });
     // Duyệt trả một phần lúc điểm chưa được cộng: không thu hồi được gì, nhưng phần chia (10 điểm) đã ghi vào yêu cầu.
     await prisma.returnRequest.create({
       data: { orderId: partial.order.id, userId: partial.customer.id, reason: 'IT', status: 'APPROVED', fullReturn: false, pointsReversed: 10 },
@@ -368,7 +407,7 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
     await orderStatus.setStatus(happy.order.id, 'DELIVERED');
     expect((await prisma.order.findUniqueOrThrow({ where: { id: happy.order.id } })).deliveredEffectsAt).not.toBeNull();
 
-    const crashed = await scenario({ status: 'DELIVERED', pointsEarned: 0, deliveredAt: new Date(Date.now() - 30 * MIN) });
+    const crashed = await scenario({ status: 'DELIVERED', deliveredEffectsAt: null, pointsEarned: 0, deliveredAt: new Date(Date.now() - 30 * MIN) });
     await expect(cron.resyncPending()).resolves.toMatchObject({ scanned: 1, repaired: 1 });
     expect((await prisma.order.findUniqueOrThrow({ where: { id: crashed.order.id } })).deliveredEffectsAt).not.toBeNull();
     expect((await prisma.commission.findFirstOrThrow({ where: { orderId: crashed.order.id } })).status).toBe('LOCKED');
@@ -382,13 +421,13 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
   it('migration: mọi đơn đã giao/đã trả cũ được đánh dấu xong (không bao giờ bị cron chạy lại); chạy lại không đổi gì', async () => {
     const u = await createUser(prisma, {});
     const deliveredAt = new Date(Date.now() - 3 * DAY);
-    const delivered = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredAt });
-    const legacy = await createOrder(prisma, { userId: u.id, status: 'DELIVERED' });
+    const delivered = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredEffectsAt: null, deliveredAt });
+    const legacy = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredEffectsAt: null });
     const returned = await createOrder(prisma, { userId: u.id, status: 'RETURNED', deliveredAt });
     const open = await createOrder(prisma, { userId: u.id, status: 'SHIPPING' });
     const ids = [delivered.id, legacy.id, returned.id, open.id];
 
-    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261016200000_r11_delivered_effects_marker/migration.sql'), 'utf8');
+    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261016210000_r11_delivered_effects_marker/migration.sql'), 'utf8');
     const statements = sql
       .split(/;\s*$/m)
       .map((s) => s.replace(/^\s*--.*$/gm, '').trim())

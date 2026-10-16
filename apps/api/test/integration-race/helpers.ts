@@ -63,11 +63,18 @@ export async function setConfig(prisma: PrismaService, key: string, value: Prism
   });
 }
 
+/**
+ * Đơn dựng thẳng ở DELIVERED mặc định đã xong việc sau giao (có mốc deliveredEffectsAt), như đơn đi qua setStatus thật: nếu không,
+ * DB dùng chung đầy đơn "giao mà chưa xong việc" và cron chạy lại / Sức khoẻ hệ thống của spec khác thấy chúng. Ca cần đơn chưa
+ * xong thì truyền `deliveredEffectsAt: null`.
+ */
 export async function createOrder(
   prisma: PrismaService,
   data: Partial<Prisma.OrderUncheckedCreateInput> & { userId: string },
 ) {
   const total = data.total ?? 100_000;
+  const effectsDone =
+    data.status === 'DELIVERED' && data.deliveredEffectsAt === undefined ? { deliveredEffectsAt: data.deliveredAt ?? new Date() } : {};
   return prisma.order.create({
     data: {
       code: `IT${Date.now()}${randCode(5)}`,
@@ -88,9 +95,20 @@ export async function createOrder(
         districtCode: '',
         wardCode: '00001',
       },
+      ...effectsDone,
       ...data,
     },
   });
+}
+
+/**
+ * Đánh dấu xong việc sau giao cho mọi đơn DELIVERED còn thiếu mốc (đơn spec khác lật thẳng bằng prisma.order.update hoặc giao
+ * qua setStatus với việc sau giao giả lập lỗi). Spec đọc Sức khoẻ hệ thống gọi trước mỗi ca để chỉ thấy sự cố của chính nó.
+ */
+export async function markDeliveredEffectsDone(prisma: PrismaService) {
+  await prisma.$executeRaw`
+    UPDATE "orders" SET "deliveredEffectsAt" = COALESCE("deliveredAt", now())
+     WHERE "status" = 'DELIVERED' AND "deliveredEffectsAt" IS NULL`;
 }
 
 /** Tóm tắt Promise.allSettled: số fulfilled/rejected + message các lỗi (để in khi assert fail). */

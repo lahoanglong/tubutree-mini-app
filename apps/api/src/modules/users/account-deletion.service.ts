@@ -89,7 +89,7 @@ export class AccountDeletionService {
 
   /**
    * Idempotent: yêu cầu đã RESOLVED thì trả `alreadyProcessed: true`, không chạy lại. Khoá dòng yêu
-   * cầu rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
+   * cầu, các đơn của khách rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
    * tiền vào users (vd cộng Ví) phải chờ lần kiểm số dư này xong.
    */
   async process(requestId: string, adminId: string, adminNote?: string) {
@@ -102,6 +102,9 @@ export class AccountDeletionService {
         return { alreadyProcessed: true, requestId, userId: request.userId, reviewedAt: request.reviewedAt };
       }
 
+      // Đơn của khách trước dòng users, cùng chiều với cộng điểm lúc giao / duyệt trả / gộp phiên khách (đơn → users): ẩn danh
+      // bên dưới ghi lại các đơn này, khoá users trước thì đợi lần cộng điểm đang giữ đơn trong khi nó đợi users ⇒ 40P01.
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${request.userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: request.userId } });
       const now = new Date();

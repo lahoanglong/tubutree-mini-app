@@ -1088,6 +1088,21 @@ export class AdminService {
    * "Đã xử lý" cho hàng đợi "Cần xử lý Pancake": người đã xem và xử lý xong việc Pancake báo (đang hoàn, hoàn một
    * phần, đơn bị xoá, trạng thái mâu thuẫn, hoàn tiền tay...) → đơn rời hàng đợi. Lý do cũ ghi vào log kèm admin.
    */
+  /** Chạy lại việc sau giao cho một đơn (nút/endpoint admin) — không giới hạn cửa sổ ngày như cron. */
+  async resyncDeliveredEffects(adminId: string, idOrCode: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, status: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.status !== 'DELIVERED') {
+      throw new BadRequestException(`Đơn ${order.code} đang ${order.status}, không phải đơn đã giao — không có việc sau giao để chạy lại.`);
+    }
+    const result = await this.orderStatus.resyncDeliveredEffects(order.id);
+    this.logger.warn(`Admin ${adminId} chạy lại việc sau giao cho đơn ${order.code}: ${JSON.stringify(result)}.`);
+    return { orderId: order.id, code: order.code, ...result };
+  }
+
   async resolvePancakeAttention(adminId: string, idOrCode: string, note?: string) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
