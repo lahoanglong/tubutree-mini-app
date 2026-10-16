@@ -134,8 +134,9 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
 });
 
 describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => {
-  function tx(opts: { moved?: number; left?: number; row?: unknown; originActive?: boolean } = {}) {
+  function tx(opts: { moved?: number; left?: number; row?: unknown; originActive?: boolean; store?: unknown } = {}) {
     return {
+      $queryRaw: jest.fn().mockResolvedValue(opts.store === undefined ? [{ type: 'CTV', isPartner: true, title: 'Gian hàng A' }] : opts.store),
       variation: {
         findFirst: jest.fn().mockResolvedValue(opts.row === undefined ? PANCAKE_ROW : opts.row),
         updateMany: jest.fn().mockResolvedValue({ count: opts.moved ?? 1 }),
@@ -151,6 +152,15 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
   }
   const OPTS = { adminId: 'admin-1' };
   const product = { id: 'prod-a', storefrontId: 'sf-a', pancakeLinkCode: 'PK-123' };
+
+  it('gian hàng không còn là đối tác (CTV đã tắt cờ) hoặc đã mất → 409 nêu rõ, không đụng biến thể', async () => {
+    for (const store of [[{ type: 'CTV', isPartner: false, title: 'Gian hàng A' }], []]) {
+      const t = tx({ store });
+      await expect(linkTubuFulfilledVariation(t as never, product, OPTS)).rejects.toThrow(/không còn là gian hàng đối tác/);
+      expect(t.variation.findFirst).not.toHaveBeenCalled();
+      expect(t.variation.updateMany).not.toHaveBeenCalled();
+    }
+  });
 
   it('chuyển CHÍNH dòng biến thể Pancake sang sản phẩm đối tác (có điều kiện productId cũ), xoá biến thể tạm, tắt sản phẩm vỏ', async () => {
     const t = tx();

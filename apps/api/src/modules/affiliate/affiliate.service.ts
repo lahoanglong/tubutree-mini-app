@@ -1187,8 +1187,8 @@ export class AffiliateService {
   }
 
   /**
-   * Thống kê theo từng gian hàng của CTV (đơn có storefrontSlug thuộc tôi + referrer là tôi).
-   * `orders` đếm mọi đơn của gian hàng như trước. `revenue` chỉ là doanh thu bán thật, cùng định nghĩa báo cáo doanh thu nhãn
+   * Thống kê theo từng gian hàng của CTV (đơn có storefrontSlug thuộc tôi + referrer là tôi, hoặc gian hàng tôi tự giao — xem
+   * storefront-sales.ts). `orders` và `revenue` cùng bộ lọc đơn bán thật, cùng định nghĩa báo cáo doanh thu nhãn
    * (BrandService.getOwnedSales): loại đơn chờ thanh toán/huỷ/trả (PENDING_PAYMENT, CANCELLED, RETURNED) và đơn đã hoàn tiền/
    * thanh toán lỗi (REFUNDED, FAILED); tổng `Order.total` của các đơn còn lại trừ tiền hàng + phí ship đã hoàn của các yêu cầu
    * trả MỘT PHẦN đã duyệt (APPROVED, fullReturn = false — cùng bộ lọc partialReturnTotals), kẹp ≥ 0. Số hoa hồng không đổi.
@@ -1200,21 +1200,15 @@ export class AffiliateService {
     const out = [] as Array<{ slug: string; title?: string; orders: number; revenue: number; commission: number }>;
     const revenueOf = await storefrontSalesByStore(this.prisma, userId, myStores.map((s) => s.slug));
     for (const s of myStores) {
-      const [orderAgg, commAgg] = await Promise.all([
-        this.prisma.order.aggregate({
-          where: { storefrontSlug: s.slug, referrerUserId: userId },
-          _count: { _all: true },
-        }),
-        // P0 A5-11 (cùng họ lỗi với dashboard()): loại commission đã REJECTED (đơn huỷ/trả) —
-        // trước đây cộng cả REJECTED nên hoa hồng theo gian hàng không giảm khi đơn bị huỷ.
-        this.prisma.commission.aggregate({
-          where: { affiliateUserId: userId, order: { storefrontSlug: s.slug }, status: { not: CommissionStatus.REJECTED } },
-          _sum: { amount: true },
-        }),
-      ]);
+      // P0 A5-11 (cùng họ lỗi với dashboard()): loại commission đã REJECTED (đơn huỷ/trả) —
+      // trước đây cộng cả REJECTED nên hoa hồng theo gian hàng không giảm khi đơn bị huỷ.
+      const commAgg = await this.prisma.commission.aggregate({
+        where: { affiliateUserId: userId, order: { storefrontSlug: s.slug }, status: { not: CommissionStatus.REJECTED } },
+        _sum: { amount: true },
+      });
       out.push({
         slug: s.slug, title: s.title,
-        orders: orderAgg._count._all, revenue: Math.max(0, revenueOf.get(s.slug)?.revenue ?? 0),
+        orders: revenueOf.get(s.slug)?.orders ?? 0, revenue: Math.max(0, revenueOf.get(s.slug)?.revenue ?? 0),
         commission: commAgg._sum.amount ?? 0,
       });
     }

@@ -91,6 +91,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     order: { findUniqueOrThrow: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(0),
+    // Liên kết "Tubu giao hộ" đọc lại gian hàng (FOR SHARE) để từ chối gian hàng không còn là đối tác.
+    $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, title: 'Gian hàng IT' }]),
   };
   const prisma: Record<string, unknown> = { ...base, ...over };
   // Mảng thao tác (ghi kèm sổ user_admin_events) và callback (setUserRole khoá danh sách admin) chạy thật trên mock.

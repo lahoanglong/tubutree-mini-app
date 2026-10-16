@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { PANCAKE_FULFILLED_VARIATION_WHERE } from '../integrations/pancake/pancake-fulfilment';
+import { isPartnerStore } from './partner-store';
 
 type Db = Pick<PrismaClient, 'variation' | 'product'> | Prisma.TransactionClient;
 
@@ -165,6 +166,17 @@ export async function linkTubuFulfilledVariation(
   opts: LinkOptions,
 ): Promise<LinkedVariation | undefined> {
   if (!product.pancakeLinkCode || !product.storefrontId) return;
+  // FOR KEY SHARE chờ lần admin tắt cờ đối tác đang chạy (giữ FOR UPDATE dòng này): liên kết tạo cho gian hàng vừa thôi là đối
+  // tác sẽ tích tiền ký gửi mà không còn ai lập phiếu đối soát được. Không dùng FOR SHARE: tx duyệt đã khoá dòng sản phẩm trước,
+  // còn đổi tên gian hàng cập nhật dòng gian hàng (NO KEY UPDATE) rồi mới sửa nhãn các sản phẩm đó — FOR SHARE chờ lần cập nhật
+  // thường ấy thì hai bên khoá ngược chiều (40P01); KEY SHARE không xung đột với cập nhật không đụng khoá.
+  const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean; title: string }[]>`
+    SELECT "type"::text AS "type", "isPartner", "title" FROM "storefronts" WHERE "id" = ${product.storefrontId} FOR KEY SHARE`;
+  if (!store || !isPartnerStore(store)) {
+    throw new ConflictException(
+      `Gian hàng "${store?.title ?? product.storefrontId}" không còn là gian hàng đối tác nên không liên kết hàng Tubu giao hộ được. Từ chối sản phẩm hoặc bật lại cờ đối tác trước.`,
+    );
+  }
   const target = await findLinkablePancakeVariation(tx, product.pancakeLinkCode, product.id);
   // Biến thể đã thuộc chính sản phẩm này (duyệt lặp): không có gì để chuyển.
   if (target?.productId === product.id) return;

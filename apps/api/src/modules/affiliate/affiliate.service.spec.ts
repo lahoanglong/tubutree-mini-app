@@ -1371,16 +1371,14 @@ describe('AffiliateService analytics', () => {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
       order: { aggregate: orderAggregate },
       // Doanh thu gian hàng tính trong DB (500000 + 400000 − 120000); bigint như Postgres SUM trả về.
-      $queryRaw: jest.fn().mockResolvedValue([{ slug: 'linh', revenue: 780000n }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ slug: 'linh', orders: 3n, revenue: 780000n }]),
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
     const r = await svc.storefrontAnalytics('u1');
     expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 780000, commission: 72000 });
-    // Hardening: WHERE phải scope đúng theo slug + referrer (chống đếm chéo người dùng).
-    expect(orderAggregate).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ storefrontSlug: 'linh', referrerUserId: 'u1' }) }),
-    );
+    // Số đơn lấy từ cùng truy vấn doanh thu (cùng bộ lọc trạng thái), không đếm riêng gồm cả đơn huỷ/trả.
+    expect(orderAggregate).not.toHaveBeenCalled();
     expect(commissionAggregate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ affiliateUserId: 'u1', order: { storefrontSlug: 'linh' } }),
