@@ -990,7 +990,7 @@ describe('R4-ADMIN-7: việc admin phải làm với đối tác', () => {
     expect(internals.statementFor).toHaveBeenCalledWith('sf-a', NOW, expect.anything(), { holdDays: 7, defaultCommissionPct: 0.15 });
   });
 
-  it('countStoresToSettle: gian hàng đã tắt cờ chỉ tính khi có dòng REVERSAL (SALE không đếm)', async () => {
+  it('countStoresToSettle: gian hàng đã tắt cờ chỉ tính khi có dòng REVERSAL của đơn đã có SALE đã lưu (SALE không đếm)', async () => {
     const { svc, prisma } = build();
     const internals = svc as unknown as { storesWithPending: jest.Mock; statementFor: jest.Mock; settlementConfig: jest.Mock };
     internals.storesWithPending = jest.fn().mockResolvedValue(new Set(['off-sale', 'off-rev']));
@@ -999,8 +999,13 @@ describe('R4-ADMIN-7: việc admin phải làm với đối tác', () => {
       { id: 'off-sale', type: 'CTV', isPartner: false },
       { id: 'off-rev', type: 'CTV', isPartner: false },
     ]);
+    (prisma.merchantPayoutLine as unknown as { findMany: jest.Mock }).findMany = jest.fn().mockResolvedValue([{ orderId: 'o-rev', orderItemId: null }]);
     internals.statementFor = jest.fn(async (id: string) => ({
-      lines: [id === 'off-sale' ? { kind: 'SALE', netAmount: 5 } : { kind: 'REVERSAL', netAmount: -5 }],
+      lines: [
+        id === 'off-sale'
+          ? { kind: 'SALE', netAmount: 5, orderId: 'o-sale', orderItemId: null }
+          : { kind: 'REVERSAL', netAmount: -5, orderId: 'o-rev', orderItemId: null },
+      ],
     }));
 
     await expect(svc.countStoresToSettle(NOW)).resolves.toBe(1);

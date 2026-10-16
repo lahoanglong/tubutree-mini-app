@@ -39,7 +39,6 @@ import {
   listFulfilOrders,
   updateMerchantOrderStatus,
   pauseMerchantOrders,
-  getMerchantSettlement,
   type MerchantStore,
   type MerchantProduct,
   type UpdateMerchantStoreInput,
@@ -174,15 +173,8 @@ export default function MerchantPage() {
     queryFn: () => listFulfilOrders(undefined, 1, 1),
     enabled: authed && selfFulfils,
   });
-  // Gian hàng đã tắt cờ chỉ còn xem phiếu đối soát đã lập cho mình (API từ chối khi chưa có phiếu nào): có phiếu mới hiện tab.
-  const offPartnerSlipsQ = useQuery({
-    queryKey: ['merchant-settlement'],
-    queryFn: getMerchantSettlement,
-    enabled: authed && !!store && !selfFulfils,
-    retry: false,
-  });
-  const hasSlips = (offPartnerSlipsQ.data?.payouts.length ?? 0) > 0;
-  const visibleTabs = TAB_DEFS.filter((t) => !t.merchantOnly || selfFulfils || (t.k === 'settlement' && hasSlips));
+  // Gian hàng đã tắt cờ chỉ còn xem phiếu đối soát đã lập cho mình: có phiếu (hasPayouts) mới hiện tab.
+  const visibleTabs = TAB_DEFS.filter((t) => !t.merchantOnly || selfFulfils || (t.k === 'settlement' && store?.hasPayouts === true));
   const activeTab: MerchantTab = store && !visibleTabs.some((t) => t.k === tab) ? 'store' : tab;
   // Thanh tab cuộn ngang ở màn hẹp: mở bằng ?tab= thì tab đang chọn có thể nằm ngoài khung nhìn. Chỉ cuộn ngang thanh tab,
   // không dùng scrollIntoView vì nó kéo cả trang xuống.

@@ -62,7 +62,7 @@ describe('Lập phiếu cho gian hàng đã tắt cờ đối tác còn khoản 
   });
 
   /** CTV (cờ đối tác bật) có một đơn COD tự giao 130.000 đã giao; chưa vào phiếu. */
-  async function setup(opts: { isPartner: boolean }) {
+  async function setup(opts: { isPartner: boolean; pm?: 'COD' | 'BANK_TRANSFER'; ps?: 'UNPAID' | 'PAID' }) {
     const owner = await createUser(prisma, { role: 'CUSTOMER' });
     const tag = randCode(8).toLowerCase();
     const store = await prisma.storefront.create({
@@ -90,8 +90,8 @@ describe('Lập phiếu cho gian hàng đã tắt cờ đối tác còn khoản 
       fulfiller: 'MERCHANT',
       fulfillerStorefrontId: store.id,
       merchantCommissionPct: 0.15,
-      paymentMethod: 'COD',
-      paymentStatus: 'UNPAID',
+      paymentMethod: opts.pm ?? 'COD',
+      paymentStatus: opts.ps ?? 'UNPAID',
       subtotal: 100_000,
       shippingFee: 30_000,
       total: 130_000,
@@ -265,5 +265,114 @@ describe('Lập phiếu cho gian hàng đã tắt cờ đối tác còn khoản 
     const ids = (await settlement.adminOverview()).stores.map((s) => s.storefrontId);
     expect(ids).not.toContain(off.id);
     expect(ids).not.toContain(partnerOff.id);
+  });
+
+  describe('REVERSAL chỉ thu được khi đảo tiền Tubu đã trả (có SALE đã lưu trên phiếu)', () => {
+    /** Dữ liệu cũ: gian hàng isPartner=false, đơn giao đủ hạn CHƯA vào phiếu, khách trả một phần đã duyệt. */
+    async function legacyWithPartialReturn(pm: 'COD' | 'BANK_TRANSFER', ps: 'UNPAID' | 'PAID') {
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      const ctx = await setup({ isPartner: false, pm, ps });
+      const r1 = await returns.request(ctx.buyer.id, ctx.order.code, {
+        reasonCode: 'OTHER',
+        reason: 'Một quả bị dập khi nhận',
+        items: [{ orderItemId: ctx.item.id, quantity: 1 }],
+      });
+      await returns.review(admin.id, r1.id, { approve: true });
+      return { ...ctx, admin, r1 };
+    }
+
+    it.each([
+      ['COD', 'UNPAID'],
+      ['BANK_TRANSFER', 'PAID'],
+    ] as const)('đơn %s/%s chưa có SALE đã lưu + trả một phần: 404, không lên phiếu, không liệt kê, không đếm, chủ không xem được', async (pm, ps) => {
+      const todoBefore = await settlement.countStoresToSettle();
+      const { store, owner } = await legacyWithPartialReturn(pm, ps);
+      expect((await settlement.statementFor(store.id)).lines.some((l) => l.kind === 'REVERSAL')).toBe(true);
+      await expect(settlement.createPayout('admin-it', store.id)).rejects.toBeInstanceOf(NotFoundException);
+      expect(await prisma.merchantPayout.count({ where: { storefrontId: store.id } })).toBe(0);
+      expect(await prisma.merchantPayoutLine.count({ where: { payout: { storefrontId: store.id } } })).toBe(0);
+      expect((await settlement.adminOverview()).stores.map((s) => s.storefrontId)).not.toContain(store.id);
+      expect(await settlement.countStoresToSettle()).toBe(todoBefore);
+      await expect(settlement.myStatement(owner.id)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('đơn COD đã RETURNED nguyên đơn chưa có SALE đã lưu (kèm trả một phần trước đó): không thu gì', async () => {
+      const { store, order, admin, buyer, item } = await legacyWithPartialReturn('COD', 'UNPAID');
+      const r2 = await returns.request(buyer.id, order.code, { reasonCode: 'OTHER', reason: 'Quả còn lại cũng dập', items: [{ orderItemId: item.id, quantity: 1 }] });
+      await returns.review(admin.id, r2.id, { approve: true });
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('RETURNED');
+      await expect(settlement.createPayout('admin-it', store.id)).rejects.toBeInstanceOf(NotFoundException);
+      expect((await settlement.adminOverview()).stores.map((s) => s.storefrontId)).not.toContain(store.id);
+    });
+
+    /** SALE lên phiếu và chuyển tiền, tuỳ chọn tắt cờ, rồi trả một phần (duyệt), lập phiếu, trả nốt phần còn lại, lập phiếu. */
+    async function sequence(flagOff: boolean) {
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      const ctx = await setup({ isPartner: true });
+      const sale = await settlement.createPayout('admin-it', ctx.store.id);
+      await settlement.markPayoutPaid('admin-it', sale.id, 'FT-SEQ');
+      if (flagOff) {
+        await prisma.product.updateMany({ where: { storefrontId: ctx.store.id }, data: { isActive: false } });
+        await settlement.setStorePartner(admin.id, ctx.store.id, false);
+      }
+      const ask = async (reason: string) => {
+        const r = await returns.request(ctx.buyer.id, ctx.order.code, { reasonCode: 'OTHER', reason, items: [{ orderItemId: ctx.item.id, quantity: 1 }] });
+        await returns.review(admin.id, r.id, { approve: true });
+        return r;
+      };
+      await ask('Một quả bị dập');
+      const slip2 = await settlement.createPayout('admin-it', ctx.store.id);
+      const again = await settlement.createPayout('admin-it', ctx.store.id).then(
+        () => 'ok',
+        (e: Error) => e.constructor.name,
+      );
+      const adminView = await settlement.adminStatement(ctx.store.id);
+      await ask('Quả còn lại cũng dập');
+      const slip3 = await settlement.createPayout('admin-it', ctx.store.id).catch((e: Error) => e);
+      const stored = await prisma.merchantPayoutLine.findMany({ where: { orderId: ctx.order.id }, orderBy: { createdAt: 'asc' } });
+      return { ctx, slip2, again, adminView, slip3, stored };
+    }
+
+    it('SALE đã lưu, tắt cờ, trả một phần rồi trả nốt: thu đúng một lần, không phát lại, tổng khớp gian hàng còn là đối tác', async () => {
+      const partner = await sequence(false);
+      const off = await sequence(true);
+      expect(off.slip2.amount).toBe(-42_500);
+      expect(off.slip2.lines.map((l) => l.kind)).toEqual(['REVERSAL']);
+      expect(off.again).toBe('NotFoundException');
+      expect(off.adminView.lines).toEqual([]);
+      expect(off.adminView.total).toBe(0);
+      expect(partner.again).toBe('BadRequestException');
+      const shape = (r: typeof off) => r.stored.map((l) => [l.kind, l.netAmount]).sort();
+      expect(shape(off)).toEqual(shape(partner));
+      expect(off.stored.reduce((t, l) => t + l.netAmount, 0)).toBe(partner.stored.reduce((t, l) => t + l.netAmount, 0));
+      expect(off.slip3).not.toBeInstanceOf(Error);
+    });
+
+    it('sau khi tắt cờ có phiếu REVERSAL rồi bật cờ lại: lập phiếu cho đơn SALE còn mở bình thường (không dính P2002)', async () => {
+      const { store, sale2 } = await partnerOffWithSaleAndReversal();
+      await settlement.createPayout('admin-it', store.id);
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      await settlement.setStorePartner(admin.id, store.id, true);
+      const slip = await settlement.createPayout('admin-it', store.id);
+      expect(slip.lines.map((l) => [l.kind, l.orderId])).toEqual([['SALE', sale2.id]]);
+    });
+
+    it('storesWithPending không kéo gian hàng đã tắt cờ chỉ có đơn chưa đối soát (kể cả COD hoàn tiền), vẫn giữ gian hàng đối tác', async () => {
+      const off = await setup({ isPartner: false });
+      const offCod = await setup({ isPartner: false });
+      await prisma.order.update({ where: { id: offCod.order.id }, data: { status: 'RETURNED', paymentStatus: 'REFUNDED' } });
+      const partner = await setup({ isPartner: true });
+      const pending = await settlement['storesWithPending']();
+      expect(pending).not.toContain(off.store.id);
+      expect(pending).not.toContain(offCod.store.id);
+      expect(pending).toContain(partner.store.id);
+    });
+
+    it('cổng: hasPayouts trên hồ sơ gian hàng — false khi chưa có phiếu, true khi có', async () => {
+      const { store } = await partnerOffWithOpenReversal();
+      expect(await settlement.storeHasPayouts(store.id)).toBe(true);
+      const fresh = await emptyCtvStore(false);
+      expect(await settlement.storeHasPayouts(fresh.id)).toBe(false);
+    });
   });
 });

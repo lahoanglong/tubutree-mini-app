@@ -249,9 +249,6 @@ describe('cổng đối tác /merchant — khung trang (DS v2)', () => {
   it('SELLER-8: gian hàng CTV không thấy tab tự giao, tài khoản nhận đối soát, giao hàng; thẻ đơn ghi rõ kho Tubu xử lý', async () => {
     mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
     mocks.store = { ...STORE, type: 'CTV' };
-    mocks.settlement = vi.fn(async () => {
-      throw new Error('Chỉ gian hàng đối tác tự giao hàng mới có đơn cần giao.');
-    });
     const root = await mount();
     const tabs = Array.from(root.querySelectorAll('[role="tab"]')).map((t) => t.textContent);
     expect(tabs).toEqual(['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng']);
@@ -410,20 +407,18 @@ describe('cổng đối tác — đại lý giữ gian hàng CTV (isPartner)', (
     expect(root.querySelector('#merchant-bank-name')).not.toBeNull();
   });
 
-  it('CTV + isPartner=false chưa có phiếu đối soát (API từ chối): chỉ ba tab của gian hàng CTV, không có nút tạm nghỉ', async () => {
+  it('CTV + isPartner=false chưa có phiếu đối soát: chỉ ba tab của gian hàng CTV, không có nút tạm nghỉ', async () => {
     mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
     mocks.store = { ...STORE, type: 'CTV', isPartner: false };
-    mocks.settlement = vi.fn(async () => {
-      throw new Error('Chỉ gian hàng đối tác tự giao hàng mới có đơn cần giao.');
-    });
     const root = await mount();
     expect(tabLabels(root)).toEqual(['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng']);
     expect(byText(root, 'button', 'Tạm nghỉ nhận đơn')).toBeNull();
+    expect(mocks.settlement).not.toHaveBeenCalled();
   });
 
   it('CTV + isPartner=false đã có phiếu đối soát (vd. phiếu âm từ thông báo): có thêm tab Đối soát xem phiếu, vẫn không có tab đối tác khác', async () => {
     mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
-    mocks.store = { ...STORE, type: 'CTV', isPartner: false };
+    mocks.store = { ...STORE, type: 'CTV', isPartner: false, hasPayouts: true };
     mocks.settlement = vi.fn(async () => ({
       holdDays: 7,
       lines: [],
@@ -448,9 +443,6 @@ describe('cổng đối tác — đại lý giữ gian hàng CTV (isPartner)', (
 
   it('BRAND không isPartner: không có tab đối tác', async () => {
     mocks.store = { ...STORE, type: 'BRAND' };
-    mocks.settlement = vi.fn(async () => {
-      throw new Error('Chỉ gian hàng đối tác tự giao hàng mới có đơn cần giao.');
-    });
     const root = await mount();
     expect(tabLabels(root)).toEqual(['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng']);
   });

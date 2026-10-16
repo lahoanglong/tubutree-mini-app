@@ -8,6 +8,8 @@ export interface MerchantStore {
   type: string;
   /** API quyết định gian hàng dùng cổng đối tác (MERCHANT, hoặc CTV của đại lý đã duyệt); thiếu = xét theo type. */
   isPartner?: boolean;
+  /** Đã có phiếu đối soát: gian hàng đã tắt cờ vẫn xem được tab Đối soát. */
+  hasPayouts?: boolean;
   slug: string;
   subdomain?: string | null;
   customDomain?: string | null;

@@ -410,10 +410,39 @@ export class MerchantFulfilmentService {
     return store;
   }
 
-  /** Gian hàng đã tắt cờ chỉ còn đối soát các dòng REVERSAL (khoản khách trả hàng phải thu lại); SALE và khoản chờ để mở. */
-  private openLinesOf<T extends { kind: string; netAmount: number }>(store: { type: string; isPartner: boolean }, lines: T[]) {
-    const open = isPartnerStore(store) ? lines : lines.filter((l) => l.kind === 'REVERSAL');
-    return { lines: open, total: open.reduce((s, l) => s + l.netAmount, 0) };
+  /**
+   * Gian hàng đã tắt cờ chỉ còn thu các dòng REVERSAL đảo tiền Tubu ĐÃ trả: đơn (hoặc dòng hàng giao hộ) có dòng SALE đã lưu trên
+   * một phiếu. REVERSAL của đơn chưa từng được trả (trả một phần, trả nguyên đơn, giao hộ) không thu vì Tubu chưa trả đồng nào;
+   * SALE và khoản chờ để mở. Gian hàng đối tác: giữ nguyên.
+   */
+  private async openLinesOf<T extends { kind: string; netAmount: number; orderId: string; orderItemId: string | null }>(
+    store: { type: string; isPartner: boolean },
+    lines: T[],
+    db: Db = this.prisma,
+  ) {
+    if (isPartnerStore(store)) return { lines, total: lines.reduce((t, l) => t + l.netAmount, 0) };
+    const reversals = lines.filter((l) => l.kind === 'REVERSAL');
+    const paid = reversals.length
+      ? await db.merchantPayoutLine.findMany({
+          where: {
+            kind: 'SALE',
+            OR: [
+              { orderId: { in: reversals.filter((l) => !l.orderItemId).map((l) => l.orderId) }, orderItemId: null },
+              { orderItemId: { in: reversals.flatMap((l) => (l.orderItemId ? [l.orderItemId] : [])) } },
+            ],
+          },
+          select: { orderId: true, orderItemId: true },
+        })
+      : [];
+    const paidOrders = new Set(paid.filter((l) => !l.orderItemId).map((l) => l.orderId));
+    const paidItems = new Set(paid.flatMap((l) => (l.orderItemId ? [l.orderItemId] : [])));
+    const open = reversals.filter((l) => (l.orderItemId ? paidItems.has(l.orderItemId) : paidOrders.has(l.orderId)));
+    return { lines: open, total: open.reduce((t, l) => t + l.netAmount, 0) };
+  }
+
+  /** Gian hàng đã có phiếu đối soát nào chưa (cổng cho chủ gian hàng đã tắt cờ biết có phiếu để xem). */
+  async storeHasPayouts(storefrontId: string): Promise<boolean> {
+    return (await this.prisma.merchantPayout.count({ where: { storefrontId } })) > 0;
   }
 
   // ── Đối tác: đơn cần giao ──
@@ -775,7 +804,13 @@ export class MerchantFulfilmentService {
 
   /** Bảng kê kèm danh sách hàng giao hộ chưa vào đối soát tự động — màn admin xem trước khi lập phiếu. */
   async adminStatement(storefrontId: string) {
-    const [statement, consignmentExcluded] = await Promise.all([this.statementFor(storefrontId), this.consignmentExcluded(storefrontId)]);
+    const [statement, consignmentExcluded, store] = await Promise.all([
+      this.statementFor(storefrontId),
+      this.consignmentExcluded(storefrontId),
+      this.prisma.storefront.findUnique({ where: { id: storefrontId }, select: { type: true, isPartner: true } }),
+    ]);
+    // Gian hàng đã tắt cờ: màn admin hiện đúng những dòng sẽ lên phiếu.
+    if (store && !isPartnerStore(store)) return { ...statement, ...(await this.openLinesOf(store, statement.lines)), upcoming: [], consignmentExcluded };
     return { ...statement, consignmentExcluded };
   }
 
@@ -968,7 +1003,7 @@ export class MerchantFulfilmentService {
       this.consignmentExcluded(store.id),
     ]);
     const payouts = [...live, ...cancelled].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    const statement = isPartnerStore(store) ? fullStatement : { ...fullStatement, ...this.openLinesOf(store, fullStatement.lines), upcoming: [] };
+    const statement = isPartnerStore(store) ? fullStatement : { ...fullStatement, ...(await this.openLinesOf(store, fullStatement.lines)), upcoming: [] };
     return {
       ...statement,
       // Id admin lập/chuyển/huỷ phiếu là dữ liệu nội bộ, không trả cho gian hàng.
@@ -1021,7 +1056,7 @@ export class MerchantFulfilmentService {
       payout = await this.prisma.$transaction(
         async (tx) => {
           await this.lockStorePayouts(tx, store.id);
-          const { lines, total } = this.openLinesOf(store, (await this.statementFor(store.id, new Date(), tx, cfg)).lines);
+          const { lines, total } = await this.openLinesOf(store, (await this.statementFor(store.id, new Date(), tx, cfg)).lines, tx);
           if (lines.length === 0) {
             if (!partner) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
             throw new BadRequestException('Không có đơn nào đủ điều kiện đối soát.');
@@ -1198,11 +1233,13 @@ export class MerchantFulfilmentService {
       SELECT o."fulfillerStorefrontId" AS "id" FROM "orders" o
        WHERE o."fulfiller" = 'MERCHANT' AND o."fulfillerStorefrontId" IS NOT NULL AND (
          (o."status" = 'DELIVERED' AND (o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')
+           AND EXISTS (SELECT 1 FROM "storefronts" sf WHERE sf."id" = o."fulfillerStorefrontId" AND (sf."type" = 'MERCHANT' OR sf."isPartner"))
            AND NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE' AND s."orderItemId" IS NULL))
          OR (o."status" = 'RETURNED'
            AND NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" r WHERE r."orderId" = o."id" AND r."kind" = 'REVERSAL' AND r."refKey" = '')
            AND (EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE' AND s."orderItemId" IS NULL)
-                OR (o."paymentMethod" = 'COD' AND o."paymentStatus" = 'REFUNDED')))
+                OR (o."paymentMethod" = 'COD' AND o."paymentStatus" = 'REFUNDED'
+                    AND EXISTS (SELECT 1 FROM "storefronts" sf WHERE sf."id" = o."fulfillerStorefrontId" AND (sf."type" = 'MERCHANT' OR sf."isPartner")))))
          OR EXISTS (
            SELECT 1 FROM "return_requests" rr
             WHERE rr."orderId" = o."id" AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
@@ -1213,6 +1250,7 @@ export class MerchantFulfilmentService {
         JOIN "order_items" oi ON oi."variationId" = lk."variationId"
         JOIN "orders" o ON o."id" = oi."orderId"
        WHERE ${consignmentPendingSql(Prisma.raw('lk."storefrontId"'), settleFrom)}
+         AND EXISTS (SELECT 1 FROM "storefronts" sf WHERE sf."id" = lk."storefrontId" AND (sf."type" = 'MERCHANT' OR sf."isPartner"))
       UNION
       SELECT p."storefrontId" FROM "merchant_payout_lines" s
         JOIN "merchant_payouts" p ON p."id" = s."payoutId"
@@ -1280,7 +1318,7 @@ export class MerchantFulfilmentService {
     const out = [];
     for (const sf of stores) {
       const statement = pendingStores.has(sf.id) ? await this.statementFor(sf.id, now) : null;
-      const { lines, total } = this.openLinesOf(sf, statement?.lines ?? []);
+      const { lines, total } = await this.openLinesOf(sf, statement?.lines ?? []);
       if (!isPartnerStore(sf) && lines.length === 0) continue;
       out.push({
         storefrontId: sf.id,
@@ -1557,7 +1595,7 @@ export class MerchantFulfilmentService {
     const stores = await this.prisma.storefront.findMany({ where: { id: { in: [...candidates] } }, select: { id: true, type: true, isPartner: true } });
     let n = 0;
     for (const sf of stores) {
-      const { lines } = this.openLinesOf(sf, (await this.statementFor(sf.id, now, this.prisma, cfg)).lines);
+      const { lines } = await this.openLinesOf(sf, (await this.statementFor(sf.id, now, this.prisma, cfg)).lines);
       if (lines.length > 0) n += 1;
     }
     return n;
