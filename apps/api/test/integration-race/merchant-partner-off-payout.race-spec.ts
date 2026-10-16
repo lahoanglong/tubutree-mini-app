@@ -368,6 +368,100 @@ describe('Lập phiếu cho gian hàng đã tắt cờ đối tác còn khoản 
       expect(pending).toContain(partner.store.id);
     });
 
+    it('hàng giao hộ: gian hàng đã tắt cờ chỉ thu REVERSAL của dòng hàng có SALE đã lưu; dòng hàng chưa từng lên phiếu (SALE mở) không thu', async () => {
+      await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      const owner = await createUser(prisma, { role: 'CUSTOMER' });
+      const tag = randCode(8).toLowerCase();
+      const store = await prisma.storefront.create({
+        data: { type: 'CTV', isPartner: true, slug: `itgh-${tag}`, title: `Vườn giao hộ ${tag}`, ownerUserId: owner.id, commissionPct: 0.1, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400 },
+      });
+      const product = await prisma.product.create({
+        data: {
+          storefrontId: store.id,
+          fulfilment: 'TUBU',
+          brand: 'IT',
+          slug: `itgh-${tag}`,
+          name: `Giao hộ ${tag}`,
+          description: 'IT',
+          basePrice: 60_000,
+          variations: {
+            create: [60_000, 50_000].map((price, i) => ({ sku: `ITGH-${tag}-${i}`, pancakeId: `itgh-${tag}-${i}`, name: `Loại ${i}`, attributes: {}, retailPrice: price, stock: 20 })),
+          },
+        },
+        include: { variations: { orderBy: { retailPrice: 'desc' } } },
+      });
+      const [vA, vB] = product.variations as [(typeof product.variations)[number], (typeof product.variations)[number]];
+      for (const v of [vA, vB]) {
+        await prisma.merchantPancakeLink.create({ data: { storefrontId: store.id, productId: product.id, variationId: v.id, linkedAt: new Date(Date.now() - 60 * DAY) } });
+      }
+      const buyer = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+      const consignmentOrder = async (v: typeof vA, unitPrice: number) => {
+        const order = await createOrder(prisma, {
+          userId: buyer.id,
+          status: 'DELIVERED',
+          createdAt: new Date(Date.now() - 3 * DAY),
+          deliveredAt: new Date(Date.now() - 2 * DAY),
+          fulfiller: 'TUBU',
+          paymentMethod: 'WALLET',
+          paymentStatus: 'PAID',
+          subtotal: unitPrice * 2,
+          total: unitPrice * 2,
+          items: { create: { variationId: v.id, productName: 'Giao hộ', variationName: 'Loại', unitPrice, quantity: 2, total: unitPrice * 2 } },
+        });
+        return { order, item: await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } }) };
+      };
+      const a = await consignmentOrder(vA, 60_000);
+      const b = await consignmentOrder(vB, 50_000);
+      // Chỉ đơn A đã qua hạn khi lập phiếu đầu: đơn B còn trong hạn giữ nên chưa có SALE đã lưu.
+      await prisma.order.update({ where: { id: b.order.id }, data: { deliveredAt: new Date(Date.now() - 6 * 3_600_000) } });
+      const sale = await settlement.createPayout('admin-it', store.id);
+      expect(sale.lines.map((l) => l.orderItemId)).toEqual([a.item.id]);
+      await settlement.markPayoutPaid('admin-it', sale.id, 'FT-GH');
+      await prisma.storefront.update({ where: { id: store.id }, data: { isPartner: false } });
+
+      const ask = async (ctx: typeof a, reason: string) => {
+        const old = ctx.order.id === b.order.id ? new Date(Date.now() - 6 * 3_600_000) : new Date(Date.now() - 2 * DAY);
+        await prisma.order.update({ where: { id: ctx.order.id }, data: { deliveredAt: old } });
+        const r = await returns.request(buyer.id, ctx.order.code, { reasonCode: 'OTHER', reason, items: [{ orderItemId: ctx.item.id, quantity: 1 }] });
+        await prisma.order.update({ where: { id: ctx.order.id }, data: { deliveredAt: new Date(Date.now() - 10 * DAY) } });
+        await returns.review(admin.id, r.id, { approve: true });
+        return r;
+      };
+      const rA1 = await ask(a, 'Một hũ bị nứt');
+      const rB1 = await ask(b, 'Một hũ bị nứt');
+
+      const raw = (await settlement.statementFor(store.id)).lines;
+      expect(raw.some((l) => l.kind === 'SALE' && l.orderItemId === b.item.id)).toBe(true);
+      expect(raw.some((l) => l.kind === 'REVERSAL' && l.orderItemId === b.item.id)).toBe(true);
+
+      const reversalA = `RETURN:${rA1.id}:ITEM:${a.item.id}`;
+      const view = await settlement.adminStatement(store.id);
+      expect(view.lines.map((l) => [l.kind, l.refKey])).toEqual([['REVERSAL', reversalA]]);
+      const netA1 = view.lines[0]!.netAmount;
+      expect(netA1).toBeLessThan(0);
+      const row = (await settlement.adminOverview()).stores.find((x) => x.storefrontId === store.id);
+      expect(row).toMatchObject({ isPartner: false, settleableLines: 1, settleableAmount: netA1 });
+
+      const slip = await settlement.createPayout('admin-it', store.id, undefined, netA1);
+      expect(slip.lines.map((l) => [l.kind, l.refKey, l.orderItemId])).toEqual([['REVERSAL', reversalA, a.item.id]]);
+      expect(rB1.id).toBeDefined();
+      expect(await prisma.merchantPayoutLine.count({ where: { orderId: b.order.id } })).toBe(0);
+      await expect(settlement.createPayout('admin-it', store.id)).rejects.toBeInstanceOf(NotFoundException);
+      expect((await settlement.adminOverview()).stores.map((x) => x.storefrontId)).not.toContain(store.id);
+
+      await ask(a, 'Trả nốt');
+      await ask(b, 'Trả nốt');
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: a.order.id } })).status).toBe('RETURNED');
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: b.order.id } })).status).toBe('RETURNED');
+      const slip2 = await settlement.createPayout('admin-it', store.id);
+      expect(slip2.lines.map((l) => [l.kind, l.refKey, l.orderItemId])).toEqual([['REVERSAL', `ITEM:${a.item.id}`, a.item.id]]);
+      const storedA = await prisma.merchantPayoutLine.findMany({ where: { orderId: a.order.id } });
+      expect(storedA.reduce((t, l) => t + l.netAmount, 0)).toBe(0);
+      expect(await prisma.merchantPayoutLine.count({ where: { orderId: b.order.id } })).toBe(0);
+      await expect(settlement.createPayout('admin-it', store.id)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
     it('cổng: hasPayouts trên hồ sơ gian hàng — false khi chưa có phiếu, true khi có', async () => {
       const { store } = await partnerOffWithOpenReversal();
       expect(await settlement.storeHasPayouts(store.id)).toBe(true);

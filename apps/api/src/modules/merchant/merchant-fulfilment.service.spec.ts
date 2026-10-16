@@ -1009,5 +1009,31 @@ describe('R4-ADMIN-7: việc admin phải làm với đối tác', () => {
     }));
 
     await expect(svc.countStoresToSettle(NOW)).resolves.toBe(1);
+    expect((prisma.merchantPayoutLine as unknown as { findMany: jest.Mock }).findMany).toHaveBeenCalledWith({
+      where: { kind: 'SALE', OR: [{ orderId: { in: ['o-rev'] }, orderItemId: null }, { orderItemId: { in: [] } }] },
+      select: { orderId: true, orderItemId: true },
+    });
+  });
+
+  it('openLinesOf: dòng REVERSAL giao hộ chỉ thu khi chính dòng hàng đó có SALE đã lưu; hỏi DB theo đúng orderItemId', async () => {
+    const { svc, prisma } = build();
+    const findMany = jest.fn().mockResolvedValue([{ orderId: 'o-c', orderItemId: 'it-a' }]);
+    (prisma.merchantPayoutLine as unknown as { findMany: jest.Mock }).findMany = findMany;
+    const line = (orderItemId: string | null, orderId = 'o-c') => ({ kind: 'REVERSAL', netAmount: -10, orderId, orderItemId });
+    const lines = [line('it-a'), line('it-b'), line(null, 'o-self'), { kind: 'SALE', netAmount: 5, orderId: 'o-c', orderItemId: 'it-a' }];
+    const internals = svc as unknown as { openLinesOf: (s: { type: string; isPartner: boolean }, l: typeof lines) => Promise<{ lines: typeof lines; total: number }> };
+
+    const off = await internals.openLinesOf({ type: 'CTV', isPartner: false }, lines);
+    expect(off.lines.map((l) => l.orderItemId)).toEqual(['it-a']);
+    expect(off.total).toBe(-10);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { kind: 'SALE', OR: [{ orderId: { in: ['o-self'] }, orderItemId: null }, { orderItemId: { in: ['it-a', 'it-b'] } }] },
+      select: { orderId: true, orderItemId: true },
+    });
+
+    findMany.mockClear();
+    const partner = await internals.openLinesOf({ type: 'CTV', isPartner: true }, lines);
+    expect(partner.lines).toHaveLength(4);
+    expect(findMany).not.toHaveBeenCalled();
   });
 });
