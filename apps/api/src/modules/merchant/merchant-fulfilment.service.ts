@@ -39,6 +39,7 @@ import {
   type ConsignmentTermsRow,
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
+import { consignmentLinkedSql } from './consignment-link-sql';
 import { isPartnerStore, PARTNER_STORE_WHERE } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
@@ -1589,18 +1590,6 @@ const CONSIGNMENT_SOLD_SQL = Prisma.sql`o."fulfiller" = 'TUBU' AND o."status" = 
 
 /** Dòng hàng `oi` chưa có SALE. */
 const CONSIGNMENT_NO_SALE_SQL = Prisma.sql`NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderItemId" = oi."id" AND s."kind" = 'SALE')`;
-
-/**
- * Biến thể của dòng `oi` liên kết với gian hàng `store` lúc đặt đơn `o` ([linkedAt, unlinkedAt)). `confirmedOnly`: liên kết
- * takeover chỉ tính đơn đặt từ lúc admin xác nhận hàng ký gửi.
- */
-function consignmentLinkedSql(store: Prisma.Sql, confirmedOnly: boolean): Prisma.Sql {
-  return Prisma.sql`EXISTS (
-      SELECT 1 FROM "merchant_pancake_links" l
-       WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
-         AND o."createdAt" >= l."linkedAt" AND (l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")
-         ${confirmedOnly ? Prisma.sql`AND (NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))` : Prisma.empty})`;
-}
 
 /**
  * Liên kết của dòng `oi` lúc đặt đơn `o` vẫn đang chờ admin xác nhận hàng ký gửi (cùng điều kiện CONSIGNMENT_PENDING_LINK_WHERE
