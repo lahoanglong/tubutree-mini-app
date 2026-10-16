@@ -455,3 +455,67 @@ describe('CouponsService.release', () => {
     expect(txUpdateMany).toHaveBeenCalled();
   });
 });
+
+describe('CouponsService.previewMany', () => {
+  const GUEST = { id: 'u1', tierId: null, phone: null, zaloId: null };
+  const cases: { name: string; c: Record<string, unknown>; used?: number; total?: number; user?: unknown }[] = [
+    { name: 'PERCENT có trần', c: { code: 'A', type: 'PERCENT', value: 50, maxDiscount: 30000 } },
+    { name: 'PERCENT > 100%', c: { code: 'B', type: 'PERCENT', value: 150 } },
+    { name: 'AMOUNT > tiền hàng', c: { code: 'C', type: 'AMOUNT', value: 900000 } },
+    { name: 'FREESHIP', c: { code: 'D', type: 'FREESHIP', value: 10000 } },
+    { name: 'dưới đơn tối thiểu', c: { code: 'E', minOrder: 300000 } },
+    { name: 'đã tắt', c: { code: 'F', isActive: false } },
+    { name: 'hết hạn', c: { code: 'G', endAt: past, startAt: new Date(Date.now() - 2 * 864e5) } },
+    { name: 'hết lượt cá nhân', c: { code: 'H' }, used: 1 },
+    { name: 'hết tổng lượt', c: { code: 'I', usageLimit: 5 }, total: 5 },
+    { name: 'gắn sản phẩm không có trong giỏ', c: { code: 'J', applyTo: { productIds: ['px'] } } },
+    { name: 'gắn sản phẩm có trong giỏ', c: { code: 'K', type: 'AMOUNT', value: 50000, applyTo: { productIds: ['p1'] } } },
+    { name: 'mã người khác', c: { code: 'L', scope: 'USER_GROUP', scopeMeta: { userId: 'other' } } },
+    { name: 'mã công khai giới hạn người + khách chưa đăng nhập', c: { code: 'M', scope: 'PUBLIC' }, user: GUEST },
+  ];
+  const lines = [
+    { productId: 'p1', total: 30000 },
+    { productId: 'p2', total: 170000 },
+  ];
+
+  it.each(cases)('$name: cùng kết quả/lỗi với validateAndCompute', async ({ c, used = 0, total = 0, user = REAL_USER }) => {
+    const row = coupon({ isActive: true, scope: 'PUBLIC', applyTo: null, ...c });
+    const single = makeService(row, [used, total], user);
+    const expected = await single.validateAndCompute(row.code as string, 'u1', 200000, lines).catch((e: Error) => e);
+
+    const prisma = {
+      coupon: { findMany: jest.fn().mockResolvedValue([row]) },
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      couponRedemption: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValueOnce(used ? [{ couponId: 'c1', _count: { _all: used } }] : [])
+          .mockResolvedValueOnce(total ? [{ couponId: 'c1', _count: { _all: total } }] : []),
+      },
+    } as unknown as PrismaService;
+    const got = (await new CouponsService(prisma).previewMany([row.code as string], 'u1', 200000, lines)).get(row.code as string);
+    if (expected instanceof Error) {
+      expect(got).toBeInstanceOf(expected.constructor);
+      expect((got as Error).message).toBe(expected.message);
+    } else {
+      expect(got).toEqual(expected);
+    }
+  });
+
+  it('cả ví: một lần đọc mã, một lần đọc người dùng, tối đa hai lần đếm lượt; mã mới nhất trước, có trần', async () => {
+    const rows = [
+      coupon({ id: 'c2', code: 'X2', isActive: true, scope: 'PUBLIC' }),
+      coupon({ id: 'c1', code: 'X1', isActive: true, scope: 'PUBLIC', usageLimit: 3 }),
+    ];
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const groupBy = jest.fn().mockResolvedValue([]);
+    const findUnique = jest.fn().mockResolvedValue(REAL_USER);
+    const prisma = { coupon: { findMany }, user: { findUnique }, couponRedemption: { groupBy } } as unknown as PrismaService;
+    const out = await new CouponsService(prisma).previewMany(['x1', ' X2 '], 'u1', 100000);
+    expect([...out.keys()]).toEqual(['X2', 'X1']);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany.mock.calls[0][0]).toMatchObject({ where: { code: { in: ['X1', 'X2'] } }, orderBy: { id: 'desc' }, take: 50 });
+    expect(findUnique).toHaveBeenCalledTimes(1);
+    expect(groupBy).toHaveBeenCalledTimes(2);
+  });
+});
