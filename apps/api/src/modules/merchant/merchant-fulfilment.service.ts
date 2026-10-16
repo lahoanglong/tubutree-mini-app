@@ -1386,13 +1386,47 @@ export class MerchantFulfilmentService {
     return { id: storefrontId, isPartner };
   }
 
-  private async partnerBlockers(tx: Db, storefrontId: string, ownerUserId: string | null, cfg: SettlementConfig): Promise<string[]> {
+  /**
+   * Gọi trong tx đổi vai trò khi chủ đang là DEALER bị đổi sang vai trò khác, TRƯỚC lúc ghi dòng users: tắt cờ isPartner của các
+   * gian hàng CTV của chủ cùng luật với `setStorePartner` (khoá phiếu → dòng gian hàng, kiểm vướng mắc dưới khoá, ghi
+   * STOREFRONT_PARTNER) trừ vướng mắc "chủ còn là đại lý" (chính lần đổi này gỡ nó). Còn vướng mắc thì ném 409 để cả lần đổi
+   * vai trò huỷ. Gian hàng MERCHANT luôn là đối tác nên không đụng tới.
+   */
+  async clearPartnerOnDealerRevoke(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig) {
+    const stores = await tx.storefront.findMany({
+      where: { ownerUserId, type: 'CTV', isPartner: true },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
+    for (const { id } of stores) {
+      await this.lockStorePayouts(tx, id);
+      const [store] = await tx.$queryRaw<{ isPartner: boolean }[]>`SELECT "isPartner" FROM "storefronts" WHERE "id" = ${id} FOR UPDATE`;
+      if (!store?.isPartner) continue;
+      const blockers = await this.partnerBlockers(tx, id, ownerUserId, cfg, true);
+      if (blockers.length) {
+        throw new ConflictException(`Chưa thể thu hồi vai trò đại lý vì gian hàng đối tác còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`);
+      }
+      await tx.storefront.update({ where: { id }, data: { isPartner: false } });
+      await recordUserAdminEvent(tx, { userId: ownerUserId, kind: 'STOREFRONT_PARTNER', from: 'true', to: 'false', reason: id, actorId });
+    }
+    if (stores.length) {
+      this.logger.warn(`Thu hồi vai trò đại lý của ${ownerUserId}: tắt cờ đối tác ${stores.length} gian hàng CTV (admin ${actorId}).`);
+    }
+  }
+
+  private async partnerBlockers(
+    tx: Db,
+    storefrontId: string,
+    ownerUserId: string | null,
+    cfg: SettlementConfig,
+    ownerLosingDealer = false,
+  ): Promise<string[]> {
     const store = Prisma.sql`${storefrontId}`;
     const settleFrom = await this.consignmentSettleFrom(tx);
     const count = (q: Promise<{ n: bigint }[]>) => q.then((r) => Number(r[0]?.n ?? 0));
     const [owner, openOrders, consignmentOpen, statement, pendingPayouts, activeLinks, pendingReturns, unreceivedReturns, ownProducts] =
       await Promise.all([
-        ownerUserId ? tx.user.findUnique({ where: { id: ownerUserId }, select: { role: true } }) : null,
+        ownerUserId && !ownerLosingDealer ? tx.user.findUnique({ where: { id: ownerUserId }, select: { role: true } }) : null,
         tx.order.count({
           where: { fulfillerStorefrontId: storefrontId, status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] } },
         }),

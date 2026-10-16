@@ -18,6 +18,7 @@ import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
+import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
 import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
@@ -175,6 +176,7 @@ export class AdminService {
     private readonly rbac: RbacService,
     private readonly gomdonOrder: GomdonOrderService,
     private readonly gomdonClient: GomdonClient,
+    private readonly fulfilment?: MerchantFulfilmentService,
   ) {}
 
   /**
@@ -464,6 +466,8 @@ export class AdminService {
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
     }
+    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này đang là DEALER bị đổi vai trò.
+    const partnerCfg = role !== 'DEALER' ? await this.fulfilment?.settlementConfig() : undefined;
     const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const user = await tx.user.findUnique({ where: { phone: normalized } });
@@ -492,6 +496,11 @@ export class AdminService {
             }
           : {}),
       };
+      // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
+      if (previousRole === 'DEALER' && role !== 'DEALER') {
+        if (!this.fulfilment || !partnerCfg) throw new Error('AdminService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
+        await this.fulfilment.clearPartnerOnDealerRevoke(tx, user.id, adminId, partnerCfg);
+      }
       const updated = await tx.user.update({
         where: { id: user.id },
         data,
@@ -510,7 +519,7 @@ export class AdminService {
         });
       }
       return { updated, previousRole };
-    });
+    }, { maxWait: 15_000, timeout: 60_000 });
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
     // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
     // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ
