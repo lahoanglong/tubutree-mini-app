@@ -33,12 +33,13 @@ const REWARD = 100;
 const ROUNDS = 5;
 
 /**
- * Trừ suất giờ vàng khi khách ĐÃ có dòng suất không được giữ khoá dòng users của khách (KEY SHARE chặn FOR UPDATE) trong lúc còn
- * phải khoá suất giờ vàng của dòng sau. Admin duyệt trả một phần đơn của người được mời R (có suất B) hoàn suất B rồi khoá người
- * mời U (FOR UPDATE, thu hồi thưởng giới thiệu); U đặt đơn [A (U đã có dòng suất A), B]. Tx thứ ba giữ dòng suất B: lần duyệt xếp
- * hàng trước, lần đặt (đã xong dòng A) xếp hàng sau; thả ra thì lần duyệt lấy B rồi chờ users của U.
+ * Trừ suất giờ vàng không được giữ khoá dòng users của khách (KEY SHARE chặn FOR UPDATE) trong lúc còn phải khoá suất giờ vàng
+ * của dòng khác. Admin duyệt trả một phần đơn của người được mời R (có suất B) hoàn suất B rồi khoá người mời U (FOR UPDATE, thu
+ * hồi thưởng giới thiệu); U đặt đơn có B cùng dòng giờ vàng khác: A (U đã có dòng suất A) hoặc C (U chưa có dòng suất). Tx thứ ba
+ * giữ dòng suất B: lần duyệt xếp hàng trước, lần đặt (đã xong các dòng trước B) xếp hàng sau; thả ra thì lần duyệt lấy B rồi chờ
+ * users của U.
  */
-describe('Đặt đơn giờ vàng (đã có dòng suất) ‖ duyệt trả một phần đơn của người được mời (real Postgres)', () => {
+describe('Đặt đơn nhiều dòng giờ vàng ‖ duyệt trả một phần đơn của người được mời (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let checkout: CheckoutService;
@@ -113,8 +114,11 @@ describe('Đặt đơn giờ vàng (đã có dòng suất) ‖ duyệt trả m�
     return { v, flash };
   }
 
-  /** U mời R; U đã mua 1 suất A; R có đơn thứ hai đã giao gồm 2 suất B và yêu cầu trả 1; U nhận thưởng giới thiệu cho R. */
-  async function scenario() {
+  /**
+   * U mời R; U đã mua 1 suất A, chưa mua C; R có đơn thứ hai đã giao gồm 2 suất B và yêu cầu trả 1; U nhận thưởng giới thiệu
+   * cho R. Giỏ của U gồm các dòng `cartOf` theo đúng thứ tự đó.
+   */
+  async function scenario(cartOf: ('A' | 'B' | 'C')[]) {
     const now = Date.now();
     const sale = await prisma.flashSale.create({
       data: { title: `Giờ vàng ${randCode(4)}`, startAt: new Date(now - 3_600_000), endAt: new Date(now + 3_600_000), createdBy: 'it' },
@@ -122,6 +126,7 @@ describe('Đặt đơn giờ vàng (đã có dòng suất) ‖ duyệt trả m�
     created.flashSaleIds.push(sale.id);
     const a = await flashLine(sale.id);
     const b = await flashLine(sale.id);
+    const c = await flashLine(sale.id);
     const referrer = await createUser(prisma, { role: 'CUSTOMER' });
     const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
     created.userIds.push(referrer.id, referee.id);
@@ -178,10 +183,20 @@ describe('Đặt đơn giờ vàng (đã có dòng suất) ‖ duyệt trả m�
       reason: 'Không còn nhu cầu dùng nữa',
       items: [{ orderItemId: item.id, quantity: 1 }],
     });
-    await cart.addItem(referrer.id, { variationId: a.v.id, quantity: 1 });
-    await cart.addItem(referrer.id, { variationId: b.v.id, quantity: 1 });
-    expect((await cart.getCart(referrer.id)).items.map((l) => l.flashSaleItemId)).toEqual([a.flash.id, b.flash.id]);
-    return { a, b, referrer, referee, addr, req };
+    const lines = cartOf.map((k) => ({ A: a, B: b, C: c })[k]);
+    // Dòng giỏ không có cột thứ tự (đọc theo thứ tự vật lý): chèn lại tới khi checkout đọc đúng thứ tự cần tái hiện.
+    for (let attempt = 0; ; attempt++) {
+      for (const l of lines) await cart.addItem(referrer.id, { variationId: l.v.id, quantity: 1 });
+      const read = (await cart.getCart(referrer.id)).items.map((l) => l.flashSaleItemId);
+      const want = lines.map((l) => l.flash.id);
+      if (attempt < 5 && read.join() !== want.join()) {
+        await prisma.cartItem.deleteMany({ where: { cart: { userId: referrer.id } } });
+        continue;
+      }
+      expect(read).toEqual(want);
+      break;
+    }
+    return { a, b, c, referrer, referee, addr, req };
   }
 
   async function holdFlashItem(id: string) {
@@ -221,9 +236,15 @@ describe('Đặt đơn giờ vàng (đã có dòng suất) ‖ duyệt trả m�
     }
   }
 
-  it(`duyệt trả một phần (hoàn suất B rồi khoá người mời) ‖ người mời đặt [A đã có dòng suất, B] → không 40P01 (${ROUNDS} vòng)`, async () => {
+  const CASES: { cart: ('A' | 'B' | 'C')[]; what: string }[] = [
+    { cart: ['A', 'B'], what: '[A đã có dòng suất, B]' },
+    { cart: ['C', 'B'], what: '[C chưa có dòng suất, B]' },
+    { cart: ['C', 'A', 'B'], what: '[C chưa có dòng suất, A đã có, B chưa có]' },
+  ];
+
+  it.each(CASES)(`duyệt trả một phần (hoàn suất B rồi khoá người mời) ‖ người mời đặt $what → không 40P01 (${ROUNDS} vòng)`, async ({ cart: cartOf }) => {
     for (let round = 0; round < ROUNDS; round++) {
-      const s = await scenario();
+      const s = await scenario(cartOf);
       const holder = await holdFlashItem(s.b.flash.id);
       const running: Promise<unknown>[] = [];
       try {
@@ -241,20 +262,26 @@ describe('Đặt đơn giờ vàng (đã có dòng suất) ‖ duyệt trả m�
         holder.release();
         await holder.done;
       }
-      const r = summarize(await Promise.allSettled(running));
+      const settled = await Promise.allSettled(running);
+      const r = summarize(settled);
       expect(r.errors.filter((e) => e.includes('40P01') || e.includes('deadlock'))).toEqual([]);
       expect(r.errors).toEqual([]);
+      expect(settled.map((x) => x.status)).toEqual(['fulfilled', 'fulfilled']);
 
       expect((await prisma.returnRequest.findUniqueOrThrow({ where: { id: s.req.id } })).status).toBe('APPROVED');
+      const items = { A: s.a, B: s.b, C: s.c };
       const placed = await prisma.order.findMany({ where: { userId: s.referrer.id }, include: { items: true } });
-      expect(placed.map((o) => o.items.map((i) => i.flashSaleItemId).sort())).toEqual([[s.a.flash.id, s.b.flash.id].sort()]);
+      expect(placed.map((o) => o.items.map((i) => i.flashSaleItemId).sort())).toEqual([cartOf.map((k) => items[k].flash.id).sort()]);
+      const bought = { A: 1 + (cartOf.includes('A') ? 1 : 0), B: 1, C: cartOf.includes('C') ? 1 : 0 };
       const purchases = await prisma.flashSalePurchase.findMany({ where: { userId: s.referrer.id } });
       expect(new Map(purchases.map((p) => [p.flashSaleItemId, p.quantity]))).toEqual(
-        new Map([
-          [s.a.flash.id, 2],
-          [s.b.flash.id, 1],
-        ]),
+        new Map((['A', 'B', 'C'] as const).filter((k) => bought[k] > 0).map((k) => [items[k].flash.id, bought[k]])),
       );
+      // soldCount = tổng dòng suất: A (U), B (R còn 1 sau khi trả 1 + U 1), C (U).
+      const sold = { A: bought.A, B: 1 + bought.B, C: bought.C };
+      for (const k of ['A', 'B', 'C'] as const) {
+        expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: items[k].flash.id } })).soldCount).toBe(sold[k]);
+      }
       for (const u of [s.referrer.id, s.referee.id]) {
         const row = await prisma.user.findUniqueOrThrow({ where: { id: u }, select: { pointsBalance: true } });
         const ledger = await prisma.pointsTransaction.aggregate({ where: { userId: u, lot: 'STANDARD' }, _sum: { delta: true } });

@@ -5,6 +5,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AuthUser, JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import { Prisma, type User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
@@ -29,17 +30,10 @@ export const MERGE_ANCESTOR_CAP = 1000;
 const MERGE_TX_OPTIONS = { maxWait: 2_000, timeout: 5_000 } as const;
 const MERGE_LOCK_TIMEOUT = '2s';
 const MERGE_STATEMENT_TIMEOUT = '5s';
-const MERGE_BUSY_MESSAGE = 'Hệ thống đang bận, vui lòng thử lại sau ít giây.';
+const MERGE_BUSY_MESSAGE = LOCK_BUSY_MESSAGE;
 
-/**
- * Lần gộp thua vì tranh khoá, thử lại là qua: hạn chờ khoá/câu lệnh/tx (55P03 lock_timeout, 57014 statement_timeout, P2028 Prisma
- * huỷ tx) hoặc bị Postgres chọn làm nạn nhân deadlock (40P01, Prisma P2034). Tx đã rollback nên không đổi gì.
- */
-export function isMergeBusy(err: unknown): boolean {
-  if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === 'P2028' || err.code === 'P2034')) return true;
-  const message = err instanceof Error ? err.message : '';
-  return /\b55P03\b|\b57014\b|\b40P01\b|lock timeout|statement timeout|deadlock detected/i.test(message);
-}
+/** Lần gộp thua vì tranh khoá, thử lại là qua (tx đã rollback nên không đổi gì). */
+export const isMergeBusy = isLockBusy;
 
 /**
  * Thứ tự khoá dòng users khi gộp: người được mời trước người mời (cạnh a → b khi a.referredById = b, cả hai trong tập),
