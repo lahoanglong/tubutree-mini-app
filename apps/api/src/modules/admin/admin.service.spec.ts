@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService } from '../orders/order-status.service';
@@ -23,6 +23,7 @@ import type { CouponsService } from '../coupons/coupons.service';
 import type { RbacService } from '../staff/rbac/rbac.service';
 import type { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import type { GomdonClient } from '../integrations/gomdon/gomdon.client';
+import type { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
 // test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
@@ -59,6 +60,10 @@ const defaultGomdonOrder = {
   isRecyclingEnabled: jest.fn().mockResolvedValue(false),
 } as unknown as GomdonOrderService;
 const defaultGomdonClient = { getConfig: jest.fn() } as unknown as GomdonClient;
+const fulfilment = {
+  settlementConfig: jest.fn().mockResolvedValue({}),
+  clearPartnerOnRoleLoss: jest.fn().mockResolvedValue(undefined),
+};
 const mkAdmin = (
   prisma: PrismaService,
   deps: { gomdonOrder?: GomdonOrderService; gomdonClient?: GomdonClient; config?: SystemConfigService } = {},
@@ -76,6 +81,7 @@ const mkAdmin = (
     rbac,
     deps.gomdonOrder ?? defaultGomdonOrder,
     deps.gomdonClient ?? defaultGomdonClient,
+    fulfilment as unknown as MerchantFulfilmentService,
   );
 };
 
@@ -112,11 +118,13 @@ function makeApproveTx(opts: {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = jest.fn().mockResolvedValue(0);
+  const queryRaw = jest.fn().mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false }]);
   const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       $executeRaw: executeRaw,
+      $queryRaw: queryRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
       storefront: { updateMany: storefrontUpdateMany },
       user: {
@@ -126,7 +134,7 @@ function makeApproveTx(opts: {
       },
     }),
   );
-  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, userCount, storefrontUpdateMany };
+  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, queryRaw, userCount, storefrontUpdateMany };
 }
 
 describe('AdminService.reviewDealerApplication', () => {
@@ -419,6 +427,37 @@ describe('AdminService.setUserRole', () => {
     });
     await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
     expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'CUSTOMER');
+  });
+
+  describe('gian hàng đối tác của chủ khi đổi vai trò (luật B)', () => {
+    const withRole = (role: string) =>
+      makePrisma({
+        user: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role }),
+          update: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'X', fullName: 'X' }),
+          count: jest.fn().mockResolvedValue(3),
+        },
+      });
+
+    it.each([
+      ['DEALER', 'CUSTOMER', true],
+      ['DEALER', 'AFFILIATE', true],
+      ['STAFF', 'CUSTOMER', true],
+      ['ADMIN', 'AFFILIATE', true],
+      ['DEALER', 'STAFF', false],
+      ['DEALER', 'ADMIN', false],
+      ['STAFF', 'DEALER', false],
+      ['CUSTOMER', 'AFFILIATE', false],
+    ])('%s → %s: xử lý gian hàng = %s', async (from, to, expected) => {
+      fulfilment.clearPartnerOnRoleLoss.mockClear();
+      await mkAdmin(withRole(from)).setUserRole('admin1', '0899625240', to as 'CUSTOMER', to === 'DEALER' ? 't1' : undefined);
+      expect(fulfilment.clearPartnerOnRoleLoss.mock.calls.length > 0).toBe(expected);
+    });
+
+    it('deadlock trong transaction đổi vai trò → 503', async () => {
+      const prisma = makePrisma({ $transaction: jest.fn().mockRejectedValue(new Error('deadlock detected (40P01)')) });
+      await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
   });
 
   // Một cú chạm nhầm không được phép khoá cả tổ chức ra ngoài: khôi phục chỉ còn cách vào

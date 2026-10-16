@@ -5,6 +5,8 @@ import { UserBlockService } from '../../src/modules/admin/user-block.service';
 import { SessionStateService } from '../../src/modules/auth/session-state.service';
 import { JwtStrategy } from '../../src/modules/auth/strategies/jwt.strategy';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../../src/config/env.validation';
 import { createOrder, createUser } from './helpers';
@@ -25,9 +27,10 @@ describe('Chi tiết người dùng + nhóm việc nhân viên (real Postgres)',
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    rbac = new RbacService(prisma);
+    const fulfilment = new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma));
+    rbac = new RbacService(prisma, fulfilment);
     const none = {} as never;
-    admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none);
+    admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none, fulfilment);
     sessions = new SessionStateService(prisma);
     blocks = new UserBlockService(prisma, sessions);
     const config = { get: () => 'it-secret' } as unknown as ConfigService<Env, true>;

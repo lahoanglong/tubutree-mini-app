@@ -19,6 +19,8 @@ import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
+import { losesPartnerStore } from '../merchant/partner-store';
+import { throwIfLockBusy } from '../../common/lock-busy';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
 import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
@@ -255,8 +257,17 @@ export class AdminService {
       await this.prisma.$transaction(async (tx) => {
         // Duyệt đổi vai trò người nộp sang DEALER: người nộp là admin thì đây cũng là một lần hạ quyền admin.
         await lockAdminRoster(tx);
-        const applicant = await tx.user.findUnique({ where: { id: app.userId }, select: { role: true } });
-        if (applicant?.role === 'ADMIN') {
+        // Gian hàng của người nộp khoá trước dòng users (cùng thứ tự với thu hồi đại lý và ẩn danh tài khoản), nếu không bên ghi
+        // users trước rồi đợi gian hàng sẽ deadlock với bên giữ gian hàng rồi đợi users.
+        await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
+        // Rồi tới dòng users (FOR UPDATE) TRƯỚC mọi ghi vào hồ sơ: người nộp chưa có gian hàng thì không có dòng gian hàng nào để
+        // khoá, mà bên ghi hồ sơ rồi đợi users sẽ deadlock với ẩn danh tài khoản (giữ users rồi ghi hồ sơ).
+        const [applicant] = await tx.$queryRaw<{ role: string; isBlocked: boolean }[]>`
+          SELECT "role"::text AS "role", "isBlocked" FROM "users" WHERE "id" = ${app.userId} FOR UPDATE`;
+        if (!applicant || applicant.isBlocked) {
+          throw new BadRequestException('Tài khoản người nộp đã bị khoá hoặc đã xoá — không thể duyệt hồ sơ đại lý.');
+        }
+        if (applicant.role === 'ADMIN') {
           if (app.userId === adminId) {
             throw new BadRequestException('Không thể tự duyệt hồ sơ đại lý của chính mình — nhờ một quản trị viên khác thực hiện.');
           }
@@ -272,7 +283,7 @@ export class AdminService {
           data: { role: 'DEALER', metadata: mergedMeta },
         });
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
-      });
+      }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
         where: { id, status: 'PENDING' },
@@ -466,8 +477,8 @@ export class AdminService {
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
     }
-    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này đang là DEALER bị đổi vai trò.
-    const partnerCfg = role !== 'DEALER' ? await this.fulfilment?.settlementConfig() : undefined;
+    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này rơi xuống CUSTOMER/AFFILIATE.
+    const partnerCfg = losesPartnerStore('DEALER', role) ? await this.fulfilment?.settlementConfig() : undefined;
     const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const user = await tx.user.findUnique({ where: { phone: normalized } });
@@ -497,9 +508,9 @@ export class AdminService {
           : {}),
       };
       // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
-      if (previousRole === 'DEALER' && role !== 'DEALER') {
+      if (losesPartnerStore(previousRole, role)) {
         if (!this.fulfilment || !partnerCfg) throw new Error('AdminService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
-        await this.fulfilment.clearPartnerOnDealerRevoke(tx, user.id, adminId, partnerCfg);
+        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole);
       }
       const updated = await tx.user.update({
         where: { id: user.id },
@@ -519,7 +530,7 @@ export class AdminService {
         });
       }
       return { updated, previousRole };
-    }, { maxWait: 15_000, timeout: 60_000 });
+    }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
     // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
     // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ

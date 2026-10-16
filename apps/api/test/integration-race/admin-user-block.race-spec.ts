@@ -11,6 +11,8 @@ import type { ZaloService } from '../../src/modules/auth/zalo.service';
 import { SessionStateService } from '../../src/modules/auth/session-state.service';
 import { JwtStrategy } from '../../src/modules/auth/strategies/jwt.strategy';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { UserBlockService } from '../../src/modules/admin/user-block.service';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
 import { ROLES_KEY } from '../../src/common/decorators/roles.decorator';
@@ -42,7 +44,7 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
       JWT_REFRESH_REUSE_GRACE_SECONDS: 30,
     };
     const config = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
-    rbac = new RbacService(prisma);
+    rbac = new RbacService(prisma, new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma)));
     auth = new AuthService(prisma, new JwtService(), config, {} as ZaloService, rbac);
     sessions = new SessionStateService(prisma);
     strategy = new JwtStrategy(config, sessions);

@@ -1,10 +1,13 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { recordUserAdminEvent } from '../../../common/user-admin-events';
 import { maskPhone } from '../../../common/mask-pii';
 import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../../common/admin-roster';
+import { throwIfLockBusy } from '../../../common/lock-busy';
+import { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
+import { losesPartnerStore } from '../../merchant/partner-store';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -21,7 +24,10 @@ type Db = PrismaService | Prisma.TransactionClient;
 export class RbacService {
   private readonly logger = new Logger(RbacService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly fulfilment?: MerchantFulfilmentService,
+  ) {}
 
   /**
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
@@ -97,12 +103,15 @@ export class RbacService {
   /**
    * Thu hồi mọi grant STAFF/ADMIN theo SĐT. Nếu user đang STAFF/ADMIN thì hạ về role GỐC
    * (DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER) — tránh xoá nhầm quyền đại lý khi
-   * một đại lý từng được nâng tạm lên nhân viên.
+   * một đại lý từng được nâng tạm lên nhân viên. Nếu vai trò gốc là CUSTOMER mà người này còn gian hàng đối tác vướng
+   * mắc thì vẫn gỡ quyền và về CUSTOMER, gian hàng giữ nguyên và kết quả có `storeBlocked: true` (không bao giờ nâng quyền ở đây).
    * Bọc trong $transaction: revoke grant + hạ role là 1 thao tác atomic — tránh trạng thái nửa
    * vời (grant đã revoke nhưng role chưa hạ) nếu lỗi giữa chừng.
    */
   async revokeGrant(adminId: string, phone: string) {
     const normalized = phone.trim();
+    // Đọc cấu hình đối soát trước khi mở tx (như AdminService.setUserRole): chỉ dùng khi người này rơi xuống CUSTOMER.
+    const partnerCfg = await this.fulfilment?.settlementConfig();
     return this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const { count } = await tx.roleGrant.updateMany({
@@ -117,8 +126,24 @@ export class RbacService {
       }
       if (user?.role === 'ADMIN') await assertAnotherActiveAdmin(tx, user.id, LAST_ADMIN_MESSAGE.revoke);
       let downgraded = false;
+      let role: UserRole | null = null;
+      let storeBlocked = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
         const base = await this.resolveBaseRole(user.id, tx);
+        // Gian hàng khoá trước dòng users (cùng thứ tự với checkout). Việc gỡ quyền nhân viên không bao giờ bị gian hàng chặn và không
+        // bao giờ nâng quyền: còn vướng mắc đối tác thì vai trò vẫn về đúng vai trò gốc, gian hàng giữ nguyên (storeBlocked), hết vướng
+        // thì cờ tắt như bình thường.
+        if (losesPartnerStore(user.role, base)) {
+          if (!this.fulfilment || !partnerCfg) throw new Error('RbacService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
+          try {
+            await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, user.role);
+          } catch (err) {
+            if (!(err instanceof ConflictException)) throw err;
+            storeBlocked = true;
+            this.logger.warn(`Thu hồi quyền người dùng ${user.id} (${maskPhone(normalized)}): gian hàng đối tác còn vướng nên giữ nguyên gian hàng, vai trò về ${base}.`);
+          }
+        }
+        role = base;
         await tx.user.update({
           where: { id: user.id },
           data: { role: base, ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
@@ -136,8 +161,8 @@ export class RbacService {
         downgraded = true;
         this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${maskPhone(normalized)}: ${user.role} → ${base}`);
       }
-      return { revoked: count, downgraded };
-    });
+      return { revoked: count, downgraded, role, ...(storeBlocked ? { storeBlocked } : {}) };
+    }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
   }
 
   /**
@@ -160,7 +185,11 @@ export class RbacService {
     return count;
   }
 
-  /** Role gốc khi bỏ quyền nhân viên: DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER. */
+  /**
+   * Role gốc khi bỏ quyền nhân viên: DEALER chỉ khi có đơn đại lý đã duyệt, ngược lại CUSTOMER. Đại lý cấp qua
+   * AdminService.setUserRole (không có đơn) bỏ quyền nhân viên sẽ về CUSTOMER — metadata.dealerTierId không được tin vì không
+   * bao giờ bị xoá khi hạ vai trò.
+   */
   private async resolveBaseRole(userId: string, db: Db = this.prisma): Promise<'CUSTOMER' | 'DEALER'> {
     const dealerApp = await db.dealerApplication.findFirst({
       where: { userId, status: 'APPROVED' },
