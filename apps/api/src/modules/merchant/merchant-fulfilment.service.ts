@@ -1491,16 +1491,20 @@ export class MerchantFulfilmentService {
    * vào đối soát tự động. Bấm lại không đổi mốc.
    */
   async confirmConsignment(adminId: string, linkId: string) {
-    const link = await this.prisma.merchantPancakeLink.findUnique({
-      where: { id: linkId },
-      select: { takeover: true, unlinkedAt: true },
-    });
-    if (!link) throw new NotFoundException('Không tìm thấy liên kết.');
-    if (!link.takeover) throw new BadRequestException('Liên kết này không nhận lại hàng Tubu đang bán nên không cần xác nhận hàng ký gửi.');
-    if (link.unlinkedAt) throw new BadRequestException('Liên kết đã gỡ.');
-    await this.prisma.merchantPancakeLink.updateMany({
-      where: { id: linkId, consignmentConfirmedAt: null },
-      data: { consignmentConfirmedAt: new Date(), consignmentConfirmedBy: adminId },
+    await this.prisma.$transaction(async (tx) => {
+      const found = await tx.merchantPancakeLink.findUnique({ where: { id: linkId }, select: { variationId: true } });
+      if (!found) throw new NotFoundException('Không tìm thấy liên kết.');
+      // Khoá biến thể trước khi lấy mốc: checkout giữ khoá này tới commit và tính hoa hồng CTV sau khi chèn đơn, nên đơn đặt từ
+      // mốc xác nhận luôn thấy liên kết đã xác nhận (hoa hồng loại, bảng kê trả), đơn trước mốc thì ngược lại.
+      await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${found.variationId} FOR UPDATE`;
+      const link = await tx.merchantPancakeLink.findUnique({ where: { id: linkId }, select: { takeover: true, unlinkedAt: true } });
+      if (!link) throw new NotFoundException('Không tìm thấy liên kết.');
+      if (!link.takeover) throw new BadRequestException('Liên kết này không nhận lại hàng Tubu đang bán nên không cần xác nhận hàng ký gửi.');
+      if (link.unlinkedAt) throw new BadRequestException('Liên kết đã gỡ.');
+      await tx.merchantPancakeLink.updateMany({
+        where: { id: linkId, consignmentConfirmedAt: null },
+        data: { consignmentConfirmedAt: new Date(), consignmentConfirmedBy: adminId },
+      });
     });
     return this.prisma.merchantPancakeLink.findUniqueOrThrow({
       where: { id: linkId },

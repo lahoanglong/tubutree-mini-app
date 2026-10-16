@@ -948,12 +948,14 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     const { svc, prisma } = build();
     prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce(null);
     await expect(svc.confirmConsignment('admin-1', 'l0')).rejects.toThrow(NotFoundException);
-    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ takeover: false, unlinkedAt: null });
+    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ variationId: 'v1' }).mockResolvedValueOnce({ takeover: false, unlinkedAt: null });
     await expect(svc.confirmConsignment('admin-1', 'l1')).rejects.toThrow(BadRequestException);
-    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ takeover: true, unlinkedAt: NOW });
+    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ variationId: 'v1' }).mockResolvedValueOnce({ takeover: true, unlinkedAt: NOW });
     await expect(svc.confirmConsignment('admin-1', 'l2')).rejects.toThrow('Liên kết đã gỡ.');
-    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ takeover: true, unlinkedAt: null });
+    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ variationId: 'v1' }).mockResolvedValueOnce({ takeover: true, unlinkedAt: null });
+    prisma.$queryRaw.mockClear();
     await svc.confirmConsignment('admin-1', 'l3');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     expect(prisma.merchantPancakeLink.updateMany).toHaveBeenCalledWith({
       where: { id: 'l3', consignmentConfirmedAt: null },
       data: { consignmentConfirmedAt: expect.any(Date), consignmentConfirmedBy: 'admin-1' },

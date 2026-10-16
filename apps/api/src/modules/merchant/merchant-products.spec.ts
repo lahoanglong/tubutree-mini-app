@@ -277,6 +277,7 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
         findFirst: jest.fn().mockResolvedValue(link),
         updateMany: jest.fn().mockResolvedValue({ count: closed }),
       },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       variation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), create: jest.fn().mockResolvedValue({}) },
       product: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ basePrice: 150_000, salePrice: null }),

@@ -3,6 +3,10 @@ import { Prisma } from '@prisma/client';
 /**
  * Biến thể của dòng `oi` liên kết với gian hàng `store` lúc đặt đơn `o` ([linkedAt, unlinkedAt)). `confirmedOnly`: liên kết
  * takeover chỉ tính đơn đặt từ lúc admin xác nhận hàng ký gửi.
+ *
+ * Hoa hồng CTV (affiliate.ownConsignmentVariationIds) dùng đúng điều kiện này mà CỐ Ý không xét mốc bắt đầu đối soát
+ * (`consignmentSettleFrom`): đơn trước mốc được chốt tay ngoài phiếu và vẫn là hàng ký gửi của đại lý, nên CTV không hưởng
+ * thêm (tránh trả hai lần).
  */
 export function consignmentLinkedSql(store: Prisma.Sql, confirmedOnly: boolean): Prisma.Sql {
   return Prisma.sql`EXISTS (
