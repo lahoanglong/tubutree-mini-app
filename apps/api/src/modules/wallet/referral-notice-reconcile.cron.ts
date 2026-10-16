@@ -6,6 +6,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isReportableNotice, referralDedupeKey, sendReferralNotices, type ReferralNotice } from './referral-notify';
 import { referralNoticeFromLedger, REFERRAL_NOTICE_REASON_PREFIXES, type ReferralLedgerRow } from './referral-notice-ledger';
+import { MILESTONE_PREFIX } from './referral-reward';
 
 const PAGE = 50;
 const MAX_PER_TICK = 200;
@@ -38,6 +39,8 @@ export class ReferralNoticeReconcileCron {
   private running = false;
   private cursor: Cursor | null = null;
   private liveSince: Date | null = null;
+  private failClosedSince: Date | null = null;
+  private readonly warnedAmbiguous = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -83,8 +86,8 @@ export class ReferralNoticeReconcileCron {
   /** Một lượt quét KHÔNG giữ khoá cron (test chạy hai lượt song song để chứng minh dedupeKey đủ chặn trùng). */
   async sweep(now: Date): Promise<{ scanned: number; missing: number; sent: number; failed: number; skippedNotices: number; wrapped: boolean }> {
     const windowStart = new Date(now.getTime() - WINDOW_MS);
-    const liveSince = await this.templatesLiveSince();
-    const from = liveSince && liveSince > windowStart ? liveSince : windowStart;
+    const liveSince = await this.templatesLiveSince(now);
+    const from = liveSince > windowStart ? liveSince : windowStart;
     const to = new Date(now.getTime() - MIN_AGE_MS);
     const out = { scanned: 0, missing: 0, sent: 0, failed: 0, skippedNotices: 0, wrapped: false };
     let after = this.cursor;
@@ -123,15 +126,30 @@ export class ReferralNoticeReconcileCron {
   }
 
   /**
-   * Lúc migration mẫu tin chạy xong (không có cột ngày tạo ở notification_templates): chặn lần triển khai đầu gửi dồn tin cho các
-   * sự kiện của 3 ngày trước đó, vốn chưa từng được báo. Không đọc được thì không chặn (DB dựng không qua migrate, chỉ dev/test).
+   * Mốc dưới của lượt quét: lúc migration mẫu tin chạy xong (notification_templates không có cột ngày tạo), để lần triển khai
+   * đầu không gửi dồn tin cho sự kiện của 3 ngày trước, vốn chưa từng có đường báo. Đọc lỗi hoặc không có dòng migration thành
+   * công thì ĐÓNG: mốc = lúc lượt quét đầu tiên của tiến trình này (chỉ dòng sổ tạo sau đó mới được gửi bù), ghi cảnh báo một
+   * lần; lần sau vẫn thử đọc lại nên có dòng migration là tự hết đóng.
    */
-  private async templatesLiveSince(): Promise<Date | null> {
+  private async templatesLiveSince(now: Date): Promise<Date> {
     if (this.liveSince) return this.liveSince;
-    const rows = await this.prisma.$queryRaw<{ finishedAt: Date | null }[]>`
-      SELECT "finished_at" AS "finishedAt" FROM "_prisma_migrations" WHERE "migration_name" = ${TEMPLATES_MIGRATION}`;
-    this.liveSince = rows[0]?.finishedAt ?? null;
-    return this.liveSince;
+    try {
+      const rows = await this.prisma.$queryRaw<{ finishedAt: Date | null }[]>`
+        SELECT max("finished_at") AS "finishedAt" FROM "_prisma_migrations"
+         WHERE "migration_name" = ${TEMPLATES_MIGRATION} AND "rolled_back_at" IS NULL AND "finished_at" IS NOT NULL`;
+      const at = rows[0]?.finishedAt;
+      if (at) {
+        this.liveSince = at;
+        return at;
+      }
+    } catch (err) {
+      this.logger.warn(`Không đọc được mốc migration ${TEMPLATES_MIGRATION}: ${err instanceof Error ? err.message : err}`);
+    }
+    if (!this.failClosedSince) {
+      this.failClosedSince = now;
+      this.logger.warn(`Không có mốc migration ${TEMPLATES_MIGRATION}: chỉ gửi bù tin cho dòng sổ tạo sau ${now.toISOString()}.`);
+    }
+    return this.failClosedSince;
   }
 
   private async reconcilePage(page: ReferralLedgerRow[]): Promise<{ missing: number; sent: number; failed: number; skippedNotices: number }> {
@@ -140,19 +158,19 @@ export class ReferralNoticeReconcileCron {
     const delivered = await this.deliveredKeys(page);
     const notices: ReferralNotice[] = [];
     for (const row of page) {
-      if (delivered.has(`${row.userId}|${referralDedupeKey(row.reason)}`)) continue;
-      res.missing += 1;
+      if (delivered.has(row.id)) continue;
       try {
         const notice = await referralNoticeFromLedger(this.prisma, row);
-        if (notice === 'AMBIGUOUS') {
-          this.logger.warn(`Không dựng lại được tin thu hồi giới thiệu cho dòng sổ ${row.id} (${row.reason}): nhiều dòng thu hồi cùng một sự kiện; bỏ qua.`);
-        }
+        if (notice === 'AMBIGUOUS') this.warnAmbiguousOnce(row);
+        // Dòng không có tin riêng (đã gộp vào tin khác, tin 0 điểm, bỏ qua có chủ đích) không phải tin sót.
         if (notice === null || typeof notice === 'string' || !isReportableNotice(notice)) {
           res.skippedNotices += 1;
           continue;
         }
+        res.missing += 1;
         notices.push(notice);
       } catch (err) {
+        res.missing += 1;
         res.failed += 1;
         this.logger.error(`Dựng lại tin giới thiệu cho dòng sổ ${row.id} (${row.reason}) lỗi: ${err instanceof Error ? err.message : err}`);
       }
@@ -165,20 +183,47 @@ export class ReferralNoticeReconcileCron {
     return res;
   }
 
-  /** `${userId}|${dedupeKey}` của các tin INAPP đã có, đúng phép kiểm của NotificationsService.notify. */
+  private warnAmbiguousOnce(row: ReferralLedgerRow): void {
+    if (this.warnedAmbiguous.has(row.id)) return;
+    if (this.warnedAmbiguous.size >= 1000) this.warnedAmbiguous.clear();
+    this.warnedAmbiguous.add(row.id);
+    this.logger.warn(`Không dựng lại được tin thu hồi giới thiệu cho dòng sổ ${row.id} (${row.reason}): nhiều dòng thu hồi cùng một sự kiện; bỏ qua.`);
+  }
+
+  /**
+   * Id các dòng sổ đã có tin, đúng phép kiểm của NotificationsService.notify (cùng khách, cùng dedupeKey, INAPP). Gộp khách chuyển
+   * dòng sổ sang tài khoản đích mà không chuyển nhật ký tin, nên tin đã gửi cho khách (user.mergedIntoId = chủ dòng sổ) cũng tính
+   * là đã gửi; khoá mốc bị đổi tên khi gộp (mang id đích, đời mới) nên với mốc so thêm theo số mốc đã báo cho khách đó.
+   */
   private async deliveredKeys(page: ReferralLedgerRow[]): Promise<Set<string>> {
-    const userIds = [...new Set(page.map((r) => r.userId))];
+    const owners = [...new Set(page.map((r) => r.userId))];
+    const guests = await this.prisma.user.findMany({ where: { mergedIntoId: { in: owners } }, select: { id: true, mergedIntoId: true } });
+    const guestsOf = new Map<string, string[]>();
+    for (const g of guests) guestsOf.set(g.mergedIntoId!, [...(guestsOf.get(g.mergedIntoId!) ?? []), g.id]);
+    const userIds = [...new Set([...owners, ...guests.map((g) => g.id)])];
     const keys = [...new Set(page.map((r) => referralDedupeKey(r.reason)))];
     const earliest = page.reduce((min, r) => (r.createdAt < min ? r.createdAt : min), page[0]!.createdAt);
     const since = new Date(earliest.getTime() - 60_000);
     // Tin chỉ có thể gửi sau dòng sổ của nó nên chặn sentAt cho truy vấn đi theo index (userId, sentAt).
-    const rows = await this.prisma.$queryRaw<{ userId: string; key: string }[]>(Prisma.sql`
-      SELECT "userId", "payload"->>'dedupeKey' AS "key"
+    const rows = await this.prisma.$queryRaw<{ userId: string; key: string | null; template: string; count: string | null }[]>(Prisma.sql`
+      SELECT "userId", "payload"->>'dedupeKey' AS "key", "templateCode" AS "template", "payload"->'data'->>'count' AS "count"
         FROM "notification_logs"
        WHERE "channel" = 'INAPP'
          AND "userId" = ANY(${userIds}::text[])
          AND "sentAt" >= ${since}
-         AND "payload"->>'dedupeKey' = ANY(${keys}::text[])`);
-    return new Set(rows.map((r) => `${r.userId}|${r.key}`));
+         AND ("payload"->>'dedupeKey' = ANY(${keys}::text[]) OR "templateCode" = 'REFERRAL_MILESTONE_PAID')`);
+    const byKey = new Set(rows.filter((r) => r.key).map((r) => `${r.userId}|${r.key}`));
+    const milestonesTold = new Set(rows.filter((r) => r.template === 'REFERRAL_MILESTONE_PAID').map((r) => `${r.userId}|${r.count}`));
+    const delivered = new Set<string>();
+    for (const row of page) {
+      const key = referralDedupeKey(row.reason);
+      const guestIds = guestsOf.get(row.userId) ?? [];
+      if ([row.userId, ...guestIds].some((u) => byKey.has(`${u}|${key}`))) delivered.add(row.id);
+      else if (row.reason.startsWith(MILESTONE_PREFIX)) {
+        const count = row.reason.slice(row.reason.lastIndexOf(':') + 1).split('#')[0];
+        if (guestIds.some((u) => milestonesTold.has(`${u}|${count}`))) delivered.add(row.id);
+      }
+    }
+    return delivered;
   }
 }

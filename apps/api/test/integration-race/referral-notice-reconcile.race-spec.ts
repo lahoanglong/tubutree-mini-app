@@ -122,7 +122,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     await moduleRef.get(SystemConfigService).set('referral.milestones_points', [], admin.id);
   });
 
-  async function deliveredOrder(userId: string, daysAgo: number, qty = 3) {
+  async function deliveredOrder(userId: string, daysAgo: number, qty = 3, gift = false) {
     const tag = randCode(8);
     const product = await prisma.product.create({
       data: { pancakeId: `it-p-${tag}`, brand: 'IT', slug: `it-r12-${tag.toLowerCase()}`, name: `SP ${tag}`, description: 'IT', basePrice: UNIT },
@@ -141,18 +141,23 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
       total,
       createdAt: new Date(Date.now() - daysAgo * DAY),
       deliveredAt: new Date(),
-      items: { create: [{ variationId: v.id, productName: 'Nước giặt', variationName: 'Chai', unitPrice: UNIT, quantity: qty, total, paidTotal: total }] },
+      items: {
+        create: [
+          { variationId: v.id, productName: 'Nước giặt', variationName: 'Chai', unitPrice: UNIT, quantity: qty, total, paidTotal: total },
+          ...(gift ? [{ variationId: v.id, productName: 'Quà tặng', variationName: 'Chai', unitPrice: 0, quantity: 1, total: 0, paidTotal: 0 }] : []),
+        ],
+      },
     });
-    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id, total: { gt: 0 } } });
     return { ...order, item };
   }
   type Ord = Awaited<ReturnType<typeof deliveredOrder>>;
 
-  async function pair(opts: { referrerName?: string; refereeName?: string } = {}) {
+  async function pair(opts: { referrerName?: string; refereeName?: string; giftOnB?: boolean } = {}) {
     const referrer = await createUser(prisma, { role: 'CUSTOMER', fullName: opts.referrerName ?? 'Lê Thị Hoa' });
     const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id, fullName: opts.refereeName ?? 'Nguyễn Văn An' });
     const a = await deliveredOrder(referee.id, 9);
-    const b = await deliveredOrder(referee.id, 4);
+    const b = await deliveredOrder(referee.id, 4, 3, opts.giftOnB);
     return { referrer, referee, a, b };
   }
 
@@ -311,6 +316,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     expect(await inbox(lost.referrer.id)).toEqual(liveInbox);
     await sweepAll(newCron(), later());
     expect(await inbox(lost.referrer.id)).toEqual(liveInbox);
+    expect(await inbox(live.referrer.id)).toEqual(liveInbox);
     expect(await balanceOf(lost.referrer.id)).toBe(0);
   });
 
@@ -325,26 +331,88 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     failNotify = false;
     await sweepAll(newCron(), later());
     expect(await inbox(lost.referrer.id)).toEqual(liveInbox);
+    expect(await inbox(live.referrer.id)).toEqual(liveInbox);
     expect(await balanceOf(lost.referrer.id)).toBe(await balanceOf(live.referrer.id));
   });
 
-  it('(g) gộp khách làm thưởng bị thu: tin thu hồi (ẩn tên) tới tài khoản giữ thưởng, không có tin "bạn nhận" nêu chính họ', async () => {
-    failNotify = true;
+  /** Khách G mời T (T đủ điều kiện, tự trả một phần nếu `partialReturn`), G gộp vào T: liên kết tự mời bị cắt, thưởng thu lại. */
+  async function mergeSelfReferral(partialReturn: boolean) {
     const g = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, fullName: 'Khách' });
     const t = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}`, referredById: g.id, fullName: 'Phạm Minh Tuấn' });
     await deliveredOrder(t.id, 9);
-    await deliveredOrder(t.id, 4);
+    const b = await deliveredOrder(t.id, 4);
     expect(await rewards.grantReferralOrderReward(t.id)).toBe(true);
+    if (partialReturn) await returnUnits(t.id, b, 1);
     zaloIdForNextCall = t.zaloId!;
     await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access');
+    return { g, t };
+  }
+
+  /** Khách G mời X, X mời T, X nhận thưởng, G gộp vào T: vòng bị cắt, thưởng của X (đang nằm ở G, nay ở T) bị thu. */
+  async function mergeCyclic() {
+    const g = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, fullName: 'Khách' });
+    const x = await createUser(prisma, { role: 'CUSTOMER', referredById: g.id, fullName: 'Nguyễn Văn An' });
+    const t = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}`, referredById: x.id, fullName: 'Phạm Minh Tuấn' });
+    await deliveredOrder(x.id, 9);
+    await deliveredOrder(x.id, 4);
+    expect(await rewards.grantReferralOrderReward(x.id)).toBe(true);
+    zaloIdForNextCall = t.zaloId!;
+    await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access');
+    return { g, t };
+  }
+
+  const MERGE_REVOKE_HIDDEN = 'Thưởng giới thiệu từ bạn bè được thu lại vì liên kết giới thiệu không còn hợp lệ sau khi gộp tài khoản: đã trừ 100 Điểm Xanh.';
+
+  it('(g) gộp khách làm thưởng bị thu: tin thu hồi (ẩn tên) tới tài khoản giữ thưởng, không có tin "bạn nhận" nêu chính họ', async () => {
+    const live = await mergeSelfReferral(false);
+    const liveT = await inbox(live.t.id);
+    const liveG = await inbox(live.g.id);
+    expect(liveT).toEqual([['REFERRAL_REWARD_REVOKED', MERGE_REVOKE_HIDDEN]]);
+    expect(liveG.map((r) => r[0])).toEqual(['REFERRAL_REWARD_PAID']);
+
+    failNotify = true;
+    const lost = await mergeSelfReferral(false);
     failNotify = false;
-    expect(await inbox(t.id)).toEqual([]);
+    expect(await inbox(lost.t.id)).toEqual([]);
     await sweepAll(newCron(), later());
-    expect(await inbox(t.id)).toEqual([
-      ['REFERRAL_REWARD_REVOKED', 'Thưởng giới thiệu từ bạn bè được thu lại vì liên kết giới thiệu không còn hợp lệ sau khi gộp tài khoản: đã trừ 100 Điểm Xanh.'],
-    ]);
-    expect(await inbox(g.id)).toEqual([]);
+    expect(await inbox(lost.t.id)).toEqual(liveT);
+    expect(await inbox(lost.g.id)).toEqual([]);
+    expect(await inbox(live.t.id)).toEqual(liveT);
+    expect(await inbox(live.g.id)).toEqual(liveG);
+    expect(await balanceOf(lost.t.id)).toBe(0);
+  });
+
+  it('(m) gộp khách vòng G→X→T: tin đã gửi cho khách G không bị gửi lại cho T ("Bạn nhận" khi T đã bị thu hết), T chỉ có tin thu hồi', async () => {
+    const { g, t } = await mergeCyclic();
+    const tInbox = await inbox(t.id);
+    const gInbox = await inbox(g.id);
+    expect(gInbox.map((r) => r[0])).toEqual(['REFERRAL_REWARD_PAID']);
+    expect(tInbox.map((r) => r[0])).toEqual(['REFERRAL_REWARD_REVOKED']);
+    await sweepAll(newCron(), later());
+    expect(await inbox(t.id)).toEqual(tInbox);
+    expect(await inbox(g.id)).toEqual(gInbox);
     expect(await balanceOf(t.id)).toBe(0);
+  });
+
+  it('(n) tự mời: khách G mời T, T trả một phần rồi G gộp vào T: tin cũ của G không lặp lại cho T, không có tin nêu T là "bạn" của chính họ', async () => {
+    const live = await mergeSelfReferral(true);
+    const tInbox = await inbox(live.t.id);
+    const gInbox = await inbox(live.g.id);
+    expect(gInbox.map((r) => r[0])).toEqual(['REFERRAL_REWARD_PAID', 'REFERRAL_REWARD_REVOKED']);
+    expect(tInbox).toEqual([['REFERRAL_REWARD_REVOKED', expect.stringContaining('bạn bè')]]);
+    await sweepAll(newCron(), later());
+    expect(await inbox(live.t.id)).toEqual(tInbox);
+    expect(await inbox(live.g.id)).toEqual(gInbox);
+  });
+
+  it('(o) tự mời, mọi tin đều bị sót: T chỉ nhận tin thu hồi do gộp (ẩn tên), không nhận tin cấp/thu từng phần nêu chính mình', async () => {
+    failNotify = true;
+    const lost = await mergeSelfReferral(true);
+    failNotify = false;
+    await sweepAll(newCron(), later());
+    expect(await inbox(lost.t.id)).toEqual([['REFERRAL_REWARD_REVOKED', expect.stringContaining('bạn bè')]]);
+    expect(await inbox(lost.g.id)).toEqual([]);
+    expect(await balanceOf(lost.t.id)).toBe(0);
   });
 
   it('(h) tin đã có (kể cả khách đã bấm đã đọc) không bị gửi lại; đường trực tiếp chạy bình thường rồi cron quét không thêm', async () => {
@@ -371,7 +439,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     expect(await balanceOf(referrer.id)).toBe(REWARD);
   });
 
-  it('(k) hai lần trả một phần cộng lại đủ cả khoản (đóng khoản thưởng kèm thu mốc trong cùng sự kiện): một tin, cùng số điểm như đường trực tiếp', async () => {
+  it('(k) trả một phần rồi trả nốt phần còn lại (hai đơn trả, thu cả mốc ở lần sau): cùng các tin, cùng số điểm như đường trực tiếp', async () => {
     const scenario = async () => {
       await moduleRef.get(SystemConfigService).set('referral.milestones_points', [{ count: 1, bonusPoints: MILESTONE }], admin.id);
       const { referrer, referee, b } = await pair();
@@ -388,7 +456,35 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     failNotify = false;
     await sweepAll(newCron(), later());
     expect(await inbox(lost.id)).toEqual(liveInbox);
+    expect(await inbox(live.id)).toEqual(liveInbox);
     expect(await balanceOf(lost.id)).toBe(await balanceOf(live.id));
+    const again = await sweepAll(newCron(), later());
+    expect(again.missing).toBe(0);
+    expect(again.skippedNotices).toBeGreaterThanOrEqual(1);
+  });
+
+  it('(r) trả hết phần có tiền của đơn còn dòng quà 0đ (đóng khoản thưởng ngay trong lần trả một phần, kèm thu mốc): một tin mang khoá dòng từng phần, cron không gửi thêm cho người mời đã được báo', async () => {
+    const scenario = async () => {
+      await moduleRef.get(SystemConfigService).set('referral.milestones_points', [{ count: 1, bonusPoints: MILESTONE }], admin.id);
+      const { referrer, referee, b } = await pair({ giftOnB: true });
+      await rewards.grantReferralOrderReward(referee.id);
+      await returnUnits(referee.id, b, 3);
+      return referrer;
+    };
+    const live = await scenario();
+    const liveInbox = await inbox(live.id);
+    expect(liveInbox.map((r) => r[0])).toEqual(['REFERRAL_REWARD_PAID', 'REFERRAL_MILESTONE_PAID', 'REFERRAL_REWARD_REVOKED']);
+    expect(liveInbox[2]?.[1]).toContain('một phần đơn hàng');
+    expect(liveInbox[2]?.[1]).toContain('đã trừ 120 Điểm Xanh');
+    failNotify = true;
+    const lost = await scenario();
+    failNotify = false;
+    await sweepAll(newCron(), later());
+    expect(await inbox(lost.id)).toEqual(liveInbox);
+    expect(await inbox(live.id)).toEqual(liveInbox);
+    expect(await balanceOf(lost.id)).toBe(0);
+    const again = await sweepAll(newCron(), later());
+    expect(again.missing).toBe(0);
   });
 
   it('(l) sự kiện trước lúc migration mẫu tin chạy xong (lần triển khai đầu) không bị coi là tin sót', async () => {
@@ -407,6 +503,42 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     }
     await sweepAll(newCron(), later());
     expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
+  });
+
+  const FLOOR_MIGRATION = '20261017000100_r12_referral_notification_templates';
+
+  it('(p) không có dòng migration mẫu tin thành công: đóng, không gửi tin của dòng sổ tạo trước lượt quét đầu', async () => {
+    failNotify = true;
+    const { referrer, referee } = await pair();
+    await rewards.grantReferralOrderReward(referee.id);
+    failNotify = false;
+    await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "migration_name" = 'it-renamed' WHERE "migration_name" = ${FLOOR_MIGRATION}`;
+    try {
+      await sweepAll(newCron(), later());
+      expect(await inbox(referrer.id)).toEqual([]);
+    } finally {
+      await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "migration_name" = ${FLOOR_MIGRATION} WHERE "migration_name" = 'it-renamed'`;
+    }
+    await sweepAll(newCron(), later());
+    expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
+  });
+
+  it('(q) dòng migration lỗi/đã gỡ rồi chạy lại thành công: mốc lấy dòng thành công, bỏ dòng đã rolled_back', async () => {
+    failNotify = true;
+    const { referrer, referee } = await pair();
+    await rewards.grantReferralOrderReward(referee.id);
+    failNotify = false;
+    const [ok] = await prisma.$queryRaw<{ finishedAt: Date }[]>`SELECT "finished_at" AS "finishedAt" FROM "_prisma_migrations" WHERE "migration_name" = ${FLOOR_MIGRATION}`;
+    const extraId = `it-${randCode(8)}`;
+    await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "rolled_back_at" = now(), "finished_at" = ${later(60 * 60_000)} WHERE "migration_name" = ${FLOOR_MIGRATION}`;
+    await prisma.$executeRaw`INSERT INTO "_prisma_migrations" ("id", "checksum", "finished_at", "migration_name", "started_at", "applied_steps_count") VALUES (${extraId}, 'it', ${ok!.finishedAt}, ${FLOOR_MIGRATION}, now(), 1)`;
+    try {
+      await sweepAll(newCron(), later());
+      expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
+    } finally {
+      await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE "id" = ${extraId}`;
+      await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "rolled_back_at" = NULL, "finished_at" = ${ok!.finishedAt} WHERE "migration_name" = ${FLOOR_MIGRATION}`;
+    }
   });
 
   it('(j) handleCron không ném ra ngoài dù truy vấn hỏng', async () => {

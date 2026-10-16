@@ -96,6 +96,17 @@ async function findGrant(db: Db, refereeId: string): Promise<{ amount: number; l
 }
 
 /**
+ * Người được mời chính là người nhận tin (hoặc phiên khách đã gộp vào họ): chỉ xảy ra sau khi gộp khách chuyển dòng sổ sang
+ * tài khoản đích. Đường trực tiếp không bao giờ báo "bạn bè" là chính người nhận, nên tin dựng lại cũng bỏ qua; riêng thu hồi do
+ * gộp thì đường trực tiếp báo với tên ẩn (hideFriend) nên giữ.
+ */
+async function isSelfReferral(db: Db, userId: string, refereeId: string): Promise<boolean> {
+  if (refereeId === userId) return true;
+  const referee = await db.user.findUnique({ where: { id: refereeId }, select: { mergedIntoId: true } });
+  return referee?.mergedIntoId === userId;
+}
+
+/**
  * Dựng lại tin ReferralNotice mà đường trực tiếp đã (hoặc lẽ ra phải) gửi cho một dòng sổ điểm khoá tin, chỉ từ sổ. Cùng khoá
  * reason nên cùng dedupeKey; số điểm/nợ/nguyên nhân cùng nguồn với đường trực tiếp nên lời tin giống hệt (referralNoticeMessage).
  * Trả null nếu dòng không phải dòng khoá của tin nào.
@@ -105,7 +116,7 @@ export async function referralNoticeFromLedger(db: Db, row: ReferralLedgerRow): 
   if (reason.startsWith(REFERRAL_ORDER2_PREFIX)) {
     const refereeId = reason.slice(REFERRAL_ORDER2_PREFIX.length);
     // Dòng thưởng đã theo sổ của khách gộp sang chính người được mời (khách mời X, X là target): không có "bạn" nào để báo.
-    if (!(row.delta > 0) || refereeId === userId) return null;
+    if (!(row.delta > 0) || (await isSelfReferral(db, userId, refereeId))) return null;
     return { kind: 'PAID', referrerId: userId, refereeId, points: row.delta, key: reason };
   }
   if (reason.startsWith(MILESTONE_PREFIX)) {
@@ -119,6 +130,7 @@ export async function referralNoticeFromLedger(db: Db, row: ReferralLedgerRow): 
     const sep = rest.indexOf(':');
     if (sep <= 0) return null;
     const refereeId = rest.slice(0, sep);
+    if (await isSelfReferral(db, userId, refereeId)) return null;
     let taken = Math.max(-row.delta, 0);
     let debt = await debtTotal(db, userId, `${REFERRAL_ORDER2_PARTIAL_DEBT_PREFIX}${rest}:`);
     const closing = await closingPartial(db, userId, refereeId);
@@ -133,6 +145,8 @@ export async function referralNoticeFromLedger(db: Db, row: ReferralLedgerRow): 
     const refereeId = reason.slice(REFERRAL_ORDER2_REVOKE_PREFIX.length);
     const refId = row.refId;
     if (!refId) return null;
+    // Thu hồi do gộp (cause MERGE) đã tự ẩn tên khi người được mời là chính người giữ thưởng; các nguyên nhân khác không có "bạn" để nêu.
+    if (!refId.startsWith(MERGE_REF_PREFIX) && (await isSelfReferral(db, userId, refereeId))) return null;
     if ((await closingPartial(db, userId, refereeId))?.revoke.id === row.id) return 'FOLDED';
     const sameEvent = await db.pointsTransaction.count({
       where: { userId, refType: 'REFERRAL', reason: { startsWith: REFERRAL_ORDER2_REVOKE_PREFIX }, refId },
