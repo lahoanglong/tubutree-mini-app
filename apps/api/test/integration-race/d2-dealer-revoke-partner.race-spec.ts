@@ -349,7 +349,19 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     expect(msg).toContain('DEALER');
   });
 
-  it('đại lý cấp qua setUserRole (không có hồ sơ): mở cổng → MERCHANT; cấp STAFF rồi thu hồi → về DEALER, gian hàng nguyên vẹn', async () => {
+  it('hồi quy: DEALER (setUserRole) → CUSTOMER → cấp STAFF → thu hồi: vai trò cuối CUSTOMER, bậc đại lý cũ không khôi phục DEALER', async () => {
+    const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
+    created.tierIds.push(tier.id);
+    const adminUser = await user('ADMIN');
+    const owner = await user('AFFILIATE');
+    await admin.setUserRole(adminUser.id, owner.phone!, 'DEALER', tier.id);
+    await admin.setUserRole(adminUser.id, owner.phone!, 'CUSTOMER');
+    await rbac.addGrant(adminUser.id, owner.phone!, 'STAFF');
+    await expect(rbac.revokeGrant(adminUser.id, owner.phone!)).resolves.toMatchObject({ downgraded: true, role: 'CUSTOMER' });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role).toBe('CUSTOMER');
+  });
+
+  it('đại lý cấp qua setUserRole (không có hồ sơ): mở cổng → MERCHANT; cấp STAFF rồi thu hồi → CUSTOMER, gian hàng sạch vướng thì về CTV không đối tác', async () => {
     const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
     created.tierIds.push(tier.id);
     const adminUser = await user('ADMIN');
@@ -360,10 +372,10 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     expect(sf).toMatchObject({ type: 'MERCHANT', isPartner: true });
     await rbac.addGrant(adminUser.id, owner.phone!, 'STAFF');
     expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role).toBe('STAFF');
-    await expect(rbac.revokeGrant(adminUser.id, owner.phone!)).resolves.toMatchObject({ downgraded: true, role: 'DEALER' });
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role).toBe('DEALER');
-    expect(await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).toMatchObject({ type: 'MERCHANT', isPartner: true });
-    expect(await prisma.userAdminEvent.count({ where: { userId: owner.id, kind: 'STOREFRONT_PARTNER' } })).toBe(0);
+    await expect(rbac.revokeGrant(adminUser.id, owner.phone!)).resolves.toMatchObject({ downgraded: true, role: 'CUSTOMER' });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role).toBe('CUSTOMER');
+    expect(await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).toMatchObject({ type: 'CTV', isPartner: false });
+    expect(await prisma.userAdminEvent.count({ where: { userId: owner.id, kind: 'STOREFRONT_PARTNER' } })).toBe(1);
   });
 
   it('freeze phí sàn mặc định áp cho cả gian hàng đã thôi là đối tác nhưng còn lịch sử; mở lại thì đơn mới tính mức mới', async () => {
@@ -626,7 +638,12 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
       }
     });
 
-    it(`duyệt hồ sơ đại lý đua với ẩn danh của cùng người nộp (khoá gian hàng trước users ở cả hai): không 40P01, cả hai xong (${ROUNDS} vòng)`, async () => {
+    it.each([
+      [true, true],
+      [false, true],
+      [true, false],
+      [false, false],
+    ])(`duyệt hồ sơ đại lý đua với ẩn danh của cùng người nộp (có gian hàng: %s, duyệt đến trước: %s): không 40P01, cả hai xong (${ROUNDS} vòng)`, async (hasStore, approvalFirst) => {
       const none = {} as never;
       const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, rbac, none, none, merchant);
       const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
@@ -636,31 +653,60 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
         warn.mockClear();
         const d = await deletable();
         await prisma.user.update({ where: { id: d.owner.id }, data: { role: 'AFFILIATE' } });
-        await prisma.storefront.update({ where: { id: d.sf.id }, data: { isPartner: false } });
+        if (hasStore) await prisma.storefront.update({ where: { id: d.sf.id }, data: { isPartner: false } });
+        else await prisma.storefront.update({ where: { id: d.sf.id }, data: { ownerUserId: null } });
         const app = await prisma.dealerApplication.create({
           data: { userId: d.owner.id, businessName: 'IT', ownerName: 'IT', phone: d.owner.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
         });
         const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${d.owner.id} FOR UPDATE`);
         const running: Promise<unknown>[] = [];
         try {
-          let apSettled = false;
-          running.push(approver.reviewDealerApplication(d.adminUser.id, app.id, true, tier.id).finally(() => (apSettled = true)));
-          await waitUntil(async () => apSettled || (await lockWaiters(holder.pid)) >= 1, 'duyệt hồ sơ');
-          let delSettled = false;
-          running.push(deletion.process(d.request.id, d.adminUser.id).finally(() => (delSettled = true)));
-          await waitUntil(async () => delSettled || (await lockWaiters(holder.pid)) >= 2, 'xoá tài khoản');
+          const startApproval = () => {
+            let s = false;
+            running.push(approver.reviewDealerApplication(d.adminUser.id, app.id, true, tier.id).finally(() => (s = true)));
+            return () => s;
+          };
+          const startDeletion = () => {
+            let s = false;
+            running.push(deletion.process(d.request.id, d.adminUser.id).finally(() => (s = true)));
+            return () => s;
+          };
+          const first = approvalFirst ? startApproval() : startDeletion();
+          await waitUntil(async () => first() || (await lockWaiters(holder.pid)) >= 1, 'bên đến trước');
+          const second = approvalFirst ? startDeletion() : startApproval();
+          await waitUntil(async () => second() || (await lockWaiters(holder.pid)) >= 2, 'bên đến sau');
         } finally {
           holder.release();
           await holder.done;
         }
         const settled = await Promise.allSettled(running);
         expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock/i);
-        expect(settled.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+        // Duyệt đến sau mà ẩn danh đã xong thì bị từ chối (người nộp đã xoá); ẩn danh luôn phải xong.
+        const [approval, del] = approvalFirst ? [settled[0]!, settled[1]!] : [settled[1]!, settled[0]!];
+        expect(del.status).toBe('fulfilled');
+        if (approvalFirst) expect(approval.status).toBe('fulfilled');
+        if (approval.status === 'rejected') expect(approval.reason).not.toBeInstanceOf(ServiceUnavailableException);
         // Ẩn danh tự chạy lại một lần khi gặp deadlock nên che mất nó: không được rơi vào nhánh đó.
         expect(warn.mock.calls.filter(([m]) => String(m).includes('chạy lại một lần'))).toHaveLength(0);
-        expect(await d.flag()).toBe(true);
+        if (hasStore && approval.status === 'fulfilled') expect(await d.flag()).toBe(true);
         expect((await prisma.user.findUniqueOrThrow({ where: { id: d.owner.id } })).isBlocked).toBe(true);
       }
+    });
+
+    it('duyệt hồ sơ của người nộp đã bị khoá / đã ẩn danh → từ chối, hồ sơ vẫn PENDING, vai trò không đổi', async () => {
+      const none = {} as never;
+      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, rbac, none, none, merchant);
+      const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
+      created.tierIds.push(tier.id);
+      const d = await deletable();
+      await prisma.user.update({ where: { id: d.owner.id }, data: { role: 'AFFILIATE' } });
+      const app = await prisma.dealerApplication.create({
+        data: { userId: d.owner.id, businessName: 'IT', ownerName: 'IT', phone: d.owner.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
+      });
+      await deletion.process(d.request.id, d.adminUser.id);
+      await expect(approver.reviewDealerApplication(d.adminUser.id, app.id, true, tier.id)).rejects.toThrow(/khoá|xoá/);
+      expect((await prisma.dealerApplication.findUniqueOrThrow({ where: { id: app.id } })).status).toBe('PENDING');
+      expect(await d.role()).toBe('AFFILIATE');
     });
 
     it(`hai bên chạy tự do (${ROUNDS * 2} vòng): không 40P01, trạng thái cuối nhất quán`, async () => {

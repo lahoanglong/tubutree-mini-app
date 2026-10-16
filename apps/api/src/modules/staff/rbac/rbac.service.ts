@@ -102,7 +102,7 @@ export class RbacService {
 
   /**
    * Thu hồi mọi grant STAFF/ADMIN theo SĐT. Nếu user đang STAFF/ADMIN thì hạ về role GỐC
-   * (DEALER nếu có đơn đại lý đã duyệt hoặc bậc đại lý, ngược lại CUSTOMER) — tránh xoá nhầm quyền đại lý khi
+   * (DEALER nếu có đơn đại lý đã duyệt, ngược lại CUSTOMER) — tránh xoá nhầm quyền đại lý khi
    * một đại lý từng được nâng tạm lên nhân viên. Nếu vai trò gốc là CUSTOMER mà người này còn gian hàng đối tác vướng
    * mắc thì vẫn gỡ quyền và về CUSTOMER, gian hàng giữ nguyên và kết quả có `storeBlocked: true` (không bao giờ nâng quyền ở đây).
    * Bọc trong $transaction: revoke grant + hạ role là 1 thao tác atomic — tránh trạng thái nửa
@@ -186,16 +186,16 @@ export class RbacService {
   }
 
   /**
-   * Role gốc khi bỏ quyền nhân viên: DEALER nếu có đơn đại lý đã duyệt hoặc đã được gán bậc đại lý (metadata.dealerTierId — đường
-   * AdminService.setUserRole cấp DEALER không tạo đơn), ngược lại CUSTOMER.
+   * Role gốc khi bỏ quyền nhân viên: DEALER chỉ khi có đơn đại lý đã duyệt, ngược lại CUSTOMER. Đại lý cấp qua
+   * AdminService.setUserRole (không có đơn) bỏ quyền nhân viên sẽ về CUSTOMER — metadata.dealerTierId không được tin vì không
+   * bao giờ bị xoá khi hạ vai trò.
    */
   private async resolveBaseRole(userId: string, db: Db = this.prisma): Promise<'CUSTOMER' | 'DEALER'> {
-    const [dealerApp, user] = await Promise.all([
-      db.dealerApplication.findFirst({ where: { userId, status: 'APPROVED' }, select: { id: true } }),
-      db.user.findUnique({ where: { id: userId }, select: { metadata: true } }),
-    ]);
-    const tierId = (user?.metadata as Record<string, unknown> | null)?.dealerTierId;
-    return dealerApp || (typeof tierId === 'string' && tierId.length > 0) ? 'DEALER' : 'CUSTOMER';
+    const dealerApp = await db.dealerApplication.findFirst({
+      where: { userId, status: 'APPROVED' },
+      select: { id: true },
+    });
+    return dealerApp ? 'DEALER' : 'CUSTOMER';
   }
 
   /** Danh sách nhân sự (user STAFF/ADMIN) + lời mời chờ (grant chưa gắn user). */

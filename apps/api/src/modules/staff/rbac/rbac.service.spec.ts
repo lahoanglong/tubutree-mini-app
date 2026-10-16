@@ -364,12 +364,12 @@ describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật
     expect(tx.user.update).not.toHaveBeenCalled();
   });
 
-  it('bậc đại lý trong metadata (đại lý cấp qua setUserRole, không có hồ sơ) → về DEALER, không đụng gian hàng', async () => {
+  it('bậc đại lý trong metadata (đại lý cấp qua setUserRole, không có đơn) KHÔNG đủ để về DEALER → CUSTOMER, xử lý gian hàng', async () => {
     const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
     tx.user.findUnique.mockResolvedValue(mkUser({ role: 'STAFF', metadata: { dealerTierId: 't1' } } as Partial<User>));
     const f = fulfilment();
-    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).resolves.toMatchObject({ role: 'DEALER' });
-    expect(f.clearPartnerOnRoleLoss).not.toHaveBeenCalled();
+    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).resolves.toMatchObject({ role: 'CUSTOMER' });
+    expect(f.clearPartnerOnRoleLoss).toHaveBeenCalled();
   });
 
   it('giao dịch có maxWait/timeout rộng như setUserRole (kiểm vướng mắc nặng khi đang giữ khoá danh sách admin)', async () => {

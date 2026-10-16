@@ -260,8 +260,14 @@ export class AdminService {
         // Gian hàng của người nộp khoá trước dòng users (cùng thứ tự với thu hồi đại lý và ẩn danh tài khoản), nếu không bên ghi
         // users trước rồi đợi gian hàng sẽ deadlock với bên giữ gian hàng rồi đợi users.
         await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
-        const applicant = await tx.user.findUnique({ where: { id: app.userId }, select: { role: true } });
-        if (applicant?.role === 'ADMIN') {
+        // Rồi tới dòng users (FOR UPDATE) TRƯỚC mọi ghi vào hồ sơ: người nộp chưa có gian hàng thì không có dòng gian hàng nào để
+        // khoá, mà bên ghi hồ sơ rồi đợi users sẽ deadlock với ẩn danh tài khoản (giữ users rồi ghi hồ sơ).
+        const [applicant] = await tx.$queryRaw<{ role: string; isBlocked: boolean }[]>`
+          SELECT "role"::text AS "role", "isBlocked" FROM "users" WHERE "id" = ${app.userId} FOR UPDATE`;
+        if (!applicant || applicant.isBlocked) {
+          throw new BadRequestException('Tài khoản người nộp đã bị khoá hoặc đã xoá — không thể duyệt hồ sơ đại lý.');
+        }
+        if (applicant.role === 'ADMIN') {
           if (app.userId === adminId) {
             throw new BadRequestException('Không thể tự duyệt hồ sơ đại lý của chính mình — nhờ một quản trị viên khác thực hiện.');
           }
@@ -277,7 +283,7 @@ export class AdminService {
           data: { role: 'DEALER', metadata: mergedMeta },
         });
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
-      }).catch(throwIfLockBusy);
+      }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
         where: { id, status: 'PENDING' },

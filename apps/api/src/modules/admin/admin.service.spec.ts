@@ -118,7 +118,7 @@ function makeApproveTx(opts: {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = jest.fn().mockResolvedValue(0);
-  const queryRaw = jest.fn().mockResolvedValue([]);
+  const queryRaw = jest.fn().mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false }]);
   const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>

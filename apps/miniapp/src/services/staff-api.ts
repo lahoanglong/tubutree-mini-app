@@ -29,5 +29,5 @@ export const grantStaff = (phone: string, role: StaffRole) =>
 
 export const revokeStaff = (phone: string) =>
   api
-    .post<{ revoked: number; downgraded: boolean }>('/admin/staff/revoke', { phone })
+    .post<{ revoked: number; downgraded: boolean; storeBlocked?: boolean }>('/admin/staff/revoke', { phone })
     .then((r) => r.data);

@@ -21,7 +21,7 @@ export async function lockStoreOwner(tx: Prisma.TransactionClient, ownerUserId: 
 
 /**
  * Đổi vai trò làm gian hàng đối tác của chủ mất tư cách: chủ rơi xuống CUSTOMER/AFFILIATE từ DEALER/STAFF/ADMIN. DEALER lên
- * STAFF/ADMIN thì KHÔNG (thăng tạm thời, rbac trả họ về DEALER khi bỏ quyền nhân viên có hồ sơ đại lý duyệt hoặc bậc đại lý).
+ * STAFF/ADMIN thì KHÔNG (thăng tạm thời, rbac chỉ trả về DEALER những đại lý có đơn đại lý đã duyệt khi bỏ quyền nhân viên).
  */
 export function losesPartnerStore(from: string, to: string): boolean {
   return (to === 'CUSTOMER' || to === 'AFFILIATE') && (from === 'DEALER' || from === 'STAFF' || from === 'ADMIN');

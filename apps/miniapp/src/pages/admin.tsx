@@ -512,8 +512,15 @@ function StaffSection() {
 
   const revokeM = useMutation({
     mutationFn: (p: string) => revokeStaff(p),
-    onSuccess: () => {
-      openSnackbar({ text: 'Đã thu hồi quyền.', type: 'success' });
+    onSuccess: (res) => {
+      openSnackbar(
+        res.storeBlocked
+          ? {
+              text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên giữ nguyên; xử lý rồi tắt đối tác ở tab Đơn đối tác.',
+              type: 'warning',
+            }
+          : { text: 'Đã thu hồi quyền.', type: 'success' },
+      );
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
