@@ -1131,3 +1131,73 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
     expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
   });
 });
+
+/**
+ * Thứ tự khoá: mọi đường tạo đơn khoá biến thể → suất giờ vàng → users, nên lần đảo tiền phải cộng kho và hoàn suất TRƯỚC mọi
+ * lần ghi dòng users (hoàn Ví/điểm), nếu không đặt đơn cùng khách ‖ huỷ/trả đơn deadlock (checkout-reversal-lock-order.race-spec).
+ */
+describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi users', () => {
+  let service: OrderReversalService;
+  let flashSale: { restore: jest.Mock };
+
+  beforeEach(async () => {
+    flashSale = { restore: jest.fn().mockResolvedValue(undefined) };
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: flashSale },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+    jest.mocked(applyWalletDelta).mockClear();
+  });
+
+  const orderOf = (mocks: jest.Mock[]) => mocks.flatMap((m) => m.mock.invocationCallOrder);
+
+  /** Lần ghi users đầu tiên (Ví qua applyWalletDelta, số dư qua user.update, sổ điểm) phải sau lần cộng kho/hoàn suất cuối cùng. */
+  function expectStockAndFlashFirst(tx: MockTx) {
+    const stockCalls = tx.$executeRaw.mock.calls
+      .map((c, i) => ({ sql: (c[0] as string[]).join(''), at: tx.$executeRaw.mock.invocationCallOrder[i]! }))
+      .filter((c) => c.sql.includes('"variations"'))
+      .map((c) => c.at);
+    const restored = [...stockCalls, ...orderOf([flashSale.restore])];
+    const userWrites = orderOf([jest.mocked(applyWalletDelta), tx.user.update, tx.pointsTransaction.createManyAndReturn]);
+    expect(restored.length).toBeGreaterThan(0);
+    expect(userWrites.length).toBeGreaterThan(0);
+    expect(Math.max(...restored)).toBeLessThan(Math.min(...userWrites));
+  }
+
+  it('reverseFinancials (huỷ đơn trả Ví có dòng giờ vàng)', async () => {
+    const order = makeOrder({ status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID' });
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order);
+    expect(flashSale.restore).toHaveBeenCalled();
+    expectStockAndFlashFirst(tx);
+  });
+
+  it('reversePartialReturn (trả một phần dòng giờ vàng, hoàn Ví)', async () => {
+    const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'WALLET', paymentStatus: 'PAID', shippingFee: 0 });
+    const tx = Object.assign(makeTx(order), { commission: { findMany: jest.fn().mockResolvedValue([]) } });
+    const shares = {
+      isFull: false,
+      goods: 50_000,
+      shipping: 0,
+      pointsUsedBack: 0,
+      convertedBack: 0,
+      pointsEarnedBack: 0,
+      ratioBefore: 0,
+      ratioAfter: 0,
+      lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 50_000 }],
+    };
+    await service.reversePartialReturn(tx as never, order, {
+      requestId: 'r1',
+      shares,
+      destination: WALLET_DESTINATION,
+      prior: NO_PARTIAL_RETURNS,
+      standardPointsExpiresAt: null,
+    });
+    expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1);
+    expectStockAndFlashFirst(tx);
+  });
+});

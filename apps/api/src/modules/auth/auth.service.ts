@@ -342,13 +342,18 @@ export class AuthService {
       // Mọi lần gộp chạy nối tiếp nhau. Tập dòng users của hai lần gộp có thể chồng nhau (khách G2 mời khách G1, cả hai gộp
       // vào cùng T) và thứ tự người-được-mời-trước của mỗi lần chỉ nhất quán trong tập của chính nó ⇒ hai lần gộp xen kẽ có
       // thể khoá ngược chiều (40P01). Khoá chung chấp nhận được: gộp chỉ xảy ra một lần mỗi khách lúc đăng nhập Zalo, tx
-      // ngắn. Lấy trước mọi khoá dòng nên không tạo vòng chờ với đường trả hàng hay thưởng (chúng không lấy khoá này).
+      // ngắn. Khoá này chỉ xếp các lần gộp với nhau (đường khác không lấy nó); với trả hàng, huỷ đơn, đặt đơn và thưởng, chính
+      // thứ tự khoá dòng bên dưới mới chống vòng chờ.
       await tx.$queryRaw`SELECT set_config('lock_timeout', ${MERGE_LOCK_TIMEOUT}, true), set_config('statement_timeout', ${MERGE_STATEMENT_TIMEOUT}, true)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_MERGE_LOCK_KEY}))`;
-      // Thứ tự khoá như đường duyệt trả hàng (yêu cầu trả → đơn → users): khoá dòng khách trước rồi mới chuyển đơn/yêu cầu
-      // trả thì đảo chiều với lần duyệt đang giữ yêu cầu + đơn và chờ ví/điểm của khách ⇒ 40P01 (UAT R6-SYNC-2).
+      // Thứ tự khoá như đường đảo tiền (yêu cầu trả → đơn → suất giờ vàng → users): khoá dòng khách trước rồi mới chuyển
+      // đơn/yêu cầu trả thì đảo chiều với lần duyệt đang giữ yêu cầu + đơn và chờ ví/điểm của khách ⇒ 40P01 (UAT R6-SYNC-2).
       await tx.$queryRaw`SELECT "id" FROM "return_requests" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
+      // Suất giờ vàng đã mua (bước 6 cộng dồn vào dòng của target): huỷ/trả đơn của target hoàn suất rồi mới ghi users của target,
+      // nên gộp khoá users trước rồi mới ghi dòng suất là chờ ngược chiều ⇒ 40P01 (merge-reversal-flash-lock.race-spec).
+      await tx.$queryRaw`
+        SELECT "id" FROM "flash_sale_purchases" WHERE "userId" IN (${guest.id}, ${target.id}) ORDER BY "id" FOR NO KEY UPDATE`;
       // Dòng users: khách, target và những người khách đã mời (đổi referredById ở bước 10), người được mời trước người mời
       // (referralLockOrder). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để bước kiểm trùng bên
       // dưới thấy dòng của lần gộp trước. Cạnh theo người mời đã quy qua mergedIntoId, như lần cấp thưởng khoá người được

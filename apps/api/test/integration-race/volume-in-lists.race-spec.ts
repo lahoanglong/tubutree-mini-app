@@ -8,7 +8,7 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { OrderReturnsService, RETURNS_TO_RECEIVE } from '../../src/modules/orders/order-returns.service';
-import { createOrder, createUser, randCode, warmPool } from './helpers';
+import { createOrder, createUser, deleteItData, randCode, warmPool } from './helpers';
 
 /** Trên giới hạn 32.767 tham số bind của một câu Postgres (Prisma P2029/P2035 khi danh sách IN dài hơn). */
 const BIG = 33_000;
@@ -66,7 +66,7 @@ describe('Danh sách IN vượt giới hạn bind (real Postgres)', () => {
       await prisma.$executeRaw`DELETE FROM "return_requests" WHERE "id" LIKE ${`itvol-${tag}-%`}`;
       await prisma.$executeRaw`DELETE FROM "points_transactions" WHERE "userId" = ANY(${createdUsers})`;
       await prisma.$executeRaw`DELETE FROM "orders" WHERE "id" LIKE ${`itvol-${tag}-%`} OR "userId" = ANY(${createdUsers})`;
-      await prisma.user.updateMany({ where: { id: { in: createdUsers } }, data: { tierId: null } });
+      await deleteItData(prisma, { userIds: createdUsers });
       await prisma.membershipTier.deleteMany({ where: { id: { in: Object.values(tierIds) } } });
     }
     await moduleRef?.close();

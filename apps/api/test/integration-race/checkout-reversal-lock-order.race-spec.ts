@@ -25,7 +25,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { OrdersService } from '../../src/modules/orders/orders.service';
-import { createOrder, createUser, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
+import { createOrder, createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const PRICE = 100_000;
 const FLASH_PRICE = 50_000;
@@ -49,6 +49,9 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
   let orders: OrdersService;
   let returns: OrderReturnsService;
   let admin: { id: string };
+  const CONFIG_KEYS = ['loyalty.vnd_per_point_redeem', 'loyalty.max_redeem_pct', 'returns.window_days'];
+  let savedConfig: { key: string; value: unknown }[] = [];
+  const created = { userIds: [] as string[], productIds: [] as string[], flashSaleIds: [] as string[] };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -86,20 +89,28 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
     cart = moduleRef.get(CartService);
     orders = moduleRef.get(OrdersService);
     returns = moduleRef.get(OrderReturnsService);
+    savedConfig = await prisma.systemConfig.findMany({ where: { key: { in: CONFIG_KEYS } } });
     // Phải có trước lần get() đầu (SystemConfigService cache 60s).
     await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.2);
     await setConfig(prisma, 'returns.window_days', 7);
     admin = await createUser(prisma, { role: 'ADMIN' });
+    created.userIds.push(admin.id);
   });
 
   afterAll(async () => {
+    if (prisma) {
+      await deleteItData(prisma, created);
+      await prisma.systemConfig.deleteMany({ where: { key: { in: CONFIG_KEYS.filter((k) => !savedConfig.some((c) => c.key === k)) } } });
+      for (const c of savedConfig) await setConfig(prisma, c.key, c.value as never);
+    }
     await moduleRef?.close();
   });
 
   /** Khách có SEED_POINTS điểm thường khớp sổ và một địa chỉ. */
   async function customer() {
     const u = await createUser(prisma, { role: 'CUSTOMER', pointsBalance: SEED_POINTS });
+    created.userIds.push(u.id);
     await prisma.pointsTransaction.create({ data: { userId: u.id, delta: SEED_POINTS, lot: 'STANDARD', reason: 'IT_SEED_STANDARD', refType: 'IT' } });
     const addr = await prisma.address.create({
       data: {
@@ -123,6 +134,7 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
     const product = await prisma.product.create({
       data: { pancakeId: `itlo-p-${tag}`, brand: 'IT', slug: `itlo-sp-${tag.toLowerCase()}`, name: `SP ${tag}`, description: 'IT', basePrice: PRICE },
     });
+    created.productIds.push(product.id);
     return prisma.variation.create({
       data: { pancakeId: `itlo-v-${tag}`, productId: product.id, sku: `ITLO-${tag}`, name: 'Chai', attributes: {}, retailPrice: PRICE, stock: 100 },
     });
@@ -183,6 +195,12 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
     return summarize(await Promise.allSettled([placing, reversing]));
   }
 
+  /** Vòng khoá báo riêng (40P01) trước khi đòi không có lỗi nào. */
+  function expectNoErrors(s: { errors: string[] }) {
+    expect(s.errors.filter((e) => e.includes('40P01'))).toEqual([]);
+    expect(s.errors).toEqual([]);
+  }
+
   async function ledgerInvariants(userId: string) {
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { pointsBalance: true, walletBalance: true } });
     const points = await prisma.pointsTransaction.aggregate({ where: { userId, lot: 'STANDARD' }, _sum: { delta: true } });
@@ -215,7 +233,7 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
         () => checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: POINTS_USED } as never),
         () => orders.cancel(u.id, earlier.code),
       );
-      expect(s.errors).toEqual([]);
+      expectNoErrors(s);
 
       expect((await prisma.order.findUniqueOrThrow({ where: { id: earlier.id } })).status).toBe('CANCELLED');
       expect(await prisma.walletTransaction.count({ where: { userId: u.id, type: 'ORDER_REFUND', refId: earlier.id } })).toBe(1);
@@ -236,6 +254,7 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
       const sale = await prisma.flashSale.create({
         data: { title: `Giờ vàng ${randCode(4)}`, startAt: new Date(now - 3_600_000), endAt: new Date(now + 3_600_000), createdBy: 'it' },
       });
+      created.flashSaleIds.push(sale.id);
       const flash = await prisma.flashSaleItem.create({
         data: { flashSaleId: sale.id, variationId: v.id, flashPrice: FLASH_PRICE, quota: 100, soldCount: 3, perUserLimit: 10 },
       });
@@ -293,7 +312,7 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
         () => checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: POINTS_USED } as never),
         () => returns.review(admin.id, req.id, { approve: true }),
       );
-      expect(s.errors).toEqual([]);
+      expectNoErrors(s);
 
       expect((await prisma.returnRequest.findUniqueOrThrow({ where: { id: req.id } })).status).toBe('APPROVED');
       expect(await prisma.walletTransaction.count({ where: { userId: u.id, type: 'ORDER_REFUND', refId: req.id } })).toBe(1);

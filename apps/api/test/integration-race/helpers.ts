@@ -170,3 +170,31 @@ export function barrierOnFirstCalls<T extends object, K extends keyof T>(obj: T,
 export async function warmPool(prisma: PrismaService, connections = 20) {
   await Promise.all(Array.from({ length: connections }, () => prisma.$queryRaw`SELECT pg_sleep(0.05)::text AS s`));
 }
+
+/**
+ * Xoá dữ liệu một spec đã tạo (khách và mọi dòng của họ, sản phẩm/biến thể, đợt giờ vàng), theo thứ tự khoá ngoại RESTRICT: đợt
+ * giờ vàng còn hiệu lực hay đơn/sổ của khách thử ở lại DB dùng chung làm sai các spec sau liệt kê giờ vàng hay quét đơn.
+ */
+export async function deleteItData(
+  prisma: PrismaService,
+  ids: { userIds?: string[]; productIds?: string[]; flashSaleIds?: string[] },
+) {
+  const userIds = ids.userIds ?? [];
+  const productIds = ids.productIds ?? [];
+  const flashSaleIds = ids.flashSaleIds ?? [];
+  await prisma.$executeRaw`DELETE FROM "return_requests" WHERE "userId" = ANY(${userIds})`;
+  await prisma.$executeRaw`DELETE FROM "points_transactions" WHERE "userId" = ANY(${userIds})`;
+  await prisma.$executeRaw`DELETE FROM "wallet_transactions" WHERE "userId" = ANY(${userIds})`;
+  await prisma.$executeRaw`DELETE FROM "flash_sale_purchases" WHERE "userId" = ANY(${userIds})`;
+  await prisma.$executeRaw`
+    DELETE FROM "order_customer_refunds" WHERE "orderId" IN (SELECT "id" FROM "orders" WHERE "userId" = ANY(${userIds}))`;
+  await prisma.$executeRaw`
+    DELETE FROM "commissions"
+     WHERE "affiliateUserId" = ANY(${userIds}) OR "orderId" IN (SELECT "id" FROM "orders" WHERE "userId" = ANY(${userIds}))`;
+  await prisma.$executeRaw`DELETE FROM "orders" WHERE "userId" = ANY(${userIds})`;
+  await prisma.$executeRaw`DELETE FROM "flash_sales" WHERE "id" = ANY(${flashSaleIds})`;
+  await prisma.$executeRaw`
+    DELETE FROM "cart_items" WHERE "variationId" IN (SELECT "id" FROM "variations" WHERE "productId" = ANY(${productIds}))`;
+  await prisma.$executeRaw`DELETE FROM "users" WHERE "id" = ANY(${userIds})`;
+  await prisma.$executeRaw`DELETE FROM "products" WHERE "id" = ANY(${productIds})`;
+}
