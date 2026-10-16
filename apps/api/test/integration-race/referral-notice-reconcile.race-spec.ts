@@ -57,6 +57,23 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
   ];
   let savedConfig: { key: string; value: unknown }[] = [];
 
+  const FLOOR_MIGRATION = '20261017000100_r12_referral_notification_templates';
+
+  /** Trả nguyên trạng những gì các spec mốc đã đổi ở bảng dùng chung (kể cả dấu vết của một lần chạy trước bị kill giữa chừng). */
+  async function repairSharedState() {
+    await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "migration_name" = ${FLOOR_MIGRATION} WHERE "migration_name" = 'it-renamed'`;
+    const extras = await prisma.$queryRaw<{ id: string; finishedAt: Date | null }[]>`
+      SELECT "id", "finished_at" AS "finishedAt" FROM "_prisma_migrations" WHERE "migration_name" = ${FLOOR_MIGRATION} AND "id" LIKE 'it-%'`;
+    for (const e of extras) {
+      if (e.finishedAt) {
+        await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "rolled_back_at" = NULL, "finished_at" = ${e.finishedAt} WHERE "migration_name" = ${FLOOR_MIGRATION} AND "id" NOT LIKE 'it-%'`;
+      }
+      await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE "id" = ${e.id}`;
+    }
+    await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "finished_at" = "started_at" WHERE "migration_name" = ${FLOOR_MIGRATION} AND "finished_at" > now() + interval '30 minutes'`;
+    await prisma.$executeRaw`UPDATE "notification_logs" SET "templateCode" = substr("templateCode", 9) WHERE "templateCode" LIKE 'IT_HIDE_REFERRAL%'`;
+  }
+
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
@@ -98,6 +115,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     await setConfig(prisma, 'referral.min_order_amount', 100_000);
     await setConfig(prisma, 'referral.milestones_points', []);
     admin = await createUser(prisma, { role: 'ADMIN' });
+    await repairSharedState();
 
     const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-r12', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30, JWT_REFRESH_REUSE_GRACE_SECONDS: 60 };
     const config = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
@@ -111,6 +129,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
 
   afterAll(async () => {
     if (prisma) {
+      await repairSharedState();
       await prisma.systemConfig.deleteMany({ where: { key: { in: CONFIG_KEYS.filter((k) => !savedConfig.some((c) => c.key === k)) } } });
       for (const c of savedConfig) await setConfig(prisma, c.key, c.value as never);
     }
@@ -119,6 +138,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
 
   afterEach(async () => {
     failNotify = false;
+    await repairSharedState();
     await moduleRef.get(SystemConfigService).set('referral.milestones_points', [], admin.id);
   });
 
@@ -500,34 +520,53 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
       expect(await inbox(referrer.id)).toEqual([]);
     } finally {
       await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "finished_at" = ${saved!.finishedAt} WHERE "migration_name" = ${migration}`;
+      await repairSharedState();
     }
     await sweepAll(newCron(), later());
     expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
   });
 
-  const FLOOR_MIGRATION = '20261017000100_r12_referral_notification_templates';
+  const hideReferralNotices = () =>
+    prisma.$executeRaw`UPDATE "notification_logs" SET "templateCode" = 'IT_HIDE_' || "templateCode" WHERE "templateCode" IN ('REFERRAL_REWARD_PAID', 'REFERRAL_MILESTONE_PAID', 'REFERRAL_REWARD_REVOKED')`;
+  const renameMigration = () => prisma.$executeRaw`UPDATE "_prisma_migrations" SET "migration_name" = 'it-renamed' WHERE "migration_name" = ${FLOOR_MIGRATION}`;
+  const pause = (ms = 25) => new Promise((r) => setTimeout(r, ms));
 
-  it('(p) không có dòng migration mẫu tin thành công: đóng, không gửi tin của dòng sổ tạo trước lượt quét đầu', async () => {
+  async function lostReward() {
     failNotify = true;
     const { referrer, referee } = await pair();
     await rewards.grantReferralOrderReward(referee.id);
     failNotify = false;
-    await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "migration_name" = 'it-renamed' WHERE "migration_name" = ${FLOOR_MIGRATION}`;
-    try {
-      await sweepAll(newCron(), later());
-      expect(await inbox(referrer.id)).toEqual([]);
-    } finally {
-      await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "migration_name" = ${FLOOR_MIGRATION} WHERE "migration_name" = 'it-renamed'`;
-    }
+    return referrer;
+  }
+
+  it('(p) không có dòng migration và chưa có tin giới thiệu nào: đóng theo lượt quét đầu, dòng sổ tạo trước không gửi, tạo sau thì gửi bù', async () => {
+    await hideReferralNotices();
+    await renameMigration();
+    const before = await lostReward();
+    await pause();
+    const cron = newCron();
+    await sweepAll(cron, new Date());
+    await pause();
+    const after = await lostReward();
+    await sweepAll(cron, later());
+    expect(await inbox(before.id)).toEqual([]);
+    expect(await inbox(after.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
+  });
+
+  it('(p2) không có dòng migration nhưng đã có tin giới thiệu thật: mốc = tin sớm nhất (không đóng, không đổi khi khởi động lại), dòng sổ sau đó được gửi bù', async () => {
+    const { referrer: told, referee } = await pair();
+    await rewards.grantReferralOrderReward(referee.id);
+    expect(await inbox(told.id)).toHaveLength(1);
+    await pause();
+    const lost = await lostReward();
+    await renameMigration();
     await sweepAll(newCron(), later());
-    expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
+    expect(await inbox(lost.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
+    expect(await inbox(told.id)).toHaveLength(1);
   });
 
   it('(q) dòng migration lỗi/đã gỡ rồi chạy lại thành công: mốc lấy dòng thành công, bỏ dòng đã rolled_back', async () => {
-    failNotify = true;
-    const { referrer, referee } = await pair();
-    await rewards.grantReferralOrderReward(referee.id);
-    failNotify = false;
+    const referrer = await lostReward();
     const [ok] = await prisma.$queryRaw<{ finishedAt: Date }[]>`SELECT "finished_at" AS "finishedAt" FROM "_prisma_migrations" WHERE "migration_name" = ${FLOOR_MIGRATION}`;
     const extraId = `it-${randCode(8)}`;
     await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "rolled_back_at" = now(), "finished_at" = ${later(60 * 60_000)} WHERE "migration_name" = ${FLOOR_MIGRATION}`;
@@ -536,9 +575,75 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
       await sweepAll(newCron(), later());
       expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
     } finally {
-      await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE "id" = ${extraId}`;
-      await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "rolled_back_at" = NULL, "finished_at" = ${ok!.finishedAt} WHERE "migration_name" = ${FLOOR_MIGRATION}`;
+      await repairSharedState();
     }
+  });
+
+  /** Khách G mời X (X đủ điều kiện thưởng) → G nhận PAID (+ mốc 1 nếu có cấu hình). */
+  async function guestRewarded() {
+    const g = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, fullName: 'Khách' });
+    const x = await createUser(prisma, { role: 'CUSTOMER', referredById: g.id, fullName: 'Nguyễn Văn An' });
+    await deliveredOrder(x.id, 9);
+    await deliveredOrder(x.id, 4);
+    expect(await rewards.grantReferralOrderReward(x.id)).toBe(true);
+    return g;
+  }
+
+  async function mergeGuestInto(g: { id: string }, t: { zaloId: string | null }) {
+    zaloIdForNextCall = t.zaloId!;
+    await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access');
+  }
+
+  const MILESTONE_BODY = 'Bạn đã giới thiệu thành công 1 người bạn và nhận thêm 20 Điểm Xanh thưởng mốc 🌿';
+
+  it('(s) mốc: tin mốc riêng của T bị sót vẫn được gửi bù dù khách G đã gộp vào T (dòng mốc đổi tên của G đã báo cho G)', async () => {
+    await moduleRef.get(SystemConfigService).set('referral.milestones_points', [{ count: 1, bonusPoints: MILESTONE }], admin.id);
+    const g = await guestRewarded();
+    expect((await inbox(g.id)).map((r) => r[0])).toEqual(['REFERRAL_REWARD_PAID', 'REFERRAL_MILESTONE_PAID']);
+    const t = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}`, fullName: 'Phạm Minh Tuấn' });
+    const y = await createUser(prisma, { role: 'CUSTOMER', referredById: t.id, fullName: 'Lê Văn Bình' });
+    await deliveredOrder(y.id, 9);
+    await deliveredOrder(y.id, 4);
+    failNotify = true;
+    expect(await rewards.grantReferralOrderReward(y.id)).toBe(true);
+    failNotify = false;
+    expect(await inbox(t.id)).toEqual([]);
+    await mergeGuestInto(g, t);
+    const milestoneRows = await prisma.pointsTransaction.findMany({ where: { userId: t.id, reason: { startsWith: `REFERRAL_MILESTONE:${t.id}:` } }, select: { reason: true } });
+    expect(milestoneRows.map((r) => r.reason).sort()).toEqual([`REFERRAL_MILESTONE:${t.id}:1`, `REFERRAL_MILESTONE:${t.id}:1#1`]);
+    await sweepAll(newCron(), later());
+    const got = await inbox(t.id);
+    expect(got.map((r) => r[0]).sort()).toEqual(['REFERRAL_MILESTONE_PAID', 'REFERRAL_REWARD_PAID']);
+    expect(got.find((r) => r[0] === 'REFERRAL_MILESTONE_PAID')?.[1]).toBe(MILESTONE_BODY);
+    await sweepAll(newCron(), later());
+    expect(await inbox(t.id)).toHaveLength(2);
+    expect(await balanceOf(t.id)).toBe(2 * (REWARD + MILESTONE));
+  });
+
+  it('(t) mốc: dòng mốc đổi tên đã báo cho khách G thì không gửi lại cho T (che đúng một dòng)', async () => {
+    await moduleRef.get(SystemConfigService).set('referral.milestones_points', [{ count: 1, bonusPoints: MILESTONE }], admin.id);
+    const g = await guestRewarded();
+    const t = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}`, fullName: 'Phạm Minh Tuấn' });
+    await mergeGuestInto(g, t);
+    await sweepAll(newCron(), later());
+    expect(await inbox(t.id)).toEqual([]);
+    expect((await inbox(g.id)).map((r) => r[0])).toEqual(['REFERRAL_REWARD_PAID', 'REFERRAL_MILESTONE_PAID']);
+  });
+
+  it('(u) tự mời, trả cả đơn rồi gộp: tin thu hồi (không do gộp) gửi cho G bị sót không biến thành tin cho T nêu chính T là "bạn"', async () => {
+    failNotify = true;
+    const g = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, fullName: 'Khách' });
+    const t = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}`, referredById: g.id, fullName: 'Phạm Minh Tuấn' });
+    await deliveredOrder(t.id, 9);
+    const b = await deliveredOrder(t.id, 4);
+    expect(await rewards.grantReferralOrderReward(t.id)).toBe(true);
+    await orderStatus.setStatus(b.id, 'RETURNED');
+    failNotify = false;
+    await mergeGuestInto(g, t);
+    await sweepAll(newCron(), later());
+    expect(await inbox(t.id)).toEqual([]);
+    expect(await inbox(g.id)).toEqual([]);
+    expect(await balanceOf(t.id)).toBe(0);
   });
 
   it('(j) handleCron không ném ra ngoài dù truy vấn hỏng', async () => {

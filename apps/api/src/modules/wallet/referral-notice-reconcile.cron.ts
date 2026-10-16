@@ -15,6 +15,7 @@ const WINDOW_MS = 3 * 864e5;
 const MIN_AGE_MS = 5 * 60_000;
 const LOCK_KEY = 'cron:wallet.referral_notice_reconcile';
 // Migration seed các mẫu REFERRAL_*: sự kiện trước lúc nó chạy xong thì chưa từng có đường báo nào, không phải tin "bị sót".
+const REFERRAL_TEMPLATE_CODES = ['REFERRAL_REWARD_PAID', 'REFERRAL_MILESTONE_PAID', 'REFERRAL_REWARD_REVOKED'] as const;
 const TEMPLATES_MIGRATION = '20261017000100_r12_referral_notification_templates';
 
 type Cursor = { createdAt: Date; id: string };
@@ -40,6 +41,7 @@ export class ReferralNoticeReconcileCron {
   private cursor: Cursor | null = null;
   private liveSince: Date | null = null;
   private failClosedSince: Date | null = null;
+  private warnedFloor = false;
   private readonly warnedAmbiguous = new Set<string>();
 
   constructor(
@@ -106,7 +108,7 @@ export class ReferralNoticeReconcileCron {
           select: { id: true, userId: true, delta: true, reason: true, refId: true, createdAt: true },
         });
         out.scanned += page.length;
-        const batch = await this.reconcilePage(page);
+        const batch = await this.reconcilePage(page, from, to);
         out.missing += batch.missing;
         out.sent += batch.sent;
         out.failed += batch.failed;
@@ -127,9 +129,10 @@ export class ReferralNoticeReconcileCron {
 
   /**
    * Mốc dưới của lượt quét: lúc migration mẫu tin chạy xong (notification_templates không có cột ngày tạo), để lần triển khai
-   * đầu không gửi dồn tin cho sự kiện của 3 ngày trước, vốn chưa từng có đường báo. Đọc lỗi hoặc không có dòng migration thành
-   * công thì ĐÓNG: mốc = lúc lượt quét đầu tiên của tiến trình này (chỉ dòng sổ tạo sau đó mới được gửi bù), ghi cảnh báo một
-   * lần; lần sau vẫn thử đọc lại nên có dòng migration là tự hết đóng.
+   * đầu không gửi dồn tin cho sự kiện của 3 ngày trước, vốn chưa từng có đường báo. Có dòng migration thành công thì dùng nó,
+   * không bao giờ đóng. Thiếu/đọc lỗi dòng đó thì lấy tin REFERRAL_* sớm nhất trong notification_logs (tin đầu tiên chứng minh
+   * mẫu đã chạy thật; không đổi khi tiến trình khởi động lại). Chưa có tin nào thì ĐÓNG: mốc = lúc lượt quét đầu tiên của tiến
+   * trình này (chỉ dòng sổ tạo sau đó mới được gửi bù). Cảnh báo một lần; mỗi lượt vẫn thử đọc lại nên có dòng migration là hết đóng.
    */
   private async templatesLiveSince(now: Date): Promise<Date> {
     if (this.liveSince) return this.liveSince;
@@ -145,17 +148,25 @@ export class ReferralNoticeReconcileCron {
     } catch (err) {
       this.logger.warn(`Không đọc được mốc migration ${TEMPLATES_MIGRATION}: ${err instanceof Error ? err.message : err}`);
     }
-    if (!this.failClosedSince) {
-      this.failClosedSince = now;
-      this.logger.warn(`Không có mốc migration ${TEMPLATES_MIGRATION}: chỉ gửi bù tin cho dòng sổ tạo sau ${now.toISOString()}.`);
+    let fallback: Date | null = null;
+    try {
+      const first = await this.prisma.notificationLog.aggregate({ where: { templateCode: { in: [...REFERRAL_TEMPLATE_CODES] } }, _min: { sentAt: true } });
+      fallback = first._min.sentAt;
+    } catch (err) {
+      this.logger.warn(`Không đọc được tin giới thiệu đầu tiên: ${err instanceof Error ? err.message : err}`);
     }
-    return this.failClosedSince;
+    if (!fallback) fallback = this.failClosedSince ??= now;
+    if (!this.warnedFloor) {
+      this.warnedFloor = true;
+      this.logger.warn(`Không có mốc migration ${TEMPLATES_MIGRATION}: chỉ gửi bù tin cho dòng sổ tạo sau ${fallback.toISOString()}.`);
+    }
+    return fallback;
   }
 
-  private async reconcilePage(page: ReferralLedgerRow[]): Promise<{ missing: number; sent: number; failed: number; skippedNotices: number }> {
+  private async reconcilePage(page: ReferralLedgerRow[], from: Date, to: Date): Promise<{ missing: number; sent: number; failed: number; skippedNotices: number }> {
     const res = { missing: 0, sent: 0, failed: 0, skippedNotices: 0 };
     if (page.length === 0 || !this.notifications) return res;
-    const delivered = await this.deliveredKeys(page);
+    const delivered = await this.deliveredKeys(page, from, to);
     const notices: ReferralNotice[] = [];
     for (const row of page) {
       if (delivered.has(row.id)) continue;
@@ -193,37 +204,67 @@ export class ReferralNoticeReconcileCron {
   /**
    * Id các dòng sổ đã có tin, đúng phép kiểm của NotificationsService.notify (cùng khách, cùng dedupeKey, INAPP). Gộp khách chuyển
    * dòng sổ sang tài khoản đích mà không chuyển nhật ký tin, nên tin đã gửi cho khách (user.mergedIntoId = chủ dòng sổ) cũng tính
-   * là đã gửi; khoá mốc bị đổi tên khi gộp (mang id đích, đời mới) nên với mốc so thêm theo số mốc đã báo cho khách đó.
+   * là đã gửi. Khoá mốc bị đổi tên khi gộp (mang id đích, đời mới) nên mốc đối chiếu riêng, từng-một-với-một (milestoneCovered).
    */
-  private async deliveredKeys(page: ReferralLedgerRow[]): Promise<Set<string>> {
+  private async deliveredKeys(page: ReferralLedgerRow[], from: Date, to: Date): Promise<Set<string>> {
     const owners = [...new Set(page.map((r) => r.userId))];
     const guests = await this.prisma.user.findMany({ where: { mergedIntoId: { in: owners } }, select: { id: true, mergedIntoId: true } });
     const guestsOf = new Map<string, string[]>();
     for (const g of guests) guestsOf.set(g.mergedIntoId!, [...(guestsOf.get(g.mergedIntoId!) ?? []), g.id]);
-    const userIds = [...new Set([...owners, ...guests.map((g) => g.id)])];
-    const keys = [...new Set(page.map((r) => referralDedupeKey(r.reason)))];
-    const earliest = page.reduce((min, r) => (r.createdAt < min ? r.createdAt : min), page[0]!.createdAt);
-    const since = new Date(earliest.getTime() - 60_000);
-    // Tin chỉ có thể gửi sau dòng sổ của nó nên chặn sentAt cho truy vấn đi theo index (userId, sentAt).
-    const rows = await this.prisma.$queryRaw<{ userId: string; key: string | null; template: string; count: string | null }[]>(Prisma.sql`
-      SELECT "userId", "payload"->>'dedupeKey' AS "key", "templateCode" AS "template", "payload"->'data'->>'count' AS "count"
-        FROM "notification_logs"
-       WHERE "channel" = 'INAPP'
-         AND "userId" = ANY(${userIds}::text[])
-         AND "sentAt" >= ${since}
-         AND ("payload"->>'dedupeKey' = ANY(${keys}::text[]) OR "templateCode" = 'REFERRAL_MILESTONE_PAID')`);
-    const byKey = new Set(rows.filter((r) => r.key).map((r) => `${r.userId}|${r.key}`));
-    const milestonesTold = new Set(rows.filter((r) => r.template === 'REFERRAL_MILESTONE_PAID').map((r) => `${r.userId}|${r.count}`));
+    const found = await this.sentKeys(
+      [...new Set([...owners, ...guests.map((g) => g.id)])],
+      page.map((r) => referralDedupeKey(r.reason)),
+      new Date(Math.min(...page.map((r) => r.createdAt.getTime())) - 60_000),
+    );
     const delivered = new Set<string>();
     for (const row of page) {
       const key = referralDedupeKey(row.reason);
-      const guestIds = guestsOf.get(row.userId) ?? [];
-      if ([row.userId, ...guestIds].some((u) => byKey.has(`${u}|${key}`))) delivered.add(row.id);
-      else if (row.reason.startsWith(MILESTONE_PREFIX)) {
-        const count = row.reason.slice(row.reason.lastIndexOf(':') + 1).split('#')[0];
-        if (guestIds.some((u) => milestonesTold.has(`${u}|${count}`))) delivered.add(row.id);
-      }
+      if ([row.userId, ...(guestsOf.get(row.userId) ?? [])].some((u) => found.has(`${u}|${key}`))) delivered.add(row.id);
+    }
+    const ownersToCheck = [...new Set(page.filter((r) => r.reason.startsWith(MILESTONE_PREFIX) && !delivered.has(r.id) && guestsOf.has(r.userId)).map((r) => r.userId))];
+    for (const owner of ownersToCheck) {
+      for (const id of await this.milestoneCovered(owner, guestsOf.get(owner) ?? [], from, to)) delivered.add(id);
     }
     return delivered;
+  }
+
+  /** `${userId}|${dedupeKey}` của các tin INAPP đã có trong số `keys`. sentAt chặn dưới cho truy vấn đi theo index (userId, sentAt). */
+  private async sentKeys(userIds: string[], keys: string[], since: Date): Promise<Set<string>> {
+    const rows = await this.prisma.$queryRaw<{ userId: string; key: string }[]>(Prisma.sql`
+      SELECT "userId", "payload"->>'dedupeKey' AS "key"
+        FROM "notification_logs"
+       WHERE "channel" = 'INAPP' AND "userId" = ANY(${userIds}::text[]) AND "sentAt" >= ${since}
+         AND "payload"->>'dedupeKey' = ANY(${keys}::text[])`);
+    return new Set(rows.map((r) => `${r.userId}|${r.key}`));
+  }
+
+  /**
+   * Dòng mốc của `owner` đã được báo cho khách đã gộp vào họ trước khi dòng bị đổi khoá. Một tin mốc của khách (cùng số mốc, cùng
+   * số điểm) chỉ che đúng MỘT dòng của owner chưa có tin theo khoá, ưu tiên dòng có đời (#n) cao nhất (dòng đổi tên nối sau đời
+   * của owner): dòng mốc riêng của owner mà tin bị sót vẫn được gửi bù. Xét mọi dòng mốc của owner trong cửa sổ, không chỉ trang
+   * đang quét, nên kết quả không phụ thuộc ranh giới trang.
+   */
+  private async milestoneCovered(owner: string, guestIds: string[], from: Date, to: Date): Promise<string[]> {
+    const pool = await this.prisma.pointsTransaction.findMany({
+      where: { userId: owner, refType: 'REFERRAL', delta: { gt: 0 }, reason: { startsWith: `${MILESTONE_PREFIX}${owner}:` }, createdAt: { gte: from, lte: to } },
+      select: { id: true, delta: true, reason: true, createdAt: true },
+    });
+    if (pool.length === 0) return [];
+    const own = await this.sentKeys([owner], pool.map((r) => referralDedupeKey(r.reason)), new Date(from.getTime() - 60_000));
+    const told = await this.prisma.notificationLog.findMany({
+      where: { userId: { in: guestIds }, channel: 'INAPP', templateCode: 'REFERRAL_MILESTONE_PAID', sentAt: { gte: new Date(from.getTime() - 60_000) } },
+      select: { payload: true },
+    });
+    const gen = (reason: string) => Number(reason.split('#')[1] ?? 0);
+    const open = pool
+      .filter((r) => !own.has(`${owner}|${referralDedupeKey(r.reason)}`))
+      .sort((a, b) => gen(b.reason) - gen(a.reason) || b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? -1 : 1));
+    const covered: string[] = [];
+    for (const log of told) {
+      const data = (log.payload as { data?: { count?: string; points?: string } } | null)?.data;
+      const hit = open.findIndex((r) => String(Number(r.reason.slice(r.reason.lastIndexOf(':') + 1).split('#')[0])) === data?.count && r.delta.toLocaleString('vi-VN') === data?.points);
+      if (hit >= 0) covered.push(...open.splice(hit, 1).map((r) => r.id));
+    }
+    return covered;
   }
 }
