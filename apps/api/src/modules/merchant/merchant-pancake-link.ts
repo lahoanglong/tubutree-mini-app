@@ -273,7 +273,7 @@ export async function unlinkTubuFulfilledVariation(
   }
   // Khoá biến thể TRƯỚC khi đóng mốc: checkout giữ khoá này tới commit và tính hoa hồng CTV sau khi chèn đơn, nên mốc `unlinkedAt`
   // lấy sau khoá luôn muộn hơn mọi đơn đã chèn và đã tính hoa hồng (bảng kê và hoa hồng không cùng bỏ hay cùng trả một dòng).
-  await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${link.variationId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${link.variationId} FOR NO KEY UPDATE`;
   const closed = await tx.merchantPancakeLink.updateMany({
     where: { id: link.id, unlinkedAt: null },
     data: { unlinkedAt: new Date(), unlinkedBy: opts.actorId, unlinkReason: opts.reason.slice(0, 300) },

@@ -301,6 +301,11 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
       data: { productId: 'tubu-shell' },
     });
     expect(t.variation.create.mock.calls[0][0].data).toMatchObject({ productId: 'prod-a', pancakeId: null, stock: 0 });
+    const lock = t.$queryRaw.mock.calls[0] as unknown as [string[], ...unknown[]];
+    expect(lock[0].join('?')).toContain('FOR NO KEY UPDATE');
+    expect(lock[1]).toBe('var-pk');
+    // mốc gỡ liên kết lấy SAU khi giành khoá biến thể
+    expect(t.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(t.merchantPancakeLink.updateMany.mock.invocationCallOrder[0]!);
     expect(t.product.update).toHaveBeenCalledWith({ where: { id: 'prod-a' }, data: { fulfilment: 'MERCHANT', isActive: false } });
     expect(t.product.updateMany).toHaveBeenCalledWith({ where: { id: 'tubu-shell', isActive: false }, data: { isActive: true } });
   });

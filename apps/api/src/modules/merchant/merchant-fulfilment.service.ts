@@ -1496,7 +1496,7 @@ export class MerchantFulfilmentService {
       if (!found) throw new NotFoundException('Không tìm thấy liên kết.');
       // Khoá biến thể trước khi lấy mốc: checkout giữ khoá này tới commit và tính hoa hồng CTV sau khi chèn đơn, nên đơn đặt từ
       // mốc xác nhận luôn thấy liên kết đã xác nhận (hoa hồng loại, bảng kê trả), đơn trước mốc thì ngược lại.
-      await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${found.variationId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${found.variationId} FOR NO KEY UPDATE`;
       const link = await tx.merchantPancakeLink.findUnique({ where: { id: linkId }, select: { takeover: true, unlinkedAt: true } });
       if (!link) throw new NotFoundException('Không tìm thấy liên kết.');
       if (!link.takeover) throw new BadRequestException('Liên kết này không nhận lại hàng Tubu đang bán nên không cần xác nhận hàng ký gửi.');

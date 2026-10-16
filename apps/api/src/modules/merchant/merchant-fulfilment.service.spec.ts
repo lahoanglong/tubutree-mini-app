@@ -956,6 +956,11 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     prisma.$queryRaw.mockClear();
     await svc.confirmConsignment('admin-1', 'l3');
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const lock = prisma.$queryRaw.mock.calls[0] as [string[], ...unknown[]];
+    expect(lock[0].join('?')).toContain('FOR NO KEY UPDATE');
+    expect(lock[1]).toBe('v1');
+    // mốc xác nhận lấy SAU khi giành khoá biến thể
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.merchantPancakeLink.updateMany.mock.invocationCallOrder[0]!);
     expect(prisma.merchantPancakeLink.updateMany).toHaveBeenCalledWith({
       where: { id: 'l3', consignmentConfirmedAt: null },
       data: { consignmentConfirmedAt: expect.any(Date), consignmentConfirmedBy: 'admin-1' },
