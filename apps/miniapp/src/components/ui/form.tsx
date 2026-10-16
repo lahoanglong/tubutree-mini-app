@@ -1,5 +1,5 @@
 import { Children, cloneElement, Fragment, isValidElement, useId } from 'react';
-import type { ComponentProps, ReactElement, ReactNode } from 'react';
+import type { ComponentProps, MouseEvent, ReactElement, ReactNode } from 'react';
 import { Checkbox as ZCheckbox, Radio as ZRadio, Switch as ZSwitch } from 'zmp-ui';
 import { Text } from './text';
 
@@ -77,12 +77,21 @@ export function Field({ label, error, children }: FieldProps) {
 // `tabIndex -1` ở dưới, hành vi như trước.
 const INERT = { inert: '' } as Record<string, string>;
 
+// Khung 44px lớn hơn control 24px: cú chạm trúng phần đệm (target là chính khung) chuyển cho <input>
+// bên trong để vùng chạm thật sự là 44px. Cú chạm vào nhãn/ô đi đường label gốc, target khác khung nên
+// không bị chuyển lần hai. Control trang trí thì hàng cha tự xử lý bấm nên không chuyển.
+function forwardPaddingTap(e: MouseEvent<HTMLDivElement>) {
+  if (e.target !== e.currentTarget) return;
+  e.currentTarget.querySelector('input')?.click();
+}
+
 function hitArea(testId: string, children: ReactNode, decorative: boolean) {
   return (
     <div
       data-testid={testId}
       aria-hidden={decorative || undefined}
       {...(decorative ? INERT : null)}
+      onClick={decorative ? undefined : forwardPaddingTap}
       style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center' }}
     >
       {children}

@@ -7,6 +7,7 @@ import {
   refundOfReturn,
   refundStatusText,
   remainingByLine,
+  returnedByLine,
   returnLinesText,
   returnStatusLabel,
   returnFormError,
@@ -53,6 +54,20 @@ describe('destinationBody / maskedBank', () => {
   });
   it('che số tài khoản, chỉ hiện 4 số cuối', () => {
     expect(maskedBank('Techcombank', '190312345678')).toBe('Techcombank ••• 5678');
+  });
+});
+
+describe('returnedByLine — nhãn "Đã trả x/y" (R6-BUYER-9)', () => {
+  const items = [{ id: 'i1', quantity: 3 }, { id: 'i2', quantity: 1 }];
+  it('cộng dồn các yêu cầu đã duyệt, bỏ qua yêu cầu chờ/từ chối và dòng chưa trả', () => {
+    const m = returnedByLine(items, [
+      { status: 'APPROVED', items: [{ orderItemId: 'i1', quantity: 1 }] },
+      { status: 'APPROVED', items: [{ orderItemId: 'i1', quantity: 1 }] },
+      { status: 'REQUESTED', items: [{ orderItemId: 'i2', quantity: 1 }] },
+      { status: 'REJECTED', items: [{ orderItemId: 'i2', quantity: 1 }] },
+    ]);
+    expect(m.get('i1')).toBe(2);
+    expect(m.has('i2')).toBe(false);
   });
 });
 

@@ -19,6 +19,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
 import { getOwnedBrand } from '../services/brand-owner-api';
+import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -96,12 +97,17 @@ export default function ProfilePage() {
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: status === 'authenticated' });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: status === 'authenticated' });
 
-  // Brand-owner (lộ trình B): chỉ hiện mục "Quản lý nhãn" khi user sở hữu 1 nhãn.
-  // Dùng CHUNG queryKey ['owned-brand'] với brand-owner.tsx → 1 lần fetch phục vụ cả 2 màn,
-  // và khi chủ nhãn sửa thông tin (invalidate ['owned-brand']) menu hint cũng cập nhật theo.
+  // Brand-owner (lộ trình B): chỉ hiện mục "Quản lý nhãn" khi user sở hữu 1 nhãn. Chưa có cờ "là chủ nhãn" trên
+  // /me nên vẫn phải hỏi API, mà API trả 404 cho mọi người không sở hữu nhãn: đó là trạng thái bình thường
+  // (null), không phải lỗi. Khoá riêng (không dùng chung với brand-owner.tsx, nơi 404 là màn "chưa có nhãn")
+  // nhưng vẫn nằm dưới ['owned-brand'] để chủ nhãn sửa thông tin thì menu hint cập nhật theo.
   const ownedBrandQ = useQuery({
-    queryKey: ['owned-brand'],
-    queryFn: getOwnedBrand,
+    queryKey: ['owned-brand', 'profile'],
+    queryFn: () =>
+      getOwnedBrand().catch((e: unknown) => {
+        if (isNotFoundError(e)) return null;
+        throw e;
+      }),
     enabled: status === 'authenticated',
     retry: false,
   });

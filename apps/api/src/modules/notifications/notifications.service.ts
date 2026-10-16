@@ -194,6 +194,15 @@ export class NotificationsService {
     return { ok: result.count > 0 };
   }
 
+  /** Chỉ chạm tin INAPP chưa đọc của chính khách; gọi lại khi không còn tin chưa đọc trả count 0. */
+  async markAllRead(userId: string): Promise<{ ok: true; count: number }> {
+    const result = await this.prisma.notificationLog.updateMany({
+      where: { userId, channel: 'INAPP', status: { not: 'READ' } },
+      data: { status: 'READ' },
+    });
+    return { ok: true, count: result.count };
+  }
+
   private render(template: string, data: Record<string, string>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_, k: string) => data[k] ?? '');
   }

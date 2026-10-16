@@ -791,7 +791,29 @@ function DashboardTab({
           </button>
         </div>
 
-        <ScrollRegion label="Đơn hàng gần đây" className="mt-3">
+        {/* Điện thoại: bảng 6 cột phải vuốt ngang mới thấy tổng tiền và trạng thái, nên mỗi đơn là một thẻ hai dòng. */}
+        <ul data-recent-orders-cards className="mt-3 divide-y divide-stone-100 sm:hidden">
+          {stats.recentOrders.length === 0 ? (
+            <li className="py-6 text-center text-xs text-stone-500">Chưa có đơn hàng nào.</li>
+          ) : (
+            stats.recentOrders.map((o) => (
+              <li key={o.id} className="py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 break-words font-semibold text-stone-800">{o.code}</span>
+                  <span className="shrink-0 font-semibold text-forest-700">{formatVnd(o.total)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2 text-xs text-stone-500">
+                  <span className="min-w-0 break-words">
+                    {o.user?.fullName ?? 'Khách lẻ'} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod} · {formatDateTime(o.createdAt)}
+                  </span>
+                  <OrderStatusBadge status={o.status} />
+                </div>
+              </li>
+            ))
+          )}
+        </ul>
+
+        <ScrollRegion label="Đơn hàng gần đây" className="mt-3 hidden sm:block">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>

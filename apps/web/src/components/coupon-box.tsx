@@ -5,7 +5,13 @@ import { Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { applyCoupon, formatVnd, getMyCoupons, removeCoupon } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
-import { couponExpiryLabel, couponValueLabel, isCouponEligible, sortCouponsForCart } from '@/lib/coupon-view';
+import {
+  couponExpiryLabel,
+  couponValueLabel,
+  isCouponEligible,
+  isFreeshipRedundant,
+  sortCouponsForCart,
+} from '@/lib/coupon-view';
 import { autoCouponName } from '@/lib/coupon-name';
 
 /** Số voucher hiện sẵn; còn lại nằm sau nút xem thêm để giỏ/thanh toán trên điện thoại không dài thêm hàng chục cuộn. */
@@ -25,11 +31,14 @@ export const COUPON_MUTATION_KEY = ['cart-coupon'] as const;
 export function CouponBox({
   currentCode,
   subtotal,
+  shippingFee = null,
   notice = null,
   disabled = false,
 }: {
   currentCode: string | null;
   subtotal: number;
+  /** Phí vận chuyển đã tính của đơn (thanh toán); chưa biết thì null và thẻ freeship không nói được số tiền. */
+  shippingFee?: number | null;
   /** Mã đang giữ nhưng chưa áp cho đơn (server giải thích lý do, vd hàng giờ vàng không tính vào điều kiện). */
   notice?: string | null;
   /** Trang chứa đang đặt hàng: đổi mã lúc này làm đơn lấy mã khác với con số khách đã thấy. */
@@ -111,21 +120,24 @@ export function CouponBox({
                 {sortCouponsForCart(couponsQ.data!, subtotal)
                   .slice(0, showAll ? undefined : VISIBLE_COUPONS)
                   .map((c) => {
-                    const eligible = isCouponEligible(c, subtotal);
+                    const redundant = isFreeshipRedundant(c, shippingFee);
+                    const meetsMin = isCouponEligible(c, subtotal);
+                    const eligible = meetsMin && !redundant;
                     return (
                       <li
                         key={c.code}
                         className={`flex items-center gap-3 rounded-control border border-dashed border-promo-solid bg-promo-bg p-3 ${
-                          eligible ? '' : 'opacity-80'
+                          eligible ? '' : redundant ? 'opacity-60' : 'opacity-80'
                         }`}
                       >
                         <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
                         <div className="min-w-0 flex-1">
                           <div className="break-all text-sm font-bold text-promo-fg">{autoCouponName(c.code) ?? c.code}</div>
                           <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
+                          {redundant && <div className="text-xs text-stone-700">Đơn này đã miễn phí vận chuyển</div>}
                           {c.minOrder != null && (
-                            <div className={`text-xs ${eligible ? 'text-stone-700' : 'font-medium text-warning-fg'}`}>
-                              {eligible
+                            <div className={`text-xs ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}>
+                              {meetsMin
                                 ? `Đơn tối thiểu ${formatVnd(c.minOrder)}`
                                 : `Cần đơn tối thiểu ${formatVnd(c.minOrder)} — mua thêm ${formatVnd(c.minOrder - subtotal)} để dùng mã này`}
                             </div>
@@ -136,10 +148,10 @@ export function CouponBox({
                           type="button"
                           disabled={!eligible || busy}
                           onClick={() => apply.mutate(c.code)}
-                          aria-label={`Dùng mã ${autoCouponName(c.code) ?? c.code}`}
+                          aria-label={`${redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
                           className={`${ui.btnPrimary} flex-none px-3`}
                         >
-                          {eligible ? 'Dùng mã' : 'Chưa đủ'}
+                          {redundant ? 'Không cần' : eligible ? 'Dùng mã' : 'Chưa đủ'}
                         </button>
                       </li>
                     );

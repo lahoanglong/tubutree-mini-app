@@ -25,6 +25,7 @@ import {
   destinationBody,
   remainingByLine,
   refundOfReturn,
+  refundStatusText,
   returnLinesText,
   returnStatusLabel,
   type MyRefund,
@@ -32,6 +33,7 @@ import {
   type RefundMethodChoice,
 } from '@/lib/refund-rules';
 import { RefundDestinationPicker } from './refund-destination-picker';
+import { RefundDestinationControl } from './order-refunds';
 import { ReturnRequestForm } from './return-request-form';
 
 /** Số dòng của lượt mua lại không thêm được (hết hàng/ngừng bán) hoặc chỉ thêm được một phần. */
@@ -304,6 +306,12 @@ function ReturnStatus({
       {lines && <p className="ml-6 text-xs text-stone-600">Trả: {lines}</p>}
       {r.status === 'APPROVED' && !!r.items?.length && (
         <p className="ml-6 text-xs text-stone-600">{r.receivedAt ? 'Tubu đã nhận lại hàng.' : 'Tubu sẽ liên hệ để nhận lại hàng.'}</p>
+      )}
+      {refund && !placedForCustomer && (
+        <div className="ml-6">
+          {refundStatusText(refund).detail && <p className="text-xs text-stone-600">{refundStatusText(refund).detail}</p>}
+          <RefundDestinationControl refund={refund} />
+        </div>
       )}
     </div>
   );

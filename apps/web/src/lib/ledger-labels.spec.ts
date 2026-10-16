@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pointsReasonDetail, pointsReasonLabel, walletTxLabel } from './ledger-labels';
+import { pointsDebtAmount, pointsReasonDetail, pointsReasonLabel, walletTxLabel, walletTxTitle } from './ledger-labels';
 
 describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng tiếng Việt', () => {
   it.each([
@@ -9,7 +9,7 @@ describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng t
     ['ORDER_REFUND_POINTS:TB1', 'Hoàn lại điểm đã dùng'],
     ['DAILY_CHECKIN:2026-10-14', 'Điểm danh hằng ngày'],
     ['POINTS_EXPIRED:2026-09', 'Điểm hết hạn'],
-    ['REFERRAL_REVOKE:abc', 'Thu hồi thưởng giới thiệu'],
+    ['REFERRAL_REVOKE:abc', 'Thu hồi toàn bộ thưởng giới thiệu'],
     ['REFERRAL_REWARD:abc', 'Thưởng giới thiệu bạn bè'],
     ['REVIEW:p1', 'Đánh giá sản phẩm'],
   ])('%s → %s', (reason, label) => {
@@ -47,12 +47,15 @@ const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail
   ['POINTS_EXPIRED', 'Điểm hết hạn', 'Điểm hết hạn'],
   ['XU_TO_POINTS:123456', 'Chuyển từ xu cũ sang Điểm Xanh', 'Chuyển từ xu cũ sang Điểm Xanh'],
   ['REFERRAL_ORDER2:u1', 'Thưởng giới thiệu bạn bè', 'Thưởng giới thiệu bạn bè'],
-  ['REFERRAL_MILESTONE:u1:3', 'Thưởng giới thiệu bạn bè', 'Thưởng giới thiệu bạn bè'],
-  ['REFERRAL_MILESTONE:u1:3#1', 'Thưởng giới thiệu bạn bè', 'Thưởng giới thiệu bạn bè'],
-  ['REFERRAL_ORDER2_REVOKE:u1', 'Thu hồi thưởng giới thiệu', 'Thu hồi thưởng giới thiệu'],
-  ['REFERRAL_MILESTONE_REVOKE:u1:3#1', 'Thu hồi thưởng giới thiệu', 'Thu hồi thưởng giới thiệu'],
+  ['REFERRAL_MILESTONE:u1:3', 'Thưởng mốc giới thiệu', 'Thưởng mốc giới thiệu'],
+  ['REFERRAL_MILESTONE:u1:3#1', 'Thưởng mốc giới thiệu', 'Thưởng mốc giới thiệu'],
+  ['REFERRAL_ORDER2_REVOKE:u1', 'Thu hồi toàn bộ thưởng giới thiệu', 'Thu hồi toàn bộ thưởng giới thiệu'],
+  ['REFERRAL_ORDER2_PARTIAL_REVOKE:u1:req1', 'Thu hồi một phần thưởng giới thiệu', 'Thu hồi một phần thưởng giới thiệu'],
+  ['REFERRAL_MILESTONE_REVOKE:u1:3#1', 'Thu hồi thưởng mốc giới thiệu', 'Thu hồi thưởng mốc giới thiệu'],
   ['REFERRAL_ORDER2_DEBT:u1', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu'],
-  ['REFERRAL_MILESTONE_DEBT:u1:3#1:12', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu'],
+  ['REFERRAL_ORDER2_DEBT:u1:9', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 9 điểm'],
+  ['REFERRAL_ORDER2_PARTIAL_DEBT:u1:req1:11', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 11 điểm'],
+  ['REFERRAL_MILESTONE_DEBT:u1:3#1:12', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 12 điểm'],
   ['COMMUNITY_POST:p1', 'Thưởng cộng đồng', 'Thưởng cộng đồng'],
   ['COMMUNITY_ANSWER:c1', 'Thưởng cộng đồng', 'Thưởng cộng đồng'],
   ['COMMUNITY_BEST:p1', 'Thưởng cộng đồng', 'Thưởng cộng đồng'],
@@ -102,6 +105,40 @@ describe('mọi mã reason API ghi vào sổ Điểm Xanh đều có nhãn tiế
   it('phần tham chiếu không giống mã đơn thì bị bỏ (không in rác ra màn hình)', () => {
     expect(pointsReasonDetail('ORDER_DELIVERED:<script>x</script>')).toBe('Tích điểm từ đơn hàng');
     expect(pointsReasonDetail(`ORDER_DELIVERED:${'A'.repeat(80)}`)).toBe('Tích điểm từ đơn hàng');
+  });
+});
+
+describe('R6-ADMIN-1 — mỗi loại dòng giới thiệu một nhãn riêng, nợ hiện số điểm', () => {
+  it('thưởng đơn, thưởng mốc và ba kiểu thu hồi không trùng nhãn', () => {
+    const labels = [
+      'REFERRAL_ORDER2:u1',
+      'REFERRAL_MILESTONE:u1:3',
+      'REFERRAL_ORDER2_REVOKE:u1',
+      'REFERRAL_ORDER2_PARTIAL_REVOKE:u1:r1',
+      'REFERRAL_MILESTONE_REVOKE:u1:3#0',
+      'REFERRAL_ORDER2_PARTIAL_DEBT:u1:r1:11',
+    ].map(pointsReasonLabel);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('số nợ lấy từ đoạn cuối reason, không phải dòng khác', () => {
+    expect(pointsDebtAmount('REFERRAL_ORDER2_PARTIAL_DEBT:u1:req1:50')).toBe(50);
+    expect(pointsDebtAmount('REFERRAL_ORDER2_DEBT:u1')).toBeNull();
+    expect(pointsDebtAmount('REFERRAL_ORDER2_REVOKE:u1:5')).toBeNull();
+    expect(pointsDebtAmount('MERGED:g1:REFERRAL_MILESTONE_DEBT:u1:3#0:7')).toBe(7);
+  });
+});
+
+describe('R6-BUYER-13 — tiêu đề sao kê Ví theo nguồn khoản hoàn', () => {
+  it.each([
+    [{ type: 'ORDER_REFUND', reason: 'Hoàn tiền trả hàng đơn TUBU1' }, 'Hoàn tiền trả hàng'],
+    [{ type: 'ORDER_REFUND', reason: 'Hoàn tiền đơn TUBU1' }, 'Hoàn tiền đơn hàng'],
+    [{ type: 'ORDER_REFUND', reason: null }, 'Hoàn tiền đơn hàng'],
+    [{ type: 'ORDER_PAY', reason: 'Thanh toán đơn TUBU1' }, 'Thanh toán đơn'],
+    [{ type: 'WITHDRAW', reason: null }, 'Rút về ngân hàng'],
+    [{ type: 'NEW_TYPE', reason: null }, 'Biến động ví'],
+  ])('%j → %s', (tx, title) => {
+    expect(walletTxTitle(tx)).toBe(title);
   });
 });
 

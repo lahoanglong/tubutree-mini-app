@@ -2,7 +2,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { PassThrough } from 'node:stream';
 import type { Response } from 'express';
 import { csvCell, csvText, orderCsvChunks, ORDER_CSV_HEADERS, streamCsv, userCsvChunks, EXPORT_BATCH } from './admin-export';
-import { BANK_REFUND_IN_PROGRESS } from '../orders/refund-queue';
+import { BANK_REFUND_IN_PROGRESS, OPEN_REFUND_FOR_EXPORT } from '../orders/refund-queue';
 
 /** ADMINOPS-12: file CSV cho kế toán phải có MỌI đơn khớp bộ lọc, không chỉ 20 đơn của trang đang xem. */
 function fakeOrders(n: number) {
@@ -32,7 +32,7 @@ function fakeOrders(n: number) {
     user: { fullName: 'Khách "Một"', phone: '0911111111' },
     fulfillerStorefront: null,
     items: [{ quantity: 2 }, { quantity: 1 }],
-    _count: { customerRefunds: 0 },
+    customerRefunds: [],
   }));
 }
 
@@ -101,27 +101,42 @@ describe('cột Trạng thái TT trong CSV đơn hàng (R3-UI-3)', () => {
 
   // R4-ADMIN-1: huỷ đơn chuyển khoản, khách chọn nhận về ngân hàng → đơn lật REFUNDED ngay nhưng tiền còn nằm ở hàng đợi
   // chuyển khoản tay. CSV ghi "Đã hoàn tiền" thì kế toán/CSKH báo khách đã hoàn trong khi chưa ai chuyển.
+  const bank = { method: 'MANUAL_TRANSFER', kind: 'CANCEL' };
   it.each([
-    ['còn khoản chuyển khoản Chờ/Đang chuyển', 1, 'Đang hoàn tiền'],
-    ['mọi khoản đã chuyển xong (hoặc hoàn vào Ví)', 0, 'Đã hoàn tiền'],
-  ])('REFUNDED, %s → %s', async (_name, inProgress, expected) => {
+    ['còn khoản chuyển khoản Chờ/Đang chuyển', [bank], 'Đang hoàn tiền'],
+    ['mọi khoản đã chuyển xong (hoặc hoàn vào Ví)', [], 'Đã hoàn tiền'],
+  ])('REFUNDED, %s → %s', async (_name, openRefunds, expected) => {
     expect(
-      await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'CANCELLED', paymentStatus: 'REFUNDED', _count: { customerRefunds: inProgress } }),
+      await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'CANCELLED', paymentStatus: 'REFUNDED', customerRefunds: openRefunds }),
     ).toBe(expected);
   });
 
   it('khoản còn chờ chỉ đổi chữ của đơn đã lật REFUNDED: đơn đã trả tiền (trả một phần về ngân hàng) vẫn "Đã thanh toán"', async () => {
     expect(
-      await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'DELIVERED', paymentStatus: 'PAID', _count: { customerRefunds: 1 } }),
+      await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'DELIVERED', paymentStatus: 'PAID', customerRefunds: [{ method: 'MANUAL_TRANSFER', kind: 'RETURN' }] }),
     ).toBe('Đã thanh toán');
   });
 
-  it('đếm đúng khoản chuyển khoản Chờ/Đang chuyển của đơn (không đếm Ví, đã chuyển, chờ đối soát, bỏ qua)', async () => {
+  // R6-ADMIN-2: đơn huỷ còn UNPAID nhưng khách đã chuyển tiền về muộn, khoản hoàn đang chờ: không phải "Chưa thanh toán".
+  it.each([
+    ['LATE_PAYMENT', 'CANCELLED', 'UNPAID', 'Đang hoàn tiền'],
+    ['OVERPAYMENT', 'CANCELLED', 'UNPAID', 'Đang hoàn tiền'],
+    ['OVERPAYMENT', 'DELIVERED', 'PAID', 'Đã thanh toán'],
+  ])('khoản %s đang chờ hoàn, đơn %s/%s → %s', async (kind, status, paymentStatus, expected) => {
+    expect(
+      await statusCell({ paymentMethod: 'BANK_TRANSFER', status, paymentStatus, customerRefunds: [{ method: 'MANUAL_TRANSFER', kind }] }),
+    ).toBe(expected);
+  });
+
+  it('chỉ lấy khoản Chờ/Đang chuyển: chuyển khoản Tubu, hoặc tiền về muộn/chuyển dư', async () => {
     const { prisma, findMany } = cursorPrisma(fakeOrders(1), 'order');
     await collect(orderCsvChunks(prisma, {}));
-    const select = (findMany.mock.calls[0]![0] as unknown as { select: { _count: unknown } }).select;
-    expect(select._count).toEqual({ select: { customerRefunds: { where: BANK_REFUND_IN_PROGRESS } } });
+    const select = (findMany.mock.calls[0]![0] as unknown as { select: { customerRefunds: unknown } }).select;
+    expect(select.customerRefunds).toEqual({ where: OPEN_REFUND_FOR_EXPORT, select: { method: true, kind: true } });
     expect(BANK_REFUND_IN_PROGRESS).toEqual({ method: 'MANUAL_TRANSFER', status: { in: ['PENDING', 'PROCESSING'] } });
+    expect(OPEN_REFUND_FOR_EXPORT).toEqual({
+      OR: [BANK_REFUND_IN_PROGRESS, { kind: { in: ['LATE_PAYMENT', 'OVERPAYMENT'] }, status: { in: ['PENDING', 'PROCESSING'] } }],
+    });
   });
 });
 

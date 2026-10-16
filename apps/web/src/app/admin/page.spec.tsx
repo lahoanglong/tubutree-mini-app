@@ -441,6 +441,18 @@ describe('admin/page — tab Tổng quan', () => {
     ['Đã trả hàng', 'bg-promo-bg', 'text-promo-fg'],
   ];
 
+  it('R6-ADMIN-5 — điện thoại: mỗi đơn gần đây là thẻ hai dòng có tổng tiền và trạng thái, bảng chỉ hiện từ 640px', async () => {
+    const { container } = await mount();
+    const cards = container.querySelectorAll('ul[data-recent-orders-cards] > li');
+    expect(cards).toHaveLength(7);
+    expect(cards[0]!.textContent).toContain('TT0');
+    expect(cards[0]!.textContent).toContain('100.000');
+    expect(cards[0]!.textContent).toContain('Chờ thanh toán');
+    expect(cards[6]!.textContent).toContain('Đã trả hàng');
+    expect(container.querySelector('ul[data-recent-orders-cards]')!.className).toContain('sm:hidden');
+    expect(container.querySelector('table')!.closest('[role="region"]')!.className).toContain('hidden sm:block');
+  });
+
   it('huy hiệu trạng thái đơn mỗi trạng thái một cặp nền/chữ cùng họ token, nhãn giữ nguyên', async () => {
     const { container } = await mount();
     const badges = [...container.querySelectorAll('tbody span.inline-block')];

@@ -189,6 +189,8 @@ export interface CouponDTO {
   minOrder: number | null;
   maxDiscount: number | null;
   endAt: string;
+  /** Mã chỉ áp cho các sản phẩm này (mã mua chung); null/thiếu = mọi sản phẩm. */
+  products?: { id: string; name: string }[] | null;
 }
 export const getMyCoupons = () => apiFetch<CouponDTO[]>('/me/coupons');
 export const applyCoupon = (code: string) =>
