@@ -92,13 +92,13 @@ describe('sendReferralNotices', () => {
   it('gửi lỗi chỉ ghi cảnh báo, không ném, tin sau vẫn gửi', async () => {
     const notify = jest.fn().mockRejectedValueOnce(new Error('db down')).mockResolvedValue(undefined);
     const { c, warn } = ctx('An', notify);
-    await expect(sendReferralNotices(c, [paid, { ...paid, key: 'other' }])).resolves.toBeUndefined();
+    await expect(sendReferralNotices(c, [paid, { ...paid, key: 'other' }])).resolves.toBe(1);
     expect(notify).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it('thiếu NotificationsService thì bỏ qua', async () => {
     const { c } = ctx();
-    await expect(sendReferralNotices({ ...c, notifications: undefined }, [paid])).resolves.toBeUndefined();
+    await expect(sendReferralNotices({ ...c, notifications: undefined }, [paid])).resolves.toBe(0);
   });
 });
