@@ -6,6 +6,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+  locState: null as unknown,
+  voucherProps: [] as Record<string, unknown>[],
   openSnackbar: vi.fn(),
   getAddresses: vi.fn(),
   getCart: vi.fn(),
@@ -24,7 +26,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ pathname: '/checkout', search: '', state: null }),
+  useLocation: () => ({ pathname: '/checkout', search: '', state: mocks.locState }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/shop-api', () => ({
@@ -61,7 +63,12 @@ vi.mock('../store/auth', () => {
 });
 vi.mock('../store/storefront-context', () => ({ useStorefrontContext: () => mocks.sfCtx }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, recyclingEnabled: false }) }));
-vi.mock('../components/checkout/voucher-sheet', () => ({ VoucherSheet: () => null }));
+vi.mock('../components/checkout/voucher-sheet', () => ({
+  VoucherSheet: (p: Record<string, unknown>) => {
+    mocks.voucherProps.push(p);
+    return null;
+  },
+}));
 vi.mock('../components/checkout/order-success', () => ({ OrderSuccess: () => <div data-testid="order-success" /> }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../services/geo-api', () => ({
@@ -471,12 +478,95 @@ describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', ()
     expect(screen.getByText('UAT50K')).toBeTruthy();
   });
 
+  it('mua một phần giỏ: giỏ (cả giỏ) giữ mã kèm lời báo nhưng báo giá của phần chọn áp được mã → không hiện lời báo của giỏ', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 0, couponNotice: 'Mã chưa được áp dụng cho đơn này (phần giảm combo không được tính vào điều kiện của mã): Đơn tối thiểu 95.000đ để dùng mã này.' });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 10_000, couponNotice: null });
+    renderPage();
+    await screen.findByText('SALE');
+    await screen.findByText('Giảm giá');
+    expect(screen.queryByTestId('coupon-notice')).toBeNull();
+    expect(screen.queryByText(/chưa được áp dụng/)).toBeNull();
+  });
+
   it('mã áp bình thường → không có câu giải thích', async () => {
     mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 5000 });
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 5000, couponNotice: null });
     renderPage();
     await screen.findByText('SALE');
     expect(screen.queryByTestId('coupon-notice')).toBeNull();
+  });
+});
+
+describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ combo như báo giá', () => {
+  const TWO = {
+    ...CART,
+    items: [
+      ...CART.items,
+      { id: 'ci2', variationId: 'v2', productName: 'Dầu gội', variationName: null, slug: 'dg', thumbnail: null, unitPrice: 50_000, quantity: 1, stock: 5, total: 50_000 },
+    ],
+    subtotal: 100_000,
+    couponCode: 'SALE',
+    comboDiscount: 10_000,
+    discount: 5_000,
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.locState = null;
+    mocks.voucherProps = [];
+    mocks.getAddresses.mockResolvedValue([]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+  afterEach(() => {
+    mocks.locState = null;
+  });
+
+  it('mua cả giỏ: dòng "Giảm giá combo" và tổng = tiền hàng − combo − mã', async () => {
+    mocks.getCart.mockResolvedValue(TWO);
+    renderPage();
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    expect(screen.getByText('-10.000đ')).toBeInTheDocument();
+    expect(screen.getByText('85.000đ')).toBeInTheDocument();
+  });
+
+  it('lựa chọn nhớ lại bằng đúng mọi dòng của giỏ: vẫn là cả giỏ, trừ combo', async () => {
+    mocks.locState = { itemIds: ['ci1', 'ci2'] };
+    mocks.getCart.mockResolvedValue(TWO);
+    renderPage();
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    expect(screen.getByText('85.000đ')).toBeInTheDocument();
+  });
+
+  it('xem trước mã gửi cho máy chủ cả khi chưa có địa chỉ (không kèm addressId) để đủ điều kiện tính trên phần hàng sau combo', async () => {
+    mocks.getCart.mockResolvedValue(TWO);
+    renderPage();
+    await screen.findByText('Giảm giá combo');
+    const last = mocks.voucherProps[mocks.voucherProps.length - 1]!;
+    expect(last.previewParams).toEqual({ storefrontSlug: undefined, itemIds: undefined });
+    expect(last.previewParams).not.toHaveProperty('addressId');
+  });
+
+  it('mua một phần giỏ: không trừ combo cấp giỏ (máy chủ tính lại phần chọn)', async () => {
+    mocks.locState = { itemIds: ['ci1'] };
+    mocks.getCart.mockResolvedValue(TWO);
+    renderPage();
+    await screen.findAllByText('Xà bông thảo mộc');
+    expect(screen.getByText('Cần chọn địa chỉ giao hàng')).toBeInTheDocument();
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+  });
+
+  it('không có combo (0 hoặc API cũ): tổng như cũ', async () => {
+    mocks.getCart.mockResolvedValue({ ...TWO, comboDiscount: undefined });
+    renderPage();
+    await screen.findByText('Cần chọn địa chỉ giao hàng');
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+    expect(screen.getByText('95.000đ')).toBeInTheDocument();
   });
 });
 

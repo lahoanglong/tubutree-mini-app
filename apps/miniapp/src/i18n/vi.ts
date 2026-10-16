@@ -187,6 +187,7 @@ export const vi = {
     subtotal: 'Tạm tính',
     subtotalAfterDiscount: 'Tạm tính (đã giảm, chưa gồm ship)',
     discount: 'Giảm giá',
+    comboDiscount: 'Giảm giá combo',
     checkout: (n: number) => `Thanh toán (${n})`,
     removed: 'Đã bỏ khỏi giỏ',
     couponPlaceholder: 'Nhập mã giảm giá',

@@ -20,6 +20,7 @@ import {
   sortCouponsForCart,
 } from '@/lib/coupon-view';
 import { autoCouponName } from '@/lib/coupon-name';
+import { cartKey } from '@/lib/cart-key';
 
 /** Số voucher hiện sẵn; còn lại nằm sau nút xem thêm để giỏ/thanh toán trên điện thoại không dài thêm hàng chục cuộn. */
 const VISIBLE_COUPONS = 3;
@@ -105,7 +106,7 @@ export function CouponBox({
   };
 
   const afterChange = (cart: Awaited<ReturnType<typeof applyCoupon>>) => {
-    qc.setQueryData(['cart'], cart);
+    qc.setQueryData(cartKey(), cart);
     void qc.invalidateQueries({ queryKey: ['quote'] });
   };
   const apply = useMutation({

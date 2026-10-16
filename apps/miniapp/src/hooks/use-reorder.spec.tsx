@@ -34,15 +34,17 @@ function setup(source: Parameters<typeof useReorder>[0], opts?: Parameters<typeo
 describe('useReorder', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('1 SP từ kệ Home: addToCart với addSource=repurchase; cập nhật ["cart"]; snackbar có "Xem giỏ"; KHÔNG tự chuyển trang', async () => {
+  it('1 SP từ kệ Home: addToCart với addSource=repurchase; tải lại ["cart"] (không ghi giỏ không kèm gian hàng vào cache); snackbar có "Xem giỏ"; KHÔNG tự chuyển trang', async () => {
     mocks.addToCart.mockResolvedValue(CART);
     const { result, qc } = setup('home_rail');
+    qc.setQueryData(['cart', 'shop-a'], { ...CART, comboDiscount: 5000 });
     let summary;
     await act(async () => {
       summary = await result.current.submit(ITEM, [{ key: 'v1', variationId: 'v-v1', quantity: 2 }]);
     });
     expect(mocks.addToCart).toHaveBeenCalledWith('v-v1', 2, 'repurchase');
-    expect(qc.getQueryData(['cart'])).toEqual(CART);
+    expect(qc.getQueryData(['cart', null])).toBeUndefined();
+    expect(qc.getQueryState(['cart', 'shop-a'])?.isInvalidated).toBe(true);
     expect(summary).toMatchObject({ addedUnits: 2 });
     expect(mocks.trackReorderCompleted).toHaveBeenCalledWith({ source: 'home_rail', added: 1, skipped: 0 });
     expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);

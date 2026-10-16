@@ -12,11 +12,12 @@ import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
+import { cartKey, useCartKey } from '@/lib/cart-key';
 
 export default function CartPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
-  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
   const [deselected, setDeselected] = useState<Set<string>>(() => new Set());
   // Cùng gian hàng thanh toán gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
@@ -30,11 +31,11 @@ export default function CartPage() {
 
   const update = useMutation({
     mutationFn: ({ id, q }: { id: string; q: number }) => updateCartItem(id, q),
-    onSuccess: (data) => qc.setQueryData(['cart'], data),
+    onSuccess: (data) => qc.setQueryData(cartKey(), data),
   });
   const remove = useMutation({
     mutationFn: (id: string) => removeCartItem(id),
-    onSuccess: (data) => qc.setQueryData(['cart'], data),
+    onSuccess: (data) => qc.setQueryData(cartKey(), data),
   });
   // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
   // nút của đúng item đó (item khác vẫn thao tác được bình thường).
@@ -88,6 +89,7 @@ export default function CartPage() {
     cart && selectedItems.length > 0 && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
   // Mã giảm giá chỉ cộng vào số hiển thị khi chọn cả giỏ; chọn một phần thì báo giá ở bước thanh toán tính lại.
   const shownDiscount = cart && allSelected ? cart.discount : 0;
+  const shownCombo = cart && allSelected ? (cart.comboDiscount ?? 0) : 0;
 
   return (
     <Shell>
@@ -287,6 +289,12 @@ export default function CartPage() {
               <span className="text-stone-600">Tạm tính</span>
               <span className="text-stone-900">{formatVnd(selectedSubtotal)}</span>
             </div>
+            {shownCombo > 0 && (
+              <div className="mt-1 flex justify-between text-sm text-success-fg">
+                <span>Giảm giá combo</span>
+                <span>-{formatVnd(shownCombo)}</span>
+              </div>
+            )}
             {shownDiscount > 0 && (
               <div className="mt-1 flex justify-between text-sm text-success-fg">
                 <span>Giảm giá{cart.couponCode ? ` (${cart.couponCode})` : ''}</span>
@@ -310,7 +318,7 @@ export default function CartPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span>{formatVnd(Math.max(0, selectedSubtotal - shownDiscount))}</span>
+              <span>{formatVnd(Math.max(0, selectedSubtotal - shownCombo - shownDiscount))}</span>
             </div>
             {selectedItems.length === 0 ? (
               <>

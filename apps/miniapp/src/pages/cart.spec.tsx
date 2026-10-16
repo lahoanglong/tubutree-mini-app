@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -37,6 +37,7 @@ vi.mock('../components/checkout/voucher-sheet', () => ({
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import CartPage from './cart';
+import { useStorefrontContext } from '../store/storefront-context';
 
 const GONE = {
   id: 'ci-gone',
@@ -241,5 +242,62 @@ describe('CartPage: tham số xem trước mức giảm mã cho VoucherSheet', (
     renderPage();
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn tất cả' }));
     await waitFor(() => expect(last().previewParams).toBeUndefined());
+  });
+});
+
+describe('CartPage: giảm giá combo trong tóm tắt', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('có combo: dòng "Giảm giá combo" riêng, tạm tính (đã giảm) = tiền hàng − combo − mã', async () => {
+    mocks.getCart.mockResolvedValue(summary({ couponCode: 'XANH10', comboDiscount: 5_000, discount: 2_000 }));
+    renderPage();
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    expect(screen.getByText('-5.000đ')).toBeInTheDocument();
+    expect(screen.getAllByText('-2.000đ').length).toBeGreaterThan(0);
+    expect(screen.getByText('43.000đ')).toBeInTheDocument();
+  });
+
+  it('combo 0 hoặc API cũ chưa trả: không có dòng combo, tạm tính như cũ', async () => {
+    mocks.getCart.mockResolvedValue(summary({ comboDiscount: 0, discount: 2_000 }));
+    const first = renderPage();
+    await screen.findByText('Giảm giá');
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+    expect(screen.getByText('48.000đ')).toBeInTheDocument();
+    first.unmount();
+    mocks.getCart.mockResolvedValue(summary({ discount: 2_000 }));
+    renderPage();
+    await screen.findByText('Giảm giá');
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+    expect(screen.getByText('48.000đ')).toBeInTheDocument();
+  });
+
+  it('sang gian hàng khác: giỏ của gian hàng trước không hiện lại combo (khoá cache kèm gian hàng)', async () => {
+    const store = useStorefrontContext;
+    store.getState().setContext({ slug: 'shop-a', kind: 'ctv' });
+    mocks.getCart.mockImplementation(async () =>
+      summary({ comboDiscount: store.getState().slug === 'shop-a' ? 5_000 : 0 }),
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <CartPage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    expect(qc.getQueryData(['cart', 'shop-a'])).toBeDefined();
+    act(() => store.getState().setContext({ slug: 'shop-b', kind: 'ctv' }));
+    await waitFor(() => expect(screen.queryByText('Giảm giá combo')).toBeNull());
+    expect(qc.getQueryData(['cart', 'shop-b'])).toMatchObject({ comboDiscount: 0 });
+    store.getState().clear();
+  });
+
+  it('bỏ chọn một phần giỏ: không hiện combo (checkout tính lại phần chọn)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ comboDiscount: 5_000 }));
+    renderPage();
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn tất cả' }));
+    await waitFor(() => expect(screen.queryByText('Giảm giá combo')).toBeNull());
   });
 });

@@ -37,9 +37,9 @@ import { Button } from '../components/ui/button';
 import { PriceTag } from '../components/ui/price-tag';
 import { Heading } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
+import { cartKey, useCartKey } from '../services/cart-key';
 
 const UNDO_WINDOW_MS = 3500;
-const CART_KEY = ['cart'] as const;
 
 /**
  * Mutation giỏ hàng kiểu optimistic (AD-005):
@@ -54,16 +54,16 @@ function useOptimisticCart<TVars>(
   return useMutation({
     mutationFn,
     onMutate: async (vars: TVars) => {
-      await queryClient.cancelQueries({ queryKey: CART_KEY });
-      const prev = queryClient.getQueryData<CartSummary>(CART_KEY);
-      if (prev) queryClient.setQueryData(CART_KEY, apply(prev, vars));
+      await queryClient.cancelQueries({ queryKey: ['cart'] });
+      const prev = queryClient.getQueryData<CartSummary>(cartKey());
+      if (prev) queryClient.setQueryData(cartKey(), apply(prev, vars));
       return { prev };
     },
     onError: (e: unknown, _vars, ctx) => {
-      if (ctx?.prev) queryClient.setQueryData(CART_KEY, ctx.prev);
+      if (ctx?.prev) queryClient.setQueryData(cartKey(), ctx.prev);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: CART_KEY }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['cart'] }),
   });
 }
 
@@ -73,7 +73,7 @@ export default function CartPage() {
   const { openSnackbar } = useSnackbar();
   const phase = useAuthPhase();
 
-  const cart = useQuery({ queryKey: CART_KEY, queryFn: getCart, enabled: phase === 'authenticated' });
+  const cart = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const [removed, setRemoved] = useState<CartLine | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Chọn từng món: lưu tập ĐÃ BỎ CHỌN (deselected) → món mới auto-chọn, món xoá tự biến mất
@@ -124,7 +124,7 @@ export default function CartPage() {
     setRemoved(null);
     if (undoTimer.current) clearTimeout(undoTimer.current);
     addToCart(line.variationId, line.quantity)
-      .then((c) => queryClient.setQueryData(CART_KEY, c))
+      .then((c) => queryClient.setQueryData(cartKey(), c))
       .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }));
   };
 
@@ -187,7 +187,7 @@ export default function CartPage() {
         lines={summary.unavailableItems ?? []}
         onRemove={(id) =>
           removeCartItem(id)
-            .then((c) => queryClient.setQueryData(CART_KEY, c))
+            .then((c) => queryClient.setQueryData(cartKey(), c))
             .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
         }
       />
@@ -640,6 +640,8 @@ function StickySummary({
   const remaining = Math.max(0, threshold - base);
   // Coupon giảm chỉ hiển thị khi chọn TOÀN giỏ (subset re-tính ở checkout — tránh số sai).
   const discount = allSelected ? summary.discount : 0;
+  // Combo cũng chỉ hiện khi chọn TOÀN giỏ (combo cần đủ bộ sản phẩm; tập con checkout tính lại).
+  const comboDiscount = allSelected ? (summary.comboDiscount ?? 0) : 0;
 
   return (
     <StickyActionBar
@@ -679,6 +681,9 @@ function StickySummary({
             </Box>
           )}
 
+          {comboDiscount > 0 && (
+            <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboDiscount)}`} tone="success" />
+          )}
           {discount > 0 && (
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" />
           )}
@@ -687,7 +692,7 @@ function StickySummary({
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
           <KeyValueRow
             label={vi.cart.subtotalAfterDiscount}
-            value={formatVnd(Math.max(0, selectedSubtotal - discount))}
+            value={formatVnd(Math.max(0, selectedSubtotal - comboDiscount - discount))}
             emphasis
           />
           {overStock && (

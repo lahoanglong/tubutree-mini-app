@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -25,6 +26,12 @@ const state = vi.hoisted(() => ({
   gate: null as Promise<void> | null,
   /** Server giữ mã nhưng chưa áp cho đơn (MONEY-3). */
   couponNotice: null as string | null,
+  /** Chưa có địa chỉ nào để chọn. */
+  noAddress: false,
+  /** Lời báo chỉ có ở giỏ (cả giỏ), báo giá không có. */
+  cartNotice: null as string | null,
+  /** Tham số trang gửi cho xem trước mã. */
+  previewCalls: [] as Record<string, unknown>[],
 }));
 const SUBTOTAL = 300000;
 const discountOf = () => (state.couponCode && !state.couponNotice ? 90000 : 0);
@@ -33,7 +40,7 @@ const cartNow = () => ({
     { id: 'i1', variationId: 'v1', productName: 'Dầu gội bồ kết', variationName: '500ml', slug: 'dau-goi', thumbnail: null, unitPrice: 150000, quantity: 2, stock: 5, total: SUBTOTAL },
   ],
   couponCode: state.couponCode,
-  couponNotice: state.couponNotice,
+  couponNotice: state.cartNotice ?? state.couponNotice,
   subtotal: SUBTOTAL,
   discount: discountOf(),
   freeship: false,
@@ -59,7 +66,11 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     state.couponCode = null;
     return cartNow();
   },
-  getAddresses: async () => [
+  getCouponPreviews: async (params: Record<string, unknown>) => {
+    state.previewCalls.push(params);
+    return [];
+  },
+  getAddresses: async () => state.noAddress ? [] : [
     { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: 'p', districtCode: '', wardCode: 'w', isDefault: true },
   ],
   checkoutQuote: async () => {
@@ -113,10 +124,31 @@ beforeEach(() => {
   state.coupons = [COUPON];
   state.gate = null;
   state.couponNotice = null;
+  state.noAddress = false;
+  state.cartNotice = null;
+  state.previewCalls = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+});
+
+describe('/thanh-toan — xem trước mã không cần địa chỉ (server tính đủ điều kiện trên phần hàng sau combo)', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+
+  it('chưa chọn địa chỉ: vẫn hỏi máy chủ, không kèm addressId', async () => {
+    state.noAddress = true;
+    await mount();
+    await settle();
+    expect(state.previewCalls.length).toBeGreaterThan(0);
+    expect(state.previewCalls.every((p) => !('addressId' in p) || p.addressId === undefined)).toBe(true);
+  });
+
+  it('đã có địa chỉ: kèm addressId như cũ', async () => {
+    await mount();
+    await settle();
+    expect(state.previewCalls.some((p) => p.addressId === 'a1')).toBe(true);
+  });
 });
 
 describe('/thanh-toan — Mã giảm giá (C-025)', () => {
@@ -184,6 +216,14 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     const { container } = await mount();
     expect(container.querySelector('[data-testid="coupon-notice"]')?.textContent).toBe(state.couponNotice);
     expect(container.textContent).not.toContain('Giảm giá (');
+  });
+
+  it('giỏ giữ mã kèm lời báo nhưng báo giá (phần đang chọn) áp được mã: không hiện lời báo của giỏ', async () => {
+    state.couponCode = 'WELCOME30';
+    state.cartNotice = 'Mã chưa được áp dụng cho đơn này (phần giảm combo không được tính vào điều kiện của mã): Đơn tối thiểu 95.000đ để dùng mã này.';
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('chưa được áp dụng');
+    expect(container.querySelector('[data-testid="coupon-notice"]')).toBeNull();
   });
 
   it('mã đòi đơn tối thiểu cao hơn tạm tính bị khoá và nói rõ lý do', async () => {

@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from '../ui/empty-state';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { autoCouponName } from '../../utils/coupon-name';
+import { cartKey } from '../../services/cart-key';
 
 export interface VoucherSheetProps {
   visible: boolean;
@@ -76,12 +77,20 @@ export function VoucherSheet({
 
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
-    onSuccess: (cart) => {
-      queryClient.setQueryData(['cart'], cart);
+    onSuccess: (cart, code) => {
+      queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('medium');
       setCustomCode('');
-      openSnackbar({ text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 });
+      // Mã được giữ nhưng chưa giảm cho giỏ này (vd combo kéo phần hàng dưới đơn tối thiểu): nói lý do, không báo "đã áp dụng".
+      // Lời báo là của CẢ giỏ: nếu xem trước cho phần đang chọn (mua một phần) nói mã dùng được thì mã được áp cho đơn này.
+      const eligibleHere = previews.get(code.trim().toUpperCase())?.eligible === true;
+      const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship && !eligibleHere;
+      openSnackbar(
+        heldOnly
+          ? { text: cart.couponNotice!, type: 'warning', duration: 5000 }
+          : { text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 },
+      );
       onCouponApplied?.();
       onClose();
     },
@@ -91,7 +100,7 @@ export function VoucherSheet({
   const removeMut = useMutation({
     mutationFn: removeCoupon,
     onSuccess: (cart) => {
-      queryClient.setQueryData(['cart'], cart);
+      queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('light');
       openSnackbar({ text: 'Đã bỏ mã giảm giá', type: 'success', duration: 2000 });

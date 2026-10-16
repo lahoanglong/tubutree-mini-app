@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class AddItemDto {
   @IsString() variationId!: string;
@@ -14,4 +14,9 @@ export class UpdateItemDto {
 
 export class ApplyCouponDto {
   @IsString() code!: string;
+}
+
+/** Gian hàng đang ghi công (cùng chuỗi báo giá nhận): giỏ trừ combo của gian hàng đó như checkout. */
+export class CartQueryDto {
+  @IsOptional() @IsString() @MaxLength(200) storefrontSlug?: string;
 }

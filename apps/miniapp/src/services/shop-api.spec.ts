@@ -1,10 +1,14 @@
 import { describe, it, expect, expectTypeOf, vi, beforeEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
+vi.mock('../store/storefront-context', () => ({ useStorefrontContext: { getState: vi.fn(() => ({ kind: 'ctv', slug: null })) } }));
 
 import { api } from './api';
+import { useStorefrontContext } from '../store/storefront-context';
 import {
   addToCart,
+  applyCoupon,
+  getCart,
   catalogParams,
   createReview,
   fetchActiveOrderCount,
@@ -51,9 +55,9 @@ describe('shop-api — buy-flow 4a', () => {
   it('addToCart chỉ gửi addSource khi có', async () => {
     post.mockResolvedValue({ data: CART });
     await addToCart('v1', 1);
-    expect(post).toHaveBeenLastCalledWith('/cart/items', { variationId: 'v1', quantity: 1 });
+    expect(post).toHaveBeenLastCalledWith('/cart/items', { variationId: 'v1', quantity: 1 }, {});
     await addToCart('v1', 2, 'repurchase');
-    expect(post).toHaveBeenLastCalledWith('/cart/items', { variationId: 'v1', quantity: 2, addSource: 'repurchase' });
+    expect(post).toHaveBeenLastCalledWith('/cart/items', { variationId: 'v1', quantity: 2, addSource: 'repurchase' }, {});
   });
 
   it('fetchOrders: status thắng group; không lọc → chỉ page/limit', async () => {
@@ -145,5 +149,31 @@ describe('shop-api — createReview', () => {
     expect(post).toHaveBeenCalledWith('/products/nuoc-rua-chen/reviews', { rating: 4, orderId: 'o1' });
     expect(r.pointsEarned).toBe(0);
     expect(r.updated).toBe(false);
+  });
+});
+
+describe('shop-api — giỏ gửi gian hàng CTV đang ghi công để máy chủ trừ combo', () => {
+  const ctx = useStorefrontContext.getState as unknown as ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    get.mockResolvedValue({ data: CART });
+    post.mockResolvedValue({ data: CART });
+  });
+
+  it('gian hàng CTV: getCart và đường trả giỏ kèm storefrontSlug', async () => {
+    ctx.mockReturnValue({ kind: 'ctv', slug: 'shop-a' });
+    await getCart();
+    expect(get).toHaveBeenLastCalledWith('/cart', { params: { storefrontSlug: 'shop-a' } });
+    await applyCoupon('XANH10');
+    expect(post).toHaveBeenLastCalledWith('/cart/coupon', { code: 'XANH10' }, { params: { storefrontSlug: 'shop-a' } });
+  });
+
+  it('trang nhãn hàng hoặc không có gian hàng: không gửi slug (như cũ)', async () => {
+    ctx.mockReturnValue({ kind: 'brand', slug: 'visante' });
+    await getCart();
+    expect(get).toHaveBeenLastCalledWith('/cart', {});
+    ctx.mockReturnValue({ kind: 'ctv', slug: null });
+    await getCart();
+    expect(get).toHaveBeenLastCalledWith('/cart', {});
   });
 });
