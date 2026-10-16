@@ -8,11 +8,11 @@ const as = (metatype: new () => object, value: Record<string, unknown>) =>
   pipe.transform(value, { type: 'query', metatype, data: undefined });
 
 describe('Giới hạn độ dài từ khoá tìm kiếm (C-038)', () => {
-  it('GET /search/suggest: q tới 100 ký tự nhận; dài hơn → 400; thiếu q vẫn nhận (service trả [])', async () => {
+  it('GET /search/suggest: q tới 100 ký tự nhận nguyên; dài hơn → cắt còn 100 (không 400); thiếu q vẫn nhận (service trả [])', async () => {
     expect(SEARCH_Q_MAX_LENGTH).toBe(100);
     await expect(as(SuggestQuery, { q: 'nước rửa' })).resolves.toMatchObject({ q: 'nước rửa' });
     await expect(as(SuggestQuery, { q: 'a'.repeat(100) })).resolves.toMatchObject({ q: 'a'.repeat(100) });
-    await expect(as(SuggestQuery, { q: 'a'.repeat(101) })).rejects.toThrow();
+    await expect(as(SuggestQuery, { q: 'a'.repeat(5000) })).resolves.toEqual({ q: 'a'.repeat(100) });
     await expect(as(SuggestQuery, {})).resolves.toEqual({});
   });
 
