@@ -21,7 +21,7 @@ import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, Scro
 import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';
 import { useNarrowScreen } from './side-drawer';
 import { useConfirm } from './confirm-dialog';
-import { mergeQueuePages, nextPageParam } from '@/lib/admin-client';
+import { mergeQueuePages, nextPageParam, setStorefrontPartner } from '@/lib/admin-client';
 
 const SLA_LABEL = { CONFIRM_OVERDUE: 'Quá hạn xác nhận', SHIP_OVERDUE: 'Quá hạn gửi hàng', DELIVER_OVERDUE: 'Quá hạn giao' } as const;
 
@@ -58,8 +58,9 @@ export function pctInputToFraction(v: string): number | null {
  * (docs/2026-10-14-merchant-fulfilment-design.md mục 7, 8). Phiếu mặc định chỉ hiện phiếu chờ chuyển/thu (việc admin phải làm,
  * khớp số trên "Việc cần xử lý"); chip "Tất cả" xem cả phiếu đã xong. `onOpenConsignmentConfirm` mở màn xác nhận hàng ký gửi.
  */
-export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenConsignmentConfirm?: () => void }) {
+export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = false }: { onOpenConsignmentConfirm?: () => void; isAdmin?: boolean }) {
   const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
   const narrow = useNarrowScreen();
   const [slipFilter, setSlipFilter] = useState<'PENDING' | 'ALL'>('PENDING');
   const overviewQ = useQuery({ queryKey: ['admin-merchant-fulfilment'], queryFn: getMerchantFulfilmentOverview });
@@ -83,6 +84,25 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenCons
     onSuccess: refresh,
     onError,
   });
+  const partnerMut = useMutation({
+    mutationFn: (v: { storefrontId: string; isPartner: boolean }) => setStorefrontPartner(v.storefrontId, v.isPartner),
+    onSuccess: refresh,
+    onError,
+  });
+  const onTogglePartner = async (s: OverviewStore) => {
+    if (partnerMut.isPending) return;
+    const next = !s.isPartner;
+    const ok = await confirm({
+      title: next ? 'Bật gian hàng đối tác' : 'Tắt gian hàng đối tác',
+      message: next
+        ? `Bật cờ đối tác cho "${s.title}"? Chủ gian hàng sẽ dùng được Cổng người bán (đăng sản phẩm, đơn tự giao, đối soát).`
+        : `Tắt cờ đối tác của "${s.title}"? Hệ thống từ chối nếu gian hàng còn việc đối tác dở dang (đơn tự giao, khoản chờ đối soát, phiếu chưa chuyển, yêu cầu trả hàng, sản phẩm đang bán).`,
+      confirmLabel: next ? 'Bật' : 'Tắt',
+      cancelLabel: 'Đóng',
+    });
+    if (ok && !partnerMut.isPending) partnerMut.mutate({ storefrontId: s.storefrontId, isPartner: next });
+  };
+  const partnerToggle = isAdmin ? { onToggle: onTogglePartner, pending: partnerMut.isPending } : undefined;
   const [panel, setPanel] = useState<{ storefrontId: string; kind: 'lines' | 'fees' } | null>(null);
   const toggle = (storefrontId: string, kind: 'lines' | 'fees') =>
     setPanel((cur) => (cur?.storefrontId === storefrontId && cur.kind === kind ? null : { storefrontId, kind }));
@@ -131,6 +151,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenCons
                     open={panel?.storefrontId === s.storefrontId ? panel.kind : null}
                     onCreate={() => createMut.mutate(s)}
                     onToggle={(kind) => toggle(s.storefrontId, kind)}
+                    partner={partnerToggle}
                   />
                 ))}
               </ul>
@@ -157,6 +178,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenCons
                         open={panel?.storefrontId === s.storefrontId ? panel.kind : null}
                         onCreate={() => createMut.mutate(s)}
                         onToggle={(kind) => toggle(s.storefrontId, kind)}
+                        partner={partnerToggle}
                       />
                     ))}
                   </tbody>
@@ -241,6 +263,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenCons
           </div>
         )}
       </section>
+      {dialog}
     </div>
   );
 }
@@ -252,9 +275,11 @@ interface StoreRowProps {
   open: 'lines' | 'fees' | null;
   onCreate: () => void;
   onToggle: (kind: 'lines' | 'fees') => void;
+  /** Chỉ ADMIN: nút bật/tắt cờ đối tác (chỉ gian hàng CTV, loại khác API từ chối). */
+  partner?: { onToggle: (s: OverviewStore) => void; pending: boolean };
 }
 
-function StoreActions({ store: s, creating, open, onCreate, onToggle }: StoreRowProps) {
+function StoreActions({ store: s, creating, open, onCreate, onToggle, partner }: StoreRowProps) {
   return (
     <>
       <button type="button" disabled={s.settleableLines === 0 || creating} onClick={onCreate} className={BTN_XS_PRIMARY}>
@@ -266,6 +291,11 @@ function StoreActions({ store: s, creating, open, onCreate, onToggle }: StoreRow
       <button type="button" aria-expanded={open === 'fees'} onClick={() => onToggle('fees')} className={BTN_XS_SECONDARY}>
         Sửa phí
       </button>
+      {partner && s.type === 'CTV' && (
+        <button type="button" disabled={partner.pending} onClick={() => partner.onToggle(s)} className={s.isPartner ? BTN_XS_DANGER : BTN_XS_SECONDARY}>
+          {s.isPartner ? 'Tắt đối tác' : 'Bật đối tác'}
+        </button>
+      )}
     </>
   );
 }

@@ -23,8 +23,8 @@ const OVERVIEW = {
   slaConfig: { confirmHours: 24, shipHours: 48, deliverDays: 7 },
   defaultCommissionPct: 0.15,
   stores: [
-    { storefrontId: 'sf1', title: 'Mật ong Linh', owner: { fullName: 'Linh', phone: '0900000009' }, activeOrders: 3, overdueOrders: 1, settleableLines: 2, settleableAmount: 185000 },
-    { storefrontId: 'sf2', title: 'Xà bông Mộc', owner: null, activeOrders: 0, overdueOrders: 0, settleableLines: 0, settleableAmount: 0 },
+    { storefrontId: 'sf1', title: 'Mật ong Linh', type: 'CTV' as const, isPartner: true, owner: { fullName: 'Linh', phone: '0900000009' }, activeOrders: 3, overdueOrders: 1, settleableLines: 2, settleableAmount: 185000 },
+    { storefrontId: 'sf2', title: 'Xà bông Mộc', type: 'MERCHANT' as const, isPartner: false, owner: null, activeOrders: 0, overdueOrders: 0, settleableLines: 0, settleableAmount: 0 },
     {
       storefrontId: 'sf3',
       title: 'Trà Shan giao hộ',
@@ -670,5 +670,64 @@ describe('MerchantProductsTab: liên kết ký gửi chờ xác nhận (R4-ADMIN
     mounted.push(r);
     await flush();
     expect(r.container.textContent).toContain('Không còn liên kết nào chờ xác nhận hàng ký gửi.');
+  });
+});
+
+describe('Bật/tắt cờ đối tác (admin)', () => {
+  const partnerBtn = (root: ParentNode) =>
+    Array.from(root.querySelectorAll<HTMLButtonElement>('button')).filter((b) => /^(Tắt|Bật) đối tác$/.test(b.textContent ?? ''));
+
+  it('chỉ ADMIN thấy nút, và chỉ ở gian hàng CTV', async () => {
+    setup();
+    const staff = render(<MerchantFulfilmentTab />);
+    mounted.push(staff);
+    await flush();
+    expect(partnerBtn(staff.container)).toHaveLength(0);
+    staff.unmount();
+    mounted = [];
+
+    setup();
+    const admin = render(<MerchantFulfilmentTab isAdmin />);
+    mounted.push(admin);
+    await flush();
+    expect(partnerBtn(admin.container).map((b) => b.textContent)).toEqual(['Tắt đối tác']);
+  });
+
+  it('hộp xác nhận: "Đóng" không gọi API; đồng ý → POST isPartner=false rồi tải lại tổng quan', async () => {
+    const api = setup({ '/admin/storefronts/sf1/partner': { body: { id: 'sf1', isPartner: false } } });
+    const r = render(<MerchantFulfilmentTab isAdmin />);
+    mounted.push(r);
+    await flush();
+    click(partnerBtn(r.container)[0]!);
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Tắt cờ đối tác của "Mật ong Linh"');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/partner'))).toBe(false);
+
+    const before = api.calls.filter((c) => c.url.endsWith('/admin/merchant-fulfilment/overview')).length;
+    click(partnerBtn(r.container)[0]!);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const post = api.calls.find((c) => c.url.endsWith('/admin/storefronts/sf1/partner'))!;
+    expect(post.init?.method).toBe('POST');
+    expect(JSON.parse(String(post.init!.body))).toEqual({ isPartner: false });
+    expect(api.calls.filter((c) => c.url.endsWith('/admin/merchant-fulfilment/overview')).length).toBe(before + 1);
+  });
+
+  it('409: hiện nguyên văn câu của máy chủ (kèm mã đơn) và không tải lại dữ liệu', async () => {
+    const message = 'Chưa thể tắt gian hàng đối tác: còn 2 đơn tự giao chưa xong (TB-1, TB-2). Xử lý xong rồi thử lại.';
+    const api = setup({ '/admin/storefronts/sf1/partner': { status: 409, body: { message } } });
+    const r = render(<MerchantFulfilmentTab isAdmin />);
+    mounted.push(r);
+    await flush();
+    const before = api.calls.filter((c) => c.url.endsWith('/admin/merchant-fulfilment/overview')).length;
+    click(partnerBtn(r.container)[0]!);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(r.container.querySelector('[role="alert"]')?.textContent).toBe(message);
+    expect(api.calls.filter((c) => c.url.endsWith('/admin/merchant-fulfilment/overview')).length).toBe(before);
   });
 });

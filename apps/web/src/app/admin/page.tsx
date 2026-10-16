@@ -475,7 +475,7 @@ export default function AdminPage() {
           {active === 'coupons' && <CouponsTab />}
           {active === 'brands' && <BrandsTab />}
           {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
-          {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} />}
+          {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} isAdmin={isAdmin} />}
           {active === 'flashSales' && <FlashSalesTab />}
           {active === 'faqs' && <FaqTab />}
           {active === 'contentKit' && <ContentKitTab />}
