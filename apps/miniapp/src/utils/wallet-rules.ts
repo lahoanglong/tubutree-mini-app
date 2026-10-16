@@ -40,11 +40,10 @@ const WALLET_TX_LABELS: Record<string, string> = {
 };
 
 /** Nhãn dòng sao kê Ví theo loại biến động; loại BE mới thêm mà bản app cũ chưa biết vẫn hiện được.
- * ORDER_REFUND gộp mọi nguồn hoàn nên phân biệt tiếp theo lời `reason` API ghi ("Hoàn tiền trả hàng đơn …" / "Hoàn tiền đơn …"). */
+ * ORDER_REFUND gộp mọi nguồn hoàn; chỉ "Hoàn tiền trả hàng đơn …" (trả một phần) chắc chắn là trả hàng. "Hoàn tiền đơn …" API ghi cả cho huỷ đơn, trả hàng toàn phần và đổi nơi nhận về Ví nên không đoán nguồn. */
 export function walletTxLabel(type: string, reason?: string | null): string {
   if (type === 'ORDER_REFUND' && reason) {
     if (reason.startsWith('Hoàn tiền trả hàng')) return 'Hoàn tiền trả hàng';
-    if (reason.startsWith('Hoàn tiền đơn')) return 'Hoàn tiền huỷ đơn';
   }
   return WALLET_TX_LABELS[type] ?? 'Biến động ví';
 }

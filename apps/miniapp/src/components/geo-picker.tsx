@@ -164,7 +164,7 @@ function GeoSelect({
       <button
         type="button"
         aria-haspopup="dialog"
-        aria-label={label}
+        aria-label={`${label}: ${selected?.name ?? placeholder}`}
         disabled={disabled}
         onClick={() => setOpen(true)}
         style={{

@@ -209,7 +209,7 @@ export default function OrderDetailPage() {
                 </div>
                 {it.id && returnedQty.has(it.id) && (
                   <div className="mt-0.5 text-xs font-medium text-promo-fg">
-                    Đã trả {returnedQty.get(it.id)}/{it.quantity}
+                    Đã duyệt trả {returnedQty.get(it.id)}/{it.quantity}
                   </div>
                 )}
                 {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}

@@ -228,7 +228,8 @@ export class OpsHealthService {
     try {
       const row = await this.prisma.opsHealthState.findUnique({ where: { key: WEBHOOK_STATE_KEY } });
       const kind = (row?.detail as { kind?: unknown } | null)?.kind;
-      const lastErrorKind = kind === 'PERMANENT' || kind === 'TRANSIENT' ? kind : null;
+      const recovered = !!row?.lastOkAt && !!row.lastErrorAt && row.lastOkAt >= row.lastErrorAt;
+      const lastErrorKind = !recovered && (kind === 'PERMANENT' || kind === 'TRANSIENT') ? kind : null;
       return {
         state: 'READY',
         lastOkAt: row?.lastOkAt?.toISOString() ?? null,

@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { OpsHealthService } from './ops-health.service';
-import { WEBHOOK_STATE_KEY } from './ops-state';
+import { recordWebhookDelivery, WEBHOOK_STATE_KEY } from './ops-state';
 import type { OpsProblem } from './ops-alerts';
 
 const HOOK_URL = 'https://hooks.slack.com/services/T0/B0/SECRETTOKEN';
@@ -112,7 +112,16 @@ describe('OpsHealthService — kênh webhook báo động (R6-ADMIN-4)', () => {
     const t1 = new Date(t0.getTime() + 5 * 60_000);
     await svc.checkAndAlert(t0);
     await svc.checkAndAlert(t1);
-    expect(await channel(svc)).toMatchObject({ lastErrorAt: t0.toISOString(), lastOkAt: t1.toISOString() });
+    expect(await channel(svc)).toMatchObject({ lastErrorAt: t0.toISOString(), lastOkAt: t1.toISOString(), lastErrorKind: null, lastErrorHint: null });
+  });
+
+  it('đã gửi được lại sau lỗi vĩnh viễn: API không còn trả loại lỗi/gợi ý của lần hỏng cũ', async () => {
+    const { svc } = build({ OPS_ALERT_WEBHOOK_URL: HOOK_URL }, jest.fn());
+    const t0 = new Date('2026-10-15T10:00:00Z');
+    await recordWebhookDelivery((svc as unknown as { prisma: never }).prisma, { ok: false, error: 'HTTP 410', kind: 'PERMANENT' }, t0);
+    expect(await channel(svc)).toMatchObject({ lastErrorKind: 'PERMANENT' });
+    await recordWebhookDelivery((svc as unknown as { prisma: never }).prisma, { ok: true }, new Date(t0.getTime() + 60_000));
+    expect(await channel(svc)).toMatchObject({ lastErrorKind: null, lastErrorHint: null, lastError: 'HTTP 410' });
   });
 
   it('hai lượt cron chạy song song không làm hỏng trạng thái kênh: vẫn ra một trạng thái hợp lệ', async () => {

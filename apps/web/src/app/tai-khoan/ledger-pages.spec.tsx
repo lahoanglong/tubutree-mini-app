@@ -124,7 +124,7 @@ describe('/tai-khoan/vi-tubu — sao kê Ví Tubu', () => {
     expect(c.textContent).toContain('50.000đ');
     const rows = Array.from(c.querySelectorAll('li')).map((li) => li.textContent ?? '');
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain('Hoàn tiền huỷ đơn');
+    expect(rows[0]).toContain('Hoàn tiền đơn hàng');
     expect(rows[0]).toContain('+120.000đ');
     expect(rows[0]).toContain('Số dư 170.000đ');
     expect(rows[1]).toContain('Thanh toán đơn');

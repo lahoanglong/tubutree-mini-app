@@ -52,7 +52,7 @@ describe('walletTxLabel (sao kê Ví)', () => {
 
   it('ORDER_REFUND tách theo nguồn từ lời reason API ghi', () => {
     expect(walletTxLabel('ORDER_REFUND', 'Hoàn tiền trả hàng đơn TT001')).toBe('Hoàn tiền trả hàng');
-    expect(walletTxLabel('ORDER_REFUND', 'Hoàn tiền đơn TT002')).toBe('Hoàn tiền huỷ đơn');
+    expect(walletTxLabel('ORDER_REFUND', 'Hoàn tiền đơn TT002')).toBe('Hoàn tiền đơn hàng');
     expect(walletTxLabel('ORDER_REFUND', 'lý do lạ')).toBe('Hoàn tiền đơn hàng');
     expect(walletTxLabel('ORDER_REFUND', null)).toBe('Hoàn tiền đơn hàng');
     expect(walletTxLabel('ORDER_PAY', 'Thanh toán đơn TT003')).toBe('Thanh toán đơn');

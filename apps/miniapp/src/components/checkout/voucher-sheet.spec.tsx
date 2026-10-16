@@ -225,36 +225,16 @@ describe('VoucherSheet — mã chỉ áp cho sản phẩm cụ thể (R2-BUYERMI
     expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
     expect(screen.getByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
   });
-
-  it('R6-BUYER-12: giỏ có cả hàng ngoài phạm vi thì không ghi số tiền giảm; giỏ toàn hàng trong phạm vi thì có', async () => {
-    mocks.getCoupons.mockResolvedValue([scoped]);
-    renderWith(['p-chia', 'p-dau-goi']);
-    expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
-    expect(screen.queryByText(/cho đơn này/)).toBeNull();
-    cleanup();
-    renderWith(['p-chia']);
-    expect(await screen.findByText('Giảm 17.250đ cho đơn này')).toBeInTheDocument();
-  });
 });
 
-describe('VoucherSheet: số tiền giảm cho đơn này và mã freeship (R6-BUYER-12)', () => {
+describe('VoucherSheet: mã freeship khi phí ship đã 0 (R6-BUYER-12)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('mã phần trăm dùng được: ghi số tiền giảm theo tạm tính, tôn trọng trần', async () => {
-    mocks.getCoupons.mockResolvedValue(COUPONS.slice(0, 1));
-    renderSheet(undefined, { subtotal: 438_000 });
-    expect(await screen.findByText('Giảm 43.800đ cho đơn này')).toBeInTheDocument();
-  });
-
-  it('vượt trần thì ghi đúng trần; mã chưa đủ điều kiện không ghi số tiền giảm', async () => {
+  it('không tự tính "Giảm X cho đơn này": API tính trên hàng không flash, sau combo và theo phạm vi sản phẩm của mã', async () => {
     mocks.getCoupons.mockResolvedValue(COUPONS);
-    renderSheet(undefined, { subtotal: 900_000 });
-    expect(await screen.findByText('Giảm 50.000đ cho đơn này')).toBeInTheDocument();
-    cleanup();
-    renderSheet(undefined, { subtotal: 100_000 });
-    await screen.findByText('Cần đơn tối thiểu 500.000đ');
-    expect(screen.getByText('Giảm 10.000đ cho đơn này')).toBeInTheDocument();
-    expect(screen.getAllByText(/cho đơn này/)).toHaveLength(1);
+    renderSheet(undefined, { subtotal: 438_000 });
+    await screen.findByText('Giảm 10% (tối đa 50.000đ)');
+    expect(screen.queryByText(/cho đơn này/)).toBeNull();
   });
 
   it('phí ship đã 0: mã freeship bị làm mờ và khoá, ghi lý do', async () => {

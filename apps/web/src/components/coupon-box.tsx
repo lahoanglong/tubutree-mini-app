@@ -7,7 +7,6 @@ import { applyCoupon, formatVnd, getMyCoupons, removeCoupon } from '@/lib/shop-c
 import { ui } from '@/lib/guest-ui';
 import {
   couponExpiryLabel,
-  couponSavingLabel,
   couponValueLabel,
   isCouponEligible,
   isFreeshipRedundant,
@@ -124,7 +123,6 @@ export function CouponBox({
                     const redundant = isFreeshipRedundant(c, shippingFee);
                     const meetsMin = isCouponEligible(c, subtotal);
                     const eligible = meetsMin && !redundant;
-                    const saving = eligible ? couponSavingLabel(c, subtotal) : null;
                     return (
                       <li
                         key={c.code}
@@ -136,7 +134,6 @@ export function CouponBox({
                         <div className="min-w-0 flex-1">
                           <div className="break-all text-sm font-bold text-promo-fg">{autoCouponName(c.code) ?? c.code}</div>
                           <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
-                          {saving && <div className="text-xs font-semibold text-success-fg">{saving}</div>}
                           {redundant && <div className="text-xs text-stone-700">Đơn này đã miễn phí vận chuyển</div>}
                           {c.minOrder != null && (
                             <div className={`text-xs ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}>
@@ -151,7 +148,7 @@ export function CouponBox({
                           type="button"
                           disabled={!eligible || busy}
                           onClick={() => apply.mutate(c.code)}
-                          aria-label={`Dùng mã ${autoCouponName(c.code) ?? c.code}`}
+                          aria-label={`${redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
                           className={`${ui.btnPrimary} flex-none px-3`}
                         >
                           {redundant ? 'Không cần' : eligible ? 'Dùng mã' : 'Chưa đủ'}

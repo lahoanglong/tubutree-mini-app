@@ -55,7 +55,7 @@ describe('GeoPicker: tìm phường/xã', () => {
   it('gõ không dấu lọc danh sách; chọn một dòng thì trả đúng tên + mã và đóng bảng', async () => {
     const onValue = renderHarness();
     await waitFor(() => expect(mocks.getCommunes).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('button', { name: 'Phường/Xã' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Phường\/Xã/ }));
     const list = await screen.findByRole('listbox', { name: 'Phường/Xã' });
     expect(within(list).getAllByRole('option')).toHaveLength(3);
 
@@ -71,7 +71,7 @@ describe('GeoPicker: tìm phường/xã', () => {
   it('không khớp: báo không tìm thấy', async () => {
     renderHarness();
     await waitFor(() => expect(mocks.getCommunes).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('button', { name: 'Phường/Xã' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Phường\/Xã/ }));
     fireEvent.change(await screen.findByRole('searchbox', { name: /Tìm phường/i }), { target: { value: 'zzz' } });
     expect(screen.getByText('Không tìm thấy kết quả phù hợp')).toBeInTheDocument();
   });
@@ -84,6 +84,6 @@ describe('GeoPicker: tìm phường/xã', () => {
         <GeoPicker value={EMPTY_GEO} onChange={vi.fn()} />
       </QueryClientProvider>,
     );
-    expect(screen.getByRole('button', { name: 'Phường/Xã' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Phường\/Xã/ })).toBeDisabled();
   });
 });

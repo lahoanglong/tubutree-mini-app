@@ -28,7 +28,7 @@ const mount = async (subtotal = 300000, shippingFee: number | null = null) => {
   await flush(6);
   return r.container;
 };
-const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonElement>(`button[aria-label="Dùng mã ${code}"]`)!.closest('li')!;
+const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonElement>(`button[aria-label$="mã ${code}"]`)!.closest('li')!;
 
 beforeEach(() => {
   state.applied = [];
@@ -83,32 +83,22 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     expect(btn.textContent).toBe('Chưa đủ');
   });
 
-  it('R6-BUYER-12: mã áp dụng được nói giảm bao nhiêu cho đơn này, kẹp mức tối đa của mã %', async () => {
+  it('R6-BUYER-12: không tự tính "Giảm X cho đơn này" (API tính trên hàng không flash, sau combo, theo phạm vi sản phẩm của mã)', async () => {
     state.coupons = [
       c('XANH10', { value: 10, maxDiscount: 50000 }),
-      c('MAX', { value: 30, maxDiscount: 50000 }),
-      c('TIEN20', { type: 'AMOUNT', value: 20000, maxDiscount: null }),
-    ];
-    const box = await mount(438000);
-    expect(card(box, 'XANH10').textContent).toContain('Giảm 43.800đ cho đơn này');
-    expect(card(box, 'MAX').textContent).toContain('Giảm 50.000đ cho đơn này (mức tối đa)');
-    expect(card(box, 'MAX').textContent).toContain('Giảm 30% (tối đa 50.000đ)');
-    expect(card(box, 'TIEN20').textContent).toContain('Giảm 20.000đ cho đơn này');
-  });
-
-  it('R6-BUYER-12: mã chỉ áp cho vài sản phẩm không nói số tiền giảm (API tính trên các dòng đó, không phải cả giỏ)', async () => {
-    state.coupons = [
       c('GBUY', { type: 'AMOUNT', value: 17250, maxDiscount: null, products: [{ id: 'p1', name: 'Hạt chia' }] }),
     ];
-    const box = card(await mount(438000), 'GBUY');
+    const box = await mount(438000);
+    expect(card(box, 'XANH10').textContent).toContain('Giảm 10% (tối đa 50.000đ)');
     expect(box.textContent).not.toContain('cho đơn này');
   });
 
-  it('R6-BUYER-12: freeship khi phí ship đã 0 thì mờ và khoá; còn phí thì vẫn dùng được và không đoán số tiền', async () => {
+  it('R6-BUYER-12: freeship khi phí ship đã 0 thì mờ và khoá; còn phí thì vẫn dùng được', async () => {
     state.coupons = [c('SHIP', { type: 'FREESHIP', value: 0, maxDiscount: null })];
     const free = card(await mount(438000, 0), 'SHIP');
     expect(free.querySelector('button')!.disabled).toBe(true);
     expect(free.querySelector('button')!.textContent).toBe('Không cần');
+    expect(free.querySelector('button')!.getAttribute('aria-label')).toBe('Không cần dùng mã SHIP');
     expect(free.textContent).toContain('Đơn này đã miễn phí vận chuyển');
     expect(free.textContent).not.toContain('cho đơn này');
     expect(free.className).toContain('opacity-60');

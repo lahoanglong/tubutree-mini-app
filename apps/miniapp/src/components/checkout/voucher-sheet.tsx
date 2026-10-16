@@ -14,7 +14,6 @@ import { EmptyState, ErrorState } from '../ui/empty-state';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { autoCouponName } from '../../utils/coupon-name';
-import { couponDiscountFor } from '../../utils/coupon-discount';
 
 export interface VoucherSheetProps {
   visible: boolean;
@@ -168,9 +167,6 @@ export function VoucherSheet({
                 const belowMin = coupon.minOrder != null && subtotal < coupon.minOrder;
                 const shipAlreadyFree = coupon.type === 'FREESHIP' && shippingFee === 0 && !isApplied;
                 const notEligible = wrongProducts || belowMin || shipAlreadyFree;
-                // API tính mã theo sản phẩm trên các dòng thuộc phạm vi; chỉ biết chắc số khi cả giỏ nằm trong phạm vi.
-                const scopeCoversCart = !scope || (!!productIds && productIds.every((id) => scope.some((x) => x.id === id)));
-                const saving = notEligible || !scopeCoversCart ? 0 : couponDiscountFor(coupon, subtotal);
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
                 const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
@@ -217,11 +213,6 @@ export function VoucherSheet({
                       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                         {formatCouponDesc(coupon)}
                       </Text>
-                      {saving > 0 && (
-                        <Text variant="caption" tone="success" as="div" style={{ marginTop: 2, fontWeight: 600 }}>
-                          {`Giảm ${formatVnd(saving)} cho đơn này`}
-                        </Text>
-                      )}
                       {shipAlreadyFree && (
                         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                           Đơn này đã miễn phí ship

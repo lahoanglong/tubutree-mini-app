@@ -142,11 +142,11 @@ const WALLET_TX_LABELS: Record<string, string> = {
 };
 
 /**
- * Tiêu đề dòng sao kê Ví: mọi khoản hoàn đều là ORDER_REFUND nên tách theo nguồn từ `reason` API ghi ("Hoàn tiền trả hàng đơn …"
- * cho phiếu trả, "Hoàn tiền đơn …" cho huỷ đơn/tiền về muộn) để khách quét lịch sử biết khoản nào là khoản nào.
+ * Tiêu đề dòng sao kê Ví: mọi khoản hoàn đều là ORDER_REFUND. Chỉ "Hoàn tiền trả hàng đơn …" (trả một phần) chắc chắn là trả hàng;
+ * "Hoàn tiền đơn …" API ghi cả cho huỷ đơn, trả hàng toàn phần và đổi nơi nhận về Ví nên giữ nhãn chung, không đoán nguồn.
  */
 export function walletTxTitle(tx: { type: string; reason?: string | null }): string {
-  if (tx.type === 'ORDER_REFUND') return /trả hàng/i.test(tx.reason ?? '') ? 'Hoàn tiền trả hàng' : 'Hoàn tiền huỷ đơn';
+  if (tx.type === 'ORDER_REFUND' && /^Hoàn tiền trả hàng/.test(tx.reason ?? '')) return 'Hoàn tiền trả hàng';
   if (tx.type === 'ORDER_PAY') return 'Thanh toán đơn';
   return walletTxLabel(tx.type);
 }

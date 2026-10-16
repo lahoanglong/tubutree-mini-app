@@ -587,9 +587,9 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(text).toContain('Đã cộng vào Ví Tubu lúc');
     expect(container.querySelector('#refunds-title')).toBeNull();
     expect(text.match(/150\.000đ vào Ví Tubu/g)).toHaveLength(1);
-    expect(text).toContain('Đã trả 1/2');
-    expect(text).not.toContain('Đã trả 0/');
-    expect(text).not.toContain('Đã trả 1/1');
+    expect(text).toContain('Đã duyệt trả 1/2');
+    expect(text).not.toContain('Đã duyệt trả 0/');
+    expect(text).not.toContain('Đã duyệt trả 1/1');
   });
 
   it('R6-BUYER-9: khoản hoàn trả hàng còn chờ chọn nơi nhận vẫn chọn được ngay trên dòng yêu cầu', async () => {

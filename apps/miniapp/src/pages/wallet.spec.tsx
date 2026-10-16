@@ -510,12 +510,12 @@ describe('WalletPage — khách thường (R6-BUYER-13)', () => {
     }
   });
 
-  it('lịch sử đặt tiêu đề theo nguồn: trả hàng, huỷ đơn, thanh toán đơn', async () => {
+  it('lịch sử đặt tiêu đề theo nguồn chắc chắn: trả hàng một phần, thanh toán đơn; hoàn còn lại giữ "Hoàn tiền đơn hàng"', async () => {
     stubLoaded(PLAIN_WALLET, REFUND_TXNS);
     renderPage();
     expect(await screen.findByText('Hoàn tiền trả hàng')).toBeInTheDocument();
-    expect(screen.getByText('Hoàn tiền huỷ đơn')).toBeInTheDocument();
+    expect(screen.queryByText('Hoàn tiền huỷ đơn')).toBeNull();
+    expect(screen.getByText('Hoàn tiền đơn hàng')).toBeInTheDocument();
     expect(screen.getByText('Thanh toán đơn')).toBeInTheDocument();
-    expect(screen.queryByText('Hoàn tiền đơn hàng')).toBeNull();
   });
 });

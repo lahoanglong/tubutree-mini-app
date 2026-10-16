@@ -132,8 +132,8 @@ describe('R6-ADMIN-1 — mỗi loại dòng giới thiệu một nhãn riêng, n
 describe('R6-BUYER-13 — tiêu đề sao kê Ví theo nguồn khoản hoàn', () => {
   it.each([
     [{ type: 'ORDER_REFUND', reason: 'Hoàn tiền trả hàng đơn TUBU1' }, 'Hoàn tiền trả hàng'],
-    [{ type: 'ORDER_REFUND', reason: 'Hoàn tiền đơn TUBU1' }, 'Hoàn tiền huỷ đơn'],
-    [{ type: 'ORDER_REFUND', reason: null }, 'Hoàn tiền huỷ đơn'],
+    [{ type: 'ORDER_REFUND', reason: 'Hoàn tiền đơn TUBU1' }, 'Hoàn tiền đơn hàng'],
+    [{ type: 'ORDER_REFUND', reason: null }, 'Hoàn tiền đơn hàng'],
     [{ type: 'ORDER_PAY', reason: 'Thanh toán đơn TUBU1' }, 'Thanh toán đơn'],
     [{ type: 'WITHDRAW', reason: null }, 'Rút về ngân hàng'],
     [{ type: 'NEW_TYPE', reason: null }, 'Biến động ví'],
