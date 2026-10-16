@@ -730,4 +730,27 @@ describe('Bật/tắt cờ đối tác (admin)', () => {
     expect(r.container.querySelector('[role="alert"]')?.textContent).toBe(message);
     expect(api.calls.filter((c) => c.url.endsWith('/admin/merchant-fulfilment/overview')).length).toBe(before);
   });
+
+  it('gian hàng CTV vừa bật cờ, chưa có đơn/khoản: hiện hàng với "—", nút lập phiếu và xem khoản khoá, nút Tắt đối tác chạy', async () => {
+    const empty = { storefrontId: 'sf9', title: 'Vườn mới', type: 'CTV' as const, isPartner: true, owner: { fullName: 'Mai', phone: '0900000099' }, activeOrders: 0, overdueOrders: 0, settleableLines: 0, settleableAmount: 0, consignmentLines: 0, commissionPct: null, consignmentFeePct: 0, consignmentFeeFixed: 0 };
+    const api = setup({
+      '/admin/merchant-fulfilment/overview': { body: { ...OVERVIEW, stores: [empty], overdue: [] } },
+      '/admin/storefronts/sf9/partner': { body: { id: 'sf9', isPartner: false } },
+    });
+    const r = render(<MerchantFulfilmentTab isAdmin />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(root.textContent).toContain('Vườn mới');
+    expect(root.textContent).toContain('Gian hàng đối tác (1)');
+    expect((byText(root, 'button', 'Lập phiếu đối soát') as HTMLButtonElement).disabled).toBe(true);
+    expect((byText(root, 'button', 'Xem khoản') as HTMLButtonElement).disabled).toBe(true);
+    click(byText(root, 'button', 'Tắt đối tác')!);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const post = api.calls.find((c) => c.url.endsWith('/admin/storefronts/sf9/partner'))!;
+    expect(JSON.parse(String(post.init!.body))).toEqual({ isPartner: false });
+  });
 });
+
