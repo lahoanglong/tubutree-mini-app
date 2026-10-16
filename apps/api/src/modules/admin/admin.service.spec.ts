@@ -782,7 +782,7 @@ function makeStatusPrisma(order: Record<string, unknown>, finalOrder: Record<str
     Object.assign(row, data);
     return { count: 1 };
   });
-  const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb({ order: { updateMany: txUpdateMany }, orderStatusHistory: { create: jest.fn().mockResolvedValue({}) } }));
+  const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb({ order: { updateMany: txUpdateMany, findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order.userId }) }, orderStatusHistory: { create: jest.fn().mockResolvedValue({}) } }));
   const prisma = {
     order: {
       findFirst: jest.fn().mockResolvedValue(order),

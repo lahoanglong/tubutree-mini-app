@@ -75,7 +75,7 @@ describe('OrderStatusService', () => {
 
   function mockTx(flipCount = 1) {
     const tx = {
-      order: { updateMany: jest.fn().mockResolvedValue({ count: flipCount }) },
+      order: { updateMany: jest.fn().mockResolvedValue({ count: flipCount }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: 'u1' }) },
       // Sổ ghi vết đổi trạng thái — ghi trong CÙNG transaction với lần lật status.
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -454,7 +454,7 @@ describe('OrderStatusService', () => {
 describe('OrderStatusService — huỷ đơn thu gom tái chế → huỷ vận đơn Gomdon', () => {
   function make(order: Record<string, unknown>, queueAdd = jest.fn().mockResolvedValue({})) {
     const tx = {
-      order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order.userId }) },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
@@ -501,7 +501,7 @@ describe('OrderStatusService — huỷ đơn thu gom tái chế → huỷ vận 
 describe('OrderStatusService — ghi deliveredAt khi lật DELIVERED (mốc hạn đổi/trả)', () => {
   it('DELIVERED → data có deliveredAt; trạng thái khác → không', async () => {
     const tx = {
-      order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: 'u1' }) },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const order = makeOrder({ status: 'SHIPPING' });
@@ -537,7 +537,7 @@ describe('OrderStatusService — ghi deliveredAt khi lật DELIVERED (mốc hạ
 describe('OrderStatusService — chặn giao đơn trả trước chưa thanh toán (C-024)', () => {
   function make(order: Record<string, unknown>, opts: { creditDebit?: boolean; flipCount?: number } = {}) {
     const tx = {
-      order: { updateMany: jest.fn().mockResolvedValue({ count: opts.flipCount ?? 1 }) },
+      order: { updateMany: jest.fn().mockResolvedValue({ count: opts.flipCount ?? 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order.userId }) },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
@@ -680,7 +680,7 @@ describe('OrderStatusService.markPaid', () => {
   function make(reads: Record<string, unknown>[], flipCounts: number[] = [1]) {
     const flips = [...flipCounts];
     const tx = {
-      order: { updateMany: jest.fn(async () => ({ count: flips.length ? flips.shift()! : 1 })) },
+      order: { updateMany: jest.fn(async () => ({ count: flips.length ? flips.shift()! : 1 })), findUniqueOrThrow: jest.fn(async () => ({ userId: reads[0]?.userId })) },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const findFirst = jest.fn();
@@ -854,7 +854,7 @@ describe('OrderStatusService.markPaid', () => {
 describe('OrderStatusService.setStatus — onlyIfUnpaid (cron huỷ đơn quá hạn thanh toán, C-024)', () => {
   function make(order: Record<string, unknown>, flipCount = 1) {
     const tx = {
-      order: { updateMany: jest.fn().mockResolvedValue({ count: flipCount }) },
+      order: { updateMany: jest.fn().mockResolvedValue({ count: flipCount }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order.userId }) },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {

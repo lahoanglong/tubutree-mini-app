@@ -35,7 +35,7 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
 
 function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> = {}) {
   const tx = {
-    order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order.userId }) },
     orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
   };
   const prisma = {
