@@ -104,6 +104,25 @@ describe('Chi tiết người dùng + nhóm việc nhân viên (real Postgres)',
     expect(d.blockHistory.map((e) => e.kind)).toEqual(['BLOCK']);
   });
 
+  it('trả lịch sử bật/tắt cờ gian hàng đối tác (STOREFRONT_PARTNER) kèm người làm, mới nhất trước, tách khỏi vai trò/khoá', async () => {
+    const boss = await createUser(prisma, { role: 'ADMIN', phone: phone() });
+    const u = await createUser(prisma, { role: 'STAFF', phone: phone() });
+    await prisma.userAdminEvent.create({
+      data: { userId: u.id, kind: 'STOREFRONT_PARTNER', fromValue: 'false', toValue: 'true', reason: 'sf-1', actorId: boss.id, createdAt: new Date('2026-10-01T00:00:00Z') },
+    });
+    await prisma.userAdminEvent.create({
+      data: { userId: u.id, kind: 'STOREFRONT_PARTNER', fromValue: 'true', toValue: 'false', reason: 'sf-1', actorId: boss.id, createdAt: new Date('2026-10-02T00:00:00Z') },
+    });
+    const d = await admin.getUserDetail(u.id);
+    expect(d.partnerHistory.map((e) => `${e.kind}:${e.fromValue}->${e.toValue}`)).toEqual([
+      'STOREFRONT_PARTNER:true->false',
+      'STOREFRONT_PARTNER:false->true',
+    ]);
+    expect(d.partnerHistory[0]).toMatchObject({ reason: 'sf-1', actorId: boss.id, actorName: expect.any(String) });
+    expect(d.roleHistory).toEqual([]);
+    expect(d.blockHistory).toEqual([]);
+  });
+
   it('cấp quyền theo SĐT (RoleGrant) áp lên tài khoản → sổ ghi ai cấp', async () => {
     const boss = await createUser(prisma, { role: 'ADMIN', phone: phone() });
     const p = phone();

@@ -160,6 +160,10 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     expect(ev).toHaveLength(1);
     expect(ev[0]).toMatchObject({ fromValue: 'true', toValue: 'false', actorId: c.adminUser.id, reason: c.sf.id });
     expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE', fromValue: 'DEALER', toValue: 'CUSTOMER' } })).toBe(1);
+    const detail = await admin.getUserDetail(c.owner.id);
+    expect(detail.partnerHistory).toEqual([
+      expect.objectContaining({ kind: 'STOREFRONT_PARTNER', fromValue: 'true', toValue: 'false', reason: c.sf.id, actorId: c.adminUser.id, actorName: expect.any(String) }),
+    ]);
   });
 
   const blockers: [string, (c: Ctx) => Promise<unknown>, string][] = [
