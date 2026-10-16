@@ -1,5 +1,5 @@
 import { api } from './api';
-import { requestZaloLocation, getZaloAccessToken } from './zmp-bridge';
+import { requestZaloLocationStrict, getZaloAccessToken } from './zmp-bridge';
 import type { Shift } from './shifts-api';
 
 export interface OpenSession {
@@ -24,28 +24,52 @@ export interface LocationPayload {
   zaloAccessToken?: string;
 }
 
+const LOCATION_FAIL_PREFIX = 'Không lấy được vị trí';
+const LOCATION_FAIL_MSG = {
+  denied: `${LOCATION_FAIL_PREFIX}: bạn chưa cấp quyền vị trí cho Zalo. Hãy bật quyền vị trí trong phần cài đặt rồi thử lại.`,
+  timeout: `${LOCATION_FAIL_PREFIX}: hết thời gian chờ tín hiệu GPS. Hãy ra nơi thoáng hoặc bật GPS rồi thử lại.`,
+  unavailable: `${LOCATION_FAIL_PREFIX}: thiết bị chưa xác định được vị trí. Hãy bật GPS/dịch vụ vị trí rồi thử lại.`,
+} as const;
+
+function locationFailureMessage(geoError: unknown, zaloError: unknown): string {
+  // GeolocationPositionError.code: 1 PERMISSION_DENIED (cả khi origin không an toàn), 2 POSITION_UNAVAILABLE, 3 TIMEOUT
+  const code = (geoError as { code?: number } | undefined)?.code;
+  if (code === 1) return LOCATION_FAIL_MSG.denied;
+  if (code === 3) return LOCATION_FAIL_MSG.timeout;
+  if (code === 2) return LOCATION_FAIL_MSG.unavailable;
+  // Không có geolocation (webview Zalo): chỉ còn lỗi của Zalo SDK để suy ra lý do.
+  const zaloText = `${(zaloError as { message?: string } | undefined)?.message ?? ''}`;
+  if (/denied|permission|reject|từ chối|quyền/i.test(zaloText)) return LOCATION_FAIL_MSG.denied;
+  return LOCATION_FAIL_MSG.unavailable;
+}
+
 /**
  * Lấy dữ liệu vị trí để gửi backend: ưu tiên token Zalo getLocation (chính thống),
- * fallback navigator.geolocation (dev / một số webview). Rỗng nếu không lấy được.
+ * fallback navigator.geolocation (dev / một số webview). Rỗng nếu không lấy được —
+ * backend vẫn là nơi quyết định; `onFailure` nhận đúng một thông báo lý do khi cả hai đều hỏng.
  */
-export async function acquireLocationPayload(): Promise<LocationPayload> {
+export async function acquireLocationPayload(onFailure?: (message: string) => void): Promise<LocationPayload> {
+  let zaloError: unknown;
   try {
-    const loc = await requestZaloLocation();
+    const loc = await requestZaloLocationStrict();
     if (loc?.token) {
       const { accessToken } = await getZaloAccessToken();
       if (accessToken) return { locationToken: loc.token, zaloAccessToken: accessToken };
     }
-  } catch {
-    /* rơi xuống fallback */
+  } catch (e) {
+    zaloError = e;
   }
+  let geoError: unknown;
   try {
     const pos = await new Promise<GeolocationPosition>((res, rej) =>
       navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000, enableHighAccuracy: true }),
     );
     return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-  } catch {
-    return {};
+  } catch (e) {
+    geoError = e;
   }
+  onFailure?.(locationFailureMessage(geoError, zaloError));
+  return {};
 }
 
 export const getAttendanceStatus = () =>
