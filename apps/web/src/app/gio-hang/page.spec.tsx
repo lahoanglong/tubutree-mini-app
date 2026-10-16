@@ -310,6 +310,7 @@ describe('/gio-hang — xem trước mức giảm mã theo đúng giỏ đang ch
   });
 
   it('bỏ chọn hết: không gọi xem trước (itemIds rỗng bị máy chủ coi là cả giỏ)', async () => {
+    state.coupons = [MIN];
     state.cart = cartOf([line({}), line({ id: 'i2', variationId: 'v2', productName: 'Xà phòng', total: 100000, quantity: 1 })]);
     const { container } = await mount();
     await settle();
