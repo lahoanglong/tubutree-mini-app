@@ -986,6 +986,7 @@ export default function CheckoutPage() {
         subtotal={quote.data?.subtotal ?? cart.data?.subtotal ?? 0}
         shippingFee={quote.data?.shippingFee}
         productIds={cartProductIds(checkoutItems)}
+        previewParams={addressId ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
         onCouponApplied={() => {
           void cart.refetch();
           void quote.refetch();

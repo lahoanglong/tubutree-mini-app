@@ -25,6 +25,7 @@ import { useDebounced } from '../utils/use-debounced';
 import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { useStorefrontContext } from '../store/storefront-context';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { PageHeader } from '../components/ui/page-header';
 import { Checkbox } from '../components/ui/form';
@@ -234,7 +235,12 @@ export default function CartPage() {
             </section>
           ))}
 
-          <CouponBlock summary={summary} selectedSubtotal={selectedSubtotal} selectedProductIds={cartProductIds(selectedItems)} />
+          <CouponBlock
+            summary={summary}
+            selectedSubtotal={selectedSubtotal}
+            selectedProductIds={cartProductIds(selectedItems)}
+            selectedItemIds={allSelected ? undefined : selectedItems.map((l) => l.id)}
+          />
         </>
       )}
 
@@ -494,12 +500,18 @@ function CouponBlock({
   summary,
   selectedSubtotal,
   selectedProductIds,
+  selectedItemIds,
 }: {
   summary: CartSummary;
   selectedSubtotal: number;
   selectedProductIds?: string[];
+  /** Món đang chọn khi chỉ thanh toán một phần giỏ; undefined = cả giỏ. */
+  selectedItemIds?: string[];
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const sfCtx = useStorefrontContext();
+  // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
+  const ctvSlug = sfCtx.kind === 'ctv' ? (sfCtx.slug ?? undefined) : undefined;
 
   return (
     <>
@@ -585,6 +597,7 @@ function CouponBlock({
         // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
         subtotal={selectedSubtotal}
         productIds={selectedProductIds}
+        previewParams={{ storefrontSlug: ctvSlug, itemIds: selectedItemIds }}
       />
     </>
   );

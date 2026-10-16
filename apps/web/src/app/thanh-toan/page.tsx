@@ -534,6 +534,7 @@ export default function CheckoutPage() {
               shippingFee={quote?.shippingFee ?? null}
               notice={quote?.couponNotice ?? cart.couponNotice}
               disabled={place.isPending}
+              preview={addressId ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
             />
           )}
           {usablePoints > 0 && (

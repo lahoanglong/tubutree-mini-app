@@ -3,7 +3,8 @@ import { Input, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, TriangleAlert } from 'lucide-react';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
-import { applyCoupon, removeCoupon } from '../../services/shop-api';
+import type { CouponPreviewRequest } from '@tubutree/shared-types';
+import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
@@ -24,6 +25,11 @@ export interface VoucherSheetProps {
   shippingFee?: number;
   /** Sản phẩm của các dòng đang mua — mã chỉ áp cho sản phẩm khác thì báo "Chỉ áp cho ..." và khoá nút dùng. */
   productIds?: string[];
+  /**
+   * Tham số báo giá của lần đặt đang xem (thanh toán: có addressId; giỏ: không). Có thì hỏi máy chủ mức giảm thật từng mã
+   * (`/checkout/coupon-previews`); không có, đang tải hoặc lỗi (API cũ) thì thẻ chỉ ghi điều kiện của mã như trước.
+   */
+  previewParams?: CouponPreviewRequest;
   onCouponApplied?: () => void;
 }
 
@@ -34,6 +40,7 @@ export function VoucherSheet({
   subtotal,
   shippingFee,
   productIds,
+  previewParams,
   onCouponApplied,
 }: VoucherSheetProps) {
   const queryClient = useQueryClient();
@@ -45,6 +52,13 @@ export function VoucherSheet({
     queryFn: getCoupons,
     enabled: visible,
   });
+  const previewsQ = useQuery({
+    queryKey: ['coupon-previews', previewParams ?? null],
+    queryFn: () => getCouponPreviews(previewParams!),
+    enabled: visible && !!previewParams,
+    retry: false,
+  });
+  const previews = new Map((previewsQ.data ?? []).map((p) => [p.code.toUpperCase(), p]));
 
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
@@ -163,10 +177,20 @@ export function VoucherSheet({
               {couponsQ.data.map((coupon) => {
                 const isApplied = currentCode?.toUpperCase() === coupon.code.toUpperCase();
                 const scope = coupon.products?.length ? coupon.products : null;
-                const wrongProducts = !!scope && !!productIds && !scope.some((x) => productIds.includes(x.id));
-                const belowMin = coupon.minOrder != null && subtotal < coupon.minOrder;
-                const shipAlreadyFree = coupon.type === 'FREESHIP' && shippingFee === 0 && !isApplied;
-                const notEligible = wrongProducts || belowMin || shipAlreadyFree;
+                const preview = previews.get(coupon.code.toUpperCase());
+                // Có số của máy chủ thì theo số đó; các phép đoán dưới đây chỉ dùng khi chưa có (API cũ, đang tải, lỗi).
+                const wrongProducts = !preview && !!scope && !!productIds && !scope.some((x) => productIds.includes(x.id));
+                const belowMin = !preview && coupon.minOrder != null && subtotal < coupon.minOrder;
+                const shipAlreadyFree = !preview && coupon.type === 'FREESHIP' && shippingFee === 0 && !isApplied;
+                const serverBlocked = !!preview && !preview.eligible && !isApplied;
+                const notEligible = wrongProducts || belowMin || shipAlreadyFree || serverBlocked;
+                const savingText = !preview
+                  ? null
+                  : preview.discount > 0
+                    ? `Giảm ${formatVnd(preview.discount)} cho đơn này`
+                    : (preview.freeshipSaving ?? 0) > 0
+                      ? `Miễn phí ship ${formatVnd(preview.freeshipSaving)} cho đơn này`
+                      : null;
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
                 const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
@@ -213,6 +237,17 @@ export function VoucherSheet({
                       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                         {formatCouponDesc(coupon)}
                       </Text>
+                      {savingText && (
+                        <Text variant="caption" tone="success" as="div" style={{ marginTop: 2, fontWeight: 600 }}>
+                          {savingText}
+                        </Text>
+                      )}
+                      {serverBlocked && preview?.reason && (
+                        <Text variant="caption" tone="warning" as="div" style={{ marginTop: 2 }}>
+                          <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />
+                          {preview.reason}
+                        </Text>
+                      )}
                       {shipAlreadyFree && (
                         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                           Đơn này đã miễn phí ship
@@ -255,7 +290,7 @@ export function VoucherSheet({
                           onPress={() => applyMut.mutate(coupon.code)}
                           style={{ minWidth: 0 }}
                         >
-                          {wrongProducts ? 'Không áp dụng' : belowMin ? 'Chưa đủ' : shipAlreadyFree ? 'Không cần dùng' : 'Dùng mã'}
+                          {wrongProducts || serverBlocked ? 'Không áp dụng' : belowMin ? 'Chưa đủ' : shipAlreadyFree ? 'Không cần dùng' : 'Dùng mã'}
                         </Button>
                       )}
                     </div>

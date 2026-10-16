@@ -11,6 +11,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
+import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 
 export default function CartPage() {
   const phase = useAuthPhase();
@@ -18,6 +19,8 @@ export default function CartPage() {
   const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
   // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
   const [deselected, setDeselected] = useState<Set<string>>(() => new Set());
+  // Cùng gian hàng thanh toán gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
+  const [ctvSlug] = useState(() => ctvSlugFor(getStorefrontContext()));
   const toggleSelect = (id: string) =>
     setDeselected((prev) => {
       const next = new Set(prev);
@@ -290,7 +293,12 @@ export default function CartPage() {
                 <span>-{formatVnd(shownDiscount)}</span>
               </div>
             )}
-            <CouponBox currentCode={cart.couponCode} subtotal={selectedSubtotal} notice={cart.couponNotice} />
+            <CouponBox
+              currentCode={cart.couponCode}
+              subtotal={selectedSubtotal}
+              notice={cart.couponNotice}
+              preview={{ storefrontSlug: ctvSlug, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) }}
+            />
             {!allSelected && cart.couponCode && (
               <p className="mt-2 text-xs text-stone-600">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
             )}

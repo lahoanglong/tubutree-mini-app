@@ -3,13 +3,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
-const mocks = vi.hoisted(() => ({ getCoupons: vi.fn(), applyCoupon: vi.fn(), removeCoupon: vi.fn(), openSnackbar: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getCoupons: vi.fn(),
+  getCouponPreviews: vi.fn(),
+  applyCoupon: vi.fn(),
+  removeCoupon: vi.fn(),
+  openSnackbar: vi.fn(),
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<typeof ZmpUi>()),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../../services/account-api', () => ({ getCoupons: mocks.getCoupons }));
-vi.mock('../../services/shop-api', () => ({ applyCoupon: mocks.applyCoupon, removeCoupon: mocks.removeCoupon }));
+vi.mock('../../services/shop-api', () => ({
+  applyCoupon: mocks.applyCoupon,
+  removeCoupon: mocks.removeCoupon,
+  getCouponPreviews: mocks.getCouponPreviews,
+}));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { VoucherSheet } from './voucher-sheet';
@@ -21,12 +31,18 @@ const COUPONS = [
 
 function renderSheet(
   currentCode?: string,
-  extra: { onClose?: () => void; onCouponApplied?: () => void; subtotal?: number; shippingFee?: number } = {},
+  extra: {
+    onClose?: () => void;
+    onCouponApplied?: () => void;
+    subtotal?: number;
+    shippingFee?: number;
+    previewParams?: { addressId?: string; itemIds?: string[] };
+  } = {},
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <VoucherSheet visible onClose={extra.onClose ?? (() => {})} onCouponApplied={extra.onCouponApplied} currentCode={currentCode} subtotal={extra.subtotal ?? 100_000} shippingFee={extra.shippingFee} />
+      <VoucherSheet visible onClose={extra.onClose ?? (() => {})} onCouponApplied={extra.onCouponApplied} currentCode={currentCode} subtotal={extra.subtotal ?? 100_000} shippingFee={extra.shippingFee} previewParams={extra.previewParams} />
     </QueryClientProvider>,
   );
 }
@@ -251,5 +267,78 @@ describe('VoucherSheet: mã freeship khi phí ship đã 0 (R6-BUYER-12)', () => 
     cleanup();
     renderSheet();
     expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
+  });
+});
+
+describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/checkout/coupon-previews)', () => {
+  const PERCENT = COUPONS[0];
+  const FS = { ...COUPONS[1], minOrder: null };
+  const SCOPED = { ...PERCENT, code: 'MUACHUNG', type: 'AMOUNT', value: 20_000, maxDiscount: null, products: [{ id: 'p-x', name: 'Chậu gốm' }] };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCoupons.mockResolvedValue([PERCENT, FS, SCOPED]);
+  });
+
+  it('có số: ghi "Giảm X cho đơn này" (vẫn giữ "tối đa" của mã), freeship ghi phí ship miễn được, gửi đúng tham số báo giá', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([
+      { code: 'GIAM10', eligible: true, discount: 43_800 },
+      { code: 'FREESHIP', eligible: true, discount: 0, freeshipSaving: 19_000 },
+      { code: 'MUACHUNG', eligible: true, discount: 12_000 },
+    ]);
+    renderSheet(undefined, { previewParams: { addressId: 'a1', itemIds: ['l1'] }, shippingFee: 19_000 });
+    expect(await screen.findByText('Giảm 43.800đ cho đơn này')).toBeInTheDocument();
+    expect(screen.getByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
+    expect(screen.getByText('Miễn phí ship 19.000đ cho đơn này')).toBeInTheDocument();
+    expect(screen.getByText('Giảm 12.000đ cho đơn này')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Dùng mã' })).toHaveLength(3);
+    expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ addressId: 'a1', itemIds: ['l1'] });
+  });
+
+  it('freeship không miễn được đồng nào (hoặc trang giỏ chưa có phí giao): không ghi số tiền', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([
+      { code: 'GIAM10', eligible: true, discount: 5_000 },
+      { code: 'FREESHIP', eligible: true, discount: 0 },
+      { code: 'MUACHUNG', eligible: true, discount: 1_000 },
+    ]);
+    renderSheet(undefined, { previewParams: {} });
+    await screen.findByText('Giảm 5.000đ cho đơn này');
+    expect(screen.queryByText(/Miễn phí ship .*cho đơn này/)).toBeNull();
+  });
+
+  it('mã không dùng được: hiện lý do của máy chủ và khoá nút, kể cả khi phép đoán phía máy nói đủ điều kiện', async () => {
+    const reason = 'Đơn tối thiểu 150.000đ để dùng mã này.';
+    mocks.getCouponPreviews.mockResolvedValue([
+      { code: 'GIAM10', eligible: false, reason, discount: 0 },
+      { code: 'FREESHIP', eligible: true, discount: 0, freeshipSaving: 19_000 },
+      { code: 'MUACHUNG', eligible: true, discount: 1_000 },
+    ]);
+    renderSheet(undefined, { previewParams: { addressId: 'a1' }, subtotal: 900_000 });
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    const blocked = screen.getByRole('button', { name: 'Không áp dụng' });
+    expect(blocked).toBeDisabled();
+    fireEvent.click(blocked);
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Giảm .* cho đơn này/, { selector: 'div' })).toHaveTextContent('Giảm 1.000đ cho đơn này');
+  });
+
+  it('API cũ / lỗi: giữ cách hiện cũ (không có số, phép đoán phía máy vẫn chạy)', async () => {
+    mocks.getCouponPreviews.mockRejectedValue(new Error('404'));
+    renderSheet(undefined, { previewParams: { addressId: 'a1' }, shippingFee: 0 });
+    expect(await screen.findByText('Đơn này đã miễn phí ship')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalled());
+    expect(screen.queryByText(/cho đơn này/)).toBeNull();
+    expect(screen.getByText('Chỉ áp cho Chậu gốm')).toBeInTheDocument();
+  });
+
+  it('đang tải số: thẻ hiện như cũ, chưa có số; không truyền tham số thì không gọi API', async () => {
+    mocks.getCouponPreviews.mockReturnValue(new Promise(() => {}));
+    renderSheet(undefined, { previewParams: { addressId: 'a1' } });
+    expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
+    expect(screen.queryByText(/cho đơn này/)).toBeNull();
+    cleanup();
+    mocks.getCouponPreviews.mockClear();
+    renderSheet();
+    await screen.findByText('Giảm 10% (tối đa 50.000đ)');
+    expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
   });
 });

@@ -193,6 +193,22 @@ export interface CouponDTO {
   products?: { id: string; name: string }[] | null;
 }
 export const getMyCoupons = () => apiFetch<CouponDTO[]>('/me/coupons');
+/** Mức giảm một mã cho lần đặt đang xem, máy chủ tính đúng như báo giá (khớp CouponPreviewDTO của shared-types). */
+export interface CouponPreview {
+  code: string;
+  eligible: boolean;
+  reason?: string;
+  discount: number;
+  /** Chỉ có khi gửi kèm addressId (thanh toán). */
+  freeshipSaving?: number;
+}
+export interface CouponPreviewParams {
+  addressId?: string;
+  storefrontSlug?: string;
+  itemIds?: string[];
+}
+export const getCouponPreviews = (params: CouponPreviewParams) =>
+  apiFetch<{ coupons: CouponPreview[] }>('/checkout/coupon-previews', { method: 'POST', body: params }).then((r) => r.coupons);
 export const applyCoupon = (code: string) =>
   apiFetch<CartSummary>('/cart/coupon', { method: 'POST', body: { code } });
 export const removeCoupon = () => apiFetch<CartSummary>('/cart/coupon', { method: 'DELETE' });

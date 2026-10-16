@@ -3,7 +3,14 @@
 import { useState } from 'react';
 import { Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { applyCoupon, formatVnd, getMyCoupons, removeCoupon } from '@/lib/shop-client';
+import {
+  applyCoupon,
+  formatVnd,
+  getCouponPreviews,
+  getMyCoupons,
+  removeCoupon,
+  type CouponPreviewParams,
+} from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import {
   couponExpiryLabel,
@@ -34,6 +41,7 @@ export function CouponBox({
   shippingFee = null,
   notice = null,
   disabled = false,
+  preview,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -43,12 +51,28 @@ export function CouponBox({
   notice?: string | null;
   /** Trang chứa đang đặt hàng: đổi mã lúc này làm đơn lấy mã khác với con số khách đã thấy. */
   disabled?: boolean;
+  /**
+   * Tham số báo giá của lần đặt đang xem (thanh toán: có addressId; giỏ: không). Có thì hỏi máy chủ mức giảm thật từng mã;
+   * không có, đang tải hoặc lỗi (API cũ) thì thẻ chỉ ghi điều kiện của mã như trước.
+   */
+  preview?: CouponPreviewParams;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
+  const previewsQ = useQuery({
+    queryKey: ['coupon-previews', preview ?? null],
+    queryFn: () => getCouponPreviews(preview!),
+    enabled: !!preview && !currentCode,
+    retry: false,
+  });
+  const previews = new Map((previewsQ.data ?? []).map((p) => [p.code.toUpperCase(), p]));
+  const usable = (c: { code: string; minOrder: number | null }) => {
+    const p = previews.get(c.code.toUpperCase());
+    return p ? p.eligible : isCouponEligible(c, subtotal);
+  };
 
   const afterChange = (cart: Awaited<ReturnType<typeof applyCoupon>>) => {
     qc.setQueryData(['cart'], cart);
@@ -117,12 +141,25 @@ export function CouponBox({
           {(couponsQ.data?.length ?? 0) > 0 && (
             <>
               <ul aria-label="Mã giảm giá của bạn" className="mt-3 space-y-2">
-                {sortCouponsForCart(couponsQ.data!, subtotal)
+                {(previews.size > 0
+                  ? [...couponsQ.data!.filter(usable), ...couponsQ.data!.filter((c) => !usable(c))]
+                  : sortCouponsForCart(couponsQ.data!, subtotal)
+                )
                   .slice(0, showAll ? undefined : VISIBLE_COUPONS)
                   .map((c) => {
-                    const redundant = isFreeshipRedundant(c, shippingFee);
-                    const meetsMin = isCouponEligible(c, subtotal);
-                    const eligible = meetsMin && !redundant;
+                    const pv = previews.get(c.code.toUpperCase());
+                    // Có số của máy chủ thì theo số đó; các phép đoán dưới đây chỉ dùng khi chưa có (API cũ, đang tải, lỗi).
+                    const redundant = !pv && isFreeshipRedundant(c, shippingFee);
+                    const meetsMin = !!pv || isCouponEligible(c, subtotal);
+                    const serverBlocked = !!pv && !pv.eligible;
+                    const eligible = meetsMin && !redundant && !serverBlocked;
+                    const saving = !pv
+                      ? null
+                      : pv.discount > 0
+                        ? `Giảm ${formatVnd(pv.discount)} cho đơn này`
+                        : (pv.freeshipSaving ?? 0) > 0
+                          ? `Miễn phí ship ${formatVnd(pv.freeshipSaving!)} cho đơn này`
+                          : null;
                     return (
                       <li
                         key={c.code}
@@ -134,6 +171,8 @@ export function CouponBox({
                         <div className="min-w-0 flex-1">
                           <div className="break-all text-sm font-bold text-promo-fg">{autoCouponName(c.code) ?? c.code}</div>
                           <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
+                          {saving && <div className="text-xs font-semibold text-success-fg">{saving}</div>}
+                          {serverBlocked && pv.reason && <div className="text-xs font-medium text-warning-fg">{pv.reason}</div>}
                           {redundant && <div className="text-xs text-stone-700">Đơn này đã miễn phí vận chuyển</div>}
                           {c.minOrder != null && (
                             <div className={`text-xs ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}>
@@ -151,7 +190,7 @@ export function CouponBox({
                           aria-label={`${redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
                           className={`${ui.btnPrimary} flex-none px-3`}
                         >
-                          {redundant ? 'Không cần' : eligible ? 'Dùng mã' : 'Chưa đủ'}
+                          {redundant ? 'Không cần' : serverBlocked ? 'Không áp dụng' : eligible ? 'Dùng mã' : 'Chưa đủ'}
                         </button>
                       </li>
                     );
