@@ -209,6 +209,18 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     throw new Error('cron không đi hết một vòng');
   }
 
+  /** Như sweepAll nhưng qua reconcile (có khoá cron): một lượt chỉ quét tối đa 200 dòng nên lặp tới khi hết vòng. */
+  async function reconcileAll(cron: ReferralNoticeReconcileCron, now: Date) {
+    const total = { scanned: 0, missing: 0, sent: 0, failed: 0, skippedNotices: 0 };
+    for (let i = 0; i < 100; i++) {
+      const r = await cron.reconcile(now);
+      if ('skipped' in r) throw new Error(`reconcile bị bỏ qua: ${r.skipped}`);
+      for (const k of Object.keys(total) as (keyof typeof total)[]) total[k] += r[k];
+      if (r.wrapped) return total;
+    }
+    throw new Error('cron không đi hết một vòng');
+  }
+
   /** Mốc 1 người + trả một phần + trả cả đơn: cấp (PAID, MILESTONE), thu từng phần, thu nốt kèm thu hồi mốc. */
   async function lifecycle(opts: { refereeName?: string; spendBeforeReturn?: number } = {}) {
     await moduleRef.get(SystemConfigService).set('referral.milestones_points', [{ count: 1, bonusPoints: MILESTONE }], admin.id);
@@ -267,7 +279,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     expect(holder).toEqual({ skipped: 'LOCKED' });
     expect(await inbox(referrer.id)).toEqual([]);
     const cron = newCron();
-    expect(await cron.reconcile(later())).not.toHaveProperty('skipped');
+    await reconcileAll(cron, later());
     expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
   });
 
@@ -350,9 +362,8 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     const { referrer, referee } = await pair();
     await rewards.grantReferralOrderReward(referee.id);
     const cron = newCron();
-    const res = await cron.reconcile(later());
-    expect(res).not.toHaveProperty('skipped');
-    expect((res as { failed: number }).failed).toBeGreaterThanOrEqual(1);
+    const res = await reconcileAll(cron, later());
+    expect(res.failed).toBeGreaterThanOrEqual(1);
     expect(await inbox(referrer.id)).toEqual([]);
     failNotify = false;
     await sweepAll(cron, later());
@@ -378,6 +389,24 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     await sweepAll(newCron(), later());
     expect(await inbox(lost.id)).toEqual(liveInbox);
     expect(await balanceOf(lost.id)).toBe(await balanceOf(live.id));
+  });
+
+  it('(l) sự kiện trước lúc migration mẫu tin chạy xong (lần triển khai đầu) không bị coi là tin sót', async () => {
+    const migration = '20261017000100_r12_referral_notification_templates';
+    failNotify = true;
+    const { referrer, referee } = await pair();
+    await rewards.grantReferralOrderReward(referee.id);
+    failNotify = false;
+    const [saved] = await prisma.$queryRaw<{ finishedAt: Date }[]>`SELECT "finished_at" AS "finishedAt" FROM "_prisma_migrations" WHERE "migration_name" = ${migration}`;
+    await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "finished_at" = ${later(60 * 60_000)} WHERE "migration_name" = ${migration}`;
+    try {
+      await sweepAll(newCron(), later());
+      expect(await inbox(referrer.id)).toEqual([]);
+    } finally {
+      await prisma.$executeRaw`UPDATE "_prisma_migrations" SET "finished_at" = ${saved!.finishedAt} WHERE "migration_name" = ${migration}`;
+    }
+    await sweepAll(newCron(), later());
+    expect(await inbox(referrer.id)).toEqual([['REFERRAL_REWARD_PAID', PAID_BODY]]);
   });
 
   it('(j) handleCron không ném ra ngoài dù truy vấn hỏng', async () => {

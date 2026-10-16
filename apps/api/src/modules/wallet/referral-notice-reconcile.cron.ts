@@ -13,6 +13,8 @@ const WINDOW_MS = 3 * 864e5;
 // Đường trực tiếp gửi tin ngay sau commit: dòng sổ trẻ hơn mức này có thể chỉ đang chờ chính nó, nên chưa coi là sót.
 const MIN_AGE_MS = 5 * 60_000;
 const LOCK_KEY = 'cron:wallet.referral_notice_reconcile';
+// Migration seed các mẫu REFERRAL_*: sự kiện trước lúc nó chạy xong thì chưa từng có đường báo nào, không phải tin "bị sót".
+const TEMPLATES_MIGRATION = '20261017000100_r12_referral_notification_templates';
 
 type Cursor = { createdAt: Date; id: string };
 
@@ -35,6 +37,7 @@ export class ReferralNoticeReconcileCron {
   private readonly logger = new Logger(ReferralNoticeReconcileCron.name);
   private running = false;
   private cursor: Cursor | null = null;
+  private liveSince: Date | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -79,7 +82,9 @@ export class ReferralNoticeReconcileCron {
 
   /** Một lượt quét KHÔNG giữ khoá cron (test chạy hai lượt song song để chứng minh dedupeKey đủ chặn trùng). */
   async sweep(now: Date): Promise<{ scanned: number; missing: number; sent: number; failed: number; skippedNotices: number; wrapped: boolean }> {
-    const from = new Date(now.getTime() - WINDOW_MS);
+    const windowStart = new Date(now.getTime() - WINDOW_MS);
+    const liveSince = await this.templatesLiveSince();
+    const from = liveSince && liveSince > windowStart ? liveSince : windowStart;
     const to = new Date(now.getTime() - MIN_AGE_MS);
     const out = { scanned: 0, missing: 0, sent: 0, failed: 0, skippedNotices: 0, wrapped: false };
     let after = this.cursor;
@@ -115,6 +120,18 @@ export class ReferralNoticeReconcileCron {
       this.cursor = after;
     }
     return out;
+  }
+
+  /**
+   * Lúc migration mẫu tin chạy xong (không có cột ngày tạo ở notification_templates): chặn lần triển khai đầu gửi dồn tin cho các
+   * sự kiện của 3 ngày trước đó, vốn chưa từng được báo. Không đọc được thì không chặn (DB dựng không qua migrate, chỉ dev/test).
+   */
+  private async templatesLiveSince(): Promise<Date | null> {
+    if (this.liveSince) return this.liveSince;
+    const rows = await this.prisma.$queryRaw<{ finishedAt: Date | null }[]>`
+      SELECT "finished_at" AS "finishedAt" FROM "_prisma_migrations" WHERE "migration_name" = ${TEMPLATES_MIGRATION}`;
+    this.liveSince = rows[0]?.finishedAt ?? null;
+    return this.liveSince;
   }
 
   private async reconcilePage(page: ReferralLedgerRow[]): Promise<{ missing: number; sent: number; failed: number; skippedNotices: number }> {
