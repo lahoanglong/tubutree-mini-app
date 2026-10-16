@@ -531,7 +531,7 @@ describe('StorefrontService.pickerProducts', () => {
 describe('StorefrontService.getStats', () => {
   it('đọc doanh thu/đơn/sản phẩm từ SQL gộp (không nạp đơn về Node), hoa hồng từ bảng Commission', async () => {
     const queryRaw = jest.fn()
-      .mockResolvedValueOnce([{ slug: 'linh', orders: 3n, revenue: 360000n }])
+      .mockResolvedValueOnce([{ slug: 'linh', orders: 3n, revenue: 700000n }])
       .mockResolvedValueOnce([{ slug: 'linh', orders: 2n, revenue: 100000n }])
       .mockResolvedValueOnce([
         { productSlug: 'p1', productName: 'P1', qty: 1n, revenue: 100000n },
@@ -554,13 +554,33 @@ describe('StorefrontService.getStats', () => {
     expect(r).toEqual({
       orders7d: 2,
       orders30d: 3,
-      revenue30d: 360000,
+      revenue30d: 700000,
       commission30d: 8000,
       byProduct: [
         { productSlug: 'p2', productName: 'P2', qty: 6, revenue: 550000 },
         { productSlug: 'p1', productName: 'P1', qty: 1, revenue: 100000 },
       ],
+      shippingAndOrderDiscount30d: 50000,
     });
+  });
+
+  it('ẩn dòng đã trả hết (0 món), phần cấp đơn = doanh thu − tổng các dòng còn hiện', async () => {
+    const queryRaw = jest.fn()
+      .mockResolvedValueOnce([{ slug: 'linh', orders: 2n, revenue: 90000n }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { productSlug: 'p1', productName: 'P1', qty: 0n, revenue: 0n },
+        { productSlug: 'p2', productName: 'P2', qty: 1n, revenue: 120000n },
+      ]);
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', slug: 'linh', ownerUserId: 'u1' }) },
+      commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
+      $queryRaw: queryRaw,
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getStats('u1');
+    expect(r.byProduct).toEqual([{ productSlug: 'p2', productName: 'P2', qty: 1, revenue: 120000 }]);
+    expect(r.orders7d).toBe(0);
+    expect(r.shippingAndOrderDiscount30d).toBe(-30000);
   });
 
   it('404 nếu chưa có gian hàng', async () => {

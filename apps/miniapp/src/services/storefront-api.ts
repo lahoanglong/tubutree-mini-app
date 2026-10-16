@@ -100,6 +100,8 @@ export interface StorefrontProductStat { productSlug: string; productName: strin
 export interface StorefrontStats {
   orders7d: number; orders30d: number; revenue30d: number; commission30d: number;
   byProduct: StorefrontProductStat[];
+  /** revenue30d − tổng byProduct.revenue: phí ship, giảm giá cấp đơn, chênh lệch tiền hoàn. Có thể âm. */
+  shippingAndOrderDiscount30d?: number;
 }
 export const getStorefrontStats = () => api.get('/storefront/me/stats').then((r) => r.data as StorefrontStats);
 

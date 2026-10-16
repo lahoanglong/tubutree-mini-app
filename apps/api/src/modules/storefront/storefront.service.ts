@@ -381,12 +381,18 @@ export class StorefrontService {
       }),
     ]);
 
+    const revenue30d = Math.max(0, sales30d.get(sf.slug)?.revenue ?? 0);
+    const lines = byProduct.filter((p) => p.qty > 0).sort((a, b) => b.revenue - a.revenue);
     return {
       orders7d: sales7d.get(sf.slug)?.orders ?? 0,
       orders30d: sales30d.get(sf.slug)?.orders ?? 0,
-      revenue30d: Math.max(0, sales30d.get(sf.slug)?.revenue ?? 0),
+      revenue30d,
       commission30d: commission30dAgg._sum.amount ?? 0,
-      byProduct: byProduct.sort((a, b) => b.revenue - a.revenue),
+      byProduct: lines,
+      // Doanh thu tính trên Order.total (gồm phí ship, trừ giảm giá cấp đơn và tiền hoàn thực tế) còn dòng sản phẩm tính trên
+      // OrderItem.total: phần chênh hiện thành một dòng riêng để các dòng cộng đúng ô Doanh thu. Có thể âm khi giảm giá cấp đơn
+      // lớn hơn phí ship.
+      shippingAndOrderDiscount30d: revenue30d - lines.reduce((t, p) => t + p.revenue, 0),
     };
   }
 
