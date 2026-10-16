@@ -1,13 +1,13 @@
 import { formatDate } from './format-date';
 import { formatVnd, type CouponDTO } from './shop-client';
 
-/** Mã này cho khách lợi gì, cùng lời với Mini App (voucher-sheet). FREESHIP: `value` > 0 là mức phí ship tối đa được giảm. */
+/** Mã này cho khách lợi gì, cùng lời với Mini App (voucher-sheet). FREESHIP: `value` KHÔNG phải mức trần của khoản giảm ship nên nhãn không ghi "tối đa"; số thật lấy từ báo giá của server. */
 export function couponValueLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>): string {
   if (c.type === 'PERCENT') {
     return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   }
   if (c.type === 'FREESHIP') {
-    return `Miễn phí vận chuyển${c.value > 0 ? ` (tối đa ${formatVnd(c.value)})` : ''}`;
+    return 'Miễn phí vận chuyển';
   }
   return `Giảm ${formatVnd(c.value)}`;
 }
