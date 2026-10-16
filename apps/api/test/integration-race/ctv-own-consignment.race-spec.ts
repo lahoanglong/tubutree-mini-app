@@ -17,8 +17,9 @@ import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
 
 /**
- * Đại lý không hưởng hoa hồng CTV trên hàng ký gửi "Tubu giao hộ" của chính mình khi khách mua qua slug của đại lý (chủ dự án
- * chốt 2026-10-16). Loại theo từng dòng: đơn con Tubu có thể trộn hàng Tubu và hàng của đại lý.
+ * Đại lý không hưởng hoa hồng CTV trên hàng ký gửi "Tubu giao hộ" của chính mình khi khách mua qua kênh của đại lý (chủ dự án
+ * chốt 2026-10-16). Loại theo từng dòng: đơn con Tubu có thể trộn hàng Tubu và hàng của đại lý. "Hàng ký gửi" theo đúng định nghĩa
+ * bảng kê trả tiền: liên kết Pancake còn hiệu lực, liên kết takeover chỉ từ lúc admin xác nhận (consignmentLinkedSql).
  */
 describe('Hoa hồng CTV: loại hàng ký gửi của chính người giới thiệu (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -57,7 +58,10 @@ describe('Hoa hồng CTV: loại hàng ký gửi của chính người giới th
     await moduleRef?.close();
   });
 
-  async function variation(price: number, storefrontId: string | null, rate = 10) {
+  type LinkOpts = false | { takeover?: boolean; confirmedAt?: Date | null; unlinked?: boolean };
+  const HOUR = 3_600_000;
+
+  async function variation(price: number, storefrontId: string | null, rate = 10, link: LinkOpts = {}, blocked = false) {
     const tag = randCode(8);
     const product = await prisma.product.create({
       data: {
@@ -68,11 +72,26 @@ describe('Hoa hồng CTV: loại hàng ký gửi của chính người giới th
         description: 'IT',
         basePrice: price,
         storefrontId,
+        affiliateBlocked: blocked,
       },
     });
-    return prisma.variation.create({
+    const v = await prisma.variation.create({
       data: { pancakeId: `it-oc-v-${tag}`, productId: product.id, sku: `ITOC-${tag}`, name: 'Mặc định', attributes: {}, retailPrice: price, affiliateRate: rate, stock: 50 },
     });
+    if (storefrontId && link !== false) {
+      await prisma.merchantPancakeLink.create({
+        data: {
+          productId: product.id,
+          storefrontId,
+          variationId: v.id,
+          takeover: link.takeover ?? false,
+          linkedAt: new Date(Date.now() - 2 * HOUR),
+          consignmentConfirmedAt: link.confirmedAt ?? null,
+          unlinkedAt: link.unlinked ? new Date(Date.now() - HOUR) : null,
+        },
+      });
+    }
+    return v;
   }
 
   async function dealerWithStore() {
@@ -85,12 +104,17 @@ describe('Hoa hồng CTV: loại hàng ký gửi của chính người giới th
   }
 
   /** Đơn con Tubu giao hộ: dòng ký gửi của đại lý (2 x 100.000) + dòng hàng Tubu (2 x 100.000), tiền thực trả bằng giá. */
-  async function mixedOrder(referrerId: string, storeId: string) {
-    const buyer = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
-    const [own, tubu] = await Promise.all([variation(100_000, storeId), variation(100_000, null)]);
+  async function mixedOrder(
+    referrerId: string,
+    storeId: string,
+    opts: { link?: LinkOpts; placedForCustomer?: boolean; ownBlocked?: boolean; buyerId?: string } = {},
+  ) {
+    const buyer = opts.buyerId ? { id: opts.buyerId } : await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+    const [own, tubu] = await Promise.all([variation(100_000, storeId, 10, opts.link, opts.ownBlocked), variation(100_000, null)]);
     const order = await createOrder(prisma, {
       userId: buyer.id,
       referrerUserId: referrerId,
+      placedForCustomer: opts.placedForCustomer ?? false,
       status: 'DELIVERED',
       deliveredAt: new Date(),
       subtotal: 400_000,
@@ -204,5 +228,67 @@ describe('Hoa hồng CTV: loại hàng ký gửi của chính người giới th
     });
     await returns.review(admin.id, req.id, { approve: true });
     expect((await commissionsOf(o.order.id))[0]).toMatchObject({ amount: 30_000, commissionableTotal: 300_000 });
+  });
+
+  /** Dòng ký gửi vẫn hưởng như dòng Tubu: hoa hồng 10% cả hai dòng, nền 400.000. */
+  async function expectBothLinesEarn(referrerId: string, o: Awaited<ReturnType<typeof mixedOrder>>) {
+    await affiliate.createCommissionForOrder(o.order.id);
+    const rows = await commissionsOf(o.order.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ affiliateUserId: referrerId, amount: 40_000, commissionableTotal: 400_000 });
+    expect(rows[0]!.lineAmounts).toEqual({ [o.own.id]: 20_000, [o.tubu.id]: 20_000 });
+  }
+
+  async function expectOnlyTubuLineEarns(referrerId: string, o: Awaited<ReturnType<typeof mixedOrder>>) {
+    await affiliate.createCommissionForOrder(o.order.id);
+    const rows = await commissionsOf(o.order.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ affiliateUserId: referrerId, amount: 20_000, commissionableTotal: 200_000 });
+    expect(rows[0]!.lineAmounts).toEqual({ [o.tubu.id]: 20_000 });
+  }
+
+  it('takeover chưa xác nhận: bảng kê chưa trả cho đại lý nên dòng vẫn hưởng hoa hồng CTV', async () => {
+    const { dealer, store } = await dealerWithStore();
+    await expectBothLinesEarn(dealer.id, await mixedOrder(dealer.id, store.id, { link: { takeover: true, confirmedAt: null } }));
+  });
+
+  it('takeover đã xác nhận trước giờ đặt đơn: bảng kê trả cho đại lý nên dòng bị loại', async () => {
+    const { dealer, store } = await dealerWithStore();
+    const confirmedAt = new Date(Date.now() - HOUR);
+    await expectOnlyTubuLineEarns(dealer.id, await mixedOrder(dealer.id, store.id, { link: { takeover: true, confirmedAt } }));
+  });
+
+  it('takeover xác nhận SAU giờ đặt đơn: đơn này bảng kê không trả nên dòng vẫn hưởng hoa hồng', async () => {
+    const { dealer, store } = await dealerWithStore();
+    const confirmedAt = new Date(Date.now() + HOUR);
+    await expectBothLinesEarn(dealer.id, await mixedOrder(dealer.id, store.id, { link: { takeover: true, confirmedAt } }));
+  });
+
+  it('hàng không còn liên kết (biến thể đã chuyển về Tubu): hưởng hoa hồng dù Product.storefrontId còn trỏ gian hàng', async () => {
+    const { dealer, store } = await dealerWithStore();
+    await expectBothLinesEarn(dealer.id, await mixedOrder(dealer.id, store.id, { link: { unlinked: true } }));
+  });
+
+  it('hàng chưa từng liên kết: hưởng hoa hồng', async () => {
+    const { dealer, store } = await dealerWithStore();
+    await expectBothLinesEarn(dealer.id, await mixedOrder(dealer.id, store.id, { link: false }));
+  });
+
+  it('CTV AFFILIATE lên đơn hộ khách với hàng ký gửi liên kết của chính mình: dòng bị loại (theo referrerFor, mọi kênh giới thiệu)', async () => {
+    const { dealer: owner, store } = await dealerWithStore();
+    await prisma.user.update({ where: { id: owner.id }, data: { role: 'AFFILIATE' } });
+    const customer = await createUser(prisma, { role: 'CUSTOMER' });
+    const o = await mixedOrder(owner.id, store.id, { placedForCustomer: true, buyerId: customer.id });
+    await expectOnlyTubuLineEarns(owner.id, o);
+  });
+
+  it('affiliateBlocked + hàng ký gửi của chính mình: dòng bị loại, dòng Tubu vẫn hưởng', async () => {
+    const { dealer, store } = await dealerWithStore();
+    await expectOnlyTubuLineEarns(dealer.id, await mixedOrder(dealer.id, store.id, { ownBlocked: true }));
+  });
+
+  it('affiliateBlocked trên hàng ký gửi takeover chưa xác nhận: vẫn bị loại vì chặn affiliate, không vì ký gửi', async () => {
+    const { dealer, store } = await dealerWithStore();
+    await expectOnlyTubuLineEarns(dealer.id, await mixedOrder(dealer.id, store.id, { ownBlocked: true, link: { takeover: true } }));
   });
 });

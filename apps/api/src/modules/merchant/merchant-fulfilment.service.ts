@@ -39,6 +39,7 @@ import {
   type ConsignmentTermsRow,
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
+import { consignmentLinkedSql } from './consignment-link-sql';
 import { isPartnerStore, PARTNER_STORE_WHERE } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
@@ -1490,16 +1491,20 @@ export class MerchantFulfilmentService {
    * vào đối soát tự động. Bấm lại không đổi mốc.
    */
   async confirmConsignment(adminId: string, linkId: string) {
-    const link = await this.prisma.merchantPancakeLink.findUnique({
-      where: { id: linkId },
-      select: { takeover: true, unlinkedAt: true },
-    });
-    if (!link) throw new NotFoundException('Không tìm thấy liên kết.');
-    if (!link.takeover) throw new BadRequestException('Liên kết này không nhận lại hàng Tubu đang bán nên không cần xác nhận hàng ký gửi.');
-    if (link.unlinkedAt) throw new BadRequestException('Liên kết đã gỡ.');
-    await this.prisma.merchantPancakeLink.updateMany({
-      where: { id: linkId, consignmentConfirmedAt: null },
-      data: { consignmentConfirmedAt: new Date(), consignmentConfirmedBy: adminId },
+    await this.prisma.$transaction(async (tx) => {
+      const found = await tx.merchantPancakeLink.findUnique({ where: { id: linkId }, select: { variationId: true } });
+      if (!found) throw new NotFoundException('Không tìm thấy liên kết.');
+      // Khoá biến thể trước khi lấy mốc: checkout giữ khoá này tới commit và tính hoa hồng CTV sau khi chèn đơn, nên đơn đặt từ
+      // mốc xác nhận luôn thấy liên kết đã xác nhận (hoa hồng loại, bảng kê trả), đơn trước mốc thì ngược lại.
+      await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${found.variationId} FOR NO KEY UPDATE`;
+      const link = await tx.merchantPancakeLink.findUnique({ where: { id: linkId }, select: { takeover: true, unlinkedAt: true } });
+      if (!link) throw new NotFoundException('Không tìm thấy liên kết.');
+      if (!link.takeover) throw new BadRequestException('Liên kết này không nhận lại hàng Tubu đang bán nên không cần xác nhận hàng ký gửi.');
+      if (link.unlinkedAt) throw new BadRequestException('Liên kết đã gỡ.');
+      await tx.merchantPancakeLink.updateMany({
+        where: { id: linkId, consignmentConfirmedAt: null },
+        data: { consignmentConfirmedAt: new Date(), consignmentConfirmedBy: adminId },
+      });
     });
     return this.prisma.merchantPancakeLink.findUniqueOrThrow({
       where: { id: linkId },
@@ -1589,18 +1594,6 @@ const CONSIGNMENT_SOLD_SQL = Prisma.sql`o."fulfiller" = 'TUBU' AND o."status" = 
 
 /** Dòng hàng `oi` chưa có SALE. */
 const CONSIGNMENT_NO_SALE_SQL = Prisma.sql`NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderItemId" = oi."id" AND s."kind" = 'SALE')`;
-
-/**
- * Biến thể của dòng `oi` liên kết với gian hàng `store` lúc đặt đơn `o` ([linkedAt, unlinkedAt)). `confirmedOnly`: liên kết
- * takeover chỉ tính đơn đặt từ lúc admin xác nhận hàng ký gửi.
- */
-function consignmentLinkedSql(store: Prisma.Sql, confirmedOnly: boolean): Prisma.Sql {
-  return Prisma.sql`EXISTS (
-      SELECT 1 FROM "merchant_pancake_links" l
-       WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
-         AND o."createdAt" >= l."linkedAt" AND (l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")
-         ${confirmedOnly ? Prisma.sql`AND (NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))` : Prisma.empty})`;
-}
 
 /**
  * Liên kết của dòng `oi` lúc đặt đơn `o` vẫn đang chờ admin xác nhận hàng ký gửi (cùng điều kiện CONSIGNMENT_PENDING_LINK_WHERE

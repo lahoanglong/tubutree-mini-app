@@ -45,6 +45,8 @@ function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()
   return {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     variation: { findMany: jest.fn().mockResolvedValue(variations) },
+    // Dòng ký gửi của chính người giới thiệu (consignmentLinkedSql): không có dòng nào trong các ca unit.
+    $queryRaw: jest.fn().mockResolvedValue([]),
     commission: { createMany: createSpy },
   } as unknown as PrismaService;
 }
@@ -320,6 +322,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
           .mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [], code: 'TUBU1' }),
       },
       commission: { createMany: commissionCreate },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
@@ -840,6 +843,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       },
       variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1' }]) },
       $executeRaw: txExecuteRaw,
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: 'AFFILIATE' }) },

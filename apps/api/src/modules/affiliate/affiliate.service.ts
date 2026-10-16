@@ -49,6 +49,7 @@ import {
 import { CRON_TZ } from '../../common/cron-tz';
 import { VN_OFFSET_MS } from '../../common/vn-time';
 import { paidLineTotals } from './commission-base';
+import { consignmentLinkedSql } from '../merchant/consignment-link-sql';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from '../checkout/total-changed';
 
@@ -797,6 +798,21 @@ export class AffiliateService {
   }
 
   /**
+   * Biến thể của đơn mà người giới thiệu là chủ gian hàng có liên kết ký gửi còn hiệu lực với đúng điều kiện bảng kê trả tiền
+   * (consignmentLinkedSql confirmedOnly, tại thời điểm đặt đơn): các dòng này đại lý đã hưởng qua bảng kê nên không hưởng thêm CTV.
+   */
+  private async ownConsignmentVariationIds(orderId: string, referrerUserId: string, db: Prisma.TransactionClient): Promise<Set<string>> {
+    const rows = await db.$queryRaw<{ variationId: string }[]>`
+      SELECT DISTINCT oi."variationId"
+        FROM "order_items" oi
+        JOIN "orders" o ON o."id" = oi."orderId"
+        JOIN "storefronts" s ON s."ownerUserId" = ${referrerUserId}
+       WHERE oi."orderId" = ${orderId}
+         AND ${consignmentLinkedSql(Prisma.sql`s."id"`, true)}`;
+    return new Set(rows.map((r) => r.variationId));
+  }
+
+  /**
    * Tạo commission PENDING cho đơn có người giới thiệu. Caller tạo đơn truyền `tx` của chính
    * transaction tạo đơn: hoa hồng commit/rollback cùng đơn, lỗi nổi lên thay vì đơn tồn tại mà CTV
    * mất hoa hồng vĩnh viễn (C-002). Gọi lại / gọi song song an toàn: unique (orderId,
@@ -815,22 +831,19 @@ export class AffiliateService {
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({
       where: { id: { in: variationIds } },
-      select: {
-        id: true,
-        affiliateRate: true,
-        product: { select: { affiliateBlocked: true, storefront: { select: { ownerUserId: true } } } },
-      },
+      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
     });
+    const ownConsignment = await this.ownConsignmentVariationIds(order.id, order.referrerUserId, db);
     // Sản phẩm bị chặn affiliate (product.affiliateBlocked) → rate=0, KHÔNG tính hoa hồng cho
     // dòng hàng đó, dù link/CTV nào đã trót chia sẻ trước khi bị chặn (mirror storefront/brand
     // đã lọc affiliateBlocked ở bước hiển thị — chỗ này chặn ở chính điểm phát sinh tiền thật).
-    // Hàng ký gửi "Tubu giao hộ" của chính người giới thiệu (đại lý mua qua slug riêng) cũng rate=0 theo từng dòng: đơn con Tubu
-    // có thể trộn hàng Tubu và hàng của đại lý, nên không loại được ở mức đơn (checkout.referrerFor chỉ loại đơn tự giao).
-    // CTV khác hay đại lý khác giới thiệu cùng hàng đó vẫn hưởng như thường.
+    // Hàng ký gửi "Tubu giao hộ" của chính người giới thiệu (đại lý mua qua kênh riêng) cũng rate=0 theo từng dòng, nhưng chỉ khi
+    // bảng kê đối tác SẼ trả tiền cho đại lý dòng đó (xem ownConsignmentVariationIds): đơn con Tubu có thể trộn hàng Tubu và
+    // hàng của đại lý nên không loại được ở mức đơn. Takeover chưa xác nhận, liên kết đã gỡ, hàng không liên kết: hưởng như thường.
     const rateMap = new Map(
       variations.map((v) => [
         v.id,
-        v.product?.affiliateBlocked || (v.product?.storefront?.ownerUserId ?? null) === order.referrerUserId
+        v.product?.affiliateBlocked || ownConsignment.has(v.id)
           ? 0
           : v.affiliateRate
             ? Number(v.affiliateRate)
