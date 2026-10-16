@@ -22,6 +22,8 @@ export class VouchersService {
   private static readonly WELCOME_MAX_PAGES = 25;
   /** Kích thước lô keyset cho birthday/winback (quét đến hết, không có trần số trang). */
   private static readonly BATCH_PAGE = 500;
+  /** Số grant() chạy cùng lúc trong một lô birthday (mỗi grant giữ 1 kết nối Prisma ngắn hạn, pool mặc định nhỏ). */
+  private static readonly BIRTHDAY_CONCURRENCY = 10;
   /** Cửa sổ NS-1 (analytics-aggregation NS1_WINDOW_DAYS): đơn thứ 2 tính trong 30 ngày kể từ đơn đầu. */
   private static readonly NS1_WINDOW_DAYS = 30;
   private static readonly SECOND_ORDER_PAGE = 200;
@@ -174,9 +176,17 @@ export class VouchersService {
             AND u.id > ${cursor}
           ORDER BY u.id
           LIMIT ${VouchersService.BATCH_PAGE}`;
-        for (const u of users) {
-          const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
-          if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
+        for (let i = 0; i < users.length; i += VouchersService.BIRTHDAY_CONCURRENCY) {
+          const results = await Promise.allSettled(
+            users.slice(i, i + VouchersService.BIRTHDAY_CONCURRENCY).map((u) => {
+              const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
+              return this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' });
+            }),
+          );
+          // Đợi cả nhóm xong rồi mới ném lỗi đầu tiên: không để grant còn chạy dở sau khi catch ngoài đã ghi log.
+          const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+          if (failed) throw failed.reason;
+          granted += results.filter((r) => r.status === 'fulfilled' && r.value).length;
         }
         if (users.length < VouchersService.BATCH_PAGE) break;
         cursor = users[users.length - 1]!.id;

@@ -38,15 +38,24 @@ export class AttendanceJob {
       where: { checkoutAt: null },
       include: { shift: { select: { approvedEnd: true, endAt: true } } },
     });
-    let closed = 0;
+    // Phiên cùng ca có cùng giờ chốt → gom một updateMany. `checkoutAt: null` giữ nguyên checkout nhân viên vừa tự chấm
+    // giữa lúc đọc và ghi (update theo id trước đây ghi đè nó); `closed` chỉ đếm phiên thật sự được đóng.
+    const groups = new Map<string, { at: Date; reason: 'SHIFT_END'; ids: string[] }>();
     for (const s of open) {
       const decision = computeAutoClose(s, now);
       if (!decision) continue;
-      await this.prisma.attendanceSession.update({
-        where: { id: s.id },
-        data: { checkoutAt: decision.at, closeReason: decision.reason },
+      const key = `${decision.at.getTime()}|${decision.reason}`;
+      const g = groups.get(key) ?? { ...decision, ids: [] };
+      g.ids.push(s.id);
+      groups.set(key, g);
+    }
+    let closed = 0;
+    for (const g of groups.values()) {
+      const r = await this.prisma.attendanceSession.updateMany({
+        where: { id: { in: g.ids }, checkoutAt: null },
+        data: { checkoutAt: g.at, closeReason: g.reason },
       });
-      closed++;
+      closed += r.count;
     }
     if (closed > 0) this.logger.warn(`Auto-checkout ${closed} phiên quá giờ hết ca.`);
     return { closed };
