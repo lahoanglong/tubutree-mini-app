@@ -313,11 +313,27 @@ export class OrderReversalService {
       if (backordered > 0) {
         await tx.orderItem.update({ where: { id: item.id }, data: { backorderedQty: 0 } });
       }
-      const flashQty = item.quantity - (prior.approvedQty.get(item.id) ?? 0);
-      if (item.flashSaleItemId && flashQty > 0) {
-        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, flashQty);
-      }
     }
+    await this.restoreFlashInIdOrder(
+      tx,
+      order.userId,
+      order.items.map((item) => ({ flashSaleItemId: item.flashSaleItemId, quantity: item.quantity - (prior.approvedQty.get(item.id) ?? 0) })),
+    );
+  }
+
+  /**
+   * Hoàn suất giờ vàng theo flashSaleItemId, cùng thứ tự đặt đơn khoá flash_sale_items (FlashSaleService.consumeQuotas): hoàn
+   * theo thứ tự dòng đơn thì đơn [B, A] với id(A) < id(B) giữ B rồi chờ A, còn lần đặt có A, B giữ A rồi chờ B ⇒ 40P01
+   * (r13-reversal-flash-order.race-spec). Mỗi dòng vẫn hoàn riêng đúng số của nó như trước.
+   */
+  private async restoreFlashInIdOrder(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    lines: { flashSaleItemId: string | null; quantity: number }[],
+  ): Promise<void> {
+    const flash = lines.flatMap((l) => (l.flashSaleItemId && l.quantity > 0 ? [{ id: l.flashSaleItemId, quantity: l.quantity }] : []));
+    flash.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+    for (const l of flash) await this.flashSale.restore(tx, l.id, userId, l.quantity);
   }
 
   /**
@@ -346,12 +362,11 @@ export class OrderReversalService {
 
     // Suất flash trước mọi ghi lên dòng users, cùng thứ tự với đường tạo đơn (xem reverseFinancials).
     const byId = new Map(order.items.map((i) => [i.id, i]));
-    for (const line of shares.lines) {
-      const item = byId.get(line.orderItemId);
-      if (item?.flashSaleItemId && line.quantity > 0) {
-        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, line.quantity);
-      }
-    }
+    await this.restoreFlashInIdOrder(
+      tx,
+      order.userId,
+      shares.lines.map((line) => ({ flashSaleItemId: byId.get(line.orderItemId)?.flashSaleItemId ?? null, quantity: line.quantity })),
+    );
 
     const amount = shares.goods + shares.shipping;
     if (amount > 0 && isMoneyBackable(order)) {
