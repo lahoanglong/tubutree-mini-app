@@ -3,7 +3,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -47,6 +47,9 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code.startsWith('COMMISSION')) return { Icon: Coins, title: 'Hoa hồng CTV' };
   if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
+  if (code === 'REFERRAL_REWARD_PAID') return { Icon: UserPlus, title: 'Thưởng giới thiệu bạn bè' };
+  if (code === 'REFERRAL_MILESTONE_PAID') return { Icon: UserPlus, title: 'Thưởng mốc giới thiệu' };
+  if (code === 'REFERRAL_REWARD_REVOKED') return { Icon: UserPlus, title: 'Thu lại thưởng giới thiệu' };
   if (code.startsWith('POINTS') || code === 'XU_CONVERTED') return { Icon: Leaf, title: 'Điểm Xanh' };
   if (code.startsWith('STOREFRONT')) return { Icon: Store, title: 'Gian hàng của bạn' };
   // REORDER_REMINDER (§6.14.7, LifecycleService.sendReorderReminders) — nhắc mua lại khi 1 SP đã
@@ -118,7 +121,7 @@ export function notificationAction(templateCode: string, data: Record<string, st
   if (templateCode.endsWith('_VOUCHER') || templateCode.startsWith('VOUCHER')) {
     return { kind: 'link', label: 'Xem mã giảm giá', to: '/loyalty' };
   }
-  if (templateCode.startsWith('POINTS') || templateCode === 'XU_CONVERTED') {
+  if (templateCode.startsWith('POINTS') || templateCode === 'XU_CONVERTED' || templateCode.startsWith('REFERRAL_')) {
     return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
   }
   if (templateCode.startsWith('CASHBACK')) return { kind: 'link', label: 'Xem Ví Tubu', to: '/wallet' };

@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, Optional, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -11,6 +11,8 @@ import { RbacService } from '../staff/rbac/rbac.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { isAnonymized, renameMergedMilestones, resolveMergedUserId, revokeReferralRewardForReferee } from '../wallet/referral-reward';
 import { roleClaims } from './session-state.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -72,6 +74,8 @@ export class AuthService {
     private readonly config: ConfigService<Env, true>,
     private readonly zalo: ZaloService,
     private readonly rbac: RbacService,
+    // Optional: test dựng tay 5 tham số vẫn chạy, chỉ không báo người mời bị thu thưởng lúc gộp.
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   /**
@@ -338,7 +342,9 @@ export class AuthService {
     phone: string | null,
   ): Promise<User> {
     const targetPhone = phone && !target.phone ? await this.phoneIfFree(phone, target.id) : undefined;
-    return this.prisma.$transaction(async (tx) => {
+    let referralNotices: ReferralNotice[] = [];
+    const result = await this.prisma.$transaction(async (tx) => {
+      referralNotices = [];
       // Mọi lần gộp chạy nối tiếp nhau. Tập dòng users của hai lần gộp có thể chồng nhau (khách G2 mời khách G1, cả hai gộp
       // vào cùng T) và thứ tự người-được-mời-trước của mỗi lần chỉ nhất quán trong tập của chính nó ⇒ hai lần gộp xen kẽ có
       // thể khoá ngược chiều (40P01). Khoá chung chấp nhận được: gộp chỉ xảy ra một lần mỗi khách lúc đăng nhập Zalo, tx
@@ -617,7 +623,10 @@ export class AuthService {
       const cut = [...cyclic, ...(selfReferred ? [gid] : [])];
       if (cut.length > 0) {
         await tx.user.updateMany({ where: { id: { in: cut } }, data: { referredById: null } });
-        for (const refereeId of cut) await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);
+        for (const refereeId of cut) {
+          const revoked = await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);
+          if (revoked) referralNotices.push(...revoked.notices);
+        }
       }
 
       return cut.length > 0 ? tx.user.findUniqueOrThrow({ where: { id: tid } }) : merged;
@@ -628,6 +637,8 @@ export class AuthService {
       }
       throw err;
     });
+    await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, referralNotices);
+    return result;
   }
 
   /**

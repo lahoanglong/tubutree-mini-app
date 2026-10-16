@@ -43,6 +43,7 @@ import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '
 import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
 import { receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
+import { sendReferralNotices } from '../wallet/referral-notify';
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
 export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
@@ -336,6 +337,10 @@ export class OrderStatusService {
       }
       return current;
     }
+    await sendReferralNotices(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      (reversed as ReversalResult | null)?.referralNotices ?? [],
+    );
 
     // Side-effect điểm/hoa hồng — idempotent qua unique index riêng, an toàn để NGOÀI tx. Crash/lỗi giữa chừng sau commit
     // (retry thấy status đã bằng targetStatus) không còn mất việc: DELIVERED chỉ có mốc deliveredEffectsAt khi mọi việc sau
