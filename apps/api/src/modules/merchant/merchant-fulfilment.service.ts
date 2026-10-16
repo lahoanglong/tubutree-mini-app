@@ -990,6 +990,8 @@ export class MerchantFulfilmentService {
    * Lập phiếu đối soát gồm mọi dòng đủ điều kiện (đơn tự giao và hàng Tubu giao hộ). Bảng kê tính lại trong transaction sau khi
    * khoá gian hàng (huỷ phiếu cùng lúc phải chờ), nên phiếu không thể chứa dòng đảo của một SALE vừa bị huỷ. `expectedTotal` là
    * tổng admin vừa xem: lệch thì từ chối để admin xem lại. Unique (orderId, kind, refKey) vẫn là chốt chặn cuối.
+   * Gian hàng đã tắt cờ đối tác vẫn lập được khi bảng kê còn dòng mở (vd. REVERSAL do khách trả hàng sau khi tắt cờ): "còn dư
+   * nợ" = có ít nhất một dòng trong bảng kê (chưa nằm trên phiếu nào), tổng có thể âm. Không còn dòng nào thì 404 như cũ.
    */
   async createPayout(adminId: string, storefrontId: string, note?: string, expectedTotal?: number) {
     const store = await this.prisma.storefront.findUnique({
@@ -998,7 +1000,8 @@ export class MerchantFulfilmentService {
         id: true, type: true, isPartner: true, title: true, ownerUserId: true, bankName: true, bankAccountNo: true, bankAccountName: true,
       },
     });
-    if (!store || !isPartnerStore(store)) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+    if (!store) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+    const partner = isPartnerStore(store);
     const cfg = await this.settlementConfig();
     let payout;
     try {
@@ -1006,7 +1009,10 @@ export class MerchantFulfilmentService {
         async (tx) => {
           await this.lockStorePayouts(tx, store.id);
           const { lines, total } = await this.statementFor(store.id, new Date(), tx, cfg);
-          if (lines.length === 0) throw new BadRequestException('Không có đơn nào đủ điều kiện đối soát.');
+          if (lines.length === 0) {
+            if (!partner) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+            throw new BadRequestException('Không có đơn nào đủ điều kiện đối soát.');
+          }
           if (expectedTotal !== undefined && expectedTotal !== total) {
             throw new ConflictException(
               `Số tiền chờ đối soát vừa thay đổi (${expectedTotal.toLocaleString('vi-VN')}đ → ${total.toLocaleString('vi-VN')}đ). Tải lại bảng kê rồi lập phiếu.`,
@@ -1224,7 +1230,11 @@ export class MerchantFulfilmentService {
     ]);
     const stores = await this.prisma.storefront.findMany({
       where: {
-        AND: [PARTNER_STORE_WHERE, { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] }],
+        AND: [
+          // Gian hàng đã tắt cờ vẫn hiện khi có thể còn dòng mở (lọc chính xác bằng bảng kê bên dưới) để admin lập phiếu thu.
+          { OR: [PARTNER_STORE_WHERE, { id: { in: [...pendingStores] } }] },
+          { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] },
+        ],
       },
       select: {
         id: true,
@@ -1256,6 +1266,7 @@ export class MerchantFulfilmentService {
     for (const sf of stores) {
       const statement = pendingStores.has(sf.id) ? await this.statementFor(sf.id, now) : null;
       const lines = statement?.lines ?? [];
+      if (!isPartnerStore(sf) && lines.length === 0) continue;
       out.push({
         storefrontId: sf.id,
         title: sf.title,
