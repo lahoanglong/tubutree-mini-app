@@ -977,13 +977,32 @@ describe('R4-ADMIN-7: việc admin phải làm với đối tác', () => {
   });
 
   it('countStoresToSettle chỉ đếm gian hàng thật sự có dòng đủ hạn trong bảng kê', async () => {
-    const { svc } = build();
+    const { svc, prisma } = build();
     const internals = svc as unknown as { storesWithPending: jest.Mock; statementFor: jest.Mock; settlementConfig: jest.Mock };
     internals.storesWithPending = jest.fn().mockResolvedValue(new Set(['sf-a', 'sf-b', 'sf-c']));
+    (prisma.storefront as unknown as { findMany: jest.Mock }).findMany = jest.fn().mockResolvedValue(
+      ['sf-a', 'sf-b', 'sf-c'].map((id) => ({ id, type: 'MERCHANT', isPartner: true })),
+    );
     internals.settlementConfig = jest.fn().mockResolvedValue({ holdDays: 7, defaultCommissionPct: 0.15 });
     internals.statementFor = jest.fn(async (id: string) => ({ lines: id === 'sf-b' ? [] : [{ netAmount: 1 }] }));
 
     await expect(svc.countStoresToSettle(NOW)).resolves.toBe(2);
     expect(internals.statementFor).toHaveBeenCalledWith('sf-a', NOW, expect.anything(), { holdDays: 7, defaultCommissionPct: 0.15 });
+  });
+
+  it('countStoresToSettle: gian hàng đã tắt cờ chỉ tính khi có dòng REVERSAL (SALE không đếm)', async () => {
+    const { svc, prisma } = build();
+    const internals = svc as unknown as { storesWithPending: jest.Mock; statementFor: jest.Mock; settlementConfig: jest.Mock };
+    internals.storesWithPending = jest.fn().mockResolvedValue(new Set(['off-sale', 'off-rev']));
+    internals.settlementConfig = jest.fn().mockResolvedValue({ holdDays: 7, defaultCommissionPct: 0.15 });
+    (prisma.storefront as unknown as { findMany: jest.Mock }).findMany = jest.fn().mockResolvedValue([
+      { id: 'off-sale', type: 'CTV', isPartner: false },
+      { id: 'off-rev', type: 'CTV', isPartner: false },
+    ]);
+    internals.statementFor = jest.fn(async (id: string) => ({
+      lines: [id === 'off-sale' ? { kind: 'SALE', netAmount: 5 } : { kind: 'REVERSAL', netAmount: -5 }],
+    }));
+
+    await expect(svc.countStoresToSettle(NOW)).resolves.toBe(1);
   });
 });

@@ -410,6 +410,12 @@ export class MerchantFulfilmentService {
     return store;
   }
 
+  /** Gian hàng đã tắt cờ chỉ còn đối soát các dòng REVERSAL (khoản khách trả hàng phải thu lại); SALE và khoản chờ để mở. */
+  private openLinesOf<T extends { kind: string; netAmount: number }>(store: { type: string; isPartner: boolean }, lines: T[]) {
+    const open = isPartnerStore(store) ? lines : lines.filter((l) => l.kind === 'REVERSAL');
+    return { lines: open, total: open.reduce((s, l) => s + l.netAmount, 0) };
+  }
+
   // ── Đối tác: đơn cần giao ──
 
   async listOrders(userId: string, status: string | undefined, page = 1, limit = 20, now = new Date()) {
@@ -933,8 +939,14 @@ export class MerchantFulfilmentService {
   }
 
   async myStatement(userId: string) {
-    const store = await this.merchantStore(userId);
-    const [statement, live, cancelled, dueDays, tubuAccount, consignmentExcluded] = await Promise.all([
+    const owned = await this.prisma.storefront.findFirst({
+      where: { ownerUserId: userId },
+      select: { id: true, type: true, isPartner: true, title: true, ownerUserId: true },
+    });
+    // Chủ gian hàng đã tắt cờ vẫn xem được phiếu đã lập cho mình (thông báo phiếu trỏ tới đây); chỉ đọc, mọi thao tác khác vẫn từ chối.
+    const hasPayout = owned && !isPartnerStore(owned) ? (await this.prisma.merchantPayout.count({ where: { storefrontId: owned.id } })) > 0 : false;
+    const store = hasPayout && owned ? owned : await this.merchantStore(userId);
+    const [fullStatement, live, cancelled, dueDays, tubuAccount, consignmentExcluded] = await Promise.all([
       this.statementFor(store.id),
       this.prisma.merchantPayout.findMany({
         where: { storefrontId: store.id, status: { not: 'CANCELLED' } },
@@ -956,6 +968,7 @@ export class MerchantFulfilmentService {
       this.consignmentExcluded(store.id),
     ]);
     const payouts = [...live, ...cancelled].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const statement = isPartnerStore(store) ? fullStatement : { ...fullStatement, ...this.openLinesOf(store, fullStatement.lines), upcoming: [] };
     return {
       ...statement,
       // Id admin lập/chuyển/huỷ phiếu là dữ liệu nội bộ, không trả cho gian hàng.
@@ -1008,7 +1021,7 @@ export class MerchantFulfilmentService {
       payout = await this.prisma.$transaction(
         async (tx) => {
           await this.lockStorePayouts(tx, store.id);
-          const { lines, total } = await this.statementFor(store.id, new Date(), tx, cfg);
+          const { lines, total } = this.openLinesOf(store, (await this.statementFor(store.id, new Date(), tx, cfg)).lines);
           if (lines.length === 0) {
             if (!partner) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
             throw new BadRequestException('Không có đơn nào đủ điều kiện đối soát.');
@@ -1193,6 +1206,7 @@ export class MerchantFulfilmentService {
          OR EXISTS (
            SELECT 1 FROM "return_requests" rr
             WHERE rr."orderId" = o."id" AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
+              AND EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE' AND s."orderItemId" IS NULL)
               AND NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" r WHERE r."orderId" = o."id" AND r."kind" = 'REVERSAL' AND r."refKey" = ${RETURN_REF_PREFIX} || rr."id")))
       UNION
       SELECT lk."storefrontId" FROM "merchant_pancake_links" lk
@@ -1266,7 +1280,7 @@ export class MerchantFulfilmentService {
     const out = [];
     for (const sf of stores) {
       const statement = pendingStores.has(sf.id) ? await this.statementFor(sf.id, now) : null;
-      const lines = statement?.lines ?? [];
+      const { lines, total } = this.openLinesOf(sf, statement?.lines ?? []);
       if (!isPartnerStore(sf) && lines.length === 0) continue;
       out.push({
         storefrontId: sf.id,
@@ -1277,7 +1291,7 @@ export class MerchantFulfilmentService {
         activeOrders: activeByStore.get(sf.id) ?? 0,
         overdueOrders: overdueByStore.get(sf.id) ?? 0,
         settleableLines: lines.length,
-        settleableAmount: statement?.total ?? 0,
+        settleableAmount: total,
         consignmentLines: lines.filter((l) => l.orderItemId).length,
         commissionPct: sf.commissionPct == null ? null : Number(sf.commissionPct),
         consignmentFeePct: Number(sf.consignmentFeePct),
@@ -1540,9 +1554,10 @@ export class MerchantFulfilmentService {
    */
   async countStoresToSettle(now = new Date()): Promise<number> {
     const [candidates, cfg] = await Promise.all([this.storesWithPending(), this.settlementConfig()]);
+    const stores = await this.prisma.storefront.findMany({ where: { id: { in: [...candidates] } }, select: { id: true, type: true, isPartner: true } });
     let n = 0;
-    for (const storefrontId of candidates) {
-      const { lines } = await this.statementFor(storefrontId, now, this.prisma, cfg);
+    for (const sf of stores) {
+      const { lines } = this.openLinesOf(sf, (await this.statementFor(sf.id, now, this.prisma, cfg)).lines);
       if (lines.length > 0) n += 1;
     }
     return n;
