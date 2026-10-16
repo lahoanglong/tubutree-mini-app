@@ -1760,7 +1760,7 @@ export const rejectRefill = (id: string, reason?: string) =>
 // ── Chi tiết người dùng (ADMINOPS-11) + nhóm việc nhân viên (ADMINOPS-10) ──
 export interface AdminUserEvent {
   id: string;
-  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK';
+  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER';
   fromValue: string | null;
   toValue: string | null;
   reason: string | null;
@@ -1794,6 +1794,7 @@ export interface AdminUserDetail {
   points: { id: string; delta: number; reason: string; refType: string | null; refId: string | null; lot: string | null; expiresAt: string | null; createdAt: string }[];
   roleHistory: AdminUserEvent[];
   blockHistory: AdminUserEvent[];
+  partnerHistory?: AdminUserEvent[];
   grants: { id: string; role: string; grantedBy: string; grantedByName: string | null; note: string | null; revokedAt: string | null; createdAt: string }[];
 }
 export const getUserDetail = (id: string) => apiFetch<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}/detail`);

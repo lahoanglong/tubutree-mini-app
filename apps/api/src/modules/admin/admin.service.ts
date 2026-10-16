@@ -597,7 +597,7 @@ export class AdminService {
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
     const take = AdminService.DETAIL_TAKE;
-    const [orders, orderTotal, wallet, points, events, grants] = await Promise.all([
+    const [orders, orderTotal, wallet, points, events, partnerEvents, grants] = await Promise.all([
       this.prisma.order.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -617,9 +617,14 @@ export class AdminService {
         take,
         select: { id: true, delta: true, reason: true, refType: true, refId: true, lot: true, expiresAt: true, createdAt: true },
       }),
-      // Chỉ các loại màn này hiện (STOREFRONT_PARTNER thuộc gian hàng, không vào lịch sử vai trò/khoá) để chúng không chiếm 100 dòng.
+      // STOREFRONT_PARTNER lấy riêng (partnerHistory) để không chiếm 100 dòng của lịch sử vai trò/khoá.
       this.prisma.userAdminEvent.findMany({
         where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      this.prisma.userAdminEvent.findMany({
+        where: { userId, kind: 'STOREFRONT_PARTNER' },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
@@ -631,7 +636,7 @@ export class AdminService {
           })
         : Promise.resolve([]),
     ]);
-    const actorIds = [...new Set([...events.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
+    const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, phone: true } })
       : [];
@@ -644,6 +649,7 @@ export class AdminService {
       points,
       roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS').map(withActor),
       blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK').map(withActor),
+      partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
     };
   }

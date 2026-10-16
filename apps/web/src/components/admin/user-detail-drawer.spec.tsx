@@ -45,10 +45,10 @@ const DETAIL: AdminUserDetail = {
   grants: [],
 };
 
-async function open() {
+async function open(detail: AdminUserDetail = DETAIL) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response(JSON.stringify(DETAIL), { status: 200, headers: { 'Content-Type': 'application/json' } })),
+    vi.fn(async () => new Response(JSON.stringify(detail), { status: 200, headers: { 'Content-Type': 'application/json' } })),
   );
   const r = render(<UserDetailDrawer userId="u1" isAdmin onClose={() => undefined} />);
   mounted.push(r);
@@ -97,5 +97,27 @@ describe('UserDetailDrawer — sổ Điểm Xanh và sổ ví đọc được b�
         expect(li.children[1]!.className).toContain('shrink-0');
       }
     }
+  });
+});
+
+describe('UserDetailDrawer — lịch sử gian hàng đối tác', () => {
+  const ev = (id: string, from: string, to: string, createdAt: string) => ({
+    id, kind: 'STOREFRONT_PARTNER' as const, fromValue: from, toValue: to, reason: 'sf-9', actorId: 'a1', actorName: 'Quản trị An', createdAt,
+  });
+
+  it('hiện "Gian hàng đối tác: Bật → Tắt" kèm người làm, giờ và gian hàng; không lộ true/false', async () => {
+    const body = await open({ ...DETAIL, partnerHistory: [ev('e2', 'true', 'false', '2026-10-16T03:00:00.000Z'), ev('e1', 'false', 'true', '2026-10-15T03:00:00.000Z')] });
+    const sec = section(body, 'Gian hàng đối tác');
+    const text = sec.textContent ?? '';
+    expect(text).toContain('Gian hàng đối tác: Tắt → Bật');
+    expect(text).toContain('Gian hàng đối tác: Bật → Tắt');
+    expect(text).toContain('Quản trị An');
+    expect(text).toContain('gian hàng sf-9');
+    expect(text).not.toMatch(/true|false/);
+  });
+
+  it('không có dòng nào thì không hiện mục', async () => {
+    const body = await open();
+    expect(body.querySelector('section[aria-label^="Gian hàng đối tác"]')).toBeNull();
   });
 });

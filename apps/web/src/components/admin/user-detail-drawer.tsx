@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Quản trị',
 };
 const roleLabel = (r: string | null) => (r ? (ROLE_LABELS[r] ?? r) : '—');
+const onOff = (v: string | null) => (v === 'true' ? 'Bật' : v === 'false' ? 'Tắt' : '—');
 const permLabel = (v: string | null) => (v ? v.split(',').join(' + ') : 'không có');
 
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
@@ -46,15 +47,17 @@ function EventLine({ e }: { e: AdminUserEvent }) {
       ? `Vai trò ${roleLabel(e.fromValue)} → ${roleLabel(e.toValue)}`
       : e.kind === 'STAFF_PERMISSIONS'
         ? `Nhóm việc ${permLabel(e.fromValue)} → ${permLabel(e.toValue)}`
-        : e.kind === 'BLOCK'
-          ? 'Khoá tài khoản'
-          : 'Mở khoá';
+        : e.kind === 'STOREFRONT_PARTNER'
+          ? `Gian hàng đối tác: ${onOff(e.fromValue)} → ${onOff(e.toValue)}`
+          : e.kind === 'BLOCK'
+            ? 'Khoá tài khoản'
+            : 'Mở khoá';
   return (
     <li className="py-1.5">
       <div className="font-medium text-stone-900">{what}</div>
       <div className="text-xs text-stone-500">
         {formatDateTime(e.createdAt)} · {e.actorName ?? (e.actorId ? e.actorId : 'hệ thống')}
-        {e.reason && ` · ${e.reason}`}
+        {e.reason && ` · ${e.kind === 'STOREFRONT_PARTNER' ? `gian hàng ${e.reason}` : e.reason}`}
       </div>
     </li>
   );
@@ -214,6 +217,16 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
           </ul>
         )}
       </Section>
+
+      {(d.partnerHistory?.length ?? 0) > 0 && (
+        <Section title="Gian hàng đối tác" count={d.partnerHistory!.length}>
+          <ul className="divide-y divide-stone-100">
+            {d.partnerHistory!.map((e) => (
+              <EventLine key={e.id} e={e} />
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Section title="Lịch sử khoá">
         {d.blockHistory.length === 0 ? (
