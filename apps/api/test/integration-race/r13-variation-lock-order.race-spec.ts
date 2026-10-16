@@ -151,10 +151,15 @@ describe('Giữ/trả kho nhiều dòng theo thứ tự id biến thể (real Po
 
   /** Khách có giỏ đúng thứ tự dòng `ids` (kiểm lại thứ tự dòng mà checkout sẽ đọc: không xanh giả vì giỏ tự sắp theo id). */
   async function cartWith(ids: string[]) {
-    const c = await customer();
-    for (const variationId of ids) await cart.addItem(c.u.id, { variationId, quantity: 1 });
-    expect((await cart.getCart(c.u.id)).items.map((l) => l.variationId)).toEqual(ids);
-    return c;
+    // Dòng giỏ không có cột thứ tự: đọc theo thứ tự vật lý, chỗ trống do dòng đã xoá ở vòng trước có thể đảo thứ tự chèn.
+    for (let attempt = 0; ; attempt++) {
+      const c = await customer();
+      for (const variationId of ids) await cart.addItem(c.u.id, { variationId, quantity: 1 });
+      const read = (await cart.getCart(c.u.id)).items.map((l) => l.variationId);
+      if (attempt < 5 && read.join() !== ids.join()) continue;
+      expect(read).toEqual(ids);
+      return c;
+    }
   }
 
   async function holdVariations(ids: string[]) {
