@@ -379,7 +379,9 @@ export default function CheckoutPage() {
     : (cart.data?.items ?? []);
   const previewSubtotal = shownItems.reduce((s, it) => s + it.total, 0);
   // Chưa có báo giá: tiền hàng trừ combo (chỉ khi mua cả giỏ — chọn một phần thì máy chủ tính lại) rồi trừ mã, như checkout trừ.
-  const previewCombo = itemIds ? 0 : (cart.data?.comboDiscount ?? 0);
+  // Lựa chọn nhớ lại có thể bằng đúng mọi dòng của giỏ (vd còn lại sau khi dọn món đã xoá): vẫn là cả giỏ.
+  const wholeCart = !itemIds || itemIds.length === (cart.data?.items.length ?? 0);
+  const previewCombo = wholeCart ? (cart.data?.comboDiscount ?? 0) : 0;
   const previewDiscount = cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const maxRecycleKg = recyclingMaxKg(shownItems);
 
@@ -992,7 +994,7 @@ export default function CheckoutPage() {
         subtotal={quote.data?.subtotal ?? cart.data?.subtotal ?? 0}
         shippingFee={quote.data?.shippingFee}
         productIds={cartProductIds(checkoutItems)}
-        previewParams={addressId && checkoutItems.length > 0 ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
+        previewParams={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
         previewKey={cartPreviewKey(checkoutItems)}
         onCouponApplied={() => {
           void cart.refetch();

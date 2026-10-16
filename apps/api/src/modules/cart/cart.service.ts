@@ -335,6 +335,12 @@ export class CartService {
     try {
       await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLines);
     } catch (err) {
+      // Combo chỉ áp khi giỏ đủ bộ sản phẩm của nó: mua một phần giỏ ("Mua ngay", bỏ chọn món) phần hàng tính mã có thể CAO hơn cả giỏ.
+      // Mã chỉ hụt đơn tối thiểu vì combo (trước combo vẫn đạt) thì giữ lại, giỏ báo giảm 0đ kèm lời báo như mã đang giữ.
+      if (err instanceof CouponMinOrderError && combo.total > 0 && (await this.meetsMinOrderBeforeCombo(normalized, userId, cart.items))) {
+        await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
+        return this.getCart(userId, storefrontSlug);
+      }
       if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart, combo.total > 0))) {
         if (combo.total > 0) {
           const hasFlash = cart.items.some((l) => l.isFlash);
@@ -350,6 +356,22 @@ export class CartService {
     }
     await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
     return this.getCart(userId, storefrontSlug);
+  }
+
+  /** Phần hàng thường (loại giờ vàng) trước khi trừ combo đã đạt điều kiện của mã: chỉ combo làm mã hụt. */
+  private async meetsMinOrderBeforeCombo(
+    code: string,
+    userId: string,
+    items: { productId: string; total: number; isFlash: boolean }[],
+  ): Promise<boolean> {
+    const nonFlash = items.filter((l) => !l.isFlash).map((l) => ({ productId: l.productId, total: l.total }));
+    try {
+      await this.coupons.validateAndCompute(code, userId, nonFlash.reduce((s, l) => s + l.total, 0), nonFlash);
+      return true;
+    } catch (err) {
+      if (err instanceof BadRequestException) return false;
+      throw err;
+    }
   }
 
   /** Hàng giờ vàng hoặc phần giảm combo mới là lý do chưa đạt đơn tối thiểu: tính cả hai thì mã hợp lệ. */

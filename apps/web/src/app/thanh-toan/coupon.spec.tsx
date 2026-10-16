@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -25,6 +26,10 @@ const state = vi.hoisted(() => ({
   gate: null as Promise<void> | null,
   /** Server giữ mã nhưng chưa áp cho đơn (MONEY-3). */
   couponNotice: null as string | null,
+  /** Chưa có địa chỉ nào để chọn. */
+  noAddress: false,
+  /** Tham số trang gửi cho xem trước mã. */
+  previewCalls: [] as Record<string, unknown>[],
 }));
 const SUBTOTAL = 300000;
 const discountOf = () => (state.couponCode && !state.couponNotice ? 90000 : 0);
@@ -59,7 +64,11 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     state.couponCode = null;
     return cartNow();
   },
-  getAddresses: async () => [
+  getCouponPreviews: async (params: Record<string, unknown>) => {
+    state.previewCalls.push(params);
+    return [];
+  },
+  getAddresses: async () => state.noAddress ? [] : [
     { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: 'p', districtCode: '', wardCode: 'w', isDefault: true },
   ],
   checkoutQuote: async () => {
@@ -113,10 +122,30 @@ beforeEach(() => {
   state.coupons = [COUPON];
   state.gate = null;
   state.couponNotice = null;
+  state.noAddress = false;
+  state.previewCalls = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+});
+
+describe('/thanh-toan — xem trước mã không cần địa chỉ (server tính đủ điều kiện trên phần hàng sau combo)', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+
+  it('chưa chọn địa chỉ: vẫn hỏi máy chủ, không kèm addressId', async () => {
+    state.noAddress = true;
+    await mount();
+    await settle();
+    expect(state.previewCalls.length).toBeGreaterThan(0);
+    expect(state.previewCalls.every((p) => !('addressId' in p) || p.addressId === undefined)).toBe(true);
+  });
+
+  it('đã có địa chỉ: kèm addressId như cũ', async () => {
+    await mount();
+    await settle();
+    expect(state.previewCalls.some((p) => p.addressId === 'a1')).toBe(true);
+  });
 });
 
 describe('/thanh-toan — Mã giảm giá (C-025)', () => {

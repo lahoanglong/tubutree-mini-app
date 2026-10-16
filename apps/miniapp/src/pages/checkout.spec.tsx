@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   locState: null as unknown,
+  voucherProps: [] as Record<string, unknown>[],
   openSnackbar: vi.fn(),
   getAddresses: vi.fn(),
   getCart: vi.fn(),
@@ -62,7 +63,12 @@ vi.mock('../store/auth', () => {
 });
 vi.mock('../store/storefront-context', () => ({ useStorefrontContext: () => mocks.sfCtx }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, recyclingEnabled: false }) }));
-vi.mock('../components/checkout/voucher-sheet', () => ({ VoucherSheet: () => null }));
+vi.mock('../components/checkout/voucher-sheet', () => ({
+  VoucherSheet: (p: Record<string, unknown>) => {
+    mocks.voucherProps.push(p);
+    return null;
+  },
+}));
 vi.mock('../components/checkout/order-success', () => ({ OrderSuccess: () => <div data-testid="order-success" /> }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../services/geo-api', () => ({
@@ -502,6 +508,7 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     mocks.user.fullName = 'Long';
     mocks.user.phone = '0900000000';
     mocks.locState = null;
+    mocks.voucherProps = [];
     mocks.getAddresses.mockResolvedValue([]);
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
@@ -516,6 +523,23 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
     expect(screen.getByText('-10.000đ')).toBeInTheDocument();
     expect(screen.getByText('85.000đ')).toBeInTheDocument();
+  });
+
+  it('lựa chọn nhớ lại bằng đúng mọi dòng của giỏ: vẫn là cả giỏ, trừ combo', async () => {
+    mocks.locState = { itemIds: ['ci1', 'ci2'] };
+    mocks.getCart.mockResolvedValue(TWO);
+    renderPage();
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    expect(screen.getByText('85.000đ')).toBeInTheDocument();
+  });
+
+  it('xem trước mã gửi cho máy chủ cả khi chưa có địa chỉ (không kèm addressId) để đủ điều kiện tính trên phần hàng sau combo', async () => {
+    mocks.getCart.mockResolvedValue(TWO);
+    renderPage();
+    await screen.findByText('Giảm giá combo');
+    const last = mocks.voucherProps[mocks.voucherProps.length - 1]!;
+    expect(last.previewParams).toEqual({ storefrontSlug: undefined, itemIds: undefined });
+    expect(last.previewParams).not.toHaveProperty('addressId');
   });
 
   it('mua một phần giỏ: không trừ combo cấp giỏ (máy chủ tính lại phần chọn)', async () => {

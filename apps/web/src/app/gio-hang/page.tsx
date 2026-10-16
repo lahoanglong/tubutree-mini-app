@@ -12,12 +12,12 @@ import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
-import { cartKey } from '@/lib/cart-key';
+import { cartKey, useCartKey } from '@/lib/cart-key';
 
 export default function CartPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
-  const cartQ = useQuery({ queryKey: cartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
   const [deselected, setDeselected] = useState<Set<string>>(() => new Set());
   // Cùng gian hàng thanh toán gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.

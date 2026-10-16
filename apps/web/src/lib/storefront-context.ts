@@ -44,6 +44,20 @@ function read(): StorefrontContext {
   }
 }
 
+const listeners = new Set<() => void>();
+
+/** Cho màn đang mở (vd badge giỏ ở layout gốc, không remount khi vào /s/[slug]) biết gian hàng ghi công vừa đổi. */
+export function subscribeStorefrontContext(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notify(): void {
+  listeners.forEach((l) => l());
+}
+
 function write(ctx: StorefrontContext): void {
   if (typeof window === 'undefined') return;
   try {
@@ -51,6 +65,7 @@ function write(ctx: StorefrontContext): void {
   } catch {
     /* private mode / hết quota — mất ngữ cảnh chấp nhận được, không được làm hỏng trang */
   }
+  notify();
 }
 
 export function getStorefrontContext(): StorefrontContext {
@@ -88,4 +103,5 @@ export function clearStorefrontContext(): void {
   } catch {
     /* ignore */
   }
+  notify();
 }

@@ -49,7 +49,7 @@ import { BankTransferPanel } from './bank-transfer-panel';
 import { InvoiceSection } from './invoice-section';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
-import { cartKey } from '@/lib/cart-key';
+import { useCartKey } from '@/lib/cart-key';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
@@ -69,7 +69,7 @@ export default function CheckoutPage() {
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [idemKey] = useState(() => (typeof crypto !== 'undefined' ? crypto.randomUUID() : String(Math.random())));
 
-  const cartQ = useQuery({ queryKey: cartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
   // Số dư Ví Tubu lấy từ máy chủ (không từ ảnh chụp lúc đăng nhập): khách vừa được hoàn tiền về ví hoặc vừa tiêu ví
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
@@ -535,7 +535,7 @@ export default function CheckoutPage() {
               shippingFee={quote?.shippingFee ?? null}
               notice={quote?.couponNotice ?? cart.couponNotice}
               disabled={place.isPending}
-              preview={addressId && checkoutItems.length > 0 ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
+              preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
               previewKey={couponPreviewKey(checkoutItems)}
             />
           )}

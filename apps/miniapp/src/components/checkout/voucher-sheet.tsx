@@ -82,7 +82,13 @@ export function VoucherSheet({
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('medium');
       setCustomCode('');
-      openSnackbar({ text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 });
+      // Mã được giữ nhưng chưa giảm cho giỏ này (vd combo kéo phần hàng dưới đơn tối thiểu): nói lý do, không báo "đã áp dụng".
+      const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship;
+      openSnackbar(
+        heldOnly
+          ? { text: cart.couponNotice!, type: 'warning', duration: 5000 }
+          : { text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 },
+      );
       onCouponApplied?.();
       onClose();
     },
