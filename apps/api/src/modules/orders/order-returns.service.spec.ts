@@ -330,29 +330,38 @@ describe('OrderReturnsService.listForAdmin — khoản hoàn thật của từng
 });
 
 describe('OrderReturnsService.listForAdmin TO_RECEIVE — đúng tập thẻ "Hàng trả chờ nhận về kho" (R2-ADMINOPS-4)', () => {
-  it('lọc APPROVED chưa nhận, bỏ đơn gian hàng tự giao', async () => {
-    const findMany = jest
+  it('lọc APPROVED chưa nhận, bỏ đơn gian hàng tự giao, giữ thứ tự id của SQL', async () => {
+    const queryRaw = jest
       .fn()
-      .mockResolvedValueOnce([{ orderId: 'o1' }, { orderId: 'o2' }, { orderId: 'o1' }])
-      .mockResolvedValueOnce([]);
-    const orderFindMany = jest.fn().mockResolvedValueOnce([{ id: 'o2' }]).mockResolvedValue([]);
-    const count = jest.fn().mockResolvedValue(0);
+      .mockResolvedValue([])
+      .mockResolvedValueOnce([{ id: 'r2' }, { id: 'r1' }])
+      .mockResolvedValueOnce([{ n: 2 }]);
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'r1', orderId: 'o1', userId: 'u1', items: [] },
+      { id: 'r2', orderId: 'o1', userId: 'u1', items: [] },
+    ]);
     const prisma = {
-      returnRequest: { findMany, count },
-      order: { findMany: orderFindMany },
+      returnRequest: { findMany },
+      order: { findMany: jest.fn().mockResolvedValue([]) },
       user: { findMany: jest.fn().mockResolvedValue([]) },
       orderCustomerRefund: { findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: queryRaw,
       $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
     } as unknown as PrismaService;
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
-    await svc.listForAdmin('TO_RECEIVE', 1, 20);
-    expect(orderFindMany.mock.calls[0][0].where).toEqual({ id: { in: ['o1', 'o2'] }, fulfiller: 'MERCHANT' });
+    const res = (await svc.listForAdmin('TO_RECEIVE', 1, 20)) as { data: { id: string }[]; meta: { total: number } };
+    const [strings, ...values] = queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    const query = Prisma.sql(strings, ...(values as Prisma.Sql[]));
+    const sql = query.sql.replace(/\s+/g, ' ');
+    expect(sql).toContain(`rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL`);
     // Yêu cầu cũ trước P5 (đã cộng kho lúc duyệt) không có dòng hàng: không có gì để nhận về.
-    expect(findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', receivedAt: null, items: { some: {} } });
-    const where = { status: 'APPROVED', receivedAt: null, items: { some: {} }, orderId: { notIn: ['o2'] } };
-    expect(findMany.mock.calls[1][0].where).toEqual(where);
-    expect(count.mock.calls[0][0].where).toEqual(where);
-    expect(findMany.mock.calls[1][0].orderBy).toEqual({ createdAt: 'asc' });
+    expect(sql).toContain(`EXISTS (SELECT 1 FROM "return_request_items" i WHERE i."returnRequestId" = rr."id")`);
+    expect(sql).toContain(`NOT EXISTS (SELECT 1 FROM "orders" o WHERE o."id" = rr."orderId" AND o."fulfiller" = 'MERCHANT')`);
+    expect(sql).toContain(`ORDER BY rr."createdAt" ASC, rr."id" ASC OFFSET ? LIMIT ?`);
+    expect(query.values).toEqual([0, 20]);
+    expect(findMany.mock.calls[0][0].where).toEqual({ id: { in: ['r2', 'r1'] } });
+    expect(res.data.map((r) => r.id)).toEqual(['r2', 'r1']);
+    expect(res.meta.total).toBe(2);
   });
 });
 

@@ -51,6 +51,9 @@ export class DealerBackorderService {
         // kho ảo vĩnh viễn. Bọc trong 1 transaction, truyền tx xuyên suốt để hoặc cả hai cùng
         // commit, hoặc cả hai cùng rollback.
         const got = await this.prisma.$transaction(async (tx) => {
+          // Dòng hàng trước biến thể, cùng thứ tự với huỷ/trả đơn (OrderReversalService: đơn → dòng hàng → biến thể): khoá biến
+          // thể trước thì chờ ngược chiều với lần huỷ đang giữ dòng hàng ⇒ 40P01 (dealer-backorder-cancel-lock.race-spec).
+          await tx.$queryRaw`SELECT "id" FROM "order_items" WHERE "id" = ${item.id} FOR NO KEY UPDATE`;
           const reserved = await reserveAvailableVariationStock(tx, item.variationId, item.backorderedQty);
           if (reserved === 0) return 0; // vẫn chưa có hàng cho variation này
 

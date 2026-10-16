@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Logger } from '@nestjs/common';
-import type { Prisma, UserRole } from '@prisma/client';
+import { Prisma, type UserRole } from '@prisma/client';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 // Giữ log lỗi/cảnh báo của service (hữu ích khi điều tra), bỏ log/debug ồn ào.
@@ -169,4 +169,53 @@ export function barrierOnFirstCalls<T extends object, K extends keyof T>(obj: T,
  */
 export async function warmPool(prisma: PrismaService, connections = 20) {
   await Promise.all(Array.from({ length: connections }, () => prisma.$queryRaw`SELECT pg_sleep(0.05)::text AS s`));
+}
+
+/**
+ * Xoá dữ liệu một spec đã tạo (khách và mọi dòng của họ, sản phẩm/biến thể, đợt giờ vàng), theo thứ tự khoá ngoại RESTRICT: đợt
+ * giờ vàng còn hiệu lực hay đơn/sổ của khách thử ở lại DB dùng chung làm sai các spec sau liệt kê giờ vàng hay quét đơn.
+ */
+export async function deleteItData(
+  prisma: PrismaService,
+  ids: { userIds?: string[]; productIds?: string[]; flashSaleIds?: string[] },
+) {
+  const userIds = ids.userIds ?? [];
+  const productIds = ids.productIds ?? [];
+  const flashSaleIds = ids.flashSaleIds ?? [];
+  const orders = Prisma.sql`SELECT "id" FROM "orders" WHERE "userId" = ANY(${userIds}::text[])`;
+  const variations = Prisma.sql`SELECT "id" FROM "variations" WHERE "productId" = ANY(${productIds}::text[])`;
+  await prisma.$executeRaw`DELETE FROM "return_requests" WHERE "userId" = ANY(${userIds}::text[])`;
+  // Mọi bảng tham chiếu users/đơn/sản phẩm/biến thể bằng khoá ngoại RESTRICT (ON DELETE CASCADE/SET NULL tự dọn theo).
+  for (const table of [
+    'points_transactions',
+    'wallet_transactions',
+    'coin_transactions',
+    'flash_sale_purchases',
+    'affiliate_links',
+    'cashback_clicks',
+    'cashback_transactions',
+    'ctv_milestone_claims',
+    'dealer_applications',
+    'dealer_order_templates',
+    'payouts',
+    'xu_points_conversions',
+  ]) {
+    await prisma.$executeRaw`DELETE FROM ${Prisma.raw(`"${table}"`)} WHERE "userId" = ANY(${userIds}::text[])`;
+  }
+  await prisma.$executeRaw`
+    DELETE FROM "pos_point_credits" WHERE "memberId" = ANY(${userIds}::text[]) OR "staffUserId" = ANY(${userIds}::text[])`;
+  await prisma.$executeRaw`
+    DELETE FROM "reviews" WHERE "userId" = ANY(${userIds}::text[]) OR "productId" = ANY(${productIds}::text[])`;
+  await prisma.$executeRaw`DELETE FROM "order_customer_refunds" WHERE "orderId" IN (${orders})`;
+  await prisma.$executeRaw`DELETE FROM "merchant_payout_lines" WHERE "orderId" IN (${orders})`;
+  await prisma.$executeRaw`DELETE FROM "commissions" WHERE "affiliateUserId" = ANY(${userIds}::text[]) OR "orderId" IN (${orders})`;
+  await prisma.$executeRaw`DELETE FROM "orders" WHERE "userId" = ANY(${userIds}::text[])`;
+  await prisma.$executeRaw`DELETE FROM "flash_sales" WHERE "id" = ANY(${flashSaleIds}::text[])`;
+  await prisma.$executeRaw`DELETE FROM "flash_sale_items" WHERE "variationId" IN (${variations})`;
+  await prisma.$executeRaw`DELETE FROM "cart_items" WHERE "variationId" IN (${variations})`;
+  await prisma.$executeRaw`
+    DELETE FROM "merchant_pancake_links" WHERE "productId" = ANY(${productIds}::text[]) OR "variationId" IN (${variations})`;
+  await prisma.$executeRaw`DELETE FROM "storefront_items" WHERE "productId" = ANY(${productIds}::text[])`;
+  await prisma.$executeRaw`DELETE FROM "users" WHERE "id" = ANY(${userIds}::text[])`;
+  await prisma.$executeRaw`DELETE FROM "products" WHERE "id" = ANY(${productIds}::text[])`;
 }

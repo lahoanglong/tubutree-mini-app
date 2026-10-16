@@ -1131,3 +1131,102 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
     expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
   });
 });
+
+/**
+ * Thứ tự khoá: mọi đường tạo đơn khoá biến thể → suất giờ vàng → users, nên lần đảo tiền phải cộng kho và hoàn suất TRƯỚC mọi
+ * lần ghi dòng users (hoàn Ví/điểm), nếu không đặt đơn cùng khách ‖ huỷ/trả đơn deadlock (checkout-reversal-lock-order.race-spec).
+ */
+describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi users', () => {
+  let service: OrderReversalService;
+  let flashSale: { restore: jest.Mock };
+
+  beforeEach(async () => {
+    flashSale = { restore: jest.fn().mockResolvedValue(undefined) };
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: flashSale },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+    jest.mocked(applyWalletDelta).mockClear();
+  });
+
+  const orderOf = (mocks: jest.Mock[]) => mocks.flatMap((m) => m.mock.invocationCallOrder);
+  /** Thời điểm các câu SQL thô có nhắc tới bảng `table` (khoá FOR … / UPDATE). */
+  const rawOn = (mock: jest.Mock, table: string) =>
+    mock.mock.calls.flatMap((c, i) => ((c[0] as string[]).join('').includes(`"${table}"`) ? [mock.mock.invocationCallOrder[i]!] : []));
+
+  type OrderTx = MockTx & {
+    user: { update: jest.Mock; updateMany: jest.Mock };
+    pointsTransaction: MockTx['pointsTransaction'] & { create: jest.Mock; findFirst: jest.Mock };
+  };
+  const withUserMocks = (tx: MockTx): OrderTx =>
+    Object.assign(tx, {
+      user: { ...tx.user, updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      pointsTransaction: {
+        ...tx.pointsTransaction,
+        create: jest.fn().mockResolvedValue({ id: 'ptx' }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'credited' }),
+      },
+    });
+
+  /**
+   * Lần chạm users đầu tiên phải sau lần cộng kho/hoàn suất cuối cùng: Ví (applyWalletDelta), user.update/updateMany, dòng sổ
+   * điểm (KEY SHARE qua khoá ngoại) và mọi câu SQL thô khoá/ghi "users".
+   */
+  function expectStockAndFlashFirst(tx: OrderTx) {
+    const restored = [...rawOn(tx.$executeRaw, 'variations'), ...orderOf([flashSale.restore])];
+    const userTouches = [
+      ...orderOf([
+        jest.mocked(applyWalletDelta),
+        tx.user.update,
+        tx.user.updateMany,
+        tx.pointsTransaction.createManyAndReturn,
+        tx.pointsTransaction.create,
+      ]),
+      ...rawOn(tx.$executeRaw, 'users'),
+      ...rawOn(tx.$queryRaw, 'users'),
+    ];
+    expect(restored.length).toBeGreaterThan(0);
+    expect(userTouches.length).toBeGreaterThan(0);
+    expect(Math.max(...restored)).toBeLessThan(Math.min(...userTouches));
+  }
+
+  it('reverseFinancials (huỷ đơn trả Ví có dòng giờ vàng)', async () => {
+    const order = makeOrder({ status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID' });
+    const tx = withUserMocks(makeTx(order));
+    await service.reverseFinancials(tx as never, order);
+    expect(flashSale.restore).toHaveBeenCalled();
+    expectStockAndFlashFirst(tx);
+  });
+
+  it('reversePartialReturn (trả một phần dòng giờ vàng: hoàn Ví, trả điểm đã dùng, khoá users để thu điểm tích)', async () => {
+    const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'WALLET', paymentStatus: 'PAID', shippingFee: 0 });
+    const tx = Object.assign(withUserMocks(makeTx(order)), { commission: { findMany: jest.fn().mockResolvedValue([]) } });
+    const shares = {
+      isFull: false,
+      goods: 50_000,
+      shipping: 0,
+      pointsUsedBack: 5,
+      convertedBack: 0,
+      pointsEarnedBack: 3,
+      ratioBefore: 0,
+      ratioAfter: 0,
+      lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 50_000 }],
+    };
+    await service.reversePartialReturn(tx as never, order, {
+      requestId: 'r1',
+      shares,
+      destination: WALLET_DESTINATION,
+      prior: NO_PARTIAL_RETURNS,
+      standardPointsExpiresAt: null,
+    });
+    expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1);
+    // Ca này phải đi qua cả hai đường: khoá users trước khi thu điểm tích, và dòng sổ trả điểm đã dùng.
+    expect(rawOn(tx.$queryRaw, 'users')).toHaveLength(1);
+    expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalled();
+    expectStockAndFlashFirst(tx);
+  });
+});
