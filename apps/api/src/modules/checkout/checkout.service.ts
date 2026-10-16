@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { CouponPreviewDTO, CouponPreviewsResponse } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
@@ -49,6 +49,7 @@ import {
 } from './checkout-split';
 import { PARTNER_POINTS_NOTE } from '../cart/partner-goods';
 import { DEFAULT_MERCHANT_COMMISSION_PCT, DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
+import { isPartnerStore } from '../merchant/partner-store';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from './total-changed';
 
@@ -60,6 +61,8 @@ export { TOTAL_CHANGED, TOTAL_CHANGED_MESSAGE_PREFIX, totalChangedMessage } from
 export const CART_CHANGED = 'CART_CHANGED';
 const CART_CHANGED_MESSAGE =
   'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Vui lòng xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại.';
+/** Gian hàng đối tác vừa thôi là đối tác giữa lúc tính tiền và lúc ghi đơn (admin tắt cờ): 409; tải lại giỏ thì thấy tình trạng mới. */
+export const STORE_CHANGED_MESSAGE = 'Gian hàng vừa thay đổi, vui lòng đặt lại.';
 
 /**
  * Lần bấm "Đặt hàng" đến sau khi giỏ đã thành đơn (app báo lỗi mạng/quá thời gian rồi khách bấm lại, có khi với key mới) nhận
@@ -454,6 +457,8 @@ export class CheckoutService {
             }
           }
         }
+
+        await this.assertPartnerStoresUnderLock(tx, computed.shipments);
 
         const created: Awaited<ReturnType<typeof tx.order.create>>[] = [];
         for (const [i, shipment] of computed.shipments.entries()) {
@@ -856,6 +861,24 @@ export class CheckoutService {
   /** Lỗi vi phạm ràng buộc unique của Prisma (P2002). */
   private isUniqueViolation(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+  }
+
+  /**
+   * Nơi giao "gian hàng đối tác" được quyết NGOÀI tx (giỏ → `fulfillerOf`); admin tắt cờ `isPartner` (setStorePartner khoá FOR
+   * UPDATE dòng gian hàng rồi đếm đơn tự giao còn chạy) commit trước lần ghi đơn thì để lại đơn tự giao trên gian hàng không còn là
+   * đối tác. KEY SHARE dòng gian hàng rồi đọc lại cờ: tắt cờ đến trước thì ở đây thấy cờ đã tắt; đến sau thì chờ tx này và đếm được
+   * đơn vừa ghi. Đặt ngay trước lần chèn đơn, nơi khoá ngoại `fulfillerStorefrontId` vốn lấy đúng khoá này, nên thứ tự khoá không
+   * đổi (biến thể → suất giờ vàng → gian hàng/users của khoá ngoại đơn → users FOR UPDATE → mã giảm giá). KEY SHARE không chặn chủ
+   * gian hàng đổi tên/tạm nghỉ (NO KEY UPDATE), như duyệt liên kết giao hộ (merchant-pancake-link).
+   */
+  private async assertPartnerStoresUnderLock(tx: Prisma.TransactionClient, shipments: CheckoutShipment[]): Promise<void> {
+    const ids = [...new Set(shipments.flatMap((s) => (s.fulfiller.kind === 'MERCHANT' ? [s.fulfiller.storefrontId] : [])))];
+    if (ids.length === 0) return;
+    const stores = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
+      SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR KEY SHARE`;
+    if (stores.length !== ids.length || !stores.every((s) => isPartnerStore(s))) {
+      throw new ConflictException(STORE_CHANGED_MESSAGE);
+    }
   }
 
   /**
