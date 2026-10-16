@@ -9,11 +9,20 @@ import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
-import { renameMergedMilestones, resolveMergedUserId, revokeReferralRewardForReferee } from '../wallet/referral-reward';
+import { isAnonymized, renameMergedMilestones, resolveMergedUserId, revokeReferralRewardForReferee } from '../wallet/referral-reward';
 import { roleClaims } from './session-state.service';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
+
+/** Số bước tối đa khi dò chuỗi người mời của tài khoản đích lúc gộp (xem bước 10 của mergeGuestInto). */
+export const MERGE_ANCESTOR_CAP = 1000;
+
+/**
+ * Tx gộp giữ khoá gộp chung (GUEST_MERGE_LOCK_KEY) nên đặt hạn rõ: một lần gộp chậm bất thường bị huỷ (P2028, khách thử lại)
+ * thay vì để các lần gộp khác xếp hàng sau nó, mỗi lần giữ một kết nối pool. Bình thường một lần gộp mất vài chục ms.
+ */
+const MERGE_TX_OPTIONS = { maxWait: 2_000, timeout: 5_000 } as const;
 
 /**
  * Thứ tự khoá dòng users khi gộp: người được mời trước người mời (cạnh a → b khi a.referredById = b, cả hai trong tập),
@@ -215,17 +224,9 @@ export class AuthService {
 
     // Dòng khách đã gộp (access token cũ còn hạn) không phải khách: nâng cấp tại chỗ sẽ hồi sinh nó với mergedIntoId còn trỏ
     // tài khoản đích, mã giới thiệu của nó vẫn quy về đích.
-    const isGuest =
-      (currentUser.zaloId?.startsWith('guest_') ?? false) && !currentUser.zaloId?.includes('_merged_') && !currentUser.mergedIntoId;
-    if (!isGuest) {
-      this.logger.warn(
-        `ensurePhone: user ${currentUser.id} (đã là Zalo thật, zaloId=${currentUser.zaloId}) ` +
-          `đổi sang zaloId khác (${info.zaloId}) trên máy — từ chối gộp, giữ nguyên phiên hiện tại.`,
-      );
-      throw new ConflictException(
-        'Tài khoản Zalo trên máy hiện khác với phiên đang đăng nhập. Vui lòng đăng xuất rồi đăng nhập lại để tiếp tục.',
-      );
-    }
+    if (currentUser.mergedIntoId) return this.mergedSessionTokens(currentUser, info, phone);
+    const isGuest = (currentUser.zaloId?.startsWith('guest_') ?? false) && !currentUser.zaloId?.includes('_merged_');
+    if (!isGuest) throw this.zaloMismatch(currentUser, info.zaloId);
 
     const existingByZalo = await this.prisma.user.findUnique({ where: { zaloId: info.zaloId } });
     if (existingByZalo) {
@@ -245,8 +246,10 @@ export class AuthService {
     // tạo user mới rồi gộp — giỏ/địa chỉ/điểm/đơn đã đúng sẵn vì cùng 1 id.
     const checkedPhone = await this.phoneIfFree(phone, currentUser.id);
     try {
-      const upgraded = await this.prisma.user.update({
-        where: { id: currentUser.id },
+      // Có điều kiện: một request song song có thể vừa gộp chính dòng khách này (đọc ở trên trước lúc nó commit). Nâng cấp
+      // vô điều kiện sẽ ghi đè zaloId của dòng đã gộp mà mergedIntoId vẫn trỏ tài khoản đích.
+      const upgraded = await this.prisma.user.updateMany({
+        where: { id: currentUser.id, zaloId: currentUser.zaloId, mergedIntoId: null },
         data: {
           zaloId: info.zaloId,
           fullName: info.name,
@@ -254,7 +257,10 @@ export class AuthService {
           ...(checkedPhone ? { phone: checkedPhone } : {}),
         },
       });
-      return this.issueTokens(upgraded);
+      const fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      if (upgraded.count === 1 || fresh.zaloId === info.zaloId) return this.issueTokens(fresh);
+      if (fresh.mergedIntoId) return this.mergedSessionTokens(fresh, info, phone);
+      throw this.zaloMismatch(fresh, info.zaloId);
     } catch (err) {
       // Hai máy khách khác nhau cùng nâng cấp lên một tài khoản Zalo mới cùng lúc: máy thắng đã
       // giữ zaloId, máy thua gộp vào dòng đó thay vì trả 500.
@@ -263,6 +269,27 @@ export class AuthService {
       if (!winner || winner.id === currentUser.id) throw err;
       return this.issueTokens(await this.mergeGuestInto(currentUser, winner, info, phone));
     }
+  }
+
+  /**
+   * Phiên của một dòng khách đã gộp (access token cũ còn hạn, thường là client gửi lại ensurePhone sau lần gộp): đúng tài
+   * khoản Zalo của tài khoản đích thì trả token của đích như lần gộp đầu; Zalo khác thì từ chối như mọi phiên không phải khách.
+   */
+  private async mergedSessionTokens(merged: User, info: { zaloId: string }, phone: string | null): Promise<LoginResponse> {
+    const targetId = merged.mergedIntoId ? await resolveMergedUserId(this.prisma, merged.mergedIntoId) : null;
+    const target = targetId ? await this.prisma.user.findUnique({ where: { id: targetId } }) : null;
+    if (target && target.zaloId === info.zaloId) return this.issueTokens(await this.attachPhoneIfMissing(target, phone));
+    throw this.zaloMismatch(merged, info.zaloId);
+  }
+
+  private zaloMismatch(user: User, zaloId: string): ConflictException {
+    this.logger.warn(
+      `ensurePhone: user ${user.id} (không phải phiên khách, zaloId=${user.zaloId}) ` +
+        `đổi sang zaloId khác (${zaloId}) trên máy — từ chối gộp, giữ nguyên phiên hiện tại.`,
+    );
+    return new ConflictException(
+      'Tài khoản Zalo trên máy hiện khác với phiên đang đăng nhập. Vui lòng đăng xuất rồi đăng nhập lại để tiếp tục.',
+    );
   }
 
   /** Gắn SĐT nếu user chưa có và SĐT còn trống — dùng cho nhánh "đúng danh tính đang có". */
@@ -311,9 +338,12 @@ export class AuthService {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
       // Dòng users: khách, target và những người khách đã mời (đổi referredById ở bước 10), người được mời trước người mời
       // (referralLockOrder). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để bước kiểm trùng bên
-      // dưới thấy dòng của lần gộp trước.
+      // dưới thấy dòng của lần gộp trước. Cạnh theo người mời đã quy qua mergedIntoId, như lần cấp thưởng khoá người được
+      // mời rồi người mời ĐÃ QUY (khách B còn trỏ khách A đã gộp vào T: cấp thưởng khoá B rồi T, gộp B vào T cũng phải vậy).
       const circle = await tx.$queryRaw<{ id: string; referredById: string | null }[]>`
-        SELECT "id", "referredById" FROM "users" WHERE "id" IN (${guest.id}, ${target.id}) OR "referredById" = ${guest.id}`;
+        SELECT u."id", COALESCE(p."mergedIntoId", u."referredById") AS "referredById"
+          FROM "users" u LEFT JOIN "users" p ON p."id" = u."referredById"
+         WHERE u."id" IN (${guest.id}, ${target.id}) OR u."referredById" = ${guest.id}`;
       for (const id of referralLockOrder(circle)) {
         if (id === guest.id || id === target.id) await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR UPDATE`;
         else await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR NO KEY UPDATE`;
@@ -331,6 +361,11 @@ export class AuthService {
       const g = lockedGuest[0];
       if (!g || g.zaloId !== guest.zaloId || g.zaloId?.includes('_merged_')) {
         return tx.user.findUniqueOrThrow({ where: { id: target.id } });
+      }
+      // Target bị khoá hoặc vừa bị xoá (ẩn danh hoá) sau lúc tra ở ngoài: không đổ tiền/đơn của khách vào tài khoản chết.
+      const lockedTarget = await tx.user.findUniqueOrThrow({ where: { id: target.id }, select: { isBlocked: true, metadata: true } });
+      if (lockedTarget.isBlocked || isAnonymized(lockedTarget.metadata)) {
+        throw new ConflictException('Tài khoản Zalo này đã bị khoá hoặc đã xoá, không thể gộp phiên khách vào. Vui lòng liên hệ hỗ trợ.');
       }
       const gid = guest.id;
       const tid = target.id;
@@ -535,16 +570,26 @@ export class AuthService {
       //     nguyên (G6). So theo danh tính: dòng khách đã gộp trước đó là chính tài khoản đích của nó (mergedIntoId), nên khách
       //     G mời khách B rồi B gộp vào T trước G thì B cũng là T. Đọc lại sau khi đã khoá (người được mời, người mời của G).
       const identity = (row: { id: string; mergedIntoId: string | null }) => row.mergedIntoId ?? row.id;
-      const ancestors = new Set<string>();
-      for (let cur: string | null = tid; cur && !ancestors.has(cur); ) {
-        ancestors.add(cur);
-        const parents: { id: string; mergedIntoId: string | null }[] = await tx.$queryRaw`
-          SELECT p."id", p."mergedIntoId" FROM "users" u JOIN "users" p ON p."id" = u."referredById" WHERE u."id" = ${cur}`;
-        cur = parents[0] ? identity(parents[0]) : null;
-      }
+      //     Chuỗi tổ tiên của target đọc bằng MỘT truy vấn đệ quy (tx đang giữ khoá gộp chung, không đi từng bước một), dừng
+      //     ở MERGE_ANCESTOR_CAP bước. Chuỗi dài hơn (hoặc vòng trong dữ liệu) chỉ dựng được bằng hàng loạt phiên khách giả:
+      //     coi là nghi vòng và cắt MỌI người khách đã mời, vì không chứng minh được ai trong số họ nằm ngoài chuỗi.
+      const chain = await tx.$queryRaw<{ id: string; truncated: boolean }[]>`
+        WITH RECURSIVE "chain"("id", "depth") AS (
+          SELECT ${tid}::text, 0
+          UNION ALL
+          SELECT COALESCE(p."mergedIntoId", p."id"), c."depth" + 1
+            FROM "chain" c
+            JOIN "users" u ON u."id" = c."id"
+            JOIN "users" p ON p."id" = u."referredById"
+           WHERE c."depth" < ${MERGE_ANCESTOR_CAP}::int
+        )
+        SELECT c."id", (c."depth" = ${MERGE_ANCESTOR_CAP}::int AND u."referredById" IS NOT NULL) AS "truncated"
+          FROM "chain" c JOIN "users" u ON u."id" = c."id"`;
+      const ancestors = new Set(chain.map((c) => c.id));
+      const truncated = chain.some((c) => c.truncated);
       const referees = await tx.$queryRaw<{ id: string; mergedIntoId: string | null }[]>`
         SELECT "id", "mergedIntoId" FROM "users" WHERE "referredById" = ${gid} ORDER BY "id" FOR NO KEY UPDATE`;
-      const cyclic = referees.filter((r) => ancestors.has(identity(r))).map((r) => r.id);
+      const cyclic = referees.filter((r) => truncated || ancestors.has(identity(r))).map((r) => r.id);
       await tx.user.updateMany({
         where: { referredById: gid, ...(cyclic.length > 0 ? { id: { notIn: cyclic } } : {}) },
         data: { referredById: tid },
@@ -559,7 +604,7 @@ export class AuthService {
       }
 
       return cut.length > 0 ? tx.user.findUniqueOrThrow({ where: { id: tid } }) : merged;
-    });
+    }, MERGE_TX_OPTIONS);
   }
 
   /**

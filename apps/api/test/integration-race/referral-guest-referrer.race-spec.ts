@@ -2,7 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { AuthService } from '../../src/modules/auth/auth.service';
+import { AuthService, MERGE_ANCESTOR_CAP } from '../../src/modules/auth/auth.service';
 import type { ZaloService } from '../../src/modules/auth/zalo.service';
 import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import type { Env } from '../../src/config/env.validation';
@@ -590,5 +590,114 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     expect(row.zaloId).toBe(merged.zaloId);
     expect(row.mergedIntoId).toBe(t.id);
     expect((await guestWithCode(row.referralCode)).referredById).toBe(t.id);
+  });
+
+  it('(9a) R2-X: ensurePhone gộp vào T ‖ ensurePhone nâng cấp tại chỗ cùng khách (đọc trước lúc gộp commit) → không hồi sinh dòng đã gộp', async () => {
+    const g = await guestUser();
+    const t = await zaloUser();
+    const original = prisma.user.findUniqueOrThrow.bind(prisma.user);
+    const z2 = `zalo_new_${randCode(8)}`;
+    jest.spyOn(prisma.user, 'findUniqueOrThrow').mockImplementationOnce((async (args: Parameters<typeof original>[0]) => {
+      const res = await original(args);
+      await merge(g.id, t);
+      zaloIdForNextCall = z2;
+      return res;
+    }) as never);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: g.id } });
+    expect(row.zaloId).toContain('_merged_');
+    expect(row.mergedIntoId).toBe(t.id);
+  });
+
+  it('(9b) R2-Z: gộp xong, client gửi lại ensurePhone bằng token khách cũ với đúng Zalo của T → token của T; Zalo khác → từ chối', async () => {
+    const g = await guestUser();
+    const t = await zaloUser();
+    await merge(g.id, t);
+    zaloIdForNextCall = t.zaloId!;
+    const res = await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access');
+    expect(res.user.id).toBe(t.id);
+    zaloIdForNextCall = `zalo_other_${randCode(8)}`;
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('(9c) R2-Y: khách B còn trỏ khách A đã gộp vào T; gộp B vào T ‖ cấp thưởng cho B (ép xen kẽ) → không deadlock (5 vòng)', async () => {
+    for (let round = 0; round < 5; round++) {
+      const a = await guestUser();
+      const t = await zaloUser();
+      await merge(a.id, t);
+      await sleep(5);
+      const b = await guestUser({ referredById: a.id });
+      expect(t.id < b.id).toBe(true);
+      await deliveredOrder(b.id, 9);
+      await deliveredOrder(b.id, 4);
+
+      const hold = await holdRows('users', [t.id], 'FOR KEY SHARE');
+      let mSettled = false;
+      const pM = merge(b.id, t).finally(() => (mSettled = true));
+      await waitForWaiters(hold.pid, 1, () => mSettled);
+      const pG = rewards.grantReferralOrderReward(b.id);
+      for (let i = 0; i < 80 && (await lockWaiters(hold.pid)) < 2; i++) await sleep(25);
+      hold.release();
+      await hold.done;
+      expect(summarize(await Promise.allSettled([pM, pG])).errors).toEqual([]);
+      expect(await referrerOf(b.id)).toBeNull();
+      const rows = (await referralRows(t.id)).map((r) => r.reason);
+      expect(rows.length === 0 || rows.includes(`REFERRAL_ORDER2_REVOKE:${b.id}`)).toBe(true);
+      expect(await balanceOf(t.id)).toBe(0);
+    }
+  });
+
+  it('(9d) chuỗi tổ tiên vượt trần: coi như nghi vòng, cắt người G đã mời và thu thưởng', async () => {
+    const g = await guestUser();
+    const x = await createUser(prisma, { referredById: g.id });
+    await qualify(x.id);
+    const tag = randCode(6).toLowerCase();
+    const chain = Array.from({ length: MERGE_ANCESTOR_CAP + 5 }, (_, i) => ({
+      id: `chain${tag}${String(i).padStart(5, '0')}`,
+      referralCode: `CH${tag.toUpperCase()}${String(i).padStart(5, '0')}`,
+      fullName: 'IT chain',
+      referredById: i === 0 ? x.id : `chain${tag}${String(i - 1).padStart(5, '0')}`,
+    }));
+    await prisma.user.createMany({ data: chain });
+    const t = await zaloUser({ referredById: chain[chain.length - 1]!.id });
+    await merge(g.id, t);
+    expect(await referrerOf(x.id)).toBeNull();
+    expect((await referralRows(t.id)).map((r) => r.reason)).toEqual([`REFERRAL_ORDER2:${x.id}`, `REFERRAL_ORDER2_REVOKE:${x.id}`]);
+    expect(await balanceOf(t.id)).toBe(0);
+  });
+
+  async function anonymize(userId: string) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { zaloId: null, isBlocked: true, referralCode: `DEL${randCode(12)}`, metadata: { anonymizedAt: new Date().toISOString() } },
+    });
+  }
+
+  it('(10a) T bị khoá/xoá ngay trước lúc gộp khoá T → từ chối gộp, tiền và đơn ở lại khách', async () => {
+    const g = await guestUser();
+    const t = await zaloUser();
+    const o = await deliveredOrder(g.id, 1);
+    await prisma.user.update({ where: { id: g.id }, data: { pointsBalance: 7 } });
+    await prisma.pointsTransaction.create({ data: { userId: g.id, delta: 7, lot: 'STANDARD', reason: `IT_SEED:${g.id}`, refType: 'ADJUST' } });
+    const original = prisma.user.findUnique.bind(prisma.user);
+    jest.spyOn(prisma.user, 'findUnique').mockImplementationOnce((async (args: Parameters<typeof original>[0]) => {
+      const res = await original(args);
+      await anonymize(t.id);
+      return res;
+    }) as never);
+    zaloIdForNextCall = t.zaloId!;
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).userId).toBe(g.id);
+    expect(await balanceOf(g.id)).toBe(7);
+    expect(await balanceOf(t.id)).toBe(0);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: g.id } })).mergedIntoId).toBeNull();
+  });
+
+  it('(10b) mã của khách đã gộp không hồi sinh tài khoản đích đã xoá', async () => {
+    const g = await guestUser();
+    const t = await zaloUser();
+    await merge(g.id, t);
+    await anonymize(t.id);
+    expect((await guestWithCode(g.referralCode)).referredById).toBeNull();
   });
 });

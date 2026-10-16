@@ -309,7 +309,13 @@ function makeGuestMergeFixture(opts: {
       update: jest.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
         applyUserUpdate(where.id, data),
       ),
-      updateMany: jest.fn(async () => ({ count: 0 })),
+      // Nâng cấp tại chỗ có điều kiện (id + zaloId đã đọc + chưa gộp); các updateMany khác (bước 10) không có ai khớp.
+      updateMany: jest.fn(async ({ where, data }: { where: { id?: unknown; zaloId?: unknown }; data: Record<string, unknown> }) => {
+        const row = typeof where.id === 'string' ? users.get(where.id) : undefined;
+        if (!row || row.zaloId !== where.zaloId || (row as { mergedIntoId?: unknown }).mergedIntoId) return { count: 0 };
+        await applyUserUpdate(where.id as string, data);
+        return { count: 1 };
+      }),
     },
     cart: {
       findUnique: jest.fn(async ({ where }: { where: { userId: string } }) => {

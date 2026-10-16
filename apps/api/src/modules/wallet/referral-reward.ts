@@ -620,14 +620,21 @@ export async function revokeReferralRewardForReferee(
  * người được mời còn trỏ dòng khách (tạo xen giữa lúc gộp) nhờ đó thưởng cho tài khoản đích. Chỉ khách mới bị gộp và đích
  * không bao giờ là khách nên chuỗi dài một bước; vòng lặp có giới hạn chỉ để phòng dữ liệu tay.
  */
-export async function resolveMergedUserId(db: Db, userId: string): Promise<string> {
+export async function resolveMergedUserId(db: Db, userId: string): Promise<string | null> {
   let current = userId;
   for (let hop = 0; hop < 5; hop++) {
-    const row = await db.user.findUnique({ where: { id: current }, select: { mergedIntoId: true } });
+    const row = await db.user.findUnique({ where: { id: current }, select: { mergedIntoId: true, metadata: true } });
+    // Tài khoản đích đã xoá (account-deletion đổi mã của chính nó): mã cũ của khách đã gộp không được quy về nó.
+    if (hop > 0 && isAnonymized(row?.metadata)) return null;
     if (!row?.mergedIntoId || row.mergedIntoId === current) return current;
     current = row.mergedIntoId;
   }
   return current;
+}
+
+/** Dòng đã ẩn danh hoá bởi account-deletion.service (metadata.anonymizedAt). */
+export function isAnonymized(metadata: unknown): boolean {
+  return typeof metadata === 'object' && metadata !== null && 'anonymizedAt' in metadata;
 }
 
 /**
