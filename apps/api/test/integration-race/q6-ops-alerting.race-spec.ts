@@ -291,7 +291,8 @@ describe('q6 báo động vận hành (real Postgres)', () => {
   it('đơn thu gom COD quá 15 phút chưa có vận đơn Gomdon → gomdon.backlog; đơn trả trước chưa nhận tiền thì không', async () => {
     const u = await createUser(prisma, {});
     const old = new Date(Date.now() - 20 * 60_000);
-    const cod = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true, createdAt: old });
+    // Danh sách tồn đọng chỉ lấy STUCK_LIST đơn cũ nhất: đơn của test phải cũ hơn mọi đơn tồn đọng spec khác để lại trong DB dùng chung.
+    const cod = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true, createdAt: new Date(0) });
     const unpaid = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true, createdAt: old, paymentMethod: 'ZALOPAY', status: 'PENDING_PAYMENT' });
     const fresh = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true });
     const snap = await health.snapshot();

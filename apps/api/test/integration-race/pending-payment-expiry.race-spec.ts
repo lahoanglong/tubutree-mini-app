@@ -60,7 +60,21 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     );
   });
 
+  // Đơn 2001 còn treo (PENDING_PAYMENT/CONFIRMED/PACKED) nằm đầu mọi danh sách kẹt cũ-trước-tiên của Sức khoẻ hệ thống
+  // (ops-health, q6) nếu để lại trong DB dùng chung: xoá hết dữ liệu spec đã tạo.
+  const created = { orderIds: [] as string[], userIds: [] as string[], productIds: [] as string[] };
+
   afterAll(async () => {
+    if (prisma) {
+      const { orderIds, userIds, productIds } = created;
+      await prisma.$transaction([
+        prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
+        prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } }),
+        prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+        prisma.product.deleteMany({ where: { id: { in: productIds } } }),
+      ]);
+    }
     await prisma?.$disconnect();
   });
 
@@ -83,6 +97,7 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
         basePrice: 100_000,
       },
     });
+    created.productIds.push(product.id);
     return prisma.variation.create({
       data: {
         pancakeId: `itppx-v-${tag}`,
@@ -99,6 +114,7 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
 
   async function staleOrder(over: Partial<Prisma.OrderUncheckedCreateInput> = {}) {
     const user = await createUser(prisma, { role: 'CUSTOMER' });
+    created.userIds.push(user.id);
     const v = await variation();
     const order = await createOrder(prisma, {
       userId: user.id,
@@ -122,6 +138,7 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
         ],
       },
     });
+    created.orderIds.push(order.id);
     return { user, order, variationId: v.id };
   }
 
