@@ -660,10 +660,11 @@ export class CheckoutService {
           if (order.referrerUserId) await this.affiliate.createCommissionForOrder(order.id, tx);
         }
         // Dọn giỏ cùng tx với đơn (vẫn dưới khoá giỏ). Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại và mã giảm giá.
+        // Cả giỏ: xoá đúng các dòng đã đọc (món đã mua + dòng ngừng bán), dòng vào giỏ sau lần đọc được giữ lại.
         if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
           await this.cart.removeItems(userId, cart.items.map((l) => l.id), tx);
         } else {
-          await this.cart.clear(userId, tx);
+          await this.cart.clearOrdered(userId, [...cart.items, ...cart.unavailableItems].map((l) => l.id), tx);
         }
         return created;
       });

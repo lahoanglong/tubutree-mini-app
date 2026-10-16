@@ -360,10 +360,10 @@ export class AuthService {
       await tx.$queryRaw`SELECT "id" FROM "return_requests" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
       // Giỏ của khách (bước 1 xoá) và của target (nhận dòng của khách): đặt đơn khoá giỏ của người đặt trước mọi khoá khác rồi
-      // mới chèn suất giờ vàng và chạm users. Gộp khoá users rồi mới xoá giỏ khách là chờ ngược chiều với lần khách đang đặt
-      // (40P01); bỏ qua khoá giỏ của target thì lần target đang đặt dọn giỏ lúc commit xoá luôn dòng vừa chuyển từ khách sang;
-      // và target đặt đơn giờ vàng lần đầu chèn dòng (suất, target) rồi chờ users của target mà gộp đang giữ để chuyển dòng
-      // suất của khách sang đúng khoá đó (r13-merge-checkout-lock.race-spec). FOR UPDATE: dòng giỏ của khách bị xoá.
+      // mới chạm users. Gộp khoá users rồi mới xoá giỏ khách là chờ ngược chiều với lần khách đang đặt (40P01). Lần target
+      // đang đặt chỉ dọn đúng các dòng nó đã đọc, nhưng bước 1 cộng dồn dòng khách trùng biến thể vào chính dòng đó: không chờ
+      // giỏ của target thì phần cộng dồn bị xoá theo (r13-merge-checkout-lock.race-spec). FOR UPDATE: dòng giỏ của khách bị
+      // xoá. Đổi lại gộp chờ cả lần target đang đặt (quá lock_timeout ⇒ 503 "đang bận").
       await tx.$queryRaw`SELECT "id" FROM "carts" WHERE "userId" IN (${guest.id}, ${target.id}) ORDER BY "id" FOR UPDATE`;
       // Suất giờ vàng đã mua (bước 6 cộng dồn vào dòng của target): huỷ/trả đơn của target hoàn suất rồi mới ghi users của target,
       // nên gộp khoá users trước rồi mới ghi dòng suất là chờ ngược chiều ⇒ 40P01 (merge-reversal-flash-lock.race-spec). Chỉ khoá

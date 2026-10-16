@@ -357,6 +357,8 @@ describe('Gộp phiên khách ‖ đặt đơn của khách hoặc của tài kh
       const w = await variation();
       await cart.addItem(p.target.id, { variationId: v.id, quantity: 1 });
       await cart.addItem(p.guest.id, { variationId: w.id, quantity: 2 });
+      // Trùng biến thể với dòng T đang đặt: gộp cộng dồn vào chính dòng đó; không chờ giỏ của T thì T dọn dòng đó theo id ⇒ mất 3.
+      await cart.addItem(p.guest.id, { variationId: v.id, quantity: 3 });
 
       const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${v.id} FOR UPDATE`);
       const s = await race(holder, place(p.target.id, p.targetAddr.id), merge(p));
@@ -364,9 +366,14 @@ describe('Gộp phiên khách ‖ đặt đơn của khách hoặc của tài kh
 
       await expectMerged(p);
       const placed = await prisma.order.findMany({ where: { userId: p.target.id }, include: { items: true } });
-      expect(placed.map((o) => o.items.map((i) => i.variationId))).toEqual([[v.id]]);
+      expect(placed.map((o) => o.items.map((i) => [i.variationId, i.quantity]))).toEqual([[[v.id, 1]]]);
       const after = await prisma.cartItem.findMany({ where: { cart: { userId: p.target.id } } });
-      expect(after.map((i) => [i.variationId, i.quantity])).toEqual([[w.id, 2]]);
+      expect(new Map(after.map((i) => [i.variationId, i.quantity]))).toEqual(
+        new Map([
+          [v.id, 3],
+          [w.id, 2],
+        ]),
+      );
     }
   });
 
@@ -385,8 +392,8 @@ describe('Gộp phiên khách ‖ đặt đơn của khách hoặc của tài kh
       await expectMerged(p);
       const placed = await prisma.order.findMany({ where: { userId: p.target.id }, include: { items: true } });
       expect(placed.map((o) => o.items.map((i) => i.variationId))).toEqual([[v.id]]);
-      // Không kiểm giỏ của T: đặt đơn cả giỏ dọn mọi dòng của giỏ lúc commit, kể cả dòng vừa chuyển từ khách sang (có từ trước,
-      // như thêm vào giỏ ở tab khác trong lúc đặt; ghi ở ROADMAP).
+      const after = await prisma.cartItem.findMany({ where: { cart: { userId: p.target.id } } });
+      expect(after.map((i) => [i.variationId, i.quantity])).toEqual([[w.id, 2]]);
     }
   });
 });

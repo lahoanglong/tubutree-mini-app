@@ -842,3 +842,15 @@ describe('CartService guard tồn kho', () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+describe('CartService.clearOrdered (dọn giỏ sau khi đặt cả giỏ)', () => {
+  it('chỉ xoá các dòng đã vào đơn và bỏ mã giảm giá', async () => {
+    const tx = {
+      cart: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }), update: jest.fn() },
+      cartItem: { deleteMany: jest.fn() },
+    };
+    await new CartService({} as PrismaService, coupons, config, flash, analytics).clearOrdered('u1', ['i1', 'i2'], tx as never);
+    expect(tx.cartItem.deleteMany).toHaveBeenCalledWith({ where: { cartId: 'c1', id: { in: ['i1', 'i2'] } } });
+    expect(tx.cart.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+  });
+});

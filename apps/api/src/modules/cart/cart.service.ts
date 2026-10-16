@@ -350,10 +350,14 @@ export class CartService {
     return this.getCart(userId);
   }
 
-  async clear(userId: string, db: Prisma.TransactionClient = this.prisma): Promise<void> {
+  /**
+   * Dọn giỏ sau khi đặt CẢ giỏ: chỉ xoá các dòng đã vào đơn (không xoá cả giỏ) vì giỏ có thể nhận dòng mới sau lần đọc của
+   * checkout (gộp phiên khách chuyển giỏ khách sang, thêm vào giỏ ở tab khác); bỏ mã giảm giá như trước.
+   */
+  async clearOrdered(userId: string, itemIds: string[], db: Prisma.TransactionClient = this.prisma): Promise<void> {
     const cart = await db.cart.findUnique({ where: { userId } });
     if (!cart) return;
-    await db.cartItem.deleteMany({ where: { cartId: cart.id } });
+    await db.cartItem.deleteMany({ where: { cartId: cart.id, id: { in: itemIds } } });
     await db.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
   }
 }
