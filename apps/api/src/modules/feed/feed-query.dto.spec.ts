@@ -42,4 +42,11 @@ describe('GET /feed: validate query theo enum thật', () => {
   it('query lạ ngoài danh sách vẫn bị 400', async () => {
     await expect(as({ foo: 'x' })).rejects.toThrow();
   });
+
+  it('q, tag, category, cursor quá dài → 400; đúng trần vẫn nhận', async () => {
+    for (const [key, max] of [['q', 100], ['tag', 100], ['category', 100], ['cursor', 200]] as const) {
+      await expect(as({ [key]: 'a'.repeat(max) })).resolves.toMatchObject({ [key]: 'a'.repeat(max) });
+      await expect(as({ [key]: 'a'.repeat(max + 1) })).rejects.toThrow();
+    }
+  });
 });
