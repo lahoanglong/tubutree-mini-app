@@ -202,6 +202,77 @@ describe('VouchersService.birthdayVouchers (P0 A3-05 — theo hạng thành viê
   });
 });
 
+describe('VouchersService.birthdayVouchers — xử lý từng lô song song có giới hạn', () => {
+  const tierAmounts = { CO_THU: 300000, DAI_THU: 150000 };
+  const tierOf = (i: number) => (i % 3 === 0 ? 'CO_THU' : i % 3 === 1 ? 'DAI_THU' : null);
+  const users = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `u${String(i).padStart(3, '0')}`, tierId: tierOf(i) }));
+  const expectedValue = (i: number) => (i % 3 === 0 ? 300000 : i % 3 === 1 ? 150000 : 50000);
+
+  /** Kho coupon trong bộ nhớ: findUnique/create theo code như unique thật; đo số create đang chạy cùng lúc. */
+  function setup(rows: { id: string; tierId: string | null }[], opts: { failOn?: string } = {}) {
+    const store = new Map<string, { code: string; value: number }>();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const create = jest.fn(async ({ data }: { data: { code: string; value: number; scopeMeta: { userId: string } } }) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      if (opts.failOn && data.scopeMeta.userId === opts.failOn) throw new Error('db down');
+      store.set(data.code, { code: data.code, value: data.value });
+      return {};
+    });
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue(rows),
+      coupon: { findUnique: jest.fn(async ({ where }: { where: { code: string } }) => store.get(where.code) ?? null), create },
+      membershipTier: {
+        findMany: jest.fn().mockResolvedValue(Object.entries(tierAmounts).map(([id, birthdayVoucherAmount]) => ({ id, birthdayVoucherAmount }))),
+      },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+    const logger = jest.spyOn((svc as unknown as { logger: { log: () => void; error: () => void } }).logger, 'log').mockImplementation(() => undefined);
+    const errLogger = jest.spyOn((svc as unknown as { logger: { error: () => void } }).logger, 'error').mockImplementation(() => undefined);
+    return { svc, create, store, logger, errLogger, maxInFlight: () => maxInFlight };
+  }
+
+  it('25 user: cùng tập coupon và mức theo hạng như xử lý tuần tự, số "granted" đúng, đồng thời tối đa 10', async () => {
+    const { svc, store, logger, maxInFlight } = setup(users(25));
+    await svc.birthdayVouchers();
+    expect(store.size).toBe(25);
+    const reason = /^BIRTHDAY-\d{4}-\d{2}-/;
+    users(25).forEach((u, i) => {
+      const c = [...store.values()].find((x) => x.code.endsWith(u.id.toUpperCase()));
+      expect(c?.code).toMatch(reason);
+      expect(c?.value).toBe(expectedValue(i));
+    });
+    expect(logger).toHaveBeenCalledWith('Birthday vouchers granted: 25');
+    expect(maxInFlight()).toBeGreaterThan(1);
+    expect(maxInFlight()).toBeLessThanOrEqual(10);
+  });
+
+  it('chạy lại: không tạo thêm coupon, không log granted', async () => {
+    const { svc, create, store, logger } = setup(users(25));
+    await svc.birthdayVouchers();
+    create.mockClear();
+    logger.mockClear();
+    await svc.birthdayVouchers();
+    expect(create).not.toHaveBeenCalled();
+    expect(store.size).toBe(25);
+    expect(logger).not.toHaveBeenCalled();
+  });
+
+  it('một grant lỗi: cả lần chạy dừng như cũ (log lỗi, không log granted, lô sau không chạy), không nuốt lỗi', async () => {
+    const { svc, store, logger, errLogger } = setup(users(35), { failOn: 'u012' });
+    await svc.birthdayVouchers();
+    expect(errLogger).toHaveBeenCalledWith('birthdayVouchers lỗi: db down');
+    expect(logger).not.toHaveBeenCalled();
+    // Lô 10-19 chạy xong trọn vẹn rồi mới dừng; lô 20-29 và 30-34 không bắt đầu.
+    expect(store.size).toBe(10 + 9);
+    expect([...store.keys()].some((k) => k.endsWith('U020') || k.endsWith('U034'))).toBe(false);
+  });
+});
+
 describe('VouchersService.milestoneVouchers (§6.6)', () => {
   function setup(rows: { userId: string; spent: bigint }[]) {
     const create = jest.fn().mockResolvedValue({});
