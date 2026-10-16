@@ -682,7 +682,12 @@ describe('OrderReversalService — huỷ đơn có backorder', () => {
     await service.reverseFinancials(tx as never, order);
 
     expect(tx.orderItem.update).not.toHaveBeenCalled();
-    expect(tx.$queryRaw).not.toHaveBeenCalled(); // đơn thường: không khoá/đọc lại thêm
+    // Đơn thường: không khoá/đọc lại dòng đặt trước; câu duy nhất là khoá hai biến thể theo id trước khi cộng kho.
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = (tx.$queryRaw.mock.calls[0]![0] as string[]).join('?');
+    expect(sql).toContain('FROM "variations"');
+    expect(sql).not.toContain('order_items');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.$executeRaw.mock.invocationCallOrder[0]!);
   });
 });
 

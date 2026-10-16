@@ -14,7 +14,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService } from '../storefront/combo.service';
 import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
 import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
-import { reserveVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
@@ -431,6 +431,7 @@ export class CheckoutService {
         // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
         // SP có thể bị gỡ/từ chối giữa lúc tính giá (compute) và lúc ghi đơn — kiểm lại ở đây.
         await assertVariationsSellable(tx, cart.items);
+        await lockVariationsInIdOrder(tx, cart.items.map((l) => l.variationId));
         for (const line of cart.items) {
           const reserved = await reserveVariationStock(tx, line.variationId, line.quantity);
           if (!reserved) {
