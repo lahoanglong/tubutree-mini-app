@@ -6,7 +6,9 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { linkTubuFulfilledVariation } from '../../src/modules/merchant/merchant-pancake-link';
-import { createOrder as createOrderRow, createUser as createUserRow, randCode, setConfig, summarize, warmPool } from './helpers';
+import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import type { OrderStatusService } from '../../src/modules/orders/order-status.service';
+import { createOrder as createOrderRow, createUser as createUserRow, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const DAY = 86_400_000;
 
@@ -200,11 +202,21 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
     await tubuOrder('CANCELLED', 5);
     await tubuOrder('SHIPPING', 1);
     await tubuOrder('CONFIRMED', 20);
-    await tubuOrder('SHIPPING', 5);
+    const open = await tubuOrder('SHIPPING', 5);
 
     const msg = await conflictMessage(svc.setStorePartner(admin.id, sf.id, false));
-    expect(msg).toBe('Chưa thể tắt gian hàng đối tác: 1 đơn có hàng Tubu giao hộ của gian hàng chưa bán xong. Xử lý xong rồi thử lại.');
+    expect(msg).toBe(
+      `Chưa thể tắt gian hàng đối tác: 1 đơn có hàng Tubu giao hộ của gian hàng chưa bán xong (${open.code}). Xử lý xong rồi thử lại.`,
+    );
     expect(await flag()).toBe(true);
+
+    const more = [];
+    for (let i = 0; i < 6; i++) more.push(await tubuOrder('CONFIRMED', 9 - i));
+    const msg2 = await conflictMessage(svc.setStorePartner(admin.id, sf.id, false));
+    const first5 = [...more.slice(0, 4), open].map((o) => o.code);
+    expect(msg2).toBe(
+      `Chưa thể tắt gian hàng đối tác: 7 đơn có hàng Tubu giao hộ của gian hàng chưa bán xong (${first5.join(', ')}, …). Xử lý xong rồi thử lại.`,
+    );
   });
 
   it('yêu cầu trả đã duyệt mà chưa xác nhận nhận hàng về → 409; đã nhận về thì không chặn', async () => {
@@ -218,9 +230,22 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
     await expect(svc.setStorePartner(admin.id, sf.id, false)).resolves.toEqual({ id: sf.id, isPartner: false });
   });
 
-  async function pendingConsignment(sf: { id: string }) {
+  /**
+   * Sản phẩm "Tubu giao hộ" chờ duyệt đúng hình dạng merchant.service createProduct: fulfilment MERCHANT, biến thể tạm không mã
+   * Pancake, PENDING_REVIEW, nhãn = tên gian hàng. `hidden`: chủ đã ẩn (isActive=false) — sản phẩm đang bật thì vướng mắc 'sản
+   * phẩm tự giao đang bán' đã chặn tắt cờ.
+   */
+  async function pendingConsignment(sf: { id: string; title: string }, hidden = true) {
     const tubu = await product(null, 'TUBU', false);
-    const partner = await product(sf.id, 'TUBU', true, { pancakeLinkCode: tubu.variations[0]!.pancakeId });
+    const partner = await prisma.product.create({
+      data: {
+        storefrontId: sf.id, fulfilment: 'MERCHANT', isActive: !hidden, approvalStatus: 'PENDING_REVIEW', brand: sf.title,
+        slug: `it-pf-c-${randCode(8).toLowerCase()}`, name: 'SP giao hộ IT', description: 'IT', basePrice: 1000,
+        pancakeLinkCode: tubu.variations[0]!.pancakeId,
+        variations: { create: [{ sku: `ITPFC-${randCode(8)}`, pancakeId: null, name: 'Mặc định', attributes: {}, retailPrice: 1000, stock: 0 }] },
+      },
+    });
+    created.productIds.push(partner.id);
     return { tubu, partner };
   }
 
@@ -233,6 +258,55 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
     expect(err).toBeInstanceOf(ConflictException);
     expect((err as Error).message).toContain('không còn là gian hàng đối tác');
     expect(await prisma.merchantPancakeLink.count({ where: { storefrontId: sf.id } })).toBe(0);
+  });
+
+  it('sản phẩm giao hộ chờ duyệt đang bật (hình dạng thật): tắt cờ bị chặn bởi sản phẩm tự giao đang bán, duyệt vẫn liên kết được', async () => {
+    const { admin, sf, flag } = await store();
+    const { partner } = await pendingConsignment(sf, false);
+    const msg = await conflictMessage(svc.setStorePartner(admin.id, sf.id, false));
+    expect(msg).toBe('Chưa thể tắt gian hàng đối tác: 1 sản phẩm tự giao đang bán. Xử lý xong rồi thử lại.');
+    await prisma.$transaction((tx) => linkTubuFulfilledVariation(tx, partner, { adminId: admin.id }));
+    expect(await prisma.merchantPancakeLink.count({ where: { storefrontId: sf.id, unlinkedAt: null } })).toBe(1);
+    expect(await flag()).toBe(true);
+  });
+
+  async function blockedBy(holderPid: number) {
+    const [row] = await prisma.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS "n" FROM pg_stat_activity WHERE ${holderPid}::int = ANY(pg_blocking_pids("pid"))`;
+    return row?.n ?? 0;
+  }
+
+  it('duyệt liên kết (đã khoá dòng sản phẩm) ‖ chủ đổi tên gian hàng (khoá gian hàng rồi sửa nhãn sản phẩm), ép xen kẽ: không 40P01, cả hai xong', async () => {
+    const { admin, owner, sf } = await store();
+    const { partner } = await pendingConsignment(sf);
+    const merchant = new MerchantService(prisma, {} as OrderStatusService);
+    let pid = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let locked!: () => void;
+    const productLocked = new Promise<void>((r) => (locked = r));
+    // Cùng thứ tự với AdminService.reviewMerchantProduct: CAS dòng sản phẩm trước, rồi liên kết trong cùng tx.
+    const approval = prisma.$transaction(
+      async (tx) => {
+        await tx.product.updateMany({ where: { id: partner.id, approvalStatus: 'PENDING_REVIEW' }, data: { approvalStatus: 'APPROVED' } });
+        [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS "pid"`;
+        locked();
+        await gate;
+        return linkTubuFulfilledVariation(tx, partner, { adminId: admin.id });
+      },
+      { maxWait: 15_000, timeout: 30_000 },
+    );
+    await productLocked;
+    const rename = merchant.updateStore(owner.id, { title: 'Tên mới IT' });
+    for (let i = 0; (await blockedBy(pid)) < 1; i++) {
+      if (i > 200) throw new Error('lần đổi tên không chờ dòng sản phẩm');
+      await sleep(25);
+    }
+    release();
+    const r = summarize(await Promise.allSettled([approval, rename]));
+    expect(r.errors).toEqual([]);
+    expect(await prisma.merchantPancakeLink.count({ where: { storefrontId: sf.id, unlinkedAt: null } })).toBe(1);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: partner.id } })).brand).toBe('Tên mới IT');
   });
 
   it('admin tắt cờ ‖ admin duyệt liên kết giao hộ cùng lúc (5 vòng): đúng một bên thành công, không có liên kết sống trên gian hàng đã tắt', async () => {

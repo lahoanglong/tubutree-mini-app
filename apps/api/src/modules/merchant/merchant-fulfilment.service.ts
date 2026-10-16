@@ -1395,13 +1395,16 @@ export class MerchantFulfilmentService {
         // Đơn kho Tubu có dòng hàng ký gửi của gian hàng (cùng định nghĩa bảng kê: liên kết lúc đặt, takeover tính từ lúc xác nhận,
         // từ mốc bắt đầu đối soát, chưa có SALE) mà chưa thành khoản bán được (chưa giao, hoặc giao mà Tubu chưa thu tiền): khi
         // thành khoản thì gian hàng đã thôi là đối tác, không ai lập phiếu được. Khoản đã bán nằm ở statementFor bên dưới.
-        count(tx.$queryRaw<{ n: bigint }[]>`
-          SELECT COUNT(DISTINCT o."id") AS n FROM "order_items" oi JOIN "orders" o ON o."id" = oi."orderId"
-           WHERE o."fulfiller" = 'TUBU' AND o."status" NOT IN ('CANCELLED', 'RETURNED')
-             AND NOT (${CONSIGNMENT_SOLD_SQL})
-             ${settleFrom ? Prisma.sql`AND o."createdAt" >= ${settleFrom}` : Prisma.empty}
-             AND ${consignmentLinkedSql(store, true)}
-             AND ${CONSIGNMENT_NO_SALE_SQL}`),
+        // Năm mã đơn cũ nhất kèm tổng số đơn để admin tìm ra mà xử lý.
+        tx.$queryRaw<{ code: string; n: bigint }[]>`
+          SELECT t."code", COUNT(*) OVER () AS n FROM (
+            SELECT DISTINCT o."code", o."createdAt" FROM "order_items" oi JOIN "orders" o ON o."id" = oi."orderId"
+             WHERE o."fulfiller" = 'TUBU' AND o."status" NOT IN ('CANCELLED', 'RETURNED')
+               AND NOT (${CONSIGNMENT_SOLD_SQL})
+               ${settleFrom ? Prisma.sql`AND o."createdAt" >= ${settleFrom}` : Prisma.empty}
+               AND ${consignmentLinkedSql(store, true)}
+               AND ${CONSIGNMENT_NO_SALE_SQL}) t
+          ORDER BY t."createdAt", t."code" LIMIT 5`,
         this.statementFor(storefrontId, new Date(), tx, cfg),
         tx.merchantPayout.count({ where: { storefrontId, status: 'PENDING' } }),
         tx.merchantPancakeLink.count({ where: { storefrontId, unlinkedAt: null } }),
@@ -1418,7 +1421,11 @@ export class MerchantFulfilmentService {
     return [
       owner?.role === 'DEALER' ? 'chủ gian hàng vẫn là đại lý (đổi vai trò trước, nếu không cờ tự bật lại)' : null,
       openOrders ? `${openOrders} đơn tự giao chưa xong` : null,
-      consignmentOpen ? `${consignmentOpen} đơn có hàng Tubu giao hộ của gian hàng chưa bán xong` : null,
+      consignmentOpen.length
+        ? `${Number(consignmentOpen[0]!.n)} đơn có hàng Tubu giao hộ của gian hàng chưa bán xong (${consignmentOpen.map((r) => r.code).join(', ')}${
+            Number(consignmentOpen[0]!.n) > consignmentOpen.length ? ', …' : ''
+          })`
+        : null,
       settleLines ? `${settleLines} khoản chờ đối soát` : null,
       pendingPayouts ? `${pendingPayouts} phiếu đối soát chưa chuyển` : null,
       activeLinks ? `${activeLinks} liên kết hàng Tubu giao hộ đang hiệu lực` : null,
