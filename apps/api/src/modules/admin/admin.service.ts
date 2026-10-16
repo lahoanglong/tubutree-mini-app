@@ -241,15 +241,6 @@ export class AdminService {
       if (!tierId) throw new BadRequestException('Cần chọn bậc đại lý khi duyệt.');
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: tierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
-      // Merge vào metadata sẵn có — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz).
-      const user = await this.prisma.user.findUnique({
-        where: { id: app.userId },
-        select: { metadata: true },
-      });
-      const mergedMeta = {
-        ...((user?.metadata as Record<string, unknown> | null) ?? {}),
-        dealerTierId: tierId,
-      };
       // Atomic guard status='PENDING' TRONG transaction — chống 2 admin duyệt cùng đơn
       // (check status ở ngoài chỉ để trả lỗi rõ ràng, không đủ chống race: cả 2 request có thể
       // đọc PENDING trước khi bên nào ghi xong). Không guard → user.update DEALER chạy 2 lần
@@ -262,8 +253,10 @@ export class AdminService {
         await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
         // Rồi tới dòng users (FOR UPDATE) TRƯỚC mọi ghi vào hồ sơ: người nộp chưa có gian hàng thì không có dòng gian hàng nào để
         // khoá, mà bên ghi hồ sơ rồi đợi users sẽ deadlock với ẩn danh tài khoản (giữ users rồi ghi hồ sơ).
-        const [applicant] = await tx.$queryRaw<{ role: string; isBlocked: boolean }[]>`
-          SELECT "role"::text AS "role", "isBlocked" FROM "users" WHERE "id" = ${app.userId} FOR UPDATE`;
+        // NO KEY UPDATE (không phải FOR UPDATE): FOR UPDATE đợi FOR KEY SHARE của khoá ngoại (đơn người nộp đang đặt qua slug của mình
+        // giữ KEY SHARE rồi đợi gian hàng mà ta đang giữ ⇒ 40P01), còn NO KEY UPDATE vẫn chặn ẩn danh và các ghi khác vào users.
+        const [applicant] = await tx.$queryRaw<{ role: string; isBlocked: boolean; metadata: unknown }[]>`
+          SELECT "role"::text AS "role", "isBlocked", "metadata" FROM "users" WHERE "id" = ${app.userId} FOR NO KEY UPDATE`;
         if (!applicant || applicant.isBlocked) {
           throw new BadRequestException('Tài khoản người nộp đã bị khoá hoặc đã xoá — không thể duyệt hồ sơ đại lý.');
         }
@@ -280,7 +273,11 @@ export class AdminService {
         if (flipped.count === 0) throw new BadRequestException('Đơn đã được xử lý.');
         await tx.user.update({
           where: { id: app.userId },
-          data: { role: 'DEALER', metadata: mergedMeta },
+          // Merge vào metadata đọc từ dòng đã khoá — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz, kể cả ghi chen vừa xong).
+          data: {
+            role: 'DEALER',
+            metadata: { ...((applicant.metadata as Record<string, unknown> | null) ?? {}), dealerTierId: tierId } as Prisma.InputJsonObject,
+          },
         });
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
       }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
