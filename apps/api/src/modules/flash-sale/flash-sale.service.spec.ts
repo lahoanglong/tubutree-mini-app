@@ -143,6 +143,7 @@ describe('FlashSaleService.consumeQuota', () => {
   const now = new Date('2026-07-05T10:00:00Z');
   const mkTx = (soldRaw: number, perUserLimit: number, existing: any, purchaseHit: number) => ({
     $executeRaw: jest.fn().mockResolvedValue(soldRaw),
+    $queryRaw: jest.fn().mockResolvedValue([]),
     flashSaleItem: {
       findUnique: jest.fn().mockResolvedValue({ perUserLimit }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -166,6 +167,17 @@ describe('FlashSaleService.consumeQuota', () => {
     const tx = mkTx(1, 5, null, 0);
     await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
     expect(tx.flashSalePurchase.create).toHaveBeenCalled();
+  });
+
+  it('KEY SHARE dòng users TRƯỚC khi đọc/chèn dòng suất (gộp phiên khách chuyển dòng suất sang đúng khoá đó)', async () => {
+    const tx = mkTx(1, 5, null, 0);
+    await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
+    const [sql, ...values] = tx.$queryRaw.mock.calls[0]!;
+    expect((sql as string[]).join('?')).toMatch(/FROM "users" WHERE "id" = \? FOR KEY SHARE/);
+    expect(values).toEqual(['u1']);
+    const lockAt = tx.$queryRaw.mock.invocationCallOrder[0]!;
+    expect(lockAt).toBeLessThan(tx.flashSalePurchase.findUnique.mock.invocationCallOrder[0]!);
+    expect(lockAt).toBeLessThan(tx.flashSalePurchase.create.mock.invocationCallOrder[0]!);
   });
 
   it('hết quota / flash hết giờ (rows=0) → throw "Hết suất ưu đãi."', async () => {
