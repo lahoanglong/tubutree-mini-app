@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -19,10 +19,22 @@ export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
 export const MERGE_ANCESTOR_CAP = 1000;
 
 /**
- * Tx gộp giữ khoá gộp chung (GUEST_MERGE_LOCK_KEY) nên đặt hạn rõ: một lần gộp chậm bất thường bị huỷ (P2028, khách thử lại)
- * thay vì để các lần gộp khác xếp hàng sau nó, mỗi lần giữ một kết nối pool. Bình thường một lần gộp mất vài chục ms.
+ * Hạn của tx gộp phía Prisma: maxWait = chờ lấy kết nối pool, timeout = Prisma huỷ tx khi quá hạn. timeout KHÔNG cắt một câu
+ * đang chờ khoá (P2028 chỉ tới khi câu đó trả về), nên tx gộp còn tự đặt lock_timeout/statement_timeout ở Postgres
+ * (MERGE_LOCK_TIMEOUT, MERGE_STATEMENT_TIMEOUT): lần gộp xếp hàng sau một lần gộp chậm (khoá chung) hay sau một tx giữ dòng lâu
+ * bỏ cuộc sau vài giây, trả kết nối pool, client nhận lỗi "đang bận, thử lại". Bình thường một lần gộp mất vài chục ms.
  */
 const MERGE_TX_OPTIONS = { maxWait: 2_000, timeout: 5_000 } as const;
+const MERGE_LOCK_TIMEOUT = '2s';
+const MERGE_STATEMENT_TIMEOUT = '5s';
+const MERGE_BUSY_MESSAGE = 'Hệ thống đang bận, vui lòng thử lại sau ít giây.';
+
+/** Lỗi do hạn chờ khoá/câu lệnh/tx của lần gộp (55P03 lock_timeout, 57014 statement_timeout, P2028 Prisma huỷ tx). */
+function isMergeTimeout(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2028') return true;
+  const message = err instanceof Error ? err.message : '';
+  return /\b55P03\b|\b57014\b|lock timeout|statement timeout/i.test(message);
+}
 
 /**
  * Thứ tự khoá dòng users khi gộp: người được mời trước người mời (cạnh a → b khi a.referredById = b, cả hai trong tập),
@@ -331,6 +343,7 @@ export class AuthService {
       // vào cùng T) và thứ tự người-được-mời-trước của mỗi lần chỉ nhất quán trong tập của chính nó ⇒ hai lần gộp xen kẽ có
       // thể khoá ngược chiều (40P01). Khoá chung chấp nhận được: gộp chỉ xảy ra một lần mỗi khách lúc đăng nhập Zalo, tx
       // ngắn. Lấy trước mọi khoá dòng nên không tạo vòng chờ với đường trả hàng hay thưởng (chúng không lấy khoá này).
+      await tx.$queryRaw`SELECT set_config('lock_timeout', ${MERGE_LOCK_TIMEOUT}, true), set_config('statement_timeout', ${MERGE_STATEMENT_TIMEOUT}, true)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_MERGE_LOCK_KEY}))`;
       // Thứ tự khoá như đường duyệt trả hàng (yêu cầu trả → đơn → users): khoá dòng khách trước rồi mới chuyển đơn/yêu cầu
       // trả thì đảo chiều với lần duyệt đang giữ yêu cầu + đơn và chờ ví/điểm của khách ⇒ 40P01 (UAT R6-SYNC-2).
@@ -556,6 +569,8 @@ export class AuthService {
         data: {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
           mergedIntoId: tid,
+          // Refresh token vừa xoay trước lúc gộp còn trong khoảng ân hạn: chốt mốc để refresh() không cấp lại phiên cho khách.
+          sessionsRevokedAt: new Date(),
           pointsBalance: 0,
           pointsConvertedBalance: 0,
           cashbackPending: 0,
@@ -571,8 +586,10 @@ export class AuthService {
       //     G mời khách B rồi B gộp vào T trước G thì B cũng là T. Đọc lại sau khi đã khoá (người được mời, người mời của G).
       const identity = (row: { id: string; mergedIntoId: string | null }) => row.mergedIntoId ?? row.id;
       //     Chuỗi tổ tiên của target đọc bằng MỘT truy vấn đệ quy (tx đang giữ khoá gộp chung, không đi từng bước một), dừng
-      //     ở MERGE_ANCESTOR_CAP bước. Chuỗi dài hơn (hoặc vòng trong dữ liệu) chỉ dựng được bằng hàng loạt phiên khách giả:
-      //     coi là nghi vòng và cắt MỌI người khách đã mời, vì không chứng minh được ai trong số họ nằm ngoài chuỗi.
+      //     ở MERGE_ANCESTOR_CAP bước. Khách đã mang mergedIntoId = target (bước 9) nên khi khách là tổ tiên của target chuỗi
+      //     quay về target: CYCLE dừng ở đó và mọi danh tính trên vòng nằm trong `ancestors` (chỉ người được mời có danh tính
+      //     trên vòng bị cắt). Chạm trần mà KHÔNG gặp vòng thì chuỗi tổ tiên dài hơn 1000 người, chỉ dựng được bằng hàng loạt
+      //     phiên khách giả: coi là nghi vòng và cắt mọi người khách đã mời, vì không chứng minh được ai nằm ngoài chuỗi.
       const chain = await tx.$queryRaw<{ id: string; truncated: boolean }[]>`
         WITH RECURSIVE "chain"("id", "depth") AS (
           SELECT ${tid}::text, 0
@@ -582,8 +599,8 @@ export class AuthService {
             JOIN "users" u ON u."id" = c."id"
             JOIN "users" p ON p."id" = u."referredById"
            WHERE c."depth" < ${MERGE_ANCESTOR_CAP}::int
-        )
-        SELECT c."id", (c."depth" = ${MERGE_ANCESTOR_CAP}::int AND u."referredById" IS NOT NULL) AS "truncated"
+        ) CYCLE "id" SET "isCycle" USING "path"
+        SELECT c."id", (c."depth" = ${MERGE_ANCESTOR_CAP}::int AND NOT c."isCycle" AND u."referredById" IS NOT NULL) AS "truncated"
           FROM "chain" c JOIN "users" u ON u."id" = c."id"`;
       const ancestors = new Set(chain.map((c) => c.id));
       const truncated = chain.some((c) => c.truncated);
@@ -604,7 +621,13 @@ export class AuthService {
       }
 
       return cut.length > 0 ? tx.user.findUniqueOrThrow({ where: { id: tid } }) : merged;
-    }, MERGE_TX_OPTIONS);
+    }, MERGE_TX_OPTIONS).catch((err: unknown) => {
+      if (isMergeTimeout(err)) {
+        this.logger.warn(`Gộp khách ${guest.id} vào ${target.id} quá hạn chờ (khoá/câu lệnh), client thử lại.`);
+        throw new ServiceUnavailableException(MERGE_BUSY_MESSAGE);
+      }
+      throw err;
+    });
   }
 
   /**
@@ -740,6 +763,11 @@ export class AuthService {
     // hoàn toàn việc khoá. Access token đang có bị JwtStrategy chặn qua SessionStateService.
     if (user.isBlocked) {
       throw new UnauthorizedException('Tài khoản đã bị khoá.');
+    }
+    // Khách đã gộp không còn là danh tính: refresh token cũ của khách không được đổi ra phiên mới (phải đăng nhập lại để
+    // nhận token của tài khoản đích; mergedSessionTokens cấp token cho đích, không qua dòng khách).
+    if (user.mergedIntoId) {
+      throw new UnauthorizedException('Phiên đã hết hiệu lực, vui lòng đăng nhập lại.');
     }
     // Áp quyền theo SĐT (allowlist) — chạy cho cả login lẫn refresh ⇒ đổi role có hiệu lực
     // ở lần refresh kế. Không có phone / không có grant → trả nguyên user.

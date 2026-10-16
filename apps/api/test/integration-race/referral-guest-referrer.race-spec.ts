@@ -1,8 +1,8 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { AuthService, MERGE_ANCESTOR_CAP } from '../../src/modules/auth/auth.service';
+import { AuthService, GUEST_MERGE_LOCK_KEY, MERGE_ANCESTOR_CAP } from '../../src/modules/auth/auth.service';
 import type { ZaloService } from '../../src/modules/auth/zalo.service';
 import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import type { Env } from '../../src/config/env.validation';
@@ -94,7 +94,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     ]);
     admin = await createUser(prisma, { role: 'ADMIN' });
 
-    const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-r11', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30 };
+    const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-r11', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30, JWT_REFRESH_REUSE_GRACE_SECONDS: 60 };
     const config = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
     const zalo = {
       getUserInfo: async () => ({ zaloId: zaloIdForNextCall, name: 'Zalo IT' }),
@@ -181,6 +181,17 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
       select: { reason: true, delta: true },
       orderBy: { reason: 'asc' },
     });
+  }
+
+  /** Dòng thưởng giới thiệu của user dạng `reason delta`, sắp theo JS (không phụ thuộc collation của DB). */
+  const ledger = async (userId: string) => (await referralRows(userId)).map((r) => `${r.reason} ${r.delta}`).sort();
+  const rows = (...xs: string[]) => [...xs].sort();
+
+  /** Người được khách G mời, không liên quan vòng nào, đã đủ điều kiện (thưởng cho G). */
+  async function bystander(g: { id: string }) {
+    const r = await createUser(prisma, { referredById: g.id });
+    await qualify(r.id);
+    return r;
   }
 
   const successes = (referrerId: string) => prisma.$transaction((tx) => countReferralSuccesses(tx, referrerId));
@@ -371,11 +382,15 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const g = await guestUser();
     const t = await zaloUser({ referredById: g.id });
     await qualify(t.id);
+    const r = await bystander(g);
     await merge(g.id, t);
     expect(await referrerOf(t.id)).toBeNull();
-    expect((await referralRows(t.id)).map((x) => x.reason)).toEqual([`REFERRAL_ORDER2:${t.id}`, `REFERRAL_ORDER2_REVOKE:${t.id}`]);
-    expect(await balanceOf(t.id)).toBe(0);
-    expect(await successes(t.id)).toBe(0);
+    expect(await referrerOf(r.id)).toBe(t.id);
+    expect(await ledger(t.id)).toEqual(
+      rows(`REFERRAL_ORDER2:${t.id} ${REWARD}`, `REFERRAL_ORDER2_REVOKE:${t.id} ${-REWARD}`, `REFERRAL_ORDER2:${r.id} ${REWARD}`),
+    );
+    expect(await balanceOf(t.id)).toBe(REWARD);
+    expect(await successes(t.id)).toBe(1);
   });
 
   it('(3c) vòng 2: G mời X, X mời T; gộp G vào T → cắt X khỏi T, thu thưởng của X, X giữ thưởng mời T', async () => {
@@ -384,13 +399,41 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const t = await zaloUser({ referredById: x.id });
     await qualify(x.id);
     await qualify(t.id);
+    const r = await bystander(g);
     await merge(g.id, t);
     expect(await referrerOf(x.id)).toBeNull();
     expect(await referrerOf(t.id)).toBe(x.id);
-    expect((await referralRows(t.id)).map((r) => r.reason)).toEqual([`REFERRAL_ORDER2:${x.id}`, `REFERRAL_ORDER2_REVOKE:${x.id}`]);
-    expect(await balanceOf(t.id)).toBe(0);
+    expect(await referrerOf(r.id)).toBe(t.id);
+    expect(await ledger(t.id)).toEqual(
+      rows(`REFERRAL_ORDER2:${x.id} ${REWARD}`, `REFERRAL_ORDER2_REVOKE:${x.id} ${-REWARD}`, `REFERRAL_ORDER2:${r.id} ${REWARD}`),
+    );
+    expect(await balanceOf(t.id)).toBe(REWARD);
     expect(await balanceOf(x.id)).toBe(REWARD);
     expect(await successes(x.id)).toBe(1);
+  });
+
+  it('(X1) khách là tổ tiên của T (G mời X, X mời T) và G còn mời R không liên quan: chỉ cắt X, R chuyển sang T giữ thưởng', async () => {
+    const g = await guestUser();
+    const x = await createUser(prisma, { referredById: g.id });
+    const t = await zaloUser({ referredById: x.id });
+    const r = await bystander(g);
+    await merge(g.id, t);
+    expect(await referrerOf(x.id)).toBeNull();
+    expect(await referrerOf(r.id)).toBe(t.id);
+    expect(await ledger(t.id)).toEqual([`REFERRAL_ORDER2:${r.id} ${REWARD}`]);
+    expect(await balanceOf(t.id)).toBe(REWARD);
+    expect(await successes(t.id)).toBe(1);
+  });
+
+  it('(X2) T tạo bằng mã của G, G còn mời R không liên quan: chỉ cắt T, R chuyển sang T giữ thưởng', async () => {
+    const g = await guestUser();
+    const t = await zaloUser({ referredById: g.id });
+    const r = await bystander(g);
+    await merge(g.id, t);
+    expect(await referrerOf(t.id)).toBeNull();
+    expect(await referrerOf(r.id)).toBe(t.id);
+    expect(await ledger(t.id)).toEqual([`REFERRAL_ORDER2:${r.id} ${REWARD}`]);
+    expect(await balanceOf(t.id)).toBe(REWARD);
   });
 
   it('(3d) G6 giữ nguyên: G được R mời (R ≠ T) → gộp không cắt, không thu thưởng của R', async () => {
@@ -482,14 +525,14 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
   });
 
   /** Trạng thái cuối khi khách A mời khách B (B đã đủ 2 đơn) và cả hai gộp vào T, thứ tự nào cũng vậy. */
-  async function expectSelfReferralCut(t: { id: string }, b: { id: string }) {
+  async function expectSelfReferralCut(t: { id: string }, b: { id: string }, r: { id: string }) {
     expect(await referrerOf(b.id)).toBeNull();
-    expect((await referralRows(t.id)).map((r) => [r.reason, r.delta])).toEqual([
-      [`REFERRAL_ORDER2:${b.id}`, REWARD],
-      [`REFERRAL_ORDER2_REVOKE:${b.id}`, -REWARD],
-    ]);
-    expect(await successes(t.id)).toBe(0);
-    expect(await balanceOf(t.id)).toBe(0);
+    expect(await referrerOf(r.id)).toBe(t.id);
+    expect(await ledger(t.id)).toEqual(
+      rows(`REFERRAL_ORDER2:${b.id} ${REWARD}`, `REFERRAL_ORDER2_REVOKE:${b.id} ${-REWARD}`, `REFERRAL_ORDER2:${r.id} ${REWARD}`),
+    );
+    expect(await successes(t.id)).toBe(1);
+    expect(await balanceOf(t.id)).toBe(REWARD);
   }
 
   it('(6a) REV-1: khách B (được khách A mời) gộp vào T TRƯỚC, rồi A gộp vào T → cắt B, thu thưởng T tự mời', async () => {
@@ -497,9 +540,10 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const a = await guestUser();
     const b = await guestWithCode(a.referralCode);
     await qualify(b.id);
+    const r = await bystander(a);
     await merge(b.id, t);
     await merge(a.id, t);
-    await expectSelfReferralCut(t, b);
+    await expectSelfReferralCut(t, b, r);
   });
 
   it('(6b) REV-1b: A gộp trước rồi B → cùng trạng thái cuối như (6a)', async () => {
@@ -507,9 +551,10 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const a = await guestUser();
     const b = await guestWithCode(a.referralCode);
     await qualify(b.id);
+    const r = await bystander(a);
     await merge(a.id, t);
     await merge(b.id, t);
-    await expectSelfReferralCut(t, b);
+    await expectSelfReferralCut(t, b, r);
   });
 
   it('(6c) REV-3: A và B gộp vào T cùng lúc (ép xen kẽ) → không lỗi, cùng trạng thái cuối', async () => {
@@ -517,6 +562,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const a = await guestUser();
     const b = await guestWithCode(a.referralCode);
     await qualify(b.id);
+    const r = await bystander(a);
     const hold = await holdRows('users', [t.id], 'FOR SHARE');
     const pA = merge(a.id, t);
     await waitForWaiters(hold.pid, 1);
@@ -525,7 +571,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     hold.release();
     await hold.done;
     expect(summarize(await Promise.allSettled([pA, pB])).errors).toEqual([]);
-    await expectSelfReferralCut(t, b);
+    await expectSelfReferralCut(t, b, r);
   });
 
   it('(6d) REV-2: vòng qua dòng đã gộp (G mời X, X gộp vào T2, T2 mời T; G gộp vào T) → cắt X, thu thưởng của X', async () => {
@@ -536,11 +582,15 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     await merge(x.id, t2);
     const t = await zaloUser({ referredById: t2.id });
     await qualify(t.id);
+    const r = await bystander(g);
     await merge(g.id, t);
     expect(await referrerOf(x.id)).toBeNull();
     expect(await referrerOf(t.id)).toBe(t2.id);
-    expect((await referralRows(t.id)).map((r) => r.reason)).toEqual([`REFERRAL_ORDER2:${x.id}`, `REFERRAL_ORDER2_REVOKE:${x.id}`]);
-    expect(await balanceOf(t.id)).toBe(0);
+    expect(await referrerOf(r.id)).toBe(t.id);
+    expect(await ledger(t.id)).toEqual(
+      rows(`REFERRAL_ORDER2:${x.id} ${REWARD}`, `REFERRAL_ORDER2_REVOKE:${x.id} ${-REWARD}`, `REFERRAL_ORDER2:${r.id} ${REWARD}`),
+    );
+    expect(await balanceOf(t.id)).toBe(REWARD);
     expect(await balanceOf(t2.id)).toBe(REWARD);
   });
 
@@ -548,13 +598,17 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const g = await guestUser();
     const x = await createUser(prisma, { referredById: g.id });
     await qualify(x.id);
+    const r = await bystander(g);
     let parent = x.id;
     for (let i = 0; i < 70; i++) parent = (await createUser(prisma, { referredById: parent })).id;
     const t = await zaloUser({ referredById: parent });
     await merge(g.id, t);
     expect(await referrerOf(x.id)).toBeNull();
-    expect((await referralRows(t.id)).map((r) => r.reason)).toEqual([`REFERRAL_ORDER2:${x.id}`, `REFERRAL_ORDER2_REVOKE:${x.id}`]);
-    expect(await balanceOf(t.id)).toBe(0);
+    expect(await referrerOf(r.id)).toBe(t.id);
+    expect(await ledger(t.id)).toEqual(
+      rows(`REFERRAL_ORDER2:${x.id} ${REWARD}`, `REFERRAL_ORDER2_REVOKE:${x.id} ${-REWARD}`, `REFERRAL_ORDER2:${r.id} ${REWARD}`),
+    );
+    expect(await balanceOf(t.id)).toBe(REWARD);
   });
 
   it('(7) REV-4: hai khách gộp cùng lúc vào T với tập dòng chồng nhau (G2 mời G1, G1 mời C) → không deadlock (10 vòng)', async () => {
@@ -647,10 +701,11 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     }
   });
 
-  it('(9d) chuỗi tổ tiên vượt trần: coi như nghi vòng, cắt người G đã mời và thu thưởng', async () => {
+  it('(9d) chuỗi tổ tiên vượt trần (không vòng): coi như nghi vòng, cắt MỌI người G đã mời (kể cả R không liên quan) và thu thưởng', async () => {
     const g = await guestUser();
     const x = await createUser(prisma, { referredById: g.id });
     await qualify(x.id);
+    const r = await bystander(g);
     const tag = randCode(6).toLowerCase();
     const chain = Array.from({ length: MERGE_ANCESTOR_CAP + 5 }, (_, i) => ({
       id: `chain${tag}${String(i).padStart(5, '0')}`,
@@ -662,8 +717,68 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const t = await zaloUser({ referredById: chain[chain.length - 1]!.id });
     await merge(g.id, t);
     expect(await referrerOf(x.id)).toBeNull();
-    expect((await referralRows(t.id)).map((r) => r.reason)).toEqual([`REFERRAL_ORDER2:${x.id}`, `REFERRAL_ORDER2_REVOKE:${x.id}`]);
+    expect(await referrerOf(r.id)).toBeNull();
+    expect(await ledger(t.id)).toEqual(
+      rows(
+        `REFERRAL_ORDER2:${x.id} ${REWARD}`,
+        `REFERRAL_ORDER2_REVOKE:${x.id} ${-REWARD}`,
+        `REFERRAL_ORDER2:${r.id} ${REWARD}`,
+        `REFERRAL_ORDER2_REVOKE:${r.id} ${-REWARD}`,
+      ),
+    );
     expect(await balanceOf(t.id)).toBe(0);
+  });
+
+  it('(X3) lần gộp xếp hàng sau khoá gộp chung bị giữ lâu → bỏ cuộc trong vài giây (503 thử lại), không đổi gì; thử lại sau thì gộp được', async () => {
+    const g = await guestUser();
+    const t = await zaloUser();
+    const o = await deliveredOrder(g.id, 1);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const held = new Promise<void>((resolve) => (locked = resolve));
+    const done = prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_MERGE_LOCK_KEY}))`;
+        locked();
+        await gate;
+      },
+      { timeout: 30_000 },
+    );
+    await held;
+    const started = Date.now();
+    const attempt = merge(g.id, t);
+    const outcome = await Promise.race([
+      attempt.then(
+        () => 'ok',
+        (err: unknown) => err,
+      ),
+      sleep(8_000).then(() => 'hung'),
+    ]);
+    const elapsed = Date.now() - started;
+    release();
+    await done;
+    await attempt.catch(() => undefined);
+    expect(outcome).toBeInstanceOf(ServiceUnavailableException);
+    expect(elapsed).toBeLessThan(4_000);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: g.id } })).mergedIntoId).toBeNull();
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).userId).toBe(g.id);
+
+    await merge(g.id, t);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: g.id } })).mergedIntoId).toBe(t.id);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).userId).toBe(t.id);
+  }, 30_000);
+
+  it('(X4) refresh token cũ của khách đã gộp không đổi ra phiên mới; ensurePhone bằng access token khách vẫn nhận token của T', async () => {
+    const t = await zaloUser();
+    const login = await auth.loginAsGuest(`dev_${randCode(10)}`);
+    const g = login.user;
+    const rotated = await auth.refresh(login.refreshToken!);
+    await merge(g.id, t);
+    await expect(auth.refresh(login.refreshToken!)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(auth.refresh(rotated.refreshToken!)).rejects.toBeInstanceOf(UnauthorizedException);
+    zaloIdForNextCall = t.zaloId!;
+    expect((await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).user.id).toBe(t.id);
   });
 
   async function anonymize(userId: string) {
