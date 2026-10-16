@@ -184,8 +184,12 @@ export class VouchersService {
             }),
           );
           // Đợi cả nhóm xong rồi mới ném lỗi đầu tiên: không để grant còn chạy dở sau khi catch ngoài đã ghi log.
-          const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-          if (failed) throw failed.reason;
+          const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+          // Lỗi đầu tiên được catch ngoài log; các lỗi sau trong cùng nhóm phải log ở đây kẻo mất dấu.
+          for (const f of failures.slice(1)) {
+            this.logger.error(`birthdayVouchers lỗi thêm trong cùng nhóm: ${f.reason instanceof Error ? f.reason.message : f.reason}`);
+          }
+          if (failures.length) throw failures[0]!.reason;
           granted += results.filter((r) => r.status === 'fulfilled' && r.value).length;
         }
         if (users.length < VouchersService.BATCH_PAGE) break;

@@ -209,7 +209,7 @@ describe('VouchersService.birthdayVouchers — xử lý từng lô song song có
   const expectedValue = (i: number) => (i % 3 === 0 ? 300000 : i % 3 === 1 ? 150000 : 50000);
 
   /** Kho coupon trong bộ nhớ: findUnique/create theo code như unique thật; đo số create đang chạy cùng lúc. */
-  function setup(rows: { id: string; tierId: string | null }[], opts: { failOn?: string } = {}) {
+  function setup(rows: { id: string; tierId: string | null }[], opts: { failOn?: string; alsoFailOn?: string } = {}) {
     const store = new Map<string, { code: string; value: number }>();
     let inFlight = 0;
     let maxInFlight = 0;
@@ -219,6 +219,7 @@ describe('VouchersService.birthdayVouchers — xử lý từng lô song song có
       await new Promise((r) => setTimeout(r, 5));
       inFlight--;
       if (opts.failOn && data.scopeMeta.userId === opts.failOn) throw new Error('db down');
+      if (opts.alsoFailOn && data.scopeMeta.userId === opts.alsoFailOn) throw new Error('db down 2');
       store.set(data.code, { code: data.code, value: data.value });
       return {};
     });
@@ -270,6 +271,15 @@ describe('VouchersService.birthdayVouchers — xử lý từng lô song song có
     // Lô 10-19 chạy xong trọn vẹn rồi mới dừng; lô 20-29 và 30-34 không bắt đầu.
     expect(store.size).toBe(10 + 9);
     expect([...store.keys()].some((k) => k.endsWith('U020') || k.endsWith('U034'))).toBe(false);
+  });
+
+  it('nhiều grant lỗi trong cùng lô: lỗi đầu tiên vẫn ném ra, các lỗi sau cũng được log, lô sau không chạy', async () => {
+    const { svc, store, logger, errLogger } = setup(users(35), { failOn: 'u012', alsoFailOn: 'u015' });
+    await svc.birthdayVouchers();
+    expect(errLogger).toHaveBeenCalledWith('birthdayVouchers lỗi: db down');
+    expect(errLogger.mock.calls.some((c) => String((c as unknown[])[0]).includes('db down 2'))).toBe(true);
+    expect(logger).not.toHaveBeenCalled();
+    expect(store.size).toBe(10 + 8);
   });
 });
 

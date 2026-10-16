@@ -4,6 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { VouchersService } from '../../src/modules/vouchers/vouchers.service';
+import { vnDateParts } from '../../src/common/vn-time';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
 
 /**
@@ -63,8 +64,8 @@ describe('VouchersService real-user + batching (real Postgres)', () => {
 
   it('(b) birthday: guest không nhận; > 1 lô user cùng ngày sinh đều nhận, chạy 2 lần không trùng', async () => {
     statics.BATCH_PAGE = 3;
-    const now = new Date();
-    const dob = new Date(Date.UTC(1990, now.getMonth(), now.getDate(), 12));
+    const { month, day } = vnDateParts();
+    const dob = new Date(Date.UTC(1990, month - 1, day, 12));
     const reals = [];
     for (let i = 0; i < 8; i++) reals.push(await createUser(prisma, { zaloId: `${Date.now()}${randCode(8)}`, dob }));
     const g = await createUser(prisma, { zaloId: `guest_d_${randCode(20)}`, dob });
@@ -103,8 +104,8 @@ describe('VouchersService real-user + batching (real Postgres)', () => {
 
   it('(d) birthday: 2 instance cron chạy song song → mỗi user đúng 1 voucher', async () => {
     statics.BATCH_PAGE = 2;
-    const now = new Date();
-    const dob = new Date(Date.UTC(1985, now.getMonth(), now.getDate(), 12));
+    const { month, day } = vnDateParts();
+    const dob = new Date(Date.UTC(1985, month - 1, day, 12));
     const reals = [];
     for (let i = 0; i < 5; i++) reals.push(await createUser(prisma, { phone: `08${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`, dob }));
 
@@ -116,8 +117,8 @@ describe('VouchersService real-user + batching (real Postgres)', () => {
   });
 
   it('(e) birthday: 520 user thật cùng ngày sinh (vượt mốc 500 cũ) với lô mặc định → không sót ai', async () => {
-    const now = new Date();
-    const dob = new Date(Date.UTC(1977, now.getMonth(), now.getDate(), 12));
+    const { year, month, day } = vnDateParts();
+    const dob = new Date(Date.UTC(1977, month - 1, day, 12));
     const tag = randCode(6);
     await prisma.user.createMany({
       data: Array.from({ length: 520 }, (_, i) => ({ referralCode: `E${tag}${i}`, zaloId: `z${tag}${i}`, dob })),
@@ -126,7 +127,7 @@ describe('VouchersService real-user + batching (real Postgres)', () => {
 
     await vouchers.birthdayVouchers();
 
-    const codes = ids.map((id) => `BIRTHDAY-${now.getFullYear()}-${now.getMonth() + 1}-${id}`.toUpperCase());
+    const codes = ids.map((id) => `BIRTHDAY-${year}-${month}-${id}`.toUpperCase());
     const granted = await prisma.coupon.count({ where: { code: { in: codes } } });
     console.log('[e] birthday 520 users granted=%d', granted);
     expect(ids).toHaveLength(520);

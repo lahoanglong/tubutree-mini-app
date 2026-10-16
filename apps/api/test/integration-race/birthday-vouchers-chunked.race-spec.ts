@@ -4,6 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { VouchersService } from '../../src/modules/vouchers/vouchers.service';
+import { vnDateParts } from '../../src/common/vn-time';
 import { createUser, randCode, warmPool } from './helpers';
 
 /** birthdayVouchers xử lý lô song song (tối đa 10): cùng tập coupon + mức theo hạng, chạy lại / 2 instance không trùng. */
@@ -43,8 +44,8 @@ describe('VouchersService.birthdayVouchers chunked (real Postgres)', () => {
         data: { id: t.id, name: t.id, minPoints: 0, birthdayVoucherAmount: t.amount, perks: [], sortOrder: 900 + i },
       });
     }
-    const now = new Date();
-    const dob = new Date(Date.UTC(1990, now.getMonth(), now.getDate(), 12));
+    const { year, month, day } = vnDateParts();
+    const dob = new Date(Date.UTC(1990, month - 1, day, 12));
     const mine: { id: string; expected: number }[] = [];
     for (let i = 0; i < 27; i++) {
       const tier = i % 4 === 3 ? null : tiers[i % 3]!;
@@ -69,7 +70,7 @@ describe('VouchersService.birthdayVouchers chunked (real Postgres)', () => {
       const c = first.filter((x) => (x.scopeMeta as { userId: string }).userId === m.id);
       expect(c).toHaveLength(1);
       expect(c[0]!.value).toBe(m.expected);
-      expect(c[0]!.code).toBe(`${c[0]!.code.split('-').slice(0, 3).join('-')}-${m.id}`.toUpperCase());
+      expect(c[0]!.code).toBe(`BIRTHDAY-${year}-${month}-${m.id}`.toUpperCase());
     }
     expect(second.map((c) => c.id).sort()).toEqual(first.map((c) => c.id).sort());
   });
