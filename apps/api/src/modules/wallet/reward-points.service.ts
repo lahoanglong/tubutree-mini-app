@@ -9,13 +9,16 @@ import {
   findReferralRewardedOrders,
   fullyReturnedOrderIds,
   hasReferralEntry,
+  heldMilestoneGens,
   LEGACY_REFERRAL_CASHBACK_PREFIX,
   legacyXuToPoints,
   lockReferee,
   lockReferrer,
   milestoneGrantReason,
+  nextMilestoneGen,
   readMilestoneState,
   REFERRAL_ORDER2_PREFIX,
+  resolveMergedUserId,
   revokeReferralRewardForPriorReturns,
 } from './referral-reward';
 
@@ -194,12 +197,13 @@ export class RewardPointsService {
    * DELIVERED; tự xét lại từ DB nên gọi lặp/song song an toàn. Người mời là CTV thì không thưởng
    * (CTV chỉ hưởng hoa hồng). Người được mời không nhận thêm — họ đã có voucher chào mừng.
    */
-  async grantReferralOrderReward(refereeId: string): Promise<boolean> {
+  async grantReferralOrderReward(refereeId: string, retried = false): Promise<boolean> {
     const referee = await this.prisma.user.findUnique({
       where: { id: refereeId },
       select: { referredById: true },
     });
-    const referrerId = referee?.referredById;
+    // Người mời là khách đã gộp (người được mời tạo xen giữa lúc gộp) ⇒ thưởng cho tài khoản đích.
+    const referrerId = referee?.referredById ? await resolveMergedUserId(this.prisma, referee.referredById) : null;
     if (!referrerId || referrerId === refereeId) return false;
     const referrer = await this.prisma.user.findUnique({ where: { id: referrerId }, select: { role: true } });
     if (!referrer || referrer.role === 'AFFILIATE') return false;
@@ -211,8 +215,11 @@ export class RewardPointsService {
     ]);
     if (!(reward > 0)) return false;
 
-    const granted = await this.prisma.$transaction(async (tx) => {
+    const granted = await this.prisma.$transaction(async (tx): Promise<boolean | 'STALE'> => {
       await lockReferee(tx, refereeId);
+      // Gộp khách đổi referredById của người được mời dưới khoá này: người mời đọc ở trên có thể là dòng khách vừa gộp.
+      const fresh = await tx.user.findUnique({ where: { id: refereeId }, select: { referredById: true } });
+      if ((fresh?.referredById ? await resolveMergedUserId(tx, fresh.referredById) : null) !== referrerId) return 'STALE';
       if (await hasReferralEntry(tx, [`${REFERRAL_ORDER2_PREFIX}${refereeId}`, `${LEGACY_REFERRAL_CASHBACK_PREFIX}${refereeId}`])) {
         return false;
       }
@@ -260,6 +267,7 @@ export class RewardPointsService {
       if (ok) await revokeReferralRewardForPriorReturns(tx, [first.id, second.id]);
       return ok;
     });
+    if (granted === 'STALE') return retried ? false : this.grantReferralOrderReward(refereeId, true);
     if (granted) await this.awardReferralMilestones(referrerId);
     return granted;
   }
@@ -280,9 +288,8 @@ export class RewardPointsService {
       for (const m of milestones) {
         if (successCount < m.count) continue;
         const s = state.get(m.count);
-        const gen = s?.grants.size ?? 0;
-        if (gen > (s?.revokes ?? 0)) continue;
-        await this.grant(referrerId, m.bonusPoints, milestoneGrantReason(referrerId, m.count, gen), 'REFERRAL', referrerId, tx, expiresAt);
+        if (heldMilestoneGens(s).length > 0) continue;
+        await this.grant(referrerId, m.bonusPoints, milestoneGrantReason(referrerId, m.count, nextMilestoneGen(s)), 'REFERRAL', referrerId, tx, expiresAt);
       }
     });
   }

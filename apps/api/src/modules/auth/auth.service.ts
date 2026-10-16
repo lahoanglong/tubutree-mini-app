@@ -9,7 +9,34 @@ import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { renameMergedMilestones, resolveMergedUserId, revokeReferralRewardForReferee } from '../wallet/referral-reward';
 import { roleClaims } from './session-state.service';
+
+/**
+ * Thứ tự khoá dòng users khi gộp: người được mời trước người mời (cạnh a → b khi a.referredById = b, cả hai trong tập),
+ * cùng chiều mọi đường thưởng/thu hồi giới thiệu (lockReferee rồi lockReferrer). Tập này trước gộp không có vòng (người
+ * mời luôn có trước). Hoà thì theo id để hai lần gộp cùng chạm một dòng khoá cùng thứ tự.
+ */
+export function referralLockOrder(rows: { id: string; referredById: string | null }[]): string[] {
+  const ids = new Set(rows.map((r) => r.id));
+  const pending = new Map<string, number>([...ids].map((id) => [id, 0]));
+  for (const r of rows) {
+    if (r.referredById && ids.has(r.referredById) && r.referredById !== r.id) {
+      pending.set(r.referredById, (pending.get(r.referredById) ?? 0) + 1);
+    }
+  }
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const out: string[] = [];
+  while (pending.size > 0) {
+    const ready = [...pending].filter(([, n]) => n === 0).map(([id]) => id).sort();
+    const next = ready[0] ?? [...pending.keys()].sort()[0]!;
+    pending.delete(next);
+    out.push(next);
+    const parent = byId.get(next)?.referredById;
+    if (parent && pending.has(parent)) pending.set(parent, (pending.get(parent) ?? 1) - 1);
+  }
+  return out;
+}
 
 @Injectable()
 export class AuthService {
@@ -267,9 +294,19 @@ export class AuthService {
   ): Promise<User> {
     const targetPhone = phone && !target.phone ? await this.phoneIfFree(phone, target.id) : undefined;
     return this.prisma.$transaction(async (tx) => {
-      // Khoá theo thứ tự cố định khách → target (target không bao giờ là khách nên không đảo
-      // chiều được). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để
-      // bước kiểm trùng bên dưới thấy dòng của lần gộp trước.
+      // Thứ tự khoá như đường duyệt trả hàng (yêu cầu trả → đơn → users): khoá dòng khách trước rồi mới chuyển đơn/yêu cầu
+      // trả thì đảo chiều với lần duyệt đang giữ yêu cầu + đơn và chờ ví/điểm của khách ⇒ 40P01 (UAT R6-SYNC-2).
+      await tx.$queryRaw`SELECT "id" FROM "return_requests" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
+      // Dòng users: khách, target và những người khách đã mời (đổi referredById ở bước 10), người được mời trước người mời
+      // (referralLockOrder). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để bước kiểm trùng bên
+      // dưới thấy dòng của lần gộp trước.
+      const circle = await tx.$queryRaw<{ id: string; referredById: string | null }[]>`
+        SELECT "id", "referredById" FROM "users" WHERE "id" IN (${guest.id}, ${target.id}) OR "referredById" = ${guest.id}`;
+      for (const id of referralLockOrder(circle)) {
+        if (id === guest.id || id === target.id) await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR UPDATE`;
+        else await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR NO KEY UPDATE`;
+      }
       const lockedGuest = await tx.$queryRaw<
         {
           zaloId: string | null;
@@ -280,7 +317,6 @@ export class AuthService {
         }[]
       >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
-      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${target.id} FOR UPDATE`;
       const g = lockedGuest[0];
       if (!g || g.zaloId !== guest.zaloId || g.zaloId?.includes('_merged_')) {
         return tx.user.findUniqueOrThrow({ where: { id: target.id } });
@@ -365,6 +401,7 @@ export class AuthService {
                         WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
       await tx.pointsTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await renameMergedMilestones(tx, gid, tid);
 
       // 6) Bảng giới hạn lượt theo user. Flash sale: cộng dồn số đã mua để perUserLimit tính cả
       //    hai bên. Đánh giá: mỗi lần mua (đơn) một đánh giá và đơn của khách đã sang target ở trên, nên đánh giá đi theo
@@ -472,13 +509,45 @@ export class AuthService {
         where: { id: gid },
         data: {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
+          mergedIntoId: tid,
           pointsBalance: 0,
           pointsConvertedBalance: 0,
           cashbackPending: 0,
         },
       });
 
-      return merged;
+      // 10) Danh tính giới thiệu (UAT R6 "khách là người mời"): người khách đã mời chuyển sang target, mã của khách quy về
+      //     target qua mergedIntoId (bước 9), dòng thưởng/mốc đã theo sổ ở bước 5. Liên kết làm target tự mời mình hoặc tạo
+      //     vòng (khách mời X, ..., X là tổ tiên giới thiệu của target) bị cắt và thưởng đã cấp cho nó bị thu ngay: vòng
+      //     người được mời ↔ người mời làm hai lần trả hàng khoá ngược chiều nhau (40P01), tự mời thì người mời tự nhận
+      //     thưởng. Khách được chính target mời (target tạo khách bằng mã của mình) cũng vậy. Khách được người khác mời: giữ
+      //     nguyên (G6).
+      const referees = await tx.$queryRaw<{ id: string }[]>`
+        SELECT "id" FROM "users" WHERE "referredById" = ${gid} ORDER BY "id" FOR NO KEY UPDATE`;
+      const refereeIds = new Set(referees.map((r) => r.id));
+      let cyclic: string | null = null;
+      const seen = new Set<string>([gid]);
+      for (let cur: string | null = tid; cur && !seen.has(cur) && seen.size < 64; ) {
+        if (refereeIds.has(cur)) {
+          cyclic = cur;
+          break;
+        }
+        seen.add(cur);
+        const row: { referredById: string | null } | null = await tx.user.findUnique({ where: { id: cur }, select: { referredById: true } });
+        cur = row?.referredById ?? null;
+      }
+      await tx.user.updateMany({
+        where: { referredById: gid, ...(cyclic ? { id: { not: cyclic } } : {}) },
+        data: { referredById: tid },
+      });
+      const selfReferred = circle.find((r) => r.id === gid)?.referredById === tid;
+      const cut = [cyclic, selfReferred ? gid : null].filter((id): id is string => id !== null);
+      if (cut.length > 0) {
+        await tx.user.updateMany({ where: { id: { in: cut } }, data: { referredById: null } });
+        for (const refereeId of cut) await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);
+      }
+
+      return cut.length > 0 ? tx.user.findUniqueOrThrow({ where: { id: tid } }) : merged;
     });
   }
 
@@ -674,7 +743,7 @@ export class AuthService {
       where: { referralCode: referralCode.toUpperCase() },
       select: { id: true },
     });
-    return ref?.id ?? null;
+    return ref ? resolveMergedUserId(this.prisma, ref.id) : null;
   }
 
   /** Sinh referralCode duy nhất (8 ký tự base36 không lẫn ký tự dễ nhầm). */

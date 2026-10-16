@@ -151,10 +151,27 @@ export async function countReferralSuccesses(db: Db, referrerId: string): Promis
 export interface MilestoneState {
   /** Khoản đã cấp của từng đời (đơn vị theo sổ), theo số đời (đời 0 = reason không hậu tố). */
   grants: Map<number, ReferralGrant>;
-  revokes: number;
+  /** Các đời đã thu hồi (hậu tố #<đời> của dòng thu hồi). */
+  revoked: Set<number>;
 }
 
-/** Trạng thái mốc của người mời (gộp hai sổ), theo số lượt của mốc. Mốc đang giữ ⇔ grants.size > revokes. */
+/**
+ * Các đời đang giữ, tăng dần. Không gộp thì luôn là một đoạn liền sau các đời đã thu (đời cấp = số đời đã cấp, đời thu =
+ * đời giữ nhỏ nhất), nên thu đời nhỏ nhất trùng reason cách đánh số cũ. Sau gộp khách, đời của khách được đánh lại nối
+ * sau đời của người đích (renameMergedMilestones) nên đời giữ có thể xen giữa đời đã thu.
+ */
+export function heldMilestoneGens(s: MilestoneState | undefined): number[] {
+  if (!s) return [];
+  return [...s.grants.keys()].filter((gen) => !s.revoked.has(gen)).sort((a, b) => a - b);
+}
+
+/** Đời cho lần cấp mới: sau đời lớn nhất đã có (cấp hay thu), không bao giờ trùng reason cũ. */
+export function nextMilestoneGen(s: MilestoneState | undefined): number {
+  if (!s) return 0;
+  return Math.max(-1, ...s.grants.keys(), ...s.revoked) + 1;
+}
+
+/** Trạng thái mốc của người mời (gộp hai sổ), theo số lượt của mốc. Mốc đang giữ ⇔ heldMilestoneGens khác rỗng. */
 export async function readMilestoneState(db: Db, referrerId: string): Promise<Map<number, MilestoneState>> {
   const grantPrefix = `${MILESTONE_PREFIX}${referrerId}:`;
   const revokePrefix = `${MILESTONE_REVOKE_PREFIX}${referrerId}:`;
@@ -178,9 +195,11 @@ export async function readMilestoneState(db: Db, referrerId: string): Promise<Ma
     const [countPart, genPart] = row.reason.slice(isRevoke ? revokePrefix.length : grantPrefix.length).split('#');
     const count = Number(countPart);
     if (!Number.isFinite(count)) continue;
-    const s = state.get(count) ?? { grants: new Map<number, ReferralGrant>(), revokes: 0 };
-    if (isRevoke) s.revokes += 1;
-    else s.grants.set(genPart ? Number(genPart) : 0, { amount: row.delta, ledger: row.ledger });
+    const gen = genPart ? Number(genPart) : 0;
+    if (!Number.isInteger(gen) || gen < 0) continue;
+    const s = state.get(count) ?? { grants: new Map<number, ReferralGrant>(), revoked: new Set<number>() };
+    if (isRevoke) s.revoked.add(gen);
+    else s.grants.set(gen, { amount: row.delta, ledger: row.ledger });
     state.set(count, s);
   }
   return state;
@@ -255,22 +274,76 @@ async function revokeLostMilestones(
   const state = await readMilestoneState(tx, referrerId);
   const total = { revoked: 0, shortfall: 0 };
   for (const [count, s] of state) {
-    if (count <= net || s.grants.size <= s.revokes) continue;
-    const gen = s.revokes;
-    const res = await debitReferralReward(
-      tx,
-      referrerId,
-      s.grants.get(gen) ?? { amount: 0, ledger: 'POINTS' },
-      `${MILESTONE_REVOKE_PREFIX}${referrerId}:${count}#${gen}`,
-      refId,
-      `REFERRAL_MILESTONE_DEBT:${referrerId}:${count}#${gen}`,
-    );
-    if (res) {
-      total.revoked += res.revoked;
-      total.shortfall += res.shortfall;
+    if (count <= net) continue;
+    // Sau gộp khách có thể giữ nhiều đời của cùng mốc (khách và người đích mỗi bên đạt một lần): hết đủ lượt thì thu cả.
+    for (const gen of heldMilestoneGens(s)) {
+      const res = await debitReferralReward(
+        tx,
+        referrerId,
+        s.grants.get(gen) ?? { amount: 0, ledger: 'POINTS' },
+        `${MILESTONE_REVOKE_PREFIX}${referrerId}:${count}#${gen}`,
+        refId,
+        `REFERRAL_MILESTONE_DEBT:${referrerId}:${count}#${gen}`,
+      );
+      if (res) {
+        total.revoked += res.revoked;
+        total.shortfall += res.shortfall;
+      }
     }
   }
   return total;
+}
+
+/**
+ * Gộp khách `fromId` vào `toId` (gọi trong tx gộp, SAU khi dòng sổ của khách đã sang `toId`, đang giữ khoá dòng users của
+ * `toId`): đổi khoá các dòng mốc REFERRAL_MILESTONE[_REVOKE]:<fromId>:<mốc>#<đời> (và dòng nợ mốc) sang `toId`, đời của khách
+ * dời nối sau đời lớn nhất của `toId` cho cùng mốc. Đọc mốc theo `toId` (readMilestoneState, revokeLostMilestones) mới thấy
+ * mốc khách đã nhận: không cấp lại mốc đó lần hai và lượt bị thu hồi sau này thu được cả mốc của khách. Dời đời (không đọc
+ * mọi tiền tố) để reason mới không đụng partial unique index theo reason, và để dòng thu hồi vẫn cùng khoá `<mốc>#<đời>` với
+ * dòng cấp — loyalty-expiry ghép lô thưởng/lô thu hồi theo khoá đó.
+ */
+export async function renameMergedMilestones(tx: Db, fromId: string, toId: string): Promise<void> {
+  const fromGrant = `${MILESTONE_PREFIX}${fromId}:`;
+  const fromRevoke = `${MILESTONE_REVOKE_PREFIX}${fromId}:`;
+  const fromDebt = `REFERRAL_MILESTONE_DEBT:${fromId}:`;
+  const where = {
+    userId: toId,
+    OR: [
+      { refType: 'REFERRAL', reason: { startsWith: fromGrant } },
+      { refType: 'REFERRAL', reason: { startsWith: fromRevoke } },
+      { refType: REFERRAL_DEBT_REF_TYPE, reason: { startsWith: fromDebt } },
+    ],
+  };
+  const select = { id: true, reason: true } as const;
+  const [coinRows, pointsRows] = await Promise.all([
+    tx.coinTransaction.findMany({ where, select }),
+    tx.pointsTransaction.findMany({ where, select }),
+  ]);
+  if (coinRows.length + pointsRows.length === 0) return;
+
+  const own = await readMilestoneState(tx, toId);
+  const offset = new Map<number, number>();
+  const rename = (reason: string): string | null => {
+    const prefix = reason.startsWith(fromRevoke) ? fromRevoke : reason.startsWith(fromGrant) ? fromGrant : fromDebt;
+    const [mark, ...tail] = reason.slice(prefix.length).split(':');
+    const [countPart, genPart] = (mark ?? '').split('#');
+    const count = Number(countPart);
+    const gen = genPart ? Number(genPart) : 0;
+    if (!Number.isFinite(count) || !Number.isInteger(gen) || gen < 0) return null;
+    if (!offset.has(count)) offset.set(count, nextMilestoneGen(own.get(count)));
+    const newGen = gen + offset.get(count)!;
+    if (prefix === fromGrant) return milestoneGrantReason(toId, count, newGen);
+    const toPrefix = prefix === fromRevoke ? MILESTONE_REVOKE_PREFIX : 'REFERRAL_MILESTONE_DEBT:';
+    return [`${toPrefix}${toId}:${count}#${newGen}`, ...tail].join(':');
+  };
+  for (const row of coinRows) {
+    const reason = rename(row.reason);
+    if (reason) await tx.coinTransaction.update({ where: { id: row.id }, data: { reason } });
+  }
+  for (const row of pointsRows) {
+    const reason = rename(row.reason);
+    if (reason) await tx.pointsTransaction.update({ where: { id: row.id }, data: { reason } });
+  }
 }
 
 /**
@@ -292,7 +365,7 @@ async function findOrderGrants(tx: Db, order: { id: string; userId: string }) {
     tx.coinTransaction.findMany({ where, select }),
     tx.pointsTransaction.findMany({ where, select }),
   ]);
-  return [
+  const grants = [
     ...coinGrants.map((g) => ({ ...g, ledger: 'COIN' as const })),
     ...pointsGrants.map((g) => ({ ...g, ledger: 'POINTS' as const })),
   ]
@@ -303,6 +376,14 @@ async function findOrderGrants(tx: Db, order: { id: string; userId: string }) {
       grant: { amount: g.delta, ledger: g.ledger } satisfies ReferralGrant,
     }))
     .filter((g) => g.refereeId === order.userId);
+  // Thưởng đã thu hồi hoàn toàn thì không còn gì để thu: bỏ ra trước khi caller khoá người mời. Dòng thu hồi không bao giờ
+  // bị xoá nên đọc ngoài khoá vẫn đúng. Thưởng bị thu lúc gộp vì tạo vòng (khách G mời X, X mời T, G gộp vào T) vẫn nằm ở T;
+  // nếu trả đơn của X còn khoá T thì đảo chiều với trả đơn của T (khoá T rồi X) ⇒ deadlock.
+  const out: typeof grants = [];
+  for (const g of grants) {
+    if (!(await hasReferralEntry(tx, [`${REFERRAL_ORDER2_REVOKE_PREFIX}${g.refereeId}`]))) out.push(g);
+  }
+  return out;
 }
 
 /**
@@ -476,27 +557,77 @@ export async function revokeReferralRewardForOrder(
 
   const total = { revoked: 0, shortfall: 0 };
   let anyRevoked = false;
-  for (const { referrerId, refereeId, grant } of grants) {
-    // Chỉ thu phần chưa thu ở các lần trả một phần (kể cả phần đã ghi nợ). Dòng thu hồi vẫn ghi khi phần còn lại là 0: nó là
-    // dấu "đã thu hồi hoàn toàn" cho số lượt giới thiệu và mốc thưởng thêm.
-    await lockReferrer(tx, referrerId);
-    const partial = await readPartialRevocations(tx, referrerId, refereeId);
-    const main = await debitReferralReward(
-      tx,
-      referrerId,
-      grant,
-      `${REFERRAL_ORDER2_REVOKE_PREFIX}${refereeId}`,
-      order.id,
-      `REFERRAL_ORDER2_DEBT:${refereeId}`,
-      Math.max(0, referralGrantDue(grant) - partial.total),
-    );
-    if (!main) continue;
-    const milestones = await revokeLostMilestones(tx, referrerId, order.id);
+  for (const g of grants) {
+    const res = await revokeGrantFully(tx, g, order.id);
+    if (!res) continue;
     anyRevoked = true;
-    total.revoked += main.revoked + milestones.revoked;
-    total.shortfall += main.shortfall + milestones.shortfall;
+    total.revoked += res.revoked;
+    total.shortfall += res.shortfall;
   }
   return anyRevoked ? total : null;
+}
+
+/**
+ * Thu hồi HOÀN TOÀN một lần thưởng (phần còn lại sau các lần thu từng phần) kèm các mốc không còn đủ lượt. Caller đã khoá
+ * người được mời. Chỉ thu phần chưa thu ở các lần trả một phần (kể cả phần đã ghi nợ). Dòng thu hồi vẫn ghi khi phần còn lại
+ * là 0: nó là dấu "đã thu hồi hoàn toàn" cho số lượt giới thiệu và mốc thưởng thêm.
+ */
+async function revokeGrantFully(
+  tx: Db,
+  g: { referrerId: string; refereeId: string; grant: ReferralGrant },
+  refId: string,
+): Promise<{ revoked: number; shortfall: number } | null> {
+  await lockReferrer(tx, g.referrerId);
+  const partial = await readPartialRevocations(tx, g.referrerId, g.refereeId);
+  const main = await debitReferralReward(
+    tx,
+    g.referrerId,
+    g.grant,
+    `${REFERRAL_ORDER2_REVOKE_PREFIX}${g.refereeId}`,
+    refId,
+    `REFERRAL_ORDER2_DEBT:${g.refereeId}`,
+    Math.max(0, referralGrantDue(g.grant) - partial.total),
+  );
+  if (!main) return null;
+  const milestones = await revokeLostMilestones(tx, g.referrerId, refId);
+  return { revoked: main.revoked + milestones.revoked, shortfall: main.shortfall + milestones.shortfall };
+}
+
+/**
+ * Thu hồi hoàn toàn thưởng REFERRAL_ORDER2:<refereeId> (ở bất kỳ ai đang giữ dòng thưởng), không theo đơn: gộp khách cắt một
+ * liên kết giới thiệu tự mời hoặc tạo vòng thì thu luôn thưởng đã cấp cho liên kết đó. Khoá người được mời rồi người giữ
+ * thưởng như đường trả hàng. Không có thưởng hoặc đã thu hồi rồi thì null.
+ */
+export async function revokeReferralRewardForReferee(
+  tx: Db,
+  refereeId: string,
+  refId: string,
+): Promise<{ revoked: number; shortfall: number } | null> {
+  await lockReferee(tx, refereeId);
+  const where = { refType: 'REFERRAL', reason: `${REFERRAL_ORDER2_PREFIX}${refereeId}`, delta: { gt: 0 } };
+  const select = { userId: true, delta: true } as const;
+  const [coin, points] = await Promise.all([
+    tx.coinTransaction.findFirst({ where, select }),
+    tx.pointsTransaction.findFirst({ where, select }),
+  ]);
+  const row = points ? { ...points, ledger: 'POINTS' as const } : coin ? { ...coin, ledger: 'COIN' as const } : null;
+  if (!row) return null;
+  return revokeGrantFully(tx, { referrerId: row.userId, refereeId, grant: { amount: row.delta, ledger: row.ledger } }, refId);
+}
+
+/**
+ * Người dùng hiện tại của một id: dòng khách đã gộp (users.mergedIntoId) quy về tài khoản đích. Mã giới thiệu cũ của khách và
+ * người được mời còn trỏ dòng khách (tạo xen giữa lúc gộp) nhờ đó thưởng cho tài khoản đích. Chỉ khách mới bị gộp và đích
+ * không bao giờ là khách nên chuỗi dài một bước; vòng lặp có giới hạn chỉ để phòng dữ liệu tay.
+ */
+export async function resolveMergedUserId(db: Db, userId: string): Promise<string> {
+  let current = userId;
+  for (let hop = 0; hop < 5; hop++) {
+    const row = await db.user.findUnique({ where: { id: current }, select: { mergedIntoId: true } });
+    if (!row?.mergedIntoId || row.mergedIntoId === current) return current;
+    current = row.mergedIntoId;
+  }
+  return current;
 }
 
 /**
