@@ -1,7 +1,14 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { RbacService } from './rbac.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
+import type { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
 import type { User } from '@prisma/client';
+
+const fulfilment = () =>
+  ({
+    settlementConfig: jest.fn().mockResolvedValue({}),
+    clearPartnerOnRoleLoss: jest.fn().mockResolvedValue(undefined),
+  }) as unknown as MerchantFulfilmentService & { clearPartnerOnRoleLoss: jest.Mock };
 
 const mkUser = (over: Partial<User> = {}): User =>
   ({ id: 'u1', phone: '0900000001', role: 'CUSTOMER', ...over }) as unknown as User;
@@ -178,7 +185,7 @@ describe('RbacService.revokeGrant', () => {
       },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
     });
-    const out = await new RbacService(prisma).revokeGrant('admin1', '0900000001');
+    const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
     expect(prisma.roleGrant.updateMany).toHaveBeenCalled();
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { role: 'CUSTOMER' } }),
@@ -195,7 +202,7 @@ describe('RbacService.revokeGrant', () => {
       },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue({ id: 'app1' }) },
     });
-    const out = await new RbacService(prisma).revokeGrant('admin1', '0900000001');
+    const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { role: 'DEALER' } }),
     );
@@ -207,7 +214,7 @@ describe('RbacService.revokeGrant', () => {
       roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'DEALER' })), update: jest.fn() },
     });
-    const out = await new RbacService(prisma).revokeGrant('admin1', '0900000001');
+    const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
     expect(prisma.user.update).not.toHaveBeenCalled();
     expect(out.downgraded).toBe(false);
   });
@@ -279,7 +286,7 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
 
   it('admin bấm Thu hồi trên dòng CHÍNH MÌNH → từ chối, không hạ role', async () => {
     const { prisma, tx } = txWith({ id: 'admin1', role: 'ADMIN' });
-    await expect(new RbacService(prisma).revokeGrant('admin1', '0899625240')).rejects.toBeInstanceOf(
+    await expect(new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0899625240')).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(tx.user.update).not.toHaveBeenCalled();
@@ -287,7 +294,7 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
 
   it('thu hồi ADMIN CUỐI CÙNG → từ chối', async () => {
     const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 0);
-    await expect(new RbacService(prisma).revokeGrant('admin1', '0899625240')).rejects.toThrow(/quản trị viên cuối cùng/);
+    await expect(new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0899625240')).rejects.toThrow(/quản trị viên cuối cùng/);
     expect(tx.user.update).not.toHaveBeenCalled();
     expect(tx.user.count).toHaveBeenCalledWith({ where: { role: 'ADMIN', isBlocked: false, id: { not: 'u2' } } });
   });
@@ -295,7 +302,7 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
   // R4-ADMIN-6: hai admin cuối cùng thu hồi nhau cùng lúc — khoá chung trước khi đọc vai trò và đếm.
   it('lấy khoá advisory chung trước mọi lần đọc/ghi trong transaction', async () => {
     const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 1);
-    await new RbacService(prisma).revokeGrant('admin1', '0899625240');
+    await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0899625240');
     const lockAt = tx.$executeRaw.mock.invocationCallOrder[0]!;
     expect(lockAt).toBeLessThan(tx.roleGrant.updateMany.mock.invocationCallOrder[0]!);
     expect(lockAt).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
@@ -303,9 +310,53 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
 
   it('thu hồi một ADMIN khi còn admin khác → vẫn hạ role như cũ', async () => {
     const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 1);
-    const out = await new RbacService(prisma).revokeGrant('admin1', '0899625240');
+    const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0899625240');
     expect(tx.user.update).toHaveBeenCalled();
     expect(out.downgraded).toBe(true);
+  });
+});
+
+describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật B)', () => {
+  function txFor(role: string, base: 'CUSTOMER' | 'DEALER') {
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: role as User['role'] })), update: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(2) },
+      dealerApplication: { findFirst: jest.fn().mockResolvedValue(base === 'DEALER' ? { id: 'app' } : null) },
+      userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    return { prisma, tx };
+  }
+
+  it('STAFF → CUSTOMER: xử lý gian hàng đối tác TRƯỚC khi ghi users', async () => {
+    const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
+    const f = fulfilment();
+    await new RbacService(prisma, f).revokeGrant('admin1', '0900000001');
+    expect(f.clearPartnerOnRoleLoss).toHaveBeenCalledWith(tx, 'u1', 'admin1', {});
+    expect(f.clearPartnerOnRoleLoss.mock.invocationCallOrder[0]!).toBeLessThan(tx.user.update.mock.invocationCallOrder[0]!);
+  });
+
+  it('về DEALER (hồ sơ APPROVED): không đụng gian hàng', async () => {
+    const { prisma } = txFor('STAFF', 'DEALER');
+    const f = fulfilment();
+    await new RbacService(prisma, f).revokeGrant('admin1', '0900000001');
+    expect(f.clearPartnerOnRoleLoss).not.toHaveBeenCalled();
+  });
+
+  it('gian hàng còn vướng (409) → không hạ role', async () => {
+    const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
+    const f = fulfilment();
+    f.clearPartnerOnRoleLoss.mockRejectedValueOnce(new ConflictException('vướng'));
+    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('deadlock / hết hạn chờ khoá → 503', async () => {
+    const prisma = { $transaction: jest.fn().mockRejectedValue(new Error('deadlock detected (40P01)')) } as unknown as PrismaService;
+    await expect(new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 });
 

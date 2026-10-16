@@ -1,10 +1,13 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { recordUserAdminEvent } from '../../../common/user-admin-events';
 import { maskPhone } from '../../../common/mask-pii';
 import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../../common/admin-roster';
+import { throwIfLockBusy } from '../../../common/lock-busy';
+import { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
+import { losesPartnerStore } from '../../merchant/partner-store';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -21,7 +24,10 @@ type Db = PrismaService | Prisma.TransactionClient;
 export class RbacService {
   private readonly logger = new Logger(RbacService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly fulfilment?: MerchantFulfilmentService,
+  ) {}
 
   /**
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
@@ -103,6 +109,8 @@ export class RbacService {
    */
   async revokeGrant(adminId: string, phone: string) {
     const normalized = phone.trim();
+    // Đọc cấu hình đối soát trước khi mở tx (như AdminService.setUserRole): chỉ dùng khi người này rơi xuống CUSTOMER.
+    const partnerCfg = await this.fulfilment?.settlementConfig();
     return this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const { count } = await tx.roleGrant.updateMany({
@@ -119,6 +127,11 @@ export class RbacService {
       let downgraded = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
         const base = await this.resolveBaseRole(user.id, tx);
+        // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409, grant và vai trò không đổi.
+        if (losesPartnerStore(user.role, base)) {
+          if (!this.fulfilment || !partnerCfg) throw new Error('RbacService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
+          await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg);
+        }
         await tx.user.update({
           where: { id: user.id },
           data: { role: base, ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
@@ -137,7 +150,7 @@ export class RbacService {
         this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${maskPhone(normalized)}: ${user.role} → ${base}`);
       }
       return { revoked: count, downgraded };
-    });
+    }).catch(throwIfLockBusy);
   }
 
   /**

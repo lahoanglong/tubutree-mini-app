@@ -1347,8 +1347,8 @@ export class MerchantFulfilmentService {
   }
 
   /**
-   * Admin bật/tắt cờ đối tác của gian hàng CTV (isPartner) — cờ không tự tắt khi chủ thôi làm đại lý, trước đây chỉ gỡ được bằng
-   * SQL. Tắt bị từ chối khi gian hàng còn việc đối tác dở dang sẽ mồ côi (chỉ chủ gian hàng đối tác thấy và xử lý chúng ở Cổng
+   * Admin bật/tắt cờ đối tác của gian hàng CTV (isPartner) thủ công; cờ cũng tự tắt khi chủ rơi xuống CUSTOMER/AFFILIATE (xem
+   * clearPartnerOnRoleLoss). Tắt bị từ chối khi gian hàng còn việc đối tác dở dang sẽ mồ côi (chỉ chủ gian hàng đối tác thấy và xử lý chúng ở Cổng
    * người bán), hoặc khi chủ còn là đại lý (lần vào Cổng người bán kế tiếp sẽ tự bật lại). Khoá đối soát của gian hàng giữ suốt
    * lần kiểm để không lập phiếu chen giữa; bấm lại cùng giá trị không ghi thêm sổ.
    */
@@ -1399,30 +1399,31 @@ export class MerchantFulfilmentService {
   }
 
   /**
-   * Gọi trong tx đổi vai trò khi chủ đang là DEALER bị đổi sang vai trò khác, TRƯỚC lúc ghi dòng users: tắt cờ isPartner của các
-   * gian hàng CTV của chủ cùng luật với `setStorePartner` (khoá phiếu → dòng gian hàng, kiểm vướng mắc dưới khoá, ghi
-   * STOREFRONT_PARTNER) trừ vướng mắc "chủ còn là đại lý" (chính lần đổi này gỡ nó). Còn vướng mắc thì ném 409 để cả lần đổi
-   * vai trò huỷ. Gian hàng MERCHANT luôn là đối tác nên không đụng tới.
+   * Gọi trong tx đổi vai trò khi chủ (đang là DEALER/STAFF/ADMIN) rơi xuống CUSTOMER/AFFILIATE, TRƯỚC lúc ghi dòng users: gian hàng
+   * đối tác của chủ thôi là đối tác cùng luật với `setStorePartner` (khoá phiếu → dòng gian hàng, kiểm vướng mắc dưới khoá, ghi
+   * STOREFRONT_PARTNER) trừ vướng mắc "chủ còn là đại lý" (chính lần đổi này gỡ nó). Gian hàng MERCHANT được chuyển luôn về loại
+   * CTV (hàng, tài khoản nhận tiền, điều khoản, lịch sử phiếu giữ nguyên; duyệt lại đại lý rồi vào Cổng người bán thì cờ bật lại như
+   * mọi gian hàng CTV). Còn vướng mắc thì ném 409 để cả lần đổi vai trò huỷ. Mọi gian hàng của chủ đều khoá trước rồi mới đọc cờ dưới
+   * khoá, để lần bật lại cờ ở Cổng người bán chạy song song không lọt qua.
    */
-  async clearPartnerOnDealerRevoke(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig) {
-    const stores = await tx.storefront.findMany({
-      where: { ownerUserId, type: 'CTV', isPartner: true },
-      select: { id: true },
-      orderBy: { id: 'asc' },
-    });
+  async clearPartnerOnRoleLoss(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig) {
+    const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
+    let cleared = 0;
     for (const { id } of stores) {
       await this.lockStorePayouts(tx, id);
-      const [store] = await tx.$queryRaw<{ isPartner: boolean }[]>`SELECT "isPartner" FROM "storefronts" WHERE "id" = ${id} FOR UPDATE`;
-      if (!store?.isPartner) continue;
+      const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
+        SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${id} FOR UPDATE`;
+      if (!store || !isPartnerStore(store)) continue;
       const blockers = await this.partnerBlockers(tx, id, ownerUserId, cfg, true);
       if (blockers.length) {
         throw new ConflictException(`Chưa thể thu hồi vai trò đại lý vì gian hàng đối tác còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`);
       }
-      await tx.storefront.update({ where: { id }, data: { isPartner: false } });
+      await tx.storefront.update({ where: { id }, data: { isPartner: false, ...(store.type === 'MERCHANT' ? { type: 'CTV' } : {}) } });
       await recordUserAdminEvent(tx, { userId: ownerUserId, kind: 'STOREFRONT_PARTNER', from: 'true', to: 'false', reason: id, actorId });
+      cleared++;
     }
-    if (stores.length) {
-      this.logger.warn(`Thu hồi vai trò đại lý của ${ownerUserId}: tắt cờ đối tác ${stores.length} gian hàng CTV (admin ${actorId}).`);
+    if (cleared) {
+      this.logger.warn(`Đổi vai trò của ${ownerUserId} về khách/CTV: tắt cờ đối tác ${cleared} gian hàng (admin ${actorId}).`);
     }
   }
 
