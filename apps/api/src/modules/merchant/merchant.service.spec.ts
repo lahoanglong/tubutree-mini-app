@@ -798,9 +798,11 @@ describe('MerchantService', () => {
     function setup(store: Record<string, unknown>, role = 'AFFILIATE') {
       const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...store, ...data }));
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }), findUnique: jest.fn().mockResolvedValue({ role }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
+        $queryRaw: jest.fn().mockResolvedValue([{ isPartner: false }]),
       });
+      (prisma as unknown as { $transaction: unknown }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
       return { svc: new MerchantService(prisma, orderStatus), update };
     }
 
@@ -829,14 +831,17 @@ describe('MerchantService', () => {
   });
 
   describe('updateStore — đổi tên gian hàng (R2-MERCHANT-7), kho gửi hàng chỉ cho gian hàng tự giao (SELLER-8)', () => {
-    function setup(store: Record<string, unknown>, role = 'AFFILIATE') {
+    function setup(store: Record<string, unknown>, role = 'AFFILIATE', roleAfterLock = role) {
       const storefrontUpdate = jest.fn().mockResolvedValue({ ...store });
       const productUpdateMany = jest.fn().mockResolvedValue({ count: 2 });
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }), findUnique: jest.fn().mockResolvedValue({ role: roleAfterLock }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update: storefrontUpdate },
         product: { updateMany: productUpdateMany },
-        $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+        $queryRaw: jest.fn().mockResolvedValue([{ isPartner: false }]),
+        $transaction: jest.fn((arg: Promise<unknown>[] | ((tx: unknown) => unknown)) =>
+          Array.isArray(arg) ? Promise.all(arg) : arg(prisma),
+        ),
       });
       return { svc: new MerchantService(prisma, orderStatus), storefrontUpdate, productUpdateMany };
     }
@@ -870,6 +875,12 @@ describe('MerchantService', () => {
       expect(storefrontUpdate.mock.calls[0][0]).toEqual({ where: { id: 'sf-c' }, data: { isPartner: true } });
       expect(storefrontUpdate.mock.calls[1][0].data).toHaveProperty('warehousePhone', '0955555555');
       expect(storefrontUpdate.mock.calls.every(([a]) => !('type' in a.data))).toBe(true);
+    });
+
+    it('chủ đã hết là đại lý khi gian hàng bị khoá (thu hồi chen vào trước): không bật cờ', async () => {
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', isPartner: false, ownerUserId: 'u1', title: 'CTV', collections: [] }, 'DEALER', 'CUSTOMER');
+      await svc.updateStore('u1', { title: 'Mới' });
+      expect(storefrontUpdate.mock.calls.every(([a]) => !('isPartner' in a.data))).toBe(true);
     });
 
     it('CTV thường (không phải đại lý) không được bật cờ', async () => {

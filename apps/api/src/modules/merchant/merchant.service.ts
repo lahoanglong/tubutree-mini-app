@@ -302,8 +302,18 @@ export class MerchantService {
     });
     if (store) {
       if (user.role === 'DEALER' && store.type === 'CTV' && !store.isPartner) {
-        await this.prisma.storefront.update({ where: { id: store.id }, data: { isPartner: true } });
-        return { ...store, isPartner: true };
+        // Khoá dòng gian hàng rồi đọc lại vai trò chủ: thu hồi đại lý chạy song song khoá cùng dòng này trước khi ghi users, nên hoặc
+        // nó thắng (chủ đã hết là DEALER, không bật cờ) hoặc nó chờ rồi thấy cờ đã bật để kiểm vướng mắc và tắt lại.
+        const isPartner = await this.prisma.$transaction(async (tx) => {
+          const [locked] = await tx.$queryRaw<{ isPartner: boolean }[]>`
+            SELECT "isPartner" FROM "storefronts" WHERE "id" = ${store.id} FOR UPDATE`;
+          if (!locked || locked.isPartner) return locked?.isPartner ?? false;
+          const owner = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
+          if (owner?.role !== 'DEALER') return false;
+          await tx.storefront.update({ where: { id: store.id }, data: { isPartner: true } });
+          return true;
+        });
+        return { ...store, isPartner };
       }
       return store;
     }
