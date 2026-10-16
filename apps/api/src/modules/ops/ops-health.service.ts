@@ -16,6 +16,7 @@ import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/p
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
+import { DELIVERED_EFFECTS_GRACE_MINUTES, deliveredEffectsPendingWhere } from '../orders/delivered-effects';
 import {
   alertWebhookBody,
   decideAlert,
@@ -154,11 +155,12 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, orders] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
       this.email?.state() ?? DISABLED_EMAIL_STATE,
+      this.orderHealth(now),
     ]);
     const problems = opsProblems(
       {
@@ -175,10 +177,15 @@ export class OpsHealthService {
           attentionRefs: refs(gomdon.attentionOrders, (o) => o.code),
         },
         queues,
+        orders: {
+          deliveredEffectsPending: orders.deliveredEffectsPending,
+          deliveredEffectsRefs: refs(orders.deliveredEffectsOrders, (o) => o.code),
+          graceMinutes: DELIVERED_EFFECTS_GRACE_MINUTES,
+        },
       },
       t,
     );
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, alertChannels: { email: emailChannel }, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel }, problems };
   }
 
   private pancakeConfigured(): boolean {
@@ -364,6 +371,20 @@ export class OpsHealthService {
       backlog,
       backlogOrders,
     };
+  }
+
+  private async orderHealth(now: Date) {
+    const where = deliveredEffectsPendingWhere(now);
+    const [deliveredEffectsPending, deliveredEffectsOrders] = await Promise.all([
+      this.prisma.order.count({ where }),
+      this.prisma.order.findMany({
+        where,
+        orderBy: { deliveredAt: 'asc' },
+        take: STUCK_LIST,
+        select: { id: true, code: true, deliveredAt: true },
+      }),
+    ]);
+    return { deliveredEffectsPending, deliveredEffectsOrders };
   }
 
   private async queueHealth(now: Date): Promise<QueueHealth> {

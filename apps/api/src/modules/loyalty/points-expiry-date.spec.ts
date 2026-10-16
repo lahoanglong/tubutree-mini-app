@@ -27,7 +27,8 @@ async function orderCreditExpiry(months: unknown): Promise<Date> {
     pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null), create, findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null }), update: jest.fn().mockReturnValue({}) },
     membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
-    $transaction: jest.fn().mockResolvedValue([]),
+    $queryRaw: jest.fn().mockResolvedValue([{ status: 'DELIVERED' }]),
+    $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma)),
   } as unknown as PrismaService;
   await new LoyaltyService(prisma, configWith(months)).creditOrderPoints('o1');
   return create.mock.calls[0][0].data.expiresAt;

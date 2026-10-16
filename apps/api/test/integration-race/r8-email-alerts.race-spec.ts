@@ -95,6 +95,7 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
     await prisma.opsHealthState.deleteMany({});
     await prisma.pancakeWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
     await prisma.gomdonWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
+    await prisma.order.updateMany({ where: { status: 'DELIVERED', deliveredEffectsAt: null }, data: { deliveredEffectsAt: new Date() } });
     await prisma.order.updateMany({ where: { id: { in: created } }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
   });
 

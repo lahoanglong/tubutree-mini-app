@@ -51,22 +51,27 @@ export class LoyaltyService {
   ) {}
 
   /**
-   * Cộng điểm tích cho đơn đã giao (idempotent theo reason).
+   * Cộng điểm tích cho đơn đã giao (idempotent theo reason). true = lần gọi này vừa cộng.
    *
    * RACE: 2 webhook DELIVERED song song/retry trước đây cùng findFirst NGOÀI tx → cùng thấy
    * chưa cộng → cùng create + increment → DOUBLE credit. Fix: pre-check để giảm ops vô ích,
    * nhưng GUARD CỨNG là partial unique index (reason, refId) where reason LIKE 'ORDER_DELIVERED:%'
    * (migration 20260623010000_loyalty_credit_unique). Caller thua race ăn P2002 → bail idempotent.
    * Đối xứng với reverseOrderPoints.
+   *
+   * Lần cộng có thể tới muộn (DeliveredEffectsResyncCron chạy lại khi đường chính lỗi sau commit), nên trong tx khoá dòng đơn
+   * TRƯỚC rồi mới đọc trạng thái: đơn đã trả/huỷ thì lần đảo đã chạy mà không có gì để thu hồi — cộng lúc này là cho khách giữ
+   * điểm của đơn đã trả. Phần đã duyệt trả một phần lúc chưa cộng (lần trả đó không thu hồi được gì) cũng trừ ra. Khoá đơn rồi
+   * mới tới dòng users, cùng thứ tự với duyệt trả và lật trạng thái, nên không thêm chu trình khoá.
    */
-  async creditOrderPoints(orderId: string): Promise<void> {
+  async creditOrderPoints(orderId: string): Promise<boolean> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     if (order.pointsEarned <= 0) {
       // 0 điểm vẫn phải recalc: đơn DELIVERED đầu tiên (dù 0 điểm) là lúc DUY NHẤT user được
       // gán hạng lần đầu (recalcAllTiers chỉ quét user ĐÃ có tierId). Bail sớm mà không recalc
       // sẽ khiến user kẹt vĩnh viễn không có tier — xem candidate 2 trong audit loyalty.
       await this.recalcTier(order.userId);
-      return;
+      return false;
     }
     const reason = `ORDER_DELIVERED:${order.code}`;
 
@@ -77,28 +82,35 @@ export class LoyaltyService {
       // Đã cộng điểm ở lần gọi trước nhưng có thể đã crash TRƯỚC KHI recalcTier (dòng cuối
       // hàm này) kịp chạy — recalc lại ở đây để không kẹt vĩnh viễn không có tier.
       await this.recalcTier(order.userId);
-      return;
+      return false;
     }
 
     const expiresAt = await this.pointsExpiresAt(new Date());
 
+    let credited: boolean;
     try {
-      await this.prisma.$transaction([
-        this.prisma.pointsTransaction.create({
+      credited = await this.prisma.$transaction(async (tx) => {
+        const [locked] = await tx.$queryRaw<{ status: string }[]>`
+          SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${order.id} FOR SHARE`;
+        if (locked?.status !== 'DELIVERED') return false;
+        const delta = order.pointsEarned - (await partialReturnTotals(tx, order.id)).pointsEarnedBack;
+        if (delta <= 0) return false;
+        await tx.pointsTransaction.create({
           data: {
             userId: order.userId,
-            delta: order.pointsEarned,
+            delta,
             reason,
             refType: 'ORDER',
             refId: order.id,
             expiresAt,
           },
-        }),
-        this.prisma.user.update({
+        });
+        await tx.user.update({
           where: { id: order.userId },
-          data: { pointsBalance: { increment: order.pointsEarned } },
-        }),
-      ]);
+          data: { pointsBalance: { increment: delta } },
+        });
+        return true;
+      });
     } catch (err) {
       // Partial unique (reason, refId) chặn double-credit — caller thua race ăn P2002 → no-op.
       // CHỈ coi idempotent skip nếu P2002 ĐÚNG là index credit này: re-query thấy bản ghi reason
@@ -114,7 +126,7 @@ export class LoyaltyService {
           // Kẻ thắng race đã commit điểm nhưng có thể chưa/không kịp recalcTier — recalc ở
           // đây để bail idempotent không kéo theo mất tier vĩnh viễn.
           await this.recalcTier(order.userId);
-          return;
+          return false;
         }
         this.logger.error(
           `creditOrderPoints P2002 KHÔNG khớp idempotency (reason=${reason}) order=${order.code} — re-throw`,
@@ -123,6 +135,7 @@ export class LoyaltyService {
       throw err;
     }
     await this.recalcTier(order.userId);
+    return credited;
   }
 
   /**

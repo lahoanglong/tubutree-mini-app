@@ -53,6 +53,12 @@ export interface ProblemInput {
     attentionRefs: string[];
   };
   queues: { ok: true; items: { name: string; failedLastHour: number }[] } | { ok: false; error: string };
+  orders: {
+    /** Đơn đã giao quá thời gian chờ mà việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) chưa xong. */
+    deliveredEffectsPending: number;
+    deliveredEffectsRefs: string[];
+    graceMinutes: number;
+  };
 }
 
 /** Việc cho người trong một sự cố: số việc + mã đơn của vài việc cũ nhất — để biết lúc nào có việc MỚI. */
@@ -136,6 +142,15 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
         items: { count: s.gomdon.attention, refs: s.gomdon.attentionRefs },
       });
     }
+  }
+  if (s.orders.deliveredEffectsPending > 0) {
+    out.push({
+      key: 'orders.delivered_effects',
+      message:
+        `${s.orders.deliveredEffectsPending} đơn đã giao chưa xong việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) ` +
+        `quá ${s.orders.graceMinutes} phút${refList(s.orders.deliveredEffectsRefs, s.orders.deliveredEffectsPending)} — hệ thống tự chạy lại ` +
+        'mỗi 10 phút; còn mãi thì xem log lỗi của đơn',
+    });
   }
   if (!s.queues.ok) {
     out.push({ key: 'queues.down', message: `Hàng đợi không phản hồi: ${s.queues.error}` });

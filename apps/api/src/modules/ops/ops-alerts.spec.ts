@@ -25,6 +25,7 @@ const healthy: ProblemInput = {
     attentionRefs: [],
   },
   queues: { ok: true, items: [{ name: 'pancake-push', failedLastHour: 0 }] },
+  orders: { deliveredEffectsPending: 0, deliveredEffectsRefs: [], graceMinutes: 10 },
 };
 
 describe('opsProblems (PLATFORM-5)', () => {
@@ -45,6 +46,7 @@ describe('opsProblems (PLATFORM-5)', () => {
         },
         gomdon: { ...healthy.gomdon, webhookFailedOpen: 1, credentialsRejected: true, backlog: 2, attention: 1 },
         queues: { ok: true, items: [{ name: 'pancake-push', failedLastHour: 5 }, { name: 'notifications', failedLastHour: 4 }] },
+        orders: healthy.orders,
       },
       T,
     ).map((p) => p.key);
@@ -124,6 +126,24 @@ describe('lời báo động nêu việc cụ thể (R2-PLATFORM-1, R2-GOMDON-4)
   it('đơn cần xử lý Pancake mang số việc và mã đơn để báo động biết khi có việc mới (R4-SYNC-3b)', () => {
     const [p] = opsProblems({ ...healthy, pancake: { ...healthy.pancake, attention: 3, attentionRefs: ['TUBU1', 'TUBU2', 'TUBU3'] } }, T);
     expect(p).toMatchObject({ key: 'pancake.attention', items: { count: 3, refs: ['TUBU1', 'TUBU2', 'TUBU3'] } });
+  });
+
+  it('đơn đã giao chưa xong việc sau giao → một sự cố kèm mã đơn, kể cả khi Pancake/Gomdon chưa cấu hình; không phải hàng việc (không báo lại mỗi đơn mới)', () => {
+    const problems = opsProblems(
+      {
+        ...healthy,
+        pancake: { ...healthy.pancake, configured: false },
+        gomdon: { ...healthy.gomdon, configured: false },
+        orders: { deliveredEffectsPending: 2, deliveredEffectsRefs: ['TUBU7', 'TUBU8'], graceMinutes: 10 },
+      },
+      T,
+    );
+    expect(problems).toHaveLength(1);
+    const [p] = problems;
+    expect(p?.key).toBe('orders.delivered_effects');
+    expect(p?.message).toContain('2 đơn đã giao chưa xong việc sau giao');
+    expect(p?.message).toContain('quá 10 phút: TUBU7, TUBU8');
+    expect(p?.items).toBeUndefined();
   });
 });
 

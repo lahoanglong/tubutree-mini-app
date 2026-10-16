@@ -122,9 +122,8 @@ describe('LoyaltyService.getAvailableCoupons', () => {
 });
 
 describe('LoyaltyService.creditOrderPoints', () => {
-  function prismaFor(order: unknown, existed: unknown = null) {
-    const txn = jest.fn().mockResolvedValue([]);
-    const prisma = {
+  function prismaFor(order: unknown, existed: unknown = null, lockedStatus = 'DELIVERED') {
+    const prisma: Record<string, unknown> = {
       order: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(order),
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
@@ -136,10 +135,14 @@ describe('LoyaltyService.creditOrderPoints', () => {
         update: jest.fn(),
       },
       membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
-      $transaction: txn,
-    } as unknown as PrismaService;
-    return { prisma, txn };
+      $queryRaw: jest.fn().mockResolvedValue([{ status: lockedStatus }]),
+    };
+    const txn = jest.fn(async (cb: (t: unknown) => unknown) => cb(prisma));
+    prisma.$transaction = txn;
+    return { prisma: prisma as unknown as PrismaService, txn };
   }
+
+  const created = (prisma: PrismaService) => (prisma.pointsTransaction.create as jest.Mock).mock.calls.map((c) => c[0].data);
 
   it('pointsEarned <= 0 → không cộng', async () => {
     const { prisma, txn } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 0 });
@@ -155,8 +158,24 @@ describe('LoyaltyService.creditOrderPoints', () => {
 
   it('lần đầu → cộng điểm (transaction) + recalc tier', async () => {
     const { prisma, txn } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 });
-    await new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1');
+    await expect(new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1')).resolves.toBe(true);
     expect(txn).toHaveBeenCalledTimes(1);
+    expect(created(prisma)).toEqual([expect.objectContaining({ delta: 50, reason: 'ORDER_DELIVERED:C1' })]);
+  });
+
+  it('cộng muộn (cron chạy lại) mà đơn đã trả/huỷ → không cộng: lần đảo đã chạy khi chưa có gì để thu hồi', async () => {
+    const { prisma } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }, null, 'RETURNED');
+    await expect(new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1')).resolves.toBe(false);
+    expect(created(prisma)).toEqual([]);
+  });
+
+  it('cộng muộn sau khi đã duyệt trả một phần (lần trả đó không thu hồi được gì) → chỉ cộng phần còn lại', async () => {
+    const { prisma } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 });
+    (prisma.returnRequest.findMany as jest.Mock).mockResolvedValueOnce([
+      { refundAmount: 0, shippingRefund: 0, pointsRefunded: 0, convertedPointsRefunded: 0, pointsReversed: 20, commissionReversed: 0, items: [] },
+    ]);
+    await expect(new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1')).resolves.toBe(true);
+    expect(created(prisma)).toEqual([expect.objectContaining({ delta: 30 })]);
   });
 
   it('race: webhook DELIVERED thứ 2 ăn P2002 từ unique index → idempotent (KHÔNG throw, VẪN recalc tier)', async () => {
@@ -183,7 +202,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
 
     await expect(
       new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1'),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
     // Bail idempotent ở nhánh P2002/already VẪN phải recalcTier (gọi user.findUniqueOrThrow) —
     // nếu không, user có thể kẹt vĩnh viễn không có tier (candidate 2, audit loyalty).
     expect(userFind).toHaveBeenCalled();
