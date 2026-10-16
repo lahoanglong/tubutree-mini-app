@@ -87,8 +87,8 @@ export class RewardPointsService {
   ) {}
 
   /** Báo người mời sau khi tx ghi sổ đã commit; không bao giờ ném. */
-  private notifyReferrer(notices: ReferralNotice[]): Promise<void> {
-    return sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, notices);
+  private async notifyReferrer(notices: ReferralNotice[]): Promise<void> {
+    await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, notices);
   }
 
   /**
