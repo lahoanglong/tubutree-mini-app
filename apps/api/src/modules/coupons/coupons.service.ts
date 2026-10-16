@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Coupon } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isCouponEligible, requiresRealUser } from './coupon-scope';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
@@ -58,6 +58,78 @@ export function couponProductIds(applyTo: unknown): string[] | null {
   return clean.length > 0 ? clean : null;
 }
 
+/*
+ * Các bước xét mã không đụng DB, theo đúng thứ tự validateAndCompute: áp mã (giỏ, báo giá, đặt đơn) và xem trước mức giảm
+ * của cả ví (`previewMany`) đi qua cùng các bước này, chỉ khác cách đọc dữ liệu (từng mã hay gộp một lần cho cả ví).
+ */
+function assertCouponLive(coupon: Coupon | null): asserts coupon is Coupon {
+  if (!coupon) throw new BadRequestException('Mã giảm giá không tồn tại.');
+  if (coupon.isActive === false) throw new BadRequestException('Mã giảm giá đã ngừng áp dụng.');
+}
+
+function scopeOwnershipError(coupon: { scope?: string | null }): BadRequestException {
+  return new BadRequestException(
+    coupon.scope === 'TIER' ? 'Mã chỉ áp dụng cho hạng thành viên khác.' : 'Mã không áp dụng cho tài khoản này.',
+  );
+}
+
+function assertCouponWindow(coupon: Coupon, now: Date): void {
+  if (now < coupon.startAt || now > coupon.endAt) {
+    throw new BadRequestException('Mã giảm giá đã hết hạn hoặc chưa hiệu lực.');
+  }
+}
+
+/** Phần hàng mã được tính trên (mã gắn sản phẩm: chỉ các dòng sản phẩm đó) sau khi kiểm sản phẩm và đơn tối thiểu. */
+function couponScopedSubtotal(coupon: Coupon, subtotal: number, lines: CouponLine[] | undefined) {
+  const productIds = couponProductIds(coupon.applyTo);
+  if (productIds) {
+    const matched = (lines ?? []).filter((l) => productIds.includes(l.productId));
+    if (matched.length === 0) throw new CouponProductScopeError(productIds);
+    subtotal = Math.min(subtotal, matched.reduce((s, l) => s + l.total, 0));
+  }
+  if (coupon.minOrder && subtotal < coupon.minOrder) throw new CouponMinOrderError(coupon.minOrder, subtotal);
+  return { subtotal, productIds };
+}
+
+function assertPerUserLimit(coupon: Coupon, usedByUser: number): void {
+  // perUserLimit <= 0 = không giới hạn (nhất quán với guard trong redeem() bên dưới).
+  // Trước đây thiếu guard này → coupon perUserLimit=0 bị validateAndCompute từ chối
+  // NGAY LẦN ĐẦU (0 >= 0), dù redeem() coi 0 là "không giới hạn" → không ai dùng được mã.
+  if (coupon.perUserLimit > 0 && usedByUser >= coupon.perUserLimit) {
+    throw new BadRequestException('Bạn đã dùng hết lượt cho mã này.');
+  }
+}
+
+function assertUsageLimit(coupon: Coupon, totalUsed: number): void {
+  if (coupon.usageLimit != null && totalUsed >= coupon.usageLimit) {
+    throw new BadRequestException('Mã giảm giá đã hết lượt sử dụng.');
+  }
+}
+
+function couponAmount(coupon: Coupon, subtotal: number): { discount: number; freeship: boolean } {
+  let discount = 0;
+  let freeship = false;
+  switch (coupon.type) {
+    case 'PERCENT':
+      // value có thể >100 nếu admin nhập sai và không set maxDiscount (DTO chỉ @Min(0), không
+      // @Max) — clamp về subtotal như nhánh AMOUNT bên dưới để discount không bao giờ vượt
+      // giá trị đơn hàng, bất kể caller nào gọi hàm này (cart preview, checkout...).
+      discount = Math.min(Math.floor((subtotal * coupon.value) / 100), subtotal);
+      if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
+      break;
+    case 'AMOUNT':
+      discount = Math.min(coupon.value, subtotal);
+      break;
+    case 'FREESHIP':
+      freeship = true;
+      break;
+  }
+  return { discount, freeship };
+}
+
+/** Số mã tối đa xem trước trong một lần (các mã đầu ví): ví khách thật có vài mã, trần này chỉ chặn ví bất thường. */
+export const COUPON_PREVIEW_LIMIT = 50;
+
 /**
  * Validate coupon + tính mức giảm (Build Spec §6.3, §6.6).
  * Phase 1: scope PUBLIC. TIER/BIRTHDAY/INVITE mở rộng ở Phase 2.
@@ -73,8 +145,7 @@ export class CouponsService {
    */
   async validateAndCompute(code: string, userId: string, subtotal: number, lines?: CouponLine[]): Promise<CouponResult> {
     const coupon = await this.prisma.coupon.findUnique({ where: { code: normalizeCouponCode(code) } });
-    if (!coupon) throw new BadRequestException('Mã giảm giá không tồn tại.');
-    if (coupon.isActive === false) throw new BadRequestException('Mã giảm giá đã ngừng áp dụng.');
+    assertCouponLive(coupon);
 
     await this.assertScopeOwnership(coupon, userId, this.prisma);
     if (requiresRealUser(coupon)) {
@@ -82,54 +153,70 @@ export class CouponsService {
       if (!isRealUser(u)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
     }
 
-    const now = new Date();
-    if (now < coupon.startAt || now > coupon.endAt) {
-      throw new BadRequestException('Mã giảm giá đã hết hạn hoặc chưa hiệu lực.');
-    }
-
-    const productIds = couponProductIds(coupon.applyTo);
-    if (productIds) {
-      const matched = (lines ?? []).filter((l) => productIds.includes(l.productId));
-      if (matched.length === 0) throw new CouponProductScopeError(productIds);
-      subtotal = Math.min(subtotal, matched.reduce((s, l) => s + l.total, 0));
-    }
-    if (coupon.minOrder && subtotal < coupon.minOrder) throw new CouponMinOrderError(coupon.minOrder, subtotal);
+    assertCouponWindow(coupon, new Date());
+    const scoped = couponScopedSubtotal(coupon, subtotal, lines);
 
     const usedByUser = await this.prisma.couponRedemption.count({
       where: { couponId: coupon.id, userId },
     });
-    // perUserLimit <= 0 = không giới hạn (nhất quán với guard trong redeem() bên dưới).
-    // Trước đây thiếu guard này → coupon perUserLimit=0 bị validateAndCompute từ chối
-    // NGAY LẦN ĐẦU (0 >= 0), dù redeem() coi 0 là "không giới hạn" → không ai dùng được mã.
-    if (coupon.perUserLimit > 0 && usedByUser >= coupon.perUserLimit) {
-      throw new BadRequestException('Bạn đã dùng hết lượt cho mã này.');
-    }
+    assertPerUserLimit(coupon, usedByUser);
     if (coupon.usageLimit != null) {
       // Chỉ check pre-flight để UX tốt; kiểm cuối ATOMIC ở redeem() (updateMany guard usedCount<usageLimit).
       const totalUsed = await this.prisma.couponRedemption.count({ where: { couponId: coupon.id } });
-      if (totalUsed >= coupon.usageLimit) {
-        throw new BadRequestException('Mã giảm giá đã hết lượt sử dụng.');
-      }
+      assertUsageLimit(coupon, totalUsed);
     }
 
-    let discount = 0;
-    let freeship = false;
-    switch (coupon.type) {
-      case 'PERCENT':
-        // value có thể >100 nếu admin nhập sai và không set maxDiscount (DTO chỉ @Min(0), không
-        // @Max) — clamp về subtotal như nhánh AMOUNT bên dưới để discount không bao giờ vượt
-        // giá trị đơn hàng, bất kể caller nào gọi hàm này (cart preview, checkout...).
-        discount = Math.min(Math.floor((subtotal * coupon.value) / 100), subtotal);
-        if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
-        break;
-      case 'AMOUNT':
-        discount = Math.min(coupon.value, subtotal);
-        break;
-      case 'FREESHIP':
-        freeship = true;
-        break;
+    return { code: coupon.code, ...couponAmount(coupon, scoped.subtotal), productIds: scoped.productIds };
+  }
+
+  /**
+   * Kết quả validateAndCompute của nhiều mã trên cùng một phần hàng, đọc gộp (mã, người dùng, số lượt) thay vì vài truy vấn
+   * mỗi mã. Mã bị từ chối trả đúng lỗi validateAndCompute sẽ ném. Chỉ đọc: không ghi lượt dùng, không khoá. Xét
+   * COUPON_PREVIEW_LIMIT mã ĐẦU TIÊN theo đúng thứ tự `codes` (thứ tự ví khách thấy), kết quả cũng theo thứ tự đó; mã ngoài trần
+   * không có trong kết quả.
+   */
+  async previewMany(
+    codes: string[],
+    userId: string,
+    subtotal: number,
+    lines?: CouponLine[],
+  ): Promise<Map<string, CouponResult | BadRequestException>> {
+    const out = new Map<string, CouponResult | BadRequestException>();
+    const wanted = [...new Set(codes.map(normalizeCouponCode))].slice(0, COUPON_PREVIEW_LIMIT);
+    if (wanted.length === 0) return out;
+    const rows = await this.prisma.coupon.findMany({ where: { code: { in: wanted } } });
+    const byCode = new Map(rows.map((c) => [c.code, c]));
+    const ids = rows.map((c) => c.id);
+    const limitedIds = rows.filter((c) => c.usageLimit != null).map((c) => c.id);
+    const [user, mine, all] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true } }),
+      ids.length
+        ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { userId, couponId: { in: ids } }, _count: { _all: true } })
+        : [],
+      limitedIds.length
+        ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: limitedIds } }, _count: { _all: true } })
+        : [],
+    ]);
+    const usedByUser = new Map(mine.map((g) => [g.couponId, g._count._all]));
+    const totalUsed = new Map(all.map((g) => [g.couponId, g._count._all]));
+    const now = new Date();
+    for (const code of wanted) {
+      const coupon = byCode.get(code) ?? null;
+      try {
+        assertCouponLive(coupon);
+        if (!isCouponEligible(coupon, { id: userId, tierId: user?.tierId })) throw scopeOwnershipError(coupon);
+        if (requiresRealUser(coupon) && !isRealUser(user)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
+        assertCouponWindow(coupon, now);
+        const scoped = couponScopedSubtotal(coupon, subtotal, lines);
+        assertPerUserLimit(coupon, usedByUser.get(coupon.id) ?? 0);
+        assertUsageLimit(coupon, totalUsed.get(coupon.id) ?? 0);
+        out.set(coupon.code, { code: coupon.code, ...couponAmount(coupon, scoped.subtotal), productIds: scoped.productIds });
+      } catch (err) {
+        if (!(err instanceof BadRequestException)) throw err;
+        out.set(code, err);
+      }
     }
-    return { code: coupon.code, discount, freeship, productIds };
+    return out;
   }
 
   /**
@@ -275,10 +362,6 @@ export class CouponsService {
     // Quyết định eligible dùng CHUNG isCouponEligible với LoyaltyService.getAvailableCoupons
     // (list) → list & apply không lệch. Message giữ riêng theo scope cho rõ với user.
     if (isCouponEligible(coupon, { id: userId, tierId })) return;
-    throw new BadRequestException(
-      coupon.scope === 'TIER'
-        ? 'Mã chỉ áp dụng cho hạng thành viên khác.'
-        : 'Mã không áp dụng cho tài khoản này.',
-    );
+    throw scopeOwnershipError(coupon);
   }
 }

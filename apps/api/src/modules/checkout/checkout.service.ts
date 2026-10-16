@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import type { CouponPreviewDTO, CouponPreviewsResponse } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { CartService } from '../cart/cart.service';
@@ -12,7 +13,7 @@ import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service'
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService } from '../storefront/combo.service';
 import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
-import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
+import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -104,6 +105,31 @@ export interface CheckoutShipment extends GroupAmounts {
   pointsEarned: number;
   /** Phí sàn chốt cho đơn đối tác (phân số); null với kiện Tubu. */
   commissionPct: number | null;
+}
+
+/** Dòng hàng của lần đặt như CartService.getCart trả về. */
+type CheckoutLine = Awaited<ReturnType<CartService['getCart']>>['items'][number];
+
+type CouponPreviewItem = CouponPreviewDTO;
+
+function assertNoUnavailableLine(items: CheckoutLine[]): void {
+  const unavailable = items.find((l) => l.fulfiller.kind === 'UNAVAILABLE');
+  if (unavailable && unavailable.fulfiller.kind === 'UNAVAILABLE') {
+    throw new BadRequestException(unavailableLineMessage(unavailable.productName, unavailable.fulfiller));
+  }
+}
+
+function groupSubtotal(lines: { total: number }[]): number {
+  return lines.reduce((s, l) => s + l.total, 0);
+}
+
+/**
+ * Mã hợp lệ mà không đem lại đồng nào cho lần đặt (giảm 0đ, freeship không miễn được phí nào) thì coi như chưa áp: placeOrder không
+ * redeem. Trả lý do báo khách, null = mã có áp.
+ */
+function couponNothingReason(discount: number, freeship: boolean, freeshipSaved: number): string | null {
+  if (discount > 0 || freeshipSaved > 0) return null;
+  return freeship && discount === 0 ? COUPON_FREESHIP_NOTHING_REASON : COUPON_ZERO_DISCOUNT_REASON;
 }
 
 /** Gian hàng ghi công resolve phía server (SELLER-4/5). */
@@ -831,7 +857,65 @@ export class CheckoutService {
     return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
   }
 
-  private async compute(userId: string, addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) {
+  /**
+   * Mức giảm từng mã trong ví cho chính lần đặt khách đang xem (cùng tham số báo giá), để thẻ voucher ghi đúng số checkout sẽ trừ.
+   * Đi qua đúng các bước của compute: cùng dòng hàng, cùng phần hàng tính mã (loại giờ vàng, trừ combo), cùng validateAndCompute
+   * (đọc gộp cho cả ví) và cùng phí giao. Không có `addressId` (trang giỏ, chưa có phí giao) thì không tính phần freeship.
+   * Chỉ đọc: không áp mã vào giỏ, không ghi lượt dùng, không khoá.
+   */
+  async couponPreviews(userId: string, dto: CouponPreviewDto): Promise<CouponPreviewsResponse> {
+    const storefront = await this.resolveStorefront(dto.storefrontSlug);
+    const cart = await this.checkoutLines(userId, dto.itemIds);
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const withShipping = !!dto.addressId;
+    if (dto.addressId) await this.deliveryAddress(userId, dto.addressId);
+    const base = await this.couponBase(cart.items, storefront?.slug, userId);
+
+    const held = await this.loyalty.getAvailableCoupons(userId);
+    const results = await this.coupons.previewMany(
+      held.map((c) => c.code),
+      userId,
+      base.goodsAfterCombo,
+      base.couponLines,
+    );
+    // Báo giá ném lỗi này cho cả lần đặt; xem trước cũng vậy để không hứa số tiền của một lần đặt không đặt được.
+    if (withShipping) assertNoUnavailableLine(cart.items);
+    let freeshipSaved = 0;
+    if (withShipping && [...results.values()].some((r) => !(r instanceof BadRequestException) && r.freeship)) {
+      const groups = groupByFulfiller(cart.items);
+      const terms = await this.shipmentTerms(groups, groups.map((g) => groupSubtotal(g.lines)), user.tierId, true);
+      freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
+    }
+
+    const coupons: CouponPreviewItem[] = [];
+    for (const [code, r] of results) {
+      if (r instanceof BadRequestException) {
+        coupons.push({ code, eligible: false, reason: couponRejectReason(r, cart.items), discount: 0 });
+        continue;
+      }
+      const discount = Math.min(r.discount, base.goodsAfterCombo);
+      // Trang giỏ chưa có phí giao: mã freeship hợp lệ là dùng được (như getCart), số tiền miễn phí giao chỉ biết ở thanh toán.
+      const nothing = withShipping
+        ? couponNothingReason(discount, r.freeship, r.freeship ? freeshipSaved : 0)
+        : discount > 0 || r.freeship
+          ? null
+          : COUPON_ZERO_DISCOUNT_REASON;
+      coupons.push({
+        code,
+        eligible: nothing === null,
+        ...(nothing ? { reason: nothing } : {}),
+        discount,
+        ...(withShipping && r.freeship ? { freeshipSaving: freeshipSaved } : {}),
+      });
+    }
+    return { coupons };
+  }
+
+  /**
+   * Dòng hàng của lần đặt: toàn giỏ hoặc tập con đã chọn, chặn dòng ngừng bán được chọn và dòng chưa có giá. Báo giá, đặt đơn
+   * và xem trước mã dùng chung.
+   */
+  private async checkoutLines(userId: string, itemIds?: string[]) {
     const fullCart = await this.cart.getCart(userId);
     // Checkout TẬP CON: chỉ tính trên các dòng được chọn, tính lại subtotal từ subset (combo/
     // coupon/điểm/ship đều dựa subtotal này). Rỗng/thiếu itemIds = toàn giỏ (tương thích ngược).
@@ -855,25 +939,27 @@ export class CheckoutService {
       );
     }
     const subtotal = subset ? items.reduce((s, l) => s + l.total, 0) : fullCart.subtotal;
-    const cart = { ...fullCart, items, subtotal };
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    return { ...fullCart, items, subtotal };
+  }
+
+  private async deliveryAddress(userId: string, addressId: string) {
     const address = await this.prisma.address.findUnique({ where: { id: addressId } });
     if (!address || address.userId !== userId) {
       throw new BadRequestException('Địa chỉ giao hàng không hợp lệ.');
     }
     await assertDeliverableAddress(this.geo, address);
+    return address;
+  }
 
-    // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
-    // giá trị hàng (giữ invariant subtotal - tổng-giảm = goods):
-    //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
-    //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
-    //   3) Điểm Xanh — trên phần còn lại sau coupon (lô STANDARD có trần %, lô quy đổi thì không).
-    const nonFlash = cart.items.filter((l) => !l.isFlash);
-    const flashSubtotal = cart.items
+  /**
+   * Phần hàng tính mã: loại hàng giờ vàng (giá cuối, không cộng dồn mã), trừ combo của gian hàng (combo CHỈ áp trên dòng
+   * không giờ vàng). Báo giá, đặt đơn và xem trước mã dùng chung.
+   */
+  private async couponBase(items: CheckoutLine[], storefrontSlug: string | undefined, userId: string) {
+    const nonFlash = items.filter((l) => !l.isFlash);
+    const flashSubtotal = items
       .filter((l) => l.isFlash)
       .reduce((s, l) => s + l.total, 0);
-
-    // Combo CHỈ áp trên line KHÔNG flash (flash không gộp combo).
     const combo = await this.combo.computeForStorefront(
       storefrontSlug,
       nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
@@ -881,6 +967,24 @@ export class CheckoutService {
     );
     const nonFlashSubtotal = nonFlash.reduce((s, l) => s + l.total, 0);
     const goodsAfterCombo = Math.max(0, nonFlashSubtotal - combo.total); // = coupon base (loại flash)
+    const couponLines = nonFlash.map((l) => ({
+      productId: l.productId,
+      total: Math.max(0, l.total - (combo.perLine[l.variationId] ?? 0)),
+    }));
+    return { flashSubtotal, combo, goodsAfterCombo, couponLines };
+  }
+
+  private async compute(userId: string, addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) {
+    const cart = await this.checkoutLines(userId, itemIds);
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const address = await this.deliveryAddress(userId, addressId);
+
+    // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
+    // giá trị hàng (giữ invariant subtotal - tổng-giảm = goods):
+    //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
+    //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
+    //   3) Điểm Xanh — trên phần còn lại sau coupon (lô STANDARD có trần %, lô quy đổi thì không).
+    const { flashSubtotal, combo, goodsAfterCombo, couponLines } = await this.couponBase(cart.items, storefrontSlug, userId);
 
     let discount = 0; // coupon (sau combo)
     let couponProductIds: string[] | null = null;
@@ -889,10 +993,6 @@ export class CheckoutService {
     let couponNotice: string | null = null;
     if (cart.couponCode) {
       try {
-        const couponLines = nonFlash.map((l) => ({
-          productId: l.productId,
-          total: Math.max(0, l.total - (combo.perLine[l.variationId] ?? 0)),
-        }));
         const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
         discount = Math.min(r.discount, goodsAfterCombo);
         couponProductIds = r.productIds ?? null;
@@ -973,10 +1073,7 @@ export class CheckoutService {
 
     // Giảm giá tính trên cả lần đặt ở trên rồi phân bổ về từng dòng và từng kiện; phí giao tính riêng từng kiện. Giỏ chỉ hàng
     // Tubu = một kiện = đúng số tiền như trước.
-    const unavailable = cart.items.find((l) => l.fulfiller.kind === 'UNAVAILABLE');
-    if (unavailable && unavailable.fulfiller.kind === 'UNAVAILABLE') {
-      throw new BadRequestException(unavailableLineMessage(unavailable.productName, unavailable.fulfiller));
-    }
+    assertNoUnavailableLine(cart.items);
     const amounts = allocateGroupAmounts(groups, {
       comboPerLine: combo.perLine,
       comboTotal: combo.total,
@@ -994,16 +1091,16 @@ export class CheckoutService {
       );
       throw new InternalServerErrorException('Không tính được số tiền của đơn hàng. Vui lòng thử lại sau hoặc liên hệ Tubu Tree.');
     }
-    const terms = await this.shipmentTerms(groups, amounts, user.tierId, freeship);
+    const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship);
     // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ hết) → giảm 0đ; mã
     // freeship chỉ miễn phí giao kiện Tubu, nên giỏ toàn hàng gian hàng tự giao hoặc kiện Tubu đã miễn phí giao thì không
     // được gì. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
     const freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
     // couponApplied: coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true.
-    const couponApplied = couponValid && (discount > 0 || freeshipSaved > 0);
-    if (couponValid && !couponApplied) {
-      const reason = freeship && discount === 0 ? COUPON_FREESHIP_NOTHING_REASON : COUPON_ZERO_DISCOUNT_REASON;
-      couponNotice = couponNotAppliedNotice(reason, flashSubtotal > 0, combo.total > 0);
+    const nothingReason = couponValid ? couponNothingReason(discount, freeship, freeshipSaved) : null;
+    const couponApplied = couponValid && nothingReason === null;
+    if (nothingReason !== null) {
+      couponNotice = couponNotAppliedNotice(nothingReason, flashSubtotal > 0, combo.total > 0);
     } else if (couponApplied && discount > 0 && flashSubtotal > 0) {
       couponNotice = couponFlashExcludedNotice(goodsAfterCombo);
     }
@@ -1060,7 +1157,8 @@ export class CheckoutService {
    */
   private async shipmentTerms(
     groups: { fulfiller: LineFulfiller }[],
-    amounts: GroupAmounts[],
+    /** Tiền hàng (trước mọi khoản giảm) của từng kiện, cùng thứ tự `groups`. */
+    subtotals: number[],
     tierId: string | null,
     freeship: boolean,
   ): Promise<{ shippingFee: number; commissionPct: number | null; freeshipWaived: number }[]> {
@@ -1079,12 +1177,12 @@ export class CheckoutService {
     const out: { shippingFee: number; commissionPct: number | null; freeshipWaived: number }[] = [];
     for (const [i, g] of groups.entries()) {
       if (g.fulfiller.kind !== 'MERCHANT') {
-        const fee = await this.pricing.calcShippingFee({ subtotal: amounts[i]!.subtotal, tierId });
+        const fee = await this.pricing.calcShippingFee({ subtotal: subtotals[i]!, tierId });
         out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0 });
         continue;
       }
       const sf = byId.get(g.fulfiller.storefrontId);
-      const freeByShop = sf?.freeShipFrom != null && amounts[i]!.subtotal >= sf.freeShipFrom;
+      const freeByShop = sf?.freeShipFrom != null && subtotals[i]! >= sf.freeShipFrom;
       out.push({
         // Mã freeship là Tubu tài trợ phí kho Tubu; phí giao của đối tác là tiền của đối tác nên chỉ miễn theo ngưỡng của shop.
         shippingFee: freeByShop ? 0 : sf?.shippingFee ?? defaultFee,

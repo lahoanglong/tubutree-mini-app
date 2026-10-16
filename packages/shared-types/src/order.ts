@@ -113,3 +113,27 @@ export interface OrderDTO {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Mức giảm một mã trong ví cho lần đặt đang xem — POST /checkout/coupon-previews. API cũ không có endpoint này. */
+export interface CouponPreviewDTO {
+  code: string;
+  /** Áp mã này thì checkout có giảm (tiền hàng hoặc phí giao). */
+  eligible: boolean;
+  /** Vì sao không giảm được (tiếng Việt, đúng câu checkout sẽ báo). */
+  reason?: string;
+  /** Số tiền hàng mã giảm cho lần đặt này (đúng số checkout trừ). */
+  discount: number;
+  /** Phí giao mã freeship miễn được; chỉ có khi gửi kèm `addressId` (thanh toán). */
+  freeshipSaving?: number;
+}
+
+/** Tham số xem trước: cùng tham số báo giá. Thiếu `addressId` (trang giỏ) thì không tính phí giao. */
+export interface CouponPreviewRequest {
+  addressId?: string;
+  storefrontSlug?: string;
+  itemIds?: string[];
+}
+
+export interface CouponPreviewsResponse {
+  coupons: CouponPreviewDTO[];
+}

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   getCart: vi.fn(),
   removeCartItem: vi.fn(),
+  voucherProps: [] as Record<string, unknown>[],
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -27,7 +28,12 @@ vi.mock('../store/auth', () => {
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
 });
 vi.mock('../components/storefront-context-bar', () => ({ StorefrontContextBar: () => null }));
-vi.mock('../components/checkout/voucher-sheet', () => ({ VoucherSheet: () => null }));
+vi.mock('../components/checkout/voucher-sheet', () => ({
+  VoucherSheet: (p: Record<string, unknown>) => {
+    mocks.voucherProps.push(p);
+    return null;
+  },
+}));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import CartPage from './cart';
@@ -212,5 +218,28 @@ describe('CartPage — chia theo nơi giao (D4)', () => {
     renderPage();
     await screen.findByText('Mật ong rừng');
     expect(screen.queryByText(/miễn phí ship/)).toBeNull();
+  });
+});
+
+describe('CartPage: tham số xem trước mức giảm mã cho VoucherSheet', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.voucherProps = [];
+  });
+  const last = () => mocks.voucherProps[mocks.voucherProps.length - 1]!;
+
+  it('chọn cả giỏ: không gửi itemIds, kèm dấu vân tay id + số lượng + thành tiền', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    await screen.findByRole('button', { name: 'Thanh toán (1)' });
+    expect(last().previewParams).toEqual({ storefrontSlug: undefined, itemIds: undefined });
+    expect(last().previewKey).toBe('ci-ok:1:50000');
+  });
+
+  it('bỏ chọn hết: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ)', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn tất cả' }));
+    await waitFor(() => expect(last().previewParams).toBeUndefined());
   });
 });
