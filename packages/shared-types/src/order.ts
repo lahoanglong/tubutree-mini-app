@@ -104,6 +104,11 @@ export interface OrderDTO {
    * toán, không bày nút trả tiền/huỷ, chỉ một câu "Tubu đang xử lý đơn này". API cũ chưa trả.
    */
   manualHandling?: boolean;
+  /**
+   * Chỉ chi tiết đơn: Điểm Xanh tích của đơn thực sự đã thu lại do trả một phần (tổng dòng sổ RETURN_REVERSED, đã kẹp theo số dư),
+   * có thể nhỏ hơn tổng pointsReversed của các yêu cầu trả. API cũ chưa trả.
+   */
+  pointsReturnReversed?: number;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;
