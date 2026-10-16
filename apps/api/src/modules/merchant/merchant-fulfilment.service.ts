@@ -1217,7 +1217,7 @@ export class MerchantFulfilmentService {
   }
 
   /**
-   * Tổng quan cho admin: mỗi gian hàng đối tác có đơn tự giao hoặc hàng "Tubu giao hộ" — số đơn đang xử lý, quá hạn, số khoản
+   * Tổng quan cho admin: mỗi gian hàng đang bật cờ đối tác, hoặc có đơn tự giao / hàng "Tubu giao hộ" — số đơn đang xử lý, quá hạn, số khoản
    * và số tiền chờ đối soát (kèm số khoản giao hộ), mức phí sàn/phí giao hộ để admin sửa. Bảng kê chỉ dựng cho gian hàng có
    * khoản chờ (storesWithPending), số đơn đang xử lý đếm gộp một lần.
    */
@@ -1233,7 +1233,8 @@ export class MerchantFulfilmentService {
         AND: [
           // Gian hàng đã tắt cờ vẫn hiện khi có thể còn dòng mở (lọc chính xác bằng bảng kê bên dưới) để admin lập phiếu thu.
           { OR: [PARTNER_STORE_WHERE, { id: { in: [...pendingStores] } }] },
-          { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] },
+          // Gian hàng đang bật cờ luôn có dòng (kể cả chưa có gì) để admin còn nút tắt cờ.
+          { OR: [{ isPartner: true }, { fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] },
         ],
       },
       select: {

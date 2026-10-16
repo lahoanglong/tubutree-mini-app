@@ -897,7 +897,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(prisma.storefront.findMany.mock.calls[0][0].where).toEqual({
       AND: [
         { OR: [{ OR: [{ type: 'MERCHANT' }, { isPartner: true }] }, { id: { in: ['sf-d'] } }] },
-        { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: ['sf-c'] } }] },
+        { OR: [{ isPartner: true }, { fulfilledOrders: { some: {} } }, { id: { in: ['sf-c'] } }] },
       ],
     });
     expect(spy.mock.calls.map((c) => c[0])).toEqual(['sf-d']);

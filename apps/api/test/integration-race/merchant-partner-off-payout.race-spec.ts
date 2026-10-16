@@ -163,4 +163,29 @@ describe('Lập phiếu cho gian hàng đã tắt cờ đối tác còn khoản 
     await settlement.createPayout('admin-it', store.id);
     await expect(settlement.createPayout('admin-it', store.id)).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  async function emptyCtvStore(isPartner: boolean) {
+    const owner = await createUser(prisma, { role: 'CUSTOMER' });
+    const tag = randCode(8).toLowerCase();
+    return prisma.storefront.create({
+      data: { type: 'CTV', isPartner, slug: `itpe-${tag}`, title: `Vườn trống ${tag}`, ownerUserId: owner.id },
+    });
+  }
+
+  it('tổng quan admin liệt kê CTV vừa bật cờ dù chưa có đơn hay liên kết (để còn nút Tắt), không tính vào việc cần lập phiếu', async () => {
+    const todoBefore = await settlement.countStoresToSettle();
+    const store = await emptyCtvStore(true);
+    const row = (await settlement.adminOverview()).stores.find((s) => s.storefrontId === store.id);
+    expect(row).toMatchObject({ type: 'CTV', isPartner: true, activeOrders: 0, overdueOrders: 0, settleableLines: 0, settleableAmount: 0, consignmentLines: 0 });
+    expect(await settlement.countStoresToSettle()).toBe(todoBefore);
+  });
+
+  it('CTV đã tắt cờ và không còn gì mở, hay chưa từng bật cờ → không hiện trong tổng quan', async () => {
+    const off = await emptyCtvStore(false);
+    const { store: partnerOff } = await partnerOffWithOpenReversal();
+    await settlement.createPayout('admin-it', partnerOff.id);
+    const ids = (await settlement.adminOverview()).stores.map((s) => s.storefrontId);
+    expect(ids).not.toContain(off.id);
+    expect(ids).not.toContain(partnerOff.id);
+  });
 });
