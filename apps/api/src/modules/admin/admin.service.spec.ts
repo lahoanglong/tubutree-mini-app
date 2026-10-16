@@ -113,12 +113,13 @@ function makeApproveTx(opts: {
   dealerAppUpdateMany?: jest.Mock;
   userUpdate?: jest.Mock;
   applicantRole?: string;
+  applicantMetadata?: unknown;
   otherActiveAdmins?: number;
 }) {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = jest.fn().mockResolvedValue(0);
-  const queryRaw = jest.fn().mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false }]);
+  const queryRaw = jest.fn().mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false, metadata: opts.applicantMetadata ?? null }]);
   const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
@@ -194,15 +195,14 @@ describe('AdminService.reviewDealerApplication', () => {
   });
 
   it('duyệt hợp lệ → MERGE metadata, KHÔNG xoá segments/onboardedAt (regression)', async () => {
-    const { $transaction, dealerAppUpdateMany, userUpdate, storefrontUpdateMany } = makeApproveTx({});
+    const { $transaction, dealerAppUpdateMany, userUpdate, storefrontUpdateMany } = makeApproveTx({
+      applicantMetadata: { segments: ['mom_baby'], onboardedAt: '2026-01-01' },
+    });
     const prisma = makePrisma({
       dealerApplication: {
         findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }),
       },
       dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1' }) },
-      user: {
-        findUnique: jest.fn().mockResolvedValue({ metadata: { segments: ['mom_baby'], onboardedAt: '2026-01-01' } }),
-      },
       $transaction,
     });
     await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');

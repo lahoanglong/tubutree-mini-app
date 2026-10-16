@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { ConflictException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -685,11 +685,110 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
         const [approval, del] = approvalFirst ? [settled[0]!, settled[1]!] : [settled[1]!, settled[0]!];
         expect(del.status).toBe('fulfilled');
         if (approvalFirst) expect(approval.status).toBe('fulfilled');
+        else {
+          // Ẩn danh xong trước: duyệt phải bị từ chối vì người nộp đã bị khoá/xoá, hồ sơ còn PENDING, không thành DEALER.
+          expect(approval.status).toBe('rejected');
+          expect((approval as PromiseRejectedResult).reason).toBeInstanceOf(BadRequestException);
+          expect(((approval as PromiseRejectedResult).reason as Error).message).toMatch(/khoá|xoá/);
+          expect((await prisma.dealerApplication.findUniqueOrThrow({ where: { id: app.id } })).status).toBe('PENDING');
+          expect(await d.role()).not.toBe('DEALER');
+        }
         if (approval.status === 'rejected') expect(approval.reason).not.toBeInstanceOf(ServiceUnavailableException);
         // Ẩn danh tự chạy lại một lần khi gặp deadlock nên che mất nó: không được rơi vào nhánh đó.
         expect(warn.mock.calls.filter(([m]) => String(m).includes('chạy lại một lần'))).toHaveLength(0);
         if (hasStore && approval.status === 'fulfilled') expect(await d.flag()).toBe(true);
         expect((await prisma.user.findUniqueOrThrow({ where: { id: d.owner.id } })).isBlocked).toBe(true);
+      }
+    });
+
+    /** Người nộp CTV (gian hàng chưa đối tác, đã có địa chỉ) + hồ sơ PENDING + bậc đại lý; duyệt bằng AdminService riêng. */
+    async function applicant() {
+      const none = {} as never;
+      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, rbac, none, none, merchant);
+      const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
+      created.tierIds.push(tier.id);
+      const d = await deletable();
+      await prisma.user.update({ where: { id: d.owner.id }, data: { role: 'AFFILIATE', metadata: { segments: ['home'] } } });
+      await prisma.storefront.update({ where: { id: d.sf.id }, data: { isPartner: false } });
+      const app = await prisma.dealerApplication.create({
+        data: { userId: d.owner.id, businessName: 'IT', ownerName: 'IT', phone: d.owner.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
+      });
+      return { d, approver, tier, app, approve: () => approver.reviewDealerApplication(d.adminUser.id, app.id, true, tier.id) };
+    }
+
+    it('duyệt hồ sơ chỉ khoá users kiểu NO KEY UPDATE: không chờ FOR KEY SHARE của khoá ngoại (đặt đơn / tạo dòng trỏ tới users)', async () => {
+      const a = await applicant();
+      const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${a.d.owner.id} FOR KEY SHARE`);
+      let settled = false;
+      const approval = a.approve().finally(() => (settled = true));
+      try {
+        await waitUntil(() => settled, 'duyệt hồ sơ khi users đang bị KEY SHARE');
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+      await approval;
+      expect(await a.d.role()).toBe('DEALER');
+    });
+
+    it('metadata ghi chen vào users trước khi duyệt lấy được khoá không bị mất (duyệt gộp metadata từ dòng đã khoá)', async () => {
+      const a = await applicant();
+      const holder = await hold(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${a.d.owner.id} FOR UPDATE`;
+        await tx.user.update({ where: { id: a.d.owner.id }, data: { metadata: { segments: ['home'], onboardedAt: '2026-10-01' } } });
+      });
+      let settled = false;
+      const approval = a.approve().finally(() => (settled = true));
+      try {
+        await waitUntil(async () => settled || (await lockWaiters(holder.pid)) >= 1, 'duyệt hồ sơ');
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+      await approval;
+      const meta = (await prisma.user.findUniqueOrThrow({ where: { id: a.d.owner.id } })).metadata as Record<string, unknown>;
+      expect(meta).toEqual({ segments: ['home'], onboardedAt: '2026-10-01', dealerTierId: a.tier.id });
+    });
+
+    it.each([true, false])(`CTV nộp hồ sơ vừa đặt đơn qua chính slug của mình vừa được duyệt (duyệt đến trước: %s): không 40P01, không 503 (${ROUNDS} vòng)`, async (approvalFirst) => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const a = await applicant();
+        const p = await prisma.product.create({
+          data: {
+            fulfilment: 'TUBU', isActive: true, brand: 'IT', slug: `itdr-${randCode(8).toLowerCase()}`, name: 'SP IT', description: 'IT', basePrice: PRICE,
+            variations: { create: [{ sku: `ITDR-${randCode(8)}`, pancakeId: `itdr-${randCode(8)}`, name: 'v', attributes: {}, retailPrice: PRICE, stock: STOCK }] },
+          },
+          include: { variations: true },
+        });
+        created.productIds.push(p.id);
+        const addr = await prisma.address.findFirstOrThrow({ where: { userId: a.d.owner.id } });
+        await cart.addItem(a.d.owner.id, { variationId: p.variations[0]!.id, quantity: 1 });
+        const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "id" = ${a.d.sf.id} FOR UPDATE`);
+        const running: Promise<unknown>[] = [];
+        try {
+          const startApproval = () => {
+            let s = false;
+            running.push(a.approve().finally(() => (s = true)));
+            return () => s;
+          };
+          const startCheckout = () => {
+            let s = false;
+            running.push(checkout.placeOrder(a.d.owner.id, { addressId: addr.id, paymentMethod: 'COD', storefrontSlug: a.d.sf.slug } as never).finally(() => (s = true)));
+            return () => s;
+          };
+          const first = approvalFirst ? startApproval() : startCheckout();
+          await waitUntil(async () => first() || (await lockWaiters(holder.pid)) >= 1, 'bên đến trước');
+          const second = approvalFirst ? startCheckout() : startApproval();
+          await waitUntil(async () => second() || (await lockWaiters(holder.pid)) >= 2, 'bên đến sau');
+        } finally {
+          holder.release();
+          await holder.done;
+        }
+        const settled = await Promise.allSettled(running);
+        expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock|bận/i);
+        for (const r of settled) if (r.status === 'rejected') expect(r.reason).not.toBeInstanceOf(ServiceUnavailableException);
+        expect(settled.some((r) => r.status === 'fulfilled')).toBe(true);
+        expect(await a.d.role()).toBe('DEALER');
       }
     });
 
