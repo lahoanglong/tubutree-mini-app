@@ -1,4 +1,12 @@
-import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { CouponPreviewDTO, CouponPreviewsResponse } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -12,7 +20,14 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService } from '../storefront/combo.service';
-import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
+import {
+  FlashQuotaLineError,
+  FlashSaleService,
+  FLASH_OVER_LIMIT_MSG,
+  type FlashQuotaLine,
+  type FlashQuotaOutcome,
+} from '../flash-sale/flash-sale.service';
+import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
@@ -435,27 +450,29 @@ export class CheckoutService {
         // SP có thể bị gỡ/từ chối giữa lúc tính giá (compute) và lúc ghi đơn — kiểm lại ở đây.
         await assertVariationsSellable(tx, cart.items);
         await lockVariationsInIdOrder(tx, cart.items.map((l) => l.variationId));
-        for (const line of cart.items) {
-          const reserved = await reserveVariationStock(tx, line.variationId, line.quantity);
-          if (!reserved) {
-            throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
+        // Giữ kho từng dòng tới dòng thiếu hàng đầu tiên, rồi trừ suất giờ vàng của các dòng trước nó một lượt (khoá theo pha,
+        // xem consumeQuotas): lỗi báo khách vẫn là lỗi của dòng hỏng sớm nhất như khi làm từng dòng.
+        let short = cart.items.length;
+        for (const [i, line] of cart.items.entries()) {
+          if (!(await reserveVariationStock(tx, line.variationId, line.quantity))) {
+            short = i;
+            break;
           }
-          const fid = line.flashSaleItemId;
-          if (fid) {
-            try {
-              await this.flashSale.consumeQuota(tx, fid, userId, line.quantity, new Date());
-            } catch (e) {
-              // Vượt giới hạn mua = lỗi hợp lệ, giữ nguyên message. Hết suất/hết giờ → PRICE_CHANGED
-              // để FE hỏi lại giá mới (không âm thầm tính giá flash đã hết).
-              if (e instanceof BadRequestException && e.message === FLASH_OVER_LIMIT_MSG) throw e;
-              // Log trước khi remap: lỗi hạ tầng (DB timeout, bug) bị che dưới thông báo
-              // "giá đã đổi" cho khách — vẫn cần log để vận hành chẩn đoán được nguyên nhân thật.
-              this.logger.error(
-                `consumeQuota lỗi cho đơn ${code}, flashSaleItemId=${fid}: ${e instanceof Error ? e.message : e}`,
-              );
-              throw new BadRequestException('PRICE_CHANGED');
-            }
-          }
+        }
+        const flashLines = cart.items
+          .slice(0, short)
+          .flatMap((l) => (l.flashSaleItemId ? [{ flashSaleItemId: l.flashSaleItemId, quantity: l.quantity }] : []));
+        const outcomes = flashLines.length > 0 ? await this.consumeFlashQuotas(tx, userId, flashLines, code) : [];
+        const failed = outcomes.findIndex((o) => o !== 'OK');
+        if (failed >= 0) {
+          // Vượt giới hạn mua = lỗi hợp lệ, giữ nguyên message. Hết suất/hết giờ → PRICE_CHANGED để FE hỏi lại giá mới
+          // (không âm thầm tính giá flash đã hết).
+          if (outcomes[failed] === 'OVER_LIMIT') throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
+          this.logger.error(`consumeQuotas hết suất cho đơn ${code}, flashSaleItemId=${flashLines[failed]!.flashSaleItemId}`);
+          throw new BadRequestException('PRICE_CHANGED');
+        }
+        if (short < cart.items.length) {
+          throw new BadRequestException(`Sản phẩm "${cart.items[short]!.productName}" không đủ tồn kho.`);
         }
 
         await this.assertPartnerStoresUnderLock(tx, computed.shipments);
@@ -872,6 +889,31 @@ export class CheckoutService {
    * đổi (biến thể → suất giờ vàng → gian hàng/users của khoá ngoại đơn → users FOR UPDATE → mã giảm giá). KEY SHARE không chặn chủ
    * gian hàng đổi tên/tạm nghỉ (NO KEY UPDATE), như duyệt liên kết giao hộ (merchant-pancake-link).
    */
+  /**
+   * Trừ suất giờ vàng trong tx đặt đơn. Thua tranh khoá (deadlock, quá hạn chờ) → 503 để khách thử lại, không báo "giá đã
+   * đổi" cho một lỗi không liên quan tới giá. Lỗi hạ tầng khác vẫn log rồi PRICE_CHANGED như trước.
+   */
+  private async consumeFlashQuotas(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    lines: FlashQuotaLine[],
+    code: string,
+  ): Promise<FlashQuotaOutcome[]> {
+    try {
+      return await this.flashSale.consumeQuotas(tx, userId, lines, new Date());
+    } catch (e) {
+      const original = e instanceof FlashQuotaLineError ? e.original : e;
+      const fid = e instanceof FlashQuotaLineError ? lines[e.lineIndex]?.flashSaleItemId : undefined;
+      const detail = `đơn ${code}, flashSaleItemId=${fid}: ${original instanceof Error ? original.message : original}`;
+      if (isLockBusy(original)) {
+        this.logger.warn(`consumeQuotas thua tranh khoá cho ${detail}`);
+        throw new ServiceUnavailableException(LOCK_BUSY_MESSAGE);
+      }
+      this.logger.error(`consumeQuotas lỗi cho ${detail}`);
+      throw new BadRequestException('PRICE_CHANGED');
+    }
+  }
+
   private async assertPartnerStoresUnderLock(tx: Prisma.TransactionClient, shipments: CheckoutShipment[]): Promise<void> {
     const ids = [...new Set(shipments.flatMap((s) => (s.fulfiller.kind === 'MERCHANT' ? [s.fulfiller.storefrontId] : [])))];
     if (ids.length === 0) return;

@@ -1,5 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CheckoutService } from './checkout.service';
+import { FlashQuotaLineError } from '../flash-sale/flash-sale.service';
+import { LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
 import { CouponProductScopeError, type CouponsService } from '../coupons/coupons.service';
@@ -51,7 +54,7 @@ function build(
     getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
     createCommissionForOrder?: jest.Mock; // override affiliate.createCommissionForOrder
     cartData?: unknown; // override giỏ (test checkout tập con)
-    flashSale?: { consumeQuota: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
+    flashSale?: { consumeQuotas: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
     gomdon?: unknown;
     pointsBalance?: number;
     /** PD-3: số dư lô CONVERTED (xu cũ quy đổi). */
@@ -179,9 +182,9 @@ function build(
   } as unknown as AffiliateService;
   // combo mặc định: không giảm (override qua opts.combo cho test combo).
   const combo = (opts.combo ?? { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) }) as unknown as ComboService;
-  // flash-sale mặc định: consumeQuota no-op OK (override qua opts.flashSale cho test flash).
+  // flash-sale mặc định: mọi dòng flash trừ suất OK (override qua opts.flashSale cho test flash).
   const flashSale = (opts.flashSale ?? {
-    consumeQuota: jest.fn().mockResolvedValue(undefined),
+    consumeQuotas: jest.fn().mockImplementation(async (_tx: unknown, _u: string, lines: unknown[]) => lines.map(() => 'OK')),
     resolveEffective: jest.fn().mockResolvedValue(new Map()),
   }) as any;
   // analytics: record/recordBestEffort no-op — không assert trong test cũ (Task 4 chỉ thêm
@@ -888,74 +891,82 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
   });
 
-  it('placeOrder gọi consumeQuota(tx) cho line flash + đóng dấu flashSaleItemId lên OrderItem', async () => {
-    const FLASH_CART = {
-      items: [
-        { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 80000, quantity: 2, total: 160000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 10 },
-      ],
-      subtotal: 160000, discount: 0, freeship: false, couponCode: null,
-    };
-    const { svc, orderCreate, flashSale, prisma } = build({ cartData: FLASH_CART, stockCount: 1 });
+  const flashLine = (id: string, fid: string, quantity = 1) => ({
+    id, variationId: `v-${id}`, productId: `p-${id}`, productName: `SP ${id}`, variationName: 'V', unitPrice: 80000, quantity,
+    total: 80000 * quantity, isFlash: true, flashSaleItemId: fid, flashEndAt: new Date(), soldPct: 10,
+  });
+  const flashCart = (...items: ReturnType<typeof flashLine>[]) => ({
+    items, subtotal: items.reduce((t, l) => t + l.total, 0), discount: 0, freeship: false, couponCode: null,
+  });
+  const flashWith = (consumeQuotas: jest.Mock) => ({ consumeQuotas, resolveEffective: jest.fn().mockResolvedValue(new Map()) });
+
+  it('placeOrder gọi consumeQuotas(tx) MỘT lần cho mọi line flash + đóng dấu flashSaleItemId lên OrderItem', async () => {
+    const { svc, orderCreate, flashSale, prisma } = build({ cartData: flashCart(flashLine('i1', 'fi1', 2)), stockCount: 1 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
-    // consumeQuota nhận tx (= prisma stub trong $transaction), itemId, userId, qty, Date.
-    expect(flashSale.consumeQuota).toHaveBeenCalledWith(prisma, 'fi1', 'u1', 2, expect.any(Date));
+    expect(flashSale.consumeQuotas).toHaveBeenCalledTimes(1);
+    expect(flashSale.consumeQuotas).toHaveBeenCalledWith(prisma, 'u1', [{ flashSaleItemId: 'fi1', quantity: 2 }], expect.any(Date));
     // OrderItem được đóng dấu flashSaleItemId để reconciliation/hoàn suất về sau.
     const items = orderCreate.mock.calls[0][0].data.items.create;
     expect(items).toContainEqual(expect.objectContaining({ flashSaleItemId: 'fi1' }));
   });
 
-  it('consumeQuota throw (hết suất giữa lúc checkout) → PRICE_CHANGED, KHÔNG tạo đơn', async () => {
-    const FLASH_CART = {
-      items: [
-        { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 80000, quantity: 1, total: 80000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 90 },
-      ],
-      subtotal: 80000, discount: 0, freeship: false, couponCode: null,
-    };
-    const flashSale = {
-      consumeQuota: jest.fn().mockRejectedValue(new Error('Hết suất ưu đãi.')),
-      resolveEffective: jest.fn().mockResolvedValue(new Map()),
-    };
-    const { svc, orderCreate } = build({ cartData: FLASH_CART, stockCount: 1, flashSale });
-    await expect(
-      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
-    ).rejects.toThrow('PRICE_CHANGED');
+  it('hết suất giữa lúc checkout (SOLD_OUT) → PRICE_CHANGED, KHÔNG tạo đơn', async () => {
+    const flashSale = flashWith(jest.fn().mockResolvedValue(['SOLD_OUT']));
+    const { svc, orderCreate } = build({ cartData: flashCart(flashLine('i1', 'fi1')), stockCount: 1, flashSale });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('PRICE_CHANGED');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('consumeQuota throw BadRequestException hết suất → vẫn map PRICE_CHANGED, KHÔNG tạo đơn', async () => {
-    const FLASH_CART = {
-      items: [
-        { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 80000, quantity: 1, total: 80000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 90 },
-      ],
-      subtotal: 80000, discount: 0, freeship: false, couponCode: null,
-    };
-    const flashSale = {
-      consumeQuota: jest.fn().mockRejectedValue(new BadRequestException('Hết suất ưu đãi.')),
-      resolveEffective: jest.fn().mockResolvedValue(new Map()),
-    };
-    const { svc, orderCreate } = build({ cartData: FLASH_CART, stockCount: 1, flashSale });
-    await expect(
-      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
-    ).rejects.toThrow('PRICE_CHANGED');
+  it('vượt giới hạn mua (OVER_LIMIT) → GIỮ NGUYÊN message, KHÔNG map PRICE_CHANGED', async () => {
+    const flashSale = flashWith(jest.fn().mockResolvedValue(['OVER_LIMIT']));
+    const { svc, orderCreate } = build({ cartData: flashCart(flashLine('i1', 'fi1')), stockCount: 1, flashSale });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('consumeQuota throw BadRequestException vượt giới hạn mua → GIỮ NGUYÊN message, KHÔNG map PRICE_CHANGED', async () => {
-    const FLASH_CART = {
-      items: [
-        { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 80000, quantity: 1, total: 80000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 10 },
-      ],
-      subtotal: 80000, discount: 0, freeship: false, couponCode: null,
-    };
-    const flashSale = {
-      consumeQuota: jest.fn().mockRejectedValue(new BadRequestException('Vượt giới hạn mua ưu đãi.')),
-      resolveEffective: jest.fn().mockResolvedValue(new Map()),
-    };
-    const { svc, orderCreate } = build({ cartData: FLASH_CART, stockCount: 1, flashSale });
-    await expect(
-      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
-    ).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+  it('lỗi hạ tầng khác khi trừ suất → log rồi PRICE_CHANGED như trước', async () => {
+    const flashSale = flashWith(jest.fn().mockRejectedValue(new FlashQuotaLineError(0, new Error('connection reset'))));
+    const { svc, orderCreate } = build({ cartData: flashCart(flashLine('i1', 'fi1')), stockCount: 1, flashSale });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('PRICE_CHANGED');
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['40P01 (câu raw)', new FlashQuotaLineError(0, new Error('Raw query failed. Code: `40P01`. Message: `ERROR: deadlock detected`'))],
+    ['55P03 lock_timeout', new FlashQuotaLineError(0, new Error('Code: `55P03`. Message: `canceling statement due to lock timeout`'))],
+    ['57014 statement_timeout', new FlashQuotaLineError(0, new Error('Code: `57014`. Message: `canceling statement due to statement timeout`'))],
+    ['P2034', new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock', { code: 'P2034', clientVersion: 'x' })],
+  ])('thua tranh khoá khi trừ suất (%s) → 503 "đang bận" để thử lại, KHÔNG báo PRICE_CHANGED', async (_what, err) => {
+    const flashSale = flashWith(jest.fn().mockRejectedValue(err));
+    const { svc, orderCreate } = build({ cartData: flashCart(flashLine('i1', 'fi1')), stockCount: 1, flashSale });
+    const res = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never).catch((e: unknown) => e);
+    expect(res).toBeInstanceOf(ServiceUnavailableException);
+    expect((res as Error).message).toBe(LOCK_BUSY_MESSAGE);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('nhiều dòng hỏng → báo lỗi của dòng hỏng ĐẦU TIÊN theo thứ tự giỏ', async () => {
+    const cart = flashCart(flashLine('i1', 'fi2'), flashLine('i2', 'fi1'));
+    const soldFirst = build({ cartData: cart, stockCount: 1, flashSale: flashWith(jest.fn().mockResolvedValue(['SOLD_OUT', 'OVER_LIMIT'])) });
+    await expect(soldFirst.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('PRICE_CHANGED');
+    const overFirst = build({ cartData: cart, stockCount: 1, flashSale: flashWith(jest.fn().mockResolvedValue(['OK', 'OVER_LIMIT'])) });
+    await expect(overFirst.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+  });
+
+  it('dòng 2 thiếu hàng nhưng dòng 1 hết suất → lỗi của dòng 1 (như làm từng dòng); chỉ trừ suất các dòng trước dòng thiếu', async () => {
+    const consumeQuotas = jest.fn().mockResolvedValue(['SOLD_OUT']);
+    const executeRaw = jest.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0).mockResolvedValue(1);
+    const { svc } = build({ cartData: flashCart(flashLine('i1', 'fi1'), flashLine('i2', 'fi2')), executeRaw, flashSale: flashWith(consumeQuotas) });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('PRICE_CHANGED');
+    expect(consumeQuotas).toHaveBeenCalledWith(expect.anything(), 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], expect.any(Date));
+  });
+
+  it('dòng 1 thiếu hàng → lỗi tồn kho của dòng 1, không trừ suất', async () => {
+    const consumeQuotas = jest.fn().mockResolvedValue([]);
+    const executeRaw = jest.fn().mockResolvedValueOnce(0).mockResolvedValue(1);
+    const { svc } = build({ cartData: flashCart(flashLine('i1', 'fi1'), flashLine('i2', 'fi2')), executeRaw, flashSale: flashWith(consumeQuotas) });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('Sản phẩm "SP i1" không đủ tồn kho.');
+    expect(consumeQuotas).not.toHaveBeenCalled();
   });
 
   it('đơn hàng có hasRecyclingPickup=true → enqueue Gomdon, không enqueue Pancake trực tiếp', async () => {

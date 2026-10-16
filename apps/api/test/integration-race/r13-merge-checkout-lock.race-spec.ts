@@ -143,15 +143,19 @@ describe('Gộp phiên khách ‖ đặt đơn của khách hoặc của tài kh
   }
 
   /** Suất giờ vàng của biến thể v; G đã mua GUEST_FLASH_QTY suất. */
-  async function flashWithGuestPurchase(v: { id: string }, guestId: string) {
+  async function flashItem(v: { id: string }, soldCount = 0) {
     const now = Date.now();
     const sale = await prisma.flashSale.create({
       data: { title: `Giờ vàng ${randCode(4)}`, startAt: new Date(now - 3_600_000), endAt: new Date(now + 3_600_000), createdBy: 'it' },
     });
     created.flashSaleIds.push(sale.id);
-    const flash = await prisma.flashSaleItem.create({
-      data: { flashSaleId: sale.id, variationId: v.id, flashPrice: FLASH_PRICE, quota: 100, soldCount: GUEST_FLASH_QTY, perUserLimit: 10 },
+    return prisma.flashSaleItem.create({
+      data: { flashSaleId: sale.id, variationId: v.id, flashPrice: FLASH_PRICE, quota: 100, soldCount, perUserLimit: 10 },
     });
+  }
+
+  async function flashWithGuestPurchase(v: { id: string }, guestId: string) {
+    const flash = await flashItem(v, GUEST_FLASH_QTY);
     await prisma.flashSalePurchase.create({ data: { flashSaleItemId: flash.id, userId: guestId, quantity: GUEST_FLASH_QTY } });
     return flash;
   }
@@ -329,6 +333,49 @@ describe('Gộp phiên khách ‖ đặt đơn của khách hoặc của tài kh
       const purchases = await prisma.flashSalePurchase.findMany({ where: { flashSaleItemId: flash.id } });
       expect(purchases.map((x) => [x.userId, x.quantity])).toEqual([[p.target.id, GUEST_FLASH_QTY + 2]]);
       expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: flash.id } })).soldCount).toBe(GUEST_FLASH_QTY + 2);
+    }
+  });
+
+  /**
+   * Như ca trên nhưng đơn hộ có thêm một dòng giờ vàng ĐỨNG TRƯỚC mà T chưa có dòng suất: dòng đó không được khoá users của T
+   * trước khi dòng sau khoá xong dòng suất (gộp giữ dòng suất đó rồi chờ users của T).
+   */
+  it(`(b) đơn hộ [x chưa có dòng suất, v đích đã có dòng suất] ‖ gộp đã khoá dòng suất v → không 40P01 (${ROUNDS} vòng)`, async () => {
+    for (let round = 0; round < ROUNDS; round++) {
+      const tag = randCode(10).toLowerCase();
+      const p = await pair({ guest: `itr13-a-${tag}`, target: `itr13-b-${tag}` });
+      await prisma.user.update({ where: { id: p.target.id }, data: { role: 'AFFILIATE', phone: randomPhone() } });
+      const x = await variation();
+      const v = await variation();
+      const flashX = await flashItem(x);
+      const flash = await flashWithGuestPurchase(v, p.guest.id);
+      await prisma.flashSalePurchase.create({ data: { flashSaleItemId: flash.id, userId: p.target.id, quantity: 1 } });
+      await prisma.flashSaleItem.update({ where: { id: flash.id }, data: { soldCount: GUEST_FLASH_QTY + 1 } });
+      const dto = {
+        items: [
+          { variationId: x.id, quantity: 1 },
+          { variationId: v.id, quantity: 1 },
+        ],
+        customer: { recipient: 'Khách của CTV', phone: randomPhone(), province: 'Hà Nội', ward: 'Phường IT', street: '1 Đường IT', provinceCode: '84_VN01', wardCode: '00001' },
+        paymentMethod: 'COD' as const,
+      };
+
+      const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${p.guest.id} FOR UPDATE`);
+      const s = await race(holder, merge(p), () => affiliate.placeOrderForCustomer(p.target.id, dto));
+      expectNoErrors(s);
+
+      await expectMerged(p);
+      const placed = await prisma.order.findMany({ where: { userId: p.target.id }, include: { items: true } });
+      expect(placed.map((o) => o.items.map((i) => i.flashSaleItemId).sort())).toEqual([[flashX.id, flash.id].sort()]);
+      const purchases = await prisma.flashSalePurchase.findMany({ where: { flashSaleItemId: { in: [flash.id, flashX.id] } } });
+      expect(new Map(purchases.map((q) => [`${q.flashSaleItemId}:${q.userId}`, q.quantity]))).toEqual(
+        new Map([
+          [`${flash.id}:${p.target.id}`, GUEST_FLASH_QTY + 2],
+          [`${flashX.id}:${p.target.id}`, 1],
+        ]),
+      );
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: flash.id } })).soldCount).toBe(GUEST_FLASH_QTY + 2);
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: flashX.id } })).soldCount).toBe(1);
     }
   });
 
