@@ -8,6 +8,7 @@ import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/sho
 import { getErrorMessage } from '../../services/api';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { useDebounced } from '../../utils/use-debounced';
 import { Badge } from '../ui/badge';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -30,8 +31,16 @@ export interface VoucherSheetProps {
    * (`/checkout/coupon-previews`); không có, đang tải hoặc lỗi (API cũ) thì thẻ chỉ ghi điều kiện của mã như trước.
    */
   previewParams?: CouponPreviewRequest;
+  /**
+   * Dấu vân tay các dòng đang tính (id, số lượng, thành tiền): đổi là số xem trước cũ hết đúng (`itemIds` không đổi khi đổi số
+   * lượng hay khi chọn cả giỏ) nên phải hỏi lại.
+   */
+  previewKey?: string;
   onCouponApplied?: () => void;
 }
+
+/** Chờ lựa chọn/số lượng đứng yên rồi mới hỏi lại, để bấm liên tục không chạm giới hạn 30 lần/phút của API. */
+const PREVIEW_DEBOUNCE_MS = 300;
 
 export function VoucherSheet({
   visible,
@@ -41,6 +50,7 @@ export function VoucherSheet({
   shippingFee,
   productIds,
   previewParams,
+  previewKey,
   onCouponApplied,
 }: VoucherSheetProps) {
   const queryClient = useQueryClient();
@@ -52,13 +62,17 @@ export function VoucherSheet({
     queryFn: getCoupons,
     enabled: visible,
   });
+  const previewSig = previewParams ? JSON.stringify([previewParams, previewKey ?? '']) : null;
+  const settledSig = useDebounced(previewSig, PREVIEW_DEBOUNCE_MS);
   const previewsQ = useQuery({
-    queryKey: ['coupon-previews', previewParams ?? null],
-    queryFn: () => getCouponPreviews(previewParams!),
-    enabled: visible && !!previewParams,
+    queryKey: ['coupon-previews', settledSig],
+    queryFn: () => getCouponPreviews((JSON.parse(settledSig!) as [CouponPreviewRequest, string])[0]),
+    enabled: visible && !!settledSig,
     retry: false,
   });
-  const previews = new Map((previewsQ.data ?? []).map((p) => [p.code.toUpperCase(), p]));
+  // Số chỉ đúng cho đúng giỏ đã hỏi: giỏ vừa đổi (chưa hỏi lại) hoặc đang tải lại thì quay về phép đoán phía máy, không hiện số cũ.
+  const previewTrusted = !!previewSig && settledSig === previewSig && previewsQ.isSuccess && !previewsQ.isFetching;
+  const previews = new Map((previewTrusted ? (previewsQ.data ?? []) : []).map((p) => [p.code.toUpperCase(), p]));
 
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),

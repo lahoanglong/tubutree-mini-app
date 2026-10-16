@@ -127,7 +127,7 @@ function couponAmount(coupon: Coupon, subtotal: number): { discount: number; fre
   return { discount, freeship };
 }
 
-/** Số mã tối đa xem trước trong một lần (mới nhất trước): ví khách thật có vài mã, trần này chỉ chặn ví bất thường. */
+/** Số mã tối đa xem trước trong một lần (các mã đầu ví): ví khách thật có vài mã, trần này chỉ chặn ví bất thường. */
 export const COUPON_PREVIEW_LIMIT = 50;
 
 /**
@@ -171,8 +171,9 @@ export class CouponsService {
 
   /**
    * Kết quả validateAndCompute của nhiều mã trên cùng một phần hàng, đọc gộp (mã, người dùng, số lượt) thay vì vài truy vấn
-   * mỗi mã. Mã bị từ chối trả đúng lỗi validateAndCompute sẽ ném. Chỉ đọc: không ghi lượt dùng, không khoá. Xét tối đa
-   * COUPON_PREVIEW_LIMIT mã mới nhất; mã ngoài trần không có trong kết quả.
+   * mỗi mã. Mã bị từ chối trả đúng lỗi validateAndCompute sẽ ném. Chỉ đọc: không ghi lượt dùng, không khoá. Xét
+   * COUPON_PREVIEW_LIMIT mã ĐẦU TIÊN theo đúng thứ tự `codes` (thứ tự ví khách thấy), kết quả cũng theo thứ tự đó; mã ngoài trần
+   * không có trong kết quả.
    */
   async previewMany(
     codes: string[],
@@ -181,16 +182,12 @@ export class CouponsService {
     lines?: CouponLine[],
   ): Promise<Map<string, CouponResult | BadRequestException>> {
     const out = new Map<string, CouponResult | BadRequestException>();
-    const wanted = [...new Set(codes.map(normalizeCouponCode))];
+    const wanted = [...new Set(codes.map(normalizeCouponCode))].slice(0, COUPON_PREVIEW_LIMIT);
     if (wanted.length === 0) return out;
-    const coupons = await this.prisma.coupon.findMany({
-      where: { code: { in: wanted } },
-      // id là cuid (tăng theo thời gian tạo) nên giảm dần = mới nhất trước.
-      orderBy: { id: 'desc' },
-      take: COUPON_PREVIEW_LIMIT,
-    });
-    const ids = coupons.map((c) => c.id);
-    const limitedIds = coupons.filter((c) => c.usageLimit != null).map((c) => c.id);
+    const rows = await this.prisma.coupon.findMany({ where: { code: { in: wanted } } });
+    const byCode = new Map(rows.map((c) => [c.code, c]));
+    const ids = rows.map((c) => c.id);
+    const limitedIds = rows.filter((c) => c.usageLimit != null).map((c) => c.id);
     const [user, mine, all] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true } }),
       ids.length
@@ -203,7 +200,8 @@ export class CouponsService {
     const usedByUser = new Map(mine.map((g) => [g.couponId, g._count._all]));
     const totalUsed = new Map(all.map((g) => [g.couponId, g._count._all]));
     const now = new Date();
-    for (const coupon of coupons) {
+    for (const code of wanted) {
+      const coupon = byCode.get(code) ?? null;
       try {
         assertCouponLive(coupon);
         if (!isCouponEligible(coupon, { id: userId, tierId: user?.tierId })) throw scopeOwnershipError(coupon);
@@ -215,7 +213,7 @@ export class CouponsService {
         out.set(coupon.code, { code: coupon.code, ...couponAmount(coupon, scoped.subtotal), productIds: scoped.productIds });
       } catch (err) {
         if (!(err instanceof BadRequestException)) throw err;
-        out.set(coupon.code, err);
+        out.set(code, err);
       }
     }
     return out;

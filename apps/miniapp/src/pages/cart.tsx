@@ -11,7 +11,7 @@ import {
   type CartLine,
   type UnavailableCartLine,
 } from '../services/shop-api';
-import { cartProductIds } from '../utils/coupon-scope';
+import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { getErrorMessage } from '../services/api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -239,7 +239,12 @@ export default function CartPage() {
             summary={summary}
             selectedSubtotal={selectedSubtotal}
             selectedProductIds={cartProductIds(selectedItems)}
-            selectedItemIds={allSelected ? undefined : selectedItems.map((l) => l.id)}
+            // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
+            previewSelection={
+              selectedItems.length === 0
+                ? null
+                : { itemIds: allSelected ? undefined : selectedItems.map((l) => l.id), key: cartPreviewKey(selectedItems) }
+            }
           />
         </>
       )}
@@ -500,13 +505,13 @@ function CouponBlock({
   summary,
   selectedSubtotal,
   selectedProductIds,
-  selectedItemIds,
+  previewSelection,
 }: {
   summary: CartSummary;
   selectedSubtotal: number;
   selectedProductIds?: string[];
-  /** Món đang chọn khi chỉ thanh toán một phần giỏ; undefined = cả giỏ. */
-  selectedItemIds?: string[];
+  /** Món đang chọn (itemIds undefined = cả giỏ) và dấu vân tay của chúng; null = chưa chọn món nào. */
+  previewSelection: { itemIds?: string[]; key: string } | null;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const sfCtx = useStorefrontContext();
@@ -597,7 +602,8 @@ function CouponBlock({
         // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
         subtotal={selectedSubtotal}
         productIds={selectedProductIds}
-        previewParams={{ storefrontSlug: ctvSlug, itemIds: selectedItemIds }}
+        previewParams={previewSelection ? { storefrontSlug: ctvSlug, itemIds: previewSelection.itemIds } : undefined}
+        previewKey={previewSelection?.key}
       />
     </>
   );

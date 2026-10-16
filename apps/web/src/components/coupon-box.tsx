@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -24,6 +24,25 @@ import { autoCouponName } from '@/lib/coupon-name';
 /** Số voucher hiện sẵn; còn lại nằm sau nút xem thêm để giỏ/thanh toán trên điện thoại không dài thêm hàng chục cuộn. */
 const VISIBLE_COUPONS = 3;
 
+/** Chờ lựa chọn/số lượng đứng yên rồi mới hỏi lại mức giảm, để bấm liên tục không chạm giới hạn 30 lần/phút của API. */
+const PREVIEW_DEBOUNCE_MS = 300;
+
+function useSettled<T>(value: T, delayMs: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return settled;
+}
+
+/**
+ * Dấu vân tay các dòng đang tính cho xem trước mức giảm mã: đổi số lượng, giá (giờ vàng) hay dòng là số cũ hết đúng.
+ */
+export function couponPreviewKey(lines: { id: string; quantity: number; total: number }[]): string {
+  return lines.map((l) => `${l.id}:${l.quantity}:${l.total}`).join(',');
+}
+
 /** Khoá mutation dùng chung để trang chứa (thanh toán) biết mã đang được đổi qua `useIsMutating`. */
 export const COUPON_MUTATION_KEY = ['cart-coupon'] as const;
 
@@ -42,6 +61,7 @@ export function CouponBox({
   notice = null,
   disabled = false,
   preview,
+  previewKey,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -56,19 +76,28 @@ export function CouponBox({
    * không có, đang tải hoặc lỗi (API cũ) thì thẻ chỉ ghi điều kiện của mã như trước.
    */
   preview?: CouponPreviewParams;
+  /**
+   * Dấu vân tay các dòng đang tính (`couponPreviewKey`): `itemIds` không đổi khi đổi số lượng hay khi chọn cả giỏ, nên đổi
+   * dấu này là số xem trước cũ hết đúng và phải hỏi lại.
+   */
+  previewKey?: string;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
+  const previewSig = preview ? JSON.stringify([preview, previewKey ?? '']) : null;
+  const settledSig = useSettled(previewSig, PREVIEW_DEBOUNCE_MS);
   const previewsQ = useQuery({
-    queryKey: ['coupon-previews', preview ?? null],
-    queryFn: () => getCouponPreviews(preview!),
-    enabled: !!preview && !currentCode,
+    queryKey: ['coupon-previews', settledSig],
+    queryFn: () => getCouponPreviews((JSON.parse(settledSig!) as [CouponPreviewParams, string])[0]),
+    enabled: !!settledSig && !currentCode,
     retry: false,
   });
-  const previews = new Map((previewsQ.data ?? []).map((p) => [p.code.toUpperCase(), p]));
+  // Số chỉ đúng cho đúng giỏ đã hỏi: giỏ vừa đổi (chưa hỏi lại) hoặc đang tải lại thì quay về phép đoán phía máy, không hiện số cũ.
+  const previewTrusted = !!previewSig && settledSig === previewSig && previewsQ.isSuccess && !previewsQ.isFetching;
+  const previews = new Map((previewTrusted ? (previewsQ.data ?? []) : []).map((p) => [p.code.toUpperCase(), p]));
   const usable = (c: { code: string; minOrder: number | null }) => {
     const p = previews.get(c.code.toUpperCase());
     return p ? p.eligible : isCouponEligible(c, subtotal);

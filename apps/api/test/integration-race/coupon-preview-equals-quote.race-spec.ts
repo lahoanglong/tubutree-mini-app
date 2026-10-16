@@ -26,7 +26,7 @@ import {
   COUPON_FREESHIP_NOTHING_REASON,
   COUPON_PRODUCT_FLASH_REASON,
 } from '../../src/modules/coupons/coupon-notice';
-import { createUser, randCode, setConfig, warmPool } from './helpers';
+import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
 
 /**
  * POST /checkout/coupon-previews phải ra ĐÚNG số báo giá checkout trừ khi khách áp chính mã đó: với từng mã trong ví, gọi xem
@@ -134,7 +134,7 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     userId: string,
     type: CouponType,
     value: number,
-    extra: { minOrder?: number; maxDiscount?: number; productIds?: string[] } = {},
+    extra: { minOrder?: number; maxDiscount?: number; productIds?: string[]; usageLimit?: number; tierId?: string } = {},
   ) {
     const c = await prisma.coupon.create({
       data: {
@@ -146,8 +146,9 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
         startAt: new Date(Date.now() - 86_400_000),
         endAt: new Date(Date.now() + 86_400_000),
         perUserLimit: 1,
-        scope: 'USER_GROUP',
-        scopeMeta: { userId },
+        usageLimit: extra.usageLimit ?? null,
+        scope: extra.tierId ? 'TIER' : 'USER_GROUP',
+        scopeMeta: extra.tierId ? { tierId: extra.tierId } : { userId },
         applyTo: extra.productIds ? { productIds: extra.productIds } : undefined,
       },
     });
@@ -156,12 +157,21 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
 
   type Ctx = { userId: string; addressId: string; storefrontSlug?: string; itemIds?: string[] };
 
+  async function usageSnapshot() {
+    const [redemptions, used] = await Promise.all([
+      prisma.couponRedemption.count(),
+      prisma.coupon.aggregate({ _sum: { usedCount: true } }),
+    ]);
+    return { redemptions, usedCount: used._sum.usedCount ?? 0 };
+  }
+
   /**
    * Với mọi mã trong ví: xem trước (có phí giao) rồi báo giá thật với mã đó trên giỏ, so từng số. Trả kết quả xem trước theo mã
    * để ca kiểm thêm con số kỳ vọng tính tay.
    */
   async function expectPreviewEqualsQuote(ctx: Ctx) {
     const quoteArgs = { addressId: ctx.addressId, storefrontSlug: ctx.storefrontSlug, itemIds: ctx.itemIds };
+    const usageBefore = await usageSnapshot();
     await prisma.cart.update({ where: { userId: ctx.userId }, data: { couponCode: null } });
     const noCoupon = await checkout.quote(ctx.userId, quoteArgs);
     const preview = await checkout.couponPreviews(ctx.userId, quoteArgs);
@@ -190,11 +200,8 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     }
     await prisma.cart.update({ where: { userId: ctx.userId }, data: { couponCode: null } });
 
-    // Chỉ đọc: không lượt dùng nào, bộ đếm không đổi; điểm không đổi (sổ = số dư).
-    const codes = preview.coupons.map((p) => p.code);
-    expect(await prisma.couponRedemption.count({ where: { coupon: { code: { in: codes } } } })).toBe(0);
-    const used = await prisma.coupon.aggregate({ where: { code: { in: codes } }, _sum: { usedCount: true } });
-    expect(used._sum.usedCount ?? 0).toBe(0);
+    // Chỉ đọc: không thêm lượt dùng nào, bộ đếm không đổi; điểm không đổi (sổ = số dư).
+    expect(await usageSnapshot()).toEqual(usageBefore);
     const u = await prisma.user.findUniqueOrThrow({ where: { id: ctx.userId } });
     const ledger = await prisma.pointsTransaction.aggregate({ where: { userId: ctx.userId }, _sum: { delta: true } });
     expect(ledger._sum.delta ?? 0).toBe(u.pointsBalance);
@@ -341,5 +348,32 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     const fsMixed = await coupon(mixed.userId, 'FREESHIP', 0);
     const r3 = await expectPreviewEqualsQuote(mixed);
     expect(r3.byCode.get(fsMixed)).toMatchObject({ eligible: true, freeshipSaving: 19_000 });
+  });
+
+  it('hết tổng lượt (usageLimit), mã theo hạng, và chọn rỗng (itemIds [] = cả giỏ như báo giá)', async () => {
+    const tier = await prisma.membershipTier.create({
+      data: { id: `itcp-tier-${randCode(8)}`, name: 'Hạng IT', minPoints: 999_999_999, perks: [] },
+    });
+    const b = await buyer();
+    await prisma.user.update({ where: { id: b.userId }, data: { tierId: tier.id } });
+    const a = await product(70_000);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 2 }); // 140.000đ
+    const usedUp = await coupon(b.userId, 'AMOUNT', 15_000, { usageLimit: 1 });
+    const other = await createUser(prisma);
+    const order = await createOrder(prisma, { userId: other.id });
+    const usedUpRow = await prisma.coupon.findUniqueOrThrow({ where: { code: usedUp } });
+    await prisma.couponRedemption.create({ data: { couponId: usedUpRow.id, userId: other.id, orderId: order.id } });
+    const forTier = await coupon(b.userId, 'PERCENT', 20, { tierId: tier.id });
+
+    const { byCode } = await expectPreviewEqualsQuote(b);
+    expect(byCode.get(usedUp)).toMatchObject({ eligible: false, discount: 0, reason: 'Mã giảm giá đã hết lượt sử dụng.' });
+    expect(byCode.get(forTier)).toMatchObject({ eligible: true, discount: 28_000 });
+
+    const empty = await expectPreviewEqualsQuote({ ...b, itemIds: [] });
+    expect(empty.byCode.get(forTier)).toMatchObject({ eligible: true, discount: 28_000 });
+
+    // Đếm lượt của mã hết lượt chỉ là lượt có sẵn của khách khác, xem trước/báo giá không ghi thêm.
+    expect(await prisma.couponRedemption.count({ where: { couponId: usedUpRow.id } })).toBe(1);
+    await prisma.user.update({ where: { id: b.userId }, data: { tierId: null } });
   });
 });

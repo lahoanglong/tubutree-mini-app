@@ -3,7 +3,7 @@ import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'z
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
 import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } from '../services/shop-api';
-import { cartProductIds } from '../utils/coupon-scope';
+import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage } from '../services/api';
@@ -986,7 +986,8 @@ export default function CheckoutPage() {
         subtotal={quote.data?.subtotal ?? cart.data?.subtotal ?? 0}
         shippingFee={quote.data?.shippingFee}
         productIds={cartProductIds(checkoutItems)}
-        previewParams={addressId ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
+        previewParams={addressId && checkoutItems.length > 0 ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
+        previewKey={cartPreviewKey(checkoutItems)}
         onCouponApplied={() => {
           void cart.refetch();
           void quote.refetch();

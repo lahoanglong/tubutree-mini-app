@@ -502,7 +502,7 @@ describe('CouponsService.previewMany', () => {
     }
   });
 
-  it('cả ví: một lần đọc mã, một lần đọc người dùng, tối đa hai lần đếm lượt; mã mới nhất trước, có trần', async () => {
+  it('cả ví: một lần đọc mã, một lần đọc người dùng, tối đa hai lần đếm lượt; kết quả theo đúng thứ tự ví', async () => {
     const rows = [
       coupon({ id: 'c2', code: 'X2', isActive: true, scope: 'PUBLIC' }),
       coupon({ id: 'c1', code: 'X1', isActive: true, scope: 'PUBLIC', usageLimit: 3 }),
@@ -511,11 +511,28 @@ describe('CouponsService.previewMany', () => {
     const groupBy = jest.fn().mockResolvedValue([]);
     const findUnique = jest.fn().mockResolvedValue(REAL_USER);
     const prisma = { coupon: { findMany }, user: { findUnique }, couponRedemption: { groupBy } } as unknown as PrismaService;
-    const out = await new CouponsService(prisma).previewMany(['x1', ' X2 '], 'u1', 100000);
-    expect([...out.keys()]).toEqual(['X2', 'X1']);
+    const out = await new CouponsService(prisma).previewMany(['x1', ' X2 ', 'GONE'], 'u1', 100000);
+    expect([...out.keys()]).toEqual(['X1', 'X2', 'GONE']);
+    expect((out.get('GONE') as Error).message).toBe('Mã giảm giá không tồn tại.');
     expect(findMany).toHaveBeenCalledTimes(1);
-    expect(findMany.mock.calls[0][0]).toMatchObject({ where: { code: { in: ['X1', 'X2'] } }, orderBy: { id: 'desc' }, take: 50 });
+    expect(findMany.mock.calls[0][0]).toEqual({ where: { code: { in: ['X1', 'X2', 'GONE'] } } });
     expect(findUnique).toHaveBeenCalledTimes(1);
     expect(groupBy).toHaveBeenCalledTimes(2);
+  });
+
+  it('ví hơn 50 mã: xét đúng 50 mã ĐẦU theo thứ tự ví (thẻ khách thấy trước), không theo id', async () => {
+    const codes = Array.from({ length: 55 }, (_, i) => `M${String(i).padStart(2, '0')}`);
+    // id ngược thứ tự ví: nếu còn chọn theo id thì 5 mã cuối ví sẽ chiếm chỗ.
+    const rows = codes.map((code, i) => coupon({ id: `c${99 - i}`, code, isActive: true, scope: 'PUBLIC' }));
+    const findMany = jest.fn().mockImplementation(({ where }: { where: { code: { in: string[] } } }) =>
+      Promise.resolve(rows.filter((r) => where.code.in.includes(r.code as string))),
+    );
+    const prisma = {
+      coupon: { findMany },
+      user: { findUnique: jest.fn().mockResolvedValue(REAL_USER) },
+      couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const out = await new CouponsService(prisma).previewMany(codes, 'u1', 100000);
+    expect([...out.keys()]).toEqual(codes.slice(0, 50));
   });
 });

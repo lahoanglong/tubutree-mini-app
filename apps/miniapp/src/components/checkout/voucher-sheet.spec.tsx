@@ -342,3 +342,43 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
   });
 });
+
+describe('VoucherSheet: số xem trước cũ không được tin khi giỏ đổi', () => {
+  const MIN = { ...COUPONS[0], code: 'MIN150', minOrder: 150_000 };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCoupons.mockResolvedValue([MIN]);
+  });
+
+  function sheet(subtotal: number, previewKey: string) {
+    return (
+      <VoucherSheet visible onClose={() => {}} subtotal={subtotal} previewParams={{ addressId: 'a1' }} previewKey={previewKey} />
+    );
+  }
+
+  it('đổi số lượng: hỏi lại máy chủ; trong lúc chờ không hiện số cũ, dưới đơn tối thiểu thì nút khoá', async () => {
+    mocks.getCouponPreviews.mockResolvedValueOnce([{ code: 'MIN150', eligible: true, discount: 20_000 }]);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const r = render(<QueryClientProvider client={qc}>{sheet(200_000, 'l1:4:200000')}</QueryClientProvider>);
+    expect(await screen.findByText('Giảm 20.000đ cho đơn này')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dùng mã' })).toBeEnabled();
+
+    mocks.getCouponPreviews.mockReturnValueOnce(new Promise(() => {}));
+    r.rerender(<QueryClientProvider client={qc}>{sheet(100_000, 'l1:2:100000')}</QueryClientProvider>);
+    expect(screen.queryByText('Giảm 20.000đ cho đơn này')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Chưa đủ' })).toBeDisabled();
+    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('button', { name: 'Chưa đủ' })).toBeDisabled();
+  });
+
+  it('giỏ đổi liên tục: chỉ hỏi một lần sau khi đứng yên', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([{ code: 'MIN150', eligible: true, discount: 20_000 }]);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const r = render(<QueryClientProvider client={qc}>{sheet(200_000, 'k0')}</QueryClientProvider>);
+    await screen.findByText('Giảm 20.000đ cho đơn này');
+    for (const k of ['k1', 'k2', 'k3']) r.rerender(<QueryClientProvider client={qc}>{sheet(200_000, k)}</QueryClientProvider>);
+    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(2));
+    await new Promise((res) => setTimeout(res, 400));
+    expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(2);
+  });
+});

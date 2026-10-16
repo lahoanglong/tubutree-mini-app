@@ -42,7 +42,7 @@ import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
-import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
+import { CouponBox, COUPON_MUTATION_KEY, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { BankTransferPanel } from './bank-transfer-panel';
@@ -534,7 +534,8 @@ export default function CheckoutPage() {
               shippingFee={quote?.shippingFee ?? null}
               notice={quote?.couponNotice ?? cart.couponNotice}
               disabled={place.isPending}
-              preview={addressId ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
+              preview={addressId && checkoutItems.length > 0 ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
+              previewKey={couponPreviewKey(checkoutItems)}
             />
           )}
           {usablePoints > 0 && (

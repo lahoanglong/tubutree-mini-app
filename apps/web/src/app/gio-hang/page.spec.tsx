@@ -10,12 +10,15 @@ const state = vi.hoisted(() => ({
   cart: null as unknown,
   updates: [] as { id: string; q: number }[],
   removed: [] as string[],
+  coupons: [] as unknown[],
+  previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => state.cart,
-  getMyCoupons: async () => [],
+  getMyCoupons: async () => state.coupons,
+  getCouponPreviews: (p: unknown) => state.previews(p),
   updateCartItem: async (id: string, q: number) => {
     state.updates.push({ id, q });
     return state.cart;
@@ -50,6 +53,9 @@ beforeEach(() => {
   state.updates = [];
   state.removed = [];
   state.cart = cartOf([line({})]);
+  state.coupons = [];
+  state.previews.mockReset();
+  state.previews.mockResolvedValue([]);
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -273,5 +279,44 @@ describe('/gio-hang — dòng giá Giờ vàng (R4-BUYER-4)', () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Vượt giới hạn mua giá Giờ vàng');
     expect(container.querySelector('[data-testid="cart-flash-badge"]')).toBeNull();
+  });
+});
+
+describe('/gio-hang — xem trước mức giảm mã theo đúng giỏ đang chọn', () => {
+  const settle = async () => {
+    await new Promise((r) => setTimeout(r, 350));
+    await flush(6);
+  };
+  const MIN = { code: 'MIN250', type: 'PERCENT', value: 10, minOrder: 250000, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
+  const card = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[aria-label$="mã MIN250"]')!;
+
+  it('đổi số lượng: hỏi lại máy chủ; trong lúc chờ không hiện số cũ, dưới đơn tối thiểu thì nút khoá', async () => {
+    state.coupons = [MIN];
+    state.previews.mockResolvedValueOnce([{ code: 'MIN250', eligible: true, discount: 30000 }]);
+    const { container } = await mount();
+    await settle();
+    expect(container.textContent).toContain('Giảm 30.000đ cho đơn này');
+    expect(card(container).disabled).toBe(false);
+
+    state.previews.mockReturnValueOnce(new Promise(() => {}));
+    state.cart = cartOf([line({ quantity: 1, total: 150000 })]);
+    click(button(container, 'Giảm số lượng Dầu gội bồ kết'));
+    await flush(6);
+    expect(container.textContent).not.toContain('Giảm 30.000đ cho đơn này');
+    expect(card(container).disabled).toBe(true);
+    await settle();
+    expect(state.previews).toHaveBeenCalledTimes(2);
+    expect(card(container).disabled).toBe(true);
+  });
+
+  it('bỏ chọn hết: không gọi xem trước (itemIds rỗng bị máy chủ coi là cả giỏ)', async () => {
+    state.cart = cartOf([line({}), line({ id: 'i2', variationId: 'v2', productName: 'Xà phòng', total: 100000, quantity: 1 })]);
+    const { container } = await mount();
+    await settle();
+    expect(state.previews).toHaveBeenCalledTimes(1);
+    expect(state.previews).toHaveBeenLastCalledWith({ itemIds: undefined });
+    click(container.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="Chọn tất cả sản phẩm"]'));
+    await settle();
+    expect(state.previews).toHaveBeenCalledTimes(1);
   });
 });

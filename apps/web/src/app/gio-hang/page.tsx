@@ -6,7 +6,7 @@ import { ShoppingBag, Truck, Leaf, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
-import { CouponBox } from '@/components/coupon-box';
+import { CouponBox, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
@@ -297,7 +297,13 @@ export default function CartPage() {
               currentCode={cart.couponCode}
               subtotal={selectedSubtotal}
               notice={cart.couponNotice}
-              preview={{ storefrontSlug: ctvSlug, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) }}
+              // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
+              preview={
+                selectedItems.length === 0
+                  ? undefined
+                  : { storefrontSlug: ctvSlug, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) }
+              }
+              previewKey={couponPreviewKey(selectedItems)}
             />
             {!allSelected && cart.couponCode && (
               <p className="mt-2 text-xs text-stone-600">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
