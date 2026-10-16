@@ -7,11 +7,12 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart } from '@/lib/shop-client';
 import SiteSearch from '@/components/site-search';
+import { cartKey } from '@/lib/cart-key';
 
 export default function SiteHeader() {
   const { user, status } = useAuth();
   const sessionDown = useAuthPhase() === 'unavailable';
-  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: status === 'authenticated' });
+  const cartQ = useQuery({ queryKey: cartKey(), queryFn: getCart, enabled: status === 'authenticated' });
   const count = cartQ.data?.itemCount ?? 0;
 
   return (

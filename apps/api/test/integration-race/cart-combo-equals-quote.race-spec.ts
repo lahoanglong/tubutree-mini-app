@@ -21,6 +21,7 @@ import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service'
 import { CashbackService } from '../../src/modules/cashback/cashback.service';
 import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/cashback-provider.registry';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
+import { BadRequestException } from '@nestjs/common';
 import { createUser, randCode, setConfig, warmPool } from './helpers';
 
 /**
@@ -126,7 +127,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
 
   async function coupon(
     userId: string,
-    type: 'PERCENT' | 'AMOUNT',
+    type: 'PERCENT' | 'AMOUNT' | 'FREESHIP',
     value: number,
     extra: { minOrder?: number; maxDiscount?: number; productIds?: string[]; usageLimit?: number; tierId?: string } = {},
   ) {
@@ -180,6 +181,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     expect(c.subtotal).toBe(q.subtotal);
     expect(c.comboDiscount).toBe(q.comboDiscount);
     expect(c.discount).toBe(q.discount);
+    expect(c.couponNotice).toBe(q.couponNotice);
     expect(c.subtotal - c.comboDiscount - c.discount).toBe(q.total - q.shippingFee);
     return { c, q };
   }
@@ -250,5 +252,99 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     const slug = await comboStore(a.productId, c.productId, 10);
     expect(await cart.getCart(b.userId)).toMatchObject({ comboDiscount: 0, discount: 14_000 });
     expect((await cart.getCart(b.userId, slug)).comboDiscount).toBe(14_000);
+  });
+
+  async function flashProduct(price: number, flashPrice: number) {
+    const f = await product(price);
+    const sale = await prisma.flashSale.create({
+      data: {
+        title: 'IT giờ vàng',
+        startAt: new Date(Date.now() - 3_600_000),
+        endAt: new Date(Date.now() + 3_600_000),
+        createdBy: 'it',
+        items: { create: { variationId: f.variationId, flashPrice, quota: 100, perUserLimit: 5 } },
+      },
+    });
+    return { ...f, saleId: sale.id };
+  }
+
+  async function expectApplyRejected(userId: string, code: string, slug: string, ...parts: string[]) {
+    const err = await cart.applyCoupon(userId, code, slug).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    for (const part of parts) expect((err as BadRequestException).message).toContain(part);
+    expect((await cart.getCart(userId, slug)).couponCode).toBeNull();
+    return (err as BadRequestException).message;
+  }
+
+  it('combo kéo phần hàng dưới đơn tối thiểu (không giờ vàng): lời báo của giỏ = báo giá (nói về combo), áp mã bị từ chối', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const slug = await comboStore(a.productId, c.productId, 10);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: c.variationId, quantity: 1 }); // 100.000đ, sau combo 90.000đ
+    const amount = await coupon(b.userId, 'AMOUNT', 10_000, { minOrder: 95_000 });
+    const freeship = await coupon(b.userId, 'FREESHIP', 0, { minOrder: 95_000 });
+
+    for (const code of [amount, freeship]) {
+      await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: null } });
+      const msg = await expectApplyRejected(b.userId, code, slug, 'phần giảm combo', 'Đơn tối thiểu 95.000đ');
+      expect(msg).not.toContain('giờ vàng');
+      await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: code } });
+      const { c: got } = await expectCartEqualsQuote(b.userId, b.addressId, slug);
+      expect(got.couponNotice).toContain('phần giảm combo');
+      expect(got.couponNotice).not.toContain('giờ vàng');
+      expect(got.couponCode).toBe(code);
+    }
+    // Không gửi gian hàng (không combo): 100.000đ đạt 95.000đ nên áp được như cũ.
+    await cart.applyCoupon(b.userId, amount);
+    expect((await cart.getCart(b.userId)).discount).toBe(10_000);
+  });
+
+  it('giờ vàng + combo: lời báo nêu cả hai, đúng chữ báo giá; áp mã bị từ chối cùng lý do', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const f = await flashProduct(100_000, 50_000);
+    const slug = await comboStore(a.productId, c.productId, 10);
+    try {
+      await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+      await cart.addItem(b.userId, { variationId: c.variationId, quantity: 1 });
+      await cart.addItem(b.userId, { variationId: f.variationId, quantity: 1 }); // thường 100.000đ − combo 10.000đ = 90.000đ; giờ vàng 50.000đ
+      const code = await coupon(b.userId, 'AMOUNT', 10_000, { minOrder: 95_000 });
+      await expectApplyRejected(b.userId, code, slug, 'hàng giờ vàng và phần giảm combo');
+      await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: code } });
+      const { c: got } = await expectCartEqualsQuote(b.userId, b.addressId, slug);
+      expect(got.couponNotice).toContain('hàng giờ vàng và phần giảm combo');
+      expect(got.discount).toBe(0);
+    } finally {
+      await prisma.flashSale.update({ where: { id: f.saleId }, data: { isActive: false } });
+    }
+  });
+
+  it('giờ vàng + mã gắn sản phẩm: giỏ = báo giá (lời báo, mức giảm) cả khi có combo; mã gắn hàng thường vẫn giảm sau combo', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const f = await flashProduct(100_000, 50_000);
+    const slug = await comboStore(a.productId, c.productId, 10);
+    try {
+      await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+      await cart.addItem(b.userId, { variationId: c.variationId, quantity: 1 });
+      await cart.addItem(b.userId, { variationId: f.variationId, quantity: 1 });
+      const onFlash = await coupon(b.userId, 'PERCENT', 20, { productIds: [f.productId] });
+      await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: onFlash } });
+      const r1 = await expectCartEqualsQuote(b.userId, b.addressId, slug);
+      expect(r1.c.discount).toBe(0);
+      expect(r1.c.couponNotice).toContain('giờ vàng');
+
+      const onA = await coupon(b.userId, 'PERCENT', 50, { productIds: [a.productId] });
+      await cart.applyCoupon(b.userId, onA, slug);
+      const r2 = await expectCartEqualsQuote(b.userId, b.addressId, slug);
+      expect(r2.c.discount).toBe(27_000); // 50% × (60.000 − 6.000)
+      expect(r2.c.comboDiscount).toBe(10_000);
+    } finally {
+      await prisma.flashSale.update({ where: { id: f.saleId }, data: { isActive: false } });
+    }
   });
 });

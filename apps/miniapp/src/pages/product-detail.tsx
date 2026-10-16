@@ -51,6 +51,7 @@ import { ProductTile } from '../components/ui/product-tile';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { useScrollHints } from '../components/ui/use-scroll-hints';
+import { cartKey, useCartKey } from '../services/cart-key';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -128,7 +129,7 @@ export default function ProductDetailPage() {
     enabled: !!slug && product.isSuccess,
   });
   const cart = useQuery({
-    queryKey: ['cart'],
+    queryKey: useCartKey(),
     queryFn: getCart,
     enabled: status === 'authenticated',
   });
@@ -202,7 +203,7 @@ export default function ProductDetailPage() {
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>
       addToCart(input.variation.id, input.qty),
     onSuccess: (updatedCart) => {
-      queryClient.setQueryData(['cart'], updatedCart);
+      queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       setBadgeBounce(true);
       openSnackbar({ text: vi.product.added, type: 'success', duration: 2000 });
@@ -215,7 +216,7 @@ export default function ProductDetailPage() {
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>
       addToCart(input.variation.id, input.qty).then((updatedCart) => ({ updatedCart, variationId: input.variation.id })),
     onSuccess: ({ updatedCart, variationId }, variables) => {
-      queryClient.setQueryData(['cart'], updatedCart);
+      queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       // Chỉ chọn đúng dòng vừa "Mua ngay" — tránh charge nhầm các món khác đã có sẵn trong giỏ.
       const line = updatedCart.items.find((l) => l.variationId === variationId);

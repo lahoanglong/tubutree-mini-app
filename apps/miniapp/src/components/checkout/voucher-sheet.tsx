@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from '../ui/empty-state';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { autoCouponName } from '../../utils/coupon-name';
+import { cartKey } from '../../services/cart-key';
 
 export interface VoucherSheetProps {
   visible: boolean;
@@ -77,7 +78,7 @@ export function VoucherSheet({
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     onSuccess: (cart) => {
-      queryClient.setQueryData(['cart'], cart);
+      queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('medium');
       setCustomCode('');
@@ -91,7 +92,7 @@ export function VoucherSheet({
   const removeMut = useMutation({
     mutationFn: removeCoupon,
     onSuccess: (cart) => {
-      queryClient.setQueryData(['cart'], cart);
+      queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('light');
       openSnackbar({ text: 'Đã bỏ mã giảm giá', type: 'success', duration: 2000 });

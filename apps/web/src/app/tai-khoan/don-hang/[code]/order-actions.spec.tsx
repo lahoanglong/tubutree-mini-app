@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -334,6 +335,20 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     await flush(8);
     expect(mocks.repurchase).toHaveBeenCalledWith('TB-9');
     expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
+  it('mua lại: tải lại giỏ thay vì ghi giỏ không kèm gian hàng (không combo) vào cache', async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    const setData = vi.spyOn(QueryClient.prototype, 'setQueryData');
+    mocks.order = delivered;
+    mocks.repurchase.mockResolvedValue({ cart: { items: [], itemCount: 2 }, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 2 }] });
+    const { container } = await mount();
+    click(btn(container, 'Mua lại đơn này')!);
+    await flush(8);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
+    expect(setData.mock.calls.some(([key]) => Array.isArray(key) && key[0] === 'cart')).toBe(false);
+    invalidate.mockRestore();
+    setData.mockRestore();
   });
 
   it('thêm được một phần: ở lại trang, nói rõ bao nhiêu dòng chưa thêm được và có lối vào giỏ', async () => {

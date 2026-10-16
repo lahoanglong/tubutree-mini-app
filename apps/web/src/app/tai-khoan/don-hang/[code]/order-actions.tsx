@@ -105,7 +105,8 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
   const repurchase = useMutation({
     mutationFn: () => repurchaseOrder(o.code),
     onSuccess: (res) => {
-      qc.setQueryData(['cart'], res.cart);
+      // Giỏ trong phản hồi không kèm gian hàng (không có combo): tải lại giỏ thay vì ghi số cũ vào cache.
+      void qc.invalidateQueries({ queryKey: ['cart'] });
       const summary = repurchaseSummary(res);
       if (summary.added > 0 && summary.short === 0) router.push('/gio-hang');
       else setPartial(summary);

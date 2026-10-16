@@ -3,7 +3,7 @@
 import { apiFetch } from './client-api';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
 import type { FlashItem } from './flash-price';
-import { ctvSlugFor, getStorefrontContext } from './storefront-context';
+import { cartStorefrontSlug } from './cart-key';
 
 export interface CartLine {
   id: string;
@@ -181,7 +181,7 @@ export async function getActiveFlashSales(): Promise<FlashItem[]> {
  * và tổng ở trang giỏ đúng số thanh toán sẽ trừ. Mọi đường trả giỏ đều gửi để giỏ trong cache không đổi số giữa các thao tác.
  */
 function cartPath(path: string): string {
-  const slug = ctvSlugFor(getStorefrontContext());
+  const slug = cartStorefrontSlug();
   return slug ? `${path}?storefrontSlug=${encodeURIComponent(slug)}` : path;
 }
 export const getCart = () => apiFetch<CartSummary>(cartPath('/cart'));

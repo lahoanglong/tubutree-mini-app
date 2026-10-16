@@ -2,7 +2,7 @@ import { isAxiosError } from 'axios';
 import { api } from './api';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 import type { CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
-import { useStorefrontContext } from '../store/storefront-context';
+import { cartStorefrontSlug } from './cart-key';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
@@ -422,8 +422,8 @@ export const cancelFlashReminder = (itemId: string) =>
  * và tiền hàng ở trang giỏ đúng số thanh toán sẽ trừ. Mọi đường trả giỏ đều gửi để giỏ trong cache không đổi số giữa các thao tác.
  */
 function cartParams(): { params?: { storefrontSlug: string } } {
-  const ctx = useStorefrontContext.getState();
-  return ctx.kind === 'ctv' && ctx.slug ? { params: { storefrontSlug: ctx.slug } } : {};
+  const slug = cartStorefrontSlug();
+  return slug ? { params: { storefrontSlug: slug } } : {};
 }
 export const getCart = () => api.get<CartSummary>('/cart', cartParams()).then((r) => r.data);
 export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification';

@@ -57,10 +57,11 @@ describe('recompute', () => {
     expect(result.items).toEqual([]);
   });
 
-  it('giữ nguyên discount/couponCode/freeship của cart gốc (server tính lại sau, không suy đoán ở client)', () => {
-    const cart = summary({ discount: 20_000, couponCode: 'FREESHIP', freeship: true });
+  it('giữ couponCode/freeship của cart gốc; combo và giảm của mã về 0 chờ máy chủ tính lại (không hiện combo của món vừa xoá)', () => {
+    const cart = summary({ discount: 20_000, comboDiscount: 10_000, couponCode: 'FREESHIP', freeship: true });
     const result = recompute(cart, [line()]);
-    expect(result.discount).toBe(20_000);
+    expect(result.discount).toBe(0);
+    expect(result.comboDiscount).toBe(0);
     expect(result.couponCode).toBe('FREESHIP');
     expect(result.freeship).toBe(true);
   });

@@ -11,6 +11,7 @@ import { variationPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
+import { cartKey } from '@/lib/cart-key';
 
 interface Variation {
   id: string;
@@ -106,7 +107,7 @@ export default function AddToCart({
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
-      qc.setQueryData(['cart'], cart);
+      qc.setQueryData(cartKey(), cart);
       setMsg('Đã thêm vào giỏ!');
       setSuccess(true);
     } catch (e) {

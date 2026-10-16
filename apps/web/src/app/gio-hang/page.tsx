@@ -12,11 +12,12 @@ import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
+import { cartKey } from '@/lib/cart-key';
 
 export default function CartPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
-  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
+  const cartQ = useQuery({ queryKey: cartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
   const [deselected, setDeselected] = useState<Set<string>>(() => new Set());
   // Cùng gian hàng thanh toán gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
@@ -30,11 +31,11 @@ export default function CartPage() {
 
   const update = useMutation({
     mutationFn: ({ id, q }: { id: string; q: number }) => updateCartItem(id, q),
-    onSuccess: (data) => qc.setQueryData(['cart'], data),
+    onSuccess: (data) => qc.setQueryData(cartKey(), data),
   });
   const remove = useMutation({
     mutationFn: (id: string) => removeCartItem(id),
-    onSuccess: (data) => qc.setQueryData(['cart'], data),
+    onSuccess: (data) => qc.setQueryData(cartKey(), data),
   });
   // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
   // nút của đúng item đó (item khác vẫn thao tác được bình thường).

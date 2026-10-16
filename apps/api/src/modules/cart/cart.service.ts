@@ -22,11 +22,6 @@ import {
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
 
-/** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
-function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
-  return lines.filter((l) => !l.isFlash).map((l) => ({ productId: l.productId, total: l.total }));
-}
-
 @Injectable()
 export class CartService {
   constructor(
@@ -136,16 +131,7 @@ export class CartService {
     });
     const subtotal = lines.reduce((s, l) => s + l.total, 0);
     // Coupon base LOẠI flash item (giá flash là giá cuối, không stack coupon) và TRỪ combo → giảm hiển thị khớp checkout.
-    const nonFlash = lines.filter((l) => !l.isFlash);
-    const storefront = await resolvePublishedStorefront(this.prisma, storefrontSlug);
-    const combo = storefront
-      ? await this.combo.computeForStorefront(
-          storefront.slug,
-          nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
-          userId,
-        )
-      : { total: 0, perLine: {} };
-    const { goodsAfterCombo: couponBase, couponLines } = goodsAfterComboOf(nonFlash, combo);
+    const { combo, goodsAfterCombo: couponBase, couponLines } = await this.couponBaseAfterCombo(lines, userId, storefrontSlug);
 
     let discount = 0;
     let freeship = false;
@@ -179,7 +165,7 @@ export class CartService {
           await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
           discount = 0;
           freeship = false;
-          couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), true);
+          couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
         } catch (err2) {
           if (!(err2 instanceof BadRequestException)) throw err2;
           await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
@@ -205,6 +191,24 @@ export class CartService {
       itemCount: lines.reduce((s, l) => s + l.quantity, 0),
       unavailableItems,
     };
+  }
+
+  /** Phần hàng tính mã của giỏ: loại giờ vàng, trừ combo của gian hàng ghi công (cùng hàm với checkout). */
+  private async couponBaseAfterCombo(
+    lines: { variationId: string; productId: string; total: number; isFlash: boolean }[],
+    userId: string,
+    storefrontSlug: string | undefined,
+  ) {
+    const nonFlash = lines.filter((l) => !l.isFlash);
+    const storefront = await resolvePublishedStorefront(this.prisma, storefrontSlug);
+    const combo = storefront
+      ? await this.combo.computeForStorefront(
+          storefront.slug,
+          nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
+          userId,
+        )
+      : { total: 0, perLine: {} };
+    return { combo, ...goodsAfterComboOf(nonFlash, combo) };
   }
 
   async addItem(userId: string, dto: AddItemDto, storefrontSlug?: string) {
@@ -324,13 +328,18 @@ export class CartService {
 
   async applyCoupon(userId: string, code: string, storefrontSlug?: string) {
     const cart = await this.getCart(userId);
-    // Validate trên base KHÔNG flash (khớp getCart) — tránh apply rồi bị strip ngay.
-    const couponBase = cart.items.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0);
+    // Validate trên base KHÔNG flash và TRỪ combo (khớp getCart và checkout) — tránh apply rồi bị strip ngay, hoặc báo "đã áp
+    // dụng" cho mã không giảm được đồng nào.
+    const { combo, goodsAfterCombo: couponBase, couponLines } = await this.couponBaseAfterCombo(cart.items, userId, storefrontSlug);
     const normalized = normalizeCouponCode(code);
     try {
-      await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
+      await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLines);
     } catch (err) {
-      if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart))) {
+      if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart, combo.total > 0))) {
+        if (combo.total > 0) {
+          const hasFlash = cart.items.some((l) => l.isFlash);
+          throw new BadRequestException(couponNotAppliedNotice(couponRejectReason(err, cart.items), hasFlash, true));
+        }
         throw new BadRequestException(couponRejectedWithFlash(err.message, err.base));
       }
       if (err instanceof BadRequestException) {
@@ -343,13 +352,14 @@ export class CartService {
     return this.getCart(userId, storefrontSlug);
   }
 
-  /** Hàng giờ vàng mới là lý do chưa đạt đơn tối thiểu: tính cả các dòng giờ vàng thì mã hợp lệ. */
+  /** Hàng giờ vàng hoặc phần giảm combo mới là lý do chưa đạt đơn tối thiểu: tính cả hai thì mã hợp lệ. */
   private async meetsMinOrderWithFlash(
     code: string,
     userId: string,
     cart: { subtotal: number; items: { productId: string; total: number; isFlash: boolean }[] },
+    hasCombo: boolean,
   ): Promise<boolean> {
-    if (!cart.items.some((l) => l.isFlash)) return false;
+    if (!hasCombo && !cart.items.some((l) => l.isFlash)) return false;
     try {
       await this.coupons.validateAndCompute(code, userId, cart.subtotal, cart.items.map((l) => ({ productId: l.productId, total: l.total })));
       return true;

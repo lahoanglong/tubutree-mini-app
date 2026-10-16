@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -37,6 +37,7 @@ vi.mock('../components/checkout/voucher-sheet', () => ({
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import CartPage from './cart';
+import { useStorefrontContext } from '../store/storefront-context';
 
 const GONE = {
   id: 'ci-gone',
@@ -270,6 +271,26 @@ describe('CartPage: giảm giá combo trong tóm tắt', () => {
     await screen.findByText('Giảm giá');
     expect(screen.queryByText('Giảm giá combo')).toBeNull();
     expect(screen.getByText('48.000đ')).toBeInTheDocument();
+  });
+
+  it('sang gian hàng khác: giỏ của gian hàng trước không hiện lại combo (khoá cache kèm gian hàng)', async () => {
+    const store = useStorefrontContext;
+    store.getState().setContext({ slug: 'shop-a', kind: 'ctv' });
+    mocks.getCart.mockImplementation(async () =>
+      summary({ comboDiscount: store.getState().slug === 'shop-a' ? 5_000 : 0 }),
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <CartPage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    expect(qc.getQueryData(['cart', 'shop-a'])).toBeDefined();
+    act(() => store.getState().setContext({ slug: 'shop-b', kind: 'ctv' }));
+    await waitFor(() => expect(screen.queryByText('Giảm giá combo')).toBeNull());
+    expect(qc.getQueryData(['cart', 'shop-b'])).toMatchObject({ comboDiscount: 0 });
+    store.getState().clear();
   });
 
   it('bỏ chọn một phần giỏ: không hiện combo (checkout tính lại phần chọn)', async () => {
