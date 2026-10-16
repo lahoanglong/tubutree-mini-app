@@ -77,13 +77,15 @@ export function VoucherSheet({
 
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
-    onSuccess: (cart) => {
+    onSuccess: (cart, code) => {
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('medium');
       setCustomCode('');
       // Mã được giữ nhưng chưa giảm cho giỏ này (vd combo kéo phần hàng dưới đơn tối thiểu): nói lý do, không báo "đã áp dụng".
-      const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship;
+      // Lời báo là của CẢ giỏ: nếu xem trước cho phần đang chọn (mua một phần) nói mã dùng được thì mã được áp cho đơn này.
+      const eligibleHere = previews.get(code.trim().toUpperCase())?.eligible === true;
+      const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship && !eligibleHere;
       openSnackbar(
         heldOnly
           ? { text: cart.couponNotice!, type: 'warning', duration: 5000 }

@@ -478,6 +478,16 @@ describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', ()
     expect(screen.getByText('UAT50K')).toBeTruthy();
   });
 
+  it('mua một phần giỏ: giỏ (cả giỏ) giữ mã kèm lời báo nhưng báo giá của phần chọn áp được mã → không hiện lời báo của giỏ', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 0, couponNotice: 'Mã chưa được áp dụng cho đơn này (phần giảm combo không được tính vào điều kiện của mã): Đơn tối thiểu 95.000đ để dùng mã này.' });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 10_000, couponNotice: null });
+    renderPage();
+    await screen.findByText('SALE');
+    await screen.findByText('Giảm giá');
+    expect(screen.queryByTestId('coupon-notice')).toBeNull();
+    expect(screen.queryByText(/chưa được áp dụng/)).toBeNull();
+  });
+
   it('mã áp bình thường → không có câu giải thích', async () => {
     mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 5000 });
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 5000, couponNotice: null });

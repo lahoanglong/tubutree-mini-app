@@ -555,14 +555,14 @@ export default function CheckoutPage() {
             <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
         </Box>
-        {cart.data?.couponCode && (quote.data?.couponNotice ?? cart.data.couponNotice) && (
+        {cart.data?.couponCode && (quote.data ? quote.data.couponNotice : cart.data.couponNotice) && (
           <Text
             size="xSmall"
             role="status"
             data-testid="coupon-notice"
             style={{ color: 'var(--color-text-warning)', marginTop: 6 }}
           >
-            {quote.data?.couponNotice ?? cart.data.couponNotice}
+            {quote.data ? quote.data.couponNotice : cart.data.couponNotice}
           </Text>
         )}
       </Box>

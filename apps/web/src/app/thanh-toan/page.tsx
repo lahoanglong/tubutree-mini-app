@@ -533,7 +533,7 @@ export default function CheckoutPage() {
               currentCode={cart.couponCode}
               subtotal={previewSubtotal}
               shippingFee={quote?.shippingFee ?? null}
-              notice={quote?.couponNotice ?? cart.couponNotice}
+              notice={quote ? quote.couponNotice : cart.couponNotice}
               disabled={place.isPending}
               preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
               previewKey={couponPreviewKey(checkoutItems)}

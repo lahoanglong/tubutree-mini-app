@@ -305,6 +305,31 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ addressId: 'a1', itemIds: ['l1'] });
   });
 
+  const HELD_NOTICE = 'Mã chưa được áp dụng cho đơn này (phần giảm combo không được tính vào điều kiện của mã): Đơn tối thiểu 95.000đ để dùng mã này.';
+
+  it('mua một phần giỏ, xem trước nói mã dùng được nhưng giỏ (cả giỏ) giữ mã kèm lời báo: báo "Đã áp dụng", không hiện chữ "chưa được áp dụng"', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([{ code: 'GIAM10', eligible: true, discount: 10_000 }]);
+    mocks.applyCoupon.mockResolvedValue({ couponCode: 'GIAM10', discount: 0, freeship: false, couponNotice: HELD_NOTICE });
+    renderSheet(undefined, { previewParams: { itemIds: ['l1'] } });
+    await screen.findByText('Giảm 10.000đ cho đơn này');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Dùng mã' })[0]!);
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('GIAM10'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã GIAM10', type: 'success' })));
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
+    expect(JSON.stringify(mocks.openSnackbar.mock.calls)).not.toContain('chưa được áp dụng');
+  });
+
+  it('xem trước nói mã không dùng được cho phần đang chọn (hoặc chưa có xem trước): lời báo của giỏ vẫn hiện dạng cảnh báo', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([{ code: 'GIAM10', eligible: false, discount: 0, reason: 'Đơn tối thiểu 95.000đ để dùng mã này.' }]);
+    mocks.applyCoupon.mockResolvedValue({ couponCode: 'GIAM10', discount: 0, freeship: false, couponNotice: HELD_NOTICE });
+    renderSheet(undefined, { previewParams: {} });
+    await screen.findByText('Đơn tối thiểu 95.000đ để dùng mã này.');
+    fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'giam10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('GIAM10'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: HELD_NOTICE, type: 'warning' })));
+  });
+
   it('freeship không miễn được đồng nào (hoặc trang giỏ chưa có phí giao): không ghi số tiền', async () => {
     mocks.getCouponPreviews.mockResolvedValue([
       { code: 'GIAM10', eligible: true, discount: 5_000 },
