@@ -244,6 +244,9 @@ function ownsLine(scope: MerchantOrderScope, line: { variationId: string }, orde
 export const CTV_CANNOT_CREATE_PRODUCT =
   'Gian hàng CTV bán lại sản phẩm Tubu Tree, không đăng sản phẩm riêng. Muốn bán hàng của bạn, hãy đăng ký làm đại lý/đối tác.';
 
+export const MERCHANT_SELF_SHIP_USE_FULFIL_TAB =
+  'Đơn này shop tự giao: hãy đổi trạng thái bằng các nút ở tab "Đơn cần giao" (nhận đơn, đã đóng gói, bắt đầu giao, đã giao).';
+
 @Injectable()
 export class MerchantService {
   private readonly logger = new Logger(MerchantService.name);
@@ -982,11 +985,15 @@ export class MerchantService {
     const role = await this.getCallerRole(userId);
     if (role !== 'ADMIN') {
       // Đơn không thuộc gian hàng của người gọi (kể cả đơn tự giao của gian hàng khác) thì không được biết nó có tồn tại.
+      const scope = await this.merchantOrderScope(userId);
       const own = await this.prisma.order.findFirst({
-        where: { id: orderId, ...(await this.resolveMerchantOrderFilter(userId)) },
-        select: { id: true },
+        where: { id: orderId, ...this.orderWhereOf(scope) },
+        select: { id: true, fulfiller: true, fulfillerStorefrontId: true },
       });
       if (!own) throw new NotFoundException('Không tìm thấy đơn của gian hàng bạn.');
+      if (own.fulfiller === 'MERCHANT' && scope.storeId && own.fulfillerStorefrontId === scope.storeId) {
+        throw new ForbiddenException(MERCHANT_SELF_SHIP_USE_FULFIL_TAB);
+      }
       throw new ForbiddenException(
         'Đơn hàng do kho Tubu Tree xử lý giao nhận; đối tác không thể tự chuyển trạng thái tại đây.',
       );
