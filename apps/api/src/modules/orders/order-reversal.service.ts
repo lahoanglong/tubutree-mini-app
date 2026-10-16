@@ -103,6 +103,12 @@ export class OrderReversalService {
     const prior = order.status === 'DELIVERED' ? await partialReturnTotals(tx, order.id, opts.returnRequestId) : NO_PARTIAL_RETURNS;
     const refundable = Math.max(0, order.total - prior.money);
     const destination = opts.destination ?? WALLET_DESTINATION;
+
+    // Kho và suất flash TRƯỚC mọi ghi lên dòng users (hoàn Ví/điểm): mọi đường tạo đơn (đặt đơn, CTV lên hộ, định kỳ, đại lý)
+    // khoá variation → suất flash → users. Ghi users trước rồi mới cộng kho thì một lần đặt đơn tiêu điểm/trả Ví của cùng khách
+    // đang giữ đúng variation/suất đó và chờ dòng users ⇒ 40P01 (checkout-reversal-lock-order.race-spec).
+    await this.restoreStockAndFlash(tx, order, prior, opts);
+
     let refund: RefundOutcome | null = null;
     // Hoàn tiền — guard bằng updateMany, count=1 mới thực sự chi tiền, tránh hoàn 2 lần nếu bị
     // gọi lại (dù caller đã guard status, phòng thủ 2 lớp cho tiền).
@@ -218,41 +224,6 @@ export class OrderReversalService {
     // (đứt DB, SIGTERM lúc deploy) là đơn đã CANCELLED mà khách mất điểm vĩnh viễn: không có đường thử lại.
     pointsRefunded += await this.refundConvertedPoints(tx, order, prior);
 
-    // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
-    // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
-    // Dòng đặt trước: ĐỌC LẠI backorderedQty dưới khoá dòng. Ảnh chụp `order.items` của caller có
-    // thể cũ — cron DealerBackorderService.reconcile vừa lấp hàng (giữ kho + giảm backorderedQty)
-    // sau lúc caller đọc đơn; dùng số cũ thì phần vừa giữ không bao giờ được hoàn → kẹt kho. Khoá
-    // FOR UPDATE còn làm guard `backorderedQty = <đã đọc>` của cron chờ rồi trượt (tự trả phần giữ).
-    const boIds = order.items.filter((i) => i.backorderedQty > 0).map((i) => i.id);
-    const freshBackorder = new Map<string, number>();
-    if (boIds.length > 0) {
-      const rows = await tx.$queryRaw<{ id: string; backorderedQty: number }[]>`
-        SELECT "id", "backorderedQty" FROM "order_items" WHERE "id" IN (${Prisma.join(boIds)}) FOR UPDATE`;
-      for (const r of rows) freshBackorder.set(r.id, Number(r.backorderedQty));
-    }
-
-    for (const item of order.items) {
-      // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
-      // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
-      // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
-      // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
-      // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived cộng
-      // rồi, chưa nhận thì markReceived sẽ cộng khi hàng về.
-      const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
-      const reserved = item.quantity - backordered - (prior.approvedQty.get(item.id) ?? 0);
-      if (opts.restock !== false && reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
-      // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
-      // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
-      if (backordered > 0) {
-        await tx.orderItem.update({ where: { id: item.id }, data: { backorderedQty: 0 } });
-      }
-      const flashQty = item.quantity - (prior.approvedQty.get(item.id) ?? 0);
-      if (item.flashSaleItemId && flashQty > 0) {
-        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, flashQty);
-      }
-    }
-
     // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
     // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
     await this.releaseCoupon(tx, order);
@@ -293,6 +264,50 @@ export class OrderReversalService {
   }
 
   /**
+   * Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì caller (status flip atomic) đảm bảo
+   * reverseFinancials chỉ chạy đúng 1 lần cho mỗi đơn.
+   */
+  private async restoreStockAndFlash(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    prior: PartialReturnTotals,
+    opts: ReversalOptions,
+  ): Promise<void> {
+    // Dòng đặt trước: ĐỌC LẠI backorderedQty dưới khoá dòng. Ảnh chụp `order.items` của caller có
+    // thể cũ — cron DealerBackorderService.reconcile vừa lấp hàng (giữ kho + giảm backorderedQty)
+    // sau lúc caller đọc đơn; dùng số cũ thì phần vừa giữ không bao giờ được hoàn → kẹt kho. Khoá
+    // FOR UPDATE còn làm guard `backorderedQty = <đã đọc>` của cron chờ rồi trượt (tự trả phần giữ).
+    const boIds = order.items.filter((i) => i.backorderedQty > 0).map((i) => i.id);
+    const freshBackorder = new Map<string, number>();
+    if (boIds.length > 0) {
+      const rows = await tx.$queryRaw<{ id: string; backorderedQty: number }[]>`
+        SELECT "id", "backorderedQty" FROM "order_items" WHERE "id" IN (${Prisma.join(boIds)}) FOR UPDATE`;
+      for (const r of rows) freshBackorder.set(r.id, Number(r.backorderedQty));
+    }
+
+    for (const item of order.items) {
+      // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
+      // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
+      // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
+      // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
+      // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived cộng
+      // rồi, chưa nhận thì markReceived sẽ cộng khi hàng về.
+      const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
+      const reserved = item.quantity - backordered - (prior.approvedQty.get(item.id) ?? 0);
+      if (opts.restock !== false && reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
+      // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
+      // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
+      if (backordered > 0) {
+        await tx.orderItem.update({ where: { id: item.id }, data: { backorderedQty: 0 } });
+      }
+      const flashQty = item.quantity - (prior.approvedQty.get(item.id) ?? 0);
+      if (item.flashSaleItemId && flashQty > 0) {
+        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, flashQty);
+      }
+    }
+  }
+
+  /**
    * Trả MỘT PHẦN đơn đã giao (D3): hoàn tiền phần của các dòng trả (sau phân bổ giảm giá/điểm, cộng phí ship nếu lỗi do
    * shop) về nơi khách chọn, trả lại Điểm Xanh đã dùng theo phần, thu hồi Điểm Xanh tích và giảm hoa hồng CTV cùng tỉ
    * lệ, hoàn quota flash sale của số đơn vị trả, thu hồi thưởng giới thiệu theo tỷ lệ nếu đơn đã dùng để thưởng. KHÔNG cộng kho (chỉ khi admin bấm "Đã nhận hàng về") và KHÔNG đổi
@@ -315,6 +330,16 @@ export class OrderReversalService {
   ): Promise<PartialReversalResult> {
     const { shares, requestId } = input;
     const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0 };
+
+    // Suất flash trước mọi ghi lên dòng users, cùng thứ tự với đường tạo đơn (xem reverseFinancials).
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    for (const line of shares.lines) {
+      const item = byId.get(line.orderItemId);
+      if (item?.flashSaleItemId && line.quantity > 0) {
+        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, line.quantity);
+      }
+    }
+
     const amount = shares.goods + shares.shipping;
     if (amount > 0 && isMoneyBackable(order)) {
       if (order.placedForCustomer) {
@@ -443,14 +468,6 @@ export class OrderReversalService {
         data: { amount: { decrement: cut }, commissionableTotal: { decrement: baseCut } },
       });
       if (res.count === 1) result.commissionCut += cut;
-    }
-
-    const byId = new Map(order.items.map((i) => [i.id, i]));
-    for (const line of shares.lines) {
-      const item = byId.get(line.orderItemId);
-      if (item?.flashSaleItemId && line.quantity > 0) {
-        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, line.quantity);
-      }
     }
 
     // Thưởng giới thiệu thu hồi theo tỷ lệ tiền hàng đã trả luỹ kế của đơn (gồm yêu cầu này), cùng điều kiện với nhánh trả cả
