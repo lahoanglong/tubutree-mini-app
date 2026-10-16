@@ -1,4 +1,5 @@
 import { maskFriendName, revokeDetail, sendReferralNotices, type ReferralNotice } from './referral-notify';
+import { ANONYMIZED_NAME } from '../users/account-deletion.service';
 
 function ctx(fullName: string | null = 'Nguyễn Văn An', notify = jest.fn().mockResolvedValue(undefined)) {
   const findUnique = jest.fn().mockResolvedValue({ fullName });
@@ -16,7 +17,16 @@ describe('maskFriendName', () => {
     ['0912345678', 'bạn bè'],
     ['Lan 0912345678', 'bạn bè'],
     ['lan@example.com', 'bạn bè'],
+    ['Khách hàng', 'bạn bè'],
+    ['Khách lẻ', 'bạn bè'],
+    ['Khách Tubu', 'bạn bè'],
+    ['khách  HÀNG', 'bạn bè'],
+    ['Nguyễn Khách', 'Khách'],
   ])('%p → %p', (name, out) => expect(maskFriendName(name)).toBe(out));
+
+  it('tài khoản đã xoá (tên ẩn danh) → "bạn bè", không lấy từ cuối "xoá"', () => {
+    expect(maskFriendName(ANONYMIZED_NAME)).toBe('bạn bè');
+  });
 });
 
 describe('revokeDetail', () => {
@@ -53,6 +63,13 @@ describe('sendReferralNotices', () => {
     const [userId, code, data] = notify.mock.calls[0];
     expect([userId, code]).toEqual(['T', 'REFERRAL_REWARD_REVOKED']);
     expect(data).toMatchObject({ friend: 'An', points: '33', debt: '7', cause: 'một phần đơn hàng của bạn ấy đã được trả lại' });
+  });
+
+  it('REVOKED hideFriend (tự mời lúc gộp): "bạn bè", không đọc tên người được mời', async () => {
+    const { c, notify, findUnique } = ctx();
+    await sendReferralNotices(c, [{ kind: 'REVOKED', referrerId: 'T', refereeId: 'G', taken: 5, debt: 0, cause: 'MERGE', key: 'k', hideFriend: true }]);
+    expect(notify.mock.calls[0][2]).toMatchObject({ friend: 'bạn bè' });
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it('MILESTONE: số lượt và số điểm', async () => {

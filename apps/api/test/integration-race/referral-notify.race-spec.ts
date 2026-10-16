@@ -287,7 +287,7 @@ describe('Báo người mời về thưởng giới thiệu (real Postgres)', ()
     zaloIdForNextCall = t.zaloId!;
     await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access');
     expect(await inbox(t.id)).toEqual([
-      ['REFERRAL_REWARD_REVOKED', 'Thưởng giới thiệu từ Tuấn được thu lại vì liên kết giới thiệu không còn hợp lệ sau khi gộp tài khoản: đã trừ 100 Điểm Xanh.'],
+      ['REFERRAL_REWARD_REVOKED', 'Thưởng giới thiệu từ bạn bè được thu lại vì liên kết giới thiệu không còn hợp lệ sau khi gộp tài khoản: đã trừ 100 Điểm Xanh.'],
     ]);
     expect((await inbox(g.id)).map((r) => r[0])).toEqual(['REFERRAL_REWARD_PAID']);
     expect(await balanceOf(t.id)).toBe(0);

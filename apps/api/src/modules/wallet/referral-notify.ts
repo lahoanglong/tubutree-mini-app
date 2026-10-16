@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Logger } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
+import { ANONYMIZED_NAME } from '../users/account-deletion.service';
 
 /**
  * Tin báo NGƯỜI MỜI về một dòng sổ thưởng giới thiệu vừa commit. `key` = reason của dòng sổ chính của sự kiện (duy nhất nhờ
@@ -19,6 +20,8 @@ export type ReferralNotice =
       debt: number;
       cause: 'RETURN' | 'PARTIAL_RETURN' | 'MERGE';
       key: string;
+      /** Người được mời là chính người mời (phiên khách của họ vừa gộp vào): không nêu tên. */
+      hideFriend?: boolean;
     };
 
 interface ReferralNotifier {
@@ -35,13 +38,19 @@ export interface ReferralNotifyContext {
 const FRIEND_FALLBACK = 'bạn bè';
 
 /**
+ * Tên không phải tên người: tên phiên khách (auth.service tạo khách với 'Khách'), tên đã ẩn danh khi xoá tài khoản, và các nhãn
+ * mặc định kiểu "Khách hàng" — lấy từ cuối của chúng ra "hàng", "xoá" là vô nghĩa.
+ */
+const PLACEHOLDER_NAMES = new Set(['Khách', 'Khách hàng', 'Khách lẻ', 'Khách Tubu', ANONYMIZED_NAME].map((n) => n.normalize('NFC').toLowerCase()));
+
+/**
  * Tên gọi của người được mời cho tin gửi người mời: chỉ từ cuối của họ tên (tên gọi theo cách viết tên tiếng Việt), không họ,
- * không số điện thoại. Tên khách mặc định, tên có chữ số/@ (thường là số điện thoại hay email) hoặc trống thì "bạn bè".
+ * không số điện thoại. Tên mặc định/ẩn danh, tên có chữ số/@ (thường là số điện thoại hay email) hoặc trống thì "bạn bè".
  */
 export function maskFriendName(fullName: string | null | undefined): string {
   const words = (fullName ?? '').normalize('NFC').trim().split(/\s+/).filter(Boolean);
   const last = words[words.length - 1];
-  if (!last || (words.length === 1 && last.toLowerCase() === 'khách')) return FRIEND_FALLBACK;
+  if (!last || PLACEHOLDER_NAMES.has(words.join(' ').toLowerCase())) return FRIEND_FALLBACK;
   if (/[\d@]/.test(last) || last.length > 20) return FRIEND_FALLBACK;
   return last;
 }
@@ -86,7 +95,8 @@ export async function sendReferralNotices(ctx: ReferralNotifyContext, notices: r
         continue;
       }
       if (n.kind === 'PAID' ? !(n.points > 0) : !(n.taken > 0 || n.debt > 0)) continue;
-      const referee = await ctx.prisma.user.findUnique({ where: { id: n.refereeId }, select: { fullName: true } });
+      const hidden = n.kind === 'REVOKED' && n.hideFriend;
+      const referee = hidden ? null : await ctx.prisma.user.findUnique({ where: { id: n.refereeId }, select: { fullName: true } });
       const friend = maskFriendName(referee?.fullName);
       if (n.kind === 'PAID') {
         await ctx.notifications.notify(

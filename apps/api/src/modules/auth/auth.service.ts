@@ -625,7 +625,8 @@ export class AuthService {
         await tx.user.updateMany({ where: { id: { in: cut } }, data: { referredById: null } });
         for (const refereeId of cut) {
           const revoked = await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);
-          if (revoked) referralNotices.push(...revoked.notices);
+          // Tự mời: người được mời là chính T hoặc phiên khách của T, không có "bạn" nào để nêu tên.
+          if (revoked) referralNotices.push(...revoked.notices.map((n) => (refereeId === gid || refereeId === tid ? { ...n, hideFriend: true } : n)));
         }
       }
 
