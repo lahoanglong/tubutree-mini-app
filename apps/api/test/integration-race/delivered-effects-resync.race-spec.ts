@@ -5,6 +5,12 @@ import { Logger } from '@nestjs/common';
 import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Prisma } from '@prisma/client';
+import { JwtService } from '@nestjs/jwt';
+import type { ConfigService } from '@nestjs/config';
+import { AuthService } from '../../src/modules/auth/auth.service';
+import type { ZaloService } from '../../src/modules/auth/zalo.service';
+import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import type { Env } from '../../src/config/env.validation';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
@@ -22,7 +28,7 @@ import { DeliveredEffectsResyncCron } from '../../src/modules/orders/delivered-e
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
-import { createOrder, createUser, markDeliveredEffectsDone, setConfig, sleep, summarize, warmPool } from './helpers';
+import { createOrder, createUser, markDeliveredEffectsDone, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const EARNED = 30;
 const REWARD = 5;
@@ -44,6 +50,8 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
   let loyalty: LoyaltyService;
   let cron: DeliveredEffectsResyncCron;
   let health: OpsHealthService;
+  let auth: AuthService;
+  let zaloIdForNextCall = '';
   let savedConfig: { key: string; value: unknown }[] = [];
   const CONFIG_KEYS = ['referral.referrer_reward_points', 'referral.window_days', 'referral.milestones_points', 'referral.min_order_amount'];
 
@@ -89,6 +97,15 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
         return (row?.value as T) ?? fallback;
       },
     };
+    const authCfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-delivered-resync', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30 };
+    auth = new AuthService(
+      prisma,
+      new JwtService(),
+      { get: (k: string) => authCfg[k] } as unknown as ConfigService<Env, true>,
+      { getUserInfo: async () => ({ zaloId: zaloIdForNextCall, name: 'Zalo IT' }), resolvePhoneNumber: async () => null } as unknown as ZaloService,
+      { applyGrants: async <T,>(u: T) => u } as unknown as RbacService,
+    );
+
     // Pancake/Gomdon chưa cấu hình: chỉ hàng việc sau giao quyết định sự cố.
     health = new OpsHealthService(
       prisma,
@@ -293,6 +310,69 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
       await setConfig(prisma, 'referral.milestones_points', []);
       (sysConfig as unknown as { cache: Map<string, unknown> }).cache.delete('referral.milestones_points');
     }
+  });
+
+  it('đơn 2 của phiên khách: gộp vào tài khoản thật commit giữa lúc đọc chủ đơn và lúc khoá người được mời → người mời vẫn được thưởng đúng một lần', async () => {
+    const guest = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}` });
+    const s = await scenario({ userId: guest.id, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 30 * MIN), deliveredEffectsAt: null });
+    const target = await prisma.user.update({ where: { id: s.customer.id }, data: { zaloId: `zalo_${randCode(10)}` } });
+    const rewards = moduleRef.get(RewardPointsService);
+    const original = rewards.grantReferralOrderReward.bind(rewards);
+    let ownerSeen = '';
+    spy(rewards, 'grantReferralOrderReward').mockImplementationOnce(async (refereeId: string, retried?: boolean) => {
+      ownerSeen = refereeId;
+      zaloIdForNextCall = target.zaloId!;
+      await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+      return original(refereeId, retried);
+    });
+
+    await expect(orderStatus.resyncDeliveredEffects(s.order.id)).resolves.toMatchObject({ outcome: 'DONE' });
+    expect(ownerSeen).toBe(guest.id);
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } });
+    expect(after.userId).toBe(target.id);
+    expect(after.deliveredEffectsAt).not.toBeNull();
+    const referrerRows = () =>
+      prisma.pointsTransaction.findMany({ where: { userId: s.referrer.id, refType: 'REFERRAL' }, select: { reason: true, delta: true } });
+    expect(await referrerRows()).toEqual([{ reason: `${REFERRAL_ORDER2_PREFIX}${target.id}`, delta: REWARD }]);
+    expect(await ledgerMatches(s.referrer.id)).toBe(REWARD);
+
+    await expect(rewards.grantReferralOrderReward(guest.id)).resolves.toBe(false);
+    await expect(rewards.grantReferralOrderReward(target.id)).resolves.toBe(false);
+    await expect(orderStatus.resyncDeliveredEffects(s.order.id)).resolves.toMatchObject({ outcome: 'ALREADY_DONE' });
+    expect(await referrerRows()).toEqual([{ reason: `${REFERRAL_ORDER2_PREFIX}${target.id}`, delta: REWARD }]);
+  });
+
+  it('phiên khách cũng có người mời: gộp commit sau lần đọc người được mời, trước khoá → xét lại dưới khoá cho tài khoản thật, thưởng đúng một lần', async () => {
+    const guest0 = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}` });
+    const s = await scenario({ userId: guest0.id, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 30 * MIN), deliveredEffectsAt: null });
+    const guest = await prisma.user.update({ where: { id: guest0.id }, data: { referredById: s.referrer.id } });
+    const target = await prisma.user.update({ where: { id: s.customer.id }, data: { zaloId: `zalo_${randCode(10)}` } });
+    const rewards = moduleRef.get(RewardPointsService);
+    const findUnique = prisma.user.findUnique.bind(prisma.user);
+    let merged = false;
+    spy(prisma.user, 'findUnique').mockImplementation((async (args: Parameters<typeof findUnique>[0]) => {
+      const row = await findUnique(args);
+      const select = args.select as Record<string, unknown> | undefined;
+      if (!merged && args.where.id === guest.id && select?.referredById) {
+        merged = true;
+        zaloIdForNextCall = target.zaloId!;
+        await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+      }
+      return row;
+    }) as never);
+    const grant = spy(rewards, 'grantReferralOrderReward');
+
+    await expect(orderStatus.resyncDeliveredEffects(s.order.id)).resolves.toMatchObject({ outcome: 'DONE' });
+    expect(merged).toBe(true);
+    expect(grant.mock.calls.map((c) => c[0])).toEqual([guest.id, target.id]);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).userId).toBe(target.id);
+    const referrerRows = () =>
+      prisma.pointsTransaction.findMany({ where: { userId: s.referrer.id, refType: 'REFERRAL' }, select: { reason: true, delta: true } });
+    expect(await referrerRows()).toEqual([{ reason: `${REFERRAL_ORDER2_PREFIX}${target.id}`, delta: REWARD }]);
+    expect(await ledgerMatches(s.referrer.id)).toBe(REWARD);
+    await expect(orderStatus.resyncDeliveredEffects(s.order.id)).resolves.toMatchObject({ outcome: 'ALREADY_DONE' });
+    await expect(rewards.grantReferralOrderReward(target.id)).resolves.toBe(false);
+    expect(await referrerRows()).toHaveLength(1);
   });
 
   it('chết giữa chừng sau commit (lật xong, chưa việc nào chạy) → cron sửa; gọi lại DELIVERED cũng sửa ngay', async () => {

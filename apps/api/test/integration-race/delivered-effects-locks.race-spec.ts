@@ -109,6 +109,29 @@ describe('Cộng điểm giao hàng ‖ xoá tài khoản / gộp khách: cùng 
     return { release, done, pid };
   }
 
+  /** Như hold() nhưng rollback khi thả: giữ một dòng chưa commit (vd chèn trùng khoá unique) để tx khác chờ rồi đi tiếp. */
+  async function holdThenRollback(lock: (tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0]) => Promise<unknown>) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const held = new Promise<void>((resolve) => (locked = resolve));
+    let pid = 0;
+    const done = prisma
+      .$transaction(
+        async (tx) => {
+          await lock(tx);
+          [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS "pid"`;
+          locked();
+          await gate;
+          throw new Error('rollback');
+        },
+        { timeout: 30_000 },
+      )
+      .catch(() => undefined);
+    await held;
+    return { release, done, pid };
+  }
+
   async function lockWaiters(holderPid: number) {
     const [row] = await prisma.$queryRaw<{ n: number }[]>`
       WITH RECURSIVE "w" AS (
@@ -211,6 +234,51 @@ describe('Cộng điểm giao hàng ‖ xoá tài khoản / gộp khách: cùng 
       const s = await race(holder, () => loyalty.creditOrderPoints(c.order.id), () => merge(c.guest.id, c.target));
       expect(s.errors).toEqual([]);
       await expectMergedAndCreditedOnTarget(c);
+    }
+  });
+
+  // Xoá tài khoản T đã khoá đơn của T và chờ dòng users T đang bị lần gộp khách G → T giữ; lần gộp chuyển đơn O của G sang T rồi
+  // commit; lần cộng điểm O khoá O (FOR SHARE) và chờ users T (xoá đang giữ); xoá ẩn danh đơn của T nay gồm cả O ⇒ chờ vòng.
+  // Ép xoá là bên bị huỷ (bắt đầu chờ trước): lần ghi sổ điểm của lần cộng bị giữ ở khoá unique (reason, refId) tới khi xoá đã
+  // chờ O. Xoá phải tự chạy lại và xong; điểm cộng đúng một lần cho T.
+  it('gộp khách ‖ xoá tài khoản đích ‖ cộng điểm đơn vừa chuyển: xoá gặp 40P01 thì tự chạy lại, xong cả hai (3 vòng)', async () => {
+    for (let round = 0; round < 3; round++) {
+      const c = await guestAndTarget();
+      await prisma.user.update({ where: { id: c.target.id }, data: { phone: randomPhone(), fullName: 'Trần Thị Đích' } });
+      const request = await prisma.accountDeletionRequest.create({ data: { userId: c.target.id, reason: 'không dùng nữa' } });
+      const checkIn = await prisma.loyaltyCheckIn.create({ data: { userId: c.guest.id, dayKey: '2020-01-01', cycleDay: 1, streakDays: 1, points: 0 } });
+      const bystander = await createUser(prisma);
+      const mergeHold = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "loyalty_check_ins" WHERE "id" = ${checkIn.id} FOR UPDATE`);
+      const ledgerHold = await holdThenRollback((tx) =>
+        tx.pointsTransaction.create({
+          data: { userId: bystander.id, delta: 1, reason: `ORDER_DELIVERED:${c.order.code}`, refType: 'ORDER', refId: c.order.id },
+        }),
+      );
+      const retried = jest.spyOn((deletion as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn');
+
+      const pM = merge(c.guest.id, c.target);
+      await waitForWaiters(mergeHold.pid, 1);
+      const pD = deletion.process(request.id, admin.id);
+      await waitForWaiters(mergeHold.pid, 2);
+      const pC = loyalty.creditOrderPoints(c.order.id);
+      await waitForWaiters(mergeHold.pid, 3);
+      mergeHold.release();
+      await mergeHold.done;
+      // Lần cộng chờ ở khoá unique (ledgerHold), xoá chờ O mà lần cộng giữ.
+      await waitForWaiters(ledgerHold.pid, 2);
+      ledgerHold.release();
+      await ledgerHold.done;
+
+      const s = summarize(await Promise.allSettled([pM, pD, pC]));
+      expect(s.errors).toEqual([]);
+      // Đúng ca cần chứng minh: xoá là bên bị huỷ vì deadlock và đã chạy lại.
+      expect(retried.mock.calls.filter(([m]) => String(m).includes('chạy lại một lần'))).toHaveLength(1);
+      retried.mockRestore();
+      expect((await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: request.id } })).status).toBe('RESOLVED');
+      const o = await prisma.order.findUniqueOrThrow({ where: { id: c.order.id } });
+      expect(o.userId).toBe(c.target.id);
+      expect(await credits(c.order.code)).toEqual([{ userId: c.target.id, delta: EARNED }]);
+      expect(await balanceOf(c.target.id)).toBe(EARNED);
     }
   });
 

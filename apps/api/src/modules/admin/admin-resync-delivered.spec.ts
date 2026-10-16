@@ -11,7 +11,10 @@ import type { OrderStatusService } from '../orders/order-status.service';
 
 function mkAdmin(order: unknown, resync = jest.fn().mockResolvedValue({ outcome: 'DONE', pointsCredited: true, commissionsLocked: 1 })) {
   const none = {} as never;
-  const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order) } };
+  const prisma = {
+    order: { findFirst: jest.fn().mockResolvedValue(order) },
+    orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+  };
   const orderStatus = { resyncDeliveredEffects: resync } as unknown as OrderStatusService;
   const svc = new AdminService(prisma as unknown as PrismaService, none, none, none, none, none, orderStatus, none, none, none);
   return { svc, prisma, resync };
@@ -44,9 +47,10 @@ describe('POST /admin/orders/:id/resync-delivered-effects', () => {
 
   it('đơn không có → 404; đơn chưa/không còn DELIVERED → 400, không chạy gì', async () => {
     await expect(mkAdmin(null).svc.resyncDeliveredEffects('a', 'X')).rejects.toBeInstanceOf(NotFoundException);
-    const { svc, resync } = mkAdmin({ id: 'o1', code: 'TUBU1', status: 'RETURNED' });
+    const { svc, resync, prisma } = mkAdmin({ id: 'o1', code: 'TUBU1', status: 'RETURNED' });
     await expect(svc.resyncDeliveredEffects('a', 'TUBU1')).rejects.toBeInstanceOf(BadRequestException);
     expect(resync).not.toHaveBeenCalled();
+    expect(prisma.orderStatusHistory.create).not.toHaveBeenCalled();
   });
 
   it('đơn DELIVERED (kể cả quá cửa sổ cron) → chạy lại theo id, trả kết quả; đơn đã xong trả ALREADY_DONE (idempotent)', async () => {
@@ -61,5 +65,30 @@ describe('POST /admin/orders/:id/resync-delivered-effects', () => {
     expect(resync).toHaveBeenCalledWith('o1');
     resync.mockResolvedValueOnce({ outcome: 'ALREADY_DONE' });
     await expect(svc.resyncDeliveredEffects('a', 'TUBU1')).resolves.toMatchObject({ outcome: 'ALREADY_DONE' });
+  });
+
+  it('mỗi lần chạy lại để lại một dòng lịch sử đơn (admin, kết quả) — không đổi trạng thái đơn', async () => {
+    const { svc, prisma, resync } = mkAdmin({ id: 'o1', code: 'TUBU1', status: 'DELIVERED' });
+    await svc.resyncDeliveredEffects('admin-9', 'TUBU1');
+    resync.mockResolvedValueOnce({ outcome: 'ALREADY_DONE' });
+    await svc.resyncDeliveredEffects('admin-9', 'TUBU1');
+    expect(prisma.orderStatusHistory.create.mock.calls.map((c) => c[0].data)).toEqual([
+      {
+        orderId: 'o1',
+        fromStatus: 'DELIVERED',
+        toStatus: 'DELIVERED',
+        actorType: 'ADMIN',
+        actorId: 'admin-9',
+        note: 'Admin chạy lại việc sau giao: DONE (cộng điểm: có, khoá hoa hồng: 1)',
+      },
+      {
+        orderId: 'o1',
+        fromStatus: 'DELIVERED',
+        toStatus: 'DELIVERED',
+        actorType: 'ADMIN',
+        actorId: 'admin-9',
+        note: 'Admin chạy lại việc sau giao: ALREADY_DONE',
+      },
+    ]);
   });
 });
