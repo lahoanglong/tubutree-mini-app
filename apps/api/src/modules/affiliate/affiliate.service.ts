@@ -815,13 +815,27 @@ export class AffiliateService {
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({
       where: { id: { in: variationIds } },
-      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
+      select: {
+        id: true,
+        affiliateRate: true,
+        product: { select: { affiliateBlocked: true, storefront: { select: { ownerUserId: true } } } },
+      },
     });
     // Sản phẩm bị chặn affiliate (product.affiliateBlocked) → rate=0, KHÔNG tính hoa hồng cho
     // dòng hàng đó, dù link/CTV nào đã trót chia sẻ trước khi bị chặn (mirror storefront/brand
     // đã lọc affiliateBlocked ở bước hiển thị — chỗ này chặn ở chính điểm phát sinh tiền thật).
+    // Hàng ký gửi "Tubu giao hộ" của chính người giới thiệu (đại lý mua qua slug riêng) cũng rate=0 theo từng dòng: đơn con Tubu
+    // có thể trộn hàng Tubu và hàng của đại lý, nên không loại được ở mức đơn (checkout.referrerFor chỉ loại đơn tự giao).
+    // CTV khác hay đại lý khác giới thiệu cùng hàng đó vẫn hưởng như thường.
     const rateMap = new Map(
-      variations.map((v) => [v.id, v.product?.affiliateBlocked ? 0 : v.affiliateRate ? Number(v.affiliateRate) : 0]),
+      variations.map((v) => [
+        v.id,
+        v.product?.affiliateBlocked || (v.product?.storefront?.ownerUserId ?? null) === order.referrerUserId
+          ? 0
+          : v.affiliateRate
+            ? Number(v.affiliateRate)
+            : 0,
+      ]),
     );
 
     let amount = 0;
