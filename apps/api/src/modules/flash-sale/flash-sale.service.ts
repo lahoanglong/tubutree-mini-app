@@ -178,16 +178,19 @@ export class FlashSaleService {
     if (sold === 0) throw new BadRequestException(FLASH_SOLD_OUT_MSG);
 
     // (b) perUserLimit
-    // KEY SHARE dòng users (đúng khoá mà khoá ngoại của đơn sắp chèn sẽ lấy) TRƯỚC khi đọc/chèn dòng suất: gộp phiên khách giữ
-    // FOR UPDATE users của tài khoản đích rồi chuyển dòng suất của khách sang khoá (suất, đích). Chèn dòng (suất, đích) mới
-    // trước rồi mới chờ users là giữ mục chỉ mục unique mà gộp đang chờ ⇒ 40P01 (r13-merge-checkout-lock.race-spec). Chờ ở
-    // đây thì gộp xong trước và lần đọc bên dưới thấy dòng vừa chuyển sang, cộng dồn vào đó.
-    await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR KEY SHARE`;
     const item = await tx.flashSaleItem.findUnique({ where: { id: itemId }, select: { perUserLimit: true } });
     const limit = item?.perUserLimit ?? 0;
-    const existing = await tx.flashSalePurchase.findUnique({
-      where: { flashSaleItemId_userId: { flashSaleItemId: itemId, userId } },
-    });
+    const findExisting = () =>
+      tx.flashSalePurchase.findUnique({ where: { flashSaleItemId_userId: { flashSaleItemId: itemId, userId } } });
+    let existing = await findExisting();
+    if (!existing) {
+      // Chỉ khi sắp CHÈN dòng (suất, khách): gộp phiên khách giữ FOR UPDATE users của tài khoản đích rồi chuyển dòng suất của
+      // khách sang khoá (suất, đích); chèn trước rồi mới chờ users (khoá ngoại của đơn) là giữ mục chỉ mục unique gộp đang chờ
+      // ⇒ 40P01. Nên chờ KEY SHARE users ở đây rồi đọc lại. Khi đã có dòng thì KHÔNG lấy: tx đang giữ suất các dòng trước mà
+      // duyệt trả/gộp giữ suất dòng sau rồi FOR UPDATE users ⇒ 40P01 (r13-merge-checkout-lock, r13-flash-existing-row-lock).
+      await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR KEY SHARE`;
+      existing = await findExisting();
+    }
     if (existing) {
       const bumped = await tx.flashSalePurchase.updateMany({
         where: { flashSaleItemId: itemId, userId, quantity: { lte: limit - qty } },

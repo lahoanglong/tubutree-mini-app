@@ -132,9 +132,10 @@ describe('Gộp phiên khách ‖ đặt đơn của khách hoặc của tài kh
   }
 
   /** Khách G (có địa chỉ) và tài khoản Zalo T (có địa chỉ). */
-  async function pair() {
-    const guest = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}` });
-    const target = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}` });
+  /** `ids`: ép id khách nhỏ hơn id đích để gộp khoá users của khách trước (referralLockOrder sắp theo id khi không có cạnh mời). */
+  async function pair(ids?: { guest: string; target: string }) {
+    const guest = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, ...(ids ? { id: ids.guest } : {}) });
+    const target = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}`, ...(ids ? { id: ids.target } : {}) });
     created.userIds.push(guest.id, target.id);
     const guestAddr = await address(guest.id);
     const targetAddr = await address(target.id);
@@ -297,6 +298,37 @@ describe('Gộp phiên khách ‖ đặt đơn của khách hoặc của tài kh
       expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: flash.id } })).soldCount).toBe(GUEST_FLASH_QTY + 1);
       const placed = await prisma.order.findMany({ where: { userId: p.target.id, placedForCustomer: true }, include: { items: true } });
       expect(placed.map((o) => o.items.map((i) => i.flashSaleItemId))).toEqual([[flash.id]]);
+    }
+  });
+
+  /**
+   * Đích ĐÃ có dòng suất: gộp khoá dòng suất của khách và của đích rồi mới khoá users (khách trước, đích sau). Lần CTV lên hộ không
+   * được giữ khoá users của đích (KEY SHARE chặn FOR UPDATE của gộp) trong lúc chờ dòng suất mà gộp đang giữ. Tx thứ ba giữ users
+   * của khách: gộp dừng giữa khoá dòng suất và khoá users; lần lên hộ tới sau kẹt ở dòng suất của đích.
+   */
+  it(`(b) đích đã có dòng suất: gộp đã khoá dòng suất ‖ CTV T lên đơn hộ giờ vàng → không 40P01 (${ROUNDS} vòng)`, async () => {
+    for (let round = 0; round < ROUNDS; round++) {
+      const tag = randCode(10).toLowerCase();
+      const p = await pair({ guest: `itr13-a-${tag}`, target: `itr13-b-${tag}` });
+      await prisma.user.update({ where: { id: p.target.id }, data: { role: 'AFFILIATE', phone: randomPhone() } });
+      const v = await variation();
+      const flash = await flashWithGuestPurchase(v, p.guest.id);
+      await prisma.flashSalePurchase.create({ data: { flashSaleItemId: flash.id, userId: p.target.id, quantity: 1 } });
+      await prisma.flashSaleItem.update({ where: { id: flash.id }, data: { soldCount: GUEST_FLASH_QTY + 1 } });
+      const dto = {
+        items: [{ variationId: v.id, quantity: 1 }],
+        customer: { recipient: 'Khách của CTV', phone: randomPhone(), province: 'Hà Nội', ward: 'Phường IT', street: '1 Đường IT', provinceCode: '84_VN01', wardCode: '00001' },
+        paymentMethod: 'COD' as const,
+      };
+
+      const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${p.guest.id} FOR UPDATE`);
+      const s = await race(holder, merge(p), () => affiliate.placeOrderForCustomer(p.target.id, dto));
+      expectNoErrors(s);
+
+      await expectMerged(p);
+      const purchases = await prisma.flashSalePurchase.findMany({ where: { flashSaleItemId: flash.id } });
+      expect(purchases.map((x) => [x.userId, x.quantity])).toEqual([[p.target.id, GUEST_FLASH_QTY + 2]]);
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: flash.id } })).soldCount).toBe(GUEST_FLASH_QTY + 2);
     }
   });
 
