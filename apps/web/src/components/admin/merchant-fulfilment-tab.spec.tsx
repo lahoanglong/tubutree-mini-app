@@ -752,5 +752,17 @@ describe('Bật/tắt cờ đối tác (admin)', () => {
     const post = api.calls.find((c) => c.url.endsWith('/admin/storefronts/sf9/partner'))!;
     expect(JSON.parse(String(post.init!.body))).toEqual({ isPartner: false });
   });
-});
 
+  it('gian hàng CTV đã tắt cờ còn khoản REVERSAL: không có nút "Sửa phí" (API 404); MERCHANT dù cột isPartner=false vẫn sửa được phí', async () => {
+    const off = { storefrontId: 'sf8', title: 'Vườn đã tắt', type: 'CTV' as const, isPartner: false, owner: { fullName: 'Hoa', phone: '0900000088' }, activeOrders: 0, overdueOrders: 0, settleableLines: 1, settleableAmount: -42500, consignmentLines: 0, commissionPct: null, consignmentFeePct: 0, consignmentFeeFixed: 0 };
+    const merchant = { ...off, storefrontId: 'sf7', title: 'Xưởng cũ', type: 'MERCHANT' as const };
+    setup({ '/admin/merchant-fulfilment/overview': { body: { ...OVERVIEW, stores: [off, merchant], overdue: [] } } });
+    const r = render(<MerchantFulfilmentTab isAdmin />);
+    mounted.push(r);
+    await flush();
+    const rowOf = (title: string) => Array.from(r.container.querySelectorAll('tr')).find((tr) => tr.textContent?.includes(title))!;
+    expect(byText(rowOf('Vườn đã tắt'), 'button', 'Lập phiếu đối soát')).not.toBeNull();
+    expect(byText(rowOf('Vườn đã tắt'), 'button', 'Sửa phí')).toBeNull();
+    expect(byText(rowOf('Xưởng cũ'), 'button', 'Sửa phí')).not.toBeNull();
+  });
+});
