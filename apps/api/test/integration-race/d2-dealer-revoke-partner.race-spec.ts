@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -25,6 +25,8 @@ import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/c
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import { AccountDeletionService } from '../../src/modules/users/account-deletion.service';
 import { createOrder, createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 import type { OrderStatus, Prisma } from '@prisma/client';
 
@@ -47,6 +49,9 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
   let cart: CartService;
   let merchant: MerchantFulfilmentService;
   let admin: AdminService;
+  let rbac: RbacService;
+  let portal: MerchantService;
+  let deletion: AccountDeletionService;
   const CONFIG_KEYS = ['merchant.settlement_hold_days', 'merchant.consignment_settle_from'];
   let savedConfig: { key: string; value: unknown }[] = [];
   const created = { userIds: [] as string[], productIds: [] as string[], storefrontIds: [] as string[], tierIds: [] as string[] };
@@ -86,7 +91,10 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
     merchant = new MerchantFulfilmentService(prisma, {} as never, undefined, moduleRef.get(SystemConfigService));
     const none = {} as never;
-    admin = new AdminService(prisma, none, none, none, none, none, none, new RbacService(prisma), none, none, merchant);
+    rbac = new RbacService(prisma, merchant);
+    admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none, merchant);
+    portal = new MerchantService(prisma, none);
+    deletion = new AccountDeletionService(prisma);
   });
 
   afterAll(async () => {
@@ -95,6 +103,8 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
       await prisma.merchantPayout.deleteMany({ where: { storefrontId: { in: storefrontIds } } });
       await prisma.merchantPancakeLink.deleteMany({ where: { storefrontId: { in: storefrontIds } } });
       await prisma.userAdminEvent.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.roleGrant.deleteMany({ where: { grantedBy: { in: userIds } } });
+      await prisma.accountDeletionRequest.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.storefront.updateMany({ where: { id: { in: storefrontIds } }, data: { ownerUserId: null } });
       await deleteItData(prisma, created);
       await prisma.storefront.deleteMany({ where: { id: { in: storefrontIds } } });
@@ -113,9 +123,9 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
   }
 
   /** Đại lý (DEALER) có gian hàng CTV là đối tác, không vướng mắc nào. */
-  async function dealerStore(o: { isPartner?: boolean; type?: 'CTV' | 'MERCHANT' } = {}) {
+  async function dealerStore(o: { isPartner?: boolean; type?: 'CTV' | 'MERCHANT'; ownerRole?: 'DEALER' | 'STAFF' | 'ADMIN' } = {}) {
     const adminUser = await user('ADMIN');
-    const owner = await user('DEALER');
+    const owner = await user(o.ownerRole ?? 'DEALER');
     const buyer = await user('CUSTOMER');
     const tag = randCode(8).toLowerCase();
     const sf = await prisma.storefront.create({
@@ -123,10 +133,11 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     });
     created.storefrontIds.push(sf.id);
     const flag = async () => (await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).isPartner;
+    const type = async () => (await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).type;
     const role = async () => (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role;
     const partnerEvents = () => prisma.userAdminEvent.findMany({ where: { userId: owner.id, kind: 'STOREFRONT_PARTNER' } });
     const revoke = () => admin.setUserRole(adminUser.id, owner.phone!, 'CUSTOMER');
-    return { adminUser, owner, buyer, sf, tag, flag, role, partnerEvents, revoke };
+    return { adminUser, owner, buyer, sf, tag, flag, type, role, partnerEvents, revoke };
   }
   type Ctx = Awaited<ReturnType<typeof dealerStore>>;
 
@@ -210,14 +221,7 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE' } })).toBe(0);
   });
 
-  it('đổi sang STAFF cũng đi qua cùng kiểm tra (vai trò khác DEALER); còn vướng mắc thì 409', async () => {
-    const c = await dealerStore();
-    await selfShip(c, 'PACKED');
-    await conflictMessage(admin.setUserRole(c.adminUser.id, c.owner.phone!, 'STAFF'));
-    expect(await c.role()).toBe('DEALER');
-  });
-
-  it('không có gian hàng, cờ đã tắt, gian hàng MERCHANT: thu hồi chạy như trước, không ghi STOREFRONT_PARTNER', async () => {
+  it('không có gian hàng hoặc cờ đã tắt: thu hồi chạy như trước, không ghi STOREFRONT_PARTNER', async () => {
     const adminUser = await user('ADMIN');
     const bare = await user('DEALER');
     await expect(admin.setUserRole(adminUser.id, bare.phone!, 'CUSTOMER')).resolves.toMatchObject({ role: 'CUSTOMER' });
@@ -227,11 +231,144 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     await expect(off.revoke()).resolves.toMatchObject({ role: 'CUSTOMER' });
     expect(await off.flag()).toBe(false);
     expect(await off.partnerEvents()).toHaveLength(0);
+  });
 
+  it('gian hàng MERCHANT sạch vướng mắc: thu hồi chuyển thành CTV + isPartner=false, ghi STOREFRONT_PARTNER, giữ dữ liệu bán hàng; duyệt lại DEALER + vào Cổng người bán bật lại cờ', async () => {
     const m = await dealerStore({ type: 'MERCHANT' });
-    await expect(m.revoke()).resolves.toMatchObject({ role: 'CUSTOMER' });
+    await prisma.storefront.update({ where: { id: m.sf.id }, data: { bankName: 'ACB', bankAccountNo: '123456', commissionPct: 0.12 } });
+    const p = await product(m.sf, 'MERCHANT', false);
+    const paid = await prisma.merchantPayout.create({ data: { storefrontId: m.sf.id, amount: 5000, createdBy: m.adminUser.id, status: 'PAID' } });
+    await selfShip(m, 'CANCELLED');
+
+    await expect(m.revoke()).resolves.toMatchObject({ ok: true, role: 'CUSTOMER', previousRole: 'DEALER' });
+    expect(await m.type()).toBe('CTV');
+    expect(await m.flag()).toBe(false);
+    expect(await m.role()).toBe('CUSTOMER');
+    const ev = await m.partnerEvents();
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ fromValue: 'true', toValue: 'false', actorId: m.adminUser.id, reason: m.sf.id });
+    const after = await prisma.storefront.findUniqueOrThrow({ where: { id: m.sf.id } });
+    expect(after).toMatchObject({ bankName: 'ACB', bankAccountNo: '123456', ownerUserId: m.owner.id });
+    expect(Number(after.commissionPct)).toBeCloseTo(0.12);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).storefrontId).toBe(m.sf.id);
+    expect((await prisma.merchantPayout.findUniqueOrThrow({ where: { id: paid.id } })).status).toBe('PAID');
+
+    const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
+    created.tierIds.push(tier.id);
+    await admin.setUserRole(m.adminUser.id, m.owner.phone!, 'DEALER', tier.id);
+    expect(await m.flag()).toBe(false);
+    const reopened = await portal.getOrCreateStore(m.owner.id);
+    expect(reopened).toMatchObject({ id: m.sf.id, isPartner: true, type: 'CTV' });
     expect(await m.flag()).toBe(true);
-    expect(await m.partnerEvents()).toHaveLength(0);
+  });
+
+  const merchantBlockers: [string, (c: Ctx) => Promise<unknown>, string][] = [
+    ['đơn tự giao chưa xong', (c) => selfShip(c, 'SHIPPING'), '1 đơn tự giao chưa xong'],
+    ['phiếu đối soát PENDING', (c) => prisma.merchantPayout.create({ data: { storefrontId: c.sf.id, amount: 1000, createdBy: c.adminUser.id } }), '1 phiếu đối soát chưa chuyển'],
+  ];
+  it.each(merchantBlockers)('gian hàng MERCHANT vướng "%s" → 409, vai trò/loại/cờ giữ nguyên, không ghi sổ', async (_name, setup, expected) => {
+    const c = await dealerStore({ type: 'MERCHANT' });
+    await setup(c);
+    const msg = await conflictMessage(c.revoke());
+    expect(msg).toContain(expected);
+    expect(await c.role()).toBe('DEALER');
+    expect(await c.type()).toBe('MERCHANT');
+    expect(await c.flag()).toBe(true);
+    expect(await c.partnerEvents()).toHaveLength(0);
+    expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE' } })).toBe(0);
+  });
+
+  describe.each(['CUSTOMER', 'AFFILIATE'] as const)('STAFF/ADMIN hạ về %s (luật B)', (finalRole) => {
+    it.each(['STAFF', 'ADMIN'] as const)('%s có gian hàng đối tác còn vướng → 409, vai trò giữ nguyên', async (from) => {
+      const c = await dealerStore({ ownerRole: from });
+      await selfShip(c, 'SHIPPING');
+      await conflictMessage(admin.setUserRole(c.adminUser.id, c.owner.phone!, finalRole));
+      expect(await c.role()).toBe(from);
+      expect(await c.flag()).toBe(true);
+    });
+
+    it('STAFF sạch vướng mắc → tắt cờ và ghi STOREFRONT_PARTNER cùng ROLE', async () => {
+      const c = await dealerStore({ ownerRole: 'STAFF' });
+      await expect(admin.setUserRole(c.adminUser.id, c.owner.phone!, finalRole)).resolves.toMatchObject({ role: finalRole, previousRole: 'STAFF' });
+      expect(await c.flag()).toBe(false);
+      expect(await c.partnerEvents()).toHaveLength(1);
+    });
+  });
+
+  it('STAFF sở hữu gian hàng MERCHANT sạch vướng mắc hạ về CUSTOMER → chuyển CTV, cờ tắt', async () => {
+    const c = await dealerStore({ ownerRole: 'STAFF', type: 'MERCHANT' });
+    await admin.setUserRole(c.adminUser.id, c.owner.phone!, 'CUSTOMER');
+    expect(await c.type()).toBe('CTV');
+    expect(await c.flag()).toBe(false);
+  });
+
+  it('DEALER → STAFF / ADMIN không đụng gian hàng dù đang vướng (thăng tạm thời)', async () => {
+    for (const to of ['STAFF', 'ADMIN'] as const) {
+      const c = await dealerStore();
+      await selfShip(c, 'SHIPPING');
+      await expect(admin.setUserRole(c.adminUser.id, c.owner.phone!, to)).resolves.toMatchObject({ role: to });
+      expect(await c.flag()).toBe(true);
+      expect(await c.partnerEvents()).toHaveLength(0);
+    }
+  });
+
+  async function grant(c: Ctx) {
+    await prisma.roleGrant.create({ data: { phone: c.owner.phone!, role: 'STAFF', grantedBy: c.adminUser.id } });
+  }
+  const activeGrants = (c: Ctx) => prisma.roleGrant.count({ where: { phone: c.owner.phone!, revokedAt: null } });
+
+  it('revokeGrant: STAFF không có hồ sơ đại lý (→ CUSTOMER) có gian hàng vướng → 409, grant và vai trò giữ nguyên', async () => {
+    const c = await dealerStore({ ownerRole: 'STAFF' });
+    await grant(c);
+    await selfShip(c, 'SHIPPING');
+    await conflictMessage(rbac.revokeGrant(c.adminUser.id, c.owner.phone!));
+    expect(await c.role()).toBe('STAFF');
+    expect(await activeGrants(c)).toBe(1);
+    expect(await c.flag()).toBe(true);
+    expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE' } })).toBe(0);
+  });
+
+  it('revokeGrant: STAFF → CUSTOMER sạch vướng mắc → tắt cờ, ghi STOREFRONT_PARTNER', async () => {
+    const c = await dealerStore({ ownerRole: 'STAFF' });
+    await grant(c);
+    await expect(rbac.revokeGrant(c.adminUser.id, c.owner.phone!)).resolves.toMatchObject({ revoked: 1, downgraded: true });
+    expect(await c.role()).toBe('CUSTOMER');
+    expect(await c.flag()).toBe(false);
+    expect(await c.partnerEvents()).toHaveLength(1);
+  });
+
+  it('revokeGrant: về DEALER (có hồ sơ APPROVED) không đụng gian hàng dù đang vướng', async () => {
+    const c = await dealerStore({ ownerRole: 'STAFF' });
+    await grant(c);
+    await prisma.dealerApplication.create({
+      data: { userId: c.owner.id, status: 'APPROVED', businessName: 'IT', ownerName: 'IT', phone: c.owner.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
+    });
+    await selfShip(c, 'SHIPPING');
+    await expect(rbac.revokeGrant(c.adminUser.id, c.owner.phone!)).resolves.toMatchObject({ downgraded: true });
+    expect(await c.role()).toBe('DEALER');
+    expect(await c.flag()).toBe(true);
+    expect(await c.partnerEvents()).toHaveLength(0);
+  });
+
+  it('applyGrants nâng DEALER lên STAFF không đụng gian hàng và không lỗi', async () => {
+    const c = await dealerStore();
+    await selfShip(c, 'SHIPPING');
+    await grant(c);
+    const fresh = await prisma.user.findUniqueOrThrow({ where: { id: c.owner.id } });
+    await expect(rbac.applyGrants(fresh)).resolves.toMatchObject({ role: 'STAFF' });
+    expect(await c.flag()).toBe(true);
+    expect(await c.partnerEvents()).toHaveLength(0);
+  });
+
+  it('thua tranh khoá / deadlock trong thu hồi → 503 chứ không phải 500', async () => {
+    const c = await dealerStore();
+    const spy = jest.spyOn(prisma, '$transaction').mockImplementationOnce((() => Promise.reject(new Error('ERROR: deadlock detected 40P01'))) as never);
+    try {
+      await expect(c.revoke()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await c.role()).toBe('DEALER');
   });
 
   it('cấp DEALER không đụng cờ isPartner', async () => {
@@ -359,5 +496,99 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
       const orders = await prisma.order.findMany({ where: { userId: s.buyer.id } });
       expect(orders.map((o) => [o.fulfiller, o.fulfillerStorefrontId])).toEqual([['MERCHANT', s.sf.id]]);
     }
+  });
+
+  /** Cổng người bán mở lại (chủ DEALER, gian hàng CTV cờ tắt) đua với thu hồi; giữ khoá dòng gian hàng để ép thứ tự tới. */
+  describe.each([
+    ['cổng trước, thu hồi sau', true],
+    ['thu hồi trước, cổng sau', false],
+  ] as const)('Cổng người bán đua với thu hồi: %s', (_label, portalFirst) => {
+    it(`không bao giờ để lại chủ không còn là DEALER mà cờ đối tác bật (${ROUNDS} vòng)`, async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const c = await dealerStore({ isPartner: false });
+        const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "id" = ${c.sf.id} FOR UPDATE`);
+        const running: Promise<unknown>[] = [];
+        try {
+          const start = (kind: 'portal' | 'revoke') => {
+            let settled = false;
+            running.push((kind === 'portal' ? portal.getOrCreateStore(c.owner.id) : c.revoke()).finally(() => (settled = true)));
+            return () => settled;
+          };
+          const first = start(portalFirst ? 'portal' : 'revoke');
+          await waitUntil(async () => first() || (await lockWaiters(holder.pid)) >= 1, 'bên đến trước');
+          const second = start(portalFirst ? 'revoke' : 'portal');
+          await waitUntil(async () => second() || (await lockWaiters(holder.pid)) >= 2, 'bên đến sau');
+        } finally {
+          holder.release();
+          await holder.done;
+        }
+        const settled = await Promise.allSettled(running);
+        expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock/i);
+        const role = await c.role();
+        const flag = await c.flag();
+        expect({ role, flag }).toEqual({ role: 'CUSTOMER', flag: false });
+      }
+    });
+  });
+
+  /** Thu hồi đua với ẩn danh tài khoản của cùng chủ: gian hàng khoá trước users ở cả hai bên, nên không deadlock. */
+  describe('Thu hồi đua với ẩn danh tài khoản của cùng chủ', () => {
+    async function deletable() {
+      const c = await dealerStore();
+      const addr = await prisma.address.create({
+        data: {
+          userId: c.owner.id, recipient: 'IT', phone: phone(), province: 'Ha Noi', district: '', ward: 'P', street: '1',
+          provinceCode: '84_VN01', districtCode: '', wardCode: '00001',
+        },
+      });
+      const request = await prisma.accountDeletionRequest.create({ data: { userId: c.owner.id, reason: 'IT' } });
+      return { ...c, addr, request };
+    }
+
+    it(`ẩn danh giữ users rồi đợi dòng địa chỉ, thu hồi đã giữ gian hàng: không 40P01 tới người gọi, kết quả nhất quán (${ROUNDS} vòng)`, async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const d = await deletable();
+        const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${d.addr.id} FOR UPDATE`);
+        const running: Promise<unknown>[] = [];
+        try {
+          let delSettled = false;
+          running.push(deletion.process(d.request.id, d.adminUser.id).finally(() => (delSettled = true)));
+          await waitUntil(async () => delSettled || (await lockWaiters(holder.pid)) >= 1, 'xoá tài khoản');
+          let revSettled = false;
+          running.push(d.revoke().finally(() => (revSettled = true)));
+          await waitUntil(async () => revSettled || (await lockWaiters(holder.pid)) >= 2, 'thu hồi');
+        } finally {
+          holder.release();
+          await holder.done;
+        }
+        const settled = await Promise.allSettled(running);
+        expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock/i);
+        expect(settled[0]).toMatchObject({ status: 'fulfilled' });
+        expect(settled[1]).toMatchObject({ status: 'fulfilled' });
+        const u = await prisma.user.findUniqueOrThrow({ where: { id: d.owner.id } });
+        expect(u).toMatchObject({ isBlocked: true, role: 'CUSTOMER' });
+        expect(await d.flag()).toBe(false);
+        expect((await prisma.storefront.findUniqueOrThrow({ where: { id: d.sf.id } })).isPublished).toBe(false);
+      }
+    });
+
+    it(`hai bên chạy tự do (${ROUNDS * 2} vòng): không 40P01, trạng thái cuối nhất quán`, async () => {
+      for (let round = 0; round < ROUNDS * 2; round++) {
+        const d = await deletable();
+        const settled = await Promise.allSettled(round % 2 ? [d.revoke(), deletion.process(d.request.id, d.adminUser.id)] : [deletion.process(d.request.id, d.adminUser.id), d.revoke()]);
+        expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock/i);
+        const [del, rev] = round % 2 ? [settled[1]!, settled[0]!] : [settled[0]!, settled[1]!];
+        expect(del.status).toBe('fulfilled');
+        expect((await prisma.user.findUniqueOrThrow({ where: { id: d.owner.id } })).isBlocked).toBe(true);
+        if (rev.status === 'fulfilled') {
+          expect(await d.flag()).toBe(false);
+          expect(await d.role()).toBe('CUSTOMER');
+        } else {
+          // Ẩn danh xong trước: SĐT đã gỡ nên thu hồi không tìm thấy người dùng, vai trò và cờ giữ nguyên.
+          expect(rev.reason).toBeInstanceOf(NotFoundException);
+          expect(await d.role()).toBe('DEALER');
+        }
+      }
+    });
   });
 });

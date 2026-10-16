@@ -124,6 +124,8 @@ export class AccountDeletionService {
       // Đơn của khách trước dòng users, cùng chiều với cộng điểm lúc giao / duyệt trả / gộp phiên khách (đơn → users): ẩn danh
       // bên dưới ghi lại các đơn này, khoá users trước thì đợi lần cộng điểm đang giữ đơn trong khi nó đợi users ⇒ 40P01.
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
+      // Gian hàng của chủ trước dòng users: thu hồi vai trò đại lý khoá gian hàng rồi mới ghi users, khoá ngược chiều thì deadlock (40P01).
+      await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${request.userId} ORDER BY "id" FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${request.userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: request.userId } });
       const now = new Date();
