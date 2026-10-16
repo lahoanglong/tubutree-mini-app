@@ -1417,7 +1417,7 @@ function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin:
       {isAdmin && <DealerCreditPanel order={o} />}
 
       {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
-      <OrderStatusActions order={o} canConfirmPayment={isAdmin} />
+      <OrderStatusActions order={o} canConfirmPayment={isAdmin} canResync={isAdmin} />
 
       <OrderStatusHistory order={o} />
     </div>

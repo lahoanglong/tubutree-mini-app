@@ -118,6 +118,8 @@ export interface AdminOrder {
   /** Báo động Gomdon chưa xử lý (mới nhất trước, tối đa 10). */
   gomdonAlerts?: GomdonAlertView[];
   deliveredAt?: string | null;
+  /** Mốc việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) đã xong; null trên đơn DELIVERED = chưa xong. */
+  deliveredEffectsAt?: string | null;
   user?: {
     id: string;
     phone: string | null;
@@ -551,6 +553,18 @@ export const confirmOrderPayment = (orderId: string, input: { bankRef?: string; 
     body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}), ...(input.amount !== undefined ? { amount: input.amount } : {}) },
   });
 };
+
+export type ResyncDeliveredEffectsOutcome = 'DONE' | 'ALREADY_DONE' | 'INCOMPLETE';
+export interface ResyncDeliveredEffectsResult {
+  orderId: string;
+  code: string;
+  outcome: ResyncDeliveredEffectsOutcome;
+  pointsCredited?: boolean;
+  commissionsLocked?: number;
+}
+/** Chạy lại việc sau giao của đơn DELIVERED chưa có mốc deliveredEffectsAt (chỉ ADMIN, chạy lại an toàn). */
+export const resyncDeliveredEffects = (orderId: string) =>
+  apiFetch<ResyncDeliveredEffectsResult>(`/admin/orders/${encodeURIComponent(orderId)}/resync-delivered-effects`, { method: 'POST' });
 
 // ── Công nợ đại lý (A5-09): "Báo đã CK" của đại lý giờ chỉ là thông báo, sổ công nợ CHỈ giảm khi
 // ADMIN tự đối chiếu sao kê rồi xác nhận ở đây — xem DealerService.adminRecordCreditPayment. ──
@@ -1644,6 +1658,12 @@ export interface OpsHealth {
     backlogOrders: OpsBacklogOrder[];
   };
   queues: { ok: true; items: OpsQueueRow[] } | { ok: false; error: string };
+  /** Đơn đã giao chưa xong việc sau giao (cũ nhất trước). Tuỳ chọn: API cũ chưa trả trường này. */
+  orders?: {
+    deliveredEffectsPending: number;
+    deliveredEffectsStale: number;
+    deliveredEffectsOrders: { id: string; code: string; deliveredAt: string | null }[];
+  };
   /** Kênh báo động ngoài app. Tuỳ chọn: API cũ chưa trả trường này. */
   alertChannels?: { email: OpsEmailChannel; webhook?: OpsWebhookChannel };
   problems: { key: string; message: string }[];

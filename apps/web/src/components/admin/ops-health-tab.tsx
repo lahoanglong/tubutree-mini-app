@@ -616,6 +616,23 @@ function HealthBody({
         </ListSection>
       )}
 
+      {h.orders && h.orders.deliveredEffectsOrders.length > 0 && (
+        <ListSection title={`Đơn đã giao chưa xong việc sau giao (${h.orders.deliveredEffectsPending})`}>
+          {h.orders.deliveredEffectsOrders.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="min-w-0">
+                <b className="text-stone-900">{o.code}</b>
+                {o.deliveredAt && <span className="text-xs text-stone-500"> · giao {formatDateTime(o.deliveredAt)}</span>}
+              </span>
+              {openOrder(o.code)}
+            </li>
+          ))}
+          <li className="py-2 text-xs text-stone-500">
+            Mở đơn rồi bấm “Chạy lại việc sau giao” (chỉ ADMIN). Đơn giao quá cửa sổ cron ({h.orders.deliveredEffectsStale} đơn) không tự chạy lại.
+          </li>
+        </ListSection>
+      )}
+
       {h.pancake.stuckOrders.length > 0 && (
         <section aria-label="Đơn kẹt" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <h3 className="font-display text-sm font-semibold text-stone-900">
