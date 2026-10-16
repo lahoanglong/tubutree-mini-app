@@ -110,8 +110,7 @@ export function VoucherSheet({
       return `Giảm ${coupon.value}%${maxText}`;
     }
     if (coupon.type === 'FREESHIP') {
-      const maxText = coupon.value > 0 ? ` (tối đa ${formatVnd(coupon.value)})` : '';
-      return `Miễn phí ship${maxText}`;
+      return 'Miễn phí ship';
     }
     return `Giảm ${formatVnd(coupon.value)}`;
   };

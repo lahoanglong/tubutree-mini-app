@@ -100,7 +100,8 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(screen.getByText('Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá')).toBeInTheDocument();
     expect(screen.getByLabelText('Nhập mã giảm giá khác')).toBeInTheDocument();
     expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
-    expect(screen.getByText('Miễn phí ship (tối đa 20.000đ)')).toBeInTheDocument();
+    expect(screen.getByText('Miễn phí ship')).toBeInTheDocument();
+    expect(screen.queryByText(/Miễn phí ship \(tối đa/)).toBeNull();
     expect(screen.getByText('Cần đơn tối thiểu 500.000đ')).toBeInTheDocument();
     expect(screen.getAllByText('HSD: 01/01/2027')).toHaveLength(2);
   });
