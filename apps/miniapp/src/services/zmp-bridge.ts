@@ -102,6 +102,13 @@ export async function requestZaloLocation(): Promise<{ token: string } | null> {
   }
 }
 
+/** Như `requestZaloLocation` nhưng giữ lại lỗi của SDK (throw) để caller phân biệt từ chối quyền / lỗi khác. */
+export async function requestZaloLocationStrict(): Promise<{ token: string } | null> {
+  const res = await getLocation({});
+  const token = (res as { token?: string }).token;
+  return token ? { token } : null;
+}
+
 /** Lấy thông tin hiển thị cơ bản (tên, avatar) — cần quyền scope.userInfo. */
 export async function getZaloUserInfo() {
   const { userInfo } = await getUserInfo({ autoRequestPermission: true });
