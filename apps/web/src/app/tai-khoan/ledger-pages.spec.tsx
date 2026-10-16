@@ -10,6 +10,8 @@ const state = vi.hoisted(() => ({
   walletPages: [] as { data: Record<string, unknown>[]; total: number }[],
   walletCalls: [] as number[],
   failPoints: false,
+  failLock: false,
+  lock: { lockedPoints: 0, lockedReturnPoints: 0, lockedUntil: null } as Record<string, unknown>,
   phase: 'authenticated' as string,
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
@@ -18,6 +20,10 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getMe: async () => ({ pointsBalance: 1681, pointsConvertedBalance: 119, walletBalance: 50000 }),
   getWallet: async () => ({ walletBalance: 50000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0, withdrawMin: 100000, withdrawFee: 3000 }),
+  getMyPointsLock: async () => {
+    if (state.failLock) throw new Error('boom');
+    return state.lock;
+  },
   getPointsTransactions: async () => {
     if (state.failPoints) throw new Error('boom');
     return state.points;
@@ -43,6 +49,8 @@ const mount = async (ui: Parameters<typeof render>[0]) => {
 beforeEach(() => {
   state.phase = 'authenticated';
   state.failPoints = false;
+  state.failLock = false;
+  state.lock = { lockedPoints: 0, lockedReturnPoints: 0, lockedUntil: null };
   state.walletCalls = [];
   state.points = [
     { id: 'p1', delta: -1681, reason: 'ORDER_REDEEM:TB1', expiresAt: null, createdAt: '2026-10-14T05:00:00Z' },
@@ -80,6 +88,24 @@ describe('/tai-khoan/diem-xanh — lịch sử Điểm Xanh', () => {
     expect(rows[1]).toContain('+250');
     expect(rows[1]).toContain('Hết hạn 14/10/2027');
     expect(rows[2]).toContain('Điểm không hết hạn');
+  });
+
+  it('điểm đang chờ: nói số điểm và ngày mở khoá dd/MM (giờ Việt Nam), kèm phần chờ xử lý đổi/trả', async () => {
+    state.lock = { lockedPoints: 350, lockedReturnPoints: 100, lockedUntil: '2026-10-21T20:00:00.000Z' };
+    const c = await mount(<PointsPage />);
+    const card = c.querySelector('section[aria-label="Số dư Điểm Xanh"]')!;
+    expect(card.textContent).toContain('250 điểm đang chờ, mở khoá ngày 22/10');
+    expect(card.textContent).toContain('100 điểm đang chờ xử lý đổi/trả, mở khoá khi yêu cầu được xử lý xong');
+  });
+
+  it('không có điểm khoá hoặc API khoá lỗi: không hiện dòng chờ, số dư và lịch sử vẫn hiện', async () => {
+    const none = await mount(<PointsPage />);
+    expect(none.textContent).not.toContain('đang chờ');
+    state.failLock = true;
+    const failed = await mount(<PointsPage />);
+    expect(failed.textContent).not.toContain('đang chờ');
+    expect(failed.textContent).toContain('1.800');
+    expect(failed.querySelectorAll('li')).toHaveLength(4);
   });
 
   it('mã lý do lạ không lộ ra màn hình', async () => {
