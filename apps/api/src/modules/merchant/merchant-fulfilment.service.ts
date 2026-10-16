@@ -1229,6 +1229,8 @@ export class MerchantFulfilmentService {
       select: {
         id: true,
         title: true,
+        type: true,
+        isPartner: true,
         owner: { select: { fullName: true, phone: true } },
         commissionPct: true,
         consignmentFeePct: true,
@@ -1257,6 +1259,8 @@ export class MerchantFulfilmentService {
       out.push({
         storefrontId: sf.id,
         title: sf.title,
+        type: sf.type,
+        isPartner: sf.isPartner,
         owner: sf.owner,
         activeOrders: activeByStore.get(sf.id) ?? 0,
         overdueOrders: overdueByStore.get(sf.id) ?? 0,

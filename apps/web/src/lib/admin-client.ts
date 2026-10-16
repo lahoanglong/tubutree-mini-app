@@ -566,6 +566,13 @@ export interface ResyncDeliveredEffectsResult {
 export const resyncDeliveredEffects = (orderId: string) =>
   apiFetch<ResyncDeliveredEffectsResult>(`/admin/orders/${encodeURIComponent(orderId)}/resync-delivered-effects`, { method: 'POST' });
 
+/** Bật/tắt cờ đối tác của gian hàng CTV (chỉ ADMIN). Tắt bị 409 kèm câu liệt kê việc đang vướng. */
+export const setStorefrontPartner = (storefrontId: string, isPartner: boolean) =>
+  apiFetch<{ id: string; isPartner: boolean }>(`/admin/storefronts/${encodeURIComponent(storefrontId)}/partner`, {
+    method: 'POST',
+    body: { isPartner },
+  });
+
 // ── Công nợ đại lý (A5-09): "Báo đã CK" của đại lý giờ chỉ là thông báo, sổ công nợ CHỈ giảm khi
 // ADMIN tự đối chiếu sao kê rồi xác nhận ở đây — xem DealerService.adminRecordCreditPayment. ──
 export interface DealerCreditLedgerEntry {

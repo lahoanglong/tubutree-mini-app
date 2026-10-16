@@ -479,6 +479,9 @@ export interface MerchantFulfilmentOverview {
   stores: {
     storefrontId: string;
     title: string;
+    /** Loại gian hàng: chỉ CTV mới bật/tắt được cờ đối tác. */
+    type?: 'CTV' | 'MERCHANT' | 'BRAND';
+    isPartner?: boolean;
     owner: { fullName: string | null; phone: string | null } | null;
     activeOrders: number;
     overdueOrders: number;
