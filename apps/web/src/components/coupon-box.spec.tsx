@@ -204,4 +204,10 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     await mountWith(undefined);
     expect(state.previews).not.toHaveBeenCalled();
   });
+
+  it('ví không có mã nào: không gọi API xem trước dù có tham số giỏ', async () => {
+    state.coupons = [];
+    await mountWith({ addressId: 'a1', itemIds: ['l1'] });
+    expect(state.previews).not.toHaveBeenCalled();
+  });
 });

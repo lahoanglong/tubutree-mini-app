@@ -92,7 +92,8 @@ export function CouponBox({
   const previewsQ = useQuery({
     queryKey: ['coupon-previews', settledSig],
     queryFn: () => getCouponPreviews((JSON.parse(settledSig!) as [CouponPreviewParams, string])[0]),
-    enabled: !!settledSig && !currentCode,
+    // Ví không có mã nào thì không có gì để tính: khỏi gọi máy chủ mỗi lần đổi giỏ.
+    enabled: !!settledSig && !currentCode && (couponsQ.data?.length ?? 0) > 0,
     retry: false,
   });
   // Số chỉ đúng cho đúng giỏ đã hỏi: giỏ vừa đổi (chưa hỏi lại) hoặc đang tải lại thì quay về phép đoán phía máy, không hiện số cũ.
