@@ -143,6 +143,7 @@ describe('FlashSaleService.consumeQuota', () => {
   const now = new Date('2026-07-05T10:00:00Z');
   const mkTx = (soldRaw: number, perUserLimit: number, existing: any, purchaseHit: number) => ({
     $executeRaw: jest.fn().mockResolvedValue(soldRaw),
+    $queryRaw: jest.fn().mockResolvedValue([]),
     flashSaleItem: {
       findUnique: jest.fn().mockResolvedValue({ perUserLimit }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -166,6 +167,38 @@ describe('FlashSaleService.consumeQuota', () => {
     const tx = mkTx(1, 5, null, 0);
     await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
     expect(tx.flashSalePurchase.create).toHaveBeenCalled();
+  });
+
+  it('chưa có dòng suất → KEY SHARE dòng users rồi ĐỌC LẠI trước khi chèn (gộp phiên khách có thể vừa chuyển dòng sang)', async () => {
+    const tx = mkTx(1, 5, null, 0);
+    await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    const [sql, ...values] = tx.$queryRaw.mock.calls[0]!;
+    expect((sql as string[]).join('?')).toMatch(/FROM "users" WHERE "id" = \? FOR KEY SHARE/);
+    expect(values).toEqual(['u1']);
+    const lockAt = tx.$queryRaw.mock.invocationCallOrder[0]!;
+    const reads = tx.flashSalePurchase.findUnique.mock.invocationCallOrder;
+    expect(reads).toHaveLength(2);
+    expect(reads[0]!).toBeLessThan(lockAt);
+    expect(lockAt).toBeLessThan(reads[1]!);
+    expect(reads[1]!).toBeLessThan(tx.flashSalePurchase.create.mock.invocationCallOrder[0]!);
+  });
+
+  it('chưa có dòng suất nhưng đọc lại thấy dòng (gộp vừa chuyển sang) → cộng dồn, không chèn', async () => {
+    const tx = mkTx(1, 5, null, 0);
+    tx.flashSalePurchase.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ quantity: 1 });
+    tx.flashSalePurchase.updateMany.mockResolvedValue({ count: 1 });
+    await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
+    expect(tx.flashSalePurchase.updateMany).toHaveBeenCalled();
+    expect(tx.flashSalePurchase.create).not.toHaveBeenCalled();
+  });
+
+  it('đã có dòng suất → KHÔNG khoá dòng users (tx giữ suất dòng trước; duyệt trả/gộp FOR UPDATE users ⇒ 40P01)', async () => {
+    const tx = mkTx(1, 5, { quantity: 1 }, 1);
+    await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
+    expect(tx.flashSalePurchase.findUnique).toHaveBeenCalledTimes(1);
+    expect(tx.flashSalePurchase.updateMany).toHaveBeenCalled();
   });
 
   it('hết quota / flash hết giờ (rows=0) → throw "Hết suất ưu đãi."', async () => {

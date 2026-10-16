@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
@@ -90,8 +90,13 @@ function build(
     // hạng tự động — mặc định null (không hạng/không giảm), test tier perks override qua opts.tier.
     membershipTier: { findUnique: jest.fn().mockResolvedValue(opts.tier ?? null) },
     $executeRaw: executeRaw,
-    // SELECT … FOR UPDATE khoá dòng users trước khi trừ điểm (xem placeOrder).
-    $queryRaw: jest.fn().mockResolvedValue([{ id: 'u1' }]),
+    // SELECT … FOR UPDATE khoá dòng users trước khi trừ điểm (xem placeOrder); KEY SHARE gian hàng đối tác trước khi ghi đơn tự
+    // giao: mặc định mọi gian hàng vẫn là đối tác.
+    $queryRaw: jest.fn().mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) =>
+      strings.join('?').includes('"storefronts"')
+        ? (values[0] as { values: unknown[] }).values.map(() => ({ type: 'MERCHANT', isPartner: true }))
+        : [{ id: 'u1' }],
+    ),
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
     storefront: {
       findFirst: jest.fn().mockImplementation(({ where }: { where: { OR: Array<Record<string, string>> } }) => {
@@ -125,7 +130,7 @@ function build(
     lockForCheckout: jest.fn().mockImplementation(async () =>
       cartData.items.map((it) => ({ id: it.id, variationId: it.variationId, quantity: it.quantity })),
     ),
-    clear: jest.fn(),
+    clearOrdered: jest.fn(),
     removeItems: jest.fn(),
   } as unknown as CartService;
   const coupons = {
@@ -460,7 +465,7 @@ describe('CheckoutService.placeOrder — hoa hồng CTV tạo trong tx của đ�
     expect(create).toHaveBeenCalledTimes(1);
     // $transaction mock truyền chính `prisma` làm tx.
     expect(create).toHaveBeenCalledWith('o1', prisma);
-    expect(create.mock.invocationCallOrder[0]!).toBeLessThan((cart.clear as jest.Mock).mock.invocationCallOrder[0]!);
+    expect(create.mock.invocationCallOrder[0]!).toBeLessThan((cart.clearOrdered as jest.Mock).mock.invocationCallOrder[0]!);
     expect(create.mock.invocationCallOrder[0]!).toBeLessThan((pancake.enqueuePush as jest.Mock).mock.invocationCallOrder[0]!);
   });
 
@@ -821,9 +826,9 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
   it('placeOrder itemIds=[i2] → chỉ xoá món đã mua (removeItems), KHÔNG clear cả giỏ', async () => {
     const { svc, cart, prisma } = build({ cartData: TWO_ITEM_CART });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i2'] } as never);
-    const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
+    const cartMock = cart as unknown as { removeItems: jest.Mock; clearOrdered: jest.Mock };
     expect(cartMock.removeItems).toHaveBeenCalledWith('u1', ['i2'], prisma);
-    expect(cartMock.clear).not.toHaveBeenCalled();
+    expect(cartMock.clearOrdered).not.toHaveBeenCalled();
   });
 
   it('subset < minOrder coupon → BỎ coupon (không redeem, order.couponCode=null)', async () => {
@@ -842,11 +847,12 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
     expect(orderData.subtotal).toBe(300);
   });
 
-  it('full cart (không itemIds) → clear cả giỏ như cũ (không regression)', async () => {
-    const { svc, cart, prisma } = build({ cartData: TWO_ITEM_CART });
+  it('full cart (không itemIds) → dọn đúng các dòng đã đọc (món đã mua + dòng ngừng bán) và bỏ mã, giữ dòng vào giỏ sau đó', async () => {
+    const stale = { id: 'i3', variationId: 'v3', productId: 'p3', productName: 'C', variationName: 'VC', unitPrice: 50, quantity: 1, total: 50 };
+    const { svc, cart, prisma } = build({ cartData: { ...TWO_ITEM_CART, unavailableItems: [stale] } });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
-    const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
-    expect(cartMock.clear).toHaveBeenCalledWith('u1', prisma);
+    const cartMock = cart as unknown as { removeItems: jest.Mock; clearOrdered: jest.Mock };
+    expect(cartMock.clearOrdered).toHaveBeenCalledWith('u1', ['i1', 'i2', 'i3'], prisma);
     expect(cartMock.removeItems).not.toHaveBeenCalled();
   });
 
@@ -1618,6 +1624,27 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
     expect(shop.couponCode).toBeNull();
     expect(coupons.redeem).toHaveBeenCalledTimes(1);
     expect((coupons.redeem as jest.Mock).mock.calls[0][2]).toBe(`id-${tubu.code}`);
+  });
+
+  it('KEY SHARE gian hàng đối tác sau khi giữ kho, trước khi chèn đơn; cờ đã tắt dưới khoá → 409, không tạo đơn', async () => {
+    const { svc, prisma, orderCreate } = buildSplit();
+    const queryRaw = prisma.$queryRaw as unknown as jest.Mock;
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const lockIdx = queryRaw.mock.calls.findIndex((c) => (c[0] as string[]).join('?').includes('"storefronts"'));
+    expect((queryRaw.mock.calls[lockIdx]![0] as string[]).join('?')).toMatch(/FOR KEY SHARE/);
+    expect((queryRaw.mock.calls[lockIdx]![1] as { values: unknown[] }).values).toEqual(['sf-a']);
+    const lockAt = queryRaw.mock.invocationCallOrder[lockIdx]!;
+    expect(lockAt).toBeGreaterThan(Math.max(...(prisma.$executeRaw as unknown as jest.Mock).mock.invocationCallOrder));
+    expect(lockAt).toBeLessThan(orderCreate.mock.invocationCallOrder[0]!);
+
+    const off = buildSplit();
+    (off.prisma.$queryRaw as unknown as jest.Mock).mockImplementation(async (strings: TemplateStringsArray) =>
+      strings.join('?').includes('"storefronts"') ? [{ type: 'CTV', isPartner: false }] : [{ id: 'u1' }],
+    );
+    const err = await off.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).message).toBe('Gian hàng vừa thay đổi, vui lòng đặt lại.');
+    expect(off.orderCreate).not.toHaveBeenCalled();
   });
 
   it('chỉ đơn Tubu đi Pancake; đơn đối tác báo chủ gian hàng MERCHANT_ORDER_NEW', async () => {

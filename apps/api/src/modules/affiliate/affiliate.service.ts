@@ -10,7 +10,7 @@ import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-
 import { FLASH_OVER_LIMIT_MSG, FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { COD_MAX_PER_ORDER, PAYMENT_METHOD_NOT_ALLOWED } from '../checkout/checkout-split';
-import { reserveVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { RewardPointsService } from '../wallet/reward-points.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
@@ -641,6 +641,7 @@ export class AffiliateService {
       order = await this.prisma.$transaction(async (tx) => {
         // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
         await assertVariationsSellable(tx, lines, { pancakeOnly: true });
+        await lockVariationsInIdOrder(tx, lines.map((l) => l.variationId));
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell; 0 dòng bị sửa → throw rollback.
         for (const line of lines) {
           const hit = await reserveVariationStock(tx, line.variationId, line.quantity);

@@ -4,7 +4,7 @@ import { Prisma, type Order, type OrderItem } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
-import { releaseVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
 import type { ReferralNotice } from '../wallet/referral-notify';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
@@ -292,6 +292,12 @@ export class OrderReversalService {
       for (const r of rows) freshBackorder.set(r.id, Number(r.backorderedQty));
     }
 
+    const reservedQty = (item: OrderItem) =>
+      item.quantity - (freshBackorder.get(item.id) ?? item.backorderedQty) - (prior.approvedQty.get(item.id) ?? 0);
+    if (opts.restock !== false) {
+      await lockVariationsInIdOrder(tx, order.items.filter((i) => reservedQty(i) > 0).map((i) => i.variationId));
+    }
+
     for (const item of order.items) {
       // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
       // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
@@ -300,7 +306,7 @@ export class OrderReversalService {
       // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived cộng
       // rồi, chưa nhận thì markReceived sẽ cộng khi hàng về.
       const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
-      const reserved = item.quantity - backordered - (prior.approvedQty.get(item.id) ?? 0);
+      const reserved = reservedQty(item);
       if (opts.restock !== false && reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
       // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
       // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
@@ -553,16 +559,19 @@ export class OrderReversalService {
     alreadyRestocked: ReadonlyMap<string, number>,
   ): Promise<number> {
     const byId = new Map(order.items.map((i) => [i.id, i]));
-    let restocked = 0;
+    const plan: { variationId: string; qty: number }[] = [];
     for (const line of lines) {
       const item = byId.get(line.orderItemId);
       if (!item) continue;
       const cap = item.quantity - item.backorderedQty - (alreadyRestocked.get(item.id) ?? 0);
       const qty = Math.min(line.quantity, cap);
-      if (qty > 0) {
-        await releaseVariationStock(tx, item.variationId, qty);
-        restocked += qty;
-      }
+      if (qty > 0) plan.push({ variationId: item.variationId, qty });
+    }
+    await lockVariationsInIdOrder(tx, plan.map((p) => p.variationId));
+    let restocked = 0;
+    for (const p of plan) {
+      await releaseVariationStock(tx, p.variationId, p.qty);
+      restocked += p.qty;
     }
     return restocked;
   }
