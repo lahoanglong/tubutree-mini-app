@@ -150,6 +150,34 @@ describe('Cộng điểm giao hàng ‖ xoá tài khoản / gộp khách: cùng 
     }
   }
 
+  /** Phiên đang chờ khoá mà `holderPid` giữ trực tiếp và đang chạy câu khớp `query` (đợi tới khi có, đúng một phiên). */
+  async function waiterOf(holderPid: number, query: string) {
+    for (let i = 0; ; i++) {
+      const rows = await prisma.$queryRaw<{ pid: number }[]>`
+        SELECT "pid" FROM pg_stat_activity
+         WHERE ${holderPid}::int = ANY(pg_blocking_pids("pid")) AND "query" LIKE ${`%${query}%`}`;
+      if (rows.length === 1) return rows[0]!.pid;
+      if (i > 200) throw new Error(`không thấy đúng một phiên "${query}" chờ phiên ${holderPid} (thấy ${rows.length})`);
+      await sleep(25);
+    }
+  }
+
+  /**
+   * Postgres chỉ kiểm deadlock MỘT lần cho mỗi lượt chờ khoá, sau deadlock_timeout; vòng chờ hình thành sau lần kiểm đó thì
+   * chỉ phiên khép vòng (bắt đầu chờ sau) tự kiểm và bị huỷ. Đợi `pid` chờ quá deadlock_timeout (cộng biên) để chọn chắc
+   * nạn nhân, thay vì trông vào việc phiên nào bắt đầu chờ trước vài mili giây.
+   */
+  async function waitPastDeadlockCheck(pid: number) {
+    for (let i = 0; ; i++) {
+      const [row] = await prisma.$queryRaw<{ past: boolean | null }[]>`
+        SELECT bool_or(clock_timestamp() - "waitstart" > current_setting('deadlock_timeout')::interval + interval '500 milliseconds') AS "past"
+          FROM pg_locks WHERE "pid" = ${pid}::int AND NOT "granted"`;
+      if (row?.past) return;
+      if (i > 400) throw new Error(`phiên ${pid} không còn chờ khoá`);
+      await sleep(25);
+    }
+  }
+
   /** `first` tới chỗ chờ khoá giữ, rồi `second` cũng chờ (trực tiếp hoặc sau `first`); thả khoá, cả hai phải xong không lỗi. */
   async function race(holder: Awaited<ReturnType<typeof hold>>, first: () => Promise<unknown>, second: () => Promise<unknown>) {
     const pA = first();
@@ -237,48 +265,117 @@ describe('Cộng điểm giao hàng ‖ xoá tài khoản / gộp khách: cùng 
     }
   });
 
+  /** Như hold() nhưng không đợi lấy được khoá: xếp hàng sau tx đang giữ dòng, `held` trả pid khi tới lượt. */
+  function holdQueued(lock: (tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0]) => Promise<unknown>) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let locked!: (pid: number) => void;
+    const held = new Promise<number>((resolve) => (locked = resolve));
+    const done = prisma.$transaction(
+      async (tx) => {
+        await lock(tx);
+        const [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS "pid"`;
+        locked(pid);
+        await gate;
+      },
+      { timeout: 30_000 },
+    );
+    return { release, done, held };
+  }
+
   // Xoá tài khoản T đã khoá đơn của T và chờ dòng users T đang bị lần gộp khách G → T giữ; lần gộp chuyển đơn O của G sang T rồi
-  // commit; lần cộng điểm O khoá O (FOR SHARE) và chờ users T (xoá đang giữ); xoá ẩn danh đơn của T nay gồm cả O ⇒ chờ vòng.
-  // Ép xoá là bên bị huỷ (bắt đầu chờ trước): lần ghi sổ điểm của lần cộng bị giữ ở khoá unique (reason, refId) tới khi xoá đã
-  // chờ O. Xoá phải tự chạy lại và xong; điểm cộng đúng một lần cho T.
-  it('gộp khách ‖ xoá tài khoản đích ‖ cộng điểm đơn vừa chuyển: xoá gặp 40P01 thì tự chạy lại, xong cả hai (3 vòng)', async () => {
+  // commit; lần cộng điểm O khoá O (FOR SHARE) rồi chờ users T (xoá đang giữ); xoá ẩn danh đơn của T nay gồm cả O ⇒ chờ vòng.
+  // Vòng này có thật ở production và cả hai phía tự hồi phục: xoá chạy lại một lần (AccountDeletionService.process), lần cộng
+  // điểm thua thì đơn chưa có deliveredEffectsAt và DeliveredEffectsResyncCron cộng lại (idempotent). Postgres chọn nạn nhân là
+  // phiên mà lần kiểm deadlock (một lần, sau deadlock_timeout) gặp vòng trước, nên mỗi ca ép riêng một phía.
+  async function threeWayCase() {
+    const c = await guestAndTarget();
+    await prisma.user.update({ where: { id: c.target.id }, data: { phone: randomPhone(), fullName: 'Trần Thị Đích' } });
+    const request = await prisma.accountDeletionRequest.create({ data: { userId: c.target.id, reason: 'không dùng nữa' } });
+    const checkIn = await prisma.loyaltyCheckIn.create({ data: { userId: c.guest.id, dayKey: '2020-01-01', cycleDay: 1, streakDays: 1, points: 0 } });
+    // Gộp dừng ở bước điểm danh, sau khi đã khoá đơn + users và chuyển địa chỉ.
+    const mergeHold = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "loyalty_check_ins" WHERE "id" = ${checkIn.id} FOR UPDATE`);
+    const retried = jest.spyOn((deletion as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn');
+    const retries = () => retried.mock.calls.filter(([m]) => String(m).includes('chạy lại một lần')).length;
+    return { ...c, request, mergeHold, retries };
+  }
+
+  it('gộp khách ‖ xoá tài khoản đích ‖ cộng điểm đơn vừa chuyển: xoá khép vòng thì xoá là nạn nhân 40P01, tự chạy lại, xong cả hai (3 vòng)', async () => {
     for (let round = 0; round < 3; round++) {
-      const c = await guestAndTarget();
-      await prisma.user.update({ where: { id: c.target.id }, data: { phone: randomPhone(), fullName: 'Trần Thị Đích' } });
-      const request = await prisma.accountDeletionRequest.create({ data: { userId: c.target.id, reason: 'không dùng nữa' } });
-      const checkIn = await prisma.loyaltyCheckIn.create({ data: { userId: c.guest.id, dayKey: '2020-01-01', cycleDay: 1, streakDays: 1, points: 0 } });
+      const c = await threeWayCase();
+      const pM = merge(c.guest.id, c.target);
+      await waitForWaiters(c.mergeHold.pid, 1);
+      const pD = deletion.process(c.request.id, admin.id);
+      await waitForWaiters(c.mergeHold.pid, 2);
+      const pC = loyalty.creditOrderPoints(c.order.id);
+      await waitForWaiters(c.mergeHold.pid, 3);
+      // Địa chỉ gộp vừa chuyển sang T: tx này xếp hàng trước, giữ nó khi gộp commit để xoá dừng ở bước ẩn danh địa chỉ (đã
+      // giữ users T, chưa tới đơn).
+      const addrHold = holdQueued((tx) => tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${c.address.id} FOR UPDATE`);
+      await waitForWaiters(c.mergeHold.pid, 4);
+      c.mergeHold.release();
+      await c.mergeHold.done;
+
+      const addrPid = await addrHold.held;
+      const deletionPid = await waiterOf(addrPid, '"addresses"');
+      const creditPid = await waiterOf(deletionPid, '"points_transactions"');
+      // Lần cộng đã chờ users T quá lần kiểm deadlock của nó (chưa có vòng); thả địa chỉ, xoá tới UPDATE đơn O và khép vòng.
+      await waitPastDeadlockCheck(creditPid);
+      addrHold.release();
+      await addrHold.done;
+
+      const s = summarize(await Promise.allSettled([pM, pD, pC]));
+      expect(s.errors).toEqual([]);
+      expect(c.retries()).toBe(1);
+      expect((await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: c.request.id } })).status).toBe('RESOLVED');
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: c.order.id } })).userId).toBe(c.target.id);
+      expect(await credits(c.order.code)).toEqual([{ userId: c.target.id, delta: EARNED }]);
+      expect(await balanceOf(c.target.id)).toBe(EARNED);
+      jest.restoreAllMocks();
+    }
+  });
+
+  it('gộp khách ‖ xoá tài khoản đích ‖ cộng điểm đơn vừa chuyển: cộng điểm khép vòng thì cộng điểm là nạn nhân 40P01, xoá xong không chạy lại, lần chạy lại việc sau giao cộng đúng một lần (3 vòng)', async () => {
+    for (let round = 0; round < 3; round++) {
+      const c = await threeWayCase();
       const bystander = await createUser(prisma);
-      const mergeHold = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "loyalty_check_ins" WHERE "id" = ${checkIn.id} FOR UPDATE`);
+      // Lần ghi sổ điểm của lần cộng bị giữ ở khoá unique (reason, refId) tới khi xoá đã chờ O.
       const ledgerHold = await holdThenRollback((tx) =>
         tx.pointsTransaction.create({
           data: { userId: bystander.id, delta: 1, reason: `ORDER_DELIVERED:${c.order.code}`, refType: 'ORDER', refId: c.order.id },
         }),
       );
-      const retried = jest.spyOn((deletion as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn');
-
       const pM = merge(c.guest.id, c.target);
-      await waitForWaiters(mergeHold.pid, 1);
-      const pD = deletion.process(request.id, admin.id);
-      await waitForWaiters(mergeHold.pid, 2);
+      await waitForWaiters(c.mergeHold.pid, 1);
+      const pD = deletion.process(c.request.id, admin.id);
+      await waitForWaiters(c.mergeHold.pid, 2);
       const pC = loyalty.creditOrderPoints(c.order.id);
-      await waitForWaiters(mergeHold.pid, 3);
-      mergeHold.release();
-      await mergeHold.done;
-      // Lần cộng chờ ở khoá unique (ledgerHold), xoá chờ O mà lần cộng giữ.
-      await waitForWaiters(ledgerHold.pid, 2);
+      await waitForWaiters(c.mergeHold.pid, 3);
+      c.mergeHold.release();
+      await c.mergeHold.done;
+
+      const creditPid = await waiterOf(ledgerHold.pid, '"points_transactions"');
+      const deletionPid = await waiterOf(creditPid, '"orders"');
+      // Xoá đã chờ O quá lần kiểm deadlock của nó (chưa có vòng); thả khoá unique, lần cộng tới users T và khép vòng.
+      await waitPastDeadlockCheck(deletionPid);
       ledgerHold.release();
       await ledgerHold.done;
 
-      const s = summarize(await Promise.allSettled([pM, pD, pC]));
-      expect(s.errors).toEqual([]);
-      // Đúng ca cần chứng minh: xoá là bên bị huỷ vì deadlock và đã chạy lại.
-      expect(retried.mock.calls.filter(([m]) => String(m).includes('chạy lại một lần'))).toHaveLength(1);
-      retried.mockRestore();
-      expect((await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: request.id } })).status).toBe('RESOLVED');
-      const o = await prisma.order.findUniqueOrThrow({ where: { id: c.order.id } });
-      expect(o.userId).toBe(c.target.id);
+      const [m, d, cr] = await Promise.allSettled([pM, pD, pC]);
+      expect(summarize([m!, d!]).errors).toEqual([]);
+      expect(cr!.status).toBe('rejected');
+      expect(String((cr as PromiseRejectedResult).reason)).toMatch(/40P01|deadlock detected/);
+      expect(c.retries()).toBe(0);
+      expect((await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: c.request.id } })).status).toBe('RESOLVED');
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: c.order.id } })).userId).toBe(c.target.id);
+      expect(await credits(c.order.code)).toEqual([]);
+      expect(await balanceOf(c.target.id)).toBe(0);
+
+      // DeliveredEffectsResyncCron (đơn DELIVERED chưa có deliveredEffectsAt) gọi lại đúng hàm này.
+      await expect(loyalty.creditOrderPoints(c.order.id)).resolves.toBe(true);
       expect(await credits(c.order.code)).toEqual([{ userId: c.target.id, delta: EARNED }]);
       expect(await balanceOf(c.target.id)).toBe(EARNED);
+      jest.restoreAllMocks();
     }
   });
 
