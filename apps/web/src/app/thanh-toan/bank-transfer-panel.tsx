@@ -120,7 +120,7 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
           <p role="status" data-testid="bank-qr-saved" className="text-xs text-stone-700">
             {qrSaved === 'saved'
               ? 'Đã lưu ảnh QR vào máy.'
-              : 'Đã mở ảnh QR ở tab mới — nhấn giữ ảnh để lưu về máy.'}
+              : 'Chưa lưu được. Bạn nhấn giữ vào ảnh QR để lưu, hoặc chụp màn hình nhé.'}
           </p>
         )}
       </div>

@@ -1,9 +1,10 @@
 /**
  * Lưu một ảnh về máy. Ảnh QR VietQR nằm ở tên miền khác nên thuộc tính `download` của thẻ <a> bị trình duyệt bỏ qua;
- * tải qua fetch thành blob thì mới đặt được tên file. Nếu máy chủ ảnh không cho đọc chéo miền (CORS) hay mất mạng thì
- * mở ảnh ở tab mới để khách nhấn giữ lưu — vẫn hơn là không có đường nào.
+ * tải qua fetch thành blob thì mới đặt được tên file. Không tải được (máy chủ ảnh không cho đọc chéo miền, mất mạng) thì trả
+ * 'failed' để nơi gọi báo khách tự lưu từ ảnh đang hiển thị. Cố ý KHÔNG `window.open` ở đây: lúc đó đã qua `await`, không còn
+ * nằm trong cú bấm của khách nên trình duyệt chặn cửa sổ bật lên.
  */
-export type SaveImageResult = 'saved' | 'opened';
+export type SaveImageResult = 'saved' | 'failed';
 
 export async function saveImage(url: string, filename: string): Promise<SaveImageResult> {
   try {
@@ -20,7 +21,6 @@ export async function saveImage(url: string, filename: string): Promise<SaveImag
     setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
     return 'saved';
   } catch {
-    window.open(url, '_blank', 'noopener,noreferrer');
-    return 'opened';
+    return 'failed';
   }
 }

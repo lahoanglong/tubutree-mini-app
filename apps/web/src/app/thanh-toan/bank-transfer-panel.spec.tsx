@@ -223,7 +223,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(container.querySelector('[data-testid="bank-qr-saved"]')?.textContent).toContain('Đã lưu');
   });
 
-  it('"Lưu mã QR" không tải được (chặn CORS): mở ảnh ở tab mới và dặn nhấn giữ để lưu', async () => {
+  it('"Lưu mã QR" không tải được (chặn CORS): không mở tab, báo chưa lưu và dặn nhấn giữ ảnh hoặc chụp màn hình', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     const fetchFn = vi.fn(async (url: string) => {
       if (url === QR_BODY.qrImageUrl) throw new TypeError('Failed to fetch');
@@ -234,8 +234,11 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     await flush();
     click(byText(container, 'button', 'Lưu mã QR'));
     await flush();
-    expect(open).toHaveBeenCalledWith(QR_BODY.qrImageUrl, '_blank', 'noopener,noreferrer');
-    expect(container.querySelector('[data-testid="bank-qr-saved"]')?.textContent).toMatch(/nhấn giữ/i);
+    expect(open).not.toHaveBeenCalled();
+    const msg = container.querySelector('[data-testid="bank-qr-saved"]')?.textContent ?? '';
+    expect(msg).toContain('Chưa lưu được');
+    expect(msg).toMatch(/nhấn giữ/i);
+    expect(msg).not.toContain('tab mới');
   });
 
   it('lỗi tải API → hiện thông báo lỗi + nút Thử lại (không crash)', async () => {

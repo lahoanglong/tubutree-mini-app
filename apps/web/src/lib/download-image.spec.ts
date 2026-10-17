@@ -21,17 +21,23 @@ describe('saveImage', () => {
     expect(document.querySelector('a[download]')).toBeNull();
   });
 
-  it('máy chủ ảnh trả lỗi: mở ảnh ở tab mới', async () => {
+  it('máy chủ ảnh trả lỗi: báo "failed", không mở tab nào (window.open sau await bị chặn popup)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('no', { status: 404 })));
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    await expect(saveImage('https://img.test/a.png', 'qr.png')).resolves.toBe('opened');
-    expect(open).toHaveBeenCalledWith('https://img.test/a.png', '_blank', 'noopener,noreferrer');
+    await expect(saveImage('https://img.test/a.png', 'qr.png')).resolves.toBe('failed');
+    expect(open).not.toHaveBeenCalled();
   });
 
-  it('fetch ném lỗi (CORS/mạng): mở ảnh ở tab mới thay vì ném lỗi', async () => {
+  it('fetch ném lỗi (CORS/mạng): báo "failed" thay vì ném lỗi, không mở tab', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    await expect(saveImage('https://img.test/a.png', 'qr.png')).resolves.toBe('opened');
-    expect(open).toHaveBeenCalledTimes(1);
+    await expect(saveImage('https://img.test/a.png', 'qr.png')).resolves.toBe('failed');
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('trình duyệt không có URL.createObjectURL: báo "failed"', async () => {
+    Object.assign(URL, { createObjectURL: undefined });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, blob: async () => new Blob(['x']) })));
+    await expect(saveImage('https://img.test/a.png', 'qr.png')).resolves.toBe('failed');
   });
 });
