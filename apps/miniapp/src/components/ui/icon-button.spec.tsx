@@ -24,4 +24,10 @@ describe('IconButton', () => {
     render(<IconButton icon={X} label="Thông báo" badge />);
     expect(screen.getByTestId('icon-button-badge')).toBeInTheDocument();
   });
+  it('tone đổi màu icon, mặc định là chữ chính', () => {
+    const { rerender } = render(<IconButton icon={X} label="Đóng" />);
+    expect(screen.getByRole('button', { name: 'Đóng' }).querySelector('svg')).toHaveAttribute('stroke', 'var(--color-text-primary)');
+    rerender(<IconButton icon={X} label="Đóng" tone="brand" />);
+    expect(screen.getByRole('button', { name: 'Đóng' }).querySelector('svg')).toHaveAttribute('stroke', 'var(--color-text-brand)');
+  });
 });

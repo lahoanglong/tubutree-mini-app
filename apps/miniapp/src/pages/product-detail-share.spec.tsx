@@ -28,7 +28,7 @@ vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValu
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
-vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
+vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink, hasOA: false, openOAChat: vi.fn() }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn() }) }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ data: undefined }) }));

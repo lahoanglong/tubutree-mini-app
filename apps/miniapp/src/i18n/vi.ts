@@ -115,6 +115,8 @@ export const vi = {
     share: 'Chia sẻ',
     certified: 'Chứng nhận',
     viewCart: 'Xem giỏ hàng',
+    chatWithShop: 'Chat với Tubu Tree',
+    chatAbout: (name: string) => `Mình muốn hỏi về sản phẩm: ${name}`,
   },
 
   subscriptions: {
