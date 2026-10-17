@@ -91,6 +91,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     order: { findUniqueOrThrow: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(0),
+    // Liên kết "Tubu giao hộ" đọc lại gian hàng (FOR SHARE) để từ chối gian hàng không còn là đối tác.
+    $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, title: 'Gian hàng IT' }]),
   };
   const prisma: Record<string, unknown> = { ...base, ...over };
   // Mảng thao tác (ghi kèm sổ user_admin_events) và callback (setUserRole khoá danh sách admin) chạy thật trên mock.
@@ -1125,6 +1127,16 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
     const admin = await list(orders, [], { role: 'ADMIN' });
     expect(admin.C!.allowedTransitions).toEqual(['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED']);
     expect(admin.N!.allowedTransitions).toEqual(['PACKED', 'CANCELLED']);
+  });
+
+  it('trả deliveredEffectsAt để màn admin biết đơn DELIVERED nào chưa xong việc sau giao (nút chạy lại)', async () => {
+    const done = new Date('2026-10-02T00:00:00.000Z');
+    const by = (await list([
+      { code: 'D1', status: 'DELIVERED', paymentMethod: 'COD', deliveredEffectsAt: null },
+      { code: 'D2', status: 'DELIVERED', paymentMethod: 'COD', deliveredEffectsAt: done },
+    ])) as unknown as Record<string, { deliveredEffectsAt: Date | null }>;
+    expect(by.D1).toHaveProperty('deliveredEffectsAt', null);
+    expect(by.D2!.deliveredEffectsAt).toEqual(done);
   });
 
   it('chuyển khoản lẻ chưa trả: không có SHIPPING/DELIVERED, có nút Đã nhận tiền', async () => {

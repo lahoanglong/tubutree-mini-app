@@ -497,6 +497,31 @@ describe('Thống kê và Hành trình gian hàng', () => {
     expect(screen.getByText('4 món · 320.000đ')).toBeInTheDocument();
   });
 
+  it('các dòng cộng đúng ô Doanh thu: sản phẩm ngoài top 5 gộp một dòng, phần ship/giảm giá cấp đơn một dòng, ẩn dòng 0 món', async () => {
+    const p = (i: number, revenue: number, qty = 1) => ({ productSlug: `p${i}`, productName: `SP ${i}`, qty, revenue });
+    mocks.getStorefrontStats.mockResolvedValue({
+      ...stats,
+      revenue30d: 1_000_000,
+      byProduct: [p(1, 300_000), p(2, 200_000), p(3, 150_000), p(4, 100_000), p(5, 80_000), p(6, 70_000, 2), p(7, 50_000), p(8, 0, 0)],
+      shippingAndOrderDiscount30d: 50_000,
+    });
+    renderPage();
+    expect(await screen.findByText('SP 5')).toBeInTheDocument();
+    expect(screen.queryByText('SP 6')).not.toBeInTheDocument();
+    expect(screen.getByText('2 sản phẩm khác')).toBeInTheDocument();
+    expect(screen.getByText('3 món · 120.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Phí ship, giảm giá, chênh lệch hoàn tiền')).toBeInTheDocument();
+    expect(screen.getByText('50.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('SP 8')).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 món · 0đ/)).not.toBeInTheDocument();
+  });
+
+  it('phần cấp đơn bằng 0 hoặc API cũ không trả: không hiện dòng đó', async () => {
+    renderPage();
+    expect(await screen.findByText('4 món · 320.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('Phí ship, giảm giá, chênh lệch hoàn tiền')).not.toBeInTheDocument();
+  });
+
   it('chưa có đơn: hiện lời nhắn chia sẻ link', async () => {
     mocks.getStorefrontStats.mockResolvedValue({ ...stats, byProduct: [] });
     renderPage();

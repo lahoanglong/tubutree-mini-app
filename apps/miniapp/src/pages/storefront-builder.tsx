@@ -583,6 +583,11 @@ function StatsSection() {
   const statsQ = useQuery({ queryKey: ['storefront-stats'], queryFn: getStorefrontStats });
   const data = statsQ.data;
   if (!data) return null;
+  // Các dòng dưới cộng đúng ô Doanh thu: top 5 sản phẩm, phần còn lại gộp một dòng, phần cấp đơn (ship, giảm giá, chênh lệch
+  // giữa tiền hoàn thực tế và phần trừ theo tỷ lệ dòng) một dòng.
+  const lines = data.byProduct.filter((p) => p.qty > 0);
+  const rest = lines.slice(5);
+  const orderLevel = data.shippingAndOrderDiscount30d ?? 0;
 
   return (
     <Card style={CARD_MARGIN}>
@@ -595,17 +600,32 @@ function StatsSection() {
         <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
         <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" tone="brand" />
       </div>
-      {data.byProduct.length === 0 ? (
+      {lines.length === 0 && !orderLevel ? (
         <Text variant="caption" tone="tertiary" as="div">Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</Text>
       ) : (
-        data.byProduct.slice(0, 5).map((p) => (
-          <div key={p.productSlug || p.productName} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
-            <Text variant="body-sm" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.productName}</Text>
-            <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap', marginLeft: 8 }}>{p.qty} món · {formatVnd(p.revenue)}</Text>
-          </div>
-        ))
+        <>
+          {lines.slice(0, 5).map((p) => (
+            <StatLine key={p.productSlug || p.productName} name={p.productName} value={`${p.qty} món · ${formatVnd(p.revenue)}`} />
+          ))}
+          {rest.length > 0 && (
+            <StatLine
+              name={vi.storefront.statsOtherProducts(rest.length)}
+              value={`${rest.reduce((t, p) => t + p.qty, 0)} món · ${formatVnd(rest.reduce((t, p) => t + p.revenue, 0))}`}
+            />
+          )}
+          {orderLevel !== 0 && <StatLine name={vi.storefront.statsOrderLevel} value={formatVnd(orderLevel)} />}
+        </>
       )}
     </Card>
+  );
+}
+
+function StatLine({ name, value }: { name: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
+      <Text variant="body-sm" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</Text>
+      <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap', marginLeft: 8 }}>{value}</Text>
+    </div>
   );
 }
 

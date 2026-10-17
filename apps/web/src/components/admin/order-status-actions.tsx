@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   confirmOrderPayment,
+  resyncDeliveredEffects,
+  type ResyncDeliveredEffectsOutcome,
   updateOrderStatus,
   DEALER_BANK_REF_MAX,
   type AdminOrder,
@@ -44,6 +46,17 @@ const ACTIONS: readonly OrderStatusAction[] = [
 export function orderStatusActions(order: Pick<AdminOrder, 'allowedTransitions'>): OrderStatusAction[] {
   const allowed = new Set(order.allowedTransitions ?? []);
   return ACTIONS.filter((a) => allowed.has(a.status));
+}
+
+export const RESYNC_OUTCOME_TEXT: Record<ResyncDeliveredEffectsOutcome, { ok: boolean; text: string }> = {
+  DONE: { ok: true, text: 'Đã chạy xong' },
+  ALREADY_DONE: { ok: true, text: 'Đơn này đã xong từ trước' },
+  INCOMPLETE: { ok: false, text: 'Chưa xong hết, xem lại sau' },
+};
+
+/** Nút chạy lại chỉ hiện khi đơn đã giao mà chưa có mốc xong việc sau giao. */
+export function needsDeliveredResync(order: Pick<AdminOrder, 'status' | 'deliveredEffectsAt'>): boolean {
+  return order.status === 'DELIVERED' && !order.deliveredEffectsAt;
 }
 
 const PREPAID_METHODS = new Set(['WALLET', 'ZALOPAY', 'BANK_TRANSFER', 'VNPAY', 'XU']);
@@ -113,7 +126,16 @@ function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
  * Khối "Chuyển trạng thái" + "Đã nhận tiền" trong chi tiết đơn admin. `canConfirmPayment=false` cho nhân viên:
  * POST confirm-payment chỉ mở cho ADMIN, nút sẽ chỉ ra lỗi 403.
  */
-export function OrderStatusActions({ order, canConfirmPayment = true }: { order: AdminOrder; canConfirmPayment?: boolean }) {
+export function OrderStatusActions({
+  order,
+  canConfirmPayment = true,
+  canResync = false,
+}: {
+  order: AdminOrder;
+  canConfirmPayment?: boolean;
+  /** Chỉ ADMIN: POST resync-delivered-effects không mở cho nhân viên. */
+  canResync?: boolean;
+}) {
   const qc = useQueryClient();
   const [bankRef, setBankRef] = useState('');
   const [received, setReceived] = useState<number | null>(order.total);
@@ -132,6 +154,28 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
     mutationFn: ({ status, note }: { status: string; note?: string }) => updateOrderStatus(order.id || order.code, status, note),
     onSuccess: refresh,
   });
+
+  const resyncMut = useMutation({
+    mutationFn: () => resyncDeliveredEffects(order.id || order.code),
+    onSuccess: refresh,
+  });
+
+  const onResync = async () => {
+    if (resyncMut.isPending) return;
+    const ok = await confirm({
+      title: 'Chạy lại việc sau giao',
+      message:
+        `Chạy lại việc sau giao cho đơn ${order.code}?\n\n` +
+        'Hệ thống sẽ làm nốt: cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu. ' +
+        'Chạy lại an toàn, không cộng hai lần: việc nào đã xong thì được bỏ qua.',
+      confirmLabel: 'Chạy lại',
+      cancelLabel: 'Đóng',
+    });
+    if (ok && !resyncMut.isPending) resyncMut.mutate();
+  };
+
+  const showResync = canResync && needsDeliveredResync(order);
+  const resyncText = resyncMut.data ? RESYNC_OUTCOME_TEXT[resyncMut.data.outcome] : null;
 
   // Đơn đã huỷ/trả mà tiền chuyển khoản về sau: cùng API, nhưng ghi khoản hoàn vào hàng đợi thay vì lật "đã thanh toán".
   const latePayment = !order.canConfirmPayment && order.canRecordLatePayment === true;
@@ -255,6 +299,31 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
       {payMsg && (
         <p role={payMsg.ok ? 'status' : 'alert'} className={`text-xs ${payMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {payMsg.text}
+        </p>
+      )}
+
+      {showResync && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onResync}
+            disabled={resyncMut.isPending || busy}
+            className={`${ACTION_BASE} border border-stone-300 text-stone-800 hover:bg-stone-100`}
+          >
+            Chạy lại việc sau giao
+          </button>
+          <span className="text-xs text-stone-500">Đơn đã giao nhưng chưa xong việc sau giao.</span>
+          {resyncMut.isPending && <span className="text-xs text-stone-500">Đang chạy…</span>}
+        </div>
+      )}
+      {resyncText && (
+        <p role={resyncText.ok ? 'status' : 'alert'} className={`text-xs ${resyncText.ok ? 'text-success-fg' : 'text-warning-fg'}`}>
+          {resyncText.text}
+        </p>
+      )}
+      {resyncMut.isError && (
+        <p role="alert" className="text-xs text-danger-fg">
+          {resyncMut.error instanceof Error ? resyncMut.error.message : 'Không chạy lại được việc sau giao.'}
         </p>
       )}
 

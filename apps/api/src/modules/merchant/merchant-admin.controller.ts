@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -87,5 +87,22 @@ export class MerchantAdminController {
   @Post('payouts/:id/cancel')
   cancelPayout(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: CancelMerchantPayoutDto) {
     return this.fulfilment.cancelPayout(adminId, id, dto.reason);
+  }
+}
+
+export class SetStorePartnerDto {
+  @IsBoolean() isPartner!: boolean;
+}
+
+/** Admin: cờ đối tác của gian hàng CTV (đại lý giữ gian hàng CTV) — bật lại hoặc gỡ cờ còn sót sau khi chủ thôi làm đại lý. */
+@Controller('admin/storefronts')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class StorefrontPartnerAdminController {
+  constructor(private readonly fulfilment: MerchantFulfilmentService) {}
+
+  @Post(':id/partner')
+  setPartner(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: SetStorePartnerDto) {
+    return this.fulfilment.setStorePartner(adminId, id, dto.isPartner);
   }
 }

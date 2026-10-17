@@ -103,7 +103,7 @@ describe('AffiliateService.storefrontAnalytics revenue (real Postgres)', () => {
     const findMany = jest.spyOn(prisma.order, 'findMany');
     try {
       const r = await read();
-      expect(r).toMatchObject({ orders: N + 1, revenue: N * 1000 - 700 });
+      expect(r).toMatchObject({ orders: N, revenue: N * 1000 - 700 });
       expect(findMany).not.toHaveBeenCalled();
     } finally {
       findMany.mockRestore();

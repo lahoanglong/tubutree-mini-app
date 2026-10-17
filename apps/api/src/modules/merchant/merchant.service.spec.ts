@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { MerchantService } from './merchant.service';
+import { MERCHANT_SELF_SHIP_USE_FULFIL_TAB, MerchantService } from './merchant.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
 
@@ -399,6 +399,31 @@ describe('MerchantService', () => {
       });
       const svc = new MerchantService(prisma, freshOrderStatus);
       await expect(svc.updateMerchantOrderStatus('ctv-1', 'ord-1', 'NOT_A_STATUS')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('đơn shop TỰ GIAO của chính mình → 403 chỉ sang tab "Đơn cần giao", không nói "do kho Tubu xử lý"', async () => {
+      const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        ...ownOrderMocks,
+        order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1', fulfiller: 'MERCHANT', fulfillerStorefrontId: 's1' }) },
+      });
+      const svc = new MerchantService(prisma, freshOrderStatus);
+      const err = await svc.updateMerchantOrderStatus('u1', 'ord-1', 'DELIVERED').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(err.message).toBe(MERCHANT_SELF_SHIP_USE_FULFIL_TAB);
+      expect(err.message).not.toContain('kho Tubu');
+      expect(freshOrderStatus.setStatus).not.toHaveBeenCalled();
+    });
+
+    it('đơn do kho Tubu giao (fulfiller TUBU) vẫn giữ câu "do kho Tubu Tree xử lý"', async () => {
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        ...ownOrderMocks,
+        order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1', fulfiller: 'TUBU', fulfillerStorefrontId: null }) },
+      });
+      const svc = new MerchantService(prisma, { setStatus: jest.fn() } as unknown as OrderStatusService);
+      await expect(svc.updateMerchantOrderStatus('u1', 'ord-1', 'DELIVERED')).rejects.toThrow(/do kho Tubu Tree xử lý/);
     });
 
     it('đơn không thuộc gian hàng của người gọi → 404 "Không tìm thấy đơn của gian hàng bạn.", không lộ đơn có tồn tại', async () => {

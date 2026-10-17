@@ -5,10 +5,15 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // R2-BUYERWEB-7: gợi ý voucher chỉ hiện mã trần, không có giá trị giảm, đơn tối thiểu hay hạn dùng.
 
-const state = vi.hoisted(() => ({ coupons: [] as unknown[], applied: [] as string[] }));
+const state = vi.hoisted(() => ({
+  coupons: [] as unknown[],
+  applied: [] as string[],
+  previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
+}));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getMyCoupons: async () => state.coupons,
+  getCouponPreviews: (p: unknown) => state.previews(p),
   applyCoupon: async (code: string) => {
     state.applied.push(code);
     return { items: [], couponCode: code, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0 };
@@ -33,6 +38,7 @@ const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonEle
 beforeEach(() => {
   state.applied = [];
   state.coupons = [];
+  state.previews.mockReset();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -132,5 +138,76 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     const box = await mount();
     expect(unnamedControls(box)).toEqual([]);
     expect(smallTouchTargets(box)).toEqual([]);
+  });
+});
+
+describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/checkout/coupon-previews)', () => {
+  const mountWith = async (preview: { addressId?: string; itemIds?: string[] } | undefined, shippingFee: number | null = null) => {
+    const r = render(<CouponBox currentCode={null} subtotal={300000} shippingFee={shippingFee} preview={preview} />);
+    mounted.push(r);
+    await flush(8);
+    return r.container;
+  };
+
+  it('có số: "Giảm X cho đơn này" (giữ "tối đa" của mã), freeship ghi phí ship miễn được, gửi đúng tham số', async () => {
+    state.coupons = [c('GIAM30'), c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null })];
+    state.previews.mockResolvedValue([
+      { code: 'GIAM30', eligible: true, discount: 43800 },
+      { code: 'FS', eligible: true, discount: 0, freeshipSaving: 19000 },
+    ]);
+    const box = await mountWith({ addressId: 'a1', itemIds: ['l1'] }, 19000);
+    expect(state.previews).toHaveBeenCalledWith({ addressId: 'a1', itemIds: ['l1'] });
+    const giam = card(box, 'GIAM30').textContent!;
+    expect(giam).toContain('Giảm 30% (tối đa 50.000đ)');
+    expect(giam).toContain('Giảm 43.800đ cho đơn này');
+    expect(card(box, 'FS').textContent).toContain('Miễn phí ship 19.000đ cho đơn này');
+  });
+
+  it('trang giỏ (không phí giao) hoặc freeship không miễn được gì: không ghi số tiền freeship', async () => {
+    state.coupons = [c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null })];
+    state.previews.mockResolvedValue([{ code: 'FS', eligible: true, discount: 0 }]);
+    const box = await mountWith({});
+    expect(card(box, 'FS').textContent).not.toContain('cho đơn này');
+    expect(card(box, 'FS').querySelector('button')!.disabled).toBe(false);
+  });
+
+  it('mã không dùng được: lý do của máy chủ, nút khoá, kể cả khi phép đoán phía máy nói đủ điều kiện', async () => {
+    const reason = 'Mã này chỉ áp dụng khi mua đúng sản phẩm của chương trình. Giỏ hàng chưa có sản phẩm đó.';
+    state.coupons = [c('MUACHUNG', { minOrder: 100000 })];
+    state.previews.mockResolvedValue([{ code: 'MUACHUNG', eligible: false, reason, discount: 0 }]);
+    const box = await mountWith({ addressId: 'a1' });
+    const li = card(box, 'MUACHUNG');
+    expect(li.textContent).toContain(reason);
+    const btn = li.querySelector('button')!;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toBe('Không áp dụng');
+    click(btn);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('API cũ / lỗi: giữ cách hiện cũ (không có số, phép đoán phía máy vẫn chạy)', async () => {
+    state.coupons = [c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null })];
+    state.previews.mockRejectedValue(new Error('404'));
+    const box = await mountWith({ addressId: 'a1' }, 0);
+    expect(state.previews).toHaveBeenCalled();
+    expect(card(box, 'FS').textContent).toContain('Đơn này đã miễn phí vận chuyển');
+    expect(card(box, 'FS').textContent).not.toContain('cho đơn này');
+  });
+
+  it('đang tải số: thẻ hiện như cũ; không truyền tham số thì không gọi API', async () => {
+    state.coupons = [c('GIAM30')];
+    state.previews.mockReturnValue(new Promise(() => {}));
+    const box = await mountWith({ addressId: 'a1' });
+    expect(card(box, 'GIAM30').textContent).toContain('Giảm 30% (tối đa 50.000đ)');
+    expect(card(box, 'GIAM30').textContent).not.toContain('cho đơn này');
+    state.previews.mockClear();
+    await mountWith(undefined);
+    expect(state.previews).not.toHaveBeenCalled();
+  });
+
+  it('ví không có mã nào: không gọi API xem trước dù có tham số giỏ', async () => {
+    state.coupons = [];
+    await mountWith({ addressId: 'a1', itemIds: ['l1'] });
+    expect(state.previews).not.toHaveBeenCalled();
   });
 });

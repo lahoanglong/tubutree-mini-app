@@ -193,6 +193,22 @@ export interface CouponDTO {
   products?: { id: string; name: string }[] | null;
 }
 export const getMyCoupons = () => apiFetch<CouponDTO[]>('/me/coupons');
+/** Mức giảm một mã cho lần đặt đang xem, máy chủ tính đúng như báo giá (khớp CouponPreviewDTO của shared-types). */
+export interface CouponPreview {
+  code: string;
+  eligible: boolean;
+  reason?: string;
+  discount: number;
+  /** Chỉ có khi gửi kèm addressId (thanh toán). */
+  freeshipSaving?: number;
+}
+export interface CouponPreviewParams {
+  addressId?: string;
+  storefrontSlug?: string;
+  itemIds?: string[];
+}
+export const getCouponPreviews = (params: CouponPreviewParams) =>
+  apiFetch<{ coupons: CouponPreview[] }>('/checkout/coupon-previews', { method: 'POST', body: params }).then((r) => r.coupons);
 export const applyCoupon = (code: string) =>
   apiFetch<CartSummary>('/cart/coupon', { method: 'POST', body: { code } });
 export const removeCoupon = () => apiFetch<CartSummary>('/cart/coupon', { method: 'DELETE' });
@@ -205,6 +221,16 @@ export interface MyBalances {
   walletBalance: number;
 }
 export const getMe = () => apiFetch<MyBalances>('/me');
+
+/** GET /me/loyalty (cùng endpoint Mini App) — web chỉ đọc phần Điểm Xanh đang khoá. API cũ chưa trả → vắng. */
+export interface MyPointsLock {
+  lockedPoints?: number;
+  /** Phần của lockedPoints thuộc đơn đang chờ xử lý đổi/trả (mở khi yêu cầu xử lý xong, không theo ngày). */
+  lockedReturnPoints?: number;
+  /** ISO — mốc muộn nhất phần khoá theo hạn đổi/trả được mở; null nếu không có. */
+  lockedUntil?: string | null;
+}
+export const getMyPointsLock = () => apiFetch<MyPointsLock>('/me/loyalty');
 
 // Ví Tubu và Điểm Xanh — số dư thật + sổ cái, cùng contract với Mini App (services/account-api.ts).
 export interface WalletSummary {

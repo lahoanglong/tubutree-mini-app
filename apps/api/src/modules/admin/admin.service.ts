@@ -608,7 +608,12 @@ export class AdminService {
         take,
         select: { id: true, delta: true, reason: true, refType: true, refId: true, lot: true, expiresAt: true, createdAt: true },
       }),
-      this.prisma.userAdminEvent.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      // Chỉ các loại màn này hiện (STOREFRONT_PARTNER thuộc gian hàng, không vào lịch sử vai trò/khoá) để chúng không chiếm 100 dòng.
+      this.prisma.userAdminEvent.findMany({
+        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
       user.phone
         ? this.prisma.roleGrant.findMany({
             where: { phone: user.phone },
@@ -1619,7 +1624,8 @@ export class AdminService {
     // B bấm Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người thứ hai nhận 409 rõ ràng
     // thay vì lặng lẽ lật ngược quyết định, kể cả khi sản phẩm đã APPROVED và đang bán.
     // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm (hoặc trả về sản phẩm gốc khi từ chối) trong CÙNG
-    // transaction — mã vừa bị sản phẩm khác lấy thì rollback cả lần duyệt.
+    // transaction — mã vừa bị sản phẩm khác lấy thì rollback cả lần duyệt. Hạn tx rộng: liên kết chờ khoá dòng gian hàng của lần
+    // tắt cờ đối tác đang kiểm vướng mắc (tx đó tới 60 giây); hạn mặc định 5 giây sẽ thành 500 (P2028) thay vì 409 rõ ràng.
     const linked = await this.prisma.$transaction(async (tx) => {
       // Cả mã Pancake đang xin liên kết và phiên bản nội dung: đối tác đổi mã hay sửa giữa lúc admin xem và bấm thì không duyệt
       // nhầm mã hay nội dung admin chưa xem.
@@ -1646,7 +1652,7 @@ export class AdminService {
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
       await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
       return undefined;
-    });
+    }, { maxWait: 15_000, timeout: 60_000 });
     const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: productId } });
 
     if (approve && readCode) {

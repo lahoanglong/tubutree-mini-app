@@ -1,7 +1,7 @@
 import { isAxiosError } from 'axios';
 import { api } from './api';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
-import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
+import type { CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
@@ -435,6 +435,9 @@ export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
 // Checkout
 export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) =>
   api.post<CheckoutQuote>('/checkout/quote', { addressId, pointsToUse, storefrontSlug, itemIds }).then((r) => r.data);
+/** Mức giảm từng mã trong ví cho lần đặt đang xem, đúng số checkout trừ (thiếu addressId thì chưa tính phí giao). */
+export const getCouponPreviews = (params: CouponPreviewRequest) =>
+  api.post<CouponPreviewsResponse>('/checkout/coupon-previews', params).then((r) => r.data.coupons);
 /** Đặt hàng kèm Idempotency-Key (AD-004) — retry sau timeout không tạo đơn đôi. */
 export interface InvoiceRequest {
   taxCode: string;

@@ -104,7 +104,36 @@ export interface OrderDTO {
    * toán, không bày nút trả tiền/huỷ, chỉ một câu "Tubu đang xử lý đơn này". API cũ chưa trả.
    */
   manualHandling?: boolean;
+  /**
+   * Chỉ chi tiết đơn: Điểm Xanh tích của đơn thực sự đã thu lại do trả một phần (tổng dòng sổ RETURN_REVERSED, đã kẹp theo số dư),
+   * có thể nhỏ hơn tổng pointsReversed của các yêu cầu trả. API cũ chưa trả.
+   */
+  pointsReturnReversed?: number;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** Mức giảm một mã trong ví cho lần đặt đang xem — POST /checkout/coupon-previews. API cũ không có endpoint này. */
+export interface CouponPreviewDTO {
+  code: string;
+  /** Áp mã này thì checkout có giảm (tiền hàng hoặc phí giao). */
+  eligible: boolean;
+  /** Vì sao không giảm được (tiếng Việt, đúng câu checkout sẽ báo). */
+  reason?: string;
+  /** Số tiền hàng mã giảm cho lần đặt này (đúng số checkout trừ). */
+  discount: number;
+  /** Phí giao mã freeship miễn được; chỉ có khi gửi kèm `addressId` (thanh toán). */
+  freeshipSaving?: number;
+}
+
+/** Tham số xem trước: cùng tham số báo giá. Thiếu `addressId` (trang giỏ) thì không tính phí giao. */
+export interface CouponPreviewRequest {
+  addressId?: string;
+  storefrontSlug?: string;
+  itemIds?: string[];
+}
+
+export interface CouponPreviewsResponse {
+  coupons: CouponPreviewDTO[];
 }

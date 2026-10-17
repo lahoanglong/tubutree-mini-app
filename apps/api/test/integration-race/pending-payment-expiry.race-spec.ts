@@ -324,4 +324,90 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     expect(st.history.filter((h) => h.toStatus === 'CANCELLED')).toHaveLength(1);
     expectConsistent(st);
   });
+
+  it('(j) mốc hạn: đơn khách lẻ còn 1 giây tới hạn 24 giờ giữ nguyên, quá hạn 1 giây thì huỷ; lượt sau khi qua hạn huỷ nốt', async () => {
+    const base = ancient();
+    const justInside = await staleOrder({ createdAt: new Date(base.getTime() + 1_000) });
+    const justOver = await staleOrder({ createdAt: new Date(base.getTime() - 1_000) });
+    const now = new Date(base.getTime() + 24 * 3_600_000);
+    await newCron().expireStale(now);
+    const inside = await state(justInside.order.id, justInside.variationId, justInside.user.id);
+    expect(inside.order.status).toBe('PENDING_PAYMENT');
+    expect(inside.stock).toBe(START_STOCK);
+    expect(inside.history).toHaveLength(0);
+    expectConsistent(await state(justOver.order.id, justOver.variationId, justOver.user.id));
+
+    await newCron().expireStale(new Date(now.getTime() + 2_000));
+    const later = await state(justInside.order.id, justInside.variationId, justInside.user.id);
+    expect(later.order.status).toBe('CANCELLED');
+    expectConsistent(later);
+  });
+
+  it('(k) cùng một lượt: chuyển khoản và ZaloPay quá hạn đều huỷ (ZaloPay đã mở lệnh thì lịch sử ghi đối chiếu cổng), COD không đụng', async () => {
+    const bank = await staleOrder();
+    const zaloOpened = await staleOrder({ paymentMethod: 'ZALOPAY' });
+    await prisma.paymentAttempt.create({
+      data: { orderId: zaloOpened.order.id, provider: 'ZALOPAY', appTransId: `it-ppx-${randCode(12)}`, amount: 200_000 },
+    });
+    const zaloNoAttempt = await staleOrder({ paymentMethod: 'ZALOPAY' });
+    const cod = await staleOrder({ paymentMethod: 'COD' });
+    await newCron().expireStale();
+
+    const cancelNote = async (f: { order: { id: string }; variationId: string; user: { id: string } }) => {
+      const st = await state(f.order.id, f.variationId, f.user.id);
+      expect(st.order.status).toBe('CANCELLED');
+      expectConsistent(st);
+      return st.history.find((h) => h.toStatus === 'CANCELLED')!.note;
+    };
+    expect(await cancelNote(bank)).toBe('Tự huỷ: quá 24 giờ chưa thanh toán');
+    expect(await cancelNote(zaloOpened)).toBe(
+      'Tự huỷ: quá 24 giờ chưa thanh toán — đã mở lệnh ZALOPAY: đối chiếu ZALOPAY, đã trừ tiền thì hoàn thủ công',
+    );
+    expect(await cancelNote(zaloNoAttempt)).toBe('Tự huỷ: quá 24 giờ chưa thanh toán');
+    const codSt = await state(cod.order.id, cod.variationId, cod.user.id);
+    expect(codSt.order).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
+    expect(codSt.stock).toBe(START_STOCK);
+    expect(codSt.history).toHaveLength(0);
+  });
+
+  it('(l) lượt cron lỗi giữa lô (một đơn ném lỗi) → đơn khác vẫn huỷ; lượt thử lại huỷ đơn lỗi đúng 1 lần, báo khách đúng 1 lần mỗi đơn', async () => {
+    const fixtures = await Promise.all(Array.from({ length: 3 }, () => staleOrder()));
+    const victim = fixtures[1]!.order.id;
+    const original = orderStatus.setStatus.bind(orderStatus);
+    const spy = jest.spyOn(orderStatus, 'setStatus').mockImplementation((async (id: string, ...rest: unknown[]) => {
+      if (id === victim) throw new Error('mất kết nối giả lập');
+      return (original as (...a: unknown[]) => unknown)(id, ...rest);
+    }) as never);
+    let first;
+    try {
+      first = await newCron().expireStale();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(first).toMatchObject({ failed: 1 });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: victim } })).status).toBe('PENDING_PAYMENT');
+
+    await newCron().expireStale();
+    await newCron().expireStale();
+    const codes = new Set(fixtures.map((f) => f.order.code));
+    for (const f of fixtures) {
+      const st = await state(f.order.id, f.variationId, f.user.id);
+      expect(st.order.status).toBe('CANCELLED');
+      expectConsistent(st);
+    }
+    const notices = notify.mock.calls.filter(
+      (c) => c[1] === 'ORDER_PAYMENT_EXPIRED' && codes.has((c[2] as { order_code: string }).order_code),
+    );
+    expect(notices).toHaveLength(3);
+  });
+
+  it('(m) đơn đã đánh dấu không tự huỷ được (đã bàn giao vận chuyển) → mọi lượt sau bỏ qua, không lịch sử, không hoàn kho', async () => {
+    const blocked = await staleOrder({ autoCancelBlockedAt: new Date() });
+    await newCron().expireStale();
+    await newCron().expireStale();
+    const st = await state(blocked.order.id, blocked.variationId, blocked.user.id);
+    expect(st.order.status).toBe('PENDING_PAYMENT');
+    expect(st.stock).toBe(START_STOCK);
+    expect(st.history).toHaveLength(0);
+  });
 });

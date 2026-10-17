@@ -10,7 +10,22 @@ type Db = Pick<PrismaService, '$queryRaw'>;
 const num = (v: bigint | number | string | null | undefined) => Number(v ?? 0);
 
 /**
- * Số đơn bán thật và doanh thu theo từng gian hàng của CTV `userId` (đơn có referrerUserId = chủ gian hàng), tổng hợp ngay
+ * Đơn thuộc gian hàng CTV của `userId`: đơn chủ gian hàng giới thiệu, hoặc đơn khách mua qua slug của chính gian hàng mà gian
+ * hàng (đại lý giữ gian hàng CTV, cờ isPartner) tự giao — checkout `referrerFor` đặt referrerUserId null cho đơn con đó để không
+ * sinh hoa hồng, nên phải nhận theo fulfillerStorefrontId. Chủ tự mua hàng của mình (không lên đơn hộ) không phải doanh số.
+ * Một điều kiện OR trên cùng một dòng đơn nên đơn khớp cả hai nhánh chỉ đếm một lần.
+ */
+function storefrontOrderOf(userId: string) {
+  return Prisma.sql`(o."referrerUserId" = ${userId}
+      OR (o."fulfillerStorefrontId" IS NOT NULL
+          AND (o."userId" <> ${userId} OR o."placedForCustomer")
+          AND EXISTS (SELECT 1 FROM "storefronts" fs
+                      WHERE fs."id" = o."fulfillerStorefrontId" AND fs."slug" = o."storefrontSlug"
+                        AND fs."ownerUserId" = ${userId} AND fs."type" = 'CTV')))`;
+}
+
+/**
+ * Số đơn bán thật và doanh thu theo từng gian hàng của CTV `userId` (đơn thuộc gian hàng theo storefrontOrderOf), tổng hợp ngay
  * trong DB: CTV nhiều chục nghìn đơn không được nạp về Node, cũng không được gửi `orderId IN (...)` (giới hạn ~32.766 tham
  * số bind). Doanh thu = Order.total trừ tiền hàng + phí ship của các yêu cầu trả MỘT PHẦN đã duyệt (APPROVED, fullReturn =
  * false — cùng bộ lọc partialReturnTotals). LATERAL gom tiền đã hoàn theo từng đơn nên một đơn có nhiều yêu cầu trả không bị
@@ -32,7 +47,7 @@ export async function storefrontSalesByStore(
       WHERE rr."orderId" = o."id" AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
     ) r ON true
     WHERE o."storefrontSlug" = ANY(${slugs}::text[])
-      AND o."referrerUserId" = ${userId}
+      AND ${storefrontOrderOf(userId)}
       AND NOT (o."status"::text = ANY(${[...SALES_ORDER_STATUS_EXCLUDED]}::text[]))
       AND NOT (o."paymentStatus"::text = ANY(${[...SALES_ORDER_PAYMENT_EXCLUDED]}::text[]))
       ${since ? Prisma.sql`AND o."createdAt" >= ${since.toISOString()}::timestamp` : Prisma.empty}
@@ -66,7 +81,7 @@ export async function storefrontSalesByProduct(
       WHERE ri."orderItemId" = oi."id" AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
     ) ret ON true
     WHERE o."storefrontSlug" = ${slug}
-      AND o."referrerUserId" = ${userId}
+      AND ${storefrontOrderOf(userId)}
       AND o."createdAt" >= ${since.toISOString()}::timestamp
       AND NOT (o."status"::text = ANY(${[...SALES_ORDER_STATUS_EXCLUDED]}::text[]))
       AND NOT (o."paymentStatus"::text = ANY(${[...SALES_ORDER_PAYMENT_EXCLUDED]}::text[]))

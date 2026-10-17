@@ -88,6 +88,22 @@ describe('Chi tiết người dùng + nhóm việc nhân viên (real Postgres)',
     expect(d.blockHistory[1]).toMatchObject({ reason: 'bom hàng COD', actorId: boss.id });
   });
 
+  it('dòng bật/tắt cờ gian hàng đối tác (STOREFRONT_PARTNER) không chiếm chỗ của lịch sử vai trò/khoá trong 100 dòng gần nhất', async () => {
+    const boss = await createUser(prisma, { role: 'ADMIN', phone: phone() });
+    const p = phone();
+    const u = await createUser(prisma, { role: 'STAFF', phone: p });
+    await admin.setUserRole(boss.id, p, 'CUSTOMER');
+    await blocks.block(boss.id, u.id, 'IT');
+    await prisma.userAdminEvent.createMany({
+      data: Array.from({ length: 120 }, (_, i) => ({
+        userId: u.id, kind: 'STOREFRONT_PARTNER', fromValue: String(i % 2 === 0), toValue: String(i % 2 !== 0), reason: 'sf-it', actorId: boss.id,
+      })),
+    });
+    const d = await admin.getUserDetail(u.id);
+    expect(d.roleHistory.map((e) => `${e.kind}:${e.fromValue}->${e.toValue}`)).toEqual(['ROLE:STAFF->CUSTOMER']);
+    expect(d.blockHistory.map((e) => e.kind)).toEqual(['BLOCK']);
+  });
+
   it('cấp quyền theo SĐT (RoleGrant) áp lên tài khoản → sổ ghi ai cấp', async () => {
     const boss = await createUser(prisma, { role: 'ADMIN', phone: phone() });
     const p = phone();

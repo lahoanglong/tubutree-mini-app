@@ -952,6 +952,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
         order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([order]), count: jest.fn().mockResolvedValue(1) },
         variation: { findMany: variationFindMany },
         review: { findMany: reviewFindMany },
+        pointsTransaction: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: null } }) },
         $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
       } as unknown as PrismaService;
       return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), reviewFindMany };

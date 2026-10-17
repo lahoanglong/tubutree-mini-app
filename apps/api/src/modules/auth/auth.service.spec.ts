@@ -1,5 +1,6 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import { AuthService } from './auth.service';
+import { Prisma } from '@prisma/client';
+import { AuthService, isMergeBusy } from './auth.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
@@ -729,5 +730,24 @@ describe('AuthService.toAuthUser — hồ sơ trả về client sau PD-3', () =>
     } as never);
     expect(out).toMatchObject({ pointsBalance: 120, pointsConvertedBalance: 40, walletBalance: 5_000 });
     expect(out).not.toHaveProperty('coinsBalance');
+  });
+});
+
+describe('isMergeBusy — lỗi gộp trả 503 "đang bận" thay vì lộ lỗi thô', () => {
+  const known = (code: string, message = code) => new Prisma.PrismaClientKnownRequestError(message, { code, clientVersion: 'test' });
+
+  it('quá hạn chờ khoá/câu lệnh/tx và deadlock (Postgres 40P01, Prisma P2034) là bận, thử lại được', () => {
+    expect(isMergeBusy(known('P2028'))).toBe(true);
+    expect(isMergeBusy(known('P2034'))).toBe(true);
+    expect(isMergeBusy(new Error('Raw query failed. Code: `55P03`. Message: `canceling statement due to lock timeout`'))).toBe(true);
+    expect(isMergeBusy(new Error('Code: `57014`. Message: `canceling statement due to statement timeout`'))).toBe(true);
+    expect(isMergeBusy(known('P2010', 'Raw query failed. Code: `40P01`. Message: `ERROR: deadlock detected`'))).toBe(true);
+    expect(isMergeBusy(new Error('PostgresError { code: "40P01", message: "deadlock detected" }'))).toBe(true);
+  });
+
+  it('lỗi khác vẫn ném nguyên', () => {
+    expect(isMergeBusy(known('P2002', 'Unique constraint failed'))).toBe(false);
+    expect(isMergeBusy(new ConflictException('Tài khoản đã bị khoá'))).toBe(false);
+    expect(isMergeBusy('40P01')).toBe(false);
   });
 });

@@ -23,6 +23,14 @@ describe('notificationMeta', () => {
   });
 
   it.each([
+    ['REFERRAL_REWARD_PAID', 'Thưởng giới thiệu bạn bè'],
+    ['REFERRAL_MILESTONE_PAID', 'Thưởng mốc giới thiệu'],
+    ['REFERRAL_REWARD_REVOKED', 'Thu lại thưởng giới thiệu'],
+  ])('%s (tin cho người mời) → %s, không rơi về nhãn chung', (code, title) => {
+    expect(notificationMeta(code).title).toBe(title);
+  });
+
+  it.each([
     'DEALER_BONUS_PAID',
     'DEALER_REWARD_CLAIM_NEW',
     'DEALER_REWARD_CLAIM_APPROVED',
@@ -127,6 +135,9 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
     ['BIRTHDAY_VOUCHER', '/loyalty'],
     ['POINTS_EXPIRING', '/loyalty'],
     ['XU_CONVERTED', '/loyalty'],
+    ['REFERRAL_REWARD_PAID', '/loyalty'],
+    ['REFERRAL_MILESTONE_PAID', '/loyalty'],
+    ['REFERRAL_REWARD_REVOKED', '/loyalty'],
     ['CASHBACK_PAID', '/wallet'],
     ['SUBSCRIPTION_PAUSED', '/subscriptions'],
     ['STOREFRONT_TRENDING_PRODUCTS', '/storefront'],

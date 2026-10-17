@@ -3,7 +3,7 @@ import { PancakePushReconcileService } from '../../src/modules/integrations/panc
 import { PANCAKE_CANCEL_REFUSED_PREFIX, type PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
 import type { GomdonAlertService } from '../../src/modules/integrations/gomdon/gomdon-alert.service';
-import { createOrder, createUser, warmPool } from './helpers';
+import { createOrder as createOrderRow, createUser as createUserRow, warmPool } from './helpers';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -31,7 +31,29 @@ describe('Cron cứu hộ Pancake: không bỏ đói đơn thật, thử lại t
     );
   });
 
+  // 55 đơn thu gom "đang chờ Gomdon" tạo cách đây 30 phút nằm lại DB dùng chung thì lọt vào lô quét của cron Gomdon/Pancake
+  // và hàng đợi Sức khoẻ hệ thống ở spec khác: xoá đúng các dòng spec này tạo.
+  const created = { orderIds: [] as string[], userIds: [] as string[] };
+  const createUser = async (...args: Parameters<typeof createUserRow>) => {
+    const u = await createUserRow(...args);
+    created.userIds.push(u.id);
+    return u;
+  };
+  const createOrder = async (...args: Parameters<typeof createOrderRow>) => {
+    const o = await createOrderRow(...args);
+    created.orderIds.push(o.id);
+    return o;
+  };
+
   afterAll(async () => {
+    if (prisma) {
+      const { orderIds, userIds } = created;
+      await prisma.$transaction([
+        prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
+        prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+      ]);
+    }
     await prisma?.$disconnect();
   });
 

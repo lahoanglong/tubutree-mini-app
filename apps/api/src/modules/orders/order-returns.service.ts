@@ -8,6 +8,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isMoneyBackable, OrderReversalService, type RefundOutcome } from './order-reversal.service';
+import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { computeReturnShares, type AllocOrder, type ReturnShares } from './refund-allocation';
 import {
   canRefundToBank,
@@ -295,12 +296,13 @@ export class OrderReturnsService {
   // ── Admin ──
 
   async listForAdmin(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc') {
-    const where = status === RETURNS_TO_RECEIVE ? await this.toReceiveWhere() : status ? { status: status as never } : {};
+    if (status === RETURNS_TO_RECEIVE) return this.listToReceive(page, limit, order ?? 'asc');
+    const where = status ? { status: status as never } : {};
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.returnRequest.findMany({
         where,
         // Hàng chờ duyệt (REQUESTED) web gửi order=asc — yêu cầu cũ nhất lên đầu, không bị chìm.
-        orderBy: { createdAt: order ?? (status === RETURNS_TO_RECEIVE ? 'asc' : 'desc') },
+        orderBy: { createdAt: order ?? 'desc' },
         ...skipTake(page, limit),
         select: RETURN_LIST_SELECT,
       }),
@@ -309,15 +311,27 @@ export class OrderReturnsService {
     return paginated(await this.withContext(rows), page, limit, total);
   }
 
-  /** Cùng tập với thẻ inbox returnsToReceive: hàng trả của đơn gian hàng tự giao về gian hàng, không về kho Tubu. */
-  private async toReceiveWhere(): Promise<Prisma.ReturnRequestWhereInput> {
-    const base = { status: 'APPROVED' as const, receivedAt: null, items: { some: {} } };
-    const pending = await this.prisma.returnRequest.findMany({ where: base, select: { orderId: true } });
-    const merchant = await this.prisma.order.findMany({
-      where: { id: { in: [...new Set(pending.map((r) => r.orderId))] }, fulfiller: 'MERCHANT' },
-      select: { id: true },
-    });
-    return { ...base, orderId: { notIn: merchant.map((o) => o.id) } };
+  /**
+   * Cùng tập với thẻ inbox returnsToReceive: hàng trả của đơn gian hàng tự giao về gian hàng, không về kho Tubu. Lọc đơn gian
+   * hàng bằng NOT EXISTS trong SQL: đưa id đơn qua danh sách IN/NOT IN thì quá ~32k yêu cầu chờ là vượt giới hạn tham số bind.
+   */
+  private async listToReceive(page: number, limit: number, order: 'asc' | 'desc') {
+    const from = Prisma.sql`
+      FROM "return_requests" rr
+      WHERE rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL
+        AND EXISTS (SELECT 1 FROM "return_request_items" i WHERE i."returnRequestId" = rr."id")
+        AND NOT EXISTS (SELECT 1 FROM "orders" o WHERE o."id" = rr."orderId" AND o."fulfiller" = 'MERCHANT')`;
+    const dir = order === 'desc' ? Prisma.sql`DESC` : Prisma.sql`ASC`;
+    const { skip, take } = skipTake(page, limit);
+    const [ids, counted] = await this.prisma.$transaction([
+      this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT rr."id" ${from} ORDER BY rr."createdAt" ${dir}, rr."id" ${dir} OFFSET ${skip} LIMIT ${take}`,
+      this.prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS "n" ${from}`,
+    ]);
+    const rows = await this.prisma.returnRequest.findMany({ where: { id: { in: ids.map((r) => r.id) } }, select: RETURN_LIST_SELECT });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered = ids.flatMap((r) => byId.get(r.id) ?? []);
+    return paginated(await this.withContext(ordered), page, limit, counted[0]?.n ?? 0);
   }
 
   /** Số tiền/điểm sẽ hoàn nếu duyệt ngay bây giờ — bước xác nhận của admin (không ghi gì). */
@@ -388,6 +402,7 @@ export class OrderReturnsService {
       let money: RefundOutcome | null;
       let pointsBack = shares.pointsUsedBack;
       let commissionCut = 0;
+      let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
         if (flipped.count === 0) throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
@@ -396,6 +411,7 @@ export class OrderReturnsService {
         });
         const reversed = await this.reversal.reverseFinancials(tx, order, { destination, restock: false, returnRequestId: id });
         money = reversed.refund;
+        referralNotices = reversed.referralNotices ?? [];
       } else {
         const partial = await this.reversal.reversePartialReturn(tx, order, {
           requestId: id,
@@ -407,6 +423,7 @@ export class OrderReturnsService {
         money = partial.refund;
         pointsBack = partial.pointsBack;
         commissionCut = partial.commissionCut;
+        referralNotices = partial.referralNotices ?? [];
       }
 
       await tx.returnRequestItem.deleteMany({ where: { returnRequestId: id } });
@@ -427,10 +444,11 @@ export class OrderReturnsService {
           ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),
         },
       });
-      return { order, shares, money, pointsBack };
+      return { order, shares, money, pointsBack, referralNotices };
     });
 
     const { order, shares, money } = outcome;
+    await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, outcome.referralNotices);
     if (shares.isFull) {
       // Điểm thường/điểm tích và hoa hồng của phần còn lại — idempotent, chạy sau commit như mọi lần đảo cả đơn.
       await this.loyalty.reverseOrderPoints(order.id);

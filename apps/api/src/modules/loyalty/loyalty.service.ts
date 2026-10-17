@@ -310,10 +310,12 @@ export class LoyaltyService {
     const partialReturns = await this.partialReturnsByOrder(userId, since);
     let spent12m = spentAgg._sum.total ?? 0;
     if (partialReturns.size > 0) {
-      const partiallyReturned = await this.prisma.order.findMany({
-        where: { ...spendWhere, id: { in: [...partialReturns.keys()] } },
-        select: { id: true, total: true },
-      });
+      const partiallyReturned: { id: string; total: number }[] = [];
+      for (const ids of inChunks([...partialReturns.keys()])) {
+        partiallyReturned.push(
+          ...(await this.prisma.order.findMany({ where: { ...spendWhere, id: { in: ids } }, select: { id: true, total: true } })),
+        );
+      }
       for (const o of partiallyReturned) spent12m -= Math.min(o.total, partialReturns.get(o.id)?.refunded ?? 0);
       spent12m = Math.max(0, spent12m);
     }
@@ -425,10 +427,15 @@ export class LoyaltyService {
     const earned = delivered.reduce((s, r) => s + r.delta, 0);
     const orderIds = [...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!id))];
     if (orderIds.length === 0) return earned;
-    const reversed = await this.prisma.pointsTransaction.findMany({
-      where: { userId, reason: { startsWith: TIER_REVERSED_PREFIX }, refId: { in: orderIds } },
-      select: { refId: true },
-    });
+    const reversed: { refId: string | null }[] = [];
+    for (const ids of inChunks(orderIds)) {
+      reversed.push(
+        ...(await this.prisma.pointsTransaction.findMany({
+          where: { userId, reason: { startsWith: TIER_REVERSED_PREFIX }, refId: { in: ids } },
+          select: { refId: true },
+        })),
+      );
+    }
     // Đơn đã có dòng ORDER_REVERSED thì bỏ NGUYÊN điểm giao của nó, không trừ theo delta của dòng thu hồi: reverseOrderPoints
     // chỉ thu hồi phần còn lại của lô (điểm đã hết hạn hay đã tiêu thì delta nhỏ hơn, có khi 0) nhưng đơn đã trả thì
     // chi tiêu của nó không còn thuộc hạng.
@@ -1348,6 +1355,17 @@ interface PartialReturnSum {
 }
 
 const DAY_MS = 864e5;
+
+/**
+ * Postgres nhận tối đa 32.767 tham số bind mỗi câu, và Prisma không tự tách khi `where` có bộ lọc phủ định (vd paymentMethod
+ * not XU): khách có hàng chục nghìn đơn thì danh sách id phải đi theo từng phần.
+ */
+const IN_CHUNK = 10_000;
+function inChunks<T>(items: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += IN_CHUNK) out.push(items.slice(i, i + IN_CHUNK));
+  return out;
+}
 
 /**
  * Bảng điểm danh 7 ngày MẶC ĐỊNH (ghi đè bằng SystemConfig `loyalty.checkin_points`).

@@ -1,9 +1,11 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from '../loyalty/points-expiry-date';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { sendReferralNotices, type ReferralNotice } from './referral-notify';
 import {
   countReferralSuccesses,
   findReferralRewardedOrders,
@@ -80,7 +82,14 @@ export class RewardPointsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    // Optional: test dựng tay (prisma, config) vẫn chạy, chỉ không báo người mời.
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
+
+  /** Báo người mời sau khi tx ghi sổ đã commit; không bao giờ ném. */
+  private notifyReferrer(notices: ReferralNotice[]): Promise<void> {
+    return sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, notices);
+  }
 
   /**
    * Cộng Điểm Xanh thưởng. Idempotent: dòng sổ ghi bằng INSERT ... ON CONFLICT DO NOTHING trên partial
@@ -217,7 +226,9 @@ export class RewardPointsService {
     ]);
     if (!(reward > 0)) return false;
 
+    let notices: ReferralNotice[] = [];
     const granted = await this.prisma.$transaction(async (tx): Promise<boolean | 'STALE' | 'ALREADY' | 'MERGED'> => {
+      notices = [];
       await lockReferee(tx, refereeId);
       // Gộp khách đổi referredById của người được mời dưới khoá này: người mời đọc ở trên có thể là dòng khách vừa gộp.
       const fresh = await tx.user.findUnique({ where: { id: refereeId }, select: { referredById: true, mergedIntoId: true } });
@@ -265,11 +276,17 @@ export class RewardPointsService {
       // Ghi trước rồi mới khoá (lúc thu hồi theo tỷ lệ ngay dưới) là nâng khoá: dòng sổ của lần cấp song song cho người được
       // mời khác giữ KEY SHARE trên người mời và chờ UPDATE của tx này ⇒ deadlock.
       await lockReferrer(tx, referrerId);
-      const ok = await this.grant(referrerId, reward, `${REFERRAL_ORDER2_PREFIX}${refereeId}`, 'REFERRAL', `${first.id}:${second.id}`, tx, expiresAt);
-      // Phần đơn đã duyệt trả một phần trước lúc cấp: thu theo tỷ lệ ngay trong tx này (revokeReferralRewardForPriorReturns).
-      if (ok) await revokeReferralRewardForPriorReturns(tx, [first.id, second.id]);
+      const reason = `${REFERRAL_ORDER2_PREFIX}${refereeId}`;
+      const ok = await this.grant(referrerId, reward, reason, 'REFERRAL', `${first.id}:${second.id}`, tx, expiresAt);
+      if (ok) {
+        notices.push({ kind: 'PAID', referrerId, refereeId, points: reward, key: reason });
+        // Phần đơn đã duyệt trả một phần trước lúc cấp: thu theo tỷ lệ ngay trong tx này (revokeReferralRewardForPriorReturns).
+        const prior = await revokeReferralRewardForPriorReturns(tx, [first.id, second.id]);
+        if (prior) notices.push(...prior.notices);
+      }
       return ok;
     });
+    if (granted === true) await this.notifyReferrer(notices);
     if (granted === 'MERGED') return this.grantForMergedReferee(refereeId, retried);
     if (granted === 'STALE') return retried ? false : this.grantReferralOrderReward(refereeId, true);
     // Đã thưởng từ trước vẫn xét mốc: lần cấp trước có thể đã commit thưởng mà lỗi ở bước mốc (chạy riêng tx), và lần gọi lại
@@ -298,7 +315,9 @@ export class RewardPointsService {
   private async awardReferralMilestones(referrerId: string): Promise<void> {
     const [milestones, expiresAt] = await Promise.all([this.referralMilestones(), this.expiresAt()]);
     if (!milestones.length) return;
+    let notices: ReferralNotice[] = [];
     await this.prisma.$transaction(async (tx) => {
+      notices = [];
       await lockReferrer(tx, referrerId);
       const successCount = await countReferralSuccesses(tx, referrerId);
       const state = await readMilestoneState(tx, referrerId);
@@ -306,8 +325,12 @@ export class RewardPointsService {
         if (successCount < m.count) continue;
         const s = state.get(m.count);
         if (heldMilestoneGens(s).length > 0) continue;
-        await this.grant(referrerId, m.bonusPoints, milestoneGrantReason(referrerId, m.count, nextMilestoneGen(s)), 'REFERRAL', referrerId, tx, expiresAt);
+        const reason = milestoneGrantReason(referrerId, m.count, nextMilestoneGen(s));
+        if (await this.grant(referrerId, m.bonusPoints, reason, 'REFERRAL', referrerId, tx, expiresAt)) {
+          notices.push({ kind: 'MILESTONE', referrerId, count: m.count, points: m.bonusPoints, key: reason });
+        }
       }
     });
+    await this.notifyReferrer(notices);
   }
 }

@@ -404,3 +404,93 @@ describe('OrderStatusActions — DS v2, vùng chạm 44px ở điện thoại', 
     expect(container.querySelector('[role="alert"]')?.className).toContain('text-danger-fg');
   });
 });
+
+describe('Chạy lại việc sau giao (đơn DELIVERED chưa có deliveredEffectsAt)', () => {
+  const delivered = (over: Partial<AdminOrder> = {}) =>
+    order({ status: 'DELIVERED', paymentStatus: 'PAID', allowedTransitions: ['RETURNED'], canConfirmPayment: false, deliveredEffectsAt: null, ...over });
+  const RESYNC = 'Chạy lại việc sau giao';
+
+  it('chỉ hiện cho ADMIN và khi đơn đã giao mà chưa có mốc xong việc', () => {
+    expect(buttonLabels(mount(<OrderStatusActions order={delivered()} canResync />).container)).toContain(RESYNC);
+    expect(buttonLabels(mount(<OrderStatusActions order={delivered()} />).container)).not.toContain(RESYNC);
+    expect(
+      buttonLabels(mount(<OrderStatusActions order={delivered({ deliveredEffectsAt: '2026-10-02T00:00:00.000Z' })} canResync />).container),
+    ).not.toContain(RESYNC);
+    expect(buttonLabels(mount(<OrderStatusActions order={order({ canConfirmPayment: false })} canResync />).container)).not.toContain(RESYNC);
+  });
+
+  it('hộp xác nhận nêu 3 việc; "Đóng" không gọi API; đồng ý → POST resync, hiện "Đã chạy xong"', async () => {
+    const api = mockFetch({ '/resync-delivered-effects': { body: { orderId: 'o1', code: 'TB-300', outcome: 'DONE', pointsCredited: true, commissionsLocked: 1 } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={delivered()} canResync />);
+    const btn = byText(container, 'button', RESYNC);
+    click(btn);
+    await flush();
+    const text = confirmDialog()?.textContent ?? '';
+    expect(text).toMatch(/Điểm Xanh/);
+    expect(text).toMatch(/hoa hồng CTV/);
+    expect(text).toMatch(/thưởng giới thiệu/);
+    expect(text).toMatch(/không cộng hai lần/);
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+
+    click(btn);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls).toHaveLength(1);
+    expect(api.calls[0]!.url).toContain('/admin/orders/o1/resync-delivered-effects');
+    expect(api.calls[0]!.init?.method).toBe('POST');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã chạy xong');
+  });
+
+  it.each([
+    ['ALREADY_DONE', 'Đơn này đã xong từ trước', 'status'],
+    ['INCOMPLETE', 'Chưa xong hết, xem lại sau', 'alert'],
+  ])('kết quả %s hiện "%s"', async (outcome, text, role) => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/resync-delivered-effects': { body: { orderId: 'o1', code: 'TB-300', outcome } } }).fn));
+    const { container } = mount(<OrderStatusActions order={delivered()} canResync />);
+    click(byText(container, 'button', RESYNC));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector(`[role="${role}"]`)?.textContent).toBe(text);
+  });
+
+  it('đang chạy thì nút bị khoá và chỉ có 1 request', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        await gate;
+        return new Response(JSON.stringify({ orderId: 'o1', code: 'TB-300', outcome: 'DONE' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const { container } = mount(<OrderStatusActions order={delivered()} canResync />);
+    const btn = byText(container, 'button', RESYNC) as HTMLButtonElement;
+    click(btn);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(btn.disabled).toBe(true);
+    expect(container.textContent).toContain('Đang chạy');
+    expect(calls).toHaveLength(1);
+    release();
+    await flush();
+    expect(btn.disabled).toBe(false);
+  });
+
+  it('API lỗi → hiện thông báo lỗi', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/resync-delivered-effects': { status: 400, body: { message: 'Đơn TB-300 đang CANCELLED, không phải đơn đã giao.' } } }).fn));
+    const { container } = mount(<OrderStatusActions order={delivered()} canResync />);
+    click(byText(container, 'button', RESYNC));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('không phải đơn đã giao');
+  });
+});

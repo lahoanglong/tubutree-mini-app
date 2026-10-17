@@ -6,6 +6,7 @@ import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
+import type { ReferralNotice } from '../wallet/referral-notify';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from '../loyalty/loyalty-expiry.service';
@@ -40,6 +41,8 @@ export interface ReversalResult {
   moneyRefunded: boolean;
   pointsRefunded: number;
   refund: RefundOutcome | null;
+  /** Tin báo người mời bị thu hồi thưởng giới thiệu: caller gửi SAU khi tx commit (sendReferralNotices). */
+  referralNotices?: ReferralNotice[];
 }
 
 export interface PartialReversalResult {
@@ -48,6 +51,8 @@ export interface PartialReversalResult {
   pointsBack: number;
   pointsTaken: number;
   commissionCut: number;
+  /** Như ReversalResult.referralNotices. */
+  referralNotices?: ReferralNotice[];
 }
 
 /** Q-03a: 1.000 xu = 1 Điểm Xanh, làm tròn lên (cùng tỉ lệ migration B quy đổi số dư). */
@@ -103,6 +108,12 @@ export class OrderReversalService {
     const prior = order.status === 'DELIVERED' ? await partialReturnTotals(tx, order.id, opts.returnRequestId) : NO_PARTIAL_RETURNS;
     const refundable = Math.max(0, order.total - prior.money);
     const destination = opts.destination ?? WALLET_DESTINATION;
+
+    // Kho và suất flash TRƯỚC mọi ghi lên dòng users (hoàn Ví/điểm): mọi đường tạo đơn (đặt đơn, CTV lên hộ, định kỳ, đại lý)
+    // khoá variation → suất flash → users. Ghi users trước rồi mới cộng kho thì một lần đặt đơn tiêu điểm/trả Ví của cùng khách
+    // đang giữ đúng variation/suất đó và chờ dòng users ⇒ 40P01 (checkout-reversal-lock-order.race-spec).
+    await this.restoreStockAndFlash(tx, order, prior, opts);
+
     let refund: RefundOutcome | null = null;
     // Hoàn tiền — guard bằng updateMany, count=1 mới thực sự chi tiền, tránh hoàn 2 lần nếu bị
     // gọi lại (dù caller đã guard status, phòng thủ 2 lớp cho tiền).
@@ -218,8 +229,57 @@ export class OrderReversalService {
     // (đứt DB, SIGTERM lúc deploy) là đơn đã CANCELLED mà khách mất điểm vĩnh viễn: không có đường thử lại.
     pointsRefunded += await this.refundConvertedPoints(tx, order, prior);
 
-    // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
-    // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
+    // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
+    // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
+    await this.releaseCoupon(tx, order);
+
+    // Đảo công nợ đại lý. Đơn đại lý "Ghi công nợ" tạo dòng DealerCreditLedger dương lúc đặt;
+    // huỷ/trả đơn mà không đảo thì đại lý vẫn NỢ tiền một đơn không còn tồn tại, và khoản nợ ảo
+    // đó tiếp tục ăn vào hạn mức nên chặn luôn các đơn sau. Không dùng delete để giữ vết sổ sách.
+    await this.reverseDealerCredit(tx, order);
+
+    // Thu hồi thưởng doanh số quý nếu quý của đơn đã được trả thưởng (cron ngày 10 quý sau) — chạy
+    // SAU CÙNG để dealerVolume (đọc qua tx) thấy đơn đã lật trạng thái/REFUNDED. `order` là ảnh chụp
+    // TRƯỚC lần lật (status cũ) — DealerService dùng nó + paidBeforeReversal để biết đơn có đang được
+    // tính vào doanh số đã chốt không (chỉ thu phần biên của đơn đó). Lỗi DB ở đây phải ném ra:
+    // transaction Postgres đã hỏng thì cả lần huỷ đơn rollback, không để tiền lệch.
+    if (order.type === 'DEALER') {
+      const dealer = this.resolveDealer();
+      if (dealer) {
+        await dealer.clawbackQuarterBonusForOrder(tx, order, { paidBeforeReversal });
+      } else {
+        this.logger.error(
+          `DealerService chưa wiring — KHÔNG thu hồi được thưởng quý cho đơn đại lý ${order.code} bị huỷ/trả. Cần đối soát tay.`,
+        );
+      }
+    }
+
+    // Thưởng giới thiệu chỉ cấp từ đơn đã giao (đơn lẻ, không phải lên hộ), nên chỉ đơn trả hàng
+    // (ảnh chụp trước lần lật = DELIVERED) mới có thể là đơn đã dùng để thưởng. Thu hồi trong cùng tx
+    // để lần trả hàng và việc trừ điểm người mời commit/rollback cùng nhau.
+    let referralNotices: ReferralNotice[] = [];
+    if (order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer) {
+      const revoked = await revokeReferralRewardForOrder(tx, order);
+      if (revoked?.shortfall) {
+        this.logger.warn(
+          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
+        );
+      }
+      referralNotices = revoked?.notices ?? [];
+    }
+    return { moneyRefunded, pointsRefunded, refund, referralNotices };
+  }
+
+  /**
+   * Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì caller (status flip atomic) đảm bảo
+   * reverseFinancials chỉ chạy đúng 1 lần cho mỗi đơn.
+   */
+  private async restoreStockAndFlash(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    prior: PartialReturnTotals,
+    opts: ReversalOptions,
+  ): Promise<void> {
     // Dòng đặt trước: ĐỌC LẠI backorderedQty dưới khoá dòng. Ảnh chụp `order.items` của caller có
     // thể cũ — cron DealerBackorderService.reconcile vừa lấp hàng (giữ kho + giảm backorderedQty)
     // sau lúc caller đọc đơn; dùng số cũ thì phần vừa giữ không bao giờ được hoàn → kẹt kho. Khoá
@@ -252,44 +312,6 @@ export class OrderReversalService {
         await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, flashQty);
       }
     }
-
-    // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
-    // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
-    await this.releaseCoupon(tx, order);
-
-    // Đảo công nợ đại lý. Đơn đại lý "Ghi công nợ" tạo dòng DealerCreditLedger dương lúc đặt;
-    // huỷ/trả đơn mà không đảo thì đại lý vẫn NỢ tiền một đơn không còn tồn tại, và khoản nợ ảo
-    // đó tiếp tục ăn vào hạn mức nên chặn luôn các đơn sau. Không dùng delete để giữ vết sổ sách.
-    await this.reverseDealerCredit(tx, order);
-
-    // Thu hồi thưởng doanh số quý nếu quý của đơn đã được trả thưởng (cron ngày 10 quý sau) — chạy
-    // SAU CÙNG để dealerVolume (đọc qua tx) thấy đơn đã lật trạng thái/REFUNDED. `order` là ảnh chụp
-    // TRƯỚC lần lật (status cũ) — DealerService dùng nó + paidBeforeReversal để biết đơn có đang được
-    // tính vào doanh số đã chốt không (chỉ thu phần biên của đơn đó). Lỗi DB ở đây phải ném ra:
-    // transaction Postgres đã hỏng thì cả lần huỷ đơn rollback, không để tiền lệch.
-    if (order.type === 'DEALER') {
-      const dealer = this.resolveDealer();
-      if (dealer) {
-        await dealer.clawbackQuarterBonusForOrder(tx, order, { paidBeforeReversal });
-      } else {
-        this.logger.error(
-          `DealerService chưa wiring — KHÔNG thu hồi được thưởng quý cho đơn đại lý ${order.code} bị huỷ/trả. Cần đối soát tay.`,
-        );
-      }
-    }
-
-    // Thưởng giới thiệu chỉ cấp từ đơn đã giao (đơn lẻ, không phải lên hộ), nên chỉ đơn trả hàng
-    // (ảnh chụp trước lần lật = DELIVERED) mới có thể là đơn đã dùng để thưởng. Thu hồi trong cùng tx
-    // để lần trả hàng và việc trừ điểm người mời commit/rollback cùng nhau.
-    if (order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer) {
-      const revoked = await revokeReferralRewardForOrder(tx, order);
-      if (revoked?.shortfall) {
-        this.logger.warn(
-          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
-        );
-      }
-    }
-    return { moneyRefunded, pointsRefunded, refund };
   }
 
   /**
@@ -315,6 +337,16 @@ export class OrderReversalService {
   ): Promise<PartialReversalResult> {
     const { shares, requestId } = input;
     const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0 };
+
+    // Suất flash trước mọi ghi lên dòng users, cùng thứ tự với đường tạo đơn (xem reverseFinancials).
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    for (const line of shares.lines) {
+      const item = byId.get(line.orderItemId);
+      if (item?.flashSaleItemId && line.quantity > 0) {
+        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, line.quantity);
+      }
+    }
+
     const amount = shares.goods + shares.shipping;
     if (amount > 0 && isMoneyBackable(order)) {
       if (order.placedForCustomer) {
@@ -445,14 +477,6 @@ export class OrderReversalService {
       if (res.count === 1) result.commissionCut += cut;
     }
 
-    const byId = new Map(order.items.map((i) => [i.id, i]));
-    for (const line of shares.lines) {
-      const item = byId.get(line.orderItemId);
-      if (item?.flashSaleItemId && line.quantity > 0) {
-        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, line.quantity);
-      }
-    }
-
     // Thưởng giới thiệu thu hồi theo tỷ lệ tiền hàng đã trả luỹ kế của đơn (gồm yêu cầu này), cùng điều kiện với nhánh trả cả
     // đơn ở reverseFinancials.
     if (order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer) {
@@ -469,6 +493,7 @@ export class OrderReversalService {
           `Thu hồi một phần thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
+      result.referralNotices = revoked?.notices ?? [];
     }
     return result;
   }

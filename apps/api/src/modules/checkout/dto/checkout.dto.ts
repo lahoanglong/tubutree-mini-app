@@ -21,6 +21,16 @@ export class QuoteDto {
 }
 
 /**
+ * Xem trước mức giảm từng mã trong ví: cùng tham số với báo giá để ra đúng số checkout trừ. Thiếu `addressId` (trang giỏ) thì
+ * không tính phí giao nên mã freeship không có số tiền miễn.
+ */
+export class CouponPreviewDto {
+  @IsOptional() @IsString() addressId?: string;
+  @IsOptional() @IsString() storefrontSlug?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(200) @IsString({ each: true }) itemIds?: string[];
+}
+
+/**
  * Phương thức thanh toán CÓ settlement path thật ở checkout. `PaymentMethod` (shared-types)
  * còn liệt kê VNPAY cho tương thích dữ liệu cũ/enum Prisma, nhưng KHÔNG có service/controller/
  * webhook nào xử lý nó — nhận đơn VNPAY vẫn trừ kho + đứng PENDING_PAYMENT vĩnh viễn (không

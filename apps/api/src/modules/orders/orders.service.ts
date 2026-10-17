@@ -23,6 +23,7 @@ import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { toPublicCart } from '../checkout/checkout-split';
 import { forBuyer, type BuyerHiddenOrderField } from './buyer-order-fields';
 import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
+import { returnPointsTaken } from './return-ledger';
 import { foldVietnamese } from '../catalog/search-text';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 
@@ -73,6 +74,8 @@ export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & 
   paymentDeadline?: string | null;
   /** Người xem tự huỷ được đơn này không (customerCancelBlock) — app/web chỉ bày nút "Hủy đơn" khi true (R3-CANCEL-2). */
   canCancel: boolean;
+  /** Chỉ chi tiết đơn: Điểm Xanh tích của đơn thực sự đã thu lại do trả một phần (returnPointsTaken). */
+  pointsReturnReversed?: number;
   /**
    * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (Pancake đã gửi hàng, hệ thống thôi tự huỷ): Tubu xử lý tay với khách.
    * App/web thay hạn thanh toán, nút trả tiền và nút huỷ bằng câu trung tính "Tubu đang xử lý đơn này" (R5-SYNC-1).
@@ -233,13 +236,20 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, paymentDeadline, reviewOf] = await Promise.all([
+    const [[view], fulfilment, paymentDeadline, reviewOf, pointsReturnReversed] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       this.paymentDeadline(order),
       orderLineReviews(this.prisma, order),
+      order.status === 'DELIVERED' || order.status === 'RETURNED' ? returnPointsTaken(this.prisma, order) : undefined,
     ]);
-    return { ...view!, items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })), ...fulfilment, paymentDeadline };
+    return {
+      ...view!,
+      items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })),
+      ...fulfilment,
+      paymentDeadline,
+      pointsReturnReversed,
+    };
   }
 
   /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL và điều kiện với cron tự huỷ. Null với đơn cron không huỷ. */

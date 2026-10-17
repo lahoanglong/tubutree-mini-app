@@ -3,8 +3,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { getMe, getPointsTransactions } from '@/lib/shop-client';
-import { formatCount, pointsSummary } from '@/lib/checkout-points';
+import { getMe, getMyPointsLock, getPointsTransactions } from '@/lib/shop-client';
+import { formatCount, lockedPointsLines, pointsSummary } from '@/lib/checkout-points';
 import { pointsReasonDetail } from '@/lib/ledger-labels';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
@@ -18,6 +18,8 @@ export default function PointsHistoryPage() {
   const { user } = useAuth();
   const authed = phase === 'authenticated';
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: authed, refetchOnWindowFocus: true });
+  // Chỉ là ghi chú phụ: lỗi hay API cũ thì không hiện, không chặn số dư và lịch sử.
+  const lockQ = useQuery({ queryKey: ['points-lock'], queryFn: getMyPointsLock, enabled: authed, retry: false });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
 
   if (phase === 'loading') {
@@ -45,6 +47,7 @@ export default function PointsHistoryPage() {
   const balances = meQ.data ?? user;
   const points = balances ? pointsSummary(balances) : null;
   const rows = txnQ.data ?? [];
+  const lockLines = lockedPointsLines(lockQ.data);
 
   return (
     <LedgerShell title={TITLE}>
@@ -53,6 +56,11 @@ export default function PointsHistoryPage() {
           <div className="text-2xl font-bold text-stone-900">{formatCount(points.total)}</div>
           <div className="text-sm text-stone-600">Điểm Xanh hiện có</div>
           {points.convertedNote && <div className="mt-0.5 text-xs text-stone-600">{points.convertedNote}</div>}
+          {lockLines.map((line) => (
+            <div key={line} className="mt-0.5 break-words text-xs text-stone-600">
+              {line}
+            </div>
+          ))}
         </section>
       )}
 

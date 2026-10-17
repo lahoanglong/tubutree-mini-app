@@ -276,7 +276,7 @@ describe('dòng thu hồi ăn đúng lô gốc khi cron hết hạn chạy (real
     it('thưởng đơn thứ hai +5 bị thu hồi (-5), qua hạn, cron hai lần → lô cũ không hạn còn 30, không có POINTS_EXPIRED', async () => {
       const referrer = await referrerWithOldLot();
       const { second } = await grantReferral(referrer.id);
-      expect(await revoke(second)).toEqual({ revoked: 5, shortfall: 0 });
+      expect(await revoke(second)).toMatchObject({ revoked: 5, shortfall: 0 });
       expect(await balance(referrer.id)).toBe(30);
 
       await ageLedger(referrer.id, 13);
@@ -291,7 +291,7 @@ describe('dòng thu hồi ăn đúng lô gốc khi cron hết hạn chạy (real
       const referrer = await referrerWithOldLot();
       const { second } = await grantReferral(referrer.id, { count: 1, gen: 0, bonus: 10 });
       expect(await balance(referrer.id)).toBe(45);
-      expect(await revoke(second)).toEqual({ revoked: 15, shortfall: 0 });
+      expect(await revoke(second)).toMatchObject({ revoked: 15, shortfall: 0 });
       expect(await balance(referrer.id)).toBe(30);
 
       await ageLedger(referrer.id, 13);
@@ -309,7 +309,7 @@ describe('dòng thu hồi ăn đúng lô gốc khi cron hết hạn chạy (real
       expect(await balance(referrer.id)).toBe(30);
       const gen1 = await grantReferral(referrer.id, { count: 1, gen: 1, bonus: 12 });
       expect(await balance(referrer.id)).toBe(30 + 5 + 12);
-      expect(await revoke(gen1.second)).toEqual({ revoked: 17, shortfall: 0 });
+      expect(await revoke(gen1.second)).toMatchObject({ revoked: 17, shortfall: 0 });
       expect(await balance(referrer.id)).toBe(30);
       expect(await prisma.pointsTransaction.count({ where: { userId: referrer.id, reason: { startsWith: 'REFERRAL_MILESTONE_REVOKE:' } } })).toBe(2);
 
