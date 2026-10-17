@@ -48,7 +48,6 @@ import { CartBadge } from '../components/ui/cart-badge';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
-import { IconButton } from '../components/ui/icon-button';
 import { SectionTitle } from '../components/ui/section-title';
 import { PriceTag } from '../components/ui/price-tag';
 import { Badge } from '../components/ui/badge';
@@ -743,6 +742,20 @@ export default function ProductDetailPage() {
             </Box>
           ))}
         </Box>
+        {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}
+        {hasOA && (
+          <Button
+            variant="secondary"
+            icon={MessageCircle}
+            onPress={() => {
+              haptic('light');
+              void openOAChat(vi.product.chatAbout(p.name));
+            }}
+            style={{ marginTop: 12, minWidth: 0 }}
+          >
+            {vi.product.chatWithShop}
+          </Button>
+        )}
       </Box>
 
       {/* ── Mô tả ── */}
@@ -825,40 +838,26 @@ export default function ProductDetailPage() {
       {/* ── Sticky CTA ── */}
       <StickyActionBar
         secondary={
-          <Box flex style={{ gap: 8, flex: '0 0 auto' }}>
-            {hasOA && (
-              <IconButton
-                icon={MessageCircle}
-                tone="brand"
-                label={vi.product.chatWithShop}
-                onPress={() => {
-                  haptic('light');
-                  void openOAChat(vi.product.chatAbout(p.name));
-                }}
-                style={SECONDARY_ACTION_STYLE}
-              />
-            )}
-            <Box
-              role="button"
-              aria-label={vi.product.viewCart}
-              className="tubu-press"
-              onClick={() => navigate('/cart')}
-              onAnimationEnd={() => setBadgeBounce(false)}
-              style={{
-                position: 'relative',
-                width: 48,
-                height: 48,
-                borderRadius: 'var(--radius-control)',
-                border: '1px solid var(--color-action-secondary-border)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flex: '0 0 auto',
-              }}
-            >
-              <CartIcon />
-              <CartBadge count={cartCount} bounce={badgeBounce} />
-            </Box>
+          <Box
+            role="button"
+            aria-label={vi.product.viewCart}
+            className="tubu-press"
+            onClick={() => navigate('/cart')}
+            onAnimationEnd={() => setBadgeBounce(false)}
+            style={{
+              position: 'relative',
+              width: 48,
+              height: 48,
+              borderRadius: 'var(--radius-control)',
+              border: '1px solid var(--color-action-secondary-border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: '0 0 auto',
+            }}
+          >
+            <CartIcon />
+            <CartBadge count={cartCount} bounce={badgeBounce} />
           </Box>
         }
         primary={
@@ -917,15 +916,6 @@ const PRODUCT_NAME_STYLE: CSSProperties = {
   lineHeight: 'var(--type-title-md-lh)',
   fontWeight: 'var(--type-title-md-weight)' as unknown as number,
   color: 'var(--color-text-primary)',
-};
-
-/** Nút phụ của thanh CTA dính (Chat): cùng khung 48px viền mảnh với nút giỏ. */
-const SECONDARY_ACTION_STYLE: CSSProperties = {
-  width: 48,
-  height: 48,
-  borderRadius: 'var(--radius-control)',
-  border: '1px solid var(--color-action-secondary-border)',
-  flex: '0 0 auto',
 };
 
 /** Một dòng của nhãn 2 dòng trên nút "Mua ngay" (thanh CTA dính đáy). */

@@ -1,13 +1,11 @@
 import type { CSSProperties } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Icon, type IconProps } from './icon';
+import { Icon } from './icon';
 
 export interface IconButtonProps {
   icon: LucideIcon;
   label: string;
   size?: 'md' | 'sm';
-  /** Màu icon; mặc định là chữ chính. */
-  tone?: IconProps['tone'];
   onPress?: () => void;
   badge?: boolean;
   className?: string;
@@ -16,7 +14,7 @@ export interface IconButtonProps {
 
 /** Nút chỉ-icon — vùng chạm LUÔN 44x44 dù nhìn nhỏ hơn (audit A4-14: 31 vòng icon 32-40px cũ).
  * `label` bắt buộc ở kiểu (TS) VÀ ở lint (Task 6) — hai lớp phòng thủ cho cùng một lỗi A4-16. */
-export function IconButton({ icon: IconCmp, label, size = 'md', tone, onPress, badge, className, style }: IconButtonProps) {
+export function IconButton({ icon: IconCmp, label, size = 'md', onPress, badge, className, style }: IconButtonProps) {
   return (
     <button
       type="button"
@@ -37,7 +35,7 @@ export function IconButton({ icon: IconCmp, label, size = 'md', tone, onPress, b
         ...style,
       }}
     >
-      <Icon icon={IconCmp} size={size === 'md' ? 'md' : 'sm'} tone={tone} />
+      <Icon icon={IconCmp} size={size === 'md' ? 'md' : 'sm'} />
       {badge && (
         <span
           data-testid="icon-button-badge"

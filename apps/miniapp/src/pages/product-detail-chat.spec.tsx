@@ -67,7 +67,7 @@ function renderPdp() {
   );
 }
 
-describe('ProductDetailPage — nút Chat Zalo OA trong thanh hành động dưới (D7 #3)', () => {
+describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" (D7 #3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasOA = true;
@@ -76,22 +76,29 @@ describe('ProductDetailPage — nút Chat Zalo OA trong thanh hành động dư�
     mocks.fetchBoughtTogether.mockResolvedValue([]);
   });
 
-  it('OA đã cấu hình: có nút Chat cạnh nút giỏ trong thanh dính; bấm mở chat OA kèm tên sản phẩm', async () => {
+  it('OA đã cấu hình: nút Chat nằm trong khối "Cam kết Tubu"; bấm mở chat OA kèm tên sản phẩm', async () => {
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
-    const bar = screen.getByTestId('sticky-bar');
-    const chat = within(bar).getByRole('button', { name: 'Chat với Tubu Tree' });
-    expect(within(bar).getByRole('button', { name: 'Xem giỏ hàng' })).toBeInTheDocument();
+    const block = screen.getByRole('heading', { name: 'Cam kết Tubu' }).parentElement!;
+    const chat = within(block).getByRole('button', { name: 'Chat với Tubu Tree' });
     fireEvent.click(chat);
     expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
     expect(mocks.openOAChat).toHaveBeenCalledWith(expect.stringContaining('Xà phòng sả chanh'));
   });
 
+  it('thanh CTA dính giữ bố cục cũ: chỉ nút giỏ 48px, không có nút Chat làm hẹp hai nút chính', async () => {
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    const bar = screen.getByTestId('sticky-bar');
+    expect(within(bar).queryByRole('button', { name: 'Chat với Tubu Tree' })).toBeNull();
+    const cart = within(bar).getByRole('button', { name: 'Xem giỏ hàng' });
+    expect(cart.style.width).toBe('48px');
+  });
+
   it('vùng chạm nút Chat >= 44px', async () => {
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
-    const chat = within(screen.getByTestId('sticky-bar')).getByRole('button', { name: 'Chat với Tubu Tree' });
-    expect(parseInt(chat.style.minWidth, 10)).toBeGreaterThanOrEqual(44);
+    const chat = screen.getByRole('button', { name: 'Chat với Tubu Tree' });
     expect(parseInt(chat.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
   });
 
