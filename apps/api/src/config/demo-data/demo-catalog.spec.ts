@@ -10,6 +10,7 @@ import {
   DEMO_PRODUCTS_LOADED_AT,
   DEMO_VARIATIONS,
   classifyDemoCoupon,
+  demoCouponTermsMatch,
   isDemoCouponKind,
 } from './demo-catalog';
 
@@ -111,6 +112,9 @@ describe('Danh sách dữ liệu demo khớp đúng file migration', () => {
     expect(classifyDemoCoupon({ ...row, maxDiscount: 10000 })).toBe('name-only');
     expect(classifyDemoCoupon({ ...row, scope: 'TIER' })).toBe('name-only');
     expect(classifyDemoCoupon({ ...row, code: 'TET2027' })).toBeNull();
+    expect(demoCouponTermsMatch(row)).toBe(true);
+    expect(demoCouponTermsMatch({ ...row, id: w.id, value: 50000 })).toBe(false);
+    expect(demoCouponTermsMatch({ ...row, code: 'TET2027' })).toBe(false);
     expect(isDemoCouponKind('seed') && isDemoCouponKind('migration') && !isDemoCouponKind('name-only') && !isDemoCouponKind(null)).toBe(true);
   });
 

@@ -15,7 +15,7 @@ import { RemarketingService } from '../../src/modules/lifecycle/remarketing.serv
 import { ReviewInviteService } from '../../src/modules/lifecycle/review-invite.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
-import { applyDemoCleanup, formatUndoSql, hasDemoData, planDemoCleanup, previewDemoCleanup } from '../../src/config/demo-data/cleanup';
+import { applyDemoCleanup, formatPlan, formatUndoSql, hasDemoData, planDemoCleanup, previewDemoCleanup } from '../../src/config/demo-data/cleanup';
 import {
   DEMO_BRANDS,
   DEMO_CATEGORIES,
@@ -185,6 +185,23 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(plan.categories.reduce((n, c) => n + c.publicDemo, 0)).toBeGreaterThanOrEqual(44);
     expect(plan.brands.every((b) => b.exists && !b.isPublished)).toBe(true);
     expect(await prisma.product.count({ where: { ...DEMO_PRODUCT_WHERE, isActive: true } })).toBe(44);
+  });
+
+  it('xem trước: đúng dòng migration nhưng chủ shop đã sửa điều kiện (WELCOME30 lên 50.000đ) thì nêu ĐIỀU KIỆN ĐÃ SỬA', async () => {
+    const W = DEMO_COUPONS.find((c) => c.code === 'WELCOME30')!;
+    try {
+      await prisma.coupon.update({ where: { id: W.id }, data: { value: 50_000 } });
+      const plan = await previewDemoCleanup(prisma);
+      expect(plan.coupons.map((c) => [c.code, c.kind, c.termsChanged])).toEqual([
+        ['FREESHIP', 'migration', false],
+        ['WELCOME30', 'migration', true],
+        ['XANH10', 'migration', false],
+      ]);
+      const text = formatPlan(plan, { apply: false, coupons: 'expire', keepCoupons: [], expectDb: null });
+      expect(text).toMatch(/WELCOME30 \[ĐIỀU KIỆN ĐÃ SỬA so với bản demo: kiểm tay, dùng --keep-coupon=WELCOME30 nếu là mã thật\].*sẽ TẮT/);
+    } finally {
+      await prisma.coupon.update({ where: { id: W.id }, data: { value: W.terms.value } });
+    }
   });
 
   it('--apply (mặc định giữ mã): tắt 44 SP + 48 biến thể, trả SKU, không xoá dòng nào, dòng tham chiếu còn nguyên', async () => {
@@ -358,6 +375,9 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
       await prisma.coupon.update({ where: { id: W.id }, data: { isActive: false, startAt: start, endAt: end } });
       // FREESHIP: đã tắt nhưng hạn còn xa → cắt hạn, tính là một dòng đổi.
       await prisma.coupon.update({ where: { id: F.id }, data: { isActive: false, endAt: end } });
+      // Bản xem trước nói đúng điều --apply sẽ làm.
+      const willExpire = Object.fromEntries((await previewDemoCleanup(prisma)).coupons.map((c) => [c.code, c.willExpire]));
+      expect(willExpire).toMatchObject({ WELCOME30: false, FREESHIP: true });
       const { result } = await applyDemoCleanup(prisma, { coupons: 'expire' });
       expect(result.couponsExpired).toBe(1);
       expect(result.undo.coupons).toEqual([{ id: F.id, code: 'FREESHIP', isActive: false, endAt: end }]);

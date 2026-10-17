@@ -14,6 +14,7 @@ import {
   DEMO_VARIATION_PANCAKE_IDS,
   DEMO_VARIATION_WHERE,
   classifyDemoCoupon,
+  demoCouponTermsMatch,
   isDemoCouponKind,
   type DemoCouponKind,
 } from './demo-catalog';
@@ -97,6 +98,11 @@ export interface DemoCouponRow {
   code: string;
   /** `migration`/`seed` là mã demo, `--coupons=expire` đổi; `name-only` (chỉ trùng mã, điều kiện khác) không đụng. */
   kind: DemoCouponKind;
+  /**
+   * Đúng dòng migration (id khớp) nhưng điều kiện đã bị sửa (vd chủ shop nâng WELCOME30 lên 50.000đ để dùng thật). Vẫn là mã
+   * demo, `--coupons=expire` vẫn tắt; bản xem trước nhắc kiểm tay và dùng `--keep-coupon` nếu là mã thật.
+   */
+  termsChanged: boolean;
   isActive: boolean;
   endAt: Date;
   /** Khách còn dùng được: isActive và chưa quá endAt. */
@@ -200,7 +206,7 @@ export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<D
 
   const couponRows = await db.coupon.findMany({
     where: { code: { in: DEMO_COUPONS.map((c) => c.code) } },
-    select: { ...DEMO_COUPON_SELECT, isActive: true, endAt: true },
+    select: { ...DEMO_COUPON_SELECT, isActive: true, startAt: true, endAt: true },
     orderBy: { code: 'asc' },
   });
   const coupons: DemoCouponRow[] = [];
@@ -210,10 +216,12 @@ export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<D
       id: c.id,
       code: c.code,
       kind,
+      termsChanged: kind === 'migration' && !demoCouponTermsMatch(c),
       isActive: c.isActive,
       endAt: c.endAt,
       live: c.isActive && c.endAt >= now,
-      willExpire: isDemoCouponKind(kind) && (c.isActive || c.endAt > now),
+      // Cùng điều kiện với --apply: mã đã tắt chỉ còn đổi khi cắt được hạn (đã tới ngày bắt đầu, hạn còn ở tương lai).
+      willExpire: isDemoCouponKind(kind) && (c.isActive || (c.endAt > now && c.startAt <= now)),
       refs: {
         redemptions: await db.couponRedemption.count({ where: { couponId: c.id } }),
         orders: await db.order.count({ where: { couponCode: c.code } }),
@@ -398,7 +406,9 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
   for (const c of plan.coupons) {
     const refs = `đã dùng ${c.refs.redemptions} lượt, ${c.refs.orders} đơn, ${c.refs.carts} giỏ đang gắn, ${c.refs.brandPromotions} khuyến mãi nhãn, ${c.refs.missions} nhiệm vụ`;
     const state = c.live ? `còn dùng được tới ${day(c.endAt)}` : `không dùng được (${c.isActive ? `hết hạn ${day(c.endAt)}` : 'đã tắt'})`;
-    const origin = c.kind === 'seed' ? ' [do seed tạo: id khác migration, điều kiện như bản demo]' : '';
+    const origin =
+      (c.kind === 'seed' ? ' [do seed tạo: id khác migration, điều kiện như bản demo]' : '') +
+      (c.termsChanged ? ` [ĐIỀU KIỆN ĐÃ SỬA so với bản demo: kiểm tay, dùng --keep-coupon=${c.code} nếu là mã thật]` : '');
     let action: string;
     if (c.kind === 'name-only') action = 'KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác (mã thật hoặc đã sửa), kiểm ở Quản trị, Mã giảm giá';
     else if (args.coupons === 'expire' && args.keepCoupons.includes(c.code)) action = `GIỮ theo --keep-coupon${c.live ? ': khách dùng được, xác nhận điều kiện đúng như chủ dự án duyệt' : ''}`;

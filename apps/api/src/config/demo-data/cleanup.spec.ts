@@ -11,7 +11,7 @@ function plan(over: Partial<DemoCleanupPlan> = {}): DemoCleanupPlan {
       { label: 'giỏ hàng', table: 'cart_items', rows: 0 },
     ],
     coupons: [
-      { id: 'cmqfuw9l0000gw1vf8f2wozy0', code: 'WELCOME30', kind: 'migration', isActive: true, endAt: END, live: true, willExpire: true, refs: { redemptions: 0, orders: 0, carts: 0, brandPromotions: 0, missions: 0 } },
+      { id: 'cmqfuw9l0000gw1vf8f2wozy0', code: 'WELCOME30', kind: 'migration', termsChanged: false, isActive: true, endAt: END, live: true, willExpire: true, refs: { redemptions: 0, orders: 0, carts: 0, brandPromotions: 0, missions: 0 } },
     ],
     categories: [
       { id: 'cat-baby', slug: 'cho-be', exists: true, publicDemo: 5, publicNonDemo: 0 },
@@ -98,6 +98,16 @@ describe('formatPlan', () => {
     expect(text).toContain('THỰC HIỆN');
     expect(text).toMatch(/WELCOME30.*sẽ TẮT/);
     expect(formatPlan(plan(), { apply: true, coupons: 'expire', keepCoupons: ['WELCOME30'], expectDb: null })).toMatch(/WELCOME30.*GIỮ theo --keep-coupon/);
+  });
+
+  it('đúng dòng migration nhưng điều kiện đã sửa: vẫn sẽ TẮT, kèm cảnh báo kiểm tay và gợi ý --keep-coupon', () => {
+    const p = plan({ coupons: [{ ...plan().coupons[0]!, termsChanged: true }] });
+    for (const coupons of ['expire', 'keep'] as const) {
+      const text = formatPlan(p, { apply: false, coupons, keepCoupons: [], expectDb: null });
+      expect(text).toContain('WELCOME30 [ĐIỀU KIỆN ĐÃ SỬA so với bản demo: kiểm tay, dùng --keep-coupon=WELCOME30 nếu là mã thật]');
+    }
+    expect(formatPlan(p, { apply: false, coupons: 'expire', keepCoupons: [], expectDb: null })).toMatch(/ĐIỀU KIỆN ĐÃ SỬA.*sẽ TẮT/);
+    expect(formatPlan(plan(), { apply: false, coupons: 'expire', keepCoupons: [], expectDb: null })).not.toContain('ĐIỀU KIỆN ĐÃ SỬA');
   });
 
   it('mã do seed tạo được nêu nguồn và cũng bị tắt; mã chỉ trùng tên thì KHÔNG ĐỤNG', () => {

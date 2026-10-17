@@ -195,20 +195,26 @@ export const DEMO_COUPON_SELECT = {
 
 type CouponTermsRow = Prisma.CouponGetPayload<{ select: typeof DEMO_COUPON_SELECT }>;
 
-/** null khi mã không phải mã demo. */
-export function classifyDemoCoupon(row: CouponTermsRow): DemoCouponKind | null {
-  const demo = DEMO_COUPONS.find((c) => c.code === row.code);
-  if (!demo) return null;
-  if (demo.id === row.id) return 'migration';
-  const t = demo.terms;
-  const same =
+/** Điều kiện của dòng có đúng như bản demo cùng mã không (false khi mã không phải mã demo). */
+export function demoCouponTermsMatch(row: CouponTermsRow): boolean {
+  const t = DEMO_COUPONS.find((c) => c.code === row.code)?.terms;
+  if (!t) return false;
+  return (
     row.type === t.type &&
     row.value === t.value &&
     row.minOrder === t.minOrder &&
     row.maxDiscount === t.maxDiscount &&
     row.perUserLimit === t.perUserLimit &&
-    row.scope === t.scope;
-  return same ? 'seed' : 'name-only';
+    row.scope === t.scope
+  );
+}
+
+/** null khi mã không phải mã demo. */
+export function classifyDemoCoupon(row: CouponTermsRow): DemoCouponKind | null {
+  const demo = DEMO_COUPONS.find((c) => c.code === row.code);
+  if (!demo) return null;
+  if (demo.id === row.id) return 'migration';
+  return demoCouponTermsMatch(row) ? 'seed' : 'name-only';
 }
 
 export const isDemoCouponKind = (k: DemoCouponKind | null): k is 'migration' | 'seed' => k === 'migration' || k === 'seed';
