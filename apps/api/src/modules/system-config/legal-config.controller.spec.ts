@@ -46,7 +46,21 @@ describe('LegalConfigController.get — nội dung điều khoản/chính sách 
     expect(def.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 200000 });
   });
 
-  it('số cấu hình hỏng (chuỗi, âm, 0) → rơi về mặc định thay vì in "NaN ngày" lên trang chính sách', async () => {
+  it('ngưỡng freeship 0 là giá trị hợp lệ (mọi đơn miễn phí vận chuyển) và hạn đổi trả 0 cũng vậy: giữ nguyên số 0, không tự đổi về mặc định', async () => {
+    const config = makeConfig({ 'shipping.free_threshold': 0, 'returns.window_days': 0 });
+    const out = await new LegalConfigController(config).get('van-chuyen');
+    expect(out.vars).toEqual({ returnWindowDays: 0, freeshipThreshold: 0 });
+  });
+
+  it('số cấu hình null/rỗng/đúng kiểu sai: về mặc định, không bị Number(null) = 0 đổi thành "miễn phí mọi đơn"', async () => {
+    for (const bad of [null, '', '  ', true, [], {}]) {
+      const config = makeConfig({ 'shipping.free_threshold': bad, 'returns.window_days': bad });
+      const out = await new LegalConfigController(config).get('van-chuyen');
+      expect(out.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 200000 });
+    }
+  });
+
+  it('số cấu hình hỏng (chuỗi, âm, NaN) → rơi về mặc định thay vì in "NaN ngày" lên trang chính sách', async () => {
     const config = makeConfig({ 'returns.window_days': 'abc', 'shipping.free_threshold': -5 });
     const out = await new LegalConfigController(config).get('van-chuyen');
     expect(out.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 200000 });

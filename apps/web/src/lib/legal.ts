@@ -173,9 +173,13 @@ Hotline ${support.hotline} hoặc email ${support.email}.`;
 
 function doiTra(vars: LegalVars, support: Support): string {
   const days = vars.returnWindowDays;
+  const window =
+    days > 0
+      ? `Bạn có thể yêu cầu đổi hoặc trả hàng trong vòng ${days} ngày kể từ khi đơn được giao thành công. Yêu cầu gửi ngay trong mục Đơn hàng của tài khoản.`
+      : 'Hiện Tubu Tree chưa nhận yêu cầu đổi trả sau khi giao hàng thành công. Nếu sản phẩm có vấn đề khi nhận, vui lòng liên hệ ngay với chúng tôi qua thông tin ở cuối trang.';
   return `## 1. Thời hạn đổi trả
 
-Bạn có thể yêu cầu đổi hoặc trả hàng trong vòng ${days} ngày kể từ khi đơn được giao thành công. Yêu cầu gửi ngay trong mục Đơn hàng của tài khoản.
+${window}
 
 ## 2. Trường hợp được chấp nhận
 
@@ -215,6 +219,10 @@ ${operator(support)}`;
 }
 
 function vanChuyen(vars: LegalVars, support: Support): string {
+  const freeship =
+    vars.freeshipThreshold > 0
+      ? `Đơn từ ${formatVnd(vars.freeshipThreshold)} được miễn phí vận chuyển. Một số hạng thành viên hoặc chương trình có thể có ngưỡng miễn phí khác, được hiển thị ở giỏ hàng.`
+      : 'Mọi đơn đều được miễn phí vận chuyển.';
   return `## 1. Phạm vi giao hàng
 
 Tubu Tree giao hàng tới các khu vực mà đơn vị vận chuyển phục vụ. Nếu địa chỉ của bạn nằm ngoài vùng giao, hệ thống sẽ báo ở bước thanh toán.
@@ -222,7 +230,7 @@ Tubu Tree giao hàng tới các khu vực mà đơn vị vận chuyển phục v
 ## 2. Phí vận chuyển
 
 - Phí vận chuyển được tính theo địa chỉ nhận hàng và khối lượng đơn, hiển thị trước khi bạn bấm đặt hàng.
-- Đơn từ ${formatVnd(vars.freeshipThreshold)} được miễn phí vận chuyển. Một số hạng thành viên hoặc chương trình có thể có ngưỡng miễn phí khác, được hiển thị ở giỏ hàng.
+- ${freeship}
 
 ## 3. Thời gian giao hàng dự kiến
 

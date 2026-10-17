@@ -18,10 +18,15 @@ export const LEGAL_CONFIG_KEYS: Readonly<Record<string, string>> = {
 const DEFAULT_RETURN_WINDOW_DAYS = 7;
 const DEFAULT_FREESHIP_THRESHOLD = 200000;
 
-/** Số dương hợp lệ, không thì mặc định: giá trị hỏng trong DB không được hiện thành "NaN ngày" trên trang chính sách. */
-function positiveOr(v: unknown, fallback: number): number {
+/**
+ * Số không âm hợp lệ (0 là hợp lệ: freeship mọi đơn, hạn đổi trả 0 ngày — khớp loyalty.returnWindowDays), không thì mặc định:
+ * giá trị hỏng trong DB không được hiện thành "NaN ngày" trên trang chính sách. Chỉ nhận số hoặc chuỗi số (Number(null) = 0).
+ */
+function nonNegativeOr(v: unknown, fallback: number): number {
+  if (typeof v !== 'number' && typeof v !== 'string') return fallback;
+  if (typeof v === 'string' && v.trim() === '') return fallback;
   const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 @Public()
@@ -44,8 +49,8 @@ export class LegalConfigController {
       content: typeof raw === 'string' && raw.trim() !== '' ? raw : null,
       // Bản nháp có chỗ nhắc tới các số này: lấy từ đúng khoá hệ thống đang chạy để không lệch với giỏ/đổi trả thật.
       vars: {
-        returnWindowDays: positiveOr(returnWindowDays, DEFAULT_RETURN_WINDOW_DAYS),
-        freeshipThreshold: positiveOr(freeshipThreshold, DEFAULT_FREESHIP_THRESHOLD),
+        returnWindowDays: nonNegativeOr(returnWindowDays, DEFAULT_RETURN_WINDOW_DAYS),
+        freeshipThreshold: nonNegativeOr(freeshipThreshold, DEFAULT_FREESHIP_THRESHOLD),
       },
     };
   }

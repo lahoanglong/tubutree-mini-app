@@ -335,9 +335,12 @@ export interface LegalDoc {
   vars: LegalVars;
 }
 
-function positiveOr(v: unknown, fallback: number): number {
+/** 0 hợp lệ (freeship mọi đơn, hạn đổi trả 0 ngày); null, rỗng, sai kiểu, âm thì mặc định. */
+function nonNegativeOr(v: unknown, fallback: number): number {
+  if (typeof v !== 'number' && typeof v !== 'string') return fallback;
+  if (typeof v === 'string' && v.trim() === '') return fallback;
   const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 /**
@@ -352,8 +355,8 @@ export async function getLegalDoc(loai: string): Promise<LegalDoc> {
   return {
     content: typeof json?.content === 'string' && json.content.trim() !== '' ? json.content : null,
     vars: {
-      returnWindowDays: positiveOr(json?.vars?.returnWindowDays, DEFAULT_LEGAL_VARS.returnWindowDays),
-      freeshipThreshold: positiveOr(json?.vars?.freeshipThreshold, DEFAULT_LEGAL_VARS.freeshipThreshold),
+      returnWindowDays: nonNegativeOr(json?.vars?.returnWindowDays, DEFAULT_LEGAL_VARS.returnWindowDays),
+      freeshipThreshold: nonNegativeOr(json?.vars?.freeshipThreshold, DEFAULT_LEGAL_VARS.freeshipThreshold),
     },
   };
 }

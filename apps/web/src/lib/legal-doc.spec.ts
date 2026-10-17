@@ -33,6 +33,16 @@ describe('getLegalDoc — nội dung chính sách do admin nhập (D5-01)', () =
     await expect(getLegalDoc('dieu-khoan')).resolves.toEqual({ content: null, vars: DEFAULT_LEGAL_VARS });
   });
 
+  it('biến bằng 0 là hợp lệ (freeship mọi đơn, hạn đổi trả 0): giữ nguyên, không rơi về mặc định', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { content: null, vars: { returnWindowDays: 0, freeshipThreshold: 0 } })));
+    await expect(getLegalDoc('van-chuyen')).resolves.toEqual({ content: null, vars: { returnWindowDays: 0, freeshipThreshold: 0 } });
+  });
+
+  it('biến âm → rơi về mặc định', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { vars: { returnWindowDays: -1, freeshipThreshold: -5 } })));
+    await expect(getLegalDoc('van-chuyen')).resolves.toEqual({ content: null, vars: DEFAULT_LEGAL_VARS });
+  });
+
   it('biến thiếu/sai kiểu → rơi về mặc định từng biến; content sai kiểu hoặc trắng → null', async () => {
     vi.stubGlobal(
       'fetch',

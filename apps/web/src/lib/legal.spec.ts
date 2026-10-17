@@ -53,6 +53,21 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
     expect(vanChuyen).not.toContain('200.000đ');
   });
 
+  it('ngưỡng freeship 0: ghi "miễn phí vận chuyển cho mọi đơn", không in "Đơn từ 0đ" hay mốc mặc định 200.000đ', () => {
+    const text = defaultLegalContent('van-chuyen', { returnWindowDays: 7, freeshipThreshold: 0 }, SUPPORT);
+    expect(text).toContain('Mọi đơn đều được miễn phí vận chuyển');
+    expect(text).not.toContain('Đơn từ');
+    expect(text).not.toContain('0đ');
+    expect(text).not.toContain('200.000đ');
+    expect(text).not.toContain('ngưỡng miễn phí khác');
+  });
+
+  it('hạn đổi trả 0 ngày: nói thẳng chưa nhận đổi trả sau khi giao, không in "trong vòng 0 ngày"', () => {
+    const text = defaultLegalContent('doi-tra', { returnWindowDays: 0, freeshipThreshold: 200000 }, SUPPORT);
+    expect(text).not.toContain('0 ngày');
+    expect(text).toContain('chưa nhận yêu cầu đổi trả sau khi giao');
+  });
+
   it('đổi trả và vận chuyển dẫn chéo nhau, điều khoản dẫn tới bảo mật/đổi trả/vận chuyển bằng đường dẫn nội bộ', () => {
     const dk = defaultLegalContent('dieu-khoan', VARS, SUPPORT);
     for (const other of ['bao-mat', 'doi-tra', 'van-chuyen']) expect(dk).toContain(`](/chinh-sach/${other})`);
