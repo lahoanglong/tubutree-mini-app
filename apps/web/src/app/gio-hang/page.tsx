@@ -392,8 +392,13 @@ export default function CartPage() {
       )}
       {showBar && (
         <StickyActionBar label="Thanh toán">
+          {/* Dưới md khung tóm tắt bị ẩn hẳn (cả với trình đọc màn hình): lời báo ở đây là bản duy nhất khách thấy/nghe được. */}
           {payHint && (
-            <p aria-hidden="true" className={`mb-2 text-xs ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}>
+            <p
+              id="cart-pay-hint"
+              role={stockBlocked ? 'alert' : 'status'}
+              className={`mb-2 text-xs ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}
+            >
               {payHint}
             </p>
           )}
@@ -403,7 +408,7 @@ export default function CartPage() {
               <div className="text-lg font-bold leading-tight text-stone-900">{formatVnd(payTotal)}</div>
             </div>
             {payHint ? (
-              <button type="button" disabled className={`${uiBar.primary} min-w-0 flex-1`}>
+              <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} min-w-0 flex-1`}>
                 Thanh toán ({selectedCount})
               </button>
             ) : (

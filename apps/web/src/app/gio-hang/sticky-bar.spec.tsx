@@ -101,6 +101,44 @@ describe('/gio-hang — thanh dính đáy', () => {
     expect(bar(c)!.textContent).toContain('hết hàng');
   });
 
+  // Dưới md khung tóm tắt bị CSS ẩn (display:none, trình đọc màn hình cũng không thấy), nên lời báo vì sao nút khoá chỉ đến được
+  // người dùng trình đọc màn hình qua thanh dính: không được aria-hidden và nút phải được mô tả bằng chính lời báo đó.
+  it('hết hàng: lời báo trên thanh dính là thông báo cho trình đọc màn hình, gắn vào nút khoá bằng aria-describedby', async () => {
+    state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
+    const c = await mount();
+    const hint = bar(c)!.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(hint.textContent).toContain('hết hàng');
+    expect(hint.closest('[aria-hidden="true"]')).toBeNull();
+    const btn = bar(c)!.querySelector('button')!;
+    expect(hint.id).not.toBe('');
+    expect(btn.getAttribute('aria-describedby')).toBe(hint.id);
+  });
+
+  it('không chọn dòng nào: lời báo là role=status, nút khoá được mô tả bằng nó', async () => {
+    const c = await mount();
+    click(c.querySelector('input[aria-label="Chọn tất cả sản phẩm"]'));
+    await flush(3);
+    const hint = bar(c)!.querySelector<HTMLElement>('[role="status"]')!;
+    expect(hint.textContent).toContain('Chọn ít nhất một sản phẩm');
+    expect(hint.closest('[aria-hidden="true"]')).toBeNull();
+    expect(bar(c)!.querySelector('button')!.getAttribute('aria-describedby')).toBe(hint.id);
+  });
+
+  it('mỗi lúc chỉ một bản lời báo lộ ra: bản trong khung tóm tắt nằm trong khối hidden (chỉ từ md), thanh dính md:hidden', async () => {
+    state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
+    const c = await mount();
+    const hints = Array.from(c.querySelectorAll<HTMLElement>('[role="alert"]')).filter((el) => el.textContent?.includes('hết hàng'));
+    const inCard = hints.find((el) => !bar(c)!.contains(el))!;
+    expect(inCard.closest('.hidden')?.className).toMatch(/\bmd:block\b/);
+    expect(bar(c)!.className).toMatch(/\bmd:hidden\b/);
+  });
+
+  it('có thể mua: không có lời báo và nút không mang aria-describedby', async () => {
+    const c = await mount();
+    expect(bar(c)!.querySelector('[role="alert"], [role="status"]')).toBeNull();
+    expect(bar(c)!.querySelector('a[href="/thanh-toan"]')!.hasAttribute('aria-describedby')).toBe(false);
+  });
+
   it('giỏ trống hoặc chưa tải: không có thanh dính', async () => {
     state.cart = cartOf([]);
     const c = await mount();
