@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { recallCheckoutSelection } from '@/lib/checkout-selection';
 
 // BUYERWEB-10: bấm "+" trên dòng hết hàng làm dòng bị xoá (quantity kẹp về 0) mà không báo gì.
@@ -21,6 +21,8 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMyCoupons: async () => state.coupons,
   getCouponPreviews: (p: unknown) => state.previews(p),
   getCartSelection: (ids: string[]) => state.selection(ids),
+  applyCoupon: async () => state.cart,
+  removeCoupon: async () => state.cart,
   updateCartItem: async (id: string, q: number) => {
     state.updates.push({ id, q });
     return state.cart;
@@ -458,5 +460,38 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     await settle();
     expect(container.textContent).not.toContain('Giảm giá combo');
     expect(container.textContent).toContain('Tổng100.000đ');
+  });
+
+  it('bỏ mã khi đang chọn một phần: hỏi lại giá phần chọn, không còn giảm giá của mã cũ', async () => {
+    state.cart = two();
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 100000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.textContent).toContain('Tổng97.000đ');
+    state.cart = { ...two(), couponCode: null, discount: 0, comboDiscount: 0, tierDiscount: 0 };
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: null, subtotal: 100000, comboDiscount: 0, discount: 0, tierDiscount: 0 });
+    click(container.querySelector('button[aria-label="Bỏ mã giảm giá WELCOME"]'));
+    await settle();
+    expect(state.selection).toHaveBeenCalledTimes(2);
+    expect(container.textContent).not.toContain('-3.000đ');
+    expect(container.textContent).toContain('Tổng100.000đ');
+  });
+
+  it('áp mã khi đang chọn một phần: hỏi lại giá phần chọn và hiện mức giảm của mã mới', async () => {
+    state.cart = { ...two(), couponCode: null, discount: 0, comboDiscount: 0, tierDiscount: 0 };
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: null, subtotal: 100000, comboDiscount: 0, discount: 0, tierDiscount: 0 });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.textContent).toContain('Tổng100.000đ');
+    state.cart = { ...two(), couponCode: 'WELCOME' };
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 100000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+    typeInto(container.querySelector('#coupon-code'), 'welcome');
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Áp dụng')!);
+    await settle();
+    expect(state.selection).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('-3.000đ');
+    expect(container.textContent).toContain('Tổng97.000đ');
   });
 });

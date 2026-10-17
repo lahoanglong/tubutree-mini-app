@@ -24,14 +24,15 @@ export default function CartPage() {
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã. Chọn cả giỏ
   // dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá phần chọn.
   const subsetLines = (cartQ.data?.items ?? []).filter((it) => !deselected.has(it.id));
+  // Mã đang áp nằm trong dấu vân tay: áp/bỏ mã đổi giá phần chọn dù id, số lượng, thành tiền không đổi.
   const subsetSig =
     cartQ.data && subsetLines.length > 0 && subsetLines.length < cartQ.data.items.length
-      ? JSON.stringify([subsetLines.map((it) => it.id), couponPreviewKey(subsetLines)])
+      ? JSON.stringify([subsetLines.map((it) => it.id), couponPreviewKey(subsetLines), cartQ.data.couponCode])
       : null;
   const settledSubsetSig = useSettled(subsetSig, PREVIEW_DEBOUNCE_MS);
   const selectionQ = useQuery({
     queryKey: [...cartKeyNow, 'selection', settledSubsetSig],
-    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string])[0]),
+    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string, string | null])[0]),
     enabled: phase === 'authenticated' && !!settledSubsetSig,
     retry: false,
   });

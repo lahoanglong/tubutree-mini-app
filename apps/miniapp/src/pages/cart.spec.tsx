@@ -378,4 +378,53 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     expect(screen.queryByText('Giảm giá combo')).toBeNull();
     expect(screen.getAllByText('100.000đ').length).toBeGreaterThan(0);
   });
+
+  const renderWithClient = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <CartPage />
+      </QueryClientProvider>,
+    );
+    return qc;
+  };
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('bỏ mã khi đang chọn một phần: hỏi lại giá phần chọn, không còn giảm giá của mã cũ', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    mocks.getCartSelection.mockResolvedValueOnce(
+      summary({ items: [LINE_B], subtotal: 100_000, couponCode: 'XANH10', comboDiscount: 0, discount: 3_000, tierDiscount: 0 }),
+    );
+    const qc = renderWithClient();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+    expect(screen.getByText('97.000đ')).toBeInTheDocument();
+    mocks.getCartSelection.mockResolvedValueOnce(
+      summary({ items: [LINE_B], subtotal: 100_000, couponCode: null, comboDiscount: 0, discount: 0, tierDiscount: 0 }),
+    );
+    act(() => {
+      qc.setQueryData(['cart', null], two({ couponCode: null, comboDiscount: 0, discount: 0, tierDiscount: 0 }));
+    });
+    await waitFor(() => expect(mocks.getCartSelection).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    await waitFor(() => expect(screen.queryByText('-3.000đ')).toBeNull());
+  });
+
+  it('áp mã khi đang chọn một phần: hỏi lại giá phần chọn và hiện mức giảm của mã mới', async () => {
+    mocks.getCart.mockResolvedValue(two({ couponCode: null, comboDiscount: 0, discount: 0, tierDiscount: 0 }));
+    mocks.getCartSelection.mockResolvedValueOnce(
+      summary({ items: [LINE_B], subtotal: 100_000, couponCode: null, comboDiscount: 0, discount: 0, tierDiscount: 0 }),
+    );
+    const qc = renderWithClient();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    await waitFor(() => expect(mocks.getCartSelection).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    await wait(50);
+    mocks.getCartSelection.mockResolvedValueOnce(
+      summary({ items: [LINE_B], subtotal: 100_000, couponCode: 'XANH10', comboDiscount: 0, discount: 3_000, tierDiscount: 0 }),
+    );
+    act(() => {
+      qc.setQueryData(['cart', null], two({ couponCode: 'XANH10', comboDiscount: 0, discount: 0, tierDiscount: 0 }));
+    });
+    expect(await screen.findByText('-3.000đ', {}, { timeout: 2_000 })).toBeInTheDocument();
+    expect(mocks.getCartSelection).toHaveBeenCalledTimes(2);
+  });
 });
