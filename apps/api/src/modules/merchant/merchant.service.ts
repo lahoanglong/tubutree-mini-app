@@ -514,45 +514,52 @@ export class MerchantService {
 
     // PENDING_REVIEW: chưa bán được cho tới khi admin duyệt. Sản phẩm đối tác không mang mã Pancake nào (D4): hàng tự giao đi
     // hàng chờ của đối tác; hàng "Tubu giao hộ" nhận biến thể Pancake thật lúc duyệt.
-    const product = await this.prisma.product.create({
-      data: {
-        name: dto.name,
-        slug: uniqueSlug,
-        pancakeId: null,
-        fulfilment: 'MERCHANT',
-        pancakeLinkCode: link?.pancakeId ?? null,
-        brand: store.title,
-        description: dto.description,
-        shortDesc: dto.shortDesc,
-        basePrice: retailPrice,
-        salePrice,
-        images: dto.images ?? [],
-        thumbnail: dto.thumbnail ?? dto.images?.[0] ?? null,
-        categoryIds: dto.categoryIds ?? [],
-        tags: dto.tags ?? [],
-        forSegment: dto.forSegment ?? [],
-        ingredients: (dto.ingredients as Prisma.InputJsonValue) ?? undefined,
-        certifications: dto.certifications ?? [],
-        storefrontId: store.id,
-        approvalStatus: 'PENDING_REVIEW',
-        isActive: true,
-        variations: {
-          create: {
-            pancakeId: null,
-            sku,
-            name: 'Mặc định',
-            attributes: {},
-            retailPrice,
-            salePrice,
-            stock: link ? 0 : (dto.stock ?? 0),
-            isActive: true,
+    // Chèn dưới FOR KEY SHARE của dòng gian hàng rồi kiểm lại cờ (như checkout.assertPartnerStoresUnderLock): thu hồi đại lý giữ FOR UPDATE
+    // cùng dòng này trước khi tắt cờ, nên hoặc sản phẩm bị từ chối, hoặc thu hồi thấy sản phẩm này và 409, không bao giờ cả hai cùng qua.
+    const product = await this.prisma.$transaction(async (tx) => {
+      const [locked] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
+        SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${store.id} FOR KEY SHARE`;
+      if (!locked || !isPartnerStore(locked)) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+      return tx.product.create({
+        data: {
+          name: dto.name,
+          slug: uniqueSlug,
+          pancakeId: null,
+          fulfilment: 'MERCHANT',
+          pancakeLinkCode: link?.pancakeId ?? null,
+          brand: store.title,
+          description: dto.description,
+          shortDesc: dto.shortDesc,
+          basePrice: retailPrice,
+          salePrice,
+          images: dto.images ?? [],
+          thumbnail: dto.thumbnail ?? dto.images?.[0] ?? null,
+          categoryIds: dto.categoryIds ?? [],
+          tags: dto.tags ?? [],
+          forSegment: dto.forSegment ?? [],
+          ingredients: (dto.ingredients as Prisma.InputJsonValue) ?? undefined,
+          certifications: dto.certifications ?? [],
+          storefrontId: store.id,
+          approvalStatus: 'PENDING_REVIEW',
+          isActive: true,
+          variations: {
+            create: {
+              pancakeId: null,
+              sku,
+              name: 'Mặc định',
+              attributes: {},
+              retailPrice,
+              salePrice,
+              stock: link ? 0 : (dto.stock ?? 0),
+              isActive: true,
+            },
           },
         },
-      },
-      include: {
-        variations: true,
-      },
-    });
+        include: {
+          variations: true,
+        },
+      });
+    }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
 
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },

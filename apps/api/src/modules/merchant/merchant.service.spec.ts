@@ -229,6 +229,8 @@ describe('MerchantService', () => {
             ...data,
           })),
         },
+        $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true }]),
+        $transaction: jest.fn().mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma)),
       });
       const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.createProduct('u1', {
