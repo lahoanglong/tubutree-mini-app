@@ -259,6 +259,23 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
       }
     });
 
+    it('đảo điểm hỏng giữa chừng → hidePost ném lỗi và bài vẫn PUBLISHED (không gỡ nửa vời rồi mất cơ hội đảo điểm)', async () => {
+      const author = await createUser(prisma);
+      const p = await post(author.id);
+      // Có điểm đã cộng nhưng thiếu hồ sơ cộng đồng: bước trừ điểm ném P2025.
+      await prisma.reputationEvent.create({ data: { userId: author.id, amount: 5, reason: 'POST', refId: p.id } });
+
+      await expect(feed.hidePost(p.id, 'x')).rejects.toBeDefined();
+
+      expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('PUBLISHED');
+      expect(await logs(author.id, 'COMMUNITY_POST_HIDDEN')).toHaveLength(0);
+
+      await prisma.communityProfile.create({ data: { userId: author.id, reputation: 5 } });
+      await feed.hidePost(p.id, 'x');
+      expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('REMOVED');
+      expect((await prisma.communityProfile.findUniqueOrThrow({ where: { userId: author.id } })).reputation).toBe(0);
+    });
+
     it('hidePost trên bài PENDING → 409, bài vẫn PENDING, không có tin "đã được ẩn"', async () => {
       const author = await createUser(prisma);
       const p = await post(author.id, { status: 'PENDING' });

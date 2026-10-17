@@ -207,33 +207,46 @@ export class CommunityFeedService {
    */
   private async reverseReputationForRef(userId: string, refId: string, reason: string): Promise<void> {
     try {
-      const thresholds = await this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
-      await this.prisma.$transaction(async (tx) => {
-        const events = await tx.reputationEvent.findMany({
-          where: { userId, refId, amount: { gt: 0 } },
-          select: { amount: true },
-        });
-        const total = events.reduce((sum, e) => sum + e.amount, 0);
-        if (total <= 0) return;
-        await tx.reputationEvent.create({
-          data: { userId, amount: -total, reason, refId },
-        });
-        await tx.communityProfile.update({
-          where: { userId },
-          data: { reputation: { decrement: total } },
-        });
-        const profile = await tx.communityProfile.findUnique({ where: { userId }, select: { reputation: true } });
-        if (profile) {
-          await tx.communityProfile.update({
-            where: { userId },
-            data: { level: levelFromReputation(Math.max(0, profile.reputation), thresholds) },
-          });
-        }
-      });
+      const thresholds = await this.repThresholds();
+      await this.prisma.$transaction((tx) => this.reverseReputationInTx(tx, userId, refId, reason, thresholds));
     } catch (err) {
       const code = (err as { code?: string } | null)?.code;
       if (code === 'P2002') return; // đã đảo rồi (gỡ lần 2)
-      this.logger.warn(`reverseReputation failed for ${refId}: ${(err as Error).message}`);
+      // Bài đã REMOVED thì các lần gọi sau thoát sớm, nên lỗi ở đây là điểm kẹt vĩnh viễn: phải có dấu vết để dò.
+      this.logger.error(`reverseReputation failed refId=${refId} user=${userId} reason=${reason}: ${(err as Error).message}`);
+    }
+  }
+
+  private repThresholds(): Promise<number[]> {
+    return this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
+  }
+
+  /**
+   * Thân của việc đảo điểm. KHÔNG nuốt lỗi: gọi bên trong transaction của hidePost/deletePost thì lỗi hoàn tác luôn việc đổi
+   * trạng thái (bài vẫn đăng, CSKH thử lại được) thay vì để bài REMOVED mà điểm kẹt vĩnh viễn. Kiểm dòng đảo đã có bằng
+   * findFirst vì P2002 trong transaction làm hỏng cả giao dịch. `thresholds` đọc trước (đọc config trong tx xin thêm kết nối pool).
+   */
+  private async reverseReputationInTx(tx: Prisma.TransactionClient, userId: string, refId: string, reason: string, thresholds: number[]): Promise<void> {
+    if (await tx.reputationEvent.findFirst({ where: { userId, reason, refId }, select: { id: true } })) return;
+    const events = await tx.reputationEvent.findMany({
+      where: { userId, refId, amount: { gt: 0 } },
+      select: { amount: true },
+    });
+    const total = events.reduce((sum, e) => sum + e.amount, 0);
+    if (total <= 0) return;
+    await tx.reputationEvent.create({
+      data: { userId, amount: -total, reason, refId },
+    });
+    await tx.communityProfile.update({
+      where: { userId },
+      data: { reputation: { decrement: total } },
+    });
+    const profile = await tx.communityProfile.findUnique({ where: { userId }, select: { reputation: true } });
+    if (profile) {
+      await tx.communityProfile.update({
+        where: { userId },
+        data: { level: levelFromReputation(Math.max(0, profile.reputation), thresholds) },
+      });
     }
   }
 
@@ -607,11 +620,16 @@ export class CommunityFeedService {
    * lên thẳng PUBLISHED, không bao giờ qua hàng chờ nữa. Đây là tín hiệu ngược còn thiếu.
    * Không đụng tới quyền theo ROLE (nhân viên/CTV/đại lý vẫn tin cậy theo vai trò).
    */
-  private async revokeTrust(userId: string): Promise<void> {
+  private async revokeTrust(userId: string, tx?: Prisma.TransactionClient): Promise<void> {
+    // Trong transaction thì để lỗi nổi lên (hoàn tác cả giao dịch); ngoài transaction vẫn là việc phụ, không chặn việc gỡ bài.
+    if (tx) {
+      await tx.communityProfile.updateMany({ where: { userId }, data: { isTrusted: false } });
+      return;
+    }
     try {
       await this.prisma.communityProfile.updateMany({ where: { userId }, data: { isTrusted: false } });
     } catch (err) {
-      this.logger.warn(`revokeTrust failed for ${userId}: ${(err as Error).message}`);
+      this.logger.error(`revokeTrust failed user=${userId}: ${(err as Error).message}`);
     }
   }
 
@@ -959,17 +977,22 @@ export class CommunityFeedService {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true, status: true, title: true, body: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền xoá.');
-    // Chuyển trạng thái bằng MỘT câu lệnh có điều kiện rồi mới đảo điểm/rút tin cậy/báo tác giả: hai người cùng gỡ một bài thì
-    // chỉ lượt thắng (count 1) làm các việc phụ, lượt còn lại thoát êm. Kiểm-rồi-ghi tách rời sẽ báo tác giả hai lần.
-    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
-    if (count !== 1) return { ok: true };
-    // Trả lại điểm reputation đã cộng từ bài này — nếu không, đăng-ăn-điểm-rồi-xoá là cách farm hạng sạch dấu vết (P1-1).
-    // Trừ theo CHỦ BÀI, kể cả khi ADMIN là người gỡ.
-    await this.reverseReputationForPost(post.userId, postId);
-    // ADMIN gỡ bài của người khác = hành vi kiểm duyệt → rút cờ tin cậy. Tác giả tự xoá bài
-    // của mình thì không (không có vi phạm nào được xác nhận).
-    if (post.userId !== userId && role === 'ADMIN') {
-      await this.revokeTrust(post.userId);
+    // Đổi trạng thái, đảo điểm và rút tin cậy trong MỘT transaction: updateMany có điều kiện là cổng (hai người cùng gỡ thì
+    // chỉ lượt thắng, count 1, làm các việc phụ — kiểm-rồi-ghi tách rời sẽ báo tác giả hai lần), còn lỗi ở bước đảo điểm
+    // hoàn tác luôn việc gỡ để lần thử lại không thoát sớm vì "đã REMOVED" (điểm kẹt vĩnh viễn).
+    // Đảo điểm: nếu không, đăng-ăn-điểm-rồi-xoá là cách farm hạng sạch dấu vết (P1-1). Trừ theo CHỦ BÀI, kể cả khi ADMIN gỡ.
+    // ADMIN gỡ bài của người khác = hành vi kiểm duyệt → rút cờ tin cậy; tác giả tự xoá bài mình thì không.
+    const moderated = post.userId !== userId && role === 'ADMIN';
+    const thresholds = await this.repThresholds();
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
+      if (count !== 1) return false;
+      await this.reverseReputationInTx(tx, post.userId, postId, 'REVERSE_POST', thresholds);
+      if (moderated) await this.revokeTrust(post.userId, tx);
+      return true;
+    });
+    if (!removed) return { ok: true };
+    if (moderated) {
       // Bài còn PENDING chưa từng hiện ra với ai: báo "chưa được đăng" chứ không phải "đã được ẩn khỏi cộng đồng".
       if (post.status === 'PENDING') await this.notifyPostRejected(postId, post);
       else await this.notifyPostHidden(postId, post);
@@ -990,10 +1013,15 @@ export class CommunityFeedService {
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status === 'REMOVED') return { ok: true };
     if (post.status !== 'PUBLISHED') throw new ConflictException('Bài đang chờ duyệt nên chưa được đăng, không thể ẩn. Hãy dùng "Từ chối" cho bài này.');
-    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: 'PUBLISHED' }, data: { status: 'REMOVED' } });
-    if (count !== 1) return { ok: true };
-    await this.reverseReputationForPost(post.userId, postId);
-    await this.revokeTrust(post.userId);
+    const thresholds = await this.repThresholds();
+    const hidden = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.feedPost.updateMany({ where: { id: postId, status: 'PUBLISHED' }, data: { status: 'REMOVED' } });
+      if (count !== 1) return false;
+      await this.reverseReputationInTx(tx, post.userId, postId, 'REVERSE_POST', thresholds);
+      await this.revokeTrust(post.userId, tx);
+      return true;
+    });
+    if (!hidden) return { ok: true };
     await this.notifyPostHidden(postId, post, reason);
     return { ok: true };
   }
