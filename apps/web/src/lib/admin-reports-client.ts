@@ -48,3 +48,20 @@ export interface SourceReport {
 }
 
 export const getSourceReport = (r: ReportRange) => apiFetch<SourceReport>(`/admin/reports/sources?${rangeQuery(r)}`);
+
+export type PayoutExportStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
+export type RefundExportStatus = 'OPEN' | 'UNVERIFIED' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'DISMISSED';
+
+const withStatus = (r: ReportRange, status?: string) => `${rangeQuery(r)}${status ? `&status=${encodeURIComponent(status)}` : ''}`;
+
+/** Khấu trừ TNCN của CTV theo người nhận, lệnh đã chi trong khoảng ngày chi. */
+export const downloadPitCsv = (r: ReportRange) =>
+  apiDownload(`/admin/reports/exports/tax?${rangeQuery(r)}`, `thue-tncn-ctv-${r.from}-${r.to}.csv`);
+
+/** Lệnh rút tiền theo ngày yêu cầu. */
+export const downloadPayoutsCsv = (r: ReportRange, status?: PayoutExportStatus) =>
+  apiDownload(`/admin/reports/exports/payouts?${withStatus(r, status)}`, `lenh-rut-tien-${r.from}-${r.to}.csv`);
+
+/** Khoản hoàn tiền khách theo ngày tạo khoản hoàn. */
+export const downloadRefundsCsv = (r: ReportRange, status?: RefundExportStatus) =>
+  apiDownload(`/admin/reports/exports/refunds?${withStatus(r, status)}`, `hoan-tien-khach-${r.from}-${r.to}.csv`);

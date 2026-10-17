@@ -19,6 +19,16 @@ export function lastDaysRange(days: number, now: Date = new Date()): { from: str
   return { from: addDaysKey(to, -(days - 1)), to };
 }
 
+/** Tháng lịch giờ VN: offset 0 = tháng này, -1 = tháng trước. Tháng này kết thúc hôm nay. */
+export function vnMonthRange(offset: 0 | -1, now: Date = new Date()): { from: string; to: string } {
+  const today = vnTodayKey(now);
+  const [y, m] = today.split('-').map(Number) as [number, number];
+  const firstOfMonth = (monthIndex: number) => new Date(Date.UTC(y, monthIndex, 1)).toISOString().slice(0, 10);
+  const thisMonth = firstOfMonth(m - 1);
+  if (offset === 0) return { from: thisMonth, to: today };
+  return { from: firstOfMonth(m - 2), to: addDaysKey(thisMonth, -1) };
+}
+
 export const REVENUE_MAX_DAYS = 366;
 export const SOURCES_MAX_DAYS = 180;
 

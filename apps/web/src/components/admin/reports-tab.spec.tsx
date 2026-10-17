@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { ReportsTab } from './reports-tab';
-import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({
   getRevenueReport: vi.fn(),
   getSourceReport: vi.fn(),
   downloadOrderItemsCsv: vi.fn(),
   downloadOrdersCsv: vi.fn(),
+  downloadPitCsv: vi.fn(),
+  downloadPayoutsCsv: vi.fn(),
+  downloadRefundsCsv: vi.fn(),
 }));
-vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv }));
+vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv, downloadPitCsv: mocks.downloadPitCsv, downloadPayoutsCsv: mocks.downloadPayoutsCsv, downloadRefundsCsv: mocks.downloadRefundsCsv }));
 vi.mock('@/lib/admin-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-client')>()), downloadOrdersCsv: mocks.downloadOrdersCsv }));
 
 let mounted: Rendered[] = [];
@@ -164,5 +167,57 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     const { container } = mount(<ReportsTab />);
     await flush();
     expect(container.textContent).toContain('Không có khách mới nào trong khoảng ngày này');
+  });
+
+  it('chọn nhanh "Tháng trước" cho kỳ kê khai thuế', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Tháng trước')!);
+    await flush();
+    expect(mocks.getRevenueReport).toHaveBeenLastCalledWith({ from: '2026-09-01', to: '2026-09-30' });
+  });
+
+  describe('xuất file cho kế toán (D1-14)', () => {
+    const btn = (container: HTMLElement, t: string) => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === t)!;
+
+    it('mỗi nút gọi đúng file với khoảng ngày đang chọn và bộ lọc trạng thái', async () => {
+      mocks.downloadPitCsv.mockResolvedValue({ filename: 'thue.csv', bytes: 1 });
+      mocks.downloadPayoutsCsv.mockResolvedValue({ filename: 'rut.csv', bytes: 1 });
+      mocks.downloadRefundsCsv.mockResolvedValue({ filename: 'hoan.csv', bytes: 1 });
+      const { container } = mount(<ReportsTab />);
+      await flush();
+      const range = { from: '2026-09-19', to: '2026-10-18' };
+      click(btn(container, 'Xuất CSV thuế TNCN'));
+      await flush();
+      expect(mocks.downloadPitCsv).toHaveBeenCalledWith(range);
+      expect(container.textContent).toContain('Đã tải thue.csv');
+
+      click(btn(container, 'Xuất CSV lệnh rút tiền'));
+      await flush();
+      expect(mocks.downloadPayoutsCsv).toHaveBeenLastCalledWith(range, undefined);
+      const selects = container.querySelectorAll('select');
+      selectValue(selects[0]!, 'PAID');
+      click(btn(container, 'Xuất CSV lệnh rút tiền'));
+      await flush();
+      expect(mocks.downloadPayoutsCsv).toHaveBeenLastCalledWith(range, 'PAID');
+
+      selectValue(selects[1]!, 'OPEN');
+      click(btn(container, 'Xuất CSV hoàn tiền'));
+      await flush();
+      expect(mocks.downloadRefundsCsv).toHaveBeenCalledWith(range, 'OPEN');
+    });
+
+    it('lỗi tải (hết phiên, không đủ quyền) hiện thông báo; khoảng ngày sai thì khoá nút', async () => {
+      mocks.downloadPitCsv.mockRejectedValue(new Error('Bạn không có quyền.'));
+      const { container } = mount(<ReportsTab />);
+      await flush();
+      click(btn(container, 'Xuất CSV thuế TNCN'));
+      await flush();
+      expect(container.textContent).toContain('Bạn không có quyền.');
+      typeInto(container.querySelector<HTMLInputElement>('input[type="date"]'), '2024-01-01');
+      await flush();
+      expect(btn(container, 'Xuất CSV thuế TNCN').disabled).toBe(true);
+      expect(btn(container, 'Xuất CSV hoàn tiền').disabled).toBe(true);
+    });
   });
 });

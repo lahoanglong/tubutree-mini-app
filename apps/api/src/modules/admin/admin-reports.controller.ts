@@ -1,6 +1,7 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { IsOptional } from 'class-validator';
+import { IsIn, IsOptional } from 'class-validator';
+import type { CustomerRefundKind, CustomerRefundStatus, PayoutStatus } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { vnDateKey } from '../../common/vn-time';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -10,11 +11,27 @@ import { orderItemCsvChunks } from './admin-order-items-export';
 import { streamCsv } from './admin-export';
 import { AdminReportsService } from './admin-reports.service';
 import { IsCalendarDate } from '../../common/calendar-date';
+import { EXPORT_MAX_DAYS, resolveReportRange } from './report-range';
+import { payoutCsvChunks, payoutExportWhere, pitCsvChunks, refundCsvChunks, refundExportWhere } from './admin-finance-export';
 
 /** Khoảng ngày giờ VN, tính cả hai đầu. Thiếu thì lấy 30 ngày gần nhất (resolveReportRange). */
 export class ReportRangeQuery {
   @IsOptional() @IsCalendarDate() from?: string;
   @IsOptional() @IsCalendarDate() to?: string;
+}
+
+const PAYOUT_STATUSES = ['REQUESTED', 'APPROVED', 'PAID', 'REJECTED'] as const;
+const REFUND_STATUSES = ['OPEN', 'UNVERIFIED', 'PENDING', 'PROCESSING', 'COMPLETED', 'DISMISSED'] as const;
+const REFUND_KINDS = ['END_CUSTOMER', 'CANCEL', 'RETURN', 'LATE_PAYMENT', 'OVERPAYMENT'] as const;
+
+export class PayoutExportQuery extends ReportRangeQuery {
+  @IsOptional() @IsIn(PAYOUT_STATUSES) status?: PayoutStatus;
+}
+
+export class RefundExportQuery extends ReportRangeQuery {
+  /** OPEN = mọi khoản còn việc (cùng tập với thẻ "Hoàn tiền khách"). */
+  @IsOptional() @IsIn(REFUND_STATUSES) status?: 'OPEN' | CustomerRefundStatus;
+  @IsOptional() @IsIn(REFUND_KINDS) kind?: CustomerRefundKind;
 }
 
 /**
@@ -46,5 +63,26 @@ export class AdminReportsController {
   @Get('order-items/export')
   async exportOrderItems(@Query() q: ExportOrdersQuery, @Res() res: Response) {
     await streamCsv(res, `dong-hang-${vnDateKey()}.csv`, orderItemCsvChunks(this.prisma, await this.admin.adminOrderWhere(q)));
+  }
+
+  /** Khấu trừ TNCN của CTV theo người nhận, lệnh đã chi trong khoảng ngày chi (tối đa 366 ngày). */
+  @Get('exports/tax')
+  async exportTax(@Query() q: ReportRangeQuery, @Res() res: Response) {
+    const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
+    await streamCsv(res, `thue-tncn-ctv-${range.from}-${range.to}.csv`, pitCsvChunks(this.prisma, range));
+  }
+
+  /** Lệnh rút tiền (hoa hồng CTV và Ví Tubu) theo ngày yêu cầu, lọc trạng thái nếu có. */
+  @Get('exports/payouts')
+  async exportPayouts(@Query() q: PayoutExportQuery, @Res() res: Response) {
+    const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
+    await streamCsv(res, `lenh-rut-tien-${range.from}-${range.to}.csv`, payoutCsvChunks(this.prisma, payoutExportWhere(range, q.status)));
+  }
+
+  /** Khoản hoàn tiền khách theo ngày tạo khoản hoàn, lọc trạng thái/loại nếu có. */
+  @Get('exports/refunds')
+  async exportRefunds(@Query() q: RefundExportQuery, @Res() res: Response) {
+    const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
+    await streamCsv(res, `hoan-tien-khach-${range.from}-${range.to}.csv`, refundCsvChunks(this.prisma, refundExportWhere(range, q.status, q.kind)));
   }
 }

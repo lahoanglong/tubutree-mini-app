@@ -4,6 +4,9 @@ import { AdminService } from '../../src/modules/admin/admin.service';
 import { AdminReportsService } from '../../src/modules/admin/admin-reports.service';
 import { orderCsvChunks } from '../../src/modules/admin/admin-export';
 import { orderItemCsvChunks } from '../../src/modules/admin/admin-order-items-export';
+import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
+import { payoutCsvChunks, payoutExportWhere, pitCsvChunks, refundCsvChunks, refundExportWhere } from '../../src/modules/admin/admin-finance-export';
+import { resolveReportRange } from '../../src/modules/admin/report-range';
 import { REVENUE_ORDER_WHERE } from '../../src/modules/admin/admin-revenue';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
 
@@ -27,6 +30,8 @@ describe('Báo cáo admin (real Postgres)', () => {
       const orderIds = (await prisma.order.findMany({ where: { userId: { in: userIds } }, select: { id: true } })).map((o) => o.id);
       await prisma.$transaction([
         prisma.returnRequest.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.orderCustomerRefund.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.payout.deleteMany({ where: { userId: { in: userIds } } }),
         prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } }),
         prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
         prisma.storefront.deleteMany({ where: { id: { in: storefrontIds } } }),
@@ -282,6 +287,98 @@ describe('Báo cáo admin (real Postgres)', () => {
       const none = await reports.sourceReport({ from: '2001-01-01', to: '2001-01-31' });
       expect(none.rows).toEqual([]);
       expect(none.totals).toEqual({ newUsers: 0, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0 });
+    });
+  });
+
+  describe('D1-14: xuất TNCN, lệnh rút tiền, hoàn tiền khách', () => {
+    // Tháng 05/2019 giờ VN: [2019-04-30T17:00Z, 2019-05-31T17:00Z)
+    const range = resolveReportRange('2019-05-01', '2019-05-31', { maxDays: 366 });
+    const inMay = (day: number, hour = 3) => new Date(Date.UTC(2019, 4, day, hour));
+
+    it('CSV TNCN khớp bảng "Khấu trừ thuế TNCN theo tháng" (AffiliateService.pitReport) từng người, từng số', async () => {
+      const none = {} as never;
+      const affiliate = new AffiliateService(prisma, none, none, none, none, none);
+      const lan = await mkUser({ role: 'AFFILIATE', fullName: 'Lan CTV', phone: '0987000111', personalTaxId: '0012030040' });
+      const minh = await mkUser({ role: 'AFFILIATE', fullName: 'Minh CTV', phone: '0987000222' });
+      const nam = await mkUser({ role: 'AFFILIATE', fullName: 'Nam CTV', phone: '0987000333' });
+      const mkPayout = (userId: string, over: Record<string, unknown>) =>
+        prisma.payout.create({ data: { userId, amount: 0, method: 'BANK', status: 'PAID', paidAt: inMay(10), ...over } as never });
+      // Lan: hai lệnh đã chi trong tháng (MST lệnh đầu để trống thì theo lệnh sau), thêm một lệnh ngoài tháng
+      await mkPayout(lan.id, { grossAmount: 1_000_000, taxWithheld: 100_000, amount: 900_000, paidAt: inMay(5), taxId: null });
+      await mkPayout(lan.id, { grossAmount: 2_000_000, taxWithheld: 200_000, amount: 1_800_000, paidAt: inMay(20), taxId: '0099887766' });
+      await mkPayout(lan.id, { grossAmount: 5_000_000, taxWithheld: 500_000, amount: 4_500_000, paidAt: new Date('2019-06-01T00:00:00Z') });
+      // Minh: không MST, có khấu trừ (phải ghi chú thiếu)
+      await mkPayout(minh.id, { grossAmount: 3_000_000, taxWithheld: 300_000, amount: 2_700_000 });
+      // Nam: dưới ngưỡng khấu trừ; cộng thêm lệnh rút Ví (không có thu nhập gộp), lệnh chưa chi và lệnh bị từ chối: đều không vào báo cáo
+      await mkPayout(nam.id, { grossAmount: 500_000, taxWithheld: 0, amount: 500_000 });
+      await mkPayout(nam.id, { grossAmount: null, amount: 700_000 });
+      await mkPayout(nam.id, { grossAmount: 400_000, amount: 400_000, status: 'APPROVED', paidAt: null });
+      await mkPayout(nam.id, { grossAmount: 400_000, amount: 400_000, status: 'REJECTED', paidAt: null });
+
+      const mine = new Set([lan.id, minh.id, nam.id]);
+      const screen = await affiliate.pitReport('2019-05');
+      const csv = await collect(pitCsvChunks(prisma, range));
+      const lines = csv.trimEnd().split('\r\n').slice(1).filter((l) => [...mine].some((id) => l.startsWith(`${id},`)));
+      const bySheet = new Map(lines.map((l) => [l.split(',')[0]!, l]));
+      expect(bySheet.size).toBe(3);
+      for (const r of screen.rows.filter((x) => mine.has(x.userId))) {
+        const line = bySheet.get(r.userId)!;
+        // userId, tên, SĐT (="…" có nháy nên tách bằng regex), MST, số lần, thu nhập, thuế, thực nhận, ghi chú
+        const tail = line.split(',').slice(-5);
+        expect(tail.slice(0, 4).map(Number)).toEqual([r.payoutCount, r.grossAmount, r.taxWithheld, r.netAmount]);
+        expect(tail[4]).toBe(!r.taxId && r.taxWithheld > 0 ? 'Thiếu MST/CCCD' : '');
+        if (r.taxId) expect(line).toContain(`"=""${r.taxId}"""`);
+      }
+      expect(bySheet.get(lan.id)).toContain('"=""0099887766"""');
+      expect(bySheet.get(lan.id)!.endsWith(',2,3000000,300000,2700000,')).toBe(true);
+      expect(bySheet.get(minh.id)!.endsWith(',1,3000000,300000,2700000,Thiếu MST/CCCD')).toBe(true);
+      expect(bySheet.get(nam.id)!.endsWith(',1,500000,0,500000,')).toBe(true);
+      // Thứ tự theo thuế khấu trừ giảm dần như bảng trên màn
+      const order = lines.map((l) => l.split(',')[0]);
+      expect(order).toEqual(screen.rows.filter((x) => mine.has(x.userId)).map((x) => x.userId));
+    });
+
+    it('danh sách rút tiền: theo ngày yêu cầu và trạng thái, kể cả rút Ví và lệnh bị từ chối', async () => {
+      const u = await mkUser({ fullName: 'Rút Ví', phone: '0987000444' });
+      const mk = (over: Record<string, unknown>) =>
+        prisma.payout.create({ data: { userId: u.id, amount: 100_000, method: 'BANK', status: 'REQUESTED', requestedAt: inMay(12), ...over } as never });
+      const wallet = await mk({ amount: 190_000, fee: 10_000, bankInfo: { bankName: 'ACB', accountNumber: '0123456', accountName: 'RUT VI' } });
+      const rejected = await mk({ status: 'REJECTED', rejectionReason: 'Sai STK', requestedAt: inMay(13) });
+      await mk({ requestedAt: new Date('2019-06-01T00:00:00Z') });
+      const all = await collect(payoutCsvChunks(prisma, { ...payoutExportWhere(range), userId: u.id }));
+      expect(all.trimEnd().split('\r\n').slice(1).map((l) => l.split(',')[0]).sort()).toEqual([wallet.id, rejected.id].sort());
+      expect(all).toContain('Rút Ví Tubu hoặc lệnh cũ');
+      expect(all).toContain('ACB,"=""0123456""",RUT VI');
+      const onlyRejected = await collect(payoutCsvChunks(prisma, { ...payoutExportWhere(range, 'REJECTED'), userId: u.id }));
+      const rows = onlyRejected.trimEnd().split('\r\n').slice(1);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toContain('Sai STK');
+    });
+
+    it('danh sách hoàn tiền: theo ngày tạo khoản, "Đang mở" lấy khoản còn việc, đủ tài khoản nhận', async () => {
+      const u = await mkUser();
+      const mkOrder = (status: 'CANCELLED' | 'DELIVERED', code: string) =>
+        createOrder(prisma, { userId: u.id, status, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED', code, createdAt: inMay(1) });
+      const o1 = await mkOrder('CANCELLED', `IT-RF-${randCode(6)}`);
+      const o2 = await mkOrder('DELIVERED', `IT-RF-${randCode(6)}`);
+      const o3 = await mkOrder('CANCELLED', `IT-RF-${randCode(6)}`);
+      const mk = (orderId: string, orderCode: string, over: Record<string, unknown>) =>
+        prisma.orderCustomerRefund.create({
+          data: { orderId, orderCode, userId: u.id, amount: 100_000, method: 'MANUAL_TRANSFER', status: 'PENDING', reason: 'CANCELLED', kind: 'CANCEL', createdAt: inMay(15), ...over } as never,
+        });
+      await mk(o1.id, o1.code, { bankName: 'MB', bankAccountNo: '0099887766', bankAccountName: 'KHACH', amount: 123_000 });
+      await mk(o2.id, o2.code, { kind: 'RETURN', reason: 'RETURNED', status: 'COMPLETED', method: 'WALLET', refKey: 'rr1', completedAt: inMay(16) });
+      await mk(o3.id, o3.code, { status: 'PENDING', createdAt: new Date('2019-06-02T00:00:00Z') });
+      const mine = { orderId: { in: [o1.id, o2.id, o3.id] } };
+      const all = await collect(refundCsvChunks(prisma, { AND: [refundExportWhere(range), mine] }));
+      expect(all.trimEnd().split('\r\n').slice(1)).toHaveLength(2);
+      expect(all).toContain(`${o1.code},`);
+      expect(all).toContain('MB,"=""0099887766""",KHACH');
+      expect(all).toContain('Đã hoàn vào ví');
+      const open = await collect(refundCsvChunks(prisma, { AND: [refundExportWhere(range, 'OPEN'), mine] }));
+      const openRows = open.trimEnd().split('\r\n').slice(1);
+      expect(openRows).toHaveLength(1);
+      expect(openRows[0]).toContain(o1.code);
     });
   });
 });

@@ -2,6 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 import { VN_OFFSET_MS, vnDateKey } from '../../common/vn-time';
 
 export const REPORT_DEFAULT_DAYS = 30;
+/** File xuất ghi dần từng lô nên chỉ cần chặn khoảng ngày phi lý; một năm đủ cho kê khai thuế và đối soát. */
+export const EXPORT_MAX_DAYS = 366;
 const DAY_MS = 24 * 3_600_000;
 
 export interface ReportRange {

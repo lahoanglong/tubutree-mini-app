@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addDaysKey, formatPct, lastDaysRange, pivotRevenue, rangeDays, rangeError, vnTodayKey } from './admin-reports';
+import { addDaysKey, formatPct, lastDaysRange, vnMonthRange, pivotRevenue, rangeDays, rangeError, vnTodayKey } from './admin-reports';
 
 describe('khoảng ngày giờ VN', () => {
   it('hôm nay theo giờ VN, không theo UTC: 20:00Z ngày 17 đã là ngày 18 ở VN', () => {
@@ -64,5 +64,22 @@ describe('formatPct', () => {
     expect(formatPct(2, 3)).toBe('67%');
     expect(formatPct(0, 5)).toBe('0%');
     expect(formatPct(0, 0)).toBe('—');
+  });
+});
+
+describe('vnMonthRange', () => {
+  it('tháng này từ ngày 1 tới hôm nay (giờ VN); tháng trước đủ cả tháng', () => {
+    const now = new Date('2026-10-17T20:00:00Z');
+    expect(vnMonthRange(0, now)).toEqual({ from: '2026-10-01', to: '2026-10-18' });
+    expect(vnMonthRange(-1, now)).toEqual({ from: '2026-09-01', to: '2026-09-30' });
+  });
+
+  it('qua ranh giới năm và tháng 2', () => {
+    expect(vnMonthRange(-1, new Date('2027-01-05T00:00:00Z'))).toEqual({ from: '2026-12-01', to: '2026-12-31' });
+    expect(vnMonthRange(-1, new Date('2026-03-10T00:00:00Z'))).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+  });
+
+  it('00:00 giờ VN ngày 1 đã là tháng mới dù UTC còn tháng cũ', () => {
+    expect(vnMonthRange(0, new Date('2026-10-31T17:00:00Z'))).toEqual({ from: '2026-11-01', to: '2026-11-01' });
   });
 });
