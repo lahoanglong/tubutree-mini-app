@@ -68,3 +68,10 @@ describe('CartController — không lộ ID chủ gian hàng (R2-MERCHANT-14)', 
     expect(svc.getCart).toHaveBeenCalledWith('u1', undefined);
   });
 });
+
+describe('CartController — áp mã ở giỏ cùng trần với nhận mã thẻ (D2-03)', () => {
+  it('POST /cart/coupon giới hạn 10 lần/phút: gõ mã thẻ ở giỏ cũng nhận mã, không được là đường dò mã nhanh hơn /coupons/claim', () => {
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', CartController.prototype.applyCoupon)).toBe(10);
+    expect(Reflect.getMetadata('THROTTLER:TTLdefault', CartController.prototype.applyCoupon)).toBe(60_000);
+  });
+});
