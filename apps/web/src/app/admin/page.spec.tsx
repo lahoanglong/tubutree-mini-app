@@ -346,11 +346,11 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cấu hình & tích hợp',
     ]);
     const items = [...nav.querySelectorAll('button')];
-    expect(items).toHaveLength(30);
+    expect(items).toHaveLength(31);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
-    expect(group('Người bán')).toContain('Lịch sử giá đại lý');
+    expect(group('Người bán')).toEqual(expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ']));
     expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ & quà đổi điểm']);
     const current = items.find((b) => b.getAttribute('aria-current') === 'page')!;
     expect(current.textContent).toBe('Việc cần xử lý');
