@@ -147,7 +147,10 @@ export class AccountDeletionService {
       // bên dưới ghi lại các đơn này, khoá users trước thì đợi lần cộng điểm đang giữ đơn trong khi nó đợi users ⇒ 40P01.
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
       // Gian hàng của chủ trước dòng users: thu hồi vai trò đại lý khoá gian hàng rồi mới ghi users, khoá ngược chiều thì deadlock (40P01).
-      await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${request.userId} ORDER BY "id" FOR UPDATE`;
+      // NO KEY UPDATE (không phải FOR UPDATE): đặt đơn qua slug gian hàng của chính chủ giữ KEY SHARE users rồi KEY SHARE gian hàng
+      // (khoá ngoại orders); FOR UPDATE đợi KEY SHARE ấy trong lúc nó đợi users FOR UPDATE ở dưới ⇒ 40P01. Ẩn danh chỉ sửa cột không phải
+      // khoá của gian hàng, và NO KEY UPDATE vẫn xung đột với FOR UPDATE/NO KEY UPDATE của thu hồi và duyệt nên thứ tự giữa chúng không đổi.
+      await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${request.userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: request.userId } });
       const now = new Date();
