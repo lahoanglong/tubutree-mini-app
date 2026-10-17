@@ -189,6 +189,7 @@ export const vi = {
     discount: 'Giảm giá',
     comboDiscount: 'Giảm giá combo',
     tierDiscount: 'Ưu đãi hạng thành viên',
+    subsetRecalcNote: 'Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.',
     checkout: (n: number) => `Thanh toán (${n})`,
     removed: 'Đã bỏ khỏi giỏ',
     couponPlaceholder: 'Nhập mã giảm giá',
