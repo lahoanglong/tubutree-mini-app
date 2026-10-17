@@ -7,6 +7,9 @@ const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
 const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined;
 const CONFIGURED = Boolean(CLOUD && PRESET);
 
+/** Có dịch vụ lưu ảnh (Cloudinary) trong bản build này không. Ảnh đại diện chỉ lưu được dạng URL nên cần có nó. */
+export const isCloudinaryConfigured = (): boolean => CONFIGURED;
+
 /** Chặn ảnh gốc quá lớn TRƯỚC khi đưa vào canvas nén — ảnh vài chục MB (panorama, RAW export...)
  * có thể treo/crash webview khi drawImage/toDataURL. VideoUpload đã có guard tương tự (50MB). */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
