@@ -6,7 +6,8 @@ import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tansta
 import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
 import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
-import { shareLink } from '../services/zmp-bridge';
+import { useShareWithFallback } from '../components/share-sheet';
+import { WEB_BASE_URL } from '../utils/web-base-url';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -39,6 +40,7 @@ const CAPTION_BELOW: CSSProperties = { marginTop: 6, paddingLeft: 4 };
 
 export default function WalletPage() {
   const { openSnackbar } = useSnackbar();
+  const shareWithFallback = useShareWithFallback();
   const navigate = useNavigate();
   const qc = useQueryClient();
   // enabled theo trạng thái auth: nếu fetch trước khi restore() xong → 401 → (retry:false) kẹt
@@ -91,17 +93,16 @@ export default function WalletPage() {
 
   const canWithdraw = canWithdrawRule(amountNum, w, min, bank);
 
-  const shareReferral = async () => {
+  const shareReferral = () => {
     if (!referral) return;
-    try {
-      await shareLink({
+    void shareWithFallback(
+      {
         title: 'Tubu Tree — Trồng cây, nhận quà 🌳',
         description: `Dùng mã ${referral.referralCode} khi mua hàng ở Tubu Tree nhé!`,
         path: `/?ref=${referral.referralCode}`,
-      });
-    } catch {
-      openSnackbar({ text: `Mã giới thiệu của bạn: ${referral.referralCode}`, type: 'info' });
-    }
+      },
+      `Dùng mã ${referral.referralCode} khi mua hàng ở Tubu Tree nhé: ${WEB_BASE_URL}/?ref=${referral.referralCode}`,
+    );
   };
 
   // Khách thường không có hoa hồng: hai thẻ 0đ chỉ khiến tiền hoàn bị hiểu thành hoa hồng.

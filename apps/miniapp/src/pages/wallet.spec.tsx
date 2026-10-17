@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getWalletTransactions: vi.fn(),
   withdraw: vi.fn(),
   shareLink: vi.fn(),
+  copyText: vi.fn(),
   features: { cashback: false },
   role: 'CUSTOMER' as string,
 }));
@@ -35,6 +36,7 @@ vi.mock('../services/account-api', () => ({
   withdraw: mocks.withdraw,
 }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
+vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/features', () => ({
   get CASHBACK_ENABLED() {
     return mocks.features.cashback;
@@ -250,15 +252,28 @@ describe('WalletPage — điều hướng', () => {
     expect(mocks.navigate).not.toHaveBeenCalledWith('/affiliate');
   });
 
-  it('"Chia sẻ" mã giới thiệu gọi shareLink với đường dẫn ?ref=; lỗi thì báo mã qua snackbar', async () => {
+  it('"Chia sẻ" mã giới thiệu gọi shareLink với đường dẫn ?ref=; Zalo từ chối thì chép liên kết kèm mã và báo qua snackbar', async () => {
     stubLoaded();
     mocks.shareLink.mockRejectedValueOnce(new Error('no share'));
+    mocks.copyText.mockResolvedValueOnce(true);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=TUBU1234' })));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/?ref=TUBU1234')));
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mã giới thiệu của bạn: TUBU1234', type: 'info' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('đã sao chép liên kết') })),
     );
+  });
+
+  it('người dùng huỷ hộp thoại chia sẻ Zalo: không snackbar, không ghi đè clipboard', async () => {
+    stubLoaded();
+    mocks.shareLink.mockRejectedValueOnce({ code: -2003 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    expect(mocks.copyText).not.toHaveBeenCalled();
   });
 });
 
