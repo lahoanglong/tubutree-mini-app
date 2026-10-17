@@ -11,7 +11,7 @@ export function flashLimitMessage(offer: EffectivePrice, quantity: number): stri
 
 export interface FlashLinePrice {
   unitPrice: number;
-  /** Suất giờ vàng của dòng; null = giá thường. Đặt đơn trừ suất này trong transaction (FlashSaleService.consumeQuota). */
+  /** Suất giờ vàng của dòng; null = giá thường. Đặt đơn trừ suất này trong transaction (FlashSaleService.consumeQuotas). */
   flash: EffectivePrice | null;
   flashLimitNotice: string | null;
 }

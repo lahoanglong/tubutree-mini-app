@@ -40,6 +40,25 @@ import { Prisma } from '@prisma/client';
 export type StockExecutor = Pick<Prisma.TransactionClient, '$executeRaw' | '$queryRaw'>;
 
 /**
+ * Khoá trước các dòng biến thể mà tx sắp giữ/trả kho, theo thứ tự id. Mỗi đường giữ/trả kho đi từng dòng theo thứ tự giỏ/đơn;
+ * hai tx có cùng hai biến thể ở thứ tự dòng ngược nhau (A,B ‖ B,A) sẽ mỗi bên giữ một dòng rồi chờ dòng kia (40P01). Gọi trước
+ * vòng lặp theo dòng: vòng lặp giữ nguyên thứ tự dòng (lỗi "không đủ tồn kho" vẫn nêu dòng đầu tiên thiếu hàng), chỉ thứ tự
+ * lấy khoá đổi. `mode` phải đúng mức khoá mà câu ghi sau đó lấy (UPDATE cột không phải khoá = NO KEY UPDATE; CTE `FOR UPDATE`
+ * của `reserveAvailableVariationStock` = UPDATE): khoá yếu hơn rồi nâng lên giữa chừng lại mở chỗ chờ ngược chiều.
+ */
+export async function lockVariationsInIdOrder(
+  tx: StockExecutor,
+  variationIds: readonly string[],
+  mode: 'NO KEY UPDATE' | 'UPDATE' = 'NO KEY UPDATE',
+): Promise<void> {
+  const ids = [...new Set(variationIds)];
+  // Một dòng thì không có thứ tự nào để sai: câu ghi tự khoá đúng dòng đó.
+  if (ids.length < 2) return;
+  await tx.$queryRaw`
+    SELECT "id" FROM "variations" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" ${mode === 'UPDATE' ? Prisma.sql`FOR UPDATE` : Prisma.sql`FOR NO KEY UPDATE`}`;
+}
+
+/**
  * Giữ chỗ `quantity` đơn vị cho một đơn: `stock -= q`, `reservedStock += q`.
  *
  * Trả `true` nếu còn đủ hàng. Điều kiện `stock >= quantity` nằm TRONG câu UPDATE nên hai đơn

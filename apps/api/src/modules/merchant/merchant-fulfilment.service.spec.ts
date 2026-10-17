@@ -889,8 +889,8 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     prisma.$queryRaw.mockResolvedValueOnce([{ id: 'sf-d' }]);
     prisma.order.groupBy.mockResolvedValue([{ fulfillerStorefrontId: 'sf-d', _count: { _all: 3 } }]);
     prisma.storefront.findMany.mockResolvedValue([
-      { id: 'sf-c', title: 'Giao hộ', owner: null, commissionPct: null, consignmentFeePct: new Prisma.Decimal('0.02'), consignmentFeeFixed: 3_400 },
-      { id: 'sf-d', title: 'Tự giao', owner: null, commissionPct: new Prisma.Decimal('0.1'), consignmentFeePct: new Prisma.Decimal(0), consignmentFeeFixed: 0 },
+      { id: 'sf-c', title: 'Giao hộ', type: 'MERCHANT', isPartner: false, owner: null, commissionPct: null, consignmentFeePct: new Prisma.Decimal('0.02'), consignmentFeeFixed: 3_400 },
+      { id: 'sf-d', title: 'Tự giao', type: 'CTV', isPartner: true, owner: null, commissionPct: new Prisma.Decimal('0.1'), consignmentFeePct: new Prisma.Decimal(0), consignmentFeeFixed: 0 },
     ]);
     const spy = jest.spyOn(svc, 'statementFor').mockResolvedValue({ lines: [{ orderItemId: 'x', netAmount: 5 }], total: 5 } as never);
     const res = await svc.adminOverview(NOW);
@@ -904,8 +904,8 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(prisma.order.groupBy).toHaveBeenCalledTimes(1);
     expect(res.defaultCommissionPct).toBe(0.15);
     expect(res.stores).toEqual([
-      expect.objectContaining({ storefrontId: 'sf-c', activeOrders: 0, settleableLines: 0, settleableAmount: 0, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400 }),
-      expect.objectContaining({ storefrontId: 'sf-d', activeOrders: 3, settleableLines: 1, settleableAmount: 5, consignmentLines: 1, commissionPct: 0.1 }),
+      expect.objectContaining({ storefrontId: 'sf-c', type: 'MERCHANT', isPartner: false, activeOrders: 0, settleableLines: 0, settleableAmount: 0, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400 }),
+      expect.objectContaining({ storefrontId: 'sf-d', type: 'CTV', isPartner: true, activeOrders: 3, settleableLines: 1, settleableAmount: 5, consignmentLines: 1, commissionPct: 0.1 }),
     ]);
     const candidates = sqlOf(prisma.$queryRaw.mock.calls[0]);
     expect(candidates).toContain('UNION');

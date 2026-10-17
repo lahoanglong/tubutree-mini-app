@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -12,6 +12,25 @@ export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
 export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
 export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
 export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
+
+export interface FlashQuotaLine {
+  flashSaleItemId: string;
+  quantity: number;
+}
+
+/** Kết quả trừ suất của một dòng: SOLD_OUT = hết suất hoặc hết giờ, OVER_LIMIT = vượt giới hạn mua của khách. */
+export type FlashQuotaOutcome = 'OK' | 'SOLD_OUT' | 'OVER_LIMIT';
+
+/** Lỗi hạ tầng khi trừ suất (DB, tranh khoá), kèm vị trí trong `lines` của dòng đang xử lý. */
+export class FlashQuotaLineError extends Error {
+  constructor(
+    readonly lineIndex: number,
+    readonly original: unknown,
+  ) {
+    super(original instanceof Error ? original.message : String(original));
+    this.name = 'FlashQuotaLineError';
+  }
+}
 
 /** Chốt chặn gõ nhầm (R4-ADMIN-11): giá flash 1đ, đợt kéo dài 10 năm vì gõ sai năm. */
 export const FLASH_MAX_DISCOUNT_KEY = 'flashsale.max_discount_pct';
@@ -91,7 +110,7 @@ export class FlashSaleService {
       include: { flashSale: { select: { endAt: true } } },
     });
     const open = items.filter((it) => it.soldCount < it.quota);
-    // Cùng hai giới hạn consumeQuota kiểm lúc đặt đơn: giỏ/báo giá tính trước để khách không bị chặn ở bước cuối
+    // Cùng hai giới hạn consumeQuotas kiểm lúc đặt đơn: giỏ/báo giá tính trước để khách không bị chặn ở bước cuối
     // với một giá giỏ không bao giờ đặt được (ENGAGE-4).
     const bought = new Map<string, number>();
     if (userId && open.length > 0) {
@@ -149,55 +168,107 @@ export class FlashSaleService {
   }
 
   /**
-   * Trừ 1 suất flash ATOMIC trong tx đặt đơn. Guard kép:
-   *  (a) soldCount+qty<=quota + flash còn active → raw SQL (Prisma không so 2 cột); rows=0 → hết suất.
-   *  (b) FlashSalePurchase.quantity+qty<=perUserLimit → chống vượt giới hạn mua.
-   * Fail bất kỳ guard nào → throw (caller rollback toàn bộ đơn). Nếu (b) fail sau khi (a) đã trừ,
-   * hoàn lại soldCount để không "khoá" suất.
+   * Trừ suất giờ vàng của mọi dòng một lần đặt, trong tx đặt đơn. Mỗi dòng có guard kép:
+   *  (a) soldCount+qty<=quota + flash còn active → raw SQL (Prisma không so 2 cột); rows=0 → SOLD_OUT.
+   *  (b) FlashSalePurchase.quantity+qty<=perUserLimit → OVER_LIMIT, hoàn lại soldCount vừa trừ để không "khoá" suất.
+   * Trả kết quả theo đúng thứ tự `lines`; caller báo lỗi của dòng hỏng đầu tiên (tx rollback cả đơn). Lỗi hạ tầng ném
+   * FlashQuotaLineError kèm dòng đang xử lý.
+   *
+   * Khoá theo pha, không theo dòng: (1) mọi dòng suất flash_sale_items theo id, (2) mọi dòng suất của khách đã có theo
+   * flashSaleItemId, (3) chỉ khi còn dòng chưa có: một lần KEY SHARE users rồi đọc lại và chèn. Duyệt trả hoàn suất (khoá
+   * flash_sale_items) rồi khoá người mời FOR UPDATE, gộp phiên khách khoá dòng suất rồi mới khoá users: lấy users giữa chừng
+   * (khi một dòng trước cần chèn) rồi mới khoá suất của dòng sau là vòng chờ ⇒ 40P01 (r13-flash-existing-row-lock,
+   * r13-merge-checkout-lock). KEY SHARE users trước khi chèn vì gộp chuyển dòng suất của khách sang (suất, đích) dưới khoá
+   * FOR UPDATE users của đích: chèn trước rồi mới chờ users (khoá ngoại của đơn) là giữ mục chỉ mục unique gộp đang chờ.
    */
-  async consumeQuota(
+  async consumeQuotas(
     tx: Prisma.TransactionClient,
-    itemId: string,
     userId: string,
-    qty: number,
+    lines: readonly FlashQuotaLine[],
     now: Date = new Date(),
-  ): Promise<void> {
-    // (a) trừ soldCount atomic (raw — so 2 cột + kiểm tra flash còn active).
-    const sold = await tx.$executeRaw`
-      UPDATE flash_sale_items AS fsi
-      SET "soldCount" = fsi."soldCount" + ${qty}
-      WHERE fsi.id = ${itemId}
-        AND fsi."soldCount" + ${qty} <= fsi."quota"
-        AND EXISTS (
-          SELECT 1 FROM flash_sales fs
-          WHERE fs.id = fsi."flashSaleId"
-            AND fs."isActive" = true
-            AND fs."startAt" <= ${now}
-            AND fs."endAt" > ${now}
-        )`;
-    if (sold === 0) throw new BadRequestException(FLASH_SOLD_OUT_MSG);
-
-    // (b) perUserLimit
-    const item = await tx.flashSaleItem.findUnique({ where: { id: itemId }, select: { perUserLimit: true } });
-    const limit = item?.perUserLimit ?? 0;
-    const existing = await tx.flashSalePurchase.findUnique({
-      where: { flashSaleItemId_userId: { flashSaleItemId: itemId, userId } },
-    });
-    if (existing) {
-      const bumped = await tx.flashSalePurchase.updateMany({
-        where: { flashSaleItemId: itemId, userId, quantity: { lte: limit - qty } },
-        data: { quantity: { increment: qty } },
+  ): Promise<FlashQuotaOutcome[]> {
+    const outcomes: FlashQuotaOutcome[] = lines.map(() => 'OK');
+    if (lines.length === 0) return outcomes;
+    const byItem = lines
+      .map((_, i) => i)
+      .sort((a, b) => {
+        const x = lines[a]!.flashSaleItemId;
+        const y = lines[b]!.flashSaleItemId;
+        return x < y ? -1 : x > y ? 1 : a - b;
       });
-      if (bumped.count === 0) {
-        await tx.flashSaleItem.updateMany({ where: { id: itemId }, data: { soldCount: { decrement: qty } } });
-        throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
+    let at = byItem[0]!;
+    try {
+      for (const i of byItem) {
+        at = i;
+        const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
+        const sold = await tx.$executeRaw`
+          UPDATE flash_sale_items AS fsi
+          SET "soldCount" = fsi."soldCount" + ${qty}
+          WHERE fsi.id = ${itemId}
+            AND fsi."soldCount" + ${qty} <= fsi."quota"
+            AND EXISTS (
+              SELECT 1 FROM flash_sales fs
+              WHERE fs.id = fsi."flashSaleId"
+                AND fs."isActive" = true
+                AND fs."startAt" <= ${now}
+                AND fs."endAt" > ${now}
+            )`;
+        if (sold === 0) outcomes[i] = 'SOLD_OUT';
       }
-    } else {
-      if (qty > limit) {
+      const live = byItem.filter((i) => outcomes[i] === 'OK');
+      if (live.length === 0) return outcomes;
+      at = live[0]!;
+      const ids = [...new Set(live.map((i) => lines[i]!.flashSaleItemId))];
+      const items = await tx.flashSaleItem.findMany({ where: { id: { in: ids } }, select: { id: true, perUserLimit: true } });
+      const limits = new Map(items.map((it) => [it.id, it.perUserLimit]));
+      const lockOwn = async (itemIds: string[]) => {
+        const rows = await tx.$queryRaw<{ flashSaleItemId: string }[]>`
+          SELECT "flashSaleItemId" FROM "flash_sale_purchases"
+           WHERE "userId" = ${userId} AND "flashSaleItemId" IN (${Prisma.join(itemIds)})
+           ORDER BY "flashSaleItemId"
+           FOR NO KEY UPDATE`;
+        return new Set(rows.map((r) => r.flashSaleItemId));
+      };
+      const overLimit = async (i: number) => {
+        const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
         await tx.flashSaleItem.updateMany({ where: { id: itemId }, data: { soldCount: { decrement: qty } } });
-        throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
+        outcomes[i] = 'OVER_LIMIT';
+      };
+      const bump = async (i: number) => {
+        const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
+        const limit = limits.get(itemId) ?? 0;
+        const bumped = await tx.flashSalePurchase.updateMany({
+          where: { flashSaleItemId: itemId, userId, quantity: { lte: limit - qty } },
+          data: { quantity: { increment: qty } },
+        });
+        if (bumped.count === 0) await overLimit(i);
+      };
+
+      const own = await lockOwn(ids);
+      const missing: number[] = [];
+      for (const i of live) {
+        at = i;
+        if (own.has(lines[i]!.flashSaleItemId)) await bump(i);
+        else missing.push(i);
       }
-      await tx.flashSalePurchase.create({ data: { flashSaleItemId: itemId, userId, quantity: qty } });
+      if (missing.length === 0) return outcomes;
+
+      at = missing[0]!;
+      await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR KEY SHARE`;
+      for (const id of await lockOwn([...new Set(missing.map((i) => lines[i]!.flashSaleItemId))])) own.add(id);
+      for (const i of missing) {
+        at = i;
+        const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
+        if (own.has(itemId)) await bump(i);
+        else if (qty > (limits.get(itemId) ?? 0)) await overLimit(i);
+        else {
+          await tx.flashSalePurchase.create({ data: { flashSaleItemId: itemId, userId, quantity: qty } });
+          own.add(itemId);
+        }
+      }
+      return outcomes;
+    } catch (e) {
+      throw new FlashQuotaLineError(at, e);
     }
   }
 

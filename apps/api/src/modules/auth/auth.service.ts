@@ -5,6 +5,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AuthUser, JwtPayload, LoginResponse } from '@tubutree/shared-types';
 import { Prisma, type User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
@@ -29,17 +30,10 @@ export const MERGE_ANCESTOR_CAP = 1000;
 const MERGE_TX_OPTIONS = { maxWait: 2_000, timeout: 5_000 } as const;
 const MERGE_LOCK_TIMEOUT = '2s';
 const MERGE_STATEMENT_TIMEOUT = '5s';
-const MERGE_BUSY_MESSAGE = 'Hệ thống đang bận, vui lòng thử lại sau ít giây.';
+const MERGE_BUSY_MESSAGE = LOCK_BUSY_MESSAGE;
 
-/**
- * Lần gộp thua vì tranh khoá, thử lại là qua: hạn chờ khoá/câu lệnh/tx (55P03 lock_timeout, 57014 statement_timeout, P2028 Prisma
- * huỷ tx) hoặc bị Postgres chọn làm nạn nhân deadlock (40P01, Prisma P2034). Tx đã rollback nên không đổi gì.
- */
-export function isMergeBusy(err: unknown): boolean {
-  if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === 'P2028' || err.code === 'P2034')) return true;
-  const message = err instanceof Error ? err.message : '';
-  return /\b55P03\b|\b57014\b|\b40P01\b|lock timeout|statement timeout|deadlock detected/i.test(message);
-}
+/** Lần gộp thua vì tranh khoá, thử lại là qua (tx đã rollback nên không đổi gì). */
+export const isMergeBusy = isLockBusy;
 
 /**
  * Thứ tự khoá dòng users khi gộp: người được mời trước người mời (cạnh a → b khi a.referredById = b, cả hai trong tập),
@@ -359,10 +353,16 @@ export class AuthService {
       // đơn/yêu cầu trả thì đảo chiều với lần duyệt đang giữ yêu cầu + đơn và chờ ví/điểm của khách ⇒ 40P01 (UAT R6-SYNC-2).
       await tx.$queryRaw`SELECT "id" FROM "return_requests" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
+      // Giỏ của khách (bước 1 xoá) và của target (nhận dòng của khách): đặt đơn khoá giỏ của người đặt trước mọi khoá khác rồi
+      // mới chạm users. Gộp khoá users rồi mới xoá giỏ khách là chờ ngược chiều với lần khách đang đặt (40P01). Lần target
+      // đang đặt chỉ dọn đúng các dòng nó đã đọc, nhưng bước 1 cộng dồn dòng khách trùng biến thể vào chính dòng đó: không chờ
+      // giỏ của target thì phần cộng dồn bị xoá theo (r13-merge-checkout-lock.race-spec). FOR UPDATE: dòng giỏ của khách bị
+      // xoá. Đổi lại gộp chờ cả lần target đang đặt (quá lock_timeout ⇒ 503 "đang bận").
+      await tx.$queryRaw`SELECT "id" FROM "carts" WHERE "userId" IN (${guest.id}, ${target.id}) ORDER BY "id" FOR UPDATE`;
       // Suất giờ vàng đã mua (bước 6 cộng dồn vào dòng của target): huỷ/trả đơn của target hoàn suất rồi mới ghi users của target,
       // nên gộp khoá users trước rồi mới ghi dòng suất là chờ ngược chiều ⇒ 40P01 (merge-reversal-flash-lock.race-spec). Chỉ khoá
-      // đúng các dòng bước 6 ghi (của khách, và của target trùng suất với khách): đơn của target hoàn suất theo thứ tự dòng đơn,
-      // khoá mọi dòng của target theo một thứ tự khác lại thành vòng với chính lần hoàn đó.
+      // đúng các dòng bước 6 ghi (của khách, và của target trùng suất với khách), theo suất rồi khách: cùng chiều với lần
+      // hoàn suất của huỷ/trả đơn (khoá theo id suất) và với checkout.
       await tx.$queryRaw`
         SELECT "id" FROM "flash_sale_purchases"
          WHERE "userId" = ${guest.id}

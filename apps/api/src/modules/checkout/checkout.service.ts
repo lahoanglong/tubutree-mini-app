@@ -1,5 +1,13 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { CouponPreviewDTO, CouponPreviewsResponse } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
@@ -12,9 +20,16 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService } from '../storefront/combo.service';
-import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
+import {
+  FlashQuotaLineError,
+  FlashSaleService,
+  FLASH_OVER_LIMIT_MSG,
+  type FlashQuotaLine,
+  type FlashQuotaOutcome,
+} from '../flash-sale/flash-sale.service';
+import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
-import { reserveVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
@@ -49,6 +64,7 @@ import {
 } from './checkout-split';
 import { PARTNER_POINTS_NOTE } from '../cart/partner-goods';
 import { DEFAULT_MERCHANT_COMMISSION_PCT, DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
+import { isPartnerStore } from '../merchant/partner-store';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from './total-changed';
 
@@ -60,6 +76,8 @@ export { TOTAL_CHANGED, TOTAL_CHANGED_MESSAGE_PREFIX, totalChangedMessage } from
 export const CART_CHANGED = 'CART_CHANGED';
 const CART_CHANGED_MESSAGE =
   'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Vui lòng xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại.';
+/** Gian hàng đối tác vừa thôi là đối tác giữa lúc tính tiền và lúc ghi đơn (admin tắt cờ): 409; tải lại giỏ thì thấy tình trạng mới. */
+export const STORE_CHANGED_MESSAGE = 'Gian hàng vừa thay đổi, vui lòng đặt lại.';
 
 /**
  * Lần bấm "Đặt hàng" đến sau khi giỏ đã thành đơn (app báo lỗi mạng/quá thời gian rồi khách bấm lại, có khi với key mới) nhận
@@ -431,28 +449,33 @@ export class CheckoutService {
         // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
         // SP có thể bị gỡ/từ chối giữa lúc tính giá (compute) và lúc ghi đơn — kiểm lại ở đây.
         await assertVariationsSellable(tx, cart.items);
-        for (const line of cart.items) {
-          const reserved = await reserveVariationStock(tx, line.variationId, line.quantity);
-          if (!reserved) {
-            throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
-          }
-          const fid = line.flashSaleItemId;
-          if (fid) {
-            try {
-              await this.flashSale.consumeQuota(tx, fid, userId, line.quantity, new Date());
-            } catch (e) {
-              // Vượt giới hạn mua = lỗi hợp lệ, giữ nguyên message. Hết suất/hết giờ → PRICE_CHANGED
-              // để FE hỏi lại giá mới (không âm thầm tính giá flash đã hết).
-              if (e instanceof BadRequestException && e.message === FLASH_OVER_LIMIT_MSG) throw e;
-              // Log trước khi remap: lỗi hạ tầng (DB timeout, bug) bị che dưới thông báo
-              // "giá đã đổi" cho khách — vẫn cần log để vận hành chẩn đoán được nguyên nhân thật.
-              this.logger.error(
-                `consumeQuota lỗi cho đơn ${code}, flashSaleItemId=${fid}: ${e instanceof Error ? e.message : e}`,
-              );
-              throw new BadRequestException('PRICE_CHANGED');
-            }
+        await lockVariationsInIdOrder(tx, cart.items.map((l) => l.variationId));
+        // Giữ kho từng dòng tới dòng thiếu hàng đầu tiên, rồi trừ suất giờ vàng của các dòng trước nó một lượt (khoá theo pha,
+        // xem consumeQuotas): lỗi báo khách vẫn là lỗi của dòng hỏng sớm nhất như khi làm từng dòng.
+        let short = cart.items.length;
+        for (const [i, line] of cart.items.entries()) {
+          if (!(await reserveVariationStock(tx, line.variationId, line.quantity))) {
+            short = i;
+            break;
           }
         }
+        const flashLines = cart.items
+          .slice(0, short)
+          .flatMap((l) => (l.flashSaleItemId ? [{ flashSaleItemId: l.flashSaleItemId, quantity: l.quantity }] : []));
+        const outcomes = flashLines.length > 0 ? await this.consumeFlashQuotas(tx, userId, flashLines, code) : [];
+        const failed = outcomes.findIndex((o) => o !== 'OK');
+        if (failed >= 0) {
+          // Vượt giới hạn mua = lỗi hợp lệ, giữ nguyên message. Hết suất/hết giờ → PRICE_CHANGED để FE hỏi lại giá mới
+          // (không âm thầm tính giá flash đã hết).
+          if (outcomes[failed] === 'OVER_LIMIT') throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
+          this.logger.error(`consumeQuotas hết suất cho đơn ${code}, flashSaleItemId=${flashLines[failed]!.flashSaleItemId}`);
+          throw new BadRequestException('PRICE_CHANGED');
+        }
+        if (short < cart.items.length) {
+          throw new BadRequestException(`Sản phẩm "${cart.items[short]!.productName}" không đủ tồn kho.`);
+        }
+
+        await this.assertPartnerStoresUnderLock(tx, computed.shipments);
 
         const created: Awaited<ReturnType<typeof tx.order.create>>[] = [];
         for (const [i, shipment] of computed.shipments.entries()) {
@@ -654,10 +677,11 @@ export class CheckoutService {
           if (order.referrerUserId) await this.affiliate.createCommissionForOrder(order.id, tx);
         }
         // Dọn giỏ cùng tx với đơn (vẫn dưới khoá giỏ). Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại và mã giảm giá.
+        // Cả giỏ: xoá đúng các dòng đã đọc (món đã mua + dòng ngừng bán), dòng vào giỏ sau lần đọc được giữ lại.
         if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
           await this.cart.removeItems(userId, cart.items.map((l) => l.id), tx);
         } else {
-          await this.cart.clear(userId, tx);
+          await this.cart.clearOrdered(userId, [...cart.items, ...cart.unavailableItems].map((l) => l.id), tx);
         }
         return created;
       });
@@ -855,6 +879,49 @@ export class CheckoutService {
   /** Lỗi vi phạm ràng buộc unique của Prisma (P2002). */
   private isUniqueViolation(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+  }
+
+  /**
+   * Nơi giao "gian hàng đối tác" được quyết NGOÀI tx (giỏ → `fulfillerOf`); admin tắt cờ `isPartner` (setStorePartner khoá FOR
+   * UPDATE dòng gian hàng rồi đếm đơn tự giao còn chạy) commit trước lần ghi đơn thì để lại đơn tự giao trên gian hàng không còn là
+   * đối tác. KEY SHARE dòng gian hàng rồi đọc lại cờ: tắt cờ đến trước thì ở đây thấy cờ đã tắt; đến sau thì chờ tx này và đếm được
+   * đơn vừa ghi. Đặt ngay trước lần chèn đơn, nơi khoá ngoại `fulfillerStorefrontId` vốn lấy đúng khoá này, nên thứ tự khoá không
+   * đổi (biến thể → suất giờ vàng → gian hàng/users của khoá ngoại đơn → users FOR UPDATE → mã giảm giá). KEY SHARE không chặn chủ
+   * gian hàng đổi tên/tạm nghỉ (NO KEY UPDATE), như duyệt liên kết giao hộ (merchant-pancake-link).
+   */
+  /**
+   * Trừ suất giờ vàng trong tx đặt đơn. Thua tranh khoá (deadlock, quá hạn chờ) → 503 để khách thử lại, không báo "giá đã
+   * đổi" cho một lỗi không liên quan tới giá. Lỗi hạ tầng khác vẫn log rồi PRICE_CHANGED như trước.
+   */
+  private async consumeFlashQuotas(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    lines: FlashQuotaLine[],
+    code: string,
+  ): Promise<FlashQuotaOutcome[]> {
+    try {
+      return await this.flashSale.consumeQuotas(tx, userId, lines, new Date());
+    } catch (e) {
+      const original = e instanceof FlashQuotaLineError ? e.original : e;
+      const fid = e instanceof FlashQuotaLineError ? lines[e.lineIndex]?.flashSaleItemId : undefined;
+      const detail = `đơn ${code}, flashSaleItemId=${fid}: ${original instanceof Error ? original.message : original}`;
+      if (isLockBusy(original)) {
+        this.logger.warn(`consumeQuotas thua tranh khoá cho ${detail}`);
+        throw new ServiceUnavailableException(LOCK_BUSY_MESSAGE);
+      }
+      this.logger.error(`consumeQuotas lỗi cho ${detail}`);
+      throw new BadRequestException('PRICE_CHANGED');
+    }
+  }
+
+  private async assertPartnerStoresUnderLock(tx: Prisma.TransactionClient, shipments: CheckoutShipment[]): Promise<void> {
+    const ids = [...new Set(shipments.flatMap((s) => (s.fulfiller.kind === 'MERCHANT' ? [s.fulfiller.storefrontId] : [])))];
+    if (ids.length === 0) return;
+    const stores = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
+      SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR KEY SHARE`;
+    if (stores.length !== ids.length || !stores.every((s) => isPartnerStore(s))) {
+      throw new ConflictException(STORE_CHANGED_MESSAGE);
+    }
   }
 
   /**

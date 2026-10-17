@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
-import { FlashSaleService } from './flash-sale.service';
+import { FlashQuotaLineError, FlashSaleService } from './flash-sale.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -139,57 +139,163 @@ describe('FlashSaleService.listActive / listUpcoming — giá flash không còn 
   });
 });
 
-describe('FlashSaleService.consumeQuota', () => {
+describe('FlashSaleService.consumeQuotas', () => {
   const now = new Date('2026-07-05T10:00:00Z');
-  const mkTx = (soldRaw: number, perUserLimit: number, existing: any, purchaseHit: number) => ({
-    $executeRaw: jest.fn().mockResolvedValue(soldRaw),
-    flashSaleItem: {
-      findUnique: jest.fn().mockResolvedValue({ perUserLimit }),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-    },
-    flashSalePurchase: {
-      findUnique: jest.fn().mockResolvedValue(existing),
-      updateMany: jest.fn().mockResolvedValue({ count: purchaseHit }),
-      create: jest.fn().mockResolvedValue({}),
-    },
+  type Item = { sold: number; quota: number; active?: boolean; limit: number };
+
+  /**
+   * Tx giả giữ trạng thái suất và ghi lại thứ tự khoá: `sold:<id>` (UPDATE flash_sale_items), `own:<ids>` (khoá dòng suất của
+   * khách), `users` (KEY SHARE), `bump:<id>`, `create:<id>`, `undo:<id>` (hoàn soldCount khi vượt giới hạn).
+   */
+  function mkTx(items: Record<string, Item>, own: Record<string, number>, opts: { appearOnUsersLock?: Record<string, number> } = {}) {
+    const log: string[] = [];
+    const tx = {
+      $executeRaw: jest.fn(async (_sql: TemplateStringsArray, qty: number, id: string) => {
+        log.push(`sold:${id}`);
+        const it = items[id]!;
+        if (it.active === false || it.sold + qty > it.quota) return 0;
+        it.sold += qty;
+        return 1;
+      }),
+      $queryRaw: jest.fn(async (sql: TemplateStringsArray, ...values: unknown[]) => {
+        const text = sql.join('?');
+        if (text.includes('FROM "users"')) {
+          log.push('users');
+          Object.assign(own, opts.appearOnUsersLock ?? {});
+          return [];
+        }
+        const ids = (values[1] as { values: string[] }).values;
+        log.push(`own:${ids.join(',')}`);
+        return ids.filter((id) => id in own).sort().map((flashSaleItemId) => ({ flashSaleItemId }));
+      }),
+      flashSaleItem: {
+        findMany: jest.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
+          where.id.in.map((id) => ({ id, perUserLimit: items[id]!.limit })),
+        ),
+        updateMany: jest.fn(async ({ where, data }: { where: { id: string }; data: { soldCount: { decrement: number } } }) => {
+          log.push(`undo:${where.id}`);
+          items[where.id]!.sold -= data.soldCount.decrement;
+          return { count: 1 };
+        }),
+      },
+      flashSalePurchase: {
+        updateMany: jest.fn(
+          async ({ where, data }: { where: { flashSaleItemId: string; quantity: { lte: number } }; data: { quantity: { increment: number } } }) => {
+            log.push(`bump:${where.flashSaleItemId}`);
+            const q = own[where.flashSaleItemId];
+            if (q === undefined || q > where.quantity.lte) return { count: 0 };
+            own[where.flashSaleItemId] = q + data.quantity.increment;
+            return { count: 1 };
+          },
+        ),
+        create: jest.fn(async ({ data }: { data: { flashSaleItemId: string; quantity: number } }) => {
+          log.push(`create:${data.flashSaleItemId}`);
+          own[data.flashSaleItemId] = data.quantity;
+          return {};
+        }),
+      },
+    };
+    return { tx, log };
+  }
+  const svc = () => new FlashSaleService({} as any, config, notifications, lifecycle);
+  const run = (tx: unknown, lines: { flashSaleItemId: string; quantity: number }[]) => svc().consumeQuotas(tx as any, 'u1', lines, now);
+
+  it('đã có dòng suất, trong giới hạn → trừ soldCount + cộng dòng suất, KHÔNG khoá users', async () => {
+    const items = { fi1: { sold: 1, quota: 10, limit: 5 } };
+    const own = { fi1: 1 };
+    const { tx, log } = mkTx(items, own);
+    expect(await run(tx, [{ flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['OK']);
+    expect(log).toEqual(['sold:fi1', 'own:fi1', 'bump:fi1']);
+    expect(items.fi1.sold).toBe(3);
+    expect(own.fi1).toBe(3);
   });
 
-  it('còn quota + trong giới hạn (đã có purchase) → trừ soldCount (raw) + tăng purchase', async () => {
-    const tx = mkTx(1, 5, { quantity: 1 }, 1);
-    await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
-    expect(tx.$executeRaw).toHaveBeenCalled();
-    expect(tx.flashSalePurchase.updateMany).toHaveBeenCalled();
-    expect(tx.flashSalePurchase.create).not.toHaveBeenCalled();
+  it('chưa có dòng suất → khoá dòng suất, KEY SHARE users, ĐỌC LẠI rồi mới chèn', async () => {
+    const own: Record<string, number> = {};
+    const { tx, log } = mkTx({ fi1: { sold: 0, quota: 10, limit: 5 } }, own);
+    expect(await run(tx, [{ flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['OK']);
+    expect(log).toEqual(['sold:fi1', 'own:fi1', 'users', 'own:fi1', 'create:fi1']);
+    const [sql, ...values] = tx.$queryRaw.mock.calls.find(([q]) => q.join('?').includes('"users"'))!;
+    expect(sql.join('?')).toMatch(/FROM "users" WHERE "id" = \? FOR KEY SHARE/);
+    expect(values).toEqual(['u1']);
+    expect(own).toEqual({ fi1: 2 });
   });
 
-  it('chưa có purchase + qty<=limit → create purchase', async () => {
-    const tx = mkTx(1, 5, null, 0);
-    await new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now);
-    expect(tx.flashSalePurchase.create).toHaveBeenCalled();
+  it('chưa có dòng suất nhưng đọc lại sau khoá users thấy dòng (gộp vừa chuyển sang) → cộng dồn, không chèn', async () => {
+    const own: Record<string, number> = {};
+    const { tx, log } = mkTx({ fi1: { sold: 1, quota: 10, limit: 5 } }, own, { appearOnUsersLock: { fi1: 1 } });
+    expect(await run(tx, [{ flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['OK']);
+    expect(log).toEqual(['sold:fi1', 'own:fi1', 'users', 'own:fi1', 'bump:fi1']);
+    expect(own).toEqual({ fi1: 3 });
   });
 
-  it('hết quota / flash hết giờ (rows=0) → throw "Hết suất ưu đãi."', async () => {
-    const tx = mkTx(0, 5, { quantity: 0 }, 1);
-    await expect(new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now))
-      .rejects.toThrow('Hết suất ưu đãi.');
+  it('nhiều dòng [mới, đã có, mới] → mọi soldCount theo id, mọi dòng suất theo id, rồi MỘT lần khoá users, rồi chèn', async () => {
+    const items = { fi1: { sold: 1, quota: 10, limit: 5 }, fi2: { sold: 0, quota: 10, limit: 5 }, fi3: { sold: 0, quota: 10, limit: 5 } };
+    const own: Record<string, number> = { fi1: 1 };
+    const { tx, log } = mkTx(items, own);
+    const lines = [
+      { flashSaleItemId: 'fi3', quantity: 1 },
+      { flashSaleItemId: 'fi1', quantity: 1 },
+      { flashSaleItemId: 'fi2', quantity: 2 },
+    ];
+    expect(await run(tx, lines)).toEqual(['OK', 'OK', 'OK']);
+    expect(log).toEqual(['sold:fi1', 'sold:fi2', 'sold:fi3', 'own:fi1,fi2,fi3', 'bump:fi1', 'users', 'own:fi2,fi3', 'create:fi2', 'create:fi3']);
+    expect(own).toEqual({ fi1: 2, fi2: 2, fi3: 1 });
+    expect([items.fi1.sold, items.fi2.sold, items.fi3.sold]).toEqual([2, 2, 1]);
   });
 
-  it('vượt perUserLimit (đã có purchase, updateMany count=0) → rollback soldCount + throw', async () => {
-    const tx = mkTx(1, 5, { quantity: 4 }, 0);
-    await expect(new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now))
-      .rejects.toThrow('Vượt giới hạn mua ưu đãi.');
-    expect(tx.flashSaleItem.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { soldCount: { decrement: 2 } } }),
-    );
+  it('mọi dòng đã có dòng suất → KHÔNG khoá users', async () => {
+    const own = { fi1: 1, fi2: 1 };
+    const { tx, log } = mkTx({ fi1: { sold: 1, quota: 10, limit: 5 }, fi2: { sold: 1, quota: 10, limit: 5 } }, own);
+    expect(await run(tx, [{ flashSaleItemId: 'fi2', quantity: 1 }, { flashSaleItemId: 'fi1', quantity: 1 }])).toEqual(['OK', 'OK']);
+    expect(log).not.toContain('users');
   });
 
-  it('vượt perUserLimit (chưa có purchase, qty>limit) → rollback soldCount + throw', async () => {
-    const tx = mkTx(1, 1, null, 0);
-    await expect(new FlashSaleService({} as any, config, notifications, lifecycle).consumeQuota(tx as any, 'fi1', 'u1', 2, now))
-      .rejects.toThrow('Vượt giới hạn mua ưu đãi.');
-    expect(tx.flashSaleItem.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { soldCount: { decrement: 2 } } }),
-    );
+  it('hai dòng cùng suất chưa có dòng → dòng đầu chèn, dòng sau cộng dồn', async () => {
+    const own: Record<string, number> = {};
+    const { tx, log } = mkTx({ fi1: { sold: 0, quota: 10, limit: 5 } }, own);
+    expect(await run(tx, [{ flashSaleItemId: 'fi1', quantity: 1 }, { flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['OK', 'OK']);
+    expect(log.filter((e) => e.startsWith('create') || e.startsWith('bump'))).toEqual(['create:fi1', 'bump:fi1']);
+    expect(own).toEqual({ fi1: 3 });
+  });
+
+  it('hết quota / flash hết giờ (rows=0) → SOLD_OUT, không đụng dòng suất', async () => {
+    const { tx, log } = mkTx({ fi1: { sold: 9, quota: 10, limit: 5 } }, {});
+    expect(await run(tx, [{ flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['SOLD_OUT']);
+    expect(log).toEqual(['sold:fi1']);
+    const { tx: tx2 } = mkTx({ fi1: { sold: 0, quota: 10, active: false, limit: 5 } }, {});
+    expect(await run(tx2, [{ flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['SOLD_OUT']);
+  });
+
+  it('vượt perUserLimit (đã có dòng suất) → OVER_LIMIT + hoàn soldCount vừa trừ', async () => {
+    const items = { fi1: { sold: 4, quota: 10, limit: 5 } };
+    const { tx, log } = mkTx(items, { fi1: 4 });
+    expect(await run(tx, [{ flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['OVER_LIMIT']);
+    expect(log).toEqual(['sold:fi1', 'own:fi1', 'bump:fi1', 'undo:fi1']);
+    expect(items.fi1.sold).toBe(4);
+  });
+
+  it('vượt perUserLimit (chưa có dòng suất, qty>limit) → OVER_LIMIT + hoàn soldCount, không chèn', async () => {
+    const items = { fi1: { sold: 0, quota: 10, limit: 1 } };
+    const { tx, log } = mkTx(items, {});
+    expect(await run(tx, [{ flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['OVER_LIMIT']);
+    expect(log).toEqual(['sold:fi1', 'own:fi1', 'users', 'own:fi1', 'undo:fi1']);
+    expect(items.fi1.sold).toBe(0);
+  });
+
+  it('kết quả theo đúng thứ tự dòng truyền vào (caller báo lỗi của dòng hỏng đầu tiên)', async () => {
+    const { tx } = mkTx({ fi1: { sold: 0, quota: 10, limit: 1 }, fi2: { sold: 10, quota: 10, limit: 5 } }, {});
+    expect(await run(tx, [{ flashSaleItemId: 'fi2', quantity: 1 }, { flashSaleItemId: 'fi1', quantity: 2 }])).toEqual(['SOLD_OUT', 'OVER_LIMIT']);
+  });
+
+  it('lỗi hạ tầng → FlashQuotaLineError giữ lỗi gốc và vị trí dòng đang xử lý', async () => {
+    const { tx } = mkTx({ fi1: { sold: 0, quota: 10, limit: 5 }, fi2: { sold: 0, quota: 10, limit: 5 } }, { fi2: 1 });
+    const boom = new Error('Raw query failed. Code: `40P01`. Message: `ERROR: deadlock detected`');
+    tx.flashSalePurchase.updateMany.mockRejectedValueOnce(boom);
+    const err = await run(tx, [{ flashSaleItemId: 'fi1', quantity: 1 }, { flashSaleItemId: 'fi2', quantity: 1 }]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(FlashQuotaLineError);
+    expect((err as FlashQuotaLineError).lineIndex).toBe(1);
+    expect((err as FlashQuotaLineError).original).toBe(boom);
   });
 });
 

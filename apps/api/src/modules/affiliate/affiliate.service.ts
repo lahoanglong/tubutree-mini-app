@@ -1,4 +1,12 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, Prisma, type PayoutStatus } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
@@ -7,10 +15,17 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
-import { FLASH_OVER_LIMIT_MSG, FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
+import {
+  FLASH_OVER_LIMIT_MSG,
+  FlashQuotaLineError,
+  FlashSaleService,
+  type EffectivePrice,
+  type FlashQuotaOutcome,
+} from '../flash-sale/flash-sale.service';
+import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { COD_MAX_PER_ORDER, PAYMENT_METHOD_NOT_ALLOWED } from '../checkout/checkout-split';
-import { reserveVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { RewardPointsService } from '../wallet/reward-points.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
@@ -553,30 +568,48 @@ export class AffiliateService {
   }
 
   /**
-   * Giữ suất giờ vàng của dòng trong transaction đơn hộ (như checkout). Vượt giới hạn mua giữ nguyên lỗi; hết suất hoặc hết giờ
-   * giữa lúc tính giá và lúc ghi đơn thì báo PRICE_CHANGED để CTV xem giá mới, không âm thầm tính giá giờ vàng đã hết.
+   * Giữ suất giờ vàng của các dòng trong transaction đơn hộ (như checkout, khoá theo pha: xem FlashSaleService.consumeQuotas).
+   * Ném lỗi của dòng hỏng đầu tiên theo thứ tự dòng: vượt giới hạn mua giữ nguyên lỗi; hết suất hoặc hết giờ giữa lúc tính giá
+   * và lúc ghi đơn thì báo PRICE_CHANGED để CTV xem giá mới, không âm thầm tính giá giờ vàng đã hết. Thua tranh khoá → 503 thử
+   * lại, không báo hết suất cho một lỗi không liên quan tới suất.
    */
-  private async consumeFlashQuota(
+  private async consumeFlashQuotas(
     tx: Prisma.TransactionClient,
-    line: { flashSaleItemId: string | null; productName: string; quantity: number },
+    lines: { flashSaleItemId: string | null; productName: string; quantity: number }[],
     ctvId: string,
     code: string,
   ): Promise<void> {
-    if (!line.flashSaleItemId || !this.flashSale) return;
-    try {
-      await this.flashSale.consumeQuota(tx, line.flashSaleItemId, ctvId, line.quantity, new Date());
-    } catch (e) {
-      if (e instanceof BadRequestException && e.message === FLASH_OVER_LIMIT_MSG) throw e;
-      this.logger.error(
-        `consumeQuota lỗi cho đơn hộ ${code}, flashSaleItemId=${line.flashSaleItemId}: ${e instanceof Error ? e.message : e}`,
-      );
-      throw new BadRequestException({
+    if (!this.flashSale) return;
+    const flash = lines.flatMap((l) =>
+      l.flashSaleItemId ? [{ flashSaleItemId: l.flashSaleItemId, quantity: l.quantity, productName: l.productName }] : [],
+    );
+    if (flash.length === 0) return;
+    const priceChanged = (productName: string) =>
+      new BadRequestException({
         statusCode: 400,
         error: 'Bad Request',
         code: 'PRICE_CHANGED',
-        message: `Giá giờ vàng của "${line.productName}" vừa hết suất hoặc hết giờ. Vui lòng xem lại giá rồi tạo đơn lại.`,
+        message: `Giá giờ vàng của "${productName}" vừa hết suất hoặc hết giờ. Vui lòng xem lại giá rồi tạo đơn lại.`,
       });
+    let outcomes: FlashQuotaOutcome[];
+    try {
+      outcomes = await this.flashSale.consumeQuotas(tx, ctvId, flash, new Date());
+    } catch (e) {
+      const original = e instanceof FlashQuotaLineError ? e.original : e;
+      const line = flash[e instanceof FlashQuotaLineError ? e.lineIndex : 0]!;
+      const detail = `đơn hộ ${code}, flashSaleItemId=${line.flashSaleItemId}: ${original instanceof Error ? original.message : original}`;
+      if (isLockBusy(original)) {
+        this.logger.warn(`consumeQuotas thua tranh khoá cho ${detail}`);
+        throw new ServiceUnavailableException(LOCK_BUSY_MESSAGE);
+      }
+      this.logger.error(`consumeQuotas lỗi cho ${detail}`);
+      throw priceChanged(line.productName);
     }
+    const failed = outcomes.findIndex((o) => o !== 'OK');
+    if (failed < 0) return;
+    if (outcomes[failed] === 'OVER_LIMIT') throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
+    this.logger.error(`consumeQuotas hết suất cho đơn hộ ${code}, flashSaleItemId=${flash[failed]!.flashSaleItemId}`);
+    throw priceChanged(flash[failed]!.productName);
   }
 
   /**
@@ -641,13 +674,19 @@ export class AffiliateService {
       order = await this.prisma.$transaction(async (tx) => {
         // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
         await assertVariationsSellable(tx, lines, { pancakeOnly: true });
-        // Giữ chỗ tồn kho ATOMIC từng line — chống oversell; 0 dòng bị sửa → throw rollback.
-        for (const line of lines) {
-          const hit = await reserveVariationStock(tx, line.variationId, line.quantity);
-          if (!hit) {
-            throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
+        await lockVariationsInIdOrder(tx, lines.map((l) => l.variationId));
+        // Giữ chỗ tồn kho ATOMIC từng line — chống oversell; 0 dòng bị sửa → throw rollback. Tới dòng thiếu hàng đầu tiên thì
+        // dừng, trừ suất giờ vàng của các dòng trước nó một lượt: lỗi báo CTV vẫn là lỗi của dòng hỏng sớm nhất.
+        let short = lines.length;
+        for (const [i, line] of lines.entries()) {
+          if (!(await reserveVariationStock(tx, line.variationId, line.quantity))) {
+            short = i;
+            break;
           }
-          await this.consumeFlashQuota(tx, line, ctvId, code);
+        }
+        await this.consumeFlashQuotas(tx, lines.slice(0, short), ctvId, code);
+        if (short < lines.length) {
+          throw new BadRequestException(`Sản phẩm "${lines[short]!.productName}" không đủ tồn kho.`);
         }
         const created = await tx.order.create({
           data: {

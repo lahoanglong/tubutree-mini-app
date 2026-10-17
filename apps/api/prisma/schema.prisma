@@ -614,7 +614,7 @@ model Storefront {
   /// được duyệt đại lý giữ type CTV (hoa hồng giới thiệu không đổi) nhưng được bật cờ này. Không bao giờ tự tắt.
   isPartner           Boolean                  @default(false)
   slug                String                   @unique
-  subdomain          String?                  @unique
+  subdomain           String?                  @unique
   customDomain        String?                  @unique
   ownerUserId         String?
   owner               User?                    @relation(fields: [ownerUserId], references: [id])

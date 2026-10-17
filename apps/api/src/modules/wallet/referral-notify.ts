@@ -72,49 +72,51 @@ export function revokeDetail(taken: number, debt: number): string {
 }
 
 /** Khoá chống gửi trùng: băm để payload tin (khách đọc được qua /notifications) không mang id người được mời. */
-function dedupeKey(key: string): string {
+export function referralDedupeKey(key: string): string {
   return `referral:${createHash('sha256').update(key).digest('hex').slice(0, 32)}`;
+}
+
+/** Sự kiện 0 điểm (thu hồi không trừ gì và không nợ gì) không báo. */
+export function isReportableNotice(n: ReferralNotice): boolean {
+  if (n.kind === 'REVOKED') return n.taken > 0 || n.debt > 0;
+  return n.points > 0;
+}
+
+/** Tin MILESTONE và tin thu hồi của người được mời ẩn danh không nêu tên bạn nên không cần đọc tên. */
+export function noticeNamesFriend(n: ReferralNotice): n is Exclude<ReferralNotice, { kind: 'MILESTONE' }> {
+  return n.kind === 'PAID' || (n.kind === 'REVOKED' && !n.hideFriend);
+}
+
+/** Mẫu và dữ liệu của tin: nguồn duy nhất cho đường gửi trực tiếp lẫn cron bù (referral-notice-reconcile). */
+export function referralNoticeMessage(n: ReferralNotice, referee: { fullName: string | null } | null): { templateCode: string; data: Record<string, string> } {
+  if (n.kind === 'MILESTONE') {
+    return { templateCode: 'REFERRAL_MILESTONE_PAID', data: { points: fmt(n.points), count: String(n.count) } };
+  }
+  const friend = maskFriendName(noticeNamesFriend(n) ? referee?.fullName : null);
+  if (n.kind === 'PAID') return { templateCode: 'REFERRAL_REWARD_PAID', data: { points: fmt(n.points), friend } };
+  return {
+    templateCode: 'REFERRAL_REWARD_REVOKED',
+    data: { friend, cause: CAUSE_TEXT[n.cause], detail: revokeDetail(n.taken, n.debt), points: fmt(n.taken), debt: fmt(n.debt) },
+  };
 }
 
 /**
  * Gửi tin cho người mời. CHỈ gọi sau khi tx ghi sổ đã commit. Best-effort: lỗi đọc tên hay gửi tin chỉ ghi cảnh báo, không bao
- * giờ ném (tiền đã ghi xong). Sự kiện 0 điểm (thu hồi không trừ gì và không nợ gì) không báo.
+ * giờ ném (tiền đã ghi xong; cron referral-notice-reconcile gửi bù tin bị sót). Trả số tin lỗi để cron đếm.
  */
-export async function sendReferralNotices(ctx: ReferralNotifyContext, notices: readonly ReferralNotice[]): Promise<void> {
-  if (!ctx.notifications || notices.length === 0) return;
+export async function sendReferralNotices(ctx: ReferralNotifyContext, notices: readonly ReferralNotice[]): Promise<number> {
+  if (!ctx.notifications || notices.length === 0) return 0;
+  let failed = 0;
   for (const n of notices) {
     try {
-      if (n.kind === 'MILESTONE') {
-        if (!(n.points > 0)) continue;
-        await ctx.notifications.notify(
-          n.referrerId,
-          'REFERRAL_MILESTONE_PAID',
-          { points: fmt(n.points), count: String(n.count) },
-          { dedupeKey: dedupeKey(n.key) },
-        );
-        continue;
-      }
-      if (n.kind === 'PAID' ? !(n.points > 0) : !(n.taken > 0 || n.debt > 0)) continue;
-      const hidden = n.kind === 'REVOKED' && n.hideFriend;
-      const referee = hidden ? null : await ctx.prisma.user.findUnique({ where: { id: n.refereeId }, select: { fullName: true } });
-      const friend = maskFriendName(referee?.fullName);
-      if (n.kind === 'PAID') {
-        await ctx.notifications.notify(
-          n.referrerId,
-          'REFERRAL_REWARD_PAID',
-          { points: fmt(n.points), friend },
-          { dedupeKey: dedupeKey(n.key) },
-        );
-      } else {
-        await ctx.notifications.notify(
-          n.referrerId,
-          'REFERRAL_REWARD_REVOKED',
-          { friend, cause: CAUSE_TEXT[n.cause], detail: revokeDetail(n.taken, n.debt), points: fmt(n.taken), debt: fmt(n.debt) },
-          { dedupeKey: dedupeKey(n.key) },
-        );
-      }
+      if (!isReportableNotice(n)) continue;
+      const referee = noticeNamesFriend(n) ? await ctx.prisma.user.findUnique({ where: { id: n.refereeId }, select: { fullName: true } }) : null;
+      const { templateCode, data } = referralNoticeMessage(n, referee);
+      await ctx.notifications.notify(n.referrerId, templateCode, data, { dedupeKey: referralDedupeKey(n.key) });
     } catch (err) {
+      failed += 1;
       ctx.logger.warn(`Chưa báo được người mời ${n.referrerId} về ${n.kind} (${n.key}): ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  return failed;
 }

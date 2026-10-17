@@ -682,7 +682,12 @@ describe('OrderReversalService — huỷ đơn có backorder', () => {
     await service.reverseFinancials(tx as never, order);
 
     expect(tx.orderItem.update).not.toHaveBeenCalled();
-    expect(tx.$queryRaw).not.toHaveBeenCalled(); // đơn thường: không khoá/đọc lại thêm
+    // Đơn thường: không khoá/đọc lại dòng đặt trước; câu duy nhất là khoá hai biến thể theo id trước khi cộng kho.
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = (tx.$queryRaw.mock.calls[0]![0] as string[]).join('?');
+    expect(sql).toContain('FROM "variations"');
+    expect(sql).not.toContain('order_items');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.$executeRaw.mock.invocationCallOrder[0]!);
   });
 });
 
@@ -1228,5 +1233,59 @@ describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi
     expect(rawOn(tx.$queryRaw, 'users')).toHaveLength(1);
     expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalled();
     expectStockAndFlashFirst(tx);
+  });
+
+  /** Dòng đơn [fsB, fsA, fsB]: hoàn suất theo id suất (như đặt đơn khoá flash_sale_items), mỗi dòng vẫn hoàn đúng số của nó. */
+  const SHUFFLED = [
+    { id: 'i1', variationId: 'v1', quantity: 2, flashSaleItemId: 'fsB', backorderedQty: 0 },
+    { id: 'i2', variationId: 'v2', quantity: 1, flashSaleItemId: 'fsA', backorderedQty: 0 },
+    { id: 'i3', variationId: 'v3', quantity: 3, flashSaleItemId: 'fsB', backorderedQty: 0 },
+  ];
+  const restores = () => flashSale.restore.mock.calls.map((c) => [c[1], c[3]]);
+
+  it.each([
+    ['huỷ đơn (cộng kho)', {}],
+    ['trả cả đơn (restock: false)', { restock: false }],
+  ])('reverseFinancials %s → hoàn suất theo id suất, sau mọi lần cộng kho', async (_what, opts) => {
+    const order = makeOrder({ status: 'CONFIRMED', items: SHUFFLED });
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order, opts);
+    expect(restores()).toEqual([
+      ['fsA', 1],
+      ['fsB', 2],
+      ['fsB', 3],
+    ]);
+    const stock = rawOn(tx.$executeRaw, 'variations');
+    expect(stock).toHaveLength('restock' in opts ? 0 : 3);
+    if (stock.length > 0) expect(Math.max(...stock)).toBeLessThan(Math.min(...flashSale.restore.mock.invocationCallOrder));
+  });
+
+  it('reversePartialReturn dòng trả [fsB, fsA] → hoàn suất fsA trước fsB, đúng số trả của từng dòng', async () => {
+    const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'WALLET', paymentStatus: 'PAID', shippingFee: 0, items: SHUFFLED });
+    const tx = Object.assign(withUserMocks(makeTx(order)), { commission: { findMany: jest.fn().mockResolvedValue([]) } });
+    await service.reversePartialReturn(tx as never, order, {
+      requestId: 'r1',
+      shares: {
+        isFull: false,
+        goods: 0,
+        shipping: 0,
+        pointsUsedBack: 0,
+        convertedBack: 0,
+        pointsEarnedBack: 0,
+        ratioBefore: 0,
+        ratioAfter: 0,
+        lines: [
+          { orderItemId: 'i1', quantity: 1, refundAmount: 0 },
+          { orderItemId: 'i2', quantity: 1, refundAmount: 0 },
+        ],
+      },
+      destination: WALLET_DESTINATION,
+      prior: NO_PARTIAL_RETURNS,
+      standardPointsExpiresAt: null,
+    });
+    expect(restores()).toEqual([
+      ['fsA', 1],
+      ['fsB', 1],
+    ]);
   });
 });

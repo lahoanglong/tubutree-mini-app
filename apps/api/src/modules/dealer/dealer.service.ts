@@ -6,7 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
-import { reserveAvailableVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, reserveAvailableVariationStock } from '../catalog/variation-stock';
 import {
   assertVariationsSellable,
   isSellableVariation,
@@ -284,6 +284,7 @@ export class DealerService {
           // ĐÃ giữ (`quantity - backorderedQty`) — xem OrderReversalService.
           // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
           await assertVariationsSellable(tx, items, { pancakeOnly: true });
+          await lockVariationsInIdOrder(tx, items.map((l) => l.variationId), 'UPDATE');
           let hasBackorder = false;
           const itemsWithBackorder = [];
           for (const line of items) {
