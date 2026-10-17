@@ -7,8 +7,23 @@ import type { PrismaService } from '../../prisma/prisma.service';
  * giá ngoài khoảng hợp lý so với giá lẻ là lỗi dòng, và còn dòng lỗi thì không ghi dòng nào.
  */
 
-/** Giá sỉ phải nằm trong [10%, 100%] giá lẻ của biến thể — chặn gõ thiếu/thừa số 0, không phải chính sách giá. */
+/** Sàn tuyệt đối: giá sỉ không dưới 10% giá lẻ dù trần chiết khấu đại lý đặt cao tới đâu (chặn gõ thiếu số 0). */
 export const DEALER_PRICE_MIN_RATIO = 0.1;
+/** Trần chiết khấu đại lý (phân số, 0.45 = 45%) — cùng khoá và mặc định với DealerService. */
+export const DEALER_MAX_DISCOUNT_KEY = 'dealer.max_discount_pct';
+export const DEFAULT_DEALER_MAX_DISCOUNT = 0.45;
+
+/**
+ * Giá sỉ thấp nhất được nhập cho một biến thể: giá lẻ × max(10%, 1 − trần chiết khấu đại lý). Giá sỉ > 0 thắng mọi chiết khấu
+ * bậc ở DealerService.unitPrice nên không bị trần `dealer.max_discount_pct` kẹp lại — chặn ở đây, lúc nhập. Trần hỏng (không
+ * phải số 0–1) thì dùng mặc định. Tính theo phần vạn để 200.000 × 0,55 ra đúng 110.000 (không lệch số thực).
+ */
+export function dealerPriceFloor(retailPrice: number, maxDiscount: unknown): number {
+  const d =
+    typeof maxDiscount === 'number' && Number.isFinite(maxDiscount) && maxDiscount >= 0 && maxDiscount <= 1 ? maxDiscount : DEFAULT_DEALER_MAX_DISCOUNT;
+  const ratioBp = Math.round(Math.max(DEALER_PRICE_MIN_RATIO, 1 - d) * 10_000);
+  return Math.ceil((retailPrice * ratioBp) / 10_000);
+}
 export const DEALER_PRICE_CSV_MAX_ROWS = 5000;
 export const DEALER_PRICE_CSV_MAX_LENGTH = 300_000;
 
@@ -114,12 +129,17 @@ export type DealerPricePreview = {
 
 type Db = PrismaService | Prisma.TransactionClient;
 
-/** Phân loại từng dòng theo dữ liệu hiện tại. `lock`: khoá các biến thể theo id trước khi đọc (lúc áp, trong transaction). */
+const vnd = (n: number) => n.toLocaleString('vi-VN');
+
+/**
+ * Phân loại từng dòng theo dữ liệu hiện tại. `lock`: khoá các biến thể theo id trước khi đọc (lúc áp, trong transaction).
+ * `maxDiscount`: giá trị khoá `dealer.max_discount_pct` (dealerPriceFloor).
+ */
 export async function classifyDealerPrices(
   db: Db,
   tierId: string,
   parsed: DealerPriceCsvRow[],
-  opts: { lock?: boolean } = {},
+  opts: { lock?: boolean; maxDiscount?: unknown } = {},
 ): Promise<DealerPricePreview> {
   const skuCount = new Map<string, number>();
   for (const r of parsed) if (r.sku) skuCount.set(r.sku, (skuCount.get(r.sku) ?? 0) + 1);
@@ -152,13 +172,16 @@ export async function classifyDealerPrices(
     if (p.problem) return { ...base, status: 'INVALID', message: p.problem };
     if ((skuCount.get(p.sku) ?? 0) > 1) return { ...base, status: 'DUPLICATE', message: 'SKU xuất hiện nhiều lần trong file' };
     if (!v) return { ...base, status: 'NOT_FOUND', message: 'không có biến thể nào mang SKU này' };
-    const min = Math.ceil(v.retailPrice * DEALER_PRICE_MIN_RATIO);
-    if (p.price! < min || p.price! > v.retailPrice) {
+    const min = dealerPriceFloor(v.retailPrice, opts.maxDiscount);
+    if (p.price! < min) {
       return {
         ...base,
         status: 'OUT_OF_RANGE',
-        message: `ngoài khoảng 10–100% giá lẻ (${min.toLocaleString('vi-VN')}–${v.retailPrice.toLocaleString('vi-VN')}đ)`,
+        message: `thấp hơn sàn ${vnd(min)}đ — giá lẻ ${vnd(v.retailPrice)}đ trừ chiết khấu đại lý tối đa (khoá ${DEALER_MAX_DISCOUNT_KEY}); gõ thiếu số?`,
       };
+    }
+    if (p.price! > v.retailPrice) {
+      return { ...base, status: 'OUT_OF_RANGE', message: `cao hơn giá lẻ ${vnd(v.retailPrice)}đ` };
     }
     if (current === p.price) return { ...base, status: 'UNCHANGED', message: null };
     return { ...base, status: 'OK', message: null, variationId: v.id, dealerPrices: prices };

@@ -395,7 +395,7 @@ export interface DealerPricePreview {
   blocking: number;
   canApply: boolean;
 }
-/** Xem trước bảng giá sỉ: BE đọc số tiền kiểu Việt Nam (185.000, 240,000) và kiểm khoảng 10–100% giá lẻ, không ghi gì. */
+/** Xem trước bảng giá sỉ: BE đọc số tiền kiểu Việt Nam (185.000, 240,000), kiểm sàn chiết khấu đại lý và giá lẻ, không ghi gì. */
 export const previewDealerPrices = (tierId: string, csv: string) =>
   apiFetch<DealerPricePreview>('/admin/dealer-prices/import/preview', { method: 'POST', body: { tierId, csv } });
 /** Còn dòng lỗi thì BE trả 400 và không ghi dòng nào; `skipped` = dòng không đổi + SKU không khớp. */

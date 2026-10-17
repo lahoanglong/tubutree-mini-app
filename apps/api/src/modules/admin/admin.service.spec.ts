@@ -328,17 +328,21 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
     return base as unknown as PrismaService;
   }
   const m = (prisma: PrismaService) => prisma as unknown as Record<string, Record<string, jest.Mock>> & { $queryRaw: jest.Mock };
+  // Trần chiết khấu đại lý (dealer.max_discount_pct, phân số): sàn giá sỉ = giá lẻ × (1 − trần), không dưới 10%.
+  const dealerConfig = (maxDiscount?: unknown) =>
+    ({ get: jest.fn(async (key: string, fb: unknown) => (key === 'dealer.max_discount_pct' && maxDiscount !== undefined ? maxDiscount : fb)) }) as unknown as SystemConfigService;
+  const mkDealer = (prisma: PrismaService, maxDiscount?: unknown) => mkAdmin(prisma, { config: dealerConfig(maxDiscount) });
 
   it('bậc đại lý không tồn tại → BadRequest', async () => {
     const prisma = importPrisma({ dealerTier: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(mkAdmin(prisma).importDealerPrices('admin1', 'bad', { csv: 'SKU-1,100000' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 'bad', { csv: 'SKU-1,100000' })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it.each(['185.000', '185,000', '185000', '185 000', '185.000đ'])(
     'giá kiểu Việt Nam "%s" → ghi 185.000đ (MERGE vào dealerPrices[tierId]) + lịch sử old→new, khoá dòng trước khi đọc',
     async (price) => {
       const prisma = importPrisma();
-      const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', { csv: `sku;giá\nSKU-1;${price}` });
+      const r = await mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: `sku;giá\nSKU-1;${price}` });
       expect(r).toEqual({ tierId: 't1', updated: 1, unchanged: 0, notFound: [], skipped: 0 });
       const upd = m(prisma).variation!.update!.mock.calls[0][0];
       expect(upd).toEqual({ where: { id: 'v1' }, data: { dealerPrices: { t0: 99000, t1: 185_000 } } });
@@ -356,7 +360,7 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
         update: jest.fn().mockResolvedValue({}),
       },
     });
-    await mkAdmin(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,240,000' });
+    await mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,240,000' });
     expect(m(prisma).variation!.update!.mock.calls[0][0].data.dealerPrices.t1).toBe(240_000);
   });
 
@@ -368,9 +372,22 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
     ['SKU lặp', 'SKU-1,180000\nSKU-1,180000'],
   ])('%s → 400, không ghi dòng nào', async (_l, csv) => {
     const prisma = importPrisma();
-    await expect(mkAdmin(prisma).importDealerPrices('admin1', 't1', { csv })).rejects.toThrow('Chưa ghi dòng nào');
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { csv })).rejects.toThrow('Chưa ghi dòng nào');
     expect(m(prisma).variation!.update).not.toHaveBeenCalled();
     expect(m(prisma).dealerPriceHistory!.createMany).not.toHaveBeenCalled();
+  });
+
+  it('giá lẻ 200.000, trần chiết khấu 45%: "25.000" (gõ thay cho 125.000) → 400 kèm lý do sàn; 110.000 ghi được; trần 95% thì sàn 10%', async () => {
+    const prisma = importPrisma();
+    await expect(mkDealer(prisma).previewDealerPrices('t1', { csv: 'SKU-1,25.000' })).resolves.toMatchObject({
+      canApply: false,
+      rows: [{ status: 'OUT_OF_RANGE', message: expect.stringContaining('thấp hơn sàn 110.000đ') }],
+    });
+    await expect(mkDealer(prisma, 0.45).importDealerPrices('admin1', 't1', { csv: 'SKU-1,25.000' })).rejects.toThrow('Chưa ghi dòng nào');
+    await expect(mkDealer(prisma, 0.45).importDealerPrices('admin1', 't1', { csv: 'SKU-1,109.999' })).rejects.toThrow('Chưa ghi dòng nào');
+    expect(m(prisma).variation!.update).not.toHaveBeenCalled();
+    expect((await mkDealer(prisma, 0.45).importDealerPrices('admin1', 't1', { csv: 'SKU-1,110.000' })).updated).toBe(1);
+    expect((await mkDealer(importPrisma(), 0.95).importDealerPrices('admin1', 't1', { csv: 'SKU-1,20.000' })).updated).toBe(1);
   });
 
   it('dòng hợp lệ + 1 dòng lỗi → không ghi cả dòng hợp lệ', async () => {
@@ -383,7 +400,7 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
         update: jest.fn(),
       },
     });
-    await expect(mkAdmin(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,180.000\nSKU-2,1.25' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,180.000\nSKU-2,1.25' })).rejects.toBeInstanceOf(BadRequestException);
     expect(m(prisma).variation!.update).not.toHaveBeenCalled();
   });
 
@@ -397,7 +414,7 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
         update: jest.fn(),
       },
     });
-    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,150000\nSKU-2,160000\nSKU-X,100000' });
+    const r = await mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,150000\nSKU-2,160000\nSKU-X,100000' });
     expect(r).toEqual({ tierId: 't1', updated: 1, unchanged: 1, notFound: ['SKU-X'], skipped: 2 });
     expect(m(prisma).variation!.update).toHaveBeenCalledTimes(1);
   });
@@ -409,27 +426,27 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
         update: jest.fn(),
       },
     });
-    await expect(mkAdmin(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,150.000' })).rejects.toThrow('Không có giá nào cần đổi');
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,150.000' })).rejects.toThrow('Không có giá nào cần đổi');
   });
 
   it('rows JSON (API cũ) đi chung đường kiểm: giá lẻ/âm là lỗi, không ghi', async () => {
     const prisma = importPrisma();
-    await expect(mkAdmin(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: 'SKU-1', price: 185.5 }] })).rejects.toBeInstanceOf(BadRequestException);
-    await expect(mkAdmin(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: '', price: 100000 }] })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: 'SKU-1', price: 185.5 }] })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: '', price: 100000 }] })).rejects.toBeInstanceOf(BadRequestException);
     expect(m(prisma).variation!.update).not.toHaveBeenCalled();
-    const ok = await mkAdmin(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: 'SKU-1', price: 180_000 }] });
+    const ok = await mkDealer(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: 'SKU-1', price: 180_000 }] });
     expect(ok.updated).toBe(1);
   });
 
   it('xem trước: phân loại từng dòng, không ghi, không trả id nội bộ', async () => {
     const prisma = importPrisma();
-    const p = await mkAdmin(prisma).previewDealerPrices('t1', { csv: 'SKU-1,185.000\nSKU-X,1\nSKU-1,1' });
+    const p = await mkDealer(prisma).previewDealerPrices('t1', { csv: 'SKU-1,185.000\nSKU-X,1\nSKU-1,1' });
     expect(p.rows.map((r) => [r.line, r.status])).toEqual([
       [1, 'DUPLICATE'],
       [2, 'NOT_FOUND'],
       [3, 'DUPLICATE'],
     ]);
-    const p2 = await mkAdmin(prisma).previewDealerPrices('t1', { csv: 'SKU-1,185.000' });
+    const p2 = await mkDealer(prisma).previewDealerPrices('t1', { csv: 'SKU-1,185.000' });
     expect(p2.rows[0]).toMatchObject({ status: 'OK', price: 185_000, currentPrice: null, retailPrice: 200_000, productName: 'Nước rửa chén' });
     expect(p2.rows[0]).not.toHaveProperty('variationId');
     expect(p2.canApply).toBe(true);

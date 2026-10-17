@@ -41,6 +41,8 @@ import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from '
 import {
   DEALER_PRICE_CSV_MAX_ROWS,
   classifyDealerPrices,
+  DEALER_MAX_DISCOUNT_KEY,
+  DEFAULT_DEALER_MAX_DISCOUNT,
   dealerPriceRowsFromJson,
   parseDealerPriceCsv,
   publicPreview,
@@ -1394,24 +1396,27 @@ export class AdminService {
   /** Xem trước một lần nhập giá sỉ (CSV "sku,giá" hoặc rows JSON) cho một bậc: không ghi gì. */
   async previewDealerPrices(tierId: string, input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
     await this.assertDealerTier(tierId);
-    return publicPreview(await classifyDealerPrices(this.prisma, tierId, this.dealerPriceRows(input)));
+    const maxDiscount = await this.config.get<unknown>(DEALER_MAX_DISCOUNT_KEY, DEFAULT_DEALER_MAX_DISCOUNT);
+    return publicPreview(await classifyDealerPrices(this.prisma, tierId, this.dealerPriceRows(input), { maxDiscount }));
   }
 
   /**
    * Nhập/đè giá đại lý cho 1 BẬC: ghi Variation.dealerPrices[tierId] (MERGE, không mất bậc khác) + DealerPriceHistory (old→new,
-   * ai đổi). Một transaction, khoá các biến thể theo id, phân loại lại lúc ghi: còn dòng sai định dạng / ngoài khoảng 10–100%
-   * giá lẻ / SKU lặp → 400, không ghi dòng nào. SKU không khớp bỏ qua và trả lại; `skipped` = dòng không đổi + không khớp.
+   * ai đổi). Một transaction, khoá các biến thể theo id, phân loại lại lúc ghi: còn dòng sai định dạng / dưới sàn chiết khấu
+   * đại lý (dealerPriceFloor) hay trên giá lẻ / SKU lặp → 400, không ghi dòng nào. SKU không khớp bỏ qua và trả lại;
+   * `skipped` = dòng không đổi + không khớp.
    */
   async importDealerPrices(adminId: string, tierId: string, input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
     await this.assertDealerTier(tierId);
     const parsed = this.dealerPriceRows(input);
+    const maxDiscount = await this.config.get<unknown>(DEALER_MAX_DISCOUNT_KEY, DEFAULT_DEALER_MAX_DISCOUNT);
     return this.prisma.$transaction(
       async (tx) => {
-        const preview = await classifyDealerPrices(tx, tierId, parsed, { lock: true });
+        const preview = await classifyDealerPrices(tx, tierId, parsed, { lock: true, maxDiscount });
         if (!preview.canApply) {
           throw new BadRequestException(
             preview.blocking > 0
-              ? `Có ${preview.blocking} dòng lỗi (giá không đọc được, ngoài khoảng 10–100% giá lẻ hoặc SKU lặp) — sửa file rồi xem trước lại. Chưa ghi dòng nào.`
+              ? `Có ${preview.blocking} dòng lỗi (giá không đọc được, thấp hơn sàn chiết khấu đại lý hoặc cao hơn giá lẻ, SKU lặp) — sửa file rồi xem trước lại. Chưa ghi dòng nào.`
               : 'Không có giá nào cần đổi.',
           );
         }

@@ -1,4 +1,4 @@
-import { dealerPriceRowsFromJson, parseDealerPriceCsv, parseVndAmount } from './dealer-price-import';
+import { classifyDealerPrices, dealerPriceFloor, dealerPriceRowsFromJson, parseDealerPriceCsv, parseVndAmount } from './dealer-price-import';
 
 describe('parseVndAmount — số tiền đồng nguyên kiểu Việt Nam/Excel', () => {
   it.each([
@@ -55,5 +55,49 @@ describe('parseDealerPriceCsv', () => {
       [1, true],
       [null, true],
     ]);
+  });
+});
+
+describe('sàn giá sỉ theo chiết khấu tối đa cho đại lý (dealer.max_discount_pct)', () => {
+  it.each([
+    [200_000, 0.45, 110_000],
+    [199_999, 0.45, 110_000],
+    [200_000, 0.95, 20_000],
+    [200_000, 0, 200_000],
+    [200_000, 'x', 110_000],
+    [200_000, -1, 110_000],
+    [200_000, 2, 110_000],
+    [200_000, undefined, 110_000],
+  ])('giá lẻ %d, chiết khấu tối đa %p → sàn %d', (retail, maxDiscount, floor) => {
+    expect(dealerPriceFloor(retail as number, maxDiscount)).toBe(floor);
+  });
+
+  const db = (retailPrice: number) =>
+    ({
+      variation: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'A1', name: 'M', retailPrice, dealerPrices: null, product: { name: 'SP' } }]),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    }) as never;
+
+  it('giá lẻ 200.000, trần 45%: "25.000" (gõ thay cho 125.000) và 109.999 bị chặn kèm lý do; 110.000 qua; cao hơn giá lẻ bị chặn', async () => {
+    const run = async (input: string) =>
+      (await classifyDealerPrices(db(200_000), 't1', parseDealerPriceCsv(`A1,${input}`), { maxDiscount: 0.45 })).rows[0]!;
+    const low = await run('25.000');
+    expect(low.status).toBe('OUT_OF_RANGE');
+    expect(low.message).toContain('thấp hơn sàn 110.000đ');
+    expect(low.message).toContain('dealer.max_discount_pct');
+    expect((await run('109.999')).status).toBe('OUT_OF_RANGE');
+    expect((await run('110.000')).status).toBe('OK');
+    const high = await run('200.001');
+    expect(high.status).toBe('OUT_OF_RANGE');
+    expect(high.message).toContain('cao hơn giá lẻ 200.000đ');
+  });
+
+  it('trần chiết khấu 95% → sàn vẫn không dưới 10% giá lẻ', async () => {
+    const run = async (input: string) =>
+      (await classifyDealerPrices(db(200_000), 't1', parseDealerPriceCsv(`A1,${input}`), { maxDiscount: 0.95 })).rows[0]!.status;
+    expect(await run('20.000')).toBe('OK');
+    expect(await run('19.999')).toBe('OUT_OF_RANGE');
   });
 });

@@ -293,7 +293,7 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
       '/admin/dealer-prices/import/preview': {
         body: {
           tierId: 't_gold',
-          rows: [{ line: 1, sku: 'NRC-500', input: '185', status: 'OUT_OF_RANGE', price: 185, currentPrice: null, retailPrice: 200_000, productName: 'N', variationName: null, message: 'ngoài khoảng 10–100% giá lẻ (20.000–200.000đ)' }],
+          rows: [{ line: 1, sku: 'NRC-500', input: '185', status: 'OUT_OF_RANGE', price: 185, currentPrice: null, retailPrice: 200_000, productName: 'N', variationName: null, message: 'thấp hơn sàn 110.000đ — giá lẻ 200.000đ trừ chiết khấu đại lý tối đa (khoá dealer.max_discount_pct); gõ thiếu số?' }],
           counts: { OK: 0, UNCHANGED: 0, NOT_FOUND: 0, INVALID: 0, OUT_OF_RANGE: 1, DUPLICATE: 0 },
           blocking: 1,
           canApply: false,
@@ -307,7 +307,8 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     click(byText(container, 'button', 'Xem trước giá sỉ'));
     await flush();
     expect((byText(container, 'button', 'Ghi 0 giá sỉ') as HTMLButtonElement | null)?.disabled).toBe(true);
-    expect(container.textContent).toContain('Ngoài khoảng giá lẻ');
+    expect(container.textContent).toContain('Ngoài khoảng giá');
+    expect(container.textContent).toContain('thấp hơn sàn 110.000đ');
     expect(container.textContent).toContain('Còn 1 dòng lỗi');
   });
 });

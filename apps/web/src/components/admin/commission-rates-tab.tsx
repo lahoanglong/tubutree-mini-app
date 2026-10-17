@@ -471,7 +471,7 @@ const DEALER_STATUS: Record<DealerPriceImportStatus, { label: string; tone: 'suc
   UNCHANGED: { label: 'Không đổi', tone: 'neutral' },
   NOT_FOUND: { label: 'Không khớp SKU', tone: 'warning' },
   INVALID: { label: 'Sai định dạng', tone: 'danger' },
-  OUT_OF_RANGE: { label: 'Ngoài khoảng giá lẻ', tone: 'danger' },
+  OUT_OF_RANGE: { label: 'Ngoài khoảng giá', tone: 'danger' },
   DUPLICATE: { label: 'SKU lặp', tone: 'danger' },
 };
 const DEALER_STATUS_ORDER: DealerPriceImportStatus[] = ['INVALID', 'OUT_OF_RANGE', 'DUPLICATE', 'NOT_FOUND', 'OK', 'UNCHANGED'];
@@ -479,7 +479,7 @@ const vndOrDash = (n: number | null) => (n === null ? 'chưa có' : formatVnd(n)
 
 /**
  * Nhập giá sỉ theo bậc (D1-06). Giá sỉ > 0 thắng mọi chiết khấu khi đại lý đặt hàng, nên đi như CSV hoa hồng: xem trước (BE đọc
- * 185.000 / 240,000 / 1.250.000 đúng số đồng, kiểm 10–100% giá lẻ) rồi mới áp; còn dòng lỗi thì không ghi dòng nào.
+ * 185.000 / 240,000 / 1.250.000 đúng số đồng, kiểm sàn chiết khấu đại lý và giá lẻ) rồi mới áp; còn dòng lỗi thì không ghi dòng nào.
  */
 function DealerPriceImport() {
   const qc = useQueryClient();
@@ -532,7 +532,7 @@ function DealerPriceImport() {
     <section aria-label="Giá sỉ đại lý" className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3">
       <h3 className="text-sm font-semibold text-stone-900">Giá sỉ đại lý theo bậc</h3>
       <p className="text-xs text-stone-600">
-        Chọn bậc, dán 2 cột SKU và giá sỉ (đồng) từ Excel, mỗi dòng một SKU. Giá phải nằm trong 10–100% giá lẻ. Xem trước rồi mới
+        Chọn bậc, dán 2 cột SKU và giá sỉ (đồng) từ Excel, mỗi dòng một SKU. Giá không được thấp hơn giá lẻ trừ chiết khấu đại lý tối đa, và không cao hơn giá lẻ. Xem trước rồi mới
         ghi; còn dòng lỗi thì không dòng nào được ghi.
       </p>
       <DealerTierSelect

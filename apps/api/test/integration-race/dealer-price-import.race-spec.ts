@@ -1,6 +1,7 @@
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
-import { createUser, randCode, summarize } from './helpers';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
+import { createUser, randCode, setConfig, summarize } from './helpers';
 
 /**
  * Giá sỉ đại lý > 0 được DealerService.unitPrice ưu tiên tuyệt đối. Parser cũ đọc `185.000` thành 185đ, `240,000` thành 240đ và bỏ
@@ -16,8 +17,10 @@ describe('Nhập giá sỉ đại lý theo bậc (real Postgres)', () => {
     prisma = new PrismaService();
     await prisma.$connect();
     const none = {} as never;
-    admin = new AdminService(prisma, none, none, none, none, none, none, none, none, none);
+    admin = new AdminService(prisma, new SystemConfigService(prisma), none, none, none, none, none, none, none, none);
     adminId = (await createUser(prisma, { role: 'ADMIN' })).id;
+    // Sàn giá sỉ = giá lẻ × (1 − trần chiết khấu đại lý); spec khác có thể đổi khoá này trên cùng DB.
+    await setConfig(prisma, 'dealer.max_discount_pct', 0.45);
   });
 
   afterAll(async () => {
@@ -78,7 +81,7 @@ describe('Nhập giá sỉ đại lý theo bậc (real Postgres)', () => {
     const t = await tier();
     const a = await variation(200_000);
     const b = await variation(200_000);
-    for (const bad of ['185.5', '185', '250000']) {
+    for (const bad of ['185.5', '185', '25.000', '109.999', '250000']) {
       await expect(admin.importDealerPrices(adminId, t.id, { csv: `${a.sku},180.000\n${b.sku},${bad}` })).rejects.toThrow('Chưa ghi dòng nào');
     }
     await expect(admin.importDealerPrices(adminId, t.id, { csv: `${a.sku},180.000\n${a.sku},180.000` })).rejects.toThrow('Chưa ghi dòng nào');
