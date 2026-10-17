@@ -113,6 +113,14 @@ bash tools/deploy/deploy.sh
 docker compose -f docker-compose.vietnix.yml run --rm --no-deps api pnpm run go-live:check
 ```
 
+**Lần deploy đầu (hoặc DB mới): sau bước migrate, chạy thêm
+`npx prisma migrate deploy && npm run prisma:seed:reference`** (trên VPS: `docker compose -f
+docker-compose.vietnix.yml run --rm --no-deps api pnpm run prisma:seed:reference`, xem bước 7b của
+runbook). Migration không nạp chủ đề cộng đồng, quiz, nhiệm vụ, loài cây, hạng thành viên, bậc đại lý
+và 28 mẫu thông báo; `prisma:seed` thì bị chặn ở production. Lệnh này chỉ tạo dòng còn thiếu, không ghi
+đè chỉnh sửa của admin và không đụng sản phẩm, người dùng, mã giảm giá, tài khoản ngân hàng, nên chạy
+lại sau mỗi lần phát hành cũng được. `deploy.sh` chưa gọi nó.
+
 `tools/deploy/deploy.sh` giữ đúng thứ tự: `docker compose run` **không** build lại image, nên
 chạy `run --rm api pnpm exec prisma migrate deploy` trước khi build sẽ áp thư mục migrations của
 image CŨ ("No pending migrations") và migration mới chỉ chạy trong CMD của container mới, sau khi
