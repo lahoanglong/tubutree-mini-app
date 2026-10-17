@@ -172,19 +172,22 @@ export class CartService {
     let couponNotice: string | null = null;
     // Mã vừa bị gỡ khỏi giỏ ở lần đọc này (hết hạn, bị tắt, hết lượt): checkout nói đúng lý do khi tổng tăng vì mất mã.
     let couponRemoved: { code: string; reason: string } | null = null;
+    const applyCoupon = async (code: string) => {
+      const r = await this.coupons.validateAndCompute(code, userId, couponBase, couponLines);
+      // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
+      // (coupons.service.ts) — checkout đã clamp bằng Math.min(..., goodsAfterCombo), cart
+      // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
+      discount = Math.min(r.discount, couponBase);
+      freeship = r.freeship;
+      if (lines.length > 0 && discount === 0 && !freeship) {
+        couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash), combo.total > 0);
+      } else if (discount > 0 && lines.some((l) => l.isFlash)) {
+        couponNotice = couponFlashExcludedNotice(couponBase);
+      }
+    };
     if (couponCode) {
       try {
-        const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase, couponLines);
-        // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
-        // (coupons.service.ts) — checkout đã clamp bằng Math.min(..., goodsAfterCombo), cart
-        // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
-        discount = Math.min(r.discount, couponBase);
-        freeship = r.freeship;
-        if (lines.length > 0 && discount === 0 && !freeship) {
-          couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash), combo.total > 0);
-        } else if (discount > 0 && lines.some((l) => l.isFlash)) {
-          couponNotice = couponFlashExcludedNotice(couponBase);
-        }
+        await applyCoupon(couponCode);
       } catch (err) {
         // Chỉ coi là "coupon không hợp lệ" khi CouponsService từ chối bằng business rule
         // (luôn ném BadRequestException — coupons.service.ts). Lỗi hạ tầng khác (DB timeout,
@@ -213,7 +216,19 @@ export class CartService {
               couponRemoved = { code: couponCode, reason: err2.message };
               couponCode = null;
             } else {
+              // Tab khác vừa áp mã mới: trả mã đó cùng mức giảm của chính nó (tính một lần, không gỡ, không lặp lại), để mã và số giảm khớp nhau.
               couponCode = (await this.prisma.cart.findUnique({ where: { id: cartId }, select: { couponCode: true } }))?.couponCode ?? null;
+              discount = 0;
+              freeship = false;
+              couponNotice = null;
+              if (couponCode) {
+                try {
+                  await applyCoupon(couponCode);
+                } catch (err3) {
+                  if (!(err3 instanceof BadRequestException)) throw err3;
+                  couponNotice = couponNotAppliedNotice(couponRejectReason(err3, lines), lines.some((l) => l.isFlash), combo.total > 0);
+                }
+              }
             }
           }
         }
