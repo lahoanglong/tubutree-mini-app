@@ -143,6 +143,10 @@ export const vi = {
     viewCart: 'Xem giỏ hàng',
     chatWithShop: 'Chat với Tubu Tree',
     chatAbout: (name: string) => `Mình muốn hỏi về sản phẩm: ${name}`,
+    // "Tối đa": giảm giá/mã/điểm dùng ở bước thanh toán làm giá trị hàng tính điểm thấp đi, số này là trước các khoản đó.
+    pointsEarn: (points: number, valueVnd: number) =>
+      `Nhận tối đa ${formatNumber(points)} Điểm Xanh (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
+    pointsEarnGeneric: 'Nhận Điểm Xanh khi đơn giao thành công',
   },
 
   subscriptions: {
