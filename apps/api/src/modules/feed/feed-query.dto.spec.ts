@@ -43,10 +43,16 @@ describe('GET /feed: validate query theo enum thật', () => {
     await expect(as({ foo: 'x' })).rejects.toThrow();
   });
 
-  it('q, tag, category, cursor quá dài → 400; đúng trần vẫn nhận', async () => {
-    for (const [key, max] of [['q', 100], ['tag', 100], ['category', 100], ['cursor', 200]] as const) {
+  it('tag, category, cursor quá dài → 400; đúng trần vẫn nhận', async () => {
+    for (const [key, max] of [['tag', 100], ['category', 100], ['cursor', 200]] as const) {
       await expect(as({ [key]: 'a'.repeat(max) })).resolves.toMatchObject({ [key]: 'a'.repeat(max) });
       await expect(as({ [key]: 'a'.repeat(max + 1) })).rejects.toThrow();
     }
+  });
+
+  it('q dài hơn 100 → cắt còn 100 (không 400, không cắt đôi cặp surrogate); đúng trần nhận nguyên', async () => {
+    await expect(as({ q: 'a'.repeat(100) })).resolves.toEqual({ q: 'a'.repeat(100) });
+    await expect(as({ q: 'b'.repeat(108) })).resolves.toEqual({ q: 'b'.repeat(100) });
+    await expect(as({ q: `${'a'.repeat(99)}🌵🌵` })).resolves.toEqual({ q: `${'a'.repeat(99)}🌵` });
   });
 });

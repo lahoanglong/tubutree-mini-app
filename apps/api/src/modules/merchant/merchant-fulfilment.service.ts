@@ -40,7 +40,7 @@ import {
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
 import { consignmentLinkedSql } from './consignment-link-sql';
-import { isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE } from './partner-store';
+import { isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE, storeHasPayouts } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
@@ -443,7 +443,7 @@ export class MerchantFulfilmentService {
 
   /** Gian hàng đã có phiếu đối soát nào chưa (cổng cho chủ gian hàng đã tắt cờ biết có phiếu để xem). */
   async storeHasPayouts(storefrontId: string): Promise<boolean> {
-    return (await this.prisma.merchantPayout.count({ where: { storefrontId } })) > 0;
+    return storeHasPayouts(this.prisma, storefrontId);
   }
 
   // ── Đối tác: đơn cần giao ──
