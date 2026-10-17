@@ -213,6 +213,12 @@ export class AffiliateService {
     return (await this.commissionEligibleRoles()).has(ref.role) ? ref.id : null;
   }
 
+  /** Người dùng (chủ gian hàng CTV, người của "chạm") có thuộc vai trò được ghi công đơn không — checkout/attribution.ts. */
+  async isCommissionEligible(userId: string): Promise<boolean> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    return !!u && (await this.commissionEligibleRoles()).has(u.role);
+  }
+
   /** Vai trò được ghi công đơn và hưởng hoa hồng (khoá `affiliate.commission_eligible_roles`, mặc định CTV + đại lý). */
   async commissionEligibleRoles(): Promise<ReadonlySet<UserRole>> {
     return sanitizeEligibleRoles(await this.config.get<unknown>(COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES));

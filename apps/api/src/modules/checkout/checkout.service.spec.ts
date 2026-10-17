@@ -53,6 +53,7 @@ function build(
     validateAndCompute?: jest.Mock; // override coupons.validateAndCompute
     getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
     findEligibleReferrer?: jest.Mock; // override affiliate.findEligibleReferrer (mã CTV/đại lý → id, còn lại null)
+    isCommissionEligible?: jest.Mock; // override affiliate.isCommissionEligible (chủ gian hàng / người của chạm đủ vai trò)
     createCommissionForOrder?: jest.Mock; // override affiliate.createCommissionForOrder
     cartData?: unknown; // override giỏ (test checkout tập con)
     flashSale?: { consumeQuotas: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
@@ -180,6 +181,7 @@ function build(
     createCommissionForOrder: opts.createCommissionForOrder ?? jest.fn().mockResolvedValue(undefined),
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
     findEligibleReferrer: opts.findEligibleReferrer ?? jest.fn().mockResolvedValue(null),
+    isCommissionEligible: opts.isCommissionEligible ?? jest.fn().mockResolvedValue(true),
     notifyCommissionCreated: jest.fn().mockResolvedValue(undefined),
   } as unknown as AffiliateService;
   // combo mặc định: không giảm (override qua opts.combo cho test combo).
@@ -418,6 +420,19 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
     const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch, storefront: { ...SF_CTV, ownerUserId: 'u1' } });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
     expect(orderCreate.mock.calls[0][0].data.referrerUserId).toBeNull();
+  });
+
+  it('chủ gian hàng CTV không đủ vai trò (vd ADMIN) → bỏ qua, xét chạm còn hạn; người của chạm cũng không đủ → không ai', async () => {
+    const getActiveTouch = jest.fn().mockResolvedValue({ referrerUserId: 'ctv9', storefrontSlug: null, kind: 'ctv' });
+    const isCommissionEligible = jest.fn(async (id: string) => id === 'ctv9');
+    const a = build({ stockCount: 1, getActiveTouch, isCommissionEligible, storefront: SF_CTV });
+    await a.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
+    expect(a.orderCreate.mock.calls[0][0].data.referrerUserId).toBe('ctv9');
+    expect(isCommissionEligible).toHaveBeenCalledWith('ctv-lan');
+
+    const b = build({ stockCount: 1, getActiveTouch, isCommissionEligible: jest.fn().mockResolvedValue(false), storefront: SF_CTV });
+    await b.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
+    expect(b.orderCreate.mock.calls[0][0].data.referrerUserId).toBeNull();
   });
 
   it('storefrontSlug null khi không truyền', async () => {

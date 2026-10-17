@@ -1670,6 +1670,18 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     expect((prisma as any).referralTouch.upsert.mock.calls[0][0].create.referrerUserId).toBe('dealer1');
   });
 
+  it('isCommissionEligible: đúng vai trò trong khoá; không có user → false', async () => {
+    const findUnique = jest.fn();
+    const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);
+    for (const [role, ok] of [['AFFILIATE', true], ['DEALER', true], ['CUSTOMER', false], ['ADMIN', false], ['STAFF', false]] as const) {
+      findUnique.mockResolvedValueOnce({ role });
+      expect(await svc.isCommissionEligible('x')).toBe(ok);
+    }
+    findUnique.mockResolvedValueOnce(null);
+    expect(await svc.isCommissionEligible('x')).toBe(false);
+    expect(findUnique).toHaveBeenLastCalledWith({ where: { id: 'x' }, select: { role: true } });
+  });
+
   it('findEligibleReferrer: hoa hoá mã; null khi không có / chính người mua / không phải CTV-đại lý', async () => {
     const findUnique = jest.fn();
     const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);

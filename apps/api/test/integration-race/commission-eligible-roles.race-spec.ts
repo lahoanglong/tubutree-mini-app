@@ -141,7 +141,7 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
   const legacyTouch = (userId: string, referrerUserId: string) =>
     prisma.referralTouch.create({ data: { userId, referrerUserId, kind: 'ctv', expiresAt: new Date(Date.now() + 86_400_000) } });
 
-  it('đơn ghi công cho khách thường → giữ referrerUserId, KHÔNG có dòng hoa hồng; CTV và đại lý (CTV lên đại lý) → có hoa hồng', async () => {
+  it('chạm còn hạn của khách thường (ghi trước bản sửa) → đơn không ghi công ai, không có hoa hồng; CTV và đại lý (CTV lên đại lý) → có hoa hồng', async () => {
     const v = await tubuVariation();
     const friend = await createUser(prisma, { role: 'CUSTOMER' });
     const ctv = await createUser(prisma, { role: 'AFFILIATE' });
@@ -151,7 +151,7 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
     const b1 = await buyer();
     await legacyTouch(b1.u.id, friend.id);
     const o1 = await place(b1, v.id);
-    expect(o1.referrerUserId).toBe(friend.id);
+    expect(o1.referrerUserId).toBeNull();
     expect(await commissionsOf(o1.id)).toEqual([]);
 
     const b2 = await buyer();
@@ -232,6 +232,25 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
     await affiliate.recordTouch(switched.u.id, { referralCode: other.store.slug, storefrontSlug: other.store.slug, kind: 'ctv' });
     const o3 = await place(switched, v.id, { referralCode: ctv.referralCode! });
     expect(o3.referrerUserId).toBe(ctv.id);
+  });
+
+  it('mua trong gian hàng CTV do ADMIN tạo mà còn chạm của CTV B → B được ghi công và hưởng hoa hồng (chủ gian hàng không đủ vai trò thì xét bậc kế)', async () => {
+    const v = await tubuVariation();
+    const adminOwner = await createUser(prisma, { role: 'ADMIN' });
+    const adminStore = await prisma.storefront.create({
+      data: { type: 'CTV', slug: adminOwner.referralCode!.toLowerCase(), ownerUserId: adminOwner.id, title: 'Shop admin IT', isPublished: true },
+    });
+    const ctvB = await createUser(prisma, { role: 'AFFILIATE' });
+    const c = await buyer();
+    await legacyTouch(c.u.id, ctvB.id);
+    const o = await place(c, v.id, { storefrontSlug: adminStore.slug });
+    expect(o).toMatchObject({ referrerUserId: ctvB.id, storefrontId: adminStore.id });
+    expect(await commissionsOf(o.id)).toEqual([{ affiliateUserId: ctvB.id, amount: 20_000 }]);
+
+    // Không có chạm nào: gian hàng của ADMIN không ghi công cho ADMIN.
+    const d = await buyer();
+    const o2 = await place(d, v.id, { storefrontSlug: adminStore.slug });
+    expect(o2.referrerUserId).toBeNull();
   });
 
   it('admin thêm CUSTOMER vào khoá → khách thường được hưởng (chủ dự án quyết); giá trị sai bị từ chối lúc ghi', async () => {
