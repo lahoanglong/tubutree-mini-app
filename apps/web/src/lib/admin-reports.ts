@@ -64,3 +64,6 @@ export function pivotRevenue(report: PivotInput): RevenuePivot {
   const rows = [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([day, r]) => ({ day, ...r }));
   return { columns, rows, columnTotals, grandTotal };
 }
+
+/** Tỉ lệ nguyên phần trăm; mẫu số 0 thì "—" (không chia cho 0, không ghi 0% cho nhóm rỗng). */
+export const formatPct = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : '—');

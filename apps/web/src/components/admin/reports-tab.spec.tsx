@@ -5,10 +5,11 @@ import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom'
 
 const mocks = vi.hoisted(() => ({
   getRevenueReport: vi.fn(),
+  getSourceReport: vi.fn(),
   downloadOrderItemsCsv: vi.fn(),
   downloadOrdersCsv: vi.fn(),
 }));
-vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv }));
+vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv }));
 vi.mock('@/lib/admin-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-client')>()), downloadOrdersCsv: mocks.downloadOrdersCsv }));
 
 let mounted: Rendered[] = [];
@@ -34,7 +35,22 @@ const REPORT = {
   byPlatform: [],
 };
 
+const SOURCES = {
+  range: { from: '2026-09-19', to: '2026-10-18', days: 30 },
+  windowDays: 30,
+  rows: [
+    { week: '2026-10-12', source: 'shopee', label: 'Shopee', newUsers: 20, firstOrderUsers: 5, secondOrderUsers: 0, revenue: 500_000, firstWindowClosed: false, secondWindowClosed: false },
+    { week: '2026-09-21', source: 'card-2610', label: 'Thẻ hộp hàng 2610', newUsers: 10, firstOrderUsers: 4, secondOrderUsers: 1, revenue: 400_000, firstWindowClosed: true, secondWindowClosed: false },
+  ],
+  bySource: [
+    { source: 'shopee', label: 'Shopee', newUsers: 20, firstOrderUsers: 5, secondOrderUsers: 0, revenue: 500_000 },
+    { source: 'card-2610', label: 'Thẻ hộp hàng 2610', newUsers: 10, firstOrderUsers: 4, secondOrderUsers: 1, revenue: 400_000 },
+  ],
+  totals: { newUsers: 30, firstOrderUsers: 9, secondOrderUsers: 1, revenue: 900_000 },
+};
+
 beforeEach(() => {
+  mocks.getSourceReport.mockResolvedValue(SOURCES);
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-17T20:00:00Z'));
   mocks.getRevenueReport.mockResolvedValue(REPORT);
@@ -111,5 +127,42 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     const { container } = mount(<ReportsTab />);
     await flush();
     expect(container.textContent).toContain('Không có đơn nào trong khoảng ngày này');
+  });
+
+  it('bảng nguồn × tuần: khách mới, đơn đầu, đơn 2, doanh thu; tuần chưa đóng kỳ ghi "đang tăng"', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    expect(mocks.getSourceReport).toHaveBeenCalledWith({ from: '2026-09-19', to: '2026-10-18' });
+    const total = container.querySelector('tr[data-source-total]')?.textContent ?? '';
+    expect(total).toContain('30');
+    expect(total).toContain('900.000');
+    const shopee = container.querySelector('tr[data-source-row="2026-10-12|shopee"]')?.textContent ?? '';
+    expect(shopee).toContain('Tuần 12/10/2026');
+    expect(shopee).toContain('Shopee');
+    expect(shopee).toContain('5 (25%)');
+    expect(shopee).toContain('đang tăng');
+    const card = container.querySelector('tr[data-source-row="2026-09-21|card-2610"]')?.textContent ?? '';
+    expect(card).toContain('4 (40%)');
+    expect(card).toContain('1 (25% của có đơn đầu)');
+    expect(container.querySelector('tr[data-source-row="2026-09-21|card-2610"]')?.querySelectorAll('td')[4]?.textContent).toContain('đang tăng');
+    expect(container.querySelector('tr[data-source-row="2026-09-21|card-2610"]')?.querySelectorAll('td')[3]?.textContent).not.toContain('đang tăng');
+  });
+
+  it('khoảng quá 180 ngày: báo cáo nguồn báo lỗi và không gọi API (báo cáo doanh thu vẫn chạy tới 366 ngày)', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    mocks.getSourceReport.mockClear();
+    typeInto(container.querySelector<HTMLInputElement>('input[type="date"]'), '2026-01-01');
+    await flush();
+    expect(container.textContent).toContain('tối đa 180 ngày');
+    expect(mocks.getSourceReport).not.toHaveBeenCalled();
+    expect(mocks.getRevenueReport).toHaveBeenLastCalledWith({ from: '2026-01-01', to: '2026-10-18' });
+  });
+
+  it('không có khách mới: nói rõ', async () => {
+    mocks.getSourceReport.mockResolvedValue({ ...SOURCES, rows: [], bySource: [], totals: { newUsers: 0, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0 } });
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    expect(container.textContent).toContain('Không có khách mới nào trong khoảng ngày này');
   });
 });

@@ -4,6 +4,7 @@ import { AdminService } from '../../src/modules/admin/admin.service';
 import { AdminReportsService } from '../../src/modules/admin/admin-reports.service';
 import { orderCsvChunks } from '../../src/modules/admin/admin-export';
 import { orderItemCsvChunks } from '../../src/modules/admin/admin-order-items-export';
+import { REVENUE_ORDER_WHERE } from '../../src/modules/admin/admin-revenue';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
 
 /**
@@ -177,6 +178,110 @@ describe('Báo cáo admin (real Postgres)', () => {
       expect(r.totals).toMatchObject({ orders: 0, revenue: 0 });
       expect(r.byDay).toEqual([]);
       await expect(reports.revenueReport({ from: '2018-01-01', to: '2019-03-01' })).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('D2-02: nguồn chạm đầu × tuần', () => {
+    let reports: AdminReportsService;
+    beforeAll(() => {
+      reports = new AdminReportsService(prisma);
+    });
+    const DAY = 864e5;
+    // 2019-04-01 là thứ Hai. Người dùng tạo lúc 12:00 giờ VN thứ Tư (05:00Z).
+    const W1 = new Date('2019-04-03T05:00:00Z');
+    const W2 = new Date('2019-04-10T05:00:00Z');
+
+    async function seedCohorts() {
+      const made: Record<string, { id: string; createdAt: Date }> = {};
+      const user = async (key: string, over: Parameters<typeof createUser>[1] = {}, createdAt = W1) => {
+        const u = await mkUser({ createdAt, ...over });
+        made[key] = { id: u.id, createdAt };
+        return u;
+      };
+      const order = (key: string, days: number, over: Partial<Parameters<typeof createOrder>[1]> = {}) =>
+        createOrder(prisma, {
+          userId: made[key]!.id,
+          status: 'CONFIRMED',
+          paymentMethod: 'ZALOPAY',
+          paymentStatus: 'PAID',
+          createdAt: new Date(made[key]!.createdAt.getTime() + days * DAY),
+          ...over,
+        });
+
+      await user('A', { firstTouchSource: 'shopee' });
+      await order('A', 2, { status: 'DELIVERED', total: 100_000 });
+      await order('A', 10, { total: 50_000 });
+      await user('B', { firstTouchSource: 'shopee' });
+      const b1 = await order('B', 5, { total: 80_000 });
+      await prisma.returnRequest.create({ data: { orderId: b1.id, userId: made.B!.id, reason: 'IT', status: 'APPROVED', refundAmount: 20_000 } });
+      await order('B', 6, { status: 'CANCELLED', paymentStatus: 'REFUNDED', total: 30_000 });
+      await user('C', { firstTouchSource: 'shopee' });
+      await user('M', { firstTouchSource: 'shopee' });
+      await order('M', 2, { status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', fulfiller: 'MERCHANT', total: 99_000 });
+      await user('P', { firstTouchSource: 'shopee' }, new Date('2019-03-31T17:00:00Z'));
+      await user('N', { firstTouchSource: 'shopee' }, new Date('2019-03-31T16:59:59Z'));
+      await user('K', { firstTouchSource: 'shopee', role: 'ADMIN' });
+      await user('D', { firstTouchSource: 'card-2610' });
+      await order('D', 40, { total: 70_000 });
+      await user('E', { firstTouchSource: 'ctv' });
+      await order('E', 1, { status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 40_000 });
+      await order('E', 45, { total: 60_000 });
+      await user('F');
+      await order('F', 1, { total: 10_000 });
+      await user('G', { firstTouchSource: 'organic' });
+      await order('G', 1, { status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', total: 90_000 });
+      // Khách cũ được gắn nguồn lúc gộp khách (chạm đầu SAU ngày tạo): không phải khách mới của nguồn đó.
+      await user('H', { firstTouchSource: 'fb', firstTouchAt: new Date(W1.getTime() + 30 * DAY) });
+      await order('H', 1, { total: 500_000 });
+      // Chạm đầu lưu trên máy từ trước khi tạo tài khoản: vẫn là khách mới.
+      await user('I', { firstTouchSource: 'fb', firstTouchAt: new Date(W1.getTime() - 40 * DAY) });
+      await order('I', 3, { total: 25_000 });
+      await user('J', { firstTouchSource: 'ctv' }, W2);
+      await order('J', 2, { total: 15_000 });
+      await order('J', 3, { total: 5_000 });
+      return made;
+    }
+
+    it('khách mới, đơn đầu, đơn hai trong 30 ngày và doanh thu theo nguồn × tuần khớp số tính tay và khớp định nghĩa doanh thu', async () => {
+      const made = await seedCohorts();
+      const r = await reports.sourceReport({ from: '2019-04-01', to: '2019-04-14' }, new Date('2019-04-20T00:00:00Z'));
+      expect(r.range).toMatchObject({ from: '2019-04-01', to: '2019-04-14', days: 14 });
+      const cell = (week: string, source: string) => r.rows.find((x) => x.week === week && x.source === source);
+      const pick = (c: ReturnType<typeof cell>) => c && { newUsers: c.newUsers, firstOrderUsers: c.firstOrderUsers, secondOrderUsers: c.secondOrderUsers, revenue: c.revenue };
+
+      expect(pick(cell('2019-04-01', 'shopee'))).toEqual({ newUsers: 5, firstOrderUsers: 3, secondOrderUsers: 1, revenue: 210_000 });
+      expect(pick(cell('2019-04-01', 'card-2610'))).toEqual({ newUsers: 1, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0 });
+      expect(pick(cell('2019-04-01', 'ctv'))).toEqual({ newUsers: 1, firstOrderUsers: 1, secondOrderUsers: 0, revenue: 40_000 });
+      expect(pick(cell('2019-04-01', 'unknown'))).toEqual({ newUsers: 1, firstOrderUsers: 1, secondOrderUsers: 0, revenue: 10_000 });
+      expect(pick(cell('2019-04-01', 'organic'))).toEqual({ newUsers: 1, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0 });
+      expect(pick(cell('2019-04-01', 'fb'))).toEqual({ newUsers: 1, firstOrderUsers: 1, secondOrderUsers: 0, revenue: 25_000 });
+      expect(pick(cell('2019-04-08', 'ctv'))).toEqual({ newUsers: 1, firstOrderUsers: 1, secondOrderUsers: 1, revenue: 20_000 });
+      expect(r.rows).toHaveLength(7);
+      expect(r.totals).toEqual({ newUsers: 11, firstOrderUsers: 7, secondOrderUsers: 2, revenue: 305_000 });
+      expect(r.bySource[0]).toMatchObject({ source: 'shopee', newUsers: 5, label: 'Shopee' });
+      // Ngày 20/04 mới 17 ngày sau tuần 04-08 và 19 ngày sau tuần 04-01: chưa kỳ nào đóng
+      expect(r.rows.every((x) => !x.firstWindowClosed && !x.secondWindowClosed)).toBe(true);
+
+      // Đối chiếu độc lập: doanh thu của chính các khách đó theo định nghĩa doanh thu dùng chung (Prisma, không qua SQL của báo cáo)
+      let expected = 0;
+      for (const key of ['A', 'B', 'C', 'M', 'P', 'D', 'E', 'F', 'G', 'I', 'J']) {
+        const u = made[key]!;
+        const where = { userId: u.id, createdAt: { lt: new Date(u.createdAt.getTime() + 30 * DAY) }, ...REVENUE_ORDER_WHERE };
+        const gross = (await prisma.order.aggregate({ _sum: { total: true }, where }))._sum.total ?? 0;
+        const orderIds = (await prisma.order.findMany({ where, select: { id: true } })).map((o) => o.id);
+        const refunds = await prisma.returnRequest.findMany({ where: { status: 'APPROVED', orderId: { in: orderIds } }, select: { refundAmount: true, shippingRefund: true } });
+        expected += gross - refunds.reduce((sum, x) => sum + (x.refundAmount ?? 0) + x.shippingRefund, 0);
+      }
+      expect(r.totals.revenue).toBe(expected);
+    });
+
+    it('kỳ đã đóng khi đủ ngày; khoảng quá 180 ngày bị từ chối; khoảng không có khách mới rỗng', async () => {
+      const closed = await reports.sourceReport({ from: '2019-04-01', to: '2019-04-14' }, new Date('2019-12-31T00:00:00Z'));
+      expect(closed.rows.every((x) => x.firstWindowClosed && x.secondWindowClosed)).toBe(true);
+      await expect(reports.sourceReport({ from: '2018-10-01', to: '2019-04-14' })).rejects.toBeInstanceOf(BadRequestException);
+      const none = await reports.sourceReport({ from: '2001-01-01', to: '2001-01-31' });
+      expect(none.rows).toEqual([]);
+      expect(none.totals).toEqual({ newUsers: 0, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0 });
     });
   });
 });

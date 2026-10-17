@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { lastDaysRange } from '@/lib/admin-reports';
 import { ReportsRevenueSection } from './reports-revenue-section';
+import { ReportsSourcesSection } from './reports-sources-section';
 import { FIELD_CLASS, TOUCH_H, chipClass } from './ui';
 
 const PRESETS = [
@@ -47,6 +48,7 @@ export function ReportsTab() {
         </div>
       </div>
       <ReportsRevenueSection range={range} />
+      <ReportsSourcesSection range={range} />
     </div>
   );
 }

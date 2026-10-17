@@ -36,6 +36,12 @@ export class AdminReportsController {
     return this.reports.revenueReport(q);
   }
 
+  /** Khách mới theo nguồn chạm đầu × tuần: đơn đầu, đơn hai trong 30 ngày, doanh thu (tối đa 180 ngày, mặc định 30 ngày). */
+  @Get('sources')
+  sources(@Query() q: ReportRangeQuery) {
+    return this.reports.sourceReport(q);
+  }
+
   /** CSV theo dòng hàng của đúng tập đơn mà `GET /admin/orders/export` xuất với cùng bộ lọc. */
   @Get('order-items/export')
   async exportOrderItems(@Query() q: ExportOrdersQuery, @Res() res: Response) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addDaysKey, lastDaysRange, pivotRevenue, rangeDays, rangeError, vnTodayKey } from './admin-reports';
+import { addDaysKey, formatPct, lastDaysRange, pivotRevenue, rangeDays, rangeError, vnTodayKey } from './admin-reports';
 
 describe('khoảng ngày giờ VN', () => {
   it('hôm nay theo giờ VN, không theo UTC: 20:00Z ngày 17 đã là ngày 18 ở VN', () => {
@@ -55,5 +55,14 @@ describe('pivotRevenue', () => {
 
   it('không có dữ liệu: bảng rỗng', () => {
     expect(pivotRevenue({ byChannel: [], byDay: [] })).toEqual({ columns: [], rows: [], columnTotals: {}, grandTotal: 0 });
+  });
+});
+
+describe('formatPct', () => {
+  it('làm tròn phần trăm, mẫu số 0 thì gạch ngang', () => {
+    expect(formatPct(1, 3)).toBe('33%');
+    expect(formatPct(2, 3)).toBe('67%');
+    expect(formatPct(0, 5)).toBe('0%');
+    expect(formatPct(0, 0)).toBe('—');
   });
 });

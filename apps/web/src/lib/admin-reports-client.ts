@@ -31,3 +31,20 @@ export const getRevenueReport = (r: ReportRange) => apiFetch<RevenueReport>(`/ad
 /** CSV theo dòng hàng của mọi đơn đặt trong khoảng ngày (giờ VN, cả hai đầu). */
 export const downloadOrderItemsCsv = (r: ReportRange) =>
   apiDownload(`/admin/reports/order-items/export?${rangeQuery(r)}`, `dong-hang-${r.from}-${r.to}.csv`);
+
+export interface SourceTotals {
+  newUsers: number;
+  firstOrderUsers: number;
+  secondOrderUsers: number;
+  revenue: number;
+}
+
+export interface SourceReport {
+  range: { from: string; to: string; days: number };
+  windowDays: number;
+  rows: (SourceTotals & { week: string; source: string; label: string; firstWindowClosed: boolean; secondWindowClosed: boolean })[];
+  bySource: (SourceTotals & { source: string; label: string })[];
+  totals: SourceTotals;
+}
+
+export const getSourceReport = (r: ReportRange) => apiFetch<SourceReport>(`/admin/reports/sources?${rangeQuery(r)}`);
