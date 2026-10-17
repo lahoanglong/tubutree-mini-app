@@ -410,7 +410,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(await prisma.product.count({ where: DEMO_PRODUCT_WHERE })).toBe(44);
   });
 
-  it('CLI: xem trước và --apply qua tsx đều thoát 0 trên DB đã dọn; tham số sai thoát 2', () => {
+  it('CLI: xem trước và --apply qua tsx đều thoát 0 trên DB đã dọn; tham số sai hoặc sai tên DB thoát 2', () => {
     const cli = (args: string[]) =>
       spawnSync(join(apiDir, 'node_modules/.bin/tsx'), ['prisma/cleanup-demo-data.ts', ...args], {
         cwd: apiDir,
@@ -423,7 +423,12 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(dry.stdout).toContain('XEM TRƯỚC');
     expect(dry.stdout).toContain('tìm thấy 44/44, đang bán 0 → không cần đổi');
     expect(dry.stdout).toMatch(/tubutree_it/);
-    const apply = cli(['--', '--apply']);
+    // --apply phải xác nhận tên DB: thiếu hoặc sai thì thoát 2 trước khi nối DB.
+    expect(cli(['--', '--apply']).status).toBe(2);
+    const wrong = cli(['--', '--apply', '--expect-db=tubutree']);
+    expect(wrong.status).toBe(2);
+    expect(wrong.stderr).toContain('--expect-db=tubutree khác DB đang nối (tubutree_it)');
+    const apply = cli(['--', '--apply', '--expect-db=tubutree_it']);
     expect(apply.status).toBe(0);
     expect(apply.stdout).toContain('Đã tắt 0 sản phẩm, 0 biến thể');
     expect(apply.stdout).toContain('-- HOÀN TÁC: lần chạy này không đổi dòng nào.');

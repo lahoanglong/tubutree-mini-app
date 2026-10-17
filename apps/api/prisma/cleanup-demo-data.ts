@@ -3,12 +3,13 @@
  * 3 mã giảm giá công khai). Chạy MỘT lần sau `prisma migrate deploy` đầu tiên trên PROD, trước khi mở bán.
  *
  * Dùng (trong container api trên máy chủ):
- *   pnpm run prisma:cleanup-demo                                   # xem trước: không ghi gì
- *   pnpm run prisma:cleanup-demo -- --apply                        # tắt sản phẩm, biến thể; giữ nguyên mã
- *   pnpm run prisma:cleanup-demo -- --apply --coupons=expire       # thêm: tắt cả 3 mã demo
- *   pnpm run prisma:cleanup-demo -- --apply --coupons=expire --keep-coupon=WELCOME30   # tắt mã demo, trừ mã được duyệt
+ *   pnpm run prisma:cleanup-demo                                                    # xem trước: không ghi gì
+ *   pnpm run prisma:cleanup-demo -- --apply --expect-db=tubutree                    # tắt sản phẩm, biến thể; giữ nguyên mã
+ *   pnpm run prisma:cleanup-demo -- --apply --expect-db=tubutree --coupons=expire   # thêm: tắt cả 3 mã demo
+ *   pnpm run prisma:cleanup-demo -- --apply --expect-db=tubutree --coupons=expire --keep-coupon=WELCOME30
  *
- * Thoát 0 khi xong (kể cả khi không còn gì để đổi), 2 khi tham số sai hoặc DB không có dòng demo nào, 1 khi lỗi khác.
+ * `--expect-db` bắt buộc khi `--apply` và phải trùng tên DB trong DATABASE_URL. Thoát 0 khi xong (kể cả khi không còn gì
+ * để đổi), 2 khi tham số sai, sai tên DB hoặc DB không có dòng demo nào, 1 khi lỗi khác. Cuối `--apply` in khối SQL hoàn tác.
  * Logic nằm ở src/config/demo-data (có test); file này chỉ nối DB và in kết quả.
  */
 import {
@@ -16,6 +17,7 @@ import {
   formatPlan,
   formatResult,
   formatUndoSql,
+  databaseNameOf,
   hasDemoData,
   NoDemoDataError,
   parseCleanupArgs,
@@ -51,6 +53,10 @@ async function main(): Promise<number> {
     return 2;
   }
   console.log(`DB: ${describeTarget(url)}, lúc ${new Date().toISOString()}`);
+  if (args.apply && databaseNameOf(url) !== args.expectDb) {
+    console.error(`--expect-db=${args.expectDb} khác DB đang nối (${databaseNameOf(url) ?? 'không đọc được'}). Không làm gì.`);
+    return 2;
+  }
   const { PrismaClient } = await import('@prisma/client');
   const prisma = new PrismaClient({ datasourceUrl: url });
   try {

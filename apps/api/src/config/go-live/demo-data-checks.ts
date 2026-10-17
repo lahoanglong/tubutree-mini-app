@@ -71,7 +71,7 @@ export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env, phas
         'db.demo_products',
         pTitle,
         `${s.products.active} sản phẩm, ${s.activeVariations} biến thể demo đang bán (migration ${DEMO_MIGRATION} nạp vào mọi DB mới): khách thấy và đặt được hàng giả`,
-        `Trong container api: \`pnpm run prisma:cleanup-demo\` (xem trước), đọc kết quả, rồi \`pnpm run prisma:cleanup-demo -- --apply\` (tắt, không xoá). Xem ${CLEANUP_HINT}.`,
+        `Trong container api: \`pnpm run prisma:cleanup-demo\` (xem trước), đọc kết quả, rồi \`pnpm run prisma:cleanup-demo -- --apply --expect-db=<tên DB>\` (tắt, không xoá). Xem ${CLEANUP_HINT}.`,
       ),
     );
   } else if (s.products.found === 0) {
@@ -96,7 +96,7 @@ export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env, phas
         'db.demo_coupons',
         cTitle,
         `còn dùng được, chủ dự án chưa duyệt: ${couponList(blocking)}${notes.length > 0 ? `; ${notes.join('; ')}` : ''}`,
-        `Không giữ: \`pnpm run prisma:cleanup-demo -- --apply --coupons=expire\` (giữ riêng mã được duyệt: thêm --keep-coupon=<mã>; ${CLEANUP_HINT}). Mã chủ dự án duyệt giữ: chạy lại go-live check với GO_LIVE_ACCEPT_DEMO_COUPONS=<mã,...> (mã đó thành WARN).`,
+        `Không giữ: \`pnpm run prisma:cleanup-demo -- --apply --expect-db=<tên DB> --coupons=expire\` (giữ riêng mã được duyệt: thêm --keep-coupon=<mã>; ${CLEANUP_HINT}). Mã chủ dự án duyệt giữ: chạy lại go-live check với GO_LIVE_ACCEPT_DEMO_COUPONS=<mã,...> (mã đó thành WARN).`,
       ),
     );
   } else if (notes.length > 0) {

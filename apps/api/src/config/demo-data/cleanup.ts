@@ -36,18 +36,25 @@ export interface CleanupArgs {
   coupons: CouponMode;
   /** Mã demo chủ dự án duyệt giữ khi tắt các mã còn lại (`--keep-coupon=WELCOME30`). */
   keepCoupons: string[];
+  /** Tên DB người chạy xác nhận (`--expect-db=tubutree`); bắt buộc khi `--apply`, CLI so với DB trong DATABASE_URL. */
+  expectDb: string | null;
 }
 
-const USAGE = 'Dùng: [--apply] [--coupons=keep|expire] [--keep-coupon=MÃ,...]';
+const USAGE = 'Dùng: [--apply --expect-db=<tên DB>] [--coupons=keep|expire] [--keep-coupon=MÃ,...]';
 
 export function parseCleanupArgs(argv: readonly string[]): CleanupArgs {
-  const args: CleanupArgs = { apply: false, coupons: 'keep', keepCoupons: [] };
+  const args: CleanupArgs = { apply: false, coupons: 'keep', keepCoupons: [], expectDb: null };
   const demoCodes = new Set(DEMO_COUPONS.map((c) => c.code));
   for (const a of argv) {
     if (a === '--') continue;
     if (a === '--apply') args.apply = true;
     else if (a === '--coupons=expire') args.coupons = 'expire';
     else if (a === '--coupons=keep') args.coupons = 'keep';
+    else if (a.startsWith('--expect-db=')) {
+      const name = a.slice('--expect-db='.length).trim();
+      if (!name) throw new Error(`--expect-db cần tên DB. ${USAGE}`);
+      args.expectDb = name;
+    }
     else if (a.startsWith('--keep-coupon=')) {
       for (const raw of a.slice('--keep-coupon='.length).split(',')) {
         const code = raw.trim().toUpperCase();
@@ -60,7 +67,20 @@ export function parseCleanupArgs(argv: readonly string[]): CleanupArgs {
   if (args.keepCoupons.length > 0 && args.coupons !== 'expire') {
     throw new Error('--keep-coupon chỉ dùng kèm --coupons=expire (mặc định đã giữ mọi mã).');
   }
+  if (args.apply && !args.expectDb) {
+    throw new Error('--apply cần --expect-db=<tên DB> (tên DB in ở dòng "DB:" của bản xem trước) để chắc chắn ghi đúng DB.');
+  }
   return args;
+}
+
+/** Tên DB trong DATABASE_URL (phần đường dẫn), null khi không đọc được. */
+export function databaseNameOf(url: string): string | null {
+  try {
+    const name = decodeURIComponent(new URL(url).pathname.replace(/^\//, ''));
+    return name || null;
+  } catch {
+    return null;
+  }
 }
 
 export interface CouponRefs {
