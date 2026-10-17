@@ -356,6 +356,8 @@ export const getNotifications = async () =>
   (await takeMeBlock('notifications')) ?? api.get<NotificationDTO[]>('/me/notifications').then((r) => r.data);
 export const markNotificationRead = (id: string) =>
   api.post<{ ok: boolean }>(`/me/notifications/${id}/read`).then((r) => r.data);
+export const markAllNotificationsRead = () =>
+  api.post<{ ok: boolean; count: number }>('/me/notifications/read-all').then((r) => r.data);
 
 // Addresses (bổ sung update/delete cho address book)
 export const updateAddress = (id: string, data: Partial<Omit<AddressDTO, 'id'>>) =>

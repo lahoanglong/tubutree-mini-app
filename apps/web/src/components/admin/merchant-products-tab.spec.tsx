@@ -727,6 +727,40 @@ describe('MerchantProductsTab — hai admin cùng duyệt một sản phẩm (R5
     }
   });
 
+  it('R6-ADMIN-3 — mở từ thẻ ký gửi: chỉ cuộn và focus khối liên kết sau khi danh sách chờ duyệt tải xong', async () => {
+    const scroll = vi.fn();
+    (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView = scroll;
+    try {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url.includes('/merchant-products/linked')) return json(200, empty);
+          if (url.includes('/merchant-products/pending')) {
+            await gate;
+            return json(200, page(product()));
+          }
+          return json(500, { message: 'no mock' });
+        }),
+      );
+      const { container } = mount(<MerchantProductsTab focusConsignment />);
+      await flush();
+      expect(scroll).not.toHaveBeenCalled();
+
+      release();
+      await flush();
+      const section = container.querySelector('section[aria-label^="Sản phẩm đối tác đang liên kết"]');
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(section);
+      expect(document.activeElement).toBe(section);
+    } finally {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
   it('bản sửa đã được xử lý (409 EDIT_STALE) → báo bằng lời của web, danh sách tải lại', async () => {
     let listCalls = 0;
     const edit = product({ isEdit: true, editVersion: '2026-10-14T03:00:00.000Z', approvalStatus: 'APPROVED' });

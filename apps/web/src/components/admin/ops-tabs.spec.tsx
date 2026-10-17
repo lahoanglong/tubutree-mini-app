@@ -328,6 +328,55 @@ describe('OpsHealthTab — kênh email báo động (R8)', () => {
   });
 });
 
+describe('OpsHealthTab — kênh webhook báo động (R6-ADMIN-4)', () => {
+  const EMAIL = { state: 'DISABLED', recipients: 0, issues: [], lastOkAt: null, lastErrorAt: null, lastError: null };
+  const webhook = (over: Record<string, unknown> = {}) => ({
+    state: 'READY',
+    lastOkAt: null,
+    lastErrorAt: null,
+    lastError: null,
+    lastErrorKind: null,
+    lastErrorHint: null,
+    ...over,
+  });
+  const card = async (w: unknown) => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...HEALTH, alertChannels: { email: EMAIL, webhook: w } } } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    return c.querySelector('section[aria-label="Báo động qua webhook"]') as HTMLElement | null;
+  };
+
+  it('hook bị từ chối vĩnh viễn (410): thẻ hiện lỗi, gợi ý kiểm tra OPS_ALERT_WEBHOOK_URL và chi tiết kỹ thuật', async () => {
+    const section = await card(
+      webhook({
+        lastErrorAt: '2026-10-14T02:30:00.000Z',
+        lastError: 'HTTP 410',
+        lastErrorKind: 'PERMANENT',
+        lastErrorHint: 'Hook báo động bị từ chối hẳn — kiểm tra OPS_ALERT_WEBHOOK_URL.',
+      }),
+    );
+    expect(section?.textContent).toContain('Đang bật');
+    expect(section?.textContent).toContain('Lỗi 09:30 14/10/2026');
+    expect(section?.textContent).toContain('kiểm tra OPS_ALERT_WEBHOOK_URL');
+    expect(section?.querySelector('details')?.textContent).toContain('HTTP 410');
+    expect(section?.querySelector('.text-danger-fg')).not.toBeNull();
+  });
+
+  it('lỗi tạm thời: nói hệ thống tự gửi lại; gửi được lại sau lỗi thì coi là ổn', async () => {
+    const failing = await card(webhook({ lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'HTTP 503', lastErrorKind: 'TRANSIENT' }));
+    expect(failing?.textContent).toContain('tự gửi lại');
+    const ok = await card(webhook({ lastOkAt: '2026-10-14T03:00:00.000Z', lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'HTTP 503', lastErrorKind: 'TRANSIENT' }));
+    expect(ok?.textContent).toContain('OK 10:00 14/10/2026');
+    expect(ok?.textContent).not.toContain('HTTP 503');
+  });
+
+  it('chưa bật: nói rõ biến cần đặt; API cũ chưa có webhook thì không hiện thẻ', async () => {
+    const off = await card(webhook({ state: 'DISABLED' }));
+    expect(off?.textContent).toContain('Chưa bật');
+    expect(off?.textContent).toContain('OPS_ALERT_WEBHOOK_URL');
+    expect(await card(undefined)).toBeNull();
+  });
+});
+
 describe('OpsHealthTab — lỗi email vĩnh viễn và nút Gửi email thử (R8)', () => {
   const READY = {
     state: 'READY',

@@ -61,7 +61,7 @@ const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
-  if (c.type === 'PERCENT') return `Giảm ${c.value}%`;
+  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   return `Giảm ${formatVnd(c.value)}`;
 }
 

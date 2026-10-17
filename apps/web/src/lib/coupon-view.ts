@@ -12,6 +12,10 @@ export function couponValueLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDisco
   return `Giảm ${formatVnd(c.value)}`;
 }
 
+/** FREESHIP khi phí vận chuyển của đơn đã bằng 0: dùng mã không giảm thêm được gì. */
+export const isFreeshipRedundant = (c: Pick<CouponDTO, 'type'>, shippingFee?: number | null): boolean =>
+  c.type === 'FREESHIP' && shippingFee === 0;
+
 export function couponExpiryLabel(endAt: string | null | undefined): string {
   const d = formatDate(endAt);
   return d === '—' ? 'Không thời hạn' : `HSD ${d}`;

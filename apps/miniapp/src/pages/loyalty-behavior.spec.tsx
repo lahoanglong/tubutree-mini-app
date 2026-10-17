@@ -472,3 +472,15 @@ describe('LoyaltyPage — cảnh báo React trùng key', () => {
     }
   });
 });
+
+describe('LoyaltyPage — thẻ mã giảm giá (R6-BUYER-12)', () => {
+  it('mã phần trăm có trần ghi "tối đa …"; không có trần thì chỉ ghi phần trăm', async () => {
+    mocks.getCoupons.mockResolvedValue([
+      { code: 'XANH10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50_000, endAt: '2026-12-31T00:00:00.000Z' },
+      { code: 'KHONGTRAN', type: 'PERCENT', value: 5, minOrder: null, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
+    expect(screen.getByText('Giảm 5%')).toBeInTheDocument();
+  });
+});

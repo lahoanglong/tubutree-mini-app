@@ -22,13 +22,13 @@ const c = (code: string, over: Record<string, unknown> = {}) => ({
 });
 
 let mounted: Rendered[] = [];
-const mount = async (subtotal = 300000) => {
-  const r = render(<CouponBox currentCode={null} subtotal={subtotal} />);
+const mount = async (subtotal = 300000, shippingFee: number | null = null) => {
+  const r = render(<CouponBox currentCode={null} subtotal={subtotal} shippingFee={shippingFee} />);
   mounted.push(r);
   await flush(6);
   return r.container;
 };
-const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonElement>(`button[aria-label="Dùng mã ${code}"]`)!.closest('li')!;
+const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonElement>(`button[aria-label$="mã ${code}"]`)!.closest('li')!;
 
 beforeEach(() => {
   state.applied = [];
@@ -81,6 +81,31 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     const btn = t.querySelector('button')!;
     expect(btn.disabled).toBe(true);
     expect(btn.textContent).toBe('Chưa đủ');
+  });
+
+  it('R6-BUYER-12: không tự tính "Giảm X cho đơn này" (API tính trên hàng không flash, sau combo, theo phạm vi sản phẩm của mã)', async () => {
+    state.coupons = [
+      c('XANH10', { value: 10, maxDiscount: 50000 }),
+      c('GBUY', { type: 'AMOUNT', value: 17250, maxDiscount: null, products: [{ id: 'p1', name: 'Hạt chia' }] }),
+    ];
+    const box = await mount(438000);
+    expect(card(box, 'XANH10').textContent).toContain('Giảm 10% (tối đa 50.000đ)');
+    expect(box.textContent).not.toContain('cho đơn này');
+  });
+
+  it('R6-BUYER-12: freeship khi phí ship đã 0 thì mờ và khoá; còn phí thì vẫn dùng được', async () => {
+    state.coupons = [c('SHIP', { type: 'FREESHIP', value: 0, maxDiscount: null })];
+    const free = card(await mount(438000, 0), 'SHIP');
+    expect(free.querySelector('button')!.disabled).toBe(true);
+    expect(free.querySelector('button')!.textContent).toBe('Không cần');
+    expect(free.querySelector('button')!.getAttribute('aria-label')).toBe('Không cần dùng mã SHIP');
+    expect(free.textContent).toContain('Đơn này đã miễn phí vận chuyển');
+    expect(free.textContent).not.toContain('cho đơn này');
+    expect(free.className).toContain('opacity-60');
+
+    const paid = card(await mount(438000, 30000), 'SHIP');
+    expect(paid.querySelector('button')!.disabled).toBe(false);
+    expect(paid.textContent).not.toContain('cho đơn này');
   });
 
   it('mã dùng được xếp trước mã chưa đủ điều kiện; bấm Dùng mã áp đúng mã', async () => {

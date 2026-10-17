@@ -531,6 +531,7 @@ export default function CheckoutPage() {
             <CouponBox
               currentCode={cart.couponCode}
               subtotal={previewSubtotal}
+              shippingFee={quote?.shippingFee ?? null}
               notice={quote?.couponNotice ?? cart.couponNotice}
               disabled={place.isPending}
             />

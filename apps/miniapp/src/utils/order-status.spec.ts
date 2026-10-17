@@ -47,8 +47,8 @@ describe('orderPointsNote', () => {
   it('đơn đã giao → "Đã cộng", không còn hứa tương lai', () => {
     expect(orderPointsNote('DELIVERED', 35)).toEqual({ text: 'Đã cộng +35 Điểm Xanh vào tài khoản', tone: 'success' });
   });
-  it('đơn đã giao nhưng đã trả một phần thu lại điểm → ghi số đã thu lại (R6-CHECKOUT-3)', () => {
-    expect(orderPointsNote('DELIVERED', 26, 17)).toEqual({ text: 'Đã cộng +26, đã thu lại 17 do trả hàng', tone: 'muted' });
+  it('đơn đã giao nhưng đã trả một phần thu lại điểm → ghi "tối đa" vì số thực trừ có thể thấp hơn phần chia (R6-CHECKOUT-3)', () => {
+    expect(orderPointsNote('DELIVERED', 26, 17)).toEqual({ text: 'Đã cộng +26, đã thu lại tối đa 17 do trả hàng', tone: 'muted' });
   });
   it('đơn đã hoàn → điểm đã thu hồi', () => {
     expect(orderPointsNote('RETURNED', 35)).toEqual({ text: 'Điểm Xanh của đơn này đã được thu hồi', tone: 'muted' });

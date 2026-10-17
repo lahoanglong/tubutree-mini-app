@@ -28,6 +28,11 @@ export class NotificationsController {
     return this.notifications.updatePrefs(userId, dto);
   }
 
+  @Post('read-all')
+  markAllRead(@CurrentUser('sub') userId: string) {
+    return this.notifications.markAllRead(userId);
+  }
+
   @Post(':id/read')
   markRead(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.notifications.markRead(userId, id);

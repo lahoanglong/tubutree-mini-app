@@ -27,7 +27,7 @@ export function canWithdraw(
 
 const WALLET_TX_LABELS: Record<string, string> = {
   OPENING: 'Số dư đầu kỳ',
-  ORDER_PAY: 'Thanh toán đơn hàng',
+  ORDER_PAY: 'Thanh toán đơn',
   ORDER_REFUND: 'Hoàn tiền đơn hàng',
   COMMISSION_PAYOUT: 'Hoa hồng CTV về Ví',
   CASHBACK: 'Hoàn tiền sàn ngoài',
@@ -39,8 +39,12 @@ const WALLET_TX_LABELS: Record<string, string> = {
   ADJUST: 'Điều chỉnh',
 };
 
-/** Nhãn dòng sao kê Ví theo loại biến động; loại BE mới thêm mà bản app cũ chưa biết vẫn hiện được. */
-export function walletTxLabel(type: string): string {
+/** Nhãn dòng sao kê Ví theo loại biến động; loại BE mới thêm mà bản app cũ chưa biết vẫn hiện được.
+ * ORDER_REFUND gộp mọi nguồn hoàn; chỉ "Hoàn tiền trả hàng đơn …" (trả một phần) chắc chắn là trả hàng. "Hoàn tiền đơn …" API ghi cả cho huỷ đơn, trả hàng toàn phần và đổi nơi nhận về Ví nên không đoán nguồn. */
+export function walletTxLabel(type: string, reason?: string | null): string {
+  if (type === 'ORDER_REFUND' && reason) {
+    if (reason.startsWith('Hoàn tiền trả hàng')) return 'Hoàn tiền trả hàng';
+  }
   return WALLET_TX_LABELS[type] ?? 'Biến động ví';
 }
 

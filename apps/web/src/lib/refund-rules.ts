@@ -111,6 +111,20 @@ export function remainingByLine(
   return new Map(items.map((i) => [i.id, Math.max(0, i.quantity - (taken.get(i.id) ?? 0))]));
 }
 
+/** Số đã trả của từng dòng (chỉ tính yêu cầu đã duyệt): số mua trừ số còn trả được. Dòng chưa trả thì không có trong kết quả. */
+export function returnedByLine(
+  items: { id: string; quantity: number }[],
+  returns: ReturnHistory[],
+): Map<string, number> {
+  const remaining = remainingByLine(items, returns);
+  const out = new Map<string, number>();
+  for (const i of items) {
+    const returned = i.quantity - (remaining.get(i.id) ?? i.quantity);
+    if (returned > 0) out.set(i.id, returned);
+  }
+  return out;
+}
+
 /** Kiểm form đổi/trả trước khi gửi. Trả câu lỗi đầu tiên, hoặc null khi hợp lệ. */
 export function returnFormError(input: {
   lines: ReturnLineState[];

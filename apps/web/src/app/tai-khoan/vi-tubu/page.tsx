@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { formatVnd, getWallet, getWalletTransactions } from '@/lib/shop-client';
-import { walletTxLabel } from '@/lib/ledger-labels';
+import { walletTxTitle } from '@/lib/ledger-labels';
 import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -79,7 +79,7 @@ export default function WalletHistoryPage() {
             {rows.map((t) => (
               <li key={t.id} className="flex items-start justify-between gap-3 p-3">
                 <div className="min-w-0">
-                  <div className="break-words text-sm font-medium text-stone-900">{walletTxLabel(t.type)}</div>
+                  <div className="break-words text-sm font-medium text-stone-900">{walletTxTitle(t)}</div>
                   <div className="break-words text-xs text-stone-600">
                     {formatDateTime(t.createdAt)}
                     {t.reason ? ` · ${t.reason}` : ''}
