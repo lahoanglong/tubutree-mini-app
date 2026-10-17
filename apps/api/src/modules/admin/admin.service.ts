@@ -250,7 +250,8 @@ export class AdminService {
         await lockAdminRoster(tx);
         // Gian hàng của người nộp khoá trước dòng users (cùng thứ tự với thu hồi đại lý và ẩn danh tài khoản), nếu không bên ghi
         // users trước rồi đợi gian hàng sẽ deadlock với bên giữ gian hàng rồi đợi users.
-        await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
+        const ownerStores = await tx.$queryRaw<{ id: string; type: string; isPartner: boolean }[]>`
+          SELECT "id", "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
         // Rồi tới dòng users (FOR UPDATE) TRƯỚC mọi ghi vào hồ sơ: người nộp chưa có gian hàng thì không có dòng gian hàng nào để
         // khoá, mà bên ghi hồ sơ rồi đợi users sẽ deadlock với ẩn danh tài khoản (giữ users rồi ghi hồ sơ).
         // NO KEY UPDATE (không phải FOR UPDATE): FOR UPDATE đợi FOR KEY SHARE của khoá ngoại (đơn người nộp đang đặt qua slug của mình
@@ -280,6 +281,10 @@ export class AdminService {
           },
         });
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
+        for (const store of ownerStores) {
+          if (store.type === 'BRAND' || store.isPartner) continue;
+          await recordUserAdminEvent(tx, { userId: app.userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: adminId });
+        }
       }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({

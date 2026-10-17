@@ -119,7 +119,10 @@ function makeApproveTx(opts: {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = jest.fn().mockResolvedValue(0);
-  const queryRaw = jest.fn().mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false, metadata: opts.applicantMetadata ?? null }]);
+  const queryRaw = jest
+    .fn()
+    .mockResolvedValueOnce([])
+    .mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false, metadata: opts.applicantMetadata ?? null }]);
   const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
@@ -128,6 +131,7 @@ function makeApproveTx(opts: {
       $queryRaw: queryRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
       storefront: { updateMany: storefrontUpdateMany },
+      userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
       user: {
         update: userUpdate,
         findUnique: jest.fn().mockResolvedValue({ role: opts.applicantRole ?? 'CUSTOMER' }),

@@ -25,6 +25,7 @@ import {
 } from './merchant-pancake-link';
 import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
 import { isPartnerStore, lockStoreOwner } from './partner-store';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
@@ -302,6 +303,7 @@ export class MerchantService {
           const owner = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
           if (owner?.role !== 'DEALER') return false;
           await tx.storefront.update({ where: { id: store.id }, data: { isPartner: true } });
+          await recordUserAdminEvent(tx, { userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: userId });
           return true;
         }).catch(throwIfLockBusy);
         return { ...store, isPartner };
