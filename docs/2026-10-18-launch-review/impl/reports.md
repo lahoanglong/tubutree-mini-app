@@ -27,6 +27,10 @@ Mỗi mục là một commit. `admin.controller.ts` không sửa.
   - Chỉ ADMIN. Test chạy `RolesGuard` thật: STAFF, khách, CTV, đại lý đều bị 403 ở cả 6 route.
   - Có BOM UTF-8. Chống CSV injection bằng helper dùng chung `csvCell`/`csvText`.
   - Web: `reports-finance-section.tsx`.
+- **Sửa theo review** (nhánh đã gộp `review/2026-10-18-launch`, merge `56526473`)
+  - `page.spec.tsx`: giữ cả "Báo cáo" lẫn "Cộng đồng"; số mục menu là 32 (git tự gộp ra 31, sai vì cây gộp có cả hai tab).
+  - Đơn hai bị tính khống (`38486520`): checkout tách một lần thanh toán thành nhiều đơn cùng `checkoutGroup` (mỗi nơi giao một đơn). Truy vấn nguồn × tuần giờ đánh số lần mua theo `COALESCE(checkoutGroup, code)` với `MIN(createdAt)` của nhóm. Doanh thu 30 ngày đầu vẫn cộng mọi đơn trong nhóm.
+  - Khách vãng lai đã gộp (`893edf4d`): `NEW_CUSTOMER_SQL` (trong `admin-source-report.ts`) loại ADMIN/STAFF, dòng có `mergedIntoId` và khách được gắn nguồn lúc gộp. Bảng nguồn và thẻ "Khách mới" của `revenueReport` dùng chung định nghĩa này nên tổng khớp nhau.
 
 ## 2. Kiểm chứng (agent báo)
 
@@ -40,6 +44,11 @@ Mỗi mục là một commit. `admin.controller.ts` không sửa.
 - Đối chiếu tiền với sổ:
   - Test race so tổng báo cáo với số tính tay và với `getDashboardStats`. Các ca: đơn huỷ, đơn trả, hoàn một phần kể cả phí ship, đại lý trả trước/công nợ, COD đối tác, biên ngày VN.
   - TNCN so từng người với `AffiliateService.pitReport`.
+- Chạy lại sau khi gộp nhánh đích và sửa theo review (Postgres cổng 5562, DB `tubutree_it`):
+  - Race `admin-reports` (10 test, thêm 2 ca: nhóm đơn cùng `checkoutGroup`, khách vãng lai đã gộp), `admin-dashboard-kpi`, `r6-checkout`, `r9-ctv-checkout`: 4 suite, 38 test xanh. Hai ca mới đỏ trước khi sửa (`secondOrderUsers` 4 thay vì 2; `newUsers` 3 thay vì 2).
+  - `jest src/modules/admin src/modules/checkout src/common prisma/reference-data src/modules/system-config`: 66 suite, 1295 test xanh. Không gói nào thêm khoá SystemConfig mới cần duyệt vào `APPROVED_LOADED_KEYS`.
+  - `prisma migrate deploy` trên DB mới + `migrate diff --exit-code`: "No difference detected."
+  - `tsc` API và web: sạch. Vitest web `src/components/admin src/app/admin`: 40 file, 655 test xanh.
 - Không chạy full suite, build hay Playwright.
 
 ## 3. Chưa làm hoặc cố ý để lại
@@ -54,15 +63,18 @@ Mỗi mục là một commit. `admin.controller.ts` không sửa.
 - Không thêm index cho `payouts`/`order_customer_refunds` vì bảng nhỏ và truy vấn đã giới hạn khoảng ngày.
 - CSV đơn không có trần số dòng; file được ghi dần theo từng lô.
 - "Khách mới":
-  - Có tính tài khoản vãng lai, vì schema không có cột đánh dấu.
-  - Không tính ADMIN/STAFF và khách được gộp muộn.
+  - Vẫn tính tài khoản vãng lai CHƯA gộp (chưa đăng nhập bằng số điện thoại), vì schema không có cột đánh dấu.
+  - Không tính ADMIN/STAFF, dòng khách đã gộp (`mergedIntoId`) và khách được gộp muộn.
+- CSV tài chính (`exports/tax`, `exports/payouts`, `exports/refunds`) xuất SĐT, MST/CCCD và số tài khoản đầy đủ, không che. Chỉ ADMIN tải được.
+- Migration index `users(createdAt)`, `orders(userId, createdAt)` tạo không có `CONCURRENTLY`: DB hiện gần rỗng nên khoá ghi dưới 1 giây. Nếu chạy lại khi bảng lớn thì nên tạo bằng tay với `CONCURRENTLY`.
 - Mã nguồn: tối đa 40 mã, phần còn lại gộp thành "Nguồn khác". Cửa sổ 30 ngày là hằng số trong mã.
 - Rủi ro khi gộp nhánh:
-  - `page.spec.tsx` đổi số mục menu từ 30 thành 31. Gói khác thêm tab sẽ xung đột ở số này; cộng lại cho đúng.
+  - `page.spec.tsx` số mục menu hiện là 32 (đã tính cả "Báo cáo" và "Cộng đồng"). Gói khác thêm tab sẽ xung đột ở số này; cộng lại cho đúng.
   - `admin.service.ts` `getDashboardStats` đã đổi sang hằng dùng chung.
 
 ## 4. Câu hỏi cho chủ dự án (kèm mặc định đã dùng)
 
 - Doanh thu tính theo ngày đặt hay ngày thu tiền? Mặc định: ngày đặt, khớp với danh sách và CSV đơn.
 - Có cần phễu theo nguồn không? Mặc định: để sau. Cần đồng ý sửa miniapp gửi `entrySource`/`sessionId` kèm thêm giỏ và đặt đơn.
-- "Khách mới" có loại tài khoản vãng lai chưa có SĐT không? Mặc định: không loại.
+- "Khách mới" có loại tài khoản vãng lai chưa gộp và chưa có SĐT không? Mặc định: không loại.
+- CSV tài chính có cần che SĐT, MST/CCCD, số tài khoản không? Mặc định: không che vì kế toán cần đối chiếu, và chỉ ADMIN tải được.
