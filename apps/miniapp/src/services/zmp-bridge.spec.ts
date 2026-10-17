@@ -21,6 +21,7 @@ vi.mock('zmp-sdk/apis', () => ({
 
 import {
   followOA as zmpFollowOA,
+  openShareSheet,
   openPhone,
   requestSendNotification as zmpRequestSendNotification,
   getStorage,
@@ -34,6 +35,7 @@ import {
   setOaPromptState,
   shouldShowFollowOaPrompt,
   hasOA,
+  shareLink,
 } from './zmp-bridge';
 
 const mockedZmpFollowOA = vi.mocked(zmpFollowOA);
@@ -174,5 +176,53 @@ describe('callPhone — mọi loại SĐT điểm nhận bấm gọi được', 
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+// zmp-sdk 2.51 kiểm payload zmp_deep_link bằng zod: title <= 100, description <= 400, thumbnail phải là URL.
+// Vi phạm một điều là cả lần chia sẻ bị từ chối, dù người dùng không làm gì sai.
+describe('shareLink — payload luôn hợp lệ với schema openShareSheet của zmp-sdk', () => {
+  const mockedOpenShareSheet = vi.mocked(openShareSheet);
+  const sent = () => {
+    const call = mockedOpenShareSheet.mock.calls[0];
+    if (!call) throw new Error('openShareSheet chưa được gọi');
+    return (call[0] as { data: { title: string; description: string; thumbnail: string; path: string } }).data;
+  };
+
+  it('có thumbnail http(s) hợp lệ: giữ nguyên, kèm title/description/path gốc', async () => {
+    await shareLink({ title: 'Túi vải', description: 'Mô tả', thumbnail: 'https://cdn.example.com/a.jpg', path: '/product/tui-vai' });
+    expect(sent()).toEqual({ title: 'Túi vải', description: 'Mô tả', thumbnail: 'https://cdn.example.com/a.jpg', path: '/product/tui-vai' });
+  });
+
+  it.each([[undefined], [''], ['không phải url'], ['/uploads/a.jpg'], ['javascript:alert(1)']])(
+    'thumbnail %p không phải URL http(s): dùng ảnh Open Graph của web, không gửi chuỗi rỗng',
+    async (thumbnail) => {
+      await shareLink({ title: 't', description: 'd', thumbnail, path: '/p' });
+      expect(sent().thumbnail).toBe('https://app.tubutree.com/opengraph-image.png');
+    },
+  );
+
+  it('title dài hơn 100 ký tự bị cắt còn đúng 100 và kết thúc bằng …; đúng 100 thì giữ nguyên', async () => {
+    await shareLink({ title: 'a'.repeat(100), description: 'd', thumbnail: 'https://x.test/a.png', path: '/p' });
+    expect(sent().title).toBe('a'.repeat(100));
+    mockedOpenShareSheet.mockClear();
+    await shareLink({ title: 'a'.repeat(101), description: 'd', thumbnail: 'https://x.test/a.png', path: '/p' });
+    expect(sent().title).toBe(`${'a'.repeat(99)}…`);
+    expect(sent().title.length).toBe(100);
+  });
+
+  it('description dài hơn 400 ký tự bị cắt còn đúng 400', async () => {
+    await shareLink({ title: 't', description: 'b'.repeat(500), thumbnail: 'https://x.test/a.png', path: '/p' });
+    expect(sent().description.length).toBe(400);
+    expect(sent().description.endsWith('…')).toBe(true);
+  });
+
+  it('không cắt đôi cặp surrogate của emoji ở biên', async () => {
+    // 98 ký tự + emoji (2 đơn vị UTF-16) + đuôi: điểm cắt rơi giữa cặp surrogate.
+    await shareLink({ title: `${'a'.repeat(98)}🌿${'z'.repeat(5)}`, description: 'd', thumbnail: 'https://x.test/a.png', path: '/p' });
+    const title = sent().title;
+    expect(title.length).toBeLessThanOrEqual(100);
+    expect(title).toBe(`${'a'.repeat(98)}…`);
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(title)).toBe(false);
   });
 });
