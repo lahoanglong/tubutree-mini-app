@@ -391,15 +391,32 @@ describe('CommunityFeedService — ảnh trong danh sách (ENGAGE-7, D6-05)', ()
     expect(r.posts[0]).toMatchObject({ images: [], imageCount: 0 });
   });
 
-  it('ảnh nhỏ của sản phẩm gắn thẻ: URL giữ nguyên, ảnh base64 (sản phẩm đối tác chưa có Cloudinary) bị bỏ khỏi JSON', async () => {
-    const prisma = makePrisma();
+  describe('ảnh nhỏ của sản phẩm gắn thẻ', () => {
+    const DATA = `data:image/jpeg;base64,${'A'.repeat(2000)}`;
     const tag = (slug: string, thumbnail: string | null) => ({ product: { slug, name: slug, thumbnail, salePrice: null, basePrice: 100 } });
-    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
-      row({ productTags: [tag('a', 'https://cdn/a.jpg'), tag('b', `data:image/jpeg;base64,${'A'.repeat(2000)}`), tag('c', null)] }),
-    ]);
-    const r = await makeSvc(prisma).getFeed('u1');
-    expect(r.posts[0]!.productTags.map((t) => t.thumbnail)).toEqual(['https://cdn/a.jpg', null, null]);
-    expect(JSON.stringify(r)).not.toContain('base64');
+    const tags = () => [tag('a', 'https://cdn/a.jpg'), tag('b', DATA), tag('c', null)];
+
+    it('danh sách feed: URL giữ nguyên, ảnh base64 (sản phẩm đối tác chưa có Cloudinary) bị bỏ khỏi JSON', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ productTags: tags() })]);
+      const r = await makeSvc(prisma).getFeed('u1');
+      expect(r.posts[0]!.productTags.map((t) => t.thumbnail)).toEqual(['https://cdn/a.jpg', null, null]);
+      expect(JSON.stringify(r)).not.toContain('base64');
+    });
+
+    it('bài dự thi của sự kiện (cũng là danh sách) bỏ ảnh base64 như feed', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ productTags: tags() })]);
+      const r = await makeSvc(prisma).eventPosts('ev1', 'u1');
+      expect(r.posts[0]!.productTags.map((t) => t.thumbnail)).toEqual(['https://cdn/a.jpg', null, null]);
+    });
+
+    it('chi tiết bài (một bài, ảnh 48px): giữ nguyên ảnh sản phẩm kể cả base64', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row({ productTags: tags() }), reactions: [] });
+      const r = await makeSvc(prisma).getPost('u1', 'p1');
+      expect(r.productTags.map((t) => t.thumbnail)).toEqual(['https://cdn/a.jpg', DATA, null]);
+    });
   });
 
   it('bài không được xem (REMOVED, PENDING của người khác) bị chặn trước khi đọc ảnh', async () => {

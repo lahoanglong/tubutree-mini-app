@@ -359,7 +359,7 @@ export class CommunityFeedService {
     const ids = page.map((p) => p.id);
     const [counts, images] = await Promise.all([this.countsForPage(ids), loadFeedImages(this.prisma, ids, true)]);
     return {
-      posts: page.map((p) => this.toItem(p, userId, counts, images)),
+      posts: page.map((p) => this.toItem(p, userId, counts, images, { list: true })),
       nextCursor: hasMore ? page[page.length - 1]!.id : null,
     };
   }
@@ -454,7 +454,13 @@ export class CommunityFeedService {
    * Ảnh bài là base64 (~300KB/ảnh khi chưa có Cloudinary) nên không nhúng trong JSON: `images` là đường dẫn tới endpoint ảnh
    * (hoặc URL https nguyên văn). `imagesOf` đã cắt sẵn theo nơi gọi: danh sách chỉ ảnh bìa + `imageCount`, chi tiết trả đủ.
    */
-  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts, imagesOf: Map<string, FeedPostImages>) {
+  private toItem(
+    p: FeedPostRow,
+    userId: string,
+    counts: FeedCounts,
+    imagesOf: Map<string, FeedPostImages>,
+    opts: { list?: boolean } = {},
+  ) {
     const postImages = imagesOf.get(p.id);
     return {
       id: p.id,
@@ -471,10 +477,11 @@ export class CommunityFeedService {
       badge: authorBadge(p.user.role),
       authorLevel: p.user.communityProfile?.level ?? 1,
       category: p.category ? { slug: p.category.slug, name: p.category.name, icon: p.category.icon } : null,
-      // Ảnh sản phẩm đối tác có thể là base64 tới 1,5 triệu ký tự (chưa cấu hình Cloudinary): không nhúng vào JSON bảng tin
-      // chỉ để vẽ biểu tượng 28px; client đã chịu được thumbnail rỗng.
+      // Ảnh sản phẩm đối tác có thể là base64 tới 1,5 triệu ký tự (chưa cấu hình Cloudinary): danh sách (20 đến 50 bài) không
+      // nhúng chỉ để vẽ biểu tượng 28px, client đã chịu được thumbnail rỗng. Chi tiết một bài vẫn trả để vẽ ảnh 48px.
       productTags: (p.productTags ?? []).map((t) => ({
-        slug: t.product.slug, name: t.product.name, thumbnail: t.product.thumbnail?.startsWith('data:') ? null : t.product.thumbnail,
+        slug: t.product.slug, name: t.product.name,
+        thumbnail: opts.list && t.product.thumbnail?.startsWith('data:') ? null : t.product.thumbnail,
         salePrice: t.product.salePrice, basePrice: t.product.basePrice,
       })),
       tags: (p.tags ?? []).map((t) => ({ slug: t.tag.slug, name: t.tag.name })),
@@ -1326,7 +1333,7 @@ export class CommunityFeedService {
     const ids = posts.map((p) => p.id);
     const [counts, images] = await Promise.all([this.countsForPage(ids), loadFeedImages(this.prisma, ids, true)]);
     return {
-      posts: posts.map((p) => this.toItem(p, viewerId, counts, images)),
+      posts: posts.map((p) => this.toItem(p, viewerId, counts, images, { list: true })),
       nextCursor: hasMore ? posts[posts.length - 1]!.id : null,
     };
   }
