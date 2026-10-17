@@ -1459,8 +1459,17 @@ export class MerchantFulfilmentService {
    * mọi gian hàng CTV). Còn vướng mắc thì ném 409 để cả lần đổi vai trò huỷ. Khoá tư vấn theo chủ lấy trước (chặn lần tạo gian hàng
    * đầu tiên ở Cổng người bán chen vào khi chưa có dòng nào để khoá), rồi mọi gian hàng của chủ đều khoá trước khi đọc cờ dưới khoá,
    * để lần bật lại cờ chạy song song không lọt qua.
+   * `merchantOnly`: chủ vốn không còn là DEALER/STAFF/ADMIN (CUSTOMER/AFFILIATE được đặt lại vai trò) thì chỉ gian hàng loại MERCHANT
+   * (luôn là đối tác, cờ không tắt tay được) bị chuyển về CTV; gian hàng CTV do admin bật cờ tay giữ nguyên.
    */
-  async clearPartnerOnRoleLoss(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig, fromRole: string) {
+  async clearPartnerOnRoleLoss(
+    tx: Db,
+    ownerUserId: string,
+    actorId: string,
+    cfg: SettlementConfig,
+    fromRole: string,
+    opts: { merchantOnly?: boolean } = {},
+  ) {
     await lockStoreOwner(tx, ownerUserId);
     const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
     let cleared = 0;
@@ -1468,7 +1477,7 @@ export class MerchantFulfilmentService {
       await this.lockStorePayouts(tx, id);
       const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
         SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${id} FOR UPDATE`;
-      if (!store || !isPartnerStore(store)) continue;
+      if (!store || !isPartnerStore(store) || (opts.merchantOnly && store.type !== 'MERCHANT')) continue;
       const blockers = await this.partnerBlockers(tx, id, ownerUserId, cfg, true);
       if (blockers.length) {
         throw new ConflictException(

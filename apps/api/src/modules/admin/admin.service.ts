@@ -474,7 +474,7 @@ export class AdminService {
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
     }
-    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này rơi xuống CUSTOMER/AFFILIATE.
+    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này được đặt về CUSTOMER/AFFILIATE.
     const partnerCfg = losesPartnerStore('DEALER', role) ? await this.fulfilment?.settlementConfig() : undefined;
     const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
@@ -505,9 +505,13 @@ export class AdminService {
           : {}),
       };
       // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
-      if (losesPartnerStore(previousRole, role)) {
+      // Đặt về CUSTOMER/AFFILIATE khi người này không vừa rơi từ DEALER/STAFF/ADMIN (vd. lần thu hồi quyền nhân viên bị gian hàng chặn
+      // rồi admin đặt lại vai trò) vẫn chuyển gian hàng MERCHANT về CTV: loại này luôn là đối tác và cờ không tắt tay được.
+      if (losesPartnerStore('DEALER', role)) {
         if (!this.fulfilment || !partnerCfg) throw new Error('AdminService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
-        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole);
+        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole, {
+          merchantOnly: !losesPartnerStore(previousRole, role),
+        });
       }
       const updated = await tx.user.update({
         where: { id: user.id },

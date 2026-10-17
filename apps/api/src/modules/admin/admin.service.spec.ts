@@ -447,11 +447,24 @@ describe('AdminService.setUserRole', () => {
       ['DEALER', 'STAFF', false],
       ['DEALER', 'ADMIN', false],
       ['STAFF', 'DEALER', false],
-      ['CUSTOMER', 'AFFILIATE', false],
+      ['CUSTOMER', 'AFFILIATE', true],
+      ['CUSTOMER', 'CUSTOMER', true],
+      ['AFFILIATE', 'CUSTOMER', true],
     ])('%s → %s: xử lý gian hàng = %s', async (from, to, expected) => {
       fulfilment.clearPartnerOnRoleLoss.mockClear();
       await mkAdmin(withRole(from)).setUserRole('admin1', '0899625240', to as 'CUSTOMER', to === 'DEALER' ? 't1' : undefined);
       expect(fulfilment.clearPartnerOnRoleLoss.mock.calls.length > 0).toBe(expected);
+    });
+
+    it.each([
+      ['DEALER', 'CUSTOMER', false],
+      ['STAFF', 'AFFILIATE', false],
+      ['CUSTOMER', 'AFFILIATE', true],
+      ['AFFILIATE', 'CUSTOMER', true],
+    ])('%s → %s: chỉ gian hàng MERCHANT bị chuyển (merchantOnly=%s)', async (from, to, merchantOnly) => {
+      fulfilment.clearPartnerOnRoleLoss.mockClear();
+      await mkAdmin(withRole(from)).setUserRole('admin1', '0899625240', to as 'CUSTOMER');
+      expect(fulfilment.clearPartnerOnRoleLoss.mock.calls[0]?.[5]).toEqual({ merchantOnly });
     });
 
     it('deadlock trong transaction đổi vai trò → 503', async () => {
