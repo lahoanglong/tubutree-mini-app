@@ -100,6 +100,3 @@ export const markPaid = (
   staffId: string,
   body: { year: number; month: number; proofImageUrl: string; note?: string },
 ) => api.post<{ paid: boolean }>(`/admin/payroll/${staffId}/mark-paid`, body).then((r) => r.data);
-
-export const adjustPayroll = (dto: { staffId: string; workDate: string; amount: number; reason: string }) =>
-  api.post<{ adjusted: boolean }>('/admin/payroll/adjust', dto).then((r) => r.data);
