@@ -6,6 +6,8 @@
  *
  * Web chưa có analytics phía client nên chỉ giữ CHẠM ĐẦU: cookie 30 ngày, gửi kèm đăng nhập Zalo để API ghi vào tài khoản MỚI.
  */
+import { tenantSubdomain } from './tenant-subdomain';
+
 export const ENTRY_TOKEN_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 const REF_CODE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const LINK_CODE_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
@@ -38,16 +40,20 @@ function cardToken(raw: string | null): string | undefined {
   return normalizeEntryToken(v.startsWith('card-') ? v : `card-${v}`);
 }
 
+const IPV4_HOST = /^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/;
+
 /**
- * Thứ tự chọn nguồn: src, utm_source, card, rồi ngầm hiểu từ dạng link: trang gian hàng `/s/<slug>` hoặc `?l=` (link CTV tạo) → ctv,
- * chỉ có `?ref=` → ref.
- * Ứng viên bẩn bị bỏ qua. Không có nguồn dùng được → null.
+ * Thứ tự chọn nguồn: src, utm_source, card, rồi ngầm hiểu từ dạng link: trang gian hàng (`/s/<slug>` hoặc subdomain `<slug>.<miền>`)
+ * hoặc `?l=` (link CTV tạo) → ctv, chỉ có `?ref=` → ref.
+ * Ứng viên bẩn bị bỏ qua. Không có nguồn dùng được → null. `host` là `location.host` (có thể kèm cổng): subdomain gian hàng được
+ * middleware rewrite `/` → `/s/<slug>` nên trình duyệt chỉ thấy đường dẫn `/`.
  */
-export function parseEntryParams(params: URLSearchParams, pathname = ''): LaunchAttribution | null {
+export function parseEntryParams(params: URLSearchParams, pathname = '', host = ''): LaunchAttribution | null {
   const card = cardToken(params.get('card'));
   const ref = params.get('ref')?.trim();
   const hasRef = Boolean(ref && REF_CODE_PATTERN.test(ref));
-  const onStorefront = /^\/s\/[^/]+/.test(pathname);
+  // Địa chỉ IP (máy dev truy cập qua mạng LAN) không phải tên miền có subdomain, dù middleware vẫn tách chuỗi theo dấu chấm.
+  const onStorefront = /^\/s\/[^/]+/.test(pathname) || (!IPV4_HOST.test(host) && tenantSubdomain(host) !== null);
   const link = params.get('l')?.trim();
   const hasLink = Boolean(link && LINK_CODE_PATTERN.test(link));
 
@@ -102,12 +108,12 @@ export function readFirstTouchCookie(): FirstTouch | undefined {
  * gửi kèm đăng nhập; nó chỉ chứa nhãn kênh, không phải bí mật.
  */
 export function captureFirstTouch(
-  loc: Pick<Location, 'search' | 'pathname' | 'protocol'> = window.location,
+  loc: Pick<Location, 'search' | 'pathname' | 'protocol'> & { host?: string } = window.location,
   now: Date = new Date(),
 ): void {
   try {
     if (readFirstTouchCookie()) return;
-    const launch = parseEntryParams(new URLSearchParams(loc.search), loc.pathname);
+    const launch = parseEntryParams(new URLSearchParams(loc.search), loc.pathname, loc.host);
     if (!launch) return;
     const ft: FirstTouch = { source: launch.source, at: now.toISOString() };
     if (launch.campaign) ft.campaign = launch.campaign;
