@@ -19,9 +19,9 @@ Bạn dùng: web **Quản trị** (nhóm việc CSKH thấy: Việc cần xử l
 - "Vận chuyển": hãng, mã vận đơn, trạng thái giao.
 - "Lịch sử trạng thái": ai đổi, từ đâu sang đâu, lúc nào.
 
-"Xem & Sửa" **không** sửa được địa chỉ hay món. Đừng tìm nút sửa.
+"Xem & Sửa" **không** sửa được địa chỉ hay món. Đừng tìm nút sửa. Danh sách chưa lọc được theo phương thức thanh toán, loại đơn, nguồn, CTV giới thiệu (**⏳ đang làm**): nhờ admin xuất CSV rồi lọc trong Excel.
 
-**Tra khách.** **Quản trị › Khách hàng › Người dùng**, gõ SĐT, tên hoặc mã. Bấm tên khách: Hồ sơ (SĐT, hạng, số dư ví, Điểm Xanh), Đơn hàng mới nhất, Sổ ví, Điểm Xanh (từng dòng cộng/trừ, hạn dùng). Bạn chỉ xem. Khoá tài khoản là việc của admin.
+**Tra khách.** **Quản trị › Khách hàng › Người dùng**, gõ SĐT, tên hoặc mã. Bấm tên khách: Hồ sơ (SĐT, hạng, số dư ví, Điểm Xanh), Đơn hàng mới nhất, Sổ ví, Điểm Xanh (từng dòng cộng/trừ, hạn dùng). Bạn chỉ xem. Khoá tài khoản là việc của admin. Chưa có địa chỉ, tổng chi tiêu, nhãn khách (**⏳ đang làm**): xem địa chỉ trong từng đơn.
 
 **Huỷ đơn theo yêu cầu khách** (chỉ khi đơn chưa bàn giao vận chuyển):
 1. Mở đơn, bấm "Hủy đơn".

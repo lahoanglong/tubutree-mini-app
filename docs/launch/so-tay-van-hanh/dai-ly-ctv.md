@@ -37,7 +37,7 @@ Bậc mặc định (đổi chiết khấu, hạn mức: nhờ kỹ thuật, **�
 | Đại lý Cấp 3 | 38% | 50 triệu | NET 30 |
 | Đại lý VIP | 45% | 150 triệu | NET 30 |
 
-Hệ thống **không** tự kiểm đơn sỉ tối thiểu, **không** tự nhắc nợ quá hạn NET, và phí giao đơn sỉ luôn bằng 0 (**⏳ đang làm**, chờ chủ shop quyết). Đường tạm: ghi sổ riêng ngày đến hạn của từng đại lý, gọi nhắc trước hạn.
+Chưa có màn nhập bảng giá sỉ riêng cho từng đại lý và chưa có danh sách đại lý kèm công nợ từng người (**⏳ đang làm**). Màn **Người bán › Lịch sử giá đại lý** chỉ để xem. Hệ thống **không** tự kiểm đơn sỉ tối thiểu, **không** tự nhắc nợ quá hạn NET, và phí giao đơn sỉ luôn bằng 0 (**⏳ đang làm**, chờ chủ shop quyết). Đường tạm: ghi sổ riêng ngày đến hạn của từng đại lý, gọi nhắc trước hạn.
 
 Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá sỉ, đặt hàng, xem công nợ. Muốn bán online: vào Cổng người bán.
 

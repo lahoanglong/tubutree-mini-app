@@ -11,7 +11,8 @@ Bạn dùng: Pancake, web **Quản trị** (nhóm việc Kho thấy: Việc cầ
 2. Đơn nhãn **"Pancake: đẩy lỗi"** hoặc **"quá hạn tự đẩy"** là đơn chưa tới Pancake. Mở đơn, mục "Kho Pancake", bấm "Đẩy lại Pancake". Hệ thống tra theo mã đơn trước nên không tạo trùng. **Chỉ bấm khi bạn chưa tạo tay đơn đó trên Pancake.**
 3. Hai nhãn này là bình thường, không làm gì: "Pancake: chờ thanh toán" (khách trả qua cổng, chưa trả xong) và "Pancake: chờ đủ hàng" (đơn đại lý đặt trước).
 4. Mở Pancake, lọc đơn mới. Đơn từ Tubu có thẻ **MINIAPP** hoặc **WEB**.
-5. Vào ca trên Mini App: **Ca làm & chấm công**.
+5. Xem tồn các sản phẩm chạy mạnh trên Pancake. Tubu chưa có cảnh báo sắp hết hàng (**⏳ đang làm**).
+6. Vào ca trên Mini App: **Ca làm & chấm công**.
 
 ## Trong ca
 
