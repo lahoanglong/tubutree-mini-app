@@ -58,9 +58,8 @@ import {
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
 import { maskPhone } from '../../common/mask-pii';
+import { assertCouponInput } from './coupon-input-rules';
 
-/** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
-const COUPON_PERCENT_NEEDS_CAP = 50;
 
 function reviewConflict(code: string, message: string) {
   return new ConflictException({ statusCode: 409, error: 'Conflict', code, message });
@@ -1272,24 +1271,14 @@ export class AdminService {
     endAt: string;
     usageLimit?: number;
     perUserLimit?: number;
-    scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+    scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE' | 'CLAIM';
     // DTO (RequiredScopeMeta) đã bắt buộc đúng field khi scope=TIER/USER_GROUP trước khi tới đây.
     scopeMeta?: { tierId?: string; userId?: string };
+    newCustomerOnly?: boolean;
   }) {
     const startAt = new Date(data.startAt);
     const endAt = new Date(data.endAt);
-    if (endAt <= startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
-    if (endAt <= new Date()) throw new BadRequestException('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được.');
-    if (data.type !== 'FREESHIP' && data.value <= 0) throw new BadRequestException('Mức giảm phải lớn hơn 0.');
-    if (data.type === 'PERCENT' && data.value >= COUPON_PERCENT_NEEDS_CAP && !data.maxDiscount) {
-      throw new BadRequestException(`Mã giảm từ ${COUPON_PERCENT_NEEDS_CAP}% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.`);
-    }
-    if (data.type === 'AMOUNT' && data.minOrder && data.value >= data.minOrder) {
-      throw new BadRequestException(
-        `Mức giảm ${formatVnd(data.value)} phải nhỏ hơn đơn tối thiểu ${formatVnd(data.minOrder)} — không thì đơn ở mức tối thiểu được giảm hết tiền hàng. ` +
-          'Kiểm tra lại số 0 của hai ô.',
-      );
-    }
+    assertCouponInput({ ...data, startAt, endAt });
     // isCouponEligible so đúng id: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được.
     const tierId = data.scope === 'TIER' ? data.scopeMeta?.tierId : undefined;
     if (tierId && !(await this.prisma.membershipTier.findUnique({ where: { id: tierId }, select: { id: true } }))) {
@@ -1316,6 +1305,7 @@ export class AdminService {
           // Trước đây KHÔNG ghi scopeMeta → coupon scope TIER/USER_GROUP tạo ra fail-closed ở MỌI
           // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
           scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
+          newCustomerOnly: data.newCustomerOnly ?? false,
         },
       });
     } catch (err) {
@@ -1328,7 +1318,8 @@ export class AdminService {
 
   /**
    * Danh sách mã cho tab Voucher (ADMINOPS-8). Mặc định ẩn voucher cá nhân sinh tự động (USER_GROUP:
-   * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó.
+   * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó, và mã thuộc lô thẻ hộp hàng
+   * (xem theo lô ở AdminCouponBatchService) trừ khi tìm theo mã.
    */
   async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }) {
     const now = new Date();
@@ -1336,6 +1327,7 @@ export class AdminService {
     const where: Prisma.CouponWhereInput = {
       ...(keyword ? { code: { contains: escapePrismaLike(keyword) } } : {}),
       ...(q.scope ? { scope: q.scope as Prisma.CouponWhereInput['scope'] } : keyword ? {} : { scope: { not: 'USER_GROUP' } }),
+      ...(keyword ? {} : { batch: null }),
       ...(q.status === 'active' ? { isActive: true, endAt: { gte: now } } : {}),
       ...(q.status === 'inactive' ? { isActive: false } : {}),
       ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
@@ -1350,8 +1342,16 @@ export class AdminService {
       ? await this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: ids } }, _count: { _all: true } })
       : [];
     const used = new Map(grouped.map((g) => [g.couponId, g._count._all]));
+    const claimIds = rows.filter((r) => r.scope === 'CLAIM').map((r) => r.id);
+    const claimed = new Map(
+      claimIds.length
+        ? (
+            await this.prisma.couponClaim.groupBy({ by: ['couponId'], where: { couponId: { in: claimIds } }, _count: { _all: true } })
+          ).map((g) => [g.couponId, g._count._all])
+        : [],
+    );
     return paginated(
-      rows.map((r) => ({ ...r, redeemedCount: used.get(r.id) ?? 0 })),
+      rows.map((r) => ({ ...r, redeemedCount: used.get(r.id) ?? 0, claimedCount: r.scope === 'CLAIM' ? claimed.get(r.id) ?? 0 : null })),
       q.page,
       q.limit,
       total,

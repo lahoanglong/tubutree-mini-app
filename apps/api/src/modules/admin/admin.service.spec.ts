@@ -772,6 +772,41 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(out.meta.total).toBe(1);
   });
 
+  it('D2-03: tạo mã ẩn (CLAIM) chỉ khách mới → ghi đúng scope và cờ; mặc định cờ tắt', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { create } });
+    await mkAdmin(prisma).createCoupon({ ...couponBase, endAt: '2099-12-31T00:00:00.000Z', code: 'SHOPEE', scope: 'CLAIM', newCustomerOnly: true });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ scope: 'CLAIM', newCustomerOnly: true }) }));
+    await mkAdmin(prisma).createCoupon({ ...couponBase, endAt: '2099-12-31T00:00:00.000Z' });
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ newCustomerOnly: false }) }));
+  });
+
+  it('D2-03: danh sách mặc định ẩn mã thuộc lô thẻ (hàng nghìn mã, xem ở bảng lô); tìm theo mã thì vẫn thấy', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({ coupon: { findMany, count: jest.fn().mockResolvedValue(0) }, couponRedemption: { groupBy: jest.fn() } });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20 });
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ scope: { not: 'USER_GROUP' }, batch: null });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SHOPEE-AB' });
+    expect(findMany.mock.calls[1][0].where.batch).toBeUndefined();
+  });
+
+  it('D2-03: mã CLAIM trả kèm số khách đã nhận (đếm coupon_claims); mã khác không đếm', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'c1', code: 'SHOPEE', scope: 'CLAIM', isActive: true },
+      { id: 'c2', code: 'SALE10', scope: 'PUBLIC', isActive: true },
+    ]);
+    const claimGroupBy = jest.fn().mockResolvedValue([{ couponId: 'c1', _count: { _all: 4 } }]);
+    const prisma = makePrisma({
+      coupon: { findMany, count: jest.fn().mockResolvedValue(2) },
+      couponRedemption: { groupBy: jest.fn().mockResolvedValue([{ couponId: 'c1', _count: { _all: 2 } }]) },
+      couponClaim: { groupBy: claimGroupBy },
+    });
+    const out = await mkAdmin(prisma).listCoupons({ page: 1, limit: 20 });
+    expect(claimGroupBy).toHaveBeenCalledWith({ by: ['couponId'], where: { couponId: { in: ['c1'] } }, _count: { _all: true } });
+    expect(out.data[0]).toMatchObject({ code: 'SHOPEE', redeemedCount: 2, claimedCount: 4 });
+    expect(out.data[1]).toMatchObject({ code: 'SALE10', redeemedCount: 0, claimedCount: null });
+  });
+
   it('updateCoupon: tắt mã (isActive=false) ghi đúng trường', async () => {
     const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', startAt: new Date('2026-01-01'), endAt: new Date('2026-12-31'), usedCount: 0 });
     const update = jest.fn().mockResolvedValue({ id: 'c1', isActive: false });

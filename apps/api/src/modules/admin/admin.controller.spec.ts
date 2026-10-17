@@ -57,6 +57,12 @@ describe('CreateCouponDto validation (Phase 1 findings)', () => {
     expect(errors.some((e) => e.property === 'perUserLimit')).toBe(false);
   });
 
+  it('D2-03: scope CLAIM (mã ẩn) + newCustomerOnly → hợp lệ, không cần scopeMeta; newCustomerOnly phải là boolean', async () => {
+    expect(await validate(makeDto({ scope: 'CLAIM', newCustomerOnly: true }))).toHaveLength(0);
+    const errors = await validate(makeDto({ newCustomerOnly: 'yes' }));
+    expect(errors.some((e) => e.property === 'newCustomerOnly')).toBe(true);
+  });
+
   it('perUserLimit không truyền → hợp lệ (optional)', async () => {
     const errors = await validate(makeDto({}));
     expect(errors.some((e) => e.property === 'perUserLimit')).toBe(false);

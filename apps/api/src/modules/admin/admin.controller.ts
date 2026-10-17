@@ -40,7 +40,7 @@ import { OptionalNotNull } from '../../common/decorators/optional-not-null.decor
  * Không dùng @ValidateIf ở đây vì nó sẽ tắt LUÔN @IsInt/@Min(0) của cùng field khi
  * type khác PERCENT — đây là constraint riêng, cộng thêm chứ không thay thế.
  */
-function MaxIfPercent(max: number, validationOptions?: ValidationOptions) {
+export function MaxIfPercent(max: number, validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string) => {
     registerDecorator({
       name: 'maxIfPercent',
@@ -176,7 +176,7 @@ const COUPON_CODE_RE = /^[A-Z0-9_-]{3,40}$/;
 const COUPON_CODE_MSG = 'Mã chỉ gồm chữ in hoa không dấu, số, gạch ngang hoặc gạch dưới (3–40 ký tự, không khoảng trắng).';
 
 /** value <= max khi type=AMOUNT (chặn gõ thừa số 0: mã lộ ra là đơn nào cũng 0đ). */
-function MaxIfAmount(max: number, validationOptions?: ValidationOptions) {
+export function MaxIfAmount(max: number, validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string) => {
     registerDecorator({
       name: 'maxIfAmount',
@@ -217,8 +217,9 @@ export class CreateCouponDto {
   // perUserLimit <= 0 = "không giới hạn" (nhất quán với coupons.service.ts / loyalty.service.ts —
   // grep `perUserLimit > 0`). @Min(0) chỉ chặn số âm vô nghĩa, KHÔNG cấm 0.
   @IsOptional() @IsInt() @Min(0) perUserLimit?: number;
-  @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE'])
-  scope!: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+  // CLAIM = mã ẩn của thẻ hộp hàng: chỉ vào ví khách đã nhận qua link `?claim=` (coupon-claim.service.ts).
+  @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE', 'CLAIM'])
+  scope!: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE' | 'CLAIM';
   // Chỉ bắt buộc khi scope=TIER (cần tierId) hoặc USER_GROUP (cần userId) — xem RequiredScopeMeta().
   // Bỏ trống cho PUBLIC/BIRTHDAY/INVITE (BIRTHDAY/INVITE hiện DENY mọi user ở isCouponEligible,
   // chưa có logic chính thức — tạo được nhưng chưa dùng được, không phải lỗi của scopeMeta).
@@ -226,10 +227,12 @@ export class CreateCouponDto {
   @IsObject()
   @RequiredScopeMeta()
   scopeMeta?: { tierId?: string; userId?: string };
+  // Chỉ khách chưa có đơn nào (trừ đơn huỷ) dùng được. Bỏ trống = false.
+  @IsOptional() @IsBoolean() newCustomerOnly?: boolean;
 }
 export class ListCouponsQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(64) q?: string;
-  @IsOptional() @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE']) scope?: string;
+  @IsOptional() @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE', 'CLAIM']) scope?: string;
   @IsOptional() @IsIn(['active', 'inactive', 'expired']) status?: 'active' | 'inactive' | 'expired';
 }
 export class UpdateCouponDto {
