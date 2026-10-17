@@ -262,6 +262,9 @@ export async function unlinkTubuFulfilledVariation(
   productId: string,
   opts: UnlinkOptions,
 ): Promise<{ id: string; variationId: string; originProductId: string } | null> {
+  // Khoá sản phẩm TRƯỚC biến thể, cùng chiều với duyệt/từ chối (CAS lật trạng thái giữ dòng sản phẩm rồi mới chạm biến thể): gỡ
+  // liên kết của admin khoá biến thể rồi mới ghi sản phẩm thì ngược chiều với từ chối (40P01).
+  await tx.$queryRaw`SELECT "id" FROM "products" WHERE "id" = ${productId} FOR NO KEY UPDATE`;
   const link = await tx.merchantPancakeLink.findFirst({
     where: { productId, unlinkedAt: null },
     select: { id: true, variationId: true, originProductId: true, originDeactivated: true },
