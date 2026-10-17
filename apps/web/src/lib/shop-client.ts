@@ -507,6 +507,4 @@ export interface BankQrDTO {
 }
 export const getBankQr = (code: string) => apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);
 
-export function formatVnd(n: number): string {
-  return `${n.toLocaleString('vi-VN')}đ`;
-}
+export { formatVnd } from './format-vnd';
