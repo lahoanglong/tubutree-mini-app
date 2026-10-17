@@ -57,13 +57,14 @@ describe('Đặt lại vai trò CUSTOMER/AFFILIATE với gian hàng MERCHANT (re
   });
 
   it('gian hàng CTV do admin bật cờ tay: CUSTOMER → AFFILIATE và CUSTOMER → CUSTOMER không đụng, kể cả khi đang vướng', async () => {
-    const c = await h.ownerStore({ role: 'CUSTOMER', type: 'CTV', isPartner: true });
+    const c = await h.ownerStore({ role: 'CUSTOMER', type: 'CTV', isPartner: false });
+    await h.fulfilment.setStorePartner(c.adminUser.id, c.sf.id, true);
     await c.selfShip('SHIPPING');
     await h.admin.setUserRole(c.adminUser.id, c.owner.phone!, 'AFFILIATE');
     await h.admin.setUserRole(c.adminUser.id, c.owner.phone!, 'CUSTOMER');
     await h.admin.setUserRole(c.adminUser.id, c.owner.phone!, 'CUSTOMER');
     expect(await c.store()).toMatchObject({ type: 'CTV', isPartner: true });
-    expect(await c.partnerEvents()).toHaveLength(0);
+    expect((await c.partnerEvents()).filter((e) => e.toValue === 'false')).toHaveLength(0);
     expect(await c.roleOf()).toBe('CUSTOMER');
   });
 
