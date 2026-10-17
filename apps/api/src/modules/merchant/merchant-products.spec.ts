@@ -36,7 +36,10 @@ function build(opts: { role?: string; store?: Record<string, unknown>; pancakeRo
     variation: { findFirst: jest.fn().mockResolvedValue(opts.pancakeRow === undefined ? PANCAKE_ROW : opts.pancakeRow) },
     product: { create: productCreate },
     storefrontItem: { count: jest.fn(), create: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([{ type: (opts.store ?? MERCHANT_STORE).type, isPartner: false }]),
+    $transaction: jest.fn(),
   };
+  prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
   const svc = new MerchantService(prisma as unknown as PrismaService, orderStatus, { notify } as never);
   return { svc, prisma, productCreate, notify };
 }
@@ -54,6 +57,13 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     const { svc, productCreate } = build({ role: 'ADMIN', store: { ...MERCHANT_STORE, type: 'CTV' } });
     await expect(svc.createProduct('u1', BASE)).rejects.toThrow(new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT));
     await expect(svc.checkPancakeVariation('u1', 'PK-123')).rejects.toThrow(ForbiddenException);
+    expect(productCreate).not.toHaveBeenCalled();
+  });
+
+  it('cờ đối tác bị tắt giữa lúc kiểm và lúc chèn (đọc lại dưới khoá dòng gian hàng): từ chối, không tạo sản phẩm', async () => {
+    const { svc, prisma, productCreate } = build();
+    prisma.$queryRaw.mockResolvedValue([{ type: 'CTV', isPartner: false }]);
+    await expect(svc.createProduct('u1', BASE)).rejects.toThrow(new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT));
     expect(productCreate).not.toHaveBeenCalled();
   });
 

@@ -28,6 +28,9 @@ export async function defaultCommissionPctIn(tx: Prisma.TransactionClient): Prom
  * lịch sử mức mới hiệu lực từ `at`; gian hàng chưa có lịch sử thì ghi trước mốc gốc mức cũ. Hàng giao hộ chốt phí theo lúc đặt
  * đơn (termsAt), nên đơn đã đặt giữ mức cũ dù phiếu lập sau. Gọi trong transaction ghi khoá cấu hình; khoá từng gian hàng như
  * updateStoreTerms để không chen giữa một lần admin sửa phí riêng.
+ * Dòng gian hàng khoá FOR NO KEY UPDATE (không phải FOR UPDATE): chỉ chèn dòng lịch sử, khoá tư vấn ở trên đã tuần tự hoá với
+ * updateStoreTerms (cũng ghi dòng gian hàng bằng NO KEY UPDATE) và các đường khoá gian hàng mạnh hơn vẫn xung đột. FOR UPDATE đợi
+ * KEY SHARE của đặt đơn (gian hàng giao hàng rồi gian hàng ghi công qua khoá ngoại orders) khi nó đang đợi gian hàng id nhỏ hơn ta giữ ⇒ 40P01.
  */
 export async function freezeDefaultCommissionChange(
   tx: Prisma.TransactionClient,
@@ -42,7 +45,7 @@ export async function freezeDefaultCommissionChange(
       FROM (SELECT id FROM storefronts WHERE (${FREEZE_SCOPE_SQL}) AND "commissionPct" IS NULL ORDER BY id) s`;
   const stores = await tx.$queryRaw<{ id: string; consignmentFeePct: Prisma.Decimal | number; consignmentFeeFixed: number }[]>`
     SELECT id, "consignmentFeePct", "consignmentFeeFixed" FROM storefronts
-     WHERE (${FREEZE_SCOPE_SQL}) AND "commissionPct" IS NULL ORDER BY id FOR UPDATE`;
+     WHERE (${FREEZE_SCOPE_SQL}) AND "commissionPct" IS NULL ORDER BY id FOR NO KEY UPDATE`;
   if (stores.length === 0) return 0;
   const ids = stores.map((s) => s.id);
   const withHistory = new Set(

@@ -250,7 +250,8 @@ export class AdminService {
         await lockAdminRoster(tx);
         // Gian hàng của người nộp khoá trước dòng users (cùng thứ tự với thu hồi đại lý và ẩn danh tài khoản), nếu không bên ghi
         // users trước rồi đợi gian hàng sẽ deadlock với bên giữ gian hàng rồi đợi users.
-        await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
+        const ownerStores = await tx.$queryRaw<{ id: string; type: string; isPartner: boolean }[]>`
+          SELECT "id", "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
         // Rồi tới dòng users (FOR UPDATE) TRƯỚC mọi ghi vào hồ sơ: người nộp chưa có gian hàng thì không có dòng gian hàng nào để
         // khoá, mà bên ghi hồ sơ rồi đợi users sẽ deadlock với ẩn danh tài khoản (giữ users rồi ghi hồ sơ).
         // NO KEY UPDATE (không phải FOR UPDATE): FOR UPDATE đợi FOR KEY SHARE của khoá ngoại (đơn người nộp đang đặt qua slug của mình
@@ -280,6 +281,10 @@ export class AdminService {
           },
         });
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
+        for (const store of ownerStores) {
+          if (store.type === 'BRAND' || store.isPartner) continue;
+          await recordUserAdminEvent(tx, { userId: app.userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: adminId });
+        }
       }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
@@ -474,7 +479,7 @@ export class AdminService {
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
     }
-    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này rơi xuống CUSTOMER/AFFILIATE.
+    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này được đặt về CUSTOMER/AFFILIATE.
     const partnerCfg = losesPartnerStore('DEALER', role) ? await this.fulfilment?.settlementConfig() : undefined;
     const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
@@ -495,19 +500,22 @@ export class AdminService {
       const data: Prisma.UserUpdateInput = {
         role,
         ...(droppedPerms.length ? { staffPermissions: [] } : {}),
-        ...(dealerTierId
-          ? {
-              metadata: {
-                ...((user.metadata as Record<string, unknown> | null) ?? {}),
-                dealerTierId,
-              } as Prisma.InputJsonObject,
-            }
-          : {}),
       };
       // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
-      if (losesPartnerStore(previousRole, role)) {
+      // Đặt về CUSTOMER/AFFILIATE khi người này không vừa rơi từ DEALER/STAFF/ADMIN (vd. lần thu hồi quyền nhân viên bị gian hàng chặn
+      // rồi admin đặt lại vai trò) vẫn chuyển gian hàng MERCHANT về CTV: loại này luôn là đối tác và cờ không tắt tay được.
+      if (losesPartnerStore('DEALER', role)) {
         if (!this.fulfilment || !partnerCfg) throw new Error('AdminService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
-        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole);
+        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole, {
+          merchantOnly: !losesPartnerStore(previousRole, role),
+        });
+      }
+      if (dealerTierId) {
+        // Gộp dealerTierId vào metadata đọc từ dòng users đã khoá (như duyệt hồ sơ), không phải bản findUnique ở trên: ghi metadata chen
+        // giữa (nhóm da, onboardedAt) không bị ghi đè. Khoá users đứng cuối thứ tự khoá, sau gian hàng.
+        const [locked] = await tx.$queryRaw<{ metadata: unknown }[]>`
+          SELECT "metadata" FROM "users" WHERE "id" = ${user.id} FOR NO KEY UPDATE`;
+        data.metadata = { ...((locked?.metadata as Record<string, unknown> | null) ?? {}), dealerTierId } as Prisma.InputJsonObject;
       }
       const updated = await tx.user.update({
         where: { id: user.id },

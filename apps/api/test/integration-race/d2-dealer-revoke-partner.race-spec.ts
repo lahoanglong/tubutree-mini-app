@@ -96,7 +96,7 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     rbac = new RbacService(prisma, merchant);
     admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none, merchant);
     portal = new MerchantService(prisma, none);
-    deletion = new AccountDeletionService(prisma);
+    deletion = new AccountDeletionService(prisma, merchant);
   });
 
   afterAll(async () => {

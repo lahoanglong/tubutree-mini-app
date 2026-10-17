@@ -306,7 +306,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
       await waitFor(() =>
         expect(mocks.openSnackbar).toHaveBeenCalledWith({
-          text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin rồi tắt cờ đối tác, hoặc đặt lại vai trò DEALER cho người này.',
+          text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin xong thì: gian hàng loại CTV tắt cờ đối tác; gian hàng loại MERCHANT không tắt bằng cờ được, hãy đặt lại vai trò cho người này. Hoặc đặt lại vai trò DEALER để giữ nguyên gian hàng.',
           type: 'warning',
         }),
       );

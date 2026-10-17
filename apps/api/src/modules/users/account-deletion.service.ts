@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
 
 /** Mã lỗi ổn định để admin UI nhận diện (message tiếng Việt có thể đổi câu chữ). */
 export const ACCOUNT_DELETION_BLOCKED = 'ACCOUNT_DELETION_BLOCKED';
@@ -18,11 +19,23 @@ export type DeletionBlockerCode =
   | 'CUSTOMER_REFUND_PENDING'
   | 'SUBSCRIPTION_ACTIVE'
   | 'COMMISSION_UNPAID'
-  | 'DEALER_CREDIT';
+  | 'DEALER_CREDIT'
+  | 'PARTNER_STORE_OPEN';
 
 export interface DeletionBlocker {
   code: DeletionBlockerCode;
   message: string;
+}
+
+/**
+ * Cổng tới MerchantFulfilmentService (cùng danh sách vướng mắc với thu hồi đại lý): khai báo ở đây và cấp qua token để service này không
+ * import MerchantFulfilmentService (đồ thị import của nó vòng lại hằng ANONYMIZED_NAME bên dưới).
+ */
+export const PARTNER_STORE_BLOCKERS = Symbol('PARTNER_STORE_BLOCKERS');
+export interface PartnerStoreBlockersPort {
+  settlementConfig(): Promise<SettlementConfig>;
+  lockOwnerStores(tx: Db, ownerUserId: string): Promise<void>;
+  ownerPartnerBlockers(db: Db, ownerUserId: string, cfg: SettlementConfig): Promise<string[]>;
 }
 
 export type DeletionListStatus = 'PENDING' | 'RESOLVED' | 'ALL';
@@ -62,7 +75,10 @@ function isRetryableTxError(err: unknown): boolean {
 export class AccountDeletionService {
   private readonly logger = new Logger(AccountDeletionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(PARTNER_STORE_BLOCKERS) private readonly partnerStores?: PartnerStoreBlockersPort,
+  ) {}
 
   async list(status: DeletionListStatus = 'PENDING') {
     const requests = await this.prisma.accountDeletionRequest.findMany({
@@ -85,7 +101,8 @@ export class AccountDeletionService {
     });
     const byId = new Map(users.map((u) => [u.id, u]));
     const pendingUsers = users.filter((u) => requests.some((r) => r.userId === u.id && r.status === 'PENDING'));
-    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers) : new Map();
+    const partnerCfg = pendingUsers.length > 0 ? await this.partnerStores?.settlementConfig() : undefined;
+    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, partnerCfg) : new Map();
     return requests.map((r) => ({
       ...r,
       user: byId.get(r.userId) ?? null,
@@ -112,6 +129,8 @@ export class AccountDeletionService {
   }
 
   private async processOnce(requestId: string, adminId: string, adminNote?: string) {
+    // Đọc cấu hình đối soát trước khi mở tx (SystemConfigService đọc qua pool, không đọc trong lúc giữ tx), như setUserRole.
+    const partnerCfg = await this.partnerStores?.settlementConfig();
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`
         SELECT "id" FROM "account_deletion_requests" WHERE "id" = ${requestId} FOR UPDATE`;
@@ -121,17 +140,23 @@ export class AccountDeletionService {
         return { alreadyProcessed: true, requestId, userId: request.userId, reviewedAt: request.reviewedAt };
       }
 
+      // Khoá tư vấn chủ rồi khoá phiếu từng gian hàng của chủ TRƯỚC mọi khoá dòng (cùng thứ tự với thu hồi đại lý): lập phiếu đối soát
+      // đang chạy phải xong trước lần kiểm vướng mắc đối tác bên dưới, và không phiếu nào chen vào sau lần kiểm.
+      if (this.partnerStores) await this.partnerStores.lockOwnerStores(tx, request.userId);
       // Đơn của khách trước dòng users, cùng chiều với cộng điểm lúc giao / duyệt trả / gộp phiên khách (đơn → users): ẩn danh
       // bên dưới ghi lại các đơn này, khoá users trước thì đợi lần cộng điểm đang giữ đơn trong khi nó đợi users ⇒ 40P01.
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
       // Gian hàng của chủ trước dòng users: thu hồi vai trò đại lý khoá gian hàng rồi mới ghi users, khoá ngược chiều thì deadlock (40P01).
-      await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${request.userId} ORDER BY "id" FOR UPDATE`;
+      // NO KEY UPDATE (không phải FOR UPDATE): đặt đơn qua slug gian hàng của chính chủ giữ KEY SHARE users rồi KEY SHARE gian hàng
+      // (khoá ngoại orders); FOR UPDATE đợi KEY SHARE ấy trong lúc nó đợi users FOR UPDATE ở dưới ⇒ 40P01. Ẩn danh chỉ sửa cột không phải
+      // khoá của gian hàng, và NO KEY UPDATE vẫn xung đột với FOR UPDATE/NO KEY UPDATE của thu hồi và duyệt nên thứ tự giữa chúng không đổi.
+      await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${request.userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: request.userId } });
       const now = new Date();
 
       if (user) {
-        const blockers = (await this.collectBlockers(tx, [user])).get(user.id) ?? [];
+        const blockers = (await this.collectBlockers(tx, [user], partnerCfg)).get(user.id) ?? [];
         if (blockers.length > 0) {
           throw new BadRequestException({
             statusCode: 400,
@@ -156,8 +181,16 @@ export class AccountDeletionService {
   }
 
   /** Gom bằng groupBy (cố định 8 truy vấn) thay vì 8 truy vấn × mỗi dòng: danh sách admin tới 100 dòng. */
-  private async collectBlockers(db: Db, users: BlockerUser[]): Promise<Map<string, DeletionBlocker[]>> {
+  private async collectBlockers(db: Db, users: BlockerUser[], partnerCfg?: SettlementConfig): Promise<Map<string, DeletionBlocker[]>> {
     const ids = users.map((u) => u.id);
+    // Chủ gian hàng đối tác (MERCHANT, hoặc CTV có cờ) còn việc dở thì ẩn danh để lại đơn không ai xử lý và đối soát không có tài khoản nhận tiền.
+    const partnerOpen = new Map<string, string[]>();
+    if (this.partnerStores && partnerCfg) {
+      for (const id of ids) {
+        const open = await this.partnerStores.ownerPartnerBlockers(db, id, partnerCfg);
+        if (open.length) partnerOpen.set(id, open);
+      }
+    }
     const [orders, payouts, returns, refunds, subs, commissions, cashbackTxns, dealerCredit] = await Promise.all([
       db.order.groupBy({
         by: ['userId'],
@@ -238,6 +271,8 @@ export class AccountDeletionService {
       if (n(subN) > 0) add('SUBSCRIPTION_ACTIVE', `còn ${n(subN)} gói giao định kỳ đang chạy hoặc tạm dừng`);
       if (n(commissionN) > 0) add('COMMISSION_UNPAID', `còn ${n(commissionN)} khoản hoa hồng chưa trả`);
       const credit = creditSum.get(user.id) ?? 0;
+      const partnerN = partnerOpen.get(user.id);
+      if (partnerN) add('PARTNER_STORE_OPEN', `gian hàng đối tác còn vướng: ${partnerN.join('; ')}`);
       if (credit !== 0) add('DEALER_CREDIT', `công nợ đại lý chưa tất toán (${credit < 0 ? '-' : ''}${vnd(Math.abs(credit))})`);
       result.set(user.id, out);
     }
