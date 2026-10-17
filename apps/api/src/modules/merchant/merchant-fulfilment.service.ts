@@ -1485,7 +1485,9 @@ export class MerchantFulfilmentService {
         throw new ConflictException(
           fromRole === 'DEALER'
             ? `Chưa thể thu hồi vai trò đại lý vì gian hàng đối tác còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`
-            : `Chưa thể hạ vai trò vì gian hàng đối tác của người này còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại, hoặc đặt vai trò DEALER để giữ nguyên gian hàng.`,
+            : fromRole === 'CUSTOMER' || fromRole === 'AFFILIATE'
+              ? `Cờ đối tác của gian hàng còn vướng do vai trò trước đây: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`
+              : `Chưa thể hạ vai trò vì gian hàng đối tác của người này còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại, hoặc đặt vai trò DEALER để giữ nguyên gian hàng.`,
         );
       }
       await tx.storefront.update({ where: { id }, data: { isPartner: false,...(store.type === 'MERCHANT' ? { type: 'CTV' } : {}) } });
