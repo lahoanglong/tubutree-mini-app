@@ -697,6 +697,7 @@ describe('AuthService — nguồn chạm đầu (firstTouch*) ghi MỘT lần l�
       ['không phải object', 'shopee'],
       ['mảng', ['shopee']],
       ['null', null],
+      ['chạm đầu đã quá 90 ngày (bản lưu cũ trên máy)', { source: 'shopee', at: new Date(Date.now() - 91 * 86_400_000).toISOString() }],
     ])('giá trị bẩn (%s) → bỏ, vẫn đăng nhập được và không ghi cột nguồn nào', async (_label, raw) => {
       const create = echoCreate();
       const svc = svcWith({ findUnique: noUser(), create });

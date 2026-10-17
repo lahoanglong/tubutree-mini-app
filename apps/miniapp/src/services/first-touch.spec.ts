@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('zmp-sdk/apis', () => ({ getStorage: vi.fn(), setStorage: vi.fn() }));
+vi.mock('zmp-sdk/apis', () => ({ getStorage: vi.fn(), setStorage: vi.fn(), removeStorage: vi.fn() }));
 
-import { getStorage, setStorage } from 'zmp-sdk/apis';
+import { getStorage, removeStorage, setStorage } from 'zmp-sdk/apis';
 import { __resetEntrySourceForTest } from '../utils/entry-source';
 import { FIRST_TOUCH_KEY, __resetFirstTouchForTest, loadFirstTouch } from './first-touch';
 
 const mockedGet = vi.mocked(getStorage);
 const mockedSet = vi.mocked(setStorage);
+const mockedRemove = vi.mocked(removeStorage);
+const DAY = 86_400_000;
+const daysAgo = (n: number) => new Date(Date.now() - n * DAY).toISOString();
 
 const launchWith = (search: string) => vi.stubGlobal('window', { location: { search, hash: '' } });
 const stored = (v: unknown) => mockedGet.mockResolvedValue({ [FIRST_TOUCH_KEY]: v } as never);
@@ -18,6 +21,7 @@ beforeEach(() => {
   __resetFirstTouchForTest();
   mockedGet.mockResolvedValue({} as never);
   mockedSet.mockResolvedValue(undefined as never);
+  mockedRemove.mockResolvedValue(undefined as never);
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -37,6 +41,38 @@ describe('loadFirstTouch — nguồn chạm đầu bền trên máy', () => {
     launchWith('?src=tiktok');
     expect(await loadFirstTouch()).toEqual({ source: 'oa', at: '2026-10-01T00:00:00.000Z' });
     expect(mockedSet).not.toHaveBeenCalled();
+  });
+
+  describe('hạn 90 ngày của bản đã lưu', () => {
+    it('bản lưu 89 ngày tuổi vẫn là chạm đầu', async () => {
+      const at = daysAgo(89);
+      stored(JSON.stringify({ source: 'oa', at }));
+      launchWith('?src=tiktok');
+      expect(await loadFirstTouch()).toEqual({ source: 'oa', at });
+      expect(mockedRemove).not.toHaveBeenCalled();
+    });
+
+    it('bản lưu quá 90 ngày + lần mở này có nguồn → bỏ bản cũ, nguồn mới thành chạm đầu và ghi đè', async () => {
+      stored(JSON.stringify({ source: 'oa', at: daysAgo(91) }));
+      launchWith('?src=tiktok');
+      expect(await loadFirstTouch()).toMatchObject({ source: 'tiktok' });
+      expect(mockedSet).toHaveBeenCalledTimes(1);
+    });
+
+    it('bản lưu quá 90 ngày + lần mở này không có nguồn → xoá bản cũ, không gửi gì', async () => {
+      stored(JSON.stringify({ source: 'oa', at: daysAgo(91) }));
+      launchWith('');
+      expect(await loadFirstTouch()).toBeUndefined();
+      expect(mockedRemove).toHaveBeenCalledWith({ keys: [FIRST_TOUCH_KEY] });
+      expect(mockedSet).not.toHaveBeenCalled();
+    });
+
+    it('xoá storage lỗi cũng không ném', async () => {
+      mockedRemove.mockRejectedValue(new Error('no bridge'));
+      stored(JSON.stringify({ source: 'oa', at: daysAgo(120) }));
+      launchWith('');
+      await expect(loadFirstTouch()).resolves.toBeUndefined();
+    });
   });
 
   it('mở app không có nguồn và máy chưa lưu gì → không có chạm đầu, không ghi gì', async () => {

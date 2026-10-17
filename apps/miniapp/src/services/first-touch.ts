@@ -1,9 +1,11 @@
-import { getStorage, setStorage } from 'zmp-sdk/apis';
+import { getStorage, removeStorage, setStorage } from 'zmp-sdk/apis';
 import { getSessionAttribution, normalizeEntryToken } from '../utils/entry-source';
 
 export const FIRST_TOUCH_KEY = 'tubu_first_touch';
 /** Storage Zalo có thể không bao giờ trả lời ngoài Zalo hay khi cầu nối native treo; số liệu không được giữ đăng nhập lại. */
 const STORAGE_TIMEOUT_MS = 2_000;
+/** Cùng hạn với API (apps/api/src/common/attribution.ts): API bỏ chạm quá 90 ngày, nên máy cũng không giữ bản quá hạn. */
+const FIRST_TOUCH_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
 /** Nguồn chạm đầu trên máy, gửi kèm đăng nhập để API ghi vào tài khoản MỚI (API không bao giờ ghi đè). */
 export interface FirstTouch {
@@ -45,18 +47,27 @@ function parseStored(raw: unknown): FirstTouch | undefined {
   }
 }
 
+function isExpired(ft: FirstTouch): boolean {
+  return ft.at !== undefined && Date.now() - Date.parse(ft.at) > FIRST_TOUCH_MAX_AGE_MS;
+}
+
 async function resolveFirstTouch(): Promise<FirstTouch | undefined> {
+  let expired = false;
   try {
     const res = await withTimeout(getStorage({ keys: [FIRST_TOUCH_KEY] }), STORAGE_TIMEOUT_MS);
     const saved = parseStored((res as Record<string, unknown>)[FIRST_TOUCH_KEY]);
-    if (saved) return saved;
+    if (saved && !isExpired(saved)) return saved;
+    expired = saved !== undefined;
   } catch {
     return undefined;
   }
-  // Máy chưa có chạm đầu: chỉ nguồn có tên (link/QR/thẻ) mới tính; mở app trần không phải một "nguồn" để lưu, nên lần
-  // quét thẻ sau đó vẫn là chạm đầu có thật.
+  // Máy chưa có chạm đầu (hoặc bản cũ đã quá hạn): chỉ nguồn có tên (link/QR/thẻ) mới tính; mở app trần không phải một
+  // "nguồn" để lưu, nên lần quét thẻ sau đó vẫn là chạm đầu có thật.
   const launch = getSessionAttribution();
-  if (!launch) return undefined;
+  if (!launch) {
+    if (expired) void removeStorage({ keys: [FIRST_TOUCH_KEY] }).catch(() => undefined);
+    return undefined;
+  }
   const ft: FirstTouch = { source: launch.source, at: new Date().toISOString() };
   if (launch.campaign) ft.campaign = launch.campaign;
   try {

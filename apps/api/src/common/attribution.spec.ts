@@ -79,10 +79,16 @@ describe('sanitizeFirstTouch', () => {
     it.each([
       ['không phải ngày', 'hôm qua'],
       ['tương lai xa', '2026-10-20T00:00:00.000Z'],
-      ['cũ hơn 90 ngày', '2026-06-01T00:00:00.000Z'],
       ['số', 1_760_000_000_000],
     ])('%s → dùng giờ máy chủ', (_label, at) => {
       expect(sanitizeFirstTouch({ source: 'tiktok', at }, now)?.at).toEqual(now);
+    });
+
+    it('đúng 90 ngày vẫn nhận, quá 90 ngày thì bỏ cả lần chạm (máy lưu cũ không được tính như vừa chạm)', () => {
+      const edge = new Date(now.getTime() - 90 * 86_400_000).toISOString();
+      expect(sanitizeFirstTouch({ source: 'tiktok', at: edge }, now)?.at).toEqual(new Date(edge));
+      expect(sanitizeFirstTouch({ source: 'tiktok', at: '2026-06-01T00:00:00.000Z' }, now)).toBeNull();
+      expect(firstTouchColumns({ source: 'tiktok', at: '2026-06-01T00:00:00.000Z' }, now)).toEqual({});
     });
 
     it('lệch đồng hồ vài phút về tương lai vẫn nhận', () => {
