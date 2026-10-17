@@ -1,0 +1,84 @@
+import 'reflect-metadata';
+import { ValidationPipe } from '@nestjs/common';
+import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
+import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
+import { AffiliateController, LinkClickDto } from './affiliate.controller';
+import { AffiliateService } from './affiliate.service';
+import type { PrismaService } from '../../prisma/prisma.service';
+
+function makeService(link: { id: string; targetType: string; targetId: string | null } | null) {
+  const linkUpdate = jest.fn().mockReturnValue('LINK_UPDATE');
+  const clickCreate = jest.fn().mockReturnValue('CLICK_CREATE');
+  const transaction = jest.fn().mockResolvedValue([]);
+  const prisma = {
+    affiliateLink: { findUnique: jest.fn().mockResolvedValue(link), update: linkUpdate },
+    affiliateClick: { create: clickCreate },
+    $transaction: transaction,
+  } as unknown as PrismaService;
+  const svc = new AffiliateService(prisma, {} as never, {} as never, {} as never, {} as never, {} as never);
+  return { svc, linkUpdate, clickCreate, transaction };
+}
+
+describe('AffiliateService.recordLinkClick (D3-06)', () => {
+  it('link có thật → +1 click trên link và ghi một dòng AffiliateClick, trong cùng một giao dịch', async () => {
+    const { svc, linkUpdate, clickCreate, transaction } = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null });
+    await expect(svc.recordLinkClick('aB3_x-9', '203.0.113.7')).resolves.toEqual({ counted: true });
+    expect(linkUpdate).toHaveBeenCalledWith({ where: { id: 'l1' }, data: { clicks: { increment: 1 } } });
+    expect(clickCreate).toHaveBeenCalledWith({
+      data: { shortCode: 'aB3_x-9', visitorId: expect.any(String), ipHash: expect.any(String) },
+    });
+    expect(transaction).toHaveBeenCalledWith(['LINK_UPDATE', 'CLICK_CREATE']);
+  });
+
+  it('không lưu IP thô; cùng IP ra cùng mã băm, IP khác ra mã khác', async () => {
+    const a = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null });
+    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7');
+    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7');
+    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.8');
+    const rows = a.clickCreate.mock.calls.map((c) => c[0].data as { visitorId: string; ipHash: string });
+    expect(JSON.stringify(rows)).not.toContain('203.0.113');
+    expect(rows[0]!.ipHash).toBe(rows[1]!.ipHash);
+    expect(rows[0]!.ipHash).not.toBe(rows[2]!.ipHash);
+    expect(rows[0]!.ipHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('mã link không tồn tại → không đếm gì, không lỗi', async () => {
+    const { svc, transaction } = makeService(null);
+    await expect(svc.recordLinkClick('zzzzzzz', '203.0.113.7')).resolves.toEqual({ counted: false });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /affiliate/click', () => {
+  const handler = AffiliateController.prototype.click;
+
+  it('công khai (web chưa đăng nhập cũng gọi được) nhưng có giới hạn tốc độ theo IP', () => {
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBe(true);
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBeLessThanOrEqual(30);
+    expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
+  });
+
+  it('chuyển mã link và IP cho service', async () => {
+    const affiliate = { recordLinkClick: jest.fn().mockResolvedValue({ counted: true }) };
+    const c = new AffiliateController(affiliate as never);
+    const out = await c.click({ shortCode: 'aB3_x-9' }, { ip: '203.0.113.7' } as never);
+    expect(out).toEqual({ counted: true });
+    expect(affiliate.recordLinkClick).toHaveBeenCalledWith('aB3_x-9', '203.0.113.7');
+  });
+
+  describe('DTO qua ValidationPipe', () => {
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+    const run = (value: unknown) => pipe.transform(value, { type: 'body', metatype: LinkClickDto });
+
+    it('nhận mã dạng base64url do createLink sinh', async () => {
+      await expect(run({ shortCode: 'aB3_x-9' })).resolves.toBeDefined();
+    });
+
+    it.each([[{}], [{ shortCode: '' }], [{ shortCode: 'a b' }], [{ shortCode: 'x'.repeat(33) }], [{ shortCode: 'ab' }], [{ shortCode: 5 }], [{ shortCode: 'abcd', extra: 1 }]])(
+      'từ chối %j',
+      async (body) => {
+        await expect(run(body)).rejects.toThrow();
+      },
+    );
+  });
+});

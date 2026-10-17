@@ -11,7 +11,7 @@ import { MainLandmark } from './ui/main-landmark';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
-import { recordReferralTouch } from '../services/affiliate-api';
+import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { useSessionRecovery } from '../hooks/use-auth-phase';
@@ -118,6 +118,7 @@ export default function MyApp() {
   // unhandledrejection) — chỉ đăng ký 1 lần cho suốt vòng đời app, KHÔNG tạo effect thứ 2.
   useEffect(() => {
     trackAppOpened();
+    reportLaunchLinkClick();
     // addEventListener('error', ...) chứ KHÔNG gán window.onerror = ... — gán trực tiếp GHI ĐÈ
     // bất kỳ handler nào khác đã/sẽ gán vào window.onerror (kể cả của thư viện bên thứ 3),
     // addEventListener cho phép nhiều listener cùng tồn tại (phát hiện ở review Task 19).

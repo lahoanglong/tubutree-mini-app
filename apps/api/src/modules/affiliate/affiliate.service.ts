@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, Prisma, type PayoutStatus } from '@prisma/client';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -233,6 +233,17 @@ export class AffiliateService {
       this.prisma.affiliateClick.create({ data: { shortCode, visitorId, ipHash } }),
     ]);
     return { targetType: link.targetType, targetId: link.targetId };
+  }
+
+  /**
+   * Lượt mở link CTV từ phía khách (route công khai, không có userId). Khách chưa biết là ai nên "người xem" là mã băm của IP;
+   * IP thô không lưu. Không khử trùng lặp theo người xem: bảng affiliate_clicks đang đánh dấu @deprecated (chỉ ghi), đọc nó để
+   * khử trùng sẽ phải gỡ dấu đó; client đã chỉ gọi một lần mỗi phiên và route có giới hạn tốc độ theo IP.
+   */
+  async recordLinkClick(shortCode: string, ip: string): Promise<{ counted: boolean }> {
+    const ipHash = createHash('sha256').update(`affiliate-click|${ip}`).digest('hex');
+    const target = await this.trackClick(shortCode, ipHash, ipHash);
+    return { counted: target !== null };
   }
 
   async dashboard(userId: string, now: Date = new Date()) {

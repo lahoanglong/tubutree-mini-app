@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, Req } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
 import {
   IsIn,
   IsInt,
@@ -15,6 +17,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import { clientIp } from '../../common/throttle/throttle.config';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { vnDateParts } from '../../common/vn-time';
 import { clampTake } from '../../common/pagination';
@@ -61,6 +65,11 @@ class TouchDto {
   @IsOptional() @IsIn(['ctv', 'brand']) kind?: string;
 }
 
+/** Mã ngắn của link CTV: createLink sinh 5 byte base64url (7 ký tự); chừa dư cho mã dài hơn về sau. */
+export class LinkClickDto {
+  @IsString() @Matches(/^[A-Za-z0-9_-]{4,32}$/) shortCode!: string;
+}
+
 @Controller('affiliate')
 export class AffiliateController {
   constructor(private readonly affiliate: AffiliateService) {}
@@ -79,6 +88,16 @@ export class AffiliateController {
   @Get('me')
   me(@CurrentUser('sub') userId: string) {
     return this.affiliate.getMe(userId);
+  }
+
+  // Khách mở link CTV (web hoặc miniapp, gọi một lần mỗi phiên). Công khai vì khách mới chưa có phiên; đếm theo IP nên chặt hơn
+  // mặc định. Chỉ ảnh hưởng con số "click" CTV thấy, không đụng tới tiền.
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Post('click')
+  @HttpCode(HttpStatus.OK)
+  click(@Body() dto: LinkClickDto, @Req() req: Request) {
+    return this.affiliate.recordLinkClick(dto.shortCode, clientIp(req));
   }
 
   @Post('links')
