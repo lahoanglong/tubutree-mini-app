@@ -166,3 +166,57 @@ describe('NotificationsService.notify', () => {
     );
   });
 });
+
+describe('NotificationsService.notify — gộp tin theo cửa sổ thời gian (dedupeWithinMs)', () => {
+  const NOW = new Date('2026-10-17T10:00:00.000Z');
+  beforeEach(() => jest.useFakeTimers().setSystemTime(NOW));
+  afterEach(() => jest.useRealTimers());
+
+  function build(seen: { id: string } | null) {
+    const findFirst = jest.fn().mockResolvedValue(seen);
+    const create = jest.fn().mockResolvedValue({ id: 'log-1' });
+    const tx = { $executeRaw: jest.fn().mockResolvedValue(1), notificationLog: { findFirst, create } };
+    const { prisma } = makePrisma({
+      notificationTemplate: { findUnique: jest.fn().mockResolvedValue({ code: 'C', channel: 'INAPP', bodyTemplate: 'x', zaloTemplateId: null }) },
+      $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+    });
+    const svc = new NotificationsService(prisma, { sendTemplate: jest.fn() } as unknown as ZnsClient, makeAnalytics());
+    return { svc, findFirst, create };
+  }
+
+  it('đã có tin cùng khoá trong cửa sổ → không ghi tin thứ hai', async () => {
+    const { svc, findFirst, create } = build({ id: 'old' });
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'post-activity:p1', dedupeWithinMs: 3_600_000 });
+
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'u1',
+          channel: 'INAPP',
+          payload: { path: ['dedupeKey'], equals: 'post-activity:p1' },
+          sentAt: { gte: new Date('2026-10-17T09:00:00.000Z') },
+        }),
+      }),
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('chưa có tin nào trong cửa sổ (tin cũ hơn cửa sổ không tính) → ghi tin mới kèm khoá', async () => {
+    const { svc, create } = build(null);
+
+    await svc.notify('u1', 'C', { a: 'b' }, { dedupeKey: 'post-activity:p1', dedupeWithinMs: 3_600_000 });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u1', templateCode: 'C', channel: 'INAPP', payload: { body: 'x', data: { a: 'b' }, dedupeKey: 'post-activity:p1' } }),
+    });
+  });
+
+  it('không có dedupeWithinMs → hành vi cũ: khoá chặn vĩnh viễn, không lọc theo thời gian', async () => {
+    const { svc, findFirst } = build(null);
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'referral:abc' });
+
+    expect(findFirst.mock.calls[0][0].where).not.toHaveProperty('sentAt');
+  });
+});
