@@ -147,7 +147,10 @@ bản về từ remote và bấm giờ). Bước diễn tập, đo thời gian b
   HTTP, nén, `Cache-Control`, `cf-cache-status` và `/api/health`; thêm `--local` trên VPS để kiểm đĩa (WARN 80%, FAIL 90%),
   container `unhealthy`, cron certbot và bản backup mới nhất. Chỉ đọc, thoát 1 khi có FAIL, `--help` liệt kê tuỳ chọn. Chưa
   có giám sát ngoài: chạy tay trước và sau mỗi deploy, hoặc đặt UptimeRobot/BetterStack cho `https://api.tubutree.com/api/health`.
-- Trần CPU, `shm_size` Postgres và `USER node` của container web: xem phần đầu `docker-compose.vietnix.yml` và runbook mục 1.5.
+- Trần CPU của api/web và `USER node` của container web: xem phần đầu `docker-compose.vietnix.yml` và runbook mục 1.5.
+- Đổi cấu hình `postgres` hoặc `redis` trong compose thì `tools/deploy/deploy.sh` bước 4 (`up -d --no-build api`, không có `--no-deps`)
+  sẽ tạo lại chúng giữa lúc deploy (DB ngắt ~10 giây, 5xx). Muốn đổi, chạy chủ động ngoài giờ cao điểm TRƯỚC deploy:
+  `docker compose -f docker-compose.vietnix.yml up -d --no-deps postgres redis`.
 
 ## Redis và log container
 

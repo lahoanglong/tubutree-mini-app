@@ -56,22 +56,27 @@ describe('docker-compose.vietnix.yml — VPS dùng chung với ChoDeli', () => {
     }
   });
 
-  it('mọi service có trần RAM và trần CPU; mặc định CPU không vượt 1 lõi (Docker từ chối khởi động khi cpus lớn hơn số vCPU của máy)', () => {
+  it('mọi service có trần RAM; api và web có thêm trần CPU, mặc định không vượt 1 lõi (Docker từ chối khởi động khi cpus lớn hơn số vCPU của máy)', () => {
     for (const [name, block] of Object.entries(svc)) {
       expect({ name, mem: /\n {4}mem_limit: \d+m\n/.test(block) }).toEqual({ name, mem: true });
-      const cpus = /\n {4}cpus: (?:\$\{[A-Z_]+:-([\d.]+)\}|([\d.]+))\n/.exec(block);
+    }
+    for (const name of ['api', 'web']) {
+      const cpus = /\n {4}cpus: (?:\$\{[A-Z_]+:-([\d.]+)\}|([\d.]+))\n/.exec(svc[name] ?? '');
       expect({ name, hasCpus: cpus !== null }).toEqual({ name, hasCpus: true });
       expect(Number(cpus?.[1] ?? cpus?.[2])).toBeGreaterThan(0);
       expect(Number(cpus?.[1] ?? cpus?.[2])).toBeLessThanOrEqual(1);
     }
   });
 
-  it('chỉnh CPU qua .env (API_CPUS...) không cần sửa file compose: sửa file trên VPS làm git status bẩn và dừng bước 1 của runbook', () => {
-    for (const v of ['POSTGRES_CPUS', 'REDIS_CPUS', 'API_CPUS', 'WEB_CPUS']) expect(compose).toContain('${' + v + ':-');
+  it('chỉnh CPU qua .env (API_CPUS, WEB_CPUS) không cần sửa file compose: sửa file trên VPS làm git status bẩn và dừng bước 1 của runbook', () => {
+    for (const v of ['API_CPUS', 'WEB_CPUS']) expect(compose).toContain('${' + v + ':-');
   });
 
-  it('Postgres có shm_size (mặc định 64 MB của Docker quá nhỏ cho truy vấn song song)', () => {
-    expect(svc.postgres).toMatch(/\n {4}shm_size: \d+m\n/);
+  // deploy.sh bước 4 chạy `up -d --no-build api` KHÔNG có --no-deps: compose v2 hội tụ luôn các service api phụ thuộc, nên mọi
+  // thay đổi cấu hình của postgres hoặc redis làm deploy tự động tạo lại chúng giữa chừng (5xx vài chục giây, BullMQ mất kết nối).
+  // Muốn đổi thì làm chủ động ngoài giờ cao điểm: `up -d --no-deps postgres redis` trước deploy (runbook mục 1.5).
+  it.each(['postgres', 'redis'])('%s KHÔNG có cấu hình tài nguyên mới (cpus, shm_size): deploy.sh sẽ tạo lại nó giữa lúc deploy', (name) => {
+    expect(svc[name]).not.toMatch(/\n {4}(cpus|shm_size):/);
   });
 
   it('Next đóng kết nối rảnh sau 55 s: lớn hơn ttl=30 của Apache, nhỏ hơn headersTimeout mặc định 60 s của Node', () => {
