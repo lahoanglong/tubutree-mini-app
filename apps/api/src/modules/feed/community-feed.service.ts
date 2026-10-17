@@ -469,8 +469,10 @@ export class CommunityFeedService {
       badge: authorBadge(p.user.role),
       authorLevel: p.user.communityProfile?.level ?? 1,
       category: p.category ? { slug: p.category.slug, name: p.category.name, icon: p.category.icon } : null,
+      // Ảnh sản phẩm đối tác có thể là base64 tới 1,5 triệu ký tự (chưa cấu hình Cloudinary): không nhúng vào JSON bảng tin
+      // chỉ để vẽ biểu tượng 28px; client đã chịu được thumbnail rỗng.
       productTags: (p.productTags ?? []).map((t) => ({
-        slug: t.product.slug, name: t.product.name, thumbnail: t.product.thumbnail,
+        slug: t.product.slug, name: t.product.name, thumbnail: t.product.thumbnail?.startsWith('data:') ? null : t.product.thumbnail,
         salePrice: t.product.salePrice, basePrice: t.product.basePrice,
       })),
       tags: (p.tags ?? []).map((t) => ({ slug: t.tag.slug, name: t.tag.name })),

@@ -391,6 +391,17 @@ describe('CommunityFeedService — ảnh trong danh sách (ENGAGE-7, D6-05)', ()
     expect(r.posts[0]).toMatchObject({ images: [], imageCount: 0 });
   });
 
+  it('ảnh nhỏ của sản phẩm gắn thẻ: URL giữ nguyên, ảnh base64 (sản phẩm đối tác chưa có Cloudinary) bị bỏ khỏi JSON', async () => {
+    const prisma = makePrisma();
+    const tag = (slug: string, thumbnail: string | null) => ({ product: { slug, name: slug, thumbnail, salePrice: null, basePrice: 100 } });
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      row({ productTags: [tag('a', 'https://cdn/a.jpg'), tag('b', `data:image/jpeg;base64,${'A'.repeat(2000)}`), tag('c', null)] }),
+    ]);
+    const r = await makeSvc(prisma).getFeed('u1');
+    expect(r.posts[0]!.productTags.map((t) => t.thumbnail)).toEqual(['https://cdn/a.jpg', null, null]);
+    expect(JSON.stringify(r)).not.toContain('base64');
+  });
+
   it('bài không được xem (REMOVED, PENDING của người khác) bị chặn trước khi đọc ảnh', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row({ status: 'REMOVED' }), reactions: [] });
