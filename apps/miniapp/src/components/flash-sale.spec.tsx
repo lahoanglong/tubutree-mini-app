@@ -159,6 +159,48 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
   });
 });
 
+describe('FlashSale — đồng hồ tiêu đề chỉ tính các suất còn giờ', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.status = 'guest';
+    mocks.fetchUpcoming.mockResolvedValue([]);
+  });
+
+  it('suất sớm nhất đã hết giờ mà danh sách chưa tải lại: đồng hồ đếm theo suất còn giờ kế tiếp, không biến mất', async () => {
+    mocks.fetchActive.mockResolvedValue([
+      { ...ITEM, itemId: 'old', productName: 'Hết giờ', endAt: new Date(Date.now() - 60_000).toISOString() },
+      { ...ITEM, itemId: 'live', productName: 'Còn giờ', endAt: new Date(Date.now() + 2 * 3_600_000 - 30_000).toISOString() },
+    ]);
+    renderFlash();
+    const timer = await screen.findByRole('timer');
+    expect(timer).toHaveTextContent(/^Còn 2h 00m$/);
+  });
+
+  it('suất sớm nhất hết giờ khi đang xem: đồng hồ chuyển sang suất kế tiếp thay vì biến mất', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-17T08:00:00.000Z'));
+      mocks.fetchActive.mockResolvedValue([
+        { ...ITEM, itemId: 'a', endAt: '2026-10-17T08:01:00.000Z' },
+        { ...ITEM, itemId: 'b', endAt: '2026-10-17T10:00:00.000Z' },
+      ]);
+      renderFlash();
+      // setTimeout thật (chỉ giả Date/setInterval) để react-query kịp trả dữ liệu; findBy* của RTL không chạy dưới setInterval giả.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      expect(screen.getByRole('timer')).toHaveTextContent('Còn 0h 01m');
+      act(() => {
+        vi.setSystemTime(new Date('2026-10-17T08:01:01.000Z'));
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(screen.getByRole('timer')).toHaveTextContent('Còn 1h 59m');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('UpcomingFlashSales — mốc bắt đầu', () => {
   const UPCOMING = {
     itemId: 'u1', productId: 'p1', productSlug: 'p1', productName: 'Nước rửa chén', thumbnail: null, variationId: 'v1',

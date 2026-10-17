@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -81,12 +81,19 @@ export function FlashSale() {
 
   const items = q.data ?? [];
 
+  // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
+  // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
+  const [expiredTick, setExpiredTick] = useState(0);
   const soonestEndAt = useMemo(() => {
-    if (items.length === 0) return null;
-    return new Date(Math.min(...items.map((it) => new Date(it.endAt).getTime())));
-  }, [items]);
+    const now = Date.now();
+    const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
+    return live.length > 0 ? new Date(Math.min(...live)) : null;
+  }, [items, expiredTick]);
 
   const timeLeft = useCountdown(soonestEndAt);
+  useEffect(() => {
+    if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
+  }, [soonestEndAt, timeLeft]);
 
   if (q.isLoading) return null;
   if (items.length === 0) {
