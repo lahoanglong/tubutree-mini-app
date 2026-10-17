@@ -263,23 +263,26 @@ describe('VouchersService.birthdayVouchers — xử lý từng lô song song có
     expect(logger).not.toHaveBeenCalled();
   });
 
-  it('một grant lỗi: cả lần chạy dừng như cũ (log lỗi, không log granted, lô sau không chạy), không nuốt lỗi', async () => {
-    const { svc, store, logger, errLogger } = setup(users(35), { failOn: 'u012' });
+  it('một grant lỗi ở lô đầu: các lô sau vẫn được cấp, số granted đúng, log user lỗi + một dòng tổng kết', async () => {
+    const { svc, store, logger, errLogger } = setup(users(35), { failOn: 'u002' });
     await svc.birthdayVouchers();
-    expect(errLogger).toHaveBeenCalledWith('birthdayVouchers lỗi: db down');
-    expect(logger).not.toHaveBeenCalled();
-    // Lô 10-19 chạy xong trọn vẹn rồi mới dừng; lô 20-29 và 30-34 không bắt đầu.
-    expect(store.size).toBe(10 + 9);
-    expect([...store.keys()].some((k) => k.endsWith('U020') || k.endsWith('U034'))).toBe(false);
+    expect(store.size).toBe(34);
+    expect([...store.keys()].some((k) => k.endsWith('U034'))).toBe(true);
+    expect([...store.keys()].some((k) => k.endsWith('U002'))).toBe(false);
+    expect(logger).toHaveBeenCalledWith('Birthday vouchers granted: 34');
+    expect(errLogger).toHaveBeenCalledWith('birthdayVouchers lỗi cấp cho user u002: db down');
+    const summaries = errLogger.mock.calls.filter((c) => String((c as unknown[])[0]).startsWith('birthdayVouchers lỗi: '));
+    expect(summaries).toHaveLength(1);
+    expect(String((summaries[0] as unknown[])[0])).toContain('1 lượt cấp thất bại, 34 đã cấp');
   });
 
-  it('nhiều grant lỗi trong cùng lô: lỗi đầu tiên vẫn ném ra, các lỗi sau cũng được log, lô sau không chạy', async () => {
-    const { svc, store, logger, errLogger } = setup(users(35), { failOn: 'u012', alsoFailOn: 'u015' });
+  it('nhiều grant lỗi: log từng user tối đa 20 dòng, tổng kết đếm đủ, phần còn lại vẫn cấp', async () => {
+    const rows = users(60);
+    const { svc, store, errLogger } = setup(rows, { failOn: 'u001', alsoFailOn: 'u015' });
     await svc.birthdayVouchers();
-    expect(errLogger).toHaveBeenCalledWith('birthdayVouchers lỗi: db down');
-    expect(errLogger.mock.calls.some((c) => String((c as unknown[])[0]).includes('db down 2'))).toBe(true);
-    expect(logger).not.toHaveBeenCalled();
-    expect(store.size).toBe(10 + 8);
+    expect(store.size).toBe(58);
+    expect(errLogger.mock.calls.some((c) => String((c as unknown[])[0]).includes('user u015: db down 2'))).toBe(true);
+    expect(errLogger.mock.calls.filter((c) => String((c as unknown[])[0]).includes('lỗi cấp cho user'))).toHaveLength(2);
   });
 });
 
@@ -290,7 +293,7 @@ describe.each([
 ] as const)('VouchersService.%s — xử lý từng lô song song có giới hạn', (method, prefix, logPrefix) => {
   const ids = (n: number) => Array.from({ length: n }, (_, i) => `u${String(i).padStart(3, '0')}`);
 
-  function setup(rows: string[], opts: { failOn?: string; alsoFailOn?: string } = {}) {
+  function setup(rows: string[], opts: { failOn?: string; alsoFailOn?: string; failAll?: boolean } = {}) {
     const store = new Map<string, { code: string; value: number }>();
     let inFlight = 0;
     let maxInFlight = 0;
@@ -299,7 +302,7 @@ describe.each([
       maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((r) => setTimeout(r, 5));
       inFlight--;
-      if (opts.failOn && data.scopeMeta.userId === opts.failOn) throw new Error('db down');
+      if (opts.failAll || (opts.failOn && data.scopeMeta.userId === opts.failOn)) throw new Error('db down');
       if (opts.alsoFailOn && data.scopeMeta.userId === opts.alsoFailOn) throw new Error('db down 2');
       store.set(data.code, { code: data.code, value: data.value });
       return {};
@@ -326,21 +329,24 @@ describe.each([
     expect(maxInFlight()).toBeLessThanOrEqual(10);
   });
 
-  it('một grant lỗi: lần chạy dừng như cũ (lô đang chạy xong trọn, lô sau không bắt đầu, không log granted)', async () => {
-    const { svc, store, log, err } = setup(ids(35), { failOn: 'u012' });
+  it('một grant lỗi ở lô đầu: các lô sau vẫn được cấp, một dòng tổng kết, số granted đúng', async () => {
+    const { svc, store, log, err } = setup(ids(35), { failOn: 'u002' });
     await svc[method]();
-    expect(err).toHaveBeenCalledWith(`${method} lỗi: db down`);
-    expect(log).not.toHaveBeenCalled();
-    expect(store.size).toBe(10 + 9);
-    expect([...store.keys()].some((k) => k.endsWith('U020') || k.endsWith('U034'))).toBe(false);
+    expect(store.size).toBe(34);
+    expect([...store.keys()].some((k) => k.endsWith('U034'))).toBe(true);
+    expect(log).toHaveBeenCalledWith(`${logPrefix}: 34${method === 'welcomeVouchers' ? '/35 user trong cửa sổ 24h.' : ''}`);
+    expect(err).toHaveBeenCalledWith(`${method} lỗi cấp cho user u002: db down`);
+    const summaries = err.mock.calls.filter((c) => String((c as unknown[])[0]).startsWith(`${method} lỗi: `));
+    expect(summaries).toHaveLength(1);
+    expect(String((summaries[0] as unknown[])[0])).toContain('1 lượt cấp thất bại, 34 đã cấp');
   });
 
-  it('nhiều grant lỗi trong cùng lô: lỗi đầu ném ra, lỗi sau cũng được log', async () => {
-    const { svc, store, err } = setup(ids(35), { failOn: 'u012', alsoFailOn: 'u015' });
+  it('trên 20 lỗi: chỉ log 20 dòng từng user, tổng kết đếm đủ', async () => {
+    const { svc, err } = setup(ids(40), { failOn: 'u000', failAll: true });
     await svc[method]();
-    expect(err).toHaveBeenCalledWith(`${method} lỗi: db down`);
-    expect(err.mock.calls.some((c) => String((c as unknown[])[0]).includes('db down 2'))).toBe(true);
-    expect(store.size).toBe(10 + 8);
+    expect(err.mock.calls.filter((c) => String((c as unknown[])[0]).includes('lỗi cấp cho user'))).toHaveLength(20);
+    const summary = err.mock.calls.map((c) => String((c as unknown[])[0])).find((m) => m.startsWith(`${method} lỗi: `));
+    expect(summary).toContain('40 lượt cấp thất bại, 0 đã cấp');
   });
 });
 
