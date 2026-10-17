@@ -561,6 +561,8 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
    psqlq -v ON_ERROR_STOP=1 < .demo-cleanup-undo.sql
    ```
 
+   Nếu từ lúc dọn tới lúc hoàn tác, đồng bộ Pancake đã tạo biến thể thật mang SKU gốc (vd `FUWA-DW-1L`), câu gỡ tiền tố `DEMO-` vấp ràng buộc unique của `variations.sku`: psql báo `duplicate key value violates unique constraint "variations_sku_key"`, và vì `ON_ERROR_STOP=1` cả khối dừng trước `COMMIT`, không dòng nào đổi (an toàn). Khi đó tech lead xử lý tay: bỏ câu `UPDATE "variations" SET "sku" = substr(...)` khỏi `.demo-cleanup-undo.sql` (biến thể demo giữ tiền tố `DEMO-`, hàng thật giữ SKU gốc) rồi chạy lại, hoặc gỡ tiền tố riêng cho từng biến thể không trùng.
+
    Không khôi phục bản backup ở bước 6 để hoàn tác bước này: dump đó có trước migration ở bước 7, khôi phục là lùi cả lần deploy (xem mục rollback).
 
 ### Bước 8. Bật web mới
