@@ -1,3 +1,4 @@
+import { formatVnd } from './format-vnd';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
 // NEXT_PUBLIC_* bị inline lúc build nên chỉ dùng làm fallback.
 const BASE =
@@ -327,9 +328,7 @@ export async function getPublicSupport(): Promise<SupportContact> {
   }
 }
 
-export function formatVnd(n: number): string {
-  return `${n.toLocaleString('vi-VN')}đ`;
-}
+export { formatVnd };
 
 /** "Đã bán" kiểu Shopee: <1 ẩn; <1000 "Đã bán 12"; ≥1000 "Đã bán 1,2k+"; ≥1tr "...tr+". */
 export function formatSold(n: number | null | undefined): string | null {

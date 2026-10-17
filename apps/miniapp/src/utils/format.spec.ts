@@ -10,6 +10,7 @@ import {
   formatDate,
   formatDateTime,
   formatVnd,
+  formatSold,
 } from './format';
 
 // Seed lưu baseRate dạng phân số: Shopee 0.035, Lazada 0.042, TikTok 0.049.
@@ -193,5 +194,37 @@ describe('formatDate / formatDateTime — ngày giờ theo giờ máy, không ph
     expect(formatDate('không phải ngày')).toBe('—');
     expect(formatDateTime(undefined)).toBe('—');
     expect(formatDateTime('')).toBe('—');
+  });
+});
+
+describe('formatSold — kiểu Shopee', () => {
+  it('null/undefined/0/âm/NaN → ẩn (null)', () => {
+    expect(formatSold(null)).toBeNull();
+    expect(formatSold(undefined)).toBeNull();
+    expect(formatSold(0)).toBeNull();
+    expect(formatSold(-5)).toBeNull();
+    expect(formatSold(Number.NaN)).toBeNull();
+  });
+
+  it('< 1000 → hiện số thật', () => {
+    expect(formatSold(1)).toBe('Đã bán 1');
+    expect(formatSold(12)).toBe('Đã bán 12');
+    expect(formatSold(999)).toBe('Đã bán 999');
+  });
+
+  it('≥ 1000 và < 1 triệu → rút gọn "k+", bỏ .0 thừa', () => {
+    expect(formatSold(1000)).toBe('Đã bán 1k+');
+    expect(formatSold(1200)).toBe('Đã bán 1,2k+');
+    expect(formatSold(1234)).toBe('Đã bán 1,2k+');
+  });
+
+  it('biên 999.999 → toFixed(1) làm tròn thành "1000k+" (cùng quirk với bản web)', () => {
+    expect(formatSold(999_999)).toBe('Đã bán 1000k+');
+  });
+
+  it('≥ 1 triệu → rút gọn "tr+"', () => {
+    expect(formatSold(1_000_000)).toBe('Đã bán 1tr+');
+    expect(formatSold(1_500_000)).toBe('Đã bán 1,5tr+');
+    expect(formatSold(2_500_000)).toBe('Đã bán 2,5tr+');
   });
 });
