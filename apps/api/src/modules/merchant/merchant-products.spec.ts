@@ -428,7 +428,6 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     const draftUpsert = jest.fn().mockResolvedValue({});
     const draftDelete = jest.fn().mockResolvedValue({ count: 1 });
     const notify = jest.fn().mockResolvedValue(undefined);
-    const queryRaw = jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, isBlocked: false }]);
     const p = {
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }),
@@ -443,14 +442,13 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       },
       productEditDraft: { upsert: draftUpsert, deleteMany: draftDelete },
       variation: { update: variationUpdate, findFirst: variationFindFirst },
-      $queryRaw: queryRaw,
+      $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, isBlocked: false }]),
       $transaction: jest.fn(),
     };
     p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
     return {
       svc: new MerchantService(p as unknown as PrismaService, orderStatus, { notify } as never),
       variationFindFirst,
-      queryRaw,
       productUpdate,
       productUpdateMany,
       variationUpdate,
@@ -474,33 +472,6 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     variations: [{ id: 'v-a' }],
   };
   const DRAFT = { id: 'd1', name: 'Mật ong rừng', description: 'x', shortDesc: null, images: [], thumbnail: null };
-
-  describe('khoá gian hàng/users chỉ khi mở bán lại sản phẩm tự giao', () => {
-    const tables = (queryRaw: jest.Mock) =>
-      queryRaw.mock.calls.map((c) => (c[0] as string[]).join(' ').match(/FROM "(\w+)"/)?.[1]);
-
-    it.each([
-      ['đổi giá/tồn', { basePrice: 180_000, stock: 5 }],
-      ['đổi tên', { name: 'Mật ong rừng' }],
-      ['ngừng bán', { isActive: false }],
-    ])('%s: không khoá gian hàng và users', async (_n, dto) => {
-      const { svc, queryRaw } = buildEdit(OWN);
-      await svc.updateProduct('u1', 'prod-a', dto);
-      expect(tables(queryRaw)).toEqual([]);
-    });
-
-    it('sản phẩm Tubu giao hộ (kể cả mở bán lại): không khoá gian hàng và users', async () => {
-      const { svc, queryRaw } = buildEdit({ ...OWN, fulfilment: 'TUBU', pancakeLinkCode: 'PK-1' });
-      await svc.updateProduct('u1', 'prod-a', { isActive: true });
-      expect(tables(queryRaw)).toEqual([]);
-    });
-
-    it('mở bán lại sản phẩm tự giao: khoá sản phẩm, biến thể, gian hàng rồi users, theo thứ tự đó', async () => {
-      const { svc, queryRaw } = buildEdit({ ...OWN, isActive: false });
-      await svc.updateProduct('u1', 'prod-a', { isActive: true });
-      expect(tables(queryRaw)).toEqual(['products', 'variations', 'storefronts', 'users']);
-    });
-  });
 
   it('đổi giá/tồn có hiệu lực ngay, không phải duyệt lại', async () => {
     const { svc, productUpdate, variationUpdate, draftUpsert } = buildEdit(OWN);

@@ -658,15 +658,6 @@ export class MerchantService {
     const reReview = !liveEdit && (contentChanged || relink || codeChanged) && product.approvalStatus !== 'PENDING_REVIEW';
 
     await this.prisma.$transaction(async (tx) => {
-      // Mở bán lại sản phẩm tự giao là thêm một sản phẩm đang bán (một vướng mắc của partnerBlockers): cùng khoá và kiểm lại như createProduct.
-      if (!tubuFulfilled && (dto.isActive === true || requestsLink)) {
-        // Sản phẩm rồi biến thể (dòng ghi ở cuối) khoá trước gian hàng và users: duyệt liên kết khoá sản phẩm rồi biến thể, đặt đơn khoá
-        // biến thể rồi users FOR UPDATE (khi dùng điểm); khoá users trước thì đơn của chính chủ deadlock với ta.
-        await tx.$queryRaw`SELECT "id" FROM "products" WHERE "id" = ${product.id} FOR NO KEY UPDATE`;
-        const ownVariation = product.variations[0];
-        if (ownVariation) await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${ownVariation.id} FOR NO KEY UPDATE`;
-        await this.lockSellableStore(tx, store.id, userId);
-      }
       if (codeChanged) {
         // Đổi mã có điều kiện theo mã đã đọc và chưa liên kết: admin duyệt (liên kết) cùng lúc thì không ghi đè mã lên sản phẩm
         // đã nhận biến thể Pancake khác.
