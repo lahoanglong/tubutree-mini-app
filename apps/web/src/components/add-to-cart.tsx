@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, formatVnd, getProductStock } from '@/lib/shop-client';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
-import { clearCheckoutSelection } from '@/lib/checkout-selection';
+import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { variationPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
@@ -115,8 +115,10 @@ export default function AddToCart({
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
       qc.setQueryData(cartKey(), cart);
       if (buyNow) {
-        // Lựa chọn một phần giỏ còn nhớ từ lần trước (sessionStorage) sẽ loại món vừa thêm khỏi đơn thanh toán.
-        clearCheckoutSelection();
+        // "Mua ngay" chỉ thanh toán món vừa chọn: xoá lựa chọn thì trang thanh toán hiểu là TOÀN GIỎ và tính tiền cả các món
+        // khách thêm từ trước. Không thấy dòng của món này (API trả giỏ thiếu) thì null = toàn giỏ, như trước khi có lựa chọn.
+        const bought = (cart.items ?? []).filter((l) => l.variationId === variationId).map((l) => l.id);
+        rememberCheckoutSelection(bought.length > 0 ? bought : null);
         // Không bỏ khoá `busy`: trang sắp chuyển đi, bấm thêm lúc này là cộng đôi số lượng vào giỏ.
         leaving = true;
         router.push('/thanh-toan');

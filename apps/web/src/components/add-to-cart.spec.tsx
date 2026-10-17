@@ -23,6 +23,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 }));
 
 import AddToCart from './add-to-cart';
+import { reconcileSelection, recallCheckoutSelection } from '@/lib/checkout-selection';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 
 const VARIATIONS = [
@@ -266,14 +267,66 @@ describe('AddToCart — Mua ngay', () => {
     expect(container.textContent).not.toContain('Đã thêm vào giỏ!');
   });
 
-  it('xoá lựa chọn một phần giỏ còn nhớ từ lần trước để món vừa mua nằm trong đơn thanh toán', async () => {
+  const line = (id: string, variationId: string) => ({ id, variationId, quantity: 1 });
+
+  it('giỏ đã có 3 món cũ: "Mua ngay" món A chỉ thanh toán dòng của A, không kéo cả giỏ sang thanh toán', async () => {
     login();
-    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['old-line'] }));
+    const old = [line('old-1', 'x1'), line('old-2', 'x2'), line('old-3', 'x3')];
+    mocks.addToCart.mockResolvedValue({ items: [...old, line('line-A', 'v1')], itemCount: 4 });
     const { container } = mount();
     await flush();
     click(buyButtons(container)[0]!);
     await flush();
-    expect(sessionStorage.getItem('tubu_checkout_selection')).toBeNull();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    // Đúng cách trang thanh toán đọc lựa chọn: nhớ lại rồi đối chiếu với giỏ thật vừa tải.
+    const cartIds = [...old.map((l) => l.id), 'line-A'];
+    expect(reconcileSelection(recallCheckoutSelection(), cartIds)).toEqual(['line-A']);
+  });
+
+  it('thay lựa chọn một phần giỏ còn nhớ từ lần trước bằng đúng dòng vừa mua', async () => {
+    login();
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['old-1'] }));
+    mocks.addToCart.mockResolvedValue({ items: [line('old-1', 'x1'), line('line-A', 'v1')], itemCount: 2 });
+    const { container } = mount();
+    await flush();
+    click(buyButtons(container)[0]!);
+    await flush();
+    expect(recallCheckoutSelection()).toEqual(['line-A']);
+  });
+
+  it('chọn phân loại khác: chỉ dòng của phân loại đó được thanh toán', async () => {
+    login();
+    mocks.addToCart.mockResolvedValue({ items: [line('line-A', 'v1'), line('line-B', 'v2')], itemCount: 2 });
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', '500ml'));
+    click(buyButtons(container)[0]!);
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+    expect(recallCheckoutSelection()).toEqual(['line-B']);
+  });
+
+  it('giỏ trả về không có dòng của món vừa thêm: để null (thanh toán toàn giỏ), không để lại lựa chọn cũ', async () => {
+    login();
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['old-1'] }));
+    mocks.addToCart.mockResolvedValue({ items: [line('old-1', 'x1')], itemCount: 1 });
+    const { container } = mount();
+    await flush();
+    click(buyButtons(container)[0]!);
+    await flush();
+    expect(recallCheckoutSelection()).toBeNull();
+  });
+
+  it('API không trả danh sách dòng (giỏ rỗng/bản cũ): không vỡ, vẫn sang thanh toán', async () => {
+    login();
+    mocks.addToCart.mockResolvedValue({ itemCount: 1 });
+    const { container } = mount();
+    await flush();
+    click(buyButtons(container)[0]!);
+    await flush();
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    expect(recallCheckoutSelection()).toBeNull();
   });
 
   it('chưa đăng nhập: nhớ phân loại, số lượng và ý định mua ngay rồi sang đăng nhập, quay lại đúng trang sản phẩm', async () => {
