@@ -81,6 +81,9 @@ export interface AdminOrder {
   pointsUsed?: number;
   /** true = CTV lên đơn hộ khách cuối: tiền huỷ/trả hoàn cho khách cuối, không hoàn cho CTV (OrderReversalService.refundEndCustomer). */
   placedForCustomer?: boolean;
+  /** CTV được ghi công / gian hàng giới thiệu — có thì chi tiết đơn tải khối "Giới thiệu & hoa hồng". */
+  referrerUserId?: string | null;
+  storefrontId?: string | null;
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
