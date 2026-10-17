@@ -350,6 +350,163 @@ describe.each([
   });
 });
 
+/** Kho coupon trong bộ nhớ: findUnique/create theo code như unique thật; đo số create đang chạy cùng lúc. */
+function makeCouponStore(opts: { failOn?: string[]; failAll?: boolean } = {}) {
+  const store = new Map<string, { code: string; value: number; endAt: Date }>();
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const create = jest.fn(async ({ data }: { data: { code: string; value: number; endAt: Date; scopeMeta: { userId: string } } }) => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+    if (opts.failAll || opts.failOn?.includes(data.scopeMeta.userId)) throw new Error(`db down ${data.scopeMeta.userId}`);
+    store.set(data.code, { code: data.code, value: data.value, endAt: data.endAt });
+    return {};
+  });
+  const coupon = { findUnique: jest.fn(async ({ where }: { where: { code: string } }) => store.get(where.code) ?? null), create };
+  return { store, create, coupon, maxInFlight: () => maxInFlight };
+}
+
+function spyLoggers(svc: VouchersService) {
+  const logger = (svc as unknown as { logger: { log: () => void; error: () => void } }).logger;
+  return {
+    log: jest.spyOn(logger, 'log').mockImplementation(() => undefined),
+    err: jest.spyOn(logger, 'error').mockImplementation(() => undefined),
+  };
+}
+
+describe('VouchersService.milestoneVouchers — xử lý từng lô song song có giới hạn', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `u${String(i).padStart(3, '0')}`);
+
+  function setup(rows: { userId: string; spent: bigint }[], opts: { failOn?: string[]; failAll?: boolean } = {}) {
+    const k = makeCouponStore(opts);
+    const prisma = { $queryRaw: jest.fn().mockResolvedValue(rows), coupon: k.coupon } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+    return { svc, ...k, ...spyLoggers(svc) };
+  }
+  // u%3==0 → 5tr (200k), ==1 → 3tr (100k), ==2 → 1tr (30k); cứ 7 người có 1 người dưới mốc thấp nhất.
+  const spentOf = (i: number) => BigInt(i % 7 === 6 ? 500_000 : i % 3 === 0 ? 6_000_000 : i % 3 === 1 ? 3_500_000 : 1_200_000);
+  const valueOf = (i: number) => (i % 7 === 6 ? null : i % 3 === 0 ? 200_000 : i % 3 === 1 ? 100_000 : 30_000);
+  const rowsOf = (n: number) => ids(n).map((userId, i) => ({ userId, spent: spentOf(i) }));
+
+  it('25 user: mỗi người đạt mốc nhận đúng một coupon đúng mức, người dưới mốc không nhận, số granted đúng, đồng thời tối đa 10', async () => {
+    const { svc, store, log, maxInFlight } = setup(rowsOf(25));
+    await svc.milestoneVouchers();
+    const expected = ids(25).map((id, i) => ({ id, v: valueOf(i) })).filter((x) => x.v !== null);
+    expect(store.size).toBe(expected.length);
+    for (const { id, v } of expected) {
+      const c = [...store.values()].find((x) => x.code.endsWith(id.toUpperCase()));
+      expect(c?.code).toMatch(/^MILESTONE\d+-\d{4}-\d{2}-/);
+      expect(c?.value).toBe(v);
+    }
+    expect(log).toHaveBeenCalledWith(`Milestone vouchers granted: ${expected.length}`);
+    expect(maxInFlight()).toBeGreaterThan(1);
+    expect(maxInFlight()).toBeLessThanOrEqual(10);
+  });
+
+  it('một grant lỗi ở lô đầu: các lô sau vẫn được cấp, số granted đúng, log user lỗi + một dòng tổng kết', async () => {
+    const rows = ids(35).map((userId) => ({ userId, spent: BigInt(3_500_000) }));
+    const { svc, store, log, err } = setup(rows, { failOn: ['u002'] });
+    await svc.milestoneVouchers();
+    expect(store.size).toBe(34);
+    expect([...store.keys()].some((k) => k.endsWith('U034'))).toBe(true);
+    expect([...store.keys()].some((k) => k.endsWith('U002'))).toBe(false);
+    expect(log).toHaveBeenCalledWith('Milestone vouchers granted: 34');
+    expect(err).toHaveBeenCalledWith('milestoneVouchers lỗi cấp cho user u002: db down u002');
+    const summaries = err.mock.calls.filter((c) => String((c as unknown[])[0]).startsWith('milestoneVouchers lỗi: '));
+    expect(summaries).toHaveLength(1);
+    expect(String((summaries[0] as unknown[])[0])).toContain('1 lượt cấp thất bại, 34 đã cấp');
+  });
+
+  it('trên 20 lỗi: chỉ log 20 dòng từng user, tổng kết đếm đủ', async () => {
+    const rows = ids(40).map((userId) => ({ userId, spent: BigInt(3_500_000) }));
+    const { svc, err } = setup(rows, { failAll: true });
+    await svc.milestoneVouchers();
+    expect(err.mock.calls.filter((c) => String((c as unknown[])[0]).includes('lỗi cấp cho user'))).toHaveLength(20);
+    const summary = err.mock.calls.map((c) => String((c as unknown[])[0])).find((m) => m.startsWith('milestoneVouchers lỗi: '));
+    expect(summary).toContain('40 lượt cấp thất bại, 0 đã cấp');
+  });
+});
+
+describe('VouchersService.secondOrderVouchers — xử lý từng lô song song có giới hạn', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `u${String(i).padStart(3, '0')}`);
+  const FIRST_AT = new Date('2026-10-01T03:00:00Z');
+  const statics = VouchersService as unknown as { SECOND_ORDER_PAGE: number };
+  const originalPage = statics.SECOND_ORDER_PAGE;
+  afterEach(() => {
+    statics.SECOND_ORDER_PAGE = originalPage;
+  });
+
+  /** Mỗi lần gọi $queryRaw trả một trang theo cursor (giống keyset thật: userId > cursor, tối đa SECOND_ORDER_PAGE dòng). */
+  function setup(userIds: string[], opts: { failOn?: string[]; failAll?: boolean } = {}) {
+    const k = makeCouponStore(opts);
+    const cursors: string[] = [];
+    const pageQuery = jest.fn(async (_s: TemplateStringsArray, ...args: unknown[]) => {
+      const cursor = args.find((a): a is string => typeof a === 'string') ?? '';
+      cursors.push(cursor);
+      return userIds.filter((id) => id > cursor).slice(0, statics.SECOND_ORDER_PAGE).map((userId) => ({ userId, firstAt: FIRST_AT }));
+    });
+    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]) };
+    const prisma = {
+      $queryRaw: pageQuery,
+      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+      coupon: k.coupon,
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+    return { svc, cursors, pageQuery, ...k, ...spyLoggers(svc) };
+  }
+
+  it('25 khách: mọi người nhận đúng một mã SECOND-ORDER hạn theo đơn đầu, granted/scanned đúng, đồng thời tối đa 10', async () => {
+    const { svc, store, log, maxInFlight } = setup(ids(25));
+    const result = await svc.secondOrderVouchers();
+    expect(result).toEqual({ granted: 25, scanned: 25 });
+    expect(store.size).toBe(25);
+    for (const id of ids(25)) {
+      const c = store.get(`SECOND-ORDER-${id}`.toUpperCase());
+      expect(c?.value).toBe(30000);
+      expect(c?.endAt.toISOString()).toBe(new Date(FIRST_AT.getTime() + 30 * 864e5).toISOString());
+    }
+    expect(log).toHaveBeenCalledWith('Second-order vouchers granted: 25/25');
+    expect(maxInFlight()).toBeGreaterThan(1);
+    expect(maxInFlight()).toBeLessThanOrEqual(10);
+  });
+
+  it('phân trang keyset vẫn chạy hết các trang, mỗi trang xử lý trọn trước khi sang trang sau', async () => {
+    statics.SECOND_ORDER_PAGE = 12;
+    const { svc, store, cursors } = setup(ids(29));
+    const result = await svc.secondOrderVouchers();
+    expect(result).toEqual({ granted: 29, scanned: 29 });
+    expect(store.size).toBe(29);
+    expect(cursors).toEqual(['', 'u011', 'u023']);
+  });
+
+  it('một grant lỗi: các lô và trang sau vẫn được cấp, không ném, granted đếm đúng, log user lỗi + một dòng tổng kết', async () => {
+    statics.SECOND_ORDER_PAGE = 20;
+    const { svc, store, log, err } = setup(ids(35), { failOn: ['u002'] });
+    const result = await svc.secondOrderVouchers();
+    expect(result).toEqual({ granted: 34, scanned: 35 });
+    expect(store.size).toBe(34);
+    expect([...store.keys()].some((k) => k.endsWith('U034'))).toBe(true);
+    expect(log).toHaveBeenCalledWith('Second-order vouchers granted: 34/35');
+    expect(err).toHaveBeenCalledWith('secondOrderVouchers lỗi cấp cho user u002: db down u002');
+    const summaries = err.mock.calls.filter((c) => String((c as unknown[])[0]).startsWith('secondOrderVouchers lỗi: '));
+    expect(summaries).toHaveLength(1);
+    expect(String((summaries[0] as unknown[])[0])).toContain('1 lượt cấp thất bại, 34 đã cấp');
+  });
+
+  it('trên 20 lỗi: chỉ log 20 dòng từng user, tổng kết đếm đủ, kết quả vẫn là số liệu (không skipped)', async () => {
+    const { svc, err } = setup(ids(40), { failAll: true });
+    const result = await svc.secondOrderVouchers();
+    expect(result).toEqual({ granted: 0, scanned: 40 });
+    expect(err.mock.calls.filter((c) => String((c as unknown[])[0]).includes('lỗi cấp cho user'))).toHaveLength(20);
+    const summary = err.mock.calls.map((c) => String((c as unknown[])[0])).find((m) => m.startsWith('secondOrderVouchers lỗi: '));
+    expect(summary).toContain('40 lượt cấp thất bại, 0 đã cấp');
+  });
+});
+
 describe('VouchersService.milestoneVouchers (§6.6)', () => {
   function setup(rows: { userId: string; spent: bigint }[]) {
     const create = jest.fn().mockResolvedValue({});
