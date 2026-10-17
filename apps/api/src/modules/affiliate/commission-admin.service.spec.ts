@@ -1,6 +1,6 @@
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { CommissionAdminService } from './commission-admin.service';
+import { CommissionAdminService, decodeListCursor, encodeListCursor } from './commission-admin.service';
 import { AFFILIATE_MAX_RATE_KEY } from './commission-rate-csv';
 
 const dec = (n: number | null) => (n === null ? null : new Prisma.Decimal(n));
@@ -172,17 +172,32 @@ describe('CommissionAdminService.listProducts', () => {
   it('keyset: lấy take+1 để biết còn trang; % ra số; đánh dấu hàng đối tác; kèm trần và số biến thể chưa có %', async () => {
     const prisma = listPrisma([row('p1'), row('p2'), row('p3')]);
     const { svc } = make(prisma);
-    const r = await svc.listProducts({ take: 2, cursor: 'p0' });
+    const r = await svc.listProducts({ take: 2, cursor: encodeListCursor({ name: 'SP p0', id: 'p0' }) });
     const args = prisma.product.findMany.mock.calls[0][0];
-    expect(args).toMatchObject({ take: 3, cursor: { id: 'p0' }, skip: 1, orderBy: [{ name: 'asc' }, { id: 'asc' }] });
+    expect(args).toMatchObject({ take: 3, orderBy: [{ name: 'asc' }, { id: 'asc' }] });
+    expect(args).not.toHaveProperty('cursor');
+    expect(args).not.toHaveProperty('skip');
+    expect(args.where.AND).toEqual([{ OR: [{ name: { gt: 'SP p0' } }, { name: 'SP p0', id: { gt: 'p0' } }] }]);
     expect(r.items.map((i) => [i.id, i.isPartner, i.variations[0]!.affiliateRate])).toEqual([
       ['p1', false, 10],
       ['p2', true, null],
     ]);
     expect(r.items[0]).not.toHaveProperty('storefrontId');
-    expect(r.nextCursor).toBe('p2');
+    expect(decodeListCursor(r.nextCursor!)).toEqual({ name: 'SP p2', id: 'p2' });
     expect(r.maxRate).toBe(50);
     expect(r.summary).toEqual({ missing: 7, missingTubu: 5 });
+  });
+
+  it('cursor (tên, id) giữ được dấu tiếng Việt; cursor hỏng → 400, không gọi DB', async () => {
+    const c = encodeListCursor({ name: 'Nước rửa, "đặc biệt"', id: 'ckx1' });
+    expect(c).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(decodeListCursor(c)).toEqual({ name: 'Nước rửa, "đặc biệt"', id: 'ckx1' });
+    const prisma = listPrisma([]);
+    const { svc } = make(prisma);
+    for (const bad of ['p0', 'bnVsbA', Buffer.from('["a"]').toString('base64url'), Buffer.from('["a",""]').toString('base64url'), Buffer.from('[1,2]').toString('base64url')]) {
+      await expect(svc.listProducts({ take: 2, cursor: bad })).rejects.toThrow(BadRequestException);
+    }
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
   });
 
   it('trang cuối → nextCursor null; lọc chưa có % và tìm theo tên không dấu hoặc SKU (escape ký tự LIKE)', async () => {

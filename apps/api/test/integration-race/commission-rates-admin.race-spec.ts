@@ -260,6 +260,25 @@ describe('Admin đặt % hoa hồng CTV (real Postgres)', () => {
     expect(missing.summary.missing).toBeGreaterThanOrEqual(4);
   });
 
+  it('"Tải thêm" khi đang lọc chưa có %: sản phẩm cuối trang vừa được đặt % thì trang sau không nuốt sản phẩm kế tiếp', async () => {
+    const tag = randCode(6);
+    const ids: string[] = [];
+    const vids: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const v = await pancakeVariation(100_000);
+      await prisma.product.update({ where: { id: v.productId }, data: { name: `Nuot ${tag} ${i}` } });
+      await prisma.variation.update({ where: { id: v.id }, data: { sku: `ITNU-${tag}-${i}` } });
+      ids.push(v.productId);
+      vids.push(v.id);
+    }
+    const page1 = await admin.listProducts({ q: `ITNU-${tag}`, missing: true, take: 2 });
+    expect(page1.items.map((p) => p.id)).toEqual([ids[0], ids[1]]);
+    await admin.setVariationRate(adminUserId, vids[1]!, 10);
+    const page2 = await admin.listProducts({ q: `ITNU-${tag}`, missing: true, take: 2, cursor: page1.nextCursor! });
+    expect(page2.items.map((p) => p.id)).toEqual([ids[2], ids[3]]);
+    expect(page2.nextCursor).toBeNull();
+  });
+
   it('đồng bộ Pancake (đổi giá, tồn) không xoá % admin đã đặt', async () => {
     const v = await pancakeVariation(100_000, { stock: 10 });
     const product = await prisma.product.findUniqueOrThrow({ where: { id: v.productId } });

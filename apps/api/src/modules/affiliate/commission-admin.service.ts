@@ -33,6 +33,23 @@ type Db = PrismaService | Prisma.TransactionClient;
 
 const toRate = (d: Prisma.Decimal | null): number | null => (d === null ? null : Number(d));
 
+/** Cursor "Tải thêm" của danh sách % hoa hồng: (tên, id) sản phẩm cuối trang, base64url JSON — web coi là chuỗi mờ. */
+export function encodeListCursor(p: { name: string; id: string }): string {
+  return Buffer.from(JSON.stringify([p.name, p.id]), 'utf8').toString('base64url');
+}
+
+export function decodeListCursor(cursor: string): { name: string; id: string } {
+  try {
+    const v: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'string' && typeof v[1] === 'string' && v[1]) {
+      return { name: v[0], id: v[1] };
+    }
+  } catch {
+    // rơi xuống lỗi chung bên dưới
+  }
+  throw new BadRequestException('Cursor phân trang không hợp lệ — tải lại danh sách.');
+}
+
 /** Mỗi dòng log tối đa ngần này thay đổi — lần nhập lớn tách nhiều dòng thay vì một dòng vài trăm KB. */
 const LOG_CHUNK = 100;
 
@@ -64,12 +81,16 @@ export class CommissionAdminService {
   }
 
   /**
-   * Sản phẩm kèm biến thể để đặt %, sắp theo tên, phân trang keyset (cursor = id sản phẩm cuối trang trước).
+   * Sản phẩm kèm biến thể để đặt %, sắp theo (tên, id), phân trang keyset theo đúng cặp đó: cursor mang (tên, id) của sản phẩm
+   * cuối trang trước, nên trang sau vẫn đúng khi sản phẩm đó đã rời bộ lọc (vd vừa đặt % khi đang lọc "chưa có %"). Cursor
+   * kiểu Prisma `{id}, skip:1` thì khi dòng cursor không còn khớp bộ lọc lại bỏ qua sản phẩm kế tiếp.
    * `missing`: chỉ sản phẩm còn biến thể đang bán chưa có % (NULL — khác 0 là admin cố ý không trả hoa hồng).
    */
   async listProducts(opts: { q?: string; missing?: boolean; cursor?: string; take: number }) {
     const q = opts.q?.trim();
+    const after = opts.cursor ? decodeListCursor(opts.cursor) : null;
     const where: Prisma.ProductWhereInput = {
+      ...(after ? { AND: [{ OR: [{ name: { gt: after.name } }, { name: after.name, id: { gt: after.id } }] }] } : {}),
       ...(q
         ? {
             OR: [
@@ -85,7 +106,6 @@ export class CommissionAdminService {
         where,
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
         take: opts.take + 1,
-        ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
         select: {
           id: true,
           name: true,
@@ -121,7 +141,7 @@ export class CommissionAdminService {
         isPartner: storefrontId !== null,
         variations: variations.map((v) => ({ ...v, affiliateRate: toRate(v.affiliateRate) })),
       })),
-      nextCursor: rows.length > opts.take ? (page[page.length - 1]?.id ?? null) : null,
+      nextCursor: rows.length > opts.take && page.length ? encodeListCursor(page[page.length - 1]!) : null,
       maxRate,
       summary: { missing, missingTubu },
     };
