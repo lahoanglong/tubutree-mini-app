@@ -179,6 +179,9 @@ export class CommunityFeedController {
    * lưu. helmet đặt Cross-Origin-Resource-Policy: same-origin mặc định; miniapp và web khác origin nạp ảnh bằng thẻ img nên
    * route này phải mở cross-origin. Khai báo TRƯỚC `@Get(':id')` cho cùng nhóm route cố định.
    */
+  // Một trang feed là 20 ảnh tải bằng thẻ img, không có token nên đếm theo IP: mức chung 300/phút làm khách chung IP (CGNAT)
+  // bị 429 và vỡ ảnh. Chỉ nâng riêng cho route này.
+  @Throttle({ default: { limit: 1200, ttl: 60_000 } })
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
   @Get('posts/:id/images/:index')

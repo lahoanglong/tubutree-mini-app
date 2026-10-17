@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { StreamableFile } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { RequestMethod } from '@nestjs/common';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
@@ -21,6 +22,15 @@ describe('CommunityFeedController.image (GET feed/posts/:id/images/:index)', () 
     expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(OptionalJwtAuthGuard);
     expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.GET);
     expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe('posts/:id/images/:index');
+  });
+
+  // Một trang feed là 20 ảnh tải bằng thẻ img (không có token nên đếm theo IP): với mức chung 300/phút, vài khách chung IP
+  // (CGNAT) lướt feed là ảnh bị 429 và vỡ. Hạn mức riêng chỉ cho route này; route khác giữ mức toàn cục.
+  it('hạn mức riêng cao hơn mức chung cho route ảnh, các route khác giữ mức toàn cục', () => {
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBe(1200);
+    expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, CommunityFeedController.prototype.getFeed)).toBeUndefined();
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, CommunityFeedController.prototype.getPost)).toBeUndefined();
   });
 
   it('truyền id, chỉ số, người xem và mã v xuống service; trả đúng byte với Content-Type theo ảnh', async () => {
