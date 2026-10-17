@@ -151,3 +151,41 @@ npx eslint <19 file .ts đã sửa từ 107cf5c9>       # 0
 
 Gộp về sau: `community-feed.service.ts` chỉ đổi khối `FEED_INCLUDE.productTags` (thêm `where`) và một dòng import; phiên `lr/community` đang sửa cùng file, có thể chạm khi gộp.
 
+
+## 7. Vòng sửa sau review lượt 2 (APPROVE kèm sửa)
+
+Bước 0: dựng lại `lr-democlean-pg` (5565, `--rm --tmpfs`), `migrate deploy`, drift 0; chạy lại `prisma generate` trong worktree vì một reviewer đã sinh Prisma client qua symlink `node_modules`.
+
+| # | Commit | Sửa |
+|---|---|---|
+| 1 | `06a07cc0` | Runbook 7c: trước `--apply` kiểm không có `.demo-cleanup-apply.txt` (có thì đổi tên); kiểm chạy lại `tee` sang `.demo-cleanup-rerun.txt`, cấm ghi đè file chứa khối hoàn tác |
+| 2 | `efe3e342` | Dòng mang id migration mà điều kiện khác bản demo: bản xem trước in `[ĐIỀU KIỆN ĐÃ SỬA so với bản demo: kiểm tay, dùng --keep-coupon=<mã> nếu là mã thật]`, vẫn là mã demo (`--coupons=expire` vẫn tắt). Thêm: `willExpire` dùng đúng điều kiện của `--apply` (mã đã tắt chưa tới ngày bắt đầu thì không ghi "sẽ TẮT"). Runbook nhánh tương ứng |
+| 3 | `8c7582cd` | `--apply` tắt sản phẩm bằng SQL thô nên `products.updatedAt` giữ nguyên (biến thể và mã không có cột này); khối hoàn tác vốn không đụng `updatedAt`. Race spec: sau apply + hoàn tác, `updatedAt` đúng như trước và danh sách "KIỂM TAY" rỗng (đỏ với bản `updateMany`) |
+| 4 | `cba69c5d` | Runbook hoàn tác: Pancake đã tạo biến thể thật mang SKU gốc thì câu gỡ tiền tố vấp `variations_sku_key`, cả khối dừng trước `COMMIT` (không đổi gì), tech lead bỏ câu SKU rồi chạy lại. Đã chạy thật trên DB throwaway (dưới) |
+| 5 | `7a85296b` | Trần `groupbuy.max_open_per_user` đếm với cùng điều kiện như `listOpen` (`LISTED_GROUP_PRODUCT`: SP đang bán, không phải hàng đối tác). Race: nhóm ẩn trên hàng đã tắt không giữ chỗ (đỏ với bản cũ). Đã biết, ghi runbook: bật lại SP đã tắt thì nhóm cũ còn hạn hiện lại, khách có thể tạm vượt trần tới khi chúng hết hạn |
+| 6 | `4d110a0d` | Mời đánh giá đọc hàng chưa đánh giá kèm trạng thái bán TRƯỚC khi giành đơn: còn hàng chưa đánh giá nhưng đều ngừng bán thì `SKIPPED`, không ghi `reviewInvitedAt` (lượt sau còn mời được nếu hàng bật lại trong cửa sổ 7 ngày). Race: đơn vẫn chưa đánh dấu (đỏ với bản cũ) |
+
+`--expect-db` chỉ so tên DB: giữ nguyên theo quyết định review.
+
+Kiểm chứng (Postgres 5565/`tubutree_it`):
+
+```
+npx jest -c test/integration-race/jest.config.js --runInBand demo-cleanup groupbuy-expiry-notify second-order-review-invite
+Test Suites: 3 passed, 3 total
+Tests:       22 passed, 22 total            (demo-cleanup: 14)
+npx jest src/config/demo-data src/config/go-live src/modules/groupbuy src/modules/lifecycle src/modules/flash-sale src/modules/feed
+Test Suites: 23 passed, 23 total
+Tests:       787 passed, 787 total
+npx tsc --noEmit -p tsconfig.json            # 0 (race spec qua tsconfig tạm: 0)
+npx eslint <8 file .ts đổi từ f2a3cc57>      # 0
+
+# CLI thật: xem trước → --apply → khối hoàn tác qua psql → xem trước
+1. Sản phẩm demo: tìm thấy 44/44, đang bán 44 → sẽ TẮT 44 (isActive=false, không xoá)     # không có "KIỂM TAY"
+Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt 3 mã giảm giá.
+psql -v ON_ERROR_STOP=1 < undo.sql  →  BEGIN, UPDATE 44, UPDATE 48 (x2), UPDATE 1 (x3), COMMIT
+1. Sản phẩm demo: tìm thấy 44/44, đang bán 44 → sẽ TẮT 44 (isActive=false, không xoá)     # vẫn không "KIỂM TAY"; hai bản xem trước giống hệt (trừ dòng DB:)
+
+# hoàn tác khi đã có biến thể thật mang SKU gốc VIS-SR-30
+ERROR:  duplicate key value violates unique constraint "variations_sku_key"   (psql thoát 3, SP demo đang bán vẫn 0)
+xoá biến thể xung đột, chạy lại khối  →  COMMIT, 48 biến thể bật lại, 0 SKU còn tiền tố DEMO-
+```
