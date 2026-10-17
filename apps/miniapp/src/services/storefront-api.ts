@@ -77,16 +77,12 @@ export const createCollection = (dto: { title: string; kind?: 'NORMAL' | 'COMBO'
 export const updateCollection = (id: string, dto: { title?: string; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number }) =>
   api.patch(`/storefront/me/collections/${id}`, dto).then((r) => r.data);
 export const deleteCollection = (id: string) => api.delete(`/storefront/me/collections/${id}`).then((r) => r.data);
-export const reorderCollections = (orderedIds: string[]) => api.post('/storefront/me/collections/reorder', { orderedIds }).then((r) => r.data);
 
 export const addItem = (collectionId: string, dto: { productId: string; variationId?: string; note?: string }) =>
   api.post(`/storefront/me/collections/${collectionId}/items`, dto).then((r) => r.data as StorefrontItemEdit);
 export const updateItem = (id: string, dto: { note?: string; isPinned?: boolean; isHidden?: boolean }) =>
   api.patch(`/storefront/me/items/${id}`, dto).then((r) => r.data);
 export const removeItem = (id: string) => api.delete(`/storefront/me/items/${id}`).then((r) => r.data);
-export const reorderItems = (collectionId: string, orderedIds: string[]) =>
-  api.post(`/storefront/me/collections/${collectionId}/items/reorder`, { orderedIds }).then((r) => r.data);
-
 export const pickerProducts = (search?: string) =>
   api.get('/storefront/me/products', { params: { search } }).then((r) => r.data as PickerProduct[]);
 

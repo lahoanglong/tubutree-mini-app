@@ -89,10 +89,5 @@ export const adminGetTemplates = () =>
 export const createTemplate = (data: { name: string; startMin: number; endMin: number; sortOrder?: number }) =>
   api.post<ShiftTemplate>('/admin/shift-templates', data).then((r) => r.data);
 
-export const updateTemplate = (
-  id: string,
-  data: { name?: string; startMin?: number; endMin?: number; active?: boolean; sortOrder?: number },
-) => api.patch<{ updated: boolean }>(`/admin/shift-templates/${id}`, data).then((r) => r.data);
-
 export const deleteTemplate = (id: string) =>
   api.delete<{ deleted: boolean }>(`/admin/shift-templates/${id}`).then((r) => r.data);
