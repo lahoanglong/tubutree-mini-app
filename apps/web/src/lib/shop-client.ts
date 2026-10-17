@@ -4,6 +4,7 @@ import { apiFetch } from './client-api';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
 import type { FlashItem } from './flash-price';
 import { cartStorefrontSlug } from './cart-key';
+import { formatVnd } from './format-vnd';
 
 export interface CartLine {
   id: string;
@@ -507,6 +508,4 @@ export interface BankQrDTO {
 }
 export const getBankQr = (code: string) => apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);
 
-export function formatVnd(n: number): string {
-  return `${n.toLocaleString('vi-VN')}đ`;
-}
+export { formatVnd };
