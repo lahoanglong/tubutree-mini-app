@@ -1,15 +1,18 @@
 import 'reflect-metadata';
+import { createHash } from 'node:crypto';
 import { ValidationPipe } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { THROTTLER_LIMIT, THROTTLER_TRACKER, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { AffiliateController, LinkClickDto } from './affiliate.controller';
 import { AffiliateService } from './affiliate.service';
+import { hashIp } from '../../common/ip-hash';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 function makeService(
   link: { id: string; targetType: string; targetId: string | null } | null,
   transactionResult: () => Promise<unknown> = () => Promise.resolve([]),
+  secret?: string,
 ) {
   const linkUpdate = jest.fn().mockReturnValue('LINK_UPDATE');
   const clickCreate = jest.fn().mockReturnValue('CLICK_CREATE');
@@ -19,7 +22,8 @@ function makeService(
     affiliateClick: { create: clickCreate },
     $transaction: transaction,
   } as unknown as PrismaService;
-  const svc = new AffiliateService(prisma, {} as never, {} as never, {} as never, {} as never, {} as never);
+  const env = secret === undefined ? undefined : ({ get: () => secret } as never);
+  const svc = new AffiliateService(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, undefined, undefined, env);
   return { svc, linkUpdate, clickCreate, transaction };
 }
 
@@ -70,6 +74,19 @@ describe('AffiliateService.recordLinkClick (D3-06)', () => {
       const days = a.clickCreate.mock.calls.map((c) => (c[0].data as { dedupeDay: string }).dedupeDay);
       expect(days).toEqual(['2026-10-18', '2026-10-19']);
     });
+  });
+
+  it('IP băm bằng HMAC với bí mật của máy chủ: đổi bí mật thì mã đổi, và không phải sha256 trần', async () => {
+    const ipHashFor = async (secret: string | undefined) => {
+      const m = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null }, undefined, secret);
+      await m.svc.recordLinkClick('aB3_x-9', '203.0.113.7', NOW);
+      return (m.clickCreate.mock.calls[0]![0].data as { ipHash: string; visitorId: string }).ipHash;
+    };
+    const withA = await ipHashFor('secret-a');
+    expect(withA).toBe(hashIp('203.0.113.7', 'secret-a', 'affiliate-click'));
+    expect(await ipHashFor('secret-b')).not.toBe(withA);
+    expect(withA).not.toBe(createHash('sha256').update('affiliate-click|203.0.113.7').digest('hex'));
+    expect(await ipHashFor(undefined)).toMatch(/^[0-9a-f]{64}$/); // test/dev không cấu hình: vẫn băm được
   });
 
   it('mã link không tồn tại → không đếm gì, không lỗi', async () => {

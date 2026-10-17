@@ -7,9 +7,12 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, Prisma, type PayoutStatus } from '@prisma/client';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import type { Env } from '../../config/env.validation';
+import { hashIp } from '../../common/ip-hash';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -103,6 +106,8 @@ export class AffiliateService {
     @Optional() private readonly notifications?: NotificationsService,
     // @Optional cùng lý do; AffiliateModule import FlashSaleModule (affiliate.module.spec.ts giữ việc nối này).
     @Optional() private readonly flashSale?: FlashSaleService,
+    // @Optional: ConfigModule là global nên app thật luôn có; test dựng trực tiếp không truyền thì hashIp dùng khoá dev.
+    @Optional() private readonly env?: ConfigService<Env, true>,
   ) {}
 
   async register(userId: string, termsVersion?: string) {
@@ -236,12 +241,12 @@ export class AffiliateService {
   }
 
   /**
-   * Lượt mở link CTV từ phía khách (route công khai, không có userId). Khách chưa biết là ai nên "người xem" là mã băm của IP;
-   * IP thô không lưu. Mỗi (mã link, IP băm, ngày giờ VN) đếm một lần: khoá duy nhất của affiliate_clicks chặn lần thứ hai, và
+   * Lượt mở link CTV từ phía khách (route công khai, không có userId). Khách chưa biết là ai nên "người xem" là mã HMAC của IP
+   * (khoá của máy chủ, xem common/ip-hash.ts); IP thô không lưu. Mỗi (mã link, IP băm, ngày giờ VN) đếm một lần: khoá duy nhất của affiliate_clicks chặn lần thứ hai, và
    * giao dịch hoàn tác luôn cả phần +1 clicks nên không cần đọc bảng (đang đánh dấu @deprecated, chỉ ghi).
    */
   async recordLinkClick(shortCode: string, ip: string, now: Date = new Date()): Promise<{ counted: boolean }> {
-    const ipHash = createHash('sha256').update(`affiliate-click|${ip}`).digest('hex');
+    const ipHash = hashIp(ip, this.env?.get('JWT_ACCESS_SECRET', { infer: true }), 'affiliate-click');
     try {
       const target = await this.trackClick(shortCode, ipHash, ipHash, vnDateKey(now));
       return { counted: target !== null };
