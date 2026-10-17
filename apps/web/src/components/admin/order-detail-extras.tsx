@@ -160,7 +160,7 @@ export function OrderReferralPanel({ order }: { order: AdminOrder }) {
               </dd>
             </div>
           </dl>
-          {r.placedForCustomer && <p className="text-stone-500">CTV lên đơn hộ khách — CTV vẫn hưởng hoa hồng.</p>}
+          {r.placedForCustomer && <p className="text-stone-500">Đơn lên hộ khách — người lên đơn được ghi là người giới thiệu.</p>}
           {r.commissions.length > 0 ? (
             <ul className="space-y-1">
               {r.commissions.map((c) => (
@@ -177,6 +177,8 @@ export function OrderReferralPanel({ order }: { order: AdminOrder }) {
             <p className="text-stone-500">
               {r.selfReferral
                 ? 'Không có hoa hồng: người giới thiệu cũng là người mua.'
+                : r.referrer && r.referrerEligible === false && r.placedForCustomer
+                  ? 'Không có hoa hồng: người lên đơn hộ không phải CTV/đại lý (admin/nhân viên lên hộ không hưởng hoa hồng).'
                 : r.referrer && r.referrerEligible === false
                   ? 'Không có hoa hồng: người giới thiệu không phải CTV/đại lý. Khách thường chia sẻ link chỉ nhận điểm giới thiệu bạn bè.'
                   : r.referrer

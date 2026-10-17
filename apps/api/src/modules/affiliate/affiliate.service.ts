@@ -872,11 +872,9 @@ export class AffiliateService {
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
     // Chỉ CTV/đại lý (affiliate.commission_eligible_roles) hưởng hoa hồng: khách thường chia sẻ link chỉ được thưởng điểm giới
     // thiệu (theo User.referredById, không theo đơn). Xét vai trò lúc đặt đơn — CTV lên đại lý (D3-03) vẫn hưởng. Đơn lên hộ
-    // khách giữ như cũ: route đó đã tự chặn vai trò người lên đơn.
-    if (!order.placedForCustomer) {
-      const referrer = await db.user.findUnique({ where: { id: order.referrerUserId }, select: { role: true } });
-      if (!referrer || !(await this.commissionEligibleRoles()).has(referrer.role)) return;
-    }
+    // khách cũng xét: route lên đơn hộ cho cả ADMIN dùng, admin lên hộ không ăn hoa hồng.
+    const referrer = await db.user.findUnique({ where: { id: order.referrerUserId }, select: { role: true } });
+    if (!referrer || !(await this.commissionEligibleRoles()).has(referrer.role)) return;
 
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({

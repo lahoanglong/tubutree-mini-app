@@ -327,7 +327,7 @@ describe('CommissionAdminService.orderReferral (D3-07)', () => {
     expect(r.commissions[0]).not.toHaveProperty('user');
   });
 
-  it('người giới thiệu là khách thường → referrerEligible=false (giải thích vì sao không có hoa hồng); đơn lên hộ khách → true', async () => {
+  it('người giới thiệu là khách thường → referrerEligible=false (giải thích vì sao không có hoa hồng), kể cả đơn lên hộ khách', async () => {
     const base = { id: 'o1', code: 'TB1', userId: 'u1', referrerUserId: 'f1', storefrontSlug: null, source: null, storefront: null };
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValueOnce({ ...base, placedForCustomer: false }).mockResolvedValueOnce({ ...base, placedForCustomer: true }) },
@@ -336,7 +336,7 @@ describe('CommissionAdminService.orderReferral (D3-07)', () => {
     };
     const { svc } = make(prisma);
     expect(await svc.orderReferral('o1')).toMatchObject({ referrerEligible: false, commissions: [] });
-    expect(await svc.orderReferral('o1')).toMatchObject({ referrerEligible: true });
+    expect(await svc.orderReferral('o1')).toMatchObject({ referrerEligible: false, placedForCustomer: true });
   });
 
   it('đơn không người giới thiệu → referrer null, không tra user; tự giới thiệu (không phải đơn hộ) được đánh dấu', async () => {

@@ -152,6 +152,24 @@ describe('Admin đặt % hoa hồng CTV (real Postgres)', () => {
     expect(ref.commissions).toEqual([expect.objectContaining({ amount: 21_600, status: 'LOCKED', rate: 8 })]);
   });
 
+  it('đơn lên hộ khách: ADMIN lên hộ → không có hoa hồng (khung đơn báo vai trò không hưởng); CTV lên hộ → có như cũ', async () => {
+    const v = await pancakeVariation(150_000);
+    await admin.setVariationRate(adminUserId, v.id, 10);
+
+    const byAdmin = await assistedOrder(adminUserId, v.id, 1);
+    await deliver(byAdmin.id);
+    expect(await prisma.commission.count({ where: { orderId: byAdmin.id } })).toBe(0);
+    expect(await admin.orderReferral(byAdmin.code)).toMatchObject({ placedForCustomer: true, referrerEligible: false, commissions: [] });
+
+    const ctv = await createUser(prisma, { role: 'AFFILIATE', phone: randomPhone() });
+    const byCtv = await assistedOrder(ctv.id, v.id, 1);
+    await deliver(byCtv.id);
+    expect(await prisma.commission.findMany({ where: { orderId: byCtv.id }, select: { affiliateUserId: true, status: true, amount: true } })).toEqual([
+      { affiliateUserId: ctv.id, status: 'LOCKED', amount: 15_000 },
+    ]);
+    expect(await admin.orderReferral(byCtv.code)).toMatchObject({ placedForCustomer: true, referrerEligible: true });
+  });
+
   it('đơn khách có CTV giới thiệu, % đặt bằng CSV và "áp cho chưa có %": hoa hồng theo từng dòng', async () => {
     const ctv = await createUser(prisma, { role: 'AFFILIATE' });
     const buyer = await createUser(prisma);

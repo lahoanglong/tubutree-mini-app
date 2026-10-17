@@ -282,6 +282,12 @@ describe('OrderReferralPanel', () => {
     await flush();
     expect(c.container.textContent).toContain('người giới thiệu không phải CTV/đại lý');
     expect(c.container.textContent).not.toContain('chưa có % hoa hồng');
+
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/referral': { body: { ...REFERRAL, placedForCustomer: true, referrerEligible: false, commissions: [] } } }).fn));
+    const d = mount(<OrderReferralPanel order={order({ id: 'o4', referrerUserId: 'admin1' })} />);
+    await flush();
+    expect(d.container.textContent).toContain('Không có hoa hồng: người lên đơn hộ không phải CTV/đại lý');
+    expect(d.container.textContent).not.toContain('vẫn hưởng hoa hồng');
   });
 
   it('lỗi tải → thông báo + Thử lại', async () => {

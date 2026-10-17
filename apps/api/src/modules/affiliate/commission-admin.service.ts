@@ -365,8 +365,8 @@ export class CommissionAdminService {
     return {
       orderCode: order.code,
       referrer,
-      // Vai trò người giới thiệu (hiện tại) có được hưởng hoa hồng không; đơn lên hộ khách không xét vai trò. null = không có.
-      referrerEligible: referrer ? order.placedForCustomer || eligibleRoles.has(referrer.role) : null,
+      // Vai trò người giới thiệu (hiện tại) có được hưởng hoa hồng không, kể cả đơn lên hộ khách. null = không có.
+      referrerEligible: referrer ? eligibleRoles.has(referrer.role) : null,
       selfReferral: !!order.referrerUserId && order.referrerUserId === order.userId && !order.placedForCustomer,
       placedForCustomer: order.placedForCustomer,
       source: order.source,

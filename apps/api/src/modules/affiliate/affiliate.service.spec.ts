@@ -196,10 +196,15 @@ describe('AffiliateService.createCommissionForOrder — chỉ CTV/đại lý hư
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('đơn lên hộ khách giữ như cũ: không xét vai trò (route lên đơn hộ tự chặn người lên đơn)', async () => {
-    const { create, prisma } = await run(order({ userId: 'ref', placedForCustomer: true }), 'ADMIN');
+  it.each(['ADMIN', 'STAFF'])('đơn %s lên hộ khách → không có hoa hồng (người lên đơn hộ cũng phải là CTV/đại lý)', async (role) => {
+    const { create, prisma } = await run(order({ userId: 'ref', placedForCustomer: true }), role);
+    expect(create).not.toHaveBeenCalled();
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'ref' }, select: { role: true } });
+  });
+
+  it.each(['AFFILIATE', 'DEALER'])('đơn %s lên hộ khách → vẫn có hoa hồng như cũ', async (role) => {
+    const { create } = await run(order({ userId: 'ref', placedForCustomer: true }), role);
     expect(create).toHaveBeenCalledTimes(1);
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
   it('chủ dự án thêm CUSTOMER vào khoá → khách thường hưởng; giá trị khoá hỏng → về mặc định CTV + đại lý', async () => {
@@ -361,6 +366,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
         findUniqueOrThrow: jest
           .fn()
           .mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE', phone: opts.ctvPhone === undefined ? '0911111111' : opts.ctvPhone }),
+        findUnique: jest.fn().mockResolvedValue({ role: opts.role ?? 'AFFILIATE' }),
       },
       variation: { findMany: jest.fn().mockResolvedValue(variations) },
       $executeRaw: executeRaw,
@@ -894,6 +900,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [] }),
       },
       variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1' }]) },
+      user: { findUnique: jest.fn().mockResolvedValue({ role: 'AFFILIATE' }) },
       $executeRaw: txExecuteRaw,
       $queryRaw: jest.fn().mockResolvedValue([]),
     };
