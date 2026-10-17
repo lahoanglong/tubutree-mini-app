@@ -1,7 +1,7 @@
 # Đổi rác lấy quà — một chức năng thay cho Refill, nút Gomdon ở checkout và điểm nhận rời rạc
 
 - **Ngày:** 2026-10-17
-- **Trạng thái:** Bản nháp chờ chủ dự án duyệt. Chưa viết code, chưa có kế hoạch triển khai.
+- **Trạng thái:** Chủ dự án đã duyệt ngày 2026-10-17 ("duyệt hãy làm đi"), kèm các mặc định ở 18.1 câu 1 đến 4 và các quyết định ở 18.2. Kế hoạch triển khai: `docs/superpowers/plans/2026-10-17-recycle-rewards.md`. Chưa viết code sản phẩm.
 - **Phạm vi:** `apps/api` (module mới `waste-exchange`), `apps/miniapp` (trang khách, màn đại lý), `apps/web` (tab admin), `packages/shared-types`. Gỡ `/refill`, nút Gomdon ở checkout và danh mục quà cứng trong mã.
 - **Mockup:** 16 ảnh chụp màn hình trong `docs/superpowers/specs/assets/2026-10-17-recycle-rewards/` (mini app rộng 390 px, admin rộng 1280 px; danh sách ở mục 19). Số liệu, tên cửa hàng và câu chữ trong ảnh là minh hoạ; khi ảnh và văn bản khác nhau thì văn bản thắng. Tên màn dùng trong tài liệu này: Trang Đổi rác, Chọn món, Chọn cách giao, Điểm nhận gần bạn, Mã QR, Theo dõi, Đã cộng điểm, Kho quà, Lối vào từ Vườn, Đại lý nhận hàng, Admin Hàng nhận, Admin Điểm nhận.
 - **Cách đọc:** mục 1 đến 9 là phần sản phẩm (ý định, trải nghiệm khách, luật điểm, điểm nhận, ba cách giao, quà, admin). Mục 10 đến 13, 15 và 16 là phần cách làm trong code: sổ điểm, dữ liệu, thu kèm đơn qua Gomdon, việc gỡ Refill, API, giao diện. Mục 14 là pháp lý và việc phải làm với bên ngoài. Mục 17 là ra mắt và kiểm thử. Mục 18 liệt kê câu hỏi còn mở, các quyết định tôi tự đưa ra (chủ dự án đổi được) và điều chưa kiểm chứng. Mục 19 là danh sách ảnh. Mọi con số và tên khoá là đề xuất để chạy thử, trừ phần mục 3 ghi là chủ dự án đã chốt.
@@ -50,7 +50,7 @@ Khách ở Hà Nội, Cao Bằng và các tỉnh xa kho TP.HCM là bài toán kh
 4. **Đại lý:** một bảng quy đổi trung tâm; "ưu đãi riêng" của đại lý tự chịu tiền và tách khỏi sổ điểm; Tubu đặt hạn mức điểm theo tháng cho từng đại lý; đợt 1 không trả phí tiền mặt, chỉ ghi số lượng.
 5. **Pin** không nhận ở đợt 1 (hiện "Sắp nhận"). **Bỏ `/refill`**; vỏ Tubu thành một món trong danh mục chung.
 
-Thứ tự làm do chủ dự án đặt: dọn backlog nightly (đã làm xong, PR #15 chờ chủ dự án gộp), mockup (xong), spec này, rồi kế hoạch và code.
+Thứ tự làm do chủ dự án đặt: dọn backlog nightly (đã làm xong, PR #15 đã gộp vào main), mockup (xong), spec này (đã duyệt), rồi kế hoạch và code.
 
 ## 4. Trải nghiệm của khách
 
