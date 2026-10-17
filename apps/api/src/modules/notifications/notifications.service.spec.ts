@@ -172,16 +172,20 @@ describe('NotificationsService.notify — gộp tin theo cửa sổ thời gian 
   beforeEach(() => jest.useFakeTimers().setSystemTime(NOW));
   afterEach(() => jest.useRealTimers());
 
-  function build(seen: { id: string } | null) {
-    const findFirst = jest.fn().mockResolvedValue(seen);
+  function build(seen: { id: string } | null, seenInTx: { id: string } | null = seen) {
+    const findFirst = jest.fn().mockResolvedValue(seenInTx);
+    const quickFindFirst = jest.fn().mockResolvedValue(seen);
     const create = jest.fn().mockResolvedValue({ id: 'log-1' });
     const tx = { $executeRaw: jest.fn().mockResolvedValue(1), notificationLog: { findFirst, create } };
+    const transaction = jest.fn((fn: (t: typeof tx) => unknown) => fn(tx));
+    const templateFind = jest.fn().mockResolvedValue({ code: 'C', channel: 'INAPP', bodyTemplate: 'x', zaloTemplateId: null });
     const { prisma } = makePrisma({
-      notificationTemplate: { findUnique: jest.fn().mockResolvedValue({ code: 'C', channel: 'INAPP', bodyTemplate: 'x', zaloTemplateId: null }) },
-      $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+      notificationTemplate: { findUnique: templateFind },
+      notificationLog: { create: jest.fn(), findFirst: quickFindFirst, findMany: jest.fn(), updateMany: jest.fn() },
+      $transaction: transaction,
     });
     const svc = new NotificationsService(prisma, { sendTemplate: jest.fn() } as unknown as ZnsClient, makeAnalytics());
-    return { svc, findFirst, create };
+    return { svc, findFirst, quickFindFirst, create, transaction, templateFind };
   }
 
   it('đã có tin cùng khoá trong cửa sổ → không ghi tin thứ hai', async () => {
@@ -216,6 +220,14 @@ describe('NotificationsService.notify — gộp tin theo cửa sổ thời gian 
     const { svc, findFirst } = build(null);
 
     await svc.notify('u1', 'C', {}, { dedupeKey: 'referral:abc' });
+
+    expect(findFirst.mock.calls[0][0].where).not.toHaveProperty('sentAt');
+  });
+
+  it.each([0, -5, Number.NaN])('dedupeWithinMs = %s không phải cửa sổ hợp lệ → chặn vĩnh viễn như khi bỏ trống', async (ms) => {
+    const { svc, findFirst } = build(null);
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'referral:abc', dedupeWithinMs: ms });
 
     expect(findFirst.mock.calls[0][0].where).not.toHaveProperty('sentAt');
   });

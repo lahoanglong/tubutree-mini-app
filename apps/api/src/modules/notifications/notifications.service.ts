@@ -55,7 +55,8 @@ export class NotificationsService {
    * `dedupeKey`: tin gắn với một sự kiện chỉ xảy ra một lần (vd một dòng sổ điểm) — gọi lại với cùng khoá cho cùng khách thì
    * không ghi/gửi lần hai. Khoá nằm trong payload, kiểm và ghi dưới khoá advisory theo (khách, khoá) nên hai lần gọi song song
    * cũng chỉ một lần thắng. `dedupeWithinMs`: khoá chỉ chặn khi tin trước còn trong chừng này mili giây (gộp tin lặp theo
-   * thời gian, vd "bài của bạn có người thích" tối đa một tin mỗi giờ); bỏ trống thì chặn vĩnh viễn như trước.
+   * thời gian, vd "bài của bạn có người thích" tối đa một tin mỗi giờ). Chỉ số dương mới là cửa sổ hợp lệ; bỏ trống, 0, âm
+   * hay NaN đều chặn vĩnh viễn như trước (không bao giờ hiểu nhầm thành "không chặn").
    */
   async notify(
     userId: string,
@@ -79,6 +80,7 @@ export class NotificationsService {
     }
     const body = tpl ? this.render(tpl.bodyTemplate, data) : MISSING_TEMPLATE_BODY;
     const dedupeKey = opts.dedupeKey;
+    const withinMs = opts.dedupeWithinMs != null && opts.dedupeWithinMs > 0 ? opts.dedupeWithinMs : null;
     const inAppLog = dedupeKey
       ? await this.prisma.$transaction(async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`notify:${userId}:${dedupeKey}`}))`;
@@ -87,7 +89,7 @@ export class NotificationsService {
               userId,
               channel: 'INAPP',
               payload: { path: ['dedupeKey'], equals: dedupeKey },
-              ...(opts.dedupeWithinMs ? { sentAt: { gte: new Date(Date.now() - opts.dedupeWithinMs) } } : {}),
+              ...(withinMs != null ? { sentAt: { gte: new Date(Date.now() - withinMs) } } : {}),
             },
             select: { id: true },
           });
