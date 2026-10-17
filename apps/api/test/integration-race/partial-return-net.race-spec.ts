@@ -42,6 +42,8 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
   });
 
   describe('milestoneVouchers', () => {
+    // Cron voucher mốc chỉ xét user thật (SĐT đã xác thực hoặc zaloId Zalo), nên người dùng thử nghiệm phải có SĐT.
+    const realUser = () => createUser(prisma, { phone: `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}` });
     async function milestoneCoupons(userId: string) {
       const rows = await prisma.coupon.findMany({
         where: { scope: 'USER_GROUP', scopeMeta: { path: ['userId'], equals: userId } },
@@ -65,7 +67,7 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
     }
 
     it('đạt mốc 1tr chỉ nhờ phần đã trả → KHÔNG cấp', async () => {
-      const u = await createUser(prisma);
+      const u = await realUser();
       const o = await delivered(u.id, 1_200_000);
       await partialReturn(o.id, u.id, 250_000);
       await vouchers.milestoneVouchers();
@@ -73,7 +75,7 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
     });
 
     it('phí ship hoàn cũng được trừ', async () => {
-      const u = await createUser(prisma);
+      const u = await realUser();
       const o = await delivered(u.id, 1_000_000);
       await partialReturn(o.id, u.id, null, 30_000);
       await vouchers.milestoneVouchers();
@@ -81,7 +83,7 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
     });
 
     it('trả một phần nhưng vẫn >= mốc → vẫn cấp đúng mốc', async () => {
-      const u = await createUser(prisma);
+      const u = await realUser();
       const o = await delivered(u.id, 3_500_000);
       await partialReturn(o.id, u.id, 400_000, 20_000); // ròng 3.08tr → mốc 3tr
       await vouchers.milestoneVouchers();
@@ -91,14 +93,14 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
     });
 
     it('đơn không trả → hành vi cũ', async () => {
-      const u = await createUser(prisma);
+      const u = await realUser();
       await delivered(u.id, 1_000_000);
       await vouchers.milestoneVouchers();
       expect((await milestoneCoupons(u.id)).map((x) => x.value)).toEqual([30_000]);
     });
 
     it('yêu cầu REQUESTED / REJECTED chưa hoàn tiền → không trừ', async () => {
-      const u = await createUser(prisma);
+      const u = await realUser();
       const o = await delivered(u.id, 1_000_000);
       await partialReturn(o.id, u.id, 500_000, 0, 'REQUESTED');
       await partialReturn(o.id, u.id, 500_000, 0, 'REJECTED');
@@ -107,7 +109,7 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
     });
 
     it('nhiều đơn, nhiều lần trả: cộng ròng toàn bộ', async () => {
-      const u = await createUser(prisma);
+      const u = await realUser();
       const a = await delivered(u.id, 600_000);
       const b = await delivered(u.id, 600_000);
       await delivered(u.id, 1_900_000);
@@ -120,7 +122,7 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
     });
 
     it('hoàn vượt tổng (dữ liệu lệch) → kẹp 0, không lỗi và không cấp', async () => {
-      const u = await createUser(prisma);
+      const u = await realUser();
       const o = await delivered(u.id, 500_000);
       await partialReturn(o.id, u.id, 400_000, 200_000);
       await vouchers.milestoneVouchers();
