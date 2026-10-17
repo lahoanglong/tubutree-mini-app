@@ -9,24 +9,32 @@ interface TaggedProduct {
   name: string;
 }
 
-/** Chữ so khớp: bỏ dấu, hoa/thường, dấu cách và ký tự lạ ("Nước rửa-chén" = "nuoc rua chen"). */
-const key = (s: string) => foldVietnamese(s).replace(/[^a-z0-9]/g, '');
+/** Các từ đã bỏ dấu, viết thường ("Nước rửa-chén" → nuoc, rua, chen). So khớp theo TỪ để không khớp vắt qua ranh giới từ. */
+const words = (s: string) => foldVietnamese(s).split(/[^a-z0-9]+/).filter(Boolean);
 
 /** Hashtag ngắn hơn ngưỡng này chỉ khớp khi trùng hẳn: "chén" là một đoạn của "Nước rửa chén", không phải cùng một thứ. */
-const MIN_CONTAINED_LENGTH = 6;
+const MIN_PREFIX_LENGTH = 6;
 
 /**
- * Bỏ hashtag nhắc đúng sản phẩm đã gắn thẻ (trùng tên, trùng slug, hoặc nằm trọn trong tên sản phẩm) — thẻ sản phẩm đã
- * nói điều đó, thêm chip nữa chỉ tốn chỗ ở thẻ bài.
+ * Hashtag nhắc đúng sản phẩm: trùng hẳn tên/slug (không phân biệt dấu cách, gạch nối), hoặc là phần ĐẦU của tên gọi theo
+ * nguyên từ ("Nước rửa chén" của "Nước rửa chén sinh học" là cách gọi tắt của chính sản phẩm). Đoạn giữa/cuối ("Sinh học")
+ * hay đoạn vắt qua ranh giới từ ("Thương" trong "giặt hương") là chủ đề riêng, giữ lại.
+ */
+function namesProduct(tagWords: readonly string[], productWords: readonly string[]): boolean {
+  if (tagWords.length === 0 || tagWords.length > productWords.length) return false;
+  const tagKey = tagWords.join('');
+  if (tagKey === productWords.join('')) return true;
+  return tagKey.length >= MIN_PREFIX_LENGTH && tagWords.every((w, i) => w === productWords[i]);
+}
+
+/**
+ * Bỏ hashtag nhắc đúng sản phẩm đã gắn thẻ — thẻ sản phẩm đã nói điều đó, thêm chip nữa chỉ tốn chỗ ở thẻ bài.
  */
 export function dedupeTagsAgainstProducts<T extends HashTag>(tags: readonly T[], products: readonly TaggedProduct[]): T[] {
   if (products.length === 0) return [...tags];
-  const names = products.map((p) => key(p.name));
-  const slugs = products.map((p) => key(p.slug));
+  const productForms = products.flatMap((p) => [words(p.name), words(p.slug)]);
   return tags.filter((t) => {
-    const forms = [key(t.name), key(t.slug)].filter((k) => k.length > 0);
-    return !forms.some(
-      (f) => slugs.includes(f) || names.some((n) => n === f || (f.length >= MIN_CONTAINED_LENGTH && n.includes(f))),
-    );
+    const forms = [words(t.name), words(t.slug)];
+    return !forms.some((f) => productForms.some((pf) => namesProduct(f, pf)));
   });
 }
