@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
+import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // BUYERWEB-15: khách bấm "Thêm vào giỏ" khi chưa đăng nhập phải quay lại đúng sản phẩm và món đó được thêm nốt.
 // BUYERWEB-9: tồn kho trong HTML là bản ISR cũ; trang hỏi lại tồn kho thật.
@@ -241,5 +242,171 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     await flush();
     expect(container.textContent).not.toContain('Giờ vàng');
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 150.000đ');
+  });
+});
+
+// D5-04: "Mua ngay" + thanh CTA dính đáy trên điện thoại.
+describe('AddToCart — Mua ngay', () => {
+  const buyButtons = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === 'Mua ngay' || b.textContent === 'Đang xử lý…');
+  const bar = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!;
+  const login = () => {
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+  };
+
+  it('đã đăng nhập: thêm vào giỏ rồi chuyển thẳng tới thanh toán, không dừng lại báo "Đã thêm"', async () => {
+    login();
+    const { container } = mount();
+    await flush();
+    click(container.querySelector('button[aria-label="Tăng số lượng"]'));
+    click(buyButtons(container)[0]!);
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 2);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    expect(container.textContent).not.toContain('Đã thêm vào giỏ!');
+  });
+
+  it('xoá lựa chọn một phần giỏ còn nhớ từ lần trước để món vừa mua nằm trong đơn thanh toán', async () => {
+    login();
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['old-line'] }));
+    const { container } = mount();
+    await flush();
+    click(buyButtons(container)[0]!);
+    await flush();
+    expect(sessionStorage.getItem('tubu_checkout_selection')).toBeNull();
+  });
+
+  it('chưa đăng nhập: nhớ phân loại, số lượng và ý định mua ngay rồi sang đăng nhập, quay lại đúng trang sản phẩm', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', '500ml'));
+    click(container.querySelector('button[aria-label="Tăng số lượng"]'));
+    click(buyButtons(container)[0]!);
+    expect(mocks.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fdau-goi');
+    expect(JSON.parse(sessionStorage.getItem('tubu_pending_add')!)).toMatchObject({ variationId: 'v2', quantity: 2, buyNow: true });
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
+
+  it('đăng nhập xong quay lại có món "mua ngay" đang chờ: thêm vào giỏ rồi đi tiếp tới thanh toán', async () => {
+    sessionStorage.setItem('tubu_pending_add', JSON.stringify({ variationId: 'v2', quantity: 2, buyNow: true, at: Date.now() }));
+    login();
+    mount();
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 2);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+  });
+
+  it('món chờ thêm giỏ thường (không phải mua ngay) vẫn dừng ở trang sản phẩm', async () => {
+    sessionStorage.setItem('tubu_pending_add', JSON.stringify({ variationId: 'v2', quantity: 2, at: Date.now() }));
+    login();
+    mount();
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 2);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('API từ chối (hết hàng): ở lại trang, hiện lời nhắn, nút mở lại để thử tiếp', async () => {
+    login();
+    mocks.addToCart.mockRejectedValue(new Error('Chỉ còn 1 sản phẩm trong kho.'));
+    const { container } = mount();
+    await flush();
+    click(buyButtons(container)[0]!);
+    await flush();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Chỉ còn 1 sản phẩm trong kho.');
+    expect(buyButtons(container)[0]!.disabled).toBe(false);
+  });
+
+  it('đang xử lý: cả "Thêm vào giỏ" và "Mua ngay" khoá, tránh bấm đôi làm gấp đôi số lượng', async () => {
+    login();
+    let release: (v: unknown) => void = () => {};
+    mocks.addToCart.mockImplementation(() => new Promise((r) => (release = r)));
+    const { container } = mount();
+    await flush();
+    click(buyButtons(container)[0]!);
+    await flush(2);
+    expect(buyButtons(container)[0]!.textContent).toBe('Đang xử lý…');
+    expect(buyButtons(container)[0]!.disabled).toBe(true);
+    expect(addButton(container).disabled).toBe(true);
+    release(CART);
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('hết hàng: "Mua ngay" khoá', async () => {
+    login();
+    mocks.getProductStock.mockResolvedValue({ v1: 0 });
+    const { container } = mount([VARIATIONS[0]!]);
+    await flush();
+    expect(buyButtons(container).every((b) => b.disabled)).toBe(true);
+  });
+
+  it('đang khôi phục phiên: "Mua ngay" tạm khoá, không đẩy khách sang đăng nhập', async () => {
+    mocks.auth = { status: 'idle', initialized: false, user: null };
+    const { container } = mount();
+    await flush();
+    expect(buyButtons(container)[0]!.disabled).toBe(true);
+    click(buyButtons(container)[0]!);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('gian hàng tạm nghỉ: không có "Mua ngay" và không có thanh dính', async () => {
+    const r = render(<AddToCart slug="dau-goi" variations={VARIATIONS} blockedReason="Tạm nghỉ." />);
+    mounted.push(r);
+    await flush();
+    expect(buyButtons(r.container)).toHaveLength(0);
+    expect(r.container.querySelector('[data-testid="sticky-bar"]')).toBeNull();
+  });
+
+  describe('thanh CTA dính đáy (điện thoại)', () => {
+    it('hiện giá theo phân loại và số lượng đang chọn, kèm "Thêm vào giỏ" và "Mua ngay"', async () => {
+      const { container } = mount();
+      await flush();
+      expect(bar(container).textContent).toContain('150.000đ');
+      click(container.querySelector('button[aria-label="Tăng số lượng"]'));
+      click(container.querySelector('button[aria-label="Tăng số lượng"]'));
+      expect(bar(container).textContent).toContain('450.000đ'); // 150.000đ × 3
+      click(byText(container, 'button', '500ml'));
+      expect(bar(container).textContent).toContain('300.000đ'); // đổi phân loại thì số lượng về 1
+      expect(byText(bar(container), 'button', 'Thêm vào giỏ')).not.toBeNull();
+      expect(byText(bar(container), 'button', 'Mua ngay')).not.toBeNull();
+    });
+
+    it('nút "Mua ngay" trên thanh dính làm đúng việc của nút trong trang', async () => {
+      login();
+      const { container } = mount();
+      await flush();
+      click(byText(bar(container), 'button', 'Mua ngay'));
+      await flush();
+      expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
+      expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    });
+
+    it('nút "Thêm vào giỏ" trên thanh dính thêm giỏ và báo ngay trên thanh (không phải cuộn lên mới thấy)', async () => {
+      login();
+      const { container } = mount();
+      await flush();
+      click(byText(bar(container), 'button', 'Thêm vào giỏ'));
+      await flush();
+      expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
+      expect(bar(container).textContent).toContain('Đã thêm vào giỏ!');
+      expect(mocks.push).not.toHaveBeenCalled();
+    });
+
+    it('hết hàng: thanh dính chỉ còn một nút "Hết hàng" đã khoá', async () => {
+      mocks.getProductStock.mockResolvedValue({ v1: 0 });
+      const { container } = mount([VARIATIONS[0]!]);
+      await flush();
+      const buttons = Array.from(bar(container).querySelectorAll('button'));
+      expect(buttons.map((b) => b.textContent)).toEqual(['Hết hàng']);
+      expect(buttons[0]!.disabled).toBe(true);
+    });
+
+    it('vùng chạm 44px và mọi nút có tên (cả trong trang lẫn trên thanh dính)', async () => {
+      const { container } = mount();
+      await flush();
+      expect(smallTouchTargets(container)).toEqual([]);
+      expect(unnamedControls(container)).toEqual([]);
+    });
   });
 });

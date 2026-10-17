@@ -100,6 +100,16 @@ describe('món chờ thêm vào giỏ', () => {
     expect(sessionStorage.getItem('tubu_pending_add')).toBeNull();
   });
 
+  it('"Mua ngay" khi chưa đăng nhập: nhớ cờ buyNow để sau đăng nhập đi tiếp tới thanh toán', () => {
+    rememberPendingAdd({ variationId: 'v2', quantity: 1, buyNow: true });
+    expect(takePendingAdd(['v2'])).toEqual({ variationId: 'v2', quantity: 1, buyNow: true });
+  });
+
+  it('món thêm giỏ thường không mang cờ buyNow', () => {
+    rememberPendingAdd({ variationId: 'v2', quantity: 1 });
+    expect(takePendingAdd(['v2'])).not.toHaveProperty('buyNow');
+  });
+
   it('số lượng hỏng thì về 1', () => {
     sessionStorage.setItem('tubu_pending_add', JSON.stringify({ variationId: 'v1', quantity: -4, at: Date.now() }));
     expect(takePendingAdd(['v1'])).toEqual({ variationId: 'v1', quantity: 1 });

@@ -42,3 +42,10 @@
 html[data-tenant-host] [data-site-search] {
   display: none;
 }
+
+/* StickyActionBar (giỏ, thanh toán, chi tiết sản phẩm) che đáy trang trên điện thoại: chừa đúng chiều cao thanh dưới chân trang. */
+@media (max-width: 767px) {
+  body.has-sticky-bar {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+}
