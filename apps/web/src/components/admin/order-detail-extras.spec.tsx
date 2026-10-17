@@ -225,7 +225,7 @@ describe('OrderInvoicePanel', () => {
   });
 });
 
-// D3-07: CSKH/kế toán không tra được đơn do CTV nào giới thiệu và hoa hồng bao nhiêu.
+// D3-07: admin không tra được đơn do CTV nào giới thiệu và hoa hồng bao nhiêu.
 describe('OrderReferralPanel', () => {
   const REFERRAL = {
     orderCode: 'TB-500',
@@ -268,7 +268,7 @@ describe('OrderReferralPanel', () => {
     vi.stubGlobal('fetch', vi.fn(m.fn));
     const a = mount(<OrderReferralPanel order={order({ referrerUserId: 'ctv1' })} />);
     await flush();
-    expect(a.container.textContent).toContain('chưa có % hoa hồng hoặc bị chặn CTV');
+    expect(a.container.textContent).toContain('chưa có % hoa hồng, bị chặn CTV, hoặc là hàng ký gửi của chính người giới thiệu');
     expect(a.container.textContent).toContain('chỉ áp cho đơn mới');
 
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/referral': { body: { ...REFERRAL, selfReferral: true, commissions: [] } } }).fn));

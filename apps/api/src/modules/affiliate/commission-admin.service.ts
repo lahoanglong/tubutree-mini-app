@@ -315,9 +315,9 @@ export class CommissionAdminService {
   }
 
   /**
-   * Người giới thiệu + hoa hồng của một đơn (D3-07) cho CSKH/kế toán tra khi CTV hỏi "đơn X có hoa hồng không".
+   * Người giới thiệu + hoa hồng của một đơn (D3-07) để admin tra khi CTV hỏi "đơn X có hoa hồng không" (route chỉ ADMIN).
    * `referrer` là người được ghi công trên đơn; hoa hồng có thể thiếu dù có người giới thiệu (hàng chưa có %, bị chặn CTV,
-   * tự giới thiệu) — `commissions` rỗng trong các trường hợp đó.
+   * hàng ký gửi của chính người giới thiệu, tự giới thiệu) — `commissions` rỗng trong các trường hợp đó.
    */
   async orderReferral(orderIdOrCode: string) {
     const order = await this.prisma.order.findFirst({
