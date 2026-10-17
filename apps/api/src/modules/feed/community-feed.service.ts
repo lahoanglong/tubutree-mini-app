@@ -677,9 +677,9 @@ export class CommunityFeedService {
   }
 
   /**
-   * Báo chủ bài khi người khác thích/bình luận (mọi loại bài; câu trả lời cho QUESTION đã có tin riêng). Thích và bình luận
-   * dùng chung một khoá gộp theo bài nên một bài viral cũng chỉ làm điện thoại tác giả rung một lần mỗi cửa sổ. Không bao giờ
-   * làm hỏng thao tác chính.
+   * Báo chủ bài khi người khác thích/bình luận (mọi loại bài; câu trả lời cho QUESTION đã có tin riêng). Mỗi loại một khoá gộp
+   * theo bài: một bài viral cũng chỉ làm điện thoại tác giả rung một lần mỗi cửa sổ cho mỗi loại, và một lượt thích không chặn
+   * tin bình luận (bình luận mới là thứ tác giả cần trả lời). Không bao giờ làm hỏng thao tác chính.
    */
   private async notifyAuthorOfActivity(
     post: { id: string; userId: string },
@@ -692,7 +692,7 @@ export class CommunityFeedService {
       const windowMs = await this.authorNotifyWindowMs();
       if (windowMs === null) return;
       await this.notifications?.notify(post.userId, template, await buildData(), {
-        dedupeKey: `post-activity:${post.id}`,
+        dedupeKey: `${template === 'COMMUNITY_POST_LIKED' ? 'post-like' : 'post-comment'}:${post.id}`,
         dedupeWithinMs: windowMs,
       });
     } catch (err) {

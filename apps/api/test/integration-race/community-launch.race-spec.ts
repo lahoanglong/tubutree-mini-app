@@ -99,7 +99,7 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
   });
 
   describe('gộp tin tương tác theo bài', () => {
-    it('8 người thả tim cùng lúc → đúng MỘT tin cho chủ bài; bình luận ngay sau đó cũng bị gộp; hết cửa sổ thì có tin mới', async () => {
+    it('8 người thả tim cùng lúc → đúng MỘT tin; một lượt thích không chặn tin bình luận; bình luận gộp với nhau; hết cửa sổ thì có tin mới', async () => {
       const author = await createUser(prisma);
       const p = await post(author.id, { kind: 'SHOWCASE', title: 'Ban công IT' });
       const fans = await Promise.all(Array.from({ length: 8 }, () => createUser(prisma)));
@@ -109,14 +109,17 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
       expect(await logs(author.id, 'COMMUNITY_POST_LIKED')).toHaveLength(1);
 
       await feed.addComment(fans[0]!.id, 'CUSTOMER', p.id, 'đẹp quá');
-      expect(await logs(author.id, 'COMMUNITY_POST_COMMENTED')).toHaveLength(0);
+      const first = await logs(author.id, 'COMMUNITY_POST_COMMENTED');
+      expect(first).toHaveLength(1);
+      expect(JSON.stringify(first[0]!.payload)).toContain('Ban công IT');
+
+      await feed.addComment(fans[1]!.id, 'CUSTOMER', p.id, 'cho mình hỏi giống cây');
+      expect(await logs(author.id, 'COMMUNITY_POST_COMMENTED')).toHaveLength(1);
 
       // Tin cũ hơn cửa sổ 60 phút không còn chặn.
       await prisma.notificationLog.updateMany({ where: { userId: author.id }, data: { sentAt: new Date(Date.now() - 2 * HOUR) } });
-      await feed.addComment(fans[1]!.id, 'CUSTOMER', p.id, 'cho mình hỏi giống cây');
-      const commented = await logs(author.id, 'COMMUNITY_POST_COMMENTED');
-      expect(commented).toHaveLength(1);
-      expect(JSON.stringify(commented[0]!.payload)).toContain('Ban công IT');
+      await feed.addComment(fans[2]!.id, 'CUSTOMER', p.id, 'bao lâu thì ra hoa');
+      expect(await logs(author.id, 'COMMUNITY_POST_COMMENTED')).toHaveLength(2);
     });
 
     it('bài của người khác không lẫn: mỗi bài một khoá gộp riêng', async () => {

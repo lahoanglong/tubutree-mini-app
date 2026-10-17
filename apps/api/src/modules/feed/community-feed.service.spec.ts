@@ -2396,7 +2396,7 @@ describe('CommunityFeedService — báo tác giả khi bài có tương tác (D4
         'author',
         'COMMUNITY_POST_LIKED',
         { title: 'Góc ban công', post_id: 'p1' },
-        { dedupeKey: 'post-activity:p1', dedupeWithinMs: HOUR_MS },
+        { dedupeKey: 'post-like:p1', dedupeWithinMs: HOUR_MS },
       );
     });
 
@@ -2456,7 +2456,7 @@ describe('CommunityFeedService — báo tác giả khi bài có tương tác (D4
         'author',
         'COMMUNITY_POST_COMMENTED',
         { author: 'Lan', title: 'Góc ban công', post_id: 'p1' },
-        { dedupeKey: 'post-activity:p1', dedupeWithinMs: HOUR_MS },
+        { dedupeKey: 'post-comment:p1', dedupeWithinMs: HOUR_MS },
       );
     });
 
@@ -2501,7 +2501,7 @@ describe('CommunityFeedService — báo tác giả khi bài có tương tác (D4
 
       await makeSvc(prisma, undefined, notify, config).toggleReaction('u1', 'p1');
 
-      expect(notify.notify.mock.calls[0][3]).toEqual({ dedupeKey: 'post-activity:p1', dedupeWithinMs: 15 * 60_000 });
+      expect(notify.notify.mock.calls[0][3]).toEqual({ dedupeKey: 'post-like:p1', dedupeWithinMs: 15 * 60_000 });
     });
 
     it('0 = tắt tin tương tác (cả thích lẫn bình luận)', async () => {
