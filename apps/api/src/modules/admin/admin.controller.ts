@@ -35,6 +35,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { ADMIN_ORDER_STATUSES, PANCAKE_FILTERS, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { DEALER_PRICE_CSV_MAX_LENGTH } from './dealer-price-import';
+import { soldExternalRowsOrThrow } from './sold-external-csv';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -377,22 +378,6 @@ export class SetUserRoleDto {
   @IsOptional() @IsString() @MaxLength(100) tierId?: string;
 }
 
-/**
- * Parse CSV "sku,số" (phân tách , ; hoặc tab); bỏ dòng header/số không hợp lệ. Chỉ còn dùng cho "đã bán ngoài sàn" — giá sỉ
- * đại lý đi bằng parser chặt có xem trước (dealer-price-import.ts), vì `185.000` ở đây thành 185.
- */
-function parseSkuNumberCsv(csv: string): { sku: string; price: number }[] {
-  return csv
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [sku, priceRaw] = line.split(/[,;\t]/);
-      return { sku: (sku ?? '').trim(), price: Number((priceRaw ?? '').replace(/[^\d.-]/g, '')) };
-    })
-    .filter((r) => r.sku && Number.isFinite(r.price) && r.price > 0);
-}
-
 @Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
@@ -622,9 +607,7 @@ export class AdminController {
   // "Đã bán" gom từ sàn ngoài: dán "sku,số-đã-bán" hoặc rows JSON.
   @Post('products/sold-external')
   setSoldExternal(@Body() dto: ImportSoldExternalDto) {
-    const rows = dto.csv
-      ? parseSkuNumberCsv(dto.csv).map((r) => ({ sku: r.sku, count: r.price }))
-      : (dto.rows ?? []);
+    const rows = dto.csv ? soldExternalRowsOrThrow(dto.csv) : (dto.rows ?? []);
     return this.catalog.setSoldExternal(rows);
   }
 

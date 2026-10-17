@@ -496,3 +496,26 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
     });
   });
 });
+
+describe('POST /admin/products/sold-external — CSV đọc số chặt', () => {
+  const run = (csv: string) => {
+    const catalog = { setSoldExternal: jest.fn().mockResolvedValue({ updated: 1 }) };
+    const ctrl = new AdminController({} as never, catalog as never);
+    return { catalog, call: () => ctrl.setSoldExternal({ csv }) };
+  };
+
+  it('"1.250" là 1250 (trước đây thành 1) và cho đặt về 0', async () => {
+    const { catalog, call } = run('A1,1.250\nA2,0');
+    await call();
+    expect(catalog.setSoldExternal).toHaveBeenCalledWith([
+      { sku: 'A1', count: 1250 },
+      { sku: 'A2', count: 0 },
+    ]);
+  });
+
+  it('có dòng không đọc được → 400, không ghi dòng nào', async () => {
+    const { catalog, call } = run('A1,1250\nA2,12.5');
+    await expect(Promise.resolve().then(call)).rejects.toThrow('dòng 2');
+    expect(catalog.setSoldExternal).not.toHaveBeenCalled();
+  });
+});

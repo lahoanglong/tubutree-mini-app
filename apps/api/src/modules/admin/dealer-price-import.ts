@@ -33,9 +33,12 @@ export const DEALER_PRICE_CSV_MAX_LENGTH = 300_000;
  * là mơ hồ → null.
  */
 export function parseVndAmount(raw: string): number | null {
-  const s = raw
-    .replace(/[\s\u00a0\u202f]/g, '')
-    .replace(/(vnđ|vnd|đ|d)$/i, '');
+  return parseWholeNumber(raw.replace(/[\s\u00a0\u202f]/g, '').replace(/(vnđ|vnd|đ|d)$/i, ''));
+}
+
+/** Số nguyên không âm viết kiểu Excel: `1250`, `1.250`, `1,250`, `1 250`. Dấu chấm/phẩy chỉ là dấu nhóm nghìn; `1.25` → null. */
+export function parseWholeNumber(raw: string): number | null {
+  const s = raw.replace(/[\s\u00a0\u202f]/g, '');
   if (/^\d+$/.test(s)) return Number(s);
   const m = /^\d{1,3}([.,])\d{3}(?:\1\d{3})*$/.exec(s);
   return m ? Number(s.split(m[1]!).join('')) : null;
@@ -43,7 +46,7 @@ export function parseVndAmount(raw: string): number | null {
 
 export type DealerPriceCsvRow = { line: number; sku: string; input: string; price: number | null; problem: string | null };
 
-const HEADER_SKU_CELLS = new Set(['sku', 'mã', 'ma', 'mã sku', 'ma sku', 'mã hàng', 'ma hang', 'mã sp', 'ma sp']);
+export const HEADER_SKU_CELLS = new Set(['sku', 'mã', 'ma', 'mã sku', 'ma sku', 'mã hàng', 'ma hang', 'mã sp', 'ma sp']);
 
 /**
  * CSV "sku,giá" dán từ Excel: cột tách bằng tab, `;` hoặc `,` (xét từng dòng). Tách bằng dấu phẩy mà giá viết `240,000` thì
