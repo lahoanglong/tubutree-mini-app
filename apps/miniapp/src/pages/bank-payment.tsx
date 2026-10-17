@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
-import { Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
+import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
 import { haptic } from '../utils/haptic';
@@ -10,6 +10,8 @@ import { Skeleton } from '../components/ui/skeleton';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { Icon } from '../components/ui/icon';
+import { IconButton } from '../components/ui/icon-button';
+import { useRemaining } from '../hooks/use-remaining';
 import { Money } from '../components/ui/price-tag';
 import { PageHeader } from '../components/ui/page-header';
 import { SR_ONLY } from '../components/ui/sr-only';
@@ -33,17 +35,19 @@ export default function BankPaymentPage() {
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' ? false : 4000),
   });
 
-  const copy = (text: string, label: string) => {
+  const remaining = useRemaining(data?.paymentDeadline);
+
+  const copy = async (text: string, label: string): Promise<boolean> => {
     haptic('light');
-    // Chỉ báo "Đã copy" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
+    // Chỉ báo "Đã sao chép" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
     // khách dán nhầm số tài khoản cũ khi chuyển khoản.
-    void copyText(text).then((ok) =>
-      openSnackbar(
-        ok
-          ? { text: `Đã copy ${label}`, type: 'success', position: 'top' }
-          : { text: `Không thể copy ${label}. Vui lòng copy thủ công.`, type: 'error', position: 'top' },
-      ),
+    const ok = await copyText(text);
+    openSnackbar(
+      ok
+        ? { text: `Đã sao chép ${label}`, type: 'success', position: 'top' }
+        : { text: `Không thể sao chép ${label}. Vui lòng sao chép thủ công.`, type: 'error', position: 'top' },
     );
+    return ok;
   };
 
   // Cờ RIÊNG cho thao tác bấm tay. Dùng `isFetching` của query sẽ bật/tắt theo nhịp poll nền 4
@@ -190,10 +194,16 @@ export default function BankPaymentPage() {
           {/* Thông tin chuyển khoản thủ công (phòng khi không quét được) */}
           <Box mt={2} style={{ textAlign: 'left' }}>
             <Row label="Ngân hàng" value={data.bank.name} />
-            <Row label="Số tài khoản" value={data.bank.accountNo} onCopy={() => copy(data.bank.accountNo, 'số tài khoản')} />
+            <Row label="Số tài khoản" value={data.bank.accountNo} copyName="số tài khoản" onCopy={() => copy(data.bank.accountNo, 'số tài khoản')} />
             <Row label="Chủ tài khoản" value={data.bank.accountName} />
-            <Row label="Số tiền" value={<Money amount={data.amount} />} onCopy={() => copy(String(data.amount), 'số tiền')} />
-            <Row label="Nội dung CK" value={data.memo} highlight onCopy={() => copy(data.memo, 'nội dung')} />
+            <Row label="Số tiền" value={<Money amount={data.amount} />} copyName="số tiền" onCopy={() => copy(String(data.amount), 'số tiền')} />
+            <Row
+              label="Nội dung CK"
+              value={data.memo}
+              highlight
+              copyName="nội dung chuyển khoản"
+              onCopy={() => copy(data.memo, 'nội dung chuyển khoản')}
+            />
           </Box>
           <Text size="xSmall" style={{ color: 'var(--color-text-danger)', marginTop: 8 }}>
             <Icon icon={TriangleAlert} size="sm" tone="danger" style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
@@ -207,6 +217,18 @@ export default function BankPaymentPage() {
               Vui lòng chuyển khoản trước <b>{formatDateTime(data.paymentDeadline)}</b>. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó
               Tubu sẽ hoàn lại cho bạn.
             </Text>
+            {/* Không phải vùng đọc tự động: đồng hồ đổi mỗi 15 giây, đọc lại liên tục sẽ làm phiền người dùng trình đọc màn hình. */}
+            {remaining.text && (
+              <div data-testid="payment-countdown" style={{ marginTop: 6 }}>
+                <Text
+                  size="small"
+                  bold
+                  style={{ color: remaining.expired ? 'var(--color-text-danger)' : 'var(--color-status-warning-fg)' }}
+                >
+                  {remaining.expired ? 'Đã quá hạn chuyển khoản' : `${remaining.text} để chuyển khoản`}
+                </Text>
+              </div>
+            )}
           </Box>
         )}
 
@@ -230,13 +252,57 @@ export default function BankPaymentPage() {
   );
 }
 
-function Row({ label, value, onCopy, highlight }: { label: string; value: ReactNode; onCopy?: () => void; highlight?: boolean }) {
+const COPIED_FEEDBACK_MS = 2000;
+
+function Row({
+  label,
+  value,
+  onCopy,
+  copyName,
+  highlight,
+}: {
+  label: string;
+  value: ReactNode;
+  /** Trả về việc có chép được thật không; chỉ khi chép được dòng này mới hiện xác nhận "Đã sao chép". */
+  onCopy?: () => Promise<boolean>;
+  copyName?: string;
+  highlight?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const press = () => {
+    void onCopy?.().then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+    });
+  };
+
   return (
     <Box flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
       <Text size="small" style={{ color: 'var(--color-text-tertiary)' }}>{label}</Text>
       <Box flex alignItems="center" style={{ gap: 6 }}>
         <Text size="small" bold style={highlight ? { color: 'var(--color-text-success)' } : undefined}>{value}</Text>
-        {onCopy && <Copy size={15} color="var(--color-action-primary-bg)" onClick={onCopy} />}
+        {onCopy && (
+          <>
+            {/* Nút giữ vùng chạm 44px nhưng lề âm để dòng không cao hơn 44px. */}
+            <IconButton
+              icon={copied ? Check : Copy}
+              label={`Sao chép ${copyName ?? label}`}
+              size="sm"
+              onPress={press}
+              style={{ margin: '-6px -10px -6px 0' }}
+            />
+            {copied && (
+              <span role="status" style={SR_ONLY}>
+                Đã sao chép {copyName ?? label}
+              </span>
+            )}
+          </>
+        )}
       </Box>
     </Box>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Clock } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -20,6 +20,7 @@ import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
 import { useShareWithFallback } from '../components/share-sheet';
 import { WEB_BASE_URL } from '../utils/web-base-url';
+import { withReferral } from '../utils/share-link';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
@@ -27,12 +28,15 @@ import { fetchReviews } from '../services/shop-api';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
 import { formatVnd, formatSold } from '../utils/format';
+import { soldPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
@@ -45,6 +49,7 @@ import { CartBadge } from '../components/ui/cart-badge';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { SectionTitle } from '../components/ui/section-title';
 import { PriceTag } from '../components/ui/price-tag';
 import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
@@ -79,7 +84,7 @@ export default function ProductDetailPage() {
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
   const queryClient = useQueryClient();
-  const { status, login } = useAuthStore();
+  const { status, login, user } = useAuthStore();
   // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt; mã chỉ áp cho vài sản phẩm
   // kèm `products` và chỉ hiện trên trang của đúng sản phẩm đó). Để user KHÁM PHÁ ưu đãi ngay ở PDP.
   const couponsQ = useQuery({
@@ -255,7 +260,11 @@ export default function ProductDetailPage() {
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
         {isNotFoundError(product.error) ? (
-          <ErrorState message="Không tìm thấy sản phẩm này." onRetry={() => undefined} onHome={() => navigate('/')} />
+          <>
+            <ErrorState message="Không tìm thấy sản phẩm này." onRetry={() => undefined} onHome={() => navigate('/')} />
+            {/* Khách từ link sàn/CTV vào sản phẩm đã gỡ: cho họ chỗ đi tiếp thay vì ngõ cụt. */}
+            <SuggestedRail listSource="pdp_not_found" />
+          </>
         ) : (
           <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
         )}
@@ -308,15 +317,15 @@ export default function ProductDetailPage() {
 
   const handleShare = () => {
     haptic('light');
-    const path = `/product/${p.slug}`;
+    const code = user?.referralCode;
     void shareWithFallback(
       {
         title: p.name,
         description: p.shortDesc ?? vi.home.tagline,
         thumbnail: p.thumbnail ?? undefined,
-        path,
+        path: withReferral(`/product/${p.slug}`, code),
       },
-      `${WEB_BASE_URL}/san-pham/${p.slug}`,
+      withReferral(`${WEB_BASE_URL}/san-pham/${p.slug}`, code),
     );
   };
 
@@ -369,11 +378,8 @@ export default function ProductDetailPage() {
           </Box>
         </Box>
 
-        {/* Trang hero không có PageHeader nên tên sản phẩm là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định của h1,
-            hình dáng vẫn do Text.Title quyết định như trước. */}
-        <h1 style={{ margin: '2px 0 0', font: 'inherit' }}>
-          <Text.Title size="small">{p.name}</Text.Title>
-        </h1>
+        {/* Trang hero không có PageHeader nên tên sản phẩm là h1 duy nhất. */}
+        <h1 style={PRODUCT_NAME_STYLE}>{p.name}</h1>
 
         {reviews.data && reviews.data.count > 0 && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
@@ -397,11 +403,13 @@ export default function ProductDetailPage() {
             <Badge tone="promo" size="sm" style={{ background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' }}>
               -{flashPct}%
             </Badge>
-            <Badge tone="promo" size="sm">
-              {vi.flashSale.endsIn(flashLeft)}
-            </Badge>
+            {flashLeft && (
+              <Badge tone="promo" size="sm" icon={Clock}>
+                {vi.flashSale.endsIn(flashLeft)}
+              </Badge>
+            )}
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              {vi.flashSale.soldPct(flashItem.quota > 0 ? Math.round((flashItem.soldCount / flashItem.quota) * 100) : 0)}
+              {vi.flashSale.soldPct(soldPercent(flashItem.soldCount, flashItem.quota))}
             </Text>
           </Box>
         )}
@@ -586,9 +594,7 @@ export default function ProductDetailPage() {
       {/* ── Phân loại ── */}
       {variations.length > 1 && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Text bold size="small">
-            {vi.product.variations}
-          </Text>
+          <SectionTitle>{vi.product.variations}</SectionTitle>
           <Box flex style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
             {variations.map((v) => (
               <VariationChip
@@ -692,9 +698,7 @@ export default function ProductDetailPage() {
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Text bold size="small" style={{ marginBottom: 10 }}>
-            Thành phần
-          </Text>
+          <SectionTitle style={{ marginBottom: 10 }}>Thành phần</SectionTitle>
           <Box flex flexDirection="column" style={{ gap: 10 }}>
             {p.ingredients.map((ing, i) => (
               <Box key={i} flex style={{ gap: 10 }}>
@@ -730,7 +734,7 @@ export default function ProductDetailPage() {
 
       {/* ── Cam kết / chính sách (tín hiệu an tâm trước mua — trước đây PDP không có) ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-        <Text bold size="small" style={{ marginBottom: 8 }}>Cam kết Tubu</Text>
+        <SectionTitle style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
         <Box flex flexDirection="column" style={{ gap: 6 }}>
           {['Hàng chính hãng — nguồn gốc rõ ràng', 'Đổi trả trong 7 ngày nếu lỗi', 'Sản phẩm xanh, an lành cho cả nhà'].map((t) => (
             <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
@@ -739,6 +743,20 @@ export default function ProductDetailPage() {
             </Box>
           ))}
         </Box>
+        {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}
+        {hasOA && (
+          <Button
+            variant="secondary"
+            icon={MessageCircle}
+            onPress={() => {
+              haptic('light');
+              void openOAChat(vi.product.chatAbout(p.name));
+            }}
+            style={{ marginTop: 12, minWidth: 0 }}
+          >
+            {vi.product.chatWithShop}
+          </Button>
+        )}
       </Box>
 
       {/* ── Mô tả ── */}
@@ -780,7 +798,7 @@ export default function ProductDetailPage() {
         <>
           <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
             <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
-            <Text.Title size="small">Thường mua kèm</Text.Title>
+            <SectionTitle>Thường mua kèm</SectionTitle>
           </Box>
           <Box
             px={4}
@@ -801,7 +819,7 @@ export default function ProductDetailPage() {
       {(related.data?.length ?? 0) > 0 && (
         <>
           <Box pt={4} pb={2} px={4}>
-            <Text.Title size="small">Cùng nhà {p.brand}</Text.Title>
+            <SectionTitle>Cùng nhà {p.brand}</SectionTitle>
           </Box>
           <Box
             px={4}
@@ -889,6 +907,17 @@ export default function ProductDetailPage() {
     </Page>
   );
 }
+
+/** Tên sản phẩm: Inter 18/600 (title-md) — đậm và lớn hơn tiêu đề mục (title-sm) nhưng vẫn dưới giá (24/700).
+ * `font: inherit` của h1 mặc định bị thay bằng đúng bậc chữ của DS. */
+const PRODUCT_NAME_STYLE: CSSProperties = {
+  margin: '2px 0 0',
+  fontFamily: 'var(--font-ui)',
+  fontSize: 'var(--type-title-md-size)',
+  lineHeight: 'var(--type-title-md-lh)',
+  fontWeight: 'var(--type-title-md-weight)' as unknown as number,
+  color: 'var(--color-text-primary)',
+};
 
 /** Một dòng của nhãn 2 dòng trên nút "Mua ngay" (thanh CTA dính đáy). */
 const BUY_NOW_LINE: CSSProperties = {
@@ -1087,9 +1116,7 @@ function CollapsibleDescription({ text }: { text: string }) {
   const isLong = text.length > 220;
   return (
     <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-      <Text bold size="small">
-        {vi.product.description}
-      </Text>
+      <SectionTitle>{vi.product.description}</SectionTitle>
       <Text
         size="small"
         style={{

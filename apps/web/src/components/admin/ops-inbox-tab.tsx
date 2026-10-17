@@ -21,6 +21,9 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
   payouts: { title: 'Lệnh rút tiền chờ duyệt', hint: 'Hoa hồng CTV / Ví' },
   refillPending: { title: 'Đổi vỏ chai chờ duyệt', hint: 'Khách mang vỏ tới điểm nhận' },
+  communityPending: { title: 'Bài cộng đồng chờ duyệt', hint: 'Khách vừa đăng, chưa ai duyệt' },
+  communityUnanswered: { title: 'Câu hỏi cộng đồng chưa ai trả lời', hint: 'Đã chờ quá lâu mà chưa có câu trả lời' },
+  invoicePending: { title: 'Hoá đơn VAT chờ xuất', hint: 'Khách yêu cầu xuất hoá đơn, chưa phát hành' },
 };
 
 /** Trang chủ quản trị: mỗi hàng đợi một thẻ có số việc đang chờ, bấm vào mở đúng tab/bộ lọc. */

@@ -40,11 +40,13 @@ export function CheckInStreak({
             Nhận giọt nước tưới cây mỗi ngày
           </Text>
         </div>
+        {/* flexShrink 0: cạnh tiêu đề dài, nhãn nút bị rút gọn thành "Điểm d…" nếu để nút co lại. */}
         <Button
           icon={checkedInToday ? Check : undefined}
           disabled={checkedInToday || checkInPending}
           loading={checkInPending}
           onPress={() => onCheckIn()}
+          style={{ flexShrink: 0 }}
         >
           {checkedInToday ? 'Đã điểm danh' : 'Điểm danh'}
         </Button>
@@ -85,7 +87,7 @@ export function CheckInStreak({
             <Icon icon={Snowflake} size="sm" tone="muted" />
             Vé giữ lửa: <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{profile?.streakFreezes ?? 0}</span>
           </Text>
-          <Button variant="secondary" disabled={freezePending} loading={freezePending} onPress={() => onBuyFreeze()}>
+          <Button variant="secondary" disabled={freezePending} loading={freezePending} onPress={() => onBuyFreeze()} style={{ flexShrink: 0 }}>
             Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
           </Button>
         </div>

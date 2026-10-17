@@ -190,3 +190,78 @@ describe('/dang-nhap/callback', () => {
     expect(container.textContent).toContain('không gửi kèm mã đăng nhập');
   });
 });
+
+// D7 việc 4: nút "Mở trên Zalo" (chỉ thêm giao diện, không đổi luồng đăng nhập).
+describe('/dang-nhap — Mở trên Zalo', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const openLink = (c: HTMLElement) => Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mở trên Zalo');
+
+  it('có app id: hiện nút dẫn tới Mini App, vùng chạm 44px', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '2070857098114207963');
+    const { container } = mount(<LoginPage />);
+    await flush();
+    const a = openLink(container)!;
+    expect(a.getAttribute('href')).toBe('https://zalo.me/s/2070857098114207963/');
+    expect(a.className).toContain('min-h-11');
+  });
+
+  it('khách tới từ trang sản phẩm: mở đúng sản phẩm đó trong Mini App', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '123');
+    mocks.search = new URLSearchParams({ returnTo: '/san-pham/dau-goi' });
+    const { container } = mount(<LoginPage />);
+    await flush();
+    expect(openLink(container)!.getAttribute('href')).toBe('https://zalo.me/s/123/product/dau-goi');
+  });
+
+  it('chưa cấu hình app id: ẩn nút', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '');
+    const { container } = mount(<LoginPage />);
+    await flush();
+    expect(openLink(container)).toBeUndefined();
+  });
+
+  it('bấm nút này không chạm vào luồng đăng nhập: không ghi returnTo, không gọi startZaloLogin', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '123');
+    mocks.search = new URLSearchParams({ returnTo: '/gio-hang' });
+    const { container } = mount(<LoginPage />);
+    await flush();
+    openLink(container)!.addEventListener('click', (e) => e.preventDefault());
+    click(openLink(container)!);
+    expect(mocks.auth.startZaloLogin).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('tubu_return_to')).toBeNull();
+  });
+});
+
+describe('/dang-nhap — đồng ý điều khoản (D5-01)', () => {
+  it('dưới nút đăng nhập có câu đồng ý Điều khoản và Chính sách bảo mật, hai liên kết đúng trang', async () => {
+    const { container } = mount(<LoginPage />);
+    await flush();
+    const consent = Array.from(container.querySelectorAll('p')).find((p) => p.textContent?.startsWith('Bằng việc đăng nhập'))!;
+    expect(consent.textContent).toBe('Bằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.');
+    const hrefs = Array.from(consent.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')]);
+    expect(hrefs).toEqual([
+      ['Điều khoản', '/chinh-sach/dieu-khoan'],
+      ['Chính sách bảo mật', '/chinh-sach/bao-mat'],
+    ]);
+    const button = byText(container, 'button', 'Đăng nhập với Zalo')!;
+    expect(button.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('vẫn hiện khi đăng nhập Zalo tạm ngưng (khách vẫn đọc được điều khoản)', async () => {
+    mocks.auth.zaloLoginConfigured = false;
+    const { container } = mount(<LoginPage />);
+    await flush();
+    expect(container.textContent).toContain('Bằng việc đăng nhập, bạn đồng ý với');
+  });
+
+  it('không đổi luồng: bấm liên kết điều khoản không ghi returnTo, không gọi startZaloLogin', async () => {
+    mocks.search = new URLSearchParams({ returnTo: '/gio-hang' });
+    const { container } = mount(<LoginPage />);
+    await flush();
+    const a = container.querySelector<HTMLAnchorElement>('a[href="/chinh-sach/dieu-khoan"]')!;
+    a.addEventListener('click', (e) => e.preventDefault());
+    click(a);
+    expect(mocks.auth.startZaloLogin).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('tubu_return_to')).toBeNull();
+  });
+});

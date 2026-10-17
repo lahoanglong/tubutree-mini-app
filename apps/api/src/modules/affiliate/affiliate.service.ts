@@ -7,9 +7,12 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, Prisma, type PayoutStatus } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
+import type { Env } from '../../config/env.validation';
+import { hashIp } from '../../common/ip-hash';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -47,7 +50,7 @@ import {
   type VnMonth,
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
-import { VN_OFFSET_MS } from '../../common/vn-time';
+import { VN_OFFSET_MS, vnDateKey } from '../../common/vn-time';
 import { paidLineTotals } from './commission-base';
 import { consignmentLinkedSql } from '../merchant/consignment-link-sql';
 import { forBuyer } from '../orders/buyer-order-fields';
@@ -103,6 +106,8 @@ export class AffiliateService {
     @Optional() private readonly notifications?: NotificationsService,
     // @Optional cùng lý do; AffiliateModule import FlashSaleModule (affiliate.module.spec.ts giữ việc nối này).
     @Optional() private readonly flashSale?: FlashSaleService,
+    // @Optional: ConfigModule là global nên app thật luôn có; test dựng trực tiếp không truyền thì hashIp dùng khoá dev.
+    @Optional() private readonly env?: ConfigService<Env, true>,
   ) {}
 
   async register(userId: string, termsVersion?: string) {
@@ -225,14 +230,30 @@ export class AffiliateService {
   }
 
   /** Track click (web redirect /r/:shortCode). Trả target để redirect. */
-  async trackClick(shortCode: string, visitorId: string, ipHash: string) {
+  async trackClick(shortCode: string, visitorId: string, ipHash: string, dedupeDay?: string) {
     const link = await this.prisma.affiliateLink.findUnique({ where: { shortCode } });
     if (!link) return null;
     await this.prisma.$transaction([
       this.prisma.affiliateLink.update({ where: { id: link.id }, data: { clicks: { increment: 1 } } }),
-      this.prisma.affiliateClick.create({ data: { shortCode, visitorId, ipHash } }),
+      this.prisma.affiliateClick.create({ data: { shortCode, visitorId, ipHash, ...(dedupeDay ? { dedupeDay } : {}) } }),
     ]);
     return { targetType: link.targetType, targetId: link.targetId };
+  }
+
+  /**
+   * Lượt mở link CTV từ phía khách (route công khai, không có userId). Khách chưa biết là ai nên "người xem" là mã HMAC của IP
+   * (khoá của máy chủ, xem common/ip-hash.ts); IP thô không lưu. Mỗi (mã link, IP băm, ngày giờ VN) đếm một lần: khoá duy nhất của affiliate_clicks chặn lần thứ hai, và
+   * giao dịch hoàn tác luôn cả phần +1 clicks nên không cần đọc bảng (đang đánh dấu @deprecated, chỉ ghi).
+   */
+  async recordLinkClick(shortCode: string, ip: string, now: Date = new Date()): Promise<{ counted: boolean }> {
+    const ipHash = hashIp(ip, this.env?.get('JWT_ACCESS_SECRET', { infer: true }), 'affiliate-click');
+    try {
+      const target = await this.trackClick(shortCode, ipHash, ipHash, vnDateKey(now));
+      return { counted: target !== null };
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return { counted: false };
+      throw err;
+    }
   }
 
   async dashboard(userId: string, now: Date = new Date()) {

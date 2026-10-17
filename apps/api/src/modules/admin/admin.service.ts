@@ -35,6 +35,7 @@ import {
   type RecyclingFilter,
 } from './admin-order-filter';
 import { orderCsvChunks, userCsvChunks } from './admin-export';
+import { GMV_ORDER_WHERE, REVENUE_ORDER_SQL, REVENUE_ORDER_WHERE } from './admin-revenue';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
@@ -672,13 +673,9 @@ export class AdminService {
   static readonly DETAIL_TAKE = 30;
 
   async getDashboardStats() {
-    const open: Prisma.OrderWhereInput = { status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] } };
-    // COD của đơn gian hàng tự giao do đối tác thu, không phải Tubu (đối soát trừ phí sàn từ phía đối tác).
-    const collected: Prisma.OrderWhereInput = {
-      status: { notIn: ['CANCELLED', 'RETURNED'] },
-      paymentStatus: { not: 'REFUNDED' },
-      OR: [{ paymentStatus: 'PAID' }, { status: 'DELIVERED', paymentMethod: 'COD', fulfiller: { not: 'MERCHANT' } }],
-    };
+    // Định nghĩa "doanh thu" dùng chung với báo cáo theo ngày × kênh (admin-revenue.ts) để hai nơi không bao giờ lệch nhau.
+    const open = GMV_ORDER_WHERE;
+    const collected = REVENUE_ORDER_WHERE;
     const [
       totalOrders,
       pendingOrders,
@@ -714,11 +711,7 @@ export class AdminService {
       this.prisma.$queryRaw<{ all_refunds: bigint | null; on_collected: bigint | null }[]>`
         SELECT
           SUM(r."refundAmount" + r."shippingRefund") AS all_refunds,
-          SUM(r."refundAmount" + r."shippingRefund") FILTER (
-            WHERE o.status NOT IN ('CANCELLED', 'RETURNED')
-              AND o."paymentStatus" <> 'REFUNDED'
-              AND (o."paymentStatus" = 'PAID' OR (o.status = 'DELIVERED' AND o."paymentMethod" = 'COD' AND o.fulfiller <> 'MERCHANT'))
-          ) AS on_collected
+          SUM(r."refundAmount" + r."shippingRefund") FILTER (WHERE ${REVENUE_ORDER_SQL}) AS on_collected
         FROM return_requests r
         JOIN orders o ON o.id = r."orderId"
         WHERE r.status = 'APPROVED'`,

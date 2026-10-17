@@ -124,6 +124,17 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(screen.getByText('Đã bán 20%')).toBeInTheDocument();
   });
 
+  it('tiêu đề và đồng hồ dùng icon nét, không emoji (D7-6)', async () => {
+    mocks.fetchActive.mockResolvedValue([ITEM]);
+    renderFlash();
+    const title = await screen.findByRole('heading', { name: 'Ưu đãi giờ vàng' });
+    expect(title.querySelector('svg')).not.toBeNull();
+    const timer = screen.getByRole('timer');
+    expect(timer.querySelector('svg')).not.toBeNull();
+    expect(timer.textContent).toMatch(/^Còn \d+h \d{2}m$/);
+    expect(timer.getAttribute('aria-label')).toMatch(/^Còn \d+h \d{2}m$/);
+  });
+
   it('chạm thẻ → sang SP kèm đúng phân loại đang giờ vàng', async () => {
     mocks.fetchActive.mockResolvedValue([ITEM]);
     renderFlash();
@@ -131,11 +142,96 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
   });
 
-  it('thanh "đã bán" không vượt 100% khi bán quá suất', async () => {
+  it('bán quá suất: chữ và thanh "đã bán" cùng dừng ở 100%, không in 150%', async () => {
     mocks.fetchActive.mockResolvedValue([{ ...ITEM, quota: 10, soldCount: 15 }]);
     renderFlash();
-    expect(await screen.findByText('Đã bán 150%')).toBeInTheDocument();
+    expect(await screen.findByText('Đã bán 100%')).toBeInTheDocument();
+    expect(screen.queryByText(/150%/)).toBeNull();
     expect(screen.getByTestId('progress-fill')).toHaveStyle({ width: '100%' });
+  });
+
+  it('đã quá giờ kết thúc (chờ lần tải lại kế tiếp): ẩn đồng hồ, không hiện "Còn 0h 00m"', async () => {
+    mocks.fetchActive.mockResolvedValue([{ ...ITEM, endAt: new Date(Date.now() - 60_000).toISOString() }]);
+    renderFlash();
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+    expect(screen.queryByRole('timer')).toBeNull();
+    expect(screen.queryByText(/Còn /)).toBeNull();
+  });
+});
+
+describe('FlashSale — đồng hồ tiêu đề chỉ tính các suất còn giờ', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.status = 'guest';
+    mocks.fetchUpcoming.mockResolvedValue([]);
+  });
+
+  it('suất sớm nhất đã hết giờ mà danh sách chưa tải lại: đồng hồ đếm theo suất còn giờ kế tiếp, không biến mất', async () => {
+    mocks.fetchActive.mockResolvedValue([
+      { ...ITEM, itemId: 'old', productName: 'Hết giờ', endAt: new Date(Date.now() - 60_000).toISOString() },
+      { ...ITEM, itemId: 'live', productName: 'Còn giờ', endAt: new Date(Date.now() + 2 * 3_600_000 - 30_000).toISOString() },
+    ]);
+    renderFlash();
+    const timer = await screen.findByRole('timer');
+    expect(timer).toHaveTextContent(/^Còn 2h 00m$/);
+  });
+
+  it('suất sớm nhất hết giờ khi đang xem: đồng hồ chuyển sang suất kế tiếp thay vì biến mất', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-17T08:00:00.000Z'));
+      mocks.fetchActive.mockResolvedValue([
+        { ...ITEM, itemId: 'a', endAt: '2026-10-17T08:01:00.000Z' },
+        { ...ITEM, itemId: 'b', endAt: '2026-10-17T10:00:00.000Z' },
+      ]);
+      renderFlash();
+      // setTimeout thật (chỉ giả Date/setInterval) để react-query kịp trả dữ liệu; findBy* của RTL không chạy dưới setInterval giả.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      expect(screen.getByRole('timer')).toHaveTextContent('Còn 0h 01m');
+      act(() => {
+        vi.setSystemTime(new Date('2026-10-17T08:01:01.000Z'));
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(screen.getByRole('timer')).toHaveTextContent('Còn 1h 59m');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('UpcomingFlashSales — mốc bắt đầu', () => {
+  const UPCOMING = {
+    itemId: 'u1', productId: 'p1', productSlug: 'p1', productName: 'Nước rửa chén', thumbnail: null, variationId: 'v1',
+    retailPrice: 100000, flashPrice: 80000, reminded: false, startAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+  };
+  const renderUpcoming = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <UpcomingFlashSales />
+      </QueryClientProvider>,
+    );
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.status = 'authenticated';
+  });
+
+  it('còn thời gian: "Bắt đầu sau Xh YYm" và nút nhắc', async () => {
+    mocks.fetchUpcoming.mockResolvedValue([UPCOMING]);
+    renderUpcoming();
+    expect(await screen.findByText(/^Bắt đầu sau \d+h \d{2}m$/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Nhắc tôi/ })).toBeInTheDocument();
+  });
+
+  it('đã tới giờ bắt đầu: không hiện "Bắt đầu sau 0h 00m", đổi thành "Đang diễn ra" và bỏ nút nhắc', async () => {
+    mocks.fetchUpcoming.mockResolvedValue([{ ...UPCOMING, startAt: new Date(Date.now() - 60_000).toISOString() }]);
+    renderUpcoming();
+    expect(await screen.findByText('Đang diễn ra')).toBeInTheDocument();
+    expect(screen.queryByText(/Bắt đầu sau/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Nhắc tôi|Đã đặt nhắc/ })).toBeNull();
   });
 });
 
@@ -160,6 +256,17 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     mocks.fetchUpcoming.mockResolvedValue([UP]);
     mocks.setReminder.mockResolvedValue({});
     mocks.cancelReminder.mockResolvedValue({});
+  });
+
+  it('tiêu đề "Sắp diễn ra" và hai trạng thái nút nhắc dùng icon nét, không emoji (D7-6)', async () => {
+    const first = renderUpcoming();
+    const heading = await screen.findByRole('heading', { name: 'Sắp diễn ra' });
+    expect(heading.querySelector('svg')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Nhắc tôi' }).querySelector('svg')).not.toBeNull();
+    first.unmount();
+    mocks.fetchUpcoming.mockResolvedValue([{ ...UP, reminded: true }]);
+    renderUpcoming();
+    expect((await screen.findByRole('button', { name: 'Đã đặt nhắc' })).querySelector('svg')).not.toBeNull();
   });
 
   it('khách chưa đăng nhập → không vẽ gì', async () => {

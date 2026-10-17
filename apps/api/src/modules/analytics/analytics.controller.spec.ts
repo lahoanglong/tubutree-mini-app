@@ -44,6 +44,31 @@ describe('AnalyticsController.ingest', () => {
     expect(recordBestEffort).toHaveBeenCalledWith(expect.objectContaining({ userId: null }));
   });
 
+  describe('nguồn khách (entrySource, campaign) trên phong bì sự kiện', () => {
+    const base = { eventId: '11111111-1111-4111-8111-111111111111', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' };
+    const run = async (extra: Record<string, unknown>) => {
+      const recordBestEffort = jest.fn().mockResolvedValue(undefined);
+      const ctrl = new AnalyticsController({ recordBestEffort } as unknown as AnalyticsEventsService);
+      const dto = (await asBody(IngestEventsDto, { events: [{ ...base, eventName: 'app_opened', ...extra }] })) as IngestEventsDto;
+      await ctrl.ingest({ sub: 'u1', role: 'CUSTOMER' } as JwtPayload, dto);
+      return recordBestEffort.mock.calls[0]![0] as Record<string, unknown>;
+    };
+
+    it('chuyển entrySource và campaign xuống service, chuẩn hoá chữ thường', async () => {
+      const rec = await run({ entrySource: 'Shopee', campaign: 'Card-2610' });
+      expect(rec).toMatchObject({ entrySource: 'shopee', campaign: 'card-2610' });
+    });
+
+    it('vắng → null', async () => {
+      expect(await run({})).toMatchObject({ entrySource: null, campaign: null });
+    });
+
+    it('giá trị bẩn bị bỏ chứ không làm cả lô 400 (mất 50 sự kiện vì một nhãn sai là không đáng)', async () => {
+      const rec = await run({ entrySource: 'x y;drop table', campaign: '<b>' });
+      expect(rec).toMatchObject({ entrySource: null, campaign: null });
+    });
+  });
+
   describe('IngestEventsDto qua ValidationPipe — platform allowlist', () => {
     it('reject platform=admin (FE không được claim admin/pos/system)', async () => {
       await expect(

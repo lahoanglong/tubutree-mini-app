@@ -133,12 +133,14 @@ import {
   ToneBadge,
 } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
+import { ReportsTab } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import { RefillTab } from '@/components/admin/refill-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
+import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
@@ -159,6 +161,7 @@ type Tab =
   | 'dealerClaims'
   | 'dealerPrices'
   | 'engagement'
+  | 'community'
   | 'payouts'
   | 'customerRefunds'
   | 'orders'
@@ -179,7 +182,8 @@ type Tab =
   | 'posCredits'
   | 'reviews'
   | 'subscriptions'
-  | 'analytics';
+  | 'analytics'
+  | 'reports';
 /**
  * Mục quản trị theo nhóm việc (ADMINOPS-13): trước đây là một dải 24 tab cuộn ngang. Khoá `k` giữ nguyên để link cũ
  * (`/admin?tab=orders&pancake=attention`...) vẫn mở đúng chỗ.
@@ -191,6 +195,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'inbox', label: 'Việc cần xử lý' },
       { k: 'dashboard', label: 'Tổng quan KPI' },
       { k: 'analytics', label: 'Retention & North-star' },
+      { k: 'reports', label: 'Báo cáo' },
     ],
   },
   {
@@ -224,6 +229,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'users', label: 'Người dùng' },
       { k: 'reviews', label: 'Đánh giá' },
+      { k: 'community', label: 'Cộng đồng' },
       { k: 'subscriptions', label: 'Gói định kỳ' },
       { k: 'posCredits', label: 'Tích điểm tại quầy' },
       { k: 'refill', label: 'Đổi vỏ chai' },
@@ -265,7 +271,7 @@ const DEFAULT_TAB: Tab = 'inbox';
  */
 const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['refill'],
-  CSKH: ['inbox', 'orders', 'returns', 'users', 'quickReplies'],
+  CSKH: ['inbox', 'orders', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
 };
 function staffTabs(perms: readonly string[]): Set<Tab> {
@@ -310,7 +316,8 @@ export default function AdminPage() {
   const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
-  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number } | null>(null);
+  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter } | null>(null);
+  const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
   const [consignmentSeed, setConsignmentSeed] = useState(0);
   const role = user?.role;
@@ -372,8 +379,30 @@ export default function AdminPage() {
       setReturnsSeed({ filter: k === 'returnsToReceive' ? 'TO_RECEIVE' : 'REQUESTED', n: Date.now() });
       return setTab('returns');
     }
+    if (k === 'communityPending' || k === 'communityUnanswered') {
+      setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : 'pending', n: Date.now() });
+      return setTab('community');
+    }
+    if (k === 'invoicePending') {
+      setOrdersRecycling('');
+      setOrdersPancake('');
+      setOrderSeed({ search: '', n: Date.now(), invoice: 'pending' });
+      setTabState('orders');
+      return writeUrlState('orders', '');
+    }
     const target: Record<
-      Exclude<InboxKey, 'pancakeAttention' | 'pancakeUnsynced' | 'gomdonAttention' | 'returnsPending' | 'returnsToReceive' | 'consignmentPending'>,
+      Exclude<
+        InboxKey,
+        | 'pancakeAttention'
+        | 'pancakeUnsynced'
+        | 'gomdonAttention'
+        | 'returnsPending'
+        | 'returnsToReceive'
+        | 'consignmentPending'
+        | 'communityPending'
+        | 'communityUnanswered'
+        | 'invoicePending'
+      >,
       Tab
     > = {
       customerRefunds: 'customerRefunds',
@@ -441,12 +470,14 @@ export default function AdminPage() {
           {active === 'dealerClaims' && <DealerClaimsTab />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'engagement' && <EngagementTab />}
+          {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
           {active === 'payouts' && <PayoutAdminTab />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} />}
           {active === 'orders' && (
             <OrdersTab
               key={orderSeed?.n ?? 0}
               initialSearch={orderSeed?.search}
+              initialInvoice={orderSeed?.invoice}
               isAdmin={isAdmin}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
               recycling={ordersRecycling}
@@ -484,6 +515,7 @@ export default function AdminPage() {
           {active === 'quickReplies' && <QuickReplyTab />}
           {active === 'notificationTemplates' && <NotificationTemplatesTab />}
           {active === 'analytics' && <AnalyticsTab />}
+          {active === 'reports' && <ReportsTab />}
         </div>
       </div>
     </main>
@@ -874,6 +906,7 @@ function OrdersTab({
   isAdmin = true,
   canWarehouse = true,
   initialSearch,
+  initialInvoice,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
@@ -883,13 +916,14 @@ function OrdersTab({
   /** Thao tác kho (đẩy lại Pancake, xử lý Pancake/thu gom) — API chỉ mở cho ADMIN và nhân viên KHO. */
   canWarehouse?: boolean;
   initialSearch?: string;
+  initialInvoice?: InvoiceFilter;
 }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [searchInput, setSearchInput] = useState(initialSearch ?? '');
   const [search, setSearch] = useState(initialSearch ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [invoice, setInvoice] = useState<InvoiceFilter | ''>('');
+  const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);

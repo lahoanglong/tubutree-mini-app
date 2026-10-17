@@ -22,6 +22,7 @@ import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Chip } from './ui/chip';
 import { EmptyState, ErrorState } from './ui/empty-state';
+import { SectionTitle } from './ui/section-title';
 import { Skeleton } from './ui/skeleton';
 import { Heading, Text } from './ui/text';
 
@@ -184,9 +185,7 @@ export function ReviewsSection({
     <section aria-label="Đánh giá sản phẩm" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
       {/* Cao bằng nút đầu mục (48px): nút chỉ hiện khi can-review đã về, hàng không được nhảy lúc đó. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 48 }}>
-        <Heading variant="title-sm" as="h2">
-          Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}
-        </Heading>
+        <SectionTitle>Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}</SectionTitle>
         {/* Chỉ mở ô soạn khi BE xác nhận đủ điều kiện. Trước đây mở cho mọi user đăng nhập,
             khách chưa mua chọn sao + upload ảnh/video xong mới nhận lỗi "chỉ đánh giá sản phẩm
             đã mua" — mất trắng công sức (P1-2). Mọi lần mua đã có đánh giá thì nút là sửa đánh giá mới nhất. */}

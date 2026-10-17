@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { Page, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation } from '@tanstack/react-query';
 import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
@@ -16,6 +17,8 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   products?: AiProduct[];
+  /** Tin xin lỗi do lần gọi trước thất bại: không đưa vào lịch sử khi thử lại, và là chỗ gắn nút "Thử lại". */
+  failed?: boolean;
 }
 
 const SUGGESTIONS = [
@@ -34,29 +37,50 @@ export default function AiAdvisorPage() {
   const { openSnackbar } = useSnackbar();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const endRef = useRef<HTMLDivElement>(null);
+
+  const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
+    list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
 
   const chatM = useMutation({
-    mutationFn: (text: string) => {
-      const history: AiChatTurn[] = messages
-        .slice(-MAX_HISTORY_TURNS)
-        .map((m) => ({ role: m.role, content: m.content }));
-      return aiChat(text, history);
-    },
+    mutationFn: ({ text, history }: { text: string; history: AiChatTurn[] }) => aiChat(text, history),
     onSuccess: (r) => {
       setMessages((prev) => [...prev, { role: 'assistant', content: r.reply, products: r.products }]);
     },
     onError: (e: unknown) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Xin lỗi, mình chưa trả lời được lúc này 🌿' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Xin lỗi, mình chưa trả lời được lúc này 🌿', failed: true }]);
     },
   });
+
+  // Tin mới (của bạn, trả lời, hay trạng thái "đang soạn") phải hiện trong tầm nhìn mà khách không phải tự kéo xuống.
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    endRef.current?.scrollIntoView?.({ block: 'end', behavior: reduceMotion ? 'auto' : 'smooth' });
+  }, [messages.length, chatM.isPending]);
 
   const send = (text: string) => {
     const t = text.trim();
     if (!t || chatM.isPending) return;
     setMessages((prev) => [...prev, { role: 'user', content: t }]);
     setDraft('');
-    chatM.mutate(t);
+    chatM.mutate({ text: t, history: toHistory(messages) });
+  };
+
+  // Gửi lại đúng câu hỏi vừa lỗi: bỏ tin xin lỗi, giữ tin của khách (không nhân đôi), lịch sử là các lượt trước câu đó.
+  const retry = (failedIndex: number) => {
+    const question = messages[failedIndex - 1];
+    if (chatM.isPending || question?.role !== 'user') return;
+    setMessages(messages.slice(0, failedIndex));
+    chatM.mutate({ text: question.content, history: toHistory(messages.slice(0, failedIndex - 1)) });
+  };
+
+  // Enter gửi, Shift+Enter xuống dòng. Bộ gõ tiếng Việt dùng Enter để chốt chữ đang gõ dở (isComposing / keyCode 229): không gửi lúc đó.
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    send(draft);
   };
 
   return (
@@ -120,6 +144,13 @@ export default function AiAdvisorPage() {
                 {m.content}
               </Text>
             </div>
+            {m.failed && i === messages.length - 1 && !chatM.isPending && (
+              <div style={{ marginTop: 6 }}>
+                <Button variant="secondary" onPress={() => retry(i)}>
+                  Thử lại
+                </Button>
+              </div>
+            )}
             {m.products && m.products.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left' }}>
                 {m.products.map((p) => (
@@ -170,7 +201,12 @@ export default function AiAdvisorPage() {
             <Spinner /> <Text variant="caption" tone="tertiary">Trợ lý đang soạn…</Text>
           </div>
         )}
+        <div ref={endRef} aria-hidden />
       </div>
+
+      <Text variant="caption" tone="tertiary" as="p" style={{ textAlign: 'center', padding: '4px 12px' }}>
+        Gợi ý chỉ để tham khảo.
+      </Text>
 
       <div
         style={{
@@ -182,13 +218,17 @@ export default function AiAdvisorPage() {
           borderTop: '1px solid var(--color-border-subtle)',
         }}
       >
-        <Input
-          placeholder="Nhập câu hỏi…"
-          aria-label="Nhập câu hỏi"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          maxLength={2000}
-        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Input.TextArea
+            placeholder="Nhập câu hỏi…"
+            aria-label="Nhập câu hỏi"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKeyDown}
+            rows={1}
+            maxLength={2000}
+          />
+        </div>
         {/* Không gộp isPending vào disabled: Button tự chặn bấm lại khi loading, còn disabled sẽ tắt luôn spinner. */}
         <Button disabled={!draft.trim()} loading={chatM.isPending} onPress={() => send(draft)}>
           Gửi

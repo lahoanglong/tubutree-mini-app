@@ -183,6 +183,45 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(screen.queryByRole('button', { name: /^Thử lại/ })).toBeNull();
   });
 
+  it('D7-7: API sập hẳn (cả 3 lưới SP lỗi) → MỘT dải lỗi cấp trang + một nút "Thử lại", không còn thẻ lỗi từng khối; thử lại xong thì dải biến mất', async () => {
+    mocks.fetchPurchasedItems.mockRejectedValue(new Error('boom'));
+    mocks.fetchForYou.mockRejectedValue(new Error('boom'));
+    let down = true;
+    mocks.fetchProducts.mockImplementation(async (params: { sort?: string }) => {
+      if (down) throw new Error('boom');
+      return params.sort === 'best_seller' ? PAGE([card('bs', 'Bán chạy nhất')]) : PAGE([card('f2', 'Chỉ nổi bật')]);
+    });
+    const { qc } = renderHome();
+    await waitFor(() => {
+      for (const key of [['products', 'home-best-seller'], ['products', 'home-featured'], ['products', 'home-newest']]) {
+        expect(qc.getQueryState(key)?.status).toBe('error');
+      }
+    });
+    const strip = await screen.findByTestId('home-page-error');
+    expect(within(strip).getByText('Chưa tải được Trang chủ')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Thử lại/ })).toHaveLength(1);
+    expect(screen.queryAllByTestId('home-block-error')).toHaveLength(0);
+    expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
+    // Dải nằm ngay dưới ô tìm, không ở cuối trang.
+    expect(blockOrder().slice(0, 2)).toEqual(['search', 'pageError']);
+
+    down = false;
+    await userEvent.setup().click(within(strip).getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByText('Bán chạy nhất')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('home-page-error')).toBeNull());
+  });
+
+  it('D7-7: chỉ MỘT phần lỗi (còn khối khác tải được) → vẫn là thẻ lỗi từng khối, không có dải lỗi cấp trang', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.fetchProducts.mockImplementation(async (params: { sort?: string }) => {
+      if (params.sort === 'best_seller') throw new Error('boom');
+      return PAGE([card('f2', 'Chỉ nổi bật')]);
+    });
+    renderHome();
+    await screen.findByRole('button', { name: 'Thử lại Bán chạy' });
+    expect(screen.queryByTestId('home-page-error')).toBeNull();
+  });
+
   it('C-084: "Tubu chọn cho bạn" lỗi → khối lỗi, "Thử lại" gọi lại đúng danh sách nổi bật', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
     let featuredFails = true;

@@ -264,6 +264,10 @@ model User {
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   pancakeCustomerId      String?         @unique
   metadata               Json?
+  /// Nguồn chạm đầu (shopee, card-<đợt>, oa, ...): ghi MỘT lần lúc tạo tài khoản, hoặc lúc gộp khách vào tài khoản còn trống; không bao giờ ghi đè (common/attribution.ts). null = chưa biết (tài khoản có trước tính năng).
+  firstTouchSource       String?
+  firstTouchCampaign     String?
+  firstTouchAt           DateTime?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
 
@@ -312,6 +316,8 @@ model User {
   posCreditsGiven        PosPointCredit[]        @relation("PosCreditStaff")
 
   @@index([referredById])
+  /// Báo cáo nguồn khách × tuần (admin): khách tạo trong khoảng ngày.
+  @@index([createdAt])
   // Tìm đơn admin theo SĐT/tên khách (LIKE/ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
   @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_phone_trgm_idx")
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullName_trgm_idx")
@@ -975,7 +981,7 @@ model Order {
   placedForCustomer      Boolean               @default(false)
   /// @deprecated Không nơi nào ghi hoặc đọc, luôn 0 (C-108); hoa hồng CTV nằm ở bảng commissions.
   commission             Int                   @default(0)
-  source                 String? // checkout | buy_now | ctv_assisted | subscription | dealer
+  source                 String? // checkout | buy_now | storefront | ctv_assisted | subscription | dealer
   platform               String? // miniapp | web — null cho đơn cũ trước migration này
   paidAt                 DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId         String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
@@ -1047,6 +1053,8 @@ model Order {
   updatedAt              DateTime              @updatedAt
 
   @@index([userId, status])
+  /// Báo cáo nguồn khách: đơn đầu/đơn hai của từng khách theo thời gian.
+  @@index([userId, createdAt])
   @@index([referrerUserId])
   @@index([storefrontSlug])
   // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —
@@ -1385,6 +1393,8 @@ model AffiliateLink {
 }
 
 /// @deprecated Chỉ ghi, không đọc (C-108): AffiliateService.trackClick ghi mỗi lượt bấm, không nơi nào đọc lại.
+/// Route công khai POST /affiliate/click chặn ghi trùng bằng ràng buộc duy nhất (shortCode, ipHash, dedupeDay): lần ghi thứ hai
+/// trong ngày vi phạm khoá và bị bỏ, không có truy vấn đọc nào.
 model AffiliateClick {
   id               String   @id @default(cuid())
   shortCode        String
@@ -1395,7 +1405,10 @@ model AffiliateClick {
   clickedAt        DateTime @default(now())
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108, A7-24).
   convertedOrderId String?
+  /// Ngày giờ VN (YYYY-MM-DD) của lượt bấm từ route công khai; null ở các dòng ghi bằng đường khác (Postgres cho phép nhiều null).
+  dedupeDay        String?
 
+  @@unique([shortCode, ipHash, dedupeDay])
   @@index([shortCode])
   @@map("affiliate_clicks")
 }
@@ -3002,6 +3015,8 @@ model AnalyticsEvent {
   platform       String
   appVersion     String?
   entrySource    String?
+  /// Chiến dịch (utm_campaign / thẻ trong hộp) của phiên phát sinh sự kiện, đi kèm entrySource.
+  campaign       String?
   notificationId String?
   refCode        String?
   storefrontSlug String?

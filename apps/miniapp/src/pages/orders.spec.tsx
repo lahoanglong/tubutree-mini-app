@@ -82,6 +82,16 @@ describe('OrdersPage (tab gốc)', () => {
     expect(screen.queryByRole('region', { name: 'Mua lại' })).toBeNull();
   });
 
+  it('đơn chuyển khoản chờ thanh toán: nút "Thanh toán ngay" mở đúng màn chuyển khoản của đơn', async () => {
+    mocks.fetchOrders.mockResolvedValue({
+      data: [{ ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString() }],
+      meta: { page: 1, limit: 20, total: 1 },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thanh toán ngay' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU-777');
+  });
+
   it('tab "Đang xử lý" gửi group=processing', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Đang xử lý' }));

@@ -1587,7 +1587,10 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
-  | 'refillPending';
+  | 'refillPending'
+  | 'communityPending'
+  | 'communityUnanswered'
+  | 'invoicePending';
 export interface OpsInbox {
   generatedAt: string;
   items: { key: InboxKey; count: number }[];

@@ -468,6 +468,16 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(api.pays()).toHaveLength(0);
   });
 
+  it('lớp nền hộp xác nhận chừa inset trái/phải của tai thỏ, không nhỏ hơn lề 1rem sẵn có', async () => {
+    stub({ list: () => [refund()] });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    await openDialog(container);
+    const backdrop = document.querySelector<HTMLElement>('[data-confirm-backdrop]')!;
+    expect(backdrop.style.paddingLeft).toBe('max(1rem, env(safe-area-inset-left, 0px))');
+    expect(backdrop.style.paddingRight).toBe('max(1rem, env(safe-area-inset-right, 0px))');
+  });
+
   it('Huỷ / Escape / bấm nền: đóng hộp, không gửi gì, mở lại thì ô nhập trống', async () => {
     const api = stub({ list: () => [refund()] });
     const { container } = mount(<CustomerRefundsTab />);

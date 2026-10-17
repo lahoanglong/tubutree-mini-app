@@ -13,6 +13,7 @@ import {
   setUnauthorizedHandler,
 } from '../services/api';
 import { getZaloAccessToken, requestZaloPhoneToken, getLaunchReferral } from '../services/zmp-bridge';
+import { loadFirstTouch } from '../services/first-touch';
 import { vi } from '../i18n/vi';
 
 const REFRESH_KEY = 'tubu_refresh_token';
@@ -116,9 +117,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async () => {
     set({ status: 'loading', error: undefined });
     const ref = getLaunchReferral();
+    const firstTouch = await loadFirstTouch();
     try {
       const { code, accessToken } = await getZaloAccessToken();
-      const res = await loginZaloMiniApp(code, accessToken, undefined, ref);
+      const res = await loginZaloMiniApp(code, accessToken, undefined, ref, firstTouch);
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
@@ -128,7 +130,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     // Fallback khách (Zalo chưa khả dụng) — app vẫn dùng được đầy đủ.
     try {
-      const res = await loginGuest(await getDeviceId(), ref);
+      const res = await loginGuest(await getDeviceId(), ref, firstTouch);
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
@@ -170,9 +172,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo (im lặng, không sheet SĐT).
       const ref = getLaunchReferral();
+      const firstTouch = await loadFirstTouch();
       try {
         const { code, accessToken } = await getZaloAccessToken();
-        const res = await loginZaloMiniApp(code, accessToken, undefined, ref);
+        const res = await loginZaloMiniApp(code, accessToken, undefined, ref, firstTouch);
         setAccessToken(res.accessToken);
         await persistRefresh(res.refreshToken);
         set({ user: res.user, status: 'authenticated' });
@@ -183,7 +186,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Zalo login chưa khả dụng (vd app chưa kích hoạt -1401) → đăng nhập KHÁCH theo
       // deviceId để app vẫn chạy đầy đủ (giỏ/vườn/tài khoản/mua hàng).
       try {
-        const res = await loginGuest(await getDeviceId(), ref);
+        const res = await loginGuest(await getDeviceId(), ref, firstTouch);
         setAccessToken(res.accessToken);
         await persistRefresh(res.refreshToken);
         set({ user: res.user, status: 'authenticated' });

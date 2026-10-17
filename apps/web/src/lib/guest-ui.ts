@@ -24,3 +24,12 @@ export const ui = {
   btnText: 'inline-flex min-h-11 items-center px-2 text-sm font-semibold underline disabled:opacity-50',
   error: 'text-sm text-danger-fg',
 } as const;
+
+/**
+ * Nút trên thanh dính đáy: bớt đệm ngang để giá + hai nút vừa màn 360px. Tạo từ `ui` bằng cách thay lớp `px-*` chứ không
+ * chồng lớp thứ hai lên (thứ tự CSS của hai lớp `px-*` không đảm bảo, lớp gốc có thể thắng).
+ */
+export const uiBar = {
+  primary: ui.btnPrimary.replace('px-5', 'px-3'),
+  secondary: ui.btnSecondary.replace('px-5', 'px-3'),
+} as const;

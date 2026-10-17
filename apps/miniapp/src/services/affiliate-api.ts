@@ -1,4 +1,5 @@
 import { api } from './api';
+import { getSessionAttribution } from '../utils/entry-source';
 
 export interface AffiliateMe {
   isAffiliate: boolean;
@@ -187,6 +188,23 @@ export const getStorefrontAnalytics = () =>
   api.get('/affiliate/analytics/storefronts').then((r) => r.data as { storefronts: StorefrontStat[] });
 export const getProductBreakdown = () =>
   api.get('/affiliate/analytics/products').then((r) => r.data as ProductStat[]);
+
+let linkClickReported = false;
+
+/**
+ * Mở app bằng link CTV có `?l=<mã link>` (affiliate.tsx tạo) → báo API +1 click cho link đó. Một lần mỗi phiên app: mở lại từ nền
+ * không tính thêm. Fire-and-forget: con số click không đáng làm hỏng việc mở app.
+ */
+export function reportLaunchLinkClick(): void {
+  const shortCode = getSessionAttribution()?.linkCode;
+  if (!shortCode || linkClickReported) return;
+  linkClickReported = true;
+  void api.post('/affiliate/click', { shortCode }).catch(() => {});
+}
+
+export function __resetLinkClickForTest(): void {
+  linkClickReported = false;
+}
 
 /** Ghi "chạm" giới thiệu để attribution sống 3 ngày (fallback khi phiên mất). Fire-and-forget. */
 export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand' }) =>
