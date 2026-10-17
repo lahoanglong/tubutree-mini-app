@@ -319,6 +319,8 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     });
     await new ReviewInviteService(prisma, config, notifications).sendReviewInvites();
     expect(sentTo(userId, 'REVIEW_REQUEST')).toEqual([]);
+    // Không đánh dấu đã mời: hàng bật lại trong cửa sổ mời thì lượt sau vẫn mời được.
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: recent.id } })).reviewInvitedAt).toBeNull();
 
     // Giỏ bỏ quên 10 giờ, chỉ có hàng đã tắt → không nhắc.
     await prisma.$executeRaw`UPDATE "carts" SET "updatedAt" = now() - interval '10 hours', "abandonRemindedAt" = NULL WHERE "userId" = ${userId}`;
