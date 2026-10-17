@@ -31,6 +31,8 @@ const MIGRATED = [
   'app/s/[slug]/page.tsx',
   'app/dang-nhap/page.tsx',
   'app/dang-nhap/callback/page.tsx',
+  'app/chinh-sach/[loai]/page.tsx',
+  'components/legal-markdown.tsx',
   'app/error.tsx',
   'app/global-error.tsx',
   'app/not-found.tsx',

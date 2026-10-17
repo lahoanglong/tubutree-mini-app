@@ -231,3 +231,37 @@ describe('/dang-nhap — Mở trên Zalo', () => {
     expect(sessionStorage.getItem('tubu_return_to')).toBeNull();
   });
 });
+
+describe('/dang-nhap — đồng ý điều khoản (D5-01)', () => {
+  it('dưới nút đăng nhập có câu đồng ý Điều khoản và Chính sách bảo mật, hai liên kết đúng trang', async () => {
+    const { container } = mount(<LoginPage />);
+    await flush();
+    const consent = Array.from(container.querySelectorAll('p')).find((p) => p.textContent?.startsWith('Bằng việc đăng nhập'))!;
+    expect(consent.textContent).toBe('Bằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.');
+    const hrefs = Array.from(consent.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')]);
+    expect(hrefs).toEqual([
+      ['Điều khoản', '/chinh-sach/dieu-khoan'],
+      ['Chính sách bảo mật', '/chinh-sach/bao-mat'],
+    ]);
+    const button = byText(container, 'button', 'Đăng nhập với Zalo')!;
+    expect(button.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('vẫn hiện khi đăng nhập Zalo tạm ngưng (khách vẫn đọc được điều khoản)', async () => {
+    mocks.auth.zaloLoginConfigured = false;
+    const { container } = mount(<LoginPage />);
+    await flush();
+    expect(container.textContent).toContain('Bằng việc đăng nhập, bạn đồng ý với');
+  });
+
+  it('không đổi luồng: bấm liên kết điều khoản không ghi returnTo, không gọi startZaloLogin', async () => {
+    mocks.search = new URLSearchParams({ returnTo: '/gio-hang' });
+    const { container } = mount(<LoginPage />);
+    await flush();
+    const a = container.querySelector<HTMLAnchorElement>('a[href="/chinh-sach/dieu-khoan"]')!;
+    a.addEventListener('click', (e) => e.preventDefault());
+    click(a);
+    expect(mocks.auth.startZaloLogin).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('tubu_return_to')).toBeNull();
+  });
+});

@@ -44,4 +44,15 @@ describe('SiteFooter', () => {
     expect(links.length).toBeGreaterThanOrEqual(2);
     for (const a of links) expect(a).toContain('min-h-11');
   });
+
+  it('có lối tới bốn trang điều khoản/chính sách (D5-01), đủ vùng chạm 44px', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
+    const out = await html();
+    const nav = out.match(/<nav[^>]*aria-label="Chính sách"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? '';
+    expect(nav).not.toBe('');
+    const hrefs = [...nav.matchAll(/<a [^>]*href="([^"]+)"/g)].map((m) => m[1]);
+    expect(hrefs).toEqual(['/chinh-sach/dieu-khoan', '/chinh-sach/bao-mat', '/chinh-sach/doi-tra', '/chinh-sach/van-chuyen']);
+    for (const label of ['Điều khoản', 'Bảo mật', 'Đổi trả', 'Vận chuyển']) expect(nav).toContain(label);
+    for (const a of nav.match(/<a [^>]*>/g) ?? []) expect(a).toContain('min-h-11');
+  });
 });

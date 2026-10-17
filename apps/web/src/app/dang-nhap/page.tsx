@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Trees } from 'lucide-react';
@@ -61,6 +62,18 @@ function LoginInner() {
       <button type="button" onClick={onLogin} disabled={busy || unavailable} className={`${ui.btnPrimary} mt-8 w-full`}>
         {busy ? 'Đang chuyển tới Zalo…' : 'Đăng nhập với Zalo'}
       </button>
+
+      <p className="mt-3 text-xs text-stone-600">
+        Bằng việc đăng nhập, bạn đồng ý với{' '}
+        <Link href="/chinh-sach/dieu-khoan" className="font-medium text-forest-700 underline underline-offset-2">
+          Điều khoản
+        </Link>{' '}
+        và{' '}
+        <Link href="/chinh-sach/bao-mat" className="font-medium text-forest-700 underline underline-offset-2">
+          Chính sách bảo mật
+        </Link>
+        .
+      </p>
 
       {unavailable && (
         <p role="alert" className={`mt-4 ${ui.error}`}>
