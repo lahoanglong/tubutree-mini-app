@@ -14,6 +14,7 @@ import {
   setStorage,
 } from 'zmp-sdk/apis';
 import { copyText } from '../utils/clipboard';
+import { WEB_BASE_URL } from '../utils/web-base-url';
 
 /**
  * Bọc các API gốc của zmp-sdk: login, share, (pay - Phase 1).
@@ -264,14 +265,37 @@ export function getLaunchReferral(): string | undefined {
   return undefined;
 }
 
+// openShareSheet (zmp_deep_link) của zmp-sdk từ chối cả lần chia sẻ khi thumbnail không phải URL, title quá 100 hay description quá 400 ký tự.
+const SHARE_TITLE_MAX = 100;
+const SHARE_DESCRIPTION_MAX = 400;
+// Ảnh Open Graph tĩnh của web (apps/web/src/app/opengraph-image.png) cho sản phẩm hoặc gian hàng chưa có ảnh.
+const SHARE_FALLBACK_THUMBNAIL = `${WEB_BASE_URL}/opengraph-image.png`;
+
+function clipForShare(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = text.slice(0, max - 1);
+  const last = head.charCodeAt(head.length - 1);
+  const lonelyHighSurrogate = last >= 0xd800 && last <= 0xdbff;
+  return `${lonelyHighSurrogate ? head.slice(0, -1) : head}…`;
+}
+
+function shareThumbnail(url: string | undefined): string {
+  try {
+    const { protocol } = new URL(url ?? '');
+    return protocol === 'http:' || protocol === 'https:' ? (url as string) : SHARE_FALLBACK_THUMBNAIL;
+  } catch {
+    return SHARE_FALLBACK_THUMBNAIL;
+  }
+}
+
 /** Mở share sheet chia sẻ link sản phẩm (dùng cho Affiliate Phase 3). */
 export async function shareLink(params: { title: string; description: string; thumbnail?: string; path: string }) {
   await openShareSheet({
     type: 'zmp_deep_link',
     data: {
-      title: params.title,
-      description: params.description,
-      thumbnail: params.thumbnail ?? '',
+      title: clipForShare(params.title, SHARE_TITLE_MAX),
+      description: clipForShare(params.description, SHARE_DESCRIPTION_MAX),
+      thumbnail: shareThumbnail(params.thumbnail),
       path: params.path,
     },
   });

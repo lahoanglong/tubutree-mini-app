@@ -683,11 +683,12 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(JSON.stringify(card)).not.toContain('u123456');
     });
 
-    // Mặt thẻ/POS không chặn SĐT ngắn (khác maskPhoneOrNull ra '***'): ghim đầu ra để việc gộp helper sau này không đổi nó âm thầm.
+    // SĐT từ 6 ký tự trở xuống mà để lộ 3 đầu + 3 cuối thì lộ gần hết số, nên ra '***' như mọi màn che SĐT khác.
     it.each([
       ['0987654321', '098****321'],
-      ['012345', '012****345'],
-      ['1', '1****1'],
+      ['0123456', '012****456'],
+      ['012345', '***'],
+      ['1', '***'],
       ['', null],
       [null, null],
     ])('SĐT %p trên thẻ thành viên → %p', async (phone, expected) => {

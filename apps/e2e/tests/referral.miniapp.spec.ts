@@ -68,12 +68,18 @@ test.describe('Giới thiệu bạn bè', () => {
     await expect(page.getByText(/Mời thêm \d+ bạn/)).toHaveCount(0);
   });
 
-  test('chia sẻ: ngoài Zalo không mở được share sheet thì báo mã để người dùng tự gửi', async ({ page, api }) => {
+  test('chia sẻ: lời gọi share sheet hợp lệ nên không báo lỗi chia sẻ và Ví vẫn dùng được', async ({ page, api }) => {
     mockWalletPage(api);
     await page.goto('/wallet');
 
     await page.getByRole('button', { name: 'Chia sẻ' }).click({ timeout: 15_000 });
-    await expect(page.getByText('Mã giới thiệu của bạn: BANBE77')).toBeVisible();
+    // Trước đây thumbnail thiếu làm zmp-sdk từ chối (zod) nên luôn rơi vào thông báo dự phòng. Nay payload hợp lệ, SDK
+    // ngoài Zalo trả về bình thường: không có thông báo lỗi, nút vẫn bấm được. Nhánh dự phòng (SDK từ chối → chép
+    // liên kết + báo; người dùng huỷ → im lặng) do wallet.spec.tsx kiểm, vì e2e không ép được SDK từ chối.
+    await page.waitForTimeout(500);
+    await expect(page.getByText(/Chưa chia sẻ được qua Zalo|Mã giới thiệu của bạn/)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Chia sẻ' })).toBeEnabled();
+    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
   });
 
   test('/me/referral lỗi 500: ẩn khối mời bạn nhưng Ví vẫn dùng được', async ({ page, api }) => {
