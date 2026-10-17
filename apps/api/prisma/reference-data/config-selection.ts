@@ -3,8 +3,9 @@ import type { ConfigSeed } from '../../src/modules/system-config/config-seed';
 /**
  * Chọn khoá SystemConfig nào trong `seed.ts` được nạp lên DB thật (`seed-reference.ts`).
  *
- * Mọi khoá có mặc định trong mã nên không khoá nào "thiếu thì hỏng"; nạp để admin THẤY và sửa được ở tab Cấu hình
- * (tab chỉ liệt kê dòng đã có trong DB) và để các cặp khoá đi cùng nhau (hạng thành viên + freeship theo hạng) không lệch.
+ * Mọi khoá đều có mặc định trong mã nên không khoá nào "thiếu thì hỏng"; nạp để admin THẤY và sửa được ở tab Cấu hình
+ * (tab chỉ liệt kê dòng đã có trong DB). Dòng có giá trị BẰNG mặc định trong mã thì nạp không đổi hành vi. Dòng có giá
+ * trị KHÁC mặc định trong mã (BUSINESS_CONFIG_KEYS) thì nạp là đổi hành vi, nên chỉ nạp khi chủ dự án đã duyệt từng giá trị.
  * Danh sách theo tiền tố là danh sách cho phép: tiền tố mới chưa ai duyệt thì KHÔNG được nạp, và
  * reference-config-selection.spec.ts đỏ để buộc người thêm khoá quyết định nạp hay loại.
  */
@@ -53,6 +54,19 @@ export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Khoá nằm trong tiền tố được nạp nhưng giá trị seed là quyết định kinh doanh (tiền, điểm, xác suất) khác mặc định trong mã,
+ * kèm hai giá trị để chủ dự án so. Chỉ nạp với `--with-business-defaults`; không cờ thì DB giữ hành vi như bảng trống.
+ */
+export const BUSINESS_CONFIG_KEYS: Readonly<Record<string, string>> = {
+  'game.spin_prizes': 'mã mặc định [] (vòng quay tắt); seed mở 8 giải, có voucher 20k/50k và tới 50 điểm Xanh',
+  'referral.milestones_points': 'mã mặc định [] (không thưởng mốc); seed thưởng 20/40/100 điểm Xanh ở mốc 3/5/10 bạn',
+  'subscribe.discount_tiers': 'mã mặc định một bậc bằng subscribe.discount_pct (12%); seed thêm 14% (3 gói) và 15% (5 gói)',
+  'shipping.tier_freeship_overrides': 'mã mặc định {} (không hạng nào freeship sớm); seed cho Lộc Biếc freeship từ 99k, Đại Thụ và Cổ Thụ freeship hết',
+  'game.streak_7_bonus': 'mã mặc định { seeds: 20 }; seed { seeds: 10, free_spins: 1 } (free_spins không code nào đọc)',
+  'seasonpass.tiers': 'mã mặc định [] ; seed 5 bậc thưởng (Season Pass đang ẩn, SEASON_PASS_ENABLED=false)',
+};
+
+/**
  * Khoá mã đọc nhưng `seed.ts` chưa có, nạp đúng giá trị mặc định trong mã để admin thấy (D4-021).
  * `fallbackSource` là đoạn mã nguồn đang giữ mặc định đó; reference-config-selection.spec.ts đối chiếu để hai nơi không lệch.
  */
@@ -70,17 +84,23 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_thresholds', value: [0, 50, 200, 500], category: 'community', description: 'Mốc điểm uy tín để lên cấp 1 đến 4 (Mầm, Cây non, Cây trưởng thành, Cổ thụ)', fallbackSource: { file: FEED, text: 'const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];' } },
 ];
 
-export type ConfigDecision = 'reference' | 'excluded' | 'unclassified';
+export type ConfigDecision = 'reference' | 'business' | 'excluded' | 'unclassified';
 
 export function classifyConfigKey(key: string): ConfigDecision {
   if (key in EXCLUDED_CONFIG_KEYS) return 'excluded';
   if (Object.keys(EXCLUDED_CONFIG_PREFIXES).some((prefix) => key.startsWith(`${prefix}.`))) return 'excluded';
-  return REFERENCE_CONFIG_PREFIXES.includes(key.split('.')[0]!) ? 'reference' : 'unclassified';
+  if (!REFERENCE_CONFIG_PREFIXES.includes(key.split('.')[0]!)) return 'unclassified';
+  return key in BUSINESS_CONFIG_KEYS ? 'business' : 'reference';
 }
 
-/** Dòng SystemConfig sẽ nạp: khoá được duyệt của seed.ts cộng các khoá bổ sung. */
+/** Dòng SystemConfig nạp mặc định: khoá được duyệt của seed.ts cộng các khoá bổ sung (không gồm khoá giá trị kinh doanh). */
 export function selectReferenceConfigs(all: readonly ConfigSeed[]): ConfigSeed[] {
   const fromSeed = all.filter((c) => classifyConfigKey(c.key) === 'reference');
   const extras = EXTRA_CONFIGS.map(({ fallbackSource: _src, ...row }) => row);
   return [...fromSeed, ...extras];
+}
+
+/** Dòng SystemConfig chỉ nạp khi có `--with-business-defaults`. */
+export function selectBusinessConfigs(all: readonly ConfigSeed[]): ConfigSeed[] {
+  return all.filter((c) => classifyConfigKey(c.key) === 'business');
 }

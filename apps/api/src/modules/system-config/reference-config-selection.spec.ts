@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SYSTEM_CONFIGS, TIERS } from '../../../prisma/seed';
 import {
+  BUSINESS_CONFIG_KEYS,
   EXCLUDED_CONFIG_KEYS,
   EXCLUDED_CONFIG_PREFIXES,
   EXTRA_CONFIGS,
   REFERENCE_CONFIG_PREFIXES,
   classifyConfigKey,
+  selectBusinessConfigs,
   selectReferenceConfigs,
 } from '../../../prisma/reference-data/config-selection';
 
@@ -62,9 +64,7 @@ const APPROVED_LOADED_KEYS = [
     'game.quiz_daily_count',
     'game.spin_buy_cost_points',
     'game.spin_buy_daily_limit',
-    'game.spin_prizes',
     'game.spin_voucher_min_order_multiplier',
-    'game.streak_7_bonus',
     'game.streak_freeze_cost',
     'game.streak_repair_cooldown_days',
     'game.streak_repair_cost',
@@ -102,7 +102,6 @@ const APPROVED_LOADED_KEYS = [
     'ops.alert_webhook_failed',
     'orders.dealer_pending_payment_ttl_hours',
     'orders.pending_payment_ttl_hours',
-    'referral.milestones_points',
     'referral.min_order_amount',
     'referral.referrer_reward_points',
     'referral.window_days',
@@ -117,13 +116,10 @@ const APPROVED_LOADED_KEYS = [
     'retention.webhook_events_days',
     'returns.window_days',
     'seasonpass.checkin_xp',
-    'seasonpass.tiers',
     'shipping.eta_max_days',
     'shipping.eta_min_days',
-    'shipping.tier_freeship_overrides',
     'storefront.identifier_cooldown_days',
     'subscribe.discount_pct',
-    'subscribe.discount_tiers',
     'subscribe.stock_retry_days',
     'support.email',
     'support.hotline',
@@ -138,6 +134,15 @@ const APPROVED_LOADED_KEYS = [
     'wallet.withdraw_min',
     'wishlist.price_drop_cooldown_days',
     'wishlist.price_drop_min_pct',
+];
+
+const APPROVED_BUSINESS_KEYS = [
+    'game.spin_prizes',
+    'game.streak_7_bonus',
+    'referral.milestones_points',
+    'seasonpass.tiers',
+    'shipping.tier_freeship_overrides',
+    'subscribe.discount_tiers',
 ];
 
 describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
@@ -173,15 +178,30 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
 
   // Danh sách chốt: khoá mới của seed.ts (hay khoá bổ sung) làm test này đỏ để người thêm phải quyết định nạp hay loại,
   // rồi sửa danh sách ở đây cùng commit. Đừng cập nhật danh sách mà không xem khoá mới có nhạy cảm không.
-  it('danh sách khoá nạp lên DB thật khớp danh sách đã duyệt', () => {
+  it('danh sách khoá nạp mặc định lên DB thật khớp danh sách đã duyệt', () => {
     expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS)).sort()).toEqual(APPROVED_LOADED_KEYS);
   });
 
-  it('freeship theo hạng: mọi hạng trong shipping.tier_freeship_overrides là hạng có thật trong TIERS, và khoá này được nạp cùng TIERS', () => {
+  it('danh sách khoá giá trị kinh doanh (chỉ nạp có cờ) khớp danh sách đã duyệt, và không lẫn vào phần nạp mặc định', () => {
+    expect(keysOf(selectBusinessConfigs(SYSTEM_CONFIGS)).sort()).toEqual(APPROVED_BUSINESS_KEYS);
+    const loaded = new Set(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS)));
+    expect(APPROVED_BUSINESS_KEYS.filter((k) => loaded.has(k))).toEqual([]);
+  });
+
+  it('mọi khoá giá trị kinh doanh còn trong seed.ts và có lý do ghi kèm hai giá trị so sánh', () => {
+    const seeded = keysOf(SYSTEM_CONFIGS);
+    for (const [key, reason] of Object.entries(BUSINESS_CONFIG_KEYS)) {
+      expect(seeded).toContain(key);
+      expect(reason).toMatch(/mã mặc định .*seed /);
+    }
+  });
+
+  it('freeship theo hạng: mọi hạng trong shipping.tier_freeship_overrides là hạng có thật trong TIERS, và khoá này đi cùng TIERS ở nhóm chỉ nạp có cờ', () => {
     const overrides = SYSTEM_CONFIGS.find((c) => c.key === 'shipping.tier_freeship_overrides')!.value as Record<string, number>;
     const tierIds = TIERS.map((t) => t.id);
     expect(Object.keys(overrides).filter((tier) => !tierIds.includes(tier))).toEqual([]);
-    expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS))).toContain('shipping.tier_freeship_overrides');
+    expect(keysOf(selectBusinessConfigs(SYSTEM_CONFIGS))).toContain('shipping.tier_freeship_overrides');
+    expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS))).not.toContain('shipping.tier_freeship_overrides');
   });
 
   it('khoá bổ sung không trùng khoá của seed.ts và không có hai dòng cùng khoá', () => {
