@@ -1,4 +1,4 @@
-import { formatPlan, formatResult, hasDemoData, parseCleanupArgs, type DemoCleanupPlan } from './cleanup';
+import { formatPlan, formatResult, formatUndoSql, hasDemoData, parseCleanupArgs, type CleanupResult, type DemoCleanupPlan } from './cleanup';
 
 const END = new Date('2026-12-31T17:00:00.000Z');
 
@@ -117,6 +117,40 @@ describe('formatPlan', () => {
 
 describe('formatResult', () => {
   it('in số dòng đã đổi', () => {
-    expect(formatResult({ productsDeactivated: 44, variationsDeactivated: 48, skusPrefixed: 48, couponsExpired: 0 })).toMatch(/44 sản phẩm.*48 biến thể.*48 SKU sang DEMO-.*0 mã/s);
+    const undo = { productIds: [], variationIds: [], skuVariationIds: [], coupons: [] };
+    expect(formatResult({ productsDeactivated: 44, variationsDeactivated: 48, skusPrefixed: 48, couponsExpired: 0, undo })).toMatch(/44 sản phẩm.*48 biến thể.*48 SKU sang DEMO-.*0 mã/s);
+  });
+});
+
+describe('formatUndoSql', () => {
+  const base: CleanupResult = {
+    productsDeactivated: 1,
+    variationsDeactivated: 1,
+    skusPrefixed: 1,
+    couponsExpired: 1,
+    undo: {
+      productIds: ['p-visante-serum'],
+      variationIds: ['v1'],
+      skuVariationIds: ['v1'],
+      coupons: [{ id: 'cmqfuw9l0000gw1vf8f2wozy0', code: 'WELCOME30', isActive: true, endAt: new Date('2026-12-31T17:00:00.000Z') }],
+    },
+  };
+
+  it('một transaction bật lại đúng dòng đã đổi, gỡ tiền tố SKU, trả mã về isActive và endAt cũ', () => {
+    const sql = formatUndoSql(base);
+    expect(sql.split('\n')).toEqual([
+      '-- HOÀN TÁC (chỉ trưởng kỹ thuật, khi thật cần): chạy nguyên khối dưới đây qua psql.',
+      'BEGIN;',
+      `UPDATE "products" SET "isActive" = true WHERE "id" IN ('p-visante-serum');`,
+      `UPDATE "variations" SET "isActive" = true WHERE "id" IN ('v1');`,
+      `UPDATE "variations" SET "sku" = substr("sku", 6) WHERE "id" IN ('v1') AND "sku" LIKE 'DEMO-%';`,
+      `UPDATE "coupons" SET "isActive" = true, "endAt" = '2026-12-31T17:00:00.000Z' WHERE "id" = 'cmqfuw9l0000gw1vf8f2wozy0'; -- WELCOME30`,
+      'COMMIT;',
+    ]);
+  });
+
+  it('không đổi gì thì không có câu nào; id có nháy đơn được thoát', () => {
+    expect(formatUndoSql({ ...base, undo: { productIds: [], variationIds: [], skuVariationIds: [], coupons: [] } })).toMatch(/không đổi dòng nào/);
+    expect(formatUndoSql({ ...base, undo: { ...base.undo, productIds: ["a'b"] } })).toContain(`IN ('a''b')`);
   });
 });

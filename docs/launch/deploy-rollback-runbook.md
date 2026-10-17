@@ -530,12 +530,12 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
 3. Thực hiện (một transaction: lỗi thì không đổi gì). Chọn đúng một dòng theo quyết định ở điểm 2:
 
    ```bash
-   $DC run --rm --no-deps api pnpm run prisma:cleanup-demo -- --apply --coupons=expire                          # (a)
-   $DC run --rm --no-deps api pnpm run prisma:cleanup-demo -- --apply --coupons=expire --keep-coupon=WELCOME30  # (b) giữ WELCOME30
-   $DC run --rm --no-deps api pnpm run prisma:cleanup-demo -- --apply                                           # (c)
+   $DC run --rm --no-deps api pnpm run prisma:cleanup-demo -- --apply --coupons=expire 2>&1 | tee .demo-cleanup-apply.txt                          # (a)
+   $DC run --rm --no-deps api pnpm run prisma:cleanup-demo -- --apply --coupons=expire --keep-coupon=WELCOME30 2>&1 | tee .demo-cleanup-apply.txt  # (b) giữ WELCOME30
+   $DC run --rm --no-deps api pnpm run prisma:cleanup-demo -- --apply 2>&1 | tee .demo-cleanup-apply.txt                                           # (c)
    ```
 
-   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Chạy lại đúng lệnh đó phải in `Đã tắt 0 sản phẩm, 0 biến thể`.
+   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Cuối kết quả có khối `-- HOÀN TÁC` (các câu SQL đưa đúng những dòng vừa đổi về như cũ, gồm hạn cũ của từng mã); file `.demo-cleanup-apply.txt` giữ khối đó, không xoá file này. Chạy lại đúng lệnh đó phải in `Đã tắt 0 sản phẩm, 0 biến thể`.
 
    Nhìn nhanh (go-live check ở bước 10 mới là phép đối chiếu đúng danh sách):
 
@@ -552,7 +552,15 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
    - API `GET /products/<slug>/reviews` vẫn trả đánh giá cũ của sản phẩm demo; trang sản phẩm đã 404 nên khách không tới đó.
    - Trang nhãn, yêu thích, bài cộng đồng (gắn sản phẩm khi đăng) và lời nhắc CTV chỉ lọc `isActive`, chưa lọc trạng thái duyệt: không ảnh hưởng hàng demo (đã tắt), là việc riêng cho hàng đối tác chờ duyệt.
 
-   Lỡ tay: mã bật lại và sửa hạn ở Quản trị, Mã giảm giá. Sản phẩm demo không có nút bật lại trong Quản trị (hàng kho Tubu đến từ Pancake): nếu thật cần, gọi tech lead, hoặc khôi phục bản backup ở bước 6.
+   Lỡ tay (vd tắt nhầm mã chủ shop muốn giữ): một mã thì bật lại và sửa hạn ở Quản trị, Mã giảm giá, lấy hạn cũ trong khối `-- HOÀN TÁC` của `.demo-cleanup-apply.txt`. Cần đưa cả sản phẩm, biến thể về (Quản trị không có nút bật lại hàng kho Tubu): chỉ tech lead làm, chạy nguyên khối từ `BEGIN;` tới `COMMIT;` trong file đó:
+
+   ```bash
+   sed -n '/^BEGIN;$/,/^COMMIT;$/p' .demo-cleanup-apply.txt > .demo-cleanup-undo.sql
+   cat .demo-cleanup-undo.sql      # đọc lại trước khi chạy
+   psqlq -v ON_ERROR_STOP=1 < .demo-cleanup-undo.sql
+   ```
+
+   Không khôi phục bản backup ở bước 6 để hoàn tác bước này: dump đó có trước migration ở bước 7, khôi phục là lùi cả lần deploy (xem mục rollback).
 
 ### Bước 8. Bật web mới
 

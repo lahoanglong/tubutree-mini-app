@@ -11,7 +11,16 @@
  * Thoát 0 khi xong (kể cả khi không còn gì để đổi), 2 khi tham số sai hoặc DB không có dòng demo nào, 1 khi lỗi khác.
  * Logic nằm ở src/config/demo-data (có test); file này chỉ nối DB và in kết quả.
  */
-import { applyDemoCleanup, formatPlan, formatResult, hasDemoData, NoDemoDataError, parseCleanupArgs, previewDemoCleanup } from '../src/config/demo-data/cleanup';
+import {
+  applyDemoCleanup,
+  formatPlan,
+  formatResult,
+  formatUndoSql,
+  hasDemoData,
+  NoDemoDataError,
+  parseCleanupArgs,
+  previewDemoCleanup,
+} from '../src/config/demo-data/cleanup';
 
 // Đọc TRƯỚC khi nạp @prisma/client: lúc import, Prisma tự đổ file .env (vd apps/api/.env trỏ DB dev) vào process.env,
 // nên kiểm sau đó thì "chưa đặt DATABASE_URL" không bao giờ xảy ra và script lặng lẽ chạy lên DB trong file .env.
@@ -58,6 +67,8 @@ async function main(): Promise<number> {
     console.log(formatPlan(plan, args));
     console.log('');
     console.log(formatResult(result));
+    console.log('');
+    console.log(formatUndoSql(result));
     return 0;
   } catch (e) {
     if (e instanceof NoDemoDataError) {

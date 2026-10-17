@@ -102,7 +102,15 @@ export interface CleanupResult {
   productsDeactivated: number;
   variationsDeactivated: number;
   skusPrefixed: number;
+  /** Số dòng mã thật sự đổi (isActive hoặc endAt). */
   couponsExpired: number;
+  /** Đúng những dòng lần chạy này đã đổi, kèm giá trị cũ của mã: đủ để `formatUndoSql` hoàn tác. */
+  undo: {
+    productIds: string[];
+    variationIds: string[];
+    skuVariationIds: string[];
+    coupons: Array<{ id: string; code: string; isActive: boolean; endAt: Date }>;
+  };
 }
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -258,24 +266,52 @@ export async function applyDemoCleanup(
     async (tx) => {
       const plan = await planDemoCleanup(tx, now);
       if (!hasDemoData(plan)) throw new NoDemoDataError();
-      const products = await tx.product.updateMany({ where: { ...DEMO_PRODUCT_WHERE, isActive: true }, data: { isActive: false } });
-      const variations = await tx.variation.updateMany({ where: { ...DEMO_VARIATION_WHERE, isActive: true }, data: { isActive: false } });
+      // Ghi lại id từng dòng trước khi đổi rồi đổi theo đúng id đó: số in ra và khối hoàn tác khớp đúng dòng đã đổi.
+      const ids = (rows: Array<{ id: string }>) => rows.map((r) => r.id);
+      const productIds = ids(await tx.product.findMany({ where: { ...DEMO_PRODUCT_WHERE, isActive: true }, select: { id: true } }));
+      const variationIds = ids(await tx.variation.findMany({ where: { ...DEMO_VARIATION_WHERE, isActive: true }, select: { id: true } }));
+      const skuVariationIds = ids(
+        await tx.variation.findMany({
+          where: { pancakeId: { in: [...DEMO_VARIATION_PANCAKE_IDS] }, NOT: { sku: { startsWith: DEMO_SKU_PREFIX } } },
+          select: { id: true },
+        }),
+      );
+      const products = await tx.product.updateMany({ where: { id: { in: productIds }, isActive: true }, data: { isActive: false } });
+      const variations = await tx.variation.updateMany({ where: { id: { in: variationIds }, isActive: true }, data: { isActive: false } });
       const skusPrefixed = await tx.$executeRawUnsafe(
-        `UPDATE "variations" SET "sku" = $1 || "sku" WHERE "pancakeId" = ANY($2::text[]) AND "sku" NOT LIKE $3`,
+        `UPDATE "variations" SET "sku" = $1 || "sku" WHERE "id" = ANY($2::text[]) AND "sku" NOT LIKE $3`,
         DEMO_SKU_PREFIX,
-        [...DEMO_VARIATION_PANCAKE_IDS],
+        skuVariationIds,
         `${DEMO_SKU_PREFIX}%`,
       );
-      let couponsExpired = 0;
+      const undoCoupons: CleanupResult['undo']['coupons'] = [];
       const couponIds = plan.coupons.filter((c) => isDemoCouponKind(c.kind) && !keep.includes(c.code)).map((c) => c.id);
       if (opts.coupons === 'expire' && couponIds.length > 0) {
-        const couponWhere = { id: { in: couponIds } };
-        couponsExpired = await tx.coupon.count({ where: { AND: [couponWhere, { OR: [{ isActive: true }, { endAt: { gt: now } }] }] } });
-        await tx.coupon.updateMany({ where: { AND: [couponWhere, { isActive: true }] }, data: { isActive: false } });
-        // Cắt cả hạn: trang nhãn (gắn mã vào khuyến mãi, nút chép mã) chỉ xét hạn, không xét isActive.
-        await tx.coupon.updateMany({ where: { AND: [couponWhere, { endAt: { gt: now } }, { startAt: { lte: now } }] }, data: { endAt: now } });
+        const rows = await tx.coupon.findMany({
+          where: { id: { in: couponIds } },
+          select: { id: true, code: true, isActive: true, startAt: true, endAt: true },
+          orderBy: { code: 'asc' },
+        });
+        for (const c of rows) {
+          // Cắt cả hạn: trang nhãn (gắn mã vào khuyến mãi, nút chép mã) chỉ xét hạn, không xét isActive. Mã chưa tới
+          // ngày bắt đầu thì giữ hạn (endAt trước startAt là dòng vô nghĩa), chỉ tắt.
+          const endAt = c.endAt > now && c.startAt <= now ? now : c.endAt;
+          if (!c.isActive && endAt === c.endAt) continue;
+          await tx.coupon.update({ where: { id: c.id }, data: { isActive: false, endAt } });
+          undoCoupons.push({ id: c.id, code: c.code, isActive: c.isActive, endAt: c.endAt });
+        }
       }
-      return { plan, result: { productsDeactivated: products.count, variationsDeactivated: variations.count, skusPrefixed, couponsExpired } };
+      const couponsExpired = undoCoupons.length;
+      return {
+        plan,
+        result: {
+          productsDeactivated: products.count,
+          variationsDeactivated: variations.count,
+          skusPrefixed,
+          couponsExpired,
+          undo: { productIds, variationIds, skuVariationIds, coupons: undoCoupons },
+        },
+      };
     },
     { timeout: 60_000, maxWait: 10_000 },
   );
@@ -341,6 +377,30 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
     L.push(`   - ${b.name}: ${b.isPublished ? 'ĐANG CÔNG KHAI' : 'chưa công khai'}, ${b.nonDemoActive} SP thật đang bán${b.isPublished && b.nonDemoActive === 0 ? ' → trang nhãn sẽ trống' : ''}`);
   }
   return L.join('\n');
+}
+
+const sqlList = (xs: readonly string[]) => xs.map((x) => `'${x.replace(/'/g, "''")}'`).join(', ');
+
+/**
+ * Câu SQL đưa đúng những dòng lần chạy này đã đổi về như cũ (sản phẩm, biến thể bật lại, gỡ tiền tố SKU, mã về isActive và
+ * endAt cũ). In ra cuối `--apply` để lưu cùng log; chỉ trưởng kỹ thuật chạy, qua psql. Không dùng bản backup trước deploy:
+ * dump đó có trước migration, khôi phục là lùi cả lần deploy.
+ */
+export function formatUndoSql(r: CleanupResult): string {
+  const u = r.undo;
+  const stmts: string[] = [];
+  if (u.productIds.length > 0) stmts.push(`UPDATE "products" SET "isActive" = true WHERE "id" IN (${sqlList(u.productIds)});`);
+  if (u.variationIds.length > 0) stmts.push(`UPDATE "variations" SET "isActive" = true WHERE "id" IN (${sqlList(u.variationIds)});`);
+  if (u.skuVariationIds.length > 0) {
+    stmts.push(
+      `UPDATE "variations" SET "sku" = substr("sku", ${DEMO_SKU_PREFIX.length + 1}) WHERE "id" IN (${sqlList(u.skuVariationIds)}) AND "sku" LIKE '${DEMO_SKU_PREFIX}%';`,
+    );
+  }
+  for (const c of u.coupons) {
+    stmts.push(`UPDATE "coupons" SET "isActive" = ${c.isActive}, "endAt" = '${c.endAt.toISOString()}' WHERE "id" = ${sqlList([c.id])}; -- ${c.code}`);
+  }
+  if (stmts.length === 0) return '-- HOÀN TÁC: lần chạy này không đổi dòng nào.';
+  return ['-- HOÀN TÁC (chỉ trưởng kỹ thuật, khi thật cần): chạy nguyên khối dưới đây qua psql.', 'BEGIN;', ...stmts, 'COMMIT;'].join('\n');
 }
 
 export function formatResult(r: CleanupResult): string {

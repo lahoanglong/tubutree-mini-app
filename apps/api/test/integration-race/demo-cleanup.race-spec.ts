@@ -15,7 +15,7 @@ import { RemarketingService } from '../../src/modules/lifecycle/remarketing.serv
 import { ReviewInviteService } from '../../src/modules/lifecycle/review-invite.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
-import { applyDemoCleanup, hasDemoData, planDemoCleanup, previewDemoCleanup } from '../../src/config/demo-data/cleanup';
+import { applyDemoCleanup, formatUndoSql, hasDemoData, planDemoCleanup, previewDemoCleanup } from '../../src/config/demo-data/cleanup';
 import {
   DEMO_BRANDS,
   DEMO_CATEGORIES,
@@ -183,7 +183,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     await expect(realVariation()).rejects.toMatchObject({ code: 'P2002' });
 
     const { result } = await applyDemoCleanup(prisma, { coupons: 'keep' });
-    expect(result).toEqual({ productsDeactivated: 44, variationsDeactivated: 48, skusPrefixed: 48, couponsExpired: 0 });
+    expect(result).toMatchObject({ productsDeactivated: 44, variationsDeactivated: 48, skusPrefixed: 48, couponsExpired: 0 });
     expect((await prisma.variation.findUniqueOrThrow({ where: { id: demoVariation.id } })).sku).toBe(`DEMO-${realSku}`);
     const created = await realVariation();
     await prisma.variation.delete({ where: { id: created.id } });
@@ -293,7 +293,13 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
 
   it('chạy lại: không lỗi, không đổi gì', async () => {
     const { plan, result } = await applyDemoCleanup(prisma, { coupons: 'keep' });
-    expect(result).toEqual({ productsDeactivated: 0, variationsDeactivated: 0, skusPrefixed: 0, couponsExpired: 0 });
+    expect(result).toEqual({
+      productsDeactivated: 0,
+      variationsDeactivated: 0,
+      skusPrefixed: 0,
+      couponsExpired: 0,
+      undo: { productIds: [], variationIds: [], skuVariationIds: [], coupons: [] },
+    });
     expect(plan.products.active).toBe(0);
     expect(plan.variations.skuToPrefix).toBe(0);
     expect(await prisma.variation.count({ where: { sku: { startsWith: 'DEMO-DEMO-' } } })).toBe(0);
@@ -420,6 +426,27 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     const apply = cli(['--', '--apply']);
     expect(apply.status).toBe(0);
     expect(apply.stdout).toContain('Đã tắt 0 sản phẩm, 0 biến thể');
+    expect(apply.stdout).toContain('-- HOÀN TÁC: lần chạy này không đổi dòng nào.');
     expect(cli(['--aply']).status).toBe(2);
+  });
+
+  it('hoàn tác: khối SQL in cuối --apply đưa đúng các dòng đã đổi về như trước (sản phẩm, biến thể, SKU, mã với endAt cũ)', async () => {
+    await restoreDemoState();
+    const snapshot = async () => ({
+      products: await prisma.product.findMany({ where: DEMO_PRODUCT_WHERE, select: { id: true, isActive: true }, orderBy: { id: 'asc' } }),
+      variations: await prisma.variation.findMany({ where: DEMO_VARIATION_WHERE, select: { id: true, isActive: true, sku: true }, orderBy: { id: 'asc' } }),
+      coupons: await prisma.coupon.findMany({ where: { id: { in: DEMO_COUPONS.map((c) => c.id) } }, select: { id: true, isActive: true, endAt: true }, orderBy: { id: 'asc' } }),
+    });
+    const before = await snapshot();
+    const { result } = await applyDemoCleanup(prisma, { coupons: 'expire' });
+    expect(result.undo.coupons.map((c) => c.code)).toEqual(['FREESHIP', 'WELCOME30', 'XANH10']);
+    expect(await snapshot()).not.toEqual(before);
+
+    const sql = formatUndoSql(result);
+    expect(sql).toMatch(/^-- HOÀN TÁC/);
+    await prisma.$transaction(async (tx) => {
+      for (const line of sql.split('\n').filter((l) => l.startsWith('UPDATE '))) await tx.$executeRawUnsafe(line.replace(/; --.*$/, ';'));
+    });
+    expect(await snapshot()).toEqual(before);
   });
 });
