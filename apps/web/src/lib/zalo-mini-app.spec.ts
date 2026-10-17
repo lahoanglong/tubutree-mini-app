@@ -1,0 +1,28 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { miniAppLink } from './zalo-mini-app';
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe('miniAppLink', () => {
+  it('chưa cấu hình app id: không có link (nút ẩn)', () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '');
+    expect(miniAppLink()).toBeNull();
+  });
+
+  it('app id không phải số (cấu hình hỏng): không dựng link sai', () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', 'abc/../x');
+    expect(miniAppLink()).toBeNull();
+  });
+
+  it('có app id: mở trang chủ Mini App', () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '2070857098114207963');
+    expect(miniAppLink()).toBe('https://zalo.me/s/2070857098114207963/');
+    expect(miniAppLink('/gio-hang')).toBe('https://zalo.me/s/2070857098114207963/');
+  });
+
+  it('khách đang xem một sản phẩm: mở đúng sản phẩm đó trong Mini App', () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '123');
+    expect(miniAppLink('/san-pham/dau-goi-bo-ket')).toBe('https://zalo.me/s/123/product/dau-goi-bo-ket');
+    expect(miniAppLink('/san-pham/dau-goi?ref=AN1')).toBe('https://zalo.me/s/123/product/dau-goi');
+  });
+});

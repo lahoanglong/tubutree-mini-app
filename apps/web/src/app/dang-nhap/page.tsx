@@ -10,6 +10,7 @@ import { loginFailureMessage } from '@/lib/login-errors';
 import { rememberReturnTo, safeReturnPath } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { miniAppLink } from '@/lib/zalo-mini-app';
 
 function LoginInner() {
   const router = useRouter();
@@ -27,6 +28,7 @@ function LoginInner() {
     enabled: unavailable,
   });
   const support = supportQ.data ?? DEFAULT_SUPPORT;
+  const miniAppUrl = miniAppLink(returnTo);
 
   useEffect(() => {
     if (status === 'authenticated') router.replace(returnTo ?? '/');
@@ -71,6 +73,15 @@ function LoginInner() {
         <p role="alert" className={`mt-4 ${ui.error}`}>
           {error}
         </p>
+      )}
+
+      {miniAppUrl && (
+        <>
+          <a href={miniAppUrl} className={`${ui.btnSecondary} mt-3 w-full`}>
+            Mở trên Zalo
+          </a>
+          <p className="mt-2 text-xs text-stone-600">Đã dùng Zalo? Mở Mini App Tubu Tree để mua sắm mà không cần đăng nhập lại.</p>
+        </>
       )}
 
       <a href="/" className={`${ui.backLink} mt-4 text-stone-600 hover:text-stone-900`}>

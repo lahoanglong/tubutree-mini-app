@@ -8,7 +8,8 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
 import { CouponBox, couponPreviewKey, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { ui } from '@/lib/guest-ui';
+import { StickyActionBar } from '@/components/sticky-action-bar';
+import { ui, uiBar } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
@@ -113,6 +114,16 @@ export default function CartPage() {
   const shownTier = shown?.tierDiscount ?? 0;
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
+  const payTotal = Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier);
+  const onPay = () => rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id));
+  // Lý do nút Thanh toán đang khoá (lời giải thích đầy đủ nằm ở khung tóm tắt; thanh dính đáy nhắc lại ngay cạnh nút).
+  const payHint =
+    selectedItems.length === 0
+      ? 'Chọn ít nhất một sản phẩm để thanh toán.'
+      : stockBlocked
+        ? 'Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn rồi thanh toán.'
+        : null;
+  const showBar = !cartQ.isLoading && !cartQ.isError && !!cart && cart.items.length > 0;
 
   return (
     <Shell>
@@ -173,7 +184,7 @@ export default function CartPage() {
                 checked={allSelected}
                 onChange={toggleAll}
                 aria-label="Chọn tất cả sản phẩm"
-                className="h-5 w-5 flex-none accent-forest-600"
+                className="h-6 w-6 flex-none accent-forest-600"
               />
               Chọn tất cả ({allItems.length})
             </label>
@@ -211,13 +222,13 @@ export default function CartPage() {
                     const busy = busyItemId === it.id;
                     return (
                       <div key={it.id} className="flex gap-3 p-3">
-                        <label className="flex h-11 w-7 flex-none cursor-pointer items-center justify-center">
+                        <label className="flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
                           <input
                             type="checkbox"
                             checked={!deselected.has(it.id)}
                             onChange={() => toggleSelect(it.id)}
                             aria-label={`Chọn ${it.productName} để thanh toán`}
-                            className="h-5 w-5 accent-forest-600"
+                            className="h-6 w-6 accent-forest-600"
                           />
                         </label>
                         <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
@@ -348,37 +359,60 @@ export default function CartPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span>{formatVnd(Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier))}</span>
+              <span>{formatVnd(payTotal)}</span>
             </div>
-            {selectedItems.length === 0 ? (
-              <>
-                <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
-                  Thanh toán (0)
-                </button>
-                <p role="status" className="mt-2 text-xs text-stone-600">
-                  Chọn ít nhất một sản phẩm để thanh toán.
-                </p>
-              </>
-            ) : stockBlocked ? (
-              <>
-                <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+            {/* Dưới md nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ md giữ ở khung tóm tắt. */}
+            <div className="hidden md:block">
+              {selectedItems.length === 0 ? (
+                <>
+                  <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                    Thanh toán (0)
+                  </button>
+                  <p role="status" className="mt-2 text-xs text-stone-600">
+                    {payHint}
+                  </p>
+                </>
+              ) : stockBlocked ? (
+                <>
+                  <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                    Thanh toán ({selectedCount})
+                  </button>
+                  <p role="alert" className="mt-2 text-xs text-danger-fg">
+                    {payHint}
+                  </p>
+                </>
+              ) : (
+                <Link href="/thanh-toan" onClick={onPay} className={`${ui.btnPrimary} mt-4 w-full`}>
                   Thanh toán ({selectedCount})
-                </button>
-                <p role="alert" className="mt-2 text-xs text-danger-fg">
-                  Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn rồi thanh toán.
-                </p>
-              </>
-            ) : (
-              <Link
-                href="/thanh-toan"
-                onClick={() => rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id))}
-                className={`${ui.btnPrimary} mt-4 w-full`}
-              >
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showBar && (
+        <StickyActionBar label="Thanh toán">
+          {payHint && (
+            <p aria-hidden="true" className={`mb-2 text-xs ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}>
+              {payHint}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-none">
+              <div className="text-xs text-stone-600">Tổng cộng</div>
+              <div className="text-lg font-bold leading-tight text-stone-900">{formatVnd(payTotal)}</div>
+            </div>
+            {payHint ? (
+              <button type="button" disabled className={`${uiBar.primary} min-w-0 flex-1`}>
                 Thanh toán ({selectedCount})
+              </button>
+            ) : (
+              <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} min-w-0 flex-1`}>
+                Thanh toán ({selectedCount}) · {formatVnd(payTotal)}
               </Link>
             )}
           </div>
-        </div>
+        </StickyActionBar>
       )}
     </Shell>
   );

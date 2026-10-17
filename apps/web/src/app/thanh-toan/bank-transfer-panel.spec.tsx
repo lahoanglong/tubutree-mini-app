@@ -132,7 +132,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
 
   // D5-03: thăm dò nền mỗi 4s bật isFetching; trước đây nút "Tôi đã chuyển" khoá/nhấp nháy theo nhịp đó đúng lúc khách bấm.
   it('thăm dò nền đang chạy: nút "Tôi đã chuyển" vẫn bấm được, trạng thái kiểm tra hiện ở dòng riêng', async () => {
-    let release: (() => void) | null = null;
+    let release: () => void = () => {};
     let calls = 0;
     vi.stubGlobal(
       'fetch',
@@ -154,13 +154,13 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(btn().textContent).toBe('Tôi đã chuyển khoản, kiểm tra lại');
     expect(container.querySelector('[data-testid="bank-poll-status"]')?.textContent).toContain('Đang kiểm tra');
 
-    release?.();
+    release();
     await flush();
     expect(container.querySelector('[data-testid="bank-poll-status"]')?.textContent).toContain('Đang chờ thanh toán');
   });
 
   it('bấm kiểm tra tay: nút khoá + "Đang kiểm tra…" trong lúc chờ, xong báo "chưa thấy tiền về" và mở lại nút', async () => {
-    let release: (() => void) | null = null;
+    let release: () => void = () => {};
     let calls = 0;
     vi.stubGlobal(
       'fetch',
@@ -178,7 +178,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(btn().disabled).toBe(true);
     expect(btn().textContent).toBe('Đang kiểm tra…');
 
-    release?.();
+    release();
     await flush();
     expect(btn().disabled).toBe(false);
     expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toContain('Chưa thấy tiền về');

@@ -7,7 +7,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, formatVnd, getProductStock } from '@/lib/shop-client';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { clearCheckoutSelection } from '@/lib/checkout-selection';
-import { ui } from '@/lib/guest-ui';
+import { ui, uiBar } from '@/lib/guest-ui';
 import { variationPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
@@ -283,10 +283,10 @@ export default function AddToCart({
           </div>
           {available ? (
             <div className="flex min-w-0 flex-1 gap-2">
-              <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${ui.btnSecondary} min-w-0 flex-1 px-2`}>
+              <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${uiBar.secondary} min-w-0 flex-1`}>
                 {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
               </button>
-              <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${ui.btnPrimary} min-w-0 flex-1 px-2`}>
+              <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${uiBar.primary} min-w-0 flex-1`}>
                 {buyLabel}
               </button>
             </div>
