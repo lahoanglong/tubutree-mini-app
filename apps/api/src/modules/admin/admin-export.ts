@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
 import { OPEN_REFUND_FOR_EXPORT } from '../orders/refund-queue';
+import { orderPlatformLabel, orderSourceLabel } from './order-channel';
 
 /** Số dòng đọc mỗi lượt khi xuất CSV: đủ lớn để nhanh, đủ nhỏ để không giữ cả bảng trong bộ nhớ. */
 export const EXPORT_BATCH = 500;
@@ -37,9 +38,9 @@ export function csvText(value: string | null | undefined): string {
 class EncodedCell {
   constructor(readonly encoded: string) {}
 }
-const text = (value: string | null | undefined) => new EncodedCell(csvText(value));
+export const text = (value: string | null | undefined) => new EncodedCell(csvText(value));
 
-const row = (cells: unknown[]) => `${cells.map((c) => (c instanceof EncodedCell ? c.encoded : csvCell(c))).join(',')}\r\n`;
+export const row = (cells: unknown[]) => `${cells.map((c) => (c instanceof EncodedCell ? c.encoded : csvCell(c))).join(',')}\r\n`;
 
 const ORDER_STATUS: Record<string, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
@@ -108,6 +109,12 @@ export const ORDER_CSV_HEADERS = [
   'Ngày giao',
   'Thu gom tái chế',
   'Ghi chú',
+  // Cột nguồn nằm cuối để bảng tính kế toán đang tham chiếu cột theo vị trí không bị lệch.
+  'Nền tảng',
+  'Nguồn đơn',
+  'CTV giới thiệu',
+  'SĐT CTV',
+  'Gian hàng',
 ];
 
 const ORDER_SELECT = {
@@ -124,6 +131,10 @@ const ORDER_SELECT = {
   shippingFee: true,
   pointsUsed: true,
   total: true,
+  platform: true,
+  source: true,
+  referrerUserId: true,
+  storefront: { select: { title: true } },
   shippingCode: true,
   shippingPartner: true,
   pancakeOrderId: true,
@@ -140,8 +151,10 @@ const ORDER_SELECT = {
 } satisfies Prisma.OrderSelect;
 
 type ExportOrder = Prisma.OrderGetPayload<{ select: typeof ORDER_SELECT }>;
+type Referrer = { fullName: string | null; phone: string | null };
 
-function orderRow(o: ExportOrder): string {
+function orderRow(o: ExportOrder, referrers: ReadonlyMap<string, Referrer>): string {
+  const referrer = o.referrerUserId ? referrers.get(o.referrerUserId) : undefined;
   const addr = (o.shippingAddress ?? {}) as { recipient?: string; phone?: string };
   return row([
     o.code,
@@ -167,7 +180,20 @@ function orderRow(o: ExportOrder): string {
     o.deliveredAt ? formatVnDateTime(o.deliveredAt) : '',
     o.hasRecyclingPickup ? ['Có', o.gomdonStatus ?? '', o.gomdonPartnerCode ?? ''].filter(Boolean).join(' · ') : '',
     o.note ?? '',
+    orderPlatformLabel(o.platform),
+    orderSourceLabel(o.source),
+    referrer?.fullName ?? '',
+    text(referrer?.phone),
+    o.storefront?.title ?? '',
   ]);
+}
+
+/** Tên và SĐT CTV của cả lô trong một câu truy vấn (Order.referrerUserId không có quan hệ Prisma). */
+export async function loadReferrers(prisma: PrismaService, orders: readonly { referrerUserId?: string | null }[]) {
+  const ids = [...new Set(orders.flatMap((o) => (o.referrerUserId ? [o.referrerUserId] : [])))];
+  if (ids.length === 0) return new Map<string, Referrer>();
+  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true, phone: true } });
+  return new Map(users.map((u) => [u.id, { fullName: u.fullName, phone: u.phone }]));
 }
 
 /**
@@ -186,7 +212,8 @@ export async function* orderCsvChunks(prisma: PrismaService, where: Prisma.Order
       select: ORDER_SELECT,
     });
     if (batch.length === 0) return;
-    yield batch.map(orderRow).join('');
+    const referrers = await loadReferrers(prisma, batch);
+    yield batch.map((o) => orderRow(o, referrers)).join('');
     if (batch.length < EXPORT_BATCH) return;
     cursor = batch[batch.length - 1]!.id;
   }

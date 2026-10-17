@@ -316,6 +316,8 @@ model User {
   posCreditsGiven        PosPointCredit[]        @relation("PosCreditStaff")
 
   @@index([referredById])
+  /// Báo cáo nguồn khách × tuần (admin): khách tạo trong khoảng ngày.
+  @@index([createdAt])
   // Tìm đơn admin theo SĐT/tên khách (LIKE/ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
   @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_phone_trgm_idx")
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullName_trgm_idx")
@@ -979,7 +981,7 @@ model Order {
   placedForCustomer      Boolean               @default(false)
   /// @deprecated Không nơi nào ghi hoặc đọc, luôn 0 (C-108); hoa hồng CTV nằm ở bảng commissions.
   commission             Int                   @default(0)
-  source                 String? // checkout | buy_now | ctv_assisted | subscription | dealer
+  source                 String? // checkout | buy_now | storefront | ctv_assisted | subscription | dealer
   platform               String? // miniapp | web — null cho đơn cũ trước migration này
   paidAt                 DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId         String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
@@ -1051,6 +1053,8 @@ model Order {
   updatedAt              DateTime              @updatedAt
 
   @@index([userId, status])
+  /// Báo cáo nguồn khách: đơn đầu/đơn hai của từng khách theo thời gian.
+  @@index([userId, createdAt])
   @@index([referrerUserId])
   @@index([storefrontSlug])
   // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —

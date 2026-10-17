@@ -372,7 +372,8 @@ export class CheckoutService {
     // WALLET thanh toán ngay (đơn CONFIRMED + PAID).
     const paid = paymentMethod === 'WALLET';
     const status = paymentMethod === 'COD' || paid ? 'CONFIRMED' : 'PENDING_PAYMENT';
-    const orderSource = storefrontSlug ? 'ctv_assisted' : dto.itemIds?.length ? 'buy_now' : 'checkout';
+    // 'ctv_assisted' dành riêng cho đơn CTV lên hộ khách (affiliate.service); khách tự mua qua gian hàng là 'storefront'.
+    const orderSource = storefrontSlug ? 'storefront' : dto.itemIds?.length ? 'buy_now' : 'checkout';
     const codes: string[] = [];
     while (codes.length < computed.shipments.length) {
       const next = await generateUniqueOrderCode(this.prisma, 'RETAIL');
