@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { CouponClaimService } from '../coupons/coupon-claim.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { calcTierDiscount, freeShipThreshold, tierDiscountPctOf } from '../pricing/pricing.service';
+import { calcTierDiscount, firstOrderFreeShipFrom, freeShipThreshold, tierDiscountPctOf } from '../pricing/pricing.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -245,7 +245,9 @@ export class CartService {
     );
 
     // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
-    const freeshipThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
+    const tierThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
+    const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+    const freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
 
     return {
       items: lines,

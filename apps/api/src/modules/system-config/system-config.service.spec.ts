@@ -471,3 +471,31 @@ describe('SystemConfigService.set — điểm uy tín cộng đồng và thưở
     }
   });
 });
+
+describe('SystemConfigService.set — freeship đơn đầu và link Mini App cho thẻ hộp hàng (D2-08, D2-03)', () => {
+  function mk() {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it.each([
+    ['shipping.first_order_free_enabled', [true, false], ['true', 'false', 1, 0, null]],
+    ['shipping.first_order_free_min_subtotal', [0, 99000], [-1, 99000.5, 50_000_001, '99000']],
+    ['app.miniapp_base_url', ['', 'https://zalo.me/s/1234567890', 'https://zalo.me/s/1234567890/'], ['zalo.me/s/123', 'http://zalo.me/s/123', 'https://zalo.me/s/1 23', 'https://zalo.me/s/123?x=1', 5]],
+  ] as const)('%s: nhận %j, từ chối %j', async (key, goods, bads) => {
+    for (const ok of goods) {
+      const good = mk();
+      await good.svc.set(key, ok, 'admin1');
+      expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set(key, bad as never, 'admin1')).rejects.toThrow(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+});

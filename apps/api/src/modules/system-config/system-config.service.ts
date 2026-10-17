@@ -123,6 +123,7 @@ export class SystemConfigService {
     // 1đ = 1 điểm là tích điểm gấp 10.000 lần. Chặn ngay lúc ghi.
     'shipping.flat_fee_below_threshold': { min: 0, max: 1_000_000, note: 'đồng phí ship cố định', integer: true },
     'shipping.free_threshold': { min: 0, max: 50_000_000, note: 'đồng (đơn từ mức này được freeship)', integer: true },
+    'shipping.first_order_free_min_subtotal': { min: 0, max: 50_000_000, note: 'đồng tiền hàng tối thiểu để đơn đầu được freeship (0 = mọi đơn đầu)', integer: true },
     'loyalty.vnd_per_point': { min: 1000, max: 1_000_000, note: 'đồng chi tiêu cho 1 Điểm Xanh (10000 = 10.000đ/điểm)', integer: true },
     'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
     'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
@@ -230,6 +231,13 @@ export class SystemConfigService {
     // Trang chuyển khoản của khách và phiếu chi trả đối tác in nguyên hai dòng này: để trống là "Ngân hàng: " trống trơn.
     'payment.bank_name': (value) => displayNameProblem(value, 'tên ngân hàng, vd "Techcombank"'),
     'payment.bank_account_name': (value) => displayNameProblem(value, 'tên chủ tài khoản in hoa không dấu, vd "CONG TY TUBU TREE"'),
+    // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để cờ tắt không vô tình bật freeship đơn đầu.
+    'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Link nhận mã in trong QR thẻ hộp hàng và link chia sẻ của CTV dựng từ khoá này: sai là thẻ đã in mở ra trang lỗi.
+    'app.miniapp_base_url': (value) =>
+      value === '' || (typeof value === 'string' && /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(value))
+        ? null
+        : 'phải để trống hoặc là link https của Mini App, vd "https://zalo.me/s/1234567890"',
     'shipping.tier_freeship_overrides': (value) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { HẠNG: ngưỡng freeship (đồng) }';
       for (const [tier, threshold] of Object.entries(value as Record<string, unknown>)) {

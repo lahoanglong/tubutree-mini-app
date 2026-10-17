@@ -172,6 +172,28 @@ describe('CartService guard tồn kho', () => {
     expect((await svc.getCart('u1')).freeshipThreshold).toBe(200000);
   });
 
+  it('getCart: freeship đơn đầu bật → thanh tiến độ freeship theo ngưỡng đơn đầu cho khách thật chưa có đơn (D2-08)', async () => {
+    const values: Record<string, unknown> = {
+      'shipping.free_threshold': 200000,
+      'shipping.first_order_free_enabled': true,
+      'shipping.first_order_free_min_subtotal': 99000,
+    };
+    const cfg = { get: async <T>(k: string, fb?: T): Promise<T> => (k in values ? values[k] : fb) as T } as unknown as SystemConfigService;
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [], user: { tierId: null } }) },
+      membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
+      order: { findFirst: jest.fn().mockResolvedValue(null) },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, cfg, flash, analytics, combo);
+    expect((await svc.getCart('u1')).freeshipThreshold).toBe(99000);
+    (prisma.order.findFirst as jest.Mock).mockResolvedValue({ id: 'o0' });
+    expect((await svc.getCart('u1')).freeshipThreshold).toBe(200000);
+    values['shipping.first_order_free_enabled'] = false;
+    (prisma.order.findFirst as jest.Mock).mockResolvedValue(null);
+    expect((await svc.getCart('u1')).freeshipThreshold).toBe(200000);
+  });
+
   it('addItem: chặn khi tổng số lượng vượt tồn kho', async () => {
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
