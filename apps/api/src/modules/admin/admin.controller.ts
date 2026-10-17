@@ -34,6 +34,7 @@ import { vnDateKey } from '../../common/vn-time';
 import { CatalogService } from '../catalog/catalog.service';
 import { ADMIN_ORDER_STATUSES, PANCAKE_FILTERS, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
+import { DEALER_PRICE_CSV_MAX_LENGTH } from './dealer-price-import';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -237,10 +238,10 @@ export class UpdateCouponDto {
   @OptionalNotNull() @IsDateString() endAt?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsInt() @Min(1) usageLimit?: number | null;
 }
-class ImportDealerPricesDto {
-  @IsString() tierId!: string;
+export class ImportDealerPricesDto {
+  @IsString() @IsNotEmpty() @MaxLength(100) tierId!: string;
   // Dán trực tiếp 2 cột Excel "sku,giá" (mỗi dòng 1 SKU). Hoặc gửi rows JSON.
-  @IsOptional() @IsString() csv?: string;
+  @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
   @IsOptional() @IsArray() rows?: { sku: string; price: number }[];
 }
 class ImportSoldExternalDto {
@@ -376,8 +377,11 @@ export class SetUserRoleDto {
   @IsOptional() @IsString() @MaxLength(100) tierId?: string;
 }
 
-/** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
-function parseDealerPriceCsv(csv: string): { sku: string; price: number }[] {
+/**
+ * Parse CSV "sku,số" (phân tách , ; hoặc tab); bỏ dòng header/số không hợp lệ. Chỉ còn dùng cho "đã bán ngoài sàn" — giá sỉ
+ * đại lý đi bằng parser chặt có xem trước (dealer-price-import.ts), vì `185.000` ở đây thành 185.
+ */
+function parseSkuNumberCsv(csv: string): { sku: string; price: number }[] {
   return csv
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -598,11 +602,16 @@ export class AdminController {
     return this.admin.updateCoupon(id, dto);
   }
 
-  // Import bảng giá đại lý theo bậc (dán CSV "sku,giá" từ Excel hoặc gửi rows JSON).
+  /** Xem trước bảng giá đại lý theo bậc (khớp / không khớp / lỗi / ngoài khoảng giá lẻ) — không ghi gì. */
+  @Post('dealer-prices/import/preview')
+  previewDealerPrices(@Body() dto: ImportDealerPricesDto) {
+    return this.admin.previewDealerPrices(dto.tierId, { csv: dto.csv, rows: dto.rows });
+  }
+
+  // Import bảng giá đại lý theo bậc (dán CSV "sku,giá" từ Excel hoặc gửi rows JSON). Còn dòng lỗi thì không ghi dòng nào.
   @Post('dealer-prices/import')
   importDealerPrices(@CurrentUser('sub') adminId: string, @Body() dto: ImportDealerPricesDto) {
-    const rows = dto.csv ? parseDealerPriceCsv(dto.csv) : (dto.rows ?? []);
-    return this.admin.importDealerPrices(adminId, dto.tierId, rows);
+    return this.admin.importDealerPrices(adminId, dto.tierId, { csv: dto.csv, rows: dto.rows });
   }
 
   @Get('dealer-prices/history')
@@ -614,7 +623,7 @@ export class AdminController {
   @Post('products/sold-external')
   setSoldExternal(@Body() dto: ImportSoldExternalDto) {
     const rows = dto.csv
-      ? parseDealerPriceCsv(dto.csv).map((r) => ({ sku: r.sku, count: r.price }))
+      ? parseSkuNumberCsv(dto.csv).map((r) => ({ sku: r.sku, count: r.price }))
       : (dto.rows ?? []);
     return this.catalog.setSoldExternal(rows);
   }

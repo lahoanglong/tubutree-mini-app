@@ -38,6 +38,13 @@ import { orderCsvChunks, userCsvChunks } from './admin-export';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
+import {
+  DEALER_PRICE_CSV_MAX_ROWS,
+  classifyDealerPrices,
+  dealerPriceRowsFromJson,
+  parseDealerPriceCsv,
+  publicPreview,
+} from './dealer-price-import';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../common/admin-roster';
@@ -1384,88 +1391,70 @@ export class AdminService {
   }
 
   // ── Import bảng giá đại lý theo bậc (§ back-office "admin Excel giá") ──
+  /** Xem trước một lần nhập giá sỉ (CSV "sku,giá" hoặc rows JSON) cho một bậc: không ghi gì. */
+  async previewDealerPrices(tierId: string, input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
+    await this.assertDealerTier(tierId);
+    return publicPreview(await classifyDealerPrices(this.prisma, tierId, this.dealerPriceRows(input)));
+  }
+
   /**
-   * Nhập/đè giá đại lý cho 1 BẬC (tierId) từ danh sách {sku, price}.
-   * Ghi vào Variation.dealerPrices[tierId] (MERGE, không mất bậc khác) + lưu DealerPriceHistory
-   * (old→new, ai đổi) để truy vết. Bỏ qua dòng lỗi (sku rỗng/giá ≤ 0), gom SKU không tồn tại.
+   * Nhập/đè giá đại lý cho 1 BẬC: ghi Variation.dealerPrices[tierId] (MERGE, không mất bậc khác) + DealerPriceHistory (old→new,
+   * ai đổi). Một transaction, khoá các biến thể theo id, phân loại lại lúc ghi: còn dòng sai định dạng / ngoài khoảng 10–100%
+   * giá lẻ / SKU lặp → 400, không ghi dòng nào. SKU không khớp bỏ qua và trả lại; `skipped` = dòng không đổi + không khớp.
    */
-  async importDealerPrices(adminId: string, tierId: string, rows: { sku: string; price: number }[]) {
+  async importDealerPrices(adminId: string, tierId: string, input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
+    await this.assertDealerTier(tierId);
+    const parsed = this.dealerPriceRows(input);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const preview = await classifyDealerPrices(tx, tierId, parsed, { lock: true });
+        if (!preview.canApply) {
+          throw new BadRequestException(
+            preview.blocking > 0
+              ? `Có ${preview.blocking} dòng lỗi (giá không đọc được, ngoài khoảng 10–100% giá lẻ hoặc SKU lặp) — sửa file rồi xem trước lại. Chưa ghi dòng nào.`
+              : 'Không có giá nào cần đổi.',
+          );
+        }
+        const changes = preview.rows.filter((r) => r.status === 'OK');
+        for (const r of changes) {
+          await tx.variation.update({ where: { id: r.variationId! }, data: { dealerPrices: { ...r.dealerPrices, [tierId]: r.price! } } });
+        }
+        await tx.dealerPriceHistory.createMany({
+          data: changes.map((r) => ({
+            variationId: r.variationId!,
+            sku: r.sku,
+            tierId,
+            oldPrice: r.currentPrice,
+            newPrice: r.price!,
+            changedBy: adminId,
+          })),
+        });
+        this.logger.log(`Admin ${adminId} nhập giá sỉ bậc ${tierId}: đổi ${changes.length}, không đổi ${preview.counts.UNCHANGED}, không khớp ${preview.counts.NOT_FOUND}.`);
+        const notFound = preview.rows.filter((r) => r.status === 'NOT_FOUND').map((r) => r.sku);
+        return {
+          tierId,
+          updated: changes.length,
+          unchanged: preview.counts.UNCHANGED,
+          notFound,
+          skipped: preview.counts.UNCHANGED + notFound.length,
+        };
+      },
+      { timeout: 60_000 },
+    );
+  }
+
+  private async assertDealerTier(tierId: string) {
     const tier = await this.prisma.dealerTier.findUnique({ where: { id: tierId } });
     if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
+  }
 
-    // 1) Chuẩn hoá + validate TỪNG dòng trước (giữ nguyên logic cũ: sku rỗng/giá không hữu
-    // hạn/giá <= 0 → bỏ) — bước này không đụng DB.
-    const validRows: { sku: string; price: number }[] = [];
-    for (const row of rows ?? []) {
-      const sku = String(row?.sku ?? '').trim();
-      const price = Math.round(Number(row?.price));
-      if (!sku || !Number.isFinite(price) || price <= 0) continue; // bỏ dòng lỗi
-      validRows.push({ sku, price });
+  private dealerPriceRows(input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
+    const rows = input.csv ? parseDealerPriceCsv(input.csv) : dealerPriceRowsFromJson(input.rows ?? []);
+    if (rows.length === 0) throw new BadRequestException('Không có dòng giá nào — dán 2 cột "sku,giá".');
+    if (rows.length > DEALER_PRICE_CSV_MAX_ROWS) {
+      throw new BadRequestException(`Tối đa ${DEALER_PRICE_CSV_MAX_ROWS} dòng mỗi lần nhập (file có ${rows.length} dòng) — chia nhỏ file.`);
     }
-
-    // 2) Bug 1 (N+1 nghiêm trọng): trước đây findUnique() + 1 $transaction RIÊNG cho TỪNG dòng —
-    // vài trăm/nghìn dòng = vài nghìn round-trip DB tuần tự → timeout/treo connection pool.
-    // Nay MỘT findMany cho toàn bộ SKU, tra cứu qua Map, rồi ghi theo LÔ cố định bên dưới.
-    const skus = [...new Set(validRows.map((r) => r.sku))];
-    const variations = skus.length
-      ? await this.prisma.variation.findMany({ where: { sku: { in: skus } } })
-      : [];
-    const variationBySku = new Map(variations.map((v) => [v.sku, v]));
-    // dealerPrices hiện tại theo variationId — cập nhật DẦN trong vòng lặp bên dưới để 2 dòng
-    // trùng SKU trong cùng file import (dòng sau đè dòng trước) thấy đúng giá của dòng liền
-    // trước, không dùng snapshot cũ nạp 1 lần từ DB.
-    const currentPrices = new Map<string, Record<string, number>>(
-      variations.map((v) => [v.id, (v.dealerPrices as Record<string, number> | null) ?? {}]),
-    );
-
-    const notFound: string[] = [];
-    const pending: { variationId: string; sku: string; oldPrice: number | null; newPrice: number }[] = [];
-    for (const { sku, price } of validRows) {
-      const v = variationBySku.get(sku);
-      if (!v) {
-        notFound.push(sku);
-        continue;
-      }
-      const current = currentPrices.get(v.id) ?? {};
-      const oldPrice = typeof current[tierId] === 'number' ? current[tierId] : null;
-      if (oldPrice === price) continue; // không đổi → không ghi lịch sử thừa
-      currentPrices.set(v.id, { ...current, [tierId]: price });
-      pending.push({ variationId: v.id, sku, oldPrice, newPrice: price });
-    }
-
-    // 3) Ghi theo LÔ cố định — MỘT $transaction duy nhất cho cả BATCH_SIZE dòng (update + create
-    // gộp chung), không phải 1 $transaction/dòng như trước.
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-      const batch = pending.slice(i, i + BATCH_SIZE);
-      await this.prisma.$transaction([
-        ...batch.map((w) =>
-          this.prisma.variation.update({
-            where: { id: w.variationId },
-            data: { dealerPrices: currentPrices.get(w.variationId) },
-          }),
-        ),
-        ...batch.map((w) =>
-          this.prisma.dealerPriceHistory.create({
-            data: {
-              variationId: w.variationId,
-              sku: w.sku,
-              tierId,
-              oldPrice: w.oldPrice,
-              newPrice: w.newPrice,
-              changedBy: adminId,
-            },
-          }),
-        ),
-      ]);
-    }
-
-    return {
-      tierId,
-      updated: pending.length,
-      notFound,
-      skipped: (rows?.length ?? 0) - pending.length - notFound.length,
-    };
+    return rows;
   }
 
   /** Lịch sử đổi giá đại lý (mới nhất trước), lọc theo biến thể hoặc SKU, kèm tên sản phẩm, bậc và người đổi. */

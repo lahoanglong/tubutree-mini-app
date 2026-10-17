@@ -190,19 +190,66 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(container.textContent).toContain('Còn 1 dòng lỗi');
   });
 
-  it('giá sỉ đại lý: chọn bậc + dán CSV → gọi API nhập giá sỉ có sẵn, hiện kết quả', async () => {
-    const m = stub({ '/admin/dealer-prices/import': { body: { updated: 2, skipped: 0, notFound: [] } } });
+  it('giá sỉ đại lý: chọn bậc → xem trước (giá đọc kiểu VN, giá lẻ) → xác nhận → ghi', async () => {
+    const preview = {
+      tierId: 't_gold',
+      rows: [
+        { line: 1, sku: 'NRC-500', input: '185.000', status: 'OK', price: 185_000, currentPrice: null, retailPrice: 200_000, productName: 'Nước rửa chén', variationName: '500ml', message: null },
+        { line: 2, sku: 'ZZZ', input: '100.000', status: 'NOT_FOUND', price: 100_000, currentPrice: null, retailPrice: null, productName: null, variationName: null, message: 'không có biến thể nào mang SKU này' },
+      ],
+      counts: { OK: 1, UNCHANGED: 0, NOT_FOUND: 1, INVALID: 0, OUT_OF_RANGE: 0, DUPLICATE: 0 },
+      blocking: 0,
+      canApply: true,
+    };
+    const m = stub({
+      '/admin/dealer-prices/import/preview': { body: preview },
+      '/admin/dealer-prices/import': { body: { tierId: 't_gold', updated: 1, unchanged: 0, skipped: 1, notFound: ['ZZZ'] } },
+    });
     const { container } = mount(<CommissionRatesTab />);
     await flush();
-    typeInto(container.querySelector('textarea[aria-label="Nội dung CSV sku,giá sỉ"]'), 'NRC-500,80000\nNRC-1L,150000');
-    click(byText(container, 'button', 'Nhập giá sỉ'));
+    const csv = 'NRC-500;185.000\nZZZ;100.000';
+    typeInto(container.querySelector('textarea[aria-label="Nội dung CSV sku,giá sỉ"]'), csv);
+    click(byText(container, 'button', 'Xem trước giá sỉ'));
     expect(container.textContent).toContain('Chọn bậc đại lý trước.');
     selectValue(container.querySelector('select[aria-label="Bậc đại lý"]'), 't_gold');
-    click(byText(container, 'button', 'Nhập giá sỉ'));
+    click(byText(container, 'button', 'Xem trước giá sỉ'));
     await flush();
+    expect(bodyOf(m, '/import/preview')).toEqual({ tierId: 't_gold', csv });
+    const rows = container.querySelectorAll<HTMLElement>('[data-dealer-row]');
+    expect([...rows].map((r) => r.dataset.dealerRow)).toEqual(['NOT_FOUND', 'OK']);
+    expect(rows[1]!.textContent).toContain('chưa có → 185.000');
+    expect(rows[1]!.textContent).toContain('giá lẻ 200.000');
+
+    click(byText(container, 'button', 'Ghi 1 giá sỉ'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('bỏ qua 1 SKU không khớp');
     answerConfirm(true);
     await flush();
-    expect(bodyOf(m, '/admin/dealer-prices/import')).toEqual({ tierId: 't_gold', csv: 'NRC-500,80000\nNRC-1L,150000' });
-    expect(container.textContent).toContain('Đã cập nhật 2 giá sỉ');
+    const apply = m.calls.find((c) => c.url.endsWith('/admin/dealer-prices/import'));
+    expect(JSON.parse(String(apply?.init?.body))).toEqual({ tierId: 't_gold', csv });
+    expect(container.textContent).toContain('Đã cập nhật 1 giá sỉ');
+  });
+
+  it('giá sỉ còn dòng lỗi (ngoài khoảng giá lẻ) → không có nút ghi bật, báo sửa file', async () => {
+    stub({
+      '/admin/dealer-prices/import/preview': {
+        body: {
+          tierId: 't_gold',
+          rows: [{ line: 1, sku: 'NRC-500', input: '185', status: 'OUT_OF_RANGE', price: 185, currentPrice: null, retailPrice: 200_000, productName: 'N', variationName: null, message: 'ngoài khoảng 10–100% giá lẻ (20.000–200.000đ)' }],
+          counts: { OK: 0, UNCHANGED: 0, NOT_FOUND: 0, INVALID: 0, OUT_OF_RANGE: 1, DUPLICATE: 0 },
+          blocking: 1,
+          canApply: false,
+        },
+      },
+    });
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    selectValue(container.querySelector('select[aria-label="Bậc đại lý"]'), 't_gold');
+    typeInto(container.querySelector('textarea[aria-label="Nội dung CSV sku,giá sỉ"]'), 'NRC-500,185');
+    click(byText(container, 'button', 'Xem trước giá sỉ'));
+    await flush();
+    expect((byText(container, 'button', 'Ghi 0 giá sỉ') as HTMLButtonElement | null)?.disabled).toBe(true);
+    expect(container.textContent).toContain('Ngoài khoảng giá lẻ');
+    expect(container.textContent).toContain('Còn 1 dòng lỗi');
   });
 });

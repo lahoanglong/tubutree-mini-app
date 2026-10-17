@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { importDealerPrices, listDealerTiers } from '@/lib/admin-client';
+import { importDealerPrices, listDealerTiers, previewDealerPrices, type DealerPriceImportStatus, type DealerPricePreview } from '@/lib/admin-client';
 import {
   RATE_IMPORT_STATUS,
   applyRateImport,
@@ -450,58 +450,139 @@ function RateCsvImport() {
   );
 }
 
-/** Nhập giá sỉ theo bậc (D1-06): API `admin/dealer-prices/import` có sẵn, ghi lịch sử ở tab "Lịch sử giá đại lý". */
+const DEALER_STATUS: Record<DealerPriceImportStatus, { label: string; tone: 'success' | 'neutral' | 'warning' | 'danger' }> = {
+  OK: { label: 'Khớp — sẽ đổi', tone: 'success' },
+  UNCHANGED: { label: 'Không đổi', tone: 'neutral' },
+  NOT_FOUND: { label: 'Không khớp SKU', tone: 'warning' },
+  INVALID: { label: 'Sai định dạng', tone: 'danger' },
+  OUT_OF_RANGE: { label: 'Ngoài khoảng giá lẻ', tone: 'danger' },
+  DUPLICATE: { label: 'SKU lặp', tone: 'danger' },
+};
+const DEALER_STATUS_ORDER: DealerPriceImportStatus[] = ['INVALID', 'OUT_OF_RANGE', 'DUPLICATE', 'NOT_FOUND', 'OK', 'UNCHANGED'];
+const vndOrDash = (n: number | null) => (n === null ? 'chưa có' : formatVnd(n));
+
+/**
+ * Nhập giá sỉ theo bậc (D1-06). Giá sỉ > 0 thắng mọi chiết khấu khi đại lý đặt hàng, nên đi như CSV hoa hồng: xem trước (BE đọc
+ * 185.000 / 240,000 / 1.250.000 đúng số đồng, kiểm 10–100% giá lẻ) rồi mới áp; còn dòng lỗi thì không ghi dòng nào.
+ */
 function DealerPriceImport() {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [tierId, setTierId] = useState('');
   const [csv, setCsv] = useState('');
+  const [preview, setPreview] = useState<DealerPricePreview | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const mut = useMutation({
+  const previewMut = useMutation({
+    mutationFn: () => previewDealerPrices(tierId, csv),
+    onSuccess: (p) => setPreview(p),
+    onError: (e) => setMsg({ ok: false, text: errText(e, 'Không xem trước được.') }),
+  });
+  const applyMut = useMutation({
     mutationFn: () => importDealerPrices(tierId, csv),
     onSuccess: (r) => {
-      const notFound = r.notFound.length ? ` Không tìm thấy SKU: ${r.notFound.slice(0, 20).join(', ')}${r.notFound.length > 20 ? '…' : ''}.` : '';
-      setMsg({ ok: r.notFound.length === 0, text: `Đã cập nhật ${r.updated} giá sỉ, ${r.skipped} dòng bỏ qua (không đổi hoặc sai).${notFound}` });
-      if (r.notFound.length === 0) setCsv('');
+      const notFound = r.notFound.length ? ` ${r.notFound.length} SKU không khớp, đã bỏ qua: ${r.notFound.slice(0, 20).join(', ')}${r.notFound.length > 20 ? '…' : ''}.` : '';
+      setMsg({ ok: true, text: `Đã cập nhật ${r.updated} giá sỉ, ${r.unchanged} dòng không đổi.${notFound}` });
+      setPreview(null);
+      setCsv('');
       void qc.invalidateQueries({ queryKey: LIST_KEY });
       void qc.invalidateQueries({ queryKey: ['admin-dealer-price-history'] });
     },
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không nhập được giá sỉ.') }),
   });
-  const lines = csv.split(/\r?\n/).filter((l) => l.trim()).length;
+  const busy = previewMut.isPending || applyMut.isPending;
+  const rows = preview
+    ? [...preview.rows].sort((a, b) => DEALER_STATUS_ORDER.indexOf(a.status) - DEALER_STATUS_ORDER.indexOf(b.status) || a.line - b.line)
+    : [];
 
-  const onImport = async () => {
+  const onPreview = () => {
     if (!tierId) return setMsg({ ok: false, text: 'Chọn bậc đại lý trước.' });
     setMsg(null);
+    previewMut.mutate();
+  };
+  const onApply = async () => {
+    if (!preview?.canApply) return;
     const ok = await confirm({
       title: 'Nhập giá sỉ đại lý',
-      message: `Ghi giá sỉ cho ${lines} dòng vào bậc đã chọn? Dòng giá không hợp lệ hoặc SKU không có sẽ bị bỏ qua; mỗi lần đổi giá được ghi vào "Lịch sử giá đại lý".`,
-      confirmLabel: 'Nhập giá sỉ',
+      message:
+        `Ghi giá sỉ mới cho ${preview.counts.OK} biến thể vào bậc đã chọn` +
+        (preview.counts.NOT_FOUND ? `, bỏ qua ${preview.counts.NOT_FOUND} SKU không khớp` : '') +
+        '?\n\nĐơn đại lý đặt từ lúc này dùng giá mới; mỗi lần đổi giá được ghi vào "Lịch sử giá đại lý".',
+      confirmLabel: `Ghi ${preview.counts.OK} giá`,
     });
-    if (ok && !mut.isPending) mut.mutate();
+    if (ok && !busy) applyMut.mutate();
   };
 
   return (
     <section aria-label="Giá sỉ đại lý" className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3">
       <h3 className="text-sm font-semibold text-stone-900">Giá sỉ đại lý theo bậc</h3>
-      <p className="text-xs text-stone-600">Chọn bậc, dán 2 cột SKU và giá sỉ (đồng) từ Excel, mỗi dòng một SKU.</p>
-      <DealerTierSelect value={tierId} onChange={setTierId} className="w-full sm:w-80" />
+      <p className="text-xs text-stone-600">
+        Chọn bậc, dán 2 cột SKU và giá sỉ (đồng) từ Excel, mỗi dòng một SKU. Giá phải nằm trong 10–100% giá lẻ. Xem trước rồi mới
+        ghi; còn dòng lỗi thì không dòng nào được ghi.
+      </p>
+      <DealerTierSelect
+        value={tierId}
+        onChange={(id) => {
+          setTierId(id);
+          setPreview(null);
+        }}
+        className="w-full sm:w-80"
+      />
       <textarea
         aria-label="Nội dung CSV sku,giá sỉ"
         rows={5}
-        placeholder={'NRC-500,185000\nNG-1L,240000'}
+        placeholder={'SKU;Giá sỉ\nNRC-500;185.000\nNG-1L;240.000'}
         value={csv}
         onChange={(e) => {
           setCsv(e.target.value);
+          setPreview(null);
           setMsg(null);
         }}
-        disabled={mut.isPending}
+        disabled={applyMut.isPending}
         className={`${INPUT_CLASS} font-mono text-xs`}
       />
-      <button type="button" onClick={onImport} disabled={mut.isPending || !csv.trim()} className={BTN_PRIMARY}>
-        {mut.isPending ? 'Đang nhập…' : 'Nhập giá sỉ'}
-      </button>
-      {msg && <Notice tone={msg.ok ? 'success' : 'warning'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={onPreview} disabled={busy || !csv.trim()} className={BTN_SECONDARY}>
+          {previewMut.isPending ? 'Đang kiểm…' : 'Xem trước giá sỉ'}
+        </button>
+        {preview && (
+          <button type="button" onClick={onApply} disabled={busy || !preview.canApply} className={BTN_PRIMARY}>
+            {applyMut.isPending ? 'Đang ghi…' : `Ghi ${preview.counts.OK} giá sỉ`}
+          </button>
+        )}
+      </div>
+      {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
+      {preview && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {DEALER_STATUS_ORDER.filter((s) => preview.counts[s] > 0).map((s) => (
+              <ToneBadge key={s} tone={DEALER_STATUS[s].tone}>
+                {DEALER_STATUS[s].label}: {preview.counts[s]}
+              </ToneBadge>
+            ))}
+          </div>
+          {preview.blocking > 0 && (
+            <Notice tone="danger">Còn {preview.blocking} dòng lỗi — sửa trong Excel, dán lại rồi xem trước lại.</Notice>
+          )}
+          {preview.blocking === 0 && preview.counts.OK === 0 && <Notice tone="info">Không có giá nào cần đổi.</Notice>}
+          <ul className="max-h-96 divide-y divide-stone-200 overflow-y-auto rounded-control border border-stone-200">
+            {rows.map((r) => (
+              <li key={r.line} data-dealer-row={r.status} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-1.5 text-xs">
+                <span className="w-12 shrink-0 text-stone-500">Dòng {r.line}</span>
+                <span className="min-w-0 break-all font-mono text-stone-900">{r.sku || '—'}</span>
+                <ToneBadge tone={DEALER_STATUS[r.status].tone}>{DEALER_STATUS[r.status].label}</ToneBadge>
+                {(r.status === 'OK' || r.status === 'UNCHANGED') && (
+                  <span className="text-stone-700">
+                    {vndOrDash(r.currentPrice)} → {vndOrDash(r.price)}
+                    {r.retailPrice !== null && <span className="text-stone-500"> (giá lẻ {formatVnd(r.retailPrice)})</span>}
+                  </span>
+                )}
+                {r.productName && <span className="min-w-0 break-words text-stone-500">{[r.productName, r.variationName].filter(Boolean).join(' · ')}</span>}
+                {r.message && <span className="text-danger-fg">{r.message}{r.input ? ` (“${r.input}”)` : ''}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {dialog}
     </section>
   );
