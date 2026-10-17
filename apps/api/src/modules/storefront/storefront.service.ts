@@ -453,7 +453,8 @@ export class StorefrontService {
     const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
     if (!category) throw new BadRequestException('Danh mục không tồn tại.');
     const products = await this.prisma.product.findMany({
-      where: { categoryIds: { has: categoryId }, isActive: true, affiliateBlocked: false },
+      // Như picker (SELLER-15, D3-16): món đối tác chờ duyệt/bị từ chối vào gian hàng thì khách không thấy.
+      where: { categoryIds: { has: categoryId }, isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' },
       orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
       take: 8,
       select: { id: true },

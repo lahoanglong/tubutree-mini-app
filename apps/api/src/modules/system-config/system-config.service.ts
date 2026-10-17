@@ -6,6 +6,7 @@ import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
 import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliate/commission-eligibility';
 
 const DISPLAY_NAME_MAX = 100;
 
@@ -173,6 +174,8 @@ export class SystemConfigService {
     'groupbuy.target_size': { min: 2, max: 50, note: 'số người', integer: true },
     'referral.window_days': { min: 1, max: 365, note: 'số ngày', integer: true },
     'affiliate.attribution_days': { min: 1, max: 365, note: 'số ngày', integer: true },
+    // Trần % hoa hồng CTV admin được đặt cho biến thể (commission-admin.service). PHẦN TRĂM, không phải phân số như pit_withhold_pct.
+    'affiliate.max_rate_pct': { min: 0, max: 100, note: 'phần trăm (50 = 50%)' },
     'flashsale.default_per_user_limit': { min: 1, max: 1000, note: 'số sản phẩm mỗi người', integer: true },
     // ADMINOPS-3 (vòng 3, R3-UI-4): các khoá số còn lại nhận số âm, số khổng lồ hay số thực nên "đã lưu" mà tính năng chạy sai
     // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.
@@ -236,6 +239,8 @@ export class SystemConfigService {
       value === '' || (typeof value === 'string' && PICKUP_PHONE_PATTERN.test(value))
         ? null
         : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
+    // Vai trò được ghi công đơn và hưởng hoa hồng CTV (affiliate.service createCommissionForOrder / findEligibleReferrer).
+    [COMMISSION_ELIGIBLE_ROLES_KEY]: eligibleRolesProblem,
     'payment.bank_bin': (value) =>
       typeof value === 'string' && /^\d{6}$/.test(value) ? null : 'phải là mã BIN Napas gồm đúng 6 chữ số (vd "970407")',
     // Trang chuyển khoản của khách và phiếu chi trả đối tác in nguyên hai dòng này: để trống là "Ngân hàng: " trống trơn.

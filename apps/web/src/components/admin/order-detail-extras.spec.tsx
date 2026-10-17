@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { OrderInvoicePanel, OrderShippingAddress, OrderStatusHistory } from './order-detail-extras';
+import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from './order-detail-extras';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
@@ -222,5 +222,80 @@ describe('OrderInvoicePanel', () => {
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
     expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+});
+
+// D3-07: admin không tra được đơn do CTV nào giới thiệu và hoa hồng bao nhiêu.
+describe('OrderReferralPanel', () => {
+  const REFERRAL = {
+    orderCode: 'TB-500',
+    referrer: { id: 'ctv1', fullName: 'Chị Lan', phone: '0900000001', referralCode: 'LAN12345', role: 'AFFILIATE' },
+    selfReferral: false,
+    referrerEligible: true,
+    placedForCustomer: false,
+    source: 'checkout',
+    storefront: { id: 'sf1', slug: 'shop-lan', title: 'Shop Lan', type: 'CTV' },
+    storefrontSlug: 'shop-lan',
+    commissions: [
+      { id: 'c1', affiliateUserId: 'ctv1', affiliateName: 'Chị Lan', amount: 20_250, rate: 7.5, commissionableTotal: 270_000, status: 'LOCKED', createdAt: '2026-10-01T00:00:00.000Z', lockedAt: '2026-10-03T00:00:00.000Z', approvedAt: null, paidAt: null },
+    ],
+  };
+
+  it('đơn không có CTV/gian hàng → không hiện, không gọi API', async () => {
+    const m = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<OrderReferralPanel order={order()} />);
+    await flush();
+    expect(container.textContent).toBe('');
+    expect(m.calls).toHaveLength(0);
+  });
+
+  it('hiện CTV (tên, mã), gian hàng, số tiền hoa hồng và trạng thái cùng chữ CTV thấy', async () => {
+    const m = mockFetch({ '/admin/orders/o1/referral': { body: REFERRAL } });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<OrderReferralPanel order={order({ referrerUserId: 'ctv1', storefrontId: 'sf1' })} />);
+    expect(container.textContent).toContain('Đang tải…');
+    await flush();
+    const t = container.textContent ?? '';
+    expect(t).toContain('Chị Lan');
+    expect(t).toContain('LAN12345');
+    expect(t).toContain('Shop Lan (/s/shop-lan)');
+    expect(container.querySelector('[data-order-commission]')?.textContent).toContain('20.250');
+    expect(t).toContain('Đang chờ · đang giữ');
+  });
+
+  it('có người giới thiệu mà không có hoa hồng → giải thích, kể cả trường hợp tự mua', async () => {
+    const m = mockFetch({ '/referral': { body: { ...REFERRAL, commissions: [] } } });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const a = mount(<OrderReferralPanel order={order({ referrerUserId: 'ctv1' })} />);
+    await flush();
+    expect(a.container.textContent).toContain('chưa có % hoa hồng, bị chặn CTV, hoặc là hàng ký gửi của chính người giới thiệu');
+    expect(a.container.textContent).toContain('chỉ áp cho đơn mới');
+
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/referral': { body: { ...REFERRAL, selfReferral: true, commissions: [] } } }).fn));
+    const b = mount(<OrderReferralPanel order={order({ id: 'o2', referrerUserId: 'u1' })} />);
+    await flush();
+    expect(b.container.textContent).toContain('người giới thiệu cũng là người mua');
+
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/referral': { body: { ...REFERRAL, referrerEligible: false, commissions: [] } } }).fn));
+    const c = mount(<OrderReferralPanel order={order({ id: 'o3', referrerUserId: 'f1' })} />);
+    await flush();
+    expect(c.container.textContent).toContain('người giới thiệu không phải CTV/đại lý');
+    expect(c.container.textContent).not.toContain('chưa có % hoa hồng');
+
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/referral': { body: { ...REFERRAL, placedForCustomer: true, referrerEligible: false, commissions: [] } } }).fn));
+    const d = mount(<OrderReferralPanel order={order({ id: 'o4', referrerUserId: 'admin1' })} />);
+    await flush();
+    expect(d.container.textContent).toContain('Không có hoa hồng: người lên đơn hộ không phải CTV/đại lý');
+    expect(d.container.textContent).not.toContain('vẫn hưởng hoa hồng');
+  });
+
+  it('lỗi tải → thông báo + Thử lại', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/referral': { status: 404, body: { message: 'Không tìm thấy đơn hàng.' } } }).fn));
+    const { container } = mount(<OrderReferralPanel order={order({ referrerUserId: 'ctv1' })} />);
+    await flush();
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain('Không tìm thấy đơn hàng.');
+    expect(alert?.textContent).toContain('Thử lại');
   });
 });
