@@ -388,6 +388,13 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     }
   });
 
+  async function tierUser(userId: string, discountPct: number) {
+    const tier = await prisma.membershipTier.create({
+      data: { id: `itcp-tier-${randCode(8)}`, name: 'Hạng IT', minPoints: 999_999_999, discountPct, perks: [] },
+    });
+    await prisma.user.update({ where: { id: userId }, data: { tierId: tier.id } });
+  }
+
   /**
    * Cùng một lần mua đọc ba nơi: GET /cart (qua controller, đúng đường trang giỏ gọi), báo giá và đơn thật được tạo. Tiền hàng sau
    * mọi giảm (chưa phí giao, chưa điểm) phải bằng nhau từng đồng; trả thêm số liệu từng khoản để test khẳng định.
@@ -412,6 +419,33 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     });
     return { c, q, o, numbers };
   }
+
+  it('giảm theo hạng thành viên: giỏ = báo giá = đơn (combo, rồi mã, rồi hạng làm tròn xuống trên phần còn lại)', async () => {
+    const b = await buyer();
+    await tierUser(b.userId, 0.05);
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const slug = await comboStore(a.productId, c.productId, 10);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: c.variationId, quantity: 2 }); // 140.000đ, combo 14.000đ
+    const code = await coupon(b.userId, 'PERCENT', 10);
+    await cart.applyCoupon(b.userId, code, slug); // mã 12.600đ → còn 113.400đ, hạng 5% = 5.670đ
+
+    const r = await cartQuoteOrder(b, { cartSlug: slug, quoteSlug: slug, orderSlug: slug });
+    expect(r.c).toMatchObject({ comboDiscount: 14_000, discount: 12_600, tierDiscount: 5_670 });
+    expect(r.numbers).toEqual({ cart: 107_730, quote: 107_730, order: 107_730 });
+  });
+
+  it('hạng làm tròn xuống: phần lẻ không bị thiệt thêm 1đ giữa giỏ, báo giá và đơn', async () => {
+    const b = await buyer();
+    await tierUser(b.userId, 0.07);
+    const a = await product(33_333);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 }); // 7% × 33.333 = 2.333,31
+
+    const r = await cartQuoteOrder(b);
+    expect(r.c).toMatchObject({ comboDiscount: 0, discount: 0, tierDiscount: 2_333 });
+    expect(r.numbers).toEqual({ cart: 31_000, quote: 31_000, order: 31_000 });
+  });
 
   it('"chạm" giới thiệu còn hạn (phiên mất slug gian hàng): giỏ, báo giá và đơn cùng lấy gian hàng của chạm nên cùng combo', async () => {
     const b = await buyer();
@@ -450,4 +484,5 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
       expect(r.numbers).toEqual({ cart: 100_000, quote: 100_000, order: 100_000 });
     }
   });
+
 });

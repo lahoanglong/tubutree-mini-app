@@ -13,7 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { CartService } from '../cart/cart.service';
 import { CouponsService } from '../coupons/coupons.service';
-import { PricingService } from '../pricing/pricing.service';
+import { PricingService, tierDiscountPctOf } from '../pricing/pricing.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
@@ -1035,10 +1035,7 @@ export class CheckoutService {
     // nhất (giữ nguyên vị trí đã có từ trước fix này). Thứ tự cuối: combo → coupon → hạng → điểm.
     // Loại flash khỏi base (đồng bộ combo/coupon ở trên): giá flash là giá đặc biệt
     // server-authoritative, không cộng dồn thêm giảm giá hạng lên trên nó.
-    const tier = user.tierId
-      ? await this.prisma.membershipTier.findUnique({ where: { id: user.tierId }, select: { discountPct: true } })
-      : null;
-    const tierDiscountPct = tier ? Number(tier.discountPct) : 0;
+    const tierDiscountPct = await tierDiscountPctOf(this.prisma, user.tierId);
     const tierDiscount = this.pricing.calcTierDiscount(goodsAfterCoupon, tierDiscountPct);
     const goodsAfterTierDiscount = Math.max(0, goodsAfterCoupon - tierDiscount);
 
