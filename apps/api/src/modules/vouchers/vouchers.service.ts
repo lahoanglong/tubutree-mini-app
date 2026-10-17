@@ -285,6 +285,8 @@ export class VouchersService {
    */
   @Cron('0 5 * * *', { timeZone: CRON_TZ })
   async milestoneVouchers(): Promise<void> {
+    const failures: GrantFailures = { count: 0 };
+    let granted = 0;
     try {
       const milestones = await this.config.get<{ spend: number; reward: number }[]>('voucher.milestones', [
         { spend: 1_000_000, reward: 30_000 },
@@ -315,27 +317,21 @@ export class VouchersService {
         GROUP BY o."userId"
         LIMIT 1000`;
       const period = nowVn.toISOString().slice(0, 7); // yyyy-mm theo giờ VN
-      let granted = 0;
-      for (const r of rows) {
+      // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
+      const byDescSpend = [...milestones].sort((a, b) => b.spend - a.spend);
+      const hits = rows.flatMap((r) => {
         const spent = Number(r.spent);
-        // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
-        const hit = [...milestones].sort((a, b) => b.spend - a.spend).find((m) => spent >= m.spend);
-        if (!hit) continue;
-        if (
-          await this.grant({
-            userId: r.userId,
-            reason: `MILESTONE${hit.spend}-${period}`,
-            type: 'AMOUNT',
-            value: hit.reward,
-            validDays: 30,
-            templateCode: 'MILESTONE_VOUCHER',
-          })
-        )
-          granted++;
-      }
+        const hit = byDescSpend.find((m) => spent >= m.spend);
+        return hit ? [{ userId: r.userId, hit }] : [];
+      });
+      granted = await this.grantInChunks('milestoneVouchers', hits, ({ userId, hit }) => ({
+        userId, reason: `MILESTONE${hit.spend}-${period}`, type: 'AMOUNT', value: hit.reward, validDays: 30, templateCode: 'MILESTONE_VOUCHER',
+      }), failures);
       if (granted) this.logger.log(`Milestone vouchers granted: ${granted}`);
     } catch (err) {
       this.logger.error(`milestoneVouchers lỗi: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      this.reportGrantFailures('milestoneVouchers', failures, granted);
     }
   }
 
@@ -382,53 +378,51 @@ export class VouchersService {
     const deliveredBefore = new Date(now - delayDays * 864e5);
     const createdAfter = new Date(now - (VouchersService.NS1_WINDOW_DAYS - minRemainingDays) * 864e5);
 
+    const failures: GrantFailures = { count: 0 };
     let granted = 0;
     let scanned = 0;
     let cursor = '';
-    for (let page = 0; page < VouchersService.SECOND_ORDER_MAX_PAGES; page++) {
-      const rows = await this.prisma.$queryRaw<{ userId: string; firstAt: Date }[]>`
-        SELECT o."userId", o."createdAt" AS "firstAt"
-        FROM orders o
-        JOIN users u ON u.id = o."userId"
-        WHERE o.status::text = 'DELIVERED'
-          AND o.type::text = 'RETAIL'
-          AND o."placedForCustomer" = false
-          AND o."subscriptionId" IS NULL
-          AND o."createdAt" >= ${createdAfter}
-          AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${deliveredBefore}
-          AND u.role::text = 'CUSTOMER'
-          AND ${REAL_USER_SQL}
-          AND o."userId" > ${cursor}
-          AND NOT EXISTS (
-            SELECT 1 FROM orders o2
-            WHERE o2."userId" = o."userId" AND o2.id <> o.id AND o2.status::text <> 'CANCELLED')
-          AND NOT EXISTS (
-            SELECT 1 FROM subscriptions s
-            WHERE s."userId" = o."userId" AND s.status IN ('ACTIVE', 'PAUSED'))
-          AND NOT EXISTS (
-            SELECT 1 FROM coupons c WHERE c.code = upper('SECOND-ORDER-' || o."userId"))
-        ORDER BY o."userId"
-        LIMIT ${VouchersService.SECOND_ORDER_PAGE}`;
-      scanned += rows.length;
-      for (const r of rows) {
-        const endAt = new Date(new Date(r.firstAt).getTime() + VouchersService.NS1_WINDOW_DAYS * 864e5);
-        const ok = await this.grant({
+    try {
+      for (let page = 0; page < VouchersService.SECOND_ORDER_MAX_PAGES; page++) {
+        const rows = await this.prisma.$queryRaw<{ userId: string; firstAt: Date }[]>`
+          SELECT o."userId", o."createdAt" AS "firstAt"
+          FROM orders o
+          JOIN users u ON u.id = o."userId"
+          WHERE o.status::text = 'DELIVERED'
+            AND o.type::text = 'RETAIL'
+            AND o."placedForCustomer" = false
+            AND o."subscriptionId" IS NULL
+            AND o."createdAt" >= ${createdAfter}
+            AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${deliveredBefore}
+            AND u.role::text = 'CUSTOMER'
+            AND ${REAL_USER_SQL}
+            AND o."userId" > ${cursor}
+            AND NOT EXISTS (
+              SELECT 1 FROM orders o2
+              WHERE o2."userId" = o."userId" AND o2.id <> o.id AND o2.status::text <> 'CANCELLED')
+            AND NOT EXISTS (
+              SELECT 1 FROM subscriptions s
+              WHERE s."userId" = o."userId" AND s.status IN ('ACTIVE', 'PAUSED'))
+            AND NOT EXISTS (
+              SELECT 1 FROM coupons c WHERE c.code = upper('SECOND-ORDER-' || o."userId"))
+          ORDER BY o."userId"
+          LIMIT ${VouchersService.SECOND_ORDER_PAGE}`;
+        scanned += rows.length;
+        granted += await this.grantInChunks('secondOrderVouchers', rows, (r) => ({
           userId: r.userId,
           reason: 'SECOND-ORDER',
           type: 'AMOUNT',
           value,
           minOrder,
           validDays: VouchersService.NS1_WINDOW_DAYS,
-          endAt,
+          endAt: new Date(new Date(r.firstAt).getTime() + VouchersService.NS1_WINDOW_DAYS * 864e5),
           templateCode: 'SECOND_ORDER_VOUCHER',
-        }).catch((err: unknown) => {
-          this.logger.error(`Cấp mã đơn thứ 2 lỗi (user=${r.userId}): ${err instanceof Error ? err.message : err}`);
-          return false;
-        });
-        if (ok) granted++;
+        }), failures);
+        if (rows.length < VouchersService.SECOND_ORDER_PAGE) break;
+        cursor = rows[rows.length - 1]!.userId;
       }
-      if (rows.length < VouchersService.SECOND_ORDER_PAGE) break;
-      cursor = rows[rows.length - 1]!.userId;
+    } finally {
+      this.reportGrantFailures('secondOrderVouchers', failures, granted);
     }
     if (granted) this.logger.log(`Second-order vouchers granted: ${granted}/${scanned}`);
     return { granted, scanned };
