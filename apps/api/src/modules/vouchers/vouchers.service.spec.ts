@@ -283,6 +283,67 @@ describe('VouchersService.birthdayVouchers — xử lý từng lô song song có
   });
 });
 
+/** Welcome/winback dùng cùng mẫu lô song song có giới hạn như birthday. */
+describe.each([
+  ['welcomeVouchers', 'WELCOME', 'Welcome vouchers granted'],
+  ['winbackVouchers', 'WINBACK', 'Win-back vouchers granted'],
+] as const)('VouchersService.%s — xử lý từng lô song song có giới hạn', (method, prefix, logPrefix) => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `u${String(i).padStart(3, '0')}`);
+
+  function setup(rows: string[], opts: { failOn?: string; alsoFailOn?: string } = {}) {
+    const store = new Map<string, { code: string; value: number }>();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const create = jest.fn(async ({ data }: { data: { code: string; value: number; scopeMeta: { userId: string } } }) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      if (opts.failOn && data.scopeMeta.userId === opts.failOn) throw new Error('db down');
+      if (opts.alsoFailOn && data.scopeMeta.userId === opts.alsoFailOn) throw new Error('db down 2');
+      store.set(data.code, { code: data.code, value: data.value });
+      return {};
+    });
+    const prisma = {
+      user: { findMany: jest.fn().mockResolvedValueOnce(rows.map((id) => ({ id }))).mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValueOnce(rows.map((userId) => ({ userId }))).mockResolvedValue([]),
+      coupon: { findUnique: jest.fn(async ({ where }: { where: { code: string } }) => store.get(where.code) ?? null), create },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+    const log = jest.spyOn((svc as unknown as { logger: { log: () => void } }).logger, 'log').mockImplementation(() => undefined);
+    const err = jest.spyOn((svc as unknown as { logger: { error: () => void } }).logger, 'error').mockImplementation(() => undefined);
+    return { svc, store, log, err, maxInFlight: () => maxInFlight };
+  }
+
+  it('25 user: cùng tập coupon, số granted đúng, đồng thời tối đa 10', async () => {
+    const { svc, store, log, maxInFlight } = setup(ids(25));
+    await svc[method]();
+    expect(store.size).toBe(25);
+    for (const id of ids(25)) expect([...store.keys()].some((k) => k.startsWith(`${prefix}-`) && k.endsWith(id.toUpperCase()))).toBe(true);
+    expect(log).toHaveBeenCalledWith(`${logPrefix}: 25${method === 'welcomeVouchers' ? '/25 user trong cửa sổ 24h.' : ''}`);
+    expect(maxInFlight()).toBeGreaterThan(1);
+    expect(maxInFlight()).toBeLessThanOrEqual(10);
+  });
+
+  it('một grant lỗi: lần chạy dừng như cũ (lô đang chạy xong trọn, lô sau không bắt đầu, không log granted)', async () => {
+    const { svc, store, log, err } = setup(ids(35), { failOn: 'u012' });
+    await svc[method]();
+    expect(err).toHaveBeenCalledWith(`${method} lỗi: db down`);
+    expect(log).not.toHaveBeenCalled();
+    expect(store.size).toBe(10 + 9);
+    expect([...store.keys()].some((k) => k.endsWith('U020') || k.endsWith('U034'))).toBe(false);
+  });
+
+  it('nhiều grant lỗi trong cùng lô: lỗi đầu ném ra, lỗi sau cũng được log', async () => {
+    const { svc, store, err } = setup(ids(35), { failOn: 'u012', alsoFailOn: 'u015' });
+    await svc[method]();
+    expect(err).toHaveBeenCalledWith(`${method} lỗi: db down`);
+    expect(err.mock.calls.some((c) => String((c as unknown[])[0]).includes('db down 2'))).toBe(true);
+    expect(store.size).toBe(10 + 8);
+  });
+});
+
 describe('VouchersService.milestoneVouchers (§6.6)', () => {
   function setup(rows: { userId: string; spent: bigint }[]) {
     const create = jest.fn().mockResolvedValue({});
