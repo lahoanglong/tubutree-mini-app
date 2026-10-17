@@ -505,4 +505,14 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     expect(container.textContent).toContain('Tổng87.000đ');
     expect(container.textContent).not.toContain('Tổng97.000đ');
   });
+
+  it('chưa có giá phần chọn: không hiện câu giải thích mã của cả giỏ (không thuộc phần đang chọn)', async () => {
+    state.cart = { ...two(), couponNotice: 'Mã chưa áp cho đơn này: phần giảm combo làm hụt đơn tối thiểu.' };
+    state.selection.mockReturnValue(new Promise(() => {}));
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')).not.toBeNull();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.querySelector('[data-testid="coupon-notice"]')).toBeNull();
+  });
 });

@@ -439,4 +439,14 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     expect(screen.getByText('87.000đ')).toBeInTheDocument();
     expect(screen.queryByText('97.000đ')).toBeNull();
   });
+
+  it('chưa có giá phần chọn: không hiện câu giải thích mã (kể cả của cả giỏ); có giá thì hiện câu của phần chọn', async () => {
+    mocks.getCart.mockResolvedValue(two({ couponNotice: 'Mã chưa áp cho đơn này: phần giảm combo làm hụt đơn tối thiểu.' }));
+    mocks.getCartSelection.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    await new Promise((r) => setTimeout(r, 450));
+    expect(screen.queryByTestId('coupon-notice')).toBeNull();
+    expect(screen.queryByText(/phần giảm combo/)).toBeNull();
+  });
 });

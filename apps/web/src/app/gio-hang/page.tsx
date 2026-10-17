@@ -333,7 +333,8 @@ export default function CartPage() {
             <CouponBox
               currentCode={cart.couponCode}
               subtotal={selectedSubtotal}
-              notice={shown ? shown.couponNotice : cart.couponNotice}
+              // Câu giải thích chỉ hiện khi thuộc phần đang hiển thị: cả giỏ, hoặc giá phần chọn đã có; chưa có thì thôi (không mượn câu của cả giỏ).
+              notice={shown?.couponNotice ?? null}
               // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
               preview={
                 selectedItems.length === 0
