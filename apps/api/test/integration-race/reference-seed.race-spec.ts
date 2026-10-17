@@ -300,8 +300,17 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         plant_species: 0,
         community_goals: 0,
       });
-      const extraKeys = ['community.rep_post', 'community.rep_answer', 'community.rep_best', 'community.daily_rep_cap', 'community.rep_thresholds'];
+      const extraKeys = [
+        'community.rep_post',
+        'community.rep_answer',
+        'community.rep_best',
+        'community.daily_rep_cap',
+        'community.rep_thresholds',
+        'affiliate.max_rate_pct',
+        'affiliate.commission_eligible_roles',
+      ];
       expect(createdBy(results).system_configs).toBe(extraKeys.length);
+      expect(await pc.systemConfig.count({ where: { key: { in: extraKeys } } })).toBe(extraKeys.length);
       // seed.ts (dev) nạp cả mùa mẫu đã hết hạn; seed-reference thì không (kiểm ở DB A và B).
       await expectBaseReferencePresent(pc, 1);
       await expectBusinessPresent(pc);
