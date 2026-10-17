@@ -16,6 +16,7 @@ import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
+import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
 import { isRealUser } from '../../common/real-user';
 import { decideTier } from './tier-policy';
@@ -664,7 +665,7 @@ export class LoyaltyService {
     });
   }
 
-  /** Coupon khả dụng cho user: PUBLIC + đúng hạng, còn hạn, chưa hết lượt cá nhân. */
+  /** Coupon khả dụng cho user: PUBLIC + đúng hạng + mã CLAIM đã nhận, còn hạn, chưa hết lượt cá nhân. */
   async getAvailableCoupons(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const now = new Date();
@@ -682,6 +683,12 @@ export class LoyaltyService {
       WHERE scope = 'USER_GROUP'
         AND "scopeMeta" ->> 'userId' = ${userId}
         AND "startAt" <= ${now} AND "endAt" >= ${now}
+      UNION ALL
+      SELECT c.id FROM coupon_claims cc
+      JOIN coupons c ON c.id = cc."couponId"
+      WHERE cc."userId" = ${userId}
+        AND c.scope = 'CLAIM'
+        AND c."startAt" <= ${now} AND c."endAt" >= ${now}
     `);
     const coupons = idRows.length
       ? await this.prisma.coupon.findMany({
@@ -695,9 +702,22 @@ export class LoyaltyService {
     // Điều kiện scope dùng CHUNG isCouponEligible với CouponsService.assertScopeOwnership
     // (validate/redeem) để list & apply KHÔNG lệch (coupon hiện mà redeem fail).
     // Mã đã tắt và mã công khai giới hạn theo người (với tài khoản khách) cũng bị validateAndCompute từ chối.
+    // Mã chỉ khách mới bị từ chối khi khách đã có đơn chưa huỷ: ẩn luôn khỏi ví.
+    const claimIds = coupons.filter((c) => c.scope === 'CLAIM').map((c) => c.id);
+    const [claims, priorOrder] = await Promise.all([
+      claimIds.length
+        ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
+        : [],
+      coupons.some((c) => c.newCustomerOnly) ? hasPriorOrder(this.prisma, userId) : false,
+    ]);
+    const eligibleUser = { ...user, claimedCouponIds: new Set(claims.map((c) => c.couponId)) };
     const realUser = isRealUser(user);
     const filtered = coupons.filter(
-      (c) => c.isActive !== false && isCouponEligible(c, user) && (realUser || !requiresRealUser(c)),
+      (c) =>
+        c.isActive !== false &&
+        isCouponEligible(c, eligibleUser) &&
+        (realUser || !requiresRealUser(c)) &&
+        !(c.newCustomerOnly && priorOrder),
     );
 
     const ids = filtered.map((c) => c.id);

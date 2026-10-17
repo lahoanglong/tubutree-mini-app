@@ -1,4 +1,4 @@
-import { isCouponEligible } from './coupon-scope';
+import { isCouponEligible, requiresRealUser } from './coupon-scope';
 
 const user = { id: 'u1', tierId: 't1' };
 
@@ -47,5 +47,37 @@ describe('isCouponEligible (nguồn sự thật scope dùng chung list + redeem)
     expect(isCouponEligible({ scope: 'BIRTHDAY' }, user)).toBe(false);
     expect(isCouponEligible({ scope: 'INVITE' }, user)).toBe(false);
     expect(isCouponEligible({ scope: 'SOMETHING_NEW' }, user)).toBe(false);
+  });
+
+  describe('CLAIM (mã ẩn, nhận qua thẻ QR)', () => {
+    const claimed = { id: 'u1', tierId: null, claimedCouponIds: new Set(['c1']) };
+    it('khách đã nhận đúng mã → eligible', () => {
+      expect(isCouponEligible({ id: 'c1', scope: 'CLAIM' }, claimed)).toBe(true);
+    });
+    it('chưa nhận mã này (nhận mã khác, hoặc không có thông tin nhận) → KHÔNG eligible', () => {
+      expect(isCouponEligible({ id: 'c2', scope: 'CLAIM' }, claimed)).toBe(false);
+      expect(isCouponEligible({ id: 'c1', scope: 'CLAIM' }, user)).toBe(false);
+    });
+    it('thiếu id mã → KHÔNG eligible', () => {
+      expect(isCouponEligible({ scope: 'CLAIM' }, claimed)).toBe(false);
+    });
+  });
+});
+
+describe('requiresRealUser', () => {
+  it('mã công khai giới hạn theo người → cần tài khoản thật; không giới hạn → không', () => {
+    expect(requiresRealUser({ scope: 'PUBLIC', perUserLimit: 1 })).toBe(true);
+    expect(requiresRealUser({ scope: 'PUBLIC', perUserLimit: 0 })).toBe(false);
+  });
+  it('mã chỉ khách mới → luôn cần tài khoản thật (tài khoản khách tạo mới vô hạn nên luôn "mới")', () => {
+    expect(requiresRealUser({ scope: 'PUBLIC', perUserLimit: 0, newCustomerOnly: true })).toBe(true);
+    expect(requiresRealUser({ scope: 'USER_GROUP', perUserLimit: 1, newCustomerOnly: true })).toBe(true);
+  });
+  it('mã CLAIM → cần tài khoản thật', () => {
+    expect(requiresRealUser({ scope: 'CLAIM', perUserLimit: 0 })).toBe(true);
+  });
+  it('mã cá nhân/hạng không cờ khách mới → giữ như cũ (không đòi)', () => {
+    expect(requiresRealUser({ scope: 'USER_GROUP', perUserLimit: 1 })).toBe(false);
+    expect(requiresRealUser({ scope: 'TIER', perUserLimit: 1 })).toBe(false);
   });
 });

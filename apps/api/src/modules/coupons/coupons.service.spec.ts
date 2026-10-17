@@ -1,6 +1,8 @@
-import { CouponMinOrderError, CouponsService } from './coupons.service';
+import { CouponMinOrderError, CouponsService, NEW_CUSTOMER_ONLY_MSG } from './coupons.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
+import { FIRST_ORDER_LOCK, priorOrderWhere } from '../../common/first-order';
+import { REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 
 const past = new Date(Date.now() - 864e5);
 const future = new Date(Date.now() + 864e5);
@@ -23,12 +25,26 @@ function coupon(over: Record<string, unknown> = {}) {
 
 const REAL_USER = { id: 'u1', tierId: null, phone: '0912345678', zaloId: 'z1' };
 
-function makeService(c: unknown, counts: number[] = [0, 0], user: unknown = REAL_USER) {
+/** `claimed`: khách đã nhận mã CLAIM; `priorOrder`: khách đã có đơn (không còn là khách mới). */
+type Extra = { claimed?: boolean; priorOrder?: boolean };
+
+function extraModels(extra: Extra) {
+  return {
+    couponClaim: {
+      findUnique: jest.fn().mockResolvedValue(extra.claimed ? { id: 'cl1' } : null),
+      findMany: jest.fn().mockResolvedValue(extra.claimed ? [{ couponId: 'c1' }] : []),
+    },
+    order: { findFirst: jest.fn().mockResolvedValue(extra.priorOrder ? { id: 'o0' } : null) },
+  };
+}
+
+function makeService(c: unknown, counts: number[] = [0, 0], user: unknown = REAL_USER, extra: Extra = {}) {
   let i = 0;
   const prisma = {
     coupon: { findUnique: jest.fn().mockResolvedValue(c) },
     couponRedemption: { count: jest.fn().mockImplementation(() => Promise.resolve(counts[i++] ?? 0)) },
     user: { findUnique: jest.fn().mockResolvedValue(user) },
+    ...extraModels(extra),
   } as unknown as PrismaService;
   return new CouponsService(prisma);
 }
@@ -203,6 +219,44 @@ describe('CouponsService.validateAndCompute scope ownership', () => {
   });
 });
 
+describe('CouponsService.validateAndCompute — mã ẩn CLAIM và mã chỉ khách mới (D2-03)', () => {
+  const GUEST = { id: 'u1', tierId: null, phone: null, zaloId: 'guest_abc' };
+
+  it('CLAIM: khách đã nhận mã → áp được', async () => {
+    const svc = makeService(coupon({ scope: 'CLAIM', type: 'AMOUNT', value: 20000 }), [0, 0], REAL_USER, { claimed: true });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).resolves.toMatchObject({ discount: 20000 });
+  });
+
+  it('CLAIM: khách chưa nhận mã → từ chối như mã của người khác', async () => {
+    const svc = makeService(coupon({ scope: 'CLAIM' }), [0, 0], REAL_USER, { claimed: false });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('Mã không áp dụng cho tài khoản này.');
+  });
+
+  it('chỉ khách mới + khách đã có đơn chưa huỷ → từ chối với câu riêng', async () => {
+    const svc = makeService(coupon({ newCustomerOnly: true }), [0, 0], REAL_USER, { priorOrder: true });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow(NEW_CUSTOMER_ONLY_MSG);
+  });
+
+  it('chỉ khách mới + khách chưa có đơn nào → áp được; đếm đơn theo đúng luật khách mới', async () => {
+    const svc = makeService(coupon({ newCustomerOnly: true, type: 'AMOUNT', value: 15000 }), [0, 0], REAL_USER, { priorOrder: false });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).resolves.toMatchObject({ discount: 15000 });
+    const findFirst = (svc as unknown as { prisma: { order: { findFirst: jest.Mock } } }).prisma.order.findFirst;
+    expect(findFirst).toHaveBeenCalledWith({ where: priorOrderWhere('u1'), select: { id: true } });
+  });
+
+  it('chỉ khách mới + tài khoản khách vãng lai chưa SĐT → đòi đăng nhập Zalo (tài khoản khách luôn "mới")', async () => {
+    const svc = makeService(coupon({ newCustomerOnly: true, perUserLimit: 0 }), [0, 0], GUEST, { priorOrder: false });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow(REAL_USER_REQUIRED_MSG);
+  });
+
+  it('mã thường (không cờ khách mới) không đọc đơn của khách', async () => {
+    const svc = makeService(coupon(), [0, 0], REAL_USER, { priorOrder: true });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).resolves.toBeDefined();
+    const findFirst = (svc as unknown as { prisma: { order: { findFirst: jest.Mock } } }).prisma.order.findFirst;
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+});
+
 // ─────────────────────────────────────────────────────────────
 // B4: redeem atomic — bảo vệ usageLimit khỏi race + idempotency cho retry
 // ─────────────────────────────────────────────────────────────
@@ -213,6 +267,9 @@ function makeRedeemService(opts: {
   createImpl?: jest.Mock;
   perUserCount?: number | number[];
   existingRedemption?: unknown;
+  claimed?: boolean;
+  priorOrder?: boolean;
+  checkoutGroup?: string | null;
 }) {
   const updateMany = jest
     .fn()
@@ -234,6 +291,11 @@ function makeRedeemService(opts: {
       updateMany,
     },
     couponRedemption: { createMany: create, count, findUnique: findRedemption },
+    couponClaim: { findUnique: jest.fn().mockResolvedValue(opts.claimed ? { id: 'cl1' } : null) },
+    order: {
+      findUnique: jest.fn().mockResolvedValue({ checkoutGroup: opts.checkoutGroup ?? null }),
+      findFirst: jest.fn().mockResolvedValue(opts.priorOrder ? { id: 'o0' } : null),
+    },
     $executeRaw: executeRaw,
   };
   // redeem() không tx → tự mở $transaction(cb) — mock chạy cb với chính client này (mirror
@@ -241,7 +303,8 @@ function makeRedeemService(opts: {
   base.$transaction = jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(base));
   const prisma = base as unknown as PrismaService;
   const svc = new CouponsService(prisma);
-  return { svc, updateMany, create, count, findRedemption, executeRaw, transaction: base.$transaction as jest.Mock };
+  const order = base.order as { findUnique: jest.Mock; findFirst: jest.Mock };
+  return { svc, updateMany, create, count, findRedemption, executeRaw, order, transaction: base.$transaction as jest.Mock };
 }
 
 describe('CouponsService.redeem atomic (B4)', () => {
@@ -384,6 +447,54 @@ describe('CouponsService.redeem — perUserLimit race (advisory lock)', () => {
   });
 });
 
+describe('CouponsService.redeem — mã chỉ khách mới và mã CLAIM (D2-03)', () => {
+  it('chỉ khách mới: khoá đơn đầu theo khách TRƯỚC khoá (mã, khách), rồi đọc đơn trừ chính lần đặt này', async () => {
+    const calls: string[] = [];
+    const { svc, executeRaw, order, create } = makeRedeemService({
+      coupon: coupon({ newCustomerOnly: true, perUserLimit: 1 }),
+      checkoutGroup: 'DH1',
+    });
+    executeRaw.mockImplementation((_s: TemplateStringsArray, a: string) => {
+      calls.push(a === FIRST_ORDER_LOCK ? 'lock-first' : 'lock-coupon');
+      return Promise.resolve(0);
+    });
+    order.findFirst.mockImplementation(() => {
+      calls.push('read-orders');
+      return Promise.resolve(null);
+    });
+    await svc.redeem('SALE', 'u1', 'o1');
+    expect(calls).toEqual(['lock-first', 'read-orders', 'lock-coupon']);
+    expect(executeRaw.mock.calls[0].slice(1)).toEqual([FIRST_ORDER_LOCK, 'u1']);
+    expect(order.findFirst.mock.calls[0][0].where).toEqual(priorOrderWhere('u1', { orderIds: ['o1'], checkoutGroup: 'DH1' }));
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('chỉ khách mới: đã có đơn khác (lần đặt song song đi trước đã ghi) → từ chối, KHÔNG ghi lượt dùng', async () => {
+    const { svc, create } = makeRedeemService({ coupon: coupon({ newCustomerOnly: true }), priorOrder: true });
+    await expect(svc.redeem('SALE', 'u1', 'o1')).rejects.toThrow(NEW_CUSTOMER_ONLY_MSG);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('mã thường: không khoá đơn đầu, không đọc đơn', async () => {
+    const { svc, executeRaw, order } = makeRedeemService({ coupon: coupon({ perUserLimit: 1 }) });
+    await svc.redeem('SALE', 'u1', 'o1');
+    expect(executeRaw.mock.calls.map((c) => c[1])).toEqual(['c1']);
+    expect(order.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('CLAIM: khách chưa nhận mã → từ chối trong transaction, KHÔNG ghi lượt dùng', async () => {
+    const { svc, create } = makeRedeemService({ coupon: coupon({ scope: 'CLAIM' }), claimed: false });
+    await expect(svc.redeem('SALE', 'u1', 'o1')).rejects.toThrow('Mã không áp dụng cho tài khoản này.');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('CLAIM: khách đã nhận mã → ghi lượt dùng', async () => {
+    const { svc, create } = makeRedeemService({ coupon: coupon({ scope: 'CLAIM' }), claimed: true });
+    await svc.redeem('SALE', 'u1', 'o1');
+    expect(create).toHaveBeenCalled();
+  });
+});
+
 describe('CouponsService.release', () => {
   // P1 (docs/2026-09-08-review-progress.md): hủy/trả đơn hoàn ví/xu/điểm/hoa hồng/stock đủ cả
   // nhưng KHÔNG hoàn coupon — voucher usageLimit=1 (birthday/welcome/referral...) bị "đốt"
@@ -458,7 +569,7 @@ describe('CouponsService.release', () => {
 
 describe('CouponsService.previewMany', () => {
   const GUEST = { id: 'u1', tierId: null, phone: null, zaloId: null };
-  const cases: { name: string; c: Record<string, unknown>; used?: number; total?: number; user?: unknown }[] = [
+  const cases: { name: string; c: Record<string, unknown>; used?: number; total?: number; user?: unknown; extra?: Extra }[] = [
     { name: 'PERCENT có trần', c: { code: 'A', type: 'PERCENT', value: 50, maxDiscount: 30000 } },
     { name: 'PERCENT > 100%', c: { code: 'B', type: 'PERCENT', value: 150 } },
     { name: 'AMOUNT > tiền hàng', c: { code: 'C', type: 'AMOUNT', value: 900000 } },
@@ -472,15 +583,20 @@ describe('CouponsService.previewMany', () => {
     { name: 'gắn sản phẩm có trong giỏ', c: { code: 'K', type: 'AMOUNT', value: 50000, applyTo: { productIds: ['p1'] } } },
     { name: 'mã người khác', c: { code: 'L', scope: 'USER_GROUP', scopeMeta: { userId: 'other' } } },
     { name: 'mã công khai giới hạn người + khách chưa đăng nhập', c: { code: 'M', scope: 'PUBLIC' }, user: GUEST },
+    { name: 'CLAIM đã nhận', c: { code: 'N', scope: 'CLAIM', type: 'AMOUNT', value: 20000 }, extra: { claimed: true } },
+    { name: 'CLAIM chưa nhận', c: { code: 'O', scope: 'CLAIM' }, extra: { claimed: false } },
+    { name: 'chỉ khách mới + chưa có đơn', c: { code: 'P', newCustomerOnly: true }, extra: { priorOrder: false } },
+    { name: 'chỉ khách mới + đã có đơn', c: { code: 'Q', newCustomerOnly: true }, extra: { priorOrder: true } },
+    { name: 'chỉ khách mới + khách vãng lai', c: { code: 'R', newCustomerOnly: true, perUserLimit: 0 }, user: GUEST },
   ];
   const lines = [
     { productId: 'p1', total: 30000 },
     { productId: 'p2', total: 170000 },
   ];
 
-  it.each(cases)('$name: cùng kết quả/lỗi với validateAndCompute', async ({ c, used = 0, total = 0, user = REAL_USER }) => {
+  it.each(cases)('$name: cùng kết quả/lỗi với validateAndCompute', async ({ c, used = 0, total = 0, user = REAL_USER, extra = {} }) => {
     const row = coupon({ isActive: true, scope: 'PUBLIC', applyTo: null, ...c });
-    const single = makeService(row, [used, total], user);
+    const single = makeService(row, [used, total], user, extra);
     const expected = await single.validateAndCompute(row.code as string, 'u1', 200000, lines).catch((e: Error) => e);
 
     const prisma = {
@@ -492,6 +608,7 @@ describe('CouponsService.previewMany', () => {
           .mockResolvedValueOnce(used ? [{ couponId: 'c1', _count: { _all: used } }] : [])
           .mockResolvedValueOnce(total ? [{ couponId: 'c1', _count: { _all: total } }] : []),
       },
+      ...extraModels(extra),
     } as unknown as PrismaService;
     const got = (await new CouponsService(prisma).previewMany([row.code as string], 'u1', 200000, lines)).get(row.code as string);
     if (expected instanceof Error) {

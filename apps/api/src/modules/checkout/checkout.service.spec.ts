@@ -1902,6 +1902,109 @@ describe('CheckoutService — không lộ trường nội bộ cho khách (R3-ME
   });
 });
 
+describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
+  const SMALL = {
+    items: [{ id: 'l1', variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 100000, quantity: 1, total: 100000 }],
+    subtotal: 100000, discount: 0, freeship: false, couponCode: null,
+  };
+  const BASE_CONFIG: Record<string, unknown> = { 'shipping.free_threshold': 200000, 'shipping.flat_fee_below_threshold': 19000 };
+  const config = (extra: Record<string, unknown> = {}) => {
+    const values = { ...BASE_CONFIG, ...extra };
+    return { get: jest.fn().mockImplementation(async (k: string, fb?: unknown) => (k in values ? values[k] : fb)) };
+  };
+  const ON = { 'shipping.first_order_free_enabled': true };
+
+  function setup(
+    opts: { config?: { get: jest.Mock }; user?: unknown; priorOrders?: Array<unknown>; cartData?: unknown; validateAndCompute?: jest.Mock } = {},
+  ) {
+    const systemConfig = opts.config ?? config();
+    const b = build({
+      cartData: opts.cartData ?? SMALL,
+      pricing: new PricingService(systemConfig as never),
+      systemConfig,
+      validateAndCompute: opts.validateAndCompute,
+    });
+    const user = opts.user === undefined ? { phone: '0912345678', zaloId: 'z1' } : opts.user;
+    (b.prisma.user.findUnique as jest.Mock).mockImplementation(async (args: { select?: Record<string, boolean> }) =>
+      args?.select?.zaloId && args.select.phone ? user : null,
+    );
+    // Lần đọc "đã có đơn chưa" theo thứ tự gọi: báo giá, compute lúc đặt, rồi lần kiểm trong tx.
+    const queue = [...(opts.priorOrders ?? [])];
+    const findFirst = jest.fn().mockImplementation(async () => (queue.length ? queue.shift() : null));
+    (b.prisma as unknown as { order: Record<string, unknown> }).order.findFirst = findFirst;
+    return { ...b, findFirst, systemConfig };
+  }
+  const firstOrderLocks = (executeRaw: jest.Mock) =>
+    executeRaw.mock.calls.filter((c) => (c[0] as TemplateStringsArray).join('?').includes('pg_advisory_xact_lock') && c[1] === 'first-order');
+
+  it('mặc định TẮT: phí giao như cũ (19k), không đọc đơn cũ, không khoá', async () => {
+    const { svc, orderCreate, findFirst, executeRaw } = setup();
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(19000);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(orderCreate.mock.calls[0][0].data.shippingFee).toBe(19000);
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(firstOrderLocks(executeRaw)).toHaveLength(0);
+  });
+
+  it('bật + khách thật chưa có đơn: phí giao 0 ở báo giá và lúc đặt; trong tx khoá first-order rồi kiểm lại (bỏ qua chính đơn đang tạo)', async () => {
+    const { svc, orderCreate, findFirst, executeRaw } = setup({ config: config(ON) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(0);
+    expect(q.total).toBe(100000);
+    expect(q.firstOrderShipWaived).toBe(19000);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: 100000 } as never);
+    expect(orderCreate.mock.calls[0][0].data.shippingFee).toBe(0);
+    expect(orderCreate.mock.calls[0][0].data.total).toBe(100000);
+    expect(firstOrderLocks(executeRaw)).toHaveLength(1);
+    expect(findFirst.mock.calls.at(-1)![0].where).toMatchObject({ userId: 'u1', status: { not: 'CANCELLED' }, id: { notIn: ['o1'] } });
+  });
+
+  it('bật nhưng đã có đơn trước → phí giao như cũ', async () => {
+    const { svc } = setup({ config: config(ON), priorOrders: [{ id: 'o0' }, { id: 'o0' }] });
+    expect((await svc.quote('u1', { addressId: 'addr1' } as never)).shippingFee).toBe(19000);
+  });
+
+  it('bật nhưng khách vãng lai (chưa xác thực) → phí giao như cũ', async () => {
+    const { svc } = setup({ config: config(ON), user: { phone: null, zaloId: 'guest_dev1' } });
+    expect((await svc.quote('u1', { addressId: 'addr1' } as never)).shippingFee).toBe(19000);
+  });
+
+  it('bật với ngưỡng 150k, đơn đầu 100k → chưa đạt ngưỡng, phí giao như cũ', async () => {
+    const { svc } = setup({ config: config({ ...ON, 'shipping.first_order_free_min_subtotal': 150000 }) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(19000);
+    expect(q.firstOrderShipWaived).toBe(0);
+  });
+
+  it('mã freeship trên đơn đầu đã miễn phí giao → mã không miễn thêm gì: không tính là đã áp, không tiêu lượt', async () => {
+    const { svc, coupons } = setup({
+      config: config(ON),
+      cartData: { ...SMALL, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(0);
+    expect(q.couponApplied).toBe(false);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+
+  it('đơn khác của khách vừa ghi xong giữa lúc tính giá và lúc ghi đơn → kiểm trong tx từ chối, không ghi lượt mã', async () => {
+    // compute lúc đặt chưa thấy đơn nào (null), lần kiểm trong tx dưới khoá thấy đơn vừa ghi.
+    const { svc, coupons } = setup({
+      config: config(ON),
+      priorOrders: [null, { id: 'o-other' }],
+      cartData: { ...SMALL, couponCode: 'GIAM10' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 10000, freeship: false }),
+    });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow(
+      'Ưu đãi miễn phí giao hàng đơn đầu',
+    );
+    expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+});
+
 describe('CheckoutService.placeOrder — chạm đầu của khách trên order_placed (props)', () => {
   const placedEvent = (analytics: AnalyticsEventsService) =>
     (analytics.record as jest.Mock).mock.calls.map((c) => c[1]).find((e) => e.eventName === 'order_placed');

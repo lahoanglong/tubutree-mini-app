@@ -91,6 +91,7 @@ import {
 } from '@/components/admin/pancake-attention';
 import { PancakeSyncBadge, PancakeSyncPanel } from '@/components/admin/pancake-sync';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
+import { ClaimCampaignPanel } from '@/components/admin/claim-campaign-panel';
 import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
 import { ReturnRow } from '@/components/admin/return-request-row';
@@ -1901,6 +1902,7 @@ function CouponsTab() {
       <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
+    <ClaimCampaignPanel />
     <CouponList />
     </div>
   );

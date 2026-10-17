@@ -2,8 +2,9 @@ import { BadRequestException, Injectable, NotFoundException, Optional } from '@n
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
+import { CouponClaimService } from '../coupons/coupon-claim.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { calcTierDiscount, freeShipThreshold, tierDiscountPctOf } from '../pricing/pricing.service';
+import { calcTierDiscount, firstOrderFreeShipFrom, freeShipThreshold, tierDiscountPctOf } from '../pricing/pricing.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -35,6 +36,8 @@ export class CartService {
     private readonly combo: ComboService,
     // @Optional: test dựng tay không truyền (không có thì không tra "chạm" giới thiệu); AffiliateModule là @Global.
     @Optional() private readonly affiliate?: AffiliateService,
+    // @Optional: như trên (không có thì mã thẻ hộp hàng phải nhận qua link trước); CouponsModule là @Global.
+    @Optional() private readonly claims?: CouponClaimService,
   ) {}
 
   private async ensureCart(userId: string): Promise<string> {
@@ -242,7 +245,9 @@ export class CartService {
     );
 
     // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
-    const freeshipThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
+    const tierThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
+    const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+    const freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
 
     return {
       items: lines,
@@ -400,6 +405,8 @@ export class CartService {
     // dụng" cho mã không giảm được đồng nào.
     const { combo, goodsAfterCombo: couponBase, couponLines } = await this.couponBaseAfterCombo(cart.items, userId, slug);
     const normalized = normalizeCouponCode(code);
+    // Mã in trên thẻ hộp hàng (CLAIM) gõ tay ở giỏ: nhận vào ví trước, không thì mã ẩn bị xét như mã của người khác.
+    await this.claims?.claimHiddenForCart(userId, normalized);
     try {
       await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLines);
     } catch (err) {
