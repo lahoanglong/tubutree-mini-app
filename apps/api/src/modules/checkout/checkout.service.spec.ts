@@ -1926,3 +1926,37 @@ describe('CheckoutService.placeOrder — chạm đầu của khách trên order_
     expect(placedEvent(analytics).props).toMatchObject({ firstTouchSource: null, firstTouchCampaign: null });
   });
 });
+
+// D3-18: đơn khách tự mua qua gian hàng mang nguồn `storefront`, tách khỏi `ctv_assisted` (đơn CTV lên hộ, do affiliate.service ghi).
+describe('CheckoutService.placeOrder: nguồn của đơn (Order.source)', () => {
+  const placedSource = (analytics: AnalyticsEventsService) =>
+    (analytics.record as jest.Mock).mock.calls.map((c) => c[1]).find((e) => e.eventName === 'order_placed').props.orderSource;
+
+  it('đặt qua gian hàng (khách tự mua) → source "storefront", sự kiện order_placed cùng nhãn', async () => {
+    const { svc, orderCreate, analytics } = build({ stockCount: 1, storefront: SF_CTV });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
+    expect(orderCreate.mock.calls[0][0].data.source).toBe('storefront');
+    expect(placedSource(analytics)).toBe('storefront');
+  });
+
+  it('gian hàng nhãn hàng/đối tác cũng là "storefront" (chỉ có CTV lên đơn hộ mới là ctv_assisted)', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1, storefront: SF_BRAND });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
+    expect(orderCreate.mock.calls[0][0].data.source).toBe('storefront');
+  });
+
+  it('định danh gian hàng không khớp (không ghi công) → không phải "storefront"', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1, storefront: SF_BRAND });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'shop-gia-mao' } as never);
+    expect(orderCreate.mock.calls[0][0].data.source).toBe('checkout');
+  });
+
+  it('không qua gian hàng: giỏ hàng → "checkout", chọn dòng mua ngay → "buy_now"', async () => {
+    const full = build();
+    await full.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(full.orderCreate.mock.calls[0][0].data.source).toBe('checkout');
+    const picked = build({ cartData: { items: [{ id: 'i1', variationId: 'v1', productId: 'p1', productName: 'A', variationName: 'VA', unitPrice: 100, quantity: 1, total: 100 }], subtotal: 100, discount: 0, freeship: false, couponCode: null } });
+    await picked.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i1'] } as never);
+    expect(picked.orderCreate.mock.calls[0][0].data.source).toBe('buy_now');
+  });
+});
