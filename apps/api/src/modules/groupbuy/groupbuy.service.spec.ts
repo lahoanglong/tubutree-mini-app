@@ -165,6 +165,15 @@ describe('GroupBuyService.create', () => {
     expect(prisma.groupBuy.create).not.toHaveBeenCalled();
   });
 
+  it('trần số nhóm OPEN chỉ đếm nhóm khách còn thấy (sản phẩm đang bán, không phải hàng đối tác), như danh sách', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.count as jest.Mock).mockResolvedValue(0);
+    await new GroupBuyService(prisma, makeConfig()).create('u1', 'prod1');
+    expect((prisma.groupBuy.count as jest.Mock).mock.calls[0][0]).toEqual({
+      where: { initiatorId: 'u1', status: 'OPEN', product: { storefrontId: null, isActive: true, approvalStatus: 'APPROVED' } },
+    });
+  });
+
   it('còn dưới trần số nhóm OPEN → vẫn tạo được bình thường', async () => {
     const prisma = makePrisma();
     (prisma.groupBuy.count as jest.Mock).mockResolvedValue(1);

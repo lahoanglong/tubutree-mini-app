@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -23,6 +24,12 @@ interface GroupRow {
 
 /** Số ngày mã giảm của nhóm đủ người còn dùng được. */
 const COUPON_VALID_DAYS = 30;
+
+/**
+ * Nhóm khách còn thấy và tham gia được: sản phẩm đang bán, không phải hàng gian hàng đối tác. Trần số nhóm mở của mỗi khách
+ * đếm theo cùng điều kiện, để nhóm trên hàng đã ngừng bán (ẩn, không tham gia được) không giữ chỗ tới khi hết hạn.
+ */
+const LISTED_GROUP_PRODUCT = { storefrontId: null, ...PUBLIC_PRODUCT_WHERE } satisfies Prisma.ProductWhereInput;
 
 /** Mã giảm TẤT ĐỊNH theo (nhóm, thành viên): cấp lại an toàn và hiện lại được cho đúng người mà không cần tra bảng mã. */
 export function groupBuyCouponCode(groupBuyId: string, userId: string): string {
@@ -68,7 +75,7 @@ export class GroupBuyService {
     // Chống spam mở nhóm hàng loạt: rác hoá danh sách mua chung / tốn tài nguyên tạo nhóm vô tội vạ
     // (tài khoản phụ đã bị chặn ở assertRealUser, mã chỉ áp cho đúng sản phẩm — xem grantCoupon()).
     const maxOpenPerUser = await this.config.get<number>('groupbuy.max_open_per_user', 3);
-    const openCount = await this.prisma.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN' } });
+    const openCount = await this.prisma.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN', product: LISTED_GROUP_PRODUCT } });
     if (openCount >= maxOpenPerUser) {
       throw new BadRequestException(`Bạn đang có ${openCount} nhóm mua chung chưa đóng, hãy chờ nhóm cũ hoàn tất.`);
     }
@@ -275,7 +282,7 @@ export class GroupBuyService {
   async listOpen(userId?: string) {
     const groups = await this.prisma.groupBuy.findMany({
       // Nhóm trên hàng của gian hàng đối tác không tham gia được nữa (join đóng nhóm) nên không mời khách vào.
-      where: { status: 'OPEN', expiresAt: { gt: new Date() }, product: { storefrontId: null, ...PUBLIC_PRODUCT_WHERE } },
+      where: { status: 'OPEN', expiresAt: { gt: new Date() }, product: LISTED_GROUP_PRODUCT },
       orderBy: { createdAt: 'desc' },
       take: 30,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },

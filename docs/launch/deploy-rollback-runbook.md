@@ -551,6 +551,7 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
    - Ví mã của khách vẫn liệt kê mã mua chung đã cấp cho sản phẩm demo (nếu bản thử từng có nhóm thành công); mã không dùng được vì sản phẩm không vào giỏ được.
    - Lịch sử đơn vẫn hiện dòng hàng demo của đơn cũ, ghi "ngừng bán"; gói định kỳ trên hàng demo báo ngừng bán ở kỳ sau (mục 3 của bản xem trước nêu số gói, CSKH xử lý tay).
    - API `GET /products/<slug>/reviews` vẫn trả đánh giá cũ của sản phẩm demo; trang sản phẩm đã 404 nên khách không tới đó.
+   - Trần số nhóm mua chung mở mỗi khách (`groupbuy.max_open_per_user`) chỉ đếm nhóm trên hàng đang bán. Nếu sau này bật lại một sản phẩm đã tắt, các nhóm cũ còn hạn của nó hiện lại, và một khách có thể tạm vượt trần cho tới khi các nhóm đó hết hạn (tối đa `groupbuy.window_hours`).
    - Trang nhãn, yêu thích, bài cộng đồng (gắn sản phẩm khi đăng) và lời nhắc CTV chỉ lọc `isActive`, chưa lọc trạng thái duyệt: không ảnh hưởng hàng demo (đã tắt), là việc riêng cho hàng đối tác chờ duyệt.
 
    Lỡ tay (vd tắt nhầm mã chủ shop muốn giữ): một mã thì bật lại và sửa hạn ở Quản trị, Mã giảm giá, lấy hạn cũ trong khối `-- HOÀN TÁC` của `.demo-cleanup-apply.txt`. Cần đưa cả sản phẩm, biến thể về (Quản trị không có nút bật lại hàng kho Tubu): chỉ tech lead làm, chạy nguyên khối từ `BEGIN;` tới `COMMIT;` trong file đó:

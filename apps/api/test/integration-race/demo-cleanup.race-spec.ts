@@ -55,6 +55,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
   let storefrontId = '';
   let user2Id = '';
   let upcomingSaleId = '';
+  let realProductId = '';
 
   const catalog = () => new CatalogService(prisma);
   const flash = () => new FlashSaleService(prisma, {} as never, {} as never, {} as never);
@@ -142,7 +143,11 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
       await prisma.groupBuy.deleteMany({ where: { initiatorId: { in: [userId, user2Id] } } });
       await prisma.feedPost.deleteMany({ where: { userId } });
       await prisma.wishlist.deleteMany({ where: { userId } });
-      await deleteItData(prisma, { userIds: [userId, user2Id].filter(Boolean), flashSaleIds: [saleId, upcomingSaleId].filter(Boolean) });
+      await deleteItData(prisma, {
+        userIds: [userId, user2Id].filter(Boolean),
+        flashSaleIds: [saleId, upcomingSaleId].filter(Boolean),
+        productIds: [realProductId].filter(Boolean),
+      });
       await prisma.$executeRaw`DELETE FROM "flash_sale_items" WHERE "flashSaleId" = ${saleId}`;
       await restoreDemoState();
     }
@@ -272,6 +277,12 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect((await groupbuy.listOpen()).map((g) => g.id)).not.toContain(gb.id);
     await expect(groupbuy.join(user2Id, gb.id)).rejects.toThrow('ngừng bán');
     expect(await prisma.groupBuyMember.count({ where: { groupBuyId: gb.id } })).toBe(1);
+    // Trần 1 nhóm mở/khách: nhóm ẩn trên hàng đã tắt không giữ chỗ, khách mở được nhóm trên hàng đang bán.
+    const real = await prisma.product.create({ data: { brand: 'IT', slug: `it-gb-${tag}`, name: 'IT mua chung', description: '', basePrice: 100_000 } });
+    realProductId = real.id;
+    const cap1 = { get: async (k: string, fallback: unknown) => (k === 'groupbuy.max_open_per_user' ? 1 : fallback) } as never;
+    await expect(new GroupBuyService(prisma, cap1).create(userId, real.id)).resolves.toMatchObject({ status: 'OPEN' });
+    await expect(new GroupBuyService(prisma, cap1).create(userId, real.id)).rejects.toThrow('nhóm mua chung chưa đóng');
 
     // Giờ vàng sắp tới: không hiện, không đặt nhắc được.
     const lifecycle = { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefined) };
