@@ -41,11 +41,6 @@ function buildTransitions(): Record<OrderStatus, readonly OrderStatus[]> {
 
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = buildTransitions();
 
-/** Trạng thái cuối — không còn đường ra (không tính self-transition). */
-export function isTerminal(status: OrderStatus): boolean {
-  return ORDER_TRANSITIONS[status].every((s) => s === status);
-}
-
 export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ORDER_TRANSITIONS[from].includes(to);
 }
