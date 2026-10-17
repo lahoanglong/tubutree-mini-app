@@ -1495,6 +1495,31 @@ export class MerchantFulfilmentService {
     }
   }
 
+  /**
+   * Khoá của đường ẩn danh tài khoản chủ gian hàng: khoá tư vấn theo chủ rồi khoá phiếu từng gian hàng (id tăng dần), đúng thứ tự
+   * clearPartnerOnRoleLoss; dòng gian hàng và users khoá sau, ở người gọi.
+   */
+  async lockOwnerStores(tx: Db, ownerUserId: string) {
+    await lockStoreOwner(tx, ownerUserId);
+    const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
+    for (const { id } of stores) await this.lockStorePayouts(tx, id);
+  }
+
+  /**
+   * Vướng mắc của mọi gian hàng đối tác (MERCHANT hoặc isPartner) của chủ, cùng danh sách với việc thu hồi đại lý (partnerBlockers,
+   * trừ "chủ vẫn là đại lý"). Rỗng nghĩa là đã đối soát xong, không còn gì mồ côi khi tài khoản chủ bị ẩn danh.
+   */
+  async ownerPartnerBlockers(db: Db, ownerUserId: string, cfg: SettlementConfig): Promise<string[]> {
+    const stores = await db.storefront.findMany({
+      where: { ownerUserId, ...PARTNER_STORE_WHERE },
+      select: { id: true, title: true },
+      orderBy: { id: 'asc' },
+    });
+    const out: string[] = [];
+    for (const store of stores) out.push(...(await this.partnerBlockers(db, store.id, ownerUserId, cfg, true)));
+    return out;
+  }
+
   private async partnerBlockers(
     tx: Db,
     storefrontId: string,
