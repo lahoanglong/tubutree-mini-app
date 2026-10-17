@@ -54,6 +54,7 @@ export function formatDateTime(v: string | number | Date | null | undefined): st
   return d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())} ${formatDate(d)}` : '—';
 }
 
+// Bản sao của formatSold ở apps/web/src/lib/api.ts (hai app tách rời); sửa một nơi thì sửa cả nơi kia.
 /** "Đã bán" kiểu Shopee: <1 → null (ẩn); <1000 → "Đã bán 12"; ≥1000 → "Đã bán 1,2k+"; ≥1tr → "...tr+". */
 export function formatSold(n: number | null | undefined): string | null {
   const v = Number(n ?? 0);
