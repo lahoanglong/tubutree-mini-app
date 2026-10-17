@@ -67,6 +67,13 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     expect(productCreate).not.toHaveBeenCalled();
   });
 
+  it('chủ đã bị khoá/ẩn danh (đọc dưới khoá users): từ chối, không tạo sản phẩm', async () => {
+    const { svc, prisma, productCreate } = build();
+    prisma.$queryRaw.mockResolvedValueOnce([{ type: 'MERCHANT', isPartner: true }]).mockResolvedValueOnce([{ isBlocked: true }]);
+    await expect(svc.createProduct('u1', BASE)).rejects.toThrow(ForbiddenException);
+    expect(productCreate).not.toHaveBeenCalled();
+  });
+
   it('đối tác tự giao (mặc định): fulfilment MERCHANT, KHÔNG có mã Pancake nào (không còn mã giả MCH_), báo admin chờ duyệt', async () => {
     const { svc, productCreate, notify } = build();
     await svc.createProduct('u1', { ...BASE, stock: 12 });
@@ -435,6 +442,7 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       },
       productEditDraft: { upsert: draftUpsert, deleteMany: draftDelete },
       variation: { update: variationUpdate, findFirst: variationFindFirst },
+      $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, isBlocked: false }]),
       $transaction: jest.fn(),
     };
     p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));

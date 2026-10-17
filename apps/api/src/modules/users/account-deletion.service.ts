@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SessionStateService } from '../auth/session-state.service';
 import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
 
 /** Mã lỗi ổn định để admin UI nhận diện (message tiếng Việt có thể đổi câu chữ). */
@@ -78,6 +79,7 @@ export class AccountDeletionService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() @Inject(PARTNER_STORE_BLOCKERS) private readonly partnerStores?: PartnerStoreBlockersPort,
+    @Optional() private readonly sessions?: SessionStateService,
   ) {}
 
   async list(status: DeletionListStatus = 'PENDING') {
@@ -119,13 +121,17 @@ export class AccountDeletionService {
    * chạy lại khoá đủ đơn ngay từ đầu.
    */
   async process(requestId: string, adminId: string, adminNote?: string) {
+    let result;
     try {
-      return await this.processOnce(requestId, adminId, adminNote);
+      result = await this.processOnce(requestId, adminId, adminNote);
     } catch (err) {
       if (!isRetryableTxError(err)) throw err;
       this.logger.warn(`Yêu cầu xoá ${requestId}: xung đột giao dịch (${(err as Error).message}), chạy lại một lần.`);
-      return this.processOnce(requestId, adminId, adminNote);
+      result = await this.processOnce(requestId, adminId, adminNote);
     }
+    // Bộ nhớ đệm phiên (SessionStateService, TTL 5 giây) còn coi chủ vừa bị ẩn danh là đang đăng nhập: cắt ngay như khoá tài khoản.
+    this.sessions?.invalidate(result.userId);
+    return result;
   }
 
   private async processOnce(requestId: string, adminId: string, adminNote?: string) {

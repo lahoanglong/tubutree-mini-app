@@ -59,6 +59,27 @@ describe('AccountDeletionService — gian hàng đối tác của chủ', () => 
     expect(calls.indexOf('lockOwnerStores')).toBeLessThan(storefrontLock);
   });
 
+  it('xử lý xong: cắt bộ nhớ đệm phiên của chủ; bị từ chối thì không', async () => {
+    const sessions = { invalidate: jest.fn() };
+    const ok = build([]);
+    await new AccountDeletionService(
+      { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(ok.tx)) } as unknown as PrismaService,
+      ok.port,
+      sessions as never,
+    ).process('req-1', 'admin-1');
+    expect(sessions.invalidate).toHaveBeenCalledWith('u1');
+    sessions.invalidate.mockClear();
+    const blocked = build(['1 đơn tự giao chưa xong']);
+    await new AccountDeletionService(
+      { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(blocked.tx)) } as unknown as PrismaService,
+      blocked.port,
+      sessions as never,
+    )
+      .process('req-1', 'admin-1')
+      .catch(() => undefined);
+    expect(sessions.invalidate).not.toHaveBeenCalled();
+  });
+
   it('không có cổng đối tác (không nối MerchantModule): bỏ qua kiểm gian hàng như trước', async () => {
     const { tx } = build(['x']);
     const prisma = { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(tx)) };

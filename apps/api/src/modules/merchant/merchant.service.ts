@@ -260,6 +260,19 @@ export class MerchantService {
     return store;
   }
 
+  /**
+   * Bước trong transaction trước khi một sản phẩm tự giao đang bán được ghi (đăng mới, hoặc mở bán lại): khoá dòng gian hàng FOR KEY SHARE
+   * rồi kiểm lại cờ đối tác (thu hồi đại lý giữ FOR UPDATE cùng dòng trước khi tắt cờ), rồi khoá dòng users của chủ FOR KEY SHARE (ẩn danh giữ
+   * users FOR UPDATE nên ta đợi nó xong rồi thấy isBlocked). Thứ tự gian hàng → users như mọi đường khác; đặt đơn không đụng khoá này.
+   */
+  private async lockSellableStore(tx: Prisma.TransactionClient, storeId: string, ownerUserId: string): Promise<void> {
+    const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
+      SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${storeId} FOR KEY SHARE`;
+    if (!store || !isPartnerStore(store)) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+    const [owner] = await tx.$queryRaw<{ isBlocked: boolean }[]>`SELECT "isBlocked" FROM "users" WHERE "id" = ${ownerUserId} FOR KEY SHARE`;
+    if (!owner || owner.isBlocked) throw new ForbiddenException('Tài khoản đã bị khoá hoặc đã xoá, không thể đăng bán sản phẩm.');
+  }
+
   /** Kiểm mã biến thể Pancake cho "Tubu giao hộ" (form đăng sản phẩm, nút "Kiểm tra"). */
   async checkPancakeVariation(userId: string, code: string): Promise<MerchantPancakeCheck> {
     await this.assertCanSellOwnProducts(userId);
@@ -519,9 +532,7 @@ export class MerchantService {
     // Chèn dưới FOR KEY SHARE của dòng gian hàng rồi kiểm lại cờ (như checkout.assertPartnerStoresUnderLock): thu hồi đại lý giữ FOR UPDATE
     // cùng dòng này trước khi tắt cờ, nên hoặc sản phẩm bị từ chối, hoặc thu hồi thấy sản phẩm này và 409, không bao giờ cả hai cùng qua.
     const product = await this.prisma.$transaction(async (tx) => {
-      const [locked] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
-        SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${store.id} FOR KEY SHARE`;
-      if (!locked || !isPartnerStore(locked)) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+      await this.lockSellableStore(tx, store.id, userId);
       return tx.product.create({
         data: {
           name: dto.name,
