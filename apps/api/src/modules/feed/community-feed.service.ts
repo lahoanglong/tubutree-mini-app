@@ -7,6 +7,8 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 import { startOfVnDay } from '../../common/vn-time';
+import { decodeServedImage } from '../../common/served-image';
+import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
 import { DEFAULT_UNANSWERED_ALERT_HOURS, listUnansweredQuestions, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from './community-unanswered';
 
@@ -69,7 +71,6 @@ type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' 
 
 const MAX_TITLE = 160;
 const MAX_BODY = 5000;
-const MAX_IMAGES = 6;
 const MAX_PRODUCT_TAGS = 5;
 const MAX_TAGS = 5;
 const MAX_COMMENT = 500;
@@ -102,14 +103,32 @@ const FEED_INCLUDE = {
   tags: { include: { tag: { select: { slug: true, name: true } } } },
 } as const;
 
+/**
+ * Cột của một bài trong danh sách/chi tiết. KHÔNG có `images`: cột này có thể chứa tới 6 ảnh base64 nên đọc nguyên mảng
+ * cho cả trang là hàng chục MB; ảnh đi đường riêng (loadFeedImages) và trả đường dẫn tới endpoint ảnh.
+ */
+const FEED_SELECT = {
+  id: true,
+  kind: true,
+  status: true,
+  title: true,
+  body: true,
+  meta: true,
+  isPinned: true,
+  bestCommentId: true,
+  userId: true,
+  createdAt: true,
+  ...FEED_INCLUDE,
+} as const;
+
 interface FeedCounts {
   likes: Map<string, number>;
   comments: Map<string, number>;
 }
 
-/** Hình dạng FeedPost sau khi include FEED_INCLUDE + reactions (dùng chung getFeed/getPost/eventPosts). */
+/** Hình dạng FeedPost sau khi select FEED_SELECT + reactions (dùng chung getFeed/getPost/eventPosts). */
 type FeedPostRow = Prisma.FeedPostGetPayload<{
-  include: typeof FEED_INCLUDE & { reactions: { select: { id: true } } };
+  select: typeof FEED_SELECT & { reactions: { select: { id: true } } };
 }>;
 
 /**
@@ -333,13 +352,14 @@ export class CommunityFeedService {
       orderBy,
       take: take + 1,
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
-      include: { ...FEED_INCLUDE, reactions: { where: { userId }, select: { id: true } } },
+      select: { ...FEED_SELECT, reactions: { where: { userId }, select: { id: true } } },
     });
     const hasMore = posts.length > take;
     const page = hasMore ? posts.slice(0, take) : posts;
-    const counts = await this.countsForPage(page.map((p) => p.id));
+    const ids = page.map((p) => p.id);
+    const [counts, images] = await Promise.all([this.countsForPage(ids), loadFeedImages(this.prisma, ids, true)]);
     return {
-      posts: page.map((p) => this.toItem(p, userId, counts, { coverOnly: true })),
+      posts: page.map((p) => this.toItem(p, userId, counts, images)),
       nextCursor: hasMore ? page[page.length - 1]!.id : null,
     };
   }
@@ -347,7 +367,7 @@ export class CommunityFeedService {
   async getPost(userId: string, postId: string) {
     const p = await this.prisma.feedPost.findUnique({
       where: { id: postId },
-      include: { ...FEED_INCLUDE, reactions: { where: { userId }, select: { id: true } } },
+      select: { ...FEED_SELECT, reactions: { where: { userId }, select: { id: true } } },
     });
     if (!p) throw new NotFoundException('Bài viết không tồn tại.');
     if (p.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
@@ -356,7 +376,8 @@ export class CommunityFeedService {
     // UPDATE khoá đúng một dòng (ghi tuần tự trên bài viral), trong khi toItem() và FeedItem
     // KHÔNG hề trả `viewCount` ra — không màn nào hiển thị con số đó. Cột vẫn còn trong schema
     // cho báo cáo sau này; khi cần hãy đếm theo phiên/ngày hoặc gom batch thay vì ghi mỗi request.
-    return this.toItem(p, userId, await this.countsForPage([p.id]));
+    const [counts, images] = await Promise.all([this.countsForPage([p.id]), loadFeedImages(this.prisma, [p.id], false)]);
+    return this.toItem(p, userId, counts, images);
   }
 
   /**
@@ -386,6 +407,38 @@ export class CommunityFeedService {
     };
   }
 
+  /**
+   * Byte của ảnh base64 thứ `index` trong một bài (đích của `feedImageRef`). Quyền xem như bài viết: bài đã đăng ai cũng
+   * xem (ảnh bài đã công khai trong bảng tin); bài PENDING/HIDDEN/REMOVED chỉ tác giả, ADMIN hoặc STAFF nhóm CSKH. Thẻ img
+   * không gửi được token nên bài PENDING còn mở được bằng mã `v` của đúng ảnh đó (danh sách của tác giả/người duyệt mới có).
+   * Mọi trường hợp không được xem đều 404 để không lộ bài có tồn tại hay không. Chỉ đọc đúng một phần tử mảng ảnh.
+   */
+  async getImage(
+    postId: string,
+    index: number,
+    viewer: { sub: string; role: string; staffPermissions?: string[] } | undefined,
+    version: unknown,
+  ): Promise<{ mime: string; data: Buffer; isPublic: boolean }> {
+    const notFound = () => new NotFoundException('Không tìm thấy ảnh.');
+    if (!Number.isInteger(index) || index < 0 || index >= MAX_FEED_IMAGES) throw notFound();
+    const rows = await this.prisma.$queryRaw<{ status: string; userId: string; img: string | null }[]>`
+      SELECT "status"::text AS "status", "userId", "images"[${index + 1}::int] AS "img" FROM "feed_posts" WHERE "id" = ${postId}`;
+    const row = rows[0];
+    if (!row?.img) throw notFound();
+    const isPublic = row.status === 'PUBLISHED';
+    if (!isPublic) {
+      const isModerator = viewer?.role === 'ADMIN' || (viewer?.role === 'STAFF' && !!viewer.staffPermissions?.includes('CSKH'));
+      const allowed =
+        isModerator ||
+        (!!viewer && viewer.sub === row.userId) ||
+        (row.status === 'PENDING' && matchesFeedImageVersion(version, postId, index, row.img));
+      if (!allowed) throw notFound();
+    }
+    const decoded = decodeServedImage(row.img);
+    if (!decoded) throw notFound();
+    return { ...decoded, isPublic };
+  }
+
   /** Danh mục cộng đồng đang hiển thị, sắp theo order — dùng cho tabs FE. */
   async getCategories() {
     return this.prisma.communityCategory.findMany({
@@ -396,19 +449,19 @@ export class CommunityFeedService {
   }
 
   /**
-   * `coverOnly` cho danh sách: ảnh bài là base64 nội tuyến (~300KB/ảnh khi chưa có Cloudinary) mà thẻ trong
-   * feed chỉ vẽ ảnh đầu, nên danh sách trả ảnh bìa + `imageCount`, màn chi tiết mới trả đủ.
+   * Ảnh bài là base64 (~300KB/ảnh khi chưa có Cloudinary) nên không nhúng trong JSON: `images` là đường dẫn tới endpoint ảnh
+   * (hoặc URL https nguyên văn). `imagesOf` đã cắt sẵn theo nơi gọi: danh sách chỉ ảnh bìa + `imageCount`, chi tiết trả đủ.
    */
-  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts, opts: { coverOnly?: boolean } = {}) {
-    const images = p.images ?? [];
+  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts, imagesOf: Map<string, FeedPostImages>) {
+    const postImages = imagesOf.get(p.id);
     return {
       id: p.id,
       kind: p.kind,
       status: p.status,
       title: p.title ?? null,
       body: p.body,
-      images: opts.coverOnly ? images.slice(0, 1) : images,
-      imageCount: images.length,
+      images: postImages?.images ?? [],
+      imageCount: postImages?.count ?? 0,
       meta: p.meta,
       createdAt: p.createdAt,
       author: p.user.fullName ?? 'Bạn Tubu',
@@ -438,7 +491,7 @@ export class CommunityFeedService {
     const title = input.title?.trim() || null;
     if (kind === 'QUESTION' && !title) throw new BadRequestException('Câu hỏi cần có tiêu đề.');
     if (title && title.length > MAX_TITLE) throw new BadRequestException('Tiêu đề quá dài.');
-    const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.trim()).slice(0, MAX_IMAGES);
+    const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.trim()).slice(0, MAX_FEED_IMAGES);
     const slugs = input.productSlugs ?? [];
     if (slugs.length > MAX_PRODUCT_TAGS) throw new BadRequestException('Chỉ gắn tối đa 5 sản phẩm.');
 
@@ -912,7 +965,7 @@ export class CommunityFeedService {
       data.body = b;
     }
     if (patch.title !== undefined) data.title = patch.title.trim().slice(0, MAX_TITLE) || null;
-    if (patch.images !== undefined) data.images = patch.images.filter((u) => u?.trim()).slice(0, MAX_IMAGES);
+    if (patch.images !== undefined) data.images = patch.images.filter((u) => u?.trim()).slice(0, MAX_FEED_IMAGES);
 
     // Đổi NỘI DUNG (body/title/ảnh) của bài ĐÃ ĐƯỢC DUYỆT, bởi tác giả chưa thuộc nhóm tin cậy
     // → trả về PENDING để kiểm duyệt lại. Không có bước này thì: bài hiền lành được duyệt (đồng
@@ -1097,14 +1150,18 @@ export class CommunityFeedService {
       where: { status: 'PENDING' },
       orderBy: { createdAt: 'asc' },
       take,
-      include: { user: { select: { fullName: true } }, category: { select: { name: true } } },
+      select: {
+        id: true, kind: true, title: true, body: true, createdAt: true,
+        user: { select: { fullName: true } }, category: { select: { name: true } },
+      },
     });
+    const images = await loadFeedImages(this.prisma, posts.map((p) => p.id), false);
     return posts.map((p) => ({
       id: p.id,
       kind: p.kind,
       title: p.title,
       body: p.body,
-      images: p.images,
+      images: images.get(p.id)?.images ?? [],
       author: p.user.fullName ?? 'Bạn Tubu',
       category: p.category?.name ?? null,
       createdAt: p.createdAt,
@@ -1254,13 +1311,14 @@ export class CommunityFeedService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: { ...FEED_INCLUDE, reactions: { where: { userId: viewerId }, select: { id: true } } },
+      select: { ...FEED_SELECT, reactions: { where: { userId: viewerId }, select: { id: true } } },
     });
     const hasMore = rows.length > limit;
     const posts = hasMore ? rows.slice(0, limit) : rows;
-    const counts = await this.countsForPage(posts.map((p) => p.id));
+    const ids = posts.map((p) => p.id);
+    const [counts, images] = await Promise.all([this.countsForPage(ids), loadFeedImages(this.prisma, ids, true)]);
     return {
-      posts: posts.map((p) => this.toItem(p, viewerId, counts, { coverOnly: true })),
+      posts: posts.map((p) => this.toItem(p, viewerId, counts, images)),
       nextCursor: hasMore ? posts[posts.length - 1]!.id : null,
     };
   }

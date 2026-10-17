@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommunityFeedService, containsBannedContent, levelFromReputation, levelName, slugifyTag } from './community-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { feedImageVersion, MAX_FEED_IMAGES } from './feed-images';
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base: Record<string, unknown> = {
@@ -134,7 +135,7 @@ function makeSvc(
 
 // Dùng chung cho cả getFeed + getPost (row hình dạng Prisma trả về, đã include đủ quan hệ).
 const row = (over: Record<string, unknown> = {}) => ({
-  id: 'p1', kind: 'SHOWCASE', status: 'PUBLISHED', title: null, body: 'Khoe cây', images: ['i1'],
+  id: 'p1', kind: 'SHOWCASE', status: 'PUBLISHED', title: null, body: 'Khoe cây',
   meta: null, bestCommentId: null, createdAt: new Date('2026-07-03'), userId: 'author', isPinned: false,
   user: { fullName: 'Lã Hoàng Long', avatarUrl: 'https://a/1.png', role: 'CUSTOMER', communityProfile: { level: 1 } },
   category: { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿' },
@@ -169,7 +170,7 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
     (prisma.feedComment.groupBy as jest.Mock).mockResolvedValue([{ postId: 'a', _count: { _all: 1 } }]);
     const r = await makeSvc(prisma).getFeed('u1', { take: 2 });
     const findArgs = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
-    expect(JSON.stringify(findArgs.include)).not.toContain('_count');
+    expect(JSON.stringify(findArgs.select)).not.toContain('_count');
     // c là bài thừa (take+1) nên không được đếm
     expect(prisma.feedReaction.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({ by: ['postId'], where: { postId: { in: ['a', 'b'] } } }),
@@ -306,39 +307,186 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
   });
 });
 
-describe('CommunityFeedService — ảnh trong danh sách (ENGAGE-7)', () => {
-  const blob = (n: number) => `data:image/jpeg;base64,${'A'.repeat(n)}`;
-  const many = [blob(300), blob(301), blob(302)];
+describe('CommunityFeedService — ảnh trong danh sách (ENGAGE-7, D6-05)', () => {
+  const imgRow = (postId: string, idx: number, count: number, over: Record<string, unknown> = {}) => ({
+    postId, count, idx, url: null, hash: `${'a'.repeat(31)}${idx}`, ...over,
+  });
+  const ref = (postId: string, idx: number) => `/feed/posts/${postId}/images/${idx}?v=${'a'.repeat(31)}${idx}`;
+  const withImages = (prisma: PrismaService, rows: unknown[]) => (prisma.$queryRaw as jest.Mock).mockResolvedValue(rows);
 
-  it('danh sách feed chỉ trả ảnh bìa + imageCount, không đẩy cả 6 ảnh base64 xuống mỗi thẻ', async () => {
+  it('danh sách chỉ select các cột cần: không đọc cột images, không include thô', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ images: many })]);
+    await makeSvc(prisma).getFeed('u1');
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.include).toBeUndefined();
+    expect(args.select).toBeDefined();
+    expect(args.select.images).toBeUndefined();
+    expect(args.select).toMatchObject({ id: true, body: true, status: true, userId: true, reactions: { where: { userId: 'u1' }, select: { id: true } } });
+  });
+
+  it('danh sách trả ảnh bìa là đường dẫn endpoint (không phải base64) + imageCount', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    withImages(prisma, [imgRow('p1', 0, 3)]);
     const r = await makeSvc(prisma).getFeed('u1');
-    expect(r.posts[0]!.images).toEqual([many[0]]);
+    expect(r.posts[0]!.images).toEqual([ref('p1', 0)]);
     expect(r.posts[0]!.imageCount).toBe(3);
   });
 
-  it('bài dự thi của sự kiện cũng chỉ trả ảnh bìa', async () => {
+  it('ảnh bìa đã là URL (Cloudinary) thì trả nguyên', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ images: many })]);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    withImages(prisma, [imgRow('p1', 0, 1, { hash: null, url: 'https://res.cloudinary.com/x/y.jpg' })]);
+    const r = await makeSvc(prisma).getFeed('u1');
+    expect(r.posts[0]!.images).toEqual(['https://res.cloudinary.com/x/y.jpg']);
+  });
+
+  it('hỏi ảnh một lần cho cả trang, chỉ phần tử đầu', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ id: 'p1' }), row({ id: 'p2' })]);
+    await makeSvc(prisma).getFeed('u1');
+    const calls = (prisma.$queryRaw as jest.Mock).mock.calls;
+    expect(calls).toHaveLength(1);
+    const [, ...values] = calls[0] as unknown[];
+    expect(values).toEqual([['p1', 'p2'], 1]);
+  });
+
+  it('trang rỗng không hỏi ảnh', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).getFeed('u1');
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('bài dự thi của sự kiện cũng chỉ trả ảnh bìa dạng đường dẫn và không đọc cột images', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    withImages(prisma, [imgRow('p1', 0, 3)]);
     const r = await makeSvc(prisma).eventPosts('ev1', 'u1');
-    expect(r.posts[0]!.images).toEqual([many[0]]);
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.include).toBeUndefined();
+    expect(args.select.images).toBeUndefined();
+    expect(r.posts[0]!.images).toEqual([ref('p1', 0)]);
     expect(r.posts[0]!.imageCount).toBe(3);
   });
 
-  it('chi tiết bài trả đủ ảnh', async () => {
+  it('chi tiết bài trả đủ ảnh (đường dẫn hoặc URL) và không đọc cột images thô', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row({ images: many }), reactions: [] });
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row(), reactions: [] });
+    withImages(prisma, [imgRow('p1', 0, 3), imgRow('p1', 1, 3, { hash: null, url: 'https://res.cloudinary.com/a.jpg' }), imgRow('p1', 2, 3)]);
     const r = await makeSvc(prisma).getPost('u1', 'p1');
-    expect(r.images).toEqual(many);
+    const args = (prisma.feedPost.findUnique as jest.Mock).mock.calls[0][0];
+    expect(args.include).toBeUndefined();
+    expect(args.select.images).toBeUndefined();
+    expect(r.images).toEqual([ref('p1', 0), 'https://res.cloudinary.com/a.jpg', ref('p1', 2)]);
     expect(r.imageCount).toBe(3);
+    const [, ...values] = (prisma.$queryRaw as jest.Mock).mock.calls[0] as unknown[];
+    expect(values).toEqual([['p1'], 6]);
   });
 
   it('bài không ảnh → images rỗng, imageCount 0', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ images: [] })]);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
+    withImages(prisma, []);
     const r = await makeSvc(prisma).getFeed('u1');
     expect(r.posts[0]).toMatchObject({ images: [], imageCount: 0 });
+  });
+
+  it('bài không được xem (REMOVED, PENDING của người khác) bị chặn trước khi đọc ảnh', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row({ status: 'REMOVED' }), reactions: [] });
+    await expect(makeSvc(prisma).getPost('u1', 'p1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe('CommunityFeedService.getImage (endpoint ảnh bài)', () => {
+  const PNG = `data:image/png;base64,${Buffer.from('png-bytes').toString('base64')}`;
+  const author = { sub: 'author', role: 'CUSTOMER' };
+  const stranger = { sub: 'stranger', role: 'CUSTOMER' };
+  const admin = { sub: 'adm', role: 'ADMIN' };
+  const cskh = { sub: 'cs', role: 'STAFF', staffPermissions: ['CSKH'] };
+  const kho = { sub: 'kho', role: 'STAFF', staffPermissions: ['KHO'] };
+  const post = (status: string, img: string | null = PNG) => [{ status, userId: 'author', img }];
+  const svc = (rows: unknown[]) => {
+    const prisma = makePrisma();
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue(rows);
+    return { prisma, svc: makeSvc(prisma) };
+  };
+  const vOf = (idx = 0, img = PNG) => feedImageVersion('p1', idx, img);
+
+  it('bài đã đăng: ai cũng xem được, trả đúng byte + Content-Type theo data URI, cho cache công khai', async () => {
+    const r = await svc(post('PUBLISHED')).svc.getImage('p1', 0, undefined, undefined);
+    expect(r.mime).toBe('image/png');
+    expect(r.data.toString()).toBe('png-bytes');
+    expect(r.isPublic).toBe(true);
+  });
+
+  it.each(['image/jpeg', 'image/webp', 'image/gif'])('nhận MIME ảnh %s', async (mime) => {
+    const r = await svc(post('PUBLISHED', `data:${mime};base64,QUJD`)).svc.getImage('p1', 0, undefined, undefined);
+    expect(r.mime).toBe(mime);
+  });
+
+  it.each([
+    ['SVG (chạy được script)', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='],
+    ['HTML', 'data:text/html;base64,PGgxPng8L2gxPg=='],
+    ['base64 sai ký tự', 'data:image/png;base64,@@@@'],
+    ['URL https (không phải ảnh nhúng)', 'https://res.cloudinary.com/x/y.jpg'],
+  ])('không phục vụ %s', async (_name, img) => {
+    await expect(svc(post('PUBLISHED', img)).svc.getImage('p1', 0, undefined, undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('bài không tồn tại hoặc không có ảnh ở chỉ số đó → 404', async () => {
+    await expect(svc([]).svc.getImage('px', 0, undefined, undefined)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc(post('PUBLISHED', null)).svc.getImage('p1', 3, undefined, undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it.each([-1, MAX_FEED_IMAGES, 99, 1.5, Number.NaN])('chỉ số %s ngoài khoảng → 404 mà không hỏi DB', async (index) => {
+    const { prisma, svc: s } = svc(post('PUBLISHED'));
+    await expect(s.getImage('p1', index, undefined, undefined)).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('chỉ đọc đúng một phần tử của mảng ảnh (không kéo cả mảng)', async () => {
+    const { prisma, svc: s } = svc(post('PUBLISHED'));
+    await s.getImage('p1', 2, undefined, undefined);
+    const [strings, ...values] = (prisma.$queryRaw as jest.Mock).mock.calls[0] as [string[], ...unknown[]];
+    expect(strings.join('?')).toContain('"images"[');
+    expect(values).toEqual([3, 'p1']);
+  });
+
+  describe.each(['PENDING', 'HIDDEN', 'REMOVED'])('bài %s', (status) => {
+    it('tác giả, ADMIN, STAFF nhóm CSKH xem được, và ảnh không vào cache dùng chung', async () => {
+      for (const viewer of [author, admin, cskh]) {
+        const r = await svc(post(status)).svc.getImage('p1', 0, viewer, undefined);
+        expect(r.data.toString()).toBe('png-bytes');
+        expect(r.isPublic).toBe(false);
+      }
+    });
+
+    it('khách chưa đăng nhập, người dùng khác và STAFF nhóm KHO đều nhận 404', async () => {
+      for (const viewer of [undefined, stranger, kho]) {
+        await expect(svc(post(status)).svc.getImage('p1', 0, viewer, undefined)).rejects.toBeInstanceOf(NotFoundException);
+      }
+    });
+
+    it('mã v đúng cũng không mở ảnh của người khác nếu bài không phải PENDING', async () => {
+      if (status === 'PENDING') return;
+      await expect(svc(post(status)).svc.getImage('p1', 0, undefined, vOf())).rejects.toBeInstanceOf(NotFoundException);
+      await expect(svc(post(status)).svc.getImage('p1', 0, stranger, vOf())).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  it('bài PENDING: thẻ img không có token vẫn xem được khi mang đúng mã v của ảnh đó', async () => {
+    const r = await svc(post('PENDING')).svc.getImage('p1', 0, undefined, vOf());
+    expect(r.isPublic).toBe(false);
+    expect(r.data.toString()).toBe('png-bytes');
+  });
+
+  it('bài PENDING: mã v sai, thiếu hoặc của ảnh/bài khác → 404', async () => {
+    const s = svc(post('PENDING')).svc;
+    for (const v of [undefined, '', 'x'.repeat(32), vOf(1), feedImageVersion('p2', 0, PNG), vOf(0, `${PNG}A`)]) {
+      await expect(s.getImage('p1', 0, stranger, v)).rejects.toBeInstanceOf(NotFoundException);
+    }
   });
 });
 
@@ -1277,7 +1425,7 @@ describe('CommunityFeedService.adminPending', () => {
   it('lấy bài PENDING, sắp asc, kèm tên tác giả + tên danh mục', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
-      { id: 'p1', kind: 'TIP', title: 't', body: 'b', images: [], createdAt: new Date('2026-07-01'), user: { fullName: 'Long' }, category: { name: 'Chăm sóc' } },
+      { id: 'p1', kind: 'TIP', title: 't', body: 'b', createdAt: new Date('2026-07-01'), user: { fullName: 'Long' }, category: { name: 'Chăm sóc' } },
     ]);
     const r = await makeSvc(prisma).adminPending();
     const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
@@ -1286,10 +1434,26 @@ describe('CommunityFeedService.adminPending', () => {
     expect(r[0]).toMatchObject({ id: 'p1', author: 'Long', category: 'Chăm sóc' });
   });
 
+  it('ảnh chờ duyệt trả đường dẫn kèm mã (không nhúng base64) và không đọc cột images thô', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      { id: 'p1', kind: 'TIP', title: 't', body: 'b', createdAt: new Date('2026-07-01'), user: { fullName: 'Long' }, category: null },
+    ]);
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([
+      { postId: 'p1', count: 2, idx: 0, url: null, hash: 'b'.repeat(32) },
+      { postId: 'p1', count: 2, idx: 1, url: 'https://res.cloudinary.com/a.jpg', hash: null },
+    ]);
+    const r = await makeSvc(prisma).adminPending();
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.select.images).toBeUndefined();
+    expect(args.include).toBeUndefined();
+    expect(r[0]!.images).toEqual([`/feed/posts/p1/images/0?v=${'b'.repeat(32)}`, 'https://res.cloudinary.com/a.jpg']);
+  });
+
   it('tác giả không tên, không danh mục → "Bạn Tubu" / null', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
-      { id: 'p1', kind: 'TIP', title: null, body: 'b', images: [], createdAt: new Date(), user: { fullName: null }, category: null },
+      { id: 'p1', kind: 'TIP', title: null, body: 'b', createdAt: new Date(), user: { fullName: null }, category: null },
     ]);
     const r = await makeSvc(prisma).adminPending();
     expect(r[0]).toMatchObject({ author: 'Bạn Tubu', category: null });
