@@ -6,6 +6,7 @@ import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
 import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliate/commission-eligibility';
 
 const DISPLAY_NAME_MAX = 100;
 
@@ -221,6 +222,8 @@ export class SystemConfigService {
       value === '' || (typeof value === 'string' && PICKUP_PHONE_PATTERN.test(value))
         ? null
         : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
+    // Vai trò được ghi công đơn và hưởng hoa hồng CTV (affiliate.service createCommissionForOrder / findEligibleReferrer).
+    [COMMISSION_ELIGIBLE_ROLES_KEY]: eligibleRolesProblem,
     'payment.bank_bin': (value) =>
       typeof value === 'string' && /^\d{6}$/.test(value) ? null : 'phải là mã BIN Napas gồm đúng 6 chữ số (vd "970407")',
     // Trang chuyển khoản của khách và phiếu chi trả đối tác in nguyên hai dòng này: để trống là "Ngân hàng: " trống trơn.

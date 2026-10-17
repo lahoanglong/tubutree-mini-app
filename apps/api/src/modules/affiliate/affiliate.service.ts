@@ -8,7 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { CommissionStatus, Prisma, type PayoutStatus } from '@prisma/client';
+import { CommissionStatus, Prisma, type PayoutStatus, type UserRole } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -55,6 +55,7 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -195,6 +196,11 @@ export class AffiliateService {
       props: { kind: dto.kind ?? 'ctv' },
     });
     return { ok: true };
+  }
+
+  /** Vai trò được ghi công đơn và hưởng hoa hồng (khoá `affiliate.commission_eligible_roles`, mặc định CTV + đại lý). */
+  async commissionEligibleRoles(): Promise<ReadonlySet<UserRole>> {
+    return sanitizeEligibleRoles(await this.config.get<unknown>(COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES));
   }
 
   /** Lấy "chạm" còn hạn của khách (fallback attribution khi phiên đã mất). */
@@ -827,6 +833,13 @@ export class AffiliateService {
     // Chặn tự-giới-thiệu (referrer == buyer) TRỪ đơn CTV "lên đơn hộ khách"
     // (placedForCustomer=true) — đó là nghiệp vụ hợp lệ: CTV hưởng hoa hồng cho đơn hộ.
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
+    // Chỉ CTV/đại lý (affiliate.commission_eligible_roles) hưởng hoa hồng: khách thường chia sẻ link chỉ được thưởng điểm giới
+    // thiệu (theo User.referredById, không theo đơn). Xét vai trò lúc đặt đơn — CTV lên đại lý (D3-03) vẫn hưởng. Đơn lên hộ
+    // khách giữ như cũ: route đó đã tự chặn vai trò người lên đơn.
+    if (!order.placedForCustomer) {
+      const referrer = await db.user.findUnique({ where: { id: order.referrerUserId }, select: { role: true } });
+      if (!referrer || !(await this.commissionEligibleRoles()).has(referrer.role)) return;
+    }
 
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({

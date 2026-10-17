@@ -110,8 +110,8 @@ export function OrderStatusHistory({ order }: { order: AdminOrder }) {
  * Người giới thiệu + hoa hồng CTV của đơn (D3-07): admin trả lời CTV "đơn X có hoa hồng không, bao nhiêu" mà không phải tra
  * DB. Chỉ ADMIN: API `GET /admin/orders/:id/referral` là @Roles('ADMIN') và trang admin chỉ render panel cho admin (nhân viên
  * CSKH/kế toán không thấy). Chỉ hiện khi đơn có CTV hoặc gian hàng được ghi công. Có người giới thiệu mà không có dòng hoa hồng
- * là bình thường khi hàng chưa có %, bị chặn CTV, là hàng ký gửi của chính người giới thiệu, hoặc CTV tự mua — giải thích ngay
- * tại chỗ để không ai đi "sửa" nhầm.
+ * là bình thường khi hàng chưa có %, bị chặn CTV, là hàng ký gửi của chính người giới thiệu, người giới thiệu không phải CTV/đại
+ * lý, hoặc CTV tự mua — giải thích ngay tại chỗ để không ai đi "sửa" nhầm.
  */
 export function OrderReferralPanel({ order }: { order: AdminOrder }) {
   const has = !!(order.referrerUserId || order.storefrontId);
@@ -177,7 +177,9 @@ export function OrderReferralPanel({ order }: { order: AdminOrder }) {
             <p className="text-stone-500">
               {r.selfReferral
                 ? 'Không có hoa hồng: người giới thiệu cũng là người mua.'
-                : r.referrer
+                : r.referrer && r.referrerEligible === false
+                  ? 'Không có hoa hồng: người giới thiệu không phải CTV/đại lý. Khách thường chia sẻ link chỉ nhận điểm giới thiệu bạn bè.'
+                  : r.referrer
                   ? 'Không có hoa hồng: lúc đặt đơn, các sản phẩm chưa có % hoa hồng, bị chặn CTV, hoặc là hàng ký gửi của chính người giới thiệu. Đặt % bây giờ chỉ áp cho đơn mới.'
                   : 'Đơn qua gian hàng nhưng không có CTV được ghi công.'}
             </p>

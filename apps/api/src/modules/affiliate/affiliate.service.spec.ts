@@ -41,10 +41,12 @@ const analytics = {
   recordBestEffort: jest.fn().mockResolvedValue(undefined),
 } as unknown as AnalyticsEventsService;
 
-function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()) {
+function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn(), referrerRole: string | null = 'AFFILIATE') {
   return {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     variation: { findMany: jest.fn().mockResolvedValue(variations) },
+    // Vai trò người giới thiệu (chỉ CTV/đại lý hưởng hoa hồng — affiliate.commission_eligible_roles).
+    user: { findUnique: jest.fn().mockResolvedValue(referrerRole === null ? null : { role: referrerRole }) },
     // Dòng ký gửi của chính người giới thiệu (consignmentLinkedSql): không có dòng nào trong các ca unit.
     $queryRaw: jest.fn().mockResolvedValue([]),
     commission: { createMany: createSpy },
@@ -158,6 +160,56 @@ describe('AffiliateService.createCommissionForOrder', () => {
     // Trước đây mốc/bậc cộng orderTotal (80,53tr) → 1 món nhỏ + 79tr hàng bị chặn mở khoá mốc 80tr.
     expect(data.commissionableTotal).toBe(1_000_000);
     expect(data.orderTotal).toBe(80_530_000); // giữ nguyên để tra cứu/đối soát
+  });
+});
+
+describe('AffiliateService.createCommissionForOrder — chỉ CTV/đại lý hưởng hoa hồng (affiliate.commission_eligible_roles)', () => {
+  const order = (over: Record<string, unknown> = {}) => ({
+    id: 'o1',
+    userId: 'buyer',
+    referrerUserId: 'ref',
+    placedForCustomer: false,
+    total: 200000,
+    items: [{ id: 'i1', variationId: 'v1', total: 200000 }],
+    ...over,
+  });
+  const run = async (o: unknown, role: string | null, cfg: SystemConfigService = config) => {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = prismaWith(o, [{ id: 'v1', affiliateRate: 10 }], create, role);
+    await new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    return { create, prisma: prisma as unknown as { user: { findUnique: jest.Mock } } };
+  };
+
+  it.each(['AFFILIATE', 'DEALER'])('người giới thiệu %s → có hoa hồng (CTV lên đại lý D3-03 vẫn hưởng)', async (role) => {
+    const { create, prisma } = await run(order(), role);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'ref' }, select: { role: true } });
+  });
+
+  it.each(['CUSTOMER', 'STAFF', 'ADMIN'])('người giới thiệu %s → không có hoa hồng', async (role) => {
+    const { create } = await run(order(), role);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('người giới thiệu không còn tồn tại → không có hoa hồng', async () => {
+    const { create } = await run(order(), null);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đơn lên hộ khách giữ như cũ: không xét vai trò (route lên đơn hộ tự chặn người lên đơn)', async () => {
+    const { create, prisma } = await run(order({ userId: 'ref', placedForCustomer: true }), 'ADMIN');
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('chủ dự án thêm CUSTOMER vào khoá → khách thường hưởng; giá trị khoá hỏng → về mặc định CTV + đại lý', async () => {
+    const cfg = (value: unknown) =>
+      ({ get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.commission_eligible_roles' ? value : fb) as T }) as unknown as SystemConfigService;
+    expect((await run(order(), 'CUSTOMER', cfg(['AFFILIATE', 'DEALER', 'CUSTOMER']))).create).toHaveBeenCalledTimes(1);
+    for (const broken of [[], 'AFFILIATE', ['AFFILIATE', 'CTV'], null]) {
+      expect((await run(order(), 'CUSTOMER', cfg(broken))).create).not.toHaveBeenCalled();
+      expect((await run(order(), 'DEALER', cfg(broken))).create).toHaveBeenCalledTimes(1);
+    }
   });
 });
 

@@ -60,6 +60,8 @@ export interface OrderReferral {
   orderCode: string;
   referrer: { id: string; fullName: string | null; phone: string | null; referralCode: string; role: string } | null;
   selfReferral: boolean;
+  /** Vai trò hiện tại của người giới thiệu có được hưởng hoa hồng không (chỉ CTV/đại lý); null khi không có người giới thiệu. */
+  referrerEligible: boolean | null;
   placedForCustomer: boolean;
   source: string | null;
   storefront: { id: string; slug: string; title: string; type: string } | null;

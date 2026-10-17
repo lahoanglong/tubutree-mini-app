@@ -231,6 +231,7 @@ describe('OrderReferralPanel', () => {
     orderCode: 'TB-500',
     referrer: { id: 'ctv1', fullName: 'Chị Lan', phone: '0900000001', referralCode: 'LAN12345', role: 'AFFILIATE' },
     selfReferral: false,
+    referrerEligible: true,
     placedForCustomer: false,
     source: 'checkout',
     storefront: { id: 'sf1', slug: 'shop-lan', title: 'Shop Lan', type: 'CTV' },
@@ -275,6 +276,12 @@ describe('OrderReferralPanel', () => {
     const b = mount(<OrderReferralPanel order={order({ id: 'o2', referrerUserId: 'u1' })} />);
     await flush();
     expect(b.container.textContent).toContain('người giới thiệu cũng là người mua');
+
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/referral': { body: { ...REFERRAL, referrerEligible: false, commissions: [] } } }).fn));
+    const c = mount(<OrderReferralPanel order={order({ id: 'o3', referrerUserId: 'f1' })} />);
+    await flush();
+    expect(c.container.textContent).toContain('người giới thiệu không phải CTV/đại lý');
+    expect(c.container.textContent).not.toContain('chưa có % hoa hồng');
   });
 
   it('lỗi tải → thông báo + Thử lại', async () => {

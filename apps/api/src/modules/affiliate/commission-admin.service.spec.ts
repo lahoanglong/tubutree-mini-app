@@ -321,9 +321,22 @@ describe('CommissionAdminService.orderReferral (D3-07)', () => {
       referrer: { fullName: 'Lan', referralCode: 'LAN12345' },
       storefront: { title: 'Shop Lan' },
       selfReferral: false,
+      referrerEligible: true,
       commissions: [{ amount: 20_000, rate: 10, status: 'LOCKED', affiliateName: 'Lan' }],
     });
     expect(r.commissions[0]).not.toHaveProperty('user');
+  });
+
+  it('người giới thiệu là khách thường → referrerEligible=false (giải thích vì sao không có hoa hồng); đơn lên hộ khách → true', async () => {
+    const base = { id: 'o1', code: 'TB1', userId: 'u1', referrerUserId: 'f1', storefrontSlug: null, source: null, storefront: null };
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValueOnce({ ...base, placedForCustomer: false }).mockResolvedValueOnce({ ...base, placedForCustomer: true }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'f1', fullName: 'Bạn', phone: null, referralCode: 'F1', role: 'CUSTOMER' }) },
+      commission: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const { svc } = make(prisma);
+    expect(await svc.orderReferral('o1')).toMatchObject({ referrerEligible: false, commissions: [] });
+    expect(await svc.orderReferral('o1')).toMatchObject({ referrerEligible: true });
   });
 
   it('đơn không người giới thiệu → referrer null, không tra user; tự giới thiệu (không phải đơn hộ) được đánh dấu', async () => {
@@ -335,7 +348,7 @@ describe('CommissionAdminService.orderReferral (D3-07)', () => {
       commission: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const { svc } = make(prisma);
-    expect(await svc.orderReferral('o1')).toMatchObject({ referrer: null, selfReferral: false, commissions: [] });
+    expect(await svc.orderReferral('o1')).toMatchObject({ referrer: null, referrerEligible: null, selfReferral: false, commissions: [] });
     expect(findUnique).not.toHaveBeenCalled();
     expect(await svc.orderReferral('o1')).toMatchObject({ selfReferral: true });
   });

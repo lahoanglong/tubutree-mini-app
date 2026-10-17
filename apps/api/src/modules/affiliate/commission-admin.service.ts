@@ -11,6 +11,7 @@ import {
   rateProblem,
   sanitizeMaxRate,
 } from './commission-rate-csv';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
 
 export type RateImportStatus = 'OK' | 'UNCHANGED' | 'NOT_FOUND' | 'INVALID' | 'OVER_CAP' | 'DUPLICATE';
 
@@ -317,7 +318,8 @@ export class CommissionAdminService {
   /**
    * Người giới thiệu + hoa hồng của một đơn (D3-07) để admin tra khi CTV hỏi "đơn X có hoa hồng không" (route chỉ ADMIN).
    * `referrer` là người được ghi công trên đơn; hoa hồng có thể thiếu dù có người giới thiệu (hàng chưa có %, bị chặn CTV,
-   * hàng ký gửi của chính người giới thiệu, tự giới thiệu) — `commissions` rỗng trong các trường hợp đó.
+   * hàng ký gửi của chính người giới thiệu, tự giới thiệu, người giới thiệu không phải CTV/đại lý) — `commissions` rỗng trong
+   * các trường hợp đó.
    */
   async orderReferral(orderIdOrCode: string) {
     const order = await this.prisma.order.findFirst({
@@ -334,7 +336,7 @@ export class CommissionAdminService {
       },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    const [referrer, commissions] = await Promise.all([
+    const [referrer, commissions, eligibleRoles] = await Promise.all([
       order.referrerUserId
         ? this.prisma.user.findUnique({
             where: { id: order.referrerUserId },
@@ -358,10 +360,13 @@ export class CommissionAdminService {
           user: { select: { fullName: true } },
         },
       }),
+      this.config.get<unknown>(COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES).then(sanitizeEligibleRoles),
     ]);
     return {
       orderCode: order.code,
       referrer,
+      // Vai trò người giới thiệu (hiện tại) có được hưởng hoa hồng không; đơn lên hộ khách không xét vai trò. null = không có.
+      referrerEligible: referrer ? order.placedForCustomer || eligibleRoles.has(referrer.role) : null,
       selfReferral: !!order.referrerUserId && order.referrerUserId === order.userId && !order.placedForCustomer,
       placedForCustomer: order.placedForCustomer,
       source: order.source,
