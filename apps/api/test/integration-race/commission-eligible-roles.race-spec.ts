@@ -27,12 +27,16 @@ import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { COMMISSION_ELIGIBLE_ROLES_KEY } from '../../src/modules/affiliate/commission-eligibility';
-import { createUser, randCode, warmPool } from './helpers';
+import { createUser, randCode, setConfig, warmPool } from './helpers';
+
+const REFERRAL_REWARD = 5;
 
 /**
  * Chỉ CTV/đại lý hưởng hoa hồng (`affiliate.commission_eligible_roles`, mặc định AFFILIATE + DEALER). Checkout thật trên Postgres:
- * đơn ghi công cho khách thường không sinh dòng hoa hồng; thưởng "giới thiệu bạn bè" bằng điểm vẫn chạy vì đi theo
- * `User.referredById` (gán lúc tạo tài khoản), không theo `Order.referrerUserId`.
+ * - đơn ghi công cho khách thường (chạm ghi từ trước) không sinh dòng hoa hồng;
+ * - mã của khách thường (link chia sẻ sản phẩm, mua chung) không ghi chạm và không được chọn làm người giới thiệu của đơn, nên
+ *   không cướp ghi công của CTV;
+ * - thưởng "giới thiệu bạn bè" bằng điểm vẫn chạy vì đi theo `User.referredById` (gán lúc tạo tài khoản), không theo đơn.
  */
 describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout thật)', () => {
   let moduleRef: TestingModule;
@@ -89,6 +93,10 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
     affiliate = moduleRef.get(AffiliateService);
     orderStatus = moduleRef.get(OrderStatusService);
     await prisma.systemConfig.deleteMany({ where: { key: COMMISSION_ELIGIBLE_ROLES_KEY } });
+    // Spec khác đổi các khoá này trên cùng DB: đặt đúng mức mặc định để ca "giới thiệu bạn bè" đọc ra 5 điểm.
+    await setConfig(prisma, 'referral.referrer_reward_points', REFERRAL_REWARD);
+    await setConfig(prisma, 'referral.window_days', 30);
+    await setConfig(prisma, 'referral.min_order_amount', 200_000);
   });
 
   afterAll(async () => {
@@ -174,7 +182,56 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
       where: { userId: friend.id, reason: `${REFERRAL_ORDER2_PREFIX}${invited.u.id}` },
       select: { delta: true },
     });
-    expect(rewards).toEqual([{ delta: 5 }]);
+    expect(rewards).toEqual([{ delta: REFERRAL_REWARD }]);
+  });
+
+  async function ctvWithStore() {
+    const user = await createUser(prisma, { role: 'AFFILIATE' });
+    const store = await prisma.storefront.create({
+      data: { type: 'CTV', slug: user.referralCode!.toLowerCase(), ownerUserId: user.id, title: 'Shop CTV IT', isPublished: true },
+    });
+    return { user, store };
+  }
+
+  it('link chia sẻ của khách thường không cướp ghi công: chạm CTV còn hạn → mở ?ref=bạn → mua kèm mã bạn → đơn và hoa hồng vẫn của CTV', async () => {
+    const v = await tubuVariation();
+    const { user: ctv, store } = await ctvWithStore();
+    const friend = await createUser(prisma, { role: 'CUSTOMER' });
+    const c = await buyer();
+
+    // Khách vào từ gian hàng CTV (trong Zalo: mã = slug viết thường).
+    expect(await affiliate.recordTouch(c.u.id, { referralCode: store.slug, storefrontSlug: store.slug, kind: 'ctv' })).toEqual({ ok: true });
+    // Bạn (khách thường) gửi link sản phẩm ?ref=<mã bạn>: không ghi chạm, không đè chạm CTV.
+    expect(await affiliate.recordTouch(c.u.id, { referralCode: friend.referralCode!, kind: 'ctv' })).toEqual({ ok: false });
+    expect((await prisma.referralTouch.findUniqueOrThrow({ where: { userId: c.u.id } })).referrerUserId).toBe(ctv.id);
+
+    // Khách mua với mã của bạn còn trong phiên: mã bị bỏ qua, rơi về chạm CTV.
+    const o = await place(c, v.id, { referralCode: friend.referralCode! });
+    expect(o.referrerUserId).toBe(ctv.id);
+    expect(await commissionsOf(o.id)).toEqual([{ affiliateUserId: ctv.id, amount: 20_000 }]);
+  });
+
+  it('đang mua trong gian hàng CTV kèm mã khách thường → chủ gian hàng được ghi công; chỉ có mã khách thường → không ai được ghi công', async () => {
+    const v = await tubuVariation();
+    const { user: ctv, store } = await ctvWithStore();
+    const friend = await createUser(prisma, { role: 'CUSTOMER' });
+
+    const inStore = await buyer();
+    const o1 = await place(inStore, v.id, { referralCode: friend.referralCode!, storefrontSlug: store.slug });
+    expect(o1.referrerUserId).toBe(ctv.id);
+    expect(await commissionsOf(o1.id)).toEqual([{ affiliateUserId: ctv.id, amount: 20_000 }]);
+
+    const plain = await buyer();
+    const o2 = await place(plain, v.id, { referralCode: friend.referralCode! });
+    expect(o2.referrerUserId).toBeNull();
+    expect(await commissionsOf(o2.id)).toEqual([]);
+
+    // Mã CTV/đại lý gửi kèm đơn vẫn thắng chạm cũ của CTV khác như trước.
+    const other = await ctvWithStore();
+    const switched = await buyer();
+    await affiliate.recordTouch(switched.u.id, { referralCode: other.store.slug, storefrontSlug: other.store.slug, kind: 'ctv' });
+    const o3 = await place(switched, v.id, { referralCode: ctv.referralCode! });
+    expect(o3.referrerUserId).toBe(ctv.id);
   });
 
   it('admin thêm CUSTOMER vào khoá → khách thường được hưởng (chủ dự án quyết); giá trị sai bị từ chối lúc ghi', async () => {

@@ -1562,7 +1562,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
 
   it('recordTouch: resolve referralCode → upsert với expiresAt = now + 7 ngày (mặc định Q-31)', async () => {
     const prisma = makePrisma();
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1', role: 'AFFILIATE' });
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'LINH', storefrontSlug: 'LINH', kind: 'ctv' }, NOW);
     const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
     expect(call.where).toEqual({ userId: 'buyer1' });
@@ -1572,7 +1572,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
 
   it('recordTouch: đọc affiliate.attribution_days từ config (admin chỉnh được)', async () => {
     const prisma = makePrisma();
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1', role: 'AFFILIATE' });
     const cfg = {
       get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.attribution_days' ? (10 as unknown as T) : (fb as T)),
     } as unknown as SystemConfigService;
@@ -1583,7 +1583,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
 
   it('recordTouch: ghi thành công → phát referral_touched (best-effort, đúng refCode/storefrontSlug/kind)', async () => {
     const prisma = makePrisma();
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1', role: 'AFFILIATE' });
     // Mock RIÊNG (không dùng `analytics` chung ở đầu file) để assert đúng số lần gọi CỦA test này.
     const analyticsLocal = {
       record: jest.fn().mockResolvedValue(undefined),
@@ -1641,7 +1641,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
 
   it('recordTouch: bỏ qua tự giới thiệu (code trỏ chính mình)', async () => {
     const prisma = makePrisma();
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'buyer1' });
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'buyer1', role: 'AFFILIATE' });
     const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'SELF' }, NOW);
     expect(r.ok).toBe(false);
     expect((prisma as any).referralTouch.upsert).not.toHaveBeenCalled();
@@ -1652,6 +1652,36 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     (prisma as any).user.findUnique.mockResolvedValue(null);
     const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'NOPE' }, NOW);
     expect(r.ok).toBe(false);
+  });
+
+  it.each(['CUSTOMER', 'STAFF', 'ADMIN'])('recordTouch: mã của %s (link chia sẻ của khách thường) → không ghi, không đè chạm CTV đang có', async (role) => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'friend1', role });
+    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'FRIEND1', kind: 'ctv' }, NOW);
+    expect(r.ok).toBe(false);
+    expect((prisma as any).referralTouch.upsert).not.toHaveBeenCalled();
+  });
+
+  it('recordTouch: mã đại lý (DEALER) → ghi như CTV', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'dealer1', role: 'DEALER' });
+    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'DL1' }, NOW);
+    expect(r.ok).toBe(true);
+    expect((prisma as any).referralTouch.upsert.mock.calls[0][0].create.referrerUserId).toBe('dealer1');
+  });
+
+  it('findEligibleReferrer: hoa hoá mã; null khi không có / chính người mua / không phải CTV-đại lý', async () => {
+    const findUnique = jest.fn();
+    const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);
+    findUnique.mockResolvedValueOnce({ id: 'ctv1', role: 'AFFILIATE' });
+    expect(await svc.findEligibleReferrer('linh', 'buyer1')).toBe('ctv1');
+    expect(findUnique).toHaveBeenLastCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true } });
+    findUnique.mockResolvedValueOnce(null);
+    expect(await svc.findEligibleReferrer('NOPE', 'buyer1')).toBeNull();
+    findUnique.mockResolvedValueOnce({ id: 'buyer1', role: 'AFFILIATE' });
+    expect(await svc.findEligibleReferrer('SELF', 'buyer1')).toBeNull();
+    findUnique.mockResolvedValueOnce({ id: 'friend1', role: 'CUSTOMER' });
+    expect(await svc.findEligibleReferrer('FRIEND1', 'buyer1')).toBeNull();
   });
 
   it('getActiveTouch: trả touch khi còn hạn', async () => {
@@ -1675,7 +1705,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
   // bao giờ được ghi hoa hồng.
   it('recordTouch: referralCode chữ THƯỜNG (slug gian hàng CTV mở trong Zalo) phải được chuẩn hoá hoa TRƯỚC khi so khớp (P0 A5-01)', async () => {
     const prisma = makePrisma();
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1', role: 'AFFILIATE' });
     const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch(
       'buyer1',
       { referralCode: 'linh', storefrontSlug: 'linh', kind: 'ctv' },
@@ -1684,7 +1714,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     expect(r.ok).toBe(true);
     // Lookup PHẢI dùng mã đã hoa hoá — gửi thẳng 'linh' sẽ luôn trượt trên Postgres thật (referralCode
     // lưu 'LINH', so khớp phân biệt hoa/thường), dù mock ở trên không tự mô phỏng việc đó.
-    expect((prisma as any).user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'LINH' }, select: { id: true } });
+    expect((prisma as any).user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true } });
     const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
     expect(call.create.referrerUserId).toBe('ctv1');
     // storefrontSlug giữ NGUYÊN chữ thường — quy ước của slug khác với referralCode, không đổi ở đây.
@@ -1700,7 +1730,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
         findUnique: jest
           .fn()
           .mockImplementation(({ where }: { where: { referralCode: string } }) =>
-            Promise.resolve(where.referralCode === 'LINH' ? { id: 'ctv1' } : null),
+            Promise.resolve(where.referralCode === 'LINH' ? { id: 'ctv1', role: 'AFFILIATE' } : null),
           ),
       },
       referralTouch: {
