@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -9,6 +9,7 @@ import { NotificationsService } from '../../src/modules/notifications/notificati
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
+import { MERCHANT_PORTAL_ROLES } from '../../src/modules/merchant/merchant-config';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
@@ -64,7 +65,7 @@ describe('Nhận hàng trả về sau khi gian hàng tắt cờ đối tác (rea
 
   /** CTV (cờ đối tác bật) có một đơn COD tự giao 130.000 đã giao; chưa vào phiếu. */
   async function setup(opts: { isPartner: boolean; pm?: 'COD' | 'BANK_TRANSFER'; ps?: 'UNPAID' | 'PAID' }) {
-    const owner = await createUser(prisma, { role: 'CUSTOMER' });
+    const owner = await createUser(prisma, { role: 'AFFILIATE' });
     const tag = randCode(8).toLowerCase();
     const store = await prisma.storefront.create({
       data: { type: 'CTV', isPartner: opts.isPartner, slug: `itpo-${tag}`, title: `Vườn IT ${tag}`, ownerUserId: owner.id, commissionPct: 0.15 },
@@ -131,8 +132,12 @@ describe('Nhận hàng trả về sau khi gian hàng tắt cờ đối tác (rea
     const r = await requestAndApprove(ctx);
     const before = await stockOf(ctx.order.id);
 
+    // Chuỗi như Cổng người bán: chủ (AFFILIATE, qua được RolesGuard) thấy yêu cầu trong danh sách rồi mới bấm nhận.
+    expect(MERCHANT_PORTAL_ROLES).toContain('AFFILIATE');
+    expect((await returns.listForMerchant(ctx.owner.id)).map((x) => [x.id, x.receivedAt])).toEqual([[r.id, null]]);
     const view = await returns.markReceivedByMerchant(ctx.owner.id, r.id);
     expect(view.receivedAt).toBeInstanceOf(Date);
+    expect((await returns.listForMerchant(ctx.owner.id))[0]!.receivedAt).toBeInstanceOf(Date);
     expect(await stockOf(ctx.order.id)).toBe(before + 1);
     expect((await prisma.returnRequest.findUniqueOrThrow({ where: { id: r.id } })).receivedBy).toBe(ctx.owner.id);
   });
@@ -147,8 +152,24 @@ describe('Nhận hàng trả về sau khi gian hàng tắt cờ đối tác (rea
   it('gian hàng còn là đối tác: xác nhận nhận hàng như cũ', async () => {
     const ctx = await setup({ isPartner: true });
     const r = await requestAndApprove(ctx);
+    expect((await returns.listForMerchant(ctx.owner.id)).map((x) => x.id)).toEqual([r.id]);
     const view = await returns.markReceivedByMerchant(ctx.owner.id, r.id);
     expect(view.receivedAt).toBeInstanceOf(Date);
+  });
+
+  it('đã tắt cờ: danh sách chỉ có yêu cầu của đơn đã có SALE, không lộ đơn chưa từng được trả của cùng gian hàng', async () => {
+    const ctx = await partnerOffPaid();
+    const paid = await requestAndApprove(ctx);
+    const unpaidOrder = await createOrder(prisma, {
+      userId: ctx.buyer.id,
+      status: 'DELIVERED',
+      deliveredAt: new Date(Date.now() - DAY),
+      fulfiller: 'MERCHANT',
+      fulfillerStorefrontId: ctx.store.id,
+      items: { create: { variationId: ctx.item.variationId, productName: 'Bưởi', variationName: 'Quả', unitPrice: 50_000, quantity: 1, total: 50_000 } },
+    });
+    await prisma.returnRequest.create({ data: { orderId: unpaidOrder.id, userId: ctx.buyer.id, reason: 'Trả hàng', status: 'REQUESTED' } });
+    expect((await returns.listForMerchant(ctx.owner.id)).map((x) => x.id)).toEqual([paid.id]);
   });
 
   it('gian hàng chưa từng là đối tác (đơn không có SALE đã lưu): vẫn 404, không cộng kho', async () => {
@@ -166,6 +187,7 @@ describe('Nhận hàng trả về sau khi gian hàng tắt cờ đối tác (rea
       },
     });
     const before = await stockOf(ctx.order.id);
+    await expect(returns.listForMerchant(ctx.owner.id)).rejects.toBeInstanceOf(ForbiddenException);
     await expect(returns.markReceivedByMerchant(ctx.owner.id, r.id)).rejects.toBeInstanceOf(NotFoundException);
     expect(await stockOf(ctx.order.id)).toBe(before);
     expect((await prisma.returnRequest.findUniqueOrThrow({ where: { id: r.id } })).receivedAt).toBeNull();
