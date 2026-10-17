@@ -95,6 +95,27 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(m.calls.some((c) => c.url.includes('/admin/commission-rates?') && c.url.includes('missing=1'))).toBe(true);
   });
 
+  it('sản phẩm bị chặn CTV: không hiện "≈ Xđ/sp" dù biến thể có % (hoa hồng luôn 0đ)', async () => {
+    const blockedPage: CommissionRatesPage = {
+      ...PAGE,
+      items: [PAGE.items[1]!].map((p) => ({ ...p, variations: p.variations.map((v) => ({ ...v, affiliateRate: 10 })) })),
+    };
+    stub({}, blockedPage);
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    const row = container.querySelector<HTMLElement>('[data-commission-variation]')!;
+    expect(row.textContent).toContain('10%');
+    expect(row.textContent).not.toContain('≈');
+
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    stub();
+    const open = mount(<CommissionRatesTab />);
+    await flush();
+    const rows = open.container.querySelectorAll<HTMLElement>('[data-commission-variation]');
+    expect(rows[1]!.textContent).toContain('≈ 12.000');
+  });
+
   it('rỗng → câu rõ ràng; lỗi → thông báo + Thử lại', async () => {
     stub({}, { ...PAGE, items: [], summary: { missing: 0, missingTubu: 0 } });
     const { container } = mount(<CommissionRatesTab />);

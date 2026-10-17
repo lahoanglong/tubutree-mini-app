@@ -249,7 +249,7 @@ function ProductCard({ product: p, maxRate, tierNames }: { product: CommissionPr
       )}
       <ul className="mt-2 divide-y divide-stone-200 border-t border-stone-200">
         {p.variations.map((v) => (
-          <VariationRow key={`${v.id}:${v.affiliateRate ?? ''}`} v={v} maxRate={maxRate} tierNames={tierNames} />
+          <VariationRow key={`${v.id}:${v.affiliateRate ?? ''}`} v={v} blocked={p.affiliateBlocked} maxRate={maxRate} tierNames={tierNames} />
         ))}
       </ul>
       {dialog}
@@ -257,7 +257,17 @@ function ProductCard({ product: p, maxRate, tierNames }: { product: CommissionPr
   );
 }
 
-function VariationRow({ v, maxRate, tierNames }: { v: CommissionVariation; maxRate: number; tierNames: Map<string, string> }) {
+function VariationRow({
+  v,
+  blocked,
+  maxRate,
+  tierNames,
+}: {
+  v: CommissionVariation;
+  blocked: boolean;
+  maxRate: number;
+  tierNames: Map<string, string>;
+}) {
   const qc = useQueryClient();
   const initial = v.affiliateRate === null ? '' : String(v.affiliateRate).replace('.', ',');
   const [text, setText] = useState(initial);
@@ -290,7 +300,7 @@ function VariationRow({ v, maxRate, tierNames }: { v: CommissionVariation; maxRa
         <div className="mt-0.5 text-stone-500">
           Giá {formatVnd(price)} ·{' '}
           <span className={v.affiliateRate === null ? 'font-semibold text-warning-fg' : 'text-stone-700'}>{formatRate(v.affiliateRate)}</span>
-          {v.affiliateRate !== null && v.affiliateRate > 0 && <> ≈ {formatVnd(Math.floor((price * v.affiliateRate) / 100))}/sp</>}
+          {!blocked && v.affiliateRate !== null && v.affiliateRate > 0 && <> ≈ {formatVnd(Math.floor((price * v.affiliateRate) / 100))}/sp</>}
         </div>
         {dealer.length > 0 && (
           <div className="mt-0.5 text-stone-500">
