@@ -494,4 +494,15 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     expect(container.textContent).toContain('-3.000đ');
     expect(container.textContent).toContain('Tổng97.000đ');
   });
+
+  it('giá phần chọn đổi so với giỏ đã tải (hết giờ vàng): tạm tính và tổng theo chính tạm tính của phần chọn', async () => {
+    state.cart = two();
+    state.selection.mockResolvedValue({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 90000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.textContent).toContain('Tạm tính90.000đ');
+    expect(container.textContent).toContain('Tổng87.000đ');
+    expect(container.textContent).not.toContain('Tổng97.000đ');
+  });
 });

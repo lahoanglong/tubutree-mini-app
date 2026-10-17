@@ -111,6 +111,8 @@ export default function CartPage() {
   const shownDiscount = shown?.discount ?? 0;
   const shownCombo = shown?.comboDiscount ?? 0;
   const shownTier = shown?.tierDiscount ?? 0;
+  // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
+  const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
 
   return (
     <Shell>
@@ -308,7 +310,7 @@ export default function CartPage() {
           <div className={`h-fit p-4 ${ui.card}`}>
             <div className="flex justify-between text-sm">
               <span className="text-stone-600">Tạm tính</span>
-              <span className="text-stone-900">{formatVnd(selectedSubtotal)}</span>
+              <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>
             </div>
             {shownCombo > 0 && (
               <div className="mt-1 flex justify-between text-sm text-success-fg">
@@ -345,7 +347,7 @@ export default function CartPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span>{formatVnd(Math.max(0, selectedSubtotal - shownCombo - shownDiscount - shownTier))}</span>
+              <span>{formatVnd(Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier))}</span>
             </div>
             {selectedItems.length === 0 ? (
               <>

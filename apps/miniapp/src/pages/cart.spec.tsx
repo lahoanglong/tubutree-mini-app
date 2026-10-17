@@ -427,4 +427,16 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     expect(await screen.findByText('-3.000đ', {}, { timeout: 2_000 })).toBeInTheDocument();
     expect(mocks.getCartSelection).toHaveBeenCalledTimes(2);
   });
+
+  it('giá phần chọn đổi so với giỏ đã tải (hết giờ vàng): tạm tính (đã giảm) theo chính tạm tính của phần chọn', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    mocks.getCartSelection.mockResolvedValue(
+      summary({ items: [LINE_B], subtotal: 90_000, couponCode: 'XANH10', comboDiscount: 0, discount: 3_000, tierDiscount: 0 }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+    expect(screen.getByText('87.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('97.000đ')).toBeNull();
+  });
 });

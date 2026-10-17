@@ -669,6 +669,8 @@ function StickySummary({
   const discount = shown?.discount ?? 0;
   const comboDiscount = shown?.comboDiscount ?? 0;
   const tierDiscount = shown?.tierDiscount ?? 0;
+  // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
+  const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const subsetNotice = !allSelected && priced?.couponCode ? priced.couponNotice : null;
 
   return (
@@ -726,7 +728,7 @@ function StickySummary({
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
           <KeyValueRow
             label={vi.cart.subtotalAfterDiscount}
-            value={formatVnd(Math.max(0, selectedSubtotal - comboDiscount - discount - tierDiscount))}
+            value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
           {overStock && (
