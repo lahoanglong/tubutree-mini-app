@@ -482,12 +482,23 @@ export class CommunityFeedService {
       .slice(0, MAX_TAGS);
     if (tagLabels.length) {
       try {
-        const tags = await Promise.all(
-          tagLabels.map((label) => {
-            const slug = slugifyTag(label);
-            return this.prisma.tag.upsert({ where: { slug }, create: { slug, name: label }, update: {} });
-          }),
-        );
+        // Hai nhãn cùng slug là một Tag: nhãn đầu giữ name, như upsert nối tiếp trước đây.
+        const nameBySlug = new Map<string, string>();
+        for (const label of tagLabels) {
+          const slug = slugifyTag(label);
+          if (!nameBySlug.has(slug)) nameBySlug.set(slug, label);
+        }
+        const slugs = [...nameBySlug.keys()];
+        await this.prisma.tag.createMany({
+          data: slugs.map((slug) => ({ slug, name: nameBySlug.get(slug)! })),
+          skipDuplicates: true,
+        });
+        const rows = await this.prisma.tag.findMany({ where: { slug: { in: slugs } }, select: { id: true, slug: true } });
+        const idBySlug = new Map(rows.map((t) => [t.slug, t.id]));
+        const tags = slugs.flatMap((slug) => {
+          const id = idBySlug.get(slug);
+          return id ? [{ id }] : [];
+        });
         await this.prisma.postTag.createMany({
           data: tags.map((t) => ({ postId: post.id, tagId: t.id })),
           skipDuplicates: true,
