@@ -124,7 +124,25 @@ export default function AffiliatePage() {
     );
   }
 
-  return meQ.data?.isAffiliate ? <Dashboard /> : <RegisterGate />;
+  if (meQ.data?.isAffiliate) return <Dashboard />;
+  // Đại lý/nhân viên không đăng ký CTV một chạm được (API từ chối): đưa form đăng ký là ngõ cụt.
+  return meQ.data?.canRegister === false ? <CannotRegister /> : <RegisterGate />;
+}
+
+function CannotRegister() {
+  const navigate = useNavigate();
+  return (
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={PAGE_TITLE} />
+      <EmptyState
+        art="leaf"
+        heading="Tài khoản này không đăng ký CTV được"
+        body="Màn hoa hồng CTV hiện khi tài khoản đã có gian hàng CTV hoặc đã có hoa hồng."
+        ctaLabel="Về Hồ sơ"
+        onCta={() => navigate('/profile')}
+      />
+    </Page>
+  );
 }
 
 function RegisterGate() {
@@ -406,21 +424,23 @@ function Dashboard() {
 
       {/* Lối tắt "Lên đơn hộ" ngay dưới thẻ hoa hồng: việc CTV làm nhiều lần mỗi ngày, trước đây
           nằm sau thẻ bậc, thưởng mốc và nút rút nên phải cuộn qua ~3 màn mới thấy. */}
-      <div style={BLOCK_GAP}>
-        <Button
-          fullWidth
-          icon={Receipt}
-          onPress={() => {
-            haptic('light');
-            setCtvOrdering(true);
-          }}
-        >
-          {vi.ctvOrder.entry}
-        </Button>
-        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
-          {vi.ctvOrder.entryHint}
-        </Text>
-      </div>
+      {meQ.data?.canOrderForCustomer !== false && (
+        <div style={BLOCK_GAP}>
+          <Button
+            fullWidth
+            icon={Receipt}
+            onPress={() => {
+              haptic('light');
+              setCtvOrdering(true);
+            }}
+          >
+            {vi.ctvOrder.entry}
+          </Button>
+          <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
+            {vi.ctvOrder.entryHint}
+          </Text>
+        </div>
+      )}
 
       {/* Bậc doanh số tháng (§6.8.2) & Danh sách 5 bậc CTV */}
       {d?.tier && (

@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/storefront-sales';
+import { hasAffiliateAccess } from '../affiliate/affiliate-access';
 import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
@@ -54,11 +55,14 @@ export class StorefrontService {
 
   async getOrCreateMine(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (user.role !== 'AFFILIATE' && user.role !== 'ADMIN') {
+    const canCreate = user.role === 'AFFILIATE' || user.role === 'ADMIN';
+    // CTV được duyệt lên đại lý giữ gian hàng CTV (D3-03): mở lại được, nhưng đại lý không tạo gian hàng CTV mới.
+    if (!canCreate && user.role !== 'DEALER') {
       throw new BadRequestException('Chỉ CTV mới tạo được gian hàng.');
     }
     const existing = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
     if (existing) return existing;
+    if (!canCreate) throw new BadRequestException('Chỉ CTV mới tạo được gian hàng.');
     try {
       return await this.prisma.storefront.create({
         data: {
@@ -180,10 +184,10 @@ export class StorefrontService {
   }
 
   async pickerProducts(userId: string, q: { search?: string; page?: number; limit?: number }) {
-    // Guardrail §9: picker trả maxAffiliateRate (% hoa hồng) → CHỈ CTV/Admin được gọi,
-    // không lộ % hoa hồng cho khách thường.
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
-    if (user.role !== 'AFFILIATE' && user.role !== 'ADMIN') {
+    // Guardrail §9: picker trả maxAffiliateRate (% hoa hồng) → CHỈ CTV/Admin và đại lý còn gian hàng CTV hay hoa hồng
+    // (hasAffiliateAccess, D3-03) được gọi, không lộ % hoa hồng cho khách thường.
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true, role: true } });
+    if (!(await hasAffiliateAccess(this.prisma, user))) {
       throw new BadRequestException('Chỉ CTV mới xem được danh sách sản phẩm để thêm vào gian hàng.');
     }
     const take = Math.min(q.limit ?? 20, 50);

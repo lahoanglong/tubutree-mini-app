@@ -497,3 +497,47 @@ describe('Dashboard CTV — thưởng mốc là Điểm Xanh (PD-3)', () => {
     invalidate.mockRestore();
   });
 });
+
+describe('Trang CTV — đại lý (D3-03)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('đại lý đã có gian hàng CTV hoặc hoa hồng: API trả isAffiliate nên vào thẳng dashboard, không hiện form đăng ký', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Rút hoa hồng' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng ký miễn phí ngay' })).toBeNull();
+  });
+
+  it('đại lý chưa được lên đơn hộ: dashboard không có lối tắt Lên đơn hộ khách (API sẽ từ chối)', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    await screen.findByRole('button', { name: 'Rút hoa hồng' });
+    expect(screen.queryByRole('button', { name: /Lên đơn hộ khách/ })).toBeNull();
+  });
+
+  it('đại lý thuần (không đăng ký CTV được): không đưa form đăng ký ngõ cụt, có đường về Hồ sơ', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: false, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    expect(await screen.findByText('Tài khoản này không đăng ký CTV được')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng ký miễn phí ngay' })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Về Hồ sơ' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/profile');
+  });
+
+  it('khách thường (canRegister=true) vẫn thấy form đăng ký', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: false, canRegister: true, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' })).toBeInTheDocument();
+  });
+});
