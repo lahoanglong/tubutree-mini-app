@@ -192,4 +192,48 @@ describe('Nhận hàng trả về sau khi gian hàng tắt cờ đối tác (rea
     expect(await stockOf(ctx.order.id)).toBe(before);
     expect((await prisma.returnRequest.findUniqueOrThrow({ where: { id: r.id } })).receivedAt).toBeNull();
   });
+
+  it('gian hàng chỉ bán hàng giao hộ, đã được trả phiếu rồi tắt cờ: danh sách trả về [] (không 403) khớp cổng hasPayouts của tab', async () => {
+    await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
+    const owner = await createUser(prisma, { role: 'CUSTOMER' });
+    const tag = randCode(8).toLowerCase();
+    const store = await prisma.storefront.create({
+      data: { type: 'CTV', isPartner: true, slug: `itgh-${tag}`, title: `Vườn giao hộ ${tag}`, ownerUserId: owner.id, commissionPct: 0.1, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400 },
+    });
+    const product = await prisma.product.create({
+      data: {
+        storefrontId: store.id,
+        fulfilment: 'TUBU',
+        brand: 'IT',
+        slug: `itgh-${tag}`,
+        name: `Giao hộ ${tag}`,
+        description: 'IT',
+        basePrice: 60_000,
+        variations: { create: { sku: `ITGH-${tag}`, pancakeId: `itgh-${tag}`, name: 'Loại', attributes: {}, retailPrice: 60_000, stock: 20 } },
+      },
+      include: { variations: true },
+    });
+    const v = product.variations[0]!;
+    await prisma.merchantPancakeLink.create({ data: { storefrontId: store.id, productId: product.id, variationId: v.id, linkedAt: new Date(Date.now() - 60 * DAY) } });
+    const buyer = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+    const order = await createOrder(prisma, {
+      userId: buyer.id,
+      status: 'DELIVERED',
+      createdAt: new Date(Date.now() - 3 * DAY),
+      deliveredAt: new Date(Date.now() - 2 * DAY),
+      fulfiller: 'TUBU',
+      paymentMethod: 'WALLET',
+      paymentStatus: 'PAID',
+      subtotal: 120_000,
+      total: 120_000,
+      items: { create: { variationId: v.id, productName: 'Giao hộ', variationName: 'Loại', unitPrice: 60_000, quantity: 2, total: 120_000 } },
+    });
+    await prisma.returnRequest.create({ data: { orderId: order.id, userId: buyer.id, reason: 'Trả hàng', status: 'REQUESTED' } });
+    const slip = await settlement.createPayout('admin-it', store.id);
+    await settlement.markPayoutPaid('admin-it', slip.id, 'FT-GH2');
+    await prisma.storefront.update({ where: { id: store.id }, data: { isPartner: false } });
+
+    expect(await settlement.storeHasPayouts(store.id)).toBe(true);
+    await expect(returns.listForMerchant(owner.id)).resolves.toEqual([]);
+  });
 });

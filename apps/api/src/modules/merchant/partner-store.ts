@@ -30,3 +30,8 @@ export function losesPartnerStore(from: string, to: string): boolean {
 export function isPartnerStore(store: { type: string; isPartner?: boolean | null }): boolean {
   return store.type === 'MERCHANT' || store.isPartner === true;
 }
+
+/** Gian hàng đã có phiếu đối soát nào chưa: cổng chung cho tab "Hàng trả về" (hasPayouts) và `listForMerchant` của chủ đã tắt cờ. */
+export async function storeHasPayouts(db: { merchantPayout: { count(args: { where: { storefrontId: string } }): Promise<number> } }, storefrontId: string): Promise<boolean> {
+  return (await db.merchantPayout.count({ where: { storefrontId } })) > 0;
+}
