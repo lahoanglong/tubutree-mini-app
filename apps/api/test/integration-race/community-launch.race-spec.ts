@@ -215,6 +215,50 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
       expect(body).toContain('Có link bán hàng ngoài');
     });
 
+    it('duyệt rồi từ chối (màn hình cũ của CSKH) → 409, bài vẫn PUBLISHED, tác giả chỉ nhận tin "đã duyệt"', async () => {
+      const author = await createUser(prisma);
+      const p = await post(author.id, { status: 'PENDING' });
+
+      await feed.approvePost(p.id);
+      await expect(feed.rejectPost(p.id, 'stale')).rejects.toBeInstanceOf(ConflictException);
+
+      expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('PUBLISHED');
+      expect(await logs(author.id, 'COMMUNITY_POST_APPROVED')).toHaveLength(1);
+      expect(await logs(author.id, 'COMMUNITY_POST_REJECTED')).toHaveLength(0);
+    });
+
+    it('nhiều CSKH từ chối cùng một bài cùng lúc → không lỗi, đúng MỘT tin "chưa được đăng"', async () => {
+      const author = await createUser(prisma);
+      const p = await post(author.id, { status: 'PENDING' });
+
+      const res = summarize(await Promise.allSettled(['a', 'b', 'c', 'd'].map((reason) => feed.rejectPost(p.id, reason))));
+
+      expect(res.errors).toEqual([]);
+      expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('REMOVED');
+      expect(await logs(author.id, 'COMMUNITY_POST_REJECTED')).toHaveLength(1);
+    });
+
+    it('duyệt và từ chối cùng lúc → đúng MỘT kết cục nhất quán (không có bài REMOVED mà tác giả vẫn nhận "đã duyệt")', async () => {
+      for (let round = 0; round < 5; round += 1) {
+        const author = await createUser(prisma);
+        const p = await post(author.id, { status: 'PENDING' });
+
+        const settled = await Promise.allSettled([feed.approvePost(p.id), feed.rejectPost(p.id, 'x')]);
+
+        const unexpected = settled.filter((r) => r.status === 'rejected' && !(r.reason instanceof ConflictException));
+        expect(unexpected).toEqual([]);
+        const status = (await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status;
+        const approved = await logs(author.id, 'COMMUNITY_POST_APPROVED');
+        const rejected = await logs(author.id, 'COMMUNITY_POST_REJECTED');
+        if (status === 'PUBLISHED') {
+          expect([approved.length, rejected.length]).toEqual([1, 0]);
+        } else {
+          expect(status).toBe('REMOVED');
+          expect([approved.length, rejected.length]).toEqual([0, 1]);
+        }
+      }
+    });
+
     it('hidePost trên bài PENDING → 409, bài vẫn PENDING, không có tin "đã được ẩn"', async () => {
       const author = await createUser(prisma);
       const p = await post(author.id, { status: 'PENDING' });

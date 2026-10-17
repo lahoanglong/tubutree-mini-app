@@ -538,7 +538,10 @@ export class CommunityFeedService {
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status !== 'PENDING') return { ok: true }; // idempotent, không hồi sinh bài REMOVED/đã duyệt
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'PUBLISHED' } });
+    // Có điều kiện PENDING: duyệt song song với từ chối (hoặc duyệt đôi) thì chỉ một lượt thắng, lượt thua không hồi sinh
+    // bài vừa bị gỡ và không thưởng/báo lần hai.
+    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: 'PENDING' }, data: { status: 'PUBLISHED' } });
+    if (count !== 1) return { ok: true };
     try {
       await this.prisma.communityProfile.upsert({
         where: { userId: post.userId },
@@ -567,20 +570,33 @@ export class CommunityFeedService {
     return { ok: true };
   }
 
-  /** Từ chối bài PENDING (hoặc bất kỳ) → xoá mềm REMOVED và báo tác giả (kèm lý do) để họ biết bài đi đâu. */
+  /**
+   * Từ chối bài PENDING → xoá mềm REMOVED và báo tác giả (kèm lý do) để họ biết bài đi đâu. CHỈ nhận bài chưa đăng: bài đã
+   * đăng phải dùng hidePost (đảo điểm, tin nhắn "đã được ẩn"); nhận cả hai thì CSKH bấm nhầm trên bài vừa được người khác
+   * duyệt sẽ gỡ bài và báo tác giả "chưa được đăng" ngay sau tin "đã duyệt". Bài chờ duyệt chưa cộng điểm nên không có gì để đảo.
+   */
   async rejectPost(postId: string, reason?: string) {
     const post = await this.prisma.feedPost.findUnique({
       where: { id: postId },
-      select: { id: true, userId: true, title: true, body: true },
+      select: { id: true, userId: true, status: true, title: true, body: true },
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
-    // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm uy tín + Điểm Xanh thưởng), nên phải đảo điểm y như
-    // deletePost — nếu không, kiểm duyệt gỡ bài vi phạm mà tác giả vẫn giữ nguyên hạng.
-    await this.reverseReputationForPost(post.userId, postId);
+    if (post.status === 'REMOVED') return { ok: true };
+    if (post.status !== 'PENDING') throw this.alreadyPublished();
+    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: 'PENDING' }, data: { status: 'REMOVED' } });
+    if (count !== 1) {
+      // Thua cuộc đua: nếu người kia từ chối thì xong rồi; nếu người kia duyệt thì CSKH phải biết bài đã lên.
+      const now = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { status: true } });
+      if (now?.status === 'PUBLISHED') throw this.alreadyPublished();
+      return { ok: true };
+    }
     await this.revokeTrust(post.userId);
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
     await this.notifyPostRejected(postId, post, reason);
     return { ok: true };
+  }
+
+  private alreadyPublished() {
+    return new ConflictException('Bài này đã được đăng nên không thể từ chối. Hãy dùng "Ẩn" để gỡ bài đã đăng.');
   }
 
   /**
