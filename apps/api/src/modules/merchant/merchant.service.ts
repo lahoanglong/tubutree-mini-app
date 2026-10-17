@@ -24,7 +24,7 @@ import {
   type MerchantPancakeCheck,
 } from './merchant-pancake-link';
 import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
-import { isPartnerStore, lockStoreOwner } from './partner-store';
+import { isPartnerStore, lockStoreOwner, storeHasPayouts } from './partner-store';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
 
@@ -293,6 +293,15 @@ export class MerchantService {
   private async getCallerRole(userId: string): Promise<string> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
     return user.role;
+  }
+
+  /** Chủ vai trò CUSTOMER chỉ xem gian hàng đã có (không tạo mới), và chỉ khi gian hàng còn phiếu đối soát. */
+  async getStoreOfPayoutOwner(userId: string) {
+    const store = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId }, include: STORE_INCLUDE });
+    if (!store || !(await storeHasPayouts(this.prisma, store.id))) {
+      throw new ForbiddenException('Chỉ tài khoản đối tác hoặc đại lý mới có quyền mở gian hàng.');
+    }
+    return store;
   }
 
   async getOrCreateStore(userId: string) {

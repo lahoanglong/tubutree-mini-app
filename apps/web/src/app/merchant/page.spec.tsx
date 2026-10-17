@@ -26,7 +26,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@/lib/merchant-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/merchant-client')>()),
-  getMerchantStore: async () => mocks.store,
+  getMerchantStore: async () => {
+    if (mocks.store instanceof Error) throw mocks.store;
+    return mocks.store;
+  },
   updateMerchantStore: (dto: unknown) => mocks.updateStore(dto),
   getMerchantProducts: (page: number) => mocks.getProducts(page),
   createMerchantProduct: (dto: unknown) => mocks.createProduct(dto),
@@ -435,6 +438,57 @@ describe('cổng đối tác — đại lý giữ gian hàng CTV (isPartner)', (
     expect(byText(root, '[role="tab"]', 'Đối soát')!.getAttribute('aria-selected')).toBe('true');
     expect(root.textContent).toContain('0011223344');
     expect(byText(root, 'button', 'Tạm nghỉ nhận đơn')).toBeNull();
+  });
+
+  describe('CUSTOMER còn sở hữu gian hàng', () => {
+    const customer = () => {
+      mocks.auth = { user: { role: 'CUSTOMER' }, status: 'authenticated', initialized: true };
+    };
+
+    it('có phiếu đối soát (hasPayouts): chỉ hai tab Hàng trả về và Đối soát, không có mục sửa gian hàng, sản phẩm, thẻ số liệu', async () => {
+      customer();
+      mocks.store = { ...STORE, type: 'CTV', isPartner: false, hasPayouts: true };
+      mocks.getProducts.mockClear();
+      mocks.listOrders.mockClear();
+      mocks.listFulfil.mockClear();
+      window.history.replaceState(null, '', '/merchant');
+      const root = await mount();
+      expect(tabLabels(root)).toEqual(['Hàng trả về', 'Đối soát']);
+      expect(byText(root, '[role="tab"]', 'Hàng trả về')!.getAttribute('aria-selected')).toBe('true');
+      expect(root.textContent).not.toContain('Kênh dành cho đối tác');
+      expect(byText(root, 'button', 'Lưu thay đổi')).toBeNull();
+      expect(root.textContent).not.toContain('Sản phẩm bán lại');
+      expect(byText(root, 'a', 'Xem gian hàng')).toBeNull();
+      expect(mocks.getProducts).not.toHaveBeenCalled();
+      expect(mocks.listOrders).not.toHaveBeenCalled();
+      expect(mocks.listFulfil).not.toHaveBeenCalled();
+    });
+
+    it('mở bằng ?tab=store hoặc ?tab=products vẫn rơi về Hàng trả về, không lộ tab cấm', async () => {
+      customer();
+      mocks.store = { ...STORE, type: 'CTV', isPartner: false, hasPayouts: true };
+      window.history.replaceState(null, '', '/merchant?tab=products');
+      const root = await mount();
+      expect(byText(root, '[role="tab"]', 'Hàng trả về')!.getAttribute('aria-selected')).toBe('true');
+      expect(byText(root, 'button', 'Đăng sản phẩm mới')).toBeNull();
+    });
+
+    it('có gian hàng nhưng chưa có phiếu: vẫn là màn không có quyền', async () => {
+      customer();
+      mocks.store = { ...STORE, type: 'CTV', isPartner: false, hasPayouts: false };
+      const root = await mount();
+      expect(root.textContent).toContain('Kênh dành cho đối tác');
+      expect(root.querySelector('[role="tablist"]')).toBeNull();
+    });
+
+    it('GET store trả 403 (không có gian hàng hoặc chưa có phiếu): màn không có quyền, không treo ở trạng thái tải', async () => {
+      customer();
+      mocks.store = new Error('Bạn không có quyền truy cập tài nguyên này.');
+      const root = await mount();
+      expect(root.textContent).toContain('Kênh dành cho đối tác');
+      expect(root.textContent).not.toContain('Đang tải thông tin gian hàng');
+      expect(root.querySelector('[role="tablist"]')).toBeNull();
+    });
   });
 
   it('CTV + isPartner=false có phiếu đối soát: tab "Hàng trả về" chỉ có mục hàng trả, không gọi danh sách đơn cần giao', async () => {

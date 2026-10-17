@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { applyDecorators, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   ArrayMaxSize,
   IsArray,
@@ -24,6 +24,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaginationQuery } from '../../common/pagination';
+import { MerchantPayoutOwnerGuard } from './merchant-payout-owner.guard';
 import { MerchantService } from './merchant.service';
 import { MERCHANT_FULFIL_STATUSES, MerchantFulfilmentService } from './merchant-fulfilment.service';
 import { OrderReturnsService } from '../orders/order-returns.service';
@@ -185,6 +186,9 @@ class MerchantFulfilListQuery extends PaginationQuery {
   status?: string;
 }
 
+/** Bốn route chủ gian hàng CUSTOMER còn phiếu đối soát được gọi (xem gian hàng, hàng trả về, nhận hàng trả, bảng kê); mọi route khác vẫn theo vai trò của lớp. */
+const payoutOwnerRoute = () => applyDecorators(Roles(...MERCHANT_PORTAL_ROLES, 'CUSTOMER'), UseGuards(MerchantPayoutOwnerGuard));
+
 @Controller('merchant')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(...MERCHANT_PORTAL_ROLES)
@@ -196,8 +200,9 @@ export class MerchantController {
   ) {}
 
   @Get('store')
-  async getStore(@CurrentUser('sub') userId: string) {
-    const store = await this.merchant.getOrCreateStore(userId);
+  @payoutOwnerRoute()
+  async getStore(@CurrentUser('sub') userId: string, @CurrentUser('role') role: string) {
+    const store = role === 'CUSTOMER' ? await this.merchant.getStoreOfPayoutOwner(userId) : await this.merchant.getOrCreateStore(userId);
     // Cổng dùng để biết gian hàng đã tắt cờ còn phiếu đối soát để xem (không phải thử gọi /merchant/settlement rồi nhận 403).
     return { ...store, hasPayouts: await this.fulfilment.storeHasPayouts(store.id) };
   }
@@ -304,17 +309,20 @@ export class MerchantController {
   }
 
   @Get('settlement')
+  @payoutOwnerRoute()
   settlement(@CurrentUser('sub') userId: string) {
     return this.fulfilment.myStatement(userId);
   }
 
   // Hàng khách trả về gian hàng (đơn tự giao, D3/D4): gian hàng xác nhận đã nhận thì mới cộng lại kho của gian hàng.
   @Get('returns')
+  @payoutOwnerRoute()
   listReturns(@CurrentUser('sub') userId: string) {
     return this.returns.listForMerchant(userId);
   }
 
   @Post('returns/:id/received')
+  @payoutOwnerRoute()
   markReturnReceived(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.returns.markReceivedByMerchant(userId, id);
   }

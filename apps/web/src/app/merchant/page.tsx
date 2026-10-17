@@ -155,17 +155,20 @@ export default function MerchantPage() {
   // gọi refresh với ĐÚNG refresh token mà AuthProvider đang dùng. Backend xoay token single-use
   // và coi lần dùng lại là reuse → thu hồi TOÀN BỘ phiên của user, văng khỏi cả web lẫn Mini App.
   const authed = status === 'authenticated';
-  const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore, enabled: authed });
+  // CUSTOMER chủ gian hàng còn phiếu chỉ gọi được GET store, hàng trả về và bảng kê (BE 403 mọi route khác): không bắn các query còn lại,
+  // và không thử lại lần 403 vì chờ thêm một vòng chỉ làm màn chờ lâu hơn.
+  const restricted = user?.role === 'CUSTOMER';
+  const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore, enabled: authed, retry: restricted ? false : undefined });
   const store = storeQ.data;
   const selfFulfils = isPartnerStore(store);
   // Cùng queryKey/limit với trang 1 của ProductsTab → dùng chung cache. Số trên thẻ KPI đọc meta tổng
   // (ownTotal/resellTotal) — đếm `.length` của trang đầu thì không bao giờ vượt cỡ trang.
-  const productsQ = useQuery({ queryKey: ['merchant-products', 1], queryFn: () => getMerchantProducts(1), enabled: authed });
+  const productsQ = useQuery({ queryKey: ['merchant-products', 1], queryFn: () => getMerchantProducts(1), enabled: authed && !restricted });
   // Gian hàng CTV: kho Tubu xử lý mọi đơn, thẻ chỉ đếm đơn Tubu đang xử lý (đọc meta.total, limit=1).
   const tubuProcessingQ = useQuery({
     queryKey: ['merchant-orders', 'count', 'CONFIRMED'],
     queryFn: () => countMerchantOrders('CONFIRMED'),
-    enabled: authed && !!store && !selfFulfils,
+    enabled: authed && !restricted && !!store && !selfFulfils,
   });
   // Gian hàng tự giao: đếm đơn đang chờ chính đối tác (CONFIRMED + PACKED) từ `counts` của danh sách đơn cần giao.
   const fulfilQ = useQuery({
@@ -177,8 +180,10 @@ export default function MerchantPage() {
   // (hasPayouts) mới hiện hai tab đó (đơn có dòng SALE thì chắc chắn có phiếu); các mục khác của tab giao hàng sẽ 403.
   const visibleTabs = TAB_DEFS.filter(
     (t) => !t.merchantOnly || selfFulfils || ((t.k === 'settlement' || t.k === 'fulfil') && store?.hasPayouts === true),
-  ).map((t) => (t.k === 'fulfil' && !selfFulfils ? { ...t, label: 'Hàng trả về', icon: Package } : t));
-  const activeTab: MerchantTab = store && !visibleTabs.some((t) => t.k === tab) ? 'store' : tab;
+  )
+    .filter((t) => !restricted || t.k === 'settlement' || t.k === 'fulfil')
+    .map((t) => (t.k === 'fulfil' && !selfFulfils ? { ...t, label: 'Hàng trả về', icon: Package } : t));
+  const activeTab: MerchantTab = store && !visibleTabs.some((t) => t.k === tab) ? (restricted ? 'fulfil' : 'store') : tab;
   // Thanh tab cuộn ngang ở màn hẹp: mở bằng ?tab= thì tab đang chọn có thể nằm ngoài khung nhìn. Chỉ cuộn ngang thanh tab,
   // không dùng scrollIntoView vì nó kéo cả trang xuống.
   const tablistRef = useRef<HTMLDivElement>(null);
@@ -227,7 +232,15 @@ export default function MerchantPage() {
   // BE giới hạn portal này cho DEALER/AFFILIATE/ADMIN (merchant.controller.ts). Không kiểm tra ở
   // đây thì khách lẻ bấm "Kênh Đối Tác" ở header (nút luôn hiện) sẽ thấy nguyên khung portal —
   // tiêu đề, thẻ số liệu 0, các tab — kèm một hộp lỗi 403. Trang /admin đã kiểm; trang này sót.
-  if (user && !['DEALER', 'AFFILIATE', 'ADMIN'].includes(user.role)) {
+  // Ngoại lệ: CUSTOMER còn gian hàng có phiếu đối soát (đã mất tư cách đối tác) vào cổng thu hẹp để nhận hàng trả và xem đối soát.
+  if (user && !['DEALER', 'AFFILIATE', 'ADMIN'].includes(user.role) && restricted && storeQ.isLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center text-sm font-medium text-stone-500" role="status">
+        Đang tải thông tin gian hàng…
+      </div>
+    );
+  }
+  if (user && !['DEALER', 'AFFILIATE', 'ADMIN'].includes(user.role) && !(restricted && store?.hasPayouts === true)) {
     return (
       <main className="mx-auto max-w-md px-4 py-20 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-700 shadow-card">
@@ -257,13 +270,13 @@ export default function MerchantPage() {
             <h1 className="break-words font-display text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl">
               {store?.title ?? 'Cổng Quản Trị Gian Hàng Đối Tác'}
             </h1>
-            {store && (
+            {store && !restricted && (
               <span className="inline-flex items-center gap-1 rounded-full bg-forest-100 px-2.5 py-0.5 text-xs font-semibold text-forest-800">
                 <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                 {selfFulfils ? 'Đối tác tự giao' : 'Gian hàng CTV'}
               </span>
             )}
-            {store && (
+            {store && !restricted && (
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                   store.isPublished
@@ -276,7 +289,7 @@ export default function MerchantPage() {
               </span>
             )}
           </div>
-          {store?.subdomain && (
+          {store?.subdomain && !restricted && (
             <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-stone-500">
               <span>Đường dẫn gian hàng riêng:</span>
               <a
@@ -291,7 +304,7 @@ export default function MerchantPage() {
           )}
         </div>
 
-        {store && (
+        {store && !restricted && (
           <div className="flex items-center gap-2">
             <Link
               href={`/s/${store.subdomain || store.slug}`}
@@ -307,6 +320,7 @@ export default function MerchantPage() {
       </div>
 
       {/* ── KPI ── */}
+      {!restricted && (
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         {canCreateProducts && (
           <KpiCard label="Sản phẩm riêng" value={ownCount} hint="Do gian hàng tự đăng" icon={Package} iconClass="text-forest-700" />
@@ -332,6 +346,7 @@ export default function MerchantPage() {
           iconClass="text-success-fg"
         />
       </div>
+      )}
 
       {/* ── Navigation Tabs ── */}
       <div
