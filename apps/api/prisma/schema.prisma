@@ -264,6 +264,10 @@ model User {
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   pancakeCustomerId      String?         @unique
   metadata               Json?
+  /// Nguồn chạm đầu (shopee, card-<đợt>, oa, ...): ghi MỘT lần lúc tạo tài khoản, hoặc lúc gộp khách vào tài khoản còn trống; không bao giờ ghi đè (common/attribution.ts). null = chưa biết (tài khoản có trước tính năng).
+  firstTouchSource       String?
+  firstTouchCampaign     String?
+  firstTouchAt           DateTime?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
 
@@ -2981,6 +2985,8 @@ model AnalyticsEvent {
   platform       String
   appVersion     String?
   entrySource    String?
+  /// Chiến dịch (utm_campaign / thẻ trong hộp) của phiên phát sinh sự kiện, đi kèm entrySource.
+  campaign       String?
   notificationId String?
   refCode        String?
   storefrontSlug String?

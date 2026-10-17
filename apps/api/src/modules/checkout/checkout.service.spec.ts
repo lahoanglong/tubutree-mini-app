@@ -1901,3 +1901,24 @@ describe('CheckoutService — không lộ trường nội bộ cho khách (R3-ME
     expect(JSON.stringify(q)).not.toContain('u-a');
   });
 });
+
+describe('CheckoutService.placeOrder — nguồn khách trên order_placed', () => {
+  const placedEvent = (analytics: AnalyticsEventsService) =>
+    (analytics.record as jest.Mock).mock.calls.map((c) => c[1]).find((e) => e.eventName === 'order_placed');
+
+  it('mang nguồn và chiến dịch chạm đầu của khách đặt đơn', async () => {
+    const { svc, prisma, analytics } = build();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: null,
+      firstTouchSource: 'card-2610', firstTouchCampaign: 'hop-hang',
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(placedEvent(analytics)).toMatchObject({ entrySource: 'card-2610', campaign: 'hop-hang' });
+  });
+
+  it('khách chưa có nguồn (tài khoản cũ) → null, đơn vẫn đặt được', async () => {
+    const { svc, analytics } = build();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(placedEvent(analytics)).toMatchObject({ entrySource: null, campaign: null });
+  });
+});
