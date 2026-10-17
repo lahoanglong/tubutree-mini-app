@@ -179,7 +179,8 @@ describe('tools/backup/backup-db.sh', () => {
   });
 
   it('nhãn hoặc số bản giữ sai dạng: dừng ngay, chưa gọi docker', () => {
-    for (const env of [{ BACKUP_LABEL: '../x' }, { BACKUP_LABEL: 'a b' }, { BACKUP_KEEP_COUNT: 'abc' }, { BACKUP_KEEP_COUNT: '-1' }]) {
+    const bad: Record<string, string>[] = [{ BACKUP_LABEL: '../x' }, { BACKUP_LABEL: 'a b' }, { BACKUP_KEEP_COUNT: 'abc' }, { BACKUP_KEEP_COUNT: '-1' }];
+    for (const env of bad) {
       const { status, calls, files } = runWithFakeDocker('tools/backup/backup-db.sh', [], { env });
       expect({ env, status }).toEqual({ env, status: 1 });
       expect(calls).toEqual([]);
