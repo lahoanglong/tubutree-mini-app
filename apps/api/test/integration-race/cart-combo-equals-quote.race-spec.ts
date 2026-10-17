@@ -527,4 +527,26 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     expect(q.discount).toBe(0);
     expect(sub.subtotal - sub.discount).toBe(q.total - q.shippingFee);
   });
+
+  it('chọn dòng đã ngừng bán: giỏ từ chối đúng câu báo giá; id không thuộc giỏ thì bỏ qua im lặng', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    const d = await product(30_000);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: d.variationId, quantity: 1 });
+    const line = async (variationId: string) => (await prisma.cartItem.findFirstOrThrow({ where: { cart: { userId: b.userId }, variationId } })).id;
+    const lineA = await line(a.variationId);
+    const lineD = await line(d.variationId);
+    await prisma.product.update({ where: { id: d.productId }, data: { isActive: false } });
+
+    const quoteErr = await checkout.quote(b.userId, { addressId: b.addressId, itemIds: [lineD] }).catch((e: unknown) => e);
+    expect(quoteErr).toBeInstanceOf(BadRequestException);
+    const cartErr = await cartApi.get(b.userId, { itemIds: [lineD] } as never).catch((e: unknown) => e);
+    expect(cartErr).toBeInstanceOf(BadRequestException);
+    expect((cartErr as BadRequestException).message).toBe((quoteErr as BadRequestException).message);
+
+    const ok = await cartApi.get(b.userId, { itemIds: [lineA, 'khong-co-trong-gio'] } as never);
+    expect(ok.items.map((l) => l.id)).toEqual([lineA]);
+    expect((await cartApi.get(b.userId, { itemIds: ['khong-co-trong-gio'] } as never)).items).toEqual([]);
+  });
 });

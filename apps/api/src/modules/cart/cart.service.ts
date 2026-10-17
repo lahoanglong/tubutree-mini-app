@@ -12,7 +12,7 @@ import { resolvePublishedStorefront } from '../storefront/resolve-storefront';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { resolveAttribution } from '../checkout/attribution';
 import { AddItemDto } from './dto/cart.dto';
-import { isSellableVariation } from './sellable';
+import { isSellableVariation, productDiscontinuedError } from './sellable';
 import { isPartnerOwnedVariation } from './partner-goods';
 import {
   COUPON_ZERO_DISCOUNT_REASON,
@@ -121,6 +121,10 @@ export class CartService {
         thumbnail: it.variation.product.thumbnail,
         quantity: it.quantity,
       }));
+
+    // Giá một phần giỏ phải từ chối đúng như báo giá/đặt đơn khi khách chọn đích danh dòng đã ngừng bán (checkoutLines).
+    const droppedSelected = selection ? unavailableItems.filter((l) => selection.has(l.id)) : [];
+    if (droppedSelected.length > 0) throw productDiscontinuedError(droppedSelected[0]!.productName);
 
     const now = new Date();
     const flashMap = await this.flashSale.resolveEffective(
