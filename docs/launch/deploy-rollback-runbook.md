@@ -535,7 +535,7 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
    $DC run --rm --no-deps api pnpm run prisma:cleanup-demo -- --apply                                           # (c)
    ```
 
-   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. Chạy lại đúng lệnh đó phải in `Đã tắt 0 sản phẩm, 0 biến thể`.
+   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Chạy lại đúng lệnh đó phải in `Đã tắt 0 sản phẩm, 0 biến thể`.
 
    Nhìn nhanh (go-live check ở bước 10 mới là phép đối chiếu đúng danh sách):
 

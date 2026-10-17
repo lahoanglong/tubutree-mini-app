@@ -72,6 +72,10 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     for (const stmt of splitSqlStatements(sql).filter((s) => s.startsWith('INSERT INTO'))) await prisma.$executeRawUnsafe(stmt);
     await prisma.product.updateMany({ where: { pancakeId: { in: [...DEMO_PRODUCT_PANCAKE_IDS] } }, data: { isActive: true } });
     await prisma.variation.updateMany({ where: { pancakeId: { in: [...DEMO_VARIATION_PANCAKE_IDS] } }, data: { isActive: true } });
+    await prisma.$executeRawUnsafe(
+      `UPDATE "variations" SET "sku" = substr("sku", 6) WHERE "pancakeId" = ANY($1::text[]) AND "sku" LIKE 'DEMO-%'`,
+      [...DEMO_VARIATION_PANCAKE_IDS],
+    );
     const endAt = MIGRATION_END_AT > new Date() ? MIGRATION_END_AT : new Date(Date.now() + 30 * 86_400_000);
     for (const c of DEMO_COUPONS) await prisma.coupon.update({ where: { id: c.id }, data: { isActive: true, endAt } });
   }
@@ -148,7 +152,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
   it('xem trước: đúng số dòng của migration, nêu dòng tham chiếu, không ghi gì', async () => {
     const plan = await previewDemoCleanup(prisma);
     expect(plan.products).toEqual({ expected: 44, found: 44, active: 44, idMismatch: [] });
-    expect(plan.variations).toEqual({ expected: 48, found: 48, active: 48, extraActive: 0 });
+    expect(plan.variations).toEqual({ expected: 48, found: 48, active: 48, extraActive: 0, skuToPrefix: 48 });
     const refs = Object.fromEntries(plan.references.map((r) => [r.table, r.rows]));
     expect(refs).toMatchObject({ order_items: 1, cart_items: 1, flash_sale_items: 1, reviews: 1, wishlists: 1, storefront_items: 1 });
     expect(plan.coupons.map((c) => [c.code, c.kind, c.live])).toEqual([
@@ -162,9 +166,18 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(await prisma.product.count({ where: { ...DEMO_PRODUCT_WHERE, isActive: true } })).toBe(44);
   });
 
-  it('--apply (mặc định giữ mã): tắt 44 SP + 48 biến thể, không xoá dòng nào, dòng tham chiếu còn nguyên', async () => {
+  it('--apply (mặc định giữ mã): tắt 44 SP + 48 biến thể, trả SKU, không xoá dòng nào, dòng tham chiếu còn nguyên', async () => {
+    // Biến thể thật đồng bộ từ Pancake mang SKU trùng SKU demo: trước khi dọn, unique sku chặn (P2002 ở mọi lượt sync).
+    const realSku = demoVariation.sku;
+    const realVariation = () =>
+      prisma.variation.create({ data: { pancakeId: `it-real-${tag}`, productId: demoProduct.id, sku: realSku, name: 'thật', attributes: {}, retailPrice: 1 } });
+    await expect(realVariation()).rejects.toMatchObject({ code: 'P2002' });
+
     const { result } = await applyDemoCleanup(prisma, { coupons: 'keep' });
-    expect(result).toEqual({ productsDeactivated: 44, variationsDeactivated: 48, couponsExpired: 0 });
+    expect(result).toEqual({ productsDeactivated: 44, variationsDeactivated: 48, skusPrefixed: 48, couponsExpired: 0 });
+    expect((await prisma.variation.findUniqueOrThrow({ where: { id: demoVariation.id } })).sku).toBe(`DEMO-${realSku}`);
+    const created = await realVariation();
+    await prisma.variation.delete({ where: { id: created.id } });
 
     expect(await prisma.product.count({ where: DEMO_PRODUCT_WHERE })).toBe(44);
     expect(await prisma.product.count({ where: { ...DEMO_PRODUCT_WHERE, isActive: true } })).toBe(0);
@@ -205,8 +218,10 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
 
   it('chạy lại: không lỗi, không đổi gì', async () => {
     const { plan, result } = await applyDemoCleanup(prisma, { coupons: 'keep' });
-    expect(result).toEqual({ productsDeactivated: 0, variationsDeactivated: 0, couponsExpired: 0 });
+    expect(result).toEqual({ productsDeactivated: 0, variationsDeactivated: 0, skusPrefixed: 0, couponsExpired: 0 });
     expect(plan.products.active).toBe(0);
+    expect(plan.variations.skuToPrefix).toBe(0);
+    expect(await prisma.variation.count({ where: { sku: { startsWith: 'DEMO-DEMO-' } } })).toBe(0);
   });
 
   it('--coupons=expire --keep-coupon=WELCOME30: tắt hai mã còn lại, WELCOME30 vẫn dùng được; go-live FAIL tới khi chấp nhận giữ', async () => {

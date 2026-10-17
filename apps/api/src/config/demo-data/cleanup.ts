@@ -22,7 +22,7 @@ import {
  *
  * Sản phẩm và biến thể chỉ TẮT (isActive=false), không xoá: đơn, đánh giá, giỏ, giờ vàng còn trỏ tới chúng, và mọi nơi
  * khách thấy hoặc đặt hàng (catalog, tìm kiếm, gian hàng, trang nhãn, sitemap, giờ vàng, giỏ/checkout) đều lọc isActive.
- * pancakeHold để nguyên NULL = "admin tắt": đồng bộ Pancake không tự bật lại. Mã giảm giá chỉ đổi khi có
+ * pancakeHold để nguyên NULL = "admin tắt": đồng bộ Pancake không tự bật lại. SKU demo đổi thành `DEMO-<sku>` để trả SKU gốc. Mã giảm giá chỉ đổi khi có
  * `--coupons=expire` (trừ mã ghi ở `--keep-coupon`), vì chủ dự án có thể giữ WELCOME30 làm mã ra mắt. Danh mục và nhãn
  * giữ nguyên, chỉ báo.
  */
@@ -85,8 +85,11 @@ export interface DemoCouponRow {
 
 export interface DemoCleanupPlan {
   products: { expected: number; found: number; active: number; idMismatch: Array<{ id: string; pancakeId: string }> };
-  /** `extraActive`: biến thể đang bán nằm dưới sản phẩm demo nhưng không có trong migration (thêm sau); cũng bị tắt. */
-  variations: { expected: number; found: number; active: number; extraActive: number };
+  /**
+   * `extraActive`: biến thể đang bán nằm dưới sản phẩm demo nhưng không có trong migration (thêm sau); cũng bị tắt.
+   * `skuToPrefix`: biến thể demo (theo danh sách migration) còn giữ SKU gốc, `--apply` đổi thành `DEMO-<sku>`.
+   */
+  variations: { expected: number; found: number; active: number; extraActive: number; skuToPrefix: number };
   references: Array<{ label: string; table: string; rows: number; detail?: string }>;
   coupons: DemoCouponRow[];
   categories: Array<{ id: string; slug: string; exists: boolean; publicDemo: number; publicNonDemo: number }>;
@@ -96,10 +99,18 @@ export interface DemoCleanupPlan {
 export interface CleanupResult {
   productsDeactivated: number;
   variationsDeactivated: number;
+  skusPrefixed: number;
   couponsExpired: number;
 }
 
 type Db = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * `variations.sku` là unique. Pancake có SKU thật trùng SKU demo (vd FUWA-DW-1L) thì mỗi lượt đồng bộ ném P2002 khi tạo
+ * biến thể thật, nên `--apply` trả SKU lại bằng cách thêm tiền tố. Chỉ biến thể trong danh sách migration (pancakeId
+ * `seed-...` không có trên Pancake, đồng bộ không ghi đè).
+ */
+export const DEMO_SKU_PREFIX = 'DEMO-';
 
 /** `pancakeId NOT IN (...)` bỏ luôn dòng NULL (hàng đối tác tự giao), nên phải nêu NULL riêng. */
 const NON_DEMO_PRODUCT_WHERE = {
@@ -114,7 +125,7 @@ export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<D
     .filter((p) => migrationIdByPancake.get(p.pancakeId!) !== p.id)
     .map((p) => ({ id: p.id, pancakeId: p.pancakeId! }));
 
-  const variations = await db.variation.findMany({ where: DEMO_VARIATION_WHERE, select: { id: true, pancakeId: true, isActive: true } });
+  const variations = await db.variation.findMany({ where: DEMO_VARIATION_WHERE, select: { id: true, pancakeId: true, isActive: true, sku: true } });
   const demoVarPancake = new Set(DEMO_VARIATION_PANCAKE_IDS);
   const isListed = (v: { pancakeId: string | null }) => v.pancakeId !== null && demoVarPancake.has(v.pancakeId);
 
@@ -197,6 +208,7 @@ export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<D
       found: variations.filter(isListed).length,
       active: variations.filter((v) => isListed(v) && v.isActive).length,
       extraActive: variations.filter((v) => !isListed(v) && v.isActive).length,
+      skuToPrefix: variations.filter((v) => isListed(v) && !v.sku.startsWith(DEMO_SKU_PREFIX)).length,
     },
     references,
     coupons,
@@ -246,6 +258,12 @@ export async function applyDemoCleanup(
       if (!hasDemoData(plan)) throw new NoDemoDataError();
       const products = await tx.product.updateMany({ where: { ...DEMO_PRODUCT_WHERE, isActive: true }, data: { isActive: false } });
       const variations = await tx.variation.updateMany({ where: { ...DEMO_VARIATION_WHERE, isActive: true }, data: { isActive: false } });
+      const skusPrefixed = await tx.$executeRawUnsafe(
+        `UPDATE "variations" SET "sku" = $1 || "sku" WHERE "pancakeId" = ANY($2::text[]) AND "sku" NOT LIKE $3`,
+        DEMO_SKU_PREFIX,
+        [...DEMO_VARIATION_PANCAKE_IDS],
+        `${DEMO_SKU_PREFIX}%`,
+      );
       let couponsExpired = 0;
       const couponIds = plan.coupons.filter((c) => isDemoCouponKind(c.kind) && !keep.includes(c.code)).map((c) => c.id);
       if (opts.coupons === 'expire' && couponIds.length > 0) {
@@ -255,7 +273,7 @@ export async function applyDemoCleanup(
         // Cắt cả hạn: trang nhãn (gắn mã vào khuyến mãi, nút chép mã) chỉ xét hạn, không xét isActive.
         await tx.coupon.updateMany({ where: { AND: [couponWhere, { endAt: { gt: now } }, { startAt: { lte: now } }] }, data: { endAt: now } });
       }
-      return { plan, result: { productsDeactivated: products.count, variationsDeactivated: variations.count, couponsExpired } };
+      return { plan, result: { productsDeactivated: products.count, variationsDeactivated: variations.count, skusPrefixed, couponsExpired } };
     },
     { timeout: 60_000, maxWait: 10_000 },
   );
@@ -279,6 +297,9 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
   const v = plan.variations;
   L.push(`2. Biến thể demo: tìm thấy ${v.found}/${v.expected}, đang bán ${v.active} → ${v.active > 0 ? `sẽ TẮT ${v.active}` : 'không cần đổi'}`);
   if (v.extraActive > 0) L.push(`   cộng ${v.extraActive} biến thể khác đang bán nằm dưới sản phẩm demo (thêm sau migration) → sẽ TẮT theo sản phẩm cha`);
+  L.push(
+    `   SKU: ${v.skuToPrefix > 0 ? `sẽ đổi ${v.skuToPrefix} SKU demo thành ${DEMO_SKU_PREFIX}<sku> (trả SKU gốc cho hàng thật đồng bộ từ Pancake)` : 'SKU demo đã mang tiền tố, không cần đổi'}`,
+  );
 
   L.push('3. Đang tham chiếu tới hàng demo (giữ nguyên, không xoá dòng nào):');
   const used = plan.references.filter((r) => r.rows > 0);
@@ -321,5 +342,5 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
 }
 
 export function formatResult(r: CleanupResult): string {
-  return `Đã tắt ${r.productsDeactivated} sản phẩm, ${r.variationsDeactivated} biến thể; đã tắt ${r.couponsExpired} mã giảm giá. Chạy lại go-live check để xác nhận.`;
+  return `Đã tắt ${r.productsDeactivated} sản phẩm, ${r.variationsDeactivated} biến thể; đổi ${r.skusPrefixed} SKU sang ${DEMO_SKU_PREFIX}<sku>; đã tắt ${r.couponsExpired} mã giảm giá. Chạy lại go-live check để xác nhận.`;
 }

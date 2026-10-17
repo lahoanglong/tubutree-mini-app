@@ -5,7 +5,7 @@ const END = new Date('2026-12-31T17:00:00.000Z');
 function plan(over: Partial<DemoCleanupPlan> = {}): DemoCleanupPlan {
   return {
     products: { expected: 44, found: 44, active: 44, idMismatch: [] },
-    variations: { expected: 48, found: 48, active: 48, extraActive: 0 },
+    variations: { expected: 48, found: 48, active: 48, extraActive: 0, skuToPrefix: 48 },
     references: [
       { label: 'dòng đơn hàng', table: 'order_items', rows: 2, detail: '1 đơn' },
       { label: 'giỏ hàng', table: 'cart_items', rows: 0 },
@@ -51,13 +51,13 @@ describe('parseCleanupArgs', () => {
 describe('hasDemoData', () => {
   it('có sản phẩm, biến thể hoặc mã đúng dòng migration là có', () => {
     expect(hasDemoData(plan())).toBe(true);
-    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0 } });
+    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0, skuToPrefix: 0 } });
     expect(hasDemoData(none)).toBe(true);
     expect(hasDemoData({ ...none, coupons: [] })).toBe(false);
   });
 
   it('mã do seed tạo (id khác, điều kiện như bản demo) vẫn tính là có demo; chỉ trùng tên thì không', () => {
-    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0 } });
+    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0, skuToPrefix: 0 } });
     expect(hasDemoData({ ...none, coupons: [{ ...none.coupons[0]!, kind: 'name-only' }] })).toBe(false);
     expect(hasDemoData({ ...none, coupons: [{ ...none.coupons[0]!, kind: 'seed' }] })).toBe(true);
   });
@@ -69,6 +69,7 @@ describe('formatPlan', () => {
     expect(text).toContain('XEM TRƯỚC');
     expect(text).toMatch(/Sản phẩm demo: tìm thấy 44\/44, đang bán 44 → sẽ TẮT 44/);
     expect(text).toMatch(/Biến thể demo: tìm thấy 48\/48, đang bán 48 → sẽ TẮT 48/);
+    expect(text).toContain('sẽ đổi 48 SKU demo thành DEMO-<sku>');
     expect(text).toContain('order_items');
     expect(text).toContain('1 đơn');
     expect(text).toMatch(/WELCOME30.*GIỮ NGUYÊN/);
@@ -96,7 +97,7 @@ describe('formatPlan', () => {
   it('đã dọn: không còn gì để đổi', () => {
     const done = plan({
       products: { expected: 44, found: 44, active: 0, idMismatch: [] },
-      variations: { expected: 48, found: 48, active: 0, extraActive: 0 },
+      variations: { expected: 48, found: 48, active: 0, extraActive: 0, skuToPrefix: 0 },
     });
     expect(formatPlan(done, { apply: false, coupons: 'keep', keepCoupons: [] })).toMatch(/đang bán 0 → không cần đổi/);
   });
@@ -105,7 +106,7 @@ describe('formatPlan', () => {
     const text = formatPlan(
       plan({
         products: { expected: 44, found: 44, active: 44, idMismatch: [{ id: 'cmx', pancakeId: 'seed-p-fuwa-floor' }] },
-        variations: { expected: 48, found: 48, active: 48, extraActive: 2 },
+        variations: { expected: 48, found: 48, active: 48, extraActive: 2, skuToPrefix: 48 },
       }),
       { apply: false, coupons: 'keep', keepCoupons: [] },
     );
@@ -116,6 +117,6 @@ describe('formatPlan', () => {
 
 describe('formatResult', () => {
   it('in số dòng đã đổi', () => {
-    expect(formatResult({ productsDeactivated: 44, variationsDeactivated: 48, couponsExpired: 0 })).toMatch(/44 sản phẩm.*48 biến thể.*0 mã/s);
+    expect(formatResult({ productsDeactivated: 44, variationsDeactivated: 48, skusPrefixed: 48, couponsExpired: 0 })).toMatch(/44 sản phẩm.*48 biến thể.*48 SKU sang DEMO-.*0 mã/s);
   });
 });
