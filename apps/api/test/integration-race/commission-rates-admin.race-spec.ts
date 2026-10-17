@@ -233,6 +233,29 @@ describe('Admin đặt % hoa hồng CTV (real Postgres)', () => {
     }
   });
 
+  it('"áp cho chưa có %" song song với đặt % sản phẩm / biến thể / CSV: không deadlock, không đè mức vừa đặt', async () => {
+    for (let round = 0; round < 4; round++) {
+      const vs = await Promise.all(Array.from({ length: 8 }, () => pancakeVariation(100_000)));
+      const csv = vs
+        .slice(5)
+        .reverse()
+        .map((v) => `${v.sku},14`)
+        .join('\n');
+      const results = await Promise.allSettled([
+        admin.fillMissingRates(adminUserId, 5),
+        ...vs.slice(0, 3).map((v) => admin.setProductRate(adminUserId, v.productId, 12)),
+        ...vs
+          .slice(3, 5)
+          .reverse()
+          .map((v) => admin.setVariationRate(adminUserId, v.id, 13)),
+        admin.applyImport(adminUserId, csv),
+        admin.fillMissingRates(adminUserId, 6),
+      ]);
+      expect(summarize(results).errors).toEqual([]);
+      expect(await Promise.all(vs.map((v) => rateOf(v.id)))).toEqual([12, 12, 12, 13, 13, 14, 14, 14]);
+    }
+  });
+
   it('danh sách keyset (tên trùng nhau): đi hết các trang, mỗi sản phẩm đúng một lần; lọc chưa có % và tìm theo SKU', async () => {
     const tag = randCode(6);
     const made: string[] = [];

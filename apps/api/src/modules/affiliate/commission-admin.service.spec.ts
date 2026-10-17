@@ -26,23 +26,30 @@ beforeEach(() => {
 afterEach(() => logSpy.mockRestore());
 
 describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
-  it('đặt % một biến thể: ghi Decimal, log admin + cũ → mới', async () => {
-    const update = jest.fn().mockResolvedValue({ id: 'v1', sku: 'A1', affiliateRate: dec(12.5) });
-    const { svc } = make({
-      variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', sku: 'A1', affiliateRate: null }), update },
-    });
-    const r = await svc.setVariationRate('admin-1', 'v1', 12.5);
-    expect(r).toEqual({ id: 'v1', sku: 'A1', affiliateRate: 12.5 });
-    expect(update.mock.calls[0][0].data.affiliateRate.toString()).toBe('12.5');
-    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toMatch(/admin-1.*A1: chưa có → 12\.5%/);
+  const sql = (call: unknown[]) => (call[0] as string[]).join('?');
+
+  it('đặt % một biến thể: khoá dòng trong transaction, ghi Decimal, log admin + cũ→mới', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'v1', sku: 'A1', affiliateRate: null }]);
+    const { svc, prisma } = make({ variation: { update }, $queryRaw });
+    const r = await svc.setVariationRate('admin-1', 'v1', 12);
+    expect(r).toEqual({ id: 'v1', sku: 'A1', affiliateRate: 12 });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(sql($queryRaw.mock.calls[0])).toMatch(/FROM "variations" WHERE "id" = \? FOR UPDATE/);
+    expect($queryRaw.mock.calls[0][1]).toBe('v1');
+    expect($queryRaw.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]!);
+    expect(update.mock.calls[0][0].where).toEqual({ id: 'v1' });
+    expect(update.mock.calls[0][0].data.affiliateRate.toString()).toBe('12');
+    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toMatch(/admin-1.*A1: chưa có→12/);
   });
 
-  it('vượt trần cấu hình / âm / quá 2 chữ số thập phân → 400, không ghi', async () => {
+  it('vượt trần cấu hình / âm / quá 2 chữ số thập phân → 400, không mở transaction', async () => {
     const update = jest.fn();
-    const { svc } = make({ variation: { findUnique: jest.fn(), update } }, 20);
+    const { svc, prisma } = make({ variation: { update } }, 20);
     await expect(svc.setVariationRate('a', 'v1', 25)).rejects.toThrow('vượt trần 20%');
     await expect(svc.setVariationRate('a', 'v1', -1)).rejects.toBeInstanceOf(BadRequestException);
     await expect(svc.setVariationRate('a', 'v1', 1.234)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -53,27 +60,67 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect(await make({}, 30).svc.maxRate()).toBe(30);
   });
 
-  it('biến thể không tồn tại → 404', async () => {
-    const { svc } = make({ variation: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
+  it('biến thể không tồn tại → 404, không ghi', async () => {
+    const update = jest.fn();
+    const { svc } = make({ variation: { update }, $queryRaw: jest.fn().mockResolvedValue([]) });
     await expect(svc.setVariationRate('a', 'nope', 10)).rejects.toBeInstanceOf(NotFoundException);
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it('đặt % cả sản phẩm: chỉ biến thể đang bán; không còn biến thể đang bán → 400', async () => {
-    const updateMany = jest.fn().mockResolvedValueOnce({ count: 3 }).mockResolvedValueOnce({ count: 0 });
-    const { svc } = make({
-      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', name: 'SP' }) },
-      variation: { updateMany },
-    });
-    expect(await svc.setProductRate('a', 'p1', 8)).toEqual({ productId: 'p1', updated: 3, affiliateRate: 8 });
-    expect(updateMany.mock.calls[0][0].where).toEqual({ productId: 'p1', isActive: true });
+  it('đặt % cả sản phẩm: khoá biến thể đang bán theo id, ghi đúng các id đó, log từng SKU cũ→mới', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 2 });
+    const $queryRaw = jest.fn().mockResolvedValue([
+      { id: 'v1', sku: 'A1', affiliateRate: null },
+      { id: 'v2', sku: 'A2', affiliateRate: dec(5) },
+    ]);
+    const { svc } = make({ product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', name: 'SP' }) }, variation: { updateMany }, $queryRaw });
+    expect(await svc.setProductRate('admin-2', 'p1', 8)).toEqual({ productId: 'p1', updated: 2, affiliateRate: 8 });
+    expect(sql($queryRaw.mock.calls[0])).toMatch(/"productId" = \? AND "isActive" = true\s+ORDER BY "id" FOR UPDATE/);
+    expect($queryRaw.mock.calls[0][1]).toBe('p1');
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ['v1', 'v2'] } });
+    expect(updateMany.mock.calls[0][0].data.affiliateRate.toString()).toBe('8');
+    const logs = logSpy.mock.calls.map((c) => c[0]).join('\n');
+    expect(logs).toContain('admin-2');
+    expect(logs).toContain('A1: chưa có→8; A2: 5→8');
+  });
+
+  it('đặt % cả sản phẩm: không có sản phẩm → 404; không còn biến thể đang bán → 400; cả hai không ghi', async () => {
+    const updateMany = jest.fn();
+    const findUnique = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'p1', name: 'SP' });
+    const { svc } = make({ product: { findUnique }, variation: { updateMany }, $queryRaw: jest.fn().mockResolvedValue([]) });
+    await expect(svc.setProductRate('a', 'p1', 8)).rejects.toBeInstanceOf(NotFoundException);
     await expect(svc.setProductRate('a', 'p1', 8)).rejects.toThrow('không có biến thể đang bán');
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it('áp % cho biến thể chưa có %: chỉ NULL (không đè 0 cố ý hay mức đã đặt), chỉ hàng Tubu, chỉ đang bán', async () => {
-    const updateMany = jest.fn().mockResolvedValue({ count: 42 });
-    const { svc } = make({ variation: { updateMany } });
-    expect(await svc.fillMissingRates('a', 10)).toEqual({ updated: 42, affiliateRate: 10 });
-    expect(updateMany.mock.calls[0][0].where).toEqual({ isActive: true, affiliateRate: null, product: { storefrontId: null } });
+  it('áp % cho biến thể chưa có %: khoá đúng tập (NULL, đang bán, hàng Tubu) theo id rồi ghi các id đó, vẫn kèm IS NULL', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 2 });
+    const $queryRaw = jest.fn().mockResolvedValue([
+      { id: 'v1', sku: 'A1', affiliateRate: null },
+      { id: 'v3', sku: 'C3', affiliateRate: null },
+    ]);
+    const { svc } = make({ variation: { updateMany }, $queryRaw });
+    expect(await svc.fillMissingRates('admin-3', 10)).toEqual({ updated: 2, affiliateRate: 10 });
+    const q = sql($queryRaw.mock.calls[0]);
+    expect(q).toMatch(/v\."isActive" = true AND v\."affiliateRate" IS NULL AND p\."storefrontId" IS NULL/);
+    expect(q).toMatch(/ORDER BY v\."id" FOR UPDATE OF v/);
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ['v1', 'v3'] }, affiliateRate: null });
+    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toContain('A1: chưa có→10; C3: chưa có→10');
+  });
+
+  it('áp % khi không còn biến thể nào chưa có % → 0, không ghi', async () => {
+    const updateMany = jest.fn();
+    const { svc } = make({ variation: { updateMany }, $queryRaw: jest.fn().mockResolvedValue([]) });
+    expect(await svc.fillMissingRates('a', 10)).toEqual({ updated: 0, affiliateRate: 10 });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('log theo lô 100 thay đổi mỗi dòng', async () => {
+    const rows = Array.from({ length: 250 }, (_, i) => ({ id: `v${i}`, sku: `S${i}`, affiliateRate: null }));
+    const { svc } = make({ variation: { updateMany: jest.fn() }, $queryRaw: jest.fn().mockResolvedValue(rows) });
+    await svc.fillMissingRates('a', 10);
+    const chunks = logSpy.mock.calls.map((c) => c[0] as string).filter((l) => /\(\d+–\d+\/250\)/.test(l));
+    expect(chunks.map((l) => /\((\d+–\d+)\/250\)/.exec(l)![1])).toEqual(['1–100', '101–200', '201–250']);
   });
 });
 
@@ -136,6 +183,24 @@ describe('CommissionAdminService — nhập CSV "sku,%"', () => {
     expect(logs).toContain('admin-9');
     expect(logs).toContain('A1: chưa có→10');
     expect(logs).toContain('C3: 5→10');
+  });
+
+  it('áp: log ghi trong transaction (trước commit)', async () => {
+    const { svc, prisma } = make({ variation: variationMock() });
+    let inTx = false;
+    const seen: boolean[] = [];
+    logSpy.mockImplementation(() => void seen.push(inTx));
+    prisma.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => {
+      inTx = true;
+      try {
+        return await fn(prisma);
+      } finally {
+        inTx = false;
+      }
+    });
+    await svc.applyImport('a', 'A1,10');
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
   });
 
   it('áp: không có gì để đổi → 400', async () => {

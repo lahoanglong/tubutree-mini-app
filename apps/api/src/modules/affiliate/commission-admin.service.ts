@@ -33,6 +33,10 @@ type Db = PrismaService | Prisma.TransactionClient;
 
 const toRate = (d: Prisma.Decimal | null): number | null => (d === null ? null : Number(d));
 
+type LockedRate = { id: string; sku: string; affiliateRate: Prisma.Decimal | null };
+type RateChange = { sku: string; from: number | null; to: number };
+const toChanges = (rows: LockedRate[], to: number): RateChange[] => rows.map((v) => ({ sku: v.sku, from: toRate(v.affiliateRate), to }));
+
 /** Cursor "Tải thêm" của danh sách % hoa hồng: (tên, id) sản phẩm cuối trang, base64url JSON — web coi là chuỗi mờ. */
 export function encodeListCursor(p: { name: string; id: string }): string {
   return Buffer.from(JSON.stringify([p.name, p.id]), 'utf8').toString('base64url');
@@ -150,44 +154,67 @@ export class CommissionAdminService {
   /** Đặt % cho một biến thể (kể cả biến thể đang tắt — bật lại thì đã có %). */
   async setVariationRate(adminId: string, variationId: string, rate: number) {
     await this.assertRate(rate);
-    const before = await this.prisma.variation.findUnique({ where: { id: variationId }, select: { id: true, sku: true, affiliateRate: true } });
-    if (!before) throw new NotFoundException('Không tìm thấy biến thể.');
-    const after = await this.prisma.variation.update({
-      where: { id: variationId },
-      data: { affiliateRate: new Prisma.Decimal(rate) },
-      select: { id: true, sku: true, affiliateRate: true },
+    return this.prisma.$transaction(async (tx) => {
+      const [before] = await tx.$queryRaw<LockedRate[]>`
+        SELECT "id", "sku", "affiliateRate" FROM "variations" WHERE "id" = ${variationId} FOR UPDATE`;
+      if (!before) throw new NotFoundException('Không tìm thấy biến thể.');
+      await tx.variation.update({ where: { id: variationId }, data: { affiliateRate: new Prisma.Decimal(rate) } });
+      this.logRateChanges(adminId, 'đặt % hoa hồng CTV cho biến thể', toChanges([before], rate));
+      return { id: before.id, sku: before.sku, affiliateRate: rate };
     });
-    this.logger.log(`Admin ${adminId} đặt % hoa hồng CTV ${before.sku}: ${toRate(before.affiliateRate) ?? 'chưa có'} → ${rate}%.`);
-    return { id: after.id, sku: after.sku, affiliateRate: toRate(after.affiliateRate) };
   }
 
   /** Đặt cùng một % cho mọi biến thể ĐANG BÁN của sản phẩm (biến thể đang tắt giữ nguyên). */
   async setProductRate(adminId: string, productId: string, rate: number) {
     await this.assertRate(rate);
-    const product = await this.prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true } });
-    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    const { count } = await this.prisma.variation.updateMany({
-      where: { productId, isActive: true },
-      data: { affiliateRate: new Prisma.Decimal(rate) },
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, name: true } });
+      if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+      const locked = await tx.$queryRaw<LockedRate[]>`
+        SELECT "id", "sku", "affiliateRate" FROM "variations"
+        WHERE "productId" = ${productId} AND "isActive" = true
+        ORDER BY "id" FOR UPDATE`;
+      if (locked.length === 0) throw new BadRequestException('Sản phẩm không có biến thể đang bán để đặt %.');
+      await tx.variation.updateMany({ where: { id: { in: locked.map((v) => v.id) } }, data: { affiliateRate: new Prisma.Decimal(rate) } });
+      this.logRateChanges(adminId, `đặt % hoa hồng CTV cho sản phẩm ${productId} (${product.name})`, toChanges(locked, rate));
+      return { productId, updated: locked.length, affiliateRate: rate };
     });
-    if (count === 0) throw new BadRequestException('Sản phẩm không có biến thể đang bán để đặt %.');
-    this.logger.log(`Admin ${adminId} đặt % hoa hồng CTV ${rate}% cho ${count} biến thể đang bán của sản phẩm ${productId} (${product.name}).`);
-    return { productId, updated: count, affiliateRate: rate };
   }
 
   /**
    * Áp % cho mọi biến thể đang bán CHƯA có % của hàng Tubu. Hàng đối tác (gian hàng tự đăng) không áp hàng loạt: hoa hồng CTV
-   * Tubu trả, không trừ vào đối soát đối tác, nên đặt từng sản phẩm. `WHERE affiliateRate IS NULL` kiểm lại trên từng dòng lúc
-   * ghi, nên mức admin khác vừa đặt song song không bị ghi đè.
+   * Tubu trả, không trừ vào đối soát đối tác, nên đặt từng sản phẩm. Khoá theo id rồi mới ghi: dòng admin khác vừa đặt % song
+   * song bị Postgres loại khỏi tập khoá (kiểm lại `affiliateRate IS NULL` trên bản mới), nên không bị ghi đè.
    */
   async fillMissingRates(adminId: string, rate: number) {
     await this.assertRate(rate);
-    const { count } = await this.prisma.variation.updateMany({
-      where: { isActive: true, affiliateRate: null, product: { storefrontId: null } },
-      data: { affiliateRate: new Prisma.Decimal(rate) },
-    });
-    this.logger.log(`Admin ${adminId} áp % hoa hồng CTV ${rate}% cho ${count} biến thể đang bán chưa có % (hàng Tubu).`);
-    return { updated: count, affiliateRate: rate };
+    return this.prisma.$transaction(
+      async (tx) => {
+        const locked = await tx.$queryRaw<LockedRate[]>`
+          SELECT v."id", v."sku", v."affiliateRate" FROM "variations" v
+          JOIN "products" p ON p."id" = v."productId"
+          WHERE v."isActive" = true AND v."affiliateRate" IS NULL AND p."storefrontId" IS NULL
+          ORDER BY v."id" FOR UPDATE OF v`;
+        if (locked.length) {
+          await tx.variation.updateMany({
+            where: { id: { in: locked.map((v) => v.id) }, affiliateRate: null },
+            data: { affiliateRate: new Prisma.Decimal(rate) },
+          });
+        }
+        this.logRateChanges(adminId, 'áp % hoa hồng CTV cho biến thể đang bán chưa có % (hàng Tubu)', toChanges(locked, rate));
+        return { updated: locked.length, affiliateRate: rate };
+      },
+      { timeout: 30_000 },
+    );
+  }
+
+  /** Log "sku: cũ→mới" theo lô (một dòng tối đa LOG_CHUNK thay đổi). Gọi trong transaction, ngay trước commit. */
+  private logRateChanges(adminId: string, action: string, changes: RateChange[], summary = `đổi ${changes.length} biến thể`) {
+    this.logger.log(`Admin ${adminId} ${action}: ${summary}.`);
+    for (let i = 0; i < changes.length; i += LOG_CHUNK) {
+      const part = changes.slice(i, i + LOG_CHUNK).map((c) => `${c.sku}: ${c.from ?? 'chưa có'}→${c.to}`);
+      this.logger.log(`Admin ${adminId} ${action} (${i + 1}–${i + part.length}/${changes.length}): ${part.join('; ')}`);
+    }
   }
 
   /** Xem trước một lần nhập CSV "sku,%": không ghi gì. */
@@ -217,16 +244,17 @@ export class CommissionAdminService {
         for (const [rate, skus] of byRate) {
           await tx.variation.updateMany({ where: { sku: { in: skus } }, data: { affiliateRate: new Prisma.Decimal(rate) } });
         }
+        this.logRateChanges(
+          adminId,
+          'nhập CSV % hoa hồng CTV',
+          changes.map((r) => ({ sku: r.sku, from: r.currentRate, to: r.rate! })),
+          `đổi ${changes.length} biến thể, giữ nguyên ${preview.counts.UNCHANGED}, không khớp ${preview.counts.NOT_FOUND}`,
+        );
         return { preview, changes };
       },
       { timeout: 30_000 },
     );
     const { preview, changes } = result;
-    this.logger.log(`Admin ${adminId} nhập CSV % hoa hồng CTV: đổi ${changes.length} biến thể, giữ nguyên ${preview.counts.UNCHANGED}, không khớp ${preview.counts.NOT_FOUND}.`);
-    for (let i = 0; i < changes.length; i += LOG_CHUNK) {
-      const part = changes.slice(i, i + LOG_CHUNK).map((r) => `${r.sku}: ${r.currentRate ?? 'chưa có'}→${r.rate}`);
-      this.logger.log(`Admin ${adminId} nhập CSV % hoa hồng CTV (${i + 1}–${i + part.length}/${changes.length}): ${part.join('; ')}`);
-    }
     return {
       updated: changes.length,
       unchanged: preview.counts.UNCHANGED,
