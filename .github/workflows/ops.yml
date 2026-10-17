@@ -320,7 +320,7 @@ jobs:
                 ;;
 
               crontab)
-                echo "=== Cài cron backup hằng ngày 02:00 ==="
+                echo "=== Cài cron backup 6 giờ/lần (phút 17: 00:17, 06:17, 12:17, 18:17), giữ 28 bản gần nhất ==="
                 SCRIPT="$(pwd)/tools/backup/backup-db.sh"
                 # Cron chạy bằng user SSH: thư mục backup và file log phải thuộc user này, nếu không shell không mở
                 # được file log để redirect và bỏ qua luôn lệnh backup (không có bản nào, không có log báo lỗi).
@@ -330,7 +330,7 @@ jobs:
                 # Bản ngoài máy (RCLONE_REMOTE, biến repo BACKUP_RCLONE_REMOTE) cần `rclone config` sẵn trên máy
                 # chủ — xem tools/backup/README.md. Trống thì chỉ giữ bản local (cảnh báo bên dưới).
                 REMOTE="${{ vars.BACKUP_RCLONE_REMOTE || '' }}"
-                LINE="0 2 * * * COMPOSE_FILE=$(pwd)/$COMPOSE_FILE POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB RCLONE_REMOTE=$REMOTE HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-} $SCRIPT >> /var/log/tubutree-backup.log 2>&1"
+                LINE="17 */6 * * * COMPOSE_FILE=$(pwd)/$COMPOSE_FILE POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB BACKUP_LABEL=cron BACKUP_KEEP_COUNT=28 RCLONE_REMOTE=$REMOTE HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-} $SCRIPT >> /var/log/tubutree-backup.log 2>&1"
                 # grep -v khớp 0 dòng là BÌNH THƯỜNG (crontab trống, hoặc dòng cũ y hệt bị lọc ra
                 # trước khi echo dòng mới) → không phải lỗi, || true để không cắt ngang trước `echo "$LINE"`.
                 ( crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh' || true; echo "$LINE" ) | crontab -
@@ -339,7 +339,7 @@ jobs:
                 echo "=== crontab hiện tại (che URL healthcheck) ==="
                 crontab -l | grep backup | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'
                 echo "=== Chạy thử backup một lần với đúng biến của cron (ghi vào cùng file log) ==="
-                COMPOSE_FILE="$(pwd)/$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" RCLONE_REMOTE="$REMOTE" \
+                COMPOSE_FILE="$(pwd)/$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" BACKUP_LABEL=cron BACKUP_KEEP_COUNT=28 RCLONE_REMOTE="$REMOTE" \
                   HEALTHCHECK_URL="${BACKUP_HEALTHCHECK_URL:-}" bash "$SCRIPT" >> /var/log/tubutree-backup.log 2>&1 \
                   || { tail -20 /var/log/tubutree-backup.log; echo "Backup chạy thử LỖI — xem log ở trên."; exit 1; }
                 tail -5 /var/log/tubutree-backup.log
