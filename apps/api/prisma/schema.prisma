@@ -701,46 +701,46 @@ model StorefrontItem {
 }
 
 model Variation {
-  id            String   @id @default(cuid())
+  id                            String    @id @default(cuid())
   /// NULL = biến thể không có trên Pancake (sản phẩm đối tác tự giao).
-  pancakeId     String?  @unique
-  productId     String
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku           String   @unique
-  name          String
-  attributes    Json
-  retailPrice   Int
-  salePrice     Int?
-  dealerPrices  Json? // {tier_silver: 200000, tier_gold: 190000}
-  affiliateRate Decimal? // % hoa hồng CTV (import Excel) — spec 15.2 affiliate.product_rate_source
+  pancakeId                     String?   @unique
+  productId                     String
+  product                       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                           String    @unique
+  name                          String
+  attributes                    Json
+  retailPrice                   Int
+  salePrice                     Int?
+  dealerPrices                  Json? // {tier_silver: 200000, tier_gold: 190000}
+  affiliateRate                 Decimal? // % hoa hồng CTV (import Excel) — spec 15.2 affiliate.product_rate_source
   /// Tồn kho BÁN ĐƯỢC — mọi nơi kiểm tồn/hiển thị đọc đúng cột này (không đổi).
-  stock         Int      @default(0)
+  stock                         Int       @default(0)
   /// Số `remain_quantity` mà Pancake báo ở lần đồng bộ gần nhất. NULL = chưa từng đồng bộ
   /// (sản phẩm do merchant tự tạo, hoặc variation có trước khi có cơ chế này).
-  pancakeStock  Int?
+  pancakeStock                  Int?
   /// Số đơn vị đã bán bằng đơn CỦA TA mà số liệu Pancake chưa phản ánh.
   /// Sync tính `stock = pancakeStock_mới − reservedStock`, và mỗi khi số Pancake GIẢM thì trừ
   /// bấy nhiêu khỏi `reservedStock`. Nhờ đó công thức đúng cho cả hai trường hợp: Pancake có
   /// tự trừ tồn khi ta tạo đơn (số giảm ⇒ nhả giữ chỗ) lẫn không tự trừ (số đứng yên ⇒ giữ chỗ
   /// còn nguyên). Xem docs/2026-09-11-P0-3-pancake-stock-decision-brief.md.
-  reservedStock Int      @default(0)
+  reservedStock                 Int       @default(0)
   /// `updated_at` (giờ Pancake) của webhook tồn kho gần nhất đã áp. Chỉ so webhook với webhook (Pancake gửi không theo thứ
   /// tự, BullMQ thử lại): webhook cũ hơn mốc này tới sau thì không áp. NULL = chưa áp webhook nào có mốc giờ. Đồng bộ danh mục
   /// không đọc/ghi cột này: `updated_at` không mang múi giờ, Node đọc theo múi giờ của tiến trình, nên không bao giờ so nó với
   /// đồng hồ máy chủ — lượt đồng bộ đi bằng hai cột dưới.
-  pancakeStockEventAt DateTime?
+  pancakeStockEventAt           DateTime?
   /// Lúc (giờ máy chủ Tubu) lượt đồng bộ danh mục bắt đầu đọc trang Pancake mang số tồn đang áp. Webhook tồn kho NHẬN trước
   /// mốc này (hàng đợi chậm, Redis sập rồi xử lý sau) mang số cũ hơn lần đọc nên không áp. NULL = chưa lượt đồng bộ nào áp mốc.
-  pancakeStockSyncReadAt DateTime?
+  pancakeStockSyncReadAt        DateTime?
   /// Lúc (giờ máy chủ Tubu, `PancakeWebhookEvent.receivedAt`) nhận webhook tồn kho muộn nhất đã áp. Lượt đồng bộ bắt đầu đọc
   /// trước mốc này thì không ghi đè (webhook có thể mới hơn số nó đã đọc). NULL = chưa áp webhook nào kể từ khi có cột.
   pancakeStockWebhookReceivedAt DateTime?
-  isActive      Boolean  @default(true)
+  isActive                      Boolean   @default(true)
   /// Lý do đồng bộ Pancake tự tắt biến thể: REMOVED (Pancake xoá / không còn trong danh mục) | NO_PRICE
   /// (tạo mới mà thiếu giá). NULL = đồng bộ không giữ — isActive=false khi đó là do admin/merchant tắt,
   /// đồng bộ không được tự bật lại.
-  pancakeHold   String?
-  weight        Int?
+  pancakeHold                   String?
+  weight                        Int?
 
   cartItems          CartItem[]
   dealerPriceHistory DealerPriceHistory[]
@@ -1301,32 +1301,53 @@ enum CouponScope {
   USER_GROUP
   BIRTHDAY
   INVITE
+  // Mã ẩn (thẻ in bỏ hộp hàng): chỉ vào ví của khách đã nhận qua link `?claim=` hoặc gõ mã ở giỏ (coupon_claims).
+  CLAIM
 }
 
 model Coupon {
-  id           String             @id @default(cuid())
-  code         String             @unique
-  type         CouponType
-  value        Int
-  minOrder     Int?
-  maxDiscount  Int?
-  startAt      DateTime
-  endAt        DateTime
-  usageLimit   Int?
-  usedCount    Int                @default(0) // B4: bộ đếm atomic dùng cho updateMany guard
-  perUserLimit Int                @default(1)
+  id              String             @id @default(cuid())
+  code            String             @unique
+  type            CouponType
+  value           Int
+  minOrder        Int?
+  maxDiscount     Int?
+  startAt         DateTime
+  endAt           DateTime
+  usageLimit      Int?
+  usedCount       Int                @default(0) // B4: bộ đếm atomic dùng cho updateMany guard
+  perUserLimit    Int                @default(1)
   // { productIds: string[] } = chỉ áp khi giỏ có các sản phẩm đó, mức giảm/minOrder tính trên chúng.
-  applyTo      Json?
-  isStackable  Boolean            @default(false)
+  applyTo         Json?
+  isStackable     Boolean            @default(false)
   // Admin tắt mã (lộ mã/đặt nhầm giá trị) mà không xoá lịch sử dùng.
-  isActive     Boolean            @default(true)
-  scope        CouponScope
-  scopeMeta    Json?
-  redemptions  CouponRedemption[]
+  isActive        Boolean            @default(true)
+  scope           CouponScope
+  scopeMeta       Json?
+  redemptions     CouponRedemption[]
   // Remarketing (nhắc voucher cá nhân sắp hết hạn): null = chưa nhắc.
-  remindedAt   DateTime?
+  remindedAt      DateTime?
+  // Chỉ khách chưa có đơn nào (trừ đơn huỷ) dùng được; kiểm lại trong transaction đặt đơn (common/first-order.ts).
+  newCustomerOnly Boolean            @default(false)
+  // Lô mã in thẻ do admin sinh cùng cấu hình: gom số đã nhận/đã dùng và xuất lại CSV theo lô.
+  batch           String?
+  claims          CouponClaim[]
 
+  @@index([batch])
   @@map("coupons")
+}
+
+/// Khách đã nhận mã CLAIM vào ví. Mỗi khách nhận một mã một lần; số dòng của một mã không vượt `usageLimit`.
+model CouponClaim {
+  id        String   @id @default(cuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId    String
+  claimedAt DateTime @default(now())
+
+  @@unique([couponId, userId])
+  @@index([userId])
+  @@map("coupon_claims")
 }
 
 model CouponRedemption {

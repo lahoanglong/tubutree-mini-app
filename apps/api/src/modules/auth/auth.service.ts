@@ -437,6 +437,10 @@ export class AuthService {
       await tx.cashbackClick.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.cashbackTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.couponRedemption.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      // Mã thẻ hộp hàng đã nhận (unique couponId + userId): đi theo lượt dùng ở trên; trùng mã thì giữ dòng của target.
+      await tx.$executeRaw`
+        UPDATE "coupon_claims" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "coupon_claims" t WHERE t."userId" = ${tid} AND t."couponId" = g."couponId")`;
       // Gói định kỳ phải theo địa chỉ đã chuyển ở bước 2 (subscriptions.service tạm dừng gói khi
       // address.userId !== sub.userId); lệnh rút bị từ chối hoàn tiền về payout.userId.
       await tx.subscription.updateMany({ where: { userId: gid }, data: { userId: tid } });

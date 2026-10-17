@@ -104,6 +104,37 @@ describe('LoyaltyService.getAvailableCoupons', () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
+  it('D2-03: mã CLAIM chỉ hiện khi khách đã nhận; mã chỉ khách mới ẩn khi khách đã có đơn', async () => {
+    const coupons = [
+      coupon('PUB', 'PUBLIC', null),
+      coupon('CARD_MINE', 'CLAIM', null),
+      // SQL chỉ trả mã CLAIM qua bảng nhận; mã chưa nhận lọt vào (dữ liệu lệch) vẫn bị isCouponEligible chặn.
+      coupon('CARD_OTHER', 'CLAIM', null),
+      { ...coupon('NEWBIE', 'PUBLIC', null), newCustomerOnly: true },
+    ];
+    const prismaFor = (priorOrder: boolean) => {
+      const claimFindMany = jest.fn().mockResolvedValue([{ couponId: 'CARD_MINE' }]);
+      const prisma = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null, zaloId: 'z-me', phone: null }) },
+        $queryRaw: jest.fn().mockResolvedValue(coupons.map((c) => ({ id: c.id }))),
+        coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
+        couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
+        couponClaim: { findMany: claimFindMany },
+        order: { findFirst: jest.fn().mockResolvedValue(priorOrder ? { id: 'o1' } : null) },
+      } as unknown as PrismaService;
+      return { prisma, claimFindMany };
+    };
+    const fresh = prismaFor(false);
+    const newbie = await new LoyaltyService(fresh.prisma, makeConfig()).getAvailableCoupons('me');
+    expect(newbie.map((c) => c.code).sort()).toEqual(['CARD_MINE', 'NEWBIE', 'PUB']);
+    expect(fresh.claimFindMany).toHaveBeenCalledWith({
+      where: { userId: 'me', couponId: { in: ['CARD_MINE', 'CARD_OTHER'] } },
+      select: { couponId: true },
+    });
+    const old = await new LoyaltyService(prismaFor(true).prisma, makeConfig()).getAvailableCoupons('me');
+    expect(old.map((c) => c.code).sort()).toEqual(['CARD_MINE', 'PUB']);
+  });
+
   it('ẩn coupon đã dùng hết lượt cá nhân (perUserLimit)', async () => {
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null, zaloId: 'z-me', phone: null }) },

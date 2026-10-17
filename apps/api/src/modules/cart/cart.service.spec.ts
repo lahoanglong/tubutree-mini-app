@@ -558,6 +558,49 @@ describe('CartService guard tồn kho', () => {
     expect(prisma.cart.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { couponCode: 'SAVE' } });
   });
 
+  describe('D2-03: gõ mã thẻ hộp hàng (mã CLAIM) ở giỏ', () => {
+    const cartPrisma = () =>
+      ({
+        cart: {
+          upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({
+            id: 'c1',
+            couponCode: null,
+            items: [
+              { id: 'ci1', variationId: 'v1', quantity: 1, variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 150000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } } },
+            ],
+          }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+      }) as any;
+
+    it('nhận mã vào ví TRƯỚC khi xét mã (mã ẩn chưa nhận thì xét sẽ báo "không áp dụng cho tài khoản này")', async () => {
+      const order: string[] = [];
+      const claimHiddenForCart = jest.fn().mockImplementation(async () => void order.push('claim'));
+      const validateAndCompute = jest.fn().mockImplementation(async () => {
+        order.push('validate');
+        return { discount: 30000, freeship: false };
+      });
+      const prisma = cartPrisma();
+      await new CartService(prisma, { validateAndCompute } as any, config, flash, analytics, combo, undefined, { claimHiddenForCart } as any).applyCoupon(
+        'u1',
+        ' shopee-ab12 ',
+      );
+      expect(claimHiddenForCart).toHaveBeenCalledWith('u1', 'SHOPEE-AB12');
+      expect(order.slice(0, 2)).toEqual(['claim', 'validate']);
+      expect(prisma.cart.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { couponCode: 'SHOPEE-AB12' } });
+    });
+
+    it('nhận mã bị từ chối (thẻ đã có người nhận, khách cũ...) → báo đúng lý do, không lưu mã vào giỏ', async () => {
+      const claimHiddenForCart = jest.fn().mockRejectedValue(new BadRequestException('Mã ưu đãi này đã được tài khoản khác nhận.'));
+      const prisma = cartPrisma();
+      await expect(
+        new CartService(prisma, { validateAndCompute: jest.fn() } as any, config, flash, analytics, combo, undefined, { claimHiddenForCart } as any).applyCoupon('u1', 'X'),
+      ).rejects.toThrow('Mã ưu đãi này đã được tài khoản khác nhận.');
+      expect(prisma.cart.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('R2-BUYERMINI-3: nói rõ hàng giờ vàng bị loại khỏi điều kiện/giảm giá của mã', () => {
     const flashCart = (couponCode: string | null) => ({
       cart: {
