@@ -416,3 +416,58 @@ describe('SystemConfigService.set — mốc bắt đầu đối soát giao hộ 
     expect(upsert).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('SystemConfigService.set — điểm uy tín cộng đồng và thưởng chuỗi 7 ngày (seed-reference nạp các khoá này)', () => {
+  function mk() {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it.each([
+    ['community.rep_post', 5, [-1, 101, 2.5]],
+    ['community.rep_answer', 2, [-2, 101, 0.5]],
+    ['community.rep_best', 10, [-10, 101, 1.5]],
+    ['community.daily_rep_cap', 30, [-1, 1001, 30.5]],
+  ] as const)('%s: nhận %d và 0, từ chối %j', async (key, fine, badValues) => {
+    for (const ok of [fine, 0]) {
+      const good = mk();
+      await good.svc.set(key, ok, 'admin1');
+      expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+    for (const v of badValues) {
+      const bad = mk();
+      await expect(bad.svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(bad.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('community.rep_thresholds: nhận 4 mốc tăng dần bắt đầu từ 0; từ chối sai số mốc, mốc đầu khác 0, không tăng dần, số lẻ/âm/chuỗi', async () => {
+    const good = mk();
+    await good.svc.set('community.rep_thresholds', [0, 50, 200, 500], 'admin1');
+    expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    const bads: unknown[] = [[0, 50, 200], [0, 50, 200, 500, 900], [10, 50, 200, 500], [0, 200, 50, 500], [0, 50, 50, 500], [0, 50, 200.5, 500], [0, -5, 200, 500], [0, '50', 200, 500], [0, 50, 200, 2_000_000], { 0: 0 }];
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set('community.rep_thresholds', bad as number[], 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('game.streak_7_bonus: nhận { seeds } và bản seed { seeds, free_spins }; từ chối seeds âm/lẻ/quá lớn/thiếu và free_spins sai', async () => {
+    for (const ok of [{ seeds: 20 }, { seeds: 10, free_spins: 1 }, { seeds: 0 }]) {
+      const good = mk();
+      await good.svc.set('game.streak_7_bonus', ok, 'admin1');
+      expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+    const bads: object[] = [{ seeds: -1 }, { seeds: 10.5 }, { seeds: 10_001 }, {}, { seeds: '20' }, { seeds: 10, free_spins: -1 }, { seeds: 10, free_spins: 1.5 }, { seeds: 10, free_spins: 101 }, []];
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set('game.streak_7_bonus', bad, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+});

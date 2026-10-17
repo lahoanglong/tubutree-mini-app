@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SYSTEM_CONFIGS, TIERS } from '../../../prisma/seed';
+import { SystemConfigService } from './system-config.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import {
   BUSINESS_CONFIG_KEYS,
   EXCLUDED_CONFIG_KEYS,
@@ -221,5 +223,18 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
     for (const row of selectReferenceConfigs(SYSTEM_CONFIGS).filter((r) => EXTRA_CONFIGS.some((e) => e.key === r.key))) {
       expect(row).not.toHaveProperty('fallbackSource');
     }
+  });
+
+  // Dòng nạp lên DB thật là dòng admin sửa tiếp: khoá có JSON/mảng/số tiền mà chưa có luật ghi thì gõ nhầm đơn vị là "đã lưu", hệ thống chạy sai.
+  it('mọi khoá bổ sung và khoá giá trị kinh doanh đều có luật ghi, và giá trị nạp tự nó hợp lệ với luật đó', async () => {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const service = new SystemConfigService(prisma);
+    const rows = [...selectBusinessConfigs(SYSTEM_CONFIGS), ...selectReferenceConfigs(SYSTEM_CONFIGS).filter((r) => EXTRA_CONFIGS.some((e) => e.key === r.key))];
+    expect(rows.map((r) => r.key).filter((k) => !SystemConfigService.hasWriteRule(k))).toEqual([]);
+    for (const row of rows) await expect(service.set(row.key, row.value as object, 'admin-it')).resolves.toBeUndefined();
   });
 });
