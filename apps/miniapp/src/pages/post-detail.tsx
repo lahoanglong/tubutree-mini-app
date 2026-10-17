@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Flag, Heart, Leaf, MessageCircle, Pencil, Pin, Sprout, Trash2 } from 'lucide-react';
+import { CheckCircle2, Flag, Heart, MessageCircle, Pencil, Pin, Sprout, Trash2 } from 'lucide-react';
 import {
   getPost,
   getComments,
@@ -32,7 +32,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
-import { RankBadge } from '../components/community/rank-badge';
+import { AuthorLine } from '../components/community/author-line';
 import { KIND_ICON, KIND_LABEL } from '../components/community/post-card';
 
 export default function PostDetailPage() {
@@ -261,8 +261,8 @@ export default function PostDetailPage() {
             {p.isPinned ? vi.community.unpin : vi.community.pin}
           </Button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
             {p.avatar ? (
               <img src={p.avatar} alt="" width={40} height={40} style={{ borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
@@ -280,17 +280,13 @@ export default function PostDetailPage() {
                 <Icon icon={Sprout} size="md" tone="brand" />
               </div>
             )}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Text variant="body-lg" style={{ fontWeight: 600 }}>{p.author}</Text>
-                {p.badge === 'EXPERT' && <ExpertBadge />}
-                <RankBadge level={p.authorLevel} />
-              </div>
-              <Text variant="caption" tone="tertiary" as="div">
-                {timeAgo(p.createdAt)}
-                {p.category ? ` · ${p.category.icon ?? ''} ${p.category.name}` : ''}
-              </Text>
-            </div>
+            <AuthorLine
+              size="lg"
+              name={p.author}
+              badge={p.badge}
+              level={p.authorLevel}
+              meta={`${timeAgo(p.createdAt)}${p.category ? ` · ${p.category.icon ?? ''} ${p.category.name}` : ''}`}
+            />
           </div>
           {p.isOwner ? (
             <div style={{ display: 'flex', gap: 4 }}>
@@ -622,15 +618,6 @@ export default function PostDetailPage() {
   );
 }
 
-function ExpertBadge() {
-  return (
-    <Text variant="label" tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-      <Icon icon={Leaf} size="sm" tone="brand" />
-      {vi.community.expert}
-    </Text>
-  );
-}
-
 /** Skeleton match layout bài viết (avatar+tên, tiêu đề, vài dòng thân bài, ảnh) — dùng cho cả 2 trạng thái loading trước khi có dữ liệu bài viết. */
 function PostSkeleton() {
   return (
@@ -686,8 +673,8 @@ function CommentRow({
           {vi.community.bestAnswer}
         </Text>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
           {comment.avatar ? (
             <img src={comment.avatar} alt="" width={28} height={28} style={{ borderRadius: '50%', objectFit: 'cover' }} />
           ) : (
@@ -705,18 +692,7 @@ function CommentRow({
               <Icon icon={Sprout} size="sm" tone="brand" />
             </div>
           )}
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Text variant="body-sm" style={{ fontWeight: 600 }}>
-                {comment.author}
-              </Text>
-              {comment.badge === 'EXPERT' && <ExpertBadge />}
-              <RankBadge level={comment.authorLevel} />
-            </div>
-            <Text variant="caption" tone="tertiary" as="div">
-              {timeAgo(comment.createdAt)}
-            </Text>
-          </div>
+          <AuthorLine name={comment.author} badge={comment.badge} level={comment.authorLevel} meta={timeAgo(comment.createdAt)} />
         </div>
         {comment.isOwner ? (
           <IconButton

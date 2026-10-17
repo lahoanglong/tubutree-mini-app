@@ -11,7 +11,8 @@ import { Icon } from '../ui/icon';
 import { rowKeyboardProps } from '../ui/row-keyboard';
 import { STRETCHED_LINK_CLASS, STRETCHED_LINK_RESET, stretchedLinkHit44 } from '../ui/stretched-link';
 import { Text } from '../ui/text';
-import { RankBadge } from './rank-badge';
+import { AuthorLine } from './author-line';
+import { dedupeTagsAgainstProducts } from './post-tags';
 
 // Xuất để dùng lại ở community-moderation.tsx (localize post.kind thô "QUESTION"/"TIP"...).
 export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
@@ -45,6 +46,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
   const label = KIND_LABEL[post.kind];
   const KindIcon = KIND_ICON[post.kind];
   const bodyId = useId();
+  const tags = dedupeTagsAgainstProducts(post.tags, post.productTags);
   return (
     <div
       data-testid="post-card"
@@ -69,21 +71,12 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
             <Icon icon={Sprout} size="sm" tone="brand" />
           </div>
         )}
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text variant="body-sm" style={{ fontWeight: 600 }}>{post.author}</Text>
-            {post.badge === 'EXPERT' && (
-              <Text variant="label" tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                <Icon icon={Leaf} size="sm" tone="brand" />
-                {vi.community.expert}
-              </Text>
-            )}
-            <RankBadge level={post.authorLevel} />
-          </div>
-          <Text variant="caption" tone="tertiary" as="div">
-            {timeAgo(post.createdAt)}{post.category ? ` · ${post.category.icon ?? ''} ${post.category.name}` : ''}
-          </Text>
-        </div>
+        <AuthorLine
+          name={post.author}
+          badge={post.badge}
+          level={post.authorLevel}
+          meta={`${timeAgo(post.createdAt)}${post.category ? ` · ${post.category.icon ?? ''} ${post.category.name}` : ''}`}
+        />
       </div>
       {label && (
         <Text variant="label" tone="brand" as="div" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -168,16 +161,17 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
           ))}
         </div>
       )}
-      {post.tags.length > 0 && (
+      {tags.length > 0 && (
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-          {post.tags.map((t) => (
-            <span key={t.slug} style={{ position: 'relative', zIndex: 1, display: 'inline-flex' }}>
+          {tags.map((t) => (
+            <span key={t.slug} style={{ position: 'relative', zIndex: 1, display: 'inline-flex', maxWidth: '60%' }}>
               <Chip
                 size="sm"
                 icon={Hash}
+                style={{ maxWidth: '100%' }}
                 onPress={() => navigate(`/feed?tag=${encodeURIComponent(t.slug)}&tagName=${encodeURIComponent(t.name)}`)}
               >
-                {t.name}
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
               </Chip>
             </span>
           ))}
