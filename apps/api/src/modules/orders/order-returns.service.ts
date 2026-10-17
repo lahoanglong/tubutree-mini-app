@@ -562,11 +562,16 @@ export class OrderReturnsService {
         `Hàng của đơn này trả về gian hàng ${owner?.fulfillerStorefront?.title ?? 'đối tác'}, không về kho Tubu — gian hàng xác nhận đã nhận hàng trong Cổng người bán.`,
       );
     }
-    if (
-      actor.kind === 'MERCHANT' &&
-      (!merchantOrder || !owner?.fulfillerStorefront || !isPartnerStore(owner.fulfillerStorefront) || owner.fulfillerStorefront.ownerUserId !== actor.userId)
-    ) {
-      throw new NotFoundException('Không tìm thấy yêu cầu trả hàng của gian hàng bạn.');
+    if (actor.kind === 'MERCHANT') {
+      const store = owner?.fulfillerStorefront;
+      // Gian hàng đã tắt cờ đối tác vẫn nhận hàng trả của đơn Tubu đã trả tiền (đơn có dòng SALE đã lưu trên phiếu): cùng quy tắc
+      // với khoản đảo tiền còn thu (`openLinesOf`); đơn chưa từng được trả thì không.
+      const allowed =
+        merchantOrder &&
+        !!store &&
+        store.ownerUserId === actor.userId &&
+        (isPartnerStore(store) || (await this.prisma.merchantPayoutLine.count({ where: { orderId: req.orderId, kind: 'SALE' } })) > 0);
+      if (!allowed) throw new NotFoundException('Không tìm thấy yêu cầu trả hàng của gian hàng bạn.');
     }
     if (actor.kind === 'ADMIN') assertNotOwnReturn(actor.userId, req);
     const restocked = await this.prisma.$transaction(async (tx) => {
