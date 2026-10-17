@@ -26,7 +26,7 @@ Bạn dùng: web **Quản trị** (nhóm việc CSKH thấy: Việc cần xử l
 **Huỷ đơn theo yêu cầu khách** (chỉ khi đơn chưa bàn giao vận chuyển):
 1. Mở đơn, bấm "Hủy đơn".
 2. Đọc hộp xác nhận. Hộp ghi rõ hệ quả: có hoàn tiền không, trả lại bao nhiêu Điểm Xanh, có huỷ cả bên Pancake không.
-3. Ô "Lý do huỷ": khách đọc được trong thông báo huỷ. Ghi lý do thật, lịch sự.
+3. Ô "Lý do huỷ (tuỳ chọn)": khách đọc được trong thông báo huỷ. Nên ghi lý do thật, lịch sự.
 4. Bấm "Huỷ đơn". Đơn đã bàn giao hãng vận chuyển thì hệ thống từ chối. Xem "Xử lý tình huống".
 
 Đơn đã trả tiền mà **bạn** huỷ: tiền về **Ví Tubu** của khách ngay. Muốn tiền về ngân hàng, khách phải tự huỷ trong app và chọn "Tài khoản ngân hàng". Hỏi khách muốn cách nào trước khi huỷ.

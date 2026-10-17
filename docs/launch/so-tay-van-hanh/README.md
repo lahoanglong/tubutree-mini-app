@@ -49,7 +49,7 @@ Pancake là **kho**. Tubu là **cửa hàng online và sổ tiền, điểm, hoa
 | Đổi/trả, hoàn tiền khách | Tubu (Đổi / Trả, Hoàn tiền khách) | Không đẩy sang Pancake. Phiếu trả hàng ở Pancake tạo bằng tay. |
 | Voucher, Flash Sale, Điểm Xanh, hoa hồng CTV, đối soát đối tác | Tubu | Pancake không biết. |
 | Danh mục, sản phẩm nổi bật, banner | Tubu | **⏳ đang làm**: chưa có màn. Nhờ kỹ thuật. |
-| Hoá đơn VAT | Pancake hoặc phần mềm hoá đơn điện tử | Ghi nhận ở Tubu bằng nút "Đã xuất hoá đơn". Pancake có tự báo về hay không: (cần xác nhận). |
+| Hoá đơn VAT | Pancake hoặc phần mềm hoá đơn điện tử | Ghi nhận ở Tubu bằng nút "Đã xuất hoá đơn". Nếu hoá đơn xuất từ Pancake, Pancake báo về và Tubu tự ghi (cần xác nhận shop có bật hoá đơn trên Pancake). |
 | Đối soát COD với hãng vận chuyển | Pancake | Tubu chỉ hiện số "COD chưa thu". |
 
 ## 4. Những gì KHÔNG về Tubu, và hậu quả

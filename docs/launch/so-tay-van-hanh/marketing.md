@@ -70,7 +70,7 @@ Bấm "Tạo voucher". Khách nhập mã ở ô "Nhập mã giảm giá" khi tha
 
 **Khách khiếu nại voucher không dùng được.** Mở **Voucher**, tìm mã. Kiểm: còn hạn, còn lượt, "Đơn tối thiểu", "Lượt / khách" (khách dùng rồi thì hết). Đúng điều kiện mà vẫn lỗi: gửi mã và ảnh màn hình cho kỹ thuật.
 
-**Tiêu chí duyệt bài cộng đồng.** Chưa có quy định bằng văn bản (cần xác nhận với chủ shop). Gợi ý tạm: từ chối bài quảng cáo, nói xấu, lộ thông tin cá nhân. Duyệt trong ngày. Bài bị từ chối: hệ thống chưa cho ghi lý do gửi tác giả (cần xác nhận).
+**Tiêu chí duyệt bài cộng đồng.** Chưa có quy định bằng văn bản (cần xác nhận với chủ shop). Gợi ý tạm: từ chối bài quảng cáo, nói xấu, lộ thông tin cá nhân. Duyệt trong ngày. Bài bị từ chối: hệ thống chưa cho ghi lý do gửi tác giả, nên nhắn riêng nếu cần giải thích.
 
 **Chương trình CTV.** Chưa quảng bá CTV với khách thật khi hoa hồng còn 0đ (**⏳ đang làm**, xem [dai-ly-ctv.md](dai-ly-ctv.md)). Hỏi quản lý đại lý–CTV trước khi đăng.
 
