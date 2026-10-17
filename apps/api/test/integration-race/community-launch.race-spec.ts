@@ -275,6 +275,71 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
       }
     });
 
+    describe('duyệt chạy song song với ẩn / tác giả tự xoá: bài REMOVED thì không còn uy tín/tin cậy từ bài đó, không có tin "đã duyệt"', () => {
+      type Mock = jest.Mock;
+      const rewards = () => moduleRef.get(CommunityRewardService) as unknown as { rewardPost: Mock };
+      const state = async (userId: string, postId: string) => {
+        const profile = await prisma.communityProfile.findUnique({ where: { userId } });
+        const events = await prisma.reputationEvent.aggregate({ where: { userId, refId: postId }, _sum: { amount: true } });
+        return { reputation: profile?.reputation ?? 0, trusted: profile?.isTrusted ?? false, eventNet: events._sum.amount ?? 0 };
+      };
+
+      it('ẩn chen vào giữa lúc đang thưởng (sau khi gắn tin cậy, trước khi cộng uy tín)', async () => {
+        const author = await createUser(prisma);
+        const p = await post(author.id, { status: 'PENDING' });
+        rewards().rewardPost.mockImplementationOnce(async () => {
+          await feed.hidePost(p.id, 'x');
+        });
+
+        await feed.approvePost(p.id);
+
+        expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('REMOVED');
+        expect(await state(author.id, p.id)).toEqual({ reputation: 0, trusted: false, eventNet: 0 });
+        expect(await logs(author.id, 'COMMUNITY_POST_APPROVED')).toHaveLength(0);
+        expect(await logs(author.id, 'COMMUNITY_POST_HIDDEN')).toHaveLength(1);
+      });
+
+      it('tác giả tự xoá chen vào giữa lúc đang thưởng', async () => {
+        const author = await createUser(prisma);
+        const p = await post(author.id, { status: 'PENDING' });
+        rewards().rewardPost.mockImplementationOnce(async () => {
+          await feed.deletePost(author.id, 'CUSTOMER', p.id);
+        });
+
+        await feed.approvePost(p.id);
+
+        expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('REMOVED');
+        expect(await state(author.id, p.id)).toEqual({ reputation: 0, trusted: false, eventNet: 0 });
+        expect(await logs(author.id, 'COMMUNITY_POST_APPROVED')).toHaveLength(0);
+      });
+
+      it.each([
+        ['ẩn', true, (authorId: string, postId: string) => feed.hidePost(postId, 'x').catch(() => undefined)],
+        ['tác giả tự xoá', false, (authorId: string, postId: string) => feed.deletePost(authorId, 'CUSTOMER', postId)],
+      ])('chạy thật song song duyệt và %s, nhiều vòng: kết cục luôn nhất quán', async (_name, moderated, remove) => {
+        for (let round = 0; round < 8; round += 1) {
+          const author = await createUser(prisma);
+          const p = await post(author.id, { status: 'PENDING' });
+
+          const settled = await Promise.allSettled([feed.approvePost(p.id), remove(author.id, p.id)]);
+
+          expect(settled.filter((r) => r.status === 'rejected')).toEqual([]);
+          const status = (await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status;
+          const st = await state(author.id, p.id);
+          const approved = (await logs(author.id, 'COMMUNITY_POST_APPROVED')).length;
+          const hidden = (await logs(author.id, 'COMMUNITY_POST_HIDDEN')).length;
+          if (status === 'REMOVED') {
+            expect(st).toEqual({ reputation: 0, trusted: false, eventNet: 0 });
+            // Duyệt xong rồi mới ẩn là hợp lệ (nhận "đã duyệt" rồi "đã ẩn"); không được chỉ có "đã duyệt" cho bài đã bị gỡ.
+            if (moderated && approved > 0) expect(hidden).toBe(1);
+          } else {
+            expect(status).toBe('PUBLISHED');
+            expect(st.eventNet).toBeGreaterThanOrEqual(0);
+          }
+        }
+      });
+    });
+
     it('đảo điểm hỏng giữa chừng → hidePost ném lỗi và bài vẫn PUBLISHED (không gỡ nửa vời rồi mất cơ hội đảo điểm)', async () => {
       const author = await createUser(prisma);
       const p = await post(author.id);

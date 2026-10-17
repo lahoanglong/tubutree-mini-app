@@ -36,6 +36,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
       ),
     },
     postTag: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    // approvePost đọc lại trạng thái bài (FOR SHARE) sau khi thưởng; mặc định: vẫn đang đăng.
+    $queryRaw: jest.fn().mockResolvedValue([{ status: 'PUBLISHED' }]),
     communityCategory: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null) },
     order: { findFirst: jest.fn().mockResolvedValue(null) },
     communityProfile: {
@@ -1145,6 +1147,69 @@ describe('CommunityFeedService.approvePost', () => {
     expect(prisma.communityProfile.upsert).not.toHaveBeenCalled();
     expect(reward.rewardPost).not.toHaveBeenCalled();
     expect(notify.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('CommunityFeedService.approvePost — bài bị ẩn/xoá chen vào giữa lúc đang thưởng', () => {
+  const pending = { id: 'p1', userId: 'author', status: 'PENDING' };
+  const raced = () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(pending);
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ status: 'REMOVED' }]);
+    (prisma.reputationEvent.findMany as jest.Mock).mockResolvedValue([{ amount: 5 }]);
+    (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ reputation: 5 });
+    return prisma;
+  };
+
+  it('sau khi thưởng đọc lại thấy REMOVED → đảo điểm vừa cộng, rút tin cậy vừa gắn, KHÔNG báo "đã duyệt"', async () => {
+    const prisma = raced();
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    await expect(makeSvc(prisma, undefined, notify).approvePost('p1')).resolves.toEqual({ ok: true });
+
+    expect(prisma.reputationEvent.create).toHaveBeenCalledWith({ data: { userId: 'author', amount: -5, reason: 'REVERSE_POST', refId: 'p1' } });
+    expect(prisma.communityProfile.updateMany).toHaveBeenCalledWith({ where: { userId: 'author' }, data: { isTrusted: false } });
+    expect(notify.notify).not.toHaveBeenCalled();
+  });
+
+  it('lần đọc lại phải đứng SAU mọi bước cộng điểm/thưởng/gắn tin cậy (để thấy việc gỡ của lượt chen vào)', async () => {
+    const prisma = raced();
+    const order: string[] = [];
+    (prisma.communityProfile.upsert as jest.Mock).mockImplementation(async () => void order.push('upsert'));
+    (prisma.$queryRaw as jest.Mock).mockImplementation(async () => {
+      order.push('recheck');
+      return [{ status: 'REMOVED' }];
+    });
+    const reward = { rewardPost: jest.fn(async () => void order.push('reward')), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+
+    await makeSvc(prisma, reward).approvePost('p1');
+
+    expect(order.indexOf('recheck')).toBeGreaterThan(order.lastIndexOf('reward'));
+    expect(order.indexOf('recheck')).toBeGreaterThan(order.lastIndexOf('upsert'));
+  });
+
+  it('đọc lại vẫn PUBLISHED → báo "đã duyệt" như thường, không đảo gì', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(pending);
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    await makeSvc(prisma, undefined, notify).approvePost('p1');
+
+    expect(notify.notify).toHaveBeenCalledWith('author', 'COMMUNITY_POST_APPROVED', { post_id: 'p1' });
+    expect(prisma.communityProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('đảo điểm bù lỗi (không phải P2002) → vẫn rút tin cậy, không báo duyệt, ghi log error có postId và userId', async () => {
+    const prisma = raced();
+    (prisma.reputationEvent.create as jest.Mock).mockRejectedValue(new Error('db down'));
+    const svc = makeSvc(prisma);
+    const error = jest.spyOn((svc as unknown as { logger: { error: (m: string) => void } }).logger, 'error').mockImplementation(() => undefined);
+
+    await expect(svc.approvePost('p1')).resolves.toEqual({ ok: true });
+
+    expect(prisma.communityProfile.updateMany).toHaveBeenCalledWith({ where: { userId: 'author' }, data: { isTrusted: false } });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('refId=p1'));
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('user=author'));
   });
 });
 

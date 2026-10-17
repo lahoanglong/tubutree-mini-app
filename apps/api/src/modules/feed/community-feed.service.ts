@@ -575,6 +575,17 @@ export class CommunityFeedService {
     } catch (err) {
       this.logger.warn(`bumpReputation(approve) failed for ${post.userId}: ${(err as Error).message}`);
     }
+    // Các bước trên (tin cậy, thưởng, uy tín) không nằm chung transaction với việc đổi trạng thái, nên ẩn/xoá có thể chen vào
+    // giữa: lúc đó chưa có gì để đảo và tác giả giữ điểm + tin cậy của một bài đã bị gỡ. Đọc lại trạng thái SAU khi đã cộng
+    // xong; FOR SHARE chờ nếu một transaction ẩn/xoá đang giữ khoá dòng chưa commit, nên không bỏ sót lượt đang dở. Hoặc ta thấy
+    // REMOVED và tự đảo ở đây, hoặc lượt gỡ chạy sau lần đọc này và nó thấy điểm đã cộng (mọi bước cộng đã commit trước lần đọc).
+    // Điểm Xanh của rewardPost không đảo được ở đây (ẩn/xoá thường cũng không đảo): việc đã có từ trước.
+    const [now] = await this.prisma.$queryRaw<{ status: string }[]>`SELECT "status"::text AS "status" FROM "feed_posts" WHERE "id" = ${postId} FOR SHARE`;
+    if (now?.status !== 'PUBLISHED') {
+      await this.reverseReputationForPost(post.userId, postId);
+      await this.revokeTrust(post.userId);
+      return { ok: true };
+    }
     try {
       await this.notifications?.notify(post.userId, 'COMMUNITY_POST_APPROVED', { post_id: post.id });
     } catch (err) {
