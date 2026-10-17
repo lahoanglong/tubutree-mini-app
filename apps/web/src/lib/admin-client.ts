@@ -660,7 +660,10 @@ export interface CreateCouponInput {
   endAt: string;
   usageLimit?: number;
   perUserLimit?: number;
-  scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+  /** CLAIM = mã ẩn của thẻ hộp hàng: chỉ vào ví khách đã quét link `?claim=`. */
+  scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE' | 'CLAIM';
+  /** Chỉ khách chưa có đơn nào (trừ đơn huỷ) dùng được. */
+  newCustomerOnly?: boolean;
 }
 export const createCoupon = (input: CreateCouponInput) =>
   apiFetch('/admin/coupons', { method: 'POST', body: input });
@@ -680,6 +683,9 @@ export interface AdminCoupon {
   isActive: boolean;
   /** Số lượt đã dùng (đếm theo đơn đã đặt bằng mã, đã trừ đơn huỷ/trả được hoàn mã). */
   redeemedCount: number;
+  newCustomerOnly?: boolean;
+  /** Mã CLAIM: số khách đã nhận vào ví; mã khác: null. */
+  claimedCount?: number | null;
 }
 export type CouponStatusFilter = '' | 'active' | 'inactive' | 'expired';
 export async function listCoupons(params: { page: number; limit: number; q?: string; status?: CouponStatusFilter }) {
@@ -690,6 +696,54 @@ export async function listCoupons(params: { page: number; limit: number; q?: str
 }
 export const updateCoupon = (id: string, patch: { isActive?: boolean; endAt?: string; usageLimit?: number | null }) =>
   apiFetch<AdminCoupon>(`/admin/coupons/${id}`, { method: 'PATCH', body: patch });
+
+/** Lô mã in thẻ hộp hàng sàn (D2-03): mỗi mã một lượt nhận, một lượt dùng. */
+export interface CouponBatchInput {
+  prefix: string;
+  quantity: number;
+  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
+  value: number;
+  minOrder?: number;
+  maxDiscount?: number;
+  startAt: string;
+  endAt: string;
+  newCustomerOnly?: boolean;
+}
+export interface CouponBatchCode {
+  code: string;
+  /** Link in vào QR (URL gốc Mini App + `?claim=`). */
+  url: string;
+  claimed: boolean;
+  used: boolean;
+  isActive: boolean;
+}
+export interface CouponBatchCodes {
+  batch: string;
+  /** null = chưa đặt `app.miniapp_base_url`: link trong file là đường dẫn tương đối, chưa in được. */
+  claimUrlBase: string | null;
+  codes: CouponBatchCode[];
+}
+export interface CouponBatchSummary {
+  batch: string;
+  total: number;
+  claimed: number;
+  used: number;
+  active: number;
+  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
+  value: number;
+  minOrder: number | null;
+  maxDiscount: number | null;
+  newCustomerOnly: boolean;
+  startAt: string;
+  endAt: string;
+}
+export const createCouponBatch = (input: CouponBatchInput) =>
+  apiFetch<CouponBatchCodes & { created: number }>('/admin/coupon-batches', { method: 'POST', body: input });
+export const listCouponBatches = () => apiFetch<CouponBatchSummary[]>('/admin/coupon-batches');
+export const getCouponBatchCodes = (batch: string) =>
+  apiFetch<CouponBatchCodes>(`/admin/coupon-batches/${encodeURIComponent(batch)}/codes`);
+export const setCouponBatchActive = (batch: string, isActive: boolean) =>
+  apiFetch<{ batch: string; updated: number }>(`/admin/coupon-batches/${encodeURIComponent(batch)}`, { method: 'PATCH', body: { isActive } });
 
 // ── Nhãn hàng (storefront Lớp 3) ──
 export interface BrandCert {
