@@ -1,8 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
+import type { JwtPayload } from '@tubutree/shared-types';
 import { Throttle } from '@nestjs/throttler';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
@@ -165,6 +169,40 @@ export class CommunityFeedController {
   @Post('events/:id/winner')
   pickWinner(@Param('id') id: string, @Body() dto: PickWinnerDto) {
     return this.feed.pickWinner(id, dto.userId);
+  }
+
+  /**
+   * Ảnh base64 của bài (danh sách/chi tiết trả đường dẫn này thay vì nhúng nguyên văn). Công khai về mặt route vì thẻ img không
+   * gửi được token, nhưng nhận ra người xem nếu có Bearer: quyền xem theo trạng thái bài nằm ở service. Cache chỉ ở trình
+   * duyệt (`private`, như ảnh minh chứng đổi trả) để bài bị gỡ không còn nằm ở CDN dùng chung: vĩnh viễn khi mã `v` khớp
+   * nội dung ảnh hiện tại, 5 phút khi `v` sai/thiếu (URL không gắn với nội dung); bài chưa/không còn hiển thị thì không
+   * lưu. helmet đặt Cross-Origin-Resource-Policy: same-origin mặc định; miniapp và web khác origin nạp ảnh bằng thẻ img nên
+   * route này phải mở cross-origin. Khai báo TRƯỚC `@Get(':id')` cho cùng nhóm route cố định.
+   */
+  // Một trang feed là 20 ảnh tải bằng thẻ img, không có token nên đếm theo IP: mức chung 300/phút làm khách chung IP (CGNAT)
+  // bị 429 và vỡ ảnh. Chỉ nâng riêng cho route này.
+  @Throttle({ default: { limit: 1200, ttl: 60_000 } })
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('posts/:id/images/:index')
+  async image(
+    @Param('id') id: string,
+    @Param('index', ParseIntPipe) index: number,
+    @Query('v') version: unknown,
+    @CurrentUser() user: JwtPayload | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { mime, data, isPublic, versionOk } = await this.feed.getImage(id, index, user, version);
+    res.set({
+      'Cache-Control': !isPublic
+        ? 'private, no-store'
+        : versionOk
+          ? 'private, max-age=31536000, immutable'
+          : 'private, max-age=300',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(data, { type: mime });
   }
 
   @Get(':id')

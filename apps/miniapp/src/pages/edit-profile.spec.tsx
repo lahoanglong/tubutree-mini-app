@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   getMe: vi.fn(),
   updateMe: vi.fn(),
   setAuthState: vi.fn(),
+  cloudinary: true,
+  readAndCompressImage: vi.fn(),
+  uploadToCloudinary: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -27,8 +30,19 @@ vi.mock('../store/auth', () => ({
   }),
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-vi.mock('../components/image-upload', () => ({ readAndCompressImage: vi.fn(), uploadToCloudinary: vi.fn() }));
-vi.mock('../components/avatar-crop-modal', () => ({ AvatarCropModal: () => null }));
+vi.mock('../components/image-upload', () => ({
+  readAndCompressImage: mocks.readAndCompressImage,
+  uploadToCloudinary: mocks.uploadToCloudinary,
+  isCloudinaryConfigured: () => mocks.cloudinary,
+}));
+vi.mock('../components/avatar-crop-modal', () => ({
+  AvatarCropModal: ({ visible, onConfirm }: { visible: boolean; onConfirm: (url: string) => void }) =>
+    visible ? (
+      <button type="button" onClick={() => onConfirm('data:image/jpeg;base64,QUJD')}>
+        Xác nhận cắt
+      </button>
+    ) : null,
+}));
 
 import EditProfilePage from './edit-profile';
 
@@ -48,6 +62,10 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     vi.clearAllMocks();
     mocks.getMe.mockResolvedValue(ME);
     mocks.updateMe.mockResolvedValue({ avatarUrl: null });
+    mocks.cloudinary = true;
+    mocks.readAndCompressImage.mockResolvedValue('data:image/jpeg;base64,UkFX');
+    mocks.uploadToCloudinary.mockResolvedValue('https://res.cloudinary.com/demo/image/upload/v1/avatar.jpg');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ blob: async () => new Blob(['x']) }));
   });
 
   it('có đúng một h1 "Sửa hồ sơ", cả lúc đang tải', () => {
@@ -145,5 +163,84 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     renderPage();
     const pick = await screen.findByRole('button', { name: /Chạm để chọn & cắt ảnh đại diện/ });
     expect(parseInt(pick.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+  });
+});
+
+describe('Ảnh đại diện: không báo thành công khi ảnh không được lưu (D6-05 d)', () => {
+  const NO_CLOUD_NOTE = 'Chưa đổi được ảnh đại diện lúc này vì dịch vụ lưu ảnh chưa được bật. Bạn vẫn sửa được tên, email và ngày sinh.';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getMe.mockResolvedValue(ME);
+    mocks.updateMe.mockResolvedValue({ avatarUrl: null });
+    mocks.cloudinary = true;
+    mocks.readAndCompressImage.mockResolvedValue('data:image/jpeg;base64,UkFX');
+    mocks.uploadToCloudinary.mockResolvedValue('https://res.cloudinary.com/demo/image/upload/v1/avatar.jpg');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ blob: async () => new Blob(['x']) }));
+  });
+
+  const pickPhoto = async (container: HTMLElement) => {
+    await screen.findByLabelText('Họ và tên');
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận cắt' }));
+  };
+
+  it('chưa cấu hình dịch vụ ảnh: không có nút đổi ảnh, thay bằng dòng giải thích, không có lời mời chạm để chọn', async () => {
+    mocks.cloudinary = false;
+    const { container } = renderPage();
+    await screen.findByLabelText('Họ và tên');
+    expect(screen.queryByRole('button', { name: /ảnh đại diện/i })).toBeNull();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.getByText(NO_CLOUD_NOTE)).toBeInTheDocument();
+    expect(screen.queryByText(/Chạm để chọn & cắt ảnh đại diện/)).toBeNull();
+    expect(screen.getByTestId('avatar')).toBeInTheDocument();
+  });
+
+  it('đã cấu hình: nút đổi ảnh dùng được, không có dòng giải thích', async () => {
+    renderPage();
+    await screen.findByLabelText('Họ và tên');
+    expect(screen.getByRole('button', { name: /Chạm để chọn & cắt ảnh đại diện/ })).toBeEnabled();
+    expect(screen.queryByText(NO_CLOUD_NOTE)).toBeNull();
+  });
+
+  it('tải lên thành công: lưu đúng URL đã tải (không bao giờ gửi base64)', async () => {
+    const { container } = renderPage();
+    await pickPhoto(container);
+    await waitFor(() => expect(mocks.uploadToCloudinary).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+    expect(mocks.updateMe.mock.calls[0]![0].avatarUrl).toBe('https://res.cloudinary.com/demo/image/upload/v1/avatar.jpg');
+  });
+
+  it('tải lên lỗi: báo lỗi rõ, KHÔNG báo đã chọn ảnh, và ảnh cũ giữ nguyên khi lưu', async () => {
+    mocks.uploadToCloudinary.mockResolvedValue(null);
+    const { container } = renderPage();
+    await pickPhoto(container);
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.', type: 'error', position: 'top' }),
+    );
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+    expect(mocks.updateMe.mock.calls[0]![0].avatarUrl).toBeUndefined();
+  });
+
+  it('máy chủ từ chối ảnh sau khi người dùng vừa đổi: vẫn lưu phần còn lại nhưng nói rõ ảnh chưa lưu', async () => {
+    mocks.updateMe.mockRejectedValueOnce(new Error('avatarUrl must be a URL address')).mockResolvedValueOnce({ avatarUrl: null });
+    const { container } = renderPage();
+    await pickPhoto(container);
+    await waitFor(() => expect(mocks.uploadToCloudinary).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({
+        text: 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.',
+        type: 'warning',
+        position: 'top',
+      }),
+    );
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: 'Đã cập nhật hồ sơ', type: 'success', position: 'top' });
+    expect(mocks.setAuthState).toHaveBeenCalledWith({ user: { fullName: 'Lan', avatarUrl: null } });
   });
 });

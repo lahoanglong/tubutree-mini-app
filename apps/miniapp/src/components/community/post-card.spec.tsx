@@ -69,6 +69,18 @@ describe('PostCard — ảnh bìa (ENGAGE-7)', () => {
     renderCard(withImages(1));
     expect(screen.queryByText(/ảnh nữa/)).toBeNull();
   });
+
+  it('ảnh bìa do API phục vụ (đường dẫn tương đối) được ghép với gốc API cho thẻ img', () => {
+    const { container } = renderCard({ ...POST, images: ['/feed/posts/p1/images/0?v=abc123'], imageCount: 2 });
+    expect(container.querySelector('img')!.getAttribute('src')).toBe('http://localhost:3001/api/feed/posts/p1/images/0?v=abc123');
+  });
+
+  it('API cũ còn trả ảnh nhúng (data URL) hoặc URL tuyệt đối: giữ nguyên', () => {
+    const dataUrl = 'data:image/jpeg;base64,QUJD';
+    expect(renderCard({ ...POST, images: [dataUrl], imageCount: 1 }).container.querySelector('img')!.getAttribute('src')).toBe(dataUrl);
+    const https = 'https://res.cloudinary.com/demo/a.jpg';
+    expect(renderCard({ ...POST, images: [https], imageCount: 1 }).container.querySelector('img')!.getAttribute('src')).toBe(https);
+  });
 });
 
 describe('PostCard — hành vi giữ nguyên khi chuyển DS v2', () => {

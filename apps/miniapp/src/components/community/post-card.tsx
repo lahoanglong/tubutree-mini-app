@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { BookMarked, CheckCircle2, Globe, Hash, Heart, HelpCircle, Leaf, Lightbulb, MessageCircle, PenLine, Sprout, TreeDeciduous } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { apiMediaUrl } from '../../services/api';
 import type { FeedItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
 import { formatVnd } from '../../utils/format';
@@ -124,7 +125,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
       )}
       {post.images[0] && (
         <>
-          <img src={post.images[0]} alt="" loading="lazy" style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }} />
+          <img src={apiMediaUrl(post.images[0])} alt="" loading="lazy" style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }} />
           {(post.imageCount ?? 1) > 1 && (
             <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
               {`+${(post.imageCount ?? 1) - 1} ảnh nữa`}
