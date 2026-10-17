@@ -59,6 +59,13 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
     expect(defaultLegalContent('doi-tra', VARS, SUPPORT)).toContain('](/chinh-sach/van-chuyen)');
   });
 
+  it('bảo mật: chỉ hứa tự sửa họ tên trong Tài khoản (số điện thoại chỉ đọc), đổi số thì gửi yêu cầu qua liên hệ', () => {
+    const text = defaultLegalContent('bao-mat', VARS, SUPPORT);
+    expect(text).toContain('tự sửa họ tên trong mục Tài khoản');
+    expect(text).not.toMatch(/tự sửa tên và số điện thoại/);
+    expect(text).toMatch(/đổi số điện thoại[^.]*thông tin liên hệ/);
+  });
+
   it('chỉ nêu các cách thanh toán mà trang thanh toán thật có (COD, chuyển khoản, Ví Tubu)', () => {
     const dk = defaultLegalContent('dieu-khoan', VARS, SUPPORT);
     expect(dk).toContain('thanh toán khi nhận hàng (COD)');

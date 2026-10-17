@@ -156,7 +156,7 @@ Chúng tôi áp dụng các biện pháp kỹ thuật và quản lý hợp lý n
 
 ## 7. Quyền của bạn
 
-Theo quy định về bảo vệ dữ liệu cá nhân (Nghị định 13/2023/NĐ-CP), bạn có quyền được biết, đồng ý hoặc rút lại sự đồng ý, truy cập, chỉnh sửa, yêu cầu xoá dữ liệu và khiếu nại. Bạn có thể tự sửa tên và số điện thoại trong mục Tài khoản, hoặc gửi yêu cầu cho chúng tôi qua thông tin liên hệ bên dưới.
+Theo quy định về bảo vệ dữ liệu cá nhân (Nghị định 13/2023/NĐ-CP), bạn có quyền được biết, đồng ý hoặc rút lại sự đồng ý, truy cập, chỉnh sửa, yêu cầu xoá dữ liệu và khiếu nại. Bạn có thể tự sửa họ tên trong mục Tài khoản. Muốn đổi số điện thoại hoặc thực hiện các quyền còn lại, vui lòng gửi yêu cầu cho chúng tôi qua thông tin liên hệ bên dưới.
 
 ## 8. Cookie và công nghệ tương tự
 
