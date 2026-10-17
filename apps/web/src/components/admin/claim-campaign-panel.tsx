@@ -145,7 +145,8 @@ export function ClaimCampaignPanel() {
   const valueMissing = f.type !== 'FREESHIP' && !(Number(f.value) > 0);
   const quantity = Number(f.quantity);
   const batchReady = /^[A-Z0-9]{2,16}$/.test(f.prefix) && Number.isInteger(quantity) && quantity >= 1 && quantity <= BATCH_MAX && !valueMissing;
-  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && !valueMissing;
+  const claimLimit = Number(f.claimLimit);
+  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && Number.isInteger(claimLimit) && claimLimit >= 1 && !valueMissing;
   const field = `${FIELD_CLASS} ${TOUCH_H} w-full`;
 
   return (
@@ -197,7 +198,7 @@ export function ClaimCampaignPanel() {
                 className={field}
               />
             </Field>
-            <Field label="Tổng lượt nhận" hint="Bỏ trống = không giới hạn. Mỗi khách nhận và dùng một lần.">
+            <Field label="Tổng lượt nhận" hint="Bắt buộc, từ 1 trở lên: mã chung lộ ra ngoài thì hết lượt là dừng. Mỗi khách nhận và dùng một lần.">
               <input type="number" aria-label="Tổng lượt nhận" value={f.claimLimit} onChange={(e) => setF({ ...f, claimLimit: e.target.value })} className={field} />
             </Field>
           </>

@@ -59,7 +59,7 @@ import {
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
 import { maskPhone } from '../../common/mask-pii';
-import { assertCouponInput } from './coupon-input-rules';
+import { assertClaimUsageLimit, assertCouponInput } from './coupon-input-rules';
 
 
 function reviewConflict(code: string, message: string) {
@@ -1363,6 +1363,7 @@ export class AdminService {
       patch.endAt = endAt;
     }
     if (data.usageLimit !== undefined) {
+      assertClaimUsageLimit(coupon, data.usageLimit);
       if (data.usageLimit !== null) {
         const redeemed = await this.prisma.couponRedemption.count({ where: { couponId: id } });
         if (data.usageLimit < redeemed) {

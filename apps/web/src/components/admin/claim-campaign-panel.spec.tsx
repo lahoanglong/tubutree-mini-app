@@ -159,6 +159,30 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     expect(r.container.textContent).toContain(`Link in QR: ${BASE}/?claim=SHOPEETHANG11`);
   });
 
+  it('mã chung: chưa nhập Tổng lượt nhận hoặc < 1 thì không tạo được (mã lộ ra ngoài không có trần)', async () => {
+    const { r, api } = mount({
+      '/admin/config': configRoute(BASE),
+      '/admin/coupon-batches': { body: [] },
+      '/admin/coupons': { body: { id: 'c1' } },
+    });
+    await flush();
+    click(byText(r.container, 'button', 'Một mã chung cho cả đợt'));
+    typeInto(input(r, 'Mã chung'), 'SHOPEE11');
+    typeInto(input(r, 'Mức giảm'), '20000');
+    const submit = () => byText(r.container, 'button', 'Tạo mã chung') as HTMLButtonElement;
+    expect(submit().disabled).toBe(true);
+    for (const bad of ['0', '-5', '1.5']) {
+      typeInto(input(r, 'Tổng lượt nhận'), bad);
+      expect(submit().disabled).toBe(true);
+    }
+    expect(r.container.textContent).not.toContain('không giới hạn');
+    typeInto(input(r, 'Tổng lượt nhận'), '1');
+    expect(submit().disabled).toBe(false);
+    click(submit());
+    await flush();
+    expect(bodyOf(api.calls.find((c) => c.init?.method === 'POST'))).toMatchObject({ scope: 'CLAIM', usageLimit: 1 });
+  });
+
   it('nhãn ưu đãi và link nhận dùng chung cho danh sách lô', () => {
     expect(offerLabel({ type: 'PERCENT', value: 10, maxDiscount: 50000, minOrder: null })).toBe('Giảm 10%, tối đa 50.000đ');
     expect(offerLabel({ type: 'FREESHIP', value: 0, minOrder: 150000 })).toBe('Miễn phí ship · đơn từ 150.000đ');
