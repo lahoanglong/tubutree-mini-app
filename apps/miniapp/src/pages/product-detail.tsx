@@ -20,6 +20,7 @@ import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
 import { useShareWithFallback } from '../components/share-sheet';
 import { WEB_BASE_URL } from '../utils/web-base-url';
+import { withReferral } from '../utils/share-link';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
@@ -79,7 +80,7 @@ export default function ProductDetailPage() {
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
   const queryClient = useQueryClient();
-  const { status, login } = useAuthStore();
+  const { status, login, user } = useAuthStore();
   // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt; mã chỉ áp cho vài sản phẩm
   // kèm `products` và chỉ hiện trên trang của đúng sản phẩm đó). Để user KHÁM PHÁ ưu đãi ngay ở PDP.
   const couponsQ = useQuery({
@@ -308,15 +309,15 @@ export default function ProductDetailPage() {
 
   const handleShare = () => {
     haptic('light');
-    const path = `/product/${p.slug}`;
+    const code = user?.referralCode;
     void shareWithFallback(
       {
         title: p.name,
         description: p.shortDesc ?? vi.home.tagline,
         thumbnail: p.thumbnail ?? undefined,
-        path,
+        path: withReferral(`/product/${p.slug}`, code),
       },
-      `${WEB_BASE_URL}/san-pham/${p.slug}`,
+      withReferral(`${WEB_BASE_URL}/san-pham/${p.slug}`, code),
     );
   };
 
