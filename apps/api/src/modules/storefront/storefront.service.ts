@@ -13,6 +13,8 @@ import { isPartnerStore } from '../merchant/partner-store';
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
 const MAX_COLLECTIONS_PER_STORE = 30;
 const MAX_ITEMS_PER_COLLECTION = 100;
+// Trần hostname DNS (RFC 1035): dài hơn không thể là host thật.
+const HOST_MAX_LENGTH = 253;
 
 /** Lý do khách không thấy một món trong gian hàng (null = khách thấy) — cùng điều kiện lọc của getPublicBySlug. */
 export function buyerHiddenReason(item: {
@@ -333,7 +335,7 @@ export class StorefrontService {
 
   async getPublicByHost(host: string) {
     // ?host=a&host=b đến đây là mảng (không phải chuỗi) nên không được gọi .split trên nó.
-    if (typeof host !== 'string' || !host) throw new BadRequestException('Host không hợp lệ.');
+    if (typeof host !== 'string' || !host || host.length > HOST_MAX_LENGTH) throw new BadRequestException('Host không hợp lệ.');
     const hostname = host.split(':')[0]!.toLowerCase();
     const parts = hostname.split('.');
     if (parts.length >= 2) {
