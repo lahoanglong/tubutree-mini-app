@@ -149,6 +149,44 @@ describe('PancakeSyncService.syncProducts', () => {
     expect(data.name).toBe('Tinh dầu');
   });
 
+  it('% hoa hồng CTV, chặn CTV và giá sỉ do Tubu đặt: đồng bộ không ghi — cả SP/biến thể mới, cũ lẫn quét toàn bộ (D1-01)', async () => {
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockImplementation(async ({ where }) =>
+          where.pancakeId === 'a' ? { id: 'existing', slug: 'cu', brand: 'Tubu Tree', basePrice: 1000, isActive: true, pancakeHold: null } : null,
+        ),
+        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'gone-p', pancakeId: 'gone' }]),
+      },
+      variation: {
+        findUnique: jest.fn().mockImplementation(async ({ where }) =>
+          where.pancakeId === 'v-a' ? { retailPrice: 1200, salePrice: null, isActive: true, pancakeHold: null } : null,
+        ),
+        findMany: jest.fn().mockResolvedValue([{ id: 'gone-v', pancakeId: 'v-gone' }]),
+      },
+    });
+    await new PancakeSyncService(prisma, makeClient([[prod('a'), prod('b')]]), lifecycle).syncProducts();
+
+    const m = prisma as unknown as {
+      variation: Record<'upsert' | 'updateMany', jest.Mock>;
+      product: Record<'update' | 'create' | 'updateMany', jest.Mock>;
+    };
+    const writes = [
+      ...m.variation.upsert.mock.calls.flatMap(([a]) => [a.update, a.create]),
+      ...m.variation.updateMany.mock.calls.map(([a]) => a.data),
+      ...m.product.update.mock.calls.map(([a]) => a.data),
+      ...m.product.create.mock.calls.map(([a]) => a.data),
+      ...m.product.updateMany.mock.calls.map(([a]) => a.data),
+    ];
+    expect(m.variation.upsert).toHaveBeenCalledTimes(2);
+    expect(writes.length).toBeGreaterThanOrEqual(6);
+    for (const data of writes) {
+      expect(data).not.toHaveProperty('affiliateRate');
+      expect(data).not.toHaveProperty('affiliateBlocked');
+      expect(data).not.toHaveProperty('dealerPrices');
+    }
+  });
+
   it('giá biến thể GIẢM → báo wishlist (Price Drop Alert §6.14.10)', async () => {
     const prisma = makePrisma({
       product: {
