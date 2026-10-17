@@ -18,7 +18,8 @@ import { getCoupons, type CouponDTO } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
 import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
-import { shareLink } from '../services/zmp-bridge';
+import { useShareWithFallback } from '../components/share-sheet';
+import { WEB_BASE_URL } from '../utils/web-base-url';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
@@ -76,6 +77,7 @@ export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
+  const shareWithFallback = useShareWithFallback();
   const queryClient = useQueryClient();
   const { status, login } = useAuthStore();
   // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt; mã chỉ áp cho vài sản phẩm
@@ -306,14 +308,16 @@ export default function ProductDetailPage() {
 
   const handleShare = () => {
     haptic('light');
-    void shareLink({
-      title: p.name,
-      description: p.shortDesc ?? vi.home.tagline,
-      thumbnail: p.thumbnail ?? undefined,
-      path: `/product/${p.slug}`,
-    }).catch(() => {
-      /* user đóng share sheet — không phải lỗi */
-    });
+    const path = `/product/${p.slug}`;
+    void shareWithFallback(
+      {
+        title: p.name,
+        description: p.shortDesc ?? vi.home.tagline,
+        thumbnail: p.thumbnail ?? undefined,
+        path,
+      },
+      `${WEB_BASE_URL}${path}`,
+    );
   };
 
   return (
