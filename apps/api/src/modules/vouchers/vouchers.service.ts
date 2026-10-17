@@ -24,7 +24,13 @@ export class VouchersService {
   private static readonly WELCOME_MAX_PAGES = 25;
   /** Kích thước lô keyset cho birthday/winback (quét đến hết, không có trần số trang). */
   private static readonly BATCH_PAGE = 500;
-  /** Số grant() chạy cùng lúc trong một lô birthday/welcome/winback (mỗi grant giữ 1 kết nối Prisma ngắn hạn, pool mặc định nhỏ). */
+  /**
+   * Số grant() chạy cùng lúc trong mỗi lô của mọi cron dùng grantInChunks (welcome, birthday, winback, milestone, second-order);
+   * mỗi grant giữ 1 kết nối Prisma ngắn hạn. Welcome chạy mỗi giờ nên trùng giờ với second-order lúc 10:00: tối đa 20 grant
+   * cùng lúc, cộng 1 kết nối second-order giữ trong $transaction cho advisory lock, so với connection_limit=20 của
+   * docker-compose.vietnix.yml. Hàng chờ pool (pool_timeout=30) hấp thụ phần vượt, nên khi tăng GRANT_CONCURRENCY hoặc thêm
+   * cron chạy cùng giờ phải tính lại tổng này.
+   */
   private static readonly GRANT_CONCURRENCY = 10;
   /** Số dòng log lỗi từng user mỗi lượt; phần còn lại chỉ nằm trong dòng tổng kết. */
   private static readonly MAX_FAILURE_LOGS = 20;
