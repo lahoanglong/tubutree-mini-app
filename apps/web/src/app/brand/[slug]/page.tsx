@@ -116,7 +116,10 @@ export default async function BrandPage({
                     src={p.thumbnail}
                     alt={p.name}
                     className="aspect-square w-full object-cover"
+                    width={400}
+                    height={400}
                     loading="lazy"
+                    decoding="async"
                   />
                 ) : (
                   <div className="flex aspect-square w-full items-center justify-center bg-forest-50 text-forest-600">

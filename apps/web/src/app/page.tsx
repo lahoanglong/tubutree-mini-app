@@ -6,7 +6,7 @@ import { getProductsPage, getBrands, HOME_PAGE_SIZE } from '@/lib/api';
 import { firstParam, homeHref, normalizeSearchQuery, pageHref, parsePage } from '@/lib/catalog-filter';
 import { homeCanonicalPath, homeMetadata } from '@/lib/home-seo';
 import { SITE_URL } from '@/lib/site';
-import ProductCard from '@/components/product-card';
+import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
 import ProductPagination from '@/components/product-pagination';
 
 export const revalidate = 300;
@@ -212,8 +212,8 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 md:grid-cols-4">
-              {products.map((p) => (
-                <ProductCard key={p.id} product={p} />
+              {products.map((p, i) => (
+                <ProductCard key={p.id} product={p} priority={i < PRIORITY_CARDS} />
               ))}
             </div>
             <ProductPagination page={page} totalPages={totalPages} filter={{ brand, q }} />
