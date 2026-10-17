@@ -41,6 +41,14 @@ function Section({ title, count, children }: { title: string; count?: number; ch
   );
 }
 
+// Dòng STOREFRONT_PARTNER lưu `<id gian hàng>` hoặc `<id gian hàng>:ADMIN_TOGGLE` (admin bật tay): chỉ phần sau đánh dấu là nội bộ.
+const ADMIN_TOGGLE_SUFFIX = ':ADMIN_TOGGLE';
+function partnerReasonLabel(reason: string): string {
+  return reason.endsWith(ADMIN_TOGGLE_SUFFIX)
+    ? `gian hàng ${reason.slice(0, -ADMIN_TOGGLE_SUFFIX.length)} · admin bật tay`
+    : `gian hàng ${reason}`;
+}
+
 function EventLine({ e }: { e: AdminUserEvent }) {
   const what =
     e.kind === 'ROLE'
@@ -57,7 +65,7 @@ function EventLine({ e }: { e: AdminUserEvent }) {
       <div className="font-medium text-stone-900">{what}</div>
       <div className="text-xs text-stone-500">
         {formatDateTime(e.createdAt)} · {e.actorName ?? (e.actorId ? e.actorId : 'hệ thống')}
-        {e.reason && ` · ${e.kind === 'STOREFRONT_PARTNER' ? `gian hàng ${e.reason}` : e.reason}`}
+        {e.reason && ` · ${e.kind === 'STOREFRONT_PARTNER' ? partnerReasonLabel(e.reason) : e.reason}`}
       </div>
     </li>
   );

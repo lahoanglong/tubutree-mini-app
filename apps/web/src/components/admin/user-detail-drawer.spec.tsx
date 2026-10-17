@@ -116,6 +116,14 @@ describe('UserDetailDrawer — lịch sử gian hàng đối tác', () => {
     expect(text).not.toMatch(/true|false/);
   });
 
+  it('dòng admin bật tay không lộ dấu nội bộ ADMIN_TOGGLE', async () => {
+    const marked = { ...ev('e1', 'false', 'true', '2026-10-15T03:00:00.000Z'), reason: 'sf-9:ADMIN_TOGGLE' };
+    const body = await open({ ...DETAIL, partnerHistory: [marked] });
+    const text = section(body, 'Gian hàng đối tác').textContent ?? '';
+    expect(text).toContain('gian hàng sf-9 · admin bật tay');
+    expect(text).not.toContain('ADMIN_TOGGLE');
+  });
+
   it('không có dòng nào thì không hiện mục', async () => {
     const body = await open();
     expect(body.querySelector('section[aria-label^="Gian hàng đối tác"]')).toBeNull();
