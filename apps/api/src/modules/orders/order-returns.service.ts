@@ -23,7 +23,7 @@ import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
-import { isPartnerStore, PARTNER_STORE_WHERE } from '../merchant/partner-store';
+import { isPartnerStore } from '../merchant/partner-store';
 import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './return-images';
 import { decodeServedImage } from '../../common/served-image';
 import { ATTENTION_PARTIAL_RETURN_ACK } from '../integrations/pancake/pancake-attention';
@@ -497,13 +497,18 @@ export class OrderReturnsService {
 
   /** Yêu cầu trả hàng của các đơn gian hàng tự giao (đang chờ duyệt / đã duyệt) — mục "Hàng trả về" ở Cổng người bán. */
   async listForMerchant(userId: string): Promise<MerchantReturnView[]> {
-    const store = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, ...PARTNER_STORE_WHERE }, select: { id: true } });
-    if (!store) throw new ForbiddenException('Chỉ gian hàng đối tác tự giao hàng mới có hàng trả về.');
+    const owned = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId }, select: { id: true, type: true, isPartner: true } });
+    const partner = !!owned && isPartnerStore(owned);
+    // Gian hàng đã tắt cờ chỉ thấy hàng trả của đơn đã có dòng SALE trên phiếu (cùng quy tắc với `receive`); chưa từng được trả thì 403.
+    const paidOnly = !!owned && !partner && (await this.prisma.merchantPayoutLine.count({ where: { kind: 'SALE', order: { fulfillerStorefrontId: owned.id } } })) > 0;
+    if (!owned || (!partner && !paidOnly)) throw new ForbiddenException('Chỉ gian hàng đối tác tự giao hàng mới có hàng trả về.');
+    const store = owned;
     const ids = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT rr."id" FROM "return_requests" rr
         JOIN "orders" o ON o."id" = rr."orderId"
        WHERE o."fulfiller" = 'MERCHANT' AND o."fulfillerStorefrontId" = ${store.id}
          AND rr."status" IN ('REQUESTED', 'APPROVED')
+         ${partner ? Prisma.empty : Prisma.sql`AND EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE')`}
        ORDER BY (rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL) DESC, rr."createdAt" DESC
        LIMIT 50`;
     return this.merchantViews(ids.map((r) => r.id));

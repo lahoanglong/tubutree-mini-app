@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   stopSelling: vi.fn(),
   checkPancake: vi.fn(),
   pause: vi.fn(),
+  returns: vi.fn(async () => [] as unknown[]),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -41,7 +42,7 @@ vi.mock('@/lib/merchant-client', async (importOriginal) => ({
   failFulfilOrder: (id: string, reason: string) => mocks.fulfilAction('fail', id, reason),
   cancelFulfilOrder: (id: string, reason: string) => mocks.fulfilAction('cancel', id, reason),
   getMerchantSettlement: () => mocks.settlement(),
-  listMerchantReturns: async () => [],
+  listMerchantReturns: () => mocks.returns(),
   updateMerchantProduct: (id: string, dto: unknown) => mocks.updateProduct(id, dto),
   stopSellingMerchantProduct: (id: string) => mocks.stopSelling(id),
   checkPancakeVariation: (code: string) => mocks.checkPancake(code),
@@ -157,6 +158,7 @@ beforeEach(() => {
     slaConfig: { confirmHours: 24, shipHours: 48, deliverDays: 7 },
   }));
   mocks.fulfilAction = vi.fn(async () => ({}));
+  mocks.returns = vi.fn(async () => [] as unknown[]);
   mocks.settlement = vi.fn(async () => ({
     holdDays: 7,
     lines: [
@@ -429,10 +431,32 @@ describe('cổng đối tác — đại lý giữ gian hàng CTV (isPartner)', (
     }));
     window.history.replaceState(null, '', '/merchant?tab=settlement');
     const root = await mount();
-    expect(tabLabels(root)).toEqual(['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng', 'Đối soát']);
+    expect(tabLabels(root)).toEqual(['Gian hàng & Subdomain', 'Hàng trả về', 'Sản phẩm', 'Đơn qua gian hàng', 'Đối soát']);
     expect(byText(root, '[role="tab"]', 'Đối soát')!.getAttribute('aria-selected')).toBe('true');
     expect(root.textContent).toContain('0011223344');
     expect(byText(root, 'button', 'Tạm nghỉ nhận đơn')).toBeNull();
+  });
+
+  it('CTV + isPartner=false có phiếu đối soát: tab "Hàng trả về" chỉ có mục hàng trả, không gọi danh sách đơn cần giao', async () => {
+    mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
+    mocks.store = { ...STORE, type: 'CTV', isPartner: false, hasPayouts: true };
+    mocks.returns = vi.fn(async () => [
+      { id: 'r1', status: 'APPROVED', createdAt: '2026-10-13T03:00:00Z', reviewedAt: '2026-10-13T05:00:00Z', receivedAt: null, reasonLabel: null, reason: 'Hỏng', fullReturn: false, shopFault: null, orderCode: 'TB-9', lines: [{ productName: 'Mật ong', variationName: null, quantity: 1 }] },
+    ]);
+    window.history.replaceState(null, '', '/merchant?tab=fulfil');
+    const root = await mount();
+    expect(byText(root, '[role="tab"]', 'Hàng trả về')!.getAttribute('aria-selected')).toBe('true');
+    expect(root.textContent).toContain('Hàng khách trả về (1 chờ nhận)');
+    expect(byText(root, 'button', 'Đã nhận hàng trả')).not.toBeNull();
+    expect(mocks.listFulfil).not.toHaveBeenCalled();
+  });
+
+  it('CTV + isPartner=false có phiếu nhưng chưa có yêu cầu trả nào: tab hàng trả về báo trống', async () => {
+    mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
+    mocks.store = { ...STORE, type: 'CTV', isPartner: false, hasPayouts: true };
+    window.history.replaceState(null, '', '/merchant?tab=fulfil');
+    const root = await mount();
+    expect(root.textContent).toContain('Chưa có hàng khách trả về.');
   });
 
   it('MERCHANT không có trường isPartner (phản hồi cũ): vẫn đủ tab đối tác', async () => {

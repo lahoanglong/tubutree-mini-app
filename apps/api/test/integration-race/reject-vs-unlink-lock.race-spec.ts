@@ -2,13 +2,17 @@ import type { Prisma } from '@prisma/client';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { linkTubuFulfilledVariation, unlinkTubuFulfilledVariation } from '../../src/modules/merchant/merchant-pancake-link';
+import { unlinkTubuFulfilledVariation } from '../../src/modules/merchant/merchant-pancake-link';
 import { createUser, randCode, sleep, warmPool } from './helpers';
 
 /**
  * Admin từ chối sản phẩm đối tác đang chờ duyệt (lật PENDING_REVIEW rồi gỡ liên kết trong cùng tx) ‖ admin gỡ liên kết của
  * chính sản phẩm đó. Cả hai chạy `unlinkTubuFulfilledVariation`; từ chối đã giữ dòng sản phẩm (CAS duyệt) trước khi chạm biến
  * thể, nên gỡ liên kết cũng phải khoá sản phẩm trước biến thể (không thì 40P01).
+ *
+ * Trạng thái xuất phát (PENDING_REVIEW + fulfilment TUBU + liên kết mở có sản phẩm gốc) được dựng thẳng bằng Prisma: qua service
+ * hiện nay không tạo ra được (duyệt xong thì không còn PENDING_REVIEW, xin lại mã thì liên kết cũ đã gỡ). Spec chỉ ép thứ tự
+ * khoá của hai đường cùng gọi `unlinkTubuFulfilledVariation`; bước CAS của từ chối được mô phỏng, không gọi `AdminService`.
  */
 describe('Từ chối sản phẩm ‖ admin gỡ liên kết (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -127,23 +131,5 @@ describe('Từ chối sản phẩm ‖ admin gỡ liên kết (real Postgres)', 
     expect((await prisma.variation.findUniqueOrThrow({ where: { id: s.v.id } })).productId).toBe(s.origin.id);
     const own = await prisma.product.findUniqueOrThrow({ where: { id: s.own.id } });
     expect(own).toMatchObject({ approvalStatus: 'REJECTED', fulfilment: 'MERCHANT' });
-  });
-
-  it('đường duyệt (liên kết) vẫn khoá sản phẩm rồi biến thể: liên kết một sản phẩm chờ duyệt xong bình thường', async () => {
-    const owner = await createUser(prisma, { role: 'DEALER' });
-    const admin = await createUser(prisma, { role: 'ADMIN' });
-    const tag = randCode(8).toLowerCase();
-    const store = await prisma.storefront.create({ data: { type: 'MERCHANT', slug: `rl2-${tag}`, title: `S ${tag}`, ownerUserId: owner.id } });
-    const origin = await prisma.product.create({
-      data: { pancakeId: `rl2-o-${tag}`, brand: 'IT', slug: `rl2-o-${tag}`, name: `Gốc ${tag}`, description: 'IT', basePrice: 100_000, isActive: true },
-    });
-    await prisma.variation.create({
-      data: { pancakeId: `rl2-v-${tag}`, productId: origin.id, sku: `RL2-${tag}`, name: 'M', attributes: {}, retailPrice: 100_000, stock: 5 },
-    });
-    const own = await prisma.product.create({
-      data: { storefrontId: store.id, pancakeLinkCode: `rl2-v-${tag}`, approvalStatus: 'PENDING_REVIEW', brand: 'IT', slug: `rl2-p-${tag}`, name: `SP ${tag}`, description: 'IT', basePrice: 100_000 },
-    });
-    const linked = await prisma.$transaction((tx) => linkTubuFulfilledVariation(tx, own, { adminId: admin.id, confirmTakeover: true }));
-    expect(linked?.originProductId).toBe(origin.id);
   });
 });
