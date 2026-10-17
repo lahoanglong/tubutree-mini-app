@@ -589,6 +589,7 @@ describe('AdminService.setUserRole', () => {
       const prisma = makePrisma({
         user: { findUnique: jest.fn().mockResolvedValue(customer), update },
         dealerTier: { findUnique: tierFind },
+        $queryRaw: jest.fn().mockResolvedValue([{ metadata: customer.metadata }]),
       });
       const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', ' dealer_l3 ');
       expect(tierFind).toHaveBeenCalledWith({ where: { id: 'dealer_l3' } });
