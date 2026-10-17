@@ -22,6 +22,7 @@ import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { maskPhoneEnds } from '../../common/mask-pii';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
 /**
@@ -1427,8 +1428,9 @@ function memberCodeOf(referralCode: string): string {
   return `${MEMBER_CODE_PREFIX}${referralCode}`;
 }
 
+// Không chặn SĐT ngắn (khác maskPhoneOrNull): giữ đúng đầu ra cũ của màn POS.
 function maskPhone(phone: string | null | undefined): string | null {
-  return phone ? `${phone.slice(0, 3)}****${phone.slice(-3)}` : null;
+  return phone ? maskPhoneEnds(phone) : null;
 }
 
 /**
