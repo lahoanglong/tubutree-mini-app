@@ -1,7 +1,6 @@
 import {
   canTransition,
   assertTransition,
-  isTerminal,
   ORDER_TRANSITIONS,
   InvalidOrderTransitionError,
   UnpaidPrepaidTransitionError,
@@ -43,9 +42,6 @@ describe('order-transition', () => {
       if (to === 'RETURNED') continue;
       expect(canTransition('RETURNED', to as never)).toBe(false);
     }
-    expect(isTerminal('CANCELLED')).toBe(true);
-    expect(isTerminal('RETURNED')).toBe(true);
-    expect(isTerminal('DELIVERED')).toBe(false);
   });
 
   it('cho phép nhảy cóc về phía trước (Pancake/POS thường không báo đủ PACKED/SHIPPING)', () => {

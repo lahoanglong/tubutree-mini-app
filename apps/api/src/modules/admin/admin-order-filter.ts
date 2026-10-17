@@ -28,11 +28,6 @@ const RECYCLING_ATTENTION_OPEN_ONLY_CODES: readonly string[] = RECYCLING_ATTENTI
   (c) => !RECYCLING_ATTENTION_RETURN_CODES.includes(c),
 );
 
-export const RECYCLING_ATTENTION_GOMDON_STATUSES: readonly string[] = [
-  ...RECYCLING_ATTENTION_NO_WAYBILL_STATUSES,
-  ...RECYCLING_ATTENTION_PROBLEM_CODES,
-];
-
 /** Huỷ vận đơn không được (lỗi hết lượt retry) hoặc quá muộn (bưu tá đã lấy hàng) → CSKH phải huỷ tay. */
 export const RECYCLING_ATTENTION_CANCEL_STATUSES: readonly string[] = [GOMDON_CANCEL.FAILED, GOMDON_CANCEL.TOO_LATE];
 
