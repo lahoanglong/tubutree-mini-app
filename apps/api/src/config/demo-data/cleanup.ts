@@ -19,7 +19,8 @@ import {
  * Sản phẩm và biến thể chỉ TẮT (isActive=false), không xoá: đơn, đánh giá, giỏ, giờ vàng còn trỏ tới chúng, và mọi nơi
  * khách thấy hoặc đặt hàng (catalog, tìm kiếm, gian hàng, trang nhãn, sitemap, giờ vàng, giỏ/checkout) đều lọc isActive.
  * pancakeHold để nguyên NULL = "admin tắt": đồng bộ Pancake không tự bật lại. Mã giảm giá chỉ đổi khi có
- * `--coupons=expire`, vì chủ dự án có thể giữ WELCOME30 làm mã ra mắt. Danh mục và nhãn giữ nguyên, chỉ báo.
+ * `--coupons=expire` (trừ mã ghi ở `--keep-coupon`), vì chủ dự án có thể giữ WELCOME30 làm mã ra mắt. Danh mục và nhãn
+ * giữ nguyên, chỉ báo.
  */
 
 export type CouponMode = 'keep' | 'expire';
@@ -27,16 +28,31 @@ export type CouponMode = 'keep' | 'expire';
 export interface CleanupArgs {
   apply: boolean;
   coupons: CouponMode;
+  /** Mã demo chủ dự án duyệt giữ khi tắt các mã còn lại (`--keep-coupon=WELCOME30`). */
+  keepCoupons: string[];
 }
 
+const USAGE = 'Dùng: [--apply] [--coupons=keep|expire] [--keep-coupon=MÃ,...]';
+
 export function parseCleanupArgs(argv: readonly string[]): CleanupArgs {
-  const args: CleanupArgs = { apply: false, coupons: 'keep' };
+  const args: CleanupArgs = { apply: false, coupons: 'keep', keepCoupons: [] };
+  const demoCodes = new Set(DEMO_COUPONS.map((c) => c.code));
   for (const a of argv) {
     if (a === '--') continue;
     if (a === '--apply') args.apply = true;
     else if (a === '--coupons=expire') args.coupons = 'expire';
     else if (a === '--coupons=keep') args.coupons = 'keep';
-    else throw new Error(`Tham số không hiểu: "${a}". Dùng: [--apply] [--coupons=keep|expire]`);
+    else if (a.startsWith('--keep-coupon=')) {
+      for (const raw of a.slice('--keep-coupon='.length).split(',')) {
+        const code = raw.trim().toUpperCase();
+        if (!code) continue;
+        if (!demoCodes.has(code)) throw new Error(`--keep-coupon chỉ nhận mã demo (${[...demoCodes].join(', ')}), nhận được "${raw.trim()}".`);
+        if (!args.keepCoupons.includes(code)) args.keepCoupons.push(code);
+      }
+    } else throw new Error(`Tham số không hiểu: "${a}". ${USAGE}`);
+  }
+  if (args.keepCoupons.length > 0 && args.coupons !== 'expire') {
+    throw new Error('--keep-coupon chỉ dùng kèm --coupons=expire (mặc định đã giữ mọi mã).');
   }
   return args;
 }
@@ -86,12 +102,9 @@ const NON_DEMO_PRODUCT_WHERE = {
   OR: [{ pancakeId: null }, { pancakeId: { notIn: [...DEMO_PRODUCT_PANCAKE_IDS] } }],
 } satisfies Prisma.ProductWhereInput;
 
-const MIGRATION_COUPON_WHERE = {
-  OR: DEMO_COUPONS.map((c) => ({ id: c.id, code: c.code })),
-} satisfies Prisma.CouponWhereInput;
-
-function couponExpireWhere(now: Date): Prisma.CouponWhereInput {
-  return { ...MIGRATION_COUPON_WHERE, AND: [{ OR: [{ isActive: true }, { endAt: { gt: now } }] }] };
+/** Dòng mã do migration tạo (cả id lẫn mã khớp), trừ mã được giữ. */
+function migrationCouponTargets(keep: readonly string[]): Prisma.CouponWhereInput[] {
+  return DEMO_COUPONS.filter((c) => !keep.includes(c.code)).map((c) => ({ id: c.id, code: c.code }));
 }
 
 /** Chỉ đọc. Gọi tuần tự để chạy được trong một transaction (READ ONLY khi xem trước). */
@@ -222,9 +235,10 @@ export async function previewDemoCleanup(prisma: PrismaClient, now: Date = new D
  */
 export async function applyDemoCleanup(
   prisma: PrismaClient,
-  opts: { coupons: CouponMode; now?: Date },
+  opts: { coupons: CouponMode; keepCoupons?: readonly string[]; now?: Date },
 ): Promise<{ plan: DemoCleanupPlan; result: CleanupResult }> {
   const now = opts.now ?? new Date();
+  const couponTargets = migrationCouponTargets(opts.keepCoupons ?? []);
   return prisma.$transaction(
     async (tx) => {
       const plan = await planDemoCleanup(tx, now);
@@ -232,11 +246,12 @@ export async function applyDemoCleanup(
       const products = await tx.product.updateMany({ where: { ...DEMO_PRODUCT_WHERE, isActive: true }, data: { isActive: false } });
       const variations = await tx.variation.updateMany({ where: { ...DEMO_VARIATION_WHERE, isActive: true }, data: { isActive: false } });
       let couponsExpired = 0;
-      if (opts.coupons === 'expire') {
-        couponsExpired = await tx.coupon.count({ where: couponExpireWhere(now) });
-        await tx.coupon.updateMany({ where: { ...MIGRATION_COUPON_WHERE, isActive: true }, data: { isActive: false } });
+      if (opts.coupons === 'expire' && couponTargets.length > 0) {
+        const couponWhere = { OR: couponTargets };
+        couponsExpired = await tx.coupon.count({ where: { AND: [couponWhere, { OR: [{ isActive: true }, { endAt: { gt: now } }] }] } });
+        await tx.coupon.updateMany({ where: { AND: [couponWhere, { isActive: true }] }, data: { isActive: false } });
         // Cắt cả hạn: trang nhãn (gắn mã vào khuyến mãi, nút chép mã) chỉ xét hạn, không xét isActive.
-        await tx.coupon.updateMany({ where: { ...MIGRATION_COUPON_WHERE, endAt: { gt: now }, startAt: { lte: now } }, data: { endAt: now } });
+        await tx.coupon.updateMany({ where: { AND: [couponWhere, { endAt: { gt: now } }, { startAt: { lte: now } }] }, data: { endAt: now } });
       }
       return { plan, result: { productsDeactivated: products.count, variationsDeactivated: variations.count, couponsExpired } };
     },
@@ -275,6 +290,7 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
     const state = c.live ? `còn dùng được tới ${day(c.endAt)}` : `không dùng được (${c.isActive ? `hết hạn ${day(c.endAt)}` : 'đã tắt'})`;
     let action: string;
     if (!c.fromMigration) action = 'KHÔNG ĐỤNG: trùng mã nhưng id khác dòng migration tạo (seed hoặc tạo tay), xem ở Quản trị';
+    else if (args.coupons === 'expire' && args.keepCoupons.includes(c.code)) action = `GIỮ theo --keep-coupon${c.live ? ': khách dùng được, xác nhận điều kiện đúng như chủ dự án duyệt' : ''}`;
     else if (args.coupons === 'expire') action = c.willExpire ? 'sẽ TẮT (isActive=false, endAt=lúc chạy)' : 'không cần đổi';
     else action = c.live ? 'GIỮ NGUYÊN. CẢNH BÁO: khách dùng được mã chủ dự án chưa duyệt' : 'GIỮ NGUYÊN';
     L.push(`   - ${c.code}: ${state}; ${refs} → ${action}`);

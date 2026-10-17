@@ -78,8 +78,8 @@ export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env): Che
         G_DB,
         'db.demo_coupons',
         cTitle,
-        `còn dùng được, chủ dự án chưa duyệt: ${couponList(blocking)}`,
-        `Không giữ: \`pnpm run prisma:cleanup-demo -- --apply --coupons=expire\` (${CLEANUP_HINT}). Chủ dự án duyệt giữ mã nào thì chạy lại go-live check với GO_LIVE_ACCEPT_DEMO_COUPONS=<mã,...> (mã đó thành WARN).`,
+        `còn dùng được, chủ dự án chưa duyệt: ${couponList(blocking)}${others.length > 0 ? `; đã chấp nhận giữ: ${couponList(others)}` : ''}`,
+        `Không giữ: \`pnpm run prisma:cleanup-demo -- --apply --coupons=expire\` (giữ riêng mã được duyệt: thêm --keep-coupon=<mã>; ${CLEANUP_HINT}). Mã chủ dự án duyệt giữ: chạy lại go-live check với GO_LIVE_ACCEPT_DEMO_COUPONS=<mã,...> (mã đó thành WARN).`,
       ),
     );
   } else if (others.length > 0) {

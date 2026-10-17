@@ -24,12 +24,22 @@ function plan(over: Partial<DemoCleanupPlan> = {}): DemoCleanupPlan {
 
 describe('parseCleanupArgs', () => {
   it('mặc định chỉ xem trước, giữ mã', () => {
-    expect(parseCleanupArgs([])).toEqual({ apply: false, coupons: 'keep' });
+    expect(parseCleanupArgs([])).toEqual({ apply: false, coupons: 'keep', keepCoupons: [] });
   });
 
   it('nhận --apply, --coupons=expire|keep, bỏ qua "--" do pnpm/npm chuyển tiếp', () => {
-    expect(parseCleanupArgs(['--', '--apply', '--coupons=expire'])).toEqual({ apply: true, coupons: 'expire' });
-    expect(parseCleanupArgs(['--coupons=keep'])).toEqual({ apply: false, coupons: 'keep' });
+    expect(parseCleanupArgs(['--', '--apply', '--coupons=expire'])).toEqual({ apply: true, coupons: 'expire', keepCoupons: [] });
+    expect(parseCleanupArgs(['--coupons=keep'])).toEqual({ apply: false, coupons: 'keep', keepCoupons: [] });
+  });
+
+  it('--keep-coupon giữ lại mã demo được duyệt khi tắt các mã còn lại; chỉ nhận mã demo, chỉ đi kèm --coupons=expire', () => {
+    expect(parseCleanupArgs(['--coupons=expire', '--keep-coupon=welcome30, xanh10'])).toEqual({
+      apply: false,
+      coupons: 'expire',
+      keepCoupons: ['WELCOME30', 'XANH10'],
+    });
+    expect(() => parseCleanupArgs(['--coupons=expire', '--keep-coupon=SALE50'])).toThrow(/SALE50/);
+    expect(() => parseCleanupArgs(['--keep-coupon=WELCOME30'])).toThrow(/--coupons=expire/);
   });
 
   it('tham số lạ (gõ nhầm --aply, --coupons=delete) thì từ chối thay vì lặng lẽ chạy', () => {
@@ -54,7 +64,7 @@ describe('hasDemoData', () => {
 
 describe('formatPlan', () => {
   it('xem trước: nói rõ không ghi gì, số dòng sẽ tắt, tham chiếu, mã giữ nguyên kèm cảnh báo, danh mục sẽ trống', () => {
-    const text = formatPlan(plan({ coupons: [{ ...plan().coupons[0]!, willExpire: false }] }), { apply: false, coupons: 'keep' });
+    const text = formatPlan(plan({ coupons: [{ ...plan().coupons[0]!, willExpire: false }] }), { apply: false, coupons: 'keep', keepCoupons: [] });
     expect(text).toContain('XEM TRƯỚC');
     expect(text).toMatch(/Sản phẩm demo: tìm thấy 44\/44, đang bán 44 → sẽ TẮT 44/);
     expect(text).toMatch(/Biến thể demo: tìm thấy 48\/48, đang bán 48 → sẽ TẮT 48/);
@@ -67,10 +77,11 @@ describe('formatPlan', () => {
     expect(text).toContain('Fuwa3e');
   });
 
-  it('--coupons=expire: mã sẽ bị tắt và cắt hạn', () => {
-    const text = formatPlan(plan(), { apply: true, coupons: 'expire' });
+  it('--coupons=expire: mã sẽ bị tắt và cắt hạn, trừ mã --keep-coupon', () => {
+    const text = formatPlan(plan(), { apply: true, coupons: 'expire', keepCoupons: [] });
     expect(text).toContain('THỰC HIỆN');
     expect(text).toMatch(/WELCOME30.*sẽ TẮT/);
+    expect(formatPlan(plan(), { apply: true, coupons: 'expire', keepCoupons: ['WELCOME30'] })).toMatch(/WELCOME30.*GIỮ theo --keep-coupon/);
   });
 
   it('đã dọn: không còn gì để đổi', () => {
@@ -78,7 +89,7 @@ describe('formatPlan', () => {
       products: { expected: 44, found: 44, active: 0, idMismatch: [] },
       variations: { expected: 48, found: 48, active: 0, extraActive: 0 },
     });
-    expect(formatPlan(done, { apply: false, coupons: 'keep' })).toMatch(/đang bán 0 → không cần đổi/);
+    expect(formatPlan(done, { apply: false, coupons: 'keep', keepCoupons: [] })).toMatch(/đang bán 0 → không cần đổi/);
   });
 
   it('id lệch migration và biến thể thêm sau đều được nêu', () => {
@@ -87,7 +98,7 @@ describe('formatPlan', () => {
         products: { expected: 44, found: 44, active: 44, idMismatch: [{ id: 'cmx', pancakeId: 'seed-p-fuwa-floor' }] },
         variations: { expected: 48, found: 48, active: 48, extraActive: 2 },
       }),
-      { apply: false, coupons: 'keep' },
+      { apply: false, coupons: 'keep', keepCoupons: [] },
     );
     expect(text).toContain('seed-p-fuwa-floor');
     expect(text).toMatch(/2 biến thể khác/);

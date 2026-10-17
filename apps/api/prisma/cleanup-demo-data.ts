@@ -6,6 +6,7 @@
  *   pnpm run prisma:cleanup-demo                                   # xem trước: không ghi gì
  *   pnpm run prisma:cleanup-demo -- --apply                        # tắt sản phẩm, biến thể; giữ nguyên mã
  *   pnpm run prisma:cleanup-demo -- --apply --coupons=expire       # thêm: tắt cả 3 mã demo
+ *   pnpm run prisma:cleanup-demo -- --apply --coupons=expire --keep-coupon=WELCOME30   # tắt mã demo, trừ mã được duyệt
  *
  * Thoát 0 khi xong (kể cả khi không còn gì để đổi), 2 khi tham số sai hoặc DB không có dòng demo nào, 1 khi lỗi khác.
  * Logic nằm ở src/config/demo-data (có test); file này chỉ nối DB và in kết quả.
@@ -53,7 +54,7 @@ async function main(): Promise<number> {
       console.log(formatPlan(plan, args));
       return 0;
     }
-    const { plan, result } = await applyDemoCleanup(prisma, { coupons: args.coupons });
+    const { plan, result } = await applyDemoCleanup(prisma, { coupons: args.coupons, keepCoupons: args.keepCoupons });
     console.log(formatPlan(plan, args));
     console.log('');
     console.log(formatResult(result));

@@ -61,8 +61,8 @@ describe('evaluateDemoData', () => {
 
     const all = byId(run(FRESH, envWith({ GO_LIVE_ACCEPT_DEMO_COUPONS: 'WELCOME30' })), 'db.demo_coupons');
     expect(all.status).toBe('FAIL');
-    expect(all.detail).not.toContain('WELCOME30');
-    expect(all.detail).toContain('FREESHIP');
+    expect(all.detail).toMatch(/chưa duyệt: FREESHIP.*XANH10/);
+    expect(all.detail).toMatch(/đã chấp nhận giữ: WELCOME30/);
   });
 
   it('trùng mã demo nhưng không phải dòng migration tạo (id khác): WARN, không FAIL', () => {
