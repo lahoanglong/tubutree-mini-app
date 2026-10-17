@@ -47,11 +47,11 @@ export class CouponClaimService {
   async claim(userId: string, rawCode: string): Promise<ClaimedCoupon> {
     const code = normalizeCouponCode(rawCode);
     const coupon = await this.prisma.coupon.findUnique({ where: { code } });
-    if (!coupon) throw new BadRequestException('Mã ưu đãi không tồn tại. Vui lòng kiểm tra lại mã trên thẻ.');
-    if (!coupon.isActive) throw new BadRequestException('Mã ưu đãi đã ngừng áp dụng.');
+    if (!coupon) throw new BadRequestException('Mã giảm giá không tồn tại. Vui lòng kiểm tra lại mã trên thẻ.');
+    if (!coupon.isActive) throw new BadRequestException('Mã giảm giá đã ngừng áp dụng.');
     const now = new Date();
-    if (now > coupon.endAt) throw new BadRequestException('Mã ưu đãi đã hết hạn.');
-    if (now < coupon.startAt) throw new BadRequestException(`Mã ưu đãi áp dụng từ ngày ${formatVnDate(coupon.startAt)}.`);
+    if (now > coupon.endAt) throw new BadRequestException('Mã giảm giá đã hết hạn.');
+    if (now < coupon.startAt) throw new BadRequestException(`Mã giảm giá áp dụng từ ngày ${formatVnDate(coupon.startAt)}.`);
 
     // Mọi lần nhận đòi tài khoản thật: mã thẻ riêng chỉ có một lượt nhận, tài khoản khách (deviceId mới) không được giữ chỗ.
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, tierId: true, phone: true, zaloId: true } });
@@ -87,7 +87,7 @@ export class CouponClaimService {
         const taken = await tx.couponClaim.count({ where: { couponId: coupon.id } });
         if (taken >= coupon.usageLimit) {
           throw new BadRequestException(
-            coupon.usageLimit === 1 ? 'Mã ưu đãi này đã được tài khoản khác nhận.' : 'Mã ưu đãi đã hết lượt nhận.',
+            coupon.usageLimit === 1 ? 'Mã giảm giá này đã được tài khoản khác nhận.' : 'Mã giảm giá đã hết lượt nhận.',
           );
         }
       }
@@ -117,6 +117,6 @@ export class CouponClaimService {
   private async assertNotUsedUp(coupon: Coupon, userId: string): Promise<void> {
     if (coupon.perUserLimit <= 0) return;
     const used = await this.prisma.couponRedemption.count({ where: { couponId: coupon.id, userId } });
-    if (used >= coupon.perUserLimit) throw new BadRequestException('Bạn đã dùng mã ưu đãi này rồi.');
+    if (used >= coupon.perUserLimit) throw new BadRequestException('Bạn đã dùng mã giảm giá này rồi.');
   }
 }

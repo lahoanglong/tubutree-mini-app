@@ -92,13 +92,13 @@ describe('CouponClaimService.claim (D2-03: nhận mã từ thẻ trong hộp hà
 
   it('mã thẻ riêng (1 lượt) đã có người khác nhận → từ chối, không ghi', async () => {
     const { svc, createMany } = make({ claimCount: 1 });
-    await expect(svc.claim('u1', 'SHOPEE-AB12CD34')).rejects.toThrow('Mã ưu đãi này đã được tài khoản khác nhận.');
+    await expect(svc.claim('u1', 'SHOPEE-AB12CD34')).rejects.toThrow('Mã giảm giá này đã được tài khoản khác nhận.');
     expect(createMany).not.toHaveBeenCalled();
   });
 
   it('mã chung hết lượt nhận → từ chối', async () => {
     const { svc } = make({ coupon: coupon({ usageLimit: 200 }), claimCount: 200 });
-    await expect(svc.claim('u1', 'SHOPEE-AB12CD34')).rejects.toThrow('Mã ưu đãi đã hết lượt nhận.');
+    await expect(svc.claim('u1', 'SHOPEE-AB12CD34')).rejects.toThrow('Mã giảm giá đã hết lượt nhận.');
   });
 
   it('mã không giới hạn tổng lượt → không khoá, ON CONFLICT DO NOTHING chặn trùng khi nhận song song', async () => {
@@ -108,10 +108,10 @@ describe('CouponClaimService.claim (D2-03: nhận mã từ thẻ trong hộp hà
   });
 
   it.each([
-    ['không tồn tại', null, 'Mã ưu đãi không tồn tại'],
-    ['đã tắt', coupon({ isActive: false }), 'Mã ưu đãi đã ngừng áp dụng.'],
-    ['hết hạn', coupon({ startAt: new Date(Date.now() - 2 * 864e5), endAt: past }), 'Mã ưu đãi đã hết hạn.'],
-    ['chưa tới ngày', coupon({ startAt: future, endAt: new Date(Date.now() + 2 * 864e5) }), 'Mã ưu đãi áp dụng từ ngày'],
+    ['không tồn tại', null, 'Mã giảm giá không tồn tại'],
+    ['đã tắt', coupon({ isActive: false }), 'Mã giảm giá đã ngừng áp dụng.'],
+    ['hết hạn', coupon({ startAt: new Date(Date.now() - 2 * 864e5), endAt: past }), 'Mã giảm giá đã hết hạn.'],
+    ['chưa tới ngày', coupon({ startAt: future, endAt: new Date(Date.now() + 2 * 864e5) }), 'Mã giảm giá áp dụng từ ngày'],
   ])('mã %s → từ chối, không ghi', async (_name, c, msg) => {
     const { svc, createMany } = make({ coupon: c });
     const err = await svc.claim('u1', 'X').catch((e: Error) => e);
@@ -134,7 +134,7 @@ describe('CouponClaimService.claim (D2-03: nhận mã từ thẻ trong hộp hà
 
   it('khách đã dùng hết lượt của mã → báo đã dùng', async () => {
     const { svc } = make({ claimed: true, used: 1 });
-    await expect(svc.claim('u1', 'SHOPEE-AB12CD34')).rejects.toThrow('Bạn đã dùng mã ưu đãi này rồi.');
+    await expect(svc.claim('u1', 'SHOPEE-AB12CD34')).rejects.toThrow('Bạn đã dùng mã giảm giá này rồi.');
   });
 
   it('mã công khai đủ điều kiện → trả thông tin, không ghi dòng nhận (mã đã sẵn trong ví)', async () => {

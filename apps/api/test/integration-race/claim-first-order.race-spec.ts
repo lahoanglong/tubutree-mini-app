@@ -190,7 +190,7 @@ describe('claim-first-order: mã thẻ hộp hàng + freeship đơn đầu (real
       const users = await Promise.all(Array.from({ length: 6 }, () => realUser()));
       const s = summarize(await Promise.allSettled(users.map((u) => claims.claim(u.id, c.code))));
       expect(s.fulfilled).toHaveLength(1);
-      expect(new Set(s.errors)).toEqual(new Set(['BadRequestException: Mã ưu đãi này đã được tài khoản khác nhận.']));
+      expect(new Set(s.errors)).toEqual(new Set(['BadRequestException: Mã giảm giá này đã được tài khoản khác nhận.']));
       expect(await prisma.couponClaim.count({ where: { couponId: c.id } })).toBe(1);
     });
 
@@ -413,7 +413,7 @@ describe('claim-first-order: mã thẻ hộp hàng + freeship đơn đầu (real
     expect(exported.codes.filter((c) => c.claimed)).toHaveLength(1);
 
     await expect(batches.setActive(prefix, false)).resolves.toEqual({ batch: prefix, updated: 25 });
-    await expect(claims.claim((await realUser()).id, made.codes[1]!.code)).rejects.toThrow('Mã ưu đãi đã ngừng áp dụng.');
+    await expect(claims.claim((await realUser()).id, made.codes[1]!.code)).rejects.toThrow('Mã giảm giá đã ngừng áp dụng.');
     await config.set('app.miniapp_base_url', '', 'it-claim');
   });
 });
