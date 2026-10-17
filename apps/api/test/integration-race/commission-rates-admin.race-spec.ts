@@ -233,6 +233,33 @@ describe('Admin đặt % hoa hồng CTV (real Postgres)', () => {
     }
   });
 
+  it('danh sách keyset (tên trùng nhau): đi hết các trang, mỗi sản phẩm đúng một lần; lọc chưa có % và tìm theo SKU', async () => {
+    const tag = randCode(6);
+    const made: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const v = await pancakeVariation(100_000);
+      // Ba sản phẩm cùng tên: keyset chỉ theo tên sẽ lặp/bỏ sót ở ranh giới trang.
+      await prisma.product.update({ where: { id: v.productId }, data: { name: `Keyset ${tag} ${i < 3 ? 'A' : `B${i}`}` } });
+      await prisma.variation.update({ where: { id: v.id }, data: { sku: `ITKS-${tag}-${i}` } });
+      if (i === 4) await admin.setVariationRate(adminUserId, v.id, 6);
+      made.push(v.productId);
+    }
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 10; guard++) {
+      const page = await admin.listProducts({ q: `ITKS-${tag}`, take: 2, cursor });
+      seen.push(...page.items.map((p) => p.id));
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen)).toEqual(new Set(made));
+
+    const missing = await admin.listProducts({ q: `ITKS-${tag}`, take: 50, missing: true });
+    expect(missing.items.map((p) => p.id).sort()).toEqual(made.slice(0, 4).sort());
+    expect(missing.summary.missing).toBeGreaterThanOrEqual(4);
+  });
+
   it('đồng bộ Pancake (đổi giá, tồn) không xoá % admin đã đặt', async () => {
     const v = await pancakeVariation(100_000, { stock: 10 });
     const product = await prisma.product.findUniqueOrThrow({ where: { id: v.productId } });
