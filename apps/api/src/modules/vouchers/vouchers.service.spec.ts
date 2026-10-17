@@ -2,6 +2,7 @@ import { VouchersService } from './vouchers.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import { REAL_USER_WHERE } from '../../common/real-user';
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -737,5 +738,66 @@ describe('VouchersService — lịch giờ VN, độc lập TZ host (C-026)', ()
     }
     const data = ((prisma as unknown as { coupon: { create: jest.Mock } }).coupon.create).mock.calls[0][0].data;
     expect(data.scopeMeta.reason).toBe('WINBACK-2026-10');
+  });
+});
+
+// D2-07a: voucher chào mừng cấp ngay khi tài khoản thật xuất hiện, cron mỗi giờ vẫn là lưới. Cả hai đi qua cùng
+// grant() (code tất định WELCOME-<userId>) nên gọi trùng không tạo thêm mã.
+describe('VouchersService.grantWelcomeNow', () => {
+  function setup(eligible: boolean, config: Record<string, unknown> = {}) {
+    const findFirst = jest.fn().mockResolvedValue(eligible ? { id: 'u1' } : null);
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: { findFirst },
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    return { svc: new VouchersService(prisma, makeConfig(config), notify), findFirst, create, notify };
+  }
+
+  it('user đủ điều kiện → cấp đúng mã WELCOME-<userId> với giá trị/đơn tối thiểu đọc từ cấu hình, hạn 30 ngày', async () => {
+    const { svc, create, notify } = setup(true, { 'voucher.welcome_amount': 25000, 'voucher.welcome_min_order': 150000 });
+
+    await expect(svc.grantWelcomeNow('u1')).resolves.toBe(true);
+
+    const data = create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ code: 'WELCOME-U1', type: 'AMOUNT', value: 25000, minOrder: 150000, usageLimit: 1, perUserLimit: 1 });
+    expect(data.scopeMeta).toEqual({ userId: 'u1', reason: 'WELCOME' });
+    expect(Math.round((data.endAt.getTime() - data.startAt.getTime()) / 864e5)).toBe(30);
+    expect(notify.notify).toHaveBeenCalledWith('u1', 'WELCOME_VOUCHER', expect.objectContaining({ value: '25.000' }));
+  });
+
+  it('giá trị mặc định khi chưa có cấu hình giống cron (30.000đ cho đơn từ 199.000đ)', async () => {
+    const { svc, create } = setup(true);
+    await svc.grantWelcomeNow('u1');
+    expect(create.mock.calls[0][0].data).toMatchObject({ value: 30000, minOrder: 199000 });
+  });
+
+  it('điều kiện đúng như cron: khách thật, role CUSTOMER, chưa có đơn, tạo trong 24h', async () => {
+    const { svc, findFirst } = setup(true);
+    const before = Date.now();
+
+    await svc.grantWelcomeNow('u1');
+
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where).toMatchObject({ id: 'u1', role: 'CUSTOMER', orders: { none: {} }, OR: REAL_USER_WHERE.OR });
+    const since = (where.createdAt.gte as Date).getTime();
+    expect(before - since).toBeGreaterThanOrEqual(24 * 3600 * 1000 - 1000);
+    expect(before - since).toBeLessThanOrEqual(24 * 3600 * 1000 + 5000);
+  });
+
+  it('khách vãng lai / đã có đơn / quá 24h (findFirst rỗng) → không cấp, không thông báo', async () => {
+    const { svc, create, notify } = setup(false);
+    await expect(svc.grantWelcomeNow('u1')).resolves.toBe(false);
+    expect(create).not.toHaveBeenCalled();
+    expect(notify.notify).not.toHaveBeenCalled();
+  });
+
+  it('đã có mã (cron cấp trước) → false, không tạo thêm', async () => {
+    const { svc, create } = setup(true);
+    const prismaInternal = (svc as unknown as { prisma: { coupon: { findUnique: jest.Mock } } }).prisma;
+    prismaInternal.coupon.findUnique.mockResolvedValue({ id: 'c1' });
+    await expect(svc.grantWelcomeNow('u1')).resolves.toBe(false);
+    expect(create).not.toHaveBeenCalled();
   });
 });

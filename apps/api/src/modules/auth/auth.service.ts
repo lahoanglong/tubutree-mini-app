@@ -15,6 +15,7 @@ import { roleClaims } from './session-state.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { firstTouchColumns } from '../../common/attribution';
+import { VouchersService } from '../vouchers/vouchers.service';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -74,7 +75,22 @@ export class AuthService {
     private readonly rbac: RbacService,
     // Optional: test dựng tay 5 tham số vẫn chạy, chỉ không báo người mời bị thu thưởng lúc gộp.
     @Optional() private readonly notifications?: NotificationsService,
+    // Optional như notifications: không có thì chỉ cron giờ cấp voucher chào mừng.
+    @Optional() private readonly vouchers?: VouchersService,
   ) {}
+
+  /**
+   * D2-07a: voucher chào mừng ngay khi tài khoản thật xuất hiện, để lần mở đầu khách đã thấy mã. Lỗi ở đây không được làm
+   * rớt đăng nhập: cron mỗi giờ của VouchersService cùng một mã tất định nên vẫn cấp bù trong 24h đầu.
+   */
+  private async grantWelcomeVoucher(userId: string): Promise<void> {
+    if (!this.vouchers) return;
+    try {
+      await this.vouchers.grantWelcomeNow(userId);
+    } catch (err) {
+      this.logger.warn(`Cấp voucher chào mừng cho ${userId} lỗi, chờ cron: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   /**
    * Đăng nhập KHÁCH (guest) theo deviceId — dùng khi Zalo login chưa khả dụng
@@ -181,6 +197,7 @@ export class AuthService {
           user = await this.recoverFromZaloIdConflict(err, info.zaloId);
         }
       }
+      await this.grantWelcomeVoucher(user.id);
       return this.issueTokens(user);
     }
 
@@ -276,7 +293,10 @@ export class AuthService {
         },
       });
       const fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
-      if (upgraded.count === 1 || fresh.zaloId === info.zaloId) return this.issueTokens(fresh);
+      if (upgraded.count === 1 || fresh.zaloId === info.zaloId) {
+        await this.grantWelcomeVoucher(fresh.id);
+        return this.issueTokens(fresh);
+      }
       if (fresh.mergedIntoId) return this.mergedSessionTokens(fresh, info, phone);
       throw this.zaloMismatch(fresh, info.zaloId);
     } catch (err) {
@@ -728,6 +748,7 @@ export class AuthService {
         // dùng lại user vừa được request kia tạo thay vì làm rớt phiên đăng nhập hợp lệ.
         user = await this.recoverFromZaloIdConflict(err, info.zaloId);
       }
+      await this.grantWelcomeVoucher(user.id);
     } else if (info.name && user.fullName !== info.name) {
       user = await this.prisma.user.update({
         where: { id: user.id },
