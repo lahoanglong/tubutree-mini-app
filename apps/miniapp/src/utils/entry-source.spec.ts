@@ -85,8 +85,9 @@ describe('parseEntryParams', () => {
     expect(parse('card=2610&ref=ABCD1234')).toEqual({ source: 'card-2610', refCode: 'ABCD1234' });
   });
 
-  it('l= (mã link CTV) được giữ cho việc đếm click', () => {
-    expect(parse('ref=ABCD1234&l=aB3_x-9')).toMatchObject({ refCode: 'ABCD1234', linkCode: 'aB3_x-9' });
+  it('l= (mã link CTV) được giữ cho việc đếm click và ngầm hiểu nguồn ctv', () => {
+    expect(parse('ref=ABCD1234&l=aB3_x-9')).toEqual({ source: 'ctv', refCode: 'ABCD1234', linkCode: 'aB3_x-9' });
+    expect(parse('src=oa&l=aB3_x-9')?.source).toBe('oa');
   });
 
   it.each([

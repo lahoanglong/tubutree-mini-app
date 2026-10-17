@@ -62,6 +62,12 @@ describe('parseEntryParams', () => {
     expect(parse('src=oa&ref=ABCD1234', '/s/lan-shop')?.source).toBe('oa');
   });
 
+  it('link CTV tạo (?ref=&l=) → ctv; src vẫn thắng', () => {
+    expect(parse('ref=ABCD1234&l=aB3_x-9')?.source).toBe('ctv');
+    expect(parse('src=oa&l=aB3_x-9')?.source).toBe('oa');
+    expect(parse('ref=ABCD1234&l=a b')?.source).toBe('ref');
+  });
+
   it.each([[''], ['utm_campaign=x'], ['src='], ['src=a b'], ['src=<script>'], ['card=%20'], ['ref=a b']])(
     'không có nguồn dùng được (%s) → null',
     (qs) => {

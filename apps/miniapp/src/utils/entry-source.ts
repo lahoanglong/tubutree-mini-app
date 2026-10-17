@@ -37,7 +37,8 @@ function cardToken(raw: string | null): string | undefined {
 }
 
 /**
- * Thứ tự chọn nguồn: src, utm_source, card, rồi ngầm hiểu từ dạng link: `?s=` (gian hàng CTV) → ctv, chỉ có `?ref=` → ref.
+ * Thứ tự chọn nguồn: src, utm_source, card, rồi ngầm hiểu từ dạng link: `?s=` (gian hàng CTV) hoặc `?l=` (link CTV tạo) → ctv,
+ * chỉ có `?ref=` → ref.
  * Ứng viên bẩn bị bỏ qua và xét ứng viên kế. Không có nguồn dùng được → null (phiên tính là organic).
  */
 export function parseEntryParams(params: URLSearchParams): LaunchAttribution | null {
@@ -46,8 +47,12 @@ export function parseEntryParams(params: URLSearchParams): LaunchAttribution | n
   const refCode = refRaw && REF_CODE_PATTERN.test(refRaw) ? refRaw : undefined;
   const slug = params.get('s')?.trim();
 
+  const linkRaw = params.get('l')?.trim() ?? null;
+  const linkCode = linkRaw && LINK_CODE_PATTERN.test(linkRaw) ? linkRaw : undefined;
+
   const explicit = normalizeEntryToken(params.get('src')) ?? normalizeEntryToken(params.get('utm_source'));
-  const source = explicit ?? card ?? (slug ? 'ctv' : undefined) ?? (refCode ? 'ref' : undefined);
+  // Link gian hàng CTV (?s=) và link CTV tạo (?l=) chỉ CTV mới có; ?ref= trần có thể là bạn bè hoặc CTV nên chỉ gọi là "ref".
+  const source = explicit ?? card ?? (slug || linkCode ? 'ctv' : undefined) ?? (refCode ? 'ref' : undefined);
   if (!source) return null;
 
   const out: LaunchAttribution = { source };
@@ -56,8 +61,7 @@ export function parseEntryParams(params: URLSearchParams): LaunchAttribution | n
   const medium = normalizeEntryToken(params.get('utm_medium'));
   if (medium) out.medium = medium;
   if (refCode) out.refCode = refCode;
-  const linkRaw = params.get('l')?.trim() ?? null;
-  if (linkRaw && LINK_CODE_PATTERN.test(linkRaw)) out.linkCode = linkRaw;
+  if (linkCode) out.linkCode = linkCode;
   return out;
 }
 

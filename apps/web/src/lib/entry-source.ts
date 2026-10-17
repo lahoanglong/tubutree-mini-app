@@ -8,6 +8,7 @@
  */
 export const ENTRY_TOKEN_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 const REF_CODE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const LINK_CODE_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
 
 export const FIRST_TOUCH_COOKIE = 'tubu_ft';
 const COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -38,7 +39,8 @@ function cardToken(raw: string | null): string | undefined {
 }
 
 /**
- * Thứ tự chọn nguồn: src, utm_source, card, rồi ngầm hiểu từ dạng link: trang gian hàng `/s/<slug>` → ctv, chỉ có `?ref=` → ref.
+ * Thứ tự chọn nguồn: src, utm_source, card, rồi ngầm hiểu từ dạng link: trang gian hàng `/s/<slug>` hoặc `?l=` (link CTV tạo) → ctv,
+ * chỉ có `?ref=` → ref.
  * Ứng viên bẩn bị bỏ qua. Không có nguồn dùng được → null.
  */
 export function parseEntryParams(params: URLSearchParams, pathname = ''): LaunchAttribution | null {
@@ -46,9 +48,12 @@ export function parseEntryParams(params: URLSearchParams, pathname = ''): Launch
   const ref = params.get('ref')?.trim();
   const hasRef = Boolean(ref && REF_CODE_PATTERN.test(ref));
   const onStorefront = /^\/s\/[^/]+/.test(pathname);
+  const link = params.get('l')?.trim();
+  const hasLink = Boolean(link && LINK_CODE_PATTERN.test(link));
 
   const explicit = normalizeEntryToken(params.get('src')) ?? normalizeEntryToken(params.get('utm_source'));
-  const source = explicit ?? card ?? (onStorefront ? 'ctv' : undefined) ?? (hasRef ? 'ref' : undefined);
+  // Trang gian hàng CTV và link CTV tạo (?l=) chỉ CTV mới có; ?ref= trần có thể là bạn bè hoặc CTV nên chỉ gọi là "ref".
+  const source = explicit ?? card ?? (onStorefront || hasLink ? 'ctv' : undefined) ?? (hasRef ? 'ref' : undefined);
   if (!source) return null;
 
   const out: LaunchAttribution = { source };
