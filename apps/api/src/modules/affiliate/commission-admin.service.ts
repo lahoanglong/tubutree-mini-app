@@ -88,7 +88,8 @@ export class CommissionAdminService {
    * Sản phẩm kèm biến thể để đặt %, sắp theo (tên, id), phân trang keyset theo đúng cặp đó: cursor mang (tên, id) của sản phẩm
    * cuối trang trước, nên trang sau vẫn đúng khi sản phẩm đó đã rời bộ lọc (vd vừa đặt % khi đang lọc "chưa có %"). Cursor
    * kiểu Prisma `{id}, skip:1` thì khi dòng cursor không còn khớp bộ lọc lại bỏ qua sản phẩm kế tiếp.
-   * `missing`: chỉ sản phẩm còn biến thể đang bán chưa có % (NULL — khác 0 là admin cố ý không trả hoa hồng).
+   * `missing`: chỉ sản phẩm đang bán còn biến thể đang bán chưa có % (NULL — khác 0 là admin cố ý không trả hoa hồng). Cùng
+   * tập với `summary` và với "áp cho chưa có %": sản phẩm đã ngừng bán không bán được nên không tính là thiếu %.
    */
   async listProducts(opts: { q?: string; missing?: boolean; cursor?: string; take: number }) {
     const q = opts.q?.trim();
@@ -103,7 +104,7 @@ export class CommissionAdminService {
             ],
           }
         : {}),
-      ...(opts.missing ? { variations: { some: { isActive: true, affiliateRate: null } } } : {}),
+      ...(opts.missing ? { isActive: true, variations: { some: { isActive: true, affiliateRate: null } } } : {}),
     };
     const [rows, maxRate, missing, missingTubu] = await Promise.all([
       this.prisma.product.findMany({
@@ -135,8 +136,8 @@ export class CommissionAdminService {
         },
       }),
       this.maxRate(),
-      this.prisma.variation.count({ where: { isActive: true, affiliateRate: null } }),
-      this.prisma.variation.count({ where: { isActive: true, affiliateRate: null, product: { storefrontId: null } } }),
+      this.prisma.variation.count({ where: { isActive: true, affiliateRate: null, product: { isActive: true } } }),
+      this.prisma.variation.count({ where: { isActive: true, affiliateRate: null, product: { isActive: true, storefrontId: null } } }),
     ]);
     const page = rows.slice(0, opts.take);
     return {
@@ -182,9 +183,10 @@ export class CommissionAdminService {
   }
 
   /**
-   * Áp % cho mọi biến thể đang bán CHƯA có % của hàng Tubu. Hàng đối tác (gian hàng tự đăng) không áp hàng loạt: hoa hồng CTV
-   * Tubu trả, không trừ vào đối soát đối tác, nên đặt từng sản phẩm. Khoá theo id rồi mới ghi: dòng admin khác vừa đặt % song
-   * song bị Postgres loại khỏi tập khoá (kiểm lại `affiliateRate IS NULL` trên bản mới), nên không bị ghi đè.
+   * Áp % cho mọi biến thể đang bán CHƯA có % của sản phẩm Tubu đang bán — đúng tập `summary.missingTubu` mà web hỏi xác nhận.
+   * Hàng đối tác (gian hàng tự đăng) không áp hàng loạt: hoa hồng CTV Tubu trả, không trừ vào đối soát đối tác, nên đặt từng
+   * sản phẩm. Khoá theo id rồi mới ghi: dòng admin khác vừa đặt % song song bị Postgres loại khỏi tập khoá (kiểm lại
+   * `affiliateRate IS NULL` trên bản mới), nên không bị ghi đè.
    */
   async fillMissingRates(adminId: string, rate: number) {
     await this.assertRate(rate);
@@ -193,7 +195,7 @@ export class CommissionAdminService {
         const locked = await tx.$queryRaw<LockedRate[]>`
           SELECT v."id", v."sku", v."affiliateRate" FROM "variations" v
           JOIN "products" p ON p."id" = v."productId"
-          WHERE v."isActive" = true AND v."affiliateRate" IS NULL AND p."storefrontId" IS NULL
+          WHERE v."isActive" = true AND v."affiliateRate" IS NULL AND p."isActive" = true AND p."storefrontId" IS NULL
           ORDER BY v."id" FOR UPDATE OF v`;
         if (locked.length) {
           await tx.variation.updateMany({

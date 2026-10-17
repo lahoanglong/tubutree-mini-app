@@ -200,6 +200,23 @@ describe('Admin đặt % hoa hồng CTV (real Postgres)', () => {
     expect([await rateOf(set.id), await rateOf(zero.id), await rateOf(partner.id)]).toEqual([12, 0, null]);
   });
 
+  it('sản phẩm ngừng bán: không tính vào số "chưa có %", không hiện ở lọc "chưa có %", "áp cho chưa có %" không chạm', async () => {
+    const tag = randCode(6);
+    const base = await admin.listProducts({ take: 1 });
+    const off = await pancakeVariation(100_000);
+    await prisma.product.update({ where: { id: off.productId }, data: { isActive: false, name: `Ngung ${tag}` } });
+    await prisma.variation.update({ where: { id: off.id }, data: { sku: `ITOFF-${tag}` } });
+
+    const after = await admin.listProducts({ take: 1 });
+    expect(after.summary).toEqual(base.summary);
+    expect((await admin.listProducts({ q: `ITOFF-${tag}`, missing: true, take: 5 })).items).toEqual([]);
+    expect((await admin.listProducts({ q: `ITOFF-${tag}`, take: 5 })).items.map((p) => p.id)).toEqual([off.productId]);
+
+    const filled = await admin.fillMissingRates(adminUserId, 4);
+    expect(filled.updated).toBe(after.summary.missingTubu);
+    expect(await rateOf(off.id)).toBeNull();
+  });
+
   it('CSV có dòng sai / vượt trần / SKU lặp → 400, không dòng nào bị ghi (kể cả dòng hợp lệ)', async () => {
     const a = await pancakeVariation(100_000);
     const b = await pancakeVariation(100_000);

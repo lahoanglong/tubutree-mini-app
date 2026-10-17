@@ -95,7 +95,7 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it('áp % cho biến thể chưa có %: khoá đúng tập (NULL, đang bán, hàng Tubu) theo id rồi ghi các id đó, vẫn kèm IS NULL', async () => {
+  it('áp % cho biến thể chưa có %: khoá đúng tập (NULL, biến thể + sản phẩm đang bán, hàng Tubu) theo id rồi ghi các id đó, vẫn kèm IS NULL', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 2 });
     const $queryRaw = jest.fn().mockResolvedValue([
       { id: 'v1', sku: 'A1', affiliateRate: null },
@@ -104,7 +104,7 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     const { svc } = make({ variation: { updateMany }, $queryRaw });
     expect(await svc.fillMissingRates('admin-3', 10)).toEqual({ updated: 2, affiliateRate: 10 });
     const q = sql($queryRaw.mock.calls[0]);
-    expect(q).toMatch(/v\."isActive" = true AND v\."affiliateRate" IS NULL AND p\."storefrontId" IS NULL/);
+    expect(q).toMatch(/v\."isActive" = true AND v\."affiliateRate" IS NULL AND p\."isActive" = true AND p\."storefrontId" IS NULL/);
     expect(q).toMatch(/ORDER BY v\."id" FOR UPDATE OF v/);
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ['v1', 'v3'] }, affiliateRate: null });
     expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toContain('A1: chưa có→10; C3: chưa có→10');
@@ -264,6 +264,11 @@ describe('CommissionAdminService.listProducts', () => {
     expect(decodeListCursor(r.nextCursor!)).toEqual({ name: 'SP p2', id: 'p2' });
     expect(r.maxRate).toBe(50);
     expect(r.summary).toEqual({ missing: 7, missingTubu: 5 });
+    // Sản phẩm ngừng bán không tính là thiếu %: đếm cùng tập với lọc "chưa có %" và "áp cho chưa có %".
+    expect(prisma.variation.count.mock.calls.map((c: [{ where: unknown }]) => c[0].where)).toEqual([
+      { isActive: true, affiliateRate: null, product: { isActive: true } },
+      { isActive: true, affiliateRate: null, product: { isActive: true, storefrontId: null } },
+    ]);
   });
 
   it('cursor (tên, id) giữ được dấu tiếng Việt; cursor hỏng → 400, không gọi DB', async () => {
@@ -285,6 +290,7 @@ describe('CommissionAdminService.listProducts', () => {
     expect(r.nextCursor).toBeNull();
     const where = prisma.product.findMany.mock.calls[0][0].where;
     expect(where.variations).toEqual({ some: { isActive: true, affiliateRate: null } });
+    expect(where.isActive).toBe(true);
     expect(where.OR).toEqual([
       { nameSearch: { contains: 'nuoc\\_rua' } },
       { variations: { some: { sku: { contains: 'Nước\\_Rửa', mode: 'insensitive' } } } },
