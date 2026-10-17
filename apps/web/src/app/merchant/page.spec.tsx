@@ -473,6 +473,17 @@ describe('cổng đối tác — đại lý giữ gian hàng CTV (isPartner)', (
       expect(byText(root, 'button', 'Đăng sản phẩm mới')).toBeNull();
     });
 
+    it('cờ đối tác do admin bật tay còn nguyên: không dựng giao diện tự giao, không gọi danh sách đơn cần giao', async () => {
+      customer();
+      mocks.store = { ...STORE, type: 'CTV', isPartner: true, hasPayouts: true };
+      mocks.listFulfil.mockClear();
+      window.history.replaceState(null, '', '/merchant');
+      const root = await mount();
+      expect(tabLabels(root)).toEqual(['Hàng trả về', 'Đối soát']);
+      expect(root.textContent).not.toContain('Đơn cần giao');
+      expect(mocks.listFulfil).not.toHaveBeenCalled();
+    });
+
     it('có gian hàng nhưng chưa có phiếu: vẫn là màn không có quyền', async () => {
       customer();
       mocks.store = { ...STORE, type: 'CTV', isPartner: false, hasPayouts: false };

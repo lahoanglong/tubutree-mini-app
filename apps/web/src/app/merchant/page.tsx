@@ -160,7 +160,8 @@ export default function MerchantPage() {
   const restricted = user?.role === 'CUSTOMER';
   const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore, enabled: authed, retry: restricted ? false : undefined });
   const store = storeQ.data;
-  const selfFulfils = isPartnerStore(store);
+  // CUSTOMER không gọi được fulfil-orders kể cả khi cờ đối tác do admin bật tay còn nguyên, nên không dựng giao diện tự giao cho họ.
+  const selfFulfils = isPartnerStore(store) && !restricted;
   // Cùng queryKey/limit với trang 1 của ProductsTab → dùng chung cache. Số trên thẻ KPI đọc meta tổng
   // (ownTotal/resellTotal) — đếm `.length` của trang đầu thì không bao giờ vượt cỡ trang.
   const productsQ = useQuery({ queryKey: ['merchant-products', 1], queryFn: () => getMerchantProducts(1), enabled: authed && !restricted });
