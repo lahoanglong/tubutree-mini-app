@@ -259,6 +259,22 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
       }
     });
 
+    it('duyệt chạy song song ADMIN xoá bài PENDING → tác giả không bao giờ nhận cả "đã duyệt" lẫn "chưa được đăng"', async () => {
+      const admin = await createUser(prisma);
+      for (let round = 0; round < 6; round += 1) {
+        const author = await createUser(prisma);
+        const p = await post(author.id, { status: 'PENDING' });
+
+        const settled = await Promise.allSettled([feed.approvePost(p.id), feed.deletePost(admin.id, 'ADMIN', p.id)]);
+
+        expect(settled.filter((r) => r.status === 'rejected')).toEqual([]);
+        const approved = (await logs(author.id, 'COMMUNITY_POST_APPROVED')).length;
+        const rejected = (await logs(author.id, 'COMMUNITY_POST_REJECTED')).length;
+        expect(approved > 0 && rejected > 0).toBe(false);
+        expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('REMOVED');
+      }
+    });
+
     it('đảo điểm hỏng giữa chừng → hidePost ném lỗi và bài vẫn PUBLISHED (không gỡ nửa vời rồi mất cơ hội đảo điểm)', async () => {
       const author = await createUser(prisma);
       const p = await post(author.id);

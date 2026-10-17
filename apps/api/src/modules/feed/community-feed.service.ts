@@ -974,7 +974,7 @@ export class CommunityFeedService {
   }
 
   async deletePost(userId: string, role: string, postId: string) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true, status: true, title: true, body: true } });
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true, title: true, body: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền xoá.');
     // Đổi trạng thái, đảo điểm và rút tin cậy trong MỘT transaction: updateMany có điều kiện là cổng (hai người cùng gỡ thì
@@ -984,17 +984,22 @@ export class CommunityFeedService {
     // ADMIN gỡ bài của người khác = hành vi kiểm duyệt → rút cờ tin cậy; tác giả tự xoá bài mình thì không.
     const moderated = post.userId !== userId && role === 'ADMIN';
     const thresholds = await this.repThresholds();
-    const removed = await this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
-      if (count !== 1) return false;
+    // Loại tin báo tác giả chọn theo trạng thái lúc CHUYỂN, không theo lúc đọc đầu hàm: nếu người khác vừa duyệt bài trong
+    // lúc đó thì tác giả không được nhận "chưa được đăng" ngay sau "đã duyệt".
+    const removedFrom = await this.prisma.$transaction(async (tx) => {
+      const gone = { status: 'REMOVED' } as const;
+      let from: 'PENDING' | 'PUBLISHED' | null = null;
+      if ((await tx.feedPost.updateMany({ where: { id: postId, status: 'PENDING' }, data: gone })).count === 1) from = 'PENDING';
+      else if ((await tx.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: gone })).count === 1) from = 'PUBLISHED';
+      if (!from) return null;
       await this.reverseReputationInTx(tx, post.userId, postId, 'REVERSE_POST', thresholds);
       if (moderated) await this.revokeTrust(post.userId, tx);
-      return true;
+      return from;
     });
-    if (!removed) return { ok: true };
+    if (!removedFrom) return { ok: true };
     if (moderated) {
       // Bài còn PENDING chưa từng hiện ra với ai: báo "chưa được đăng" chứ không phải "đã được ẩn khỏi cộng đồng".
-      if (post.status === 'PENDING') await this.notifyPostRejected(postId, post);
+      if (removedFrom === 'PENDING') await this.notifyPostRejected(postId, post);
       else await this.notifyPostHidden(postId, post);
     }
     return { ok: true };

@@ -83,6 +83,23 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return merged as unknown as PrismaService;
 }
 
+/**
+ * `feedPost.updateMany` theo ngữ nghĩa thật: chỉ khớp (count 1) khi trạng thái HIỆN TẠI thoả `where.status`, và đổi trạng thái
+ * khi khớp. Dùng cho test cần phân biệt bài đã chuyển từ PENDING hay từ PUBLISHED.
+ */
+function withPostStatus(prisma: PrismaService, initial: string) {
+  let current = initial;
+  (prisma.feedPost.updateMany as jest.Mock).mockImplementation(
+    async ({ where, data }: { where: { status: string | { not: string } }; data: { status: string } }) => {
+      const cond = where.status;
+      const matches = typeof cond === 'string' ? current === cond : current !== cond.not;
+      if (!matches) return { count: 0 };
+      current = data.status;
+      return { count: 1 };
+    },
+  );
+}
+
 // Mock SystemConfigService — mặc định trả về fallback truyền vào (giống hành vi thật khi
 // key chưa cấu hình); truyền `overrides` để giả lập giá trị đã cấu hình cho key cụ thể.
 function makeConfig(overrides: Record<string, unknown> = {}) {
@@ -738,6 +755,7 @@ describe('CommunityFeedService.deletePost', () => {
   it('chủ bài → set status REMOVED', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'TIP' });
+    withPostStatus(prisma, 'PUBLISHED');
     await makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1');
     expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
   });
@@ -2716,6 +2734,7 @@ describe('CommunityFeedService.deletePost — ADMIN gỡ bài người khác th�
   it('ADMIN gỡ bài của người khác → COMMUNITY_POST_HIDDEN với lý do mặc định', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(row);
+    withPostStatus(prisma, 'PUBLISHED');
     const notify = { notify: jest.fn().mockResolvedValue(undefined) };
 
     await makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1');
@@ -2729,11 +2748,39 @@ describe('CommunityFeedService.deletePost — ADMIN gỡ bài người khác th�
   it('ADMIN gỡ bài của người khác khi bài còn PENDING → báo "chưa được đăng" (REJECTED), không báo "đã ẩn" cho bài chưa từng đăng', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row, status: 'PENDING' });
+    withPostStatus(prisma, 'PENDING');
     const notify = { notify: jest.fn().mockResolvedValue(undefined) };
 
     await makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1');
 
     expect(notify.notify).toHaveBeenCalledTimes(1);
+    expect(notify.notify.mock.calls[0][1]).toBe('COMMUNITY_POST_REJECTED');
+  });
+
+  it('loại tin theo trạng thái bài lúc CHUYỂN chứ không theo lúc đọc: đọc thấy PENDING nhưng người khác vừa duyệt → báo "đã ẩn", không báo "chưa được đăng"', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row, status: 'PENDING' });
+    withPostStatus(prisma, 'PUBLISHED');
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    await makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1');
+
+    expect(notify.notify).toHaveBeenCalledTimes(1);
+    expect(notify.notify.mock.calls[0][1]).toBe('COMMUNITY_POST_HIDDEN');
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls.map((c) => c[0].where)).toEqual([
+      { id: 'p1', status: 'PENDING' },
+      { id: 'p1', status: { not: 'REMOVED' } },
+    ]);
+  });
+
+  it('đọc thấy PUBLISHED nhưng lúc chuyển bài vẫn PENDING → báo "chưa được đăng"', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row, status: 'PUBLISHED' });
+    withPostStatus(prisma, 'PENDING');
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    await makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1');
+
     expect(notify.notify.mock.calls[0][1]).toBe('COMMUNITY_POST_REJECTED');
   });
 
@@ -2750,6 +2797,7 @@ describe('CommunityFeedService.deletePost — ADMIN gỡ bài người khác th�
   it('báo lỗi → bài vẫn bị gỡ', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(row);
+    withPostStatus(prisma, 'PUBLISHED');
     const notify = { notify: jest.fn().mockRejectedValue(new Error('down')) };
 
     await expect(makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1')).resolves.toEqual({ ok: true });
