@@ -536,6 +536,7 @@ export class CommunityFeedService {
         userId, kind, status, body, title, images, categoryId: input.categoryId ?? null,
         ...(input.eventId ? { meta: { eventId: input.eventId } } : {}),
       },
+      select: { id: true },
     });
 
     if (slugs.length) {
@@ -735,7 +736,7 @@ export class CommunityFeedService {
       // Cùng transaction để likeCount không lệch khi tạo tim thất bại (P2002 → rollback cả hai).
       await this.prisma.$transaction([
         this.prisma.feedReaction.create({ data: { postId, userId } }),
-        this.prisma.feedPost.update({ where: { id: postId }, data: { likeCount: { increment: 1 } } }),
+        this.prisma.feedPost.update({ where: { id: postId }, data: { likeCount: { increment: 1 } }, select: { id: true } }),
       ]);
       created = true;
       // Task 9: chỉ phát khi THẬT SỰ tạo được reaction ở request này — nhánh P2002 bên dưới nghĩa
@@ -914,7 +915,7 @@ export class CommunityFeedService {
     await this.prisma.$transaction([
       this.prisma.feedComment.updateMany({ where: { postId }, data: { isAccepted: false } }),
       this.prisma.feedComment.update({ where: { id: commentId }, data: { isAccepted: true } }),
-      this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId } }),
+      this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId }, select: { id: true } }),
     ]);
     try {
       await this.reward.rewardBestAnswer(comment.userId, post.userId, postId);
@@ -992,7 +993,7 @@ export class CommunityFeedService {
       }
     }
 
-    await this.prisma.feedPost.update({ where: { id: postId }, data });
+    await this.prisma.feedPost.update({ where: { id: postId }, data, select: { id: true } });
     return { ok: true };
   }
 
@@ -1034,7 +1035,7 @@ export class CommunityFeedService {
       data: comment.isAccepted ? { isRemoved: true, isAccepted: false } : { isRemoved: true },
     });
     if (comment.isAccepted) {
-      await this.prisma.feedPost.update({ where: { id: comment.postId }, data: { bestCommentId: null } });
+      await this.prisma.feedPost.update({ where: { id: comment.postId }, data: { bestCommentId: null }, select: { id: true } });
     }
     return { ok: true };
   }
@@ -1181,7 +1182,10 @@ export class CommunityFeedService {
       orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: size + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: { user: { select: { fullName: true } }, category: { select: { name: true } } },
+      select: {
+        id: true, kind: true, title: true, body: true, isPinned: true, createdAt: true,
+        user: { select: { fullName: true } }, category: { select: { name: true } },
+      },
     });
     const hasMore = posts.length > size;
     const page = hasMore ? posts.slice(0, size) : posts;
@@ -1280,7 +1284,7 @@ export class CommunityFeedService {
 
   /** Ghim/bỏ ghim bài lên đầu bảng tin. */
   async pinPost(postId: string, pinned: boolean) {
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { isPinned: pinned } });
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { isPinned: pinned }, select: { id: true } });
     return { ok: true };
   }
 

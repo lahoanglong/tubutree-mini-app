@@ -575,6 +575,12 @@ describe('CommunityFeedService.createPost', () => {
     const data = (prisma.feedPost.create as jest.Mock).mock.calls[0][0].data;
     expect(data).toMatchObject({ userId: 'u1', kind: 'MANUAL', body: 'Vườn mình xanh quá' });
   });
+
+  it('chỉ đọc lại id bài vừa tạo, không kéo cả mảng ảnh vừa ghi về Node', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createPost('u1', 'STAFF', { body: 'Có ảnh', images: ['https://res.cloudinary.com/a.jpg'] });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].select).toEqual({ id: true });
+  });
 });
 
 describe('CommunityFeedService.toggleReaction', () => {
@@ -592,7 +598,7 @@ describe('CommunityFeedService.toggleReaction', () => {
     expect(r.liked).toBe(true);
     expect(prisma.feedReaction.create).toHaveBeenCalled();
     expect(prisma.feedReaction.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { likeCount: { increment: 1 } } });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { likeCount: { increment: 1 } }, select: { id: true } });
   });
 
   it('đã thả tim → bỏ tim, liked false', async () => {
@@ -847,7 +853,7 @@ describe('CommunityFeedService.setBestAnswer', () => {
     await makeSvc(prisma, reward).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
     expect(prisma.feedComment.updateMany).toHaveBeenCalledWith({ where: { postId: 'p1' }, data: { isAccepted: false } });
     expect(prisma.feedComment.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isAccepted: true } });
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { bestCommentId: 'c1' } });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { bestCommentId: 'c1' }, select: { id: true } });
     expect(reward.rewardBestAnswer).toHaveBeenCalledWith('answerer', 'author', 'p1');
   });
 
@@ -936,6 +942,7 @@ describe('CommunityFeedService.editPost', () => {
     expect(arg.where).toEqual({ id: 'p1' });
     expect(arg.data.body).toBe('nội dung mới');
     expect(arg.data.editedAt).toBeInstanceOf(Date);
+    expect(arg.select).toEqual({ id: true });
   });
 
   // P1-4 (docs/2026-09-08-review-progress.md): bài của user CHƯA tin cậy đi qua kiểm duyệt
@@ -1491,13 +1498,13 @@ describe('CommunityFeedService.pinPost', () => {
   it('set isPinned true', async () => {
     const prisma = makePrisma();
     await makeSvc(prisma).pinPost('p1', true);
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isPinned: true } });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isPinned: true }, select: { id: true } });
   });
 
   it('set isPinned false', async () => {
     const prisma = makePrisma();
     await makeSvc(prisma).pinPost('p1', false);
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isPinned: false } });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { isPinned: false }, select: { id: true } });
   });
 });
 
@@ -1840,7 +1847,7 @@ describe('CommunityFeedService.removeComment', () => {
       where: { id: 'c1' },
       data: { isRemoved: true, isAccepted: false },
     });
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { bestCommentId: null } });
+    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { bestCommentId: null }, select: { id: true } });
   });
 });
 
@@ -3065,6 +3072,10 @@ describe('CommunityFeedService.adminPublished', () => {
 
     const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
     expect(args.where).toEqual({ status: 'PUBLISHED' });
+    // màn kiểm duyệt không trả ảnh nên không được kéo cột images về Node
+    expect(args.include).toBeUndefined();
+    expect(args.select.images).toBeUndefined();
+    expect(args.select).toMatchObject({ id: true, kind: true, title: true, body: true, isPinned: true, createdAt: true });
     expect(args.orderBy).toEqual([{ isPinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }]);
     expect(args.take).toBe(3);
     expect(r.nextCursor).toBe('b');
