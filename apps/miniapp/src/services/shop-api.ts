@@ -222,9 +222,18 @@ export interface PublicConfig {
   returnWindowDays?: number;
   /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
   support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
+  /** Số cho khách mới (D2-07): voucher chào mừng và freeship đơn đầu (mặc định tắt). Thiếu khi API cũ → không hứa con số. */
+  newCustomer?: {
+    welcomeVoucher: { amount: number; minOrder: number };
+    firstOrderFreeShip: { enabled: boolean; minSubtotal: number };
+  };
+  /** Chi tiêu cho 1 Điểm Xanh được tích, và số đồng được giảm khi dùng 1 điểm. Thiếu khi API cũ. */
+  loyalty?: { vndPerPoint: number; vndPerPointRedeem: number };
+  /** Cờ bố cục Trang chủ cho khách mới (home.new_customer_layout). Thiếu khi API cũ → bố cục cũ. */
+  homeNewCustomerLayout?: boolean;
 }
-export const getPublicConfig = () =>
-  api.get<PublicConfig>('/config/public').then((r) => r.data);
+export const getPublicConfig = async () =>
+  (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);
 /**
  * Giá và trạng thái HIỆN HÀNH theo slug (dải "Đã xem gần đây" không lưu giá). Sản phẩm đã ẩn hoặc chưa duyệt không có trong kết
  * quả; tối đa 20 slug một lần.

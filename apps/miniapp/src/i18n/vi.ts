@@ -88,6 +88,22 @@ export const vi = {
     retry: 'Thử lại',
     retryLabel: (title: string) => `Thử lại ${title}`,
     loadErrorTitle: 'Chưa tải được Trang chủ',
+    // D2-07b: mọi số tiền/điểm/phần trăm truyền vào từ cấu hình công khai, không viết cứng ở đây.
+    newGift: {
+      title: 'Quà khách mới',
+      voucherAmount: (amount: string) => `Voucher chào mừng ${amount}`,
+      voucherPercent: (pct: number) => `Voucher chào mừng giảm ${pct}%`,
+      voucherFreeship: 'Voucher chào mừng miễn phí giao',
+      voucherMinOrder: (min: string) => `Cho đơn từ ${min}`,
+      voucherExpires: (date: string) => `Dùng đến ${date}`,
+      cta: 'Chọn sản phẩm',
+      benefitsTitle: 'Mua trực tiếp tại Tubu Tree',
+      freeShipFirst: 'Miễn phí giao cho đơn đầu tiên',
+      freeShipFirstFrom: (min: string) => `Miễn phí giao cho đơn đầu tiên từ ${min}`,
+      freeShipFrom: (min: string) => `Miễn phí giao cho đơn từ ${min}`,
+      points: (spend: string, redeem: string) => `Mỗi ${spend} mua hàng được 1 Điểm Xanh, 1 điểm giảm ${redeem}`,
+      subscribe: (pct: number) => `Đặt định kỳ giảm ${pct}% mỗi đơn`,
+    },
     strip: {
       title: 'Đơn của bạn',
       shipping: (code: string) => `Đơn ${code} đang giao`,

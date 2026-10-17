@@ -80,6 +80,7 @@ const APPROVED_LOADED_KEYS = [
     'groupbuy.max_open_per_user',
     'groupbuy.target_size',
     'groupbuy.window_hours',
+    'home.new_customer_layout',
     'legal.bao-mat',
     'legal.dieu-khoan',
     'legal.doi-tra',

@@ -19,6 +19,7 @@ import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
 import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
 import { isRealUser } from '../../common/real-user';
+import { voucherCode } from '../vouchers/voucher-code';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
@@ -663,6 +664,20 @@ export class LoyaltyService {
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+  }
+
+  /**
+   * Khối "Quà khách mới" ở Trang chủ: chỉ cho khách chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts), kèm
+   * voucher chào mừng nếu còn dùng được. Voucher lấy qua getAvailableCoupons nên hiện thì áp được, đúng như ví voucher.
+   */
+  async getNewCustomerOffer(userId: string) {
+    if (await hasPriorOrder(this.prisma, userId)) return { isNewCustomer: false as const, welcomeVoucher: null };
+    const code = voucherCode('WELCOME', userId);
+    const voucher = (await this.getAvailableCoupons(userId)).find((c) => c.code === code);
+    return {
+      isNewCustomer: true as const,
+      welcomeVoucher: voucher ? { code: voucher.code, type: voucher.type, value: voucher.value, minOrder: voucher.minOrder, endAt: voucher.endAt } : null,
+    };
   }
 
   /** Coupon khả dụng cho user: PUBLIC + đúng hạng + mã CLAIM đã nhận, còn hạn, chưa hết lượt cá nhân. */

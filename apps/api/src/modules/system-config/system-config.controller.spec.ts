@@ -176,3 +176,44 @@ describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)'
     expect(out.support).toEqual({ hotline: '0900 000 000', email: null, zaloOaName: null });
   });
 });
+
+// D2-07b: khối "Quà khách mới" và các chữ có số (D5-10) đọc từ đây. Mặc định phải bằng mặc định trong mã của nơi dùng số đó.
+describe('SystemConfigController.publicConfig — số cho khách mới và Điểm Xanh', () => {
+  it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu tắt, 10.000đ = 1 điểm, 1 điểm = 1.000đ', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.newCustomer).toEqual({
+      welcomeVoucher: { amount: 30000, minOrder: 199000 },
+      firstOrderFreeShip: { enabled: false, minSubtotal: 0 },
+    });
+    expect(out.loyalty).toEqual({ vndPerPoint: 10000, vndPerPointRedeem: 1000 });
+    expect(out.homeNewCustomerLayout).toBe(false);
+  });
+
+  it('admin đổi → trả giá trị mới của đúng khoá mà cron voucher, checkout và pricing đang đọc', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({
+        'voucher.welcome_amount': 25000,
+        'voucher.welcome_min_order': 150000,
+        'shipping.first_order_free_enabled': true,
+        'shipping.first_order_free_min_subtotal': 99000,
+        'loyalty.vnd_per_point': 20000,
+        'home.new_customer_layout': true,
+      }),
+    ).publicConfig();
+    expect(out.newCustomer).toEqual({
+      welcomeVoucher: { amount: 25000, minOrder: 150000 },
+      firstOrderFreeShip: { enabled: true, minSubtotal: 99000 },
+    });
+    expect(out.loyalty.vndPerPoint).toBe(20000);
+    expect(out.homeNewCustomerLayout).toBe(true);
+  });
+
+  // Chuỗi "false" là truthy: chỉ boolean true thật mới bật, để cờ gõ nhầm không hứa freeship hay đổi bố cục.
+  it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) → coi là tắt', async (bad) => {
+    const out = await new SystemConfigController(
+      makeConfig({ 'shipping.first_order_free_enabled': bad, 'home.new_customer_layout': bad }),
+    ).publicConfig();
+    expect(out.newCustomer.firstOrderFreeShip.enabled).toBe(false);
+    expect(out.homeNewCustomerLayout).toBe(false);
+  });
+});

@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
 import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
+import { voucherCode } from './voucher-code';
 
 type GrantFailures = { count: number; first?: unknown };
 
@@ -69,10 +70,8 @@ export class VouchersService {
     endAt?: Date;
     templateCode: string;
   }): Promise<boolean> {
-    // Code DETERMINISTIC theo (reason, full userId) → dựa vào coupon.code @unique
-    // làm chốt idempotency thật (chống 2 cron instance cấp trùng). Dùng full userId
-    // (không slice 6) để tránh false-skip khi 2 cuid trùng tiền tố.
-    const code = `${opts.reason}-${opts.userId}`.toUpperCase();
+    // Dùng full userId (không slice 6) để tránh false-skip khi 2 cuid trùng tiền tố.
+    const code = voucherCode(opts.reason, opts.userId);
     const existed = await this.prisma.coupon.findUnique({ where: { code } });
     if (existed) return false;
 

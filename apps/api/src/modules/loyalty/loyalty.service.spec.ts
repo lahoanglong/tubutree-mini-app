@@ -1236,3 +1236,50 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
     await expect(svc.dailyCheckIn('u1')).resolves.toMatchObject({ success: true });
   });
 });
+
+// D2-07b: khối "Quà khách mới" ở Trang chủ chỉ hiện cho khách chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts).
+describe('LoyaltyService.getNewCustomerOffer', () => {
+  const welcome = { ...coupon('WELCOME-ME', 'USER_GROUP', { userId: 'me' }), value: 30000, minOrder: 199000 };
+
+  function setup(opts: { priorOrder: boolean; coupons?: ReturnType<typeof coupon>[]; user?: Record<string, unknown> }) {
+    const orderFindFirst = jest.fn().mockResolvedValue(opts.priorOrder ? { id: 'o1' } : null);
+    const coupons = opts.coupons ?? [welcome];
+    const prisma = {
+      order: { findFirst: orderFindFirst },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue(opts.user ?? { id: 'me', tierId: null, zaloId: 'z-me', phone: null }) },
+      $queryRaw: jest.fn().mockResolvedValue(coupons.map((c) => ({ id: c.id }))),
+      coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
+      couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    return { svc: new LoyaltyService(prisma, makeConfig()), orderFindFirst, prisma };
+  }
+
+  it('chưa có đơn và có voucher chào mừng khả dụng → khách mới kèm đúng mức, đơn tối thiểu và hạn', async () => {
+    const { svc, orderFindFirst } = setup({ priorOrder: false });
+    const offer = await svc.getNewCustomerOffer('me');
+    expect(offer).toEqual({
+      isNewCustomer: true,
+      welcomeVoucher: { code: 'WELCOME-ME', type: 'AMOUNT', value: 30000, minOrder: 199000, endAt: welcome.endAt },
+    });
+    // Cùng bộ lọc "đơn đã tính" với mã chỉ-khách-mới: đơn huỷ không tính (priorOrderWhere).
+    expect(orderFindFirst.mock.calls[0][0].where).toMatchObject({ userId: 'me', status: { not: 'CANCELLED' } });
+  });
+
+  it('đã có đơn (chờ thanh toán, đang giao, đã giao, đã trả đều tính) → không phải khách mới, không nạp ví voucher', async () => {
+    const { svc, prisma } = setup({ priorOrder: true });
+    expect(await svc.getNewCustomerOffer('me')).toEqual({ isNewCustomer: false, welcomeVoucher: null });
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('khách mới nhưng chưa có voucher (cron chưa chạy, khách vãng lai, đã dùng hay hết hạn) → welcomeVoucher null, vẫn là khách mới', async () => {
+    const { svc } = setup({ priorOrder: false, coupons: [coupon('PUB', 'PUBLIC', null)] });
+    expect(await svc.getNewCustomerOffer('me')).toEqual({ isNewCustomer: true, welcomeVoucher: null });
+  });
+
+  it('chỉ lấy voucher chào mừng của CHÍNH khách này, không nhầm với mã chào mừng của người khác hay mã khác', async () => {
+    const other = { ...coupon('WELCOME-SOMEONE', 'USER_GROUP', { userId: 'someone' }), value: 1 };
+    const birthday = coupon('BIRTHDAY-2026-10-ME', 'USER_GROUP', { userId: 'me' });
+    const { svc } = setup({ priorOrder: false, coupons: [other, birthday] });
+    expect((await svc.getNewCustomerOffer('me')).welcomeVoucher).toBeNull();
+  });
+});

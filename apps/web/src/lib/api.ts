@@ -186,6 +186,18 @@ export async function getBrands(): Promise<BrandCount[]> {
   return fetchList<BrandCount>('/brands', 600, (json) => json as BrandCount[]);
 }
 
+export interface CategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  /** Số sản phẩm đang bán; API cũ chưa trả thì thiếu. */
+  productCount?: number;
+}
+export async function getCategories(): Promise<CategoryItem[]> {
+  return fetchList<CategoryItem>('/categories', 600, (json) => json as CategoryItem[]);
+}
+
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
   return fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
 }

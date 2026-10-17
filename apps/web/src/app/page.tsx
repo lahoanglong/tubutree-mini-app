@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ChevronRight } from 'lucide-react';
-import { getProductsPage, getBrands, HOME_PAGE_SIZE } from '@/lib/api';
+import { getProductsPage, getBrands, getCategories, HOME_PAGE_SIZE, type CategoryItem } from '@/lib/api';
 import { firstParam, homeHref, normalizeSearchQuery, pageHref, parsePage } from '@/lib/catalog-filter';
 import { homeCanonicalPath, homeMetadata } from '@/lib/home-seo';
 import { SITE_URL } from '@/lib/site';
@@ -11,25 +11,52 @@ import ProductPagination from '@/components/product-pagination';
 
 export const revalidate = 300;
 
-type HomeSearchParams = Promise<{ brand?: string | string[]; q?: string | string[]; page?: string | string[] }>;
+type HomeSearchParams = Promise<{
+  brand?: string | string[];
+  category?: string | string[];
+  q?: string | string[];
+  page?: string | string[];
+}>;
 
-// Mỗi từ khoá là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả. Nhãn và số trang thì mỗi biến
-// thể có tiêu đề + canonical riêng (xem home-seo) để không bị coi là bản trùng của trang chủ.
+/** Danh mục là phần thêm cho trang chủ: API danh mục lỗi thì bỏ hàng này chứ không làm hỏng cả lưới sản phẩm. */
+const loadCategories = (): Promise<CategoryItem[]> => getCategories().catch(() => []);
+
+// Mỗi từ khoá là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả. Lọc theo danh mục cũng vậy
+// (cùng sản phẩm với trang chủ, chỉ khác lối vào). Nhãn và số trang thì mỗi biến thể có tiêu đề + canonical riêng
+// (xem home-seo) để không bị coi là bản trùng của trang chủ.
 export async function generateMetadata({ searchParams }: { searchParams: HomeSearchParams }): Promise<Metadata> {
   const sp = await searchParams;
-  if (normalizeSearchQuery(sp.q)) return { robots: { index: false, follow: true } };
+  if (normalizeSearchQuery(sp.q) || firstParam(sp.category)) return { robots: { index: false, follow: true } };
   const brand = firstParam(sp.brand);
   const brandKnown = brand ? (await getBrands()).some((b) => b.brand === brand) : true;
   return homeMetadata({ brand, page: parsePage(sp.page) }, brandKnown);
 }
+
+const COMMITMENTS = [
+  { Icon: ShieldCheck, tone: 'bg-forest-50 text-forest-700', title: '100% Thuần Chay & Lành Tính', note: 'Đạt chuẩn kiểm định, an toàn cho làn da' },
+  { Icon: Truck, tone: 'bg-sage-50 text-sage-700', title: 'Giao Hàng Nhanh Toàn Quốc', note: 'Đóng gói vật liệu phân hủy sinh học' },
+  // Chính sách thật (miniapp /about, và chính tab Đổi/Trả của admin): chỉ đổi/trả khi sản phẩm LỖI NHÀ SẢN XUẤT, trong
+  // 7 ngày. Hứa "hoàn tiền nếu không hài lòng" là rộng hơn hẳn — khách đổi ý sẽ bị từ chối và có cơ sở khiếu nại.
+  { Icon: RotateCcw, tone: 'bg-forest-50 text-forest-700', title: 'Đổi Trả 7 Ngày', note: 'Hàng lỗi nhà sản xuất — đổi mới hoặc hoàn tiền' },
+];
 
 export default async function HomePage({ searchParams }: { searchParams: HomeSearchParams }) {
   const sp = await searchParams;
   const brand = firstParam(sp.brand);
   const q = normalizeSearchQuery(sp.q);
   const page = parsePage(sp.page);
+  const categoryParam = firstParam(sp.category);
+  const categories = await loadCategories();
+  // Chỉ nhận id có thật: chuỗi tuỳ ý trên URL không được chuyển thẳng xuống API.
+  const category = categoryParam && categories.some((c) => c.id === categoryParam) ? categoryParam : undefined;
+  const shelf = categories.filter((c) => c.productCount === undefined || c.productCount > 0);
   const [result, brands] = await Promise.all([
-    getProductsPage({ ...(brand ? { brand } : {}), ...(q ? { q } : {}), ...(page > 1 ? { page: String(page) } : {}) }),
+    getProductsPage({
+      ...(brand ? { brand } : {}),
+      ...(category ? { category } : {}),
+      ...(q ? { q } : {}),
+      ...(page > 1 ? { page: String(page) } : {}),
+    }),
     getBrands(),
   ]);
   // Trang nhãn hàng (/brand/:slug) chỉ có khi nhãn đã công khai; không có liên kết nào khác dẫn tới nó từ trang chủ.
@@ -39,13 +66,13 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
   const totalPages = Math.max(1, Math.ceil(total / (result.meta?.limit || HOME_PAGE_SIZE)));
   // ?page= vượt trang cuối (sản phẩm vừa bị gỡ, hoặc URL cũ): đưa về trang cuối thay vì hiện "chưa có sản phẩm".
   if (products.length === 0 && total > 0 && page > totalPages) {
-    redirect(pageHref({ brand, q }, totalPages));
+    redirect(pageHref({ brand, category, q }, totalPages));
   }
 
   const canonicalPath = homeCanonicalPath({ brand, page });
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-      {canonicalPath !== '/' && !q && <link rel="canonical" href={`${SITE_URL}${canonicalPath}`} />}
+      {canonicalPath !== '/' && !q && !categoryParam && <link rel="canonical" href={`${SITE_URL}${canonicalPath}`} />}
       {/* ── Hero ── */}
       <section className="relative mb-8 overflow-hidden rounded-sheet bg-forest-800 px-6 py-10 text-stone-0 shadow-raised sm:px-10 sm:py-14">
         {/* Hai mảng sáng mờ làm điểm nhấn nền, không mang thông tin */}
@@ -80,44 +107,51 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
         </div>
       </section>
 
-      {/* ── Cam kết ── */}
-      <section aria-labelledby="cam-ket" className="mb-10">
+      {/* ── Mua theo danh mục: khách mới có lối vào ngay dưới hero, trước phần cam kết ── */}
+      {shelf.length > 0 && (
+        <nav aria-label="Mua theo danh mục" className="mb-6">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2">
+            {shelf.map((c) => {
+              const isActive = category === c.id;
+              return (
+                <Link
+                  key={c.id}
+                  href={homeHref({ brand, category: isActive ? undefined : c.id, q })}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-forest-600 font-semibold text-stone-0 shadow-card ring-2 ring-forest-600/30'
+                      : 'border border-stone-300 bg-stone-0 text-stone-700 hover:border-stone-450 hover:bg-stone-50'
+                  }`}
+                >
+                  {c.name}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+
+      {/* ── Cam kết: một hàng ba ô ở mọi cỡ màn hình; điện thoại chỉ giữ tiêu đề để vừa hàng ── */}
+      <section aria-labelledby="cam-ket" className="mb-8">
         <h2 id="cam-ket" className="sr-only">
           Cam kết của Tubu Tree
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="flex items-center gap-3.5 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-forest-50 text-forest-700">
-              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          {COMMITMENTS.map(({ Icon, tone, title, note }) => (
+            <div
+              key={title}
+              className="flex flex-col items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 text-center shadow-card sm:flex-row sm:gap-3.5 sm:p-4 sm:text-left"
+            >
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-control ${tone}`}>
+                <Icon className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-stone-900 sm:text-sm">{title}</h3>
+                <p className="hidden text-xs text-stone-600 sm:block">{note}</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-stone-900">100% Thuần Chay & Lành Tính</h3>
-              <p className="text-xs text-stone-600">Đạt chuẩn kiểm định, an toàn cho làn da</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3.5 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-sage-50 text-sage-700">
-              <Truck className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-stone-900">Giao Hàng Nhanh Toàn Quốc</h3>
-              <p className="text-xs text-stone-600">Đóng gói vật liệu phân hủy sinh học</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3.5 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-forest-50 text-forest-700">
-              <RotateCcw className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              {/* Chính sách thật (miniapp /about, và chính tab Đổi/Trả của admin): chỉ đổi/trả khi
-                  sản phẩm LỖI NHÀ SẢN XUẤT, trong 7 ngày. Hứa "hoàn tiền nếu không hài lòng" là
-                  rộng hơn hẳn — khách đổi ý sẽ bị từ chối và có cơ sở khiếu nại. */}
-              <h3 className="text-sm font-semibold text-stone-900">Đổi Trả 7 Ngày</h3>
-              <p className="text-xs text-stone-600">Hàng lỗi nhà sản xuất — đổi mới hoặc hoàn tiền</p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -144,7 +178,7 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
             <span>
               Kết quả tìm kiếm cho “<strong className="break-all font-semibold text-stone-900">{q}</strong>”
             </span>
-            <Link href={homeHref({ brand })} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
+            <Link href={homeHref({ brand, category })} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
               Xóa tìm kiếm
             </Link>
           </p>
@@ -152,7 +186,7 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
 
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
           <Link
-            href={homeHref({ q })}
+            href={homeHref({ category, q })}
             aria-current={!brand ? 'true' : undefined}
             className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-semibold transition-all ${
               !brand
@@ -167,7 +201,7 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
             return (
               <Link
                 key={b.brand}
-                href={homeHref({ brand: b.brand, q })}
+                href={homeHref({ brand: b.brand, category, q })}
                 aria-current={isActive ? 'true' : undefined}
                 className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-medium transition-all ${
                   isActive
@@ -216,7 +250,7 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
                 <ProductCard key={p.id} product={p} priority={i < PRIORITY_CARDS} />
               ))}
             </div>
-            <ProductPagination page={page} totalPages={totalPages} filter={{ brand, q }} />
+            <ProductPagination page={page} totalPages={totalPages} filter={{ brand, category, q }} />
           </>
         )}
       </section>

@@ -67,6 +67,12 @@ export interface CouponDTO {
   products?: { id: string; name: string }[] | null;
 }
 
+/** Khối "Quà khách mới": khách chưa có đơn (đúng định nghĩa đơn đầu của API) kèm voucher chào mừng còn dùng được. */
+export interface NewCustomerOffer {
+  isNewCustomer: boolean;
+  welcomeVoucher: Pick<CouponDTO, 'code' | 'type' | 'value' | 'minOrder' | 'endAt'> | null;
+}
+
 export interface WalletSummary {
   walletBalance: number;
   cashbackPending: number;
@@ -219,6 +225,8 @@ export const getLoyalty = () => api.get<LoyaltyOverview>('/me/loyalty').then((r)
 export const getPointsTransactions = () =>
   api.get<PointsTxn[]>('/me/points/transactions').then((r) => r.data);
 export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => r.data);
+export const getNewCustomerOffer = async () =>
+  (await takeMeBlock('newCustomerOffer')) ?? api.get<NewCustomerOffer>('/me/new-customer-offer').then((r) => r.data);
 export const getLoyaltyRewards = () => api.get<RewardCatalogResponse>('/me/loyalty/rewards').then((r) => r.data);
 export const redeemLoyaltyReward = (rewardId: string) =>
   api

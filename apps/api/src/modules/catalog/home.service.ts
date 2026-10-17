@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
 import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { buildPublicConfig, type PublicConfigDTO } from '../system-config/public-config';
+import { SystemConfigService } from '../system-config/system-config.service';
 import { CatalogService } from './catalog.service';
 import type { ProductQuery } from './dto/product-query.dto';
 
@@ -49,6 +52,8 @@ export class HomeService {
     private readonly purchased: PurchasedItemsService,
     private readonly subscriptions: SubscriptionsService,
     private readonly notifications: NotificationsService,
+    private readonly config: SystemConfigService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   private async block<T>(name: string, run: () => Promise<T>): Promise<Block<T>> {
@@ -95,19 +100,21 @@ export class HomeService {
   }
 
   private async buildStatic(): Promise<HomeStatic> {
-    const [bestSellers, featured, newest, categories, brands] = await Promise.all([
+    const [bestSellers, featured, newest, categories, brands, publicConfig] = await Promise.all([
       this.block('bestSellers', () => this.catalog.list(productQuery({ sort: 'best_seller' }))),
       this.block('featured', () => this.catalog.list(productQuery({ limit: HOME_FEATURED_LIMIT }))),
       this.block('newest', () => this.catalog.list(productQuery({ sort: 'newest' }))),
       this.block('categories', () => this.catalog.categories()),
       this.block('brands', () => this.catalog.brands()),
+      // Khối "Quà khách mới" cần số công khai: gộp vào đây để mở Trang chủ không tốn thêm request /config/public.
+      this.block('publicConfig', () => buildPublicConfig(this.config)),
     ]);
-    return { bestSellers, featured, newest, categories, brands };
+    return { bestSellers, featured, newest, categories, brands, publicConfig };
   }
 
   /** Phần theo người dùng — KHÔNG cache dùng chung. */
   async getForUser(userId: string, purchasedLimit: number = DEFAULT_PURCHASED_LIMIT): Promise<HomeMe> {
-    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications] = await Promise.all([
+    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer] = await Promise.all([
       this.block('forYou', () => this.catalog.getForYou(userId)),
       this.block('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
       this.block('purchasedItems', () => this.purchased.list(userId, { limit: purchasedLimit })),
@@ -115,8 +122,9 @@ export class HomeService {
       this.block('shippingOrders', () => this.orders.list(userId, { status: 'SHIPPING' }, 1, 1)),
       this.block('subscriptions', () => this.subscriptions.list(userId)),
       this.block('notifications', () => this.notifications.listForUser(userId)),
+      this.block('newCustomerOffer', () => this.loyalty.getNewCustomerOffer(userId)),
     ]);
-    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, purchasedLimit };
+    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, purchasedLimit };
   }
 }
 
@@ -129,6 +137,7 @@ export interface HomePublic {
   flashActive: Block<Awaited2<FlashSaleService['listActive']>>;
   categories: Block<Awaited2<CatalogService['categories']>>;
   brands: Block<Awaited2<CatalogService['brands']>>;
+  publicConfig: Block<PublicConfigDTO>;
 }
 
 type HomeStatic = Omit<HomePublic, 'flashActive'>;
@@ -141,6 +150,7 @@ export interface HomeMe {
   shippingOrders: Block<Awaited2<OrdersService['list']>>;
   subscriptions: Block<Awaited2<SubscriptionsService['list']>>;
   notifications: Block<Awaited2<NotificationsService['listForUser']>>;
+  newCustomerOffer: Block<Awaited2<LoyaltyService['getNewCustomerOffer']>>;
   /** Giới hạn đã dùng cho kệ Mua lại — client đối chiếu với tham số lẻ của nó. */
   purchasedLimit: number;
 }
