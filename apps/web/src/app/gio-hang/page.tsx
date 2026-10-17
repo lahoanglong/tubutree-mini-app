@@ -24,14 +24,15 @@ export default function CartPage() {
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã. Chọn cả giỏ
   // dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá phần chọn.
   const subsetLines = (cartQ.data?.items ?? []).filter((it) => !deselected.has(it.id));
+  // Mã đang áp nằm trong dấu vân tay: áp/bỏ mã đổi giá phần chọn dù id, số lượng, thành tiền không đổi.
   const subsetSig =
     cartQ.data && subsetLines.length > 0 && subsetLines.length < cartQ.data.items.length
-      ? JSON.stringify([subsetLines.map((it) => it.id), couponPreviewKey(subsetLines)])
+      ? JSON.stringify([subsetLines.map((it) => it.id), couponPreviewKey(subsetLines), cartQ.data.couponCode])
       : null;
   const settledSubsetSig = useSettled(subsetSig, PREVIEW_DEBOUNCE_MS);
   const selectionQ = useQuery({
     queryKey: [...cartKeyNow, 'selection', settledSubsetSig],
-    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string])[0]),
+    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string, string | null])[0]),
     enabled: phase === 'authenticated' && !!settledSubsetSig,
     retry: false,
   });
@@ -110,6 +111,8 @@ export default function CartPage() {
   const shownDiscount = shown?.discount ?? 0;
   const shownCombo = shown?.comboDiscount ?? 0;
   const shownTier = shown?.tierDiscount ?? 0;
+  // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
+  const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
 
   return (
     <Shell>
@@ -307,7 +310,7 @@ export default function CartPage() {
           <div className={`h-fit p-4 ${ui.card}`}>
             <div className="flex justify-between text-sm">
               <span className="text-stone-600">Tạm tính</span>
-              <span className="text-stone-900">{formatVnd(selectedSubtotal)}</span>
+              <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>
             </div>
             {shownCombo > 0 && (
               <div className="mt-1 flex justify-between text-sm text-success-fg">
@@ -330,7 +333,8 @@ export default function CartPage() {
             <CouponBox
               currentCode={cart.couponCode}
               subtotal={selectedSubtotal}
-              notice={shown ? shown.couponNotice : cart.couponNotice}
+              // Câu giải thích chỉ hiện khi thuộc phần đang hiển thị: cả giỏ, hoặc giá phần chọn đã có; chưa có thì thôi (không mượn câu của cả giỏ).
+              notice={shown?.couponNotice ?? null}
               // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
               preview={
                 selectedItems.length === 0
@@ -344,7 +348,7 @@ export default function CartPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span>{formatVnd(Math.max(0, selectedSubtotal - shownCombo - shownDiscount - shownTier))}</span>
+              <span>{formatVnd(Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier))}</span>
             </div>
             {selectedItems.length === 0 ? (
               <>

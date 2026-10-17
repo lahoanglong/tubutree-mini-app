@@ -96,14 +96,15 @@ export default function CartPage() {
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã của VoucherSheet.
   // Chọn cả giỏ dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá này.
   const subsetLines = (cart.data?.items ?? []).filter((l) => !deselected.has(l.id));
+  // Mã đang áp nằm trong dấu vân tay: áp/bỏ mã đổi giá phần chọn dù id, số lượng, thành tiền không đổi.
   const subsetSig =
     cart.data && subsetLines.length > 0 && subsetLines.length < cart.data.items.length
-      ? JSON.stringify([subsetLines.map((l) => l.id), cartPreviewKey(subsetLines)])
+      ? JSON.stringify([subsetLines.map((l) => l.id), cartPreviewKey(subsetLines), cart.data.couponCode])
       : null;
   const settledSubsetSig = useDebounced(subsetSig, PREVIEW_DEBOUNCE_MS);
   const selectionQ = useQuery({
     queryKey: [...cartKeyNow, 'selection', settledSubsetSig],
-    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string])[0]),
+    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string, string | null])[0]),
     enabled: phase === 'authenticated' && !!settledSubsetSig,
     retry: false,
   });
@@ -668,6 +669,8 @@ function StickySummary({
   const discount = shown?.discount ?? 0;
   const comboDiscount = shown?.comboDiscount ?? 0;
   const tierDiscount = shown?.tierDiscount ?? 0;
+  // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
+  const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const subsetNotice = !allSelected && priced?.couponCode ? priced.couponNotice : null;
 
   return (
@@ -725,7 +728,7 @@ function StickySummary({
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
           <KeyValueRow
             label={vi.cart.subtotalAfterDiscount}
-            value={formatVnd(Math.max(0, selectedSubtotal - comboDiscount - discount - tierDiscount))}
+            value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
           {overStock && (

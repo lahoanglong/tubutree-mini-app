@@ -561,6 +561,28 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     expect(screen.queryByText('Giảm giá combo')).toBeNull();
   });
 
+  it('mua cả giỏ có giảm hạng: trừ cả hạng như giỏ và báo giá (100.000 − combo 10.000 − mã 5.000 − hạng 4.000)', async () => {
+    mocks.getCart.mockResolvedValue({ ...TWO, tierDiscount: 4_000 });
+    renderPage();
+    expect(await screen.findByText('Ưu đãi hạng thành viên')).toBeInTheDocument();
+    expect(screen.getByText('-4.000đ')).toBeInTheDocument();
+    expect(screen.getByText('81.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('85.000đ')).toBeNull();
+  });
+
+  it('mua một phần giỏ: không trừ mã của cả giỏ khỏi tiền hàng phần chọn, nhắc tính lại ở bước thanh toán', async () => {
+    mocks.locState = { itemIds: ['ci1'] };
+    mocks.getCart.mockResolvedValue({ ...TWO, discount: 9_000, tierDiscount: 4_000 });
+    renderPage();
+    await screen.findByText('Cần chọn địa chỉ giao hàng');
+    expect(screen.queryByText('-9.000đ')).toBeNull();
+    expect(screen.queryByText('Giảm giá')).toBeNull();
+    expect(screen.queryByText('Ưu đãi hạng thành viên')).toBeNull();
+    expect(screen.queryByText('41.000đ')).toBeNull();
+    expect(screen.getAllByText('50.000đ').length).toBeGreaterThan(0);
+    expect(screen.getByText(/tính lại ở bước thanh toán/)).toBeInTheDocument();
+  });
+
   it('không có combo (0 hoặc API cũ): tổng như cũ', async () => {
     mocks.getCart.mockResolvedValue({ ...TWO, comboDiscount: undefined });
     renderPage();

@@ -549,4 +549,32 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     expect(ok.items.map((l) => l.id)).toEqual([lineA]);
     expect((await cartApi.get(b.userId, { itemIds: ['khong-co-trong-gio'] } as never)).items).toEqual([]);
   });
+
+  it('đọc giỏ gỡ mã hết hạn X trong lúc tab khác vừa áp mã Y: Y không bị gỡ nhầm', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+    const x = await coupon(b.userId, 'AMOUNT', 5_000);
+    const y = await coupon(b.userId, 'AMOUNT', 3_000);
+    await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: x } });
+    await prisma.coupon.update({ where: { code: x }, data: { endAt: new Date(Date.now() - 1_000) } });
+    const couponsSvc = moduleRef.get(CouponsService);
+    const real = couponsSvc.validateAndCompute.bind(couponsSvc);
+    // Tab B áp Y ngay sau khi tab A đã đọc giỏ (còn mã X) và thấy X hỏng, trước khi A ghi lệnh gỡ.
+    const spy = jest.spyOn(couponsSvc, 'validateAndCompute').mockImplementation(async (...args) => {
+      try {
+        return await real(...args);
+      } catch (e) {
+        if (args[0] === x) await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: y } });
+        throw e;
+      }
+    });
+    try {
+      const got = await cart.getCart(b.userId);
+      expect(got.couponRemoved).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await prisma.cart.findUniqueOrThrow({ where: { userId: b.userId } })).couponCode).toBe(y);
+  });
 });

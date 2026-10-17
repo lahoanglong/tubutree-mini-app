@@ -753,6 +753,7 @@ describe('CartService guard tồn kho', () => {
             ],
           }),
           update: jest.fn().mockResolvedValue({}),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
       }) as any;
     const flashG = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
@@ -783,7 +784,7 @@ describe('CartService guard tồn kho', () => {
       const c = await new CartService(prisma, couponsWith({ code: 'TAT50', isActive: false }), config, flashG, analytics, combo).getCart('u1');
       expect(c.couponCode).toBeNull();
       expect(c.couponRemoved).toEqual({ code: 'TAT50', reason: 'Mã giảm giá đã ngừng áp dụng.' });
-      expect(prisma.cart.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+      expect(prisma.cart.updateMany).toHaveBeenCalledWith({ where: { id: 'c1', couponCode: 'TAT50' }, data: { couponCode: null } });
     });
   });
 
@@ -832,7 +833,7 @@ describe('CartService guard tồn kho', () => {
 
   it('getCart: coupon fail cả trên TOÀN giỏ (hết hạn/hết lượt) → GỠ mã (null)', async () => {
     const validateAndCompute = jest.fn().mockRejectedValue(new BadRequestException('expired'));
-    const update = jest.fn().mockResolvedValue({});
+    const update = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
@@ -848,14 +849,14 @@ describe('CartService guard tồn kho', () => {
             },
           ],
         }),
-        update,
+        updateMany: update,
       },
     } as any;
     const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
     const couponsSvc = { validateAndCompute } as any;
     const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
     expect(cart.couponCode).toBeNull();
-    expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c1', couponCode: 'SALE' }, data: { couponCode: null } });
   });
 
   it('getCart: lỗi hạ tầng (không phải BadRequestException) khi validate coupon → KHÔNG bị nuốt, KHÔNG gỡ mã', async () => {
