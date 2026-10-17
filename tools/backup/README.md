@@ -57,14 +57,14 @@ Mất tối đa 6 giờ dữ liệu khi phải khôi phục (trước đây cron
 ```bash
 crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh' > /tmp/cron.new   # bỏ dòng 02:00 cũ nếu có
 cat >> /tmp/cron.new <<'CRON'
-17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=28 RCLONE_REMOTE=r2:tubutree-backups/db HEALTHCHECK_URL=https://hc-ping.com/<uuid> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1
+17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=r2:tubutree-backups/db HEALTHCHECK_URL=https://hc-ping.com/<uuid> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1
 CRON
 crontab /tmp/cron.new && crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'
 ```
 
 (Hoặc `crontab -e` rồi dán dòng trên, sửa remote và URL.) Dòng phải nằm trên MỘT dòng và có `RCLONE_REMOTE=` và `HEALTHCHECK_URL=` ngay trong dòng: `pnpm run go-live:check` đọc crontab theo đúng cách đó. Trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
 
-Giữ 28 bản `cron` trên máy (7 ngày). Bản `predeploy` giữ riêng 10 bản, không bị bản cron đẩy ra. Mọi file vẫn khớp `tubutree_*.sql.gz`, nên `restore-db.sh`, `ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1` trong runbook và `go-live:check` chạy như cũ.
+Giữ 120 bản `cron` trên máy (30 ngày x 4, bằng mức 30 ngày của cron 02:00 cũ). Chỉ hạ số này khi đã có `RCLONE_REMOTE` chạy thật; chưa có remote thì bản trên máy là bản duy nhất. Bản `predeploy` giữ riêng 10 bản, không bị bản cron đẩy ra. Mọi file vẫn khớp `tubutree_*.sql.gz`, nên `restore-db.sh`, `ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1` trong runbook và `go-live:check` chạy như cũ.
 
 Bản trước mỗi deploy (chạy tay ngay trước deploy, sau khi mã mới đã về máy):
 

@@ -272,6 +272,12 @@ describe('ops/crontab.backup.example', () => {
     expect(active).toHaveLength(1);
     expect(active[0]).toMatch(/^17 \*\/6 \* \* \* /);
     expect(active[0]).toContain('BACKUP_LABEL=cron');
-    expect(active[0]).toContain('BACKUP_KEEP_COUNT=28');
+    expect(active[0]).toContain('BACKUP_KEEP_COUNT=120');
+  });
+
+  it('giữ 120 bản cron (30 ngày x 4) trong mọi nơi cài cron, để không lùi so với 30 ngày của cron 02:00 cũ', () => {
+    const ops = readFileSync(join(REPO, '.github/workflows/ops.yml'), 'utf8');
+    expect(ops.match(/BACKUP_KEEP_COUNT=(\d+)/g)).toEqual(['BACKUP_KEEP_COUNT=120', 'BACKUP_KEEP_COUNT=120']);
+    expect(sample).toMatch(/chỉ hạ[^\n]*RCLONE_REMOTE/i);
   });
 });

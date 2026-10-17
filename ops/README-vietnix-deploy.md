@@ -131,7 +131,7 @@ P2028 (pool Prisma) với nhiều instance.
 
 Cài cron theo `tools/backup/README.md` mục "Cài đặt trên VPS Vietnix" và "Cài crontab (6 giờ/lần)", mẫu ở
 [ops/crontab.backup.example](crontab.backup.example): `COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml`,
-`BACKUP_LABEL=cron BACKUP_KEEP_COUNT=28`, `RCLONE_REMOTE` trỏ ra ngoài máy (R2/S3/Drive), `HEALTHCHECK_URL` để được
+`BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120` (30 ngày x 4; chỉ hạ khi đã có remote), `RCLONE_REMOTE` trỏ ra ngoài máy (R2/S3/Drive), `HEALTHCHECK_URL` để được
 báo khi backup lỗi hoặc cron không chạy. Mất tối đa 6 giờ dữ liệu khi phải khôi phục. Thiếu remote hoặc healthcheck thì
 backup vẫn chạy nhưng log có dòng `WARN` (và `go-live:check` báo). Diễn tập restore trước go-live và mỗi tháng (cùng README, lấy
 bản về từ remote và bấm giờ). Bước diễn tập, đo thời gian backup và khôi phục khi deploy hỏng nằm ở
