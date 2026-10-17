@@ -465,10 +465,10 @@ describe('AdminService.setUserRole', () => {
       ['STAFF', 'AFFILIATE', false],
       ['CUSTOMER', 'AFFILIATE', true],
       ['AFFILIATE', 'CUSTOMER', true],
-    ])('%s → %s: chỉ gian hàng MERCHANT bị chuyển (merchantOnly=%s)', async (from, to, merchantOnly) => {
+    ])('%s → %s: giữ gian hàng có cờ admin bật tay (spareAdminToggled=%s)', async (from, to, spareAdminToggled) => {
       fulfilment.clearPartnerOnRoleLoss.mockClear();
       await mkAdmin(withRole(from)).setUserRole('admin1', '0899625240', to as 'CUSTOMER');
-      expect(fulfilment.clearPartnerOnRoleLoss.mock.calls[0]?.[5]).toEqual({ merchantOnly });
+      expect(fulfilment.clearPartnerOnRoleLoss.mock.calls[0]?.[5]).toEqual({ spareAdminToggled });
     });
 
     it('deadlock trong transaction đổi vai trò → 503', async () => {

@@ -507,7 +507,7 @@ export class AdminService {
       if (losesPartnerStore('DEALER', role)) {
         if (!this.fulfilment || !partnerCfg) throw new Error('AdminService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
         await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole, {
-          merchantOnly: !losesPartnerStore(previousRole, role),
+          spareAdminToggled: !losesPartnerStore(previousRole, role),
         });
       }
       if (dealerTierId) {

@@ -572,6 +572,10 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     try {
       const got = await cart.getCart(b.userId);
       expect(got.couponRemoved).toBeNull();
+      // Mã và mức giảm trả về phải thuộc cùng một mã: Y với mức giảm thật của nó, không phải Y kèm 0đ chưa kiểm.
+      expect(got.couponCode).toBe(y);
+      expect(got.discount).toBe(3_000);
+      expect(got.couponNotice).toBeNull();
     } finally {
       spy.mockRestore();
     }

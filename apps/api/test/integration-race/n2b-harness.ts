@@ -8,7 +8,7 @@ import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-f
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
-import { createOrder, createUser, deleteItData, randCode, setConfig, warmPool } from './helpers';
+import { createOrder, createUser, deleteItData, randCode, setConfig, sleep, warmPool } from './helpers';
 
 const CONFIG_KEYS = ['merchant.settlement_hold_days', 'merchant.consignment_settle_from'];
 
@@ -92,5 +92,49 @@ export async function partnerHarness() {
     return p;
   }
 
-  return { prisma, moduleRef, admin, rbac, portal, fulfilment, created, cleanup, user, tier, ownerStore, product };
+  /** Giữ một khoá do `lock` lấy cho tới khi gọi release (cùng cách các spec d2). */
+  async function hold(lock: (tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0]) => Promise<unknown>) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const held = new Promise<void>((resolve) => (locked = resolve));
+    let pid = 0;
+    const done = prisma.$transaction(
+      async (tx) => {
+        await lock(tx);
+        [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS "pid"`;
+        locked();
+        await gate;
+      },
+      { timeout: 30_000 },
+    );
+    await held;
+    return { release, done, pid };
+  }
+
+  /** Số phiên đang chờ (kể cả gián tiếp) khoá của phiên `holderPid`. */
+  async function lockWaiters(holderPid: number) {
+    const [row] = await prisma.$queryRaw<{ n: number }[]>`
+      WITH RECURSIVE "w" AS (
+        SELECT "pid" FROM pg_stat_activity WHERE ${holderPid}::int = ANY(pg_blocking_pids("pid"))
+        UNION
+        SELECT a."pid" FROM pg_stat_activity a JOIN "w" ON "w"."pid" = ANY(pg_blocking_pids(a."pid"))
+      )
+      SELECT count(*)::int AS "n" FROM "w"`;
+    return row?.n ?? 0;
+  }
+
+  async function waitUntil(cond: () => Promise<boolean> | boolean, what: string) {
+    for (let i = 0; !(await cond()); i++) {
+      if (i > 200) throw new Error(`${what} không tới chỗ chờ khoá`);
+      await sleep(25);
+    }
+  }
+
+  const address = (userId: string) =>
+    prisma.address.create({
+      data: { userId, recipient: 'IT', phone: phone(), province: 'Ha Noi', district: '', ward: 'P', street: '1', provinceCode: '84_VN01', districtCode: '', wardCode: '00001' },
+    });
+
+  return { prisma, moduleRef, admin, rbac, portal, fulfilment, created, cleanup, user, tier, ownerStore, product, hold, lockWaiters, waitUntil, address };
 }

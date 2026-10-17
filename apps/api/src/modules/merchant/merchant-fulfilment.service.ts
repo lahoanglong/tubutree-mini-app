@@ -40,7 +40,7 @@ import {
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
 import { consignmentLinkedSql } from './consignment-link-sql';
-import { isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE, storeHasPayouts } from './partner-store';
+import { ADMIN_TOGGLE_MARK, isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE, storeHasPayouts } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
@@ -1434,7 +1434,7 @@ export class MerchantFulfilmentService {
             kind: 'STOREFRONT_PARTNER',
             from: String(!isPartner),
             to: String(isPartner),
-            reason: store.id,
+            reason: isPartner ? `${store.id}${ADMIN_TOGGLE_MARK}` : store.id,
             actorId: adminId,
           });
         }
@@ -1459,8 +1459,9 @@ export class MerchantFulfilmentService {
    * mọi gian hàng CTV). Còn vướng mắc thì ném 409 để cả lần đổi vai trò huỷ. Khoá tư vấn theo chủ lấy trước (chặn lần tạo gian hàng
    * đầu tiên ở Cổng người bán chen vào khi chưa có dòng nào để khoá), rồi mọi gian hàng của chủ đều khoá trước khi đọc cờ dưới khoá,
    * để lần bật lại cờ chạy song song không lọt qua.
-   * `merchantOnly`: chủ vốn không còn là DEALER/STAFF/ADMIN (CUSTOMER/AFFILIATE được đặt lại vai trò) thì chỉ gian hàng loại MERCHANT
-   * (luôn là đối tác, cờ không tắt tay được) bị chuyển về CTV; gian hàng CTV do admin bật cờ tay giữ nguyên.
+   * `spareAdminToggled`: chủ vốn không còn là DEALER/STAFF/ADMIN (CUSTOMER/AFFILIATE được đặt lại vai trò) thì gian hàng CTV có cờ do
+   * admin bật tay (lần bật mới nhất mang ADMIN_TOGGLE_MARK) giữ nguyên; gian hàng MERCHANT và cờ theo vai trò (Cổng người bán, duyệt đại lý)
+   * vẫn bị tắt/chuyển về CTV sau cùng lần kiểm vướng mắc.
    */
   async clearPartnerOnRoleLoss(
     tx: Db,
@@ -1468,7 +1469,7 @@ export class MerchantFulfilmentService {
     actorId: string,
     cfg: SettlementConfig,
     fromRole: string,
-    opts: { merchantOnly?: boolean } = {},
+    opts: { spareAdminToggled?: boolean } = {},
   ) {
     await lockStoreOwner(tx, ownerUserId);
     const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
@@ -1477,7 +1478,8 @@ export class MerchantFulfilmentService {
       await this.lockStorePayouts(tx, id);
       const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
         SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${id} FOR UPDATE`;
-      if (!store || !isPartnerStore(store) || (opts.merchantOnly && store.type !== 'MERCHANT')) continue;
+      if (!store || !isPartnerStore(store)) continue;
+      if (opts.spareAdminToggled && store.type !== 'MERCHANT' && (await this.isAdminToggled(tx, ownerUserId, id))) continue;
       const blockers = await this.partnerBlockers(tx, id, ownerUserId, cfg, true);
       if (blockers.length) {
         throw new ConflictException(
@@ -1518,6 +1520,15 @@ export class MerchantFulfilmentService {
     const out: string[] = [];
     for (const store of stores) out.push(...(await this.partnerBlockers(db, store.id, ownerUserId, cfg, true)));
     return out;
+  }
+
+  private async isAdminToggled(tx: Db, ownerUserId: string, storefrontId: string): Promise<boolean> {
+    const latest = await tx.userAdminEvent.findFirst({
+      where: { userId: ownerUserId, kind: 'STOREFRONT_PARTNER', toValue: 'true', reason: { in: [storefrontId, `${storefrontId}${ADMIN_TOGGLE_MARK}`] } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { reason: true },
+    });
+    return latest?.reason === `${storefrontId}${ADMIN_TOGGLE_MARK}`;
   }
 
   private async partnerBlockers(
