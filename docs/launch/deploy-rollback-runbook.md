@@ -139,12 +139,13 @@ Vì sao: BullMQ giữ mọi job trong Redis, `allkeys-lru` có thể xoá âm th
 
 - [ ] Redis `noeviction` (đã đổi nóng) và `appendonly yes`; việc đặt vĩnh viễn nằm ở mục 5 bước 5
 
-### 1.2 Backup hằng ngày, bản ngoài máy, và diễn tập khôi phục
+### 1.2 Backup 6 giờ/lần, bản ngoài máy, và diễn tập khôi phục
 
-Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab" và "Diễn tập restore". Tóm tắt những gì phải có:
+Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab (6 giờ/lần)" và "Diễn tập restore". Tóm tắt những gì phải có:
 
 - `rclone config` đã tạo remote (ví dụ tên `r2`), thử được: `rclone lsd r2:`.
-- Cron 02:00 có `RCLONE_REMOTE=<remote>:<thư mục>` và `HEALTHCHECK_URL=...`. Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`.
+- Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=28 RCLONE_REMOTE=<remote>:<thư mục> HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
+- Bản trước mỗi deploy: `bash ops/backup-predeploy.sh` (nhãn `predeploy`, giữ 10 bản, không ping check của cron). Bước 6 mục 5 vẫn dùng `backup-db.sh` như cũ (bản cuối khi API đã dừng).
 - Một bản backup chạy tay thành công, và đã **diễn tập khôi phục** vào DB tạm rồi so số dòng:
 
 ```bash
@@ -160,11 +161,14 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 
 Kỳ vọng: hai dòng số khớp nhau (chênh vài đơn mới nếu đang có khách). Ghi lại thời gian chạy `backup-db.sh` (dùng `time` đứng trước lệnh): cần cho mục 3.
 
-Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron 02:00 do `ops.yml` (hành động `crontab`) cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
+Diễn tập lần đầu nên lấy bản về TỪ NGOÀI MÁY (`rclone copy <remote>:<thư mục>/<file> /tmp/`, rồi nạp file đó thay cho `$F`) và bấm giờ cả bước nạp: số đó là thời gian khôi phục thật (RTO). Khối lệnh có sẵn bấm giờ nằm ở mục "Diễn tập restore" của [tools/backup/README.md](../../tools/backup/README.md). Lặp lại mỗi tháng.
 
-- [ ] Có remote rclone, cron, healthcheck
-- [ ] Đã diễn tập khôi phục, số dòng khớp
+Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron backup do `ops.yml` (hành động `crontab`, nay cài lịch 6 giờ/lần) hoặc `crontab -e` cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
+
+- [ ] Có remote rclone, cron 6 giờ/lần (không còn dòng 02:00 cũ), healthcheck
+- [ ] Đã diễn tập khôi phục (bản lấy từ remote), số dòng khớp
 - [ ] Thời gian một lần backup: ______ phút
+- [ ] Thời gian khôi phục (RTO, bước nạp bản backup vào DB tạm): ______ phút
 
 ### 1.3 Biến môi trường trong `/opt/tubutree/.env`
 
@@ -190,6 +194,35 @@ Ghi chú về `THROTTLE_BYPASS_TOKEN`: production nên đặt (xem [docs/2026-10
 - [ ] Đã chọn giờ theo mục 3 (tính từ danh sách chờ áp ở 1.0) và báo các admin (mẫu tin ở mục 5, bước 12)
 - [ ] Bản Zalo Mini App mới đã build sẵn nhưng CHƯA phát hành (ràng buộc 1)
 - [ ] Còn trống đĩa: `df -h /` còn ít nhất 3 lần dung lượng bảng orders (các migration viết lại mọi dòng và dựng chỉ mục): `psqlq -tAc "SELECT pg_size_pretty(pg_total_relation_size('orders'))"`. Nếu danh sách chờ áp có p4 (1.0) thì cộng thêm dung lượng bảng `users` (`pg_total_relation_size('users')`)
+
+### 1.5 Thay đổi cấu hình hạ tầng đi kèm bản này (2026-10-18)
+
+Tất cả tương thích ngược: không đổi cổng, tên service, volume hay thứ tự deploy ở mục 5. Chỉ cần biết chúng có hiệu lực lúc nào.
+
+| Thay đổi | Nằm ở | Hiệu lực khi | Cách kiểm |
+|---|---|---|---|
+| API đặt `keepAliveTimeout` 125 s và `headersTimeout` 126 s (trước: mặc định 5 s, thỉnh thoảng 502 lẻ do Apache tái dùng kết nối Node vừa đóng) | mã API (`config/http-timeouts.ts`) | bước 9 (API mới chạy) | không cần làm gì; 502 lẻ `error reading status line` trong `/www/wwwlogs/api.tubutree.com-error_log` biến mất |
+| Web đặt `KEEP_ALIVE_TIMEOUT=55000`, container web chạy user `node` (trước: root) | `docker-compose.vietnix.yml`, `apps/web/Dockerfile` | bước 3 (build) và bước 8 (web mới) | `$DC exec -T web id -un` ra `node`; `$DC logs --since 10m web \| grep -ci eacces` ra 0 |
+| Trần CPU `cpus` (api 1.0, web 1.0, postgres 1.0, redis 0.5), Postgres `shm_size: 128m` | `docker-compose.vietnix.yml` | web: bước 8, api: bước 9, Redis: bước 5 (tạo lại bằng compose mới). **Postgres không bị tạo lại trong cửa sổ** (chủ ý): nhận trần và `shm_size` mới khi tạo lại ngoài cửa sổ deploy, `$DC up -d --no-deps postgres` (khoảng 10 giây ngắt DB, dữ liệu ở volume) | `docker inspect -f '{{.HostConfig.NanoCpus}} {{.HostConfig.ShmSize}}' "$($DC ps -q postgres)"` |
+| Vhost Apache: `ProxyPass ... ttl=30` và `mod_deflate` (nén JSON/HTML/JS/CSS) | `ops/vietnix-vhost-*.conf.phase2` | khi dán lại hai file này (xem dưới), độc lập với deploy | `bash ops/check-edge.sh` dòng `nén:` có `content-encoding=gzip` |
+
+Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`; nếu lớn hơn 1, đặt trong `.env` (KHÔNG sửa compose: `git status` bẩn làm bước 1 dừng) `API_CPUS=2`, `WEB_CPUS=1`, `POSTGRES_CPUS=1.5` rồi tạo lại container tương ứng (`$DC up -d --no-deps <service>`). Mặc định cố ý không vượt 1 lõi vì Docker từ chối khởi động container có `cpus` lớn hơn số vCPU (lỗi `Range of CPUs is from 0.01 to 1.00` ở bước 8 hoặc 9: đặt `*_CPUS` nhỏ hơn rồi chạy lại lệnh `up -d`).
+
+Cập nhật vhost (chỉ khi đang dùng bản phase2, tức đã có chứng chỉ; còn phase1 thì làm theo [ops/README-vietnix-deploy.md](../../ops/README-vietnix-deploy.md) rồi dán phase2 mới. Làm ban ngày được, `graceful` không rớt kết nối đang có; backup lại hai file cũ trước):
+
+```bash
+for h in api app; do sudo cp /www/server/panel/vhost/apache/$h.tubutree.com.conf /root/$h.tubutree.com.conf.bak.$(date +%Y%m%d); done
+sudo cp ops/vietnix-vhost-api.conf.phase2 /www/server/panel/vhost/apache/api.tubutree.com.conf
+sudo cp ops/vietnix-vhost-app.conf.phase2 /www/server/panel/vhost/apache/app.tubutree.com.conf
+sudo /www/server/apache/bin/apachectl configtest && sudo /www/server/apache/bin/apachectl -k graceful
+httpd -M 2>/dev/null | grep -E 'deflate|remoteip' || /www/server/apache/bin/apachectl -M | grep -E 'deflate|remoteip'
+bash ops/check-edge.sh --local
+```
+
+`configtest` phải in `Syntax OK`. Không thấy `deflate_module` thì khối nén bị bỏ qua (không lỗi): nén vẫn có khi bật ☁ cam của Cloudflare. Quay lại: chép hai file `.bak.*` về đúng chỗ rồi `configtest` và `graceful`. Nếu error_log vẫn có `error reading status line` lẻ, thêm `disablereuse=On` sau `ttl=30` ở dòng `ProxyPass` của vhost api (mỗi request một kết nối mới, tốn thêm chút độ trễ).
+
+- [ ] Đã dán lại vhost phase2, `configtest` Syntax OK, `ops/check-edge.sh` không có FAIL
+- [ ] `nproc` đã xem và `*_CPUS` trong `.env` phù hợp (hoặc để mặc định 1 lõi mỗi service)
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
@@ -480,6 +513,8 @@ $DC exec -T redis redis-cli config get maxmemory-policy
 $DC logs --since 10m api | grep -iE 'chạy cron|error' | head
 ```
 
+Một lệnh thay cho phần `curl` đầu: `bash ops/check-edge.sh --local` (trên máy chủ) in `OK`/`WARN`/`FAIL` cho health, nén, cache, chứng chỉ, đĩa, container `unhealthy` và bản backup mới nhất; không được có `FAIL` (xem `--help`).
+
 Kỳ vọng: `health` có `"db":"up","redis":"up"`; `config/public` 200; `web` 200; hai webhook không kèm token đều trả **401** (chứng tỏ đường vào tồn tại và từ chối người lạ; không gửi dữ liệu thật); Redis `noeviction`; log có đúng một dòng `Instance ... chạy cron.` và không có `error` lặp.
 
 Giao diện:
@@ -507,7 +542,7 @@ Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã 
 
 ### Bước 14. Theo dõi 24 giờ
 
-- [ ] Sáng hôm sau: `tail /var/log/tubutree-backup.log` thấy backup 02:00 thành công, `rclone ls <remote>:<thư mục> | tail -3` thấy file mới, healthcheck xanh.
+- [ ] Sau tối đa 6 giờ: `tail /var/log/tubutree-backup.log` thấy backup theo cron thành công (không có dòng `WARN`), `rclone ls <remote>:<thư mục> | tail -3` thấy file mới, healthcheck xanh.
 - [ ] Chạy lại `go-live:check` (không kèm `--phase`).
 - [ ] Màn Sức khoẻ hệ thống: không còn dòng đỏ tồn quá 1 giờ.
 - [ ] Làm [pilot-order-playbook.md](pilot-order-playbook.md) (đơn thử thật) trước khi mở bán rộng.
