@@ -921,4 +921,18 @@ describe('StorefrontService.getPublicByHost', () => {
       expect((prisma.storefront.findFirst as jest.Mock)).not.toHaveBeenCalled();
     },
   );
+
+  it('host dài quá 253 ký tự (trần hostname DNS) → 400, không chạm DB', async () => {
+    const { svc, prisma } = mk();
+    const err = await svc.getPublicByHost(`${'a'.repeat(254)}.tubutree.vn`).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe('Host không hợp lệ.');
+    expect((prisma.storefront.findFirst as jest.Mock)).not.toHaveBeenCalled();
+  });
+
+  it('host đúng 253 ký tự vẫn được xử lý như cũ', async () => {
+    const { svc } = mk();
+    const err = await svc.getPublicByHost('a'.repeat(253)).catch((e) => e);
+    expect(err).not.toBeInstanceOf(BadRequestException);
+  });
 });
