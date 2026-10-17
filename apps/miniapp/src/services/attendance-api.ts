@@ -101,6 +101,3 @@ export const getHistory = (fromISO: string, toISO: string) =>
 // ── Admin sửa/thêm phiên ──
 export const adminEditSession = (id: string, patch: { checkinAt?: string; checkoutAt?: string }) =>
   api.post<{ updated: boolean }>(`/admin/attendance/session/${id}/edit`, patch).then((r) => r.data);
-
-export const adminAddSession = (body: { shiftId: string; checkinAt: string; checkoutAt: string }) =>
-  api.post<{ added: boolean }>('/admin/attendance/session', body).then((r) => r.data);

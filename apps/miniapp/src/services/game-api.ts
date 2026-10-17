@@ -113,9 +113,6 @@ export const waterTree = (drops: number) =>
     treesPlanted: number;
     reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
   }>('/game/tree/water', { drops }).then((r) => r.data);
-/** Mua nước 💧: BE đã ngừng (410), giữ hàm cho đủ API. */
-export const buySeeds = (seeds: number) =>
-  api.post<{ seeds: number; cost: number; totalSeeds: number }>('/game/seeds/buy', { seeds }).then((r) => r.data);
 /**
  * Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm thường trước, thiếu thì lấy điểm không hết hạn.
  * Mỗi lượt góp là một lần trừ điểm thật, nên kèm Idempotency-Key: gửi lại cùng key (chạm đúp, thử lại sau lỗi mạng
