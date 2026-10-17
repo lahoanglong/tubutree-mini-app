@@ -316,7 +316,7 @@ export default function ProductDetailPage() {
         thumbnail: p.thumbnail ?? undefined,
         path,
       },
-      `${WEB_BASE_URL}${path}`,
+      `${WEB_BASE_URL}/san-pham/${p.slug}`,
     );
   };
 

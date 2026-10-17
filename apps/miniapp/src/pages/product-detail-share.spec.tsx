@@ -72,7 +72,7 @@ describe('ProductDetailPage nút Chia sẻ', () => {
     expect(mocks.shareLink).not.toHaveBeenCalled();
     expect(mocks.shareWithFallback).toHaveBeenCalledWith(
       { title: 'Sản phẩm a', description: 'Mô tả ngắn', thumbnail: 'https://img/thumb.jpg', path: '/product/a' },
-      `${WEB_BASE_URL}/product/a`,
+      `${WEB_BASE_URL}/san-pham/a`,
     );
   });
 });

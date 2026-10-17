@@ -1,7 +1,7 @@
 # N3-SHARE: nút Chia sẻ ở trang chi tiết sản phẩm nuốt lỗi
 
 ## Làm gì
-`handleShare` trong `apps/miniapp/src/pages/product-detail.tsx` đổi từ `shareLink(...).catch(() => {})` sang hook `useShareWithFallback`. Giữ nguyên title, description, thumbnail, path. `fallbackText` là `${WEB_BASE_URL}/product/<slug>`, cùng cách dựng với share-sheet, affiliate, group-buy. Nơi khác không gắn mã giới thiệu vào liên kết sản phẩm nên không thêm.
+`handleShare` trong `apps/miniapp/src/pages/product-detail.tsx` đổi từ `shareLink(...).catch(() => {})` sang hook `useShareWithFallback`. Giữ nguyên title, description, thumbnail, path. `fallbackText` là `${WEB_BASE_URL}/san-pham/<slug>`: trên web trang sản phẩm thật là `/san-pham/<slug>`, còn `/product/<slug>` chỉ là redirect 307 giữ cho liên kết đã chia sẻ trước đây (cùng quy tắc với content-kit-sheet). `path` cho Mini App vẫn là `/product/<slug>`. Nơi khác không gắn mã giới thiệu vào liên kết sản phẩm nên không thêm.
 
 Test mới `product-detail-share.spec.tsx` (mock `../components/share-sheet`): bấm Chia sẻ thì gọi `shareWithFallback` đúng tham số và không gọi `shareLink`. Trước khi sửa test đỏ: `shareLink` bị gọi 1 lần, kèm lỗi `Cannot read properties of undefined (reading 'catch')`. Sau khi sửa test xanh.
 
