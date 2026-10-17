@@ -35,6 +35,13 @@ grantInChunks không dừng khi một grant lỗi (allSettled), ghi lỗi có tr
 - `npx eslint --max-warnings=0` trên vouchers.service.ts, vouchers.service.spec.ts, race spec mới: exit 0.
 - Race (Postgres docker cổng 5822, migrate deploy): `npx jest -c test/integration-race/jest.config.js --runInBand 'integration-race/(milestone-second-order-vouchers|birthday-vouchers-chunked|vouchers-real-user|second-order-review-invite)'`: 4 suite, 13 test xanh, exit 0. Container đã `docker rm -f -v`.
 
+## Sau review
+
+Review độc lập có 2 finding minor.
+
+- Comment GRANT_CONCURRENCY (vouchers.service.ts) còn ghi chỉ birthday/welcome/winback: xác minh trên mã là đúng (grantInChunks nay có 5 nơi gọi). Sửa comment (không đổi hành vi nên không có test đỏ; kiểm bằng tsc, eslint và jest voucher): nêu cả 5 cron, ghi chú welcome (mỗi giờ) trùng second-order lúc 10:00, tối đa 20 grant cùng lúc cộng 1 kết nối giữ lock, so với connection_limit=20 (docker-compose.vietnix.yml:79). Reviewer đã tự chạy giả lập pool nhỏ, 0 lỗi, nên đây chỉ là vấn đề tài liệu. Commit riêng.
+- milestoneVouchers dùng LIMIT 1000 với GROUP BY không ORDER BY, nếu hơn 1000 khách chi tiêu trong tháng thì lấy tập con tuỳ ý: xác minh là đúng (truy vấn đó có sẵn từ trước, diff này không đổi). KHÔNG sửa trong gói này: gói cấm đổi điều kiện/cách chọn người nhận, và keyset phân trang đổi ai nhận mã. Ghi thành mục backlog riêng: phân trang keyset theo userId như birthdayVouchers/winbackVouchers (thêm `o."userId" > cursor`, `ORDER BY o."userId"`, lặp đến khi trang thiếu), kèm test hơn 1000 khách. Chưa làm.
+
 ## Chưa verify
 
 - Không chạy full suite, Playwright, capture/axe (điều phối viên chạy).
