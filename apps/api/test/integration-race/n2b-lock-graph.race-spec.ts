@@ -22,6 +22,7 @@ import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service'
 import { CashbackService } from '../../src/modules/cashback/cashback.service';
 import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/cashback-provider.registry';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import { freezeDefaultCommissionChange } from '../../src/modules/merchant/merchant-terms-history';
 import { AccountDeletionService } from '../../src/modules/users/account-deletion.service';
 import { createUser, deleteItData, randCode, sleep, summarize, warmPool } from './helpers';
 
@@ -77,6 +78,7 @@ describe('Đồ thị khoá: đặt đơn ‖ khoá gian hàng (real Postgres)',
   afterAll(async () => {
     if (prisma) {
       const { userIds, storefrontIds } = created;
+      await prisma.storefrontTermsHistory.deleteMany({ where: { storefrontId: { in: storefrontIds } } });
       await prisma.userAdminEvent.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.accountDeletionRequest.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.storefront.updateMany({ where: { id: { in: storefrontIds } }, data: { ownerUserId: null } });
@@ -169,6 +171,68 @@ describe('Đồ thị khoá: đặt đơn ‖ khoá gian hàng (real Postgres)',
         await waitUntil(async () => d || (await lockWaiters(holder.pid)) >= 1, 'ẩn danh');
         let s = false;
         running.push(checkout.placeOrder(owner.id, { addressId: addr.id, paymentMethod: 'COD', storefrontSlug: sf.slug } as never).finally(() => (s = true)));
+        await waitUntil(async () => s || (await lockWaiters(holder.pid)) >= 2, 'đặt đơn');
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+      const settled = await Promise.allSettled(running);
+      expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock|bận/i);
+    }
+  });
+
+  it('đóng băng phí sàn mặc định (khoá nhiều gian hàng theo id) ‖ đặt đơn hàng tự giao của F qua slug CTV A đã thôi đối tác (A.id < F.id): không 40P01', async () => {
+    for (let round = 0; round < ROUNDS; round++) {
+      const adminUser = await user('ADMIN');
+      const ctvOwner = await user('AFFILIATE');
+      const dealer = await user('DEALER');
+      const buyer = await user('CUSTOMER');
+      const tag = randCode(8).toLowerCase();
+      // A: cựu đối tác có lịch sử phí nên nằm trong phạm vi đóng băng; id nhỏ hơn F để freeze khoá A trước F.
+      const A = await prisma.storefront.create({
+        data: { id: `0000n2b${tag}`, type: 'CTV', isPartner: false, slug: `n2ba-${tag}`, subdomain: `n2ba-${tag}`, ownerUserId: ctvOwner.id, title: `A ${tag}`, isPublished: true },
+      });
+      created.storefrontIds.push(A.id);
+      await prisma.storefrontTermsHistory.create({
+        data: { storefrontId: A.id, commissionPct: 0.1, consignmentFeePct: 0, consignmentFeeFixed: 0, effectiveFrom: new Date(0) },
+      });
+      const F = await prisma.storefront.create({
+        data: { id: `zzzzn2b${tag}`, type: 'MERCHANT', isPartner: true, slug: `n2bf-${tag}`, subdomain: `n2bf-${tag}`, ownerUserId: dealer.id, title: `F ${tag}`, isPublished: true },
+      });
+      created.storefrontIds.push(F.id);
+      const p = await prisma.product.create({
+        data: {
+          storefrontId: F.id, fulfilment: 'MERCHANT', isActive: true, brand: 'IT', slug: `n2b-${randCode(8).toLowerCase()}`, name: 'SP IT', description: 'IT', basePrice: PRICE,
+          variations: { create: [{ sku: `N2B-${randCode(8)}`, pancakeId: `n2b-${randCode(8)}`, name: 'v', attributes: {}, retailPrice: PRICE, stock: STOCK }] },
+        },
+        include: { variations: true },
+      });
+      created.productIds.push(p.id);
+      const addr = await address(buyer.id);
+      await cart.addItem(buyer.id, { variationId: p.variations[0]!.id, quantity: 1 });
+
+      // Giữ F ở KEY SHARE (như checkout.assertPartnerStoresUnderLock): freeze giữ A rồi đợi F FOR UPDATE; đặt đơn giữ F rồi đợi A (KEY SHARE qua orders_storefrontId_fkey).
+      const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "id" = ${F.id} FOR KEY SHARE`);
+      const running: Promise<unknown>[] = [];
+      try {
+        let f = false;
+        running.push(
+          prisma
+            .$transaction(
+              async (tx) => {
+                await freezeDefaultCommissionChange(tx, 0.1, 0.2, new Date(), adminUser.id);
+                throw new Error('ROLLBACK_OK');
+              },
+              { timeout: 30_000 },
+            )
+            .catch((e: Error) => {
+              if (!e.message.includes('ROLLBACK_OK')) throw e;
+            })
+            .finally(() => (f = true)),
+        );
+        await waitUntil(async () => f || (await lockWaiters(holder.pid)) >= 1, 'đóng băng phí');
+        let s = false;
+        running.push(checkout.placeOrder(buyer.id, { addressId: addr.id, paymentMethod: 'COD', storefrontSlug: A.slug } as never).finally(() => (s = true)));
         await waitUntil(async () => s || (await lockWaiters(holder.pid)) >= 2, 'đặt đơn');
       } finally {
         holder.release();
