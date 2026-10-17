@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { CheckCircle2, Hash, Heart, HelpCircle, Leaf, Lightbulb, MessageCircle, Sprout } from 'lucide-react';
+import { BookMarked, CheckCircle2, Globe, Hash, Heart, HelpCircle, Leaf, Lightbulb, MessageCircle, PenLine, Sprout, TreeDeciduous } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { FeedItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
@@ -25,11 +25,14 @@ export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
   MANUAL: vi.community.kindManual,
 };
 
-// Ba loại người dùng tự đăng có biểu tượng riêng; các loại hệ thống tự sinh (HARVEST...) đã có emoji trong chuỗi i18n.
 export const KIND_ICON: Partial<Record<FeedItem['kind'], LucideIcon>> = {
   QUESTION: HelpCircle,
   SHOWCASE: Leaf,
   TIP: Lightbulb,
+  HARVEST: TreeDeciduous,
+  SPECIES: BookMarked,
+  MILESTONE: Globe,
+  MANUAL: PenLine,
 };
 
 const CLAMP = (lines: number) =>

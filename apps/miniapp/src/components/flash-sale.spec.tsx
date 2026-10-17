@@ -124,6 +124,17 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(screen.getByText('Đã bán 20%')).toBeInTheDocument();
   });
 
+  it('tiêu đề và đồng hồ dùng icon nét, không emoji (D7-6)', async () => {
+    mocks.fetchActive.mockResolvedValue([ITEM]);
+    renderFlash();
+    const title = await screen.findByRole('heading', { name: 'Ưu đãi giờ vàng' });
+    expect(title.querySelector('svg')).not.toBeNull();
+    const timer = screen.getByRole('timer');
+    expect(timer.querySelector('svg')).not.toBeNull();
+    expect(timer.textContent).toMatch(/^Còn \d+h \d{2}m$/);
+    expect(timer.getAttribute('aria-label')).toMatch(/^Còn \d+h \d{2}m$/);
+  });
+
   it('chạm thẻ → sang SP kèm đúng phân loại đang giờ vàng', async () => {
     mocks.fetchActive.mockResolvedValue([ITEM]);
     renderFlash();
@@ -203,6 +214,17 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     mocks.fetchUpcoming.mockResolvedValue([UP]);
     mocks.setReminder.mockResolvedValue({});
     mocks.cancelReminder.mockResolvedValue({});
+  });
+
+  it('tiêu đề "Sắp diễn ra" và hai trạng thái nút nhắc dùng icon nét, không emoji (D7-6)', async () => {
+    const first = renderUpcoming();
+    const heading = await screen.findByRole('heading', { name: 'Sắp diễn ra' });
+    expect(heading.querySelector('svg')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Nhắc tôi' }).querySelector('svg')).not.toBeNull();
+    first.unmount();
+    mocks.fetchUpcoming.mockResolvedValue([{ ...UP, reminded: true }]);
+    renderUpcoming();
+    expect((await screen.findByRole('button', { name: 'Đã đặt nhắc' })).querySelector('svg')).not.toBeNull();
   });
 
   it('khách chưa đăng nhập → không vẽ gì', async () => {

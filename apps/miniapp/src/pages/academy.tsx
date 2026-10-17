@@ -99,9 +99,14 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
             <div style={{ margin: '8px 0 4px' }}>
               <ProgressBar value={pct} max={100} />
             </div>
-            <span>
-              {course.isCompleted ? vi.academy.completed : vi.academy.progress(course.completedCount, course.lessonCount)}
-            </span>
+            {course.isCompleted ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Icon icon={CheckCircle2} size="sm" tone="brand" />
+                {vi.academy.completed}
+              </span>
+            ) : (
+              <span>{vi.academy.progress(course.completedCount, course.lessonCount)}</span>
+            )}
           </>
         }
         onPress={onOpen}
@@ -212,6 +217,7 @@ function CourseDetailBody({
                 variant={done ? 'secondary' : 'primary'}
                 disabled={done || (completingId !== undefined && completingId !== lesson.id)}
                 loading={completingId === lesson.id}
+                icon={done ? CheckCircle2 : undefined}
                 onPress={() => onComplete(lesson.id)}
                 style={{ marginTop: 10 }}
               >

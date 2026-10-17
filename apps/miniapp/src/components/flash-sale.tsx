@@ -1,5 +1,6 @@
 import { useMemo, type CSSProperties, type MouseEvent } from 'react';
 import { useNavigate } from 'zmp-ui';
+import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchActiveFlashSales,
@@ -17,10 +18,13 @@ import { useAuthStore } from '../store/auth';
 import { HomeBlockError } from './home/home-block-error';
 import { useBlockQuery } from './home/use-block-query';
 import { Badge } from './ui/badge';
+import { Icon } from './ui/icon';
 import { PriceTag } from './ui/price-tag';
 import { ProgressBar } from './ui/progress-bar';
 import { ScrollRow } from './ui/scroll-row';
 import { Heading, Text } from './ui/text';
+
+const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
 
 const CARD_STYLE: CSSProperties = {
   flex: '0 0 132px',
@@ -94,13 +98,16 @@ export function FlashSale() {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ padding: '0 16px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Heading variant="title-sm" as="h2" style={{ color: 'var(--color-promo-fg)' }}>
+        <Heading variant="title-sm" as="h2" style={PROMO_TITLE_STYLE}>
+          <Icon icon={Zap} size="sm" tone="current" />
           {vi.flashSale.sectionTitle}
         </Heading>
         {/* Hết giờ mà danh sách chưa kịp tải lại (poll 60s): không hiện đồng hồ về 0. */}
         {timeLeft && (
           <span role="timer" aria-label={vi.flashSale.endsIn(timeLeft)}>
-            <Badge tone="promo">{vi.flashSale.endsIn(timeLeft)}</Badge>
+            <Badge tone="promo" icon={Clock}>
+              {vi.flashSale.endsIn(timeLeft)}
+            </Badge>
           </span>
         )}
       </div>
@@ -223,6 +230,7 @@ function UpcomingFlashCard({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              gap: 6,
               borderRadius: 'var(--radius-pill)',
               fontSize: 'var(--type-label-size)',
               fontWeight: 600,
@@ -231,6 +239,7 @@ function UpcomingFlashCard({
               color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
             }}
           >
+            <Icon icon={item.reminded ? CheckCircle2 : Bell} size="sm" tone="current" />
             {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
           </div>
         )}
@@ -278,7 +287,8 @@ export function UpcomingFlashSales() {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ padding: '0 16px', marginBottom: 8 }}>
-        <Heading variant="title-sm" as="h2" style={{ color: 'var(--color-promo-fg)' }}>
+        <Heading variant="title-sm" as="h2" style={PROMO_TITLE_STYLE}>
+          <Icon icon={Bell} size="sm" tone="current" />
           {vi.flashSale.upcomingTitle}
         </Heading>
       </div>

@@ -70,7 +70,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
   it('còn giờ: hiện "Còn Xh YYm" và "Đã bán %"', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([flash()]);
     renderPdp();
-    expect(await screen.findByText(/^⏳ Còn 2h 00m$|^Còn 2h 00m$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Còn 2h 00m$/)).toBeInTheDocument();
     expect(screen.getByText('Đã bán 40%')).toBeInTheDocument();
   });
 

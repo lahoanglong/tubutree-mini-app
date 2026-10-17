@@ -88,7 +88,9 @@ describe('AcademyPage — danh sách khoá học, hành vi giữ nguyên khi chu
     expect(screen.getByText(viText.academy.subtitle)).toBeInTheDocument();
     expect(screen.getByText('Mô tả khoá a')).toBeInTheDocument();
     expect(screen.getByText('1/3 bài đã học')).toBeInTheDocument();
-    expect(screen.getByText(viText.academy.completed)).toBeInTheDocument();
+    const completed = screen.getByText(viText.academy.completed);
+    expect(completed.textContent).toBe('Đã hoàn thành');
+    expect(completed.querySelector('svg')).not.toBeNull();
   });
 
   it('khoá không có mô tả thì không hiện dòng mô tả; có ảnh bìa thì hiện ảnh', async () => {
@@ -153,7 +155,9 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
   it('bài đã học: nút "✓ Đã học xong" bị khoá; bài chưa học: "Đánh dấu đã học" bấm được', async () => {
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    expect(screen.getByRole('button', { name: viText.academy.alreadyDone })).toBeDisabled();
+    const doneBtn = screen.getByRole('button', { name: viText.academy.alreadyDone });
+    expect(doneBtn).toBeDisabled();
+    expect(doneBtn.querySelector('svg')).not.toBeNull();
     expect(screen.getAllByRole('button', { name: viText.academy.markDone })).toHaveLength(2);
     for (const b of screen.getAllByRole('button', { name: viText.academy.markDone })) expect(b).not.toBeDisabled();
   });

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Clock } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -404,7 +404,7 @@ export default function ProductDetailPage() {
               -{flashPct}%
             </Badge>
             {flashLeft && (
-              <Badge tone="promo" size="sm">
+              <Badge tone="promo" size="sm" icon={Clock}>
                 {vi.flashSale.endsIn(flashLeft)}
               </Badge>
             )}

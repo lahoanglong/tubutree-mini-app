@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Ticket, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import {
   getCart,
   getCartSelection,
@@ -36,6 +36,7 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { IconButton } from '../components/ui/icon-button';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { PriceTag } from '../components/ui/price-tag';
 import { Heading } from '../components/ui/text';
@@ -475,19 +476,9 @@ function CartLineRow({
         </Box>
         {line.isFlash && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 4 }}>
-            <span
-              style={{
-                display: 'inline-block',
-                background: 'var(--clay-50)',
-                color: 'var(--clay-700)',
-                borderRadius: 'var(--radius-pill)',
-                padding: '2px 8px',
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
+            <Badge tone="promo" size="sm" icon={Zap}>
               {vi.flashSale.badge}
-            </span>
+            </Badge>
             {line.soldPct != null && Number.isFinite(line.soldPct) && (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {vi.flashSale.soldPct(clampPercent(line.soldPct))}

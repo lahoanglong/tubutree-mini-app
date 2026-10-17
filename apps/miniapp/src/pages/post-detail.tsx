@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Flag, Heart, MessageCircle, Pencil, Pin, Sprout, Trash2 } from 'lucide-react';
+import { CheckCircle2, Clock, Flag, Heart, MessageCircle, Pencil, Pin, Sprout, Trash2 } from 'lucide-react';
 import {
   getPost,
   getComments,
@@ -224,7 +224,12 @@ export default function PostDetailPage() {
               marginBottom: 10,
             }}
           >
-            <Text variant="body-sm" as="div" style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600 }}>
+            <Text
+              variant="body-sm"
+              as="div"
+              style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Icon icon={Clock} size="sm" tone="current" />
               {vi.community.pendingBadge}
             </Text>
           </div>

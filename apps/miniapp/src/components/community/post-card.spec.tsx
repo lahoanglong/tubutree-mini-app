@@ -94,6 +94,18 @@ describe('PostCard — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(screen.getByText(/Hỏi đáp/)).toBeInTheDocument();
   });
 
+  it.each([
+    ['HARVEST', 'Thu hoạch'],
+    ['SPECIES', 'Sưu tập loài'],
+    ['MILESTONE', 'Mốc cộng đồng'],
+    ['MANUAL', 'Chia sẻ'],
+  ] as const)('loại bài hệ thống %s: nhãn "%s" đi cùng icon nét, không emoji (D7-6)', (kind, label) => {
+    renderCard({ ...POST, kind, title: null });
+    const el = screen.getByText(label);
+    expect(el.textContent).toBe(label);
+    expect(el.querySelector('svg')).not.toBeNull();
+  });
+
   it('huy hiệu chuyên gia chỉ hiện khi badge = EXPERT', () => {
     const first = renderCard();
     expect(screen.queryByText(/Chuyên gia Tubu/)).toBeNull();
