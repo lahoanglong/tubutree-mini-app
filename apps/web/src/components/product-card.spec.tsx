@@ -9,7 +9,7 @@ import type { FlashItem } from '@/lib/flash-price';
 const api = vi.hoisted(() => ({ flash: [] as unknown[] }));
 vi.mock('@/lib/shop-client', () => ({ getActiveFlashSales: async () => api.flash }));
 
-import ProductCard from './product-card';
+import ProductCard, { PRIORITY_CARDS } from './product-card';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 
 const PRODUCT = {
@@ -74,5 +74,35 @@ describe('ProductCard — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)',
     const c = await mount({ ...PRODUCT, inStock: false });
     expect(c.textContent).toContain('Hết hàng');
     expect(c.textContent).not.toContain('Giờ vàng');
+  });
+});
+
+// D6-05/D6-12: ảnh thẻ trên màn hình đầu là ứng viên LCP; ảnh nào cũng cần kích thước nội tại để không nhảy bố cục (CLS).
+describe('ProductCard — ảnh', () => {
+  const WITH_IMG = { ...PRODUCT, thumbnail: 'https://cdn.example/a.jpg' };
+  const img = (html: string) => {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    return box.querySelector('img')!;
+  };
+
+  it('thẻ thường: tải lười, không đòi ưu tiên cao, có width/height (chống nhảy bố cục)', () => {
+    const el = img(renderToStaticMarkup(<ProductCard product={WITH_IMG as never} />));
+    expect(el.getAttribute('loading')).toBe('lazy');
+    expect(el.getAttribute('fetchpriority')).toBeNull();
+    expect(el.getAttribute('width')).toBe('400');
+    expect(el.getAttribute('height')).toBe('400');
+    expect(el.getAttribute('decoding')).toBe('async');
+  });
+
+  it('thẻ priority: tải ngay (eager) và fetchpriority=high, vẫn có width/height', () => {
+    const el = img(renderToStaticMarkup(<ProductCard product={WITH_IMG as never} priority />));
+    expect(el.getAttribute('loading')).toBe('eager');
+    expect(el.getAttribute('fetchpriority')).toBe('high');
+    expect(el.getAttribute('width')).toBe('400');
+  });
+
+  it('PRIORITY_CARDS là 4 thẻ đầu (2 hàng trên mobile, 1 hàng từ md)', () => {
+    expect(PRIORITY_CARDS).toBe(4);
   });
 });
