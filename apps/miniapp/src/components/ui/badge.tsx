@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
 export type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brand' | 'promo';
@@ -16,12 +17,14 @@ export interface BadgeProps {
   children: ReactNode;
   tone?: BadgeTone;
   size?: 'sm' | 'md';
+  /** Icon nét đứng trước chữ, ăn màu chữ của tông (thay emoji đầu chuỗi). */
+  icon?: LucideIcon;
   className?: string;
   style?: CSSProperties;
 }
 
 /** Nhãn trạng thái — thay 34 pill tự vẽ + STATUS_COLOR hardcode hex (audit A4-19). */
-export function Badge({ children, tone = 'neutral', size = 'md', className, style }: BadgeProps) {
+export function Badge({ children, tone = 'neutral', size = 'md', icon: IconCmp, className, style }: BadgeProps) {
   const c = TONE_STYLE[tone];
   return (
     <span
@@ -31,9 +34,11 @@ export function Badge({ children, tone = 'neutral', size = 'md', className, styl
         borderRadius: 'var(--radius-pill)',
         fontSize: size === 'md' ? 'var(--type-label-size)' : 11,
         padding: size === 'md' ? '3px 8px' : '2px 6px',
+        ...(IconCmp ? { display: 'inline-flex', alignItems: 'center', gap: 4 } : null),
         ...style,
       }}
     >
+      {IconCmp && <IconCmp size={size === 'md' ? 14 : 12} strokeWidth={1.75} aria-hidden="true" />}
       {children}
     </span>
   );

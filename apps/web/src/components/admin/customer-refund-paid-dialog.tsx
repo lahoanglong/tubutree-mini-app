@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { safeAreaPadX } from '@/lib/safe-area';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { claimCustomerRefund, markCustomerRefundPaid, type AdminCustomerRefund } from '@/lib/admin-client';
 import {
@@ -168,6 +169,7 @@ export function CustomerRefundPaidDialog({
         if (!busy) onClose();
       }}
       className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-900/40 p-4 sm:items-center"
+      style={safeAreaPadX('1rem')}
     >
       <div
         ref={dialogRef}

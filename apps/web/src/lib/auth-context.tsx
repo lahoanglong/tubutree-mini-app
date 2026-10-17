@@ -59,6 +59,8 @@ interface AuthState {
   startZaloLogin: () => Promise<void>;
   handleCallback: (code: string, state: string | null) => Promise<void>;
   logout: () => Promise<void>;
+  /** Cập nhật phần hồ sơ đã lưu thành công (vd đổi tên) để thanh đầu trang đổi theo ngay, không chờ đăng nhập lại. */
+  updateProfile: (patch: Partial<Pick<WebUser, 'fullName'>>) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -204,6 +206,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearSavedInvoices();
   }, [qc]);
 
+  const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName'>>) => {
+    setUser((u) => (u ? { ...u, ...patch } : u));
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -216,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         startZaloLogin,
         handleCallback,
         logout,
+        updateProfile,
       }}
     >
       {children}

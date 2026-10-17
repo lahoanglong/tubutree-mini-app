@@ -20,7 +20,7 @@ vi.mock('@/lib/auth-context', () => ({
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getMe: async () => ({ pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0 }),
+  getMe: async () => ({ fullName: 'Nguyễn An Khang', phone: '0912345678', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0 }),
   fetchOrdersPage: async (page: number, filter: Record<string, string> = {}) => {
     state.calls.push({ page, filter });
     if (state.failPage === page) throw new Error('boom');
@@ -132,5 +132,21 @@ describe('/tai-khoan — danh sách đơn nhiều hơn 20 (BUYERWEB-8)', () => {
     expect(headingProblems(container)).toEqual([]);
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
+  });
+});
+
+describe('/tai-khoan — thông tin cá nhân (D5-14)', () => {
+  it('có khối Thông tin cá nhân: họ tên và số điện thoại lấy từ /me (không phải ảnh chụp lúc đăng nhập)', async () => {
+    const { container } = await mount();
+    const section = container.querySelector('section[aria-label="Thông tin cá nhân"]')!;
+    expect(section.textContent).toContain('Nguyễn An Khang');
+    expect(section.textContent).toContain('0912 345 678');
+    expect(byText(section as HTMLElement, 'button', 'Sửa tên')).not.toBeNull();
+    expect(container.querySelector('section[aria-label="Thông tin tài khoản"]')?.textContent).toContain('Nguyễn An Khang');
+  });
+
+  it('vẫn đúng một h1 và không nhảy cấp heading khi có thêm khối hồ sơ', async () => {
+    const { container } = await mount();
+    expect(headingProblems(container)).toEqual([]);
   });
 });

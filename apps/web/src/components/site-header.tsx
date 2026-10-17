@@ -16,7 +16,7 @@ export default function SiteHeader() {
   const count = cartQ.data?.itemCount ?? 0;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-0/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-0/90 backdrop-blur-md" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
         {/* Logo & Brand */}
         <Link href="/" className="group flex min-h-11 items-center gap-2.5">

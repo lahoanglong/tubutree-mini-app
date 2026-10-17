@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
-import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
@@ -127,6 +127,9 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'returnsPending', count: 1 },
           { key: 'returnsToReceive', count: 2 },
           { key: 'refillPending', count: 0 },
+          { key: 'communityPending', count: 3 },
+          { key: 'communityUnanswered', count: 1 },
+          { key: 'invoicePending', count: 2 },
         ],
       };
     },
@@ -346,13 +349,14 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cấu hình & tích hợp',
     ]);
     const items = [...nav.querySelectorAll('button')];
-    expect(items).toHaveLength(31);
+    expect(items).toHaveLength(32);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
     expect(group('Người bán')).toContain('Lịch sử giá đại lý');
     expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ & quà đổi điểm']);
     expect(group('Tổng quan')).toContain('Báo cáo');
+    expect(group('Khách hàng')).toContain('Cộng đồng');
     const current = items.find((b) => b.getAttribute('aria-current') === 'page')!;
     expect(current.textContent).toBe('Việc cần xử lý');
     expect(current.className).toContain('bg-forest-100');
@@ -2419,5 +2423,79 @@ describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
     expect(rows[0]!.querySelector('[data-order-recipient]')!.textContent).toBe('Nhận: Nguyễn Thị Mẹ Chồng · 0911222333');
     expect(rows[1]!.querySelector('[data-order-recipient]')).toBeNull();
     expect(rows[2]!.querySelector('[data-order-recipient]')).toBeNull();
+  });
+});
+
+describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần xử lý" (launch review D1-08, D1-17)', () => {
+  const stubFeed = () => {
+    const api = mockFetch({
+      '/feed/admin/pending': { body: [{ id: 'p1', kind: 'SHOWCASE', title: 'Ban công', body: 'Khoe vườn', images: [], author: 'Lan', category: null, createdAt: '2026-10-17T03:00:00.000Z' }] },
+      '/feed/admin/unanswered': { body: [{ id: 'q1', title: 'Cây khô lá', excerpt: 'Khô lá', createdAt: '2026-10-15T03:00:00.000Z', author: 'Bình', category: null, waitingHours: 52 }] },
+      '/feed/admin/published': { body: { items: [], nextCursor: null } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    return api;
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  const navItems = (c: HTMLElement) => [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+  const activeChip = (c: HTMLElement) => c.querySelector('[role="group"][aria-label="Mục kiểm duyệt cộng đồng"] [aria-pressed="true"]')!.textContent;
+
+  it('thẻ bài chờ duyệt mở tab Cộng đồng ở danh sách chờ duyệt', async () => {
+    stubFeed();
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="communityPending"]')!;
+    expect(card.textContent).toContain('3');
+    expect(card.textContent).toContain('Bài cộng đồng chờ duyệt');
+
+    click(card);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=community');
+    expect(activeChip(container)).toBe('Chờ duyệt');
+    expect(container.textContent).toContain('Ban công');
+  });
+
+  it('thẻ câu hỏi chưa ai trả lời mở thẳng danh sách "Chưa trả lời"', async () => {
+    stubFeed();
+    const { container } = await mount();
+
+    click(container.querySelector('[data-inbox="communityUnanswered"]')!);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=community');
+    expect(activeChip(container)).toBe('Chưa trả lời');
+    expect(container.textContent).toContain('Cây khô lá');
+  });
+
+  it('thẻ hoá đơn VAT chờ xuất mở tab Đơn hàng với bộ lọc "VAT chờ xuất" đã chọn', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="invoicePending"]')!;
+    expect(card.textContent).toContain('Hoá đơn VAT chờ xuất');
+
+    click(card);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=orders');
+    expect(mocks.listOrders.mock.lastCall![5]).toBe('pending');
+    expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn yêu cầu hoá đơn VAT"] [aria-selected="true"]')!.textContent).toContain('VAT chờ xuất');
+  });
+
+  it('CSKH có mục Cộng đồng và vào được từ link ?tab=community; KHO thì không (link rơi về mục đầu)', async () => {
+    stubFeed();
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const cskh = await mount();
+    expect(navItems(cskh.container)).toContain('Cộng đồng');
+    expect(cskh.container.querySelector('h2')!.textContent).toBe('Cộng đồng');
+    cskh.unmount();
+    mounted = [];
+
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const kho = await mount();
+    expect(navItems(kho.container)).not.toContain('Cộng đồng');
+    expect(kho.container.querySelector('[aria-label="Mục kiểm duyệt cộng đồng"]')).toBeNull();
   });
 });

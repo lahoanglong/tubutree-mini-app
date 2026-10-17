@@ -12,6 +12,7 @@ import {
   type MerchantProduct,
   type UpdateMerchantProductInput,
 } from '@/lib/merchant-client';
+import { safeAreaPadX } from '@/lib/safe-area';
 import { formatVnd } from '@/lib/shop-client';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 import { BTN_XS_SECONDARY, INPUT_CLASS, Notice, TOUCH_H } from '@/components/admin/ui';
@@ -42,7 +43,7 @@ export function MerchantProductPrice({ product }: { product: Pick<MerchantProduc
 function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   const panelRef = useModalA11y<HTMLDivElement>(onClose);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4" style={safeAreaPadX('1rem')}>
       <div
         ref={panelRef}
         role="dialog"

@@ -25,26 +25,37 @@ export class GameQuizService {
     return ensureGameProfile(this.prisma, this.config, userId);
   }
 
+  /**
+   * Bộ câu của hôm nay: cửa sổ `game.quiz_daily_count` câu liên tiếp (sắp theo id) trong ngân hàng, dịch đi đúng bằng ngần ấy
+   * câu mỗi ngày giờ VN rồi nối vòng. Ai cũng thấy cùng bộ trong ngày, hai ngày liền nhau không trùng câu nào, và xoay hết ngân
+   * hàng trước khi lặp lại. Câu đã làm chỉ biến khỏi danh sách, không kéo thêm câu ngoài bộ (đằng nào cũng chạm trần trả lời).
+   */
   async getTodayQuiz(userId: string) {
     await this.ensure(userId);
     const count = await this.config.get<number>('game.quiz_daily_count', 5);
-    const since = this.startOfDay(new Date());
+    const total = await this.prisma.gameQuiz.count();
+    if (total === 0 || count <= 0) return [];
+    const size = Math.min(count, total);
+    const dayNumber = Math.floor(Date.parse(`${vnDateKey()}T00:00:00Z`) / 86_400_000);
+    const offset = (dayNumber * count) % total;
+    const orderBy = { id: 'asc' as const };
+    const window = await this.prisma.gameQuiz.findMany({ orderBy, skip: offset, take: size });
+    const wrapped = window.length < size ? await this.prisma.gameQuiz.findMany({ orderBy, take: size - window.length }) : [];
     const done = await this.prisma.gameQuizAttempt.findMany({
-      where: { userId, attemptedAt: { gte: since } },
+      where: { userId, attemptedAt: { gte: this.startOfDay(new Date()) } },
       select: { quizId: true },
     });
-    const quizzes = await this.prisma.gameQuiz.findMany({
-      where: { id: { notIn: done.map((d) => d.quizId) } },
-      take: count,
-    });
-    return quizzes.map((q) => ({
-      id: q.id,
-      question: q.question,
-      options: q.options,
-      category: q.category,
-      difficulty: q.difficulty,
-      waterReward: q.waterReward,
-    }));
+    const answered = new Set(done.map((d) => d.quizId));
+    return [...window, ...wrapped]
+      .filter((q) => !answered.has(q.id))
+      .map((q) => ({
+        id: q.id,
+        question: q.question,
+        options: q.options,
+        category: q.category,
+        difficulty: q.difficulty,
+        waterReward: q.waterReward,
+      }));
   }
 
   async answerQuiz(userId: string, quizId: string, choice: number) {

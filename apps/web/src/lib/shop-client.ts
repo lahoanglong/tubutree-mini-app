@@ -232,14 +232,19 @@ export const applyCoupon = (code: string) =>
   apiFetch<CartSummary>(cartPath('/cart/coupon'), { method: 'POST', body: { code } });
 export const removeCoupon = () => apiFetch<CartSummary>(cartPath('/cart/coupon'), { method: 'DELETE' });
 
-/** GET /me — chỉ khai các số dư web hiển thị; hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập nên sẽ cũ. */
+/** GET /me — chỉ khai các trường web hiển thị; hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập nên sẽ cũ. */
 export interface MyBalances {
+  /** API cũ chưa trả hai trường hồ sơ này → vắng (undefined), khác với null = tài khoản chưa có. */
+  fullName?: string | null;
+  phone?: string | null;
   pointsBalance: number;
   /** Lô Điểm Xanh quy đổi từ xu cũ (không hết hạn). API cũ chưa trả → coi là 0. */
   pointsConvertedBalance?: number;
   walletBalance: number;
 }
 export const getMe = () => apiFetch<MyBalances>('/me');
+/** PATCH /me — đổi họ tên (UpdateMeDto.fullName, tối đa 120 ký tự). Số điện thoại không sửa được qua API này. */
+export const updateMyName = (fullName: string) => apiFetch<unknown>('/me', { method: 'PATCH', body: { fullName } });
 
 /** GET /me/loyalty (cùng endpoint Mini App) — web chỉ đọc phần Điểm Xanh đang khoá. API cũ chưa trả → vắng. */
 export interface MyPointsLock {

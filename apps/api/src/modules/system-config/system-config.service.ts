@@ -21,6 +21,14 @@ function displayNameProblem(value: unknown, what: string): string | null {
  * QUY TẮC: mọi rate/ngưỡng/hold-time PHẢI lấy qua service này, KHÔNG hard-code.
  * Cache in-memory ngắn để tránh query lặp; invalidates khi set().
  */
+const LEGAL_DOC_MAX_CHARS = 50_000;
+
+function legalDocProblem(value: unknown): string | null {
+  if (typeof value !== 'string') return 'phải là chuỗi chữ (markdown hoặc chữ thường)';
+  if (value.length > LEGAL_DOC_MAX_CHARS) return `tối đa ${LEGAL_DOC_MAX_CHARS.toLocaleString('vi-VN')} ký tự`;
+  return null;
+}
+
 @Injectable()
 export class SystemConfigService {
   private cache = new Map<string, { value: unknown; at: number }>();
@@ -78,6 +86,8 @@ export class SystemConfigService {
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
     'wishlist.price_drop_min_pct': { min: 0, max: 1, note: 'phân số (0.05 = 5%)' },
     'wishlist.price_drop_cooldown_days': { min: 0, max: 90, note: 'số ngày (0 = tắt cooldown)', integer: true },
+    'community.author_notify_interval_minutes': { min: 0, max: 1440, note: 'số phút gộp tin "bài của bạn có người thích/bình luận" (0 = tắt tin)', integer: true },
+    'community.unanswered_alert_hours': { min: 1, max: 720, note: 'số giờ câu hỏi chưa ai trả lời thì lên "Việc cần xử lý"', integer: true },
     'subscribe.stock_retry_days': { min: 0, max: 7, note: 'số đêm thử lại kỳ định kỳ khi hết hàng (0 = không thử lại)', integer: true },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
     'flashsale.max_discount_pct': { min: 0.01, max: 1, note: 'phân số (0.9 = giá flash ≥ 10% giá đang bán; 1 = không chặn)' },
@@ -273,6 +283,11 @@ export class SystemConfigService {
       }
       return null;
     },
+    // Trang /chinh-sach/:loai của web in nguyên chuỗi này (markdown). Rỗng = dùng bản nháp mặc định của web.
+    'legal.dieu-khoan': legalDocProblem,
+    'legal.bao-mat': legalDocProblem,
+    'legal.doi-tra': legalDocProblem,
+    'legal.van-chuyen': legalDocProblem,
     // Cấp uy tín chỉ có 4 tên (Mầm, Cây non, Cây trưởng thành, Cổ thụ): thêm mốc thứ 5 thì cấp 5 hiện lại tên "Mầm", bớt mốc thì mất cấp.
     // Mốc đầu là 0 để bốn mốc ứng đúng cấp 1 đến 4, và các mốc tăng dần, nếu không cấp nhảy ngược khi điểm tăng.
     'community.rep_thresholds': (value) => {

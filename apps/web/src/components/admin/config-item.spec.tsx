@@ -106,3 +106,54 @@ describe('ConfigItem (tab Cấu hình)', () => {
     });
   });
 });
+
+// D5-01: nội dung điều khoản/chính sách là văn bản dài nhiều dòng; bắt admin gõ JSON một dòng (\n, \") thì không ai dán nổi.
+describe('ConfigItem — khoá văn bản legal.* (D5-01)', () => {
+  const LEGAL = { key: 'legal.doi-tra', value: '', category: 'legal', description: 'Nội dung trang Chính sách đổi trả' };
+
+  it('hiện ô nhiều dòng với chữ thô (không ngoặc kép), nhãn là tên khoá', () => {
+    const { container } = setup(row({ ...LEGAL, value: '## 1. Đổi trả\n\nTrong 7 ngày.' }));
+    const area = container.querySelector('textarea')!;
+    expect(container.querySelector('input')).toBeNull();
+    expect(area.value).toBe('## 1. Đổi trả\n\nTrong 7 ngày.');
+    expect(area.getAttribute('aria-label')).toBe('legal.doi-tra');
+    expect(area.className).toContain('min-h-');
+  });
+
+  it('Lưu gửi nguyên chuỗi nhiều dòng, có dấu ngoặc kép và xuống dòng, không qua JSON.parse', async () => {
+    const { container, puts, onSaved } = setup(row(LEGAL));
+    const text = '# Đổi trả\n\nKhách nói "ổn" thì {đổi} được.\n- Mục 1';
+    typeInto(container.querySelector('textarea'), text);
+    click(byText(container, 'button', 'Lưu'));
+    await flush();
+    expect(puts).toEqual([{ key: 'legal.doi-tra', value: text }]);
+    expect(onSaved).toHaveBeenCalled();
+    expect(container.textContent).not.toContain('JSON không hợp lệ');
+  });
+
+  it('xoá hết chữ rồi Lưu gửi chuỗi rỗng (quay về bản nháp mặc định), không hỏi xác nhận tiền/điểm', async () => {
+    const { container, puts } = setup(row({ ...LEGAL, value: 'Nội dung cũ' }));
+    typeInto(container.querySelector('textarea'), '');
+    click(byText(container, 'button', 'Lưu'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(puts).toEqual([{ key: 'legal.doi-tra', value: '' }]);
+  });
+
+  it('khoá không phải legal.* vẫn là ô JSON một dòng như cũ', () => {
+    const { container } = setup(row({ key: 'payment.bank_name', value: 'Techcombank', category: 'payment' }));
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(container.querySelector('input')!.value).toBe('"Techcombank"');
+  });
+
+  it('máy chủ từ chối (quá 50.000 ký tự): hiện lỗi, giữ chữ đã gõ', async () => {
+    const api = mockFetch({ '/admin/config': () => ({ status: 400, body: { message: '"legal.doi-tra" không hợp lệ: tối đa 50.000 ký tự.' } }) });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = mount(<ConfigItem row={row(LEGAL)} onSaved={vi.fn()} />);
+    typeInto(r.container.querySelector('textarea'), 'abc');
+    click(byText(r.container, 'button', 'Lưu'));
+    await flush();
+    expect(r.container.textContent).toContain('tối đa 50.000 ký tự');
+    expect(r.container.querySelector('textarea')!.value).toBe('abc');
+  });
+});

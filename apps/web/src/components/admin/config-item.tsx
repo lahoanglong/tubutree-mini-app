@@ -10,17 +10,23 @@ const MONEY_PREFIXES = ['payment.', 'loyalty.', 'shipping.', 'wallet.'];
 
 /** Một dòng trong "Tất cả tham số (JSON)" của tab Cấu hình. */
 export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
-  const [val, setVal] = useState(JSON.stringify(row.value));
+  // Nội dung điều khoản/chính sách là văn bản dài nhiều dòng: sửa bằng ô nhiều dòng và lưu chữ thô, không bắt gõ JSON một dòng.
+  const isText = row.key.startsWith('legal.') && typeof row.value === 'string';
+  const [val, setVal] = useState(isText ? (row.value as string) : JSON.stringify(row.value));
   const [err, setErr] = useState<string | null>(null);
   const dead = row.deprecated === true;
   const { confirm, dialog } = useConfirm();
   const save = useMutation({
     mutationFn: async () => {
       let parsed: unknown;
-      try {
-        parsed = JSON.parse(val);
-      } catch {
-        throw new Error('JSON không hợp lệ');
+      if (isText) {
+        parsed = val;
+      } else {
+        try {
+          parsed = JSON.parse(val);
+        } catch {
+          throw new Error('JSON không hợp lệ');
+        }
       }
       if (MONEY_PREFIXES.some((p) => row.key.startsWith(p))) {
         const ok = await confirm({
@@ -47,14 +53,24 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
       </div>
       {row.description && <div className="text-xs text-stone-500">{row.description}</div>}
       {dead && <div className="text-xs text-stone-500">Hệ thống không còn đọc khoá này nên sửa sẽ không có tác dụng.</div>}
-      <div className="mt-1 flex gap-2">
-        <input
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          disabled={dead}
-          aria-label={row.key}
-          className="min-h-[44px] min-w-0 flex-1 rounded-control border border-stone-450 bg-stone-0 px-2 py-1 font-mono text-sm text-stone-900 disabled:bg-stone-100 disabled:text-stone-500"
-        />
+      <div className={isText ? 'mt-1 flex flex-col gap-2' : 'mt-1 flex gap-2'}>
+        {isText ? (
+          <textarea
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            disabled={dead}
+            aria-label={row.key}
+            className="min-h-[160px] w-full rounded-control border border-stone-450 bg-stone-0 px-2 py-1 text-sm text-stone-900 disabled:bg-stone-100 disabled:text-stone-500"
+          />
+        ) : (
+          <input
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            disabled={dead}
+            aria-label={row.key}
+            className="min-h-[44px] min-w-0 flex-1 rounded-control border border-stone-450 bg-stone-0 px-2 py-1 font-mono text-sm text-stone-900 disabled:bg-stone-100 disabled:text-stone-500"
+          />
+        )}
         {!dead && (
           <button
             onClick={() => {

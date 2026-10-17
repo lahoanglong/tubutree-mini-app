@@ -108,3 +108,21 @@ describe('SideDrawer a11y (WEB-11)', () => {
     expect(document.body.style.overflow).toBe('');
   });
 });
+
+// viewport-fit=cover: ngăn kéo dính mép màn hình nên tự chừa inset của tai thỏ ở đúng phía nó chạm (iPhone xoay ngang).
+describe('SideDrawer safe-area', () => {
+  const panel = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
+
+  it('ngăn kéo bên phải chừa inset phải, không đụng phía trái', () => {
+    mount(<SideDrawer title="Đơn" onClose={() => undefined}>x</SideDrawer>);
+    expect(panel().style.paddingRight).toBe('max(0px, env(safe-area-inset-right, 0px))');
+    expect(panel().style.paddingLeft).toBe('');
+  });
+
+  it('ngăn kéo bên trái chừa inset trái, không đụng phía phải', () => {
+    mount(<SideDrawer title="Đơn" side="left" onClose={() => undefined}>x</SideDrawer>);
+    expect(panel().style.paddingLeft).toBe('max(0px, env(safe-area-inset-left, 0px))');
+    expect(panel().style.paddingRight).toBe('');
+  });
+});
+

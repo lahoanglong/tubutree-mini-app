@@ -15,7 +15,7 @@ import { OrderStatusService } from './order-status.service';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
-import { pendingPaymentDeadline } from './pending-payment-ttl';
+import { pendingPaymentDeadlines } from './pending-payment-ttl';
 import { cancelHandover } from './order-transition';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
@@ -236,10 +236,9 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, paymentDeadline, reviewOf, pointsReturnReversed] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
-      this.paymentDeadline(order),
       orderLineReviews(this.prisma, order),
       order.status === 'DELIVERED' || order.status === 'RETURNED' ? returnPointsTaken(this.prisma, order) : undefined,
     ]);
@@ -247,16 +246,8 @@ export class OrdersService {
       ...view!,
       items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })),
       ...fulfilment,
-      paymentDeadline,
       pointsReturnReversed,
     };
-  }
-
-  /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL và điều kiện với cron tự huỷ. Null với đơn cron không huỷ. */
-  paymentDeadline(
-    order: Pick<OrderWithItems, 'type' | 'status' | 'paymentStatus' | 'paymentMethod' | 'createdAt' | 'autoCancelBlockedAt'>,
-  ): Promise<string | null> {
-    return pendingPaymentDeadline(order, this.config);
   }
 
   private async fulfilmentOf(order: {
@@ -305,6 +296,8 @@ export class OrdersService {
    * spec §3.2 không thêm cột). Một truy vấn cho cả trang đơn. */
   private async attachItemMedia(orders: OrderWithItems[], viewerId: string): Promise<OrderView[]> {
     const ids = [...new Set(orders.flatMap((o) => o.items.map((it) => it.variationId)))];
+    // Hạn thanh toán của đơn chờ chuyển khoản: danh sách đơn cũng cần để thẻ đơn ghi "Hạn …" (cùng luật với chi tiết đơn).
+    const deadlines = await pendingPaymentDeadlines(orders, this.config);
     const variations = ids.length
       ? await this.prisma.variation.findMany({
           where: { id: { in: ids } },
@@ -334,6 +327,7 @@ export class OrdersService {
       items: o.items.map((it) => ({ ...it, ...media(it.variationId) })),
       canCancel: customerCancelBlock(o, viewerId) === null,
       manualHandling: isManualHandling(o),
+      paymentDeadline: deadlines.get(o.id) ?? null,
     }));
   }
 

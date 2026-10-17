@@ -1,5 +1,6 @@
-import { useMemo, type CSSProperties, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { useNavigate } from 'zmp-ui';
+import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchActiveFlashSales,
@@ -9,6 +10,7 @@ import {
   type UpcomingFlashItem,
 } from '../services/shop-api';
 import { formatVnd } from '../utils/format';
+import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
@@ -16,10 +18,13 @@ import { useAuthStore } from '../store/auth';
 import { HomeBlockError } from './home/home-block-error';
 import { useBlockQuery } from './home/use-block-query';
 import { Badge } from './ui/badge';
+import { Icon } from './ui/icon';
 import { PriceTag } from './ui/price-tag';
 import { ProgressBar } from './ui/progress-bar';
 import { ScrollRow } from './ui/scroll-row';
 import { Heading, Text } from './ui/text';
+
+const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
 
 const CARD_STYLE: CSSProperties = {
   flex: '0 0 132px',
@@ -76,12 +81,19 @@ export function FlashSale() {
 
   const items = q.data ?? [];
 
+  // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
+  // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
+  const [expiredTick, setExpiredTick] = useState(0);
   const soonestEndAt = useMemo(() => {
-    if (items.length === 0) return null;
-    return new Date(Math.min(...items.map((it) => new Date(it.endAt).getTime())));
-  }, [items]);
+    const now = Date.now();
+    const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
+    return live.length > 0 ? new Date(Math.min(...live)) : null;
+  }, [items, expiredTick]);
 
   const timeLeft = useCountdown(soonestEndAt);
+  useEffect(() => {
+    if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
+  }, [soonestEndAt, timeLeft]);
 
   if (q.isLoading) return null;
   if (items.length === 0) {
@@ -93,18 +105,24 @@ export function FlashSale() {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ padding: '0 16px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Heading variant="title-sm" as="h2" style={{ color: 'var(--color-promo-fg)' }}>
+        <Heading variant="title-sm" as="h2" style={PROMO_TITLE_STYLE}>
+          <Icon icon={Zap} size="sm" tone="current" />
           {vi.flashSale.sectionTitle}
         </Heading>
-        <span role="timer" aria-label={vi.flashSale.endsIn(timeLeft)}>
-          <Badge tone="promo">{vi.flashSale.endsIn(timeLeft)}</Badge>
-        </span>
+        {/* Hết giờ mà danh sách chưa kịp tải lại (poll 60s): không hiện đồng hồ về 0. */}
+        {timeLeft && (
+          <span role="timer" aria-label={vi.flashSale.endsIn(timeLeft)}>
+            <Badge tone="promo" icon={Clock}>
+              {vi.flashSale.endsIn(timeLeft)}
+            </Badge>
+          </span>
+        )}
       </div>
 
       <ScrollRow label={vi.flashSale.sectionName} style={CARD_ROW_STYLE}>
         {items.map((item) => {
           const { price, was, pct } = flashDisplay(item);
-          const soldPct = item.quota > 0 ? Math.round((item.soldCount / item.quota) * 100) : 0;
+          const soldPct = soldPercent(item.soldCount, item.quota);
           return (
             <div
               key={item.itemId}
@@ -199,34 +217,39 @@ function UpcomingFlashCard({
         <div style={{ marginTop: 2 }}>
           <PriceTag value={price} flash={{ price }} size="sm" />
         </div>
+        {/* Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem. */}
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-          {vi.flashSale.startsIn(startsIn)}
+          {startsIn ? vi.flashSale.startsIn(startsIn) : vi.flashSale.live}
         </Text>
-        <div
-          role="button"
-          className="tubu-press"
-          onClick={(e: MouseEvent) => {
-            e.stopPropagation();
-            if (pending) return;
-            onToggleRemind();
-          }}
-          style={{
-            marginTop: 8,
-            textAlign: 'center',
-            minHeight: 44,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 'var(--radius-pill)',
-            fontSize: 'var(--type-label-size)',
-            fontWeight: 600,
-            opacity: pending ? 0.6 : 1,
-            background: item.reminded ? 'var(--color-action-secondary-bg)' : 'var(--color-action-primary-bg)',
-            color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
-          }}
-        >
-          {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
-        </div>
+        {startsIn && (
+          <div
+            role="button"
+            className="tubu-press"
+            onClick={(e: MouseEvent) => {
+              e.stopPropagation();
+              if (pending) return;
+              onToggleRemind();
+            }}
+            style={{
+              marginTop: 8,
+              textAlign: 'center',
+              minHeight: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              borderRadius: 'var(--radius-pill)',
+              fontSize: 'var(--type-label-size)',
+              fontWeight: 600,
+              opacity: pending ? 0.6 : 1,
+              background: item.reminded ? 'var(--color-action-secondary-bg)' : 'var(--color-action-primary-bg)',
+              color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
+            }}
+          >
+            <Icon icon={item.reminded ? CheckCircle2 : Bell} size="sm" tone="current" />
+            {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -271,7 +294,8 @@ export function UpcomingFlashSales() {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ padding: '0 16px', marginBottom: 8 }}>
-        <Heading variant="title-sm" as="h2" style={{ color: 'var(--color-promo-fg)' }}>
+        <Heading variant="title-sm" as="h2" style={PROMO_TITLE_STYLE}>
+          <Icon icon={Bell} size="sm" tone="current" />
           {vi.flashSale.upcomingTitle}
         </Heading>
       </div>

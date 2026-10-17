@@ -49,6 +49,11 @@ describe('Phân loại tin (C-022)', () => {
     expect(notificationCategory(code)).toBe('GARDEN');
   });
 
+  // Tin kéo khách quay lại khi bài có thích/bình luận: không phải tin giao dịch nên khách phải tắt được (cùng công tắc với nhắc Vườn).
+  it.each(['COMMUNITY_POST_LIKED', 'COMMUNITY_POST_COMMENTED'])('%s khách tắt được cùng công tắc Vườn Xanh', (code) => {
+    expect(notificationCategory(code)).toBe('GARDEN');
+  });
+
   it.each([
     'ORDER_CONFIRMED',
     'ORDER_CANCELLED',
@@ -64,6 +69,8 @@ describe('Phân loại tin (C-022)', () => {
     'MILESTONE_VOUCHER',
     // Mời đánh giá đơn khách đã nhận (C-017).
     'REVIEW_REQUEST',
+    // Thông báo kiểm duyệt về bài của chính khách: khách phải được biết bài đã bị ẩn.
+    'COMMUNITY_POST_HIDDEN',
   ])('%s là tin giao dịch, luôn gửi', (code) => {
     expect(notificationCategory(code)).toBe('TRANSACTIONAL');
   });
@@ -76,6 +83,15 @@ describe('NotificationsService.notify tôn trọng tuỳ chọn của khách (C-
     await svc.notify('u1', 'WINBACK_VOUCHER', {});
     expect(create).not.toHaveBeenCalled();
     expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('đã tắt công tắc Vườn → không báo thích/bình luận bài viết, nhưng báo bài bị ẩn vẫn gửi', async () => {
+    const { svc, create } = setup(optedOut);
+    await svc.notify('u1', 'COMMUNITY_POST_LIKED', { title: 'A' });
+    await svc.notify('u1', 'COMMUNITY_POST_COMMENTED', { title: 'A', author: 'B' });
+    expect(create).not.toHaveBeenCalled();
+    await svc.notify('u1', 'COMMUNITY_POST_HIDDEN', { title: 'A', reason: 'x' });
+    expect(create).toHaveBeenCalled();
   });
 
   it('đã tắt nhắc Vườn → bỏ qua nhắc tưới cây', async () => {

@@ -231,3 +231,132 @@ describe('AiAdvisorPage — tiêu đề, vùng chạm, bàn phím (C-076, C-114)
     expect(sendBtn()).toHaveAttribute('aria-busy', 'true');
   });
 });
+
+describe('AiAdvisorPage — cuộn, phím Enter, lưu ý, thử lại (D5-12)', () => {
+  const scrollIntoView = vi.fn();
+  beforeEach(() => {
+    scrollIntoView.mockReset();
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  it('chưa có tin nhắn thì không cuộn; gửi tin thì cuộn ngay, có trả lời thì cuộn tiếp xuống tin mới nhất', async () => {
+    let answer: (v: ReturnType<typeof REPLY>) => void = () => {};
+    mocks.aiChat.mockReturnValue(new Promise((r) => (answer = r)));
+    renderPage();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    await ask('Xin chào');
+    await screen.findByText('Trợ lý đang soạn…');
+    const afterQuestion = scrollIntoView.mock.calls.length;
+    expect(afterQuestion).toBeGreaterThanOrEqual(1);
+    answer(REPLY('Trả lời đây'));
+    await screen.findByText('Trả lời đây');
+    expect(scrollIntoView.mock.calls.length).toBeGreaterThan(afterQuestion);
+    expect(scrollIntoView.mock.calls.at(-1)![0]).toMatchObject({ block: 'end' });
+  });
+
+  it('Enter gửi tin và xoá ô nhập', async () => {
+    renderPage();
+    fireEvent.change(input(), { target: { value: 'Có nước giặt không?' } });
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    await waitFor(() => expect(mocks.aiChat).toHaveBeenCalledWith('Có nước giặt không?', expect.any(Array)));
+    expect(input().value).toBe('');
+  });
+
+  it('Shift+Enter xuống dòng (không gửi, không chặn phím)', () => {
+    renderPage();
+    fireEvent.change(input(), { target: { value: 'dòng 1' } });
+    const notPrevented = fireEvent.keyDown(input(), { key: 'Enter', shiftKey: true });
+    expect(notPrevented).toBe(true);
+    expect(mocks.aiChat).not.toHaveBeenCalled();
+    expect(input().value).toBe('dòng 1');
+  });
+
+  it('Enter khi đang gõ dở bằng bộ gõ (IME) chỉ chốt chữ, không gửi', () => {
+    renderPage();
+    fireEvent.change(input(), { target: { value: 'nuoc' } });
+    fireEvent.keyDown(input(), { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input(), { key: 'Enter', keyCode: 229 });
+    expect(mocks.aiChat).not.toHaveBeenCalled();
+    expect(input().value).toBe('nuoc');
+  });
+
+  it('Enter khi ô trống hoặc đang soạn câu trước: không gửi', async () => {
+    renderPage();
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(mocks.aiChat).not.toHaveBeenCalled();
+    mocks.aiChat.mockReturnValue(new Promise(() => {}));
+    await ask('Câu 1');
+    await screen.findByText('Trợ lý đang soạn…');
+    fireEvent.change(input(), { target: { value: 'Câu 2' } });
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(mocks.aiChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('ô nhập là ô nhiều dòng (textarea) vẫn giữ tên truy cập và giới hạn 2000 ký tự', () => {
+    renderPage();
+    expect(input().tagName).toBe('TEXTAREA');
+    expect(screen.getByRole('textbox', { name: 'Nhập câu hỏi' })).toBe(input());
+    expect(input().maxLength).toBe(2000);
+  });
+
+  it('luôn có dòng nhỏ "Gợi ý chỉ để tham khảo" — cả lúc chưa chat và sau khi có trả lời', async () => {
+    renderPage();
+    expect(screen.getByText(/Gợi ý chỉ để tham khảo/)).toBeInTheDocument();
+    await ask('Xin chào');
+    await screen.findByText('Mình gợi ý bạn thử loại này');
+    expect(screen.getAllByText(/Gợi ý chỉ để tham khảo/)).toHaveLength(1);
+  });
+
+  it('lỗi: tin xin lỗi có nút "Thử lại"; bấm thì gửi lại đúng câu cũ, bỏ tin xin lỗi, không nhân đôi tin của bạn', async () => {
+    mocks.aiChat.mockRejectedValueOnce(new Error('Hết hạn mức')).mockResolvedValueOnce(REPLY('Trả lời sau khi thử lại'));
+    renderPage();
+    await ask('Xin chào');
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.aiChat).toHaveBeenCalledTimes(2));
+    expect(mocks.aiChat.mock.calls[1]![0]).toBe('Xin chào');
+    expect(mocks.aiChat.mock.calls[1]![1]).toEqual([]);
+    expect(await screen.findByText('Trả lời sau khi thử lại')).toBeInTheDocument();
+    expect(screen.queryByText('Xin lỗi, mình chưa trả lời được lúc này 🌿')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(screen.getAllByText('Xin chào')).toHaveLength(1);
+  });
+
+  it('thử lại giữ nguyên lịch sử các lượt trước (không kèm tin xin lỗi và chính câu đang hỏi lại)', async () => {
+    mocks.aiChat
+      .mockResolvedValueOnce(REPLY('Trả lời 1'))
+      .mockRejectedValueOnce(new Error('lỗi mạng'))
+      .mockResolvedValueOnce(REPLY('Trả lời 2'));
+    renderPage();
+    await ask('Câu 1');
+    await screen.findByText('Trả lời 1');
+    await ask('Câu 2');
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.aiChat).toHaveBeenCalledTimes(3));
+    expect(mocks.aiChat.mock.calls[2]![0]).toBe('Câu 2');
+    expect(mocks.aiChat.mock.calls[2]![1]).toEqual([
+      { role: 'user', content: 'Câu 1' },
+      { role: 'assistant', content: 'Trả lời 1' },
+    ]);
+  });
+
+  it('thử lại vẫn lỗi: lại có tin xin lỗi và nút "Thử lại" (chỉ một nút)', async () => {
+    mocks.aiChat.mockRejectedValue(new Error('Hết hạn mức'));
+    renderPage();
+    await ask('Xin chào');
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.aiChat).toHaveBeenCalledTimes(2));
+    expect(await screen.findAllByText('Xin lỗi, mình chưa trả lời được lúc này 🌿')).toHaveLength(1);
+    expect(await screen.findAllByRole('button', { name: 'Thử lại' })).toHaveLength(1);
+  });
+
+  it('chỉ tin xin lỗi cuối cùng có nút "Thử lại": hỏi câu mới thì nút cũ biến mất', async () => {
+    mocks.aiChat.mockRejectedValueOnce(new Error('lỗi')).mockResolvedValueOnce(REPLY('Ổn rồi'));
+    renderPage();
+    await ask('Câu 1');
+    await screen.findByRole('button', { name: 'Thử lại' });
+    await ask('Câu 2');
+    await screen.findByText('Ổn rồi');
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+  });
+});

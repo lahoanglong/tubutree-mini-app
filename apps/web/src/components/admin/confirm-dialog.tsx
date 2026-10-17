@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { safeAreaPadX } from '@/lib/safe-area';
 import { INPUT_CLASS } from './ui';
 
 export interface ConfirmOptions {
@@ -107,6 +108,7 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
       data-confirm-backdrop
       onClick={() => onAnswer(false)}
       className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-900/40 p-4 sm:items-center"
+      style={safeAreaPadX('1rem')}
     >
       <div
         role="alertdialog"
