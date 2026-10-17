@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// @vitest-environment jsdom
 // C-025 (A1-014): trang chủ web nhận ?q= (từ ô tìm kiếm ở header) và chuyển cho GET /products?q=.
 
 const mocks = vi.hoisted(() => ({ getProductsPage: vi.fn(), getBrands: vi.fn(), redirect: vi.fn() }));
@@ -179,5 +180,16 @@ describe('ProductCard — nhãn hết hàng (BUYERWEB-9)', () => {
     const { inStock: _drop, ...noFlag } = PRODUCT;
     mocks.getProductsPage.mockResolvedValue(pageOf([noFlag]));
     expect(await render({})).not.toContain('Hết hàng');
+  });
+});
+
+describe('HomePage — ảnh thẻ sản phẩm (D6-12)', () => {
+  it('4 thẻ đầu tải ngay với fetchpriority=high, các thẻ sau tải lười', async () => {
+    const products = Array.from({ length: 7 }, (_, i) => ({ ...PRODUCT, id: `p${i}`, slug: `sp-${i}`, thumbnail: `https://cdn.example/${i}.jpg` }));
+    mocks.getProductsPage.mockResolvedValue(pageOf(products));
+    const imgs = [...(await render({})).matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+    expect(imgs).toHaveLength(7);
+    expect(imgs.map((i) => /loading="(\w+)"/.exec(i)?.[1])).toEqual(['eager', 'eager', 'eager', 'eager', 'lazy', 'lazy', 'lazy']);
+    expect(imgs.map((i) => /fetchPriority="(\w+)"/i.exec(i)?.[1])).toEqual(['high', 'high', 'high', 'high', undefined, undefined, undefined]);
   });
 });

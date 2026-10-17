@@ -68,7 +68,7 @@ describe('evaluateDemoData', () => {
   it('trước deploy (--phase=pre-deploy): còn demo là WARN vì bước dọn nằm trong cửa sổ deploy; sau deploy là FAIL', () => {
     const pre = evaluateDemoData(FRESH, GOOD_ENV, 'pre-deploy');
     expect(pre.map((x) => x.status)).toEqual(['WARN', 'WARN']);
-    for (const x of pre) expect(x.detail).toContain('bước 7b');
+    for (const x of pre) expect(x.detail).toContain('bước 7c');
     expect(evaluateDemoData(FRESH, GOOD_ENV, 'post-deploy').map((x) => x.status)).toEqual(['FAIL', 'FAIL']);
     expect(evaluateDemoData(CLEAN, GOOD_ENV, 'pre-deploy').map((x) => x.status)).toEqual(['PASS', 'PASS']);
     const ids = evaluateDb(dbWith({ demoData: FRESH }), { phase: 'pre-deploy', env: GOOD_ENV }).filter((x) => x.id.startsWith('db.demo_'));

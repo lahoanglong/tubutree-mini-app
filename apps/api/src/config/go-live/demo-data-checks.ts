@@ -3,7 +3,7 @@ import { DEMO_COUPONS, DEMO_MIGRATION, DEMO_PRODUCT_WHERE, DEMO_VARIATION_WHERE 
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
 
 const G_DB = 'Cơ sở dữ liệu';
-const CLEANUP_HINT = 'runbook mục 5, bước 7b';
+const CLEANUP_HINT = 'runbook mục 5, bước 7c';
 
 /** Dữ liệu demo của migration 20260616000000 còn lại trong DB; collector điền, evaluateDemoData chỉ phân tích. */
 export interface DemoDataSnapshot {
@@ -47,7 +47,7 @@ function acceptedCoupons(env: Env): Set<string> {
 const couponList = (cs: DemoDataSnapshot['liveCoupons']) => cs.map((c) => `${c.code} (hạn ${c.endAt.slice(0, 10)})`).join(', ');
 
 /**
- * Hàm thuần: không chạm DB. Thiếu ảnh chụp (fixture cũ) thì không có dòng nào. Trước deploy chỉ WARN: dọn là bước 7b trong
+ * Hàm thuần: không chạm DB. Thiếu ảnh chụp (fixture cũ) thì không có dòng nào. Trước deploy chỉ WARN: dọn là bước 7c trong
  * cửa sổ deploy (API đang dừng, khách chưa thấy gì); sau deploy còn demo là FAIL.
  */
 export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env, phase: GoLivePhase = 'post-deploy'): CheckResult[] {

@@ -104,14 +104,33 @@ Các lần phát hành thường (không có migration kiểu trên):
 
 ```bash
 cd /opt/tubutree
-# 1. Backup trước (bản pre-deploy, ngoài bản cron hằng ngày)
+# 1. Backup trước (bản pre-deploy, ngoài bản cron 6 giờ/lần). Máy chủ đã có mã mới của ops/ thì dùng
+#    `bash ops/backup-predeploy.sh` (nhãn predeploy, giữ riêng 10 bản); chưa có thì dòng dưới vẫn chạy như cũ
 COMPOSE_FILE=docker-compose.vietnix.yml bash tools/backup/backup-db.sh
 # 2. Đưa mã lên (git bundle / git merge --ff-only)
 # 3. Build -> migrate bằng image MỚI -> thay api -> thay web
 bash tools/deploy/deploy.sh
 # 4. Kiểm sau deploy (bằng image mới)
-docker compose -f docker-compose.vietnix.yml run --rm --no-deps api pnpm run go-live:check
+docker compose -f docker-compose.vietnix.yml run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
+# 5. Kiểm biên và máy chủ: health, nén, cache, chứng chỉ, đĩa, container unhealthy, backup mới nhất
+bash ops/check-edge.sh --local
 ```
+
+(`-v /var/backups/tubutree:...:ro` để `go-live:check` thấy thư mục backup; trong container nó không đọc được crontab và rclone, nên 4 mục backup còn lại luôn là WARN "không kiểm được": kiểm tay bằng `crontab -l | grep backup-db` và `rclone listremotes`, xem [runbook](../docs/launch/deploy-rollback-runbook.md) mục 1.2.)
+
+**Lần deploy đầu (hoặc DB mới): sau bước migrate, chạy thêm
+`npx prisma migrate deploy && npm run prisma:seed:reference`** (trên VPS: `docker compose -f
+docker-compose.vietnix.yml run --rm --no-deps api pnpm run prisma:seed:reference`, xem bước 7b của
+runbook). Thứ tự: `deploy.sh` migrate rồi bật API ngay trong cùng một lần chạy, nên không xen lệnh này
+vào giữa được; chạy nó NGAY SAU `deploy.sh` (vài chục giây API chạy với bảng tham chiếu còn trống, như
+trước đây, không lỗi; khoá cấu hình vừa nạp có hiệu lực trong 60 giây, không cần khởi động lại).
+Muốn dữ liệu có TRƯỚC khi API chạy thì theo thứ tự thủ công của runbook (bước 7b nằm giữa migrate và
+bật API). Migration không nạp chủ đề cộng đồng, quiz, loài cây và 28 mẫu thông báo; `prisma:seed` thì
+bị chặn ở production. Lệnh này chỉ tạo dòng còn thiếu, không ghi đè chỉnh sửa của admin và không đụng
+sản phẩm, người dùng, mã giảm giá, tài khoản ngân hàng, nên chạy lại sau mỗi lần phát hành cũng được.
+Hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá có giá trị kinh doanh KHÔNG nạp ở lệnh này: chỉ nạp khi
+thêm `--with-business-defaults`, sau khi chủ dự án duyệt bảng ở `docs/2026-10-18-launch-review/impl/refseed.md`
+mục 3.2 (chưa nạp thì admin chưa duyệt được hồ sơ đại lý). `deploy.sh` chưa gọi nó.
 
 `tools/deploy/deploy.sh` giữ đúng thứ tự: `docker compose run` **không** build lại image, nên
 chạy `run --rm api pnpm exec prisma migrate deploy` trước khi build sẽ áp thư mục migrations của
@@ -122,13 +141,30 @@ chỉ instance giữ lease trong bảng `cron_leases` chạy @Cron (`src/common/
 `Instance <host:pid:id> chạy cron.` ở đúng một instance. Vẫn giữ một instance cho tới khi đo lại
 P2028 (pool Prisma) với nhiều instance.
 
-## Backup hằng ngày (bắt buộc trước khi có khách thật)
+## Backup 6 giờ/lần (bắt buộc trước khi có khách thật)
 
-Cài cron theo `tools/backup/README.md` mục "Cài đặt trên VPS Vietnix" và "Cài crontab":
-`COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml`, `RCLONE_REMOTE` trỏ ra ngoài máy
-(R2/S3/Drive), `HEALTHCHECK_URL` để được báo khi backup lỗi hoặc cron không chạy. Diễn tập restore
-trước go-live và mỗi tháng (cùng README). Bước diễn tập, đo thời gian backup và khôi phục khi deploy
-hỏng nằm ở [runbook deploy](../docs/launch/deploy-rollback-runbook.md) mục 1.2 và mục 7.
+Cài cron theo `tools/backup/README.md` mục "Cài đặt trên VPS Vietnix" và "Cài crontab (6 giờ/lần)", mẫu ở
+[ops/crontab.backup.example](crontab.backup.example): `COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml`,
+`BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120` (30 ngày x 4; chỉ hạ khi đã có remote), `RCLONE_REMOTE` trỏ ra ngoài máy (R2/S3/Drive), `HEALTHCHECK_URL` để được
+báo khi backup lỗi hoặc cron không chạy. Mất tối đa 6 giờ dữ liệu khi phải khôi phục. Thiếu remote hoặc healthcheck thì
+backup vẫn chạy nhưng log có dòng `WARN` (và `go-live:check` báo). Diễn tập restore trước go-live và mỗi tháng (cùng README, lấy
+bản về từ remote và bấm giờ). Bước diễn tập, đo thời gian backup và khôi phục khi deploy hỏng nằm ở
+[runbook deploy](../docs/launch/deploy-rollback-runbook.md) mục 1.2 và mục 7.
+
+## Nén, giữ kết nối và kiểm biên (2026-10-18)
+
+- Vhost phase2 có `mod_deflate` (JSON/HTML/JS/CSS/SVG) và `ProxyPass ... ttl=30`; API đặt `keepAliveTimeout` 125 s, web
+  `KEEP_ALIVE_TIMEOUT=55000`. Mục đích: hết 502 lẻ "error reading status line" do Apache tái dùng kết nối Node vừa đóng
+  (A3-010). Dán lại hai file phase2 (khối lệnh ở runbook mục 1.5) để có hiệu lực; vhost đang chạy không dán lại vẫn hoạt động như cũ.
+  Dự phòng nếu vẫn thấy 502 lẻ: thêm `disablereuse=On` sau `ttl=30`.
+- `bash ops/check-edge.sh` (từ máy bất kỳ) kiểm DNS (so với `14.225.207.177`), hạn chứng chỉ (WARN dưới 21 ngày, FAIL dưới 7),
+  HTTP, nén, `Cache-Control`, `cf-cache-status` và `/api/health`; thêm `--local` trên VPS để kiểm đĩa (WARN 80%, FAIL 90%),
+  container `unhealthy`, cron certbot và bản backup mới nhất. Chỉ đọc, thoát 1 khi có FAIL, `--help` liệt kê tuỳ chọn. Chưa
+  có giám sát ngoài: chạy tay trước và sau mỗi deploy, hoặc đặt UptimeRobot/BetterStack cho `https://api.tubutree.com/api/health`.
+- Trần CPU của api/web và `USER node` của container web: xem phần đầu `docker-compose.vietnix.yml` và runbook mục 1.5.
+- Đổi cấu hình `postgres` hoặc `redis` trong compose thì `tools/deploy/deploy.sh` bước 4 (`up -d --no-build api`, không có `--no-deps`)
+  sẽ tạo lại chúng giữa lúc deploy (DB ngắt ~10 giây, 5xx). Muốn đổi, chạy chủ động ngoài giờ cao điểm TRƯỚC deploy:
+  `docker compose -f docker-compose.vietnix.yml up -d --no-deps postgres redis`.
 
 ## Redis và log container
 
@@ -149,7 +185,7 @@ hỏng nằm ở [runbook deploy](../docs/launch/deploy-rollback-runbook.md) m�
 - `/api/health` trả 503 khi DB **hoặc** Redis không phản hồi, nên `docker ps` hiện api `unhealthy`
   khi Redis sập. Monitor ngoài (UptimeRobot...) nên gọi `https://api.tubutree.com/api/health`.
 - Mọi container ghi log json-file tối đa 5 × 10MB (`x-logging` trong compose). Theo dõi đĩa:
-  `df -h /` và `docker system df`.
+  `df -h /` và `docker system df`, hoặc `bash ops/check-edge.sh --local` (WARN từ 80%).
 
 ## Khi có VM/VPS riêng (dọn dẹp về sau)
 

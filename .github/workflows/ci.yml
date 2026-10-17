@@ -50,3 +50,11 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Báo cáo kích thước bundle miniapp (chỉ cảnh báo, không chặn)
+        # Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành: chưa kiểm).
+        # Chỉnh bằng biến repo MINIAPP_ENTRY_WARN_KB / MINIAPP_TOTAL_WARN_KB; vượt thì hiện cảnh báo trên PR và bảng ở Summary.
+        run: node scripts/ci/bundle-budget.cjs apps/miniapp/www
+        env:
+          MINIAPP_ENTRY_WARN_KB: ${{ vars.MINIAPP_ENTRY_WARN_KB || '700' }}
+          MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2048' }}
