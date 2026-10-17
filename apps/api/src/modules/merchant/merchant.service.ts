@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { paginated, skipTake } from '../../common/pagination';
 import { maskFullName } from '../../common/mask-name';
+import { maskPhoneOrNull } from '../../common/mask-pii';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import {
   normalizeSubdomain,
@@ -50,17 +51,6 @@ function slugify(str: string): string {
     .replace(/đ/g, 'd')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-/**
- * Cùng công thức che SĐT với `maskPhone` ở loyalty.service.ts (giữ 3 số đầu + 3 số cuối) — không
- * import trực tiếp từ đó (module khác, tránh đụng file agent khác có thể đang sửa song song), chỉ
- * lặp lại ĐÚNG công thức để nhất quán quy ước che dữ liệu toàn hệ thống.
- */
-function maskPhoneNumber(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  if (phone.length <= 6) return '***';
-  return `${phone.slice(0, 3)}****${phone.slice(-3)}`;
 }
 
 type MaskableShippingAddress = {
@@ -983,7 +973,7 @@ export class MerchantService {
             ...order,
             ...(scope.isPartner
               ? {}
-              : { user: user ? { ...user, fullName: maskFullName(user.fullName), phone: maskPhoneNumber(user.phone) } : user }),
+              : { user: user ? { ...user, fullName: maskFullName(user.fullName), phone: maskPhoneOrNull(user.phone) } : user }),
             shippingAddress: maskShippingAddress(order.shippingAddress),
           }));
 
