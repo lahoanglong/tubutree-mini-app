@@ -118,10 +118,14 @@ describe('apps/web/Dockerfile', () => {
   const dockerfile = repoFile('apps/web/Dockerfile');
   const runner = dockerfile.slice(dockerfile.lastIndexOf('AS runner'));
 
-  it('container web chạy bằng user node, và user đó ghi được .next/cache (Data Cache của fetch)', () => {
+  it('container web chạy bằng user node, và user đó ghi được .next/cache (Data Cache) và .next/server/app (ISR)', () => {
     expect(runner).toMatch(/\nUSER node\n/);
-    expect(runner).toMatch(/mkdir -p apps\/web\/\.next\/cache && chown -R node:node apps\/web\/\.next/);
-    expect(runner.indexOf('chown -R node:node')).toBeLessThan(runner.indexOf('USER node'));
+    expect(runner).toMatch(/mkdir -p apps\/web\/\.next\/cache && chown node:node apps\/web\/\.next\/cache\n/);
+    expect(runner).toMatch(/COPY --from=builder --chown=node:node \S+\/standalone /);
+    const instructions = runner.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+    expect(instructions).not.toMatch(/chown -R/);
+    expect(runner).not.toContain('DUY NHẤT');
+    expect(runner.indexOf('chown node:node')).toBeLessThan(runner.indexOf('USER node'));
     expect(runner.indexOf('USER node')).toBeLessThan(runner.indexOf('CMD ['));
   });
 });

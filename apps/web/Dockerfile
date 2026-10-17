@@ -52,9 +52,11 @@ ENV PORT=3000
 COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
 
-# Không chạy bằng root. Next ghi Data Cache của fetch vào .next/cache lúc chạy: thư mục phải thuộc user node, nếu không
-# mọi lần ghi cache lỗi EACCES (log đầy cảnh báo, trang nào cũng gọi API lại). Đây là chỗ DUY NHẤT web ghi ra đĩa.
-RUN mkdir -p apps/web/.next/cache && chown -R node:node apps/web/.next
+# Không chạy bằng root. Web ghi ra đĩa ở hai chỗ: .next/cache (Data Cache của fetch) và .next/server/app (ISR ghi lại
+# trang tĩnh khi revalidate). Thư mục thuộc root thì mọi lần ghi lỗi EACCES (log đầy cảnh báo, trang nào cũng gọi API lại).
+# .next/server/app đã thuộc node nhờ COPY --chown ở trên; .next/cache không nằm trong standalone nên tạo ở đây, và chỉ chown
+# đúng thư mục này (chown -R lên cả .next sẽ nhân đôi layer của mọi file đã COPY).
+RUN mkdir -p apps/web/.next/cache && chown node:node apps/web/.next/cache
 USER node
 
 EXPOSE 3000

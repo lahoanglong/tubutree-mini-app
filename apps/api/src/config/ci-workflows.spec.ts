@@ -30,7 +30,8 @@ describe('.github/workflows/docker-build.yml (D6-09a)', () => {
   it('web build có ZALO_APP_ID giả (Dockerfile dừng nếu rỗng) và kiểm container chạy bằng user node ghi được .next/cache', () => {
     expect(wf).toMatch(/--build-arg NEXT_PUBLIC_ZALO_APP_ID=\S+/);
     expect(wf).toMatch(/--entrypoint id \S+ -un/);
-    expect(wf).toContain('apps/web/.next/cache');
+    expect(wf).toContain('apps/web/.next/cache/.write-test');
+    expect(wf).toContain('apps/web/.next/server/app/.write-test');
   });
 
   it('api build kiểm module chạy được từ image (bắt phantom dependency như express thiếu)', () => {

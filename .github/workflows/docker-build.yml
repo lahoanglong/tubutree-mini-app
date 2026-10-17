@@ -59,10 +59,11 @@ jobs:
           --build-arg NEXT_PUBLIC_ZALO_APP_ID=ci-dummy-app-id
           .
 
-      - name: Kiểm container web chạy bằng user node và ghi được .next/cache
-        # Next ghi Data Cache của fetch vào .next/cache lúc chạy; thư mục thuộc root thì mọi lần ghi lỗi EACCES.
+      - name: Kiểm container web chạy bằng user node và ghi được .next/cache, .next/server/app
+        # Next ghi Data Cache của fetch vào .next/cache và ISR ghi lại trang tĩnh vào .next/server/app lúc chạy;
+        # thư mục thuộc root thì mọi lần ghi lỗi EACCES.
         if: matrix.app == 'web'
         run: |
           set -euo pipefail
           test "$(docker run --rm --entrypoint id tubutree-web:ci -un)" = node
-          docker run --rm --entrypoint sh tubutree-web:ci -c 'touch apps/web/.next/cache/.write-test && echo "cache ghi được"'
+          docker run --rm --entrypoint sh tubutree-web:ci -c 'touch apps/web/.next/cache/.write-test apps/web/.next/server/app/.write-test && echo "cache và ISR ghi được"'
