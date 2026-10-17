@@ -110,6 +110,12 @@ export class SystemConfigService {
     'community.post_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
     'community.answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
     'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
+    // Điểm UY TÍN cộng đồng (cấp Mầm đến Cổ thụ), không phải Điểm Xanh. Cột reputation/amount là INTEGER: số lẻ làm giao dịch lỗi,
+    // và bumpReputation nuốt lỗi đó nên người đăng bài không được cộng mà không ai biết. Số lớn đưa người đăng bài lên cấp cao nhất ngay.
+    'community.rep_post': { min: 0, max: 100, note: 'điểm uy tín mỗi bài được đăng (0 = không cộng)', integer: true },
+    'community.rep_answer': { min: 0, max: 100, note: 'điểm uy tín mỗi câu trả lời (0 = không cộng)', integer: true },
+    'community.rep_best': { min: 0, max: 100, note: 'điểm uy tín cho câu trả lời được chọn hay nhất (0 = không cộng)', integer: true },
+    'community.daily_rep_cap': { min: 0, max: 1000, note: 'điểm uy tín tối đa mỗi người mỗi ngày (0 = không ai được cộng)', integer: true },
     'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
     'game.spin_voucher_min_order_multiplier': { min: 1, max: 50, note: 'hệ số nguyên (6 = voucher 20.000đ cho đơn từ 120.000đ)', integer: true },
@@ -264,6 +270,27 @@ export class SystemConfigService {
           const id = (prize as { id?: unknown } | null)?.id;
           return `giải thứ ${i + 1}${typeof id === 'string' ? ` ("${id}")` : ''}: ${problem}`;
         }
+      }
+      return null;
+    },
+    // Cấp uy tín chỉ có 4 tên (Mầm, Cây non, Cây trưởng thành, Cổ thụ): thêm mốc thứ 5 thì cấp 5 hiện lại tên "Mầm", bớt mốc thì mất cấp.
+    // Mốc đầu là 0 để bốn mốc ứng đúng cấp 1 đến 4, và các mốc tăng dần, nếu không cấp nhảy ngược khi điểm tăng.
+    'community.rep_thresholds': (value) => {
+      if (!Array.isArray(value) || value.length !== 4) return 'phải là mảng đúng 4 mốc điểm uy tín [0, a, b, c] cho cấp 1 đến 4';
+      if (!value.every((n) => Number.isInteger(n) && n >= 0 && n <= 1_000_000)) return 'mỗi mốc phải là số nguyên 0–1.000.000';
+      if (value[0] !== 0) return 'mốc đầu phải là 0 (ai cũng ít nhất cấp 1)';
+      for (let i = 1; i < value.length; i++) {
+        if ((value[i] as number) <= (value[i - 1] as number)) return 'các mốc phải tăng dần';
+      }
+      return null;
+    },
+    // Chỉ `seeds` được đọc (GameEconomyService.checkIn); `free_spins` có trong seed.ts nhưng không code nào dùng, nhận để bản seed không tự bị từ chối.
+    'game.streak_7_bonus': (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { seeds: 💧 thưởng chuỗi 7 ngày }';
+      const { seeds, free_spins: freeSpins } = value as Record<string, unknown>;
+      if (!Number.isInteger(seeds) || (seeds as number) < 0 || (seeds as number) > 10_000) return 'seeds phải là số 💧 nguyên 0–10.000';
+      if (freeSpins !== undefined && (!Number.isInteger(freeSpins) || (freeSpins as number) < 0 || (freeSpins as number) > 100)) {
+        return 'free_spins (nếu có) phải là số nguyên 0–100';
       }
       return null;
     },

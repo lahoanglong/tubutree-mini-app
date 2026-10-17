@@ -325,6 +325,7 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 | Số migration chờ áp ở bước 4 (`migrate status`) khác số ghi ở mục 1.0, hoặc image/DB không cùng một bản (mục 1.0) | DỪNG, chưa dừng API. Tính lại cửa sổ và đường quay lại từ danh sách mới | Tech lead |
 | Migrate báo lỗi (bất kỳ dòng `Error`) hoặc chạy quá 5 lần "tổng thời gian migrate" (mục 3.2) | DỪNG. Làm mục 7.1. Không bật API | Tech lead, Chủ shop |
 | `_prisma_migrations` có dòng `finished_at IS NULL` | DỪNG. Làm mục 7.1 (đọc kỹ điểm 2, 4 và 6 của 7.1: không bật lại API cũ trước khi xử lý dòng dở) | Tech lead |
+| `prisma:seed:reference` (bước 7b) báo lỗi hoặc số đếm xác minh sai | Chưa bật API. Lệnh chạy lại an toàn: đọc lỗi, chạy lại một lần; vẫn lỗi thì DỪNG | Tech lead |
 | API mới không `healthy` sau 5 phút | Xem log, quyết định trong 15 phút: quay lại theo mục 7 | Chủ shop quyết, Tech lead |
 | Smoke test (bước 11) có mục FAIL | Quay lại theo mục 7, hoặc sửa tiến nếu chỉ là lỗi giao diện và schema ổn | Chủ shop, Tech lead |
 | `go-live:check` sau deploy có FAIL | Không mở bán, không phát hành Mini App. Sửa rồi chạy lại | Tech lead |
@@ -463,6 +464,48 @@ psqlq -c "SELECT count(*) AS thieu_tim_kiem FROM orders WHERE COALESCE(\"shippin
 ```
 
 Kỳ vọng: `da_ap_xong` bằng (số "migrations" ghi ở bước 6) cộng (số chờ áp ở bước 4); bốn migration mới nhất đều `xong = t`; `dang_do = 0`; chỉ còn đúng một chỉ mục `reviews_userId_productId_orderId_key` (chỉ mục cũ `reviews_userId_productId_key` đã mất); `diem_nhan_vo` bằng 0 hoặc 1 (1 nếu trước đó đã có địa chỉ `refill.pickup_address`); `thieu_tim_kiem = 0`.
+
+### Bước 7b. Nạp dữ liệu tham chiếu (lần deploy đầu, hoặc DB mới)
+
+`prisma migrate deploy` chỉ tạo bảng và một phần cấu hình, mẫu thông báo. Các thứ app cần để chạy đủ tính năng nằm ở file seed và KHÔNG có trong migration: bảy chủ đề cộng đồng, 43 câu quiz Vườn Xanh, mười loài cây, mốc quỹ trồng cây, 28 mẫu thông báo (gồm "đơn đã giao", "đơn bị huỷ", "mã giảm giá chào mừng") và khoảng 80 khoá cấu hình để admin thấy ở tab Cấu hình. Lệnh `prisma:seed` bị chặn ở production (nó ghi đè sản phẩm và tài khoản ngân hàng), nên có một lệnh riêng, an toàn cho prod:
+
+```bash
+$DC run --rm --no-deps api pnpm run prisma:seed:reference
+```
+
+Chạy ngay sau bước 7, khi API vẫn đang dừng, trước bước 8. Lệnh chỉ TẠO dòng còn thiếu: không ghi đè giá trị admin đã chỉnh, không đụng sản phẩm, người dùng, mã giảm giá hay tài khoản ngân hàng, nên chạy lại bao nhiêu lần cũng an toàn (nên chạy lại sau mỗi lần phát hành có thêm mẫu thông báo hoặc khoá cấu hình mới). KHÔNG chạy `prisma:seed` và KHÔNG đặt `ALLOW_PROD_SEED=1` trên VPS.
+
+Kỳ vọng: thoát 0 và in mỗi nhóm một dòng `[seed-reference] <nhóm>: ...`. Lần đầu trên DB mới các dòng có dạng `+N mới` (ví dụ `notification_templates: +28 mới`); lần chạy sau đều `đủ sẵn`. Dòng `seasons` luôn là "bỏ qua: mùa mẫu đã hết hạn" cho tới khi chủ dự án chốt mùa mới (Vườn Xanh không hiện banner mùa trong lúc đó). Dòng cuối "chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt)" là đúng ý: lệnh KHÔNG cờ không nạp hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá cấu hình có giá trị khác mặc định trong mã (vòng quay, thưởng mốc giới thiệu, bậc Subscribe & Save, freeship theo hạng, thưởng chuỗi 7 ngày, Season Pass). Đó là các con số tiền, điểm, xác suất chủ dự án chưa quyết.
+
+CHỈ chạy lệnh có cờ sau khi chủ dự án đã duyệt bảng giá trị ở mục 3.2 của `docs/2026-10-18-launch-review/impl/refseed.md`:
+
+```bash
+$DC run --rm --no-deps api pnpm run prisma:seed:reference --with-business-defaults
+```
+
+Lệnh có cờ cũng chỉ tạo dòng còn thiếu (hạng, bậc đại lý, nhiệm vụ, 6 khoá) và an toàn chạy lại. Cờ gõ sai thì lệnh báo "Tham số không hợp lệ" và không ghi gì. Chưa chạy lệnh có cờ thì: không có hạng thành viên, admin KHÔNG duyệt được hồ sơ đại lý hay cấp vai trò DEALER (cần ít nhất một bậc đại lý), vòng quay báo "chưa cấu hình", Vườn Xanh không có nhiệm vụ. Phải chạy có cờ (hoặc tạo bậc đại lý bằng SQL) trước ngày mở đăng ký đại lý.
+
+Xác minh sau lệnh không cờ:
+
+```bash
+psqlq -c "SELECT (SELECT count(*) FROM community_categories WHERE \"isActive\") AS chu_de, (SELECT count(*) FROM game_quizzes) AS quiz, (SELECT count(*) FROM plant_species) AS loai_cay, (SELECT count(*) FROM notification_templates) AS mau_tin, (SELECT count(*) FROM community_goals WHERE status = 'ACTIVE') AS moc_quy, (SELECT count(*) FROM membership_tiers) AS hang, (SELECT count(*) FROM dealer_tiers) AS bac_dai_ly, (SELECT count(*) FROM missions) AS nhiem_vu"
+```
+
+Kỳ vọng: `chu_de ≥ 7`, `quiz ≥ 43`, `loai_cay ≥ 10`, `mau_tin ≥ 100`, `moc_quy = 1`. Lệnh này chỉ tạo dòng thiếu nên số thấp hơn mức trên mới là lỗi: chạy lại lệnh một lần, vẫn thấp thì DỪNG. Số CAO HƠN không phải lỗi: trên DB bản thử cũ (đã từng chạy `prisma:seed`) `quiz` có thể là 49 (kèm 6 quiz thương hiệu cũ) và `mau_tin` hơn 100. DB mới hoàn toàn thì `quiz = 43`, `mau_tin = 100`. Với ba cột cuối: DB mới hoàn toàn sau lệnh không cờ là `hang = 0`, `bac_dai_ly = 0`, `nhiem_vu = 0` (đúng ý, xem trên); sau lệnh có cờ là `hang ≥ 4`, `bac_dai_ly ≥ 4`, `nhiem_vu ≥ 4`; trên DB bản thử cũ ba cột này đã là 4 từ trước do seed cũ nạp sẵn.
+
+Trên DB bản thử cũ, kiểm thêm chủ đề cộng đồng cây cảnh của bản đầu còn bật (lệnh này chỉ tạo dòng thiếu nên không ẩn chúng; trên DB mới không có dòng nào):
+
+```bash
+psqlq -c "SELECT slug, name FROM community_categories WHERE \"isActive\" AND slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Có dòng nào thì ẩn bằng SQL (chưa có màn admin; chỉ ẩn khỏi danh sách chọn và lọc, không xoá nên bài đã đăng giữ nguyên nhãn cũ):
+
+```bash
+psqlq -c "UPDATE community_categories SET \"isActive\" = false WHERE slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng và bậc đại lý chưa có màn sửa (sửa bằng SQL, lần chạy sau không ghi đè).
 
 ### Bước 8. Bật web mới
 
