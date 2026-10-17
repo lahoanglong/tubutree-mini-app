@@ -22,7 +22,7 @@ import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
-import { maskPhoneEnds } from '../../common/mask-pii';
+import { maskPhoneOrNull } from '../../common/mask-pii';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
 /**
@@ -1058,7 +1058,7 @@ export class LoyaltyService {
     return {
       memberCode: memberCodeOf(user.referralCode),
       name: user.fullName ?? 'Thành viên Tubu',
-      phone: maskPhone(user.phone),
+      phone: maskPhoneOrNull(user.phone),
       tierName: user.tier?.name ?? 'Mầm Xanh',
       tierMultiplier: user.tier ? Number(user.tier.pointMultiplier) : 1,
       pointsBalance: user.pointsBalance,
@@ -1119,7 +1119,7 @@ export class LoyaltyService {
       id: member.id,
       memberCode: memberCodeOf(member.referralCode),
       name: member.fullName ?? 'Thành viên Tubu',
-      phone: maskPhone(member.phone),
+      phone: maskPhoneOrNull(member.phone),
       tier: member.tier?.name ?? 'Mầm Xanh',
       pointsBalance,
       pointsConvertedBalance,
@@ -1318,11 +1318,11 @@ export class LoyaltyService {
       note: r.note,
       dayKey: r.dayKey,
       createdAt: r.createdAt,
-      staff: { id: r.staff.id, name: r.staff.fullName, phone: maskPhone(r.staff.phone) },
+      staff: { id: r.staff.id, name: r.staff.fullName, phone: maskPhoneOrNull(r.staff.phone) },
       member: {
         id: r.member.id,
         name: r.member.fullName,
-        phone: maskPhone(r.member.phone),
+        phone: maskPhoneOrNull(r.member.phone),
         memberCode: memberCodeOf(r.member.referralCode),
       },
     }));
@@ -1426,11 +1426,6 @@ const MIN_MEMBER_CODE_LEN = 8;
 
 function memberCodeOf(referralCode: string): string {
   return `${MEMBER_CODE_PREFIX}${referralCode}`;
-}
-
-// Không chặn SĐT ngắn (khác maskPhoneOrNull): giữ đúng đầu ra cũ của màn POS.
-function maskPhone(phone: string | null | undefined): string | null {
-  return phone ? maskPhoneEnds(phone) : null;
 }
 
 /**
