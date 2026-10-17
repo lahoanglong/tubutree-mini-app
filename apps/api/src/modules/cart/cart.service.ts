@@ -207,9 +207,14 @@ export class CartService {
             couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
           } catch (err2) {
             if (!(err2 instanceof BadRequestException)) throw err2;
-            await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
-            couponRemoved = { code: couponCode, reason: err2.message };
-            couponCode = null;
+            // Chỉ gỡ đúng mã đã đọc: giữa lúc đọc và ghi, tab khác có thể đã áp mã mới — không được xoá nhầm mã đó.
+            const cleared = await this.prisma.cart.updateMany({ where: { id: cartId, couponCode }, data: { couponCode: null } });
+            if (cleared.count > 0) {
+              couponRemoved = { code: couponCode, reason: err2.message };
+              couponCode = null;
+            } else {
+              couponCode = (await this.prisma.cart.findUnique({ where: { id: cartId }, select: { couponCode: true } }))?.couponCode ?? null;
+            }
           }
         }
       }
