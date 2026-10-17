@@ -5,6 +5,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { CartService } from '../../src/modules/cart/cart.service';
+import { CartController } from '../../src/modules/cart/cart.controller';
 import { CheckoutService } from '../../src/modules/checkout/checkout.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
@@ -33,6 +34,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
   let prisma: PrismaService;
   let checkout: CheckoutService;
   let cart: CartService;
+  let cartApi: CartController;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -67,6 +69,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     await warmPool(prisma);
     checkout = moduleRef.get(CheckoutService);
     cart = moduleRef.get(CartService);
+    cartApi = new CartController(cart);
     await setConfig(prisma, 'shipping.free_threshold', 200_000);
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);
     await setConfig(prisma, 'merchant.default_shipping_fee', 25_000);
@@ -382,6 +385,69 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
       expect(r2.c.comboDiscount).toBe(10_000);
     } finally {
       await prisma.flashSale.update({ where: { id: f.saleId }, data: { isActive: false } });
+    }
+  });
+
+  /**
+   * Cùng một lần mua đọc ba nơi: GET /cart (qua controller, đúng đường trang giỏ gọi), báo giá và đơn thật được tạo. Tiền hàng sau
+   * mọi giảm (chưa phí giao, chưa điểm) phải bằng nhau từng đồng; trả thêm số liệu từng khoản để test khẳng định.
+   */
+  async function cartQuoteOrder(b: { userId: string; addressId: string }, opts: { cartSlug?: string; quoteSlug?: string; orderSlug?: string; itemIds?: string[] } = {}) {
+    const c = await cartApi.get(b.userId, { storefrontSlug: opts.cartSlug, ...(opts.itemIds ? { itemIds: opts.itemIds } : {}) } as never);
+    const q = await checkout.quote(b.userId, { addressId: b.addressId, storefrontSlug: opts.quoteSlug, itemIds: opts.itemIds });
+    await checkout.placeOrder(
+      b.userId,
+      { addressId: b.addressId, paymentMethod: 'COD', storefrontSlug: opts.orderSlug, itemIds: opts.itemIds } as never,
+      `itcp-${randCode(12)}`,
+    );
+    const o = await prisma.order.findFirstOrThrow({ where: { userId: b.userId }, orderBy: { createdAt: 'desc' } });
+    const cartGoods = c.subtotal - c.comboDiscount - c.discount - ((c as { tierDiscount?: number }).tierDiscount ?? 0);
+    const numbers = { cart: cartGoods, quote: q.total - q.shippingFee, order: o.total - o.shippingFee };
+    expect(numbers.quote).toBe(numbers.order);
+    expect(numbers.cart).toBe(numbers.quote);
+    expect({ combo: c.comboDiscount, coupon: c.discount, tier: (c as { tierDiscount?: number }).tierDiscount ?? 0 }).toEqual({
+      combo: o.comboDiscount,
+      coupon: o.couponDiscount,
+      tier: o.tierDiscount,
+    });
+    return { c, q, o, numbers };
+  }
+
+  it('"chạm" giới thiệu còn hạn (phiên mất slug gian hàng): giỏ, báo giá và đơn cùng lấy gian hàng của chạm nên cùng combo', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const slug = await comboStore(a.productId, c.productId, 10);
+    const store = await prisma.storefront.findUniqueOrThrow({ where: { slug } });
+    await prisma.referralTouch.create({
+      data: { userId: b.userId, referrerUserId: store.ownerUserId!, storefrontSlug: slug, kind: 'ctv', expiresAt: new Date(Date.now() + 86_400_000) },
+    });
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: c.variationId, quantity: 2 }); // 140.000đ, combo 14.000đ
+    const code = await coupon(b.userId, 'PERCENT', 10);
+    await cart.applyCoupon(b.userId, code);
+
+    const r = await cartQuoteOrder(b); // không bên nào gửi slug
+    expect(r.c.comboDiscount).toBe(14_000);
+    expect(r.numbers).toEqual({ cart: 113_400, quote: 113_400, order: 113_400 });
+  });
+
+  it('chạm hết hạn hoặc kind=brand: không ai áp combo (cả ba cùng không combo)', async () => {
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const slug = await comboStore(a.productId, c.productId, 10);
+    const store = await prisma.storefront.findUniqueOrThrow({ where: { slug } });
+    for (const touch of [
+      { kind: 'ctv', expiresAt: new Date(Date.now() - 1_000) },
+      { kind: 'brand', expiresAt: new Date(Date.now() + 86_400_000) },
+    ]) {
+      const b = await buyer();
+      await prisma.referralTouch.create({ data: { userId: b.userId, referrerUserId: store.ownerUserId!, storefrontSlug: touch.kind === 'brand' ? null : slug, ...touch } });
+      await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+      await cart.addItem(b.userId, { variationId: c.variationId, quantity: 1 });
+      const r = await cartQuoteOrder(b);
+      expect(r.c.comboDiscount).toBe(0);
+      expect(r.numbers).toEqual({ cart: 100_000, quote: 100_000, order: 100_000 });
     }
   });
 });
