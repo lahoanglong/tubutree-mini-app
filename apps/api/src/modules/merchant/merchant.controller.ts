@@ -196,8 +196,10 @@ export class MerchantController {
   ) {}
 
   @Get('store')
-  getStore(@CurrentUser('sub') userId: string) {
-    return this.merchant.getOrCreateStore(userId);
+  async getStore(@CurrentUser('sub') userId: string) {
+    const store = await this.merchant.getOrCreateStore(userId);
+    // Cổng dùng để biết gian hàng đã tắt cờ còn phiếu đối soát để xem (không phải thử gọi /merchant/settlement rồi nhận 403).
+    return { ...store, hasPayouts: await this.fulfilment.storeHasPayouts(store.id) };
   }
 
   @Put('store')

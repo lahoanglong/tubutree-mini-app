@@ -288,9 +288,11 @@ function StoreActions({ store: s, creating, open, onCreate, onToggle, partner }:
       <button type="button" disabled={s.settleableLines === 0} aria-expanded={open === 'lines'} onClick={() => onToggle('lines')} className={BTN_XS_SECONDARY}>
         Xem khoản
       </button>
-      <button type="button" aria-expanded={open === 'fees'} onClick={() => onToggle('fees')} className={BTN_XS_SECONDARY}>
-        Sửa phí
-      </button>
+      {(s.isPartner || s.type === 'MERCHANT') && (
+        <button type="button" aria-expanded={open === 'fees'} onClick={() => onToggle('fees')} className={BTN_XS_SECONDARY}>
+          Sửa phí
+        </button>
+      )}
       {partner && s.type === 'CTV' && (
         <button type="button" disabled={partner.pending} onClick={() => partner.onToggle(s)} className={s.isPartner ? BTN_XS_DANGER : BTN_XS_SECONDARY}>
           {s.isPartner ? 'Tắt đối tác' : 'Bật đối tác'}

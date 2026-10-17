@@ -8,12 +8,13 @@ import { AdminEngagementService } from './admin-engagement.service';
 import { CatalogModule } from '../catalog/catalog.module';
 import { OrdersModule } from '../orders/orders.module';
 import { StaffModule } from '../staff/staff.module';
+import { MerchantModule } from '../merchant/merchant.module';
 // Thao tác vận đơn thu gom (tạo lại / huỷ) + tình trạng tích hợp — dùng GomdonOrderService/GomdonClient
 // đã export. GomdonModule không import ngược AdminModule nên không có vòng phụ thuộc.
 import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 
 @Module({
-  imports: [CatalogModule, OrdersModule, StaffModule, GomdonModule],
+  imports: [CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
   controllers: [AdminController, AdminUsersController, AdminEngagementController],
   providers: [AdminService, UserBlockService, AdminEngagementService],
 })

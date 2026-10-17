@@ -611,7 +611,8 @@ model Storefront {
   id                  String                   @id @default(cuid())
   type                StorefrontType
   /// Gian hàng đối tác (tự đăng sản phẩm, tự giao, đối soát). Bền, không suy từ vai trò hiện tại của chủ: CTV đã mở gian hàng rồi
-  /// được duyệt đại lý giữ type CTV (hoa hồng giới thiệu không đổi) nhưng được bật cờ này. Không bao giờ tự tắt.
+  /// được duyệt đại lý giữ type CTV (hoa hồng giới thiệu không đổi) nhưng được bật cờ này. Tự tắt khi chủ rơi xuống CUSTOMER/AFFILIATE
+  /// (từ DEALER/STAFF/ADMIN) và gian hàng hết vướng mắc; còn vướng thì việc đổi vai trò bị 409. DEALER lên STAFF/ADMIN không đụng cờ.
   isPartner           Boolean                  @default(false)
   slug                String                   @unique
   subdomain           String?                  @unique
@@ -793,6 +794,7 @@ model FlashSalePurchase {
   updatedAt       DateTime      @updatedAt
 
   @@unique([flashSaleItemId, userId])
+  @@index([userId])
   @@map("flash_sale_purchases")
 }
 
@@ -1134,6 +1136,7 @@ model PointsTransaction {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([userId, refId])
   // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])

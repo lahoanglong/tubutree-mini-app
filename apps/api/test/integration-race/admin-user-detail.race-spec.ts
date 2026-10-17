@@ -5,6 +5,8 @@ import { UserBlockService } from '../../src/modules/admin/user-block.service';
 import { SessionStateService } from '../../src/modules/auth/session-state.service';
 import { JwtStrategy } from '../../src/modules/auth/strategies/jwt.strategy';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../../src/config/env.validation';
 import { createOrder, createUser } from './helpers';
@@ -25,9 +27,10 @@ describe('Chi tiết người dùng + nhóm việc nhân viên (real Postgres)',
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    rbac = new RbacService(prisma);
+    const fulfilment = new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma));
+    rbac = new RbacService(prisma, fulfilment);
     const none = {} as never;
-    admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none);
+    admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none, fulfilment);
     sessions = new SessionStateService(prisma);
     blocks = new UserBlockService(prisma, sessions);
     const config = { get: () => 'it-secret' } as unknown as ConfigService<Env, true>;
@@ -102,6 +105,25 @@ describe('Chi tiết người dùng + nhóm việc nhân viên (real Postgres)',
     const d = await admin.getUserDetail(u.id);
     expect(d.roleHistory.map((e) => `${e.kind}:${e.fromValue}->${e.toValue}`)).toEqual(['ROLE:STAFF->CUSTOMER']);
     expect(d.blockHistory.map((e) => e.kind)).toEqual(['BLOCK']);
+  });
+
+  it('trả lịch sử bật/tắt cờ gian hàng đối tác (STOREFRONT_PARTNER) kèm người làm, mới nhất trước, tách khỏi vai trò/khoá', async () => {
+    const boss = await createUser(prisma, { role: 'ADMIN', phone: phone() });
+    const u = await createUser(prisma, { role: 'STAFF', phone: phone() });
+    await prisma.userAdminEvent.create({
+      data: { userId: u.id, kind: 'STOREFRONT_PARTNER', fromValue: 'false', toValue: 'true', reason: 'sf-1', actorId: boss.id, createdAt: new Date('2026-10-01T00:00:00Z') },
+    });
+    await prisma.userAdminEvent.create({
+      data: { userId: u.id, kind: 'STOREFRONT_PARTNER', fromValue: 'true', toValue: 'false', reason: 'sf-1', actorId: boss.id, createdAt: new Date('2026-10-02T00:00:00Z') },
+    });
+    const d = await admin.getUserDetail(u.id);
+    expect(d.partnerHistory.map((e) => `${e.kind}:${e.fromValue}->${e.toValue}`)).toEqual([
+      'STOREFRONT_PARTNER:true->false',
+      'STOREFRONT_PARTNER:false->true',
+    ]);
+    expect(d.partnerHistory[0]).toMatchObject({ reason: 'sf-1', actorId: boss.id, actorName: expect.any(String) });
+    expect(d.roleHistory).toEqual([]);
+    expect(d.blockHistory).toEqual([]);
   });
 
   it('cấp quyền theo SĐT (RoleGrant) áp lên tài khoản → sổ ghi ai cấp', async () => {

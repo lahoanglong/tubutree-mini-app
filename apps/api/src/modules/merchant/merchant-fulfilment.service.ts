@@ -39,7 +39,8 @@ import {
   type ConsignmentTermsRow,
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
-import { isPartnerStore, PARTNER_STORE_WHERE } from './partner-store';
+import { consignmentLinkedSql } from './consignment-link-sql';
+import { isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
@@ -410,6 +411,41 @@ export class MerchantFulfilmentService {
     return store;
   }
 
+  /**
+   * Gian hàng đã tắt cờ chỉ còn thu các dòng REVERSAL đảo tiền Tubu ĐÃ trả: đơn (hoặc dòng hàng giao hộ) có dòng SALE đã lưu trên
+   * một phiếu. REVERSAL của đơn chưa từng được trả (trả một phần, trả nguyên đơn, giao hộ) không thu vì Tubu chưa trả đồng nào;
+   * SALE và khoản chờ để mở. Gian hàng đối tác: giữ nguyên.
+   */
+  private async openLinesOf<T extends { kind: string; netAmount: number; orderId: string; orderItemId: string | null }>(
+    store: { type: string; isPartner: boolean },
+    lines: T[],
+    db: Db = this.prisma,
+  ) {
+    if (isPartnerStore(store)) return { lines, total: lines.reduce((t, l) => t + l.netAmount, 0) };
+    const reversals = lines.filter((l) => l.kind === 'REVERSAL');
+    const paid = reversals.length
+      ? await db.merchantPayoutLine.findMany({
+          where: {
+            kind: 'SALE',
+            OR: [
+              { orderId: { in: reversals.filter((l) => !l.orderItemId).map((l) => l.orderId) }, orderItemId: null },
+              { orderItemId: { in: reversals.flatMap((l) => (l.orderItemId ? [l.orderItemId] : [])) } },
+            ],
+          },
+          select: { orderId: true, orderItemId: true },
+        })
+      : [];
+    const paidOrders = new Set(paid.filter((l) => !l.orderItemId).map((l) => l.orderId));
+    const paidItems = new Set(paid.flatMap((l) => (l.orderItemId ? [l.orderItemId] : [])));
+    const open = reversals.filter((l) => (l.orderItemId ? paidItems.has(l.orderItemId) : paidOrders.has(l.orderId)));
+    return { lines: open, total: open.reduce((t, l) => t + l.netAmount, 0) };
+  }
+
+  /** Gian hàng đã có phiếu đối soát nào chưa (cổng cho chủ gian hàng đã tắt cờ biết có phiếu để xem). */
+  async storeHasPayouts(storefrontId: string): Promise<boolean> {
+    return (await this.prisma.merchantPayout.count({ where: { storefrontId } })) > 0;
+  }
+
   // ── Đối tác: đơn cần giao ──
 
   async listOrders(userId: string, status: string | undefined, page = 1, limit = 20, now = new Date()) {
@@ -769,7 +805,13 @@ export class MerchantFulfilmentService {
 
   /** Bảng kê kèm danh sách hàng giao hộ chưa vào đối soát tự động — màn admin xem trước khi lập phiếu. */
   async adminStatement(storefrontId: string) {
-    const [statement, consignmentExcluded] = await Promise.all([this.statementFor(storefrontId), this.consignmentExcluded(storefrontId)]);
+    const [statement, consignmentExcluded, store] = await Promise.all([
+      this.statementFor(storefrontId),
+      this.consignmentExcluded(storefrontId),
+      this.prisma.storefront.findUnique({ where: { id: storefrontId }, select: { type: true, isPartner: true } }),
+    ]);
+    // Gian hàng đã tắt cờ: màn admin hiện đúng những dòng sẽ lên phiếu.
+    if (store && !isPartnerStore(store)) return { ...statement, ...(await this.openLinesOf(store, statement.lines)), upcoming: [], consignmentExcluded };
     return { ...statement, consignmentExcluded };
   }
 
@@ -933,8 +975,14 @@ export class MerchantFulfilmentService {
   }
 
   async myStatement(userId: string) {
-    const store = await this.merchantStore(userId);
-    const [statement, live, cancelled, dueDays, tubuAccount, consignmentExcluded] = await Promise.all([
+    const owned = await this.prisma.storefront.findFirst({
+      where: { ownerUserId: userId },
+      select: { id: true, type: true, isPartner: true, title: true, ownerUserId: true },
+    });
+    // Chủ gian hàng đã tắt cờ vẫn xem được phiếu đã lập cho mình (thông báo phiếu trỏ tới đây); chỉ đọc, mọi thao tác khác vẫn từ chối.
+    const hasPayout = owned && !isPartnerStore(owned) ? (await this.prisma.merchantPayout.count({ where: { storefrontId: owned.id } })) > 0 : false;
+    const store = hasPayout && owned ? owned : await this.merchantStore(userId);
+    const [fullStatement, live, cancelled, dueDays, tubuAccount, consignmentExcluded] = await Promise.all([
       this.statementFor(store.id),
       this.prisma.merchantPayout.findMany({
         where: { storefrontId: store.id, status: { not: 'CANCELLED' } },
@@ -956,6 +1004,7 @@ export class MerchantFulfilmentService {
       this.consignmentExcluded(store.id),
     ]);
     const payouts = [...live, ...cancelled].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const statement = isPartnerStore(store) ? fullStatement : { ...fullStatement, ...(await this.openLinesOf(store, fullStatement.lines)), upcoming: [] };
     return {
       ...statement,
       // Id admin lập/chuyển/huỷ phiếu là dữ liệu nội bộ, không trả cho gian hàng.
@@ -990,6 +1039,8 @@ export class MerchantFulfilmentService {
    * Lập phiếu đối soát gồm mọi dòng đủ điều kiện (đơn tự giao và hàng Tubu giao hộ). Bảng kê tính lại trong transaction sau khi
    * khoá gian hàng (huỷ phiếu cùng lúc phải chờ), nên phiếu không thể chứa dòng đảo của một SALE vừa bị huỷ. `expectedTotal` là
    * tổng admin vừa xem: lệch thì từ chối để admin xem lại. Unique (orderId, kind, refKey) vẫn là chốt chặn cuối.
+   * Gian hàng đã tắt cờ đối tác vẫn lập được khi bảng kê còn dòng mở (vd. REVERSAL do khách trả hàng sau khi tắt cờ): "còn dư
+   * nợ" = có ít nhất một dòng trong bảng kê (chưa nằm trên phiếu nào), tổng có thể âm. Không còn dòng nào thì 404 như cũ.
    */
   async createPayout(adminId: string, storefrontId: string, note?: string, expectedTotal?: number) {
     const store = await this.prisma.storefront.findUnique({
@@ -998,15 +1049,19 @@ export class MerchantFulfilmentService {
         id: true, type: true, isPartner: true, title: true, ownerUserId: true, bankName: true, bankAccountNo: true, bankAccountName: true,
       },
     });
-    if (!store || !isPartnerStore(store)) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+    if (!store) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+    const partner = isPartnerStore(store);
     const cfg = await this.settlementConfig();
     let payout;
     try {
       payout = await this.prisma.$transaction(
         async (tx) => {
           await this.lockStorePayouts(tx, store.id);
-          const { lines, total } = await this.statementFor(store.id, new Date(), tx, cfg);
-          if (lines.length === 0) throw new BadRequestException('Không có đơn nào đủ điều kiện đối soát.');
+          const { lines, total } = await this.openLinesOf(store, (await this.statementFor(store.id, new Date(), tx, cfg)).lines, tx);
+          if (lines.length === 0) {
+            if (!partner) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+            throw new BadRequestException('Không có đơn nào đủ điều kiện đối soát.');
+          }
           if (expectedTotal !== undefined && expectedTotal !== total) {
             throw new ConflictException(
               `Số tiền chờ đối soát vừa thay đổi (${expectedTotal.toLocaleString('vi-VN')}đ → ${total.toLocaleString('vi-VN')}đ). Tải lại bảng kê rồi lập phiếu.`,
@@ -1179,20 +1234,24 @@ export class MerchantFulfilmentService {
       SELECT o."fulfillerStorefrontId" AS "id" FROM "orders" o
        WHERE o."fulfiller" = 'MERCHANT' AND o."fulfillerStorefrontId" IS NOT NULL AND (
          (o."status" = 'DELIVERED' AND (o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')
+           AND EXISTS (SELECT 1 FROM "storefronts" sf WHERE sf."id" = o."fulfillerStorefrontId" AND (sf."type" = 'MERCHANT' OR sf."isPartner"))
            AND NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE' AND s."orderItemId" IS NULL))
          OR (o."status" = 'RETURNED'
            AND NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" r WHERE r."orderId" = o."id" AND r."kind" = 'REVERSAL' AND r."refKey" = '')
            AND (EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE' AND s."orderItemId" IS NULL)
-                OR (o."paymentMethod" = 'COD' AND o."paymentStatus" = 'REFUNDED')))
+                OR (o."paymentMethod" = 'COD' AND o."paymentStatus" = 'REFUNDED'
+                    AND EXISTS (SELECT 1 FROM "storefronts" sf WHERE sf."id" = o."fulfillerStorefrontId" AND (sf."type" = 'MERCHANT' OR sf."isPartner")))))
          OR EXISTS (
            SELECT 1 FROM "return_requests" rr
             WHERE rr."orderId" = o."id" AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
+              AND EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE' AND s."orderItemId" IS NULL)
               AND NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" r WHERE r."orderId" = o."id" AND r."kind" = 'REVERSAL' AND r."refKey" = ${RETURN_REF_PREFIX} || rr."id")))
       UNION
       SELECT lk."storefrontId" FROM "merchant_pancake_links" lk
         JOIN "order_items" oi ON oi."variationId" = lk."variationId"
         JOIN "orders" o ON o."id" = oi."orderId"
        WHERE ${consignmentPendingSql(Prisma.raw('lk."storefrontId"'), settleFrom)}
+         AND EXISTS (SELECT 1 FROM "storefronts" sf WHERE sf."id" = lk."storefrontId" AND (sf."type" = 'MERCHANT' OR sf."isPartner"))
       UNION
       SELECT p."storefrontId" FROM "merchant_payout_lines" s
         JOIN "merchant_payouts" p ON p."id" = s."payoutId"
@@ -1211,7 +1270,7 @@ export class MerchantFulfilmentService {
   }
 
   /**
-   * Tổng quan cho admin: mỗi gian hàng đối tác có đơn tự giao hoặc hàng "Tubu giao hộ" — số đơn đang xử lý, quá hạn, số khoản
+   * Tổng quan cho admin: mỗi gian hàng đang bật cờ đối tác, hoặc có đơn tự giao / hàng "Tubu giao hộ" — số đơn đang xử lý, quá hạn, số khoản
    * và số tiền chờ đối soát (kèm số khoản giao hộ), mức phí sàn/phí giao hộ để admin sửa. Bảng kê chỉ dựng cho gian hàng có
    * khoản chờ (storesWithPending), số đơn đang xử lý đếm gộp một lần.
    */
@@ -1224,7 +1283,12 @@ export class MerchantFulfilmentService {
     ]);
     const stores = await this.prisma.storefront.findMany({
       where: {
-        AND: [PARTNER_STORE_WHERE, { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] }],
+        AND: [
+          // Gian hàng đã tắt cờ vẫn hiện khi có thể còn dòng mở (lọc chính xác bằng bảng kê bên dưới) để admin lập phiếu thu.
+          { OR: [PARTNER_STORE_WHERE, { id: { in: [...pendingStores] } }] },
+          // Gian hàng đang bật cờ luôn có dòng (kể cả chưa có gì) để admin còn nút tắt cờ.
+          { OR: [{ isPartner: true }, { fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] },
+        ],
       },
       select: {
         id: true,
@@ -1255,7 +1319,8 @@ export class MerchantFulfilmentService {
     const out = [];
     for (const sf of stores) {
       const statement = pendingStores.has(sf.id) ? await this.statementFor(sf.id, now) : null;
-      const lines = statement?.lines ?? [];
+      const { lines, total } = await this.openLinesOf(sf, statement?.lines ?? []);
+      if (!isPartnerStore(sf) && lines.length === 0) continue;
       out.push({
         storefrontId: sf.id,
         title: sf.title,
@@ -1265,7 +1330,7 @@ export class MerchantFulfilmentService {
         activeOrders: activeByStore.get(sf.id) ?? 0,
         overdueOrders: overdueByStore.get(sf.id) ?? 0,
         settleableLines: lines.length,
-        settleableAmount: statement?.total ?? 0,
+        settleableAmount: total,
         consignmentLines: lines.filter((l) => l.orderItemId).length,
         commissionPct: sf.commissionPct == null ? null : Number(sf.commissionPct),
         consignmentFeePct: Number(sf.consignmentFeePct),
@@ -1335,8 +1400,8 @@ export class MerchantFulfilmentService {
   }
 
   /**
-   * Admin bật/tắt cờ đối tác của gian hàng CTV (isPartner) — cờ không tự tắt khi chủ thôi làm đại lý, trước đây chỉ gỡ được bằng
-   * SQL. Tắt bị từ chối khi gian hàng còn việc đối tác dở dang sẽ mồ côi (chỉ chủ gian hàng đối tác thấy và xử lý chúng ở Cổng
+   * Admin bật/tắt cờ đối tác của gian hàng CTV (isPartner) thủ công; cờ cũng tự tắt khi chủ rơi xuống CUSTOMER/AFFILIATE (xem
+   * clearPartnerOnRoleLoss). Tắt bị từ chối khi gian hàng còn việc đối tác dở dang sẽ mồ côi (chỉ chủ gian hàng đối tác thấy và xử lý chúng ở Cổng
    * người bán), hoặc khi chủ còn là đại lý (lần vào Cổng người bán kế tiếp sẽ tự bật lại). Khoá đối soát của gian hàng giữ suốt
    * lần kiểm để không lập phiếu chen giữa; bấm lại cùng giá trị không ghi thêm sổ.
    */
@@ -1386,13 +1451,54 @@ export class MerchantFulfilmentService {
     return { id: storefrontId, isPartner };
   }
 
-  private async partnerBlockers(tx: Db, storefrontId: string, ownerUserId: string | null, cfg: SettlementConfig): Promise<string[]> {
+  /**
+   * Gọi trong tx đổi vai trò khi chủ (đang là DEALER/STAFF/ADMIN) rơi xuống CUSTOMER/AFFILIATE, TRƯỚC lúc ghi dòng users: gian hàng
+   * đối tác của chủ thôi là đối tác cùng luật với `setStorePartner` (khoá phiếu → dòng gian hàng, kiểm vướng mắc dưới khoá, ghi
+   * STOREFRONT_PARTNER) trừ vướng mắc "chủ còn là đại lý" (chính lần đổi này gỡ nó). Gian hàng MERCHANT được chuyển luôn về loại
+   * CTV (hàng, tài khoản nhận tiền, điều khoản, lịch sử phiếu giữ nguyên; duyệt lại đại lý rồi vào Cổng người bán thì cờ bật lại như
+   * mọi gian hàng CTV). Còn vướng mắc thì ném 409 để cả lần đổi vai trò huỷ. Khoá tư vấn theo chủ lấy trước (chặn lần tạo gian hàng
+   * đầu tiên ở Cổng người bán chen vào khi chưa có dòng nào để khoá), rồi mọi gian hàng của chủ đều khoá trước khi đọc cờ dưới khoá,
+   * để lần bật lại cờ chạy song song không lọt qua.
+   */
+  async clearPartnerOnRoleLoss(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig, fromRole: string) {
+    await lockStoreOwner(tx, ownerUserId);
+    const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
+    let cleared = 0;
+    for (const { id } of stores) {
+      await this.lockStorePayouts(tx, id);
+      const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
+        SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${id} FOR UPDATE`;
+      if (!store || !isPartnerStore(store)) continue;
+      const blockers = await this.partnerBlockers(tx, id, ownerUserId, cfg, true);
+      if (blockers.length) {
+        throw new ConflictException(
+          fromRole === 'DEALER'
+            ? `Chưa thể thu hồi vai trò đại lý vì gian hàng đối tác còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`
+            : `Chưa thể hạ vai trò vì gian hàng đối tác của người này còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại, hoặc đặt vai trò DEALER để giữ nguyên gian hàng.`,
+        );
+      }
+      await tx.storefront.update({ where: { id }, data: { isPartner: false,...(store.type === 'MERCHANT' ? { type: 'CTV' } : {}) } });
+      await recordUserAdminEvent(tx, { userId: ownerUserId, kind: 'STOREFRONT_PARTNER', from: 'true', to: 'false', reason: id, actorId });
+      cleared++;
+    }
+    if (cleared) {
+      this.logger.warn(`Đổi vai trò của ${ownerUserId} về khách/CTV: tắt cờ đối tác ${cleared} gian hàng (admin ${actorId}).`);
+    }
+  }
+
+  private async partnerBlockers(
+    tx: Db,
+    storefrontId: string,
+    ownerUserId: string | null,
+    cfg: SettlementConfig,
+    ownerLosingDealer = false,
+  ): Promise<string[]> {
     const store = Prisma.sql`${storefrontId}`;
     const settleFrom = await this.consignmentSettleFrom(tx);
     const count = (q: Promise<{ n: bigint }[]>) => q.then((r) => Number(r[0]?.n ?? 0));
     const [owner, openOrders, consignmentOpen, statement, pendingPayouts, activeLinks, pendingReturns, unreceivedReturns, ownProducts] =
       await Promise.all([
-        ownerUserId ? tx.user.findUnique({ where: { id: ownerUserId }, select: { role: true } }) : null,
+        ownerUserId && !ownerLosingDealer ? tx.user.findUnique({ where: { id: ownerUserId }, select: { role: true } }) : null,
         tx.order.count({
           where: { fulfillerStorefrontId: storefrontId, status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] } },
         }),
@@ -1444,16 +1550,20 @@ export class MerchantFulfilmentService {
    * vào đối soát tự động. Bấm lại không đổi mốc.
    */
   async confirmConsignment(adminId: string, linkId: string) {
-    const link = await this.prisma.merchantPancakeLink.findUnique({
-      where: { id: linkId },
-      select: { takeover: true, unlinkedAt: true },
-    });
-    if (!link) throw new NotFoundException('Không tìm thấy liên kết.');
-    if (!link.takeover) throw new BadRequestException('Liên kết này không nhận lại hàng Tubu đang bán nên không cần xác nhận hàng ký gửi.');
-    if (link.unlinkedAt) throw new BadRequestException('Liên kết đã gỡ.');
-    await this.prisma.merchantPancakeLink.updateMany({
-      where: { id: linkId, consignmentConfirmedAt: null },
-      data: { consignmentConfirmedAt: new Date(), consignmentConfirmedBy: adminId },
+    await this.prisma.$transaction(async (tx) => {
+      const found = await tx.merchantPancakeLink.findUnique({ where: { id: linkId }, select: { variationId: true } });
+      if (!found) throw new NotFoundException('Không tìm thấy liên kết.');
+      // Khoá biến thể trước khi lấy mốc: checkout giữ khoá này tới commit và tính hoa hồng CTV sau khi chèn đơn, nên đơn đặt từ
+      // mốc xác nhận luôn thấy liên kết đã xác nhận (hoa hồng loại, bảng kê trả), đơn trước mốc thì ngược lại.
+      await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${found.variationId} FOR NO KEY UPDATE`;
+      const link = await tx.merchantPancakeLink.findUnique({ where: { id: linkId }, select: { takeover: true, unlinkedAt: true } });
+      if (!link) throw new NotFoundException('Không tìm thấy liên kết.');
+      if (!link.takeover) throw new BadRequestException('Liên kết này không nhận lại hàng Tubu đang bán nên không cần xác nhận hàng ký gửi.');
+      if (link.unlinkedAt) throw new BadRequestException('Liên kết đã gỡ.');
+      await tx.merchantPancakeLink.updateMany({
+        where: { id: linkId, consignmentConfirmedAt: null },
+        data: { consignmentConfirmedAt: new Date(), consignmentConfirmedBy: adminId },
+      });
     });
     return this.prisma.merchantPancakeLink.findUniqueOrThrow({
       where: { id: linkId },
@@ -1494,9 +1604,10 @@ export class MerchantFulfilmentService {
    */
   async countStoresToSettle(now = new Date()): Promise<number> {
     const [candidates, cfg] = await Promise.all([this.storesWithPending(), this.settlementConfig()]);
+    const stores = await this.prisma.storefront.findMany({ where: { id: { in: [...candidates] } }, select: { id: true, type: true, isPartner: true } });
     let n = 0;
-    for (const storefrontId of candidates) {
-      const { lines } = await this.statementFor(storefrontId, now, this.prisma, cfg);
+    for (const sf of stores) {
+      const { lines } = await this.openLinesOf(sf, (await this.statementFor(sf.id, now, this.prisma, cfg)).lines);
       if (lines.length > 0) n += 1;
     }
     return n;
@@ -1543,18 +1654,6 @@ const CONSIGNMENT_SOLD_SQL = Prisma.sql`o."fulfiller" = 'TUBU' AND o."status" = 
 
 /** Dòng hàng `oi` chưa có SALE. */
 const CONSIGNMENT_NO_SALE_SQL = Prisma.sql`NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderItemId" = oi."id" AND s."kind" = 'SALE')`;
-
-/**
- * Biến thể của dòng `oi` liên kết với gian hàng `store` lúc đặt đơn `o` ([linkedAt, unlinkedAt)). `confirmedOnly`: liên kết
- * takeover chỉ tính đơn đặt từ lúc admin xác nhận hàng ký gửi.
- */
-function consignmentLinkedSql(store: Prisma.Sql, confirmedOnly: boolean): Prisma.Sql {
-  return Prisma.sql`EXISTS (
-      SELECT 1 FROM "merchant_pancake_links" l
-       WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
-         AND o."createdAt" >= l."linkedAt" AND (l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")
-         ${confirmedOnly ? Prisma.sql`AND (NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))` : Prisma.empty})`;
-}
 
 /**
  * Liên kết của dòng `oi` lúc đặt đơn `o` vẫn đang chờ admin xác nhận hàng ký gửi (cùng điều kiện CONSIGNMENT_PENDING_LINK_WHERE

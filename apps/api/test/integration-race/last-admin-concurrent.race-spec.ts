@@ -4,6 +4,8 @@ import { AdminService } from '../../src/modules/admin/admin.service';
 import { UserBlockService } from '../../src/modules/admin/user-block.service';
 import { SessionStateService } from '../../src/modules/auth/session-state.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { createUser, warmPool } from './helpers';
 
@@ -24,10 +26,11 @@ describe('Quản trị viên cuối cùng an toàn khi đồng thời (real Post
     prisma = new PrismaService();
     await prisma.$connect();
     await warmPool(prisma);
-    rbac = new RbacService(prisma);
+    const fulfilment = new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma));
+    rbac = new RbacService(prisma, fulfilment);
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
     const none = {} as never;
-    admin = new AdminService(prisma, none, none, none, notifications, none, none, rbac, none, none);
+    admin = new AdminService(prisma, none, none, none, notifications, none, none, rbac, none, none, fulfilment);
     blocks = new UserBlockService(prisma, new SessionStateService(prisma));
     const others = await prisma.user.findMany({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true } });
     parked = others.map((u) => u.id);

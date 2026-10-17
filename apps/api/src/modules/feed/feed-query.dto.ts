@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export const FEED_POST_KINDS = ['MANUAL', 'HARVEST', 'MILESTONE', 'SPECIES', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 export type FeedPostKindValue = (typeof FEED_POST_KINDS)[number];
@@ -9,12 +9,12 @@ export type FeedPostKindValue = (typeof FEED_POST_KINDS)[number];
  * PrismaClientValidationError → 500; chặn ở đây để trả 400.
  */
 export class FeedQuery {
-  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() @MaxLength(100) category?: string;
   @IsOptional() @IsIn([...FEED_POST_KINDS]) kind?: FeedPostKindValue;
   // Không siết enum: service coi mọi giá trị khác 'popular' là 'new', giá trị lạ không gây lỗi.
   @IsOptional() @IsString() sort?: string;
-  @IsOptional() @IsString() cursor?: string;
-  @IsOptional() @IsString() q?: string;
+  @IsOptional() @IsString() @MaxLength(200) cursor?: string;
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
   @IsOptional() @IsString() unanswered?: string;
-  @IsOptional() @IsString() tag?: string;
+  @IsOptional() @IsString() @MaxLength(100) tag?: string;
 }

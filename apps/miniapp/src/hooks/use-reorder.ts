@@ -58,8 +58,9 @@ export function useReorder(source: ReorderSource, opts: UseReorderOptions = {}):
       const res = await send(source, v.target, v.selections);
       return { res, summary: summarizeReorder(res, targetLines(v.target), v.selections) };
     },
-    onSuccess: ({ res, summary }) => {
-      qc.setQueryData(['cart'], res.cart);
+    onSuccess: ({ summary }) => {
+      // Giỏ trong phản hồi không kèm gian hàng (không có combo): tải lại giỏ thay vì ghi số cũ vào cache.
+      void qc.invalidateQueries({ queryKey: ['cart'] });
       trackReorderCompleted({ source, added: summary.addedLines, skipped: summary.skippedLines });
       if (summary.addedUnits === 0) {
         openSnackbar({ text: summary.message, type: 'error', duration: 5000 });

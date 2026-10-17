@@ -18,6 +18,9 @@ import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
+import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
+import { losesPartnerStore } from '../merchant/partner-store';
+import { throwIfLockBusy } from '../../common/lock-busy';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
 import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
@@ -175,6 +178,7 @@ export class AdminService {
     private readonly rbac: RbacService,
     private readonly gomdonOrder: GomdonOrderService,
     private readonly gomdonClient: GomdonClient,
+    private readonly fulfilment?: MerchantFulfilmentService,
   ) {}
 
   /**
@@ -237,15 +241,6 @@ export class AdminService {
       if (!tierId) throw new BadRequestException('Cần chọn bậc đại lý khi duyệt.');
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: tierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
-      // Merge vào metadata sẵn có — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz).
-      const user = await this.prisma.user.findUnique({
-        where: { id: app.userId },
-        select: { metadata: true },
-      });
-      const mergedMeta = {
-        ...((user?.metadata as Record<string, unknown> | null) ?? {}),
-        dealerTierId: tierId,
-      };
       // Atomic guard status='PENDING' TRONG transaction — chống 2 admin duyệt cùng đơn
       // (check status ở ngoài chỉ để trả lỗi rõ ràng, không đủ chống race: cả 2 request có thể
       // đọc PENDING trước khi bên nào ghi xong). Không guard → user.update DEALER chạy 2 lần
@@ -253,8 +248,19 @@ export class AdminService {
       await this.prisma.$transaction(async (tx) => {
         // Duyệt đổi vai trò người nộp sang DEALER: người nộp là admin thì đây cũng là một lần hạ quyền admin.
         await lockAdminRoster(tx);
-        const applicant = await tx.user.findUnique({ where: { id: app.userId }, select: { role: true } });
-        if (applicant?.role === 'ADMIN') {
+        // Gian hàng của người nộp khoá trước dòng users (cùng thứ tự với thu hồi đại lý và ẩn danh tài khoản), nếu không bên ghi
+        // users trước rồi đợi gian hàng sẽ deadlock với bên giữ gian hàng rồi đợi users.
+        await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
+        // Rồi tới dòng users (FOR UPDATE) TRƯỚC mọi ghi vào hồ sơ: người nộp chưa có gian hàng thì không có dòng gian hàng nào để
+        // khoá, mà bên ghi hồ sơ rồi đợi users sẽ deadlock với ẩn danh tài khoản (giữ users rồi ghi hồ sơ).
+        // NO KEY UPDATE (không phải FOR UPDATE): FOR UPDATE đợi FOR KEY SHARE của khoá ngoại (đơn người nộp đang đặt qua slug của mình
+        // giữ KEY SHARE rồi đợi gian hàng mà ta đang giữ ⇒ 40P01), còn NO KEY UPDATE vẫn chặn ẩn danh và các ghi khác vào users.
+        const [applicant] = await tx.$queryRaw<{ role: string; isBlocked: boolean; metadata: unknown }[]>`
+          SELECT "role"::text AS "role", "isBlocked", "metadata" FROM "users" WHERE "id" = ${app.userId} FOR NO KEY UPDATE`;
+        if (!applicant || applicant.isBlocked) {
+          throw new BadRequestException('Tài khoản người nộp đã bị khoá hoặc đã xoá — không thể duyệt hồ sơ đại lý.');
+        }
+        if (applicant.role === 'ADMIN') {
           if (app.userId === adminId) {
             throw new BadRequestException('Không thể tự duyệt hồ sơ đại lý của chính mình — nhờ một quản trị viên khác thực hiện.');
           }
@@ -267,10 +273,14 @@ export class AdminService {
         if (flipped.count === 0) throw new BadRequestException('Đơn đã được xử lý.');
         await tx.user.update({
           where: { id: app.userId },
-          data: { role: 'DEALER', metadata: mergedMeta },
+          // Merge vào metadata đọc từ dòng đã khoá — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz, kể cả ghi chen vừa xong).
+          data: {
+            role: 'DEALER',
+            metadata: { ...((applicant.metadata as Record<string, unknown> | null) ?? {}), dealerTierId: tierId } as Prisma.InputJsonObject,
+          },
         });
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
-      });
+      }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
         where: { id, status: 'PENDING' },
@@ -464,6 +474,8 @@ export class AdminService {
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
     }
+    // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này rơi xuống CUSTOMER/AFFILIATE.
+    const partnerCfg = losesPartnerStore('DEALER', role) ? await this.fulfilment?.settlementConfig() : undefined;
     const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const user = await tx.user.findUnique({ where: { phone: normalized } });
@@ -492,6 +504,11 @@ export class AdminService {
             }
           : {}),
       };
+      // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
+      if (losesPartnerStore(previousRole, role)) {
+        if (!this.fulfilment || !partnerCfg) throw new Error('AdminService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
+        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole);
+      }
       const updated = await tx.user.update({
         where: { id: user.id },
         data,
@@ -510,7 +527,7 @@ export class AdminService {
         });
       }
       return { updated, previousRole };
-    });
+    }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
     // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
     // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ
@@ -588,7 +605,7 @@ export class AdminService {
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
     const take = AdminService.DETAIL_TAKE;
-    const [orders, orderTotal, wallet, points, events, grants] = await Promise.all([
+    const [orders, orderTotal, wallet, points, events, partnerEvents, grants] = await Promise.all([
       this.prisma.order.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -608,9 +625,14 @@ export class AdminService {
         take,
         select: { id: true, delta: true, reason: true, refType: true, refId: true, lot: true, expiresAt: true, createdAt: true },
       }),
-      // Chỉ các loại màn này hiện (STOREFRONT_PARTNER thuộc gian hàng, không vào lịch sử vai trò/khoá) để chúng không chiếm 100 dòng.
+      // STOREFRONT_PARTNER lấy riêng (partnerHistory) để không chiếm 100 dòng của lịch sử vai trò/khoá.
       this.prisma.userAdminEvent.findMany({
         where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      this.prisma.userAdminEvent.findMany({
+        where: { userId, kind: 'STOREFRONT_PARTNER' },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
@@ -622,7 +644,7 @@ export class AdminService {
           })
         : Promise.resolve([]),
     ]);
-    const actorIds = [...new Set([...events.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
+    const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, phone: true } })
       : [];
@@ -635,6 +657,7 @@ export class AdminService {
       points,
       roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS').map(withActor),
       blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK').map(withActor),
+      partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
     };
   }

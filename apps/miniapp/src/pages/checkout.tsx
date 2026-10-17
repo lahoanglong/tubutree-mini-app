@@ -50,6 +50,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
+import { useCartKey } from '../services/cart-key';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -100,7 +101,7 @@ export default function CheckoutPage() {
   const orderKeys = useRef(createOrderKeyRing());
 
   // Guard auth: tránh gọi /cart, /me/addresses khi chưa silent-login xong (deeplink → 401).
-  const cart = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed });
+  const cart = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: authed });
   const addresses = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: authed });
 
   useEffect(() => {
@@ -377,6 +378,10 @@ export default function CheckoutPage() {
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
     : (cart.data?.items ?? []);
   const previewSubtotal = shownItems.reduce((s, it) => s + it.total, 0);
+  // Chưa có báo giá: tiền hàng trừ combo (chỉ khi mua cả giỏ — chọn một phần thì máy chủ tính lại) rồi trừ mã, như checkout trừ.
+  // Lựa chọn nhớ lại có thể bằng đúng mọi dòng của giỏ (vd còn lại sau khi dọn món đã xoá): vẫn là cả giỏ.
+  const wholeCart = !itemIds || itemIds.length === (cart.data?.items.length ?? 0);
+  const previewCombo = wholeCart ? (cart.data?.comboDiscount ?? 0) : 0;
   const previewDiscount = cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const maxRecycleKg = recyclingMaxKg(shownItems);
 
@@ -550,14 +555,14 @@ export default function CheckoutPage() {
             <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
         </Box>
-        {cart.data?.couponCode && (quote.data?.couponNotice ?? cart.data.couponNotice) && (
+        {cart.data?.couponCode && (quote.data ? quote.data.couponNotice : cart.data.couponNotice) && (
           <Text
             size="xSmall"
             role="status"
             data-testid="coupon-notice"
             style={{ color: 'var(--color-text-warning)', marginTop: 6 }}
           >
-            {quote.data?.couponNotice ?? cart.data.couponNotice}
+            {quote.data ? quote.data.couponNotice : cart.data.couponNotice}
           </Text>
         )}
       </Box>
@@ -903,6 +908,9 @@ export default function CheckoutPage() {
           /* Fallback preview summary when addressId is missing/unselected */
           <>
             <KeyValueRow label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
+            {previewCombo > 0 && (
+              <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} tone="success" />
+            )}
             {previewDiscount > 0 && (
               <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(previewDiscount)}`} tone="success" />
             )}
@@ -910,7 +918,7 @@ export default function CheckoutPage() {
               label={vi.checkout.shippingFee}
               value={addressId ? 'Đang tính...' : 'Cần chọn địa chỉ giao hàng'}
             />
-            <KeyValueRow label={vi.checkout.total} value={formatVnd(Math.max(0, previewSubtotal - previewDiscount))} emphasis />
+            <KeyValueRow label={vi.checkout.total} value={formatVnd(Math.max(0, previewSubtotal - previewCombo - previewDiscount))} emphasis />
           </>
         )}
       </Box>
@@ -986,7 +994,7 @@ export default function CheckoutPage() {
         subtotal={quote.data?.subtotal ?? cart.data?.subtotal ?? 0}
         shippingFee={quote.data?.shippingFee}
         productIds={cartProductIds(checkoutItems)}
-        previewParams={addressId && checkoutItems.length > 0 ? { addressId, storefrontSlug: ctvSlug, itemIds } : undefined}
+        previewParams={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
         previewKey={cartPreviewKey(checkoutItems)}
         onCouponApplied={() => {
           void cart.refetch();
@@ -1011,8 +1019,8 @@ export default function CheckoutPage() {
             <KeyValueRow label="Mã giảm giá" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
           )}
 
-          {quote.data && quote.data.comboDiscount > 0 && (
-            <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(quote.data.comboDiscount)}`} tone="success" />
+          {(quote.data ? quote.data.comboDiscount : previewCombo) > 0 && (
+            <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(quote.data ? quote.data.comboDiscount : previewCombo)}`} tone="success" />
           )}
 
           {quote.data && (quote.data.tierDiscount ?? 0) > 0 && (
@@ -1041,7 +1049,7 @@ export default function CheckoutPage() {
 
           <KeyValueRow
             label="Tổng thanh toán"
-            value={formatVnd(quote.data?.total ?? Math.max(0, previewSubtotal - previewDiscount))}
+            value={formatVnd(quote.data?.total ?? Math.max(0, previewSubtotal - previewCombo - previewDiscount))}
             emphasis
           />
 

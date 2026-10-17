@@ -241,6 +241,36 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
     expect(container.textContent).not.toContain('-25.000đ');
   });
 
+  it('giảm giá combo: dòng riêng khi > 0, tổng = tạm tính − combo − mã đúng số máy chủ trả', async () => {
+    state.cart = { ...two(), couponCode: 'WELCOME', comboDiscount: 25000, discount: 10000 };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Giảm giá combo');
+    expect(container.textContent).toContain('-25.000đ');
+    expect(container.textContent).toContain('-10.000đ');
+    expect(container.textContent).toContain('Tổng215.000đ');
+  });
+
+  it('không có combo (0 hoặc API cũ chưa trả): không có dòng combo, tổng như cũ', async () => {
+    state.cart = { ...two(), couponCode: 'WELCOME', comboDiscount: 0, discount: 10000 };
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('combo');
+    expect(container.textContent).toContain('Tổng240.000đ');
+    mounted.pop()!.unmount();
+    state.cart = { ...two(), couponCode: 'WELCOME', discount: 10000 };
+    const again = await mount();
+    expect(again.container.textContent).not.toContain('combo');
+    expect(again.container.textContent).toContain('Tổng240.000đ');
+  });
+
+  it('combo cũng chỉ hiện khi chọn cả giỏ (chọn một phần do báo giá thanh toán tính lại)', async () => {
+    state.cart = { ...two(), comboDiscount: 25000 };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Giảm giá combo');
+    click(pick(container, 'Dầu gội'));
+    await flush(2);
+    expect(container.textContent).not.toContain('Giảm giá combo');
+  });
+
   it('dòng hết hàng chỉ chặn khi đang được chọn: bỏ chọn nó thì thanh toán phần còn lại', async () => {
     state.cart = cartOf([line({ id: 'i1' }), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const { container } = await mount();

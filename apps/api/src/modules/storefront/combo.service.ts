@@ -52,6 +52,24 @@ export function allocateComboDiscounts(
   return { total, perLine };
 }
 
+/**
+ * Phần hàng tính mã sau combo (THUẦN): dòng KHÔNG giờ vàng trừ phần giảm combo của từng dòng. Checkout (báo giá, đặt đơn,
+ * xem trước mã) và giỏ hàng dùng chung để số giảm của mã ở giỏ đúng số checkout sẽ trừ.
+ */
+export function goodsAfterComboOf(
+  nonFlash: { variationId: string; productId: string; total: number }[],
+  combo: ComboResult,
+): { goodsAfterCombo: number; couponLines: { productId: string; total: number }[] } {
+  const nonFlashSubtotal = nonFlash.reduce((s, l) => s + l.total, 0);
+  return {
+    goodsAfterCombo: Math.max(0, nonFlashSubtotal - combo.total),
+    couponLines: nonFlash.map((l) => ({
+      productId: l.productId,
+      total: Math.max(0, l.total - (combo.perLine[l.variationId] ?? 0)),
+    })),
+  };
+}
+
 /** Tính giảm giá combo cho giỏ theo gian hàng (slug). Combo = collection kind=COMBO + comboDiscountPct. */
 @Injectable()
 export class ComboService {

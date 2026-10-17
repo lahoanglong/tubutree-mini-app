@@ -3,6 +3,7 @@
 import { apiFetch } from './client-api';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
 import type { FlashItem } from './flash-price';
+import { cartStorefrontSlug } from './cart-key';
 
 export interface CartLine {
   id: string;
@@ -45,6 +46,9 @@ export interface CartSummary {
   /** Mã đang giữ nhưng chưa áp cho giỏ hiện tại — câu giải thích từ server. */
   couponNotice?: string | null;
   subtotal: number;
+  /** Giảm giá combo của gian hàng đang ghi công (đã trừ trước khi tính mã); API cũ chưa trả → coi như 0. */
+  comboDiscount?: number;
+  /** Mức giảm của mã, tính trên phần hàng sau combo (cùng số báo giá checkout trừ). */
   discount: number;
   freeship: boolean;
   freeshipThreshold: number;
@@ -172,13 +176,21 @@ export async function getActiveFlashSales(): Promise<FlashItem[]> {
 }
 
 // Cart
-export const getCart = () => apiFetch<CartSummary>('/cart');
+/**
+ * Gian hàng CTV đang ghi công (cùng slug màn thanh toán gửi cho báo giá): máy chủ trừ combo của gian hàng đó trong giỏ, để số giảm
+ * và tổng ở trang giỏ đúng số thanh toán sẽ trừ. Mọi đường trả giỏ đều gửi để giỏ trong cache không đổi số giữa các thao tác.
+ */
+function cartPath(path: string): string {
+  const slug = cartStorefrontSlug();
+  return slug ? `${path}?storefrontSlug=${encodeURIComponent(slug)}` : path;
+}
+export const getCart = () => apiFetch<CartSummary>(cartPath('/cart'));
 export const addToCart = (variationId: string, quantity: number) =>
-  apiFetch<CartSummary>('/cart/items', { method: 'POST', body: { variationId, quantity } });
+  apiFetch<CartSummary>(cartPath('/cart/items'), { method: 'POST', body: { variationId, quantity } });
 export const updateCartItem = (id: string, quantity: number) =>
-  apiFetch<CartSummary>(`/cart/items/${id}`, { method: 'PATCH', body: { quantity } });
+  apiFetch<CartSummary>(cartPath(`/cart/items/${id}`), { method: 'PATCH', body: { quantity } });
 export const removeCartItem = (id: string) =>
-  apiFetch<CartSummary>(`/cart/items/${id}`, { method: 'DELETE' });
+  apiFetch<CartSummary>(cartPath(`/cart/items/${id}`), { method: 'DELETE' });
 
 // Voucher — web trước đây chỉ HIỂN THỊ cart.discount, không có ô nhập/chọn mã, nên cùng một giỏ
 // mà mua trên web thì đắt hơn mua trong Mini App.
@@ -210,8 +222,8 @@ export interface CouponPreviewParams {
 export const getCouponPreviews = (params: CouponPreviewParams) =>
   apiFetch<{ coupons: CouponPreview[] }>('/checkout/coupon-previews', { method: 'POST', body: params }).then((r) => r.coupons);
 export const applyCoupon = (code: string) =>
-  apiFetch<CartSummary>('/cart/coupon', { method: 'POST', body: { code } });
-export const removeCoupon = () => apiFetch<CartSummary>('/cart/coupon', { method: 'DELETE' });
+  apiFetch<CartSummary>(cartPath('/cart/coupon'), { method: 'POST', body: { code } });
+export const removeCoupon = () => apiFetch<CartSummary>(cartPath('/cart/coupon'), { method: 'DELETE' });
 
 /** GET /me — chỉ khai các số dư web hiển thị; hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập nên sẽ cũ. */
 export interface MyBalances {

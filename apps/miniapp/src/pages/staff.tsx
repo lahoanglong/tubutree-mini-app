@@ -82,9 +82,13 @@ function TodayCard() {
   const todayShifts = statusQ.data?.shifts ?? [];
   const invalidate = () => qc.invalidateQueries({ queryKey: ['attn-status'] });
 
+  const locFailRef = useRef<string | null>(null);
   const checkinM = useMutation({
     mutationFn: async (shiftId: string) => {
-      const loc = await acquireLocationPayload();
+      locFailRef.current = null;
+      const loc = await acquireLocationPayload((m) => {
+        locFailRef.current = m;
+      });
       return attnCheckin({ shiftId, ...loc });
     },
     onSuccess: (r) => {
@@ -94,7 +98,11 @@ function TodayCard() {
       });
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) =>
+      openSnackbar({
+        text: locFailRef.current ? `${locFailRef.current} ${getErrorMessage(e)}` : getErrorMessage(e),
+        type: 'error',
+      }),
   });
 
   const checkoutM = useMutation({
@@ -135,9 +143,18 @@ function TodayCard() {
   const hbRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (!openId) return;
+    let locFailNotified = false; // mỗi chuỗi lỗi vị trí chỉ báo một lần, không báo lại mỗi nhịp
     const tick = async () => {
       try {
-        const loc = await acquireLocationPayload();
+        let locFailed = false;
+        const loc = await acquireLocationPayload((m) => {
+          locFailed = true;
+          if (!locFailNotified) {
+            locFailNotified = true;
+            openSnackbar({ text: m, type: 'warning' });
+          }
+        });
+        if (!locFailed) locFailNotified = false;
         const r = await attnHeartbeat(loc);
         if (r.closed) {
           openSnackbar({ text: 'Đã tự checkout (ra khỏi vùng công ty).', type: 'info' });

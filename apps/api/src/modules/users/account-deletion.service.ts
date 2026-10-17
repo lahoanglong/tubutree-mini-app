@@ -95,7 +95,7 @@ export class AccountDeletionService {
 
   /**
    * Idempotent: yêu cầu đã RESOLVED thì trả `alreadyProcessed: true`, không chạy lại. Khoá dòng yêu
-   * cầu, các đơn của khách rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
+   * cầu, các đơn của khách, gian hàng của khách (thu hồi/duyệt đại lý cũng khoá gian hàng trước users) rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
    * tiền vào users (vd cộng Ví) phải chờ lần kiểm số dư này xong.
    * Chạy lại một lần khi gặp deadlock: gộp phiên khách vào chính khách này commit xen giữa (chuyển thêm đơn sang khách sau
    * lúc tx này đã khoá đơn) cùng một lần cộng điểm đang giữ đơn mới đó thì lần ẩn danh đơn có thể chờ vòng (40P01). Lần
@@ -124,6 +124,8 @@ export class AccountDeletionService {
       // Đơn của khách trước dòng users, cùng chiều với cộng điểm lúc giao / duyệt trả / gộp phiên khách (đơn → users): ẩn danh
       // bên dưới ghi lại các đơn này, khoá users trước thì đợi lần cộng điểm đang giữ đơn trong khi nó đợi users ⇒ 40P01.
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
+      // Gian hàng của chủ trước dòng users: thu hồi vai trò đại lý khoá gian hàng rồi mới ghi users, khoá ngược chiều thì deadlock (40P01).
+      await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${request.userId} ORDER BY "id" FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${request.userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: request.userId } });
       const now = new Date();

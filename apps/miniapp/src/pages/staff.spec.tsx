@@ -209,6 +209,51 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Sai mạng WiFi', type: 'error' }));
     });
 
+    it('Checkin khi không lấy được vị trí: lý do vị trí đi kèm lỗi máy chủ trong cùng một thông báo', async () => {
+      mocks.getAttendanceStatus.mockResolvedValue({ shifts: [TODAY_SHIFT], openSession: null });
+      mocks.acquireLocationPayload.mockImplementation(async (onFailure?: (m: string) => void) => {
+        onFailure?.('Không lấy được vị trí: hết thời gian chờ tín hiệu GPS.');
+        return {};
+      });
+      mocks.checkin.mockRejectedValue(new Error('Bạn đang ở ngoài vùng công ty.'));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Checkin' }));
+      await waitFor(() =>
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({
+          text: 'Không lấy được vị trí: hết thời gian chờ tín hiệu GPS. Bạn đang ở ngoài vùng công ty.',
+          type: 'error',
+        }),
+      );
+    });
+
+    it('heartbeat mất vị trí: báo đúng một lần cho cả chuỗi lỗi, có lại vị trí thì chuỗi mới báo lại', async () => {
+      const spy = vi.spyOn(globalThis, 'setInterval');
+      mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
+      let failing = true;
+      mocks.acquireLocationPayload.mockImplementation(async (onFailure?: (m: string) => void) => {
+        if (failing) {
+          onFailure?.('Không lấy được vị trí: bạn chưa cấp quyền vị trí cho Zalo.');
+          return {};
+        }
+        return { lat: 1, lng: 2 };
+      });
+      renderPage();
+      await screen.findByText('Đang trong ca · vào lúc 08:30 · đi trễ');
+      const tick = spy.mock.calls.find((c) => c[1] === 3 * 60 * 1000)![0] as () => Promise<void>;
+      const locCalls = () =>
+        mocks.openSnackbar.mock.calls.filter((c) => String(c[0].text).startsWith('Không lấy được vị trí')).length;
+      await tick();
+      await tick();
+      await tick();
+      expect(locCalls()).toBe(1);
+      expect(mocks.heartbeat).toHaveBeenCalledTimes(3);
+      failing = false;
+      await tick();
+      failing = true;
+      await tick();
+      expect(locCalls()).toBe(2);
+    });
+
     it('đang trong ca: hiện giờ vào và "đi trễ"; Checkout gọi API không kèm giờ', async () => {
       mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
       renderPage();

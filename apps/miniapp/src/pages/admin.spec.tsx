@@ -298,6 +298,20 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(confirm).toHaveBeenLastCalledWith('Thu hồi quyền của 0912345678? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.');
     });
 
+    it('Thu hồi mà gian hàng đối tác còn việc dở (storeBlocked): báo cảnh báo thay vì thành công trơn', async () => {
+      confirmSpy().mockReturnValue(true);
+      mocks.revokeStaff.mockResolvedValueOnce({ revoked: 1, downgraded: true, storeBlocked: true });
+      renderPage();
+      await screen.findByText('Lan');
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
+      await waitFor(() =>
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({
+          text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin rồi tắt cờ đối tác, hoặc đặt lại vai trò DEALER cho người này.',
+          type: 'warning',
+        }),
+      );
+    });
+
     it('Huỷ lời mời chờ mở app gọi thu hồi theo SĐT, không hỏi lại', async () => {
       const confirm = confirmSpy();
       renderPage();
