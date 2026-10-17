@@ -158,7 +158,7 @@ export class CommissionAdminService {
     await this.assertRate(rate);
     return this.prisma.$transaction(async (tx) => {
       const [before] = await tx.$queryRaw<LockedRate[]>`
-        SELECT "id", "sku", "affiliateRate" FROM "variations" WHERE "id" = ${variationId} FOR UPDATE`;
+        SELECT "id", "sku", "affiliateRate" FROM "variations" WHERE "id" = ${variationId} FOR NO KEY UPDATE`;
       if (!before) throw new NotFoundException('Không tìm thấy biến thể.');
       await tx.variation.update({ where: { id: variationId }, data: { affiliateRate: new Prisma.Decimal(rate) } });
       this.logRateChanges(adminId, 'đặt % hoa hồng CTV cho biến thể', toChanges([before], rate));
@@ -175,7 +175,7 @@ export class CommissionAdminService {
       const locked = await tx.$queryRaw<LockedRate[]>`
         SELECT "id", "sku", "affiliateRate" FROM "variations"
         WHERE "productId" = ${productId} AND "isActive" = true
-        ORDER BY "id" FOR UPDATE`;
+        ORDER BY "id" FOR NO KEY UPDATE`;
       if (locked.length === 0) throw new BadRequestException('Sản phẩm không có biến thể đang bán để đặt %.');
       await tx.variation.updateMany({ where: { id: { in: locked.map((v) => v.id) } }, data: { affiliateRate: new Prisma.Decimal(rate) } });
       this.logRateChanges(adminId, `đặt % hoa hồng CTV cho sản phẩm ${productId} (${product.name})`, toChanges(locked, rate));
@@ -197,7 +197,7 @@ export class CommissionAdminService {
           SELECT v."id", v."sku", v."affiliateRate" FROM "variations" v
           JOIN "products" p ON p."id" = v."productId"
           WHERE v."isActive" = true AND v."affiliateRate" IS NULL AND p."isActive" = true AND p."storefrontId" IS NULL
-          ORDER BY v."id" FOR UPDATE OF v`;
+          ORDER BY v."id" FOR NO KEY UPDATE OF v`;
         if (locked.length) {
           await tx.variation.updateMany({
             where: { id: { in: locked.map((v) => v.id) }, affiliateRate: null },
@@ -276,7 +276,7 @@ export class CommissionAdminService {
     // Khoá trước theo thứ tự id: hai lần nhập chồng nhau xếp hàng thay vì deadlock (ghi gom theo mức % nên thứ tự ghi mỗi lần
     // một khác), và mức "cũ" đọc ngay dưới (để log) đúng là mức bị thay.
     if (opts.lock && skus.length) {
-      await db.$queryRaw`SELECT "id" FROM "variations" WHERE "sku" = ANY(${skus}) ORDER BY "id" FOR UPDATE`;
+      await db.$queryRaw`SELECT "id" FROM "variations" WHERE "sku" = ANY(${skus}) ORDER BY "id" FOR NO KEY UPDATE`;
     }
     const variations = skus.length
       ? await db.variation.findMany({

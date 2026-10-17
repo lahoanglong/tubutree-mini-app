@@ -349,7 +349,7 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
       expect(m(prisma).dealerPriceHistory!.createMany!.mock.calls[0][0].data).toEqual([
         { variationId: 'v1', sku: 'SKU-1', tierId: 't1', oldPrice: null, newPrice: 185_000, changedBy: 'admin1' },
       ]);
-      expect(m(prisma).$queryRaw.mock.calls[0][0].join('?')).toContain('FOR UPDATE');
+      expect(m(prisma).$queryRaw.mock.calls[0][0].join('?')).toContain('ORDER BY "id" FOR NO KEY UPDATE');
     },
   );
 

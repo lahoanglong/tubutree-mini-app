@@ -147,7 +147,7 @@ export async function classifyDealerPrices(
   for (const r of parsed) if (r.sku) skuCount.set(r.sku, (skuCount.get(r.sku) ?? 0) + 1);
   const skus = [...skuCount.keys()];
   if (opts.lock && skus.length) {
-    await db.$queryRaw`SELECT "id" FROM "variations" WHERE "sku" = ANY(${skus}) ORDER BY "id" FOR UPDATE`;
+    await db.$queryRaw`SELECT "id" FROM "variations" WHERE "sku" = ANY(${skus}) ORDER BY "id" FOR NO KEY UPDATE`;
   }
   const variations = skus.length
     ? await db.variation.findMany({

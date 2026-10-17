@@ -35,7 +35,7 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     const r = await svc.setVariationRate('admin-1', 'v1', 12);
     expect(r).toEqual({ id: 'v1', sku: 'A1', affiliateRate: 12 });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(sql($queryRaw.mock.calls[0])).toMatch(/FROM "variations" WHERE "id" = \? FOR UPDATE/);
+    expect(sql($queryRaw.mock.calls[0])).toMatch(/FROM "variations" WHERE "id" = \? FOR NO KEY UPDATE/);
     expect($queryRaw.mock.calls[0][1]).toBe('v1');
     expect($queryRaw.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]!);
     expect(update.mock.calls[0][0].where).toEqual({ id: 'v1' });
@@ -77,7 +77,7 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     ]);
     const { svc } = make({ product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', name: 'SP' }) }, variation: { updateMany }, $queryRaw });
     expect(await svc.setProductRate('admin-2', 'p1', 8)).toEqual({ productId: 'p1', updated: 2, affiliateRate: 8 });
-    expect(sql($queryRaw.mock.calls[0])).toMatch(/"productId" = \? AND "isActive" = true\s+ORDER BY "id" FOR UPDATE/);
+    expect(sql($queryRaw.mock.calls[0])).toMatch(/"productId" = \? AND "isActive" = true\s+ORDER BY "id" FOR NO KEY UPDATE/);
     expect($queryRaw.mock.calls[0][1]).toBe('p1');
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ['v1', 'v2'] } });
     expect(updateMany.mock.calls[0][0].data.affiliateRate.toString()).toBe('8');
@@ -105,7 +105,7 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect(await svc.fillMissingRates('admin-3', 10)).toEqual({ updated: 2, affiliateRate: 10 });
     const q = sql($queryRaw.mock.calls[0]);
     expect(q).toMatch(/v\."isActive" = true AND v\."affiliateRate" IS NULL AND p\."isActive" = true AND p\."storefrontId" IS NULL/);
-    expect(q).toMatch(/ORDER BY v\."id" FOR UPDATE OF v/);
+    expect(q).toMatch(/ORDER BY v\."id" FOR NO KEY UPDATE OF v/);
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ['v1', 'v3'] }, affiliateRate: null });
     expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toContain('A1: chưa có→10; C3: chưa có→10');
   });
@@ -185,7 +185,7 @@ describe('CommissionAdminService — nhập CSV "sku,%"', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     // Khoá các dòng theo id trước khi đọc mức cũ (chống deadlock giữa hai lần nhập, log đúng mức bị thay).
     const lock = (prisma.$queryRaw as jest.Mock).mock.calls[0];
-    expect(lock[0].join('?')).toContain('ORDER BY "id" FOR UPDATE');
+    expect(lock[0].join('?')).toContain('ORDER BY "id" FOR NO KEY UPDATE');
     expect(lock[1]).toEqual(['A1', 'C3', 'B2', 'ZZ']);
     expect((prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(v.findMany.mock.invocationCallOrder[0]!);
     expect(v.updateMany).toHaveBeenCalledTimes(1);
