@@ -388,7 +388,7 @@ $DC run --rm --no-deps -T api pnpm exec prisma migrate status 2>&1 | tr -d '\r' 
 
 Kỳ vọng:
 - `check-env` in `Cấu hình môi trường hợp lệ.` và thoát 0.
-- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài năm cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `db.refill_location` ("bảng điểm nhận vỏ chưa có": bảng đó do migration `20261015070000` tạo); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; và các dòng backup `không kiểm được` (xem ghi chú). Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
+- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài năm cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `db.refill_location` ("bảng điểm nhận vỏ chưa có": bảng đó do migration `20261015070000` tạo); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; `db.demo_products`, `db.demo_coupons` ("sẽ dọn ở runbook mục 5, bước 7c"); và các dòng backup `không kiểm được` (xem ghi chú). Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
 - Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có năm migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
 - Dòng `db.pending_scope` (chỉ có khi có migration ngoài năm cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
 - Dòng `db.orders_lock` cho số đơn và ước tính (đã nhân theo số migration nặng trên `orders`). Đối chiếu với mục 3.
@@ -509,6 +509,65 @@ psqlq -c "UPDATE community_categories SET \"isActive\" = false WHERE slug IN ('c
 
 Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng và bậc đại lý chưa có màn sửa (sửa bằng SQL, lần chạy sau không ghi đè).
 
+### Bước 7c. Dọn dữ liệu demo (API vẫn đang dừng)
+
+Migration `20260616000000_demo_catalog_multibrand` nạp vào MỌI DB mới 44 sản phẩm và 48 biến thể demo (giá giả, khách đặt được, đơn đẩy sang Pancake sẽ lỗi) cùng 3 mã giảm giá công khai còn hạn tới 31/12/2026 mà chủ dự án chưa duyệt: `WELCOME30` (giảm 30.000đ cho đơn từ 199.000đ, 1 lượt mỗi khách, không giới hạn tổng), `FREESHIP` (đơn từ 99.000đ, 3 lượt mỗi khách), `XANH10` (giảm 10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt mỗi khách). Bản thử trên VPS đã áp migration này từ tháng 6, nên dữ liệu đó có thể đang nằm trên PROD; DB dựng mới chắc chắn có. Làm bước này ở mọi lần deploy cho tới khi `db.demo_products` và `db.demo_coupons` đều PASS. Chạy lại an toàn: không còn gì để đổi thì không đổi gì.
+
+DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng tên do seed tạo: id khác, hạn tới 01/01/2027, cùng điều kiện như trên. Lệnh dọn và go-live check coi chúng là mã demo (nhận theo mã và điều kiện), xem trước ghi `[do seed tạo]`. DB như vậy còn dữ liệu demo khác mà lệnh này KHÔNG dọn: nhiệm vụ (`missions`), câu đố (`game_quizzes`), merchant hoàn tiền (`cashback_merchants`), mục tiêu cộng đồng, mùa giải, loài cây, cấp đại lý, mẫu thông báo do `prisma/seed.ts` tạo. Thấy `[do seed tạo]` ở mục 4 thì báo tech lead rà các bảng đó ở Quản trị trước khi mở bán.
+
+1. Xem trước (không ghi gì):
+
+   ```bash
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo 2>&1 | tee .demo-cleanup-preview.txt
+   ```
+
+   Lệnh đi qua `tee` nên mã thoát là của `tee`: đọc chữ in ra, không dựa vào mã thoát. Kỳ vọng: dòng bắt đầu bằng `DB:` là `DB: postgres:5432/<tên DB PROD>` (pnpm in vài dòng tiêu đề trước dòng đó); mục 1 và 2 nêu số sản phẩm, biến thể sẽ tắt (DB mới: 44 và 48); mục 3 nêu những dòng đang trỏ tới hàng demo (đơn, giỏ, đánh giá, gian hàng, giờ vàng): chúng giữ nguyên, chỉ để biết; mục 4 nêu 3 mã và trạng thái; mục 5 nêu danh mục nào sẽ trống. Dán kết quả vào nhóm chat.
+   - In câu "DB này không có dữ liệu demo" (thay cho kế hoạch) nghĩa là không còn sản phẩm, biến thể hay mã demo nào (kể cả mã do seed tạo): sang bước 8.
+   - DB chỉ còn mã do seed tạo (mục 1 và 2 báo `tìm thấy 0/44`, `0/48`, mục 4 có `[do seed tạo]`): lệnh vẫn in kế hoạch, làm tiếp điểm 2 và 3 để quyết các mã đó.
+   - Mục 4 có dòng `[ĐIỀU KIỆN ĐÃ SỬA so với bản demo …]`: đúng là dòng migration tạo nhưng ai đó đã sửa điều kiện (vd WELCOME30 lên 50.000đ để dùng thật). Lệnh vẫn coi là mã demo và `--coupons=expire` vẫn tắt. Hỏi chủ shop: là mã thật thì thêm `--keep-coupon=<mã>` ở điểm 3 và `GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ở bước 10.
+   - Mục 4 có dòng `KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác`: mã đó không phải bản demo (chủ shop tạo hoặc đã sửa điều kiện), lệnh dọn không tắt nó dù có `--coupons=expire`. Chủ shop mở Quản trị, Mã giảm giá, xem điều kiện: giữ thì go-live bước 10 ra WARN nêu đúng tên mã đó; không giữ thì tắt tay ở Quản trị.
+   Điểm dừng: dòng `DB:` không phải DB PROD; hoặc mục 3 có `dòng đơn hàng` lớn hơn 0 mà chưa ai biết đó là đơn gì (khách thật đặt hàng demo: báo chủ shop trước khi tắt); hoặc mục 1 có `KIỂM TAY TRƯỚC KHI APPLY` (sản phẩm demo có người sửa sau khi nạp). Với dòng cuối: đưa danh sách tên cho chủ shop. Không ai dùng các sản phẩm đó làm hàng thật thì làm tiếp; có thì chưa chạy `--apply`, báo tech lead (lệnh dọn không bỏ qua từng sản phẩm).
+
+2. Chủ shop quyết về 3 mã và ghi vào nhóm chat: (a) tắt cả ba; (b) giữ mã nào (vd `WELCOME30` làm mã ra mắt), tắt phần còn lại; (c) chưa quyết, giữ nguyên cả ba (go-live check bước 10 sẽ FAIL ở `db.demo_coupons` cho tới khi quyết). Lưu ý cho chủ shop: hệ thống đã tự tặng mỗi khách mới một mã chào mừng riêng 30.000đ cho đơn từ 199.000đ (cấu hình `voucher.welcome_amount`, `voucher.welcome_min_order`); giữ thêm `WELCOME30` thì khách mới được giảm chào mừng hai lần, mỗi mã một đơn.
+
+3. Thực hiện (một transaction: lỗi thì không đổi gì). Trước khi chạy: `ls .demo-cleanup-apply.txt` phải báo không có file. Có file (của lần deploy trước) thì đổi tên nó (`mv .demo-cleanup-apply.txt .demo-cleanup-apply.$(date +%Y%m%d%H%M).txt`), KHÔNG để `tee` ghi đè: file đó chứa khối hoàn tác. Chọn đúng một dòng theo quyết định ở điểm 2. `--expect-db` bắt buộc: lệnh so với tên DB mà API đang nối, khác nhau thì in `--expect-db=… khác DB đang nối (…)`, không làm gì; khi đó dừng, kiểm lại `.env`.
+
+   ```bash
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" --coupons=expire 2>&1 | tee .demo-cleanup-apply.txt                          # (a)
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" --coupons=expire --keep-coupon=WELCOME30 2>&1 | tee .demo-cleanup-apply.txt  # (b) giữ WELCOME30
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" 2>&1 | tee .demo-cleanup-apply.txt                                           # (c)
+   ```
+
+   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Cuối kết quả có khối `-- HOÀN TÁC` (các câu SQL đưa đúng những dòng vừa đổi về như cũ, gồm hạn cũ của từng mã); file `.demo-cleanup-apply.txt` giữ khối đó, không xoá, không ghi đè file này. Kiểm chạy lại: dùng đúng lệnh vừa chạy nhưng `tee` sang file KHÁC, vd thay `tee .demo-cleanup-apply.txt` bằng `tee .demo-cleanup-rerun.txt`. Kết quả phải in `Đã tắt 0 sản phẩm, 0 biến thể` và `-- HOÀN TÁC: lần chạy này không đổi dòng nào.` Lỡ tee lần chạy lại vào `.demo-cleanup-apply.txt` thì khối hoàn tác thật đã mất: báo tech lead ngay (hoàn tác khi đó phải dựng tay từ bản xem trước `.demo-cleanup-preview.txt`).
+
+   Nhìn nhanh (go-live check ở bước 10 mới là phép đối chiếu đúng danh sách):
+
+   ```bash
+   psqlq -c "SELECT count(*) FILTER (WHERE \"isActive\") AS demo_dang_ban, count(*) AS demo_tong FROM products WHERE \"pancakeId\" LIKE 'seed-%'"
+   psqlq -c "SELECT code, \"isActive\", \"endAt\" FROM coupons WHERE code IN ('WELCOME30','FREESHIP','XANH10') ORDER BY code"
+   ```
+
+   Kỳ vọng: `demo_dang_ban = 0`; ba mã đúng như quyết định ở điểm 2.
+
+   Sau bước này khách không còn thấy hay mua được hàng demo ở: catalog, tìm kiếm, trang sản phẩm, danh mục, trang nhãn, gian hàng, sitemap, yêu thích, giờ vàng (đang chạy và sắp tới, nút "Nhắc tôi"), mua chung (danh sách và nút tham gia), giỏ và thanh toán, các tin nhắc (giờ vàng bắt đầu, giảm giá cho người yêu thích, nhắc mua lại, mời đánh giá, giỏ bỏ quên), chip sản phẩm trên bài cộng đồng cũ. Đã biết, chưa sửa (không ai mua được hàng demo qua các chỗ này):
+   - Ví mã của khách vẫn liệt kê mã mua chung đã cấp cho sản phẩm demo (nếu bản thử từng có nhóm thành công); mã không dùng được vì sản phẩm không vào giỏ được.
+   - Lịch sử đơn vẫn hiện dòng hàng demo của đơn cũ, ghi "ngừng bán"; gói định kỳ trên hàng demo báo ngừng bán ở kỳ sau (mục 3 của bản xem trước nêu số gói, CSKH xử lý tay).
+   - API `GET /products/<slug>/reviews` vẫn trả đánh giá cũ của sản phẩm demo; trang sản phẩm đã 404 nên khách không tới đó.
+   - Trần số nhóm mua chung mở mỗi khách (`groupbuy.max_open_per_user`) chỉ đếm nhóm trên hàng đang bán. Nếu sau này bật lại một sản phẩm đã tắt, các nhóm cũ còn hạn của nó hiện lại, và một khách có thể tạm vượt trần cho tới khi các nhóm đó hết hạn (tối đa `groupbuy.window_hours`).
+   - Trang nhãn, yêu thích, bài cộng đồng (gắn sản phẩm khi đăng) và lời nhắc CTV chỉ lọc `isActive`, chưa lọc trạng thái duyệt: không ảnh hưởng hàng demo (đã tắt), là việc riêng cho hàng đối tác chờ duyệt.
+
+   Lỡ tay (vd tắt nhầm mã chủ shop muốn giữ): một mã thì bật lại và sửa hạn ở Quản trị, Mã giảm giá, lấy hạn cũ trong khối `-- HOÀN TÁC` của `.demo-cleanup-apply.txt`. Cần đưa cả sản phẩm, biến thể về (Quản trị không có nút bật lại hàng kho Tubu): chỉ tech lead làm, chạy nguyên khối từ `BEGIN;` tới `COMMIT;` trong file đó:
+
+   ```bash
+   sed -n '/^BEGIN;$/,/^COMMIT;$/p' .demo-cleanup-apply.txt > .demo-cleanup-undo.sql
+   cat .demo-cleanup-undo.sql      # đọc lại trước khi chạy
+   psqlq -v ON_ERROR_STOP=1 < .demo-cleanup-undo.sql
+   ```
+
+   Nếu từ lúc dọn tới lúc hoàn tác, đồng bộ Pancake đã tạo biến thể thật mang SKU gốc (vd `FUWA-DW-1L`), câu gỡ tiền tố `DEMO-` vấp ràng buộc unique của `variations.sku`: psql báo `duplicate key value violates unique constraint "variations_sku_key"`, và vì `ON_ERROR_STOP=1` cả khối dừng trước `COMMIT`, không dòng nào đổi (an toàn). Khi đó tech lead xử lý tay: bỏ câu `UPDATE "variations" SET "sku" = substr(...)` khỏi `.demo-cleanup-undo.sql` (biến thể demo giữ tiền tố `DEMO-`, hàng thật giữ SKU gốc) rồi chạy lại, hoặc gỡ tiền tố riêng cho từng biến thể không trùng.
+
+   Không khôi phục bản backup ở bước 6 để hoàn tác bước này: dump đó có trước migration ở bước 7, khôi phục là lùi cả lần deploy (xem mục rollback).
+
 ### Bước 8. Bật web mới
 
 ```bash
@@ -547,7 +606,7 @@ Ghi giờ kết thúc: khách đã đặt hàng được lại từ lúc này. T
 $DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
 ```
 
-Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). Dán kết quả vào nhóm chat.
+Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (chủ shop duyệt giữ ở bước 7c, chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=WELCOME30` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
 
 Một FAIL sửa được ngay mà không cần quay lại: `db.refill_location` ("chưa có điểm nhận vỏ nào"). Migration `20261015070000` chỉ chuyển địa chỉ cũ `refill.pickup_address` thành điểm đầu tiên khi địa chỉ đó đã có; PROD chưa từng điền thì bảng rỗng và khách không có chỗ mang vỏ tới. Thêm ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ rồi chạy lại lệnh trên. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
 

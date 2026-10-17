@@ -69,6 +69,16 @@ describe('LifecycleService.sendReorderReminders (§6.14.7)', () => {
     expect(sql).toContain('o."placedForCustomer" = false');
   });
 
+  it('chỉ nhắc mua lại hàng còn bán: biến thể và sản phẩm đang bán, sản phẩm đã duyệt', async () => {
+    const { svc, queryRaw } = setup([]);
+    await svc.sendReorderReminders();
+    const sql = (queryRaw.mock.calls[0]![0] as readonly string[]).join('?');
+    expect(sql).toContain('JOIN products p ON p.id = v."productId"');
+    expect(sql).toContain('v."isActive" = true');
+    expect(sql).toContain('p."isActive" = true');
+    expect(sql).toContain(`p."approvalStatus"::text = 'APPROVED'`);
+  });
+
   it('đã nhắc sau đơn cuối (remindedAt >= lastOrderAt) → KHÔNG nhắc lại (chống spam)', async () => {
     const { svc, notify, create, updateMany } = setup([row({ lastOrderAt: new Date('2026-04-01') })], {
       remindedAt: new Date('2026-04-20'), // đã nhắc sau đơn cuối
@@ -180,10 +190,11 @@ describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
   function setupWishlist(
     users: string[],
     slug: string | null = 'tinh-dau-tram',
-    opts: { recentlyAlerted?: string[]; cfg?: Record<string, unknown> } = {},
+    opts: { recentlyAlerted?: string[]; cfg?: Record<string, unknown>; product?: { isActive: boolean; approvalStatus: string } } = {},
   ) {
     const findMany = jest.fn().mockResolvedValue(users.map((userId) => ({ userId })));
-    const product = { findUnique: jest.fn().mockResolvedValue(slug === null ? null : { slug }) };
+    const state = opts.product ?? { isActive: true, approvalStatus: 'APPROVED' };
+    const product = { findUnique: jest.fn().mockResolvedValue(slug === null ? null : { slug, ...state }) };
     const logFindMany = jest.fn().mockResolvedValue((opts.recentlyAlerted ?? []).map((userId) => ({ userId })));
     const prisma = {
       wishlist: { findMany },
@@ -221,6 +232,15 @@ describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
   });
 
   // ENGAGE-18: thông báo chỉ nói "đang giảm giá", giảm 1đ cũng gửi, giá dao động thì nhắc lặp.
+  it('sản phẩm đã tắt hoặc chưa duyệt (đồng bộ vẫn đổi giá): không báo, không đọc wishlist', async () => {
+    for (const state of [{ isActive: false, approvalStatus: 'APPROVED' }, { isActive: true, approvalStatus: 'PENDING_REVIEW' }]) {
+      const { svc, notify, findMany } = setupWishlist(['u1'], 'tinh-dau-tram', { product: state });
+      await svc.notifyWishlistPriceDrop('p1', 'X', { oldPrice: 100_000, newPrice: 50_000 });
+      expect(notify).not.toHaveBeenCalled();
+      expect(findMany).not.toHaveBeenCalled();
+    }
+  });
+
   describe('giá cũ/mới, ngưỡng giảm tối thiểu và cooldown (ENGAGE-18)', () => {
     it('có giá → nội dung ghi giá cũ và giá mới', async () => {
       const { svc, notify } = setupWishlist(['u1']);

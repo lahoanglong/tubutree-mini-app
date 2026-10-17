@@ -101,12 +101,12 @@ describe('FlashSaleService.listActive', () => {
     expect(list[0]).toMatchObject({ itemId: 'fi1', flashPrice: 80000, retailPrice: 100000, productSlug: 'a' });
   });
 
-  it('where CHỈ lấy variation active (variation: { isActive: true })', async () => {
+  it('where CHỈ lấy hàng còn bán (biến thể và sản phẩm đang bán, sản phẩm đã duyệt)', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
     await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true } }) }),
+      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } } }) }),
     );
   });
 });
@@ -646,8 +646,10 @@ describe('FlashSaleService.setReminder', () => {
     flashSaleReminder: { upsert: jest.fn().mockResolvedValue({ id: 'r1' }) },
   });
 
+  const sellable = { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } };
+
   it('sale chưa bắt đầu (startAt > now) → upsert reminder', async () => {
-    const prisma = mkPrisma({ id: 'fi1', flashSale: { startAt: new Date('2026-07-06T00:00:00Z') } }) as any;
+    const prisma = mkPrisma({ id: 'fi1', flashSale: { startAt: new Date('2026-07-06T00:00:00Z') }, variation: sellable }) as any;
     await new FlashSaleService(prisma, config, notifications, lifecycle).setReminder('u1', 'fi1', NOW);
     expect(prisma.flashSaleReminder.upsert).toHaveBeenCalledWith({
       where: { userId_flashSaleItemId: { userId: 'u1', flashSaleItemId: 'fi1' } },
@@ -662,8 +664,20 @@ describe('FlashSaleService.setReminder', () => {
     expect(prisma.flashSaleReminder.upsert).not.toHaveBeenCalled();
   });
 
+  it('hàng đã ngừng bán (biến thể/sản phẩm tắt hoặc chưa duyệt) → reject, KHÔNG upsert', async () => {
+    for (const variation of [
+      { ...sellable, isActive: false },
+      { isActive: true, product: { isActive: false, approvalStatus: 'APPROVED' } },
+      { isActive: true, product: { isActive: true, approvalStatus: 'PENDING_REVIEW' } },
+    ]) {
+      const prisma = mkPrisma({ id: 'fi1', flashSale: { startAt: new Date('2026-07-06T00:00:00Z') }, variation }) as any;
+      await expect(new FlashSaleService(prisma, config, notifications, lifecycle).setReminder('u1', 'fi1', NOW)).rejects.toThrow();
+      expect(prisma.flashSaleReminder.upsert).not.toHaveBeenCalled();
+    }
+  });
+
   it('sale ĐÃ bắt đầu (startAt <= now) → reject "Ưu đãi đã bắt đầu.", KHÔNG upsert', async () => {
-    const prisma = mkPrisma({ id: 'fi1', flashSale: { startAt: new Date('2026-07-05T09:00:00Z') } }) as any;
+    const prisma = mkPrisma({ id: 'fi1', flashSale: { startAt: new Date('2026-07-05T09:00:00Z') }, variation: sellable }) as any;
     await expect(new FlashSaleService(prisma, config, notifications, lifecycle).setReminder('u1', 'fi1', NOW))
       .rejects.toThrow('Ưu đãi đã bắt đầu.');
     expect(prisma.flashSaleReminder.upsert).not.toHaveBeenCalled();
@@ -703,12 +717,12 @@ describe('FlashSaleService.listUpcoming', () => {
     expect(list[0]?.reminded).toBe(true);
   });
 
-  it('where lọc sale isActive+startAt>now+endAt>now, reminders lọc theo userId, sort startAt asc', async () => {
+  it('where lọc hàng còn bán, sale isActive+startAt>now+endAt>now, reminders lọc theo userId, sort startAt asc', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { flashSaleItem: { findMany } } as any;
     await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
     const arg = findMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ flashSale: { isActive: true, startAt: { gt: NOW }, endAt: { gt: NOW } } });
+    expect(arg.where).toEqual({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } }, flashSale: { isActive: true, startAt: { gt: NOW }, endAt: { gt: NOW } } });
     expect(arg.include.reminders).toEqual({ where: { userId: 'u1' }, select: { id: true } });
     expect(arg.orderBy).toEqual({ flashSale: { startAt: 'asc' } });
   });
@@ -813,14 +827,14 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
    * vượt 500 thì lô lấy ra có thể KHÔNG chứa dòng nào thuộc sale đang chạy — không ai được
    * nhắc, không lỗi, không log.
    */
-  it('chỉ lấy nhắc của sale ĐANG CHẠY, có thứ tự ổn định', async () => {
+  it('chỉ lấy nhắc của sale ĐANG CHẠY trên hàng còn bán, có thứ tự ổn định', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { flashSaleReminder: { findMany, updateMany: jest.fn().mockResolvedValue({ count: 0 }) } } as any;
     await new FlashSaleService(prisma, config, notifications, lifecycle).notifyStartedFlashSales(now);
     const args = findMany.mock.calls[0][0];
     expect(args.where).toEqual({
       notifiedAt: null,
-      item: { flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+      item: { variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } }, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
     });
     expect(args.orderBy).toEqual({ id: 'asc' });
   });
@@ -869,6 +883,12 @@ describe('FlashSaleService.notifyWishlistOfStartedSales', () => {
     );
     return { svc, findMany, notifyDrop };
   }
+
+  it('chỉ xét mặt hàng còn bán: sản phẩm ngừng bán không bị báo "giảm giá"', async () => {
+    const { svc, findMany } = setup([]);
+    await svc.notifyWishlistOfStartedSales(now);
+    expect(findMany.mock.calls[0][0].include.items.where).toEqual({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } } });
+  });
 
   it('sale vừa bắt đầu → báo wishlist của sản phẩm với giá gốc → giá flash', async () => {
     const { svc, notifyDrop } = setup([{ id: 's1', items: [item()] }]);

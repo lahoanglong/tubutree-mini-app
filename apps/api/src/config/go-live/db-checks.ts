@@ -1,5 +1,6 @@
 import { parseConsignmentSettleFrom } from '../../modules/merchant/merchant-config';
 import { OPS_THRESHOLD_KEYS, type OpsThresholds } from '../../modules/ops/ops-alerts';
+import { evaluateDemoData, type DemoDataSnapshot } from './demo-data-checks';
 import { envValue } from './secrets';
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
 
@@ -77,6 +78,7 @@ export interface DbSnapshot {
   znsTemplates: ZnsTemplateRow[];
   /** COD_MAX_PER_ORDER trong code (checkout-split.ts). */
   codMaxPerOrder: number;
+  demoData?: DemoDataSnapshot;
 }
 
 export const CONFIG_KEYS_OF_INTEREST = [
@@ -410,5 +412,6 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     ...gomdonToggleChecks(s, ctx.env),
     adminCheck(s),
     znsCheck(s),
+    ...evaluateDemoData(s.demoData, ctx.env, ctx.phase),
   ];
 }
