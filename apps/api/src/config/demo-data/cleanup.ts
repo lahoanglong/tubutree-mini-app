@@ -4,6 +4,7 @@ import {
   DEMO_BRANDS,
   DEMO_CATEGORIES,
   DEMO_COUPONS,
+  DEMO_COUPON_SELECT,
   DEMO_MIGRATION,
   DEMO_PRODUCTS,
   DEMO_PRODUCT_PANCAKE_IDS,
@@ -11,6 +12,9 @@ import {
   DEMO_VARIATIONS,
   DEMO_VARIATION_PANCAKE_IDS,
   DEMO_VARIATION_WHERE,
+  classifyDemoCoupon,
+  isDemoCouponKind,
+  type DemoCouponKind,
 } from './demo-catalog';
 
 /**
@@ -68,8 +72,8 @@ export interface CouponRefs {
 export interface DemoCouponRow {
   id: string;
   code: string;
-  /** id cũng khớp dòng migration tạo. Chỉ những mã này mới bị `--coupons=expire` đổi. */
-  fromMigration: boolean;
+  /** `migration`/`seed` là mã demo, `--coupons=expire` đổi; `name-only` (chỉ trùng mã, điều kiện khác) không đụng. */
+  kind: DemoCouponKind;
   isActive: boolean;
   endAt: Date;
   /** Khách còn dùng được: isActive và chưa quá endAt. */
@@ -101,11 +105,6 @@ type Db = PrismaClient | Prisma.TransactionClient;
 const NON_DEMO_PRODUCT_WHERE = {
   OR: [{ pancakeId: null }, { pancakeId: { notIn: [...DEMO_PRODUCT_PANCAKE_IDS] } }],
 } satisfies Prisma.ProductWhereInput;
-
-/** Dòng mã do migration tạo (cả id lẫn mã khớp), trừ mã được giữ. */
-function migrationCouponTargets(keep: readonly string[]): Prisma.CouponWhereInput[] {
-  return DEMO_COUPONS.filter((c) => !keep.includes(c.code)).map((c) => ({ id: c.id, code: c.code }));
-}
 
 /** Chỉ đọc. Gọi tuần tự để chạy được trong một transaction (READ ONLY khi xem trước). */
 export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<DemoCleanupPlan> {
@@ -143,20 +142,22 @@ export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<D
     { label: 'bản sửa chờ duyệt', table: 'product_edit_drafts', rows: await db.productEditDraft.count({ where: byProduct }) },
   ];
 
-  const migrationCouponIds = new Set(DEMO_COUPONS.map((c) => c.id));
   const couponRows = await db.coupon.findMany({
     where: { code: { in: DEMO_COUPONS.map((c) => c.code) } },
-    select: { id: true, code: true, isActive: true, endAt: true },
+    select: { ...DEMO_COUPON_SELECT, isActive: true, endAt: true },
     orderBy: { code: 'asc' },
   });
   const coupons: DemoCouponRow[] = [];
   for (const c of couponRows) {
-    const fromMigration = migrationCouponIds.has(c.id);
+    const kind = classifyDemoCoupon(c)!;
     coupons.push({
-      ...c,
-      fromMigration,
+      id: c.id,
+      code: c.code,
+      kind,
+      isActive: c.isActive,
+      endAt: c.endAt,
       live: c.isActive && c.endAt >= now,
-      willExpire: fromMigration && (c.isActive || c.endAt > now),
+      willExpire: isDemoCouponKind(kind) && (c.isActive || c.endAt > now),
       refs: {
         redemptions: await db.couponRedemption.count({ where: { couponId: c.id } }),
         orders: await db.order.count({ where: { couponCode: c.code } }),
@@ -204,15 +205,15 @@ export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<D
   };
 }
 
-/** DB "có demo" khi còn ít nhất một dòng do migration tạo. Chỉ trùng mã (id khác) thì không: có thể là mã thật. */
+/** DB "có demo" khi còn sản phẩm/biến thể demo hoặc mã demo (của migration hay do seed tạo). Chỉ trùng tên mã thì không. */
 export function hasDemoData(plan: DemoCleanupPlan): boolean {
-  return plan.products.found > 0 || plan.variations.found > 0 || plan.coupons.some((c) => c.fromMigration);
+  return plan.products.found > 0 || plan.variations.found > 0 || plan.coupons.some((c) => isDemoCouponKind(c.kind));
 }
 
 export class NoDemoDataError extends Error {
   constructor() {
     super(
-      `Không tìm thấy sản phẩm, biến thể hay mã nào do migration ${DEMO_MIGRATION} tạo: DB này không phải loại có dữ liệu demo. Không làm gì.`,
+      `Không tìm thấy sản phẩm, biến thể hay mã giảm giá demo nào (của migration ${DEMO_MIGRATION} hoặc do seed tạo): DB này không có dữ liệu demo. Không làm gì.`,
     );
     this.name = 'NoDemoDataError';
   }
@@ -238,7 +239,7 @@ export async function applyDemoCleanup(
   opts: { coupons: CouponMode; keepCoupons?: readonly string[]; now?: Date },
 ): Promise<{ plan: DemoCleanupPlan; result: CleanupResult }> {
   const now = opts.now ?? new Date();
-  const couponTargets = migrationCouponTargets(opts.keepCoupons ?? []);
+  const keep = opts.keepCoupons ?? [];
   return prisma.$transaction(
     async (tx) => {
       const plan = await planDemoCleanup(tx, now);
@@ -246,8 +247,9 @@ export async function applyDemoCleanup(
       const products = await tx.product.updateMany({ where: { ...DEMO_PRODUCT_WHERE, isActive: true }, data: { isActive: false } });
       const variations = await tx.variation.updateMany({ where: { ...DEMO_VARIATION_WHERE, isActive: true }, data: { isActive: false } });
       let couponsExpired = 0;
-      if (opts.coupons === 'expire' && couponTargets.length > 0) {
-        const couponWhere = { OR: couponTargets };
+      const couponIds = plan.coupons.filter((c) => isDemoCouponKind(c.kind) && !keep.includes(c.code)).map((c) => c.id);
+      if (opts.coupons === 'expire' && couponIds.length > 0) {
+        const couponWhere = { id: { in: couponIds } };
         couponsExpired = await tx.coupon.count({ where: { AND: [couponWhere, { OR: [{ isActive: true }, { endAt: { gt: now } }] }] } });
         await tx.coupon.updateMany({ where: { AND: [couponWhere, { isActive: true }] }, data: { isActive: false } });
         // Cắt cả hạn: trang nhãn (gắn mã vào khuyến mãi, nút chép mã) chỉ xét hạn, không xét isActive.
@@ -288,12 +290,13 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
   for (const c of plan.coupons) {
     const refs = `đã dùng ${c.refs.redemptions} lượt, ${c.refs.orders} đơn, ${c.refs.carts} giỏ đang gắn, ${c.refs.brandPromotions} khuyến mãi nhãn, ${c.refs.missions} nhiệm vụ`;
     const state = c.live ? `còn dùng được tới ${day(c.endAt)}` : `không dùng được (${c.isActive ? `hết hạn ${day(c.endAt)}` : 'đã tắt'})`;
+    const origin = c.kind === 'seed' ? ' [do seed tạo: id khác migration, điều kiện như bản demo]' : '';
     let action: string;
-    if (!c.fromMigration) action = 'KHÔNG ĐỤNG: trùng mã nhưng id khác dòng migration tạo (seed hoặc tạo tay), xem ở Quản trị';
+    if (c.kind === 'name-only') action = 'KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác (mã thật hoặc đã sửa), kiểm ở Quản trị, Mã giảm giá';
     else if (args.coupons === 'expire' && args.keepCoupons.includes(c.code)) action = `GIỮ theo --keep-coupon${c.live ? ': khách dùng được, xác nhận điều kiện đúng như chủ dự án duyệt' : ''}`;
     else if (args.coupons === 'expire') action = c.willExpire ? 'sẽ TẮT (isActive=false, endAt=lúc chạy)' : 'không cần đổi';
     else action = c.live ? 'GIỮ NGUYÊN. CẢNH BÁO: khách dùng được mã chủ dự án chưa duyệt' : 'GIỮ NGUYÊN';
-    L.push(`   - ${c.code}: ${state}; ${refs} → ${action}`);
+    L.push(`   - ${c.code}${origin}: ${state}; ${refs} → ${action}`);
   }
 
   L.push('5. Danh mục demo (giữ nguyên):');

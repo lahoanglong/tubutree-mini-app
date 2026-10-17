@@ -511,13 +511,18 @@ Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng
 
 Migration `20260616000000_demo_catalog_multibrand` nạp vào MỌI DB mới 44 sản phẩm và 48 biến thể demo (giá giả, khách đặt được, đơn đẩy sang Pancake sẽ lỗi) cùng 3 mã giảm giá công khai còn hạn tới 31/12/2026 mà chủ dự án chưa duyệt: `WELCOME30` (giảm 30.000đ cho đơn từ 199.000đ, 1 lượt mỗi khách, không giới hạn tổng), `FREESHIP` (đơn từ 99.000đ, 3 lượt mỗi khách), `XANH10` (giảm 10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt mỗi khách). Bản thử trên VPS đã áp migration này từ tháng 6, nên dữ liệu đó có thể đang nằm trên PROD; DB dựng mới chắc chắn có. Làm bước này ở mọi lần deploy cho tới khi `db.demo_products` và `db.demo_coupons` đều PASS. Chạy lại an toàn: không còn gì để đổi thì không đổi gì.
 
+DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng tên do seed tạo: id khác, hạn tới 01/01/2027, cùng điều kiện như trên. Lệnh dọn và go-live check coi chúng là mã demo (nhận theo mã và điều kiện), xem trước ghi `[do seed tạo]`. DB như vậy còn dữ liệu demo khác mà lệnh này KHÔNG dọn: nhiệm vụ (`missions`), câu đố (`game_quizzes`), merchant hoàn tiền (`cashback_merchants`), mục tiêu cộng đồng, mùa giải, loài cây, cấp đại lý, mẫu thông báo do `prisma/seed.ts` tạo. Thấy `[do seed tạo]` ở mục 4 thì báo tech lead rà các bảng đó ở Quản trị trước khi mở bán.
+
 1. Xem trước (không ghi gì):
 
    ```bash
    $DC run --rm --no-deps api pnpm run prisma:cleanup-demo | tee .demo-cleanup-preview.txt
    ```
 
-   Kỳ vọng: dòng đầu `DB: postgres:5432/<tên DB PROD>`; mục 1 và 2 nêu số sản phẩm, biến thể sẽ tắt (DB mới: 44 và 48); mục 3 nêu những dòng đang trỏ tới hàng demo (đơn, giỏ, đánh giá, gian hàng, giờ vàng): chúng giữ nguyên, chỉ để biết; mục 4 nêu 3 mã và trạng thái; mục 5 nêu danh mục nào sẽ trống. Thoát mã 2 kèm câu "DB này không phải loại có dữ liệu demo" nghĩa là không có gì để dọn: sang bước 8. Dán kết quả vào nhóm chat.
+   Kỳ vọng: dòng đầu `DB: postgres:5432/<tên DB PROD>`; mục 1 và 2 nêu số sản phẩm, biến thể sẽ tắt (DB mới: 44 và 48); mục 3 nêu những dòng đang trỏ tới hàng demo (đơn, giỏ, đánh giá, gian hàng, giờ vàng): chúng giữ nguyên, chỉ để biết; mục 4 nêu 3 mã và trạng thái; mục 5 nêu danh mục nào sẽ trống. Dán kết quả vào nhóm chat.
+   - Thoát mã 2 kèm câu "DB này không có dữ liệu demo" nghĩa là không còn sản phẩm, biến thể hay mã demo nào (kể cả mã do seed tạo): sang bước 8.
+   - DB chỉ còn mã do seed tạo (mục 1 và 2 báo `tìm thấy 0/44`, `0/48`, mục 4 có `[do seed tạo]`): lệnh KHÔNG thoát 2, vẫn làm tiếp điểm 2 và 3 để quyết các mã đó.
+   - Mục 4 có dòng `KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác`: mã đó không phải bản demo (chủ shop tạo hoặc đã sửa điều kiện), lệnh dọn không tắt nó dù có `--coupons=expire`. Chủ shop mở Quản trị, Mã giảm giá, xem điều kiện: giữ thì go-live bước 10 ra WARN nêu đúng tên mã đó; không giữ thì tắt tay ở Quản trị.
    Điểm dừng: dòng `DB:` không phải DB PROD; hoặc mục 3 có `dòng đơn hàng` lớn hơn 0 mà chưa ai biết đó là đơn gì (khách thật đặt hàng demo: báo chủ shop trước khi tắt).
 
 2. Chủ shop quyết về 3 mã và ghi vào nhóm chat: (a) tắt cả ba; (b) giữ mã nào (vd `WELCOME30` làm mã ra mắt), tắt phần còn lại; (c) chưa quyết, giữ nguyên cả ba (go-live check bước 10 sẽ FAIL ở `db.demo_coupons` cho tới khi quyết). Lưu ý cho chủ shop: hệ thống đã tự tặng mỗi khách mới một mã chào mừng riêng 30.000đ cho đơn từ 199.000đ (cấu hình `voucher.welcome_amount`, `voucher.welcome_min_order`); giữ thêm `WELCOME30` thì khách mới được giảm chào mừng hai lần, mỗi mã một đơn.
@@ -581,7 +586,7 @@ Ghi giờ kết thúc: khách đã đặt hàng được lại từ lúc này. T
 $DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
 ```
 
-Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN khi chủ shop đã duyệt giữ mã ở bước 7c (chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=WELCOME30` ngay sau `run --rm`). Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
+Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (chủ shop duyệt giữ ở bước 7c, chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=WELCOME30` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
 
 Một FAIL sửa được ngay mà không cần quay lại: `db.refill_location` ("chưa có điểm nhận vỏ nào"). Migration `20261015070000` chỉ chuyển địa chỉ cũ `refill.pickup_address` thành điểm đầu tiên khi địa chỉ đó đã có; PROD chưa từng điền thì bảng rỗng và khách không có chỗ mang vỏ tới. Thêm ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ rồi chạy lại lệnh trên. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
 

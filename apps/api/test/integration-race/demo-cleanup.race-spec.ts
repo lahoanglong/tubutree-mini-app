@@ -66,6 +66,8 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
    * thiếu bằng chính các câu INSERT của migration rồi bật lại. Hạn mã giữ như migration, trừ khi đã qua thì lùi ra 30 ngày.
    */
   async function restoreDemoState() {
+    await prisma.coupon.deleteMany({ where: { id: { startsWith: SEED_LIKE_PREFIX } } });
+    await showMigrationCoupons();
     const sql = readApiSql(`prisma/migrations/${DEMO_MIGRATION}/migration.sql`);
     for (const stmt of splitSqlStatements(sql).filter((s) => s.startsWith('INSERT INTO'))) await prisma.$executeRawUnsafe(stmt);
     await prisma.product.updateMany({ where: { pancakeId: { in: [...DEMO_PRODUCT_PANCAKE_IDS] } }, data: { isActive: true } });
@@ -73,6 +75,14 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     const endAt = MIGRATION_END_AT > new Date() ? MIGRATION_END_AT : new Date(Date.now() + 30 * 86_400_000);
     for (const c of DEMO_COUPONS) await prisma.coupon.update({ where: { id: c.id }, data: { isActive: true, endAt } });
   }
+
+  /** Đổi tạm mã của 3 dòng migration để chèn dòng cùng mã nhưng id khác (như DB đã chạy `prisma db seed` trước migration). */
+  const SEED_LIKE_PREFIX = 'itseed-';
+  const migrationCouponIds = DEMO_COUPONS.map((c) => c.id);
+  const hideMigrationCoupons = () =>
+    prisma.$executeRawUnsafe(`UPDATE "coupons" SET "code" = "code" || '_ITHIDE' WHERE "id" = ANY($1::text[]) AND "code" NOT LIKE '%\\_ITHIDE'`, migrationCouponIds);
+  const showMigrationCoupons = () =>
+    prisma.$executeRawUnsafe(`UPDATE "coupons" SET "code" = replace("code", '_ITHIDE', '') WHERE "id" = ANY($1::text[])`, migrationCouponIds);
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
@@ -141,10 +151,10 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(plan.variations).toEqual({ expected: 48, found: 48, active: 48, extraActive: 0 });
     const refs = Object.fromEntries(plan.references.map((r) => [r.table, r.rows]));
     expect(refs).toMatchObject({ order_items: 1, cart_items: 1, flash_sale_items: 1, reviews: 1, wishlists: 1, storefront_items: 1 });
-    expect(plan.coupons.map((c) => [c.code, c.fromMigration, c.live])).toEqual([
-      ['FREESHIP', true, true],
-      ['WELCOME30', true, true],
-      ['XANH10', true, true],
+    expect(plan.coupons.map((c) => [c.code, c.kind, c.live])).toEqual([
+      ['FREESHIP', 'migration', true],
+      ['WELCOME30', 'migration', true],
+      ['XANH10', 'migration', true],
     ]);
     expect(plan.categories.every((c) => c.exists && c.publicNonDemo === 0)).toBe(true);
     expect(plan.categories.reduce((n, c) => n + c.publicDemo, 0)).toBeGreaterThanOrEqual(44);
@@ -227,6 +237,65 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     await expect(coupons().validateAndCompute('WELCOME30', userId, 250_000)).rejects.toThrow(/ngừng áp dụng/);
     expect(await goLive()).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'PASS' });
     expect((await applyDemoCleanup(prisma, { coupons: 'expire' })).result.couponsExpired).toBe(0);
+  });
+
+  it('mã do seed tạo (id khác migration, điều kiện như seed.ts) vẫn là mã demo: go-live FAIL, --coupons=expire tắt, --keep-coupon giữ; mã chỉ trùng tên thì không đụng, WARN', async () => {
+    const seedTerms = { startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), scope: 'PUBLIC' as const };
+    const ids = { WELCOME30: `${SEED_LIKE_PREFIX}${tag}-welcome30`, FREESHIP: `${SEED_LIKE_PREFIX}${tag}-freeship`, XANH10: `${SEED_LIKE_PREFIX}${tag}-xanh10` };
+    await hideMigrationCoupons();
+    try {
+      await prisma.coupon.createMany({
+        data: [
+          { id: ids.WELCOME30, code: 'WELCOME30', type: 'AMOUNT', value: 30000, minOrder: 199000, perUserLimit: 1, ...seedTerms },
+          { id: ids.FREESHIP, code: 'FREESHIP', type: 'FREESHIP', value: 0, minOrder: 99000, perUserLimit: 3, ...seedTerms },
+          // Chủ shop sửa điều kiện XANH10 thành mã thật (15%): chỉ trùng tên, không phải mã demo.
+          { id: ids.XANH10, code: 'XANH10', type: 'PERCENT', value: 15, minOrder: 250000, maxDiscount: 50000, perUserLimit: 2, ...seedTerms },
+        ],
+      });
+      const status = async (env: Record<string, string> = {}) => (await goLive(env))['db.demo_coupons'];
+      expect(await status()).toBe('FAIL');
+      expect((await previewDemoCleanup(prisma)).coupons.map((c) => [c.code, c.kind])).toEqual([
+        ['FREESHIP', 'seed'],
+        ['WELCOME30', 'seed'],
+        ['XANH10', 'name-only'],
+      ]);
+
+      // DB chỉ còn mã seed (hàng demo đã đổi pancakeId): vẫn là DB có demo, CLI không được thoát 2.
+      const rollback = new Error('rollback');
+      await expect(
+        prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`UPDATE "variations" SET "pancakeId" = 'ithide-' || "pancakeId" WHERE "pancakeId" = ANY($1::text[])`, [...DEMO_VARIATION_PANCAKE_IDS]);
+          await tx.$executeRawUnsafe(`UPDATE "products" SET "pancakeId" = 'ithide-' || "pancakeId" WHERE "pancakeId" = ANY($1::text[])`, [...DEMO_PRODUCT_PANCAKE_IDS]);
+          expect(hasDemoData(await planDemoCleanup(tx))).toBe(true);
+          throw rollback;
+        }),
+      ).rejects.toBe(rollback);
+
+      expect((await applyDemoCleanup(prisma, { coupons: 'expire', keepCoupons: ['WELCOME30'] })).result.couponsExpired).toBe(1);
+      const row = async (id: string) => (await prisma.coupon.findUniqueOrThrow({ where: { id } }));
+      expect((await row(ids.WELCOME30)).isActive).toBe(true);
+      expect((await row(ids.FREESHIP)).isActive).toBe(false);
+      expect(await status()).toBe('FAIL');
+      expect(await status({ GO_LIVE_ACCEPT_DEMO_COUPONS: 'WELCOME30' })).toBe('WARN');
+
+      expect((await applyDemoCleanup(prisma, { coupons: 'expire' })).result.couponsExpired).toBe(1);
+      for (const id of [ids.WELCOME30, ids.FREESHIP]) {
+        const c = await row(id);
+        expect(c.isActive).toBe(false);
+        expect(c.endAt.getTime()).toBeLessThanOrEqual(Date.now());
+      }
+      await expect(coupons().validateAndCompute('WELCOME30', userId, 250_000)).rejects.toThrow(/ngừng áp dụng/);
+      const realXanh = await row(ids.XANH10);
+      expect(realXanh.isActive).toBe(true);
+      expect(realXanh.endAt.toISOString()).toBe('2027-01-01T00:00:00.000Z');
+      const snap = await collectDbSnapshot(prisma, []);
+      const c = evaluateDemoData(snap.demoData, {}).find((r) => r.id === 'db.demo_coupons')!;
+      expect(c.status).toBe('WARN');
+      expect(c.detail).toContain('XANH10');
+    } finally {
+      await prisma.coupon.deleteMany({ where: { id: { in: Object.values(ids) } } });
+      await showMigrationCoupons();
+    }
   });
 
   it('DB không có dòng demo nào: kế hoạch báo không có, hasDemoData=false (điều kiện CLI và --apply dùng để từ chối)', async () => {

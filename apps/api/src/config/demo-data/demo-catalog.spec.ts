@@ -8,6 +8,8 @@ import {
   DEMO_MIGRATION,
   DEMO_PRODUCTS,
   DEMO_VARIATIONS,
+  classifyDemoCoupon,
+  isDemoCouponKind,
 } from './demo-catalog';
 
 const sql = readFileSync(join(__dirname, '../../../prisma/migrations', DEMO_MIGRATION, 'migration.sql'), 'utf8');
@@ -50,9 +52,54 @@ describe('Danh sách dữ liệu demo khớp đúng file migration', () => {
     expect(DEMO_CATEGORIES).toEqual(fromSql);
   });
 
-  it('mã giảm giá: id, code', () => {
-    const fromSql = selectRows('coupons').map(([id, code]) => ({ id, code }));
+  it('mã giảm giá: id, code và điều kiện', () => {
+    const lines = sql.split('\n');
+    const fromSql = lines
+      .map((l, i) => (lines[i - 1]?.startsWith('INSERT INTO coupons ') ? l : null))
+      .filter((l): l is string => l !== null)
+      .map((l) => {
+        // Cột: id, code, type, value, minOrder, maxDiscount, startAt, endAt, usageLimit, perUserLimit, applyTo, isStackable, scope, scopeMeta
+        const v = l.replace(/^SELECT /, '').split(', ').map((x) => (x === 'NULL' ? null : x.replace(/^'(.*)'$/, '$1')));
+        const n = (x: string | null | undefined) => (x == null ? null : Number(x));
+        return {
+          id: v[0],
+          code: v[1],
+          terms: { type: v[2], value: n(v[3]), minOrder: n(v[4]), maxDiscount: n(v[5]), perUserLimit: n(v[9]), scope: v[12] },
+        };
+      });
     expect(DEMO_COUPONS).toEqual(fromSql);
+  });
+
+  it('mã giảm giá: prisma/seed.ts tạo cùng mã với đúng điều kiện đó (nếu seed đổi, phân loại "seed" phải đổi theo)', () => {
+    const seed = readFileSync(join(__dirname, '../../../prisma/seed.ts'), 'utf8');
+    for (const c of DEMO_COUPONS) {
+      const line = seed.split('\n').find((l) => l.includes(`code: '${c.code}'`) && l.includes('scope:'));
+      expect(line).toBeDefined();
+      const num = (k: string) => {
+        const m = new RegExp(`\\b${k}: (\\d+)`).exec(line!);
+        return m ? Number(m[1]) : null;
+      };
+      expect({
+        type: /type: '(\w+)'/.exec(line!)?.[1],
+        value: num('value'),
+        minOrder: num('minOrder'),
+        maxDiscount: num('maxDiscount'),
+        perUserLimit: num('perUserLimit'),
+        scope: /scope: '(\w+)'/.exec(line!)?.[1],
+      }).toEqual(c.terms);
+    }
+  });
+
+  it('classifyDemoCoupon: id migration, hoặc mã + điều kiện khớp (seed) là demo; chỉ trùng tên là mã thật', () => {
+    const w = DEMO_COUPONS[0]!;
+    const row = { id: 'cuid-from-seed', code: w.code, ...w.terms };
+    expect(classifyDemoCoupon({ ...row, id: w.id, value: 99 })).toBe('migration');
+    expect(classifyDemoCoupon(row)).toBe('seed');
+    expect(classifyDemoCoupon({ ...row, value: 50000 })).toBe('name-only');
+    expect(classifyDemoCoupon({ ...row, maxDiscount: 10000 })).toBe('name-only');
+    expect(classifyDemoCoupon({ ...row, scope: 'TIER' })).toBe('name-only');
+    expect(classifyDemoCoupon({ ...row, code: 'TET2027' })).toBeNull();
+    expect(isDemoCouponKind('seed') && isDemoCouponKind('migration') && !isDemoCouponKind('name-only') && !isDemoCouponKind(null)).toBe(true);
   });
 
   it('nhãn hàng: id = md5(tên nhãn) như migration brand_backfill, đủ mọi tên nhãn của sản phẩm demo', () => {

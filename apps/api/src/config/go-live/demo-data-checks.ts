@@ -1,5 +1,14 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { DEMO_COUPONS, DEMO_MIGRATION, DEMO_PRODUCT_WHERE, DEMO_VARIATION_WHERE } from '../demo-data/demo-catalog';
+import {
+  DEMO_COUPONS,
+  DEMO_COUPON_SELECT,
+  DEMO_MIGRATION,
+  DEMO_PRODUCT_WHERE,
+  DEMO_VARIATION_WHERE,
+  classifyDemoCoupon,
+  isDemoCouponKind,
+  type DemoCouponKind,
+} from '../demo-data/demo-catalog';
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
 
 const G_DB = 'Cơ sở dữ liệu';
@@ -11,8 +20,8 @@ export interface DemoDataSnapshot {
   products: { found: number; active: number };
   /** Biến thể demo còn isActive, gồm cả biến thể thêm sau vào sản phẩm demo. */
   activeVariations: number;
-  /** Mã trùng mã demo còn dùng được (isActive, chưa quá endAt). `fromMigration`: đúng dòng migration tạo (id cũng khớp). */
-  liveCoupons: Array<{ code: string; endAt: string; fromMigration: boolean }>;
+  /** Mã trùng tên mã demo còn dùng được (isActive, chưa quá endAt), kèm loại theo `classifyDemoCoupon`. */
+  liveCoupons: Array<{ code: string; endAt: string; kind: DemoCouponKind }>;
 }
 
 type DemoReader = Pick<PrismaClient | Prisma.TransactionClient, 'product' | 'variation' | 'coupon'>;
@@ -24,14 +33,13 @@ export async function collectDemoData(db: DemoReader, now: Date = new Date()): P
   const activeVariations = await db.variation.count({ where: { ...DEMO_VARIATION_WHERE, isActive: true } });
   const coupons = await db.coupon.findMany({
     where: { code: { in: DEMO_COUPONS.map((c) => c.code) }, isActive: true, endAt: { gte: now } },
-    select: { id: true, code: true, endAt: true },
+    select: { ...DEMO_COUPON_SELECT, endAt: true },
     orderBy: { code: 'asc' },
   });
-  const migrationIds = new Set(DEMO_COUPONS.map((c) => c.id));
   return {
     products: { found, active },
     activeVariations,
-    liveCoupons: coupons.map((c) => ({ code: c.code, endAt: c.endAt.toISOString(), fromMigration: migrationIds.has(c.id) })),
+    liveCoupons: coupons.map((c) => ({ code: c.code, endAt: c.endAt.toISOString(), kind: classifyDemoCoupon(c)! })),
   };
 }
 
@@ -72,27 +80,33 @@ export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env, phas
     out.push(pass(G_DB, 'db.demo_products', pTitle, `${s.products.found} sản phẩm demo đều đã tắt`));
   }
 
-  const cTitle = 'Mã giảm giá demo của migration';
+  const cTitle = 'Mã giảm giá demo (migration hoặc seed)';
   const accepted = acceptedCoupons(env);
-  const blocking = s.liveCoupons.filter((c) => c.fromMigration && !accepted.has(c.code));
-  const others = s.liveCoupons.filter((c) => !blocking.includes(c));
+  const demo = s.liveCoupons.filter((c) => isDemoCouponKind(c.kind));
+  const blocking = demo.filter((c) => !accepted.has(c.code));
+  const kept = demo.filter((c) => accepted.has(c.code));
+  const nameOnly = s.liveCoupons.filter((c) => c.kind === 'name-only');
+  const notes = [
+    kept.length > 0 ? `đã chấp nhận giữ: ${couponList(kept)}` : '',
+    nameOnly.length > 0 ? `trùng tên mã demo nhưng điều kiện khác bản demo (coi là mã thật, dọn không đụng): ${couponList(nameOnly)}` : '',
+  ].filter(Boolean);
   if (blocking.length > 0) {
     out.push(
       red(
         'db.demo_coupons',
         cTitle,
-        `còn dùng được, chủ dự án chưa duyệt: ${couponList(blocking)}${others.length > 0 ? `; đã chấp nhận giữ: ${couponList(others)}` : ''}`,
+        `còn dùng được, chủ dự án chưa duyệt: ${couponList(blocking)}${notes.length > 0 ? `; ${notes.join('; ')}` : ''}`,
         `Không giữ: \`pnpm run prisma:cleanup-demo -- --apply --coupons=expire\` (giữ riêng mã được duyệt: thêm --keep-coupon=<mã>; ${CLEANUP_HINT}). Mã chủ dự án duyệt giữ: chạy lại go-live check với GO_LIVE_ACCEPT_DEMO_COUPONS=<mã,...> (mã đó thành WARN).`,
       ),
     );
-  } else if (others.length > 0) {
+  } else if (notes.length > 0) {
     out.push(
       warn(
         G_DB,
         'db.demo_coupons',
         cTitle,
-        `còn dùng được: ${couponList(others)} (đã chấp nhận giữ, hoặc trùng mã demo nhưng không phải dòng migration tạo)`,
-        'Mở Quản trị, Mã giảm giá: xác nhận điều kiện (giá trị, đơn tối thiểu, số lượt, hạn) đúng như chủ dự án duyệt.',
+        `còn dùng được: ${notes.join('; ')}`,
+        'Mở Quản trị, Mã giảm giá: xác nhận điều kiện (giá trị, đơn tối thiểu, số lượt, hạn) của từng mã nêu trên đúng như chủ dự án duyệt.',
       ),
     );
   } else {

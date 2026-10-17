@@ -8,9 +8,9 @@ const FRESH: DemoDataSnapshot = {
   products: { found: 44, active: 44 },
   activeVariations: 48,
   liveCoupons: [
-    { code: 'WELCOME30', endAt: '2026-12-31T17:00:00.000Z', fromMigration: true },
-    { code: 'FREESHIP', endAt: '2026-12-31T17:00:00.000Z', fromMigration: true },
-    { code: 'XANH10', endAt: '2026-12-31T17:00:00.000Z', fromMigration: true },
+    { code: 'WELCOME30', endAt: '2026-12-31T17:00:00.000Z', kind: 'migration' as const },
+    { code: 'FREESHIP', endAt: '2026-12-31T17:00:00.000Z', kind: 'migration' as const },
+    { code: 'XANH10', endAt: '2026-12-31T17:00:00.000Z', kind: 'migration' as const },
   ],
 };
 
@@ -75,9 +75,26 @@ describe('evaluateDemoData', () => {
     expect(ids.map((x) => x.status)).toEqual(['WARN', 'WARN']);
   });
 
-  it('trùng mã demo nhưng không phải dòng migration tạo (id khác): WARN, không FAIL', () => {
-    const r = run({ ...CLEAN, liveCoupons: [{ code: 'WELCOME30', endAt: '2027-03-01T00:00:00.000Z', fromMigration: false }] });
-    expect(byId(r, 'db.demo_coupons').status).toBe('WARN');
+  it('mã do seed tạo (id khác migration, điều kiện như bản demo): sau deploy FAIL như mã migration, trừ khi chấp nhận giữ', () => {
+    const seeded = { ...CLEAN, liveCoupons: [{ code: 'WELCOME30', endAt: '2027-01-01T00:00:00.000Z', kind: 'seed' as const }] };
+    const c = byId(run(seeded), 'db.demo_coupons');
+    expect(c.status).toBe('FAIL');
+    expect(c.detail).toContain('WELCOME30');
+    expect(byId(evaluateDemoData(seeded, GOOD_ENV, 'pre-deploy'), 'db.demo_coupons').status).toBe('WARN');
+    expect(byId(run(seeded, envWith({ GO_LIVE_ACCEPT_DEMO_COUPONS: 'WELCOME30' })), 'db.demo_coupons').status).toBe('WARN');
+  });
+
+  it('chỉ trùng tên mã demo, điều kiện khác (mã thật): WARN và nêu đúng tên mã, không FAIL', () => {
+    const r = run({ ...CLEAN, liveCoupons: [{ code: 'XANH10', endAt: '2027-03-01T00:00:00.000Z', kind: 'name-only' }] });
+    const c = byId(r, 'db.demo_coupons');
+    expect(c.status).toBe('WARN');
+    expect(c.detail).toMatch(/điều kiện khác bản demo.*XANH10/);
+    const mixed = byId(
+      run({ ...CLEAN, liveCoupons: [{ code: 'FREESHIP', endAt: '2027-01-01T00:00:00.000Z', kind: 'seed' }, { code: 'XANH10', endAt: '2027-03-01T00:00:00.000Z', kind: 'name-only' }] }),
+      'db.demo_coupons',
+    );
+    expect(mixed.status).toBe('FAIL');
+    expect(mixed.detail).toMatch(/chưa duyệt: FREESHIP.*điều kiện khác bản demo.*XANH10/);
   });
 
   it('evaluateDb nối thêm hai dòng khi ảnh chụp có demoData, không thêm gì khi thiếu', () => {

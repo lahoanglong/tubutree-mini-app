@@ -134,17 +134,78 @@ export const DEMO_CATEGORIES: ReadonlyArray<{ id: string; slug: string }> = [
   { id: 'cat-skincare', slug: 'my-pham-thien-nhien' },
 ];
 
+/** Điều kiện mã demo, giống hệt giữa migration và `prisma/seed.ts` (chỉ khác id, startAt, endAt). */
+export interface DemoCouponTerms {
+  type: 'AMOUNT' | 'FREESHIP' | 'PERCENT';
+  value: number;
+  minOrder: number;
+  maxDiscount: number | null;
+  perUserLimit: number;
+  scope: 'PUBLIC';
+}
+
 /**
- * Ba mã PUBLIC hạn tới 2026-12-31 mà chủ dự án chưa duyệt: WELCOME30 (30.000đ, đơn từ 199.000đ, không trần tổng lượt,
- * 1 lượt/người), FREESHIP (đơn từ 99.000đ, 3 lượt/người), XANH10 (10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt/người).
- * Mã là khoá unique nhưng trùng mã chưa chắc là dòng của migration (migration bỏ qua khi mã đã có), nên chỉ coi là demo
- * khi cả id lẫn mã khớp.
+ * Ba mã PUBLIC chủ dự án chưa duyệt: WELCOME30 (30.000đ, đơn từ 199.000đ, không trần tổng lượt, 1 lượt/người), FREESHIP
+ * (đơn từ 99.000đ, 3 lượt/người), XANH10 (10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt/người). Migration tạo với id dưới
+ * đây, hạn tới 2026-12-31, và bỏ qua khi mã đã có. `prisma db seed` upsert cùng mã, cùng điều kiện, id cuid mới, hạn tới
+ * 2027-01-01. Xem `classifyDemoCoupon`.
  */
-export const DEMO_COUPONS: ReadonlyArray<{ id: string; code: string }> = [
-  { id: 'cmqfuw9l0000gw1vf8f2wozy0', code: 'WELCOME30' },
-  { id: 'cmqfv2cpl0029zxplw4kcnaji', code: 'FREESHIP' },
-  { id: 'cmqfv2cpn002azxplta2xvgp8', code: 'XANH10' },
+export const DEMO_COUPONS: ReadonlyArray<{ id: string; code: string; terms: DemoCouponTerms }> = [
+  {
+    id: 'cmqfuw9l0000gw1vf8f2wozy0',
+    code: 'WELCOME30',
+    terms: { type: 'AMOUNT', value: 30000, minOrder: 199000, maxDiscount: null, perUserLimit: 1, scope: 'PUBLIC' },
+  },
+  {
+    id: 'cmqfv2cpl0029zxplw4kcnaji',
+    code: 'FREESHIP',
+    terms: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, perUserLimit: 3, scope: 'PUBLIC' },
+  },
+  {
+    id: 'cmqfv2cpn002azxplta2xvgp8',
+    code: 'XANH10',
+    terms: { type: 'PERCENT', value: 10, minOrder: 250000, maxDiscount: 50000, perUserLimit: 2, scope: 'PUBLIC' },
+  },
 ];
+
+/**
+ * - `migration`: đúng dòng migration tạo (id khớp), dù sau đó có ai sửa điều kiện.
+ * - `seed`: id khác nhưng mã và điều kiện khớp bản demo, tức dòng `prisma db seed` tạo trên DB từng chạy seed.
+ * - `name-only`: chỉ trùng mã, điều kiện khác: coi là mã thật chủ shop tạo hoặc đã sửa, dọn không đụng.
+ * Hai loại đầu là mã demo: `--coupons=expire` tắt, go-live sau deploy FAIL.
+ */
+export type DemoCouponKind = 'migration' | 'seed' | 'name-only';
+
+export const DEMO_COUPON_SELECT = {
+  id: true,
+  code: true,
+  type: true,
+  value: true,
+  minOrder: true,
+  maxDiscount: true,
+  perUserLimit: true,
+  scope: true,
+} satisfies Prisma.CouponSelect;
+
+type CouponTermsRow = Prisma.CouponGetPayload<{ select: typeof DEMO_COUPON_SELECT }>;
+
+/** null khi mã không phải mã demo. */
+export function classifyDemoCoupon(row: CouponTermsRow): DemoCouponKind | null {
+  const demo = DEMO_COUPONS.find((c) => c.code === row.code);
+  if (!demo) return null;
+  if (demo.id === row.id) return 'migration';
+  const t = demo.terms;
+  const same =
+    row.type === t.type &&
+    row.value === t.value &&
+    row.minOrder === t.minOrder &&
+    row.maxDiscount === t.maxDiscount &&
+    row.perUserLimit === t.perUserLimit &&
+    row.scope === t.scope;
+  return same ? 'seed' : 'name-only';
+}
+
+export const isDemoCouponKind = (k: DemoCouponKind | null): k is 'migration' | 'seed' => k === 'migration' || k === 'seed';
 
 /**
  * Nhãn mà migration `20260626020000_brand_backfill` tạo từ tên nhãn của sản phẩm demo (id = md5(tên), isPublished=false).

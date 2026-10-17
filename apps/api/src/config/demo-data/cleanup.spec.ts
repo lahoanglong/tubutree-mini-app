@@ -11,7 +11,7 @@ function plan(over: Partial<DemoCleanupPlan> = {}): DemoCleanupPlan {
       { label: 'giỏ hàng', table: 'cart_items', rows: 0 },
     ],
     coupons: [
-      { id: 'cmqfuw9l0000gw1vf8f2wozy0', code: 'WELCOME30', fromMigration: true, isActive: true, endAt: END, live: true, willExpire: true, refs: { redemptions: 0, orders: 0, carts: 0, brandPromotions: 0, missions: 0 } },
+      { id: 'cmqfuw9l0000gw1vf8f2wozy0', code: 'WELCOME30', kind: 'migration', isActive: true, endAt: END, live: true, willExpire: true, refs: { redemptions: 0, orders: 0, carts: 0, brandPromotions: 0, missions: 0 } },
     ],
     categories: [
       { id: 'cat-baby', slug: 'cho-be', exists: true, publicDemo: 5, publicNonDemo: 0 },
@@ -56,9 +56,10 @@ describe('hasDemoData', () => {
     expect(hasDemoData({ ...none, coupons: [] })).toBe(false);
   });
 
-  it('chỉ trùng mã (id khác migration) thì không tính là DB có demo', () => {
+  it('mã do seed tạo (id khác, điều kiện như bản demo) vẫn tính là có demo; chỉ trùng tên thì không', () => {
     const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0 } });
-    expect(hasDemoData({ ...none, coupons: [{ ...none.coupons[0]!, fromMigration: false }] })).toBe(false);
+    expect(hasDemoData({ ...none, coupons: [{ ...none.coupons[0]!, kind: 'name-only' }] })).toBe(false);
+    expect(hasDemoData({ ...none, coupons: [{ ...none.coupons[0]!, kind: 'seed' }] })).toBe(true);
   });
 });
 
@@ -82,6 +83,14 @@ describe('formatPlan', () => {
     expect(text).toContain('THỰC HIỆN');
     expect(text).toMatch(/WELCOME30.*sẽ TẮT/);
     expect(formatPlan(plan(), { apply: true, coupons: 'expire', keepCoupons: ['WELCOME30'] })).toMatch(/WELCOME30.*GIỮ theo --keep-coupon/);
+  });
+
+  it('mã do seed tạo được nêu nguồn và cũng bị tắt; mã chỉ trùng tên thì KHÔNG ĐỤNG', () => {
+    const base = plan().coupons[0]!;
+    const p = plan({ coupons: [{ ...base, id: 'cuid-seed', kind: 'seed' }, { ...base, id: 'cuid-real', code: 'XANH10', kind: 'name-only', willExpire: false }] });
+    const text = formatPlan(p, { apply: false, coupons: 'expire', keepCoupons: [] });
+    expect(text).toMatch(/WELCOME30 \[do seed tạo.*sẽ TẮT/);
+    expect(text).toMatch(/XANH10:.*KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác/);
   });
 
   it('đã dọn: không còn gì để đổi', () => {
