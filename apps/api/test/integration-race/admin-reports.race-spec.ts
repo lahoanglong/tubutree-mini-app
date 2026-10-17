@@ -288,6 +288,49 @@ describe('Báo cáo admin (real Postgres)', () => {
       expect(none.rows).toEqual([]);
       expect(none.totals).toEqual({ newUsers: 0, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0 });
     });
+
+    it('một lần thanh toán tách thành nhiều đơn (cùng checkoutGroup) là MỘT lần mua: không tính đơn hai; doanh thu vẫn cộng mọi đơn trong nhóm', async () => {
+      // 2019-06-05 là thứ Tư, tuần bắt đầu thứ Hai 2019-06-03
+      const born = new Date('2019-06-05T05:00:00Z');
+      const hour = 3600e3;
+      const mk = () => mkUser({ createdAt: born, firstTouchSource: 'split-it' });
+      const order = (userId: string, afterHours: number, over: Partial<Parameters<typeof createOrder>[1]>) =>
+        createOrder(prisma, {
+          userId,
+          status: 'CONFIRMED',
+          paymentMethod: 'ZALOPAY',
+          paymentStatus: 'PAID',
+          createdAt: new Date(born.getTime() + afterHours * hour),
+          ...over,
+        });
+      const group = () => `GRP${randCode(8)}`;
+
+      // X: một giỏ có hàng Tubu và hàng đối tác ra 2 đơn cùng nhóm
+      const x = await mk();
+      const gx = group();
+      await order(x.id, 1, { total: 100_000, checkoutGroup: gx });
+      await order(x.id, 1, { total: 40_000, checkoutGroup: gx, fulfiller: 'MERCHANT' });
+      // Y: hai lần thanh toán riêng
+      const y = await mk();
+      await order(y.id, 1, { total: 100_000 });
+      await order(y.id, 50, { total: 30_000 });
+      // Z: nhóm 2 đơn rồi một lần mua khác 5 ngày sau
+      const z = await mk();
+      const gz = group();
+      await order(z.id, 1, { total: 50_000, checkoutGroup: gz });
+      await order(z.id, 1, { total: 30_000, checkoutGroup: gz });
+      await order(z.id, 120, { total: 25_000 });
+      // W: nhóm 3 đơn, một đơn đã huỷ: còn lại 2 đơn hợp lệ trong cùng nhóm vẫn là một lần mua
+      const w = await mk();
+      const gw = group();
+      await order(w.id, 1, { total: 20_000, checkoutGroup: gw });
+      await order(w.id, 1, { total: 10_000, checkoutGroup: gw });
+      await order(w.id, 1, { total: 99_000, checkoutGroup: gw, status: 'CANCELLED', paymentStatus: 'REFUNDED' });
+
+      const r = await new AdminReportsService(prisma).sourceReport({ from: '2019-06-03', to: '2019-06-09' }, new Date('2019-06-20T00:00:00Z'));
+      const cell = r.rows.find((c) => c.week === '2019-06-03' && c.source === 'split-it');
+      expect(cell).toMatchObject({ newUsers: 4, firstOrderUsers: 4, secondOrderUsers: 2, revenue: 140_000 + 130_000 + 105_000 + 30_000 });
+    });
   });
 
   describe('D1-14: xuất TNCN, lệnh rút tiền, hoàn tiền khách', () => {

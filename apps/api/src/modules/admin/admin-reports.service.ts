@@ -90,7 +90,8 @@ export class AdminReportsService {
   /**
    * Khách mới theo nguồn chạm đầu (User.firstTouchSource) × tuần tạo tài khoản (thứ Hai đầu tuần, giờ VN): bao nhiêu khách có đơn
    * đầu trong 30 ngày sau khi tạo, bao nhiêu có đơn hai trong 30 ngày sau đơn đầu, và doanh thu 30 ngày đầu của nhóm (cùng định nghĩa
-   * doanh thu với KPI: admin-revenue.ts). "Đơn" là đơn còn hiệu lực (đã xác nhận trở đi, không huỷ/trả, không còn chờ thanh toán).
+   * doanh thu với KPI: admin-revenue.ts). "Đơn" là đơn còn hiệu lực (đã xác nhận trở đi, không huỷ/trả, không còn chờ thanh toán);
+   * các đơn cùng checkoutGroup (một lần thanh toán tách theo nơi giao) tính là một lần mua, còn doanh thu vẫn cộng từng đơn.
    *
    * Không tính: tài khoản ADMIN/STAFF; khách cũ được gắn nguồn lúc gộp khách (chạm đầu muộn hơn ngày tạo hơn một ngày), vì họ
    * không phải khách mới do nguồn đó mang về (xem impl/source.md mục 3). Khách chưa có nguồn (tài khoản trước khi có cột) vào "Không rõ".
@@ -112,14 +113,20 @@ export class AdminReportsService {
           AND u.role NOT IN ('ADMIN', 'STAFF')
           AND (u."firstTouchAt" IS NULL OR u."firstTouchAt" <= u."createdAt" + interval '1 day')
       ),
-      valid AS (
+      purchase AS (
+        -- Checkout tách một lần thanh toán thành nhiều đơn (mỗi nơi giao một đơn, cùng checkoutGroup): đó là MỘT lần mua.
         SELECT c.id AS user_id,
-               o."createdAt" AS at,
-               ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY o."createdAt", o.id) AS n
+               COALESCE(o."checkoutGroup", o.code) AS purchase_key,
+               MIN(o."createdAt") AS at
         FROM cohort c
         JOIN orders o ON o."userId" = c.id
         WHERE ${GMV_ORDER_SQL}
           AND o."createdAt" >= c.created_at AND o."createdAt" < c.created_at + ${window2}
+        GROUP BY c.id, COALESCE(o."checkoutGroup", o.code)
+      ),
+      valid AS (
+        SELECT p.user_id, p.at, ROW_NUMBER() OVER (PARTITION BY p.user_id ORDER BY p.at, p.purchase_key) AS n
+        FROM purchase p
       ),
       first_order AS (
         SELECT v.user_id, v.at FROM valid v JOIN cohort c ON c.id = v.user_id WHERE v.n = 1 AND v.at < c.created_at + ${window}
