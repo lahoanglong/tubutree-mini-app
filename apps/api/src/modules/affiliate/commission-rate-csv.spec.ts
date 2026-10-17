@@ -82,3 +82,20 @@ describe('parseRateCsv — CSV "sku,%" dán từ Excel', () => {
     expect(parseRateCsv('A1,10\r\nB2,5\r\n').map((r) => r.rate)).toEqual([10, 5]);
   });
 });
+
+describe('parseRateCsv — ô có ngoặc kép (Excel/Google Sheets xuất CSV)', () => {
+  it('"A2",10 / "A2","10%" / tiêu đề trong ngoặc → SKU không dính dấu ngoặc', () => {
+    const rows = parseRateCsv('"SKU","% hoa hồng"\n"A2",10\n"A3","10%"\nA4;"12"');
+    expect(rows.map((r) => [r.line, r.sku, r.rate, r.problem])).toEqual([
+      [2, 'A2', 10, null],
+      [3, 'A3', 10, null],
+      [4, 'A4', 12, null],
+    ]);
+  });
+
+  it('"7,5" trong ngoặc (tách phẩy) → đọc 7.5 để báo "không phải số nguyên", không phải "thừa cột"', () => {
+    const [row] = parseRateCsv('"A2","7,5"');
+    expect(row).toMatchObject({ sku: 'A2', rate: 7.5, problem: null });
+    expect(rateProblem(row!.rate, 50)).toContain('không phải số nguyên');
+  });
+});

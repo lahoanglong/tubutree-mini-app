@@ -11,6 +11,10 @@ describe('parseSoldExternalCsv — "đã bán ngoài sàn" đọc số chặt', 
     ]);
   });
 
+  it('ô có ngoặc kép: "A1","1,250" → A1, 1250', () => {
+    expect(parseSoldExternalCsv('"SKU","Đã bán"\n"A1","1,250"').map((r) => [r.sku, r.count, r.problem])).toEqual([['A1', 1250, null]]);
+  });
+
   it('0 hợp lệ (đặt lại về 0); dòng tiêu đề bị bỏ', () => {
     expect(parseSoldExternalCsv('SKU,Đã bán\nA1,0').map((r) => [r.line, r.sku, r.count, r.problem])).toEqual([[2, 'A1', 0, null]]);
   });

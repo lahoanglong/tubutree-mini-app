@@ -1,3 +1,5 @@
+import { splitSkuCsvLine } from '../../common/sku-csv';
+
 /**
  * % hoa hồng CTV của biến thể (`Variation.affiliateRate`) là PHẦN TRĂM: 10 nghĩa là 10% — createCommissionForOrder tính
  * `floor(tiền dòng × rate / 100)`. Khác các khoá cấu hình lưu phân số (0.1), nên luật nhập ghi rõ đơn vị ở mọi câu lỗi.
@@ -50,7 +52,7 @@ const HEADER_SKU_CELLS = new Set(['sku', 'mã', 'ma', 'mã sku', 'ma sku', 'mã 
 
 /**
  * Đọc CSV "sku,%" dán từ Excel. Cột tách bằng tab, dấu chấm phẩy hoặc dấu phẩy (xét theo từng dòng: có tab thì tách tab, có `;`
- * thì tách `;`, còn lại tách `,`). Ô % nhận `10`, `10%`. Số lẻ (`7.5`, `0.1`, hay `7,5` khi không tách bằng dấu phẩy) vẫn đọc
+ * thì tách `;`, còn lại tách `,`; ô trong ngoặc kép được bỏ ngoặc — splitSkuCsvLine). Ô % nhận `10`, `10%`. Số lẻ (`7.5`, `0.1`, hay `7,5` khi tách bằng `;`/tab hoặc nằm trong ngoặc kép) vẫn đọc
  * ra số để bước kiểm mức báo "không phải số nguyên" kèm gợi ý, thay vì câu chung "không phải số". Dòng đầu là tiêu đề (cột đầu đúng là "SKU"/"Mã"/"Mã hàng"… và cột % không phải số) thì bỏ. Không bao giờ bỏ im lặng một dòng có dữ liệu: dòng đọc
  * không được trả về kèm `problem`.
  */
@@ -61,9 +63,7 @@ export function parseRateCsv(csv: string): RateCsvRow[] {
   lines.forEach((rawLine, idx) => {
     const line = rawLine.trim();
     if (!line) return;
-    const delim = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
-    const cells = line.split(delim).map((c) => c.trim());
-    while (cells.length > 2 && cells[cells.length - 1] === '') cells.pop();
+    const { delim, cells } = splitSkuCsvLine(line);
     const sku = cells[0] ?? '';
     const input = cells.length >= 2 ? cells.slice(1).join(delim) : '';
     const isFirst = !seenData;
@@ -80,7 +80,7 @@ export function parseRateCsv(csv: string): RateCsvRow[] {
           : 'thừa cột — mỗi dòng chỉ gồm "sku,%"';
     } else {
       const cell = (cells[1] ?? '').replace(/%$/, '').trim();
-      const normalized = delim === ',' ? cell : cell.replace(',', '.');
+      const normalized = cell.replace(',', '.');
       if (!/^\d+(\.\d+)?$/.test(normalized)) row.problem = `cột % không phải số — ${RATE_INPUT_HINT}`;
       else row.rate = Number(normalized);
     }

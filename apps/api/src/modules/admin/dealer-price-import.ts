@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { splitSkuCsvLine } from '../../common/sku-csv';
 
 /**
  * Nhập giá sỉ đại lý theo bậc từ Excel. Giá sỉ > 0 được DealerService.unitPrice ưu tiên tuyệt đối, nên một giá đọc sai
@@ -59,9 +60,7 @@ export function parseDealerPriceCsv(csv: string): DealerPriceCsvRow[] {
   csv.split(/\r?\n/).forEach((rawLine, idx) => {
     const line = rawLine.trim();
     if (!line) return;
-    const delim = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
-    const cells = line.split(delim).map((c) => c.trim());
-    while (cells.length > 2 && cells[cells.length - 1] === '') cells.pop();
+    const { delim, cells } = splitSkuCsvLine(line);
     const sku = cells[0] ?? '';
     const input = cells.slice(1).join(delim);
     const isFirst = !seenData;

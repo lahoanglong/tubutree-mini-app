@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { splitSkuCsvLine } from '../../common/sku-csv';
 import { HEADER_SKU_CELLS, parseWholeNumber } from './dealer-price-import';
 
 export type SoldExternalCsvRow = { line: number; sku: string; count: number | null; problem: string | null };
@@ -13,9 +14,7 @@ export function parseSoldExternalCsv(csv: string): SoldExternalCsvRow[] {
   csv.split(/\r?\n/).forEach((rawLine, idx) => {
     const line = rawLine.trim();
     if (!line) return;
-    const delim = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
-    const cells = line.split(delim).map((c) => c.trim());
-    while (cells.length > 2 && cells[cells.length - 1] === '') cells.pop();
+    const { delim, cells } = splitSkuCsvLine(line);
     const sku = cells[0] ?? '';
     const isFirst = !seenData;
     seenData = true;

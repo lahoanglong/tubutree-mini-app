@@ -101,3 +101,15 @@ describe('sàn giá sỉ theo chiết khấu tối đa cho đại lý (dealer.ma
     expect(await run('19.999')).toBe('OUT_OF_RANGE');
   });
 });
+
+describe('parseDealerPriceCsv — ô có ngoặc kép (Excel/Google Sheets xuất CSV)', () => {
+  it('"A2",185000 / "A3","185,000" / A4;"185.000" / tiêu đề trong ngoặc → SKU không dính dấu ngoặc, giá đúng', () => {
+    const rows = parseDealerPriceCsv('"SKU","Giá sỉ"\n"A2",185000\n"A3","185,000"\nA4;"185.000"\n"A ""5""",90000');
+    expect(rows.map((r) => [r.line, r.sku, r.price, r.problem])).toEqual([
+      [2, 'A2', 185_000, null],
+      [3, 'A3', 185_000, null],
+      [4, 'A4', 185_000, null],
+      [5, 'A "5"', 90_000, null],
+    ]);
+  });
+});
