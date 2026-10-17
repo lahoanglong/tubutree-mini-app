@@ -3,6 +3,7 @@
  * lỗi). Luật khớp DTO phía BE: apps/api/src/modules/loyalty/dto/loyalty-staff.dto.ts.
  */
 import { ApiError } from './client-api';
+import { formatVnd } from './format-vnd';
 
 export const RECEIPT_ID_RE = /^[A-Za-z0-9._\-/#]+$/;
 export const RECEIPT_ID_MIN = 3;
@@ -40,7 +41,7 @@ export function parseVndInput(raw: string): number | null {
 
 export function orderTotalError(n: number | null): string | null {
   if (n == null) return 'Nhập tổng tiền hoá đơn.';
-  if (n < ORDER_TOTAL_MIN) return `Hoá đơn tối thiểu ${ORDER_TOTAL_MIN.toLocaleString('vi-VN')}đ.`;
+  if (n < ORDER_TOTAL_MIN) return `Hoá đơn tối thiểu ${formatVnd(ORDER_TOTAL_MIN)}.`;
   if (n > ORDER_TOTAL_MAX) return 'Tổng tiền hoá đơn quá lớn.';
   return null;
 }

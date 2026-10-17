@@ -49,7 +49,6 @@ const NUMBER_TO_LOCALE_STRING: Record<string, { count: number; why: string }> = 
   'components/admin/pos-screen.tsx': { count: 2, why: 'tổng Điểm Xanh của hội viên' },
   'lib/admin-config-forms.ts': { count: 2, why: 'cận min và max của ô cấu hình số nguyên' },
   'lib/checkout-points.ts': { count: 1, why: 'group(n): nhóm nghìn của số điểm' },
-  'lib/loyalty-pos.ts': { count: 1, why: 'ORDER_TOTAL_MIN (ngưỡng tiền hoá đơn)' },
   'lib/format-vnd.ts': { count: 1, why: 'formatVnd: số tiền' },
 };
 

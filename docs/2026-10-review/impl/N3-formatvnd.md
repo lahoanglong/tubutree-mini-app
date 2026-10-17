@@ -5,14 +5,17 @@ Mục 46af0664f1 (phần app web). Tạo apps/web/src/lib/format-vnd.ts, không 
 
 Allow-list NUMBER_TO_LOCALE_STRING: grep cho thấy api.ts và shop-client.ts chỉ có đúng một toLocaleString (trong formatVnd), nên bỏ hai dòng đó và thêm lib/format-vnd.ts (count 1, số tiền).
 
+Sau review (commit tiếp theo): shop-client.ts chỉ cần re-export nên đổi thành `export { formatVnd } from './format-vnd'`. lib/loyalty-pos.ts còn một bản số tiền viết tay (`ORDER_TOTAL_MIN.toLocaleString('vi-VN')đ`), đổi sang formatVnd, chuỗi lỗi giữ nguyên, rồi bỏ dòng loyalty-pos khỏi allow-list.
+
 ## Test
 format-vnd.spec.ts: ca 0, 289000, 1000000 (chuỗi lấy bằng chạy bản cũ: 0đ, 289.000đ, 1.000.000đ) và kiểm api/shop-client re-export cùng hàm bằng toBe. Đỏ trước khi sửa vì chưa có ./format-vnd.
 
 ## Kiểm
 vitest các spec format-vnd, api, no-raw-date-format và spec có formatVnd: xanh. tsc --noEmit apps/web: exit 0. ESLint --max-warnings=0 năm file đã sửa: exit 0.
+Sau commit tiếp theo: vitest toàn bộ apps/web 137 file, 2111 test xanh; tsc --noEmit sạch; ESLint --max-warnings=0 năm file lib: exit 0.
 
 ## Chưa verify
-Next build, Playwright, full suite.
+Next build, Playwright.
 
 ## Rủi ro
 Thấp: hành vi hàm không đổi, chỉ đổi nơi định nghĩa.
