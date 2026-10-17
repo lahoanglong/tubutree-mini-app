@@ -19,7 +19,7 @@ function stateOf(r: MerchantReturn): { tone: 'warning' | 'info' | 'success'; lab
  * "Hàng trả về": yêu cầu trả hàng của đơn gian hàng tự giao. Tubu Tree xét và hoàn tiền cho khách; hàng về gian hàng, gian hàng
  * bấm "Đã nhận hàng trả" thì tồn kho sản phẩm mới được cộng lại. Ẩn hẳn khi không có yêu cầu nào.
  */
-export function MerchantReturnsSection() {
+export function MerchantReturnsSection({ showEmpty = false }: { showEmpty?: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: MERCHANT_RETURNS_KEY, queryFn: listMerchantReturns });
   const received = useMutation({
@@ -31,7 +31,7 @@ export function MerchantReturnsSection() {
   });
   if (q.isError) return <p className="text-sm text-danger-fg">Không tải được danh sách hàng trả về.</p>;
   const rows = q.data ?? [];
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return showEmpty && !q.isLoading ? <p className="text-sm text-stone-600">Chưa có hàng khách trả về.</p> : null;
   const waiting = rows.filter((r) => r.status === 'APPROVED' && !r.receivedAt).length;
 
   return (
