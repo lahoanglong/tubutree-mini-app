@@ -9,7 +9,7 @@ vi.mock('@/components/site-footer', () => ({ default: () => <footer data-testid=
 vi.mock('@/components/hide-on-portals', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('@/components/storefront-tracker', () => ({ ReferralCapture: () => null }));
 
-import RootLayout, { metadata } from './layout';
+import RootLayout, { metadata, viewport } from './layout';
 
 // PC-7: ô tìm kiếm không được nháy trên host gian hàng CTV — xem tenantHostBootScript ở lib/site.ts.
 describe('RootLayout — đánh dấu host gian hàng trước khi vẽ', () => {
@@ -56,5 +56,18 @@ describe('biểu tượng site và ảnh chia sẻ mặc định (BUYERWEB-16)',
 
   it('metadata gốc khai tên site và ngôn ngữ cho og', () => {
     expect(metadata.openGraph).toMatchObject({ siteName: 'Tubu Tree', locale: 'vi_VN' });
+  });
+});
+
+// env(safe-area-inset-bottom) chỉ có giá trị khi trang xin viewport-fit=cover: không có thì thanh dính đáy đè lên thanh home của iPhone.
+describe('RootLayout — viewport', () => {
+  it('xin viewport-fit=cover, giữ width=device-width và scale 1', () => {
+    expect(viewport).toMatchObject({ viewportFit: 'cover', width: 'device-width', initialScale: 1 });
+  });
+
+  it('globals.css chừa đệm đáy theo --sticky-bar-h (thanh dính đáy tự đo), có mặc định cho lúc chưa đo', () => {
+    const css = readFileSync(fileURLToPath(new URL('./globals.css', import.meta.url)), 'utf8');
+    expect(css).toMatch(/--sticky-bar-h:\s*calc\(6rem/);
+    expect(css).toMatch(/body\.has-sticky-bar\s*\{[^}]*padding-bottom:\s*var\(--sticky-bar-h\)/);
   });
 });

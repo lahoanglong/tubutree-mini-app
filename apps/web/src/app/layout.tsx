@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from './providers';
 import SiteHeader from '@/components/site-header';
@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   description: 'Mỹ phẩm & đồ tiêu dùng thiên nhiên Tubu Tree.',
   openGraph: { type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN' },
 };
+
+// viewport-fit=cover để env(safe-area-inset-bottom) có giá trị: thanh dính đáy chừa chỗ cho thanh home của iPhone.
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
