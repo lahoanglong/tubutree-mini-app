@@ -527,7 +527,7 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
 
 2. Chủ shop quyết về 3 mã và ghi vào nhóm chat: (a) tắt cả ba; (b) giữ mã nào (vd `WELCOME30` làm mã ra mắt), tắt phần còn lại; (c) chưa quyết, giữ nguyên cả ba (go-live check bước 10 sẽ FAIL ở `db.demo_coupons` cho tới khi quyết). Lưu ý cho chủ shop: hệ thống đã tự tặng mỗi khách mới một mã chào mừng riêng 30.000đ cho đơn từ 199.000đ (cấu hình `voucher.welcome_amount`, `voucher.welcome_min_order`); giữ thêm `WELCOME30` thì khách mới được giảm chào mừng hai lần, mỗi mã một đơn.
 
-3. Thực hiện (một transaction: lỗi thì không đổi gì). Chọn đúng một dòng theo quyết định ở điểm 2. `--expect-db` bắt buộc: lệnh so với tên DB mà API đang nối, khác nhau thì in `--expect-db=… khác DB đang nối (…)`, không làm gì; khi đó dừng, kiểm lại `.env`.
+3. Thực hiện (một transaction: lỗi thì không đổi gì). Trước khi chạy: `ls .demo-cleanup-apply.txt` phải báo không có file. Có file (của lần deploy trước) thì đổi tên nó (`mv .demo-cleanup-apply.txt .demo-cleanup-apply.$(date +%Y%m%d%H%M).txt`), KHÔNG để `tee` ghi đè: file đó chứa khối hoàn tác. Chọn đúng một dòng theo quyết định ở điểm 2. `--expect-db` bắt buộc: lệnh so với tên DB mà API đang nối, khác nhau thì in `--expect-db=… khác DB đang nối (…)`, không làm gì; khi đó dừng, kiểm lại `.env`.
 
    ```bash
    $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" --coupons=expire 2>&1 | tee .demo-cleanup-apply.txt                          # (a)
@@ -535,7 +535,7 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
    $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" 2>&1 | tee .demo-cleanup-apply.txt                                           # (c)
    ```
 
-   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Cuối kết quả có khối `-- HOÀN TÁC` (các câu SQL đưa đúng những dòng vừa đổi về như cũ, gồm hạn cũ của từng mã); file `.demo-cleanup-apply.txt` giữ khối đó, không xoá file này. Chạy lại đúng lệnh đó phải in `Đã tắt 0 sản phẩm, 0 biến thể`.
+   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Cuối kết quả có khối `-- HOÀN TÁC` (các câu SQL đưa đúng những dòng vừa đổi về như cũ, gồm hạn cũ của từng mã); file `.demo-cleanup-apply.txt` giữ khối đó, không xoá, không ghi đè file này. Kiểm chạy lại: dùng đúng lệnh vừa chạy nhưng `tee` sang file KHÁC, vd thay `tee .demo-cleanup-apply.txt` bằng `tee .demo-cleanup-rerun.txt`. Kết quả phải in `Đã tắt 0 sản phẩm, 0 biến thể` và `-- HOÀN TÁC: lần chạy này không đổi dòng nào.` Lỡ tee lần chạy lại vào `.demo-cleanup-apply.txt` thì khối hoàn tác thật đã mất: báo tech lead ngay (hoàn tác khi đó phải dựng tay từ bản xem trước `.demo-cleanup-preview.txt`).
 
    Nhìn nhanh (go-live check ở bước 10 mới là phép đối chiếu đúng danh sách):
 
