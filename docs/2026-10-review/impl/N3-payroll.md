@@ -6,10 +6,13 @@
 Không có bước đỏ trước khi sửa vì đây là xoá mã chết. Cách kiểm thay thế: grep rỗng sau xoá, tsc xanh (không còn tham chiếu), vitest các spec dùng payroll-api xanh, ESLint 0 cảnh báo.
 
 ## Lệnh kiểm
-- git grep -nw adjustPayroll: không kết quả (exit 1)
+- git grep -nw adjustPayroll -- apps scripts: không kết quả (exit 1). Không dùng pathspec docs vì chính báo cáo này có chữ adjustPayroll.
 - apps/miniapp: npx tsc --noEmit: exit 0
 - npx eslint --max-warnings=0 src/services/payroll-api.ts: exit 0
 - npx vitest run src/pages/admin.spec.tsx src/pages/my-payroll.spec.tsx: 2 file, 59 test xanh, exit 0
+
+## Ghi nhận ngoài phạm vi
+Review tìm thêm năm export client không ai gọi, chưa xoá vì cần đối chiếu backend và kế hoạch UI trước: attendance-api.ts adminAddSession, game-api.ts buySeeds, shifts-api.ts updateTemplate, storefront-api.ts reorderCollections và reorderItems. Mọi export còn lại của payroll-api.ts đều có nơi dùng.
 
 ## Chưa verify
 Playwright e2e, capture/axe, full suite.
