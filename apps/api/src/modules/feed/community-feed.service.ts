@@ -8,6 +8,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 import { startOfVnDay } from '../../common/vn-time';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
+import { DEFAULT_UNANSWERED_ALERT_HOURS, listUnansweredQuestions, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from './community-unanswered';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
 const LEVEL_NAMES: Record<number, string> = {
@@ -52,6 +53,11 @@ export { containsBannedContent } from './content-filter';
 
 const DEFAULT_REJECT_REASON = 'nội dung chưa phù hợp với nội quy cộng đồng';
 const REJECT_TITLE_PREVIEW = 40;
+
+/** Tin "bài của bạn có người thích/bình luận" gộp theo bài trong chừng này phút (0 = tắt). Khoá chỉnh được ở SystemConfig. */
+const AUTHOR_NOTIFY_INTERVAL_KEY = 'community.author_notify_interval_minutes';
+const DEFAULT_AUTHOR_NOTIFY_INTERVAL_MIN = 60;
+const MAX_AUTHOR_NOTIFY_INTERVAL_MIN = 1440;
 
 /** Tên bài trong thông báo: tiêu đề, bài không tiêu đề thì lấy đầu nội dung. */
 function previewTitle(title: string | null, body: string): string {
@@ -609,7 +615,7 @@ export class CommunityFeedService {
   async toggleReaction(userId: string, postId: string) {
     const post = await this.prisma.feedPost.findUnique({
       where: { id: postId },
-      select: { id: true, status: true },
+      select: { id: true, userId: true, status: true, title: true, body: true },
     });
     // Chỉ bài ĐÃ DUYỆT: trước đây thả tim được cho cả bài PENDING/REMOVED của người khác nếu
     // biết id — đẩy lượt tim để bài leo hạng "Phổ biến" ngay khi được duyệt.
@@ -631,12 +637,14 @@ export class CommunityFeedService {
       });
       return { liked: false };
     }
+    let created = false;
     try {
       // Cùng transaction để likeCount không lệch khi tạo tim thất bại (P2002 → rollback cả hai).
       await this.prisma.$transaction([
         this.prisma.feedReaction.create({ data: { postId, userId } }),
         this.prisma.feedPost.update({ where: { id: postId }, data: { likeCount: { increment: 1 } } }),
       ]);
+      created = true;
       // Task 9: chỉ phát khi THẬT SỰ tạo được reaction ở request này — nhánh P2002 bên dưới nghĩa
       // là thiết bị khác đã tạo trước, không phải hành động của request này.
       await this.analytics.recordBestEffort({
@@ -649,14 +657,54 @@ export class CommunityFeedService {
       // P2002 = thiết bị kia vừa tạo xong. Kết quả cuối cùng vẫn là "đã thích".
       if ((err as { code?: string } | null)?.code !== 'P2002') throw err;
     }
+    if (created) {
+      await this.notifyAuthorOfActivity(post, userId, 'COMMUNITY_POST_LIKED', async () => ({
+        title: previewTitle(post.title, post.body),
+        post_id: post.id,
+      }));
+    }
     return { liked: true };
+  }
+
+  /** Cửa sổ gộp tin tương tác theo bài, mili giây; null = đã tắt. Giá trị cấu hình sai thì dùng mặc định thay vì tắt/mở toang. */
+  private async authorNotifyWindowMs(): Promise<number | null> {
+    const raw = await this.config.get<unknown>(AUTHOR_NOTIFY_INTERVAL_KEY, DEFAULT_AUTHOR_NOTIFY_INTERVAL_MIN);
+    const minutes =
+      typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= MAX_AUTHOR_NOTIFY_INTERVAL_MIN
+        ? raw
+        : DEFAULT_AUTHOR_NOTIFY_INTERVAL_MIN;
+    return minutes === 0 ? null : minutes * 60_000;
+  }
+
+  /**
+   * Báo chủ bài khi người khác thích/bình luận (mọi loại bài; câu trả lời cho QUESTION đã có tin riêng). Thích và bình luận
+   * dùng chung một khoá gộp theo bài nên một bài viral cũng chỉ làm điện thoại tác giả rung một lần mỗi cửa sổ. Không bao giờ
+   * làm hỏng thao tác chính.
+   */
+  private async notifyAuthorOfActivity(
+    post: { id: string; userId: string },
+    actorId: string,
+    template: 'COMMUNITY_POST_LIKED' | 'COMMUNITY_POST_COMMENTED',
+    buildData: () => Promise<Record<string, string>>,
+  ): Promise<void> {
+    if (!post.userId || post.userId === actorId) return;
+    try {
+      const windowMs = await this.authorNotifyWindowMs();
+      if (windowMs === null) return;
+      await this.notifications?.notify(post.userId, template, await buildData(), {
+        dedupeKey: `post-activity:${post.id}`,
+        dedupeWithinMs: windowMs,
+      });
+    } catch (err) {
+      this.logger.warn(`notify(${template}) failed for post ${post.id}: ${(err as Error).message}`);
+    }
   }
 
   async addComment(userId: string, role: string, postId: string, body: string) {
     const text = (body ?? '').trim();
     if (!text) throw new BadRequestException('Nội dung bình luận trống.');
     if (text.length > MAX_COMMENT) throw new BadRequestException('Bình luận quá dài.');
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true } });
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true, body: true } });
     // Chỉ bài ĐÃ DUYỆT mới bình luận được. Bài PENDING không hiện trên bảng tin nhưng trước
     // đây vẫn nhận bình luận nếu biết id — hai tài khoản của cùng một người hỏi–đáp trên bài
     // vô hình đó để rút Điểm Xanh thưởng (bình luận, câu trả lời hay nhất) mà không ai kiểm
@@ -695,6 +743,11 @@ export class CommunityFeedService {
           this.logger.warn(`bumpReputation(answer) failed for ${userId}: ${(err as Error).message}`);
         }
       }
+    } else {
+      await this.notifyAuthorOfActivity(post, userId, 'COMMUNITY_POST_COMMENTED', async () => {
+        const commenter = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+        return { author: commenter?.fullName ?? 'Thành viên', title: previewTitle(post.title, post.body), post_id: post.id };
+      });
     }
     return { id: comment.id };
   }
@@ -894,7 +947,7 @@ export class CommunityFeedService {
   }
 
   async deletePost(userId: string, role: string, postId: string) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true } });
+    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true, status: true, title: true, body: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền xoá.');
     // Trả lại điểm reputation đã cộng từ bài này TRƯỚC khi gỡ — nếu không, đăng-ăn-điểm-rồi-xoá
@@ -902,9 +955,41 @@ export class CommunityFeedService {
     await this.reverseReputationForPost(post.userId, postId);
     // ADMIN gỡ bài của người khác = hành vi kiểm duyệt → rút cờ tin cậy. Tác giả tự xoá bài
     // của mình thì không (không có vi phạm nào được xác nhận).
-    if (post.userId !== userId && role === 'ADMIN') await this.revokeTrust(post.userId);
+    const moderated = post.userId !== userId && role === 'ADMIN';
+    if (moderated) await this.revokeTrust(post.userId);
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
+    if (moderated && post.status !== 'REMOVED') await this.notifyPostHidden(postId, post);
     return { ok: true };
+  }
+
+  /**
+   * Kiểm duyệt ẩn một bài (đã đăng hoặc đang chờ) kèm lý do cho tác giả. Cùng hệ quả điểm/tin cậy với từ chối và với ADMIN xoá
+   * bài người khác, nhưng tin gửi đi nói "đã được ẩn" chứ không phải "chưa được đăng". Gọi lại trên bài đã gỡ không đảo điểm
+   * hay báo lần hai.
+   */
+  async hidePost(postId: string, reason?: string) {
+    const post = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, status: true, title: true, body: true },
+    });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại.');
+    if (post.status === 'REMOVED') return { ok: true };
+    await this.reverseReputationForPost(post.userId, postId);
+    await this.revokeTrust(post.userId);
+    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
+    await this.notifyPostHidden(postId, post, reason);
+    return { ok: true };
+  }
+
+  private async notifyPostHidden(postId: string, post: { userId: string; title: string | null; body: string }, reason?: string) {
+    try {
+      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_HIDDEN', {
+        title: previewTitle(post.title, post.body),
+        reason: reason?.trim() || DEFAULT_REJECT_REASON,
+      });
+    } catch (err) {
+      this.logger.warn(`notify(hidden) failed ${postId}: ${(err as Error).message}`);
+    }
   }
 
   /** Báo cáo bài/bình luận vi phạm — tạo CommunityReport OPEN. */
@@ -952,6 +1037,47 @@ export class CommunityFeedService {
       category: p.category?.name ?? null,
       createdAt: p.createdAt,
     }));
+  }
+
+  /**
+   * Bài đã đăng cho người kiểm duyệt: ghim lên đầu rồi mới nhất trước (cùng thứ tự bảng tin), phân trang cursor. Không trả
+   * ảnh/thẻ: màn kiểm duyệt chỉ cần đủ chữ để quyết định ẩn hay ghim.
+   */
+  async adminPublished(take = 30, cursor?: string) {
+    const size = Math.max(1, Math.min(take, 50));
+    const posts = await this.prisma.feedPost.findMany({
+      where: { status: 'PUBLISHED' },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      take: size + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      include: { user: { select: { fullName: true } }, category: { select: { name: true } } },
+    });
+    const hasMore = posts.length > size;
+    const page = hasMore ? posts.slice(0, size) : posts;
+    const counts = await this.countsForPage(page.map((p) => p.id));
+    return {
+      items: page.map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        title: p.title,
+        excerpt: p.body.slice(0, 200),
+        author: p.user.fullName ?? 'Bạn Tubu',
+        category: p.category?.name ?? null,
+        createdAt: p.createdAt,
+        isPinned: p.isPinned,
+        likeCount: counts.likes.get(p.id) ?? 0,
+        commentCount: counts.comments.get(p.id) ?? 0,
+      })),
+      nextCursor: hasMore ? page[page.length - 1]!.id : null,
+    };
+  }
+
+  /** Câu hỏi đã chờ quá ngưỡng (mặc định 24 giờ) mà chưa ai trả lời, cũ nhất trước — cùng điều kiện với số trên "Việc cần xử lý". */
+  async adminUnanswered(take = 50) {
+    const now = new Date();
+    const cutoff = unansweredCutoff(await this.config.get<unknown>(UNANSWERED_ALERT_HOURS_KEY, DEFAULT_UNANSWERED_ALERT_HOURS), now);
+    const rows = await listUnansweredQuestions(this.prisma, cutoff, Math.max(1, Math.min(take, 100)));
+    return rows.map((r) => ({ ...r, waitingHours: Math.floor((now.getTime() - r.createdAt.getTime()) / 3_600_000) }));
   }
 
   /** Danh sách report đang mở (OPEN), cũ nhất trước. */
