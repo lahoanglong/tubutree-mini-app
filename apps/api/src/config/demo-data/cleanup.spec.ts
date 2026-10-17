@@ -4,7 +4,7 @@ const END = new Date('2026-12-31T17:00:00.000Z');
 
 function plan(over: Partial<DemoCleanupPlan> = {}): DemoCleanupPlan {
   return {
-    products: { expected: 44, found: 44, active: 44, idMismatch: [] },
+    products: { expected: 44, found: 44, active: 44, idMismatch: [], editedAfterLoad: [] },
     variations: { expected: 48, found: 48, active: 48, extraActive: 0, skuToPrefix: 48 },
     references: [
       { label: 'dòng đơn hàng', table: 'order_items', rows: 2, detail: '1 đơn' },
@@ -65,13 +65,13 @@ describe('parseCleanupArgs', () => {
 describe('hasDemoData', () => {
   it('có sản phẩm, biến thể hoặc mã đúng dòng migration là có', () => {
     expect(hasDemoData(plan())).toBe(true);
-    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0, skuToPrefix: 0 } });
+    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [], editedAfterLoad: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0, skuToPrefix: 0 } });
     expect(hasDemoData(none)).toBe(true);
     expect(hasDemoData({ ...none, coupons: [] })).toBe(false);
   });
 
   it('mã do seed tạo (id khác, điều kiện như bản demo) vẫn tính là có demo; chỉ trùng tên thì không', () => {
-    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0, skuToPrefix: 0 } });
+    const none = plan({ products: { expected: 44, found: 0, active: 0, idMismatch: [], editedAfterLoad: [] }, variations: { expected: 48, found: 0, active: 0, extraActive: 0, skuToPrefix: 0 } });
     expect(hasDemoData({ ...none, coupons: [{ ...none.coupons[0]!, kind: 'name-only' }] })).toBe(false);
     expect(hasDemoData({ ...none, coupons: [{ ...none.coupons[0]!, kind: 'seed' }] })).toBe(true);
   });
@@ -110,7 +110,7 @@ describe('formatPlan', () => {
 
   it('đã dọn: không còn gì để đổi', () => {
     const done = plan({
-      products: { expected: 44, found: 44, active: 0, idMismatch: [] },
+      products: { expected: 44, found: 44, active: 0, idMismatch: [], editedAfterLoad: [] },
       variations: { expected: 48, found: 48, active: 0, extraActive: 0, skuToPrefix: 0 },
     });
     expect(formatPlan(done, { apply: false, coupons: 'keep', keepCoupons: [], expectDb: null })).toMatch(/đang bán 0 → không cần đổi/);
@@ -119,13 +119,26 @@ describe('formatPlan', () => {
   it('id lệch migration và biến thể thêm sau đều được nêu', () => {
     const text = formatPlan(
       plan({
-        products: { expected: 44, found: 44, active: 44, idMismatch: [{ id: 'cmx', pancakeId: 'seed-p-fuwa-floor' }] },
+        products: { expected: 44, found: 44, active: 44, idMismatch: [{ id: 'cmx', pancakeId: 'seed-p-fuwa-floor' }], editedAfterLoad: [] },
         variations: { expected: 48, found: 48, active: 48, extraActive: 2, skuToPrefix: 48 },
       }),
       { apply: false, coupons: 'keep', keepCoupons: [], expectDb: null },
     );
     expect(text).toContain('seed-p-fuwa-floor');
     expect(text).toMatch(/2 biến thể khác/);
+  });
+
+  it('sản phẩm demo sửa sau lúc migration nạp: nêu tên, bảo kiểm tay, không tự bỏ qua', () => {
+    const edited = { id: 'p-fuwa-floor', pancakeId: 'seed-p-fuwa-floor', name: 'Nước lau sàn Fuwa3e', updatedAt: new Date('2026-08-01T03:00:00.000Z') };
+    const text = formatPlan(
+      plan({ products: { expected: 44, found: 44, active: 44, idMismatch: [], editedAfterLoad: [edited] } }),
+      { apply: false, coupons: 'keep', keepCoupons: [], expectDb: null },
+    );
+    expect(text).toContain('KIỂM TAY TRƯỚC KHI APPLY: 1 sản phẩm demo');
+    expect(text).toContain('--apply vẫn tắt');
+    expect(text).toContain('Nước lau sàn Fuwa3e (seed-p-fuwa-floor, id p-fuwa-floor), sửa lần cuối 2026-08-01T03:00:00.000Z');
+    expect(text).toMatch(/đang bán 44 → sẽ TẮT 44/);
+    expect(formatPlan(plan(), { apply: false, coupons: 'keep', keepCoupons: [], expectDb: null })).not.toContain('KIỂM TAY');
   });
 });
 

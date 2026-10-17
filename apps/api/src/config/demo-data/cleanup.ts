@@ -7,6 +7,7 @@ import {
   DEMO_COUPON_SELECT,
   DEMO_MIGRATION,
   DEMO_PRODUCTS,
+  DEMO_PRODUCTS_LOADED_AT,
   DEMO_PRODUCT_PANCAKE_IDS,
   DEMO_PRODUCT_WHERE,
   DEMO_VARIATIONS,
@@ -106,7 +107,17 @@ export interface DemoCouponRow {
 }
 
 export interface DemoCleanupPlan {
-  products: { expected: number; found: number; active: number; idMismatch: Array<{ id: string; pancakeId: string }> };
+  /**
+   * `editedAfterLoad`: sản phẩm demo còn đang bán mà updatedAt muộn hơn lúc migration nạp, tức có người sửa qua ứng dụng
+   * (có thể đã dùng làm hàng thật). Chỉ báo để kiểm tay, `--apply` vẫn tắt.
+   */
+  products: {
+    expected: number;
+    found: number;
+    active: number;
+    idMismatch: Array<{ id: string; pancakeId: string }>;
+    editedAfterLoad: Array<{ id: string; pancakeId: string; name: string; updatedAt: Date }>;
+  };
   /**
    * `extraActive`: biến thể đang bán nằm dưới sản phẩm demo nhưng không có trong migration (thêm sau); cũng bị tắt.
    * `skuToPrefix`: biến thể demo (theo danh sách migration) còn giữ SKU gốc, `--apply` đổi thành `DEMO-<sku>`.
@@ -149,7 +160,11 @@ const NON_DEMO_PRODUCT_WHERE = {
 
 /** Chỉ đọc. Gọi tuần tự để chạy được trong một transaction (READ ONLY khi xem trước). */
 export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<DemoCleanupPlan> {
-  const products = await db.product.findMany({ where: DEMO_PRODUCT_WHERE, select: { id: true, pancakeId: true, isActive: true } });
+  const products = await db.product.findMany({
+    where: DEMO_PRODUCT_WHERE,
+    select: { id: true, pancakeId: true, isActive: true, name: true, updatedAt: true },
+    orderBy: { updatedAt: 'desc' },
+  });
   const migrationIdByPancake = new Map(DEMO_PRODUCTS.map((p) => [p.pancakeId, p.id]));
   const idMismatch = products
     .filter((p) => migrationIdByPancake.get(p.pancakeId!) !== p.id)
@@ -232,7 +247,15 @@ export async function planDemoCleanup(db: Db, now: Date = new Date()): Promise<D
   }
 
   return {
-    products: { expected: DEMO_PRODUCTS.length, found: products.length, active: products.filter((p) => p.isActive).length, idMismatch },
+    products: {
+      expected: DEMO_PRODUCTS.length,
+      found: products.length,
+      active: products.filter((p) => p.isActive).length,
+      idMismatch,
+      editedAfterLoad: products
+        .filter((p) => p.isActive && p.updatedAt > DEMO_PRODUCTS_LOADED_AT)
+        .map((p) => ({ id: p.id, pancakeId: p.pancakeId!, name: p.name, updatedAt: p.updatedAt })),
+    },
     variations: {
       expected: DEMO_VARIATIONS.length,
       found: variations.filter(isListed).length,
@@ -351,6 +374,12 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
   const p = plan.products;
   L.push('', `1. Sản phẩm demo: tìm thấy ${p.found}/${p.expected}, đang bán ${p.active} → ${p.active > 0 ? `sẽ TẮT ${p.active} (isActive=false, không xoá)` : 'không cần đổi'}`);
   for (const m of p.idMismatch) L.push(`   lưu ý: ${m.pancakeId} mang id ${m.id}, khác id trong migration (DB từng chạy seed?); vẫn là hàng demo, vẫn tắt`);
+  if (p.editedAfterLoad.length > 0) {
+    L.push(
+      `   KIỂM TAY TRƯỚC KHI APPLY: ${p.editedAfterLoad.length} sản phẩm demo đang bán đã được sửa sau lúc migration nạp (${DEMO_PRODUCTS_LOADED_AT.toISOString()}); có thể ai đó đã dùng làm hàng thật. --apply vẫn tắt các sản phẩm này:`,
+    );
+    for (const e of p.editedAfterLoad) L.push(`   - ${e.name} (${e.pancakeId}, id ${e.id}), sửa lần cuối ${e.updatedAt.toISOString()}`);
+  }
 
   const v = plan.variations;
   L.push(`2. Biến thể demo: tìm thấy ${v.found}/${v.expected}, đang bán ${v.active} → ${v.active > 0 ? `sẽ TẮT ${v.active}` : 'không cần đổi'}`);

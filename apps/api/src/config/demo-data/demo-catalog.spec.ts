@@ -7,6 +7,7 @@ import {
   DEMO_COUPONS,
   DEMO_MIGRATION,
   DEMO_PRODUCTS,
+  DEMO_PRODUCTS_LOADED_AT,
   DEMO_VARIATIONS,
   classifyDemoCoupon,
   isDemoCouponKind,
@@ -33,6 +34,17 @@ describe('Danh sách dữ liệu demo khớp đúng file migration', () => {
     expect(sql).toContain('-- variations: 48 dòng');
     expect(sql).toContain('-- coupons: 3 dòng');
     expect([DEMO_CATEGORIES.length, DEMO_PRODUCTS.length, DEMO_VARIATIONS.length, DEMO_COUPONS.length]).toEqual([7, 44, 48, 3]);
+  });
+
+  it('DEMO_PRODUCTS_LOADED_AT: sau mọi updatedAt migration ghi cho sản phẩm demo, cách cái muộn nhất dưới 1 giây', () => {
+    const lines = sql.split('\n');
+    const stamps = lines
+      .filter((_, i) => lines[i - 1]?.startsWith('INSERT INTO products '))
+      .map((l) => [...l.matchAll(/'(2026-[0-9T:.-]+Z)'/g)].map((m) => new Date(m[1]!).getTime()).at(-1)!);
+    expect(stamps).toHaveLength(44);
+    const latest = Math.max(...stamps);
+    expect(DEMO_PRODUCTS_LOADED_AT.getTime()).toBeGreaterThan(latest);
+    expect(DEMO_PRODUCTS_LOADED_AT.getTime() - latest).toBeLessThan(1000);
   });
 
   it('sản phẩm: id, pancakeId, slug', () => {

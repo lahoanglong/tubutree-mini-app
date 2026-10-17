@@ -123,6 +123,12 @@ export const DEMO_VARIATIONS: readonly DemoVariation[] = [
   { id: 'cmqfv3q6m002ncgco4pgk0rh7', pancakeId: 'seed-SOK-CH-500', productId: 'p-sokfram-chia', sku: 'SOK-CH-500' },
 ];
 
+/**
+ * Migration ghi createdAt = updatedAt cho 44 sản phẩm, trễ nhất 2026-06-15T16:46:25.484Z (làm tròn lên giây). Không migration
+ * nào sau đó đổi updatedAt của chúng, nên sản phẩm demo có updatedAt muộn hơn là đã có người sửa qua ứng dụng.
+ */
+export const DEMO_PRODUCTS_LOADED_AT = new Date('2026-06-15T16:46:26.000Z');
+
 /** Giữ nguyên khi dọn (chỉ báo danh mục nào sẽ trống): đồng bộ Pancake không ghi categoryIds, danh mục do admin quyết. */
 export const DEMO_CATEGORIES: ReadonlyArray<{ id: string; slug: string }> = [
   { id: 'cat-baby', slug: 'cho-be' },

@@ -78,6 +78,8 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     const sql = readApiSql(`prisma/migrations/${DEMO_MIGRATION}/migration.sql`);
     for (const stmt of splitSqlStatements(sql).filter((s) => s.startsWith('INSERT INTO'))) await prisma.$executeRawUnsafe(stmt);
     await prisma.product.updateMany({ where: { pancakeId: { in: [...DEMO_PRODUCT_PANCAKE_IDS] } }, data: { isActive: true } });
+    // updateMany đẩy updatedAt lên lúc chạy; đưa về đúng giá trị migration ghi (createdAt = updatedAt).
+    await prisma.$executeRawUnsafe(`UPDATE "products" SET "updatedAt" = "createdAt" WHERE "pancakeId" = ANY($1::text[])`, [...DEMO_PRODUCT_PANCAKE_IDS]);
     await prisma.variation.updateMany({ where: { pancakeId: { in: [...DEMO_VARIATION_PANCAKE_IDS] } }, data: { isActive: true } });
     await prisma.$executeRawUnsafe(
       `UPDATE "variations" SET "sku" = substr("sku", 6) WHERE "pancakeId" = ANY($1::text[]) AND "sku" LIKE 'DEMO-%'`,
@@ -158,9 +160,19 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(await goLive()).toEqual({ 'db.demo_products': 'FAIL', 'db.demo_coupons': 'FAIL' });
   });
 
-  it('xem trước: đúng số dòng của migration, nêu dòng tham chiếu, không ghi gì', async () => {
+  it('xem trước: đúng số dòng của migration, nêu dòng tham chiếu, nêu sản phẩm demo đã sửa sau khi nạp, không ghi gì', async () => {
+    expect((await previewDemoCleanup(prisma)).products.editedAfterLoad).toEqual([]);
+    // Admin sửa một sản phẩm demo qua ứng dụng (Prisma đẩy updatedAt).
+    const fresh = await prisma.product.findUniqueOrThrow({ where: { id: demoProduct.id } });
+    const edited = await prisma.product.update({ where: { id: demoProduct.id }, data: { name: fresh.name } });
     const plan = await previewDemoCleanup(prisma);
-    expect(plan.products).toEqual({ expected: 44, found: 44, active: 44, idMismatch: [] });
+    expect(plan.products).toEqual({
+      expected: 44,
+      found: 44,
+      active: 44,
+      idMismatch: [],
+      editedAfterLoad: [{ id: demoProduct.id, pancakeId: demoProduct.pancakeId, name: fresh.name, updatedAt: edited.updatedAt }],
+    });
     expect(plan.variations).toEqual({ expected: 48, found: 48, active: 48, extraActive: 0, skuToPrefix: 48 });
     const refs = Object.fromEntries(plan.references.map((r) => [r.table, r.rows]));
     expect(refs).toMatchObject({ order_items: 1, cart_items: 1, flash_sale_items: 1, reviews: 1, wishlists: 1, storefront_items: 1 });
