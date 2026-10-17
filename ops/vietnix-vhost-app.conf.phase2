@@ -31,6 +31,16 @@
     ProxyRequests Off
     RequestHeader set X-Forwarded-Proto "https"
 
-    ProxyPass / http://127.0.0.1:14000/
+    # Nén phản hồi (JSON, HTML, JS, CSS, SVG). Next đã tự nén phản hồi của nó nên mod_deflate
+    # bỏ qua phản hồi đã có Content-Encoding. Thiếu mod_deflate thì khối này bị bỏ qua, không gây lỗi: kiểm bằng
+    # `bash ops/check-edge.sh` (dòng "nén"). Bật ☁ cam của Cloudflare thì Cloudflare tự nén ở biên, khối này vẫn vô hại.
+    <IfModule mod_deflate.c>
+        AddOutputFilterByType DEFLATE application/json application/manifest+json application/javascript text/javascript
+        AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml application/xml application/xhtml+xml image/svg+xml
+    </IfModule>
+
+    # Next standalone đóng kết nối rảnh sau KEEP_ALIVE_TIMEOUT=55000 ms (docker-compose.vietnix.yml); `ttl=30` bỏ kết nối rảnh
+    # trước mốc đó. Dự phòng nếu vẫn thấy 502 lẻ: thêm `disablereuse=On` sau `ttl=30`.
+    ProxyPass / http://127.0.0.1:14000/ ttl=30
     ProxyPassReverse / http://127.0.0.1:14000/
 </VirtualHost>

@@ -48,6 +48,17 @@
     ProxyRequests Off
     RequestHeader set X-Forwarded-Proto "https"
 
-    ProxyPass / http://127.0.0.1:14001/
+    # Nén phản hồi (JSON, HTML, JS, CSS, SVG). API Nest không tự nén; Next đã tự nén nên mod_deflate
+    # bỏ qua phản hồi đã có Content-Encoding. Thiếu mod_deflate thì khối này bị bỏ qua, không gây lỗi: kiểm bằng
+    # `bash ops/check-edge.sh` (dòng "nén"). Bật ☁ cam của Cloudflare thì Cloudflare tự nén ở biên, khối này vẫn vô hại.
+    <IfModule mod_deflate.c>
+        AddOutputFilterByType DEFLATE application/json application/manifest+json application/javascript text/javascript
+        AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml application/xml application/xhtml+xml image/svg+xml
+    </IfModule>
+
+    # Apache tái dùng kết nối rảnh tới Node. `ttl=30` bỏ kết nối rảnh quá 30 giây, ngắn hơn keepAliveTimeout 125 giây của API
+    # (apps/api/src/config/http-timeouts.ts), nên Apache không gặp kết nối Node vừa đóng (502 lẻ "error reading status line", A3-010).
+    # Dự phòng nếu vẫn thấy 502 lẻ trong error_log: thêm `disablereuse=On` sau `ttl=30` (mỗi request một kết nối mới).
+    ProxyPass / http://127.0.0.1:14001/ ttl=30
     ProxyPassReverse / http://127.0.0.1:14001/
 </VirtualHost>
