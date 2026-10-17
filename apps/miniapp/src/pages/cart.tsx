@@ -19,6 +19,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { formatVnd } from '../utils/format';
 import { clampPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
@@ -214,13 +215,16 @@ export default function CartPage() {
         }
       />
       {empty ? (
-        <EmptyState
-          art="basket"
-          heading={vi.cart.emptyHeading}
-          body={vi.cart.emptyBody}
-          ctaLabel={vi.cart.emptyCta}
-          onCta={() => navigate('/browse')}
-        />
+        <>
+          <EmptyState
+            art="basket"
+            heading={vi.cart.emptyHeading}
+            body={vi.cart.emptyBody}
+            ctaLabel={vi.cart.emptyCta}
+            onCta={() => navigate('/browse')}
+          />
+          <SuggestedRail listSource="cart_empty" />
+        </>
       ) : (
         <>
           {/* Chọn tất cả */}

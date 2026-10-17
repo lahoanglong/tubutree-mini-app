@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   fetchRelated: vi.fn(),
   fetchBoughtTogether: vi.fn(),
   fetchReviews: vi.fn(),
+  fetchProducts: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -22,6 +23,7 @@ vi.mock('../services/shop-api', () => ({
   fetchRelated: mocks.fetchRelated,
   fetchBoughtTogether: mocks.fetchBoughtTogether,
   fetchReviews: mocks.fetchReviews,
+  fetchProducts: mocks.fetchProducts,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
   addToCart: vi.fn(),
@@ -138,5 +140,23 @@ describe('ProductDetailPage ghi "Đã xem gần đây" (spec 5b.4)', () => {
     expect(await screen.findByText('Không tìm thấy sản phẩm này.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Về trang chủ' })).toBeInTheDocument();
+  });
+
+  it('404: màn "Không tìm thấy" có tiêu đề riêng và kệ "Có thể bạn thích" để khách đi tiếp; lỗi mạng thì không có kệ', async () => {
+    mocks.fetchProducts.mockResolvedValue({
+      data: [{ id: 'g1', slug: 'g1', brand: 'Tubu', name: 'Gợi ý một', thumbnail: null, basePrice: 90_000, salePrice: null, isFeatured: false, inStock: true }],
+      meta: { page: 1, limit: 4, total: 1 },
+    });
+    mocks.fetchProduct.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    const first = renderPdp('zzz');
+    expect(await screen.findByText('Không tìm thấy')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Có thể bạn thích' })).toBeInTheDocument();
+    expect(screen.getByText('Gợi ý một')).toBeInTheDocument();
+    first.unmount();
+
+    mocks.fetchProduct.mockRejectedValue(new Error('mạng'));
+    renderPdp('zzz');
+    expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Có thể bạn thích' })).toBeNull();
   });
 });

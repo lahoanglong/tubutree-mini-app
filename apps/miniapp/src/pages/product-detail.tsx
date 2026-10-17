@@ -27,6 +27,7 @@ import { fetchReviews } from '../services/shop-api';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
@@ -259,7 +260,11 @@ export default function ProductDetailPage() {
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
         {isNotFoundError(product.error) ? (
-          <ErrorState message="Không tìm thấy sản phẩm này." onRetry={() => undefined} onHome={() => navigate('/')} />
+          <>
+            <ErrorState message="Không tìm thấy sản phẩm này." onRetry={() => undefined} onHome={() => navigate('/')} />
+            {/* Khách từ link sàn/CTV vào sản phẩm đã gỡ: cho họ chỗ đi tiếp thay vì ngõ cụt. */}
+            <SuggestedRail listSource="pdp_not_found" />
+          </>
         ) : (
           <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
         )}

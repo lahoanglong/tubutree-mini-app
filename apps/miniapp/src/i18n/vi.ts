@@ -29,6 +29,14 @@ export const vi = {
     generic: 'Có chút trục trặc, thử lại nhé',
     loadFailed: 'Chưa tải được nội dung',
     sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
+    title: 'Chưa tải được trang này',
+    notFoundTitle: 'Không tìm thấy',
+    needHelp: 'Cần hỗ trợ?',
+    callHotline: (phone: string) => `Gọi ${phone}`,
+  },
+
+  suggested: {
+    title: 'Có thể bạn thích',
   },
 
   reviews: {
@@ -79,6 +87,7 @@ export const vi = {
     seeAllLabel: (title: string) => `Xem tất cả ${title}`,
     retry: 'Thử lại',
     retryLabel: (title: string) => `Thử lại ${title}`,
+    loadErrorTitle: 'Chưa tải được Trang chủ',
     strip: {
       title: 'Đơn của bạn',
       shipping: (code: string) => `Đơn ${code} đang giao`,
@@ -507,6 +516,8 @@ export const vi = {
   },
 
   storefront: {
+    publicTitle: 'Gian hàng',
+    notFound: 'Gian hàng này không tồn tại hoặc đã ngừng hoạt động.',
     statsOtherProducts: (n: number) => `${n} sản phẩm khác`,
     statsOrderLevel: 'Phí ship, giảm giá, chênh lệch hoàn tiền',
     renameCollection: 'Đổi tên bộ sưu tập',
