@@ -21,7 +21,7 @@ import {
   type FeedPostKind,
   type CreateEventInput,
 } from '../services/feed-api';
-import { getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -184,7 +184,7 @@ function PendingCard({
       </Text>
       {post.images[0] && (
         <img
-          src={post.images[0]}
+          src={apiMediaUrl(post.images[0])}
           alt=""
           loading="lazy"
           style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 200, objectFit: 'cover' }}

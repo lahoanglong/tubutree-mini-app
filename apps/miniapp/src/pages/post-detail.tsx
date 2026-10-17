@@ -15,7 +15,7 @@ import {
   adminPin,
   type FeedComment,
 } from '../services/feed-api';
-import { getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -342,7 +342,7 @@ export default function PostDetailPage() {
             {p.images.map((src, i) => (
               <img
                 key={i}
-                src={src}
+                src={apiMediaUrl(src)}
                 alt=""
                 loading="lazy"
                 style={{ width: '100%', borderRadius: 'var(--radius-media)', objectFit: 'cover' }}

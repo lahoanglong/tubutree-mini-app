@@ -52,6 +52,13 @@ describe('CommunityModerationTab — bài chờ duyệt', () => {
     expect(r.container.querySelector('img[src="https://cdn.example.com/a.jpg"]')).not.toBeNull();
   });
 
+  it('ảnh chờ duyệt do API phục vụ (đường dẫn kèm mã v) hiện qua gốc API, không nhúng base64', async () => {
+    const ref = `/feed/posts/p1/images/0?v=${'d'.repeat(32)}`;
+    const { r } = setup({ '/feed/admin/pending': { body: [{ ...PENDING[0], images: [ref, 'javascript:alert(1)'] }] } });
+    await flush();
+    expect([...r.container.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toEqual([`http://localhost:3001/api${ref}`]);
+  });
+
   it('Duyệt gọi approve đúng bài rồi làm mới danh sách', async () => {
     const { api, r } = setup({ '/feed/admin/p1/approve': { body: { ok: true } } });
     await flush();

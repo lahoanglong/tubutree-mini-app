@@ -42,7 +42,10 @@ vi.mock('../services/feed-api', () => ({
   closeEvent: mocks.closeEvent,
   pickEventWinner: mocks.pickEventWinner,
 }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../services/api', () => ({
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  apiMediaUrl: (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `https://api.test${src}` : src),
+}));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
     const state = { user: mocks.auth.role ? { role: mocks.auth.role } : null };
@@ -165,6 +168,13 @@ describe('CommunityModerationPage — bài chờ duyệt', () => {
     await screen.findByText('Tiêu đề a');
     expect(container.querySelectorAll('img')).toHaveLength(1);
     expect(container.querySelector('img')!.getAttribute('src')).toBe('https://img.test/1.jpg');
+  });
+
+  it('ảnh chờ duyệt do API phục vụ (đường dẫn tương đối kèm mã v) được ghép với gốc API', async () => {
+    mocks.adminPendingPosts.mockResolvedValue([PENDING('a', { images: [`/feed/posts/a/images/0?v=${'b'.repeat(32)}`] })]);
+    const { container } = renderPage();
+    await screen.findByText('Tiêu đề a');
+    expect(container.querySelector('img')!.getAttribute('src')).toBe(`https://api.test/feed/posts/a/images/0?v=${'b'.repeat(32)}`);
   });
 
   it('Duyệt: gửi đúng id, báo đã duyệt, tải lại danh sách', async () => {

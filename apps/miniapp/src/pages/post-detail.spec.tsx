@@ -42,7 +42,10 @@ vi.mock('../services/feed-api', () => ({
   removeComment: mocks.removeComment,
   adminPin: mocks.adminPin,
 }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../services/api', () => ({
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  apiMediaUrl: (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `https://api.test${src}` : src),
+}));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
     const state = { status: mocks.auth.status, user: { role: mocks.auth.role }, login: mocks.login };
@@ -146,6 +149,18 @@ describe('PostDetailPage — hiển thị (hành vi giữ nguyên khi chuyển D
     expect(pending.textContent).toBe('Chờ duyệt');
     expect(pending.querySelector('svg')).not.toBeNull();
     expect(screen.getByText(/Đã ghim/)).toBeInTheDocument();
+  });
+
+  it('ảnh bài: đường dẫn do API phục vụ được ghép gốc API, URL https và data URL (API cũ) giữ nguyên', async () => {
+    const v = 'c'.repeat(32);
+    stub(POST({ images: [`/feed/posts/p1/images/0?v=${v}`, 'https://res.cloudinary.com/demo/a.jpg', 'data:image/jpeg;base64,QUJD'], imageCount: 3 }));
+    const { container } = renderPage();
+    await screen.findByText('Mẹo rửa bình sữa bằng nước rửa chén sinh học.');
+    expect([...container.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([
+      `https://api.test/feed/posts/p1/images/0?v=${v}`,
+      'https://res.cloudinary.com/demo/a.jpg',
+      'data:image/jpeg;base64,QUJD',
+    ]);
   });
 
   it('chưa đăng nhập: cổng đăng nhập, bấm nút gọi login, không tải bài', () => {

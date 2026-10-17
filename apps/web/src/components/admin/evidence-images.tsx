@@ -4,15 +4,16 @@ import { useState } from 'react';
 import { apiMediaUrl } from '@/lib/client-api';
 
 const RASTER_DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
-const API_IMAGE_REF_RE = /^\/(?:returns|reviews)\/[A-Za-z0-9_-]{1,64}\/images\/\d{1,2}\?v=[0-9a-f]{8,64}$/;
+const API_IMAGE_REF_RE = /^\/(?:returns|reviews|feed\/posts)\/[A-Za-z0-9_-]{1,64}\/images\/\d{1,2}\?v=[0-9a-f]{8,64}$/;
 
 /**
  * Ảnh minh chứng đổi trả do khách gửi — dữ liệu không tin cậy (C-050). Chỉ hiện:
  * - https:// → ảnh + link mở tab mới;
  * - ảnh base64 raster (fallback của ImageUpload miniapp khi chưa cấu hình Cloudinary) → chỉ ảnh, không link
  *   (data: SVG/HTML chạy được script, còn trong <img> ảnh raster thì không);
- * - đường dẫn ảnh do chính API phục vụ (danh sách không nhúng base64 nữa: "/returns/:id/images/:i?v=…") → ghép gốc API,
- *   ảnh + link mở ảnh lớn. Chỉ khớp đúng dạng đó, đường dẫn tương đối khác bị từ chối.
+ * - đường dẫn ảnh do chính API phục vụ (danh sách không nhúng base64 nữa: "/returns/:id/images/:i?v=…", đánh giá và bài
+ *   cộng đồng "/feed/posts/:id/images/:i?v=…" tương tự) → ghép gốc API, ảnh + link mở ảnh lớn. Chỉ khớp đúng dạng đó,
+ *   đường dẫn tương đối khác bị từ chối.
  * Hàng cũ trong DB lưu trước khi API chặn vẫn có thể chứa javascript:/data:text/html, nên lọc cả ở đây.
  */
 export function safeEvidenceImage(raw: string): { src: string; href: string | null } | null {
