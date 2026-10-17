@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { DEMO_COUPONS, DEMO_MIGRATION, DEMO_PRODUCT_WHERE, DEMO_VARIATION_WHERE } from '../demo-data/demo-catalog';
-import { fail, pass, warn, type CheckResult, type Env } from './types';
+import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
 
 const G_DB = 'Cơ sở dữ liệu';
 const CLEANUP_HINT = 'runbook mục 5, bước 7b';
@@ -46,16 +46,20 @@ function acceptedCoupons(env: Env): Set<string> {
 
 const couponList = (cs: DemoDataSnapshot['liveCoupons']) => cs.map((c) => `${c.code} (hạn ${c.endAt.slice(0, 10)})`).join(', ');
 
-/** Hàm thuần: không chạm DB. Thiếu ảnh chụp (fixture cũ) thì không có dòng nào. */
-export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env): CheckResult[] {
+/**
+ * Hàm thuần: không chạm DB. Thiếu ảnh chụp (fixture cũ) thì không có dòng nào. Trước deploy chỉ WARN: dọn là bước 7b trong
+ * cửa sổ deploy (API đang dừng, khách chưa thấy gì); sau deploy còn demo là FAIL.
+ */
+export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env, phase: GoLivePhase = 'post-deploy'): CheckResult[] {
   if (!s) return [];
   const out: CheckResult[] = [];
+  const red = (id: string, title: string, detail: string, hint: string) =>
+    phase === 'pre-deploy' ? warn(G_DB, id, title, `${detail} (sẽ dọn ở ${CLEANUP_HINT})`, hint) : fail(G_DB, id, title, detail, hint);
 
   const pTitle = 'Sản phẩm demo của migration';
   if (s.products.active > 0 || s.activeVariations > 0) {
     out.push(
-      fail(
-        G_DB,
+      red(
         'db.demo_products',
         pTitle,
         `${s.products.active} sản phẩm, ${s.activeVariations} biến thể demo đang bán (migration ${DEMO_MIGRATION} nạp vào mọi DB mới): khách thấy và đặt được hàng giả`,
@@ -74,8 +78,7 @@ export function evaluateDemoData(s: DemoDataSnapshot | undefined, env: Env): Che
   const others = s.liveCoupons.filter((c) => !blocking.includes(c));
   if (blocking.length > 0) {
     out.push(
-      fail(
-        G_DB,
+      red(
         'db.demo_coupons',
         cTitle,
         `còn dùng được, chủ dự án chưa duyệt: ${couponList(blocking)}${others.length > 0 ? `; đã chấp nhận giữ: ${couponList(others)}` : ''}`,

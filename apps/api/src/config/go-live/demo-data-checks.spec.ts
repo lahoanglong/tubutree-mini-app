@@ -65,6 +65,16 @@ describe('evaluateDemoData', () => {
     expect(all.detail).toMatch(/đã chấp nhận giữ: WELCOME30/);
   });
 
+  it('trước deploy (--phase=pre-deploy): còn demo là WARN vì bước dọn nằm trong cửa sổ deploy; sau deploy là FAIL', () => {
+    const pre = evaluateDemoData(FRESH, GOOD_ENV, 'pre-deploy');
+    expect(pre.map((x) => x.status)).toEqual(['WARN', 'WARN']);
+    for (const x of pre) expect(x.detail).toContain('bước 7b');
+    expect(evaluateDemoData(FRESH, GOOD_ENV, 'post-deploy').map((x) => x.status)).toEqual(['FAIL', 'FAIL']);
+    expect(evaluateDemoData(CLEAN, GOOD_ENV, 'pre-deploy').map((x) => x.status)).toEqual(['PASS', 'PASS']);
+    const ids = evaluateDb(dbWith({ demoData: FRESH }), { phase: 'pre-deploy', env: GOOD_ENV }).filter((x) => x.id.startsWith('db.demo_'));
+    expect(ids.map((x) => x.status)).toEqual(['WARN', 'WARN']);
+  });
+
   it('trùng mã demo nhưng không phải dòng migration tạo (id khác): WARN, không FAIL', () => {
     const r = run({ ...CLEAN, liveCoupons: [{ code: 'WELCOME30', endAt: '2027-03-01T00:00:00.000Z', fromMigration: false }] });
     expect(byId(r, 'db.demo_coupons').status).toBe('WARN');

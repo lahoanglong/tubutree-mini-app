@@ -412,6 +412,6 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     ...gomdonToggleChecks(s, ctx.env),
     adminCheck(s),
     znsCheck(s),
-    ...evaluateDemoData(s.demoData, ctx.env),
+    ...evaluateDemoData(s.demoData, ctx.env, ctx.phase),
   ];
 }
