@@ -1,0 +1,321 @@
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
+import {
+  AFFILIATE_MAX_RATE_KEY,
+  DEFAULT_AFFILIATE_MAX_RATE_PCT,
+  RATE_CSV_MAX_ROWS,
+  parseRateCsv,
+  rateProblem,
+  sanitizeMaxRate,
+} from './commission-rate-csv';
+
+export type RateImportStatus = 'OK' | 'UNCHANGED' | 'NOT_FOUND' | 'INVALID' | 'OVER_CAP' | 'DUPLICATE';
+
+export type RateImportRow = {
+  line: number;
+  sku: string;
+  input: string;
+  status: RateImportStatus;
+  rate: number | null;
+  currentRate: number | null;
+  productName: string | null;
+  variationName: string | null;
+  message: string | null;
+};
+
+/** Trạng thái chặn cả lần nhập: giá trị admin muốn đặt không rõ ràng, áp một phần thì CTV hưởng sai mà không ai biết. */
+const BLOCKING: ReadonlySet<RateImportStatus> = new Set(['INVALID', 'OVER_CAP', 'DUPLICATE']);
+
+type Db = PrismaService | Prisma.TransactionClient;
+
+const toRate = (d: Prisma.Decimal | null): number | null => (d === null ? null : Number(d));
+
+/** Mỗi dòng log tối đa ngần này thay đổi — lần nhập lớn tách nhiều dòng thay vì một dòng vài trăm KB. */
+const LOG_CHUNK = 100;
+
+/**
+ * Admin đặt % hoa hồng CTV cho biến thể (D1-01/D3-01). `Variation.affiliateRate` là nguồn duy nhất của % hoa hồng
+ * (createCommissionForOrder, order-reversal) mà trước đây không có đường ghi nào, nên mọi đơn CTV với hàng đồng bộ từ Pancake
+ * ra 0đ. Đồng bộ Pancake không ghi cột này (pancake-sync.service upsertProduct), nên mức admin đặt không bị ghi đè.
+ *
+ * Không có bảng nhật ký chung: mọi lần ghi để lại log có id admin cùng giá trị cũ → mới (theo SKU).
+ * Không tự đặt % mặc định nào: biến thể chưa đặt giữ NULL (hoa hồng 0đ) tới khi admin chọn mức.
+ */
+@Injectable()
+export class CommissionAdminService {
+  private readonly logger = new Logger(CommissionAdminService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: SystemConfigService,
+  ) {}
+
+  async maxRate(): Promise<number> {
+    return sanitizeMaxRate(await this.config.get<unknown>(AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT));
+  }
+
+  private async assertRate(rate: unknown): Promise<number> {
+    const problem = rateProblem(rate, await this.maxRate());
+    if (problem) throw new BadRequestException(`% hoa hồng ${problem}.`);
+    return rate as number;
+  }
+
+  /**
+   * Sản phẩm kèm biến thể để đặt %, sắp theo tên, phân trang keyset (cursor = id sản phẩm cuối trang trước).
+   * `missing`: chỉ sản phẩm còn biến thể đang bán chưa có % (NULL — khác 0 là admin cố ý không trả hoa hồng).
+   */
+  async listProducts(opts: { q?: string; missing?: boolean; cursor?: string; take: number }) {
+    const q = opts.q?.trim();
+    const where: Prisma.ProductWhereInput = {
+      ...(q
+        ? {
+            OR: [
+              { nameSearch: { contains: escapePrismaLike(foldVietnamese(q)) } },
+              { variations: { some: { sku: { contains: escapePrismaLike(q), mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
+      ...(opts.missing ? { variations: { some: { isActive: true, affiliateRate: null } } } : {}),
+    };
+    const [rows, maxRate, missing, missingTubu] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        take: opts.take + 1,
+        ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+        select: {
+          id: true,
+          name: true,
+          thumbnail: true,
+          brand: true,
+          isActive: true,
+          affiliateBlocked: true,
+          approvalStatus: true,
+          storefrontId: true,
+          variations: {
+            orderBy: [{ name: 'asc' }, { id: 'asc' }],
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+              retailPrice: true,
+              salePrice: true,
+              isActive: true,
+              affiliateRate: true,
+              dealerPrices: true,
+            },
+          },
+        },
+      }),
+      this.maxRate(),
+      this.prisma.variation.count({ where: { isActive: true, affiliateRate: null } }),
+      this.prisma.variation.count({ where: { isActive: true, affiliateRate: null, product: { storefrontId: null } } }),
+    ]);
+    const page = rows.slice(0, opts.take);
+    return {
+      items: page.map(({ storefrontId, variations, ...p }) => ({
+        ...p,
+        isPartner: storefrontId !== null,
+        variations: variations.map((v) => ({ ...v, affiliateRate: toRate(v.affiliateRate) })),
+      })),
+      nextCursor: rows.length > opts.take ? (page[page.length - 1]?.id ?? null) : null,
+      maxRate,
+      summary: { missing, missingTubu },
+    };
+  }
+
+  /** Đặt % cho một biến thể (kể cả biến thể đang tắt — bật lại thì đã có %). */
+  async setVariationRate(adminId: string, variationId: string, rate: number) {
+    await this.assertRate(rate);
+    const before = await this.prisma.variation.findUnique({ where: { id: variationId }, select: { id: true, sku: true, affiliateRate: true } });
+    if (!before) throw new NotFoundException('Không tìm thấy biến thể.');
+    const after = await this.prisma.variation.update({
+      where: { id: variationId },
+      data: { affiliateRate: new Prisma.Decimal(rate) },
+      select: { id: true, sku: true, affiliateRate: true },
+    });
+    this.logger.log(`Admin ${adminId} đặt % hoa hồng CTV ${before.sku}: ${toRate(before.affiliateRate) ?? 'chưa có'} → ${rate}%.`);
+    return { id: after.id, sku: after.sku, affiliateRate: toRate(after.affiliateRate) };
+  }
+
+  /** Đặt cùng một % cho mọi biến thể ĐANG BÁN của sản phẩm (biến thể đang tắt giữ nguyên). */
+  async setProductRate(adminId: string, productId: string, rate: number) {
+    await this.assertRate(rate);
+    const product = await this.prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true } });
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+    const { count } = await this.prisma.variation.updateMany({
+      where: { productId, isActive: true },
+      data: { affiliateRate: new Prisma.Decimal(rate) },
+    });
+    if (count === 0) throw new BadRequestException('Sản phẩm không có biến thể đang bán để đặt %.');
+    this.logger.log(`Admin ${adminId} đặt % hoa hồng CTV ${rate}% cho ${count} biến thể đang bán của sản phẩm ${productId} (${product.name}).`);
+    return { productId, updated: count, affiliateRate: rate };
+  }
+
+  /**
+   * Áp % cho mọi biến thể đang bán CHƯA có % của hàng Tubu. Hàng đối tác (gian hàng tự đăng) không áp hàng loạt: hoa hồng CTV
+   * Tubu trả, không trừ vào đối soát đối tác, nên đặt từng sản phẩm. `WHERE affiliateRate IS NULL` kiểm lại trên từng dòng lúc
+   * ghi, nên mức admin khác vừa đặt song song không bị ghi đè.
+   */
+  async fillMissingRates(adminId: string, rate: number) {
+    await this.assertRate(rate);
+    const { count } = await this.prisma.variation.updateMany({
+      where: { isActive: true, affiliateRate: null, product: { storefrontId: null } },
+      data: { affiliateRate: new Prisma.Decimal(rate) },
+    });
+    this.logger.log(`Admin ${adminId} áp % hoa hồng CTV ${rate}% cho ${count} biến thể đang bán chưa có % (hàng Tubu).`);
+    return { updated: count, affiliateRate: rate };
+  }
+
+  /** Xem trước một lần nhập CSV "sku,%": không ghi gì. */
+  async previewImport(csv: string) {
+    return this.classify(this.prisma, csv, await this.maxRate());
+  }
+
+  /**
+   * Áp CSV trong MỘT transaction, phân loại lại trên dữ liệu lúc ghi (không tin bản xem trước). Còn dòng sai định dạng, vượt
+   * trần hay SKU lặp → 400, không ghi dòng nào. SKU không khớp thì bỏ qua (không có gì để ghi) và trả lại danh sách.
+   */
+  async applyImport(adminId: string, csv: string) {
+    const maxRate = await this.maxRate();
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const preview = await this.classify(tx, csv, maxRate, { lock: true });
+        if (!preview.canApply) {
+          throw new BadRequestException(
+            preview.blocking > 0
+              ? `Có ${preview.blocking} dòng lỗi (sai định dạng, vượt trần hoặc SKU lặp) — sửa file rồi xem trước lại. Chưa ghi dòng nào.`
+              : 'Không có dòng nào cần đổi.',
+          );
+        }
+        const changes = preview.rows.filter((r) => r.status === 'OK');
+        const byRate = new Map<number, string[]>();
+        for (const r of changes) byRate.set(r.rate!, [...(byRate.get(r.rate!) ?? []), r.sku]);
+        for (const [rate, skus] of byRate) {
+          await tx.variation.updateMany({ where: { sku: { in: skus } }, data: { affiliateRate: new Prisma.Decimal(rate) } });
+        }
+        return { preview, changes };
+      },
+      { timeout: 30_000 },
+    );
+    const { preview, changes } = result;
+    this.logger.log(`Admin ${adminId} nhập CSV % hoa hồng CTV: đổi ${changes.length} biến thể, giữ nguyên ${preview.counts.UNCHANGED}, không khớp ${preview.counts.NOT_FOUND}.`);
+    for (let i = 0; i < changes.length; i += LOG_CHUNK) {
+      const part = changes.slice(i, i + LOG_CHUNK).map((r) => `${r.sku}: ${r.currentRate ?? 'chưa có'}→${r.rate}`);
+      this.logger.log(`Admin ${adminId} nhập CSV % hoa hồng CTV (${i + 1}–${i + part.length}/${changes.length}): ${part.join('; ')}`);
+    }
+    return {
+      updated: changes.length,
+      unchanged: preview.counts.UNCHANGED,
+      notFound: preview.rows.filter((r) => r.status === 'NOT_FOUND').map((r) => r.sku),
+    };
+  }
+
+  private async classify(db: Db, csv: string, maxRate: number, opts: { lock?: boolean } = {}) {
+    const parsed = parseRateCsv(csv);
+    if (parsed.length > RATE_CSV_MAX_ROWS) {
+      throw new BadRequestException(`Tối đa ${RATE_CSV_MAX_ROWS} dòng mỗi lần nhập (file có ${parsed.length} dòng) — chia nhỏ file.`);
+    }
+    const skuCount = new Map<string, number>();
+    for (const r of parsed) if (r.sku) skuCount.set(r.sku, (skuCount.get(r.sku) ?? 0) + 1);
+    const skus = [...skuCount.keys()];
+    // Khoá trước theo thứ tự id: hai lần nhập chồng nhau xếp hàng thay vì deadlock (ghi gom theo mức % nên thứ tự ghi mỗi lần
+    // một khác), và mức "cũ" đọc ngay dưới (để log) đúng là mức bị thay.
+    if (opts.lock && skus.length) {
+      await db.$queryRaw`SELECT "id" FROM "variations" WHERE "sku" = ANY(${skus}) ORDER BY "id" FOR UPDATE`;
+    }
+    const variations = skus.length
+      ? await db.variation.findMany({
+          where: { sku: { in: skus } },
+          select: { sku: true, name: true, affiliateRate: true, product: { select: { name: true } } },
+        })
+      : [];
+    const bySku = new Map(variations.map((v) => [v.sku, v]));
+
+    const rows: RateImportRow[] = parsed.map((p) => {
+      const v = bySku.get(p.sku);
+      const currentRate = v ? toRate(v.affiliateRate) : null;
+      const base = {
+        line: p.line,
+        sku: p.sku,
+        input: p.input,
+        rate: p.rate,
+        currentRate,
+        productName: v?.product.name ?? null,
+        variationName: v?.name ?? null,
+      };
+      if (p.problem) return { ...base, status: 'INVALID' as const, message: p.problem };
+      const over = rateProblem(p.rate, maxRate);
+      if (over) return { ...base, status: (p.rate! > maxRate ? 'OVER_CAP' : 'INVALID') as RateImportStatus, message: over };
+      if ((skuCount.get(p.sku) ?? 0) > 1) return { ...base, status: 'DUPLICATE' as const, message: 'SKU xuất hiện nhiều lần trong file' };
+      if (!v) return { ...base, status: 'NOT_FOUND' as const, message: 'không có biến thể nào mang SKU này' };
+      if (currentRate === p.rate) return { ...base, status: 'UNCHANGED' as const, message: null };
+      return { ...base, status: 'OK' as const, message: null };
+    });
+
+    const counts: Record<RateImportStatus, number> = { OK: 0, UNCHANGED: 0, NOT_FOUND: 0, INVALID: 0, OVER_CAP: 0, DUPLICATE: 0 };
+    for (const r of rows) counts[r.status]++;
+    const blocking = rows.filter((r) => BLOCKING.has(r.status)).length;
+    return { rows, counts, blocking, maxRate, canApply: blocking === 0 && counts.OK > 0 };
+  }
+
+  /**
+   * Người giới thiệu + hoa hồng của một đơn (D3-07) cho CSKH/kế toán tra khi CTV hỏi "đơn X có hoa hồng không".
+   * `referrer` là người được ghi công trên đơn; hoa hồng có thể thiếu dù có người giới thiệu (hàng chưa có %, bị chặn CTV,
+   * tự giới thiệu) — `commissions` rỗng trong các trường hợp đó.
+   */
+  async orderReferral(orderIdOrCode: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] },
+      select: {
+        id: true,
+        code: true,
+        userId: true,
+        referrerUserId: true,
+        storefrontSlug: true,
+        placedForCustomer: true,
+        source: true,
+        storefront: { select: { id: true, slug: true, title: true, type: true } },
+      },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    const [referrer, commissions] = await Promise.all([
+      order.referrerUserId
+        ? this.prisma.user.findUnique({
+            where: { id: order.referrerUserId },
+            select: { id: true, fullName: true, phone: true, referralCode: true, role: true },
+          })
+        : null,
+      this.prisma.commission.findMany({
+        where: { orderId: order.id },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          affiliateUserId: true,
+          amount: true,
+          rate: true,
+          commissionableTotal: true,
+          status: true,
+          createdAt: true,
+          lockedAt: true,
+          approvedAt: true,
+          paidAt: true,
+          user: { select: { fullName: true } },
+        },
+      }),
+    ]);
+    return {
+      orderCode: order.code,
+      referrer,
+      selfReferral: !!order.referrerUserId && order.referrerUserId === order.userId && !order.placedForCustomer,
+      placedForCustomer: order.placedForCustomer,
+      source: order.source,
+      storefront: order.storefront,
+      storefrontSlug: order.storefrontSlug,
+      commissions: commissions.map(({ user, rate, ...c }) => ({ ...c, rate: Number(rate), affiliateName: user.fullName })),
+    };
+  }
+}
