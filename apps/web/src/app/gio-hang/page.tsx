@@ -90,6 +90,7 @@ export default function CartPage() {
   // Mã giảm giá chỉ cộng vào số hiển thị khi chọn cả giỏ; chọn một phần thì báo giá ở bước thanh toán tính lại.
   const shownDiscount = cart && allSelected ? cart.discount : 0;
   const shownCombo = cart && allSelected ? (cart.comboDiscount ?? 0) : 0;
+  const shownTier = cart && allSelected ? (cart.tierDiscount ?? 0) : 0;
 
   return (
     <Shell>
@@ -301,6 +302,12 @@ export default function CartPage() {
                 <span>-{formatVnd(shownDiscount)}</span>
               </div>
             )}
+            {shownTier > 0 && (
+              <div className="mt-1 flex justify-between text-sm text-success-fg">
+                <span>Ưu đãi hạng thành viên</span>
+                <span>-{formatVnd(shownTier)}</span>
+              </div>
+            )}
             <CouponBox
               currentCode={cart.couponCode}
               subtotal={selectedSubtotal}
@@ -318,7 +325,7 @@ export default function CartPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span>{formatVnd(Math.max(0, selectedSubtotal - shownCombo - shownDiscount))}</span>
+              <span>{formatVnd(Math.max(0, selectedSubtotal - shownCombo - shownDiscount - shownTier))}</span>
             </div>
             {selectedItems.length === 0 ? (
               <>

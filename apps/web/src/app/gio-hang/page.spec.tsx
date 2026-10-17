@@ -250,6 +250,17 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
     expect(container.textContent).toContain('Tổng215.000đ');
   });
 
+  it('ưu đãi hạng thành viên: dòng riêng, tổng = tạm tính − combo − mã − hạng; chọn một phần thì ẩn', async () => {
+    state.cart = { ...two(), couponCode: 'WELCOME', comboDiscount: 25000, discount: 10000, tierDiscount: 4000 };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Ưu đãi hạng thành viên');
+    expect(container.textContent).toContain('-4.000đ');
+    expect(container.textContent).toContain('Tổng211.000đ');
+    click(pick(container, 'Dầu gội'));
+    await flush(2);
+    expect(container.textContent).not.toContain('Ưu đãi hạng thành viên');
+  });
+
   it('không có combo (0 hoặc API cũ chưa trả): không có dòng combo, tổng như cũ', async () => {
     state.cart = { ...two(), couponCode: 'WELCOME', comboDiscount: 0, discount: 10000 };
     const { container } = await mount();

@@ -642,6 +642,7 @@ function StickySummary({
   const discount = allSelected ? summary.discount : 0;
   // Combo cũng chỉ hiện khi chọn TOÀN giỏ (combo cần đủ bộ sản phẩm; tập con checkout tính lại).
   const comboDiscount = allSelected ? (summary.comboDiscount ?? 0) : 0;
+  const tierDiscount = allSelected ? (summary.tierDiscount ?? 0) : 0;
 
   return (
     <StickyActionBar
@@ -687,12 +688,13 @@ function StickySummary({
           {discount > 0 && (
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" />
           )}
+          {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" />}
           {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
               là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
           <KeyValueRow
             label={vi.cart.subtotalAfterDiscount}
-            value={formatVnd(Math.max(0, selectedSubtotal - comboDiscount - discount))}
+            value={formatVnd(Math.max(0, selectedSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
           {overStock && (

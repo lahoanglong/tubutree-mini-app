@@ -259,6 +259,14 @@ describe('CartPage: giảm giá combo trong tóm tắt', () => {
     expect(screen.getByText('43.000đ')).toBeInTheDocument();
   });
 
+  it('có giảm hạng: dòng "Ưu đãi hạng thành viên" riêng, tạm tính (đã giảm) trừ thêm hạng', async () => {
+    mocks.getCart.mockResolvedValue(summary({ couponCode: 'XANH10', comboDiscount: 5_000, discount: 2_000, tierDiscount: 1_000 }));
+    renderPage();
+    expect(await screen.findByText('Ưu đãi hạng thành viên')).toBeInTheDocument();
+    expect(screen.getByText('-1.000đ')).toBeInTheDocument();
+    expect(screen.getByText('42.000đ')).toBeInTheDocument();
+  });
+
   it('combo 0 hoặc API cũ chưa trả: không có dòng combo, tạm tính như cũ', async () => {
     mocks.getCart.mockResolvedValue(summary({ comboDiscount: 0, discount: 2_000 }));
     const first = renderPage();
