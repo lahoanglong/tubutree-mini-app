@@ -249,7 +249,7 @@ function ProductCard({ product: p, maxRate, tierNames }: { product: CommissionPr
       )}
       <ul className="mt-2 divide-y divide-stone-200 border-t border-stone-200">
         {p.variations.map((v) => (
-          <VariationRow key={`${v.id}:${v.affiliateRate ?? ''}`} v={v} blocked={p.affiliateBlocked} maxRate={maxRate} tierNames={tierNames} />
+          <VariationRow key={v.id} v={v} blocked={p.affiliateBlocked} maxRate={maxRate} tierNames={tierNames} />
         ))}
       </ul>
       {dialog}
@@ -271,6 +271,12 @@ function VariationRow({
   const qc = useQueryClient();
   const initial = v.affiliateRate === null ? '' : String(v.affiliateRate).replace('.', ',');
   const [text, setText] = useState(initial);
+  // Mức trên server đổi (vừa lưu, đặt cả SP, CSV) thì ô nhập theo mức mới; hàng giữ nguyên để "Đã lưu" không mất khi tải lại.
+  const [shownInitial, setShownInitial] = useState(initial);
+  if (shownInitial !== initial) {
+    setShownInitial(initial);
+    setText(initial);
+  }
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const mut = useMutation({
     mutationFn: (rate: number) => setVariationRate(v.id, rate),

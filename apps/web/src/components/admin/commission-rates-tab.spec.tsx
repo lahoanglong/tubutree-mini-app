@@ -116,6 +116,36 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(rows[1]!.textContent).toContain('≈ 12.000');
   });
 
+  it('lưu xong, danh sách tải lại với mức mới: "Đã lưu" vẫn hiện, ô nhập theo mức mới', async () => {
+    let saved: number | null = null;
+    const m = mockFetch({
+      '/admin/dealer-tiers': { body: [] },
+      '/admin/commission-rates/variations/v1': (init) => {
+        saved = JSON.parse(String(init?.body)).rate;
+        return { body: { id: 'v1', sku: 'NRC-500', affiliateRate: saved } };
+      },
+      '/admin/commission-rates?': () => ({
+        body: {
+          ...PAGE,
+          items: [{ ...PAGE.items[0]!, variations: PAGE.items[0]!.variations.map((v) => (v.id === 'v1' ? { ...v, affiliateRate: saved } : v)) }],
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="% hoa hồng NRC-500"]')!;
+    typeInto(input, '9');
+    click(byText(input.closest('[data-commission-variation]')!, 'button', 'Lưu'));
+    await flush();
+    await flush();
+    expect(m.calls.filter((c) => c.url.includes('/admin/commission-rates?')).length).toBeGreaterThan(1);
+    const row = container.querySelector<HTMLElement>('[data-commission-variation]')!;
+    expect(row.textContent).toContain('Đã lưu 9%.');
+    expect(row.textContent).toContain('≈ 9.000');
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="% hoa hồng NRC-500"]')!.value).toBe('9');
+  });
+
   it('rỗng → câu rõ ràng; lỗi → thông báo + Thử lại', async () => {
     stub({}, { ...PAGE, items: [], summary: { missing: 0, missingTubu: 0 } });
     const { container } = mount(<CommissionRatesTab />);
