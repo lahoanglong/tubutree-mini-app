@@ -606,8 +606,6 @@ export class CheckoutService {
             platform,
             storefrontSlug: storefrontSlug ?? null,
             refCode: dto.referralCode ?? null,
-            entrySource: user.firstTouchSource ?? null,
-            campaign: user.firstTouchCampaign ?? null,
             props: {
               orderId: order.id,
               total: order.total,
@@ -620,6 +618,8 @@ export class CheckoutService {
               pointsUsed: order.pointsUsed,
               pointsUsedConverted: order.pointsUsedConverted,
               orderSource,
+              firstTouchSource: user.firstTouchSource ?? null,
+              firstTouchCampaign: user.firstTouchCampaign ?? null,
             },
           });
           if (paid) {
