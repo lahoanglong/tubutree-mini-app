@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -39,41 +40,52 @@ describe('VouchersService milestone + second-order chunked (real Postgres)', () 
     await moduleRef?.close();
   });
 
-  it('milestone: 25 khách chi tiêu nhiều mức, mỗi người đạt mốc đúng 1 coupon đúng mức; 2 instance song song + chạy lại không tạo thêm', async () => {
-    // createdAt = bây giờ để đơn luôn nằm trong tháng VN hiện tại (cửa sổ tính của cron), kể cả ngày đầu tháng.
-    const tiers = [
-      { spent: 6_000_000, reward: 200_000 },
-      { spent: 3_500_000, reward: 100_000 },
-      { spent: 1_200_000, reward: 30_000 },
-      { spent: 500_000, reward: null },
-    ];
-    const mine: { id: string; reward: number | null }[] = [];
-    for (let i = 0; i < 25; i++) {
-      const t = tiers[i % tiers.length]!;
-      const u = await phoneUser();
-      await createOrder(prisma, { userId: u.id, status: 'DELIVERED', total: t.spent, subtotal: t.spent, createdAt: new Date(), deliveredAt: new Date() });
-      mine.push({ id: u.id, reward: t.reward });
-    }
-    const ids = mine.map((m) => m.id);
+  it('milestone: 25 khách chi tiêu nhiều mức qua nhiều trang (trang 7), mỗi người đạt mốc đúng 1 coupon đúng mức; 2 instance song song + chạy lại không tạo thêm', async () => {
+    const statics = VouchersService as unknown as { MILESTONE_PAGE: number };
+    const original = statics.MILESTONE_PAGE;
+    statics.MILESTONE_PAGE = 7;
+    const errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      // createdAt = bây giờ để đơn luôn nằm trong tháng VN hiện tại (cửa sổ tính của cron), kể cả ngày đầu tháng.
+      const tiers = [
+        { spent: 6_000_000, reward: 200_000 },
+        { spent: 3_500_000, reward: 100_000 },
+        { spent: 1_200_000, reward: 30_000 },
+        { spent: 500_000, reward: null },
+      ];
+      const mine: { id: string; reward: number | null }[] = [];
+      for (let i = 0; i < 25; i++) {
+        const t = tiers[i % tiers.length]!;
+        const u = await phoneUser();
+        await createOrder(prisma, { userId: u.id, status: 'DELIVERED', total: t.spent, subtotal: t.spent, createdAt: new Date(), deliveredAt: new Date() });
+        mine.push({ id: u.id, reward: t.reward });
+      }
+      const ids = mine.map((m) => m.id);
 
-    await Promise.all([
-      new VouchersService(prisma, config, notifications).milestoneVouchers(),
-      new VouchersService(prisma, config, notifications).milestoneVouchers(),
-    ]);
-    const first = await couponsOf('MILESTONE', ids);
-    await new VouchersService(prisma, config, notifications).milestoneVouchers();
-    const second = await couponsOf('MILESTONE', ids);
+      await Promise.all([
+        new VouchersService(prisma, config, notifications).milestoneVouchers(),
+        new VouchersService(prisma, config, notifications).milestoneVouchers(),
+      ]);
+      const first = await couponsOf('MILESTONE', ids);
+      await new VouchersService(prisma, config, notifications).milestoneVouchers();
+      const second = await couponsOf('MILESTONE', ids);
 
-    const eligible = mine.filter((m) => m.reward !== null);
-    expect(first).toHaveLength(eligible.length);
-    expect(second.map((c) => c.id).sort()).toEqual(first.map((c) => c.id).sort());
-    for (const m of mine) {
-      const c = first.filter((x) => (x.scopeMeta as { userId: string }).userId === m.id);
-      expect(c).toHaveLength(m.reward === null ? 0 : 1);
-      if (m.reward !== null) expect(c[0]!.value).toBe(m.reward);
+      const eligible = mine.filter((m) => m.reward !== null);
+      expect(first).toHaveLength(eligible.length);
+      expect(second.map((c) => c.id).sort()).toEqual(first.map((c) => c.id).sort());
+      for (const m of mine) {
+        const c = first.filter((x) => (x.scopeMeta as { userId: string }).userId === m.id);
+        expect(c).toHaveLength(m.reward === null ? 0 : 1);
+        if (m.reward !== null) expect(c[0]!.value).toBe(m.reward);
+      }
+      const notified = notify.mock.calls.filter((c: unknown[]) => c[1] === 'MILESTONE_VOUCHER' && ids.includes(c[0] as string));
+      expect(notified).toHaveLength(eligible.length);
+      // Hai instance đua cùng mã: P2002 phải được coi là đã cấp, không thành lỗi.
+      expect(errorLog.mock.calls.filter((c) => String(c[0]).includes('lỗi'))).toHaveLength(0);
+    } finally {
+      statics.MILESTONE_PAGE = original;
+      errorLog.mockRestore();
     }
-    const notified = notify.mock.calls.filter((c: unknown[]) => c[1] === 'MILESTONE_VOUCHER' && ids.includes(c[0] as string));
-    expect(notified).toHaveLength(eligible.length);
   });
 
   it('second-order: 25 khách một đơn đã giao qua nhiều trang (trang 7): mỗi người đúng 1 mã hạn theo đơn đầu; 2 instance song song + chạy lại không tạo thêm', async () => {

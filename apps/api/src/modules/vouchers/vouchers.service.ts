@@ -1,3 +1,6 @@
+      // Phân trang keyset theo userId, không dùng LIMIT cố định: LIMIT không ORDER BY lấy lại đúng nhóm đầu mỗi lượt nên khách
+      // ngoài nhóm đó không bao giờ được xét. HAVING loại người dưới mốc thấp nhất ngay trong SQL để trang không bị chiếm bởi
+      // khách không đủ điều kiện; kết quả cấp không đổi vì chỉ có hit khi spent >= mốc thấp nhất.
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -24,6 +27,8 @@ export class VouchersService {
   private static readonly WELCOME_MAX_PAGES = 25;
   /** Kích thước lô keyset cho birthday/winback (quét đến hết, không có trần số trang). */
   private static readonly BATCH_PAGE = 500;
+  /** Kích thước trang keyset của milestone: quét hết khách đạt mốc trong tháng, không có trần số trang. */
+  private static readonly MILESTONE_PAGE = 1000;
   /**
    * Số grant() chạy cùng lúc trong mỗi lô của mọi cron dùng grantInChunks (welcome, birthday, winback, milestone, second-order);
    * mỗi grant giữ 1 kết nối Prisma ngắn hạn. Welcome chạy mỗi giờ nên trùng giờ với second-order lúc 10:00: tối đa 20 grant
@@ -310,29 +315,41 @@ export class VouchersService {
       // Chi tiêu RÒNG: đơn đã giao nhưng được trả MỘT PHẦN vẫn ở DELIVERED với nguyên `total`, nên trừ tiền hàng + ship đã
       // hoàn của các yêu cầu APPROVED (fullReturn=false, cùng định nghĩa LoyaltyService.partialReturnsByOrder), kẹp ở 0.
       // Voucher mốc đã cấp từ trước KHÔNG thu hồi: coupon đã phát cho khách, chỉ lượt cấp sau mới tính theo số ròng.
-      const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
-        SELECT o."userId", GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) AS spent
-        FROM orders o
-        LEFT JOIN (
-          SELECT "orderId", SUM(COALESCE("refundAmount", 0) + "shippingRefund") AS refunded
-          FROM return_requests
-          WHERE status::text = 'APPROVED' AND "fullReturn" = false
-          GROUP BY "orderId"
-        ) rr ON rr."orderId" = o.id
-        WHERE o.status::text = 'DELIVERED' AND o."createdAt" >= ${since}
-        GROUP BY o."userId"
-        LIMIT 1000`;
       const period = nowVn.toISOString().slice(0, 7); // yyyy-mm theo giờ VN
       // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
       const byDescSpend = [...milestones].sort((a, b) => b.spend - a.spend);
-      const hits = rows.flatMap((r) => {
-        const spent = Number(r.spent);
-        const hit = byDescSpend.find((m) => spent >= m.spend);
-        return hit ? [{ userId: r.userId, hit }] : [];
-      });
-      granted = await this.grantInChunks('milestoneVouchers', hits, ({ userId, hit }) => ({
-        userId, reason: `MILESTONE${hit.spend}-${period}`, type: 'AMOUNT', value: hit.reward, validDays: 30, templateCode: 'MILESTONE_VOUCHER',
-      }), failures);
+      const lowestSpend = byDescSpend[byDescSpend.length - 1]?.spend;
+      if (lowestSpend === undefined) return;
+      // Phân trang keyset theo userId: trước đây `GROUP BY ... LIMIT 1000` không ORDER BY nên khách ngoài 1000 dòng đầu
+      // không bao giờ được xét, lượt nào cũng lấy lại đúng nhóm đó. HAVING loại người dưới mốc thấp nhất ngay trong SQL
+      // để trang không bị chiếm bởi khách không đủ điều kiện; kết quả cấp không đổi vì hit chỉ có khi spent >= mốc thấp nhất.
+      let cursor = '';
+      for (;;) {
+        const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
+          SELECT o."userId", GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) AS spent
+          FROM orders o
+          LEFT JOIN (
+            SELECT "orderId", SUM(COALESCE("refundAmount", 0) + "shippingRefund") AS refunded
+            FROM return_requests
+            WHERE status::text = 'APPROVED' AND "fullReturn" = false
+            GROUP BY "orderId"
+          ) rr ON rr."orderId" = o.id
+          WHERE o.status::text = 'DELIVERED' AND o."createdAt" >= ${since} AND o."userId" > ${cursor}
+          GROUP BY o."userId"
+          HAVING GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) >= ${lowestSpend}
+          ORDER BY o."userId"
+          LIMIT ${VouchersService.MILESTONE_PAGE}`;
+        const hits = rows.flatMap((r) => {
+          const spent = Number(r.spent);
+          const hit = byDescSpend.find((m) => spent >= m.spend);
+          return hit ? [{ userId: r.userId, hit }] : [];
+        });
+        granted += await this.grantInChunks('milestoneVouchers', hits, ({ userId, hit }) => ({
+          userId, reason: `MILESTONE${hit.spend}-${period}`, type: 'AMOUNT', value: hit.reward, validDays: 30, templateCode: 'MILESTONE_VOUCHER',
+        }), failures);
+        if (rows.length < VouchersService.MILESTONE_PAGE) break;
+        cursor = rows[rows.length - 1]!.userId;
+      }
       if (granted) this.logger.log(`Milestone vouchers granted: ${granted}`);
     } catch (err) {
       this.logger.error(`milestoneVouchers lỗi: ${err instanceof Error ? err.message : err}`);

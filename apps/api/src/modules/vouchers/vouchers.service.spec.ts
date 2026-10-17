@@ -567,6 +567,71 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
   });
 });
 
+describe('VouchersService.milestoneVouchers — phân trang keyset, không bỏ sót khách ngoài trang đầu', () => {
+  const statics = VouchersService as unknown as { MILESTONE_PAGE: number };
+  const originalPage = statics.MILESTONE_PAGE;
+  afterEach(() => {
+    statics.MILESTONE_PAGE = originalPage;
+  });
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `u${String(i).padStart(3, '0')}`);
+
+  /** Mỗi lần gọi $queryRaw trả một trang theo cursor (userId > cursor, tối đa MILESTONE_PAGE dòng), như SQL thật. */
+  function setup(userIds: string[], config: Record<string, unknown> = {}, createImpl?: jest.Mock) {
+    const create = createImpl ?? jest.fn().mockResolvedValue({});
+    const args: unknown[][] = [];
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+      args.push(a);
+      const cursor = a.find((x): x is string => typeof x === 'string') ?? '';
+      return userIds.filter((id) => id > cursor).slice(0, statics.MILESTONE_PAGE).map((userId) => ({ userId, spent: BigInt(3_500_000) }));
+    });
+    const prisma = { $queryRaw: queryRaw, coupon: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(config), notify);
+    return { svc, create, queryRaw, args, ...spyLoggers(svc) };
+  }
+  const cursorsOf = (args: unknown[][]) => args.map((a) => a.find((x) => typeof x === 'string'));
+
+  it('29 khách, trang 12: quét đủ 3 trang theo cursor, mọi người nhận đúng một coupon', async () => {
+    statics.MILESTONE_PAGE = 12;
+    const { svc, create, args, log } = setup(ids(29));
+    await svc.milestoneVouchers();
+    expect(create).toHaveBeenCalledTimes(29);
+    expect(cursorsOf(args)).toEqual(['', 'u011', 'u023']);
+    expect(log).toHaveBeenCalledWith('Milestone vouchers granted: 29');
+  });
+
+  it('đúng bằng một trang đầy: gọi thêm một lượt, trang rỗng thì dừng', async () => {
+    statics.MILESTONE_PAGE = 12;
+    const { svc, create, args } = setup(ids(12));
+    await svc.milestoneVouchers();
+    expect(create).toHaveBeenCalledTimes(12);
+    expect(cursorsOf(args)).toEqual(['', 'u011']);
+  });
+
+  it('mốc thấp nhất trong cấu hình được đẩy xuống SQL (HAVING) để trang không bị người dưới mốc chiếm', async () => {
+    const { svc, args } = setup(ids(3), { 'voucher.milestones': [{ spend: 4_000_000, reward: 80_000 }, { spend: 2_000_000, reward: 40_000 }] });
+    await svc.milestoneVouchers();
+    expect(args[0]).toContain(2_000_000);
+    expect(args[0]).not.toContain(4_000_000);
+  });
+
+  it('không cấu hình mốc nào: không truy vấn, không cấp', async () => {
+    const { svc, create, queryRaw } = setup(ids(3), { 'voucher.milestones': [] });
+    await svc.milestoneVouchers();
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('trùng mã giữa hai instance (P2002) tính là đã cấp: không ghi log lỗi, không đếm là thất bại', async () => {
+    const create = jest.fn().mockRejectedValue(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+    const { svc, err, log } = setup(ids(3), {}, create);
+    await svc.milestoneVouchers();
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(err).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
+});
+
 /** Lấy tham số Date đầu tiên truyền vào $queryRaw (template tag → args nằm sau mảng strings). */
 function $queryRawArg(prisma: PrismaService): unknown {
   const call = ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls[0];
