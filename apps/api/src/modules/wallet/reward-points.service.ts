@@ -200,8 +200,10 @@ export class RewardPointsService {
   async grantReferralOrderReward(refereeId: string, retried = false): Promise<boolean> {
     const referee = await this.prisma.user.findUnique({
       where: { id: refereeId },
-      select: { referredById: true },
+      select: { referredById: true, mergedIntoId: true },
     });
+    // Chủ đơn đọc trước khi khoá (đường giao hàng) có thể là phiên khách vừa gộp: đơn đã sang tài khoản đích, xét ở đó.
+    if (referee?.mergedIntoId) return this.grantForMergedReferee(refereeId, retried);
     // Người mời là khách đã gộp (người được mời tạo xen giữa lúc gộp) ⇒ thưởng cho tài khoản đích.
     const referrerId = referee?.referredById ? await resolveMergedUserId(this.prisma, referee.referredById) : null;
     if (!referrerId || referrerId === refereeId) return false;
@@ -215,18 +217,19 @@ export class RewardPointsService {
     ]);
     if (!(reward > 0)) return false;
 
-    const granted = await this.prisma.$transaction(async (tx): Promise<boolean | 'STALE'> => {
+    const granted = await this.prisma.$transaction(async (tx): Promise<boolean | 'STALE' | 'ALREADY' | 'MERGED'> => {
       await lockReferee(tx, refereeId);
       // Gộp khách đổi referredById của người được mời dưới khoá này: người mời đọc ở trên có thể là dòng khách vừa gộp.
-      const fresh = await tx.user.findUnique({ where: { id: refereeId }, select: { referredById: true } });
+      const fresh = await tx.user.findUnique({ where: { id: refereeId }, select: { referredById: true, mergedIntoId: true } });
+      if (fresh?.mergedIntoId) return 'MERGED';
       if ((fresh?.referredById ? await resolveMergedUserId(tx, fresh.referredById) : null) !== referrerId) return 'STALE';
       if (await hasReferralEntry(tx, [`${REFERRAL_ORDER2_PREFIX}${refereeId}`, `${LEGACY_REFERRAL_CASHBACK_PREFIX}${refereeId}`])) {
-        return false;
+        return 'ALREADY';
       }
       // Đơn nhận về từ một phiên khách đã gộp có thể đã dùng để thưởng dưới id khách. Cùng người mời
       // ⇒ đó là cùng một người được mời đã được thưởng; khác người mời thì chỉ bỏ các đơn đó ra.
       const rewardedOrders = await findReferralRewardedOrders(tx, refereeId);
-      if (rewardedOrders.some((r) => r.referrerId === referrerId)) return false;
+      if (rewardedOrders.some((r) => r.referrerId === referrerId)) return 'ALREADY';
       // Hai đơn đầu tiên (createdAt, id) không bị loại; đọc theo trang (keyset) và dừng khi đủ hai, để chi phí trong lúc
       // giữ khoá người được mời không tăng theo số đơn của họ.
       const picked: { id: string; createdAt: Date }[] = [];
@@ -267,9 +270,23 @@ export class RewardPointsService {
       if (ok) await revokeReferralRewardForPriorReturns(tx, [first.id, second.id]);
       return ok;
     });
+    if (granted === 'MERGED') return this.grantForMergedReferee(refereeId, retried);
     if (granted === 'STALE') return retried ? false : this.grantReferralOrderReward(refereeId, true);
-    if (granted) await this.awardReferralMilestones(referrerId);
-    return granted;
+    // Đã thưởng từ trước vẫn xét mốc: lần cấp trước có thể đã commit thưởng mà lỗi ở bước mốc (chạy riêng tx), và lần gọi lại
+    // (cron chạy lại việc sau giao) là cơ hội duy nhất để cấp bù. Mốc idempotent theo reason từng đời.
+    if (granted === true || granted === 'ALREADY') await this.awardReferralMilestones(referrerId);
+    return granted === true;
+  }
+
+  /**
+   * Người được mời là phiên khách đã gộp: xét lại một lần cho tài khoản đích (đơn của khách đã chuyển sang đó). Đích đã xoá
+   * tài khoản (resolveMergedUserId trả null) thì không thưởng — như mọi đơn của tài khoản đã xoá.
+   */
+  private async grantForMergedReferee(guestId: string, retried: boolean): Promise<boolean> {
+    if (retried) return false;
+    const owner = await resolveMergedUserId(this.prisma, guestId);
+    if (!owner || owner === guestId) return false;
+    return this.grantReferralOrderReward(owner, true);
   }
 
   /**

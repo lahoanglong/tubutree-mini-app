@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
-import { createOrder, createUser, setConfig } from './helpers';
+import { createOrder, createUser, markDeliveredEffectsDone, setConfig } from './helpers';
 
 /**
  * R4-SYNC-3 trên Postgres THẬT: (a) đơn thu gom NEEDS_MANUAL_CHECK (hoặc còn báo động Gomdon mở) là một sự cố — kênh báo động
@@ -40,6 +40,7 @@ describe('Báo động vận hành: việc cho người (real Postgres)', () => 
   });
 
   beforeEach(async () => {
+    await markDeliveredEffectsDone(prisma);
     notify.mockClear();
     await prisma.opsHealthState.deleteMany({ where: { key: 'alert' } });
   });

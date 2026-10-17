@@ -17,6 +17,12 @@ import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.servi
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 import {
+  DELIVERED_EFFECTS_GRACE_MINUTES,
+  DELIVERED_EFFECTS_WINDOW_DAYS,
+  deliveredEffectsPendingWhere,
+  deliveredEffectsStaleWhere,
+} from '../orders/delivered-effects';
+import {
   alertWebhookBody,
   decideAlert,
   OPS_THRESHOLD_KEYS,
@@ -191,11 +197,12 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel, webhookChannel] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
       this.email?.state() ?? DISABLED_EMAIL_STATE,
+      this.orderHealth(now),
       this.webhookChannel(),
     ]);
     const problems = opsProblems(
@@ -213,10 +220,17 @@ export class OpsHealthService {
           attentionRefs: refs(gomdon.attentionOrders, (o) => o.code),
         },
         queues,
+        orders: {
+          deliveredEffectsPending: orders.deliveredEffectsPending,
+          deliveredEffectsRefs: refs(orders.deliveredEffectsOrders, (o) => o.code),
+          deliveredEffectsStale: orders.deliveredEffectsStale,
+          graceMinutes: DELIVERED_EFFECTS_GRACE_MINUTES,
+          windowDays: DELIVERED_EFFECTS_WINDOW_DAYS,
+        },
       },
       t,
     );
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, alertChannels: { email: emailChannel, webhook: webhookChannel }, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, problems };
   }
 
   private webhookUrl(): string {
@@ -435,6 +449,21 @@ export class OpsHealthService {
       backlog,
       backlogOrders,
     };
+  }
+
+  private async orderHealth(now: Date) {
+    const where = deliveredEffectsPendingWhere(now);
+    const [deliveredEffectsPending, deliveredEffectsStale, deliveredEffectsOrders] = await Promise.all([
+      this.prisma.order.count({ where }),
+      this.prisma.order.count({ where: deliveredEffectsStaleWhere(now) }),
+      this.prisma.order.findMany({
+        where,
+        orderBy: { deliveredAt: 'asc' },
+        take: STUCK_LIST,
+        select: { id: true, code: true, deliveredAt: true },
+      }),
+    ]);
+    return { deliveredEffectsPending, deliveredEffectsStale, deliveredEffectsOrders };
   }
 
   private async queueHealth(now: Date): Promise<QueueHealth> {

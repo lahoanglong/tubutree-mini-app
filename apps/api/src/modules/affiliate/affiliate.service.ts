@@ -819,12 +819,13 @@ export class AffiliateService {
     });
   }
 
-  /** Đơn DELIVERED → khóa commission, bắt đầu đếm hold. */
-  async lockCommissionsForOrder(orderId: string): Promise<void> {
-    await this.prisma.commission.updateMany({
+  /** Đơn DELIVERED → khóa commission, bắt đầu đếm hold. Trả số dòng vừa khoá (0 khi đã khoá/đã đảo từ trước). */
+  async lockCommissionsForOrder(orderId: string): Promise<number> {
+    const res = await this.prisma.commission.updateMany({
       where: { orderId, status: 'PENDING' },
       data: { status: 'LOCKED', lockedAt: new Date() },
     });
+    return res.count;
   }
 
   /**

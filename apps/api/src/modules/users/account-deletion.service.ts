@@ -41,6 +41,12 @@ const OPEN_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING
 
 const vnd = (n: number) => `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ`;
 
+/** Deadlock (40P01) / tuần tự hoá (40001, Prisma P2034): tx đã rollback, chạy lại an toàn. */
+function isRetryableTxError(err: unknown): boolean {
+  const e = err as { code?: string; meta?: { code?: string } } | null;
+  return e?.code === 'P2034' || e?.code === '40001' || e?.code === '40P01' || e?.meta?.code === '40001' || e?.meta?.code === '40P01';
+}
+
 /**
  * C-016 / A1-017: xử lý yêu cầu xoá tài khoản bằng ẨN DANH chứ không xoá cứng — đơn, hoa hồng, sổ Ví,
  * lệnh rút, công nợ đại lý là chứng từ kế toán/thuế phải giữ và đang trỏ khoá ngoại về users. Chỉ thay
@@ -89,10 +95,23 @@ export class AccountDeletionService {
 
   /**
    * Idempotent: yêu cầu đã RESOLVED thì trả `alreadyProcessed: true`, không chạy lại. Khoá dòng yêu
-   * cầu rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
+   * cầu, các đơn của khách rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
    * tiền vào users (vd cộng Ví) phải chờ lần kiểm số dư này xong.
+   * Chạy lại một lần khi gặp deadlock: gộp phiên khách vào chính khách này commit xen giữa (chuyển thêm đơn sang khách sau
+   * lúc tx này đã khoá đơn) cùng một lần cộng điểm đang giữ đơn mới đó thì lần ẩn danh đơn có thể chờ vòng (40P01). Lần
+   * chạy lại khoá đủ đơn ngay từ đầu.
    */
   async process(requestId: string, adminId: string, adminNote?: string) {
+    try {
+      return await this.processOnce(requestId, adminId, adminNote);
+    } catch (err) {
+      if (!isRetryableTxError(err)) throw err;
+      this.logger.warn(`Yêu cầu xoá ${requestId}: xung đột giao dịch (${(err as Error).message}), chạy lại một lần.`);
+      return this.processOnce(requestId, adminId, adminNote);
+    }
+  }
+
+  private async processOnce(requestId: string, adminId: string, adminNote?: string) {
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`
         SELECT "id" FROM "account_deletion_requests" WHERE "id" = ${requestId} FOR UPDATE`;
@@ -102,6 +121,9 @@ export class AccountDeletionService {
         return { alreadyProcessed: true, requestId, userId: request.userId, reviewedAt: request.reviewedAt };
       }
 
+      // Đơn của khách trước dòng users, cùng chiều với cộng điểm lúc giao / duyệt trả / gộp phiên khách (đơn → users): ẩn danh
+      // bên dưới ghi lại các đơn này, khoá users trước thì đợi lần cộng điểm đang giữ đơn trong khi nó đợi users ⇒ 40P01.
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${request.userId} ORDER BY "id" FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${request.userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: request.userId } });
       const now = new Date();

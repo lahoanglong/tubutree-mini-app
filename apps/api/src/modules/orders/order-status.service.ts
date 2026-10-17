@@ -94,6 +94,12 @@ const HANDOVER_ASKER: Record<'CUSTOMER' | 'STAFF' | 'SYSTEM', string> = {
  */
 export type MarkPaidOutcome = 'PAID' | 'ALREADY_PAID' | 'CLOSED' | 'NOT_PAYABLE';
 
+/** Kết quả chạy việc sau giao: pointsCredited/commissionsLocked = lần chạy này có làm gì (false/0 khi đã làm từ trước). */
+export type DeliveredEffectsResult =
+  | { outcome: 'NOT_DELIVERED' | 'ALREADY_DONE' }
+  | { outcome: 'DONE'; pointsCredited: boolean; commissionsLocked: number }
+  | { outcome: 'INCOMPLETE'; pointsCredited: boolean; commissionsLocked: number; error: string };
+
 /**
  * Nguồn ghi Order.status DUY NHẤT cho mọi nơi KHÔNG PHẢI là luồng khách tự hủy
  * (orders.service.cancel) hay khách tự yêu cầu trả hàng (admin.reviewReturn) —
@@ -181,7 +187,16 @@ export class OrderStatusService {
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
 
-    if (order.status === targetStatus) return order; // no-op idempotent (webhook lặp lại)
+    if (order.status === targetStatus) {
+      // no-op idempotent (webhook lặp lại). DELIVERED lặp mà việc sau giao chưa xong (lần trước lỗi/chết sau commit) thì làm
+      // nốt — best-effort như lần gọi lặp vẫn luôn êm; còn sót thì DeliveredEffectsResyncCron làm.
+      if (targetStatus === 'DELIVERED' && !order.deliveredEffectsAt) {
+        await this.runDeliveredEffects(order).catch((err: unknown) =>
+          this.logger.warn(`Gọi lại DELIVERED cho đơn ${order.code}: việc sau giao vẫn lỗi (${err instanceof Error ? err.message : err}) — cron sẽ chạy lại.`),
+        );
+      }
+      return order;
+    }
     if (opts.onlyIfUnpaid && order.paymentStatus !== 'UNPAID') return order;
     if (opts.expectedStatus && order.status !== opts.expectedStatus) return order;
     const from = order.status as OrderStatus;
@@ -322,22 +337,12 @@ export class OrderStatusService {
       return current;
     }
 
-    // Side-effect điểm/hoa hồng — idempotent qua unique index riêng, an toàn để NGOÀI tx
-    // (nếu crash giữa chừng, retry sẽ thấy status đã bằng targetStatus → bail ở no-op phía
-    // trên NHƯNG side-effect chưa chạy — đây là đánh đổi đã biết; các hàm credit/reverse tự kiểm tra
-    // lại nên gọi lại là an toàn, nhưng hiện CHƯA có endpoint resync nào để gọi). Vì vậy phần tiền trả
-    // trước (Điểm Xanh lô quy đổi) KHÔNG nằm ở đây mà hoàn trong tx ở reverseFinancials.
+    // Side-effect điểm/hoa hồng — idempotent qua unique index riêng, an toàn để NGOÀI tx. Crash/lỗi giữa chừng sau commit
+    // (retry thấy status đã bằng targetStatus) không còn mất việc: DELIVERED chỉ có mốc deliveredEffectsAt khi mọi việc sau
+    // giao xong, thiếu mốc thì lần gọi DELIVERED lặp hoặc DeliveredEffectsResyncCron chạy lại (resyncDeliveredEffects). Phần
+    // tiền trả trước (Điểm Xanh lô quy đổi) vẫn KHÔNG nằm ở đây mà hoàn trong tx ở reverseFinancials.
     if (targetStatus === 'DELIVERED') {
-      await this.loyalty.creditOrderPoints(order.id);
-      await this.affiliate.lockCommissionsForOrder(order.id);
-      // Đơn đã giao (commit ở trên) nên lỗi khoá/deadlock khi xét thưởng không được làm hỏng
-      // setStatus: retry Pancake sẽ thấy no-op và bỏ qua notify. Thưởng tự xét lại từ DB ở lần giao
-      // đơn kế tiếp của người được mời.
-      await this.affiliate.grantReferralReward(order.id).catch((e: unknown) => {
-        this.logger.error(
-          `Xét thưởng giới thiệu cho đơn ${order.code} lỗi: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      });
+      await this.runDeliveredEffects(order);
     }
     let standardPointsBack = 0;
     let receivedBack = 0;
@@ -388,6 +393,49 @@ export class OrderStatusService {
       .catch(() => undefined);
 
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+  }
+
+  /**
+   * Chạy lại việc sau giao của một đơn DELIVERED chưa có mốc deliveredEffectsAt (cron gọi; gọi tay cũng an toàn). Đơn không còn
+   * DELIVERED (đã trả/huỷ: lần đảo đã lo) hoặc đã có mốc thì không làm gì. Lỗi cộng điểm/khoá hoa hồng ném ra cho người gọi.
+   */
+  async resyncDeliveredEffects(orderIdOrCode: string): Promise<DeliveredEffectsResult> {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] },
+      select: { id: true, code: true, status: true, deliveredEffectsAt: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.status !== 'DELIVERED') return { outcome: 'NOT_DELIVERED' };
+    if (order.deliveredEffectsAt) return { outcome: 'ALREADY_DONE' };
+    return this.runDeliveredEffects(order);
+  }
+
+  /**
+   * Cộng Điểm Xanh (kèm tính lại hạng), khoá hoa hồng CTV, xét thưởng giới thiệu (kèm mốc thưởng) — mỗi việc idempotent và chịu
+   * được chạy song song (xem DeliveredEffectsResyncCron). Mốc chỉ ghi khi cả ba xong. Lỗi xét thưởng không làm hỏng lần giao
+   * (đơn đã commit) — chỉ để lại đơn chưa có mốc cho lần chạy lại.
+   */
+  private async runDeliveredEffects(order: Pick<Order, 'id' | 'code'>): Promise<DeliveredEffectsResult> {
+    const pointsCredited = await this.loyalty.creditOrderPoints(order.id);
+    const commissionsLocked = (await this.affiliate.lockCommissionsForOrder(order.id)) ?? 0;
+    const referralError = await this.affiliate.grantReferralReward(order.id).then(
+      () => null,
+      (e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Xét thưởng giới thiệu cho đơn ${order.code} lỗi: ${msg}`);
+        return msg;
+      },
+    );
+    const effects = { pointsCredited: pointsCredited === true, commissionsLocked };
+    if (referralError !== null) return { outcome: 'INCOMPLETE', ...effects, error: `Xét thưởng giới thiệu lỗi: ${referralError}` };
+    try {
+      await this.prisma.order.updateMany({ where: { id: order.id, deliveredEffectsAt: null }, data: { deliveredEffectsAt: new Date() } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Không ghi được mốc xong việc sau giao cho đơn ${order.code}: ${msg} — cron sẽ chạy lại (idempotent).`);
+      return { outcome: 'INCOMPLETE', ...effects, error: `Ghi mốc lỗi: ${msg}` };
+    }
+    return { outcome: 'DONE', ...effects };
   }
 
   /**

@@ -53,6 +53,15 @@ export interface ProblemInput {
     attentionRefs: string[];
   };
   queues: { ok: true; items: { name: string; failedLastHour: number }[] } | { ok: false; error: string };
+  orders: {
+    /** Đơn đã giao quá thời gian chờ mà việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) chưa xong. */
+    deliveredEffectsPending: number;
+    deliveredEffectsRefs: string[];
+    /** Phần trong số trên giao quá `windowDays` ngày: cron không tự chạy lại nữa, phải chạy lại tay. */
+    deliveredEffectsStale: number;
+    graceMinutes: number;
+    windowDays: number;
+  };
 }
 
 /** Việc cho người trong một sự cố: số việc + mã đơn của vài việc cũ nhất — để biết lúc nào có việc MỚI. */
@@ -136,6 +145,23 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
         items: { count: s.gomdon.attention, refs: s.gomdon.attentionRefs },
       });
     }
+  }
+  const o = s.orders;
+  if (o.deliveredEffectsPending > 0) {
+    const recent = o.deliveredEffectsPending - o.deliveredEffectsStale;
+    const how = [
+      recent > 0 ? `${recent} đơn giao trong ${o.windowDays} ngày hệ thống tự chạy lại mỗi 10 phút, còn mãi thì xem log lỗi của đơn` : '',
+      o.deliveredEffectsStale > 0
+        ? `${o.deliveredEffectsStale} đơn giao quá ${o.windowDays} ngày hệ thống KHÔNG tự chạy lại nữa — chạy lại tay: POST /admin/orders/<mã>/resync-delivered-effects`
+        : '',
+    ].filter(Boolean);
+    out.push({
+      key: 'orders.delivered_effects',
+      message:
+        `${o.deliveredEffectsPending} đơn đã giao chưa xong việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) ` +
+        `quá ${o.graceMinutes} phút${refList(o.deliveredEffectsRefs, o.deliveredEffectsPending)} — ${how.join('; ')}`,
+      items: { count: o.deliveredEffectsPending, refs: o.deliveredEffectsRefs },
+    });
   }
   if (!s.queues.ok) {
     out.push({ key: 'queues.down', message: `Hàng đợi không phản hồi: ${s.queues.error}` });

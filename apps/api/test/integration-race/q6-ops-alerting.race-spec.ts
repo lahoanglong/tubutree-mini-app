@@ -1,12 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
+import { gomdonBacklogWhere, OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
 import { OpsWebhookEventsService } from '../../src/modules/ops/ops-webhook-events.service';
 import { PancakeEventsReconcileService } from '../../src/modules/integrations/pancake/pancake-events-reconcile.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { GomdonReconcileService } from '../../src/modules/integrations/gomdon/gomdon-reconcile.service';
 import { GomdonWebhookService } from '../../src/modules/integrations/gomdon/gomdon-webhook.service';
-import { createOrder, createUser, setConfig } from './helpers';
+import { createOrder, createUser, markDeliveredEffectsDone, setConfig } from './helpers';
 
 /**
  * q6-platform-ops trên Postgres THẬT: báo động webhook lỗi nêu mã đơn và không tự "đã ổn" sau 24 giờ khi sự kiện còn
@@ -62,6 +62,7 @@ describe('q6 báo động vận hành (real Postgres)', () => {
   });
 
   beforeEach(async () => {
+    await markDeliveredEffectsDone(prisma);
     notify.mockClear();
     fetchMock.mockReset();
     queueAdd.mockClear();
@@ -289,14 +290,19 @@ describe('q6 báo động vận hành (real Postgres)', () => {
 
   it('đơn thu gom COD quá 15 phút chưa có vận đơn Gomdon → gomdon.backlog; đơn trả trước chưa nhận tiền thì không', async () => {
     const u = await createUser(prisma, {});
-    const old = new Date(Date.now() - 20 * 60_000);
-    const cod = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true, createdAt: old });
-    const unpaid = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true, createdAt: old, paymentMethod: 'ZALOPAY', status: 'PENDING_PAYMENT' });
+    // Danh sách tồn đọng chỉ lấy STUCK_LIST đơn cũ nhất: đơn của test phải cũ hơn mọi đơn tồn đọng spec khác để lại trong DB dùng
+    // chung, kể cả đơn phải bị loại (không thì "không có trong danh sách" đúng chỉ vì danh sách đã đầy).
+    const cod = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true, createdAt: new Date(0) });
+    const unpaid = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true, createdAt: new Date(1), paymentMethod: 'ZALOPAY', status: 'PENDING_PAYMENT' });
     const fresh = await createOrder(prisma, { userId: u.id, hasRecyclingPickup: true });
     const snap = await health.snapshot();
     const codes = snap.gomdon.backlogOrders.map((x) => x.code);
     expect(codes).toContain(cod.code);
     expect(codes).not.toContain(unpaid.code);
+    // Đơn vừa đặt luôn mới nhất nên danh sách đầy không nói được gì: hỏi thẳng bộ lọc.
+    const inBacklog = (id: string) => prisma.order.count({ where: { AND: [gomdonBacklogWhere(new Date(), snap.thresholds.gomdonBacklogMinutes), { id }] } });
+    expect(await inBacklog(cod.id)).toBe(1);
+    expect(await inBacklog(fresh.id)).toBe(0);
     expect(codes).not.toContain(fresh.code);
     expect(snap.problems.find((p) => p.key === 'gomdon.backlog')?.message).toContain('15 phút');
     await prisma.order.updateMany({ where: { id: { in: [cod.id, unpaid.id, fresh.id] } }, data: { status: 'CANCELLED' } });

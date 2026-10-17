@@ -177,12 +177,20 @@ describe('PancakeProcessor.onStatusUpdated', () => {
       code: 'TUBU1',
       userId: 'u1',
       status: 'DELIVERED',
+      deliveredEffectsAt: new Date(),
       note: null,
       items: [],
     });
     await proc.onStatusUpdated({ id: 'p1', status: 'delivered' });
     expect(txUpdateMany).not.toHaveBeenCalled();
     expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERED lặp khi việc sau giao lần trước chưa xong (chưa có mốc) → không lật lại, chỉ làm nốt việc sau giao', async () => {
+    const { proc, loyalty, affiliate } = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', deliveredEffectsAt: null, note: null, items: [] });
+    await proc.onStatusUpdated({ id: 'p1', status: 'delivered' });
+    expect(loyalty.creditOrderPoints).toHaveBeenCalledWith('o1');
+    expect(affiliate.lockCommissionsForOrder).toHaveBeenCalledWith('o1');
   });
 
   it('status không map được → no-op', async () => {

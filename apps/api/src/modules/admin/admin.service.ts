@@ -1079,6 +1079,35 @@ export class AdminService {
     }
   }
 
+  /** Chạy lại việc sau giao cho một đơn (nút/endpoint admin) — không giới hạn cửa sổ ngày như cron. */
+  async resyncDeliveredEffects(adminId: string, idOrCode: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, status: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.status !== 'DELIVERED') {
+      throw new BadRequestException(`Đơn ${order.code} đang ${order.status}, không phải đơn đã giao — không có việc sau giao để chạy lại.`);
+    }
+    const result = await this.orderStatus.resyncDeliveredEffects(order.id);
+    const detail =
+      result.outcome === 'DONE' || result.outcome === 'INCOMPLETE'
+        ? ` (cộng điểm: ${result.pointsCredited ? 'có' : 'không'}, khoá hoa hồng: ${result.commissionsLocked})`
+        : '';
+    await this.prisma.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        fromStatus: order.status,
+        toStatus: order.status,
+        actorType: 'ADMIN',
+        actorId: adminId,
+        note: `Admin chạy lại việc sau giao: ${result.outcome}${detail}`,
+      },
+    });
+    this.logger.warn(`Admin ${adminId} chạy lại việc sau giao cho đơn ${order.code}: ${JSON.stringify(result)}.`);
+    return { orderId: order.id, code: order.code, ...result };
+  }
+
   /**
    * "Đã xử lý tay": admin đã xử lý vận đơn thu gom ngoài hệ thống → gomdonStatus MANUAL_HANDLED (guard
    * nguyên tử ở GomdonOrderService.markHandled), đơn rời hàng đợi "Cần xử lý thu gom". Ghi chú của admin
