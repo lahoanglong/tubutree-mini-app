@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   getCart: vi.fn(),
+  getCartSelection: vi.fn(),
   removeCartItem: vi.fn(),
   voucherProps: [] as Record<string, unknown>[],
 }));
@@ -19,6 +20,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/shop-api', () => ({
   getCart: mocks.getCart,
+  getCartSelection: mocks.getCartSelection,
   removeCartItem: mocks.removeCartItem,
   updateCartItem: vi.fn(),
   addToCart: vi.fn(),
@@ -307,5 +309,73 @@ describe('CartPage: giảm giá combo trong tóm tắt', () => {
     expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn tất cả' }));
     await waitFor(() => expect(screen.queryByText('Giảm giá combo')).toBeNull());
+  });
+});
+
+describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy chủ (GET /cart?itemIds)', () => {
+  const LINE_B = { ...OK_LINE, id: 'ci-b', variationId: 'v-b', productName: 'Dầu gội', slug: 'dg', unitPrice: 100_000, total: 100_000 };
+  const two = (over: object = {}) =>
+    summary({ items: [OK_LINE, LINE_B], subtotal: 150_000, itemCount: 2, couponCode: 'XANH10', comboDiscount: 15_000, discount: 9_000, tierDiscount: 3_000, ...over });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCartSelection.mockRejectedValue(new Error('chưa mock'));
+  });
+
+  it('bỏ chọn một dòng: hỏi đúng itemIds, hiện combo, mã, hạng và tạm tính đúng số máy chủ trả', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    mocks.getCartSelection.mockResolvedValue(
+      summary({ items: [LINE_B], subtotal: 100_000, itemCount: 1, couponCode: 'XANH10', comboDiscount: 5_000, discount: 3_000, tierDiscount: 1_000 }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    expect(await screen.findByText('-5.000đ', {}, { timeout: 2_000 })).toBeInTheDocument();
+    expect(mocks.getCartSelection).toHaveBeenCalledTimes(1);
+    expect(mocks.getCartSelection).toHaveBeenLastCalledWith(['ci-b']);
+    expect(screen.getByText('Giảm giá combo')).toBeInTheDocument();
+    expect(screen.getByText('Ưu đãi hạng thành viên')).toBeInTheDocument();
+    expect(screen.getByText('-3.000đ')).toBeInTheDocument();
+    expect(screen.getByText('-1.000đ')).toBeInTheDocument();
+    expect(screen.getByText('91.000đ')).toBeInTheDocument();
+  });
+
+  it('chọn lại tất cả: về giỏ thường trong bộ nhớ, không hỏi thêm máy chủ', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    mocks.getCartSelection.mockResolvedValue(summary({ items: [LINE_B], subtotal: 100_000, comboDiscount: 5_000, discount: 3_000, tierDiscount: 1_000 }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    await screen.findByText('-5.000đ', {}, { timeout: 2_000 });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn tất cả' }));
+    expect(await screen.findByText('-15.000đ')).toBeInTheDocument();
+    expect(screen.getByText('123.000đ')).toBeInTheDocument();
+    expect(mocks.getCartSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('cả giỏ ngay từ đầu: không gọi giá phần chọn', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    renderPage();
+    await screen.findByText('Giảm giá combo');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(mocks.getCartSelection).not.toHaveBeenCalled();
+  });
+
+  it('mã không đạt với phần chọn: không giảm, hiện đúng câu giải thích máy chủ trả', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    mocks.getCartSelection.mockResolvedValue(
+      summary({
+        items: [LINE_B],
+        subtotal: 100_000,
+        couponCode: 'XANH10',
+        comboDiscount: 0,
+        discount: 0,
+        tierDiscount: 0,
+        couponNotice: 'Mã chưa áp cho đơn này: Đơn tối thiểu 200.000đ.',
+      }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    const notice = await screen.findByTestId('coupon-notice', {}, { timeout: 2_000 });
+    expect(notice).toHaveTextContent('Đơn tối thiểu 200.000đ');
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+    expect(screen.getAllByText('100.000đ').length).toBeGreaterThan(0);
   });
 });
