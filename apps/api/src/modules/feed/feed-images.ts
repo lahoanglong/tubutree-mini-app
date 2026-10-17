@@ -43,9 +43,10 @@ interface ImageRow {
 
 /**
  * Ảnh của các bài trong một trang, KHÔNG kéo ảnh base64 về Node: DB tự phân loại từng phần tử (https giữ nguyên, `data:`
- * thành mã md5) nên mỗi trang chỉ nhận vài chục byte mỗi ảnh. `coverOnly` cắt ngay trong SQL ở phần tử đầu (thẻ trong
- * danh sách chỉ vẽ ảnh bìa). Ảnh base64 trả đường dẫn tương đối tới endpoint ảnh, ảnh https/http (Cloudinary) trả nguyên;
- * chuỗi lạ (dòng cũ trước khi API chặn) bị bỏ. Bài không có ảnh không có mục trong Map.
+ * thành mã md5) nên mỗi trang chỉ nhận vài chục byte mỗi ảnh. `coverOnly` (thẻ trong danh sách chỉ vẽ ảnh bìa) lấy đúng
+ * phần tử đầu bằng chỉ số mảng thay vì bung cả mảng: `unnest` của 6 ảnh × 700KB ghi hàng trăm MB tệp tạm mỗi lần tải feed.
+ * Ảnh base64 trả đường dẫn tương đối tới endpoint ảnh, ảnh https/http (Cloudinary) trả nguyên; chuỗi lạ (dòng cũ trước khi
+ * API chặn) bị bỏ. Bài không có ảnh không có mục trong Map.
  */
 export async function loadFeedImages(
   db: Pick<PrismaService, '$queryRaw'>,
@@ -54,15 +55,25 @@ export async function loadFeedImages(
 ): Promise<Map<string, FeedPostImages>> {
   const out = new Map<string, FeedPostImages>();
   if (postIds.length === 0) return out;
-  const limit = coverOnly ? 1 : MAX_FEED_IMAGES;
-  const rows = await db.$queryRaw<ImageRow[]>`
-    SELECT p."id" AS "postId", cardinality(p."images")::int AS "count", (t.idx - 1)::int AS "idx",
-           CASE WHEN t.img ~ '^https?://' THEN t.img END AS "url",
-           CASE WHEN t.img LIKE 'data:%' THEN md5(p."id" || ':' || (t.idx - 1)::text || ':' || t.img) END AS "hash"
-    FROM "feed_posts" p
-    CROSS JOIN LATERAL unnest(p."images") WITH ORDINALITY AS t(img, idx)
-    WHERE p."id" = ANY(${postIds}) AND t.idx <= ${limit}
-    ORDER BY p."id", t.idx`;
+  // Subquery có OFFSET 0 để Postgres chỉ giải nén mảng ảnh một lần: không có nó biểu thức `images[1]` bị chép vào từng chỗ dùng
+  // và mảng (TOAST) bị giải nén lại ở mỗi chỗ (đo: 50 bài × 6 ảnh × 700KB, khoảng 250 ms thay vì 450 ms).
+  const rows = coverOnly
+    ? await db.$queryRaw<ImageRow[]>`
+        SELECT p."id" AS "postId", cardinality(p."images")::int AS "count", 0 AS "idx",
+               CASE WHEN c.img ~ '^https?://' THEN c.img END AS "url",
+               CASE WHEN c.img LIKE 'data:%' THEN md5(p."id" || ':0:' || c.img) END AS "hash"
+        FROM "feed_posts" p
+        CROSS JOIN LATERAL (SELECT p."images"[1] AS img OFFSET 0) c
+        WHERE p."id" = ANY(${postIds}) AND cardinality(p."images") > 0
+        ORDER BY p."id"`
+    : await db.$queryRaw<ImageRow[]>`
+        SELECT p."id" AS "postId", cardinality(p."images")::int AS "count", (t.idx - 1)::int AS "idx",
+               CASE WHEN t.img ~ '^https?://' THEN t.img END AS "url",
+               CASE WHEN t.img LIKE 'data:%' THEN md5(p."id" || ':' || (t.idx - 1)::text || ':' || t.img) END AS "hash"
+        FROM "feed_posts" p
+        CROSS JOIN LATERAL unnest(p."images") WITH ORDINALITY AS t(img, idx)
+        WHERE p."id" = ANY(${postIds}) AND t.idx <= ${MAX_FEED_IMAGES}
+        ORDER BY p."id", t.idx`;
   for (const r of rows) {
     if (typeof r.postId !== 'string') continue;
     const entry = out.get(r.postId) ?? { count: Number(r.count), images: [] };

@@ -73,20 +73,35 @@ describe('loadFeedImages', () => {
     expect(r.get('p1')).toEqual({ count: 2, images: ['http://img/ok.jpg'] });
   });
 
-  it('một lượt truy vấn cho cả trang, và chế độ chỉ-bìa giới hạn phần tử thứ nhất ngay trong SQL', async () => {
+  it('chế độ chỉ-bìa: một lượt cho cả trang, lấy phần tử đầu bằng chỉ số mảng, không bung cả mảng ảnh bằng unnest', async () => {
     const { db, $queryRaw } = makeDb([]);
     await loadFeedImages(db, ['p1', 'p2', 'p3'], true);
     expect($queryRaw).toHaveBeenCalledTimes(1);
     const [strings, ...values] = $queryRaw.mock.calls[0] as [string[], ...unknown[]];
     const sql = strings.join('?');
+    expect(sql).not.toContain('unnest');
+    expect(sql).toContain('"images"[1]');
+    expect(sql).toContain('cardinality');
+    expect(values).toEqual([['p1', 'p2', 'p3']]);
+  });
+
+  it('chế độ đủ ảnh (chi tiết bài): bung từng phần tử có số thứ tự, tối đa MAX_FEED_IMAGES', async () => {
+    const { db, $queryRaw } = makeDb([]);
+    await loadFeedImages(db, ['p1'], false);
+    const [strings, ...values] = $queryRaw.mock.calls[0] as [string[], ...unknown[]];
+    const sql = strings.join('?');
     expect(sql).toContain('unnest');
     expect(sql).toContain('WITH ORDINALITY');
-    expect(JSON.stringify(values)).toContain('"p2"');
-    expect(values).toContain(1);
+    expect(values).toEqual([['p1'], MAX_FEED_IMAGES]);
+  });
 
-    $queryRaw.mockClear();
-    await loadFeedImages(db, ['p1'], false);
-    const [, ...allValues] = $queryRaw.mock.calls[0] as [string[], ...unknown[]];
-    expect(allValues).toContain(MAX_FEED_IMAGES);
+  it('chế độ chỉ-bìa: ảnh bìa https giữ nguyên, ảnh bìa base64 thành đường dẫn chỉ số 0', async () => {
+    const { db } = makeDb([
+      { postId: 'p1', count: 4, idx: 0, url: null, hash: hash(1) },
+      { postId: 'p2', count: 1, idx: 0, url: 'https://res.cloudinary.com/a.jpg', hash: null },
+    ]);
+    const r = await loadFeedImages(db, ['p1', 'p2'], true);
+    expect(r.get('p1')).toEqual({ count: 4, images: [`/feed/posts/p1/images/0?v=${hash(1)}`] });
+    expect(r.get('p2')).toEqual({ count: 1, images: ['https://res.cloudinary.com/a.jpg'] });
   });
 });

@@ -348,7 +348,7 @@ describe('CommunityFeedService — ảnh trong danh sách (ENGAGE-7, D6-05)', ()
     const calls = (prisma.$queryRaw as jest.Mock).mock.calls;
     expect(calls).toHaveLength(1);
     const [, ...values] = calls[0] as unknown[];
-    expect(values).toEqual([['p1', 'p2'], 1]);
+    expect(values).toEqual([['p1', 'p2']]);
   });
 
   it('trang rỗng không hỏi ảnh', async () => {
