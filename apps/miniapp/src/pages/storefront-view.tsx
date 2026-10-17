@@ -3,9 +3,12 @@ import { Box, Page, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Share2, Sprout, MessageSquare, MapPin, CheckCircle2 } from 'lucide-react';
 import { getPublicStorefront } from '../services/storefront-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isNotFoundError } from '../services/api';
+import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { PageHeader } from '../components/ui/page-header';
+import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { useStorefrontContext } from '../store/storefront-context';
 import { ShareSheet } from '../components/share-sheet';
 import { TierBadge } from '../components/ui/tier-badge';
@@ -24,11 +27,25 @@ export default function StorefrontViewPage() {
 
   const sf = q.data;
   useEffect(() => {
-    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.type === 'CTV' ? sf.slug : null, kind: 'ctv' });
+    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.referralCode ?? null, kind: 'ctv' });
   }, [sf, setSfContext]);
 
   if (q.isLoading) return <Page className="page"><Box p={4}><Skeleton style={{ height: 180, borderRadius: 16 }} /></Box></Page>;
-  if (!sf) return <Page className="page"><Box p={6}><ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} /></Box></Page>;
+  if (!sf) {
+    // Link CTV hỏng/gian hàng đã đóng: thử lại không khác đi, nên chỉ đường về và gợi ý sản phẩm thay vì ngõ cụt.
+    const gone = isNotFoundError(q.error);
+    return (
+      <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={vi.storefront.publicTitle} />
+        {gone ? (
+          <ErrorState message={vi.storefront.notFound} onRetry={() => undefined} onHome={() => navigate('/')} />
+        ) : (
+          <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        )}
+        {gone && <SuggestedRail listSource="storefront_not_found" />}
+      </Page>
+    );
+  }
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)' }}>
@@ -102,7 +119,7 @@ export default function StorefrontViewPage() {
         onClose={() => setShareOpen(false)}
         slug={sf.slug}
         title={sf.title}
-        referralCode={sf.type === 'CTV' ? sf.slug : null}
+        referralCode={sf.referralCode ?? null}
         thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
       />
     </Page>

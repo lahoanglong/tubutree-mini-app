@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { tenantSubdomain } from './lib/tenant-subdomain';
 
 export function middleware(request: NextRequest) {
   const host = request.headers.get('host') ?? '';
@@ -16,20 +17,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const hostname = host.split(':')[0]!.toLowerCase();
-  const parts = hostname.split('.');
-
-  let subdomain: string | null = null;
-  if (hostname.endsWith('.localhost') && parts.length === 2) {
-    subdomain = parts[0]!;
-  } else if (parts.length >= 3 && !hostname.endsWith('.localhost')) {
-    subdomain = parts[0]!;
-  }
-
-  // Bỏ qua các subdomain hệ thống
-  if (subdomain && ['www', 'admin', 'api', 'app', 'mail'].includes(subdomain)) {
-    subdomain = null;
-  }
+  const subdomain = tenantSubdomain(host);
 
   if (subdomain) {
     const requestHeaders = new Headers(request.headers);

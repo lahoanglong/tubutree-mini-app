@@ -12,6 +12,13 @@ import SiteHeader from './site-header';
 const render = () => renderToStaticMarkup(<SiteHeader />);
 
 describe('SiteHeader', () => {
+  it('header dính đầu trang chừa inset phía trên (thanh trạng thái, tai thỏ) để không chui xuống dưới', () => {
+    mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
+    const header = render().match(/<header[^>]*>/)?.[0] ?? '';
+    expect(header).toMatch(/\bsticky\b/);
+    expect(header).toContain('padding-top:env(safe-area-inset-top, 0px)');
+  });
+
   it('không dẫn khách vào Kênh Đối Tác (/merchant) — C-025', () => {
     mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
     const out = render();

@@ -1,10 +1,11 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from './providers';
 import SiteHeader from '@/components/site-header';
 import SiteFooter from '@/components/site-footer';
 import HideOnPortals from '@/components/hide-on-portals';
 import { ReferralCapture } from '@/components/storefront-tracker';
+import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { SITE_URL, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
@@ -15,6 +16,9 @@ export const metadata: Metadata = {
   description: 'Mỹ phẩm & đồ tiêu dùng thiên nhiên Tubu Tree.',
   openGraph: { type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN' },
 };
+
+// viewport-fit=cover để env(safe-area-inset-bottom) có giá trị: thanh dính đáy chừa chỗ cho thanh home của iPhone.
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -27,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           {/* Link CTV chia sẻ thường trỏ thẳng tới trang sản phẩm kèm ?ref= — bắt ở mọi trang. */}
           <ReferralCapture />
+          <EntrySourceCapture />
           <SiteHeader />
           {/* Khối bọc để trang ngắn vẫn đẩy chân trang xuống đáy; <main> bên trong giữ nguyên bố cục. */}
           <div className="flex-1">{children}</div>

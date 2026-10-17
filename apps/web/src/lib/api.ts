@@ -1,4 +1,5 @@
 import { formatVnd } from './format-vnd';
+import { DEFAULT_LEGAL_VARS, type LegalVars } from './legal';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
 // NEXT_PUBLIC_* bị inline lúc build nên chỉ dùng làm fallback.
 const BASE =
@@ -326,6 +327,38 @@ export async function getPublicSupport(): Promise<SupportContact> {
   } catch {
     return DEFAULT_SUPPORT;
   }
+}
+
+export interface LegalDoc {
+  /** Markdown admin đã nhập; null = chưa nhập, trang dùng bản nháp mặc định. */
+  content: string | null;
+  vars: LegalVars;
+}
+
+/** 0 hợp lệ (freeship mọi đơn, hạn đổi trả 0 ngày); null, rỗng, sai kiểu, âm thì mặc định. */
+function nonNegativeOr(v: unknown, fallback: number): number {
+  if (typeof v !== 'number' && typeof v !== 'string') return fallback;
+  if (typeof v === 'string' && v.trim() === '') return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/**
+ * Nội dung trang /chinh-sach/[loai] (GET /config/legal/:loai). 404 (API bản cũ chưa có endpoint) coi như admin chưa nhập.
+ * Lỗi tạm thời thì ném: ISR giữ bản đã render thay vì thay nội dung đã duyệt bằng bản nháp.
+ */
+export async function getLegalDoc(loai: string): Promise<LegalDoc> {
+  const json = await fetchDetail<{ content?: unknown; vars?: { returnWindowDays?: unknown; freeshipThreshold?: unknown } }>(
+    `/config/legal/${encodeURIComponent(loai)}`,
+    300,
+  );
+  return {
+    content: typeof json?.content === 'string' && json.content.trim() !== '' ? json.content : null,
+    vars: {
+      returnWindowDays: nonNegativeOr(json?.vars?.returnWindowDays, DEFAULT_LEGAL_VARS.returnWindowDays),
+      freeshipThreshold: nonNegativeOr(json?.vars?.freeshipThreshold, DEFAULT_LEGAL_VARS.freeshipThreshold),
+    },
+  };
 }
 
 export { formatVnd };

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { SpinResult } from '../services/game-api';
+import { formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Button } from './ui/button';
 import { Text } from './ui/text';
@@ -141,7 +142,7 @@ export function WheelOfFortune({
         onPress={() => void handleSpin()}
         style={{ minWidth: 200 }}
       >
-        {spinning ? 'Đang quay...' : `Quay ngay (${cost} Điểm Xanh)`}
+        {spinning ? 'Đang quay...' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
       </Button>
     </div>
   );

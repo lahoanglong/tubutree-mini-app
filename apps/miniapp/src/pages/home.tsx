@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
@@ -14,7 +14,8 @@ import { CategoryGrid } from '../components/catalog/category-grid';
 import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
 import { HomeExtras } from '../components/home/home-extras';
-import { HomeBlockError } from '../components/home/home-block-error';
+import { HomeBlockError, HomeBlockErrorSuppressed } from '../components/home/home-block-error';
+import { HomePageError } from '../components/home/home-page-error';
 import { HomeHeader } from '../components/home/home-header';
 import { HomeSection, type SectionQuery } from '../components/home/home-section';
 import { useBlockQuery } from '../components/home/use-block-query';
@@ -82,6 +83,11 @@ export default function HomePage() {
     data: featured.data ? { data: dedupeAgainst(featured.data.data, forYouIds).slice(0, SECTION_LIMIT) } : undefined,
   };
 
+  // API sập hẳn: cả ba lưới SP công khai đều lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi của kệ.
+  // Chỉ một phần lỗi thì vẫn là thẻ lỗi từng khối (thử lại đúng khối đó).
+  const publicGrids = [bestSellers, featured, newest];
+  const pageDown = publicGrids.every((b) => b.isError && b.data === undefined);
+
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchShell />,
     // Lỗi thật → khối lỗi + Thử lại; 404 = API cũ chưa có endpoint → ẩn như trước (kệ này vốn tuỳ chọn).
@@ -132,11 +138,22 @@ export default function HomePage() {
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={() => refreshHomeQueries(qc)} />
       <HomeHeader unreadCount={unreadCount} />
-      {homeBlockOrder(kind).map((id) => (
-        <div key={id} data-home-block={id}>
-          {blocks[id]}
-        </div>
-      ))}
+      <HomeBlockErrorSuppressed.Provider value={pageDown}>
+        {homeBlockOrder(kind).map((id) => (
+          <Fragment key={id}>
+            <div data-home-block={id}>{blocks[id]}</div>
+            {pageDown && id === 'search' && (
+              <div data-home-block="pageError">
+                <HomePageError
+                  error={bestSellers.error}
+                  retrying={publicGrids.some((b) => b.isFetching)}
+                  onRetry={() => refreshHomeQueries(qc)}
+                />
+              </div>
+            )}
+          </Fragment>
+        ))}
+      </HomeBlockErrorSuppressed.Provider>
     </Page>
   );
 }

@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
@@ -87,13 +88,31 @@ export class CommunityFeedController {
   }
 
   // Admin (literal paths) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
+  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn/ghim, báo cáo) mở cho nhóm CSKH để bài của khách không nằm chờ chủ shop;
+  // sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
   @Roles('ADMIN')
+  @AllowStaff('CSKH')
   @Get('admin/pending')
   adminPending() {
     return this.feed.adminPending();
   }
 
   @Roles('ADMIN')
+  @AllowStaff('CSKH')
+  @Get('admin/published')
+  adminPublished(@Query() query: CursorPageQuery) {
+    return this.feed.adminPublished(query.take ? Number(query.take) : undefined, query.cursor);
+  }
+
+  @Roles('ADMIN')
+  @AllowStaff('CSKH')
+  @Get('admin/unanswered')
+  adminUnanswered() {
+    return this.feed.adminUnanswered();
+  }
+
+  @Roles('ADMIN')
+  @AllowStaff('CSKH')
   @Get('admin/reports')
   adminReports() {
     return this.feed.adminReports();
@@ -219,24 +238,36 @@ export class CommunityFeedController {
   }
 
   @Roles('ADMIN')
+  @AllowStaff('CSKH')
   @Post('admin/:id/approve')
   approve(@Param('id') id: string) {
     return this.feed.approvePost(id);
   }
 
   @Roles('ADMIN')
+  @AllowStaff('CSKH')
   @Post('admin/:id/reject')
   reject(@Param('id') id: string, @Body() dto: RejectPostDto) {
     return this.feed.rejectPost(id, dto?.reason);
   }
 
+  /** Ẩn bài đã đăng kèm lý do (tác giả được báo). `DELETE /feed/:id` vẫn dành cho chủ bài và ADMIN. */
   @Roles('ADMIN')
+  @AllowStaff('CSKH')
+  @Post('admin/:id/hide')
+  hide(@Param('id') id: string, @Body() dto: RejectPostDto) {
+    return this.feed.hidePost(id, dto?.reason);
+  }
+
+  @Roles('ADMIN')
+  @AllowStaff('CSKH')
   @Post('admin/reports/:id/resolve')
   resolveReport(@Param('id') id: string) {
     return this.feed.resolveReport(id);
   }
 
   @Roles('ADMIN')
+  @AllowStaff('CSKH')
   @Post('admin/:id/pin')
   pin(@Param('id') id: string, @Body() body: PinDto) {
     return this.feed.pinPost(id, body?.pinned !== false);

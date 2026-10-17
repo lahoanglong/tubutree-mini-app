@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
   openSnackbar: vi.fn(),
   callPhone: vi.fn(),
+  openExternal: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -22,7 +23,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/api', () => ({ api: { get: mocks.apiGet }, getErrorMessage: () => 'lỗi' }));
 vi.mock('../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../services/account-api', () => ({ requestAccountDeletion: mocks.requestAccountDeletion }));
-vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn(), callPhone: mocks.callPhone }));
+vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn(), callPhone: mocks.callPhone, openExternal: mocks.openExternal }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -219,5 +220,39 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
     await waitFor(() => expect(mocks.apiGet).toHaveBeenCalledWith('/faqs'));
     expect(screen.queryByText('Tubu Tree bán những gì?')).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Câu hỏi thường gặp' })).toBeInTheDocument();
+  });
+});
+
+describe('Điều khoản & Chính sách mở bản đầy đủ trên web (D5-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT });
+    mocks.apiGet.mockResolvedValue({ data: [] });
+  });
+
+  it.each([
+    ['Điều khoản sử dụng', 'dieu-khoan'],
+    ['Chính sách bảo mật', 'bao-mat'],
+    ['Chính sách đổi trả', 'doi-tra'],
+  ])('"%s": sheet có nút "Xem bản đầy đủ trên web" mở /chinh-sach/%s', async (label, slug) => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(label) }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem bản đầy đủ trên web' }));
+    expect(mocks.openExternal).toHaveBeenCalledTimes(1);
+    expect(mocks.openExternal).toHaveBeenCalledWith(`https://app.tubutree.com/chinh-sach/${slug}`);
+  });
+
+  it('có thêm dòng "Chính sách vận chuyển" mở thẳng trang web (chưa có bản tóm tắt trong app)', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách vận chuyển/ }));
+    expect(mocks.openExternal).toHaveBeenCalledWith('https://app.tubutree.com/chinh-sach/van-chuyen');
+    expect(screen.queryByRole('button', { name: 'Đã hiểu' })).toBeNull();
+  });
+
+  it('nút "Đã hiểu" vẫn đóng sheet và không mở web', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Điều khoản sử dụng/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đã hiểu' }));
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 });

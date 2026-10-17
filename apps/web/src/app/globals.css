@@ -7,6 +7,9 @@
 
 @layer base {
   body {
+    /* viewport-fit=cover: chừa tai thỏ khi xoay ngang; phần tử fixed tự chừa riêng (lib/safe-area.ts). */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
     background: var(--color-bg-canvas);
     color: var(--color-text-primary);
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
@@ -41,4 +44,16 @@
    <html data-tenant-host> do script ở <head> (tenantHostBootScript) đặt trước khi vẽ, để ô không hiện lên rồi biến mất. */
 html[data-tenant-host] [data-site-search] {
   display: none;
+}
+
+/* StickyActionBar (giỏ, thanh toán, chi tiết sản phẩm) che đáy trang trên điện thoại: chừa đúng chiều cao thanh dưới chân trang.
+   --sticky-bar-h do StickyActionBar đo và đặt lúc chạy (thanh cao thêm khi có dòng báo lỗi); giá trị dưới đây là mặc định
+   cho lúc chưa đo được. */
+:root {
+  --sticky-bar-h: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 767px) {
+  body.has-sticky-bar {
+    padding-bottom: var(--sticky-bar-h);
+  }
 }

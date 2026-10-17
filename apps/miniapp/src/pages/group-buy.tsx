@@ -15,6 +15,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { useShareWithFallback } from '../components/share-sheet';
+import { withReferral } from '../utils/share-link';
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -31,6 +32,7 @@ export default function GroupBuyPage() {
   const { id: invitedId } = useParams<{ id: string }>();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
   const login = useAuthStore((s) => s.login);
+  const referralCode = useAuthStore((s) => s.user?.referralCode);
   const shareWithFallback = useShareWithFallback();
 
   const {
@@ -72,9 +74,11 @@ export default function GroupBuyPage() {
         title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
         description: `Còn thiếu ${Math.max(0, g.targetSize - g.currentSize)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
         thumbnail: g.product.thumbnail ?? undefined,
-        path: `/group-buy/${g.id}`,
+        path: withReferral(`/group-buy/${g.id}`, referralCode),
       },
-      `Cùng mình mua chung ${g.product.name} giảm ${g.discountPct}% trên Tubu Tree nhé! Vào mục "Mua chung nhóm" để tham gia.`,
+      `Cùng mình mua chung ${g.product.name} giảm ${g.discountPct}% trên Tubu Tree nhé! Vào mục "Mua chung nhóm" để tham gia.${
+        referralCode ? ` Mã giới thiệu của mình: ${referralCode}` : ''
+      }`,
     );
 
   const renderCard = (g: GroupBuy, invitedBanner = false) => (

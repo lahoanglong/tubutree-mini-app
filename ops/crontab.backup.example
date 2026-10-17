@@ -1,0 +1,18 @@
+# Mẫu crontab cho VPS Vietnix. KHÔNG chép nguyên: sửa remote và URL healthcheck, rồi dán bằng `crontab -e`
+# (user chạy được docker, thường là user SSH). Đổi từ cron 02:00 cũ: xoá dòng cũ gọi backup-db.sh rồi dán dòng dưới.
+# Mỗi lệnh nằm trên MỘT dòng: `pnpm run go-live:check` đọc crontab để tìm backup-db.sh, RCLONE_REMOTE và HEALTHCHECK_URL
+# trong cùng dòng. Cài từng bước và diễn tập restore: tools/backup/README.md, docs/launch/deploy-rollback-runbook.md mục 1.2.
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Backup 6 giờ/lần (00:17, 06:17, 12:17, 18:17 giờ máy chủ; phút 17 để tránh các cron đầu giờ): mất tối đa 6 giờ dữ liệu
+# khi phải khôi phục. Giữ 120 bản mới nhất trên máy (30 ngày x 4, bằng mức 30 ngày của cron 02:00 cũ),
+# bản ngoài máy giữ theo REMOTE_KEEP_DAYS (mặc định 90 ngày). Chỉ hạ BACKUP_KEEP_COUNT khi đã có RCLONE_REMOTE chạy thật
+# (bản ngoài máy là bản sao thứ hai); chưa có remote thì bản trên máy là bản duy nhất, đừng hạ.
+# Thiếu RCLONE_REMOTE hoặc HEALTHCHECK_URL thì vẫn chạy, chỉ in WARN vào log (nhưng go-live:check sẽ báo FAIL/WARN).
+17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=r2:tubutree-backups/db HEALTHCHECK_URL=https://hc-ping.com/<uuid> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1
+
+# Bản TRƯỚC mỗi deploy không đặt trong cron: chạy tay `bash ops/backup-predeploy.sh` ngay trước deploy
+# (nhãn predeploy, giữ 10 bản, không ping healthcheck của cron này).
+
+# --- crontab của ROOT (`sudo crontab -e`): gia hạn chứng chỉ Let's Encrypt, xem ops/README-vietnix-deploy.md ---
+# 0 3 * * * certbot renew --quiet --post-hook "/www/server/apache/bin/apachectl -k graceful"

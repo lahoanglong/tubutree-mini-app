@@ -618,6 +618,8 @@ export class CheckoutService {
               pointsUsed: order.pointsUsed,
               pointsUsedConverted: order.pointsUsedConverted,
               orderSource,
+              firstTouchSource: user.firstTouchSource ?? null,
+              firstTouchCampaign: user.firstTouchCampaign ?? null,
             },
           });
           if (paid) {

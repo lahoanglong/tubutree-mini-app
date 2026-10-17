@@ -156,7 +156,7 @@ export default function BrandViewPage() {
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <BadgePercent size={18} color="var(--color-action-secondary-fg)" aria-hidden />
                 <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-action-secondary-fg)' }}>
-                  Chia sẻ nhãn này — nhận tới {ste.maxAffiliateRate}% hoa hồng
+                  {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
                 </Text>
               </span>
               <Text variant="caption" style={{ color: 'var(--color-text-brand)', marginTop: 2 }} as="span">

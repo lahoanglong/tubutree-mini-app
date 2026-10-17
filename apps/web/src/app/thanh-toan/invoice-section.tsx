@@ -37,7 +37,7 @@ export function InvoiceSection({
           checked={want}
           onChange={(e) => onWant(e.target.checked)}
           disabled={disabled}
-          className="h-4 w-4 accent-forest-600"
+          className="h-6 w-6 shrink-0 accent-forest-600"
         />
         Yêu cầu xuất hoá đơn VAT
       </label>

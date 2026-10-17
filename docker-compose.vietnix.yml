@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────
 # Tubu Tree — deploy TẠM trên VPS Vietnix dùng CHUNG với ChoDeli (2026-09-12).
 #
-# Khác docker-compose.prod.yml ở 3 chỗ, vì máy này KHÔNG phải VM riêng:
+# Khác docker-compose.prod.yml ở 4 chỗ, vì máy này KHÔNG phải VM riêng:
 #   1. KHÔNG có service `caddy` — cổng 80/443 đã do nginx aaPanel (WordPress) giữ.
 #      api/web chỉ bind ra 127.0.0.1 (không lộ ra ngoài); aaPanel nginx sẽ reverse-proxy
 #      vào 2 cổng này cho api.tubutree.com / app.tubutree.com — xem hướng dẫn kèm theo.
@@ -9,6 +9,13 @@
 #   3. `mem_limit` mọi service — máy đang chia RAM với ChoDeli + WordPress/MariaDB, giới hạn
 #      cứng để một lượt traffic tăng đột biến của Tubu Tree không kéo sập ChoDeli và ngược lại.
 #      Tổng ngân sách ~2.3GB, để lại ~2GB+ cho ChoDeli/WordPress/hệ điều hành trên máy 7.8GB.
+#   4. `cpus` cho api và web — trần CPU cùng lý do với mem_limit. Mặc định <= 1 lõi vì Docker TỪ CHỐI khởi động container
+#      khi cpus lớn hơn số vCPU của máy; máy có nhiều vCPU thì nâng trong .env (không sửa file này: sửa file trên VPS làm
+#      `git status` bẩn và dừng bước 1 của runbook deploy). Chạy `nproc` rồi đặt, ví dụ máy 4 vCPU: API_CPUS=2  WEB_CPUS=1
+#      Trần chỉ giới hạn mức dùng tối đa, không giữ chỗ; có hiệu lực khi api/web được tạo lại ở deploy.
+#      postgres và redis CỐ Ý không có `cpus`/`shm_size`: `deploy.sh` chạy `up -d --no-build api` không kèm --no-deps nên
+#      compose tạo lại cả hai service này nếu cấu hình của chúng đổi (5xx vài chục giây, BullMQ mất kết nối). Muốn thêm thì
+#      tạo lại chủ động ngoài giờ cao điểm TRƯỚC deploy: `docker compose -f docker-compose.vietnix.yml up -d --no-deps postgres redis`.
 #
 # Khi có VM/VPS riêng: quay lại dùng docker-compose.prod.yml (có Caddy, không giới hạn RAM).
 # ──────────────────────────────────────────────────────────────
@@ -68,6 +75,7 @@ services:
     stop_grace_period: 30s
     logging: *default-logging
     mem_limit: 768m
+    cpus: ${API_CPUS:-1.0}
     env_file: .env
     environment:
       NODE_ENV: production
@@ -106,9 +114,14 @@ services:
     restart: unless-stopped
     logging: *default-logging
     mem_limit: 512m
+    cpus: ${WEB_CPUS:-1.0}
     environment:
       NODE_ENV: production
       PORT: 3000
+      # Next standalone mặc định đóng kết nối rảnh sau 5 giây, trong khi Apache (ProxyPass ... ttl=30) tái dùng kết nối:
+      # thỉnh thoảng trúng kết nối vừa chết → 502 lẻ. 55 giây lớn hơn ttl của Apache và nhỏ hơn headersTimeout 60 giây của
+      # Node (Next không cho đặt headersTimeout). Tên biến do server.js của Next 14 đọc (KEEP_ALIVE_TIMEOUT, mili giây).
+      KEEP_ALIVE_TIMEOUT: '55000'
       # Docker tự set HOSTNAME=<container id> cho mọi container; Next.js standalone server.js đọc
       # process.env.HOSTNAME làm địa chỉ bind thay vì mặc định 0.0.0.0 — bind nhầm vào IP container
       # trên bridge network, "localhost"/127.0.0.1 bên trong container không kết nối được (dù host

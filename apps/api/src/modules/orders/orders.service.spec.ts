@@ -1006,6 +1006,56 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
   });
 });
 
+describe('OrdersService.list — hạn thanh toán trên thẻ đơn (D7-2)', () => {
+  const created = new Date('2026-10-14T01:20:56.000Z');
+  const waiting = {
+    ...baseOrder, type: 'RETAIL', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID',
+    createdAt: created, autoCancelBlockedAt: null, items: [],
+  };
+
+  function listService(orders: Record<string, unknown>[], ttl: Record<string, unknown> = {}) {
+    const get = jest.fn(async (key: string, fb?: unknown) => (key in ttl ? ttl[key] : fb));
+    const prisma = {
+      order: { findMany: jest.fn().mockResolvedValue(orders), count: jest.fn().mockResolvedValue(orders.length) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    const cfg = { get } as unknown as SystemConfigService;
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, cfg, affiliate, reversal), get };
+  }
+
+  it('đơn chuyển khoản chờ tiền có paymentDeadline = lúc đặt + TTL (mặc định 24 giờ); đơn khác để null', async () => {
+    const { svc } = listService([
+      { ...waiting, id: 'o1', code: 'A' },
+      { ...waiting, id: 'o2', code: 'B', paymentMethod: 'COD' },
+      { ...waiting, id: 'o3', code: 'C', status: 'CONFIRMED', paymentStatus: 'PAID' },
+      { ...waiting, id: 'o4', code: 'D', autoCancelBlockedAt: new Date('2026-10-15T02:30:00Z') },
+    ]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data.map((o) => o.paymentDeadline)).toEqual(['2026-10-15T01:20:56.000Z', null, null, null]);
+  });
+
+  it('đọc TTL MỘT lần cho cả trang dù nhiều đơn chờ tiền; đơn đại lý dùng TTL riêng', async () => {
+    const { svc, get } = listService(
+      [
+        { ...waiting, id: 'o1', code: 'A' },
+        { ...waiting, id: 'o2', code: 'B' },
+        { ...waiting, id: 'o3', code: 'C', type: 'DEALER' },
+      ],
+      { 'orders.pending_payment_ttl_hours': 12, 'orders.dealer_pending_payment_ttl_hours': 48 },
+    );
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data.map((o) => o.paymentDeadline)).toEqual(['2026-10-14T13:20:56.000Z', '2026-10-14T13:20:56.000Z', '2026-10-16T01:20:56.000Z']);
+    expect(get.mock.calls.filter(([k]) => k === 'orders.pending_payment_ttl_hours')).toHaveLength(1);
+  });
+
+  it('trang không có đơn chờ tiền thì không đọc cấu hình TTL', async () => {
+    const { svc, get } = listService([{ ...baseOrder, items: [] }]);
+    await svc.list('u1', {}, 1, 20);
+    expect(get).not.toHaveBeenCalled();
+  });
+});
+
 describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-05)', () => {
   const CART = { items: [{ id: 'ci1', fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' } }], couponCode: null, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 3 };
   const variation = (id: string, stock: number, over: { isActive?: boolean; productActive?: boolean; approval?: string } = {}) => ({

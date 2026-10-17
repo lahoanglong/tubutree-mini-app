@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
+import { Zap } from 'lucide-react';
 import { fetchActiveFlashSales, type ProductCard } from '../../services/shop-api';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
@@ -34,7 +35,7 @@ export function CatalogTile({ product, listSource, onOpen }: CatalogTileProps) {
         // Hết hàng: lớp phủ của ProductTile trong suốt 72% — không để badge % lộ ra bên dưới.
         // `inStock === false` (không phải falsy): API cũ không trả field → coi là còn hàng, giống ProductTile.
         pricing.salePct > 0 && product.inStock !== false ? (
-          <Badge tone="promo" size="sm" style={pricing.isFlash ? FLASH_BADGE_STYLE : undefined}>
+          <Badge tone="promo" size="sm" icon={pricing.isFlash ? Zap : undefined} style={pricing.isFlash ? FLASH_BADGE_STYLE : undefined}>
             {pricing.isFlash ? `${vi.flashSale.badge} -${pricing.salePct}%` : `-${pricing.salePct}%`}
           </Badge>
         ) : undefined

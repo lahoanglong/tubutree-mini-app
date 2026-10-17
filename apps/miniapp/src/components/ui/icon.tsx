@@ -6,7 +6,7 @@ const SIZE_PX = { sm: 16, md: 20, lg: 24 } as const;
 export interface IconProps {
   icon: LucideIcon;
   size?: keyof typeof SIZE_PX;
-  tone?: 'default' | 'muted' | 'brand' | 'danger' | 'inverse';
+  tone?: 'default' | 'muted' | 'brand' | 'danger' | 'inverse' | 'current';
   className?: string;
   style?: CSSProperties;
   'data-testid'?: string;
@@ -18,6 +18,8 @@ const TONE_VAR: Record<NonNullable<IconProps['tone']>, string> = {
   brand: 'var(--color-text-brand)',
   danger: 'var(--color-text-danger)',
   inverse: 'var(--color-text-inverse)',
+  /** Ăn màu chữ của phần tử cha: icon trong huy hiệu/tiêu đề đã có màu riêng (khuyến mãi, cảnh báo). */
+  current: 'currentColor',
 };
 
 /** Wrapper cố định strokeWidth 1,75 + 3 cỡ chuẩn (sm16/md20/lg24) — thay 8 giá trị strokeWidth

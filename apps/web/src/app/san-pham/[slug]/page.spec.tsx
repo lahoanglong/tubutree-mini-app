@@ -76,6 +76,19 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
   });
 });
 
+describe('/san-pham/[slug] — chia sẻ (D5-04)', () => {
+  it('có nút Chia sẻ trỏ về đúng đường dẫn sản phẩm', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+    const c = await mount();
+    const btn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Chia sẻ')!;
+    click(btn);
+    await flush();
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', url: `${window.location.origin}/san-pham/dau-goi-bo-ket` });
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+  });
+});
+
 describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
   it('hiện đủ ảnh sản phẩm: mỗi ảnh một slide, ảnh đầu tải sớm, còn lại tải lười', async () => {
     const c = await mount();

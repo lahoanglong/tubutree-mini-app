@@ -60,6 +60,7 @@ import { OrderRefunds } from '../components/orders/order-refunds';
 import {
   EMPTY_BANK,
   bankDetailsError,
+  canPayOrderNow,
   cancelRefundMode,
   destinationBody,
   remainingByLine,
@@ -261,7 +262,7 @@ export default function OrderDetailPage() {
   // khách muốn trả tiền cũng không có đường quay lại, chỉ còn cách huỷ đơn rồi đặt lại.
   // Hàng đã bàn giao vận chuyển mà chưa nhận tiền: CSKH thống nhất với khách cách trả (chuyển khoản hay hãng thu hộ) — không
   // mời trả tiền thêm ở đây để khách không trả hai lần (R5-SYNC-1).
-  const canPayNow = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER' && !o.manualHandling;
+  const canPayNow = canPayOrderNow(o);
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
   const stamp = orderStamp(o);
   const timelineSteps = timelineStepsFor(o.paymentMethod);

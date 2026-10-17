@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import { Mail, Phone } from 'lucide-react';
 import { getPublicSupport } from '@/lib/api';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
 
 const LINK =
   'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
@@ -39,6 +41,18 @@ export default async function SiteFooter() {
           </ul>
         </div>
       </div>
+
+      <nav aria-label="Chính sách" className="mx-auto max-w-6xl px-4 pb-6">
+        <ul className="flex flex-wrap gap-x-6 border-t border-stone-200 pt-2">
+          {LEGAL_SLUGS.map((slug) => (
+            <li key={slug}>
+              <Link href={`/chinh-sach/${slug}`} className={LINK}>
+                {LEGAL_PAGES[slug].footerLabel}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </footer>
   );
 }

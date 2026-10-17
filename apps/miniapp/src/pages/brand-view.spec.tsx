@@ -200,6 +200,17 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
     expect(parseInt(chip.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
   });
 
+  it('CTV đủ điều kiện nhưng nhãn chưa có tỉ lệ hoa hồng: banner vẫn chia sẻ được, không in "nhận tới % hoa hồng"', async () => {
+    for (const rate of [0, null, undefined]) {
+      mocks.getBrandShareToEarn.mockResolvedValue({ eligible: true, maxAffiliateRate: rate, referralCode: 'AFF1', brandSlug: 'sachi' });
+      const { unmount } = renderPage();
+      const banner = await screen.findByRole('button', { name: /Chia sẻ nhãn này/ });
+      expect(banner).toHaveTextContent('Chia sẻ nhãn này');
+      expect(banner.textContent).not.toMatch(/hoa hồng|nhận tới|%/);
+      unmount();
+    }
+  });
+
   it('banner share-to-earn là nút thật có thể dùng bàn phím', async () => {
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: 'sachi' });
     renderPage();

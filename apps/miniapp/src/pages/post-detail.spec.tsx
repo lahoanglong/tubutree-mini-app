@@ -142,7 +142,9 @@ describe('PostDetailPage — hiển thị (hành vi giữ nguyên khi chuyển D
     stub(POST({ kind: 'QUESTION', title: 'Rửa bình sữa thế nào?', isOwner: true, status: 'PENDING', isPinned: true }));
     renderPage();
     expect(await screen.findByText('Rửa bình sữa thế nào?')).toBeInTheDocument();
-    expect(screen.getByText(/Chờ duyệt/)).toBeInTheDocument();
+    const pending = screen.getByText(/Chờ duyệt/);
+    expect(pending.textContent).toBe('Chờ duyệt');
+    expect(pending.querySelector('svg')).not.toBeNull();
     expect(screen.getByText(/Đã ghim/)).toBeInTheDocument();
   });
 

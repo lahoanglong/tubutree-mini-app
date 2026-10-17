@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsEventsService } from './analytics-events.service';
+import { normalizeEntryToken } from '../../common/attribution';
 import { IngestEventsDto } from './dto/ingest-events.dto';
 
 @Controller('events')
@@ -28,7 +29,8 @@ export class AnalyticsController {
         sessionId: e.sessionId ?? null,
         platform: e.platform,
         appVersion: e.appVersion ?? null,
-        entrySource: e.entrySource ?? null,
+        entrySource: normalizeEntryToken(e.entrySource),
+        campaign: normalizeEntryToken(e.campaign),
         notificationId: e.notificationId ?? null,
         refCode: e.refCode ?? null,
         storefrontSlug: e.storefrontSlug ?? null,

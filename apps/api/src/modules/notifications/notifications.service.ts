@@ -54,14 +54,25 @@ export class NotificationsService {
   /**
    * `dedupeKey`: tin gắn với một sự kiện chỉ xảy ra một lần (vd một dòng sổ điểm) — gọi lại với cùng khoá cho cùng khách thì
    * không ghi/gửi lần hai. Khoá nằm trong payload, kiểm và ghi dưới khoá advisory theo (khách, khoá) nên hai lần gọi song song
-   * cũng chỉ một lần thắng.
+   * cũng chỉ một lần thắng. `dedupeWithinMs`: khoá chỉ chặn khi tin trước còn trong chừng này mili giây (gộp tin lặp theo
+   * thời gian, vd "bài của bạn có người thích" tối đa một tin mỗi giờ). Chỉ số dương mới là cửa sổ hợp lệ; bỏ trống, 0, âm
+   * hay NaN đều chặn vĩnh viễn như trước (không bao giờ hiểu nhầm thành "không chặn").
    */
   async notify(
     userId: string,
     templateCode: string,
     data: Record<string, string>,
-    opts: { dedupeKey?: string } = {},
+    opts: { dedupeKey?: string; dedupeWithinMs?: number } = {},
   ): Promise<void> {
+    const dedupeKey = opts.dedupeKey;
+    const withinMs = opts.dedupeWithinMs != null && opts.dedupeWithinMs > 0 ? opts.dedupeWithinMs : null;
+    // Đọc nhanh ngoài transaction: bài viral có hàng trăm lượt tương tác/phút mà chỉ một tin được ghi, nên các lượt còn lại
+    // phải rời đi sau đúng một truy vấn thay vì mỗi lượt giữ một kết nối chờ khoá advisory. Kiểm lại trong transaction bên
+    // dưới vẫn là cổng quyết định khi hai lượt cùng thấy "chưa có tin".
+    if (dedupeKey && (await this.prisma.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, withinMs), select: { id: true } }))) {
+      this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: đã gửi tin cho sự kiện này.`);
+      return;
+    }
     const tpl = await this.prisma.notificationTemplate.findUnique({ where: { code: templateCode } });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!isAllowedByPrefs(templateCode, user)) {
@@ -77,14 +88,10 @@ export class NotificationsService {
       this.logger.warn(`Thiếu NotificationTemplate "${templateCode}" — đã gửi nội dung mặc định.`);
     }
     const body = tpl ? this.render(tpl.bodyTemplate, data) : MISSING_TEMPLATE_BODY;
-    const dedupeKey = opts.dedupeKey;
     const inAppLog = dedupeKey
       ? await this.prisma.$transaction(async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`notify:${userId}:${dedupeKey}`}))`;
-          const seen = await tx.notificationLog.findFirst({
-            where: { userId, channel: 'INAPP', payload: { path: ['dedupeKey'], equals: dedupeKey } },
-            select: { id: true },
-          });
+          const seen = await tx.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, withinMs), select: { id: true } });
           if (seen) return null;
           return tx.notificationLog.create({
             data: { userId, templateCode, channel: 'INAPP', payload: { body, data, dedupeKey }, status: 'SENT' },
@@ -109,6 +116,15 @@ export class NotificationsService {
     if (tpl?.channel === 'ZNS' && user?.phone && tpl.zaloTemplateId) {
       await this.dispatchZns(userId, templateCode, user.phone, tpl.zaloTemplateId, data);
     }
+  }
+
+  private dedupeWhere(userId: string, dedupeKey: string, withinMs: number | null) {
+    return {
+      userId,
+      channel: 'INAPP' as const,
+      payload: { path: ['dedupeKey'], equals: dedupeKey },
+      ...(withinMs != null ? { sentAt: { gte: new Date(Date.now() - withinMs) } } : {}),
+    };
   }
 
   /**

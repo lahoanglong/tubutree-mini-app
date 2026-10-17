@@ -26,6 +26,18 @@ describe('AnalyticsEventsService.record', () => {
     expect(arg.occurredAt).toBeInstanceOf(Date);
   });
 
+  it('ghi nguồn và chiến dịch của phiên (null khi vắng)', async () => {
+    const create = jest.fn().mockResolvedValue(undefined);
+    const tx = { analyticsEvent: { create } } as unknown as PrismaService;
+    const svc = new AnalyticsEventsService({} as PrismaService);
+
+    await svc.record(tx, { eventName: 'app_opened', platform: 'miniapp', entrySource: 'card-2610', campaign: 'hop-hang' });
+    await svc.record(tx, { eventName: 'app_opened', platform: 'miniapp' });
+
+    expect(create.mock.calls[0][0].data).toMatchObject({ entrySource: 'card-2610', campaign: 'hop-hang' });
+    expect(create.mock.calls[1][0].data).toMatchObject({ entrySource: null, campaign: null });
+  });
+
   it('dùng eventId truyền vào nếu có, không tự sinh mới', async () => {
     const create = jest.fn().mockResolvedValue(undefined);
     const tx = { analyticsEvent: { create } } as unknown as PrismaService;
