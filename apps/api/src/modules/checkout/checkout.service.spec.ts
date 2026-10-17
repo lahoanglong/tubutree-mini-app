@@ -1901,3 +1901,28 @@ describe('CheckoutService — không lộ trường nội bộ cho khách (R3-ME
     expect(JSON.stringify(q)).not.toContain('u-a');
   });
 });
+
+describe('CheckoutService.placeOrder — chạm đầu của khách trên order_placed (props)', () => {
+  const placedEvent = (analytics: AnalyticsEventsService) =>
+    (analytics.record as jest.Mock).mock.calls.map((c) => c[1]).find((e) => e.eventName === 'order_placed');
+
+  it('mang nguồn và chiến dịch chạm đầu của khách đặt đơn', async () => {
+    const { svc, prisma, analytics } = build();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: null,
+      firstTouchSource: 'card-2610', firstTouchCampaign: 'hop-hang',
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const e = placedEvent(analytics);
+    expect(e.props).toMatchObject({ firstTouchSource: 'card-2610', firstTouchCampaign: 'hop-hang' });
+    // Phong bì (entrySource/campaign) là nguồn của PHIÊN ở sự kiện client; đơn không có phiên nên không được điền vào đó.
+    expect(e.entrySource).toBeUndefined();
+    expect(e.campaign).toBeUndefined();
+  });
+
+  it('khách chưa có nguồn (tài khoản cũ) → null, đơn vẫn đặt được', async () => {
+    const { svc, analytics } = build();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(placedEvent(analytics).props).toMatchObject({ firstTouchSource: null, firstTouchCampaign: null });
+  });
+});

@@ -40,7 +40,10 @@ export class EventEnvelopeDto {
   @IsOptional() @IsString() @MaxLength(64) sessionId?: string;
   @IsIn(['miniapp', 'web']) platform!: 'miniapp' | 'web';
   @IsOptional() @IsString() @MaxLength(32) appVersion?: string;
+  // Nhãn nguồn/chiến dịch chỉ kiểm kiểu và độ dài ở đây; controller chuẩn hoá và bỏ nhãn sai khuôn
+  // (common/attribution.ts) để một nhãn sai không làm cả lô 50 sự kiện bị 400.
   @IsOptional() @IsString() @MaxLength(64) entrySource?: string;
+  @IsOptional() @IsString() @MaxLength(64) campaign?: string;
   @IsOptional() @IsString() @MaxLength(64) notificationId?: string;
   @IsOptional() @IsString() @MaxLength(64) refCode?: string;
   @IsOptional() @IsString() @MaxLength(100) storefrontSlug?: string;

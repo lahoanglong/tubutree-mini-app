@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('zmp-sdk/apis', () => ({
   setStorage: vi.fn(),
@@ -20,7 +20,10 @@ vi.mock('../services/zmp-bridge', () => ({
   getLaunchReferral: vi.fn(() => undefined),
 }));
 
+vi.mock('../services/first-touch', () => ({ loadFirstTouch: vi.fn(async () => undefined) }));
+
 import { getStorage, setStorage, removeStorage } from 'zmp-sdk/apis';
+import { loadFirstTouch } from '../services/first-touch';
 import { loginGuest, loginZaloMiniApp, refreshTokens, setUnauthorizedHandler, ensurePhoneApi } from '../services/api';
 import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 import type { LoginResponse, AuthUser } from '@tubutree/shared-types';
@@ -71,6 +74,56 @@ beforeEach(() => {
   mockedRemoveStorage.mockResolvedValue(undefined as never);
   mockedGetStorage.mockResolvedValue({});
   useAuthStore.setState({ user: null, status: 'loading', error: undefined });
+});
+
+describe('nguồn chạm đầu đi kèm đăng nhập tạo tài khoản', () => {
+  const firstTouch = { source: 'shopee', campaign: 'card-2610', at: '2026-10-18T00:00:00.000Z' };
+
+  beforeEach(() => {
+    vi.mocked(loadFirstTouch).mockResolvedValue(firstTouch);
+  });
+  afterEach(() => {
+    vi.mocked(loadFirstTouch).mockResolvedValue(undefined);
+  });
+
+  it('login(): gửi firstTouch ở đăng nhập Zalo', async () => {
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValue(loginResponse('u1', 'z1'));
+    await useAuthStore.getState().login();
+    expect(mockedLoginZalo).toHaveBeenCalledWith('c', 'a', undefined, undefined, firstTouch);
+  });
+
+  it('login(): Zalo lỗi → đăng nhập khách cũng gửi firstTouch', async () => {
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockResolvedValue(loginResponse('g1'));
+    await useAuthStore.getState().login();
+    expect(mockedLoginGuest).toHaveBeenCalledWith(expect.any(String), undefined, firstTouch);
+  });
+
+  it('restore() không có phiên: đăng nhập Zalo và đăng nhập khách đều gửi firstTouch', async () => {
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockRejectedValueOnce(new Error('zalo down'));
+    mockedLoginGuest.mockResolvedValue(loginResponse('g1'));
+    await useAuthStore.getState().restore();
+    expect(mockedLoginZalo).toHaveBeenCalledWith('c', 'a', undefined, undefined, firstTouch);
+    expect(mockedLoginGuest).toHaveBeenCalledWith(expect.any(String), undefined, firstTouch);
+  });
+
+  it('restore() bằng refresh token còn hạn: không đụng tới nguồn chạm đầu (tài khoản đã có không bị ghi lại)', async () => {
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'rt' });
+    mockedRefresh.mockResolvedValue(loginResponse('u1', 'z1'));
+    await useAuthStore.getState().restore();
+    expect(loadFirstTouch).not.toHaveBeenCalled();
+  });
+
+  it('không có chạm đầu (mở app trần) → vẫn đăng nhập bình thường, tham số vắng', async () => {
+    vi.mocked(loadFirstTouch).mockResolvedValue(undefined);
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValue(loginResponse('u1', 'z1'));
+    await useAuthStore.getState().login();
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(mockedLoginZalo).toHaveBeenCalledWith('c', 'a', undefined, undefined, undefined);
+  });
 });
 
 describe('useAuthStore.login — guest fallback', () => {

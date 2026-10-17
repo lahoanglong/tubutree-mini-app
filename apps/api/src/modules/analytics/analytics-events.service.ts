@@ -13,6 +13,7 @@ export interface AnalyticsEventInput {
   platform: 'miniapp' | 'web' | 'admin' | 'pos' | 'system';
   appVersion?: string | null;
   entrySource?: string | null;
+  campaign?: string | null;
   notificationId?: string | null;
   refCode?: string | null;
   storefrontSlug?: string | null;
@@ -40,6 +41,7 @@ export class AnalyticsEventsService {
         platform: input.platform,
         appVersion: input.appVersion ?? null,
         entrySource: input.entrySource ?? null,
+        campaign: input.campaign ?? null,
         notificationId: input.notificationId ?? null,
         refCode: input.refCode ?? null,
         storefrontSlug: input.storefrontSlug ?? null,
