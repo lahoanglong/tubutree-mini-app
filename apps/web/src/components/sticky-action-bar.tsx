@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { safeAreaPadX } from '@/lib/safe-area';
 
 /**
  * Thanh hành động dính đáy cho điện thoại (giá/tổng + nút mua). Chỉ hiện dưới màn md; từ md trở lên các trang giữ nút
@@ -38,8 +39,8 @@ export function StickyActionBar({ children, label }: { children: ReactNode; labe
       role="region"
       aria-label={label}
       data-testid="sticky-bar"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-stone-0 px-4 pt-3 shadow-raised md:hidden"
-      style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-stone-0 pt-3 shadow-raised md:hidden"
+      style={{ ...safeAreaPadX('1rem'), paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
     >
       {children}
     </div>

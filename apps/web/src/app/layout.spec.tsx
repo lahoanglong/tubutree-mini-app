@@ -70,4 +70,11 @@ describe('RootLayout — viewport', () => {
     expect(css).toMatch(/--sticky-bar-h:\s*calc\(6rem/);
     expect(css).toMatch(/body\.has-sticky-bar\s*\{[^}]*padding-bottom:\s*var\(--sticky-bar-h\)/);
   });
+
+  it('body chừa inset trái/phải của tai thỏ (viewport-fit=cover), bằng 0 trên máy không có', () => {
+    const css = readFileSync(fileURLToPath(new URL('./globals.css', import.meta.url)), 'utf8');
+    const body = css.match(/(?:^|\n)\s*body\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(body).toMatch(/padding-left:\s*env\(safe-area-inset-left,\s*0px\)/);
+    expect(body).toMatch(/padding-right:\s*env\(safe-area-inset-right,\s*0px\)/);
+  });
 });

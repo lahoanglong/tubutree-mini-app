@@ -24,6 +24,14 @@ describe('StickyActionBar', () => {
     expect(bar.textContent).toBe('nội dung');
   });
 
+  it('chừa inset trái/phải của tai thỏ khi xoay ngang (không nhỏ hơn lề 1rem sẵn có)', () => {
+    const r = render(<StickyActionBar label="Mua hàng">x</StickyActionBar>);
+    mounted.push(r);
+    const bar = r.container.querySelector('[data-testid="sticky-bar"]') as HTMLElement;
+    expect(bar.style.paddingLeft).toBe('max(1rem, env(safe-area-inset-left, 0px))');
+    expect(bar.style.paddingRight).toBe('max(1rem, env(safe-area-inset-right, 0px))');
+  });
+
   it('đánh dấu <body> trong lúc hiện để chân trang không bị thanh che, và gỡ khi rời trang', () => {
     const r = render(<StickyActionBar label="Mua hàng">x</StickyActionBar>);
     expect(document.body.classList.contains('has-sticky-bar')).toBe(true);
