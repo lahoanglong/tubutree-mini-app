@@ -65,7 +65,17 @@ export class CartService {
     return this.priceCart(userId, storefrontSlug === null ? undefined : await this.attributedSlug(userId, storefrontSlug));
   }
 
-  private async priceCart(userId: string, storefrontSlug: string | undefined) {
+  /**
+   * Giá của MỘT PHẦN giỏ (khách chọn vài dòng để mua): combo, mã và giảm hạng tính trên đúng các dòng đã chọn, cùng hàm và cùng
+   * thứ tự với báo giá/đặt đơn có `itemIds` (combo chỉ áp khi đủ bộ trong phần chọn). Chỉ xem giá: không gỡ mã khỏi giỏ dù phần chọn
+   * không đạt điều kiện của mã — mã vẫn thuộc cả giỏ.
+   */
+  async getCartSelection(userId: string, storefrontSlug: string | undefined, itemIds: string[]) {
+    return this.priceCart(userId, await this.attributedSlug(userId, storefrontSlug), itemIds);
+  }
+
+  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[]) {
+    const selection = itemIds && itemIds.length > 0 ? new Set(itemIds) : null;
     const cartId = await this.ensureCart(userId);
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
@@ -118,7 +128,7 @@ export class CartService {
       now,
       userId,
     );
-    const lines = sellable.map((it) => {
+    const lines = (selection ? sellable.filter((it) => selection.has(it.id)) : sellable).map((it) => {
       const { unitPrice, flash, flashLimitNotice } = priceFlashLine(
         it.variation.salePrice ?? it.variation.retailPrice,
         it.quantity,
@@ -177,19 +187,26 @@ export class CartService {
         // connection blip...) KHÔNG được nuốt ở đây — nếu không, một trục trặc tạm thời sẽ bị
         // hiểu nhầm thành "coupon invalid" và xoá mã hợp lệ khỏi giỏ hàng của khách.
         if (!(err instanceof BadRequestException)) throw err;
-        // Có thể flash tạm thời kéo couponBase xuống dưới minOrder. Nếu coupon vẫn hợp lệ trên
-        // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
-        // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
-        try {
-          await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
+        if (selection) {
+          // Phần chọn không đạt mã: báo như báo giá (giảm 0đ kèm lý do), không đụng tới mã của cả giỏ.
           discount = 0;
           freeship = false;
           couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
-        } catch (err2) {
-          if (!(err2 instanceof BadRequestException)) throw err2;
-          await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
-          couponRemoved = { code: couponCode, reason: err2.message };
-          couponCode = null;
+        } else {
+          // Có thể flash tạm thời kéo couponBase xuống dưới minOrder. Nếu coupon vẫn hợp lệ trên
+          // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
+          // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
+          try {
+            await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
+            discount = 0;
+            freeship = false;
+            couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
+          } catch (err2) {
+            if (!(err2 instanceof BadRequestException)) throw err2;
+            await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
+            couponRemoved = { code: couponCode, reason: err2.message };
+            couponCode = null;
+          }
         }
       }
     }

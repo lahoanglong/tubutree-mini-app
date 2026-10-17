@@ -485,4 +485,46 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     }
   });
 
+  it('chọn một phần giỏ: giỏ (itemIds) = báo giá = đơn, combo chỉ khi đủ bộ trong phần chọn, mã và hạng trên phần còn lại', async () => {
+    const b = await buyer();
+    await tierUser(b.userId, 0.05);
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const d = await product(30_000);
+    const slug = await comboStore(a.productId, c.productId, 10);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: c.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: d.variationId, quantity: 1 });
+    const code = await coupon(b.userId, 'PERCENT', 10);
+    await cart.applyCoupon(b.userId, code, slug);
+    const line = async (variationId: string) => (await prisma.cartItem.findFirstOrThrow({ where: { cart: { userId: b.userId }, variationId } })).id;
+    const ids = [await line(a.variationId), await line(c.variationId)];
+
+    // a + c: 100.000đ, combo 10.000đ, mã 10% × 90.000đ = 9.000đ, hạng 5% × 81.000đ = 4.050đ.
+    const r = await cartQuoteOrder(b, { cartSlug: slug, quoteSlug: slug, orderSlug: slug, itemIds: ids });
+    expect(r.c).toMatchObject({ subtotal: 100_000, comboDiscount: 10_000, discount: 9_000, tierDiscount: 4_050, itemCount: 2 });
+    expect(r.numbers).toEqual({ cart: 76_950, quote: 76_950, order: 76_950 });
+    // Đơn chỉ lấy hai dòng đã chọn; dòng còn lại ở lại giỏ, mã giữ nguyên.
+    expect(r.c.items).toHaveLength(2);
+    expect((await cartApi.get(b.userId, { storefrontSlug: slug } as never)).items).toHaveLength(1);
+  });
+
+  it('chọn một phần giỏ: mã hụt đơn tối thiểu trên phần chọn không bị gỡ khỏi giỏ (chỉ xem giá, không ghi)', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    const d = await product(30_000);
+    await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: d.variationId, quantity: 1 });
+    const code = await coupon(b.userId, 'AMOUNT', 10_000, { minOrder: 80_000 });
+    await cart.applyCoupon(b.userId, code); // cả giỏ 90.000đ đạt 80.000đ
+    const lineD = await prisma.cartItem.findFirstOrThrow({ where: { cart: { userId: b.userId }, variationId: d.variationId } });
+
+    const sub = await cartApi.get(b.userId, { itemIds: [lineD.id] } as never);
+    expect(sub.discount).toBe(0);
+    expect(sub.couponCode).toBe(code);
+    expect((await prisma.cart.findUniqueOrThrow({ where: { userId: b.userId } })).couponCode).toBe(code);
+    const q = await checkout.quote(b.userId, { addressId: b.addressId, itemIds: [lineD.id] });
+    expect(q.discount).toBe(0);
+    expect(sub.subtotal - sub.discount).toBe(q.total - q.shippingFee);
+  });
 });
