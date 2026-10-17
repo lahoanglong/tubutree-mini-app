@@ -950,15 +950,19 @@ export class CommunityFeedService {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { userId: true, status: true, title: true, body: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Không có quyền xoá.');
-    // Trả lại điểm reputation đã cộng từ bài này TRƯỚC khi gỡ — nếu không, đăng-ăn-điểm-rồi-xoá
-    // là cách farm hạng sạch dấu vết (P1-1). Trừ theo CHỦ BÀI, kể cả khi ADMIN là người gỡ.
+    // Chuyển trạng thái bằng MỘT câu lệnh có điều kiện rồi mới đảo điểm/rút tin cậy/báo tác giả: hai người cùng gỡ một bài thì
+    // chỉ lượt thắng (count 1) làm các việc phụ, lượt còn lại thoát êm. Kiểm-rồi-ghi tách rời sẽ báo tác giả hai lần.
+    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
+    if (count !== 1) return { ok: true };
+    // Trả lại điểm reputation đã cộng từ bài này — nếu không, đăng-ăn-điểm-rồi-xoá là cách farm hạng sạch dấu vết (P1-1).
+    // Trừ theo CHỦ BÀI, kể cả khi ADMIN là người gỡ.
     await this.reverseReputationForPost(post.userId, postId);
     // ADMIN gỡ bài của người khác = hành vi kiểm duyệt → rút cờ tin cậy. Tác giả tự xoá bài
     // của mình thì không (không có vi phạm nào được xác nhận).
-    const moderated = post.userId !== userId && role === 'ADMIN';
-    if (moderated) await this.revokeTrust(post.userId);
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
-    if (moderated && post.status !== 'REMOVED') await this.notifyPostHidden(postId, post);
+    if (post.userId !== userId && role === 'ADMIN') {
+      await this.revokeTrust(post.userId);
+      await this.notifyPostHidden(postId, post);
+    }
     return { ok: true };
   }
 
@@ -974,9 +978,10 @@ export class CommunityFeedService {
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status === 'REMOVED') return { ok: true };
+    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
+    if (count !== 1) return { ok: true };
     await this.reverseReputationForPost(post.userId, postId);
     await this.revokeTrust(post.userId);
-    await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
     await this.notifyPostHidden(postId, post, reason);
     return { ok: true };
   }

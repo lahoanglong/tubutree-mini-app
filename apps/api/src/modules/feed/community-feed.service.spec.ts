@@ -738,7 +738,7 @@ describe('CommunityFeedService.deletePost', () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'TIP' });
     await makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1');
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
   });
 });
 
@@ -1522,7 +1522,7 @@ describe('CommunityFeedService.deletePost — đảo điểm reputation đã c�
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
     (prisma.reputationEvent.findMany as jest.Mock).mockRejectedValue(new Error('db down'));
     await expect(makeSvc(prisma).deletePost('author', 'CUSTOMER', 'p1')).resolves.toEqual({ ok: true });
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
   });
 });
 
@@ -2555,7 +2555,7 @@ describe('CommunityFeedService.hidePost — kiểm duyệt ẩn bài đã đăng
 
     await expect(makeSvc(prisma, undefined, notify).hidePost('p1', '  Có link bán hàng ngoài  ')).resolves.toEqual({ ok: true });
 
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
     expect(prisma.reputationEvent.create).toHaveBeenCalledWith({ data: { userId: 'author', amount: -5, reason: 'REVERSE_POST', refId: 'p1' } });
     expect(prisma.communityProfile.updateMany).toHaveBeenCalledWith({ where: { userId: 'author' }, data: { isTrusted: false } });
     expect(notify.notify).toHaveBeenCalledWith('author', 'COMMUNITY_POST_HIDDEN', { title: 'Bán hàng', reason: 'Có link bán hàng ngoài' });
@@ -2578,8 +2578,22 @@ describe('CommunityFeedService.hidePost — kiểm duyệt ẩn bài đã đăng
 
     await expect(makeSvc(prisma, undefined, notify).hidePost('p1', 'x')).resolves.toEqual({ ok: true });
 
-    expect(prisma.feedPost.update).not.toHaveBeenCalled();
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
     expect(prisma.reputationEvent.create).not.toHaveBeenCalled();
+    expect(notify.notify).not.toHaveBeenCalled();
+  });
+
+  it('hai lượt ẩn song song: lượt thua (updateMany count 0) không đảo điểm, không rút tin cậy, không báo lần hai', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(published);
+    (prisma.feedPost.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    (prisma.reputationEvent.findMany as jest.Mock).mockResolvedValue([{ amount: 5 }]);
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    await expect(makeSvc(prisma, undefined, notify).hidePost('p1', 'x')).resolves.toEqual({ ok: true });
+
+    expect(prisma.reputationEvent.create).not.toHaveBeenCalled();
+    expect(prisma.communityProfile.updateMany).not.toHaveBeenCalled();
     expect(notify.notify).not.toHaveBeenCalled();
   });
 
@@ -2589,12 +2603,26 @@ describe('CommunityFeedService.hidePost — kiểm duyệt ẩn bài đã đăng
     const notify = { notify: jest.fn().mockRejectedValue(new Error('down')) };
 
     await expect(makeSvc(prisma, undefined, notify).hidePost('p1')).resolves.toEqual({ ok: true });
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
   });
 });
 
 describe('CommunityFeedService.deletePost — ADMIN gỡ bài người khác thì báo tác giả (D4-022)', () => {
-  const row = { id: 'p1', userId: 'author', title: 'Bán hàng', body: 'nội dung' };
+  const row = { id: 'p1', userId: 'author', status: 'PUBLISHED', title: 'Bán hàng', body: 'nội dung' };
+
+  it('hai ADMIN gỡ cùng lúc: lượt thua (updateMany count 0) không đảo điểm, không rút tin cậy, không báo lần hai', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue(row);
+    (prisma.feedPost.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    (prisma.reputationEvent.findMany as jest.Mock).mockResolvedValue([{ amount: 5 }]);
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    await expect(makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1')).resolves.toEqual({ ok: true });
+
+    expect(prisma.reputationEvent.create).not.toHaveBeenCalled();
+    expect(prisma.communityProfile.updateMany).not.toHaveBeenCalled();
+    expect(notify.notify).not.toHaveBeenCalled();
+  });
 
   it('ADMIN gỡ bài của người khác → COMMUNITY_POST_HIDDEN với lý do mặc định', async () => {
     const prisma = makePrisma();
@@ -2625,7 +2653,7 @@ describe('CommunityFeedService.deletePost — ADMIN gỡ bài người khác th�
     const notify = { notify: jest.fn().mockRejectedValue(new Error('down')) };
 
     await expect(makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1')).resolves.toEqual({ ok: true });
-    expect(prisma.feedPost.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'REMOVED' } });
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
   });
 });
 

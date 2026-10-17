@@ -214,12 +214,24 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
       expect(body).toContain('Có link bán hàng ngoài');
     });
 
-    it('hai CSKH ẩn cùng một bài cùng lúc → không lỗi', async () => {
+    it('nhiều CSKH ẩn cùng một bài cùng lúc → không lỗi và tác giả chỉ nhận đúng MỘT tin', async () => {
       const author = await createUser(prisma);
       const p = await post(author.id);
-      const res = summarize(await Promise.allSettled([feed.hidePost(p.id, 'a'), feed.hidePost(p.id, 'b')]));
+      const res = summarize(await Promise.allSettled(['a', 'b', 'c', 'd', 'e', 'f'].map((reason) => feed.hidePost(p.id, reason))));
       expect(res.errors).toEqual([]);
       expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('REMOVED');
+      expect(await logs(author.id, 'COMMUNITY_POST_HIDDEN')).toHaveLength(1);
+    });
+
+    it('ẩn và ADMIN xoá cùng lúc một bài → cũng chỉ MỘT tin báo ẩn', async () => {
+      const author = await createUser(prisma);
+      const admin = await createUser(prisma);
+      const p = await post(author.id);
+      const res = summarize(
+        await Promise.allSettled([feed.hidePost(p.id, 'a'), feed.deletePost(admin.id, 'ADMIN', p.id), feed.hidePost(p.id, 'b'), feed.deletePost(admin.id, 'ADMIN', p.id)]),
+      );
+      expect(res.errors).toEqual([]);
+      expect(await logs(author.id, 'COMMUNITY_POST_HIDDEN')).toHaveLength(1);
     });
   });
 });
