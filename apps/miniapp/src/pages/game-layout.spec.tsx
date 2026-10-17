@@ -196,7 +196,7 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cộng đồng' }));
     expect(tabPanel('Cộng đồng')).toBeVisible();
-    expect(within(tabPanel('Cộng đồng')).getByText('Bảng xếp hạng tuần')).toBeVisible();
+    expect(within(tabPanel('Cộng đồng')).getByText('Chuỗi điểm danh dài nhất')).toBeVisible();
     expect(within(tabPanel('Cộng đồng')).getByRole('button', { name: 'Tặng 💧' })).toBeVisible();
   });
 
@@ -212,7 +212,7 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     // Khối ở tab đang ẩn không vào cây accessibility nên kiểm theo chữ + thẻ h2.
     expect(within(tabPanel('Vườn')).getByText(/Lô đất của bạn/).tagName).toBe('H2');
     expect(within(tabPanel('Vườn')).getByText('Tác động xanh của bạn').tagName).toBe('H2');
-    expect(within(tabPanel('Cộng đồng')).getByText('Bảng xếp hạng tuần').tagName).toBe('H2');
+    expect(within(tabPanel('Cộng đồng')).getByText('Chuỗi điểm danh dài nhất').tagName).toBe('H2');
   });
 
   it('đổi tab không dựng lại khối: vòng quay chỉ mount một lần', async () => {
@@ -255,7 +255,7 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     await screen.findByText('Lô 2 · Mận');
     const h2 = [...container.querySelectorAll('h2')].map((h) => h.textContent);
     expect(h2).toEqual(
-      expect.arrayContaining(['Nhiệm vụ', 'Quiz Sống Xanh hôm nay', 'Vòng quay may mắn', 'Tác động xanh của bạn', 'Bảng xếp hạng tuần']),
+      expect.arrayContaining(['Nhiệm vụ', 'Quiz Sống Xanh hôm nay', 'Vòng quay may mắn', 'Tác động xanh của bạn', 'Chuỗi điểm danh dài nhất']),
     );
   });
 });

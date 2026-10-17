@@ -162,7 +162,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     );
 
     const cskh = await inbox.counts({ role: 'STAFF', staffPermissions: ['CSKH'] });
-    expect(cskh.items.map((i) => i.key).sort()).toEqual(['refillPending', 'returnsPending']);
+    expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'refillPending', 'returnsPending']);
     const kho = await inbox.counts({ role: 'STAFF', staffPermissions: ['KHO'] });
     expect(kho.items.map((i) => i.key).sort()).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'refillPending', 'returnsToReceive']);
   });

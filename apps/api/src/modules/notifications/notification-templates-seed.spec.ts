@@ -155,6 +155,10 @@ describe('seed mẫu thông báo', () => {
       'SUBSCRIPTION_ORDER_FAILED',
       'PRICE_DROP_ALERT',
       'COMMUNITY_POST_REJECTED',
+      // Launch review D4-006/D4-022: tin tương tác bài và tin ẩn bài, chỉ có trên prod qua migration.
+      'COMMUNITY_POST_LIKED',
+      'COMMUNITY_POST_COMMENTED',
+      'COMMUNITY_POST_HIDDEN',
       'REFILL_APPROVED',
       'REFILL_REJECTED',
       // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.

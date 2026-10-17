@@ -1,11 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { StaffPermission } from '../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
 import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
-import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
+import { buildAdminOrderWhere, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
+import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 export type InboxKey =
   | 'pancakeAttention'
@@ -22,7 +24,10 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
-  | 'refillPending';
+  | 'refillPending'
+  | 'communityPending'
+  | 'communityUnanswered'
+  | 'invoicePending';
 
 /** Ai thấy việc này ngoài ADMIN: nhóm việc của nhân viên, hoặc 'STAFF' = mọi nhân viên (route vốn mở cho STAFF). */
 type Audience = StaffPermission[] | 'STAFF' | 'ADMIN';
@@ -41,6 +46,8 @@ export class OpsInboxService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly merchant: MerchantFulfilmentService,
+    // Optional: chỉ để đọc ngưỡng giờ của khoá `community.unanswered_alert_hours`; thiếu thì dùng mặc định trong mã.
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
 
   private defs(now: Date): { key: InboxKey; audience: Audience; count: () => Promise<number> }[] {
@@ -73,6 +80,18 @@ export class OpsInboxService {
       { key: 'dealerClaims', audience: 'ADMIN', count: () => p.dealerRewardClaim.count({ where: { status: 'PENDING' } }) },
       { key: 'payouts', audience: 'ADMIN', count: () => p.payout.count({ where: { status: 'REQUESTED' } }) },
       { key: 'refillPending', audience: 'STAFF', count: () => p.bottleReturn.count({ where: { status: 'PENDING' } }) },
+      // Cộng đồng: bài khách vừa đăng và câu hỏi chờ lâu là việc của CSKH (route kiểm duyệt @AllowStaff('CSKH') ở CommunityFeedController).
+      { key: 'communityPending', audience: ['CSKH'], count: () => p.feedPost.count({ where: { status: 'PENDING' } }) },
+      {
+        key: 'communityUnanswered',
+        audience: ['CSKH'],
+        count: async () => {
+          const hours = await this.config?.get<unknown>(UNANSWERED_ALERT_HOURS_KEY, DEFAULT_UNANSWERED_ALERT_HOURS);
+          return countUnansweredQuestions(p, unansweredCutoff(hours, now));
+        },
+      },
+      // Cùng điều kiện với bộ lọc "VAT chờ xuất" ở tab Đơn hàng; xuất hoá đơn (issue-invoice) chỉ ADMIN nên chỉ ADMIN thấy số này.
+      { key: 'invoicePending', audience: 'ADMIN', count: () => p.order.count({ where: buildAdminOrderWhere({ invoice: 'pending' }) }) },
     ];
   }
 
