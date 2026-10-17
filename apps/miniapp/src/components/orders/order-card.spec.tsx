@@ -79,6 +79,55 @@ describe('OrderCard', () => {
     expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
+  describe('đơn chờ thanh toán (D7 #2)', () => {
+    const PENDING = {
+      ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2026-09-21T10:30:00.000Z',
+    } as unknown as OrderView;
+
+    it('chuyển khoản chờ tiền: nút "Thanh toán ngay" + hạn; bấm gọi onPay, KHÔNG mở chi tiết', () => {
+      const onOpen = vi.fn();
+      const onPay = vi.fn();
+      render(<OrderCard order={PENDING} onOpen={onOpen} onReorder={() => {}} onPay={onPay} />);
+      expect(shell()).toHaveTextContent(/Hạn \d{2}:\d{2} 21\/09\/2026/);
+      fireEvent.click(screen.getByRole('button', { name: 'Thanh toán ngay' }));
+      expect(onPay).toHaveBeenCalledTimes(1);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it('không có "Mua lại" ở đơn chờ thanh toán (chưa phải đơn đã xong)', () => {
+      render(<OrderCard order={PENDING} onOpen={() => {}} onReorder={() => {}} onPay={() => {}} />);
+      expect(screen.queryByRole('button', { name: 'Mua lại' })).toBeNull();
+    });
+
+    it('không truyền onPay, COD/Ví hoặc manualHandling → không có nút thanh toán', () => {
+      const { rerender } = render(<OrderCard order={PENDING} onOpen={() => {}} />);
+      expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
+      rerender(<OrderCard order={{ ...PENDING, paymentMethod: 'COD' } as OrderView} onOpen={() => {}} onPay={() => {}} />);
+      expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
+      rerender(<OrderCard order={{ ...PENDING, manualHandling: true } as OrderView} onOpen={() => {}} onPay={() => {}} />);
+      expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
+      expect(shell()).not.toHaveTextContent(/Hạn /);
+    });
+
+    it('thiếu hạn thì chỉ có nút, không có chữ "Hạn"', () => {
+      render(<OrderCard order={{ ...PENDING, paymentDeadline: null } as OrderView} onOpen={() => {}} onPay={() => {}} />);
+      expect(screen.getByRole('button', { name: 'Thanh toán ngay' })).toBeInTheDocument();
+      expect(shell()).not.toHaveTextContent(/Hạn /);
+    });
+
+    it('nút thanh toán nổi trên lớp phủ của nút mở đơn và không lồng phần tử tương tác', () => {
+      const { container } = render(<OrderCard order={PENDING} onOpen={() => {}} onPay={() => {}} />);
+      let el: HTMLElement | null = screen.getByRole('button', { name: 'Thanh toán ngay' });
+      let lifted = false;
+      while (el && el !== shell()) {
+        if (el.style.zIndex === '1') lifted = true;
+        el = el.parentElement;
+      }
+      expect(lifted).toBe(true);
+      expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
+    });
+  });
+
   describe('không lồng phần tử tương tác (axe nested-interactive)', () => {
     it('thẻ có "Mua lại": không phần tử bấm được nào chứa phần tử focus được khác', () => {
       const { container } = render(<OrderCard order={ORDER} onOpen={() => {}} onReorder={() => {}} />);

@@ -186,6 +186,11 @@ export function showsPaymentDeadline(o: { status: OrderStatus; paymentStatus: Pa
   return o.status === 'PENDING_PAYMENT' && o.paymentStatus === 'UNPAID' && !!o.paymentDeadline;
 }
 
+/** Đơn chuyển khoản còn chờ tiền và Tubu chưa nhận xử lý tay — dùng chung cho nút "Thanh toán ngay" ở chi tiết đơn và thẻ đơn. */
+export function canPayOrderNow(o: { status: OrderStatus; paymentMethod: PaymentMethod; manualHandling?: boolean }): boolean {
+  return o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER' && !o.manualHandling;
+}
+
 export interface ReturnLike {
   status: string;
   adminNote?: string | null;
