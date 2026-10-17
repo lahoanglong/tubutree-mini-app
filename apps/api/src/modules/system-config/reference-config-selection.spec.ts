@@ -80,6 +80,10 @@ const APPROVED_LOADED_KEYS = [
     'groupbuy.max_open_per_user',
     'groupbuy.target_size',
     'groupbuy.window_hours',
+    'legal.bao-mat',
+    'legal.dieu-khoan',
+    'legal.doi-tra',
+    'legal.van-chuyen',
     'loyalty.checkin_points',
     'loyalty.max_redeem_pct',
     'loyalty.point_expire_months',
@@ -184,6 +188,12 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
   // rồi sửa danh sách ở đây cùng commit. Đừng cập nhật danh sách mà không xem khoá mới có nhạy cảm không.
   it('danh sách khoá nạp mặc định lên DB thật khớp danh sách đã duyệt', () => {
     expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS)).sort()).toEqual(APPROVED_LOADED_KEYS);
+  });
+
+  it('bốn khoá legal.* được nạp với giá trị rỗng, bằng mặc định trong mã (LegalConfigController trả null thì web dùng bản nháp), để admin có chỗ dán nội dung đã duyệt', () => {
+    const legal = selectReferenceConfigs(SYSTEM_CONFIGS).filter((c) => c.key.startsWith('legal.'));
+    expect(legal.map((c) => c.key).sort()).toEqual(['legal.bao-mat', 'legal.dieu-khoan', 'legal.doi-tra', 'legal.van-chuyen']);
+    for (const c of legal) expect(c.value).toBe('');
   });
 
   it('danh sách khoá giá trị kinh doanh (chỉ nạp có cờ) khớp danh sách đã duyệt, và không lẫn vào phần nạp mặc định', () => {

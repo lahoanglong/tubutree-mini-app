@@ -475,6 +475,8 @@ $DC run --rm --no-deps api pnpm run prisma:seed:reference
 
 Chạy ngay sau bước 7, khi API vẫn đang dừng, trước bước 8. Lệnh chỉ TẠO dòng còn thiếu: không ghi đè giá trị admin đã chỉnh, không đụng sản phẩm, người dùng, mã giảm giá hay tài khoản ngân hàng, nên chạy lại bao nhiêu lần cũng an toàn (nên chạy lại sau mỗi lần phát hành có thêm mẫu thông báo hoặc khoá cấu hình mới). KHÔNG chạy `prisma:seed` và KHÔNG đặt `ALLOW_PROD_SEED=1` trên VPS.
 
+Bốn khoá `legal.dieu-khoan`, `legal.bao-mat`, `legal.doi-tra`, `legal.van-chuyen` cũng được nạp (giá trị rỗng) để tab Cấu hình có chỗ dán nội dung điều khoản. Chủ dự án dán nội dung pháp lý đã duyệt vào bốn khoá này trước ngày ra mắt; đến lúc đó các trang `/chinh-sach/...` trên web hiện bản nháp có biển "BẢN NHÁP — chờ Tubu Tree duyệt" và chưa được lập chỉ mục.
+
 Kỳ vọng: thoát 0 và in mỗi nhóm một dòng `[seed-reference] <nhóm>: ...`. Lần đầu trên DB mới các dòng có dạng `+N mới` (ví dụ `notification_templates: +28 mới`); lần chạy sau đều `đủ sẵn`. Dòng `seasons` luôn là "bỏ qua: mùa mẫu đã hết hạn" cho tới khi chủ dự án chốt mùa mới (Vườn Xanh không hiện banner mùa trong lúc đó). Dòng cuối "chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt)" là đúng ý: lệnh KHÔNG cờ không nạp hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá cấu hình có giá trị khác mặc định trong mã (vòng quay, thưởng mốc giới thiệu, bậc Subscribe & Save, freeship theo hạng, thưởng chuỗi 7 ngày, Season Pass). Đó là các con số tiền, điểm, xác suất chủ dự án chưa quyết.
 
 CHỈ chạy lệnh có cờ sau khi chủ dự án đã duyệt bảng giá trị ở mục 3.2 của `docs/2026-10-18-launch-review/impl/refseed.md`:

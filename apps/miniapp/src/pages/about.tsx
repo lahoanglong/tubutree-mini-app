@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Page, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChevronDown, TreePine } from 'lucide-react';
+import { ChevronDown, ExternalLink, TreePine } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import { requestAccountDeletion } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
-import { openOAChat, hasOA, callPhone } from '../services/zmp-bridge';
+import { openOAChat, hasOA, callPhone, openExternal } from '../services/zmp-bridge';
+import { WEB_BASE_URL } from '../utils/web-base-url';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -38,6 +39,15 @@ const POLICIES = {
   },
 } as const;
 type PolicyKey = keyof typeof POLICIES;
+
+// Bản đầy đủ do admin quản lý nằm ở web (/chinh-sach/[loai]); bản tóm tắt trong app chỉ để đọc nhanh.
+const WEB_POLICY_SLUG: Record<PolicyKey | 'shipping', string> = {
+  terms: 'dieu-khoan',
+  privacy: 'bao-mat',
+  returns: 'doi-tra',
+  shipping: 'van-chuyen',
+};
+const openWebPolicy = (key: PolicyKey | 'shipping') => void openExternal(`${WEB_BASE_URL}/chinh-sach/${WEB_POLICY_SLUG[key]}`);
 
 const FAQ_SKELETON_ROWS = 4;
 
@@ -232,7 +242,8 @@ export default function AboutPage() {
       <Section title="Điều khoản & Chính sách">
         <LinkRow label="Điều khoản sử dụng" onClick={() => showPolicy('terms')} />
         <LinkRow label="Chính sách bảo mật" onClick={() => showPolicy('privacy')} />
-        <LinkRow label="Chính sách đổi trả" onClick={() => showPolicy('returns')} last />
+        <LinkRow label="Chính sách đổi trả" onClick={() => showPolicy('returns')} />
+        <LinkRow label="Chính sách vận chuyển" onClick={() => openWebPolicy('shipping')} external last />
       </Section>
 
       {/* Nội dung điều khoản hiển thị ngay trong app (không rời mini app) */}
@@ -241,9 +252,14 @@ export default function AboutPage() {
         onClose={() => setPolicyOpen(false)}
         title={POLICIES[policy].title}
         footer={
-          <Button fullWidth onPress={() => setPolicyOpen(false)}>
-            Đã hiểu
-          </Button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Button fullWidth variant="secondary" onPress={() => openWebPolicy(policy)}>
+              Xem bản đầy đủ trên web
+            </Button>
+            <Button fullWidth onPress={() => setPolicyOpen(false)}>
+              Đã hiểu
+            </Button>
+          </div>
         }
       >
         <Text variant="body-sm" tone="secondary" as="p">
@@ -302,11 +318,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function LinkRow({ label, onClick, last }: { label: string; onClick: () => void; last?: boolean }) {
+function LinkRow({ label, onClick, last, external }: { label: string; onClick: () => void; last?: boolean; external?: boolean }) {
   return (
     <ListRow
       title={label}
-      trailing="chevron"
+      trailing={external ? <Icon icon={ExternalLink} size="sm" tone="muted" /> : 'chevron'}
       onPress={onClick}
       style={{ borderBottom: last ? 'none' : '1px solid var(--color-border-subtle)' }}
     />

@@ -417,6 +417,38 @@ describe('SystemConfigService.set — mốc bắt đầu đối soát giao hộ 
   });
 });
 
+describe('SystemConfigService.set — nội dung điều khoản/chính sách (D5-01)', () => {
+  const keys = ['legal.dieu-khoan', 'legal.bao-mat', 'legal.doi-tra', 'legal.van-chuyen'];
+
+  it('hệ thống biết bốn khoá này dù DB chưa có dòng (admin ghi được lần đầu)', () => {
+    for (const key of keys) expect(SystemConfigService.hasWriteRule(key)).toBe(true);
+  });
+
+  it('chỉ nhận chuỗi: object/số/null bị từ chối, không ghi gì', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '' } });
+    const service = new SystemConfigService(prisma);
+    for (const bad of [{ a: 1 }, 5, ['x'], true]) {
+      await expect(service.set('legal.doi-tra', bad, 'admin1')).rejects.toThrow(BadRequestException);
+    }
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('chặn nội dung quá dài (50.000 ký tự) để một lần dán nhầm không làm nặng mọi trang chính sách', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '' } });
+    const service = new SystemConfigService(prisma);
+    await expect(service.set('legal.bao-mat', 'a'.repeat(50_001), 'admin1')).rejects.toThrow(BadRequestException);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('nhận markdown tiếng Việt và chuỗi rỗng (rỗng = dùng lại bản nháp mặc định)', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '' } });
+    const service = new SystemConfigService(prisma);
+    await service.set('legal.dieu-khoan', '# Điều khoản\n\n- Mục 1', 'admin1');
+    await service.set('legal.dieu-khoan', '', 'admin1');
+    expect(upsert).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('SystemConfigService.set — điểm uy tín cộng đồng và thưởng chuỗi 7 ngày (seed-reference nạp các khoá này)', () => {
   function mk() {
     const tx = {

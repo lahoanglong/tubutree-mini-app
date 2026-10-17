@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { safeAreaPad } from '@/lib/safe-area';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 
 /**
@@ -34,7 +35,11 @@ export function SideDrawer({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className={`flex h-full w-full max-w-xl flex-col bg-stone-50 shadow-raised outline-none ${side === 'right' ? 'ml-auto' : 'mr-auto max-w-xs'}`}
-        style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          ...safeAreaPad(side, '0px'),
+        }}
       >
         <div className="flex items-center justify-between gap-2 border-b border-stone-200 bg-stone-0 px-4 py-2">
           <h2 id={titleId} className="min-w-0 truncate font-display text-base font-semibold text-stone-900">

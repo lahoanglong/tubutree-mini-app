@@ -44,7 +44,7 @@ export function RecyclingCheckoutSection({
           checked={selected}
           disabled={disabled}
           onChange={(e) => onSelectedChange(e.target.checked)}
-          className="h-5 w-5 accent-forest-600"
+          className="h-6 w-6 shrink-0 accent-forest-600"
         />
       </label>
 

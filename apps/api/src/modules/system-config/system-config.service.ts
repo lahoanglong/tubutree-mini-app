@@ -21,6 +21,14 @@ function displayNameProblem(value: unknown, what: string): string | null {
  * QUY TẮC: mọi rate/ngưỡng/hold-time PHẢI lấy qua service này, KHÔNG hard-code.
  * Cache in-memory ngắn để tránh query lặp; invalidates khi set().
  */
+const LEGAL_DOC_MAX_CHARS = 50_000;
+
+function legalDocProblem(value: unknown): string | null {
+  if (typeof value !== 'string') return 'phải là chuỗi chữ (markdown hoặc chữ thường)';
+  if (value.length > LEGAL_DOC_MAX_CHARS) return `tối đa ${LEGAL_DOC_MAX_CHARS.toLocaleString('vi-VN')} ký tự`;
+  return null;
+}
+
 @Injectable()
 export class SystemConfigService {
   private cache = new Map<string, { value: unknown; at: number }>();
@@ -275,6 +283,11 @@ export class SystemConfigService {
       }
       return null;
     },
+    // Trang /chinh-sach/:loai của web in nguyên chuỗi này (markdown). Rỗng = dùng bản nháp mặc định của web.
+    'legal.dieu-khoan': legalDocProblem,
+    'legal.bao-mat': legalDocProblem,
+    'legal.doi-tra': legalDocProblem,
+    'legal.van-chuyen': legalDocProblem,
     // Cấp uy tín chỉ có 4 tên (Mầm, Cây non, Cây trưởng thành, Cổ thụ): thêm mốc thứ 5 thì cấp 5 hiện lại tên "Mầm", bớt mốc thì mất cấp.
     // Mốc đầu là 0 để bốn mốc ứng đúng cấp 1 đến 4, và các mốc tăng dần, nếu không cấp nhảy ngược khi điểm tăng.
     'community.rep_thresholds': (value) => {

@@ -6,12 +6,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, formatVnd, getProductStock } from '@/lib/shop-client';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
-import { ui } from '@/lib/guest-ui';
+import { rememberCheckoutSelection } from '@/lib/checkout-selection';
+import { ui, uiBar } from '@/lib/guest-ui';
 import { variationPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
 import { cartKey } from '@/lib/cart-key';
+import { StickyActionBar } from './sticky-action-bar';
 
 interface Variation {
   id: string;
@@ -55,6 +57,8 @@ export default function AddToCart({
   const setSelectedId = shared?.setSelectedId ?? setLocalId;
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
+  // Đang làm "Mua ngay" (thêm giỏ rồi đi tiếp) hay chỉ "Thêm vào giỏ": quyết định chữ trên nút nào đang quay.
+  const [buying, setBuying] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const userPicked = useRef(false);
@@ -99,15 +103,27 @@ export default function AddToCart({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi tồn kho thật vừa về
   }, [stockQ.data]);
 
-  const add = async (variationId: string, quantity: number) => {
+  const add = async (variationId: string, quantity: number, buyNow = false) => {
     setBusy(true);
+    setBuying(buyNow);
     setMsg(null);
+    let leaving = false;
     try {
       const cart = await addToCart(variationId, quantity);
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
       qc.setQueryData(cartKey(), cart);
+      if (buyNow) {
+        // "Mua ngay" chỉ thanh toán món vừa chọn: xoá lựa chọn thì trang thanh toán hiểu là TOÀN GIỎ và tính tiền cả các món
+        // khách thêm từ trước. Không thấy dòng của món này (API trả giỏ thiếu) thì null = toàn giỏ, như trước khi có lựa chọn.
+        const bought = (cart.items ?? []).filter((l) => l.variationId === variationId).map((l) => l.id);
+        rememberCheckoutSelection(bought.length > 0 ? bought : null);
+        // Không bỏ khoá `busy`: trang sắp chuyển đi, bấm thêm lúc này là cộng đôi số lượng vào giỏ.
+        leaving = true;
+        router.push('/thanh-toan');
+        return;
+      }
       setMsg('Đã thêm vào giỏ!');
       setSuccess(true);
     } catch (e) {
@@ -116,7 +132,7 @@ export default function AddToCart({
       // Thường là "Chỉ còn N sản phẩm": tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
       void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
     } finally {
-      setBusy(false);
+      if (!leaving) setBusy(false);
     }
   };
 
@@ -129,25 +145,30 @@ export default function AddToCart({
     if (!pending) return;
     userPicked.current = true;
     setSelectedId(pending.variationId);
-    void add(pending.variationId, pending.quantity);
+    void add(pending.variationId, pending.quantity, pending.buyNow === true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chạy đúng một lần khi vừa có phiên
   }, [phase]);
 
-  const onAdd = async () => {
+  // Thêm giỏ và Mua ngay chung cửa kiểm tra phiên: chưa đăng nhập thì nhớ món + ý định rồi sang đăng nhập, quay lại làm nốt.
+  const submit = async (buyNow: boolean) => {
     if (phase === 'loading' || blockedReason) return;
     if (phase === 'unavailable') {
       setSuccess(false);
-      setMsg('Chưa kết nối được tới Tubu Tree nên chưa thêm được vào giỏ. Bạn kiểm tra mạng rồi bấm lại nhé.');
+      setMsg(
+        `Chưa kết nối được tới Tubu Tree nên chưa ${buyNow ? 'mua được' : 'thêm được vào giỏ'}. Bạn kiểm tra mạng rồi bấm lại nhé.`,
+      );
       return;
     }
     if (phase === 'guest') {
-      if (selected && available) rememberPendingAdd({ variationId: selected.id, quantity: qty });
+      if (selected && available) rememberPendingAdd({ variationId: selected.id, quantity: qty, ...(buyNow ? { buyNow: true } : {}) });
       router.push(loginHref(`/san-pham/${encodeURIComponent(slug)}`));
       return;
     }
     if (!selected || !available) return;
-    await add(selected.id, Math.min(qty, maxQty));
+    await add(selected.id, Math.min(qty, maxQty), buyNow);
   };
+  const onAdd = () => submit(false);
+  const onBuyNow = () => submit(true);
 
   if (blockedReason) {
     return (
@@ -158,6 +179,21 @@ export default function AddToCart({
       </div>
     );
   }
+
+  const total = formatVnd(price * qty);
+  const addLabel = !available ? 'Hết hàng' : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${total}`;
+  const buyLabel = busy && buying ? 'Đang xử lý…' : 'Mua ngay';
+  const cannotBuy = busy || !available || phase === 'loading';
+  const status = msg && (
+    <p role="status" className={`text-sm ${success ? 'text-success-fg' : 'text-danger-fg'}`}>
+      {msg}{' '}
+      {success && (
+        <a href="/gio-hang" className="font-semibold underline">
+          Xem giỏ hàng →
+        </a>
+      )}
+    </p>
+  );
 
   return (
     <div className="mt-4">
@@ -207,6 +243,7 @@ export default function AddToCart({
       )}
 
       <div className="mt-4 flex items-center gap-3">
+        <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <div className="flex items-center rounded-control border border-stone-450 bg-stone-0">
           <button
             type="button"
@@ -228,26 +265,40 @@ export default function AddToCart({
             +
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={busy || !available || phase === 'loading'}
-          className={`${ui.btnPrimary} flex-1`}
-        >
-          {!available ? 'Hết hàng' : busy ? 'Đang thêm…' : `Thêm vào giỏ · ${formatVnd(price * qty)}`}
+        {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
+        <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
+          {addLabel}
         </button>
       </div>
+      <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
+        {buyLabel}
+      </button>
 
-      {msg && (
-        <p role="status" className={`mt-3 text-sm ${success ? 'text-success-fg' : 'text-danger-fg'}`}>
-          {msg}{' '}
-          {success && (
-            <a href="/gio-hang" className="font-semibold underline">
-              Xem giỏ hàng →
-            </a>
+      {status && <div className="mt-3 hidden md:block">{status}</div>}
+
+      <StickyActionBar label="Mua hàng">
+        {status && <div className="mb-2">{status}</div>}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-none">
+            <div className="text-xs text-stone-600">Tạm tính</div>
+            <div className="text-lg font-bold leading-tight text-stone-900">{total}</div>
+          </div>
+          {available ? (
+            <div className="flex min-w-0 flex-1 gap-2">
+              <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${uiBar.secondary} min-w-0 flex-1`}>
+                {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
+              </button>
+              <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${uiBar.primary} min-w-0 flex-1`}>
+                {buyLabel}
+              </button>
+            </div>
+          ) : (
+            <button type="button" disabled className={`${ui.btnPrimary} flex-1`}>
+              Hết hàng
+            </button>
           )}
-        </p>
-      )}
+        </div>
+      </StickyActionBar>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // R2-BUYERWEB-7: gợi ý voucher chỉ hiện mã trần, không có giá trị giảm, đơn tối thiểu hay hạn dùng.
@@ -8,6 +8,8 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
   applied: [] as string[],
+  applyError: null as Error | null,
+  applyGate: null as Promise<void> | null,
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -15,6 +17,8 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMyCoupons: async () => state.coupons,
   getCouponPreviews: (p: unknown) => state.previews(p),
   applyCoupon: async (code: string) => {
+    await state.applyGate;
+    if (state.applyError) throw state.applyError;
     state.applied.push(code);
     return { items: [], couponCode: code, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0 };
   },
@@ -37,6 +41,8 @@ const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonEle
 
 beforeEach(() => {
   state.applied = [];
+  state.applyError = null;
+  state.applyGate = null;
   state.coupons = [];
   state.previews.mockReset();
 });
@@ -209,5 +215,70 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     state.coupons = [];
     await mountWith({ addressId: 'a1', itemIds: ['l1'] });
     expect(state.previews).not.toHaveBeenCalled();
+  });
+});
+
+// D7 việc 4: ô mã giảm giá gọn một dòng, mở rộng khi bấm (trước đây danh sách voucher chiếm cả màn hình điện thoại).
+describe('CouponBox — gọn một dòng, mở khi bấm', () => {
+  const toggle = (box: HTMLElement) => box.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+  const panel = (box: HTMLElement) => box.querySelector<HTMLElement>('#coupon-panel')!;
+
+  it('mặc định thu gọn: chỉ một dòng "Mã giảm giá" có gợi ý số mã trong ví, phần nhập và danh sách ẩn', async () => {
+    state.coupons = [c('A1'), c('B2')];
+    const box = await mount();
+    expect(toggle(box).getAttribute('aria-expanded')).toBe('false');
+    expect(toggle(box).getAttribute('aria-controls')).toBe('coupon-panel');
+    expect(toggle(box).textContent).toContain('Mã giảm giá');
+    expect(toggle(box).textContent).toContain('Bạn có 2 mã');
+    expect(panel(box).hidden).toBe(true);
+  });
+
+  it('bấm dòng thì mở ô nhập và danh sách; bấm lại thì thu gọn', async () => {
+    state.coupons = [c('A1')];
+    const box = await mount();
+    click(toggle(box));
+    expect(toggle(box).getAttribute('aria-expanded')).toBe('true');
+    expect(panel(box).hidden).toBe(false);
+    expect(box.querySelector('input[name="coupon-code"]')).not.toBeNull();
+    click(toggle(box));
+    expect(panel(box).hidden).toBe(true);
+  });
+
+  it('ví không có mã nào: gợi ý "Thêm mã"', async () => {
+    const box = await mount();
+    expect(toggle(box).textContent).toContain('Thêm mã');
+  });
+
+  it('áp mã lỗi thì mở lại ô nhập cùng lời báo, kể cả khi khách đã thu gọn dòng trong lúc chờ', async () => {
+    state.applyError = new Error('Mã giảm giá đã hết lượt dùng.');
+    let release!: () => void;
+    state.applyGate = new Promise<void>((r) => (release = r));
+    const box = await mount();
+    click(toggle(box));
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'abc');
+    click(byText(box, 'button', 'Áp dụng'));
+    click(toggle(box));
+    expect(panel(box).hidden).toBe(true);
+    release();
+    await flush();
+    expect(toggle(box).getAttribute('aria-expanded')).toBe('true');
+    expect(box.querySelector('[role="alert"]')!.textContent).toBe('Mã giảm giá đã hết lượt dùng.');
+  });
+
+  it('đã áp mã: chỉ hiện thẻ mã đang dùng, không có dòng mở rộng', async () => {
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    expect(r.container.textContent).toContain('WELCOME30');
+    expect(r.container.querySelector('button[aria-expanded]')).toBeNull();
+  });
+
+  it('nhãn của ô nhập vẫn là "Mã giảm giá" (cho trình đọc màn hình) và vùng chạm 44px', async () => {
+    state.coupons = [c('A1')];
+    const box = await mount();
+    const field = box.querySelector<HTMLInputElement>('input[name="coupon-code"]')!;
+    expect(box.querySelector(`label[for="${field.id}"]`)!.textContent).toBe('Mã giảm giá');
+    expect(smallTouchTargets(box)).toEqual([]);
+    expect(unnamedControls(box)).toEqual([]);
   });
 });

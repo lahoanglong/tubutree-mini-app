@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Trees } from 'lucide-react';
@@ -10,6 +11,7 @@ import { loginFailureMessage } from '@/lib/login-errors';
 import { rememberReturnTo, safeReturnPath } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { miniAppLink } from '@/lib/zalo-mini-app';
 
 function LoginInner() {
   const router = useRouter();
@@ -27,6 +29,7 @@ function LoginInner() {
     enabled: unavailable,
   });
   const support = supportQ.data ?? DEFAULT_SUPPORT;
+  const miniAppUrl = miniAppLink(returnTo);
 
   useEffect(() => {
     if (status === 'authenticated') router.replace(returnTo ?? '/');
@@ -60,6 +63,18 @@ function LoginInner() {
         {busy ? 'Đang chuyển tới Zalo…' : 'Đăng nhập với Zalo'}
       </button>
 
+      <p className="mt-3 text-xs text-stone-600">
+        Bằng việc đăng nhập, bạn đồng ý với{' '}
+        <Link href="/chinh-sach/dieu-khoan" className="font-medium text-forest-700 underline underline-offset-2">
+          Điều khoản
+        </Link>{' '}
+        và{' '}
+        <Link href="/chinh-sach/bao-mat" className="font-medium text-forest-700 underline underline-offset-2">
+          Chính sách bảo mật
+        </Link>
+        .
+      </p>
+
       {unavailable && (
         <p role="alert" className={`mt-4 ${ui.error}`}>
           Đăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline {formatPhoneDisplay(support.hotline)}{' '}
@@ -71,6 +86,15 @@ function LoginInner() {
         <p role="alert" className={`mt-4 ${ui.error}`}>
           {error}
         </p>
+      )}
+
+      {miniAppUrl && (
+        <>
+          <a href={miniAppUrl} className={`${ui.btnSecondary} mt-3 w-full`}>
+            Mở trên Zalo
+          </a>
+          <p className="mt-2 text-xs text-stone-600">Đã dùng Zalo? Mở Mini App Tubu Tree để mua sắm mà không cần đăng nhập lại.</p>
+        </>
       )}
 
       <a href="/" className={`${ui.backLink} mt-4 text-stone-600 hover:text-stone-900`}>

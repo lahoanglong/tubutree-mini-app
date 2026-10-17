@@ -252,6 +252,13 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   // công bố trên app ("đổi/trả trong 7 ngày"). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'returns.window_days', value: 7, category: 'return', description: 'Số ngày từ khi giao (DELIVERED) được yêu cầu đổi/trả', createOnly: true },
 
+  // Trang /chinh-sach/:loai của web (legal-config.controller). Rỗng = web dùng bản nháp mặc định "chờ duyệt"; admin dán nội
+  // dung đã duyệt (markdown) vào đây là thay thế. createOnly: nội dung đã duyệt không bị seed ghi đè.
+  { key: 'legal.dieu-khoan', value: '', category: 'legal', description: 'Nội dung trang Điều khoản sử dụng (markdown). Để trống = bản nháp mặc định', createOnly: true },
+  { key: 'legal.bao-mat', value: '', category: 'legal', description: 'Nội dung trang Chính sách bảo mật (markdown). Để trống = bản nháp mặc định', createOnly: true },
+  { key: 'legal.doi-tra', value: '', category: 'legal', description: 'Nội dung trang Chính sách đổi trả (markdown). Để trống = bản nháp mặc định', createOnly: true },
+  { key: 'legal.van-chuyen', value: '', category: 'legal', description: 'Nội dung trang Chính sách vận chuyển (markdown). Để trống = bản nháp mặc định', createOnly: true },
+
   // Remarketing — nhắc giỏ bỏ quên + voucher sắp hết hạn (cron RemarketingService).
   { key: 'remarketing.cart_abandon_min_hours', value: 6, category: 'remarketing', description: 'Giỏ bỏ quên ít nhất N giờ mới nhắc' },
   { key: 'remarketing.cart_abandon_max_hours', value: 72, category: 'remarketing', description: 'Không nhắc giỏ cũ quá N giờ' },

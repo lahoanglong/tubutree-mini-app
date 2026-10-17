@@ -37,7 +37,7 @@ import {
 } from '@/lib/checkout-rules';
 import { clearCheckoutSelection, recallCheckoutSelection, reconcileSelection } from '@/lib/checkout-selection';
 import { orderDetailHref } from '@/lib/order-view';
-import { ui } from '@/lib/guest-ui';
+import { ui, uiBar } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
@@ -45,6 +45,7 @@ import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
+import { StickyActionBar } from '@/components/sticky-action-bar';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { InvoiceSection } from './invoice-section';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
@@ -340,6 +341,11 @@ export default function CheckoutPage() {
     { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})` },
   ].map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
+  const placeDisabled =
+    !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
+  const totalText = quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính';
+  // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
+  const barHint = cartIssue ?? (place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
 
   return (
     <Shell>
@@ -400,7 +406,7 @@ export default function CheckoutPage() {
                           onChange={() => setPayment(p.k)}
                           disabled={!!reason}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
-                          className="h-4 w-4 accent-forest-600"
+                          className="h-6 w-6 shrink-0 accent-forest-600"
                         />
                         {p.label}
                       </label>
@@ -550,7 +556,7 @@ export default function CheckoutPage() {
                 checked={usePoints && !partnerPoints.disabled}
                 disabled={partnerPoints.disabled}
                 onChange={(e) => setUsePoints(e.target.checked)}
-                className="h-4 w-4 accent-forest-600"
+                className="h-6 w-6 shrink-0 accent-forest-600"
               />
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="text-forest-800">
@@ -568,7 +574,7 @@ export default function CheckoutPage() {
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span>{quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính'}</span>
+            <span>{totalText}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 text-xs text-success-fg">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
@@ -592,11 +598,12 @@ export default function CheckoutPage() {
             </p>
           )}
 
+          {/* Dưới md nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ md giữ ở khung tóm tắt. */}
           <button
             type="button"
             onClick={() => place.mutate()}
-            disabled={!addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '')}
-            className={`${ui.btnPrimary} mt-4 w-full`}
+            disabled={placeDisabled}
+            className={`${ui.btnPrimary} mt-4 hidden w-full md:inline-flex`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
@@ -616,6 +623,27 @@ export default function CheckoutPage() {
           )}
         </div>
       </div>
+      <StickyActionBar label="Đặt hàng">
+        {barHint && (
+          <p aria-hidden="true" className="mb-2 text-xs text-danger-fg">
+            {barHint}
+          </p>
+        )}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-none">
+            <div className="text-xs text-stone-600">Tổng cộng</div>
+            <div className="text-lg font-bold leading-tight text-stone-900">{totalText}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => place.mutate()}
+            disabled={placeDisabled}
+            className={`${uiBar.primary} min-w-0 flex-1`}
+          >
+            {place.isPending ? 'Đang đặt hàng…' : quote ? `Đặt hàng · ${formatVnd(quote.total)}` : 'Đặt hàng'}
+          </button>
+        </div>
+      </StickyActionBar>
     </Shell>
   );
 }
@@ -669,7 +697,7 @@ function AddressPicker({
                 name="addr"
                 checked={selectedId === a.id}
                 onChange={() => onSelect(a.id)}
-                className="mt-1 h-4 w-4 accent-forest-600"
+                className="h-6 w-6 shrink-0 accent-forest-600"
               />
               <span className="min-w-0 break-words">
                 <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
