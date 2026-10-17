@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SYSTEM_CONFIGS } from '../../../prisma/seed';
+import { SYSTEM_CONFIGS, TIERS } from '../../../prisma/seed';
 import {
   EXCLUDED_CONFIG_KEYS,
   EXCLUDED_CONFIG_PREFIXES,
@@ -177,7 +177,10 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
     expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS)).sort()).toEqual(APPROVED_LOADED_KEYS);
   });
 
-  it('hạng thành viên đi cùng freeship theo hạng: khoá freeship phải nằm trong phần nạp (quyền lợi hứa trên hạng thực hiện nhờ khoá này)', () => {
+  it('freeship theo hạng: mọi hạng trong shipping.tier_freeship_overrides là hạng có thật trong TIERS, và khoá này được nạp cùng TIERS', () => {
+    const overrides = SYSTEM_CONFIGS.find((c) => c.key === 'shipping.tier_freeship_overrides')!.value as Record<string, number>;
+    const tierIds = TIERS.map((t) => t.id);
+    expect(Object.keys(overrides).filter((tier) => !tierIds.includes(tier))).toEqual([]);
     expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS))).toContain('shipping.tier_freeship_overrides');
   });
 
