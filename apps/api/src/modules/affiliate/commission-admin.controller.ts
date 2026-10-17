@@ -18,7 +18,7 @@ export class ListCommissionRatesQuery extends CursorPageQuery {
   missing?: boolean;
 }
 
-/** Trần và số chữ số thập phân kiểm ở service (trần đọc từ cấu hình `affiliate.max_rate_pct`). */
+/** Trần và luật số nguyên kiểm ở service, kèm câu gợi ý tiếng Việt (trần đọc từ cấu hình `affiliate.max_rate_pct`). */
 export class SetCommissionRateDto {
   @IsNumber({ allowNaN: false, allowInfinity: false }) rate!: number;
 }

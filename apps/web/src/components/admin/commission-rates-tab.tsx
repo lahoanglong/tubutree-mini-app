@@ -161,7 +161,7 @@ function FillMissing({ missingTubu, maxRate }: { missingTubu: number; maxRate: n
         <div className="flex flex-wrap items-center gap-2 text-sm text-stone-800">
           <span className="min-w-0">Áp một mức cho {missingTubu} biến thể hàng Tubu chưa có %:</span>
           <input
-            inputMode="decimal"
+            inputMode="numeric"
             aria-label="% áp cho biến thể chưa có %"
             placeholder="vd 10"
             value={text}
@@ -229,7 +229,7 @@ function ProductCard({ product: p, maxRate, tierNames }: { product: CommissionPr
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600">
           <span>Mọi biến thể đang bán:</span>
           <input
-            inputMode="decimal"
+            inputMode="numeric"
             aria-label={`% cho mọi biến thể đang bán của ${p.name}`}
             placeholder="%"
             value={text}
@@ -311,7 +311,7 @@ function VariationRow({ v, maxRate, tierNames }: { v: CommissionVariation; maxRa
       </div>
       <div className="flex items-center gap-1.5">
         <input
-          inputMode="decimal"
+          inputMode="numeric"
           aria-label={`% hoa hồng ${v.sku}`}
           aria-invalid={invalid ? true : undefined}
           placeholder="%"
@@ -385,7 +385,7 @@ function RateCsvImport() {
       <textarea
         aria-label="Nội dung CSV sku,% hoa hồng"
         rows={6}
-        placeholder={'SKU,% hoa hồng\nNRC-500,10\nNG-1L;7,5'}
+        placeholder={'SKU,% hoa hồng\nNRC-500,10\nNG-1L;7'}
         value={csv}
         onChange={(e) => {
           setCsv(e.target.value);

@@ -134,22 +134,22 @@ describe('Admin đặt % hoa hồng CTV (real Postgres)', () => {
     await deliver(before.id);
     expect(await prisma.commission.count({ where: { orderId: before.id } })).toBe(0);
 
-    await admin.setVariationRate(adminUserId, v.id, 7.5);
-    expect(await rateOf(v.id)).toBe(7.5);
+    await admin.setVariationRate(adminUserId, v.id, 8);
+    expect(await rateOf(v.id)).toBe(8);
 
     const after = await assistedOrder(ctv.id, v.id, 2);
     expect(await prisma.commission.findMany({ where: { orderId: after.id }, select: { status: true, amount: true } })).toEqual([
-      { status: 'PENDING', amount: 20_250 },
+      { status: 'PENDING', amount: 21_600 },
     ]);
     await deliver(after.id);
     const rows = await prisma.commission.findMany({ where: { orderId: after.id } });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ affiliateUserId: ctv.id, status: 'LOCKED', amount: Math.floor((270_000 * 7.5) / 100) });
+    expect(rows[0]).toMatchObject({ affiliateUserId: ctv.id, status: 'LOCKED', amount: Math.floor((270_000 * 8) / 100) });
     expect(rows[0]!.lockedAt).not.toBeNull();
 
     const ref = await admin.orderReferral(after.code);
     expect(ref.referrer?.id).toBe(ctv.id);
-    expect(ref.commissions).toEqual([expect.objectContaining({ amount: 20_250, status: 'LOCKED', rate: 7.5 })]);
+    expect(ref.commissions).toEqual([expect.objectContaining({ amount: 21_600, status: 'LOCKED', rate: 8 })]);
   });
 
   it('đơn khách có CTV giới thiệu, % đặt bằng CSV và "áp cho chưa có %": hoa hồng theo từng dòng', async () => {

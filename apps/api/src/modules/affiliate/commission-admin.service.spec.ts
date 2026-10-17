@@ -43,12 +43,14 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toMatch(/admin-1.*A1: chưa có→12/);
   });
 
-  it('vượt trần cấu hình / âm / quá 2 chữ số thập phân → 400, không mở transaction', async () => {
+  it('vượt trần cấu hình / âm / số lẻ (7.5, 0.1) → 400 kèm gợi ý số nguyên, không mở transaction', async () => {
     const update = jest.fn();
     const { svc, prisma } = make({ variation: { update } }, 20);
     await expect(svc.setVariationRate('a', 'v1', 25)).rejects.toThrow('vượt trần 20%');
     await expect(svc.setVariationRate('a', 'v1', -1)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(svc.setVariationRate('a', 'v1', 1.234)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.setVariationRate('a', 'v1', 7.5)).rejects.toThrow('% hoa hồng không phải số nguyên — nhập số nguyên, vd 10 cho 10%.');
+    await expect(svc.setProductRate('a', 'p1', 0.1)).rejects.toThrow('nhập số nguyên, vd 10 cho 10%');
+    await expect(svc.fillMissingRates('a', 0.1)).rejects.toThrow('nhập số nguyên, vd 10 cho 10%');
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
@@ -153,6 +155,17 @@ describe('CommissionAdminService — nhập CSV "sku,%"', () => {
     expect(p).toMatchObject({ blocking: 4, canApply: false, maxRate: 30 });
     expect(v.updateMany).not.toHaveBeenCalled();
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('xem trước: số lẻ là sai định dạng kèm gợi ý số nguyên (kể cả khi còn vượt trần), không phải vượt trần', async () => {
+    const { svc } = make({ variation: variationMock() }, 30);
+    const p = await svc.previewImport('A1,7.5\nB2;60,5\nC3,0.1');
+    expect(p.rows.map((r) => [r.sku, r.status, r.message])).toEqual([
+      ['A1', 'INVALID', 'không phải số nguyên — nhập số nguyên, vd 10 cho 10%'],
+      ['B2', 'INVALID', 'không phải số nguyên — nhập số nguyên, vd 10 cho 10%'],
+      ['C3', 'INVALID', 'không phải số nguyên — nhập số nguyên, vd 10 cho 10%'],
+    ]);
+    expect(p.canApply).toBe(false);
   });
 
   it('áp: còn dòng lỗi → 400 và KHÔNG ghi dòng nào (kể cả dòng khớp)', async () => {

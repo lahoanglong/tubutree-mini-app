@@ -6,8 +6,13 @@
 export const AFFILIATE_MAX_RATE_KEY = 'affiliate.max_rate_pct';
 /** Trần mặc định khi chưa có khoá cấu hình: chặn gõ nhầm (100 thay vì 10), không phải mức kinh doanh. */
 export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;
-/** Số chữ số thập phân tối đa của một mức % (7,25%). */
-export const RATE_MAX_DECIMALS = 2;
+/**
+ * Số chữ số thập phân tối đa của một mức %: 0 = chỉ số nguyên. Chặn gõ phân số kiểu cấu hình (0.1 thay vì 10) và giữ mức %
+ * CTV đọc được ngay.
+ */
+export const RATE_MAX_DECIMALS = 0;
+/** Gợi ý kèm mọi câu lỗi về dạng số của mức %. */
+export const RATE_INPUT_HINT = 'nhập số nguyên, vd 10 cho 10%';
 /** Một lần nhập CSV tối đa ngần này dòng có dữ liệu — danh mục Tubu vài trăm biến thể. */
 export const RATE_CSV_MAX_ROWS = 5000;
 /** Chiều dài tối đa của nội dung CSV (ký tự) — chặn ở DTO. */
@@ -15,10 +20,10 @@ export const RATE_CSV_MAX_LENGTH = 300_000;
 
 /** Lỗi của một mức %, null = hợp lệ. `max` là trần đang áp. */
 export function rateProblem(rate: unknown, max: number): string | null {
-  if (typeof rate !== 'number' || !Number.isFinite(rate)) return 'phải là số phần trăm (10 = 10%)';
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) return `phải là số phần trăm — ${RATE_INPUT_HINT}`;
   if (rate < 0) return 'không được âm';
   if (Math.round(rate * 10 ** RATE_MAX_DECIMALS) / 10 ** RATE_MAX_DECIMALS !== rate) {
-    return `tối đa ${RATE_MAX_DECIMALS} chữ số thập phân`;
+    return RATE_MAX_DECIMALS === 0 ? `không phải số nguyên — ${RATE_INPUT_HINT}` : `tối đa ${RATE_MAX_DECIMALS} chữ số thập phân`;
   }
   if (rate > max) return `vượt trần ${max}% (khoá cấu hình ${AFFILIATE_MAX_RATE_KEY})`;
   return null;
@@ -45,8 +50,8 @@ const HEADER_SKU_CELLS = new Set(['sku', 'mã', 'ma', 'mã sku', 'ma sku', 'mã 
 
 /**
  * Đọc CSV "sku,%" dán từ Excel. Cột tách bằng tab, dấu chấm phẩy hoặc dấu phẩy (xét theo từng dòng: có tab thì tách tab, có `;`
- * thì tách `;`, còn lại tách `,`). Khi không tách bằng dấu phẩy thì `7,5` hiểu là 7.5 (Excel tiếng Việt). Ô % nhận `10`, `10%`,
- * `7.5`. Dòng đầu là tiêu đề (cột đầu đúng là "SKU"/"Mã"/"Mã hàng"… và cột % không phải số) thì bỏ. Không bao giờ bỏ im lặng một dòng có dữ liệu: dòng đọc
+ * thì tách `;`, còn lại tách `,`). Ô % nhận `10`, `10%`. Số lẻ (`7.5`, `0.1`, hay `7,5` khi không tách bằng dấu phẩy) vẫn đọc
+ * ra số để bước kiểm mức báo "không phải số nguyên" kèm gợi ý, thay vì câu chung "không phải số". Dòng đầu là tiêu đề (cột đầu đúng là "SKU"/"Mã"/"Mã hàng"… và cột % không phải số) thì bỏ. Không bao giờ bỏ im lặng một dòng có dữ liệu: dòng đọc
  * không được trả về kèm `problem`.
  */
 export function parseRateCsv(csv: string): RateCsvRow[] {
@@ -71,12 +76,12 @@ export function parseRateCsv(csv: string): RateCsvRow[] {
     else if (cells.length > 2) {
       row.problem =
         delim === ',' && cells.length === 3 && /^\d+%?$/.test(cells[2] ?? '')
-          ? 'có dấu phẩy trong số — dùng dấu chấm (7.5) hoặc tách cột bằng dấu chấm phẩy/tab'
+          ? `có dấu phẩy trong số — ${RATE_INPUT_HINT}`
           : 'thừa cột — mỗi dòng chỉ gồm "sku,%"';
     } else {
       const cell = (cells[1] ?? '').replace(/%$/, '').trim();
       const normalized = delim === ',' ? cell : cell.replace(',', '.');
-      if (!/^\d+(\.\d+)?$/.test(normalized)) row.problem = 'cột % không phải số (vd 10 hoặc 7.5)';
+      if (!/^\d+(\.\d+)?$/.test(normalized)) row.problem = `cột % không phải số — ${RATE_INPUT_HINT}`;
       else row.rate = Number(normalized);
     }
     rows.push(row);

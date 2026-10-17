@@ -1,15 +1,16 @@
 import { DEFAULT_AFFILIATE_MAX_RATE_PCT, parseRateCsv, rateProblem, sanitizeMaxRate } from './commission-rate-csv';
 
 describe('rateProblem — % hoa hồng CTV là phần trăm (10 = 10%)', () => {
-  it.each([0, 5, 7.5, 7.25, 50])('nhận %p với trần 50', (r) => {
+  it.each([0, 5, 10, 50])('nhận %p với trần 50', (r) => {
     expect(rateProblem(r, 50)).toBeNull();
   });
 
   it.each([
     ['âm', -1, 'không được âm'],
-    ['vượt trần', 50.01, 'vượt trần 50%'],
-    ['ba chữ số thập phân', 7.125, 'tối đa 2 chữ số thập phân'],
-    ['NaN', Number.NaN, 'phải là số'],
+    ['vượt trần', 51, 'vượt trần 50%'],
+    ['số lẻ', 7.5, 'không phải số nguyên — nhập số nguyên, vd 10 cho 10%'],
+    ['phân số kiểu cấu hình (0.1 thay vì 10)', 0.1, 'nhập số nguyên, vd 10 cho 10%'],
+    ['NaN', Number.NaN, 'phải là số phần trăm — nhập số nguyên, vd 10 cho 10%'],
     ['chuỗi', '10', 'phải là số'],
     ['null', null, 'phải là số'],
   ])('từ chối %s', (_label, r, msg) => {
@@ -19,6 +20,18 @@ describe('rateProblem — % hoa hồng CTV là phần trăm (10 = 10%)', () => {
   it('trần 0 → chỉ nhận 0', () => {
     expect(rateProblem(0, 0)).toBeNull();
     expect(rateProblem(1, 0)).toContain('vượt trần 0%');
+  });
+});
+
+describe('parseRateCsv + rateProblem — số lẻ đọc ra số để báo đúng lỗi "không phải số nguyên"', () => {
+  it('7.5 / 7,5 (tách chấm phẩy) / 0.1 → đọc được số, rateProblem báo kèm gợi ý', () => {
+    const rows = parseRateCsv('A1,7.5\nB2;7,5\nC3\t0.1');
+    expect(rows.map((r) => [r.sku, r.rate, r.problem])).toEqual([
+      ['A1', 7.5, null],
+      ['B2', 7.5, null],
+      ['C3', 0.1, null],
+    ]);
+    for (const r of rows) expect(rateProblem(r.rate, 50)).toBe('không phải số nguyên — nhập số nguyên, vd 10 cho 10%');
   });
 });
 
@@ -32,10 +45,10 @@ describe('sanitizeMaxRate', () => {
 
 describe('parseRateCsv — CSV "sku,%" dán từ Excel', () => {
   it('phẩy / chấm phẩy / tab, có hoặc không dấu %, bỏ dòng trống và dòng tiêu đề', () => {
-    const rows = parseRateCsv('SKU,% hoa hồng\nA1,10\n\nB2;7,5\nC3\t12%\nD4, 8 %\n');
+    const rows = parseRateCsv('SKU,% hoa hồng\nA1,10\n\nB2;7\nC3\t12%\nD4, 8 %\n');
     expect(rows.map((r) => [r.line, r.sku, r.rate, r.problem])).toEqual([
       [2, 'A1', 10, null],
-      [4, 'B2', 7.5, null],
+      [4, 'B2', 7, null],
       [5, 'C3', 12, null],
       [6, 'D4', 8, null],
     ]);
@@ -57,7 +70,7 @@ describe('parseRateCsv — CSV "sku,%" dán từ Excel', () => {
       [6, 'E5', null, true],
       [7, 'F6', null, true],
     ]);
-    expect(rows[3]!.problem).toContain('dấu chấm');
+    expect(rows[3]!.problem).toContain('có dấu phẩy trong số — nhập số nguyên, vd 10 cho 10%');
     expect(rows[4]!.problem).toContain('thừa cột');
   });
 

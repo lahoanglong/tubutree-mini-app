@@ -4,8 +4,7 @@ import { formatRate, parseRateInput } from './commission-rates';
 describe('parseRateInput — % hoa hồng CTV là phần trăm (10 = 10%)', () => {
   it.each([
     ['10', 10],
-    ['7,5', 7.5],
-    ['7.25', 7.25],
+    ['10%', 10],
     [' 12 % ', 12],
     ['0', 0],
     ['50', 50],
@@ -15,10 +14,12 @@ describe('parseRateInput — % hoa hồng CTV là phần trăm (10 = 10%)', () =
 
   it.each([
     ['', 'Nhập % hoa hồng.'],
-    ['abc', 'Chỉ nhập số'],
+    ['abc', 'Chỉ nhập số. Nhập số nguyên, vd 10 cho 10%.'],
     ['-1', 'Chỉ nhập số'],
-    ['1,234', 'Tối đa 2 chữ số thập phân.'],
-    ['50,5', 'Tối đa 50%'],
+    ['7,5', 'Không phải số nguyên. Nhập số nguyên, vd 10 cho 10%.'],
+    ['7.5', 'Không phải số nguyên'],
+    ['0.1', 'Nhập số nguyên, vd 10 cho 10%.'],
+    ['51', 'Tối đa 50%'],
   ])('từ chối "%s"', (text, msg) => {
     const r = parseRateInput(text, 50);
     expect('error' in r && r.error).toContain(msg);

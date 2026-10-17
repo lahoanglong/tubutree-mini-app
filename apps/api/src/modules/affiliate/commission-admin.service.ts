@@ -296,8 +296,10 @@ export class CommissionAdminService {
         variationName: v?.name ?? null,
       };
       if (p.problem) return { ...base, status: 'INVALID' as const, message: p.problem };
+      const shape = rateProblem(p.rate, Number.POSITIVE_INFINITY);
+      if (shape) return { ...base, status: 'INVALID' as const, message: shape };
       const over = rateProblem(p.rate, maxRate);
-      if (over) return { ...base, status: (p.rate! > maxRate ? 'OVER_CAP' : 'INVALID') as RateImportStatus, message: over };
+      if (over) return { ...base, status: 'OVER_CAP' as const, message: over };
       if ((skuCount.get(p.sku) ?? 0) > 1) return { ...base, status: 'DUPLICATE' as const, message: 'SKU xuất hiện nhiều lần trong file' };
       if (!v) return { ...base, status: 'NOT_FOUND' as const, message: 'không có biến thể nào mang SKU này' };
       if (currentRate === p.rate) return { ...base, status: 'UNCHANGED' as const, message: null };

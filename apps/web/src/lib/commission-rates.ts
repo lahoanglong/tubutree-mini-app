@@ -110,16 +110,22 @@ export const applyRateImport = (csv: string) =>
 export const getOrderReferral = (orderIdOrCode: string) =>
   apiFetch<OrderReferral>(`/admin/orders/${encodeURIComponent(orderIdOrCode)}/referral`);
 
+/** Như API (commission-rate-csv.ts): mức % chỉ là số nguyên — chặn gõ 0.1 thay vì 10. */
+export const RATE_MAX_DECIMALS = 0;
+const RATE_INPUT_HINT = 'Nhập số nguyên, vd 10 cho 10%.';
+
 /**
- * Đọc ô % admin gõ (giống luật API): nhận `10`, `7,5`, `7.5`, `10%`; tối đa 2 chữ số thập phân; 0 ≤ % ≤ trần.
+ * Đọc ô % admin gõ (giống luật API): nhận `10`, `10%`; chỉ số nguyên; 0 ≤ % ≤ trần.
  * Trả số hoặc câu lỗi tiếng Việt. API vẫn kiểm lại — đây chỉ để báo sớm.
  */
 export function parseRateInput(text: string, max: number): { rate: number } | { error: string } {
   const t = text.trim().replace(/%$/, '').trim().replace(',', '.');
   if (!t) return { error: 'Nhập % hoa hồng.' };
-  if (!/^\d+(\.\d+)?$/.test(t)) return { error: 'Chỉ nhập số, vd 10 hoặc 7,5.' };
+  if (!/^\d+(\.\d+)?$/.test(t)) return { error: `Chỉ nhập số. ${RATE_INPUT_HINT}` };
   const rate = Number(t);
-  if (Math.round(rate * 100) / 100 !== rate) return { error: 'Tối đa 2 chữ số thập phân.' };
+  if (Math.round(rate * 10 ** RATE_MAX_DECIMALS) / 10 ** RATE_MAX_DECIMALS !== rate) {
+    return { error: `Không phải số nguyên. ${RATE_INPUT_HINT}` };
+  }
   if (rate > max) return { error: `Tối đa ${formatRate(max)} (trần cấu hình).` };
   return { rate };
 }

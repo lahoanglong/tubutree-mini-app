@@ -110,8 +110,8 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(r.container.querySelector('[role="alert"]')?.textContent).toContain('Thử lại');
   });
 
-  it('sửa tại chỗ: gõ 7,5 → PUT rate 7.5; vượt trần → báo lỗi, không gọi API', async () => {
-    const m = stub({ '/admin/commission-rates/variations/v1': { body: { id: 'v1', sku: 'NRC-500', affiliateRate: 7.5 } } });
+  it('sửa tại chỗ: gõ 8 → PUT rate 8; vượt trần hoặc số lẻ (7,5 / 0.1) → báo lỗi, không gọi API', async () => {
+    const m = stub({ '/admin/commission-rates/variations/v1': { body: { id: 'v1', sku: 'NRC-500', affiliateRate: 8 } } });
     const { container } = mount(<CommissionRatesTab />);
     await flush();
     const input = container.querySelector('input[aria-label="% hoa hồng NRC-500"]');
@@ -121,10 +121,17 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(row.textContent).toContain('Tối đa 50%');
     expect(m.calls.some((c) => c.url.includes('/variations/v1'))).toBe(false);
 
-    typeInto(input, '7,5');
+    for (const frac of ['7,5', '0.1']) {
+      typeInto(input, frac);
+      click(byText(row, 'button', 'Lưu'));
+      expect(row.textContent).toContain('Nhập số nguyên, vd 10 cho 10%.');
+    }
+    expect(m.calls.some((c) => c.url.includes('/variations/v1'))).toBe(false);
+
+    typeInto(input, '8');
     click(byText(row, 'button', 'Lưu'));
     await flush();
-    expect(bodyOf(m, '/variations/v1')).toEqual({ rate: 7.5 });
+    expect(bodyOf(m, '/variations/v1')).toEqual({ rate: 8 });
     expect(m.calls.find((c) => c.url.includes('/variations/v1'))?.init?.method).toBe('PUT');
   });
 

@@ -35,8 +35,8 @@ describe('CommissionAdminController — % hoa hồng CTV và người giới thi
     expect(errors(SetCommissionRateDto, body).length).toBeGreaterThan(0);
   });
 
-  it('SetCommissionRateDto nhận số (trần/thập phân kiểm ở service theo cấu hình)', () => {
-    expect(errors(SetCommissionRateDto, { rate: 7.5 })).toEqual([]);
+  it('SetCommissionRateDto nhận số (trần và luật số nguyên kiểm ở service, kèm gợi ý tiếng Việt)', () => {
+    expect(errors(SetCommissionRateDto, { rate: 10 })).toEqual([]);
   });
 
   it('ImportCommissionRatesDto: csv bắt buộc, không rỗng, giới hạn độ dài', () => {
