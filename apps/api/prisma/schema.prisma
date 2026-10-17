@@ -1368,6 +1368,8 @@ model AffiliateLink {
 }
 
 /// @deprecated Chỉ ghi, không đọc (C-108): AffiliateService.trackClick ghi mỗi lượt bấm, không nơi nào đọc lại.
+/// Route công khai POST /affiliate/click chặn ghi trùng bằng ràng buộc duy nhất (shortCode, ipHash, dedupeDay): lần ghi thứ hai
+/// trong ngày vi phạm khoá và bị bỏ, không có truy vấn đọc nào.
 model AffiliateClick {
   id               String   @id @default(cuid())
   shortCode        String
@@ -1378,7 +1380,10 @@ model AffiliateClick {
   clickedAt        DateTime @default(now())
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108, A7-24).
   convertedOrderId String?
+  /// Ngày giờ VN (YYYY-MM-DD) của lượt bấm từ route công khai; null ở các dòng ghi bằng đường khác (Postgres cho phép nhiều null).
+  dedupeDay        String?
 
+  @@unique([shortCode, ipHash, dedupeDay])
   @@index([shortCode])
   @@map("affiliate_clicks")
 }

@@ -47,7 +47,7 @@ import {
   type VnMonth,
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
-import { VN_OFFSET_MS } from '../../common/vn-time';
+import { VN_OFFSET_MS, vnDateKey } from '../../common/vn-time';
 import { paidLineTotals } from './commission-base';
 import { consignmentLinkedSql } from '../merchant/consignment-link-sql';
 import { forBuyer } from '../orders/buyer-order-fields';
@@ -225,25 +225,30 @@ export class AffiliateService {
   }
 
   /** Track click (web redirect /r/:shortCode). Trả target để redirect. */
-  async trackClick(shortCode: string, visitorId: string, ipHash: string) {
+  async trackClick(shortCode: string, visitorId: string, ipHash: string, dedupeDay?: string) {
     const link = await this.prisma.affiliateLink.findUnique({ where: { shortCode } });
     if (!link) return null;
     await this.prisma.$transaction([
       this.prisma.affiliateLink.update({ where: { id: link.id }, data: { clicks: { increment: 1 } } }),
-      this.prisma.affiliateClick.create({ data: { shortCode, visitorId, ipHash } }),
+      this.prisma.affiliateClick.create({ data: { shortCode, visitorId, ipHash, ...(dedupeDay ? { dedupeDay } : {}) } }),
     ]);
     return { targetType: link.targetType, targetId: link.targetId };
   }
 
   /**
    * Lượt mở link CTV từ phía khách (route công khai, không có userId). Khách chưa biết là ai nên "người xem" là mã băm của IP;
-   * IP thô không lưu. Không khử trùng lặp theo người xem: bảng affiliate_clicks đang đánh dấu @deprecated (chỉ ghi), đọc nó để
-   * khử trùng sẽ phải gỡ dấu đó; client đã chỉ gọi một lần mỗi phiên và route có giới hạn tốc độ theo IP.
+   * IP thô không lưu. Mỗi (mã link, IP băm, ngày giờ VN) đếm một lần: khoá duy nhất của affiliate_clicks chặn lần thứ hai, và
+   * giao dịch hoàn tác luôn cả phần +1 clicks nên không cần đọc bảng (đang đánh dấu @deprecated, chỉ ghi).
    */
-  async recordLinkClick(shortCode: string, ip: string): Promise<{ counted: boolean }> {
+  async recordLinkClick(shortCode: string, ip: string, now: Date = new Date()): Promise<{ counted: boolean }> {
     const ipHash = createHash('sha256').update(`affiliate-click|${ip}`).digest('hex');
-    const target = await this.trackClick(shortCode, ipHash, ipHash);
-    return { counted: target !== null };
+    try {
+      const target = await this.trackClick(shortCode, ipHash, ipHash, vnDateKey(now));
+      return { counted: target !== null };
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return { counted: false };
+      throw err;
+    }
   }
 
   async dashboard(userId: string, now: Date = new Date()) {

@@ -1,15 +1,19 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
-import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
+import { Prisma } from '@prisma/client';
+import { THROTTLER_LIMIT, THROTTLER_TRACKER, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { AffiliateController, LinkClickDto } from './affiliate.controller';
 import { AffiliateService } from './affiliate.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
-function makeService(link: { id: string; targetType: string; targetId: string | null } | null) {
+function makeService(
+  link: { id: string; targetType: string; targetId: string | null } | null,
+  transactionResult: () => Promise<unknown> = () => Promise.resolve([]),
+) {
   const linkUpdate = jest.fn().mockReturnValue('LINK_UPDATE');
   const clickCreate = jest.fn().mockReturnValue('CLICK_CREATE');
-  const transaction = jest.fn().mockResolvedValue([]);
+  const transaction = jest.fn().mockImplementation(transactionResult);
   const prisma = {
     affiliateLink: { findUnique: jest.fn().mockResolvedValue(link), update: linkUpdate },
     affiliateClick: { create: clickCreate },
@@ -19,22 +23,25 @@ function makeService(link: { id: string; targetType: string; targetId: string | 
   return { svc, linkUpdate, clickCreate, transaction };
 }
 
+// 05:00 UTC = 12:00 giờ VN, ngày 2026-10-18.
+const NOW = new Date('2026-10-18T05:00:00.000Z');
+
 describe('AffiliateService.recordLinkClick (D3-06)', () => {
   it('link có thật → +1 click trên link và ghi một dòng AffiliateClick, trong cùng một giao dịch', async () => {
     const { svc, linkUpdate, clickCreate, transaction } = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null });
-    await expect(svc.recordLinkClick('aB3_x-9', '203.0.113.7')).resolves.toEqual({ counted: true });
+    await expect(svc.recordLinkClick('aB3_x-9', '203.0.113.7', NOW)).resolves.toEqual({ counted: true });
     expect(linkUpdate).toHaveBeenCalledWith({ where: { id: 'l1' }, data: { clicks: { increment: 1 } } });
     expect(clickCreate).toHaveBeenCalledWith({
-      data: { shortCode: 'aB3_x-9', visitorId: expect.any(String), ipHash: expect.any(String) },
+      data: { shortCode: 'aB3_x-9', visitorId: expect.any(String), ipHash: expect.any(String), dedupeDay: '2026-10-18' },
     });
     expect(transaction).toHaveBeenCalledWith(['LINK_UPDATE', 'CLICK_CREATE']);
   });
 
   it('không lưu IP thô; cùng IP ra cùng mã băm, IP khác ra mã khác', async () => {
     const a = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null });
-    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7');
-    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7');
-    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.8');
+    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7', NOW);
+    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7', NOW);
+    await a.svc.recordLinkClick('aB3_x-9', '203.0.113.8', NOW);
     const rows = a.clickCreate.mock.calls.map((c) => c[0].data as { visitorId: string; ipHash: string });
     expect(JSON.stringify(rows)).not.toContain('203.0.113');
     expect(rows[0]!.ipHash).toBe(rows[1]!.ipHash);
@@ -42,9 +49,32 @@ describe('AffiliateService.recordLinkClick (D3-06)', () => {
     expect(rows[0]!.ipHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  describe('khử trùng phía máy chủ theo (mã link, IP băm, ngày VN)', () => {
+    const p2002 = () =>
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' });
+
+    it('khoá duy nhất đã có (cùng mã, cùng IP, cùng ngày) → không đếm thêm, không lỗi', async () => {
+      const { svc } = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null }, () => Promise.reject(p2002()));
+      await expect(svc.recordLinkClick('aB3_x-9', '203.0.113.7', NOW)).resolves.toEqual({ counted: false });
+    });
+
+    it('lỗi khác P2002 vẫn nổi lên (không nuốt lỗi DB)', async () => {
+      const { svc } = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null }, () => Promise.reject(new Error('db down')));
+      await expect(svc.recordLinkClick('aB3_x-9', '203.0.113.7', NOW)).rejects.toThrow('db down');
+    });
+
+    it('khoá ngày theo giờ VN: 17:01 UTC đã là ngày hôm sau ở VN', async () => {
+      const a = makeService({ id: 'l1', targetType: 'HOMEPAGE', targetId: null });
+      await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7', new Date('2026-10-18T16:59:00.000Z'));
+      await a.svc.recordLinkClick('aB3_x-9', '203.0.113.7', new Date('2026-10-18T17:01:00.000Z'));
+      const days = a.clickCreate.mock.calls.map((c) => (c[0].data as { dedupeDay: string }).dedupeDay);
+      expect(days).toEqual(['2026-10-18', '2026-10-19']);
+    });
+  });
+
   it('mã link không tồn tại → không đếm gì, không lỗi', async () => {
     const { svc, transaction } = makeService(null);
-    await expect(svc.recordLinkClick('zzzzzzz', '203.0.113.7')).resolves.toEqual({ counted: false });
+    await expect(svc.recordLinkClick('zzzzzzz', '203.0.113.7', NOW)).resolves.toEqual({ counted: false });
     expect(transaction).not.toHaveBeenCalled();
   });
 });
@@ -56,6 +86,12 @@ describe('POST /affiliate/click', () => {
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBe(true);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBeLessThanOrEqual(30);
     expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
+  });
+
+  it('bộ đếm giới hạn luôn theo IP, kể cả khi request mang JWT của một user khác', () => {
+    const tracker = Reflect.getMetadata(`${THROTTLER_TRACKER}default`, handler) as (req: unknown) => string;
+    expect(typeof tracker).toBe('function');
+    expect(tracker({ ip: '203.0.113.7', user: { sub: 'u1' }, headers: { authorization: 'Bearer x' } })).toBe('ip:203.0.113.7');
   });
 
   it('chuyển mã link và IP cho service', async () => {

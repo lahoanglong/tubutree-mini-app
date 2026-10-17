@@ -90,10 +90,11 @@ export class AffiliateController {
     return this.affiliate.getMe(userId);
   }
 
-  // Khách mở link CTV (web hoặc miniapp, gọi một lần mỗi phiên). Công khai vì khách mới chưa có phiên; đếm theo IP nên chặt hơn
-  // mặc định. Chỉ ảnh hưởng con số "click" CTV thấy, không đụng tới tiền.
+  // Khách mở link CTV (web hoặc miniapp, gọi một lần mỗi phiên). Công khai vì khách mới chưa có phiên. getTracker cố định theo IP:
+  // mặc định của AppThrottlerGuard đếm theo userId khi có JWT, nên một tài khoản bất kỳ gửi kèm token sẽ né được trần theo IP.
+  // Chỉ ảnh hưởng con số "click" CTV thấy, không đụng tới tiền.
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Throttle({ default: { ttl: 60_000, limit: 30, getTracker: (req) => `ip:${clientIp(req as unknown as Request)}` } })
   @Post('click')
   @HttpCode(HttpStatus.OK)
   click(@Body() dto: LinkClickDto, @Req() req: Request) {
