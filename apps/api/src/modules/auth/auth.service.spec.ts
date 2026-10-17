@@ -309,6 +309,13 @@ function makeGuestMergeFixture(opts: {
       update: jest.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
         applyUserUpdate(where.id, data),
       ),
+      // Nâng cấp tại chỗ có điều kiện (id + zaloId đã đọc + chưa gộp); các updateMany khác (bước 10) không có ai khớp.
+      updateMany: jest.fn(async ({ where, data }: { where: { id?: unknown; zaloId?: unknown }; data: Record<string, unknown> }) => {
+        const row = typeof where.id === 'string' ? users.get(where.id) : undefined;
+        if (!row || row.zaloId !== where.zaloId || (row as { mergedIntoId?: unknown }).mergedIntoId) return { count: 0 };
+        await applyUserUpdate(where.id as string, data);
+        return { count: 1 };
+      }),
     },
     cart: {
       findUnique: jest.fn(async ({ where }: { where: { userId: string } }) => {
@@ -380,6 +387,9 @@ function makeGuestMergeFixture(opts: {
   for (const table of plainMoveTables) {
     base[table] = { updateMany: jest.fn(async () => ({ count: 1 })) };
   }
+  for (const table of ['pointsTransaction', 'coinTransaction'] as const) {
+    (base[table] as Record<string, unknown>).findMany = jest.fn(async () => []);
+  }
   (base.gameProfile as Record<string, unknown>).count = jest.fn(async () => 0);
   const findCart = (id: string) => [...carts.values()].find((c) => c.id === id);
   (base.cartItem as Record<string, unknown>).updateMany = jest.fn(
@@ -393,7 +403,12 @@ function makeGuestMergeFixture(opts: {
     },
   );
   // Khoá dòng user (SELECT ... FOR UPDATE) trả số dư hiện tại của dòng đó.
-  base.$queryRaw = jest.fn(async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+  base.$queryRaw = jest.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const sql = strings.join('?');
+    // Truy vấn "user nào có referredById = khách" (bước 10): mô phỏng không ai được khách giới thiệu.
+    if (sql.includes('"referredById" =')) return [];
+    // Người mời của target/khách (bước 10): mô phỏng không ai có người mời.
+    if (sql.includes('JOIN "users" p')) return [];
     const row = users.get(values[0] as string);
     return row ? [{ ...row }] : [];
   });

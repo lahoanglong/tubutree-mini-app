@@ -238,6 +238,9 @@ model User {
   tierGraceUntil         DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
   referralCode           String          @unique
   referredById           String?
+  /// Dòng khách đã gộp → tài khoản đích (auth.service mergeGuestInto). Mã giới thiệu cũ của khách quy về người đích
+  /// (resolveMergedUserId). Không khoá ngoại: chỉ tra theo id, không cần khoá dòng đích khi ghi.
+  mergedIntoId           String?
   // Điểm Xanh lô STANDARD (có hạn, trần loyalty.max_redeem_pct). == SUM(points_transactions.delta) lot STANDARD.
   pointsBalance          Int             @default(0)
   // PD-3 (Q-03a): Điểm Xanh lô CONVERTED, quy từ xu (tiền trả trước): không hết hạn, không trần, không

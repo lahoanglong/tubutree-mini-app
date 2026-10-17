@@ -44,7 +44,7 @@ function setup(
   const orderCustomerRefund = { createMany: refundCreateMany, aggregate: refundAggregate, findFirst: jest.fn().mockResolvedValue(null) };
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
-      order: { updateMany: txUpdateMany },
+      order: { updateMany: txUpdateMany, findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order?.userId }) },
       orderStatusHistory: { create: historyCreate },
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },

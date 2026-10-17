@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -9,7 +9,58 @@ import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { isAnonymized, renameMergedMilestones, resolveMergedUserId, revokeReferralRewardForReferee } from '../wallet/referral-reward';
 import { roleClaims } from './session-state.service';
+
+/** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
+export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
+
+/** Số bước tối đa khi dò chuỗi người mời của tài khoản đích lúc gộp (xem bước 10 của mergeGuestInto). */
+export const MERGE_ANCESTOR_CAP = 1000;
+
+/**
+ * Hạn của tx gộp phía Prisma: maxWait = chờ lấy kết nối pool, timeout = Prisma huỷ tx khi quá hạn. timeout KHÔNG cắt một câu
+ * đang chờ khoá (P2028 chỉ tới khi câu đó trả về), nên tx gộp còn tự đặt lock_timeout/statement_timeout ở Postgres
+ * (MERGE_LOCK_TIMEOUT, MERGE_STATEMENT_TIMEOUT): lần gộp xếp hàng sau một lần gộp chậm (khoá chung) hay sau một tx giữ dòng lâu
+ * bỏ cuộc sau vài giây, trả kết nối pool, client nhận lỗi "đang bận, thử lại". Bình thường một lần gộp mất vài chục ms.
+ */
+const MERGE_TX_OPTIONS = { maxWait: 2_000, timeout: 5_000 } as const;
+const MERGE_LOCK_TIMEOUT = '2s';
+const MERGE_STATEMENT_TIMEOUT = '5s';
+const MERGE_BUSY_MESSAGE = 'Hệ thống đang bận, vui lòng thử lại sau ít giây.';
+
+/** Lỗi do hạn chờ khoá/câu lệnh/tx của lần gộp (55P03 lock_timeout, 57014 statement_timeout, P2028 Prisma huỷ tx). */
+function isMergeTimeout(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2028') return true;
+  const message = err instanceof Error ? err.message : '';
+  return /\b55P03\b|\b57014\b|lock timeout|statement timeout/i.test(message);
+}
+
+/**
+ * Thứ tự khoá dòng users khi gộp: người được mời trước người mời (cạnh a → b khi a.referredById = b, cả hai trong tập),
+ * cùng chiều mọi đường thưởng/thu hồi giới thiệu (lockReferee rồi lockReferrer). Tập này trước gộp không có vòng (người
+ * mời luôn có trước). Hoà thì theo id để hai lần gộp cùng chạm một dòng khoá cùng thứ tự.
+ */
+export function referralLockOrder(rows: { id: string; referredById: string | null }[]): string[] {
+  const ids = new Set(rows.map((r) => r.id));
+  const pending = new Map<string, number>([...ids].map((id) => [id, 0]));
+  for (const r of rows) {
+    if (r.referredById && ids.has(r.referredById) && r.referredById !== r.id) {
+      pending.set(r.referredById, (pending.get(r.referredById) ?? 0) + 1);
+    }
+  }
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const out: string[] = [];
+  while (pending.size > 0) {
+    const ready = [...pending].filter(([, n]) => n === 0).map(([id]) => id).sort();
+    const next = ready[0] ?? [...pending.keys()].sort()[0]!;
+    pending.delete(next);
+    out.push(next);
+    const parent = byId.get(next)?.referredById;
+    if (parent && pending.has(parent)) pending.set(parent, (pending.get(parent) ?? 1) - 1);
+  }
+  return out;
+}
 
 @Injectable()
 export class AuthService {
@@ -183,16 +234,11 @@ export class AuthService {
       return this.issueTokens(await this.attachPhoneIfMissing(currentUser, phone));
     }
 
-    const isGuest = currentUser.zaloId?.startsWith('guest_') ?? false;
-    if (!isGuest) {
-      this.logger.warn(
-        `ensurePhone: user ${currentUser.id} (đã là Zalo thật, zaloId=${currentUser.zaloId}) ` +
-          `đổi sang zaloId khác (${info.zaloId}) trên máy — từ chối gộp, giữ nguyên phiên hiện tại.`,
-      );
-      throw new ConflictException(
-        'Tài khoản Zalo trên máy hiện khác với phiên đang đăng nhập. Vui lòng đăng xuất rồi đăng nhập lại để tiếp tục.',
-      );
-    }
+    // Dòng khách đã gộp (access token cũ còn hạn) không phải khách: nâng cấp tại chỗ sẽ hồi sinh nó với mergedIntoId còn trỏ
+    // tài khoản đích, mã giới thiệu của nó vẫn quy về đích.
+    if (currentUser.mergedIntoId) return this.mergedSessionTokens(currentUser, info, phone);
+    const isGuest = (currentUser.zaloId?.startsWith('guest_') ?? false) && !currentUser.zaloId?.includes('_merged_');
+    if (!isGuest) throw this.zaloMismatch(currentUser, info.zaloId);
 
     const existingByZalo = await this.prisma.user.findUnique({ where: { zaloId: info.zaloId } });
     if (existingByZalo) {
@@ -212,8 +258,10 @@ export class AuthService {
     // tạo user mới rồi gộp — giỏ/địa chỉ/điểm/đơn đã đúng sẵn vì cùng 1 id.
     const checkedPhone = await this.phoneIfFree(phone, currentUser.id);
     try {
-      const upgraded = await this.prisma.user.update({
-        where: { id: currentUser.id },
+      // Có điều kiện: một request song song có thể vừa gộp chính dòng khách này (đọc ở trên trước lúc nó commit). Nâng cấp
+      // vô điều kiện sẽ ghi đè zaloId của dòng đã gộp mà mergedIntoId vẫn trỏ tài khoản đích.
+      const upgraded = await this.prisma.user.updateMany({
+        where: { id: currentUser.id, zaloId: currentUser.zaloId, mergedIntoId: null },
         data: {
           zaloId: info.zaloId,
           fullName: info.name,
@@ -221,7 +269,10 @@ export class AuthService {
           ...(checkedPhone ? { phone: checkedPhone } : {}),
         },
       });
-      return this.issueTokens(upgraded);
+      const fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      if (upgraded.count === 1 || fresh.zaloId === info.zaloId) return this.issueTokens(fresh);
+      if (fresh.mergedIntoId) return this.mergedSessionTokens(fresh, info, phone);
+      throw this.zaloMismatch(fresh, info.zaloId);
     } catch (err) {
       // Hai máy khách khác nhau cùng nâng cấp lên một tài khoản Zalo mới cùng lúc: máy thắng đã
       // giữ zaloId, máy thua gộp vào dòng đó thay vì trả 500.
@@ -230,6 +281,27 @@ export class AuthService {
       if (!winner || winner.id === currentUser.id) throw err;
       return this.issueTokens(await this.mergeGuestInto(currentUser, winner, info, phone));
     }
+  }
+
+  /**
+   * Phiên của một dòng khách đã gộp (access token cũ còn hạn, thường là client gửi lại ensurePhone sau lần gộp): đúng tài
+   * khoản Zalo của tài khoản đích thì trả token của đích như lần gộp đầu; Zalo khác thì từ chối như mọi phiên không phải khách.
+   */
+  private async mergedSessionTokens(merged: User, info: { zaloId: string }, phone: string | null): Promise<LoginResponse> {
+    const targetId = merged.mergedIntoId ? await resolveMergedUserId(this.prisma, merged.mergedIntoId) : null;
+    const target = targetId ? await this.prisma.user.findUnique({ where: { id: targetId } }) : null;
+    if (target && target.zaloId === info.zaloId) return this.issueTokens(await this.attachPhoneIfMissing(target, phone));
+    throw this.zaloMismatch(merged, info.zaloId);
+  }
+
+  private zaloMismatch(user: User, zaloId: string): ConflictException {
+    this.logger.warn(
+      `ensurePhone: user ${user.id} (không phải phiên khách, zaloId=${user.zaloId}) ` +
+        `đổi sang zaloId khác (${zaloId}) trên máy — từ chối gộp, giữ nguyên phiên hiện tại.`,
+    );
+    return new ConflictException(
+      'Tài khoản Zalo trên máy hiện khác với phiên đang đăng nhập. Vui lòng đăng xuất rồi đăng nhập lại để tiếp tục.',
+    );
   }
 
   /** Gắn SĐT nếu user chưa có và SĐT còn trống — dùng cho nhánh "đúng danh tính đang có". */
@@ -267,9 +339,28 @@ export class AuthService {
   ): Promise<User> {
     const targetPhone = phone && !target.phone ? await this.phoneIfFree(phone, target.id) : undefined;
     return this.prisma.$transaction(async (tx) => {
-      // Khoá theo thứ tự cố định khách → target (target không bao giờ là khách nên không đảo
-      // chiều được). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để
-      // bước kiểm trùng bên dưới thấy dòng của lần gộp trước.
+      // Mọi lần gộp chạy nối tiếp nhau. Tập dòng users của hai lần gộp có thể chồng nhau (khách G2 mời khách G1, cả hai gộp
+      // vào cùng T) và thứ tự người-được-mời-trước của mỗi lần chỉ nhất quán trong tập của chính nó ⇒ hai lần gộp xen kẽ có
+      // thể khoá ngược chiều (40P01). Khoá chung chấp nhận được: gộp chỉ xảy ra một lần mỗi khách lúc đăng nhập Zalo, tx
+      // ngắn. Lấy trước mọi khoá dòng nên không tạo vòng chờ với đường trả hàng hay thưởng (chúng không lấy khoá này).
+      await tx.$queryRaw`SELECT set_config('lock_timeout', ${MERGE_LOCK_TIMEOUT}, true), set_config('statement_timeout', ${MERGE_STATEMENT_TIMEOUT}, true)`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_MERGE_LOCK_KEY}))`;
+      // Thứ tự khoá như đường duyệt trả hàng (yêu cầu trả → đơn → users): khoá dòng khách trước rồi mới chuyển đơn/yêu cầu
+      // trả thì đảo chiều với lần duyệt đang giữ yêu cầu + đơn và chờ ví/điểm của khách ⇒ 40P01 (UAT R6-SYNC-2).
+      await tx.$queryRaw`SELECT "id" FROM "return_requests" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
+      // Dòng users: khách, target và những người khách đã mời (đổi referredById ở bước 10), người được mời trước người mời
+      // (referralLockOrder). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để bước kiểm trùng bên
+      // dưới thấy dòng của lần gộp trước. Cạnh theo người mời đã quy qua mergedIntoId, như lần cấp thưởng khoá người được
+      // mời rồi người mời ĐÃ QUY (khách B còn trỏ khách A đã gộp vào T: cấp thưởng khoá B rồi T, gộp B vào T cũng phải vậy).
+      const circle = await tx.$queryRaw<{ id: string; referredById: string | null }[]>`
+        SELECT u."id", COALESCE(p."mergedIntoId", u."referredById") AS "referredById"
+          FROM "users" u LEFT JOIN "users" p ON p."id" = u."referredById"
+         WHERE u."id" IN (${guest.id}, ${target.id}) OR u."referredById" = ${guest.id}`;
+      for (const id of referralLockOrder(circle)) {
+        if (id === guest.id || id === target.id) await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR UPDATE`;
+        else await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR NO KEY UPDATE`;
+      }
       const lockedGuest = await tx.$queryRaw<
         {
           zaloId: string | null;
@@ -280,10 +371,14 @@ export class AuthService {
         }[]
       >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
-      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${target.id} FOR UPDATE`;
       const g = lockedGuest[0];
       if (!g || g.zaloId !== guest.zaloId || g.zaloId?.includes('_merged_')) {
         return tx.user.findUniqueOrThrow({ where: { id: target.id } });
+      }
+      // Target bị khoá hoặc vừa bị xoá (ẩn danh hoá) sau lúc tra ở ngoài: không đổ tiền/đơn của khách vào tài khoản chết.
+      const lockedTarget = await tx.user.findUniqueOrThrow({ where: { id: target.id }, select: { isBlocked: true, metadata: true } });
+      if (lockedTarget.isBlocked || isAnonymized(lockedTarget.metadata)) {
+        throw new ConflictException('Tài khoản Zalo này đã bị khoá hoặc đã xoá, không thể gộp phiên khách vào. Vui lòng liên hệ hỗ trợ.');
       }
       const gid = guest.id;
       const tid = target.id;
@@ -365,6 +460,7 @@ export class AuthService {
                         WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
       await tx.pointsTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await renameMergedMilestones(tx, gid, tid);
 
       // 6) Bảng giới hạn lượt theo user. Flash sale: cộng dồn số đã mua để perUserLimit tính cả
       //    hai bên. Đánh giá: mỗi lần mua (đơn) một đánh giá và đơn của khách đã sang target ở trên, nên đánh giá đi theo
@@ -472,13 +568,65 @@ export class AuthService {
         where: { id: gid },
         data: {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
+          mergedIntoId: tid,
+          // Refresh token vừa xoay trước lúc gộp còn trong khoảng ân hạn: chốt mốc để refresh() không cấp lại phiên cho khách.
+          sessionsRevokedAt: new Date(),
           pointsBalance: 0,
           pointsConvertedBalance: 0,
           cashbackPending: 0,
         },
       });
 
-      return merged;
+      // 10) Danh tính giới thiệu (UAT R6 "khách là người mời"): người khách đã mời chuyển sang target, mã của khách quy về
+      //     target qua mergedIntoId (bước 9), dòng thưởng/mốc đã theo sổ ở bước 5. Liên kết làm target tự mời mình hoặc tạo
+      //     vòng (khách mời X, ..., X là tổ tiên giới thiệu của target) bị cắt và thưởng đã cấp cho nó bị thu ngay: vòng
+      //     người được mời ↔ người mời làm hai lần trả hàng khoá ngược chiều nhau (40P01), tự mời thì người mời tự nhận
+      //     thưởng. Khách được chính target mời (target tạo khách bằng mã của mình) cũng vậy. Khách được người khác mời: giữ
+      //     nguyên (G6). So theo danh tính: dòng khách đã gộp trước đó là chính tài khoản đích của nó (mergedIntoId), nên khách
+      //     G mời khách B rồi B gộp vào T trước G thì B cũng là T. Đọc lại sau khi đã khoá (người được mời, người mời của G).
+      const identity = (row: { id: string; mergedIntoId: string | null }) => row.mergedIntoId ?? row.id;
+      //     Chuỗi tổ tiên của target đọc bằng MỘT truy vấn đệ quy (tx đang giữ khoá gộp chung, không đi từng bước một), dừng
+      //     ở MERGE_ANCESTOR_CAP bước. Khách đã mang mergedIntoId = target (bước 9) nên khi khách là tổ tiên của target chuỗi
+      //     quay về target: CYCLE dừng ở đó và mọi danh tính trên vòng nằm trong `ancestors` (chỉ người được mời có danh tính
+      //     trên vòng bị cắt). Chạm trần mà KHÔNG gặp vòng thì chuỗi tổ tiên dài hơn 1000 người, chỉ dựng được bằng hàng loạt
+      //     phiên khách giả: coi là nghi vòng và cắt mọi người khách đã mời, vì không chứng minh được ai nằm ngoài chuỗi.
+      const chain = await tx.$queryRaw<{ id: string; truncated: boolean }[]>`
+        WITH RECURSIVE "chain"("id", "depth") AS (
+          SELECT ${tid}::text, 0
+          UNION ALL
+          SELECT COALESCE(p."mergedIntoId", p."id"), c."depth" + 1
+            FROM "chain" c
+            JOIN "users" u ON u."id" = c."id"
+            JOIN "users" p ON p."id" = u."referredById"
+           WHERE c."depth" < ${MERGE_ANCESTOR_CAP}::int
+        ) CYCLE "id" SET "isCycle" USING "path"
+        SELECT c."id", (c."depth" = ${MERGE_ANCESTOR_CAP}::int AND NOT c."isCycle" AND u."referredById" IS NOT NULL) AS "truncated"
+          FROM "chain" c JOIN "users" u ON u."id" = c."id"`;
+      const ancestors = new Set(chain.map((c) => c.id));
+      const truncated = chain.some((c) => c.truncated);
+      const referees = await tx.$queryRaw<{ id: string; mergedIntoId: string | null }[]>`
+        SELECT "id", "mergedIntoId" FROM "users" WHERE "referredById" = ${gid} ORDER BY "id" FOR NO KEY UPDATE`;
+      const cyclic = referees.filter((r) => truncated || ancestors.has(identity(r))).map((r) => r.id);
+      await tx.user.updateMany({
+        where: { referredById: gid, ...(cyclic.length > 0 ? { id: { notIn: cyclic } } : {}) },
+        data: { referredById: tid },
+      });
+      const [guestReferrer] = await tx.$queryRaw<{ id: string; mergedIntoId: string | null }[]>`
+        SELECT p."id", p."mergedIntoId" FROM "users" u JOIN "users" p ON p."id" = u."referredById" WHERE u."id" = ${gid}`;
+      const selfReferred = guestReferrer !== undefined && identity(guestReferrer) === tid;
+      const cut = [...cyclic, ...(selfReferred ? [gid] : [])];
+      if (cut.length > 0) {
+        await tx.user.updateMany({ where: { id: { in: cut } }, data: { referredById: null } });
+        for (const refereeId of cut) await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);
+      }
+
+      return cut.length > 0 ? tx.user.findUniqueOrThrow({ where: { id: tid } }) : merged;
+    }, MERGE_TX_OPTIONS).catch((err: unknown) => {
+      if (isMergeTimeout(err)) {
+        this.logger.warn(`Gộp khách ${guest.id} vào ${target.id} quá hạn chờ (khoá/câu lệnh), client thử lại.`);
+        throw new ServiceUnavailableException(MERGE_BUSY_MESSAGE);
+      }
+      throw err;
     });
   }
 
@@ -616,6 +764,11 @@ export class AuthService {
     if (user.isBlocked) {
       throw new UnauthorizedException('Tài khoản đã bị khoá.');
     }
+    // Khách đã gộp không còn là danh tính: refresh token cũ của khách không được đổi ra phiên mới (phải đăng nhập lại để
+    // nhận token của tài khoản đích; mergedSessionTokens cấp token cho đích, không qua dòng khách).
+    if (user.mergedIntoId) {
+      throw new UnauthorizedException('Phiên đã hết hiệu lực, vui lòng đăng nhập lại.');
+    }
     // Áp quyền theo SĐT (allowlist) — chạy cho cả login lẫn refresh ⇒ đổi role có hiệu lực
     // ở lần refresh kế. Không có phone / không có grant → trả nguyên user.
     user = await this.rbac.applyGrants(user);
@@ -674,7 +827,7 @@ export class AuthService {
       where: { referralCode: referralCode.toUpperCase() },
       select: { id: true },
     });
-    return ref?.id ?? null;
+    return ref ? resolveMergedUserId(this.prisma, ref.id) : null;
   }
 
   /** Sinh referralCode duy nhất (8 ký tự base36 không lẫn ký tự dễ nhầm). */

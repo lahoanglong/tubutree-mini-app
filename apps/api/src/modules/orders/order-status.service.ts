@@ -258,6 +258,9 @@ export class OrderStatusService {
         },
       });
       if (flip.count === 0) return false;
+      // Gộp phiên khách đổi orders.userId mà không đổi trạng thái, nên có thể commit giữa lúc đọc đơn (ngoài tx) và lúc lật:
+      // đọc lại chủ đơn dưới khoá dòng vừa lấy để hoàn ví/điểm và thu hồi giới thiệu theo chủ hiện tại, không theo khách đã gộp.
+      order.userId = (await tx.order.findUniqueOrThrow({ where: { id: order.id }, select: { userId: true } })).userId;
 
       // Ghi vết TRONG cùng transaction với lần lật trạng thái: đổi trạng thái trước đây chỉ để
       // lại một dòng log ứng dụng (xoay vòng theo container) và một chuỗi note nối thêm, không
