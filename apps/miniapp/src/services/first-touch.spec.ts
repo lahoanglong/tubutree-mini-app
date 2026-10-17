@@ -101,9 +101,16 @@ describe('loadFirstTouch — nguồn chạm đầu bền trên máy', () => {
     expect(await loadFirstTouch()).toMatchObject({ source: 'lazada' });
   });
 
-  it('đọc storage lỗi → không ném, không có chạm đầu (đăng nhập không được vướng vì số liệu)', async () => {
+  it('đọc storage lỗi → không ném, rơi về nguồn của lần mở này và KHÔNG ghi xuống máy', async () => {
     mockedGet.mockRejectedValue(new Error('no bridge'));
-    launchWith('?src=shopee');
+    launchWith('?src=shopee&utm_campaign=hop-hang');
+    await expect(loadFirstTouch()).resolves.toMatchObject({ source: 'shopee', campaign: 'hop-hang' });
+    expect(mockedSet).not.toHaveBeenCalled();
+  });
+
+  it('đọc storage lỗi và lần mở này cũng không có nguồn → không có chạm đầu', async () => {
+    mockedGet.mockRejectedValue(new Error('no bridge'));
+    launchWith('');
     await expect(loadFirstTouch()).resolves.toBeUndefined();
   });
 
@@ -113,17 +120,38 @@ describe('loadFirstTouch — nguồn chạm đầu bền trên máy', () => {
     await expect(loadFirstTouch()).resolves.toMatchObject({ source: 'shopee' });
   });
 
-  it('storage treo → bỏ cuộc sau hạn chờ, không chặn đăng nhập', async () => {
-    vi.useFakeTimers();
-    try {
+  it('ghi storage treo → không chặn: hàm vẫn trả ngay', async () => {
+    mockedSet.mockReturnValue(new Promise(() => {}) as never);
+    launchWith('?src=shopee');
+    await expect(loadFirstTouch()).resolves.toMatchObject({ source: 'shopee' });
+  });
+
+  describe('storage treo (cầu nối native không trả lời)', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('chờ tối đa 500ms rồi rơi về nguồn của lần mở này, không ghi xuống máy', async () => {
       mockedGet.mockReturnValue(new Promise(() => {}) as never);
       launchWith('?src=shopee');
+      let done = false;
+      const p = loadFirstTouch().then((v) => {
+        done = true;
+        return v;
+      });
+      await vi.advanceTimersByTimeAsync(499);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(p).resolves.toMatchObject({ source: 'shopee' });
+      expect(mockedSet).not.toHaveBeenCalled();
+    });
+
+    it('treo mà lần mở này không có nguồn → không có chạm đầu', async () => {
+      mockedGet.mockReturnValue(new Promise(() => {}) as never);
+      launchWith('');
       const p = loadFirstTouch();
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(600);
       await expect(p).resolves.toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
+    });
   });
 
   it('gọi nhiều lần cùng một lần mở → chỉ đọc/ghi storage một lần', async () => {

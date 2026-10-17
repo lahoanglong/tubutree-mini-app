@@ -2,8 +2,11 @@ import { getStorage, removeStorage, setStorage } from 'zmp-sdk/apis';
 import { getSessionAttribution, normalizeEntryToken } from '../utils/entry-source';
 
 export const FIRST_TOUCH_KEY = 'tubu_first_touch';
-/** Storage Zalo có thể không bao giờ trả lời ngoài Zalo hay khi cầu nối native treo; số liệu không được giữ đăng nhập lại. */
-const STORAGE_TIMEOUT_MS = 2_000;
+/**
+ * Storage Zalo có thể không bao giờ trả lời ngoài Zalo hay khi cầu nối native treo, mà đăng nhập đang đợi loadFirstTouch():
+ * số liệu không được giữ đăng nhập lại quá hạn này. Lần ghi không được đợi (xem resolveFirstTouch), nên đây cũng là trần của cả hàm.
+ */
+const STORAGE_TIMEOUT_MS = 500;
 /** Cùng hạn với API (apps/api/src/common/attribution.ts): API bỏ chạm quá 90 ngày, nên máy cũng không giữ bản quá hạn. */
 const FIRST_TOUCH_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -51,6 +54,14 @@ function isExpired(ft: FirstTouch): boolean {
   return ft.at !== undefined && Date.now() - Date.parse(ft.at) > FIRST_TOUCH_MAX_AGE_MS;
 }
 
+function touchFromLaunch(): FirstTouch | undefined {
+  const launch = getSessionAttribution();
+  if (!launch) return undefined;
+  const ft: FirstTouch = { source: launch.source, at: new Date().toISOString() };
+  if (launch.campaign) ft.campaign = launch.campaign;
+  return ft;
+}
+
 async function resolveFirstTouch(): Promise<FirstTouch | undefined> {
   let expired = false;
   try {
@@ -59,22 +70,19 @@ async function resolveFirstTouch(): Promise<FirstTouch | undefined> {
     if (saved && !isExpired(saved)) return saved;
     expired = saved !== undefined;
   } catch {
-    return undefined;
+    // Không đọc được (lỗi hay quá hạn chờ) thì không biết máy đã có chạm đầu hay chưa: gửi nguồn của lần mở này để tài khoản mới
+    // vẫn có nguồn (API chỉ ghi khi cột còn trống), nhưng KHÔNG ghi xuống máy kẻo đè lên chạm đầu thật chưa đọc được.
+    return touchFromLaunch();
   }
   // Máy chưa có chạm đầu (hoặc bản cũ đã quá hạn): chỉ nguồn có tên (link/QR/thẻ) mới tính; mở app trần không phải một
   // "nguồn" để lưu, nên lần quét thẻ sau đó vẫn là chạm đầu có thật.
-  const launch = getSessionAttribution();
-  if (!launch) {
+  const ft = touchFromLaunch();
+  if (!ft) {
     if (expired) void removeStorage({ keys: [FIRST_TOUCH_KEY] }).catch(() => undefined);
     return undefined;
   }
-  const ft: FirstTouch = { source: launch.source, at: new Date().toISOString() };
-  if (launch.campaign) ft.campaign = launch.campaign;
-  try {
-    await withTimeout(setStorage({ data: { [FIRST_TOUCH_KEY]: JSON.stringify(ft) } }), STORAGE_TIMEOUT_MS);
-  } catch {
-    /* không lưu được thì chỉ mất bản bền; lần đăng nhập này vẫn gửi được */
-  }
+  // Không đợi ghi: đăng nhập cần câu trả lời ngay; ghi lỗi thì chỉ mất bản bền, lần đăng nhập này vẫn gửi được.
+  void setStorage({ data: { [FIRST_TOUCH_KEY]: JSON.stringify(ft) } }).catch(() => undefined);
   return ft;
 }
 
