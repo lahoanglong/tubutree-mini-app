@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
@@ -579,14 +579,7 @@ export class CommunityFeedService {
     await this.reverseReputationForPost(post.userId, postId);
     await this.revokeTrust(post.userId);
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
-    try {
-      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_REJECTED', {
-        title: previewTitle(post.title, post.body),
-        reason: reason?.trim() || DEFAULT_REJECT_REASON,
-      });
-    } catch (err) {
-      this.logger.warn(`notify(reject) failed ${post.id}: ${(err as Error).message}`);
-    }
+    await this.notifyPostRejected(postId, post, reason);
     return { ok: true };
   }
 
@@ -961,15 +954,17 @@ export class CommunityFeedService {
     // của mình thì không (không có vi phạm nào được xác nhận).
     if (post.userId !== userId && role === 'ADMIN') {
       await this.revokeTrust(post.userId);
-      await this.notifyPostHidden(postId, post);
+      // Bài còn PENDING chưa từng hiện ra với ai: báo "chưa được đăng" chứ không phải "đã được ẩn khỏi cộng đồng".
+      if (post.status === 'PENDING') await this.notifyPostRejected(postId, post);
+      else await this.notifyPostHidden(postId, post);
     }
     return { ok: true };
   }
 
   /**
-   * Kiểm duyệt ẩn một bài (đã đăng hoặc đang chờ) kèm lý do cho tác giả. Cùng hệ quả điểm/tin cậy với từ chối và với ADMIN xoá
-   * bài người khác, nhưng tin gửi đi nói "đã được ẩn" chứ không phải "chưa được đăng". Gọi lại trên bài đã gỡ không đảo điểm
-   * hay báo lần hai.
+   * Kiểm duyệt ẩn một bài ĐÃ ĐĂNG kèm lý do cho tác giả (bài đang chờ duyệt thì dùng rejectPost: nó chưa từng hiện ra nên
+   * "đã được ẩn khỏi cộng đồng" là sai sự thật). Gọi lại trên bài đã gỡ, hoặc hai người ẩn cùng lúc, chỉ một lượt đảo điểm và
+   * báo tác giả.
    */
   async hidePost(postId: string, reason?: string) {
     const post = await this.prisma.feedPost.findUnique({
@@ -978,12 +973,24 @@ export class CommunityFeedService {
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status === 'REMOVED') return { ok: true };
-    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
+    if (post.status !== 'PUBLISHED') throw new ConflictException('Bài đang chờ duyệt nên chưa được đăng, không thể ẩn. Hãy dùng "Từ chối" cho bài này.');
+    const { count } = await this.prisma.feedPost.updateMany({ where: { id: postId, status: 'PUBLISHED' }, data: { status: 'REMOVED' } });
     if (count !== 1) return { ok: true };
     await this.reverseReputationForPost(post.userId, postId);
     await this.revokeTrust(post.userId);
     await this.notifyPostHidden(postId, post, reason);
     return { ok: true };
+  }
+
+  private async notifyPostRejected(postId: string, post: { userId: string; title: string | null; body: string }, reason?: string) {
+    try {
+      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_REJECTED', {
+        title: previewTitle(post.title, post.body),
+        reason: reason?.trim() || DEFAULT_REJECT_REASON,
+      });
+    } catch (err) {
+      this.logger.warn(`notify(reject) failed ${postId}: ${(err as Error).message}`);
+    }
   }
 
   private async notifyPostHidden(postId: string, post: { userId: string; title: string | null; body: string }, reason?: string) {

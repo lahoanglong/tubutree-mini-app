@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommunityFeedService, containsBannedContent, levelFromReputation, levelName, slugifyTag } from './community-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
@@ -2555,7 +2555,7 @@ describe('CommunityFeedService.hidePost — kiểm duyệt ẩn bài đã đăng
 
     await expect(makeSvc(prisma, undefined, notify).hidePost('p1', '  Có link bán hàng ngoài  ')).resolves.toEqual({ ok: true });
 
-    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: 'PUBLISHED' }, data: { status: 'REMOVED' } });
     expect(prisma.reputationEvent.create).toHaveBeenCalledWith({ data: { userId: 'author', amount: -5, reason: 'REVERSE_POST', refId: 'p1' } });
     expect(prisma.communityProfile.updateMany).toHaveBeenCalledWith({ where: { userId: 'author' }, data: { isTrusted: false } });
     expect(notify.notify).toHaveBeenCalledWith('author', 'COMMUNITY_POST_HIDDEN', { title: 'Bán hàng', reason: 'Có link bán hàng ngoài' });
@@ -2569,6 +2569,19 @@ describe('CommunityFeedService.hidePost — kiểm duyệt ẩn bài đã đăng
     await makeSvc(prisma, undefined, notify).hidePost('p1');
 
     expect(notify.notify.mock.calls[0][2].reason).toBe('nội dung chưa phù hợp với nội quy cộng đồng');
+  });
+
+  it('bài đang PENDING → 409 gợi ý dùng "Từ chối": chưa từng đăng nên không nói "đã được ẩn", không đụng DB, không báo', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...published, status: 'PENDING' });
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    const err = await makeSvc(prisma, undefined, notify).hidePost('p1', 'x').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toContain('Từ chối');
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
+    expect(notify.notify).not.toHaveBeenCalled();
   });
 
   it('bài đã REMOVED rồi → idempotent: không đảo điểm lần hai, không báo lại', async () => {
@@ -2603,7 +2616,7 @@ describe('CommunityFeedService.hidePost — kiểm duyệt ẩn bài đã đăng
     const notify = { notify: jest.fn().mockRejectedValue(new Error('down')) };
 
     await expect(makeSvc(prisma, undefined, notify).hidePost('p1')).resolves.toEqual({ ok: true });
-    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
+    expect(prisma.feedPost.updateMany).toHaveBeenCalledWith({ where: { id: 'p1', status: 'PUBLISHED' }, data: { status: 'REMOVED' } });
   });
 });
 
@@ -2635,6 +2648,17 @@ describe('CommunityFeedService.deletePost — ADMIN gỡ bài người khác th�
       title: 'Bán hàng',
       reason: 'nội dung chưa phù hợp với nội quy cộng đồng',
     });
+  });
+
+  it('ADMIN gỡ bài của người khác khi bài còn PENDING → báo "chưa được đăng" (REJECTED), không báo "đã ẩn" cho bài chưa từng đăng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row, status: 'PENDING' });
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+
+    await makeSvc(prisma, undefined, notify).deletePost('admin1', 'ADMIN', 'p1');
+
+    expect(notify.notify).toHaveBeenCalledTimes(1);
+    expect(notify.notify.mock.calls[0][1]).toBe('COMMUNITY_POST_REJECTED');
   });
 
   it('tác giả tự xoá bài của mình → KHÔNG báo', async () => {

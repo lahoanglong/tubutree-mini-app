@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -212,6 +213,16 @@ describe('Cộng đồng: câu hỏi chưa trả lời, gộp tin tương tác, 
       const body = (sent[0]!.payload as { body: string }).body;
       expect(body).toContain('Bài vi phạm IT');
       expect(body).toContain('Có link bán hàng ngoài');
+    });
+
+    it('hidePost trên bài PENDING → 409, bài vẫn PENDING, không có tin "đã được ẩn"', async () => {
+      const author = await createUser(prisma);
+      const p = await post(author.id, { status: 'PENDING' });
+
+      await expect(feed.hidePost(p.id, 'x')).rejects.toBeInstanceOf(ConflictException);
+
+      expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: p.id } })).status).toBe('PENDING');
+      expect(await logs(author.id, 'COMMUNITY_POST_HIDDEN')).toHaveLength(0);
     });
 
     it('nhiều CSKH ẩn cùng một bài cùng lúc → không lỗi và tác giả chỉ nhận đúng MỘT tin', async () => {
