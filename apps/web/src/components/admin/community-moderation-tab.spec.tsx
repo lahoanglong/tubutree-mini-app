@@ -106,6 +106,61 @@ describe('CommunityModerationTab — bài chờ duyệt', () => {
     expect(r.container.querySelector('[data-post="p2"] [role="alert"]')).toBeNull();
   });
 
+  it('từ chối bài vừa được người khác duyệt (409) → làm mới danh sách, bài biến khỏi hàng chờ, thông điệp 409 hiện ở đầu tab', async () => {
+    let listCalls = 0;
+    const { api, r } = setup({
+      '/feed/admin/pending': () => ({ body: ++listCalls === 1 ? PENDING : [PENDING[1]] }),
+      '/feed/admin/p1/reject': { status: 409, body: { message: 'Bài này đã được đăng nên không thể từ chối. Hãy dùng "Ẩn" để gỡ bài đã đăng.' } },
+    });
+    await flush();
+
+    click(byText(r.container.querySelector('[data-post="p1"]')!, 'button', 'Từ chối'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+
+    expect(api.calls.filter((c) => c.url.includes('/feed/admin/pending')).length).toBeGreaterThanOrEqual(2);
+    expect(r.container.querySelector('[data-post="p1"]')).toBeNull();
+    expect(r.container.querySelector('[data-post="p2"]')).not.toBeNull();
+    expect(r.container.querySelector('[role="alert"]')!.textContent).toContain('dùng "Ẩn"');
+  });
+
+  it('duyệt bài đã bị người khác từ chối (409/404) cũng làm mới danh sách và báo rõ; lỗi chung (500) thì KHÔNG làm mới', async () => {
+    let listCalls = 0;
+    const stale = setup({
+      '/feed/admin/pending': () => ({ body: ++listCalls === 1 ? PENDING : [PENDING[1]] }),
+      '/feed/admin/p1/approve': { status: 404, body: { message: 'Bài viết không tồn tại.' } },
+    });
+    await flush();
+    click(byText(stale.r.container.querySelector('[data-post="p1"]')!, 'button', 'Duyệt'));
+    await flush();
+    expect(stale.r.container.querySelector('[data-post="p1"]')).toBeNull();
+    expect(stale.r.container.querySelector('[role="alert"]')!.textContent).toContain('Bài viết không tồn tại');
+    stale.r.unmount();
+    mounted = [];
+
+    const broken = setup({ '/feed/admin/p1/approve': { status: 500, body: { message: 'Máy chủ bận' } } });
+    await flush();
+    click(byText(broken.r.container.querySelector('[data-post="p1"]')!, 'button', 'Duyệt'));
+    await flush();
+    expect(broken.api.calls.filter((c) => c.url.includes('/feed/admin/pending'))).toHaveLength(1);
+  });
+
+  it('thông điệp 409 ở đầu tab mất đi khi chuyển sang mục khác', async () => {
+    const { r } = setup({ '/feed/admin/p1/reject': { status: 409, body: { message: 'Bài này đã được đăng nên không thể từ chối.' } } });
+    await flush();
+    click(byText(r.container.querySelector('[data-post="p1"]')!, 'button', 'Từ chối'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(r.container.textContent).toContain('đã được đăng nên không thể từ chối');
+
+    click(byText(r.container, 'button[aria-pressed]', 'Đã đăng'));
+    await flush();
+
+    expect(r.container.textContent).not.toContain('đã được đăng nên không thể từ chối');
+  });
+
   it('trạng thái tải, rỗng và lỗi tải', async () => {
     const loading = setup();
     expect(loading.r.container.textContent).toContain('Đang tải');

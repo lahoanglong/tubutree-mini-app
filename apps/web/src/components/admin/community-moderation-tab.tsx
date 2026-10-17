@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   approveCommunityPost,
@@ -15,6 +15,7 @@ import {
   type CommunityPublishedPost,
   type CommunityUnansweredQuestion,
 } from '@/lib/community-moderation-client';
+import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
@@ -45,6 +46,10 @@ const QUERY_KEYS = {
 } as const satisfies Record<CommunityView, QueryKey>;
 const INBOX_KEY: QueryKey = ['admin-ops-inbox'];
 
+/** Bài đã đổi trạng thái do người khác (409) hoặc không còn (404): dòng sẽ biến khỏi danh sách sau khi làm mới, nên lời giải thích đứng ở đầu tab thay vì trên dòng. */
+const StaleNoticeContext = createContext<(message: string | null) => void>(() => {});
+const isStale = (e: unknown): e is ApiError => e instanceof ApiError && (e.status === 409 || e.status === 404);
+
 /**
  * Kiểm duyệt cộng đồng trên web admin cho ADMIN và nhân viên nhóm CSKH (trước đây chỉ ADMIN duyệt được, và chỉ trong mini app):
  * duyệt/từ chối bài chờ duyệt, ẩn/ghim bài đã đăng, và xem câu hỏi chờ quá lâu chưa ai trả lời. Tác giả được báo khi bài bị từ
@@ -52,20 +57,37 @@ const INBOX_KEY: QueryKey = ['admin-ops-inbox'];
  */
 export function CommunityModerationTab({ initialView = 'pending' }: { initialView?: CommunityView }) {
   const [view, setView] = useState<CommunityView>(initialView);
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
   return (
-    <div className="space-y-3">
-      <h2 className="font-display text-lg font-semibold text-stone-900">Cộng đồng</h2>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Mục kiểm duyệt cộng đồng">
-        {VIEWS.map((v) => (
-          <button key={v.k} type="button" className={chipClass(view === v.k)} aria-pressed={view === v.k} onClick={() => setView(v.k)}>
-            {v.label}
-          </button>
-        ))}
+    <StaleNoticeContext.Provider value={setStaleNotice}>
+      <div className="space-y-3">
+        <h2 className="font-display text-lg font-semibold text-stone-900">Cộng đồng</h2>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Mục kiểm duyệt cộng đồng">
+          {VIEWS.map((v) => (
+            <button
+              key={v.k}
+              type="button"
+              className={chipClass(view === v.k)}
+              aria-pressed={view === v.k}
+              onClick={() => {
+                setStaleNotice(null);
+                setView(v.k);
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {staleNotice && (
+          <Notice tone="warning" role="alert">
+            {staleNotice} Danh sách đã được làm mới.
+          </Notice>
+        )}
+        {view === 'pending' && <PendingList />}
+        {view === 'published' && <PublishedList />}
+        {view === 'unanswered' && <UnansweredList />}
       </div>
-      {view === 'pending' && <PendingList />}
-      {view === 'published' && <PublishedList />}
-      {view === 'unanswered' && <UnansweredList />}
-    </div>
+    </StaleNoticeContext.Provider>
   );
 }
 
@@ -114,14 +136,26 @@ function Thumbnails({ images }: { images: string[] }) {
 /** Thao tác trên một bài: gọi API, làm mới danh sách và số trên "Việc cần xử lý"; lỗi hiện ngay trên đúng bài. */
 function usePostAction<V>(fn: (v: V) => Promise<unknown>, refreshKeys: QueryKey[], failText: string) {
   const qc = useQueryClient();
+  const setStaleNotice = useContext(StaleNoticeContext);
   const [err, setErr] = useState<string | null>(null);
+  const refresh = () => {
+    for (const key of [...refreshKeys, INBOX_KEY]) void qc.invalidateQueries({ queryKey: key });
+  };
   const m = useMutation({
     mutationFn: fn,
-    onMutate: () => setErr(null),
-    onSuccess: () => {
-      for (const key of [...refreshKeys, INBOX_KEY]) void qc.invalidateQueries({ queryKey: key });
+    onMutate: () => {
+      setErr(null);
+      setStaleNotice(null);
     },
-    onError: (e) => setErr(e instanceof Error && e.message ? e.message : failText),
+    onSuccess: refresh,
+    onError: (e) => {
+      if (isStale(e)) {
+        setStaleNotice(e.message);
+        refresh();
+        return;
+      }
+      setErr(e instanceof Error && e.message ? e.message : failText);
+    },
   });
   return { mutate: m.mutate, pending: m.isPending, err };
 }
