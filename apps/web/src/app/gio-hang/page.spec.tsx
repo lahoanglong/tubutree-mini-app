@@ -515,4 +515,50 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     await settle();
     expect(container.querySelector('[data-testid="coupon-notice"]')).toBeNull();
   });
+
+  describe('chỉ hiện giá phần chọn khi đúng phần đã hỏi, đã xong và không đang hỏi lại', () => {
+    const three = () => ({
+      ...cartOf([
+        line({ id: 'i1', productName: 'Dầu gội', quantity: 1, total: 100000 }),
+        line({ id: 'i2', productName: 'Xà phòng', quantity: 1, total: 100000 }),
+        line({ id: 'i3', productName: 'Nước rửa', quantity: 1, total: 100000 }),
+      ]),
+      couponCode: 'WELCOME',
+      subtotal: 300000,
+      itemCount: 3,
+    });
+    const P1 = () => ({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 200000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+
+    it('đổi lựa chọn: trước khi hết debounce không hiện số của lựa chọn trước, tổng là tạm tính phần mới chọn', async () => {
+      state.cart = three();
+      state.selection.mockResolvedValueOnce(P1());
+      state.selection.mockReturnValue(new Promise(() => {}));
+      const { container } = await mount();
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(container.textContent).toContain('Tổng197.000đ');
+      click(pick(container, 'Nước rửa'));
+      await flush(3);
+      expect(container.textContent).not.toContain('-3.000đ');
+      expect(container.textContent).toContain('Tổng100.000đ');
+    });
+
+    it('hỏi lại cùng lựa chọn (đang tải, còn số cũ trong bộ nhớ): không hiện số cũ cho tới khi trả lời xong', async () => {
+      state.cart = three();
+      state.selection.mockResolvedValueOnce(P1());
+      const { container } = await mount();
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(container.textContent).toContain('Tổng197.000đ');
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(container.textContent).not.toContain('-3.000đ');
+      state.selection.mockReturnValueOnce(new Promise(() => {}));
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(state.selection).toHaveBeenCalledTimes(2);
+      expect(container.textContent).not.toContain('-3.000đ');
+      expect(container.textContent).toContain('Tổng200.000đ');
+    });
+  });
 });

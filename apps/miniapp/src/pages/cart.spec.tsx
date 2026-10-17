@@ -449,4 +449,43 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     expect(screen.queryByTestId('coupon-notice')).toBeNull();
     expect(screen.queryByText(/phần giảm combo/)).toBeNull();
   });
+
+  describe('chỉ hiện giá phần chọn khi đúng phần đã hỏi, đã xong và không đang hỏi lại', () => {
+    const LINE_C = { ...OK_LINE, id: 'ci-c', variationId: 'v-c', productName: 'Nước rửa', slug: 'nr', unitPrice: 100_000, total: 100_000 };
+    const three = () => summary({ items: [OK_LINE, LINE_B, LINE_C], subtotal: 250_000, itemCount: 3, couponCode: 'XANH10', comboDiscount: 0, discount: 0, tierDiscount: 0 });
+    const P1 = () => summary({ items: [LINE_B, LINE_C], subtotal: 200_000, couponCode: 'XANH10', comboDiscount: 0, discount: 3_000, tierDiscount: 0 });
+    const toggle = (name: string) => fireEvent.click(screen.getByRole('checkbox', { name: `Chọn ${name}` }));
+
+    it('đổi lựa chọn: trước khi hết debounce không hiện số của lựa chọn trước, tổng là tạm tính phần mới chọn', async () => {
+      mocks.getCart.mockResolvedValue(three());
+      mocks.getCartSelection.mockResolvedValueOnce(P1());
+      mocks.getCartSelection.mockReturnValue(new Promise(() => {}));
+      renderPage();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+      await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+      expect(screen.getByText('197.000đ')).toBeInTheDocument();
+      toggle('Nước rửa');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByText('-3.000đ')).toBeNull();
+      expect(screen.queryByText('197.000đ')).toBeNull();
+      expect(screen.getAllByText('100.000đ').length).toBeGreaterThan(0);
+    });
+
+    it('hỏi lại cùng lựa chọn (đang tải, còn số cũ trong bộ nhớ): không hiện số cũ cho tới khi trả lời xong', async () => {
+      mocks.getCart.mockResolvedValue(three());
+      mocks.getCartSelection.mockResolvedValueOnce(P1());
+      renderPage();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+      await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+      toggle('Xà bông thảo mộc');
+      await new Promise((r) => setTimeout(r, 450));
+      expect(screen.queryByText('-3.000đ')).toBeNull();
+      mocks.getCartSelection.mockReturnValueOnce(new Promise(() => {}));
+      toggle('Xà bông thảo mộc');
+      await waitFor(() => expect(mocks.getCartSelection).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByText('-3.000đ')).toBeNull();
+      expect(screen.getByText('200.000đ')).toBeInTheDocument();
+    });
+  });
 });
