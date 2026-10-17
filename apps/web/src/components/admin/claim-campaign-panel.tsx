@@ -123,15 +123,22 @@ export function ClaimCampaignPanel() {
   const askToggle = async (b: CouponBatchSummary) => {
     setMsg(null);
     const turnOff = b.active > 0;
-    if (turnOff) {
-      const ok = await confirm({
-        title: `Tắt lô ${b.batch}`,
-        message: 'Mọi thẻ của lô không nhận và không áp được nữa (đơn đã đặt bằng mã vẫn giữ nguyên). Dùng khi thẻ bị lộ. Bật lại được.',
-        confirmLabel: 'Tắt lô',
-        tone: 'danger',
-      });
-      if (!ok) return;
-    }
+    const ok = await confirm(
+      turnOff
+        ? {
+            title: `Tắt lô ${b.batch}`,
+            message: 'Mọi thẻ của lô không nhận và không áp được nữa (đơn đã đặt bằng mã vẫn giữ nguyên). Dùng khi thẻ bị lộ. Bật lại được.',
+            confirmLabel: 'Tắt lô',
+            tone: 'danger',
+          }
+        : {
+            title: `Bật lại lô ${b.batch}`,
+            message:
+              'Mọi mã của lô bật lại, kể cả mã đã tắt riêng ở danh sách "Mã đã tạo". Mã nào cần giữ tắt thì tìm theo mã và tắt lại sau khi bật lô.',
+            confirmLabel: 'Bật lại lô',
+          },
+    );
+    if (!ok) return;
     toggleBatch.mutate({ batch: b.batch, isActive: !turnOff });
   };
 

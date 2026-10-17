@@ -118,6 +118,28 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     expect(bodyOf(patch)).toEqual({ isActive: false });
   });
 
+  it('bật lại lô đã tắt: cảnh báo mã tắt riêng cũng bật lại, phải xác nhận', async () => {
+    const { r, api } = mount({
+      '/admin/config': configRoute(BASE),
+      '/admin/coupon-batches/SHOPEE11': { body: { batch: 'SHOPEE11', updated: 500 } },
+      '/admin/coupon-batches': { body: [batch({ active: 0 })] },
+    });
+    await flush();
+    const row = r.container.querySelector('[data-testid="claim-batch-SHOPEE11"]')!;
+    expect(row.textContent).toContain('Đã tắt');
+    click(byText(row, 'button', 'Bật lại lô'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('kể cả mã đã tắt riêng');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls.some((c) => c.init?.method === 'PATCH')).toBe(false);
+    click(byText(row, 'button', 'Bật lại lô'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(bodyOf(api.calls.find((c) => c.init?.method === 'PATCH'))).toEqual({ isActive: true });
+  });
+
   it('mã chung: tạo mã CLAIM, mỗi khách 1 lượt, tổng lượt nhận theo ô nhập; báo link in QR', async () => {
     const { r, api } = mount({
       '/admin/config': configRoute(`${BASE}/`),
