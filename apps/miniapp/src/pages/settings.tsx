@@ -114,7 +114,7 @@ export default function SettingsPage() {
           onToggle={() => void toggleNotify('notifyPromo')}
         />
         <Toggle
-          label="Nhắc nhở Vườn Xanh"
+          label="Nhắc nhở Vườn Xanh & tương tác bài viết"
           on={notify?.notifyGarden ?? false}
           disabled={!notify || saving}
           onToggle={() => void toggleNotify('notifyGarden')}
