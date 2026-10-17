@@ -47,6 +47,7 @@ export default function WalletPage() {
   const authed = phase === 'authenticated';
   // CTV chỉ hưởng hoa hồng; API không bao giờ thưởng Điểm Xanh giới thiệu cho role này.
   const isAffiliate = useAuthStore((s) => s.user?.role === 'AFFILIATE');
+  const isCommissionRole = useAuthStore((s) => s.user?.role === 'AFFILIATE' || s.user?.role === 'DEALER');
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   // Thống kê giới thiệu là phần phụ: lỗi chỉ làm ẩn khối mời bạn, không chặn cả màn Ví.
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
@@ -103,6 +104,9 @@ export default function WalletPage() {
     }
   };
 
+  // Khách thường không có hoa hồng: hai thẻ 0đ chỉ khiến tiền hoàn bị hiểu thành hoa hồng.
+  // Vẫn hiện khi còn khoản hoa hồng thật dù role chưa khớp (tiền của khách không được giấu).
+  const showCommission = isCommissionRole || (w?.commissionPending ?? 0) > 0 || (w?.commissionApproved ?? 0) > 0;
   const balance = w?.walletBalance ?? 0;
   const points = loyalty ? pointsSummary(loyalty) : null;
   const convertedNote = convertedPointsNote(points?.converted);
@@ -166,7 +170,9 @@ export default function WalletPage() {
               </div>
             </div>
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
-              Tiền thật từ hoa hồng{CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc trả đơn hàng.
+              {showCommission
+                ? `Tiền thật từ hoa hồng${CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc trả đơn hàng.`
+                : 'Số dư dùng để thanh toán đơn'}
             </Text>
           </div>
 
@@ -262,19 +268,22 @@ export default function WalletPage() {
           )}
 
           {/* Nguồn tiền chờ */}
-          <div style={{ margin: '0 16px 12px', display: 'flex', gap: 10 }}>
-            <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
-            {/* Hoa hồng APPROVED KHÔNG tự vào Ví — phải bấm "Nhận về ví" ở trang Cộng tác viên.
-                Trước đây thẻ này chỉ để đọc, nên CTV thấy "có thể rút 520.000đ" ngay cạnh
-                "Ví: 0đ", bấm Rút thì bị báo chưa đủ mốc, và không có chỉ dẫn nào. */}
-            <SourceCard
-              label="Hoa hồng có thể rút"
-              value={w.commissionApproved}
-              Icon={CheckCircle2}
-              hint={w.commissionApproved > 0 ? 'Nhận về Ví →' : undefined}
-              onClick={w.commissionApproved > 0 ? () => navigate('/affiliate') : undefined}
-            />
-          </div>
+          {showCommission && (
+            <div style={{ margin: '0 16px 12px', display: 'flex', gap: 10 }}>
+              <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
+              {/* Hoa hồng APPROVED KHÔNG tự vào Ví — phải bấm "Nhận về ví" ở trang Cộng tác viên.
+                  Trước đây thẻ này chỉ để đọc, nên CTV thấy "có thể rút 520.000đ" ngay cạnh
+                  "Ví: 0đ", bấm Rút thì bị báo chưa đủ mốc, và không có chỉ dẫn nào. */}
+              <SourceCard
+                label="Hoa hồng có thể rút"
+                value={w.commissionApproved}
+                Icon={CheckCircle2}
+                hint={w.commissionApproved > 0 ? 'Nhận về Ví →' : undefined}
+                onClick={w.commissionApproved > 0 ? () => navigate('/affiliate') : undefined}
+              />
+            </div>
+          )}
+
           {/* Khoản đã duyệt còn chờ về Ví là tiền của khách nên vẫn hiện dù lối vào Hoàn tiền sàn ngoài đã ẩn. */}
           {(CASHBACK_ENABLED || w.cashbackPending > 0) && (
             <div style={{ margin: '0 16px 12px', display: 'flex' }}>
@@ -437,7 +446,7 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--color-border-subtle)' }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
-                <Text variant="body-sm" as="div">{walletTxLabel(t.type)}</Text>
+                <Text variant="body-sm" as="div">{walletTxLabel(t.type, t.reason)}</Text>
                 <Text variant="caption" tone="tertiary" as="div">
                   {formatWalletTxTime(t.createdAt)}
                   {t.reason ? ` · ${t.reason}` : ''}

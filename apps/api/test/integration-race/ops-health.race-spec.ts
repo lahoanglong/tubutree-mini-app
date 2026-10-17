@@ -67,7 +67,8 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
   it('ảnh chụp: đơn kẹt quá ngưỡng, webhook lỗi 24h, job lỗi 1 giờ, lượt đồng bộ danh mục', async () => {
     const before = await health.snapshot();
     const u = await createUser(prisma, {});
-    const old = new Date(Date.now() - 2 * 3_600_000);
+    // Danh sách đơn kẹt xếp cũ nhất trước và cắt ở STUCK_LIST: đơn kẹt do spec khác để lại trong DB dùng chung không được đẩy đơn này ra ngoài.
+    const old = new Date(Date.UTC(2000, 0, 1));
     const stuck = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'FAILED', pancakeSyncError: 'HTTP 500', createdAt: old });
     await createOrder(prisma, { userId: u.id, pancakePushStatus: 'PENDING' });
     await prisma.pancakeWebhookEvent.create({ data: { eventType: 'order', rawPayload: {}, status: 'FAILED', error: 'boom' } });

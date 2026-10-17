@@ -24,28 +24,23 @@ const TONE = {
 } as const;
 
 /** Khoản hoàn tiền của đơn (chuyển khoản chờ xử lý, tiền về muộn): trạng thái từng bước và chọn nơi nhận (D2). */
-export function OrderRefunds({ orderId }: { orderId: string }) {
+export function OrderRefunds({ orderId, returnRequestIds }: { orderId: string; returnRequestIds?: ReadonlySet<string> }) {
   const refunds = useQuery({
     queryKey: ['my-refunds', orderId],
     queryFn: () => fetchMyRefunds(orderId),
     retry: 0,
   });
-  const [choosing, setChoosing] = useState<MyRefund | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  // Khoản hoàn của một yêu cầu trả hàng đã nằm cùng dòng với yêu cầu đó ở khối thao tác (ReturnStatus): không lặp lại ở đây.
+  const shown = (refunds.data ?? []).filter((r) => !(r.kind === 'RETURN' && r.refKey && returnRequestIds?.has(r.refKey)));
 
-  if (!refunds.data?.length && !done) return null;
+  if (!shown.length) return null;
   return (
     <section aria-labelledby="refunds-title" className={`mt-4 p-4 ${ui.card}`}>
       <h2 id="refunds-title" className={ui.sectionTitle}>
         Hoàn tiền
       </h2>
-      {done && (
-        <p role="status" className="mt-2 text-sm font-medium text-success-fg">
-          {done}
-        </p>
-      )}
       <ul className="mt-2 space-y-3">
-        {(refunds.data ?? []).map((r) => {
+        {shown.map((r) => {
           const s = refundStatusText(r);
           const tone = TONE[s.tone];
           return (
@@ -56,35 +51,51 @@ export function OrderRefunds({ orderId }: { orderId: string }) {
                   {s.title} · {formatVnd(r.amount)}
                 </p>
                 {s.detail && <p className="text-xs text-stone-600">{s.detail}</p>}
-                {r.canChooseDestination && choosing?.id !== r.id && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDone(null);
-                      setChoosing(r);
-                    }}
-                    className={`mt-2 ${r.bankAccountNo ? ui.btnSecondary : ui.btnPrimary}`}
-                  >
-                    {r.bankAccountNo ? 'Đổi nơi nhận' : 'Chọn nơi nhận tiền'}
-                  </button>
-                )}
-                {choosing?.id === r.id && (
-                  <ChooseDestination
-                    key={r.id}
-                    refund={r}
-                    onClose={() => setChoosing(null)}
-                    onSaved={(msg) => {
-                      setChoosing(null);
-                      setDone(msg);
-                    }}
-                  />
-                )}
+                <RefundDestinationControl refund={r} />
               </div>
             </li>
           );
         })}
       </ul>
     </section>
+  );
+}
+
+/** Nút "Chọn/Đổi nơi nhận tiền" của một khoản hoàn, kèm form và lời xác nhận sau khi lưu; dùng ở khối Hoàn tiền và dòng yêu cầu trả hàng. */
+export function RefundDestinationControl({ refund: r }: { refund: MyRefund }) {
+  const [choosing, setChoosing] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  return (
+    <>
+      {done && (
+        <p role="status" className="mt-2 text-sm font-medium text-success-fg">
+          {done}
+        </p>
+      )}
+      {r.canChooseDestination && !choosing && (
+        <button
+          type="button"
+          onClick={() => {
+            setDone(null);
+            setChoosing(true);
+          }}
+          className={`mt-2 ${r.bankAccountNo ? ui.btnSecondary : ui.btnPrimary}`}
+        >
+          {r.bankAccountNo ? 'Đổi nơi nhận' : 'Chọn nơi nhận tiền'}
+        </button>
+      )}
+      {choosing && (
+        <ChooseDestination
+          key={r.id}
+          refund={r}
+          onClose={() => setChoosing(false)}
+          onSaved={(msg) => {
+            setChoosing(false);
+            setDone(msg);
+          }}
+        />
+      )}
+    </>
   );
 }
 

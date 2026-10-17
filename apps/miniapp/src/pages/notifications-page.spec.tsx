@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   getNotifications: vi.fn(),
   markNotificationRead: vi.fn(),
+  markAllNotificationsRead: vi.fn(),
   trackEvent: vi.fn(),
   authStatus: 'authenticated' as string,
 }));
@@ -19,6 +20,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/account-api', () => ({
   getNotifications: mocks.getNotifications,
   markNotificationRead: mocks.markNotificationRead,
+  markAllNotificationsRead: mocks.markAllNotificationsRead,
 }));
 vi.mock('../services/analytics', () => ({ trackEvent: mocks.trackEvent }));
 vi.mock('../services/shop-api', () => ({ fetchPurchasedItems: vi.fn() }));
@@ -170,5 +172,36 @@ describe('Trang Thông báo: chi tiết thông báo', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xem chi tiết đơn hàng' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/order/TT001');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chi tiết thông báo' })).toBeNull());
+  });
+});
+
+describe('Trang Thông báo: Đọc tất cả (R6-BUYER-5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getNotifications.mockResolvedValue([ORDER_UNREAD, POINTS_READ]);
+    mocks.markAllNotificationsRead.mockResolvedValue({ ok: true, count: 1 });
+  });
+
+  it('có tin chưa đọc: bấm "Đọc tất cả" gọi API một lần rồi nạp lại danh sách', async () => {
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    fireEvent.click(await screen.findByRole('button', { name: 'Đọc tất cả' }));
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+  });
+
+  it('không còn tin chưa đọc: ẩn nút', async () => {
+    mocks.getNotifications.mockResolvedValue([POINTS_READ]);
+    renderPage();
+    await screen.findByText('Bạn nhận thêm 50 điểm Xanh');
+    expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).not.toBeInTheDocument();
+  });
+
+  it('danh sách trống: không có nút', async () => {
+    mocks.getNotifications.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText('Chưa có thông báo nào');
+    expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).not.toBeInTheDocument();
   });
 });

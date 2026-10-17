@@ -42,12 +42,20 @@ describe('đổi Ví sang xu đã ngừng (PD-3)', () => {
 describe('walletTxLabel (sao kê Ví)', () => {
   it('mỗi loại biến động có nhãn tiếng Việt riêng', () => {
     expect(walletTxLabel('OPENING')).toBe('Số dư đầu kỳ');
-    expect(walletTxLabel('ORDER_PAY')).toBe('Thanh toán đơn hàng');
+    expect(walletTxLabel('ORDER_PAY')).toBe('Thanh toán đơn');
     expect(walletTxLabel('ORDER_REFUND')).toBe('Hoàn tiền đơn hàng');
     expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
     expect(walletTxLabel('WITHDRAW_REFUND')).toBe('Hoàn lệnh rút bị từ chối');
     // Dòng sao kê cũ của lần đổi Ví → xu trước khi xu gộp vào Điểm Xanh.
     expect(walletTxLabel('XU_CONVERT')).toBe('Đổi sang xu cũ (nay là Điểm Xanh)');
+  });
+
+  it('ORDER_REFUND tách theo nguồn từ lời reason API ghi', () => {
+    expect(walletTxLabel('ORDER_REFUND', 'Hoàn tiền trả hàng đơn TT001')).toBe('Hoàn tiền trả hàng');
+    expect(walletTxLabel('ORDER_REFUND', 'Hoàn tiền đơn TT002')).toBe('Hoàn tiền đơn hàng');
+    expect(walletTxLabel('ORDER_REFUND', 'lý do lạ')).toBe('Hoàn tiền đơn hàng');
+    expect(walletTxLabel('ORDER_REFUND', null)).toBe('Hoàn tiền đơn hàng');
+    expect(walletTxLabel('ORDER_PAY', 'Thanh toán đơn TT003')).toBe('Thanh toán đơn');
   });
 
   it('loại mới BE thêm sau mà FE chưa biết → nhãn chung, không vỡ màn', () => {

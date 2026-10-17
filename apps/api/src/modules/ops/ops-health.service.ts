@@ -28,7 +28,15 @@ import {
   type OpsThresholds,
 } from './ops-alerts';
 import { DISABLED_EMAIL_STATE, OpsEmailService, type EmailAlertOutcome } from './ops-email.service';
-import { CATALOG_STATE_KEY, recordCatalogRun, type CatalogRunResult } from './ops-state';
+import {
+  CATALOG_STATE_KEY,
+  recordCatalogRun,
+  recordWebhookDelivery,
+  WEBHOOK_STATE_KEY,
+  type CatalogRunResult,
+  type WebhookDeliveryResult,
+  type WebhookFailureKind,
+} from './ops-state';
 
 /** Phần của BullMQ Queue mà màn sức khoẻ đọc — khai báo cấu trúc để test dựng hàng đợi giả. */
 export interface OpsQueue {
@@ -116,6 +124,35 @@ function isPermanentWebhookStatus(status: number): boolean {
   return status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
+/** Trạng thái kênh webhook trong ảnh chụp sức khoẻ vận hành, cùng dạng với kênh email (không bao giờ kèm URL hay token). */
+export interface WebhookChannelState {
+  state: 'DISABLED' | 'READY';
+  lastOkAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+  /** Loại lỗi gần nhất (null = chưa có lỗi). PERMANENT: hook bị từ chối hẳn, không tự gửi lại liên tục. */
+  lastErrorKind: WebhookFailureKind | null;
+  lastErrorHint: string | null;
+}
+
+export const DISABLED_WEBHOOK_STATE: WebhookChannelState = {
+  state: 'DISABLED',
+  lastOkAt: null,
+  lastErrorAt: null,
+  lastError: null,
+  lastErrorKind: null,
+  lastErrorHint: null,
+};
+
+const WEBHOOK_PERMANENT_HINT =
+  'Hook báo động bị từ chối hẳn (hook có thể đã bị thu hồi hoặc URL sai) — kiểm tra OPS_ALERT_WEBHOOK_URL. Hệ thống không tự gửi lại liên tục: sửa URL rồi chờ sự cố kế tiếp để thử lại.';
+
+/** Lỗi mạng đôi khi nhắc nguyên URL (kèm token của Slack/Zalo): che trước khi lưu cho màn admin. */
+function scrubWebhookUrl(message: string, url: string): string {
+  const line = message.split(url).join('[webhook]').replace(/\s+/g, ' ').trim();
+  return line.length > 300 ? `${line.slice(0, 299)}…` : line;
+}
+
 export type QueueHealth =
   | { ok: true; items: { name: string; waiting: number; active: number; delayed: number; failed: number; failedLastHour: number }[] }
   | { ok: false; error: string };
@@ -154,11 +191,12 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, webhookChannel] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
       this.email?.state() ?? DISABLED_EMAIL_STATE,
+      this.webhookChannel(),
     ]);
     const problems = opsProblems(
       {
@@ -178,7 +216,40 @@ export class OpsHealthService {
       },
       t,
     );
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, alertChannels: { email: emailChannel }, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, alertChannels: { email: emailChannel, webhook: webhookChannel }, problems };
+  }
+
+  private webhookUrl(): string {
+    return String(this.config.get('OPS_ALERT_WEBHOOK_URL', { infer: true }) ?? '').trim();
+  }
+
+  private async webhookChannel(): Promise<WebhookChannelState> {
+    if (!this.webhookUrl()) return DISABLED_WEBHOOK_STATE;
+    try {
+      const row = await this.prisma.opsHealthState.findUnique({ where: { key: WEBHOOK_STATE_KEY } });
+      const kind = (row?.detail as { kind?: unknown } | null)?.kind;
+      const recovered = !!row?.lastOkAt && !!row.lastErrorAt && row.lastOkAt >= row.lastErrorAt;
+      const lastErrorKind = !recovered && (kind === 'PERMANENT' || kind === 'TRANSIENT') ? kind : null;
+      return {
+        state: 'READY',
+        lastOkAt: row?.lastOkAt?.toISOString() ?? null,
+        lastErrorAt: row?.lastErrorAt?.toISOString() ?? null,
+        lastError: row?.lastError ?? null,
+        lastErrorKind,
+        lastErrorHint: lastErrorKind === 'PERMANENT' ? WEBHOOK_PERMANENT_HINT : null,
+      };
+    } catch (e) {
+      this.logger.warn(`Không đọc được trạng thái gửi webhook báo động: ${e instanceof Error ? e.message : String(e)}`);
+      return { ...DISABLED_WEBHOOK_STATE, state: 'READY' };
+    }
+  }
+
+  private async recordWebhook(res: WebhookDeliveryResult, now: Date): Promise<void> {
+    try {
+      await recordWebhookDelivery(this.prisma, res, now);
+    } catch (e) {
+      this.logger.warn(`Không ghi được trạng thái gửi webhook báo động: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   private pancakeConfigured(): boolean {
@@ -488,7 +559,7 @@ export class OpsHealthService {
 
   /** true = đã gửi được, không cần gửi (chưa đặt URL), hoặc bị từ chối vĩnh viễn (4xx trừ 408/429) nên không có gì để gửi lại. */
   private async sendWebhook(kind: 'ALERT' | 'RECOVERED', problems: OpsProblem[], since: Date | null, now: Date): Promise<boolean> {
-    const url = String(this.config.get('OPS_ALERT_WEBHOOK_URL', { infer: true }) ?? '').trim();
+    const url = this.webhookUrl();
     const send = this.fetchImpl ?? (globalThis.fetch as unknown as FetchLike | undefined);
     if (!url || !send) return true;
     try {
@@ -498,13 +569,19 @@ export class OpsHealthService {
         body: JSON.stringify(alertWebhookBody(url, this.message(kind, problems, since, now))),
         signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
       });
-      if (res.ok) return true;
+      if (res.ok) {
+        await this.recordWebhook({ ok: true }, now);
+        return true;
+      }
       if (isPermanentWebhookStatus(res.status)) {
+        await this.recordWebhook({ ok: false, error: `HTTP ${res.status}`, kind: 'PERMANENT' }, now);
         this.logger.warn(`Webhook báo động vận hành bị từ chối HTTP ${res.status} (lỗi vĩnh viễn) — không gửi lại; kiểm tra OPS_ALERT_WEBHOOK_URL.`);
         return true;
       }
+      await this.recordWebhook({ ok: false, error: `HTTP ${res.status}`, kind: 'TRANSIENT' }, now);
       this.logger.warn(`Webhook báo động vận hành trả HTTP ${res.status} — gửi lại ở lượt kiểm sau.`);
     } catch (e) {
+      await this.recordWebhook({ ok: false, error: scrubWebhookUrl(e instanceof Error ? e.message : String(e), url), kind: 'TRANSIENT' }, now);
       this.logger.warn(`Webhook báo động vận hành lỗi: ${e instanceof Error ? e.message : e} — gửi lại ở lượt kiểm sau.`);
     }
     return false;

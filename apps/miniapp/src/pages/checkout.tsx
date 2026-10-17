@@ -984,6 +984,7 @@ export default function CheckoutPage() {
         onClose={() => setVoucherSheetOpen(false)}
         currentCode={cart.data?.couponCode}
         subtotal={quote.data?.subtotal ?? cart.data?.subtotal ?? 0}
+        shippingFee={quote.data?.shippingFee}
         productIds={cartProductIds(checkoutItems)}
         onCouponApplied={() => {
           void cart.refetch();

@@ -237,3 +237,38 @@ describe('Checkbox/Radio/Switch có nhãn qua Field không bị coi là trang tr
     expect(input).toHaveAccessibleDescription('Phải đồng ý');
   });
 });
+
+describe('Vùng chạm 44px của Checkbox/Radio/Switch nhận cú chạm vào phần đệm (R6-BUYER-15)', () => {
+  it('chạm vào khung 44px quanh ô 24px: bật/tắt đúng một lần, không đổi kích thước ô', () => {
+    const onChange = vi.fn();
+    render(<Checkbox checked={false} onChange={onChange}><span>Chọn sản phẩm</span></Checkbox>);
+    const hit = screen.getByTestId('checkbox-hit-area');
+    fireEvent.click(hit);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(hit.style.minHeight).toBe('44px');
+    expect(screen.getByRole('checkbox').style.height).toBe('');
+  });
+
+  it('chạm thẳng vào nhãn hoặc ô: vẫn đúng một lần, không bị khung nhân đôi', () => {
+    const onChange = vi.fn();
+    render(<Checkbox checked={false} onChange={onChange}><span>Chọn sản phẩm</span></Checkbox>);
+    fireEvent.click(screen.getByText('Chọn sản phẩm'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('ô bị vô hiệu: chạm phần đệm không làm gì', () => {
+    const onChange = vi.fn();
+    render(<Checkbox checked={false} disabled onChange={onChange}><span>Hết hàng</span></Checkbox>);
+    fireEvent.click(screen.getByTestId('checkbox-hit-area'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('chấm trang trí (không tên) không nhận chạm; hàng cha giữ onClick', () => {
+    const onChange = vi.fn();
+    render(<Checkbox checked={false} onChange={onChange} />);
+    fireEvent.click(screen.getByTestId('checkbox-hit-area'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});

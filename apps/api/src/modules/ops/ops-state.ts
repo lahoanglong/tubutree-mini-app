@@ -44,3 +44,15 @@ export async function recordEmailDelivery(prisma: Pick<PrismaClient, 'opsHealthS
     : { lastErrorAt: now, lastError: run.error.slice(0, 500), detail: { kind: run.kind ?? null, fingerprint: run.fingerprint ?? null } };
   await prisma.opsHealthState.upsert({ where: { key: EMAIL_STATE_KEY }, create: { key: EMAIL_STATE_KEY, ...data }, update: data });
 }
+
+export const WEBHOOK_STATE_KEY = 'alert.webhook';
+
+/** PERMANENT: hook từ chối hẳn (4xx trừ 408/429) nên không gửi lại; TRANSIENT: mạng, quá hạn, 408/429, 5xx — lượt kiểm sau gửi lại. */
+export type WebhookFailureKind = 'PERMANENT' | 'TRANSIENT';
+export type WebhookDeliveryResult = { ok: true } | { ok: false; error: string; kind: WebhookFailureKind };
+
+/** Lần gửi webhook báo động gần nhất (thành công hoặc lỗi), cùng cách ghi với email: lỗi cũ giữ nguyên khi gửi được lại, màn hình so lastErrorAt với lastOkAt. */
+export async function recordWebhookDelivery(prisma: Pick<PrismaClient, 'opsHealthState'>, run: WebhookDeliveryResult, now = new Date()) {
+  const data = run.ok ? { lastOkAt: now } : { lastErrorAt: now, lastError: run.error.slice(0, 500), detail: { kind: run.kind } };
+  await prisma.opsHealthState.upsert({ where: { key: WEBHOOK_STATE_KEY }, create: { key: WEBHOOK_STATE_KEY, ...data }, update: data });
+}
