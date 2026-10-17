@@ -257,4 +257,18 @@ describe('canPayOrderNow (nút "Thanh toán ngay" ở chi tiết đơn và thẻ
   it('hàng đã bàn giao vận chuyển (manualHandling) → không, Tubu xử lý với khách', () => {
     expect(canPayOrderNow({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: true })).toBe(false);
   });
+  describe('hạn thanh toán đã qua (cron sắp huỷ đơn)', () => {
+    const NOW = Date.parse('2026-10-17T08:00:00.000Z');
+    const base = { status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' } as const;
+    it('còn hạn → có; đúng mốc hạn hoặc quá hạn → không', () => {
+      expect(canPayOrderNow({ ...base, paymentDeadline: '2026-10-17T08:00:01.000Z' }, NOW)).toBe(true);
+      expect(canPayOrderNow({ ...base, paymentDeadline: '2026-10-17T08:00:00.000Z' }, NOW)).toBe(false);
+      expect(canPayOrderNow({ ...base, paymentDeadline: '2026-10-16T08:00:00.000Z' }, NOW)).toBe(false);
+    });
+    it('không có hạn (null/undefined) hoặc hạn không đọc được → giữ hành vi cũ: có nút', () => {
+      expect(canPayOrderNow({ ...base, paymentDeadline: null }, NOW)).toBe(true);
+      expect(canPayOrderNow(base, NOW)).toBe(true);
+      expect(canPayOrderNow({ ...base, paymentDeadline: 'không phải ngày' }, NOW)).toBe(true);
+    });
+  });
 });

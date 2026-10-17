@@ -84,7 +84,7 @@ describe('OrdersPage (tab gốc)', () => {
 
   it('đơn chuyển khoản chờ thanh toán: nút "Thanh toán ngay" mở đúng màn chuyển khoản của đơn', async () => {
     mocks.fetchOrders.mockResolvedValue({
-      data: [{ ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2026-09-21T10:30:00.000Z' }],
+      data: [{ ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString() }],
       meta: { page: 1, limit: 20, total: 1 },
     });
     renderPage();

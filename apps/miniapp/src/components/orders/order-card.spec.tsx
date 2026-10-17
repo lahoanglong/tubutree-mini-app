@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { OrderView } from '../../services/shop-api';
 import { describeNested, findNestedInteractive } from '../ui/nested-interactive';
 import { OrderCard } from './order-card';
@@ -80,6 +80,13 @@ describe('OrderCard', () => {
   });
 
   describe('đơn chờ thanh toán (D7 #2)', () => {
+    // Hạn trong fixture phải còn ở tương lai so với "bây giờ" của test, nếu không nút bị ẩn vì đã quá hạn.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-09-21T08:00:00.000Z'));
+    });
+    afterEach(() => vi.useRealTimers());
+
     const PENDING = {
       ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2026-09-21T10:30:00.000Z',
     } as unknown as OrderView;
@@ -105,6 +112,12 @@ describe('OrderCard', () => {
       rerender(<OrderCard order={{ ...PENDING, paymentMethod: 'COD' } as OrderView} onOpen={() => {}} onPay={() => {}} />);
       expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
       rerender(<OrderCard order={{ ...PENDING, manualHandling: true } as OrderView} onOpen={() => {}} onPay={() => {}} />);
+      expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
+      expect(shell()).not.toHaveTextContent(/Hạn /);
+    });
+
+    it('quá hạn thanh toán: không còn nút "Thanh toán ngay" và không in "Hạn" đã qua', () => {
+      render(<OrderCard order={{ ...PENDING, paymentDeadline: '2026-09-21T07:59:00.000Z' } as OrderView} onOpen={() => {}} onPay={() => {}} />);
       expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
       expect(shell()).not.toHaveTextContent(/Hạn /);
     });
