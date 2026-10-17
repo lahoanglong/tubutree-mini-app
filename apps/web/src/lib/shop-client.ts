@@ -50,6 +50,8 @@ export interface CartSummary {
   comboDiscount?: number;
   /** Mức giảm của mã, tính trên phần hàng sau combo (cùng số báo giá checkout trừ). */
   discount: number;
+  /** Ưu đãi hạng thành viên, tính sau combo và mã (cùng số báo giá checkout trừ); API cũ chưa trả → coi như 0. */
+  tierDiscount?: number;
   freeship: boolean;
   freeshipThreshold: number;
   itemCount: number;
@@ -185,6 +187,11 @@ function cartPath(path: string): string {
   return slug ? `${path}?storefrontSlug=${encodeURIComponent(slug)}` : path;
 }
 export const getCart = () => apiFetch<CartSummary>(cartPath('/cart'));
+/** Giá của MỘT PHẦN giỏ (các dòng đang chọn): combo, mã và hạng tính trên đúng phần đó, cùng số báo giá thanh toán trừ. Chỉ đọc. */
+export const getCartSelection = (itemIds: string[]) => {
+  const base = cartPath('/cart');
+  return apiFetch<CartSummary>(`${base}${base.includes('?') ? '&' : '?'}itemIds=${encodeURIComponent(itemIds.join(','))}`);
+};
 export const addToCart = (variationId: string, quantity: number) =>
   apiFetch<CartSummary>(cartPath('/cart/items'), { method: 'POST', body: { variationId, quantity } });
 export const updateCartItem = (id: string, quantity: number) =>

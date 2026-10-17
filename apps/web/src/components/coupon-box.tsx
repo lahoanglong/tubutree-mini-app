@@ -26,9 +26,10 @@ import { cartKey } from '@/lib/cart-key';
 const VISIBLE_COUPONS = 3;
 
 /** Chờ lựa chọn/số lượng đứng yên rồi mới hỏi lại mức giảm, để bấm liên tục không chạm giới hạn 30 lần/phút của API. */
-const PREVIEW_DEBOUNCE_MS = 300;
+export const PREVIEW_DEBOUNCE_MS = 300;
 
-function useSettled<T>(value: T, delayMs: number): T {
+/** Giá trị chỉ đổi sau khi đứng yên `delayMs` (debounce); giỏ dùng chung để hỏi giá phần chọn cùng nhịp với xem trước mã. */
+export function useSettled<T>(value: T, delayMs: number): T {
   const [settled, setSettled] = useState(value);
   useEffect(() => {
     const t = setTimeout(() => setSettled(value), delayMs);

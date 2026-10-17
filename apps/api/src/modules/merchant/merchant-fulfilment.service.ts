@@ -1281,6 +1281,7 @@ export class MerchantFulfilmentService {
       this.num('merchant.commission_pct', DEFAULT_MERCHANT_COMMISSION_PCT),
       this.storesWithPending(),
     ]);
+    // Không giới hạn số dòng: bộ lọc đã ở trong truy vấn, nên cắt trước khi lọc sẽ làm rơi gian hàng đối tác xếp sau theo tên.
     const stores = await this.prisma.storefront.findMany({
       where: {
         AND: [
@@ -1301,7 +1302,6 @@ export class MerchantFulfilmentService {
         consignmentFeeFixed: true,
       },
       orderBy: { title: 'asc' },
-      take: 200,
     });
     const [overdue, activeRows] = await Promise.all([
       this.overdueOrders(sla, now),

@@ -1,16 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { freeShipThreshold } from '../pricing/pricing.service';
+import { calcTierDiscount, freeShipThreshold, tierDiscountPctOf } from '../pricing/pricing.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
 import { resolvePublishedStorefront } from '../storefront/resolve-storefront';
+import { AffiliateService } from '../affiliate/affiliate.service';
+import { resolveAttribution } from '../checkout/attribution';
 import { AddItemDto } from './dto/cart.dto';
-import { isSellableVariation } from './sellable';
+import { isSellableVariation, productDiscontinuedError } from './sellable';
 import { isPartnerOwnedVariation } from './partner-goods';
 import {
   COUPON_ZERO_DISCOUNT_REASON,
@@ -31,6 +33,8 @@ export class CartService {
     private readonly flashSale: FlashSaleService,
     private readonly analytics: AnalyticsEventsService,
     private readonly combo: ComboService,
+    // @Optional: test dựng tay không truyền (không có thì không tra "chạm" giới thiệu); AffiliateModule là @Global.
+    @Optional() private readonly affiliate?: AffiliateService,
   ) {}
 
   private async ensureCart(userId: string): Promise<string> {
@@ -43,10 +47,35 @@ export class CartService {
   }
 
   /**
-   * `storefrontSlug`: gian hàng đang ghi công (cùng chuỗi FE gửi cho báo giá). Có thì giỏ trừ combo của gian hàng đó và tính mã trên
-   * phần hàng sau combo, đúng như checkout; không có thì như cũ (không combo).
+   * Gian hàng ghi công hiệu lực của khách: slug khách gửi, rơi về "chạm" giới thiệu còn hạn khi không gửi/không khớp — cùng hàm
+   * với báo giá và đặt đơn (checkout/attribution.ts), nên cùng khách ra cùng combo ở cả ba nơi.
    */
-  async getCart(userId: string, storefrontSlug?: string) {
+  async attributedSlug(userId: string, storefrontSlug?: string): Promise<string | undefined> {
+    if (!this.affiliate) return storefrontSlug;
+    const { storefront } = await resolveAttribution(this.prisma, this.affiliate, userId, { storefrontSlug });
+    return storefront?.slug;
+  }
+
+  /**
+   * `storefrontSlug`: gian hàng đang ghi công (cùng chuỗi FE gửi cho báo giá). Có thì giỏ trừ combo của gian hàng đó và tính mã trên
+   * phần hàng sau combo, đúng như checkout; không có thì rơi về "chạm" giới thiệu như checkout. `null` = không tra ghi công
+   * (đường nội bộ của checkout đã tự resolve).
+   */
+  async getCart(userId: string, storefrontSlug?: string | null) {
+    return this.priceCart(userId, storefrontSlug === null ? undefined : await this.attributedSlug(userId, storefrontSlug));
+  }
+
+  /**
+   * Giá của MỘT PHẦN giỏ (khách chọn vài dòng để mua): combo, mã và giảm hạng tính trên đúng các dòng đã chọn, cùng hàm và cùng
+   * thứ tự với báo giá/đặt đơn có `itemIds` (combo chỉ áp khi đủ bộ trong phần chọn). Chỉ xem giá: không gỡ mã khỏi giỏ dù phần chọn
+   * không đạt điều kiện của mã — mã vẫn thuộc cả giỏ.
+   */
+  async getCartSelection(userId: string, storefrontSlug: string | undefined, itemIds: string[]) {
+    return this.priceCart(userId, await this.attributedSlug(userId, storefrontSlug), itemIds);
+  }
+
+  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[]) {
+    const selection = itemIds && itemIds.length > 0 ? new Set(itemIds) : null;
     const cartId = await this.ensureCart(userId);
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
@@ -93,13 +122,17 @@ export class CartService {
         quantity: it.quantity,
       }));
 
+    // Giá một phần giỏ phải từ chối đúng như báo giá/đặt đơn khi khách chọn đích danh dòng đã ngừng bán (checkoutLines).
+    const droppedSelected = selection ? unavailableItems.filter((l) => selection.has(l.id)) : [];
+    if (droppedSelected.length > 0) throw productDiscontinuedError(droppedSelected[0]!.productName);
+
     const now = new Date();
     const flashMap = await this.flashSale.resolveEffective(
       sellable.map((it) => it.variationId),
       now,
       userId,
     );
-    const lines = sellable.map((it) => {
+    const lines = (selection ? sellable.filter((it) => selection.has(it.id)) : sellable).map((it) => {
       const { unitPrice, flash, flashLimitNotice } = priceFlashLine(
         it.variation.salePrice ?? it.variation.retailPrice,
         it.quantity,
@@ -158,22 +191,35 @@ export class CartService {
         // connection blip...) KHÔNG được nuốt ở đây — nếu không, một trục trặc tạm thời sẽ bị
         // hiểu nhầm thành "coupon invalid" và xoá mã hợp lệ khỏi giỏ hàng của khách.
         if (!(err instanceof BadRequestException)) throw err;
-        // Có thể flash tạm thời kéo couponBase xuống dưới minOrder. Nếu coupon vẫn hợp lệ trên
-        // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
-        // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
-        try {
-          await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
+        if (selection) {
+          // Phần chọn không đạt mã: báo như báo giá (giảm 0đ kèm lý do), không đụng tới mã của cả giỏ.
           discount = 0;
           freeship = false;
           couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
-        } catch (err2) {
-          if (!(err2 instanceof BadRequestException)) throw err2;
-          await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
-          couponRemoved = { code: couponCode, reason: err2.message };
-          couponCode = null;
+        } else {
+          // Có thể flash tạm thời kéo couponBase xuống dưới minOrder. Nếu coupon vẫn hợp lệ trên
+          // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
+          // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
+          try {
+            await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
+            discount = 0;
+            freeship = false;
+            couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
+          } catch (err2) {
+            if (!(err2 instanceof BadRequestException)) throw err2;
+            await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
+            couponRemoved = { code: couponCode, reason: err2.message };
+            couponCode = null;
+          }
         }
       }
     }
+
+    // Giảm theo hạng đặt SAU combo và mã, trên phần còn lại, đúng thứ tự và cách làm tròn của checkout (combo → mã → hạng).
+    const tierDiscount = calcTierDiscount(
+      Math.max(0, couponBase - discount),
+      await tierDiscountPctOf(this.prisma, cart.user?.tierId),
+    );
 
     // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
     const freeshipThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
@@ -186,6 +232,7 @@ export class CartService {
       subtotal,
       comboDiscount: combo.total,
       discount,
+      tierDiscount,
       freeship,
       freeshipThreshold,
       itemCount: lines.reduce((s, l) => s + l.quantity, 0),
@@ -327,10 +374,11 @@ export class CartService {
   }
 
   async applyCoupon(userId: string, code: string, storefrontSlug?: string) {
-    const cart = await this.getCart(userId);
+    const slug = await this.attributedSlug(userId, storefrontSlug);
+    const cart = await this.priceCart(userId, undefined);
     // Validate trên base KHÔNG flash và TRỪ combo (khớp getCart và checkout) — tránh apply rồi bị strip ngay, hoặc báo "đã áp
     // dụng" cho mã không giảm được đồng nào.
-    const { combo, goodsAfterCombo: couponBase, couponLines } = await this.couponBaseAfterCombo(cart.items, userId, storefrontSlug);
+    const { combo, goodsAfterCombo: couponBase, couponLines } = await this.couponBaseAfterCombo(cart.items, userId, slug);
     const normalized = normalizeCouponCode(code);
     try {
       await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLines);
@@ -339,7 +387,7 @@ export class CartService {
       // Mã chỉ hụt đơn tối thiểu vì combo (trước combo vẫn đạt) thì giữ lại, giỏ báo giảm 0đ kèm lời báo như mã đang giữ.
       if (err instanceof CouponMinOrderError && combo.total > 0 && (await this.meetsMinOrderBeforeCombo(normalized, userId, cart.items))) {
         await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
-        return this.getCart(userId, storefrontSlug);
+        return this.priceCart(userId, slug);
       }
       if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart, combo.total > 0))) {
         if (combo.total > 0) {
@@ -355,7 +403,7 @@ export class CartService {
       throw err;
     }
     await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
-    return this.getCart(userId, storefrontSlug);
+    return this.priceCart(userId, slug);
   }
 
   /** Phần hàng thường (loại giờ vàng) trước khi trừ combo đã đạt điều kiện của mã: chỉ combo làm mã hụt. */

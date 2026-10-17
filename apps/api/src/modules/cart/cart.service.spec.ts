@@ -164,6 +164,7 @@ describe('CartService guard tồn kho', () => {
     const cartRow = (tierId: string | null) => ({ id: 'c1', couponCode: null, items: [], user: { tierId } });
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue(cartRow('LOC_BIEC')) },
+      membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, tierConfig, flash, analytics, combo);
     expect((await svc.getCart('u1')).freeshipThreshold).toBe(99000);
@@ -242,11 +243,52 @@ describe('CartService guard tồn kho', () => {
       subtotal: 0,
       comboDiscount: 0,
       discount: 0,
+      tierDiscount: 0,
       freeship: false,
       freeshipThreshold: 200000,
       itemCount: 0,
       unavailableItems: [],
     });
+  });
+
+  it('getCart: giảm theo hạng tính trên phần hàng sau mã, làm tròn xuống; không hạng thì 0', async () => {
+    const line = (id: string, price: number) => ({
+      id: `ci-${id}`,
+      variationId: id,
+      quantity: 1,
+      variation: {
+        id,
+        productId: `p-${id}`,
+        name: 'M',
+        retailPrice: price,
+        salePrice: null,
+        stock: 9,
+        weight: null,
+        isActive: true,
+        product: { name: `SP ${id}`, slug: id, thumbnail: null, isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefront: null },
+      },
+    });
+    const build = (tierId: string | null, discountPct: string | null) => {
+      const prisma = {
+        cart: {
+          upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', couponCode: 'SAVE', items: [line('a', 33_333)], user: { tierId } }),
+        },
+        membershipTier: { findUnique: jest.fn().mockResolvedValue(discountPct === null ? null : { discountPct }) },
+      } as unknown as PrismaService;
+      const couponsSvc = {
+        validateAndCompute: jest.fn().mockResolvedValue({ discount: 3_333, freeship: false }),
+      } as unknown as CouponsService;
+      return { prisma, svc: new CartService(prisma, couponsSvc, config, { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as unknown as FlashSaleService, analytics, combo) };
+    };
+    const withTier = build('T1', '0.07');
+    const c = await withTier.svc.getCart('u1', null);
+    // 33.333 − mã 3.333 = 30.000; 7% = 2.100.
+    expect(c).toMatchObject({ subtotal: 33_333, discount: 3_333, tierDiscount: 2_100 });
+    expect(withTier.prisma.membershipTier.findUnique).toHaveBeenCalledWith({ where: { id: 'T1' }, select: { discountPct: true } });
+    const none = build(null, null);
+    expect((await none.svc.getCart('u1', null)).tierDiscount).toBe(0);
+    expect(none.prisma.membershipTier.findUnique).not.toHaveBeenCalled();
   });
 
   it('addItem: không truyền addSource → mặc định "pdp" trong props sự kiện add_to_cart', async () => {

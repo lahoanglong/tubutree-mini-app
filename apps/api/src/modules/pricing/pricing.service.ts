@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 
 export interface ShippingInput {
@@ -17,6 +18,21 @@ export async function freeShipThreshold(config: Pick<SystemConfigService, 'get'>
   const overrides = await config.get<Record<string, number> | null>('shipping.tier_freeship_overrides', {});
   const tier = (overrides ?? {})[tierId];
   return typeof tier === 'number' ? Math.min(tier, global) : global;
+}
+
+/**
+ * Tỉ lệ giảm tự động của hạng thành viên (0..1; 0 khi chưa có hạng). Giỏ và checkout cùng đọc qua hàm này.
+ */
+export async function tierDiscountPctOf(prisma: Pick<PrismaService, 'membershipTier'>, tierId: string | null | undefined): Promise<number> {
+  if (!tierId) return 0;
+  const tier = await prisma.membershipTier.findUnique({ where: { id: tierId }, select: { discountPct: true } });
+  return tier ? Number(tier.discountPct) : 0;
+}
+
+/** Giảm theo hạng trên phần hàng còn lại sau combo và mã; làm tròn XUỐNG, không âm. Giỏ và checkout cùng dùng hàm này. */
+export function calcTierDiscount(goodsValue: number, discountPct: number): number {
+  if (discountPct <= 0 || goodsValue <= 0) return 0;
+  return Math.floor(goodsValue * discountPct);
 }
 
 /**
@@ -110,7 +126,6 @@ export class PricingService {
    * bị làm tròn thiệt thêm 1đ vì lẻ", và không bao giờ âm (guard goodsValue/discountPct <= 0).
    */
   calcTierDiscount(goodsValue: number, discountPct: number): number {
-    if (discountPct <= 0 || goodsValue <= 0) return 0;
-    return Math.floor(goodsValue * discountPct);
+    return calcTierDiscount(goodsValue, discountPct);
   }
 }
