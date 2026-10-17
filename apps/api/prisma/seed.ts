@@ -14,10 +14,11 @@ import {
   communityCategoryUpsertArgs,
   retireCommunityCategoriesArgs,
 } from '../src/modules/feed/community-categories-seed';
+import { COMMUNITY_GOAL_SEED, SEASON_SEED } from './reference-data/garden';
 
 const prisma = new PrismaClient();
 
-const SYSTEM_CONFIGS: ConfigSeed[] = [
+export const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Loyalty
   { key: 'loyalty.vnd_per_point', value: 10000, category: 'loyalty', description: '10.000đ chi tiêu = 1 điểm' },
   { key: 'loyalty.vnd_per_point_redeem', value: 1000, category: 'loyalty', description: '1 điểm = 1.000đ khi áp' },
@@ -94,6 +95,8 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
   { key: 'community.banned_keywords', value: ['lua dao', 'lua tien', 'casino', 'vay nong', 'vay lai', 'tin dung den', 'da cap', 'rua tien', 'hang nhai', 'khieu dam', 'sex', 'ma tuy', 'vu khi', 'lam bang gia', 'chiem doat tai san', 'ca do bong da', 'ca cuoc bong da', 'cá độ', 'cá cược', 'hàng giả', 'cờ bạc'], category: 'community', description: 'Từ/cụm từ cấm trong bài cộng đồng (khớp → bài chờ duyệt). Cụm không dấu khớp cả có dấu; cụm có dấu chỉ khớp khi gõ đúng dấu', createOnly: true },
   { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
+  { key: 'community.author_notify_interval_minutes', value: 60, category: 'community', description: 'Gộp tin "bài của bạn có người thích/bình luận": tối đa 1 tin mỗi bài trong chừng này phút (0 = tắt tin)', createOnly: true },
+  { key: 'community.unanswered_alert_hours', value: 24, category: 'community', description: 'Câu hỏi cộng đồng chưa ai trả lời quá chừng này giờ thì hiện ở "Việc cần xử lý" của CSKH', createOnly: true },
   // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
   { key: 'game.tree_points_price', value: 50, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
 
@@ -294,7 +297,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'retention.refresh_sessions_days', value: 30, category: 'retention', description: 'Xoá refresh token đã thu hồi/hết hạn quá bao nhiêu ngày (sàn 7)', createOnly: true },
 ];
 
-const TIERS = [
+export const TIERS = [
   {
     id: 'MAM_XANH',
     name: 'Mầm Xanh',
@@ -341,7 +344,7 @@ const TIERS = [
   },
 ];
 
-const DEALER_TIERS = [
+export const DEALER_TIERS = [
   { id: 'DEALER_1', name: 'Đại lý Cấp 1', minOrderVolume: 10000000, discountRules: { default: 0.2 }, creditLimit: 0, paymentTerms: 'PREPAID' },
   { id: 'DEALER_2', name: 'Đại lý Cấp 2', minOrderVolume: 30000000, discountRules: { default: 0.3 }, creditLimit: 20000000, paymentTerms: 'NET 15' },
   { id: 'DEALER_3', name: 'Đại lý Cấp 3', minOrderVolume: 80000000, discountRules: { default: 0.38 }, creditLimit: 50000000, paymentTerms: 'NET 30' },
@@ -697,7 +700,7 @@ const PRODUCTS: SeedProduct[] = [
   },
 ];
 
-const NOTIFICATION_TEMPLATES = [
+export const NOTIFICATION_TEMPLATES = [
   // ORDER_CONFIRMED/ORDER_SHIPPING mang kênh ZNS nhưng chưa có zaloTemplateId (cần Zalo duyệt mẫu, không tự điền được):
   // NotificationsService chỉ gửi ZNS khi có mã mẫu, nên hiện khách nhận bản INAPP.
   { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
@@ -794,6 +797,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-refill-approved', code: 'REFILL_APPROVED', channel: 'INAPP', bodyTemplate: '🌿 Đổi vỏ chai thành công: ghi nhận {{quantity}} vỏ{{note}}, +{{seeds}} 💧 tưới cây.' },
   { id: 'nt-refill-rejected', code: 'REFILL_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi {{quantity}} vỏ chai chưa được duyệt{{reason}}. Bạn có thể gửi lại yêu cầu mới sau khi mang vỏ đến điểm nhận.' },
   { id: 'nt-comm-rejected', code: 'COMMUNITY_POST_REJECTED', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn chưa được đăng vì {{reason}}. Bạn có thể chỉnh lại nội dung rồi đăng bài mới nhé.' },
+  { id: 'nt-comm-post-liked', code: 'COMMUNITY_POST_LIKED', channel: 'INAPP', bodyTemplate: '💚 Bài viết "{{title}}" của bạn vừa được thả tim.', createOnly: true },
+  { id: 'nt-comm-post-commented', code: 'COMMUNITY_POST_COMMENTED', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa bình luận bài viết "{{title}}" của bạn.', createOnly: true },
+  { id: 'nt-comm-post-hidden', code: 'COMMUNITY_POST_HIDDEN', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn đã được ẩn khỏi cộng đồng vì {{reason}}. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.', createOnly: true },
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
@@ -844,7 +850,7 @@ const QUIZZES = [
   { id: 'q6', question: 'Khi thu hoạch cây ảo, giọt nước bạn đã tưới được góp vào đâu?', options: ['Hồ nước chung của cộng đồng', 'Ví Tubu của bạn', 'Kho hàng của đại lý', 'Quỹ khuyến mãi'], correct: 0, rewardPts: 3 },
 ];
 
-const MISSIONS = [
+export const MISSIONS = [
   { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Nhận thành công đơn hàng đầu tiên', rewardPoints: 20, goal: 1, isRepeatable: false },
   { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30, goal: 7, isRepeatable: false },
   { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15, goal: 3, isRepeatable: false },
@@ -988,15 +994,7 @@ async function main() {
   await prisma.communityGoal.upsert({
     where: { id: 'cg-cangio-2026' },
     update: {},
-    create: {
-      id: 'cg-cangio-2026',
-      title: 'Cùng Tubu góp quỹ trồng cây',
-      region: 'Cộng đồng Tubu',
-      targetDrops: 100000,
-      currentDrops: 0,
-      treesToPlant: 200,
-      status: 'ACTIVE',
-    },
+    create: COMMUNITY_GOAL_SEED,
   });
 
   // Vườn Xanh 2.0 Phase 3 — sổ tay loài cây Việt Nam.
@@ -1010,15 +1008,7 @@ async function main() {
   await prisma.season.upsert({
     where: { id: 'se-2026-he-cangio' },
     update: {},
-    create: {
-      id: 'se-2026-he-cangio',
-      name: 'Mùa Hè Xanh — Phủ xanh Cần Giờ',
-      theme: 'Rừng ngập mặn miền Nam',
-      region: 'Cần Giờ, TP.HCM',
-      featuredSpeciesIds: ['sp-duoc', 'sp-tram', 'sp-sao'],
-      startAt: new Date('2026-06-01T00:00:00+07:00'),
-      endAt: new Date('2026-08-31T23:59:59+07:00'),
-    },
+    create: SEASON_SEED,
   });
 
   // Cộng đồng Vườn Tubu — danh mục Q&A theo ngành hàng thật (C-073). Danh mục cây cảnh của bản đầu chỉ bị ẩn,
@@ -1033,7 +1023,7 @@ async function main() {
   console.log('✅ Seed done.');
 }
 
-const PLANT_SPECIES = [
+export const PLANT_SPECIES = [
   { id: 'sp-tram', name: 'Cây Tràm', scientificName: 'Melaleuca cajuputi', region: 'Đồng bằng sông Cửu Long', rarity: 'COMMON', emoji: '🌿',
     story: 'Tràm phủ xanh vùng đất phèn miền Tây, cho mật ong tràm và tinh dầu kháng khuẩn.', ecoFact: 'Rừng tràm U Minh là "lá phổi" lọc nước và giữ đa dạng sinh học bậc nhất Nam Bộ.' },
   { id: 'sp-duoc', name: 'Cây Đước', scientificName: 'Rhizophora apiculata', region: 'Cần Giờ, Cà Mau', rarity: 'COMMON', emoji: '🌱',
@@ -1056,9 +1046,12 @@ const PLANT_SPECIES = [
     story: '"Tháng ba hoa gạo" đỏ rực bến nước, đình làng Bắc Bộ.', ecoFact: 'Hoa gạo nhiều mật, là "nhà hàng" cho chào mào, sáo và nhiều loài chim mùa xuân.' },
 ] as const;
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Chỉ chạy khi gọi thẳng (`tsx prisma/seed.ts`); seed-reference.ts import file này để lấy hằng số mà không chạy main().
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}

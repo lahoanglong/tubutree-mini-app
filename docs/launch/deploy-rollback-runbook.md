@@ -139,12 +139,13 @@ Vì sao: BullMQ giữ mọi job trong Redis, `allkeys-lru` có thể xoá âm th
 
 - [ ] Redis `noeviction` (đã đổi nóng) và `appendonly yes`; việc đặt vĩnh viễn nằm ở mục 5 bước 5
 
-### 1.2 Backup hằng ngày, bản ngoài máy, và diễn tập khôi phục
+### 1.2 Backup 6 giờ/lần, bản ngoài máy, và diễn tập khôi phục
 
-Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab" và "Diễn tập restore". Tóm tắt những gì phải có:
+Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab (6 giờ/lần)" và "Diễn tập restore". Tóm tắt những gì phải có:
 
 - `rclone config` đã tạo remote (ví dụ tên `r2`), thử được: `rclone lsd r2:`.
-- Cron 02:00 có `RCLONE_REMOTE=<remote>:<thư mục>` và `HEALTHCHECK_URL=...`. Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`.
+- Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=<remote>:<thư mục> HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
+- Bản trước mỗi deploy: `bash ops/backup-predeploy.sh` (nhãn `predeploy`, giữ 10 bản, không ping check của cron). Bước 6 mục 5 vẫn dùng `backup-db.sh` như cũ (bản cuối khi API đã dừng).
 - Một bản backup chạy tay thành công, và đã **diễn tập khôi phục** vào DB tạm rồi so số dòng:
 
 ```bash
@@ -160,11 +161,14 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 
 Kỳ vọng: hai dòng số khớp nhau (chênh vài đơn mới nếu đang có khách). Ghi lại thời gian chạy `backup-db.sh` (dùng `time` đứng trước lệnh): cần cho mục 3.
 
-Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron 02:00 do `ops.yml` (hành động `crontab`) cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
+Diễn tập lần đầu nên lấy bản về TỪ NGOÀI MÁY (`rclone copy <remote>:<thư mục>/<file> /tmp/`, rồi nạp file đó thay cho `$F`) và bấm giờ cả bước nạp: số đó là thời gian khôi phục thật (RTO). Khối lệnh có sẵn bấm giờ nằm ở mục "Diễn tập restore" của [tools/backup/README.md](../../tools/backup/README.md). Lặp lại mỗi tháng.
 
-- [ ] Có remote rclone, cron, healthcheck
-- [ ] Đã diễn tập khôi phục, số dòng khớp
+Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron backup do `ops.yml` (hành động `crontab`, nay cài lịch 6 giờ/lần) hoặc `crontab -e` cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
+
+- [ ] Có remote rclone, cron 6 giờ/lần (không còn dòng 02:00 cũ), healthcheck
+- [ ] Đã diễn tập khôi phục (bản lấy từ remote), số dòng khớp
 - [ ] Thời gian một lần backup: ______ phút
+- [ ] Thời gian khôi phục (RTO, bước nạp bản backup vào DB tạm): ______ phút
 
 ### 1.3 Biến môi trường trong `/opt/tubutree/.env`
 
@@ -190,6 +194,44 @@ Ghi chú về `THROTTLE_BYPASS_TOKEN`: production nên đặt (xem [docs/2026-10
 - [ ] Đã chọn giờ theo mục 3 (tính từ danh sách chờ áp ở 1.0) và báo các admin (mẫu tin ở mục 5, bước 12)
 - [ ] Bản Zalo Mini App mới đã build sẵn nhưng CHƯA phát hành (ràng buộc 1)
 - [ ] Còn trống đĩa: `df -h /` còn ít nhất 3 lần dung lượng bảng orders (các migration viết lại mọi dòng và dựng chỉ mục): `psqlq -tAc "SELECT pg_size_pretty(pg_total_relation_size('orders'))"`. Nếu danh sách chờ áp có p4 (1.0) thì cộng thêm dung lượng bảng `users` (`pg_total_relation_size('users')`)
+
+### 1.5 Thay đổi cấu hình hạ tầng đi kèm bản này (2026-10-18)
+
+Tất cả tương thích ngược: không đổi cổng, tên service, volume hay thứ tự deploy ở mục 5. Chỉ cần biết chúng có hiệu lực lúc nào.
+
+| Thay đổi | Nằm ở | Hiệu lực khi | Cách kiểm |
+|---|---|---|---|
+| API đặt `keepAliveTimeout` 125 s và `headersTimeout` 126 s (trước: mặc định 5 s, thỉnh thoảng 502 lẻ do Apache tái dùng kết nối Node vừa đóng) | mã API (`config/http-timeouts.ts`) | bước 9 (API mới chạy) | không cần làm gì; 502 lẻ `error reading status line` trong `/www/wwwlogs/api.tubutree.com-error_log` biến mất |
+| Web đặt `KEEP_ALIVE_TIMEOUT=55000`, container web chạy user `node` (trước: root) | `docker-compose.vietnix.yml`, `apps/web/Dockerfile` | bước 3 (build) và bước 8 (web mới) | `$DC exec -T web id -un` ra `node`; `$DC logs --since 10m web \| grep -ci eacces` ra 0 |
+| Trần CPU `cpus` cho api (1.0) và web (1.0) | `docker-compose.vietnix.yml` | web: bước 8, api: bước 9 (mỗi service nhận khi được tạo lại ở bước đó) | `docker inspect -f '{{.HostConfig.NanoCpus}}' "$($DC ps -q api)"` ra `1000000000` |
+| Vhost Apache: `ProxyPass ... ttl=30` và `mod_deflate` (nén JSON/HTML/JS/CSS) | `ops/vietnix-vhost-*.conf.phase2` | khi dán lại hai file này (xem dưới), độc lập với deploy | `bash ops/check-edge.sh` dòng `nén:` có `content-encoding=gzip` |
+
+Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`; nếu lớn hơn 1, đặt trong `.env` (KHÔNG sửa compose: `git status` bẩn làm bước 1 dừng) `API_CPUS=2`, `WEB_CPUS=1` rồi tạo lại container tương ứng (`$DC up -d --no-deps <service>`). Mặc định cố ý không vượt 1 lõi vì Docker từ chối khởi động container có `cpus` lớn hơn số vCPU (lỗi `Range of CPUs is from 0.01 to 1.00` ở bước 8 hoặc 9: đặt `*_CPUS` nhỏ hơn rồi chạy lại lệnh `up -d`).
+
+**Không đổi cấu hình `postgres` hoặc `redis` trong `docker-compose.vietnix.yml` kèm một bản deploy.** `tools/deploy/deploy.sh` bước 4 chạy `dc up -d --no-build api` KHÔNG có `--no-deps`; compose v2 hội tụ luôn các service phụ thuộc, nên mọi thay đổi cấu hình của postgres hoặc redis (`cpus`, `shm_size`, `command`, `healthcheck`...) khiến chúng bị tạo lại ngay giữa deploy: DB ngắt khoảng 10 giây, 5xx, BullMQ mất kết nối. Vì vậy bản này cố ý không đổi hai service đó. Khi thực sự cần đổi, tạo lại chủ động NGOÀI giờ cao điểm, TRƯỚC khi chạy deploy: `$DC up -d --no-deps postgres redis` (dữ liệu ở volume, không mất); sau đó deploy bình thường sẽ không còn gì để tạo lại.
+
+Cập nhật vhost (chỉ khi đang dùng bản phase2, tức đã có chứng chỉ; còn phase1 thì làm theo [ops/README-vietnix-deploy.md](../../ops/README-vietnix-deploy.md) rồi dán phase2 mới. Làm ban ngày được, `graceful` không rớt kết nối đang có; backup lại hai file cũ trước):
+
+```bash
+TS=$(date +%Y%m%d-%H%M%S); V=/www/server/panel/vhost/apache; AP=/www/server/apache/bin/apachectl
+for h in api app; do sudo cp $V/$h.tubutree.com.conf /root/$h.tubutree.com.conf.bak.$TS; done
+sudo cp ops/vietnix-vhost-api.conf.phase2 $V/api.tubutree.com.conf
+sudo cp ops/vietnix-vhost-app.conf.phase2 $V/app.tubutree.com.conf
+if sudo $AP configtest; then
+  sudo $AP -k graceful
+else
+  echo "configtest LỖI: chép lại hai file cũ, KHÔNG graceful" >&2
+  for h in api app; do sudo cp /root/$h.tubutree.com.conf.bak.$TS $V/$h.tubutree.com.conf; done
+  sudo $AP configtest
+fi
+$AP -M 2>/dev/null | grep -E 'deflate|filter|remoteip'
+bash ops/check-edge.sh --local
+```
+
+`configtest` phải in `Syntax OK`. Apache này dùng chung với ChoDeli/WordPress nên khối lệnh tự chép hai file `.bak.$TS` về lại và KHÔNG `graceful` khi `configtest` lỗi (file lỗi để nguyên trên đĩa sẽ làm hỏng lần reload kế tiếp của aaPanel, kéo cả ChoDeli theo); lệnh `configtest` cuối khối phải in lại `Syntax OK`, nếu không thì dừng và báo. Không thấy `deflate_module` hoặc `filter_module` thì khối nén bị bỏ qua (không lỗi): nén vẫn có khi bật ☁ cam của Cloudflare. Quay lại sau khi đã áp dụng: chép hai file `.bak.*` về đúng chỗ rồi `configtest` và `graceful`. Nếu error_log vẫn có `error reading status line` lẻ, thêm `disablereuse=On` sau `ttl=30` ở dòng `ProxyPass` của vhost api (mỗi request một kết nối mới, tốn thêm chút độ trễ).
+
+- [ ] Đã dán lại vhost phase2, `configtest` Syntax OK, `ops/check-edge.sh` không có FAIL
+- [ ] `nproc` đã xem và `*_CPUS` trong `.env` phù hợp (hoặc để mặc định 1 lõi mỗi service)
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
@@ -283,6 +325,7 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 | Số migration chờ áp ở bước 4 (`migrate status`) khác số ghi ở mục 1.0, hoặc image/DB không cùng một bản (mục 1.0) | DỪNG, chưa dừng API. Tính lại cửa sổ và đường quay lại từ danh sách mới | Tech lead |
 | Migrate báo lỗi (bất kỳ dòng `Error`) hoặc chạy quá 5 lần "tổng thời gian migrate" (mục 3.2) | DỪNG. Làm mục 7.1. Không bật API | Tech lead, Chủ shop |
 | `_prisma_migrations` có dòng `finished_at IS NULL` | DỪNG. Làm mục 7.1 (đọc kỹ điểm 2, 4 và 6 của 7.1: không bật lại API cũ trước khi xử lý dòng dở) | Tech lead |
+| `prisma:seed:reference` (bước 7b) báo lỗi hoặc số đếm xác minh sai | Chưa bật API. Lệnh chạy lại an toàn: đọc lỗi, chạy lại một lần; vẫn lỗi thì DỪNG | Tech lead |
 | API mới không `healthy` sau 5 phút | Xem log, quyết định trong 15 phút: quay lại theo mục 7 | Chủ shop quyết, Tech lead |
 | Smoke test (bước 11) có mục FAIL | Quay lại theo mục 7, hoặc sửa tiến nếu chỉ là lỗi giao diện và schema ổn | Chủ shop, Tech lead |
 | `go-live:check` sau deploy có FAIL | Không mở bán, không phát hành Mini App. Sửa rồi chạy lại | Tech lead |
@@ -422,6 +465,48 @@ psqlq -c "SELECT count(*) AS thieu_tim_kiem FROM orders WHERE COALESCE(\"shippin
 
 Kỳ vọng: `da_ap_xong` bằng (số "migrations" ghi ở bước 6) cộng (số chờ áp ở bước 4); bốn migration mới nhất đều `xong = t`; `dang_do = 0`; chỉ còn đúng một chỉ mục `reviews_userId_productId_orderId_key` (chỉ mục cũ `reviews_userId_productId_key` đã mất); `diem_nhan_vo` bằng 0 hoặc 1 (1 nếu trước đó đã có địa chỉ `refill.pickup_address`); `thieu_tim_kiem = 0`.
 
+### Bước 7b. Nạp dữ liệu tham chiếu (lần deploy đầu, hoặc DB mới)
+
+`prisma migrate deploy` chỉ tạo bảng và một phần cấu hình, mẫu thông báo. Các thứ app cần để chạy đủ tính năng nằm ở file seed và KHÔNG có trong migration: bảy chủ đề cộng đồng, 43 câu quiz Vườn Xanh, mười loài cây, mốc quỹ trồng cây, 28 mẫu thông báo (gồm "đơn đã giao", "đơn bị huỷ", "mã giảm giá chào mừng") và khoảng 80 khoá cấu hình để admin thấy ở tab Cấu hình. Lệnh `prisma:seed` bị chặn ở production (nó ghi đè sản phẩm và tài khoản ngân hàng), nên có một lệnh riêng, an toàn cho prod:
+
+```bash
+$DC run --rm --no-deps api pnpm run prisma:seed:reference
+```
+
+Chạy ngay sau bước 7, khi API vẫn đang dừng, trước bước 8. Lệnh chỉ TẠO dòng còn thiếu: không ghi đè giá trị admin đã chỉnh, không đụng sản phẩm, người dùng, mã giảm giá hay tài khoản ngân hàng, nên chạy lại bao nhiêu lần cũng an toàn (nên chạy lại sau mỗi lần phát hành có thêm mẫu thông báo hoặc khoá cấu hình mới). KHÔNG chạy `prisma:seed` và KHÔNG đặt `ALLOW_PROD_SEED=1` trên VPS.
+
+Kỳ vọng: thoát 0 và in mỗi nhóm một dòng `[seed-reference] <nhóm>: ...`. Lần đầu trên DB mới các dòng có dạng `+N mới` (ví dụ `notification_templates: +28 mới`); lần chạy sau đều `đủ sẵn`. Dòng `seasons` luôn là "bỏ qua: mùa mẫu đã hết hạn" cho tới khi chủ dự án chốt mùa mới (Vườn Xanh không hiện banner mùa trong lúc đó). Dòng cuối "chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt)" là đúng ý: lệnh KHÔNG cờ không nạp hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá cấu hình có giá trị khác mặc định trong mã (vòng quay, thưởng mốc giới thiệu, bậc Subscribe & Save, freeship theo hạng, thưởng chuỗi 7 ngày, Season Pass). Đó là các con số tiền, điểm, xác suất chủ dự án chưa quyết.
+
+CHỈ chạy lệnh có cờ sau khi chủ dự án đã duyệt bảng giá trị ở mục 3.2 của `docs/2026-10-18-launch-review/impl/refseed.md`:
+
+```bash
+$DC run --rm --no-deps api pnpm run prisma:seed:reference --with-business-defaults
+```
+
+Lệnh có cờ cũng chỉ tạo dòng còn thiếu (hạng, bậc đại lý, nhiệm vụ, 6 khoá) và an toàn chạy lại. Cờ gõ sai thì lệnh báo "Tham số không hợp lệ" và không ghi gì. Chưa chạy lệnh có cờ thì: không có hạng thành viên, admin KHÔNG duyệt được hồ sơ đại lý hay cấp vai trò DEALER (cần ít nhất một bậc đại lý), vòng quay báo "chưa cấu hình", Vườn Xanh không có nhiệm vụ. Phải chạy có cờ (hoặc tạo bậc đại lý bằng SQL) trước ngày mở đăng ký đại lý.
+
+Xác minh sau lệnh không cờ:
+
+```bash
+psqlq -c "SELECT (SELECT count(*) FROM community_categories WHERE \"isActive\") AS chu_de, (SELECT count(*) FROM game_quizzes) AS quiz, (SELECT count(*) FROM plant_species) AS loai_cay, (SELECT count(*) FROM notification_templates) AS mau_tin, (SELECT count(*) FROM community_goals WHERE status = 'ACTIVE') AS moc_quy, (SELECT count(*) FROM membership_tiers) AS hang, (SELECT count(*) FROM dealer_tiers) AS bac_dai_ly, (SELECT count(*) FROM missions) AS nhiem_vu"
+```
+
+Kỳ vọng: `chu_de ≥ 7`, `quiz ≥ 43`, `loai_cay ≥ 10`, `mau_tin ≥ 100`, `moc_quy = 1`. Lệnh này chỉ tạo dòng thiếu nên số thấp hơn mức trên mới là lỗi: chạy lại lệnh một lần, vẫn thấp thì DỪNG. Số CAO HƠN không phải lỗi: trên DB bản thử cũ (đã từng chạy `prisma:seed`) `quiz` có thể là 49 (kèm 6 quiz thương hiệu cũ) và `mau_tin` hơn 100. DB mới hoàn toàn thì `quiz = 43`, `mau_tin = 100`. Với ba cột cuối: DB mới hoàn toàn sau lệnh không cờ là `hang = 0`, `bac_dai_ly = 0`, `nhiem_vu = 0` (đúng ý, xem trên); sau lệnh có cờ là `hang ≥ 4`, `bac_dai_ly ≥ 4`, `nhiem_vu ≥ 4`; trên DB bản thử cũ ba cột này đã là 4 từ trước do seed cũ nạp sẵn.
+
+Trên DB bản thử cũ, kiểm thêm chủ đề cộng đồng cây cảnh của bản đầu còn bật (lệnh này chỉ tạo dòng thiếu nên không ẩn chúng; trên DB mới không có dòng nào):
+
+```bash
+psqlq -c "SELECT slug, name FROM community_categories WHERE \"isActive\" AND slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Có dòng nào thì ẩn bằng SQL (chưa có màn admin; chỉ ẩn khỏi danh sách chọn và lọc, không xoá nên bài đã đăng giữ nguyên nhãn cũ):
+
+```bash
+psqlq -c "UPDATE community_categories SET \"isActive\" = false WHERE slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng và bậc đại lý chưa có màn sửa (sửa bằng SQL, lần chạy sau không ghi đè).
+
 ### Bước 8. Bật web mới
 
 ```bash
@@ -480,6 +565,8 @@ $DC exec -T redis redis-cli config get maxmemory-policy
 $DC logs --since 10m api | grep -iE 'chạy cron|error' | head
 ```
 
+Một lệnh thay cho phần `curl` đầu: `bash ops/check-edge.sh --local` (trên máy chủ) in `OK`/`WARN`/`FAIL` cho health, nén, cache, chứng chỉ, đĩa, container `unhealthy` và bản backup mới nhất; không được có `FAIL` (xem `--help`).
+
 Kỳ vọng: `health` có `"db":"up","redis":"up"`; `config/public` 200; `web` 200; hai webhook không kèm token đều trả **401** (chứng tỏ đường vào tồn tại và từ chối người lạ; không gửi dữ liệu thật); Redis `noeviction`; log có đúng một dòng `Instance ... chạy cron.` và không có `error` lặp.
 
 Giao diện:
@@ -507,7 +594,7 @@ Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã 
 
 ### Bước 14. Theo dõi 24 giờ
 
-- [ ] Sáng hôm sau: `tail /var/log/tubutree-backup.log` thấy backup 02:00 thành công, `rclone ls <remote>:<thư mục> | tail -3` thấy file mới, healthcheck xanh.
+- [ ] Sau tối đa 6 giờ: `tail /var/log/tubutree-backup.log` thấy backup theo cron thành công (không có dòng `WARN`), `rclone ls <remote>:<thư mục> | tail -3` thấy file mới, healthcheck xanh.
 - [ ] Chạy lại `go-live:check` (không kèm `--phase`).
 - [ ] Màn Sức khoẻ hệ thống: không còn dòng đỏ tồn quá 1 giờ.
 - [ ] Làm [pilot-order-playbook.md](pilot-order-playbook.md) (đơn thử thật) trước khi mở bán rộng.

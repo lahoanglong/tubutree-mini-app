@@ -1,0 +1,69 @@
+name: Docker build
+
+# Dựng đúng hai image mà VPS sẽ dựng (apps/api/Dockerfile, apps/web/Dockerfile) để lỗi chỉ lộ khi build thật bắt được
+# ở PR, không phải ngày deploy (vd `express` thiếu dependency: pnpm build xanh nhưng container crash-loop). KHÔNG đẩy image đi
+# đâu: không login registry, không push. Chạy tay được qua workflow_dispatch.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'turbo.json'
+      - 'tsconfig.base.json'
+      - '.dockerignore'
+      - '.github/workflows/docker-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image api
+        if: matrix.app == 'api'
+        run: docker build -f apps/api/Dockerfile -t tubutree-api:ci .
+
+      - name: Kiểm module của api chạy được từ image (bắt phantom dependency)
+        # `node dist/main.js` cần DB nên không chạy ở đây; require thẳng các gói mà bootstrap.ts import trực tiếp. WORKDIR của
+        # image là /app/apps/api nên resolve y như lúc chạy thật.
+        if: matrix.app == 'api'
+        run: >-
+          docker run --rm --entrypoint node tubutree-api:ci
+          -e "require('express'); require('helmet'); require('@nestjs/core'); require('@nestjs/platform-express'); require('@prisma/client'); require('./dist/bootstrap.js'); console.log('api modules ok')"
+
+      - name: Build image web
+        # ZALO_APP_ID giả: Dockerfile dừng khi rỗng. NEXT_PUBLIC_* chỉ nhúng vào bundle, không có giá trị thật nào ở đây.
+        if: matrix.app == 'web'
+        run: >-
+          docker build -f apps/web/Dockerfile -t tubutree-web:ci
+          --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.test/api
+          --build-arg NEXT_PUBLIC_SITE_URL=https://app.example.test
+          --build-arg NEXT_PUBLIC_ZALO_APP_ID=ci-dummy-app-id
+          .
+
+      - name: Kiểm container web chạy bằng user node và ghi được .next/cache, .next/server/app
+        # Next ghi Data Cache của fetch vào .next/cache và ISR ghi lại trang tĩnh vào .next/server/app lúc chạy;
+        # thư mục thuộc root thì mọi lần ghi lỗi EACCES.
+        if: matrix.app == 'web'
+        run: |
+          set -euo pipefail
+          test "$(docker run --rm --entrypoint id tubutree-web:ci -un)" = node
+          docker run --rm --entrypoint sh tubutree-web:ci -c 'touch apps/web/.next/cache/.write-test apps/web/.next/server/app/.write-test && echo "cache và ISR ghi được"'

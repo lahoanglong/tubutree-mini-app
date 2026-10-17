@@ -11,6 +11,7 @@ import {
   restoreSession,
 } from './client-api';
 import { clearSavedInvoices } from './saved-invoice';
+import { readFirstTouchCookie } from './entry-source';
 
 export interface WebUser {
   id: string;
@@ -172,7 +173,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const codeVerifier = sessionStorage.getItem(PKCE_KEY) ?? undefined;
       const res = await apiFetch<LoginResponse>('/auth/zalo-oauth', {
         method: 'POST',
-        body: { code, codeVerifier },
+        // Nguồn chạm đầu (cookie 30 ngày): API chỉ ghi khi đây là lần tạo tài khoản, không bao giờ ghi đè.
+        body: { code, codeVerifier, firstTouch: readFirstTouchCookie() },
         auth: false,
       });
       setAccessToken(res.accessToken);

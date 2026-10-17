@@ -24,7 +24,7 @@ describe('bảng xếp hạng — người chơi trùng nickname và trùng ch�
     expect(container.textContent?.match(/Cây Xanh/g)).toHaveLength(n);
   });
 
-  it.each([2, 3, 4, 7, 25])('tuần: %i người cùng nickname, cùng chuỗi ngày, cùng số cây → không cảnh báo key', (n) => {
+  it.each([2, 3, 4, 7, 25])('bảng chuỗi dài nhất: %i người cùng nickname, cùng chuỗi ngày, cùng số cây → không cảnh báo key', (n) => {
     const board: LeaderRow[] = Array.from({ length: n }, (_, i) => ({ rank: i + 1, nickname: 'Cây Xanh', streak: 5, treesPlanted: 3 }));
     const { container } = render(<WeeklyLeaderboard board={board} />);
     expect(keyWarnings()).toEqual([]);

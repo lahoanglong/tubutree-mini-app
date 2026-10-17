@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   joinGroupBuy: vi.fn(),
   shareWithFallback: vi.fn(),
   params: {} as { id?: string },
-  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
+  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous', user: undefined as { referralCode: string } | undefined },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -34,7 +34,7 @@ vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login };
+    const state = { status: mocks.auth.status, login: mocks.login, user: mocks.auth.user };
     return sel ? sel(state) : state;
   },
 }));
@@ -70,6 +70,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.params = {};
   mocks.auth.status = 'authenticated';
+  mocks.auth.user = undefined;
   mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b', { joined: true })]);
   mocks.joinGroupBuy.mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
 });
@@ -241,6 +242,16 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(params).toMatchObject({ path: '/group-buy/mine', title: expect.stringContaining('Sản phẩm mine') });
     expect(params.thumbnail).toBe('https://img.test/mine.jpg');
     expect(fallback).toContain('Sản phẩm mine');
+  });
+
+  it('người chia sẻ có mã giới thiệu → đường dẫn nhóm mang ?ref=, nội dung dán tay nêu mã', async () => {
+    mocks.auth.user = { referralCode: 'ABCD1234' };
+    mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true })]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mời bạn bè' }));
+    const [params, fallback] = mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string];
+    expect(params.path).toBe('/group-buy/mine?ref=ABCD1234');
+    expect(fallback).toContain('ABCD1234');
   });
 
   it('thành viên (không phải người mở) cũng mời được bạn; nhóm chưa tham gia thì không có nút mời', async () => {

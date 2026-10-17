@@ -23,6 +23,8 @@ export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'it
 export interface Storefront {
   id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
   type: 'CTV' | 'BRAND' | 'MERCHANT'; isPartner?: boolean; title: string; headerNote: string | null;
+  /** Mã giới thiệu của chủ gian hàng CTV (API trả ở trang công khai; null với gian hàng khác). */
+  referralCode?: string | null;
   ownerTier: { name: string; emoji: string } | null;
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;

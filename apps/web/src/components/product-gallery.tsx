@@ -73,6 +73,8 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
                   src={src}
                   alt={count > 1 ? `${name} — ảnh ${i + 1}` : name}
                   className="h-full w-full object-contain"
+                  width={800}
+                  height={800}
                   loading={i === 0 ? 'eager' : 'lazy'}
                   fetchPriority={i === 0 ? 'high' : undefined}
                   decoding="async"
@@ -117,7 +119,7 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
                   <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" onError={() => markBroken(i)} />
+                  <img src={src} alt="" className="h-full w-full object-cover" width={56} height={56} loading="lazy" decoding="async" onError={() => markBroken(i)} />
                 )}
               </button>
             </li>

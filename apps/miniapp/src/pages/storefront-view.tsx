@@ -24,7 +24,7 @@ export default function StorefrontViewPage() {
 
   const sf = q.data;
   useEffect(() => {
-    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.type === 'CTV' ? sf.slug : null, kind: 'ctv' });
+    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.referralCode ?? null, kind: 'ctv' });
   }, [sf, setSfContext]);
 
   if (q.isLoading) return <Page className="page"><Box p={4}><Skeleton style={{ height: 180, borderRadius: 16 }} /></Box></Page>;
@@ -102,7 +102,7 @@ export default function StorefrontViewPage() {
         onClose={() => setShareOpen(false)}
         slug={sf.slug}
         title={sf.title}
-        referralCode={sf.type === 'CTV' ? sf.slug : null}
+        referralCode={sf.referralCode ?? null}
         thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
       />
     </Page>

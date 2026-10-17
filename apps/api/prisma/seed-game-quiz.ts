@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-interface SeedQuiz {
+export interface SeedQuiz {
   id: string;
   question: string;
   options: string[];
@@ -11,7 +11,7 @@ interface SeedQuiz {
   waterReward: number;
 }
 
-const QUIZZES: SeedQuiz[] = [
+export const QUIZZES: SeedQuiz[] = [
   // === CAY (cây cối) — 6 câu ===
   {
     id: 'nq_cay_1', category: 'cay', difficulty: 1, waterReward: 8,

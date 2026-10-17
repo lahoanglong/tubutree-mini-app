@@ -4,8 +4,9 @@ type Ctx = { params: Promise<{ slug: string }> | { slug: string } };
 
 /**
  * Link Content Kit và chia sẻ của Mini App có dạng `/product/<slug>?ref=<mã CTV>`; trang sản phẩm của web nằm ở
- * `/san-pham/<slug>`. Route handler chứ không phải `redirect()` trong page: root có `loading.tsx` nên page đã bắt đầu
- * stream 200 trước khi redirect chạy, còn handler trả được 307 thật. 307 (không phải 308) để trình duyệt/CDN không ghim
+ * `/san-pham/<slug>`. Route handler chứ không phải `redirect()` trong page: handler luôn trả 307 thật, còn `redirect()` trong
+ * page chỉ ra 307 khi Next chưa bắt đầu stream (nếu đã stream thì thành 200 kèm meta refresh). Gốc app cố ý KHÔNG có
+ * `loading.tsx` (nó làm slug không có và lỗi API trả 200), nhưng handler không phụ thuộc vào điều đó. 307 (không phải 308) để trình duyệt/CDN không ghim
  * lại nếu sau này đổi đường dẫn. `?ref=` đi theo sang trang đích, nơi `ReferralCapture` (layout) ghi nhận hoa hồng cho CTV.
  *
  * Location tương đối: Next không sửa Location của route handler, nên nó theo host/giao thức khách đang dùng thay vì host nội

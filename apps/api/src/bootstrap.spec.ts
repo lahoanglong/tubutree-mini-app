@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { Cron, ScheduleModule } from '@nestjs/schedule';
 import { bootstrap } from './bootstrap';
 import { CRON_LEADER_OPTIONS, CronLeaderService } from './common/cron-leader/cron-leader.service';
+import { HTTP_HEADERS_TIMEOUT_MS, HTTP_KEEP_ALIVE_TIMEOUT_MS } from './config/http-timeouts';
 import { PrismaService } from './prisma/prisma.service';
 
 /** Bảng cron_leases giả dùng chung cho mọi instance trong test: một holder, ghi lại ai đã giành/gia hạn. */
@@ -84,6 +85,15 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
     expect(lease.holder()).toBe(leaderId);
     expect(exitA).not.toHaveBeenCalled();
   }, 15_000);
+
+  it('server HTTP đã mở cổng giữ kết nối rảnh lâu hơn proxy phía trước (A3-010)', async () => {
+    const app = await bootstrap(rootModule(leaseTable().prisma(), { n: 0 }), { port: 0, exit: jest.fn(), logger: false });
+    expect(app).toBeDefined();
+    opened.push(app!);
+    const server = app!.getHttpServer() as { keepAliveTimeout: number; headersTimeout: number };
+    expect(server.keepAliveTimeout).toBe(HTTP_KEEP_ALIVE_TIMEOUT_MS);
+    expect(server.headersTimeout).toBe(HTTP_HEADERS_TIMEOUT_MS);
+  });
 
   it('app đã init nhưng chưa giành lease (chưa listen xong) → cron không chạy lượt nào', async () => {
     const ticks = { n: 0 };
