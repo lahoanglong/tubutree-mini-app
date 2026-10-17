@@ -432,6 +432,14 @@ describe('CommunityFeedService.getImage (endpoint ảnh bài)', () => {
     expect(r.isPublic).toBe(true);
   });
 
+  it('bài đã đăng: báo mã v khớp ảnh đang lưu hay không (quyết định cache vĩnh viễn hay ngắn)', async () => {
+    const s = svc(post('PUBLISHED')).svc;
+    expect((await s.getImage('p1', 0, undefined, vOf())).versionOk).toBe(true);
+    for (const v of [undefined, '', 'x'.repeat(32), vOf(1), feedImageVersion('p2', 0, PNG), vOf(0, `${PNG}A`)]) {
+      expect((await s.getImage('p1', 0, undefined, v)).versionOk).toBe(false);
+    }
+  });
+
   it.each(['image/jpeg', 'image/webp', 'image/gif'])('nhận MIME ảnh %s', async (mime) => {
     const r = await svc(post('PUBLISHED', `data:${mime};base64,QUJD`)).svc.getImage('p1', 0, undefined, undefined);
     expect(r.mime).toBe(mime);

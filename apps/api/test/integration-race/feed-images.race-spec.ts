@@ -121,7 +121,7 @@ describe('Ảnh bài cộng đồng phục vụ qua endpoint riêng (real Postgr
     const img = await get(body.posts[0]!.images[0]!);
     expect(img.status).toBe(200);
     expect(img.headers.get('content-type')).toBe('image/jpeg');
-    expect(img.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(img.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
     expect(img.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
     expect(img.headers.get('x-content-type-options')).toBe('nosniff');
     expect(Buffer.from(await img.arrayBuffer()).length).toBe(BYTES);
@@ -208,14 +208,22 @@ describe('Ảnh bài cộng đồng phục vụ qua endpoint riêng (real Postgr
     expect((await get(own.images[0]!, as(cskh, 'STAFF', ['CSKH']))).status).toBe(200);
   });
 
-  it('bài được duyệt: cùng đường dẫn chuyển sang công khai, cache dài', async () => {
+  it('bài được duyệt: cùng đường dẫn chuyển sang công khai; cache dài chỉ khi URL mang đúng mã v, còn lại cache ngắn', async () => {
     const p = await post({ status: 'PENDING', images: [WEBP] });
     const url = `/feed/posts/${p.id}/images/0`;
     expect((await get(url)).status).toBe(404);
+    const own = (await (await get(`/feed/${p.id}`, as(author))).json()) as Item;
     await prisma.feedPost.update({ where: { id: p.id }, data: { status: 'PUBLISHED' } });
-    const res = await get(url);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+
+    const bare = await get(url);
+    expect(bare.status).toBe(200);
+    expect(bare.headers.get('cache-control')).toBe('private, max-age=300');
+    const wrong = await get(`${url}?v=${'0'.repeat(32)}`);
+    expect(wrong.status).toBe(200);
+    expect(wrong.headers.get('cache-control')).toBe('private, max-age=300');
+    const versioned = await get(own.images[0]!);
+    expect(versioned.status).toBe(200);
+    expect(versioned.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
   });
 
   it('sửa ảnh bài thì mã v đổi (URL cũ không dính cache cũ)', async () => {

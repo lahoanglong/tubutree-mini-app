@@ -173,10 +173,11 @@ export class CommunityFeedController {
 
   /**
    * Ảnh base64 của bài (danh sách/chi tiết trả đường dẫn này thay vì nhúng nguyên văn). Công khai về mặt route vì thẻ img không
-   * gửi được token, nhưng nhận ra người xem nếu có Bearer: quyền xem theo trạng thái bài nằm ở service. Nội dung gắn với mã
-   * `v` trong URL nên bài đã đăng cache vĩnh viễn được; bài chưa/không còn hiển thị thì không cache. helmet đặt
-   * Cross-Origin-Resource-Policy: same-origin mặc định; miniapp và web khác origin nạp ảnh bằng thẻ img nên route này phải
-   * mở cross-origin. Khai báo TRƯỚC `@Get(':id')` cho cùng nhóm route cố định.
+   * gửi được token, nhưng nhận ra người xem nếu có Bearer: quyền xem theo trạng thái bài nằm ở service. Cache chỉ ở trình
+   * duyệt (`private`, như ảnh minh chứng đổi trả) để bài bị gỡ không còn nằm ở CDN dùng chung: vĩnh viễn khi mã `v` khớp
+   * nội dung ảnh hiện tại, 5 phút khi `v` sai/thiếu (URL không gắn với nội dung); bài chưa/không còn hiển thị thì không
+   * lưu. helmet đặt Cross-Origin-Resource-Policy: same-origin mặc định; miniapp và web khác origin nạp ảnh bằng thẻ img nên
+   * route này phải mở cross-origin. Khai báo TRƯỚC `@Get(':id')` cho cùng nhóm route cố định.
    */
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
@@ -188,9 +189,13 @@ export class CommunityFeedController {
     @CurrentUser() user: JwtPayload | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { mime, data, isPublic } = await this.feed.getImage(id, index, user, version);
+    const { mime, data, isPublic, versionOk } = await this.feed.getImage(id, index, user, version);
     res.set({
-      'Cache-Control': isPublic ? 'public, max-age=31536000, immutable' : 'private, no-store',
+      'Cache-Control': !isPublic
+        ? 'private, no-store'
+        : versionOk
+          ? 'private, max-age=31536000, immutable'
+          : 'private, max-age=300',
       'Cross-Origin-Resource-Policy': 'cross-origin',
       'X-Content-Type-Options': 'nosniff',
     });

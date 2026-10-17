@@ -412,13 +412,14 @@ export class CommunityFeedService {
    * xem (ảnh bài đã công khai trong bảng tin); bài PENDING/HIDDEN/REMOVED chỉ tác giả, ADMIN hoặc STAFF nhóm CSKH. Thẻ img
    * không gửi được token nên bài PENDING còn mở được bằng mã `v` của đúng ảnh đó (danh sách của tác giả/người duyệt mới có).
    * Mọi trường hợp không được xem đều 404 để không lộ bài có tồn tại hay không. Chỉ đọc đúng một phần tử mảng ảnh.
+   * `versionOk` cho controller biết URL có gắn đúng nội dung ảnh hiện tại không (cache vĩnh viễn chỉ an toàn khi có).
    */
   async getImage(
     postId: string,
     index: number,
     viewer: { sub: string; role: string; staffPermissions?: string[] } | undefined,
     version: unknown,
-  ): Promise<{ mime: string; data: Buffer; isPublic: boolean }> {
+  ): Promise<{ mime: string; data: Buffer; isPublic: boolean; versionOk: boolean }> {
     const notFound = () => new NotFoundException('Không tìm thấy ảnh.');
     if (!Number.isInteger(index) || index < 0 || index >= MAX_FEED_IMAGES) throw notFound();
     const rows = await this.prisma.$queryRaw<{ status: string; userId: string; img: string | null }[]>`
@@ -426,17 +427,18 @@ export class CommunityFeedService {
     const row = rows[0];
     if (!row?.img) throw notFound();
     const isPublic = row.status === 'PUBLISHED';
+    const versionOk = matchesFeedImageVersion(version, postId, index, row.img);
     if (!isPublic) {
       const isModerator = viewer?.role === 'ADMIN' || (viewer?.role === 'STAFF' && !!viewer.staffPermissions?.includes('CSKH'));
       const allowed =
         isModerator ||
         (!!viewer && viewer.sub === row.userId) ||
-        (row.status === 'PENDING' && matchesFeedImageVersion(version, postId, index, row.img));
+        (row.status === 'PENDING' && versionOk);
       if (!allowed) throw notFound();
     }
     const decoded = decodeServedImage(row.img);
     if (!decoded) throw notFound();
-    return { ...decoded, isPublic };
+    return { ...decoded, isPublic, versionOk };
   }
 
   /** Danh mục cộng đồng đang hiển thị, sắp theo order — dùng cho tabs FE. */
