@@ -331,6 +331,25 @@ describe('Báo cáo admin (real Postgres)', () => {
       const cell = r.rows.find((c) => c.week === '2019-06-03' && c.source === 'split-it');
       expect(cell).toMatchObject({ newUsers: 4, firstOrderUsers: 4, secondOrderUsers: 2, revenue: 140_000 + 130_000 + 105_000 + 30_000 });
     });
+
+    it('dòng khách vãng lai đã gộp (mergedIntoId) không phải khách mới; số khách mới của KPI doanh thu khớp tổng bảng nguồn', async () => {
+      // 2019-07-10 là thứ Tư, tuần bắt đầu thứ Hai 2019-07-08
+      const born = new Date('2019-07-10T05:00:00Z');
+      const target = await mkUser({ createdAt: born, firstTouchSource: 'merge-it' });
+      await mkUser({ createdAt: born, firstTouchSource: 'merge-it', mergedIntoId: target.id });
+      await createOrder(prisma, { userId: target.id, status: 'CONFIRMED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', total: 60_000, createdAt: new Date(born.getTime() + 3600e3) });
+      await mkUser({ createdAt: born, firstTouchSource: 'merge-it' });
+      await mkUser({ createdAt: born, firstTouchSource: 'merge-it', role: 'STAFF' });
+      await mkUser({ createdAt: born, firstTouchSource: 'merge-it', firstTouchAt: new Date(born.getTime() + 20 * 864e5) });
+
+      const service = new AdminReportsService(prisma);
+      const q = { from: '2019-07-08', to: '2019-07-14' };
+      const sources = await service.sourceReport(q, new Date('2019-07-20T00:00:00Z'));
+      const revenue = await service.revenueReport(q, new Date('2019-07-20T00:00:00Z'));
+      expect(sources.rows.find((c) => c.source === 'merge-it')).toMatchObject({ newUsers: 2, firstOrderUsers: 1 });
+      expect(sources.totals.newUsers).toBe(2);
+      expect(revenue.totals.newUsers).toBe(sources.totals.newUsers);
+    });
   });
 
   describe('D1-14: xuất TNCN, lệnh rút tiền, hoàn tiền khách', () => {

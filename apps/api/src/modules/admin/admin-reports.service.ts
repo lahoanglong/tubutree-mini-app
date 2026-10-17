@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { GMV_ORDER_SQL, REVENUE_ORDER_SQL, foldRevenueRows, type RevenueRow } from './admin-revenue';
 import { orderPlatformLabel, orderSourceLabel } from './order-channel';
 import { resolveReportRange } from './report-range';
-import { SOURCE_REPORT_MAX_SOURCES, SOURCE_REPORT_WINDOW_DAYS, foldSourceRows, type SourceRow } from './admin-source-report';
+import { NEW_CUSTOMER_SQL, SOURCE_REPORT_MAX_SOURCES, SOURCE_REPORT_WINDOW_DAYS, foldSourceRows, type SourceRow } from './admin-source-report';
 import { vnDateKey } from '../../common/vn-time';
 
 /** Báo cáo theo ngày × kênh là một nhóm nhỏ mỗi ngày; một năm là đủ cho kế toán và vẫn bị chặn trên. */
@@ -58,7 +58,11 @@ export class AdminReportsService {
         ) pr ON true
         WHERE o."createdAt" >= ${range.start} AND o."createdAt" < ${range.end}
         GROUP BY 1, 2, 3`),
-      this.prisma.user.count({ where: { createdAt: { gte: range.start, lt: range.end } } }),
+      this.prisma
+        .$queryRaw<{ n: number }[]>(
+          Prisma.sql`SELECT COUNT(*)::int AS n FROM users u WHERE u."createdAt" >= ${range.start} AND u."createdAt" < ${range.end} AND ${NEW_CUSTOMER_SQL}`,
+        )
+        .then((r) => r[0]?.n ?? 0),
     ]);
     const folded = foldRevenueRows(
       rows.map(
@@ -93,8 +97,8 @@ export class AdminReportsService {
    * doanh thu với KPI: admin-revenue.ts). "Đơn" là đơn còn hiệu lực (đã xác nhận trở đi, không huỷ/trả, không còn chờ thanh toán);
    * các đơn cùng checkoutGroup (một lần thanh toán tách theo nơi giao) tính là một lần mua, còn doanh thu vẫn cộng từng đơn.
    *
-   * Không tính: tài khoản ADMIN/STAFF; khách cũ được gắn nguồn lúc gộp khách (chạm đầu muộn hơn ngày tạo hơn một ngày), vì họ
-   * không phải khách mới do nguồn đó mang về (xem impl/source.md mục 3). Khách chưa có nguồn (tài khoản trước khi có cột) vào "Không rõ".
+   * "Khách mới" theo NEW_CUSTOMER_SQL (không tính tài khoản ADMIN/STAFF, dòng khách vãng lai đã gộp, khách cũ được gắn nguồn lúc gộp;
+   * xem impl/source.md mục 3), cùng định nghĩa với thẻ "Khách mới" của revenueReport. Khách chưa có nguồn (tài khoản trước khi có cột) vào "Không rõ".
    */
   async sourceReport(q: { from?: string; to?: string }, now = new Date()) {
     const range = resolveReportRange(q.from, q.to, { maxDays: SOURCE_REPORT_MAX_DAYS, now });
@@ -110,8 +114,7 @@ export class AdminReportsService {
                to_char(date_trunc('week', u."createdAt" + interval '7 hours'), 'YYYY-MM-DD') AS week
         FROM users u
         WHERE u."createdAt" >= ${range.start} AND u."createdAt" < ${range.end}
-          AND u.role NOT IN ('ADMIN', 'STAFF')
-          AND (u."firstTouchAt" IS NULL OR u."firstTouchAt" <= u."createdAt" + interval '1 day')
+          AND ${NEW_CUSTOMER_SQL}
       ),
       purchase AS (
         -- Checkout tách một lần thanh toán thành nhiều đơn (mỗi nơi giao một đơn, cùng checkoutGroup): đó là MỘT lần mua.
