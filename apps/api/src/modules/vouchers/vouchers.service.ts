@@ -334,7 +334,9 @@ export class VouchersService {
             WHERE status::text = 'APPROVED' AND "fullReturn" = false
             GROUP BY "orderId"
           ) rr ON rr."orderId" = o.id
+          JOIN users u ON u.id = o."userId"
           WHERE o.status::text = 'DELIVERED' AND o."createdAt" >= ${since} AND o."userId" > ${cursor}
+            AND ${REAL_USER_SQL}
           GROUP BY o."userId"
           HAVING GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) >= ${lowestSpend}
           ORDER BY o."userId"

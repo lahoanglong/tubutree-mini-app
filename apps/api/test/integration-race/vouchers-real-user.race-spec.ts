@@ -133,4 +133,17 @@ describe('VouchersService real-user + batching (real Postgres)', () => {
     expect(ids).toHaveLength(520);
     expect(granted).toBe(520);
   });
+
+  it('(f) milestone: guest / guest đã gộp chi tiêu vượt mốc không nhận; user Zalo và user có SĐT nhận đúng 1 lần', async () => {
+    const [g, mg, z, p] = [await guest(), await mergedGuest(), await zaloUser(), await phoneUser()];
+    for (const u of [g, mg, z, p]) {
+      await createOrder(prisma, { userId: u.id, status: 'DELIVERED', total: 6_000_000, subtotal: 6_000_000, createdAt: new Date(), deliveredAt: new Date() });
+    }
+
+    await vouchers.milestoneVouchers();
+    await vouchers.milestoneVouchers();
+
+    const counts = await Promise.all([g, mg, z, p].map((u) => couponsOf(u.id, 'MILESTONE5000000').then((c) => c.length)));
+    expect(counts).toEqual([0, 0, 1, 1]);
+  });
 });
