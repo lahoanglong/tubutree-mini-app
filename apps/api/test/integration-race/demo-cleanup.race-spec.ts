@@ -491,7 +491,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
   it('hoàn tác: khối SQL in cuối --apply đưa đúng các dòng đã đổi về như trước (sản phẩm, biến thể, SKU, mã với endAt cũ)', async () => {
     await restoreDemoState();
     const snapshot = async () => ({
-      products: await prisma.product.findMany({ where: DEMO_PRODUCT_WHERE, select: { id: true, isActive: true }, orderBy: { id: 'asc' } }),
+      products: await prisma.product.findMany({ where: DEMO_PRODUCT_WHERE, select: { id: true, isActive: true, updatedAt: true }, orderBy: { id: 'asc' } }),
       variations: await prisma.variation.findMany({ where: DEMO_VARIATION_WHERE, select: { id: true, isActive: true, sku: true }, orderBy: { id: 'asc' } }),
       coupons: await prisma.coupon.findMany({ where: { id: { in: DEMO_COUPONS.map((c) => c.id) } }, select: { id: true, isActive: true, endAt: true }, orderBy: { id: 'asc' } }),
     });
@@ -506,5 +506,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
       for (const line of sql.split('\n').filter((l) => l.startsWith('UPDATE '))) await tx.$executeRawUnsafe(line.replace(/; --.*$/, ';'));
     });
     expect(await snapshot()).toEqual(before);
+    // --apply và khối hoàn tác đều không đẩy updatedAt: xem trước sau hoàn tác không báo nhầm "KIỂM TAY".
+    expect((await previewDemoCleanup(prisma)).products.editedAfterLoad).toEqual([]);
   });
 });

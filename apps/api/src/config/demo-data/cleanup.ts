@@ -327,7 +327,12 @@ export async function applyDemoCleanup(
           select: { id: true },
         }),
       );
-      const products = await tx.product.updateMany({ where: { id: { in: productIds }, isActive: true }, data: { isActive: false } });
+      // SQL thô thay updateMany: Prisma tự đẩy products.updatedAt (@updatedAt), làm bản xem trước sau một lần hoàn tác báo nhầm
+      // cả 44 sản phẩm "KIỂM TAY". Biến thể và mã không có cột updatedAt.
+      const productsDeactivated = await tx.$executeRawUnsafe(
+        `UPDATE "products" SET "isActive" = false WHERE "id" = ANY($1::text[]) AND "isActive" = true`,
+        productIds,
+      );
       const variations = await tx.variation.updateMany({ where: { id: { in: variationIds }, isActive: true }, data: { isActive: false } });
       const skusPrefixed = await tx.$executeRawUnsafe(
         `UPDATE "variations" SET "sku" = $1 || "sku" WHERE "id" = ANY($2::text[]) AND "sku" NOT LIKE $3`,
@@ -356,7 +361,7 @@ export async function applyDemoCleanup(
       return {
         plan,
         result: {
-          productsDeactivated: products.count,
+          productsDeactivated,
           variationsDeactivated: variations.count,
           skusPrefixed,
           couponsExpired,
