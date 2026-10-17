@@ -449,7 +449,21 @@ Xác minh sau lệnh không cờ:
 psqlq -c "SELECT (SELECT count(*) FROM community_categories WHERE \"isActive\") AS chu_de, (SELECT count(*) FROM game_quizzes) AS quiz, (SELECT count(*) FROM plant_species) AS loai_cay, (SELECT count(*) FROM notification_templates) AS mau_tin, (SELECT count(*) FROM community_goals WHERE status = 'ACTIVE') AS moc_quy, (SELECT count(*) FROM membership_tiers) AS hang, (SELECT count(*) FROM dealer_tiers) AS bac_dai_ly, (SELECT count(*) FROM missions) AS nhiem_vu"
 ```
 
-Kỳ vọng sau lệnh không cờ: `chu_de = 7`, `quiz` từ 43 trở lên, `loai_cay = 10`, `mau_tin` từ 100 trở lên, `moc_quy = 1`, và `hang = 0`, `bac_dai_ly = 0`, `nhiem_vu = 0`. Sau lệnh có cờ: `hang = 4`, `bac_dai_ly = 4`, `nhiem_vu = 4`. Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng và bậc đại lý chưa có màn sửa (sửa bằng SQL, lần chạy sau không ghi đè).
+Kỳ vọng: `chu_de ≥ 7`, `quiz ≥ 43`, `loai_cay ≥ 10`, `mau_tin ≥ 100`, `moc_quy = 1`. Lệnh này chỉ tạo dòng thiếu nên số thấp hơn mức trên mới là lỗi: chạy lại lệnh một lần, vẫn thấp thì DỪNG. Số CAO HƠN không phải lỗi: trên DB bản thử cũ (đã từng chạy `prisma:seed`) `quiz` có thể là 49 (kèm 6 quiz thương hiệu cũ) và `mau_tin` hơn 100. DB mới hoàn toàn thì `quiz = 43`, `mau_tin = 100`. Với ba cột cuối: DB mới hoàn toàn sau lệnh không cờ là `hang = 0`, `bac_dai_ly = 0`, `nhiem_vu = 0` (đúng ý, xem trên); sau lệnh có cờ là `hang ≥ 4`, `bac_dai_ly ≥ 4`, `nhiem_vu ≥ 4`; trên DB bản thử cũ ba cột này đã là 4 từ trước do seed cũ nạp sẵn.
+
+Trên DB bản thử cũ, kiểm thêm chủ đề cộng đồng cây cảnh của bản đầu còn bật (lệnh này chỉ tạo dòng thiếu nên không ẩn chúng; trên DB mới không có dòng nào):
+
+```bash
+psqlq -c "SELECT slug, name FROM community_categories WHERE \"isActive\" AND slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Có dòng nào thì ẩn bằng SQL (chưa có màn admin; chỉ ẩn khỏi danh sách chọn và lọc, không xoá nên bài đã đăng giữ nguyên nhãn cũ):
+
+```bash
+psqlq -c "UPDATE community_categories SET \"isActive\" = false WHERE slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng và bậc đại lý chưa có màn sửa (sửa bằng SQL, lần chạy sau không ghi đè).
 
 ### Bước 8. Bật web mới
 

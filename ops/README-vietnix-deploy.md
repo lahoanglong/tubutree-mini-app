@@ -116,7 +116,11 @@ docker compose -f docker-compose.vietnix.yml run --rm --no-deps api pnpm run go-
 **Lần deploy đầu (hoặc DB mới): sau bước migrate, chạy thêm
 `npx prisma migrate deploy && npm run prisma:seed:reference`** (trên VPS: `docker compose -f
 docker-compose.vietnix.yml run --rm --no-deps api pnpm run prisma:seed:reference`, xem bước 7b của
-runbook). Migration không nạp chủ đề cộng đồng, quiz, loài cây và 28 mẫu thông báo; `prisma:seed` thì
+runbook). Thứ tự: `deploy.sh` migrate rồi bật API ngay trong cùng một lần chạy, nên không xen lệnh này
+vào giữa được; chạy nó NGAY SAU `deploy.sh` (vài chục giây API chạy với bảng tham chiếu còn trống, như
+trước đây, không lỗi; khoá cấu hình vừa nạp có hiệu lực trong 60 giây, không cần khởi động lại).
+Muốn dữ liệu có TRƯỚC khi API chạy thì theo thứ tự thủ công của runbook (bước 7b nằm giữa migrate và
+bật API). Migration không nạp chủ đề cộng đồng, quiz, loài cây và 28 mẫu thông báo; `prisma:seed` thì
 bị chặn ở production. Lệnh này chỉ tạo dòng còn thiếu, không ghi đè chỉnh sửa của admin và không đụng
 sản phẩm, người dùng, mã giảm giá, tài khoản ngân hàng, nên chạy lại sau mỗi lần phát hành cũng được.
 Hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá có giá trị kinh doanh KHÔNG nạp ở lệnh này: chỉ nạp khi
