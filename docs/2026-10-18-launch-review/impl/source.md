@@ -12,13 +12,13 @@ Miniapp đọc `src`, `utm_source`, `utm_medium`, `utm_campaign`, `card` một l
 
 Thứ tự chọn nguồn: `src`, rồi `utm_source`, rồi `card=<đợt>` (thành `card-<đợt>`), rồi ngầm hiểu từ dạng link (`?s=` hoặc `?l=` thành `ctv`, chỉ có `?ref=` thành `ref`). Không có gì dùng được thì phiên tính là `organic`. Tham số bẩn bị bỏ im lặng, không bao giờ làm hỏng việc mở app, đăng nhập hay một lô sự kiện analytics.
 
-- API, lưu trữ: `apps/api/prisma/schema.prisma` (`User.firstTouchSource`, `firstTouchCampaign`, `firstTouchAt`, đều nullable; `AnalyticsEvent.campaign`), migration `apps/api/prisma/migrations/20261018120000_lr_source_first_touch/migration.sql`.
-- API, kiểm tra và lọc đầu vào: `apps/api/src/common/attribution.ts` (khuôn nguồn, `sanitizeFirstTouch`, `firstTouchColumns`). Thời điểm chạm do máy khách khai chỉ nhận trong 90 ngày gần nhất và không quá 10 phút về tương lai, ngoài ra dùng giờ máy chủ.
+- API, lưu trữ: `apps/api/prisma/schema.prisma` (`User.firstTouchSource`, `firstTouchCampaign`, `firstTouchAt`, đều nullable; `AnalyticsEvent.campaign`), migration `apps/api/prisma/migrations/20261018120000_lr_source_first_touch/migration.sql`. Gói còn một migration thứ hai cho D3-06: `20261018130000_lr_source_click_dedupe` (xem mục D3-06).
+- API, kiểm tra và lọc đầu vào: `apps/api/src/common/attribution.ts` (khuôn nguồn, `sanitizeFirstTouch`, `firstTouchColumns`). Thời điểm chạm do máy khách khai: cũ hơn 90 ngày thì bỏ cả lần chạm (không gán giờ máy chủ, vì một bản lưu cũ không phải lần chạm dẫn tới việc đăng ký lúc này); thiếu, không đọc được hoặc lệch đồng hồ quá 10 phút về tương lai thì dùng giờ máy chủ.
 - API, ghi một lần: `apps/api/src/modules/auth/auth.service.ts`. Mọi đường tạo user (khách, Mini App kể cả lần thử lại không số điện thoại, OAuth web) ghép `...firstTouchColumns(firstTouch)`. Khi gộp khách vào tài khoản (`mergeGuestInto`), cột của khách chỉ chép sang tài khoản đích nếu đích còn trống, đọc và ghi trong cùng giao dịch đang khoá `FOR UPDATE` cả hai dòng nên không có cửa đua.
 - API, DTO: `auth.controller.ts`, `dto/zalo-login.dto.ts`, `dto/zalo-oauth.dto.ts` nhận `firstTouch` (`@IsOptional() @Allow()` vì pipe toàn cục có `forbidNonWhitelisted`; giá trị bẩn được `sanitizeFirstTouch` bỏ chứ không trả 400). `analytics/dto/ingest-events.dto.ts` nhận `campaign` (`entrySource` đã có sẵn); `analytics.controller.ts` chuẩn hoá cả hai nên một thẻ bẩn không làm hỏng cả lô 50 sự kiện.
-- API, `order_placed`: `apps/api/src/modules/checkout/checkout.service.ts` (diff 2 dòng) thêm `entrySource` và `campaign` lấy từ chạm đầu của người đặt.
-- Miniapp: `src/utils/entry-source.ts` (parser, đọc URL đúng một lần vì ZMPRouter đổi URL theo từng màn), `src/services/first-touch.ts` (lưu và đọc chạm đầu qua ZMP storage, có giới hạn 2 giây, không bao giờ ném lỗi), `src/services/analytics.ts` (`trackEvent` gắn nguồn và chiến dịch, `trackAppOpened`), `src/services/api.ts` và `src/store/auth.ts` (gửi `firstTouch` khi đăng nhập hoặc tạo khách mới; đường làm mới token không đụng tới). `src/components/app.tsx` chỉ đổi một dòng gọi `trackAppOpened()` (và thêm `reportLaunchLinkClick()` cho D3-06).
-- Web: `apps/web/src/lib/entry-source.ts` (cùng khuôn parser; thêm nhận dạng đường dẫn `/s/<slug>` thành `ctv`; cookie `tubu_ft` 30 ngày, `path=/`, `SameSite=Lax`, `Secure` trên https, cố ý không HttpOnly vì API có thể khác origin và phải đọc bằng JS), `src/components/entry-source-capture.tsx` gắn trong `src/app/layout.tsx`, `src/lib/auth-context.tsx` (gửi cookie trong body `/auth/zalo-oauth`).
+- API, `order_placed`: `apps/api/src/modules/checkout/checkout.service.ts` (diff 2 dòng) đưa chạm đầu của người đặt vào `props.firstTouchSource` và `props.firstTouchCampaign`. Cố ý không dùng `entrySource`/`campaign` của phong bì: ở sự kiện client hai trường đó là nguồn của PHIÊN, còn `order_placed` do máy chủ ghi và không có phiên.
+- Miniapp: `src/utils/entry-source.ts` (parser, đọc URL đúng một lần vì ZMPRouter đổi URL theo từng màn), `src/services/first-touch.ts` (lưu và đọc chạm đầu qua ZMP storage; không bao giờ ném lỗi; chặn đăng nhập tối đa 500ms vì lần ghi không được đợi; đọc lỗi hoặc quá 500ms thì rơi về nguồn của lần mở này và không ghi xuống máy để khỏi đè chạm đầu thật chưa đọc được; bản đã lưu quá 90 ngày bị bỏ và xoá), `src/services/analytics.ts` (`trackEvent` gắn nguồn và chiến dịch, `trackAppOpened`), `src/services/api.ts` và `src/store/auth.ts` (gửi `firstTouch` khi đăng nhập hoặc tạo khách mới; đường làm mới token không đụng tới). `src/components/app.tsx` chỉ đổi một dòng gọi `trackAppOpened()` (và thêm `reportLaunchLinkClick()` cho D3-06).
+- Web: `apps/web/src/lib/entry-source.ts` (cùng khuôn parser; nhận dạng gian hàng thành `ctv` qua đường dẫn `/s/<slug>` hoặc qua subdomain `<slug>.<miền>`, dùng `src/lib/tenant-subdomain.ts` chung với `src/middleware.ts` vì middleware rewrite `/` sang `/s/<slug>` phía máy chủ nên trình duyệt chỉ thấy `/`; địa chỉ IP và subdomain hệ thống `www|admin|api|app|mail` không tính; cookie `tubu_ft` 30 ngày, `path=/`, `SameSite=Lax`, `Secure` trên https, cố ý không HttpOnly vì API có thể khác origin và phải đọc bằng JS), `src/components/entry-source-capture.tsx` gắn trong `src/app/layout.tsx`, `src/lib/auth-context.tsx` (gửi cookie trong body `/auth/zalo-oauth`).
 - Web chưa có analytics phía client, nên theo đúng yêu cầu chỉ làm phần chạm đầu (cookie + gửi lúc đăng nhập), không phát `app_opened`/`page_view`.
 
 ### D4-007: mã giới thiệu trên nút chia sẻ
@@ -31,7 +31,17 @@ Thứ tự chọn nguồn: `src`, rồi `utm_source`, rồi `card=<đợt>` (th�
 
 ### D3-06: đếm click link CTV
 
-Route công khai `POST /affiliate/click` (`apps/api/src/modules/affiliate/affiliate.controller.ts`), giới hạn 30 lần mỗi phút theo IP, gọi `trackClick` sẵn có (`affiliate.service.ts`, `recordLinkClick`); IP chỉ lưu dạng băm SHA-256. Miniapp (`src/services/affiliate-api.ts`, `reportLaunchLinkClick`) báo một lần mỗi phiên khi link mở app có `?l=<mã>`; web (`src/lib/link-click.ts`) báo một lần mỗi phiên trình duyệt cho mỗi mã (cờ trong `sessionStorage`). Lỗi mạng bị nuốt, không ảnh hưởng người dùng.
+Route công khai `POST /affiliate/click` (`apps/api/src/modules/affiliate/affiliate.controller.ts`), giới hạn 30 lần mỗi phút với bộ đếm cố định theo IP (`getTracker`; mặc định của guard toàn cục đếm theo userId khi có JWT nên một tài khoản bất kỳ gửi kèm token sẽ né được trần theo IP), gọi `trackClick` sẵn có (`affiliate.service.ts`, `recordLinkClick`). IP chỉ lưu dạng HMAC-SHA256 với khoá của máy chủ (`src/common/ip-hash.ts`): sha256 trần của IPv4 dò ngược được bằng vét cạn. Khoá suy ra từ `JWT_ACCESS_SECRET` theo nhãn mục đích nên không thêm biến môi trường và `GO-LIVE-KEYS.md` không đổi; chưa cấu hình (dev/test) thì dùng khoá dev cố định. Khử trùng phía máy chủ: mỗi (mã link, IP băm, ngày giờ VN) đếm một lần nhờ ràng buộc duy nhất mới trên `affiliate_clicks` (cột `dedupeDay`, migration `20261018130000_lr_source_click_dedupe`); lần thứ hai vi phạm khoá, giao dịch hoàn tác luôn phần +1 `clicks`, và không có truy vấn đọc nào vào bảng đang đánh dấu `@deprecated` (chỉ ghi). Miniapp (`src/services/affiliate-api.ts`, `reportLaunchLinkClick`) báo một lần mỗi phiên khi link mở app có `?l=<mã>`; web (`src/lib/link-click.ts`) báo một lần mỗi phiên trình duyệt cho mỗi mã (cờ trong `sessionStorage`). Lỗi mạng bị nuốt, không ảnh hưởng người dùng.
+
+### Sửa theo review Opus (mỗi mục một commit)
+
+1. Throttle `/affiliate/click` đếm theo IP và khử trùng phía máy chủ theo (mã link, IP băm, ngày VN): `fb62365e`.
+2. Băm IP bằng HMAC với khoá máy chủ, không dùng sha256 trần: `b18b7e7a`.
+3. Chạm đầu quá 90 ngày thì bỏ (API trả null, miniapp xoá bản cũ): `b0698c06`.
+4. Chạm đầu không chặn đăng nhập quá 500ms; lỗi hoặc quá hạn storage rơi về nguồn của phiên: `47f3c6ad`.
+5. `order_placed` mang chạm đầu trong `props`, không vào phong bì: `ac8c84fc`.
+6. Gian hàng mở bằng subdomain tính `ctv`: `72e02054`.
+7. Ghi rõ ảnh hưởng số liệu của việc gộp khách gắn nguồn cho tài khoản cũ: mục 3 bên dưới. Phần "link của khách thường cướp ghi công CTV" thuộc gói commission (`checkout/attribution.ts`, `recordTouch`), không sửa ở đây.
 
 ## 2. Lệnh kiểm chứng và kết quả
 
@@ -39,34 +49,34 @@ Môi trường: `export PATH=$HOME/.local/node/node-v22.23.3-darwin-arm64/bin:$P
 
 | Việc | Lệnh | Kết quả |
 |---|---|---|
-| Jest API (auth, analytics, checkout service, affiliate, attribution) | `cd apps/api && npx jest src/common/attribution.spec.ts src/modules/auth src/modules/analytics src/modules/checkout/checkout.service.spec.ts src/modules/affiliate` | `Test Suites: 22 passed, 22 total` / `Tests: 561 passed, 561 total` |
-| Race: chạm đầu và gộp khách | `npx jest -c test/integration-race/jest.config.js --runInBand test/integration-race/first-touch-source.race-spec.ts test/integration-race/auth-merge-guest.race-spec.ts` | `Test Suites: 2 passed, 2 total` / `Tests: 16 passed, 16 total` |
-| Race: gộp 4 khách, analytics, affiliate | cùng cấu hình, `r12-merge-four-guests`, `analytics-atomicity`, `affiliate` | `Test Suites: 3 passed, 3 total` / `Tests: 5 passed, 5 total` |
-| Race: checkout (đụng `order_placed`) | cùng cấu hình, `r6-checkout`, `r9-ctv-checkout`, `r13-merge-checkout-lock` | `Test Suites: 3 passed, 3 total` / `Tests: 32 passed, 32 total` |
-| Migration áp sạch | `npx prisma migrate status` trên cổng 5563 | `187 migrations found in prisma/migrations` / `Database schema is up to date!` |
+| Jest API (common, auth, analytics, checkout service, affiliate) | `cd apps/api && npx jest src/common src/modules/auth src/modules/analytics src/modules/checkout/checkout.service.spec.ts src/modules/affiliate` | `Test Suites: 51 passed, 51 total` / `Tests: 959 passed, 959 total` |
+| Race: chạm đầu, gộp khách, click link CTV, affiliate, analytics, checkout (đụng `order_placed`) | `npx jest -c test/integration-race/jest.config.js --runInBand` với `first-touch-source`, `auth-merge-guest`, `affiliate-link-click`, `affiliate`, `analytics-atomicity`, `r6-checkout`, `r9-ctv-checkout` | 7 suite `PASS` (`affiliate-link-click`: 3 test, 8 request song song cùng IP chỉ đếm 1) |
+| Race: gộp 4 khách | `r12-merge-four-guests.race-spec.ts` | `PASS`, `Tests: 2 passed, 2 total` lúc load ~28; hỏng 503 khi load ~45 (xem ghi chú dưới) |
+| Migration áp sạch | `npx prisma migrate status` trên cổng 5563 | `188 migrations found in prisma/migrations` / `Database schema is up to date!` |
 | Drift = 0 | `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code` | `No difference detected.` (exit 0) |
-| Vitest miniapp (mọi spec đổi trong nhánh) | `cd apps/miniapp && npx vitest run <10 spec đổi>` | `Test Files  10 passed (10)` / `Tests  177 passed (177)` |
+| Vitest miniapp (mọi spec đổi trong nhánh) | `cd apps/miniapp && npx vitest run <10 spec đổi>` | `Test Files  10 passed (10)` / `Tests  184 passed (184)` |
 | Vitest miniapp (spec liền kề app, storefront, product-detail, group-buy) | `npx vitest run src/components/app src/pages/storefront src/pages/product-detail src/pages/group` | `Test Files  11 passed (11)` / `Tests  107 passed (107)` |
-| Vitest web (mọi spec đổi) | `cd apps/web && npx vitest run <4 spec đổi>` | `Test Files  4 passed (4)` / `Tests  60 passed (60)` |
+| Vitest web (mọi spec đổi) | `cd apps/web && npx vitest run <5 spec đổi>` | `Test Files  5 passed (5)` / `Tests  92 passed (92)` |
 | Vitest web (auth, layout) | `npx vitest run src/lib/auth src/app/layout` | `Test Files  3 passed (3)` / `Tests  16 passed (16)` |
 | tsc 3 app | `npx tsc --noEmit` trong `apps/api`, `apps/miniapp`, `apps/web` | không có lỗi |
 | eslint file đổi | `npx eslint <file .ts/.tsx đổi>` trong từng app | không có cảnh báo |
 
-Test mới đáng chú ý: parser miniapp 58 ca, parser web 44 ca, `attribution.spec.ts` 41 ca, nhóm "nguồn chạm đầu ghi MỘT lần" trong `auth.service.spec.ts` (tạo mới, giá trị bẩn bị bỏ, tài khoản có sẵn không bị ghi đè, Mini App, thử lại sau P2002, OAuth, gộp khách), `first-touch-source.race-spec.ts` trên Postgres thật (tạo, bẩn, gộp vào đích trống, gộp vào đích đã có, cả hai trống).
+Test mới đáng chú ý: parser miniapp 58 ca, parser web 59 ca (kể cả subdomain gian hàng), `tenant-subdomain.spec.ts` 17 ca, `ip-hash.spec.ts`, `attribution.spec.ts` 41 ca, nhóm "nguồn chạm đầu ghi MỘT lần" trong `auth.service.spec.ts` (tạo mới, giá trị bẩn bị bỏ, tài khoản có sẵn không bị ghi đè, Mini App, thử lại sau P2002, OAuth, gộp khách), `first-touch-source.race-spec.ts` trên Postgres thật (tạo, bẩn, gộp vào đích trống, gộp vào đích đã có, cả hai trống).
 
-Ghi chú về `r12-merge-four-guests.race-spec.ts`: lần chạy lúc load average 43–153 bị 503 "Hệ thống đang bận" do `lock_timeout`. Đã đối chứng bằng cách chạy bản `auth.service.ts` gốc (HEAD trước khi sửa): cũng hỏng y hệt, nên là do môi trường quá tải, không phải do thay đổi này. Chạy lại lúc load ~28 thì xanh (dòng "3 passed" ở trên).
+Ghi chú về `r12-merge-four-guests.race-spec.ts`: khi load average từ ~41 trở lên (máy dùng chung) spec này bị 503 "Hệ thống đang bận" do `lock_timeout`; ở lần đầu đã đối chứng bằng cách chạy bản `auth.service.ts` gốc (HEAD trước khi sửa): cũng hỏng y hệt, nên là do môi trường quá tải, không phải do thay đổi này. Chạy lại lúc load ~28 thì xanh (dòng "PASS" ở bảng trên), cả sau đợt sửa theo review.
 
 Quy trình TDD: các test mới viết trước, đỏ rồi mới viết mã (ví dụ nhóm test chạm đầu của `auth.service.spec.ts` đỏ 6 ca trước khi có mã).
 
 ## 3. Chưa làm hoặc cố ý để lại
 
 - **Web không phát `app_opened`/`page_view`**: web chưa có analytics phía client, theo yêu cầu chỉ làm chạm đầu. Hậu quả: lượt vào web không tự hiện trong bảng sự kiện, chỉ thấy khi người đó đăng nhập (qua `firstTouchSource`).
-- **`order_placed` mang chạm đầu, không mang nguồn phiên**, và chỉ ở checkout thường (không có ở subscription hay đơn CTV lên hộ). Với chủ dự án câu hỏi "đơn này đến từ kênh nào" nên trả lời bằng chạm đầu của người mua; nếu cần nguồn của đúng phiên đặt hàng thì phải gửi thêm từ miniapp (chưa làm).
-- **Tài khoản cũ không được điền bù**: tài khoản đã tồn tại trước migration có `firstTouchSource = null` và không bao giờ được ghi sau này (đúng yêu cầu "ghi một lần khi trống lúc tạo hoặc gộp"; ngoại lệ duy nhất là gộp khách có chạm đầu vào tài khoản còn trống).
+- **`order_placed` mang chạm đầu (trong `props`), không mang nguồn phiên**, và chỉ ở checkout thường (không có ở subscription hay đơn CTV lên hộ). Với chủ dự án câu hỏi "đơn này đến từ kênh nào" nên trả lời bằng chạm đầu của người mua; nếu cần nguồn của đúng phiên đặt hàng thì phải gửi thêm từ miniapp (chưa làm).
+- **Tài khoản cũ không được điền bù**: tài khoản đã tồn tại trước migration có `firstTouchSource = null` và không bao giờ được ghi sau này (đúng yêu cầu "ghi một lần khi trống lúc tạo hoặc gộp"; ngoại lệ duy nhất là gộp khách có chạm đầu vào tài khoản còn trống, xem điểm kế tiếp).
+- **Gộp khách gắn nguồn mới cho tài khoản cũ có chạm đầu trống** (`apps/api/src/modules/auth/auth.service.ts`, `mergeGuestInto`, khối `...(!lockedTarget.firstTouchSource && g.firstTouchSource ? ...)`): một tài khoản đã có từ trước migration (hoặc từ trước khi app gửi chạm đầu) mà sau này gộp với một thiết bị khách có chạm đầu sẽ nhận nguồn và giờ chạm của thiết bị đó. Chấp nhận, vì nếu không thì khách cũ quét thẻ hộp hàng sẽ không bao giờ được tính. Ảnh hưởng số liệu: `firstTouchSource` của tài khoản cũ có thể là nguồn chạm SAU ngày tài khoản được tạo, nên báo cáo "doanh thu theo nguồn" có thể quy cả các đơn mua trước lần chạm đó cho nguồn này và làm nguồn đó trông hiệu quả hơn thực tế. Cách giảm trong báo cáo: chỉ tính đơn có `orders.createdAt >= users.firstTouchAt` (đã làm trong câu SQL ở mục 5). Tài khoản có chạm đầu ghi lúc tạo không bị ảnh hưởng.
 - **Không có màn báo cáo nguồn trong admin**: ngoài phạm vi (`apps/web/src/app/admin/page.tsx` và `engagement-tab.tsx` đang do phiên khác sửa). Hiện đọc bằng SQL (xem mục 5).
-- **Click link CTV**: không chống đếm trùng phía máy chủ (chỉ "một lần mỗi phiên" ở máy khách và giới hạn IP; không đọc `AffiliateClick` vì bảng này được đánh dấu `@deprecated`, chỉ ghi) và không cộng `conversions`. Số click là số lượt mở phiên, không phải số người duy nhất.
+- **Click link CTV**: mỗi (mã link, IP, ngày VN) chỉ đếm một lần (khử trùng phía máy chủ bằng khoá duy nhất, cộng với "một lần mỗi phiên" ở máy khách), nên nhiều người dùng chung một IP (Wi-Fi quán, CGNAT 4G) trong cùng ngày chỉ được đếm là một: số click là cận dưới của số người mở, không phải số người duy nhất. Không cộng `conversions`.
 - **`utm_source=facebook` không được gộp thành `fb`**: nhận nguyên giá trị hợp lệ. Muốn gộp thì phải thống nhất bảng đồng nghĩa (xem câu hỏi 3).
-- **Cookie web theo từng host**: `tubu_ft` chỉ có trong trình duyệt và host đã vào. Khách nhấn link ở `app.tubutree.com` rồi đăng nhập ở host khác sẽ không mang theo.
+- **Cookie web theo từng host**: `tubu_ft` chỉ có trong trình duyệt và host đã vào (không đặt `Domain`). Khách vào gian hàng CTV bằng subdomain `<slug>.<miền>` rồi đăng nhập ở host khác (ví dụ `app.<miền>`) sẽ không mang theo nguồn `ctv`. Muốn chia sẻ giữa các subdomain thì đặt `Domain=.<miền>` cho cookie (cần chốt tên miền gốc ở cấu hình, chưa làm).
 - **Nút chia sẻ bài viết cộng đồng**: không tồn tại trong code nên không thêm.
 - **Ensure-phone DTO** cố ý không nhận `firstTouch` (đường này chỉ gắn số điện thoại cho tài khoản đã có).
 - Prisma client đã sinh lại cục bộ trong worktree (`npx prisma generate`), file sinh ra không nằm trong commit.
@@ -120,9 +130,16 @@ FROM analytics_events
 WHERE "eventName" = 'app_opened' AND "occurredAt" > now() - interval '7 days'
 GROUP BY 1, 2 ORDER BY luot_mo DESC;
 
--- Đơn đã giao theo nguồn chạm đầu của người mua
+-- Đơn đã giao theo nguồn chạm đầu của người mua. Điều kiện createdAt >= firstTouchAt loại các đơn mua TRƯỚC lần chạm
+-- (tài khoản cũ được gắn nguồn lúc gộp khách, xem mục 3); người chưa có chạm đầu (tài khoản cũ) vào nhóm 'không rõ'.
 SELECT coalesce(u."firstTouchSource", 'không rõ') AS nguon, count(*) AS don, sum(o.total) AS doanh_thu
 FROM orders o JOIN users u ON u.id = o."userId"
-WHERE o.status = 'DELIVERED'
+WHERE o.status = 'DELIVERED' AND (u."firstTouchAt" IS NULL OR o."createdAt" >= u."firstTouchAt")
 GROUP BY 1 ORDER BY doanh_thu DESC;
+
+-- Đơn đặt theo chạm đầu ghi sẵn trên sự kiện order_placed (props, không phải phong bì entrySource)
+SELECT coalesce(props->>'firstTouchSource', 'không rõ') AS nguon, props->>'firstTouchCampaign' AS chien_dich, count(*) AS don
+FROM analytics_events
+WHERE "eventName" = 'order_placed' AND "occurredAt" > now() - interval '30 days'
+GROUP BY 1, 2 ORDER BY don DESC;
 ```
