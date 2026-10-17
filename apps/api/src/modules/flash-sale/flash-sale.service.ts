@@ -6,6 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { isSellableVariation, SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
@@ -142,7 +143,7 @@ export class FlashSaleService {
   async listActive(now: Date = new Date()) {
     const items = await this.prisma.flashSaleItem.findMany({
       where: {
-        variation: { isActive: true },
+        variation: SELLABLE_VARIATION_WHERE,
         flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
       },
       include: {
@@ -417,6 +418,7 @@ export class FlashSaleService {
   async listUpcoming(userId: string, now: Date = new Date()) {
     const items = await this.prisma.flashSaleItem.findMany({
       where: {
+        variation: SELLABLE_VARIATION_WHERE,
         flashSale: { isActive: true, startAt: { gt: now }, endAt: { gt: now } },
       },
       include: {
@@ -444,9 +446,12 @@ export class FlashSaleService {
   async setReminder(userId: string, itemId: string, now: Date = new Date()) {
     const item = await this.prisma.flashSaleItem.findUnique({
       where: { id: itemId },
-      select: { flashSale: { select: { startAt: true } } },
+      select: {
+        flashSale: { select: { startAt: true } },
+        variation: { select: { isActive: true, product: { select: { isActive: true, approvalStatus: true } } } },
+      },
     });
-    if (!item) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
+    if (!item || !isSellableVariation(item.variation)) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
     if (item.flashSale.startAt <= now) throw new BadRequestException(FLASH_ALREADY_STARTED_MSG);
     return this.prisma.flashSaleReminder.upsert({
       where: { userId_flashSaleItemId: { userId, flashSaleItemId: itemId } },
@@ -478,7 +483,8 @@ export class FlashSaleService {
       const reminders = await this.prisma.flashSaleReminder.findMany({
         where: {
           notifiedAt: null,
-          item: { flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+          // Hàng ngừng bán giữa chừng: không nhắc; dòng nhắc nằm lại tới khi đợt kết thúc rồi được đóng sổ bên dưới.
+          item: { variation: SELLABLE_VARIATION_WHERE, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
         },
         include: {
           item: {
@@ -547,6 +553,7 @@ export class FlashSaleService {
         where: { isActive: true, startAt: { gt: new Date(now.getTime() - 2 * 3600e3), lte: now }, endAt: { gt: now } },
         include: {
           items: {
+            where: { variation: SELLABLE_VARIATION_WHERE },
             select: {
               id: true,
               flashPrice: true,

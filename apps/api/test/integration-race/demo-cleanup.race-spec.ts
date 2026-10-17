@@ -8,6 +8,11 @@ import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { PUBLIC_PRODUCT_WHERE } from '../../src/modules/catalog/public-product';
 import { assertVariationsSellable, PRODUCT_DISCONTINUED } from '../../src/modules/cart/sellable';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { CommunityFeedService } from '../../src/modules/feed/community-feed.service';
+import { GroupBuyService } from '../../src/modules/groupbuy/groupbuy.service';
+import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service';
+import { RemarketingService } from '../../src/modules/lifecycle/remarketing.service';
+import { ReviewInviteService } from '../../src/modules/lifecycle/review-invite.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
 import { applyDemoCleanup, hasDemoData, planDemoCleanup, previewDemoCleanup } from '../../src/config/demo-data/cleanup';
@@ -48,6 +53,8 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
   let saleId = '';
   let storeSlug = '';
   let storefrontId = '';
+  let user2Id = '';
+  let upcomingSaleId = '';
 
   const catalog = () => new CatalogService(prisma);
   const flash = () => new FlashSaleService(prisma, {} as never, {} as never, {} as never);
@@ -130,8 +137,10 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
   afterAll(async () => {
     if (prisma) {
       await prisma.storefront.deleteMany({ where: { id: storefrontId } });
+      await prisma.groupBuy.deleteMany({ where: { initiatorId: { in: [userId, user2Id] } } });
+      await prisma.feedPost.deleteMany({ where: { userId } });
       await prisma.wishlist.deleteMany({ where: { userId } });
-      await deleteItData(prisma, { userIds: [userId], flashSaleIds: [saleId] });
+      await deleteItData(prisma, { userIds: [userId, user2Id].filter(Boolean), flashSaleIds: [saleId, upcomingSaleId].filter(Boolean) });
       await prisma.$executeRaw`DELETE FROM "flash_sale_items" WHERE "flashSaleId" = ${saleId}`;
       await restoreDemoState();
     }
@@ -214,6 +223,72 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
       response: { code: PRODUCT_DISCONTINUED },
     });
     expect(await goLive()).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'FAIL' });
+  });
+
+  it('sau khi tắt: mua chung, giờ vàng sắp tới, các tin nhắc (giờ vàng, yêu thích, mua lại, mời đánh giá, giỏ bỏ quên), chip bài cộng đồng đều bỏ hàng đã tắt', async () => {
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const notifications = { notify } as never;
+    const config = { get: async (_k: string, fallback: unknown) => fallback } as never;
+    const sentTo = (uid: string, type: string) => notify.mock.calls.filter(([u, t]) => u === uid && t === type);
+    const ago = (ms: number) => new Date(Date.now() - ms);
+    const otherVariation = DEMO_VARIATIONS.find((v) => v.productId !== demoProduct.id)!;
+
+    // Mua chung: nhóm đang mở trên hàng đã tắt không hiện, không tham gia được.
+    const user2 = await createUser(prisma, { phone: `08${Date.now().toString().slice(-8)}`, zaloId: `itdemo2-${tag}` });
+    user2Id = user2.id;
+    const gb = await prisma.groupBuy.create({
+      data: { productId: demoProduct.id, initiatorId: userId, targetSize: 3, currentSize: 1, unitPrice: 85_000, basePrice: 100_000, expiresAt: new Date(Date.now() + 86_400_000), members: { create: { userId } } },
+    });
+    const groupbuy = new GroupBuyService(prisma, config);
+    expect((await groupbuy.listOpen()).map((g) => g.id)).not.toContain(gb.id);
+    await expect(groupbuy.join(user2Id, gb.id)).rejects.toThrow('ngừng bán');
+    expect(await prisma.groupBuyMember.count({ where: { groupBuyId: gb.id } })).toBe(1);
+
+    // Giờ vàng sắp tới: không hiện, không đặt nhắc được.
+    const lifecycle = { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefined) };
+    const fs = new FlashSaleService(prisma, config, notifications, lifecycle as never);
+    const upcoming = await prisma.flashSale.create({
+      data: { title: `IT demo sắp ${tag}`, startAt: new Date(Date.now() + 3_600_000), endAt: new Date(Date.now() + 7_200_000), createdBy: userId },
+    });
+    upcomingSaleId = upcoming.id;
+    const upItem = await prisma.flashSaleItem.create({ data: { flashSaleId: upcoming.id, variationId: demoVariation.id, flashPrice: 50_000, quota: 10, perUserLimit: 2 } });
+    expect((await fs.listUpcoming(userId)).map((i) => i.itemId)).not.toContain(upItem.id);
+    await expect(fs.setReminder(userId, upItem.id)).rejects.toThrow();
+
+    // Giờ vàng đang chạy (bắt đầu 1 giờ trước): không nhắc "đã bắt đầu", không báo "giảm giá" cho người yêu thích.
+    const runningItem = await prisma.flashSaleItem.findFirstOrThrow({ where: { flashSaleId: saleId } });
+    const reminder = await prisma.flashSaleReminder.create({ data: { userId, flashSaleItemId: runningItem.id } });
+    await fs.notifyStartedFlashSales();
+    expect(sentTo(userId, 'FLASH_STARTING')).toEqual([]);
+    expect((await prisma.flashSaleReminder.findUniqueOrThrow({ where: { id: reminder.id } })).notifiedAt).toBeNull();
+    await fs.notifyWishlistOfStartedSales();
+    expect(lifecycle.notifyWishlistPriceDrop.mock.calls.map((c) => c[0])).not.toContain(demoProduct.id);
+
+    // Nhắc mua lại: đơn giao rất lâu rồi (đứng đầu hàng chờ) chỉ có hàng đã tắt.
+    const oldOrder = await createOrder(prisma, { userId, status: 'DELIVERED', createdAt: ago(400 * 86_400_000), deliveredAt: ago(399 * 86_400_000) });
+    await prisma.orderItem.create({
+      data: { orderId: oldOrder.id, variationId: otherVariation.id, productName: 'demo', variationName: 'demo', unitPrice: 1, quantity: 1, total: 1 },
+    });
+    await new LifecycleService(prisma, config, notifications).sendReorderReminders();
+    expect(sentTo(userId, 'REORDER_REMINDER')).toEqual([]);
+
+    // Mời đánh giá: đơn vừa giao 3 ngày, chỉ có hàng đã tắt (khách chưa đánh giá) → không mời.
+    const recent = await createOrder(prisma, { userId, status: 'DELIVERED', createdAt: ago(5 * 86_400_000), deliveredAt: ago(3 * 86_400_000) });
+    await prisma.orderItem.create({
+      data: { orderId: recent.id, variationId: otherVariation.id, productName: 'demo', variationName: 'demo', unitPrice: 1, quantity: 1, total: 1 },
+    });
+    await new ReviewInviteService(prisma, config, notifications).sendReviewInvites();
+    expect(sentTo(userId, 'REVIEW_REQUEST')).toEqual([]);
+
+    // Giỏ bỏ quên 10 giờ, chỉ có hàng đã tắt → không nhắc.
+    await prisma.$executeRaw`UPDATE "carts" SET "updatedAt" = now() - interval '10 hours', "abandonRemindedAt" = NULL WHERE "userId" = ${userId}`;
+    await new RemarketingService(prisma, config, notifications).sendCartAbandonReminders();
+    expect(sentTo(userId, 'CART_ABANDONED')).toEqual([]);
+
+    // Bài cộng đồng cũ gắn sản phẩm đã tắt: bài vẫn đọc được, chip sản phẩm ẩn.
+    const post = await prisma.feedPost.create({ data: { userId, body: 'IT demo', images: [], productTags: { create: { productId: demoProduct.id } } } });
+    const feed = new CommunityFeedService(prisma, {} as never, config, {} as never);
+    expect((await feed.getPost(userId, post.id)).productTags).toEqual([]);
   });
 
   it('chạy lại: không lỗi, không đổi gì', async () => {

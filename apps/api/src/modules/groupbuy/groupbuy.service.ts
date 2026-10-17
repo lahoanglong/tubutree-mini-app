@@ -4,6 +4,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
+import { isPublicProduct, PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 
 /** Số nhóm hết hạn xử lý mỗi lần quét (15 phút/lần): chặn một đợt tồn đọng làm cron chạy quá lâu; phần dư để lần quét sau. */
 const EXPIRE_BATCH = 200;
@@ -119,6 +120,9 @@ export class GroupBuyService {
     if (new Date(group.expiresAt).getTime() <= Date.now()) throw new BadRequestException('Nhóm đã hết hạn.');
     const partner = await this.closeIfPartnerGoods(group, 'OPEN');
     if (partner) throw partnerGoodsError('GROUP_BUY', partner.name);
+    // Sản phẩm đã ngừng bán (tắt, hoặc chưa/không được duyệt): nhóm đủ người sẽ cấp mã cho hàng không mua được.
+    const product = await this.prisma.product.findUnique({ where: { id: group.productId }, select: { isActive: true, approvalStatus: true } });
+    if (!product || !isPublicProduct(product)) throw new BadRequestException('Sản phẩm của nhóm đã ngừng bán, không tham gia được nữa.');
 
     const existing = await this.prisma.groupBuyMember.findUnique({
       where: { groupBuyId_userId: { groupBuyId, userId } },
@@ -271,7 +275,7 @@ export class GroupBuyService {
   async listOpen(userId?: string) {
     const groups = await this.prisma.groupBuy.findMany({
       // Nhóm trên hàng của gian hàng đối tác không tham gia được nữa (join đóng nhóm) nên không mời khách vào.
-      where: { status: 'OPEN', expiresAt: { gt: new Date() }, product: { storefrontId: null } },
+      where: { status: 'OPEN', expiresAt: { gt: new Date() }, product: { storefrontId: null, ...PUBLIC_PRODUCT_WHERE } },
       orderBy: { createdAt: 'desc' },
       take: 30,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },
@@ -289,7 +293,8 @@ export class GroupBuyService {
     // Nhóm của mình đã đủ người, mã giảm còn hạn: khách phải tìm lại được mã và mua tiếp ngay từ đây.
     const since = new Date(Date.now() - COUPON_VALID_DAYS * 864e5);
     const done = await this.prisma.groupBuy.findMany({
-      where: { status: 'SUCCESS', members: { some: { userId } }, expiresAt: { gte: since } },
+      // Mã chỉ dùng được cho đúng sản phẩm: sản phẩm ngừng bán thì không mời "mua tiếp" vào trang 404.
+      where: { status: 'SUCCESS', members: { some: { userId } }, expiresAt: { gte: since }, product: PUBLIC_PRODUCT_WHERE },
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },

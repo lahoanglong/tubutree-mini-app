@@ -120,7 +120,11 @@ export class ReviewInviteService {
       SELECT DISTINCT ON (v."productId") oi."productName", oi."productSlug"
       FROM order_items oi
       JOIN variations v ON v.id = oi."variationId"
+      JOIN products p ON p.id = v."productId"
       WHERE oi."orderId" = ${o.id}
+        -- Tin mời mở trang sản phẩm: hàng đã ngừng bán (tắt hoặc chưa duyệt) thì trang đó 404.
+        AND p."isActive" = true
+        AND p."approvalStatus"::text = 'APPROVED'
         AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r."userId" = ${o.userId} AND r."productId" = v."productId")
       ORDER BY v."productId", oi.id`;
     if (items.length === 0) return 'NOTHING_TO_REVIEW';

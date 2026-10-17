@@ -193,6 +193,16 @@ describe('GroupBuyService.join', () => {
     await expect(new GroupBuyService(prisma, makeConfig()).join('u1', 'gb1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('sản phẩm của nhóm đã ngừng bán (tắt hoặc chưa duyệt) → từ chối, không thêm thành viên', async () => {
+    for (const state of [{ isActive: false, approvalStatus: 'APPROVED' }, { isActive: true, approvalStatus: 'REJECTED' }]) {
+      const prisma = makePrisma();
+      (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue(group());
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ name: 'X', slug: 'x', storefrontId: null, ...state });
+      await expect(new GroupBuyService(prisma, makeConfig()).join('u1', 'gb1')).rejects.toThrow('ngừng bán');
+      expect(prisma.groupBuyMember.create).not.toHaveBeenCalled();
+    }
+  });
+
   it('đã là thành viên → throw', async () => {
     const prisma = makePrisma();
     (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue(group());
@@ -453,7 +463,7 @@ describe('GroupBuyService.reconcileSuccessfulGroups', () => {
 });
 
 describe('Q8 review vòng 3 S2: nhóm đã mở trên hàng của gian hàng đối tác không thành công được', () => {
-  const partnerProduct = { id: 'prod1', name: 'Mật ong rừng', slug: 'mat-ong-rung', storefrontId: 'sf-doi-tac' };
+  const partnerProduct = { id: 'prod1', name: 'Mật ong rừng', slug: 'mat-ong-rung', storefrontId: 'sf-doi-tac', isActive: true, approvalStatus: 'APPROVED' };
   const NOT_ELIGIBLE = {
     response: {
       code: 'PARTNER_GOODS_NOT_ELIGIBLE',
@@ -511,5 +521,13 @@ describe('Q8 review vòng 3 S2: nhóm đã mở trên hàng của gian hàng đ�
     const prisma = makePrisma();
     await new GroupBuyService(prisma, makeConfig()).listOpen();
     expect((prisma.groupBuy.findMany as jest.Mock).mock.calls[0][0].where).toMatchObject({ status: 'OPEN', product: { storefrontId: null } });
+  });
+
+  it('danh sách chỉ gồm nhóm của sản phẩm đang bán (cả nhóm đang mở lẫn nhóm đã đủ người của mình)', async () => {
+    const prisma = makePrisma();
+    await new GroupBuyService(prisma, makeConfig()).listOpen('u1');
+    const calls = (prisma.groupBuy.findMany as jest.Mock).mock.calls;
+    expect(calls[0][0].where.product).toMatchObject({ isActive: true, approvalStatus: 'APPROVED' });
+    expect(calls[1][0].where.product).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
   });
 });

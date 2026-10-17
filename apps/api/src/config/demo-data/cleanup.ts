@@ -20,11 +20,13 @@ import {
 /**
  * Dọn dữ liệu demo của migration 20260616000000 (logic; CLI ở `prisma/cleanup-demo-data.ts`).
  *
- * Sản phẩm và biến thể chỉ TẮT (isActive=false), không xoá: đơn, đánh giá, giỏ, giờ vàng còn trỏ tới chúng, và mọi nơi
- * khách thấy hoặc đặt hàng (catalog, tìm kiếm, gian hàng, trang nhãn, sitemap, giờ vàng, giỏ/checkout) đều lọc isActive.
- * pancakeHold để nguyên NULL = "admin tắt": đồng bộ Pancake không tự bật lại. SKU demo đổi thành `DEMO-<sku>` để trả SKU gốc. Mã giảm giá chỉ đổi khi có
- * `--coupons=expire` (trừ mã ghi ở `--keep-coupon`), vì chủ dự án có thể giữ WELCOME30 làm mã ra mắt. Danh mục và nhãn
- * giữ nguyên, chỉ báo.
+ * Sản phẩm và biến thể chỉ TẮT (isActive=false), không xoá: đơn, đánh giá, giỏ, giờ vàng còn trỏ tới chúng. Các đường khách
+ * thấy hoặc mua hàng đều bỏ hàng đã tắt (PUBLIC_PRODUCT_WHERE, SELLABLE_VARIATION_WHERE hoặc isActive): catalog, tìm kiếm,
+ * PDP, danh mục, nhãn, gian hàng, sitemap, yêu thích, giờ vàng đang chạy và sắp tới, mua chung, giỏ/checkout, tin nhắc giờ
+ * vàng, giảm giá, mua lại, mời đánh giá, giỏ bỏ quên, chip sản phẩm trên bài cộng đồng; race spec `demo-cleanup` kiểm. Chỗ còn hở đã
+ * biết ghi ở runbook bước 7c. pancakeHold để nguyên NULL = "admin tắt": đồng bộ Pancake không tự bật lại. SKU demo đổi
+ * thành `DEMO-<sku>` để trả SKU gốc. Mã giảm giá chỉ đổi khi có `--coupons=expire` (trừ mã ghi ở `--keep-coupon`), vì chủ
+ * dự án có thể giữ WELCOME30 làm mã ra mắt. Danh mục và nhãn giữ nguyên, chỉ báo.
  */
 
 export type CouponMode = 'keep' | 'expire';

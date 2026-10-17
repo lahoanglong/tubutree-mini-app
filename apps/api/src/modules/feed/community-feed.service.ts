@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
+import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { startOfVnDay } from '../../common/vn-time';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
 
@@ -92,7 +93,11 @@ export interface CreateEventInput {
 const FEED_INCLUDE = {
   user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } },
   category: { select: { slug: true, name: true, icon: true } },
-  productTags: { include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } } },
+  // Chip trên bài cũ mở trang sản phẩm: hàng đã ngừng bán thì ẩn chip (trang đó 404).
+  productTags: {
+    where: { product: PUBLIC_PRODUCT_WHERE },
+    include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } },
+  },
   tags: { include: { tag: { select: { slug: true, name: true } } } },
 } as const;
 
