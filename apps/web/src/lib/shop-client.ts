@@ -187,6 +187,11 @@ function cartPath(path: string): string {
   return slug ? `${path}?storefrontSlug=${encodeURIComponent(slug)}` : path;
 }
 export const getCart = () => apiFetch<CartSummary>(cartPath('/cart'));
+/** Giá của MỘT PHẦN giỏ (các dòng đang chọn): combo, mã và hạng tính trên đúng phần đó, cùng số báo giá thanh toán trừ. Chỉ đọc. */
+export const getCartSelection = (itemIds: string[]) => {
+  const base = cartPath('/cart');
+  return apiFetch<CartSummary>(`${base}${base.includes('?') ? '&' : '?'}itemIds=${encodeURIComponent(itemIds.join(','))}`);
+};
 export const addToCart = (variationId: string, quantity: number) =>
   apiFetch<CartSummary>(cartPath('/cart/items'), { method: 'POST', body: { variationId, quantity } });
 export const updateCartItem = (id: string, quantity: number) =>

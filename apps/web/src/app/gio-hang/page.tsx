@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { ShoppingBag, Truck, Leaf, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
-import { CouponBox, couponPreviewKey } from '@/components/coupon-box';
+import { getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
+import { CouponBox, couponPreviewKey, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
@@ -17,9 +17,27 @@ import { cartKey, useCartKey } from '@/lib/cart-key';
 export default function CartPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
-  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
+  const cartKeyNow = useCartKey();
+  const cartQ = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
   // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
   const [deselected, setDeselected] = useState<Set<string>>(() => new Set());
+  // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã. Chọn cả giỏ
+  // dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá phần chọn.
+  const subsetLines = (cartQ.data?.items ?? []).filter((it) => !deselected.has(it.id));
+  const subsetSig =
+    cartQ.data && subsetLines.length > 0 && subsetLines.length < cartQ.data.items.length
+      ? JSON.stringify([subsetLines.map((it) => it.id), couponPreviewKey(subsetLines)])
+      : null;
+  const settledSubsetSig = useSettled(subsetSig, PREVIEW_DEBOUNCE_MS);
+  const selectionQ = useQuery({
+    queryKey: [...cartKeyNow, 'selection', settledSubsetSig],
+    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string])[0]),
+    enabled: phase === 'authenticated' && !!settledSubsetSig,
+    retry: false,
+  });
+  // Số chỉ đúng cho đúng phần đã hỏi: vừa đổi chọn/số lượng (chưa hỏi lại), đang tải lại hoặc lỗi thì không hiện số cũ.
+  const priced =
+    !!subsetSig && settledSubsetSig === subsetSig && selectionQ.isSuccess && !selectionQ.isFetching ? selectionQ.data : null;
   // Cùng gian hàng thanh toán gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
   const [ctvSlug] = useState(() => ctvSlugFor(getStorefrontContext()));
   const toggleSelect = (id: string) =>
@@ -87,10 +105,11 @@ export default function CartPage() {
   const freeshipReached = (!hasMerchant && allSelected && !!cart?.freeship) || (!!cart && freeshipBase >= cart.freeshipThreshold);
   const remainingFreeship =
     cart && selectedItems.length > 0 && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
-  // Mã giảm giá chỉ cộng vào số hiển thị khi chọn cả giỏ; chọn một phần thì báo giá ở bước thanh toán tính lại.
-  const shownDiscount = cart && allSelected ? cart.discount : 0;
-  const shownCombo = cart && allSelected ? (cart.comboDiscount ?? 0) : 0;
-  const shownTier = cart && allSelected ? (cart.tierDiscount ?? 0) : 0;
+  // Số giảm hiển thị: cả giỏ lấy từ giỏ, một phần giỏ lấy từ giá phần chọn của máy chủ; chưa có giá đó thì không hiện (thanh toán tính lại).
+  const shown = allSelected ? cart : priced;
+  const shownDiscount = shown?.discount ?? 0;
+  const shownCombo = shown?.comboDiscount ?? 0;
+  const shownTier = shown?.tierDiscount ?? 0;
 
   return (
     <Shell>
@@ -311,7 +330,7 @@ export default function CartPage() {
             <CouponBox
               currentCode={cart.couponCode}
               subtotal={selectedSubtotal}
-              notice={cart.couponNotice}
+              notice={shown ? shown.couponNotice : cart.couponNotice}
               // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
               preview={
                 selectedItems.length === 0
@@ -320,7 +339,7 @@ export default function CartPage() {
               }
               previewKey={couponPreviewKey(selectedItems)}
             />
-            {!allSelected && cart.couponCode && (
+            {!allSelected && !priced && cart.couponCode && (
               <p className="mt-2 text-xs text-stone-600">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
