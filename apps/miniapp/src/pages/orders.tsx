@@ -97,6 +97,10 @@ export default function OrdersPage() {
                   order={o}
                   onOpen={() => navigate(`/order/${o.code}`)}
                   onReorder={() => setReorderTarget(orderReorderTarget(o))}
+                  onPay={() => {
+                    haptic('light');
+                    navigate(`/bank-payment/${o.code}`);
+                  }}
                 />
               ))}
             </div>

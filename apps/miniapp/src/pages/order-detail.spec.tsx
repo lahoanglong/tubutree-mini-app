@@ -534,6 +534,23 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', undefined));
   });
 
+  it.each([
+    ['còn hạn', 3_600_000, true],
+    ['quá hạn (cron sắp huỷ)', -60_000, false],
+  ])('đơn chuyển khoản chờ tiền %s: nút "Thanh toán ngay" theo hạn', async (_label, offsetMs, shown) => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      paymentDeadline: new Date(Date.now() + offsetMs).toISOString(),
+      manualHandling: false,
+    });
+    renderPage();
+    await screen.findByRole('button', { name: 'Hủy đơn' });
+    expect(screen.queryByRole('button', { name: 'Thanh toán ngay' }) !== null).toBe(shown);
+  });
+
   it('đã duyệt trả một phần: hiện số tiền, dòng trả, trạng thái nhận hàng và cho trả thêm', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, deliveredAt: new Date().toISOString() });
     mocks.fetchMyReturns.mockResolvedValue([

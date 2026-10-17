@@ -106,7 +106,11 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
 
   it('có đúng một tiêu đề h2 kèm số đánh giá, số sao trung bình và nhãn "Đã mua"', async () => {
     renderSection();
-    expect(await screen.findByRole('heading', { level: 2, name: 'Đánh giá (3)' })).toBeInTheDocument();
+    const title = await screen.findByRole('heading', { level: 2, name: 'Đánh giá (3)' });
+    expect(title).toBeInTheDocument();
+    // Cùng kiểu với các tiêu đề mục khác của trang sản phẩm: Inter title-sm, không serif.
+    expect(title.style.fontFamily).toBe('var(--font-ui)');
+    expect(title.style.fontSize).toBe('var(--type-title-sm-size)');
     expect(screen.getByText('4.3')).toBeInTheDocument();
     expect(screen.getByText('Đã mua')).toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: '5 trên 5 sao' })).toHaveLength(2);

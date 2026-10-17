@@ -20,6 +20,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: mocks.haptic }));
 
 import type { ProductCard } from '../../services/shop-api';
 import { HomeHeader } from './home-header';
+import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeSection } from './home-section';
 import { HomeExtras } from './home-extras';
 
@@ -56,6 +57,15 @@ describe('HomeHeader', () => {
 
 describe('HomeSection', () => {
   const q = (over: object) => ({ isLoading: false, isError: false, error: null, refetch: vi.fn(), ...over });
+
+  it('trang đã có dải lỗi cấp trang (HomeBlockErrorSuppressed) → khối lỗi từng kệ ẩn, không xếp chồng', () => {
+    const { container } = wrap(
+      <HomeBlockErrorSuppressed.Provider value>
+        <HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x') })} listSource="home" />
+      </HomeBlockErrorSuppressed.Provider>,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
 
   it('đã tải, rỗng → không render (không để lại tiêu đề trống)', () => {
     const { container } = wrap(<HomeSection title="Bán chạy" limit={6} query={q({ data: { data: [] } })} listSource="home" />);

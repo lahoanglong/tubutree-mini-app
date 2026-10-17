@@ -240,7 +240,8 @@ export default function WalletPage() {
                     <Text variant="caption" tone="tertiary" as="div">đã nhận từ giới thiệu</Text>
                   </div>
                 </div>
-                {referral.nextMilestone && (
+                {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
+                {referral.nextMilestone && referral.nextMilestone.count > referral.successCount && (
                   <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 12 }}>
                     {vi.wallet.referralMilestoneProgress(
                       referral.nextMilestone.count - referral.successCount,

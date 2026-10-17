@@ -186,6 +186,19 @@ export function showsPaymentDeadline(o: { status: OrderStatus; paymentStatus: Pa
   return o.status === 'PENDING_PAYMENT' && o.paymentStatus === 'UNPAID' && !!o.paymentDeadline;
 }
 
+/**
+ * Đơn chuyển khoản còn chờ tiền, Tubu chưa nhận xử lý tay và chưa quá hạn — dùng chung cho nút "Thanh toán ngay" ở chi tiết
+ * đơn và thẻ đơn. Quá hạn thì cron sắp huỷ đơn nên không mời trả nữa; không có hạn (hoặc hạn không đọc được) thì giữ như cũ.
+ */
+export function canPayOrderNow(
+  o: { status: OrderStatus; paymentMethod: PaymentMethod; manualHandling?: boolean; paymentDeadline?: string | null },
+  now: number = Date.now(),
+): boolean {
+  if (o.status !== 'PENDING_PAYMENT' || o.paymentMethod !== 'BANK_TRANSFER' || o.manualHandling) return false;
+  const deadline = o.paymentDeadline ? Date.parse(o.paymentDeadline) : Number.NaN;
+  return Number.isNaN(deadline) || deadline > now;
+}
+
 export interface ReturnLike {
   status: string;
   adminNote?: string | null;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bankDetailsError,
   bankFieldErrors,
+  canPayOrderNow,
   cancelRefundMode,
   destinationBody,
   maskedBank,
@@ -241,5 +242,33 @@ describe('returnStatusLabel / returnLinesText', () => {
     expect(
       returnLinesText({ status: 'APPROVED', items: [{ orderItemId: 'a', quantity: 1 }] }, [{ id: 'a', productName: 'Nước giặt' }]),
     ).toBe('Nước giặt ×1');
+  });
+});
+
+describe('canPayOrderNow (nút "Thanh toán ngay" ở chi tiết đơn và thẻ đơn)', () => {
+  it('đơn chuyển khoản đang chờ tiền → có', () => {
+    expect(canPayOrderNow({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' })).toBe(true);
+  });
+  it('COD, Ví (trừ ngay lúc đặt), đơn đã qua bước chờ → không', () => {
+    expect(canPayOrderNow({ status: 'PENDING_PAYMENT', paymentMethod: 'COD' })).toBe(false);
+    expect(canPayOrderNow({ status: 'PENDING_PAYMENT', paymentMethod: 'WALLET' })).toBe(false);
+    expect(canPayOrderNow({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER' })).toBe(false);
+  });
+  it('hàng đã bàn giao vận chuyển (manualHandling) → không, Tubu xử lý với khách', () => {
+    expect(canPayOrderNow({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: true })).toBe(false);
+  });
+  describe('hạn thanh toán đã qua (cron sắp huỷ đơn)', () => {
+    const NOW = Date.parse('2026-10-17T08:00:00.000Z');
+    const base = { status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' } as const;
+    it('còn hạn → có; đúng mốc hạn hoặc quá hạn → không', () => {
+      expect(canPayOrderNow({ ...base, paymentDeadline: '2026-10-17T08:00:01.000Z' }, NOW)).toBe(true);
+      expect(canPayOrderNow({ ...base, paymentDeadline: '2026-10-17T08:00:00.000Z' }, NOW)).toBe(false);
+      expect(canPayOrderNow({ ...base, paymentDeadline: '2026-10-16T08:00:00.000Z' }, NOW)).toBe(false);
+    });
+    it('không có hạn (null/undefined) hoặc hạn không đọc được → giữ hành vi cũ: có nút', () => {
+      expect(canPayOrderNow({ ...base, paymentDeadline: null }, NOW)).toBe(true);
+      expect(canPayOrderNow(base, NOW)).toBe(true);
+      expect(canPayOrderNow({ ...base, paymentDeadline: 'không phải ngày' }, NOW)).toBe(true);
+    });
   });
 });

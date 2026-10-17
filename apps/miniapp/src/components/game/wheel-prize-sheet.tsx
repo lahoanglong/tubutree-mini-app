@@ -1,5 +1,5 @@
 import type { SpinResult } from '../../services/game-api';
-import { formatDate, formatDrops, formatVnd } from '../../utils/format';
+import { formatDate, formatDrops, formatNumber, formatVnd } from '../../utils/format';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
@@ -69,7 +69,7 @@ export function WheelPrizeSheet({
           </Text>
           {outcome === 'POINTS' && (
             <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
-              +{prize.value} Điểm Xanh đã vào tài khoản
+              +{formatNumber(prize.value)} Điểm Xanh đã vào tài khoản
             </Text>
           )}
           {outcome === 'SEEDS' && (

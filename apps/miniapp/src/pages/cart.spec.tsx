@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getCartSelection: vi.fn(),
   removeCartItem: vi.fn(),
   voucherProps: [] as Record<string, unknown>[],
+  fetchProducts: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -24,7 +25,10 @@ vi.mock('../services/shop-api', () => ({
   removeCartItem: mocks.removeCartItem,
   updateCartItem: vi.fn(),
   addToCart: vi.fn(),
+  fetchProducts: mocks.fetchProducts,
+  fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../store/auth', () => {
   const state = { status: 'authenticated' };
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
@@ -104,6 +108,23 @@ describe('CartPage — SP đã ngừng bán (C-007)', () => {
     renderPage();
     expect(await screen.findByText('1 sản phẩm đã ngừng bán')).toBeInTheDocument();
     expect(screen.getByText('Giỏ còn trống đấy')).toBeInTheDocument();
+  });
+
+  it('giỏ trống: dưới lời mời mua sắm có kệ "Có thể bạn thích"; giỏ có hàng thì không có', async () => {
+    mocks.fetchProducts.mockResolvedValue({
+      data: [{ id: 'g1', slug: 'g1', brand: 'Tubu', name: 'Gợi ý một', thumbnail: null, basePrice: 90_000, salePrice: null, isFeatured: false, inStock: true }],
+      meta: { page: 1, limit: 4, total: 1 },
+    });
+    mocks.getCart.mockResolvedValue(summary({ items: [], subtotal: 0, itemCount: 0 }));
+    const empty = renderPage();
+    expect(await screen.findByText('Giỏ còn trống đấy')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Có thể bạn thích' })).toBeInTheDocument();
+    expect(screen.getByText('Gợi ý một')).toBeInTheDocument();
+    empty.unmount();
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    expect(await screen.findByText('Xà bông thảo mộc')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Có thể bạn thích' })).toBeNull();
   });
 
   it('không có dòng ngừng bán (hoặc API cũ thiếu trường) → không hiện thông báo', async () => {
