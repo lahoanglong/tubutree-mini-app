@@ -57,6 +57,20 @@ Chỉ chạy trên DB `tubutree_it` ở cổng 5566. Không chạm DB dev hay PR
 - Để lại: khách vãng lai gõ một mã CLAIM có thật ở giỏ thì nhận câu "đăng nhập Zalo", còn mã không có thật thì nhận "không tồn tại". Đây là cách biết mã có tồn tại hay không, nhưng không nhận được mã. Tốc độ dò bị trần 10 lần/phút mỗi tài khoản và 30 lần đăng nhập khách/phút mỗi IP chặn. Không gian mã khoảng 1,1 nghìn tỉ. Giữ câu chữ hiện tại để khách thật cầm thẻ được hướng dẫn đăng nhập.
 - Để lại: thanh freeship ở giỏ hiện ngưỡng 0 cho khách mới kể cả khi giỏ chỉ có hàng gian hàng đối tác, dù phí giao của đối tác vẫn tính. Hạng Cổ Thụ freeship toàn shop đang có đúng giới hạn này. Lúc đặt đơn, tiền vẫn đúng nhờ chốt `expectedTotal`.
 
+**Review độc lập lượt 2** (APPROVE kèm sửa):
+- MAJOR, đã sửa: trước đây tạo được mã chung scope CLAIM không có `usageLimit`, nên số lượt nhận và tổng tiền giảm không có trần. Sửa `UpdateCouponDto` cũng đặt được `usageLimit = null`, kể cả với mã thuộc lô. Nay `assertClaimUsageLimit` (`coupon-input-rules.ts`) từ chối scope CLAIM thiếu `usageLimit` hoặc nhỏ hơn 1, khi tạo (`assertCouponInput`) và khi sửa (`updateCoupon`, áp cho mã CLAIM và mã thuộc lô). Màn admin chỉ bật nút "Tạo mã chung" khi Tổng lượt nhận là số nguyên từ 1. Test đỏ trước: 2 test API, 1 test web.
+- MINOR, đã đổi tên migration ra sau migration của nhánh đích: `20261018150000_coupon_claims`, `20261018150010_claim_freeship_config`.
+- MINOR, ghi lại, không đổi mã: rủi ro tài khoản Zalo phụ (mục 3, câu hỏi 8).
+- Đã gộp `review/2026-10-18-launch`. Xung đột ở `checkout.service.spec.ts` và `admin.module.ts`; cả hai giữ phần của hai nhánh.
+
+| Lệnh (sau gộp và sau sửa) | Kết quả |
+|---|---|
+| DB race sạch 5566: `npx prisma migrate deploy`, rồi `npx prisma migrate diff ... --exit-code` | Áp đủ, 2 migration claim đứng cuối; `drift exit=0` |
+| Race: `claim-first-order`, `p6-promo-abuse`, `split-checkout`, `r6-checkout`, `buyer-totals-regression` | `Test Suites: 5 passed`, `Tests: 49 passed, 49 total` |
+| `npx jest src/modules/coupons src/modules/checkout src/modules/admin prisma/reference-data src/modules/system-config` | `Test Suites: 43 passed`, `Tests: 1020 passed, 1020 total` |
+| `npx tsc --noEmit` ở api, miniapp, web; eslint các file đã sửa `--max-warnings=0` | Không lỗi |
+| Web: `npx vitest run src/components/admin/claim-campaign-panel.spec.tsx` | `Tests 7 passed (7)` |
+
 ## 3. Chưa làm hoặc cố ý để lại
 
 - **Trang web `/nhan-uu-dai`**: chưa làm. Link QR mở Mini App. Trên web, khách gõ mã thẻ ở giỏ thì hệ thống tự nhận rồi áp mã (cùng endpoint giỏ), nên mã in trên thẻ vẫn dùng được trên web mà không cần trang riêng.
@@ -73,7 +87,7 @@ Chỉ chạy trên DB `tubutree_it` ở cổng 5566. Không chạm DB dev hay PR
 2. Mở tab **Voucher**, kéo tới khung **"Thẻ hộp hàng sàn (mã ẩn)"**.
 3. Chọn kiểu đợt:
    - **"Lô mã riêng (mỗi thẻ một mã)"** (khuyên dùng): nhập *Tiền tố lô* (vd `SHOPEE11`, mỗi đợt một tiền tố riêng) và *Số thẻ* (tối đa 2.000 mỗi lô; cần nhiều hơn thì tạo thêm lô với tiền tố khác). Mỗi thẻ chỉ một khách nhận và dùng một lần. Thẻ lọt ra ngoài cũng chỉ mất một suất.
-   - **"Một mã chung cho cả đợt"**: nhập *Mã chung* (vd `SHOPEETHANG11`) và *Tổng lượt nhận*. In cùng một mã trên mọi thẻ. Mã dễ bị chia sẻ lên nhóm, nên luôn đặt tổng lượt.
+   - **"Một mã chung cho cả đợt"**: nhập *Mã chung* (vd `SHOPEETHANG11`) và *Tổng lượt nhận* (bắt buộc, từ 1 trở lên). In cùng một mã trên mọi thẻ. Mã dễ bị chia sẻ lên nhóm, nên hệ thống không cho tạo hay sửa mã thẻ mà không có tổng lượt.
 4. Nhập ưu đãi: loại (giảm tiền, giảm %, hoặc freeship), mức giảm, đơn tối thiểu, giảm tối đa (bắt buộc với mã từ 50%), ngày bắt đầu và ngày hết hạn. Nên để hạn dài, vì thẻ nằm trong kho và trong hộp hàng nhiều tuần. Ô **"Chỉ khách mới"** bật sẵn.
 5. Bấm **"Tạo lô và tải CSV"** (hoặc **"Tạo mã chung"**).
    - Lô: trình duyệt tải file `the-hop-hang-<TIỀNTỐ>.csv` gồm cột `code` (in chữ trên thẻ) và cột `url` (nhà in trộn cột này thành mã QR).
