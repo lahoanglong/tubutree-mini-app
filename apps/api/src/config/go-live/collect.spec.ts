@@ -6,7 +6,15 @@ import { collectBackupSnapshot, collectDbSnapshot, listExpectedMigrations } from
 
 type Row = Record<string, unknown>;
 
-function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; migrations?: Row[] }) {
+interface FakeDemo {
+  found: number;
+  active: number;
+  activeVariations: number;
+  coupons: Row[];
+}
+
+function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; migrations?: Row[]; demo?: FakeDemo }) {
+  const demo = opts.demo ?? { found: 0, active: 0, activeVariations: 0, coupons: [] };
   const sql: string[] = [];
   const tables = new Set(opts.tables);
   const tx = {
@@ -28,6 +36,9 @@ function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; m
     }),
     systemConfig: { findMany: jest.fn(async () => [{ key: 'merchant.commission_pct', value: 0.15 }]) },
     notificationTemplate: { findMany: jest.fn(async () => [{ code: 'ORDER_CONFIRMED', channel: 'ZNS', zaloTemplateId: null }]) },
+    product: { count: jest.fn(async (a: { where: Row }) => ('isActive' in a.where ? demo.active : demo.found)) },
+    variation: { count: jest.fn(async () => demo.activeVariations) },
+    coupon: { findMany: jest.fn(async () => demo.coupons) },
   };
   const prisma = { $transaction: async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx) } as unknown as PrismaClient;
   return { prisma, tx, sql };
@@ -78,6 +89,48 @@ describe('collectDbSnapshot', () => {
     const snap = await collectDbSnapshot(prisma, ['m1']);
     expect(snap).toMatchObject({ appliedMigrations: [], unfinishedMigrations: [], orderCount: 0, adminCount: 0, configs: {}, znsTemplates: [] });
     expect(tx.systemConfig.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('collectDbSnapshot: dữ liệu demo của migration', () => {
+  const END = new Date('2026-12-31T17:00:00.000Z');
+  const seedTerms = { type: 'AMOUNT', value: 30000, minOrder: 199000, maxDiscount: null, perUserLimit: 1, scope: 'PUBLIC' };
+
+  it('có bảng products và coupons: đếm sản phẩm, biến thể đang bán, phân loại mã còn dùng được', async () => {
+    const coupons = [
+      { id: 'cmqfv2cpl0029zxplw4kcnaji', code: 'FREESHIP', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, perUserLimit: 3, scope: 'PUBLIC', endAt: END },
+      { id: 'cuid-tu-seed', code: 'WELCOME30', ...seedTerms, endAt: END },
+      { id: 'cuid-ma-that', code: 'XANH10', type: 'PERCENT', value: 15, minOrder: 250000, maxDiscount: 50000, perUserLimit: 2, scope: 'PUBLIC', endAt: END },
+    ];
+    const { prisma, tx } = fakePrisma({ tables: [...ALL_TABLES, 'products', 'coupons'], demo: { found: 44, active: 3, activeVariations: 5, coupons } });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.demoData).toEqual({
+      products: { found: 44, active: 3 },
+      activeVariations: 5,
+      liveCoupons: [
+        { code: 'FREESHIP', endAt: END.toISOString(), kind: 'migration' },
+        { code: 'WELCOME30', endAt: END.toISOString(), kind: 'seed' },
+        { code: 'XANH10', endAt: END.toISOString(), kind: 'name-only' },
+      ],
+    });
+    const where = (tx.coupon.findMany.mock.calls[0] as unknown as [{ where: Row }])[0].where;
+    expect(where).toMatchObject({ code: { in: ['WELCOME30', 'FREESHIP', 'XANH10'] }, isActive: true });
+    expect(where.endAt).toHaveProperty('gte');
+  });
+
+  it('đúng dòng migration (id khớp) là loại migration dù điều kiện đã bị sửa', async () => {
+    const coupons = [{ id: 'cmqfuw9l0000gw1vf8f2wozy0', code: 'WELCOME30', ...seedTerms, value: 99, endAt: END }];
+    const { prisma } = fakePrisma({ tables: [...ALL_TABLES, 'products', 'coupons'], demo: { found: 44, active: 44, activeVariations: 48, coupons } });
+    expect((await collectDbSnapshot(prisma, ['m1'])).demoData?.liveCoupons).toEqual([{ code: 'WELCOME30', endAt: END.toISOString(), kind: 'migration' }]);
+  });
+
+  it('thiếu bảng products hoặc coupons: không có demoData, không truy vấn', async () => {
+    for (const extra of [[], ['products'], ['coupons']]) {
+      const { prisma, tx } = fakePrisma({ tables: [...ALL_TABLES, ...extra] });
+      expect((await collectDbSnapshot(prisma, ['m1'])).demoData).toBeUndefined();
+      expect(tx.product.count).not.toHaveBeenCalled();
+      expect(tx.coupon.findMany).not.toHaveBeenCalled();
+    }
   });
 });
 

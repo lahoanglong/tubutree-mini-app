@@ -347,6 +347,27 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect((await applyDemoCleanup(prisma, { coupons: 'expire' })).result.couponsExpired).toBe(0);
   });
 
+  it('couponsExpired đếm đúng số dòng thật sự đổi: mã đã tắt mà chưa tới ngày bắt đầu không đổi, không đếm', async () => {
+    const W = DEMO_COUPONS.find((c) => c.code === 'WELCOME30')!;
+    const F = DEMO_COUPONS.find((c) => c.code === 'FREESHIP')!;
+    const wStart = (await prisma.coupon.findUniqueOrThrow({ where: { id: W.id } })).startAt;
+    const start = new Date(Date.now() + 10 * 86_400_000);
+    const end = new Date(Date.now() + 20 * 86_400_000);
+    try {
+      // WELCOME30: đã tắt, chưa tới ngày bắt đầu → không cắt hạn (endAt trước startAt vô nghĩa), không có gì đổi.
+      await prisma.coupon.update({ where: { id: W.id }, data: { isActive: false, startAt: start, endAt: end } });
+      // FREESHIP: đã tắt nhưng hạn còn xa → cắt hạn, tính là một dòng đổi.
+      await prisma.coupon.update({ where: { id: F.id }, data: { isActive: false, endAt: end } });
+      const { result } = await applyDemoCleanup(prisma, { coupons: 'expire' });
+      expect(result.couponsExpired).toBe(1);
+      expect(result.undo.coupons).toEqual([{ id: F.id, code: 'FREESHIP', isActive: false, endAt: end }]);
+      expect((await prisma.coupon.findUniqueOrThrow({ where: { id: W.id } })).endAt).toEqual(end);
+      expect((await prisma.coupon.findUniqueOrThrow({ where: { id: F.id } })).endAt.getTime()).toBeLessThanOrEqual(Date.now());
+    } finally {
+      await prisma.coupon.update({ where: { id: W.id }, data: { startAt: wStart } });
+    }
+  });
+
   it('mã do seed tạo (id khác migration, điều kiện như seed.ts) vẫn là mã demo: go-live FAIL, --coupons=expire tắt, --keep-coupon giữ; mã chỉ trùng tên thì không đụng, WARN', async () => {
     const seedTerms = { startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), scope: 'PUBLIC' as const };
     const ids = { WELCOME30: `${SEED_LIKE_PREFIX}${tag}-welcome30`, FREESHIP: `${SEED_LIKE_PREFIX}${tag}-freeship`, XANH10: `${SEED_LIKE_PREFIX}${tag}-xanh10` };

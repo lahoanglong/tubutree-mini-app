@@ -516,12 +516,12 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
 1. Xem trước (không ghi gì):
 
    ```bash
-   $DC run --rm --no-deps api pnpm run prisma:cleanup-demo | tee .demo-cleanup-preview.txt
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo 2>&1 | tee .demo-cleanup-preview.txt
    ```
 
-   Kỳ vọng: dòng đầu `DB: postgres:5432/<tên DB PROD>`; mục 1 và 2 nêu số sản phẩm, biến thể sẽ tắt (DB mới: 44 và 48); mục 3 nêu những dòng đang trỏ tới hàng demo (đơn, giỏ, đánh giá, gian hàng, giờ vàng): chúng giữ nguyên, chỉ để biết; mục 4 nêu 3 mã và trạng thái; mục 5 nêu danh mục nào sẽ trống. Dán kết quả vào nhóm chat.
-   - Thoát mã 2 kèm câu "DB này không có dữ liệu demo" nghĩa là không còn sản phẩm, biến thể hay mã demo nào (kể cả mã do seed tạo): sang bước 8.
-   - DB chỉ còn mã do seed tạo (mục 1 và 2 báo `tìm thấy 0/44`, `0/48`, mục 4 có `[do seed tạo]`): lệnh KHÔNG thoát 2, vẫn làm tiếp điểm 2 và 3 để quyết các mã đó.
+   Lệnh đi qua `tee` nên mã thoát là của `tee`: đọc chữ in ra, không dựa vào mã thoát. Kỳ vọng: dòng bắt đầu bằng `DB:` là `DB: postgres:5432/<tên DB PROD>` (pnpm in vài dòng tiêu đề trước dòng đó); mục 1 và 2 nêu số sản phẩm, biến thể sẽ tắt (DB mới: 44 và 48); mục 3 nêu những dòng đang trỏ tới hàng demo (đơn, giỏ, đánh giá, gian hàng, giờ vàng): chúng giữ nguyên, chỉ để biết; mục 4 nêu 3 mã và trạng thái; mục 5 nêu danh mục nào sẽ trống. Dán kết quả vào nhóm chat.
+   - In câu "DB này không có dữ liệu demo" (thay cho kế hoạch) nghĩa là không còn sản phẩm, biến thể hay mã demo nào (kể cả mã do seed tạo): sang bước 8.
+   - DB chỉ còn mã do seed tạo (mục 1 và 2 báo `tìm thấy 0/44`, `0/48`, mục 4 có `[do seed tạo]`): lệnh vẫn in kế hoạch, làm tiếp điểm 2 và 3 để quyết các mã đó.
    - Mục 4 có dòng `KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác`: mã đó không phải bản demo (chủ shop tạo hoặc đã sửa điều kiện), lệnh dọn không tắt nó dù có `--coupons=expire`. Chủ shop mở Quản trị, Mã giảm giá, xem điều kiện: giữ thì go-live bước 10 ra WARN nêu đúng tên mã đó; không giữ thì tắt tay ở Quản trị.
    Điểm dừng: dòng `DB:` không phải DB PROD; hoặc mục 3 có `dòng đơn hàng` lớn hơn 0 mà chưa ai biết đó là đơn gì (khách thật đặt hàng demo: báo chủ shop trước khi tắt); hoặc mục 1 có `KIỂM TAY TRƯỚC KHI APPLY` (sản phẩm demo có người sửa sau khi nạp). Với dòng cuối: đưa danh sách tên cho chủ shop. Không ai dùng các sản phẩm đó làm hàng thật thì làm tiếp; có thì chưa chạy `--apply`, báo tech lead (lệnh dọn không bỏ qua từng sản phẩm).
 
