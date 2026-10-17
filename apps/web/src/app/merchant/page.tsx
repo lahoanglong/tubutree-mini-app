@@ -173,8 +173,11 @@ export default function MerchantPage() {
     queryFn: () => listFulfilOrders(undefined, 1, 1),
     enabled: authed && selfFulfils,
   });
-  // Gian hàng đã tắt cờ chỉ còn xem phiếu đối soát đã lập cho mình: có phiếu (hasPayouts) mới hiện tab.
-  const visibleTabs = TAB_DEFS.filter((t) => !t.merchantOnly || selfFulfils || (t.k === 'settlement' && store?.hasPayouts === true));
+  // Gian hàng đã tắt cờ chỉ còn xem phiếu đối soát đã lập cho mình và nhận hàng khách trả của đơn đã vào phiếu: có phiếu
+  // (hasPayouts) mới hiện hai tab đó (đơn có dòng SALE thì chắc chắn có phiếu); các mục khác của tab giao hàng sẽ 403.
+  const visibleTabs = TAB_DEFS.filter(
+    (t) => !t.merchantOnly || selfFulfils || ((t.k === 'settlement' || t.k === 'fulfil') && store?.hasPayouts === true),
+  ).map((t) => (t.k === 'fulfil' && !selfFulfils ? { ...t, label: 'Hàng trả về', icon: Package } : t));
   const activeTab: MerchantTab = store && !visibleTabs.some((t) => t.k === tab) ? 'store' : tab;
   // Thanh tab cuộn ngang ở màn hẹp: mở bằng ?tab= thì tab đang chọn có thể nằm ngoài khung nhìn. Chỉ cuộn ngang thanh tab,
   // không dùng scrollIntoView vì nó kéo cả trang xuống.
@@ -386,8 +389,8 @@ export default function MerchantPage() {
             )}
             {activeTab === 'fulfil' && (
               <div className="space-y-6">
-                <FulfilOrdersTab />
-                <MerchantReturnsSection />
+                {selfFulfils && <FulfilOrdersTab />}
+                <MerchantReturnsSection showEmpty={!selfFulfils} />
               </div>
             )}
             {activeTab === 'products' && <ProductsTab canCreate={canCreateProducts} />}

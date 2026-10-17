@@ -62,6 +62,7 @@ describe('recompute', () => {
     const result = recompute(cart, [line()]);
     expect(result.discount).toBe(0);
     expect(result.comboDiscount).toBe(0);
+    expect(result.tierDiscount).toBe(0);
     expect(result.couponCode).toBe('FREESHIP');
     expect(result.freeship).toBe(true);
   });

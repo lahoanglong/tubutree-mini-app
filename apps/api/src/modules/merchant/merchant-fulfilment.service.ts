@@ -40,7 +40,7 @@ import {
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
 import { consignmentLinkedSql } from './consignment-link-sql';
-import { isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE } from './partner-store';
+import { ADMIN_TOGGLE_MARK, isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE, storeHasPayouts } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
@@ -443,7 +443,7 @@ export class MerchantFulfilmentService {
 
   /** Gian hàng đã có phiếu đối soát nào chưa (cổng cho chủ gian hàng đã tắt cờ biết có phiếu để xem). */
   async storeHasPayouts(storefrontId: string): Promise<boolean> {
-    return (await this.prisma.merchantPayout.count({ where: { storefrontId } })) > 0;
+    return storeHasPayouts(this.prisma, storefrontId);
   }
 
   // ── Đối tác: đơn cần giao ──
@@ -1281,6 +1281,7 @@ export class MerchantFulfilmentService {
       this.num('merchant.commission_pct', DEFAULT_MERCHANT_COMMISSION_PCT),
       this.storesWithPending(),
     ]);
+    // Không giới hạn số dòng: bộ lọc đã ở trong truy vấn, nên cắt trước khi lọc sẽ làm rơi gian hàng đối tác xếp sau theo tên.
     const stores = await this.prisma.storefront.findMany({
       where: {
         AND: [
@@ -1301,7 +1302,6 @@ export class MerchantFulfilmentService {
         consignmentFeeFixed: true,
       },
       orderBy: { title: 'asc' },
-      take: 200,
     });
     const [overdue, activeRows] = await Promise.all([
       this.overdueOrders(sla, now),
@@ -1434,7 +1434,7 @@ export class MerchantFulfilmentService {
             kind: 'STOREFRONT_PARTNER',
             from: String(!isPartner),
             to: String(isPartner),
-            reason: store.id,
+            reason: isPartner ? `${store.id}${ADMIN_TOGGLE_MARK}` : store.id,
             actorId: adminId,
           });
         }
@@ -1459,8 +1459,18 @@ export class MerchantFulfilmentService {
    * mọi gian hàng CTV). Còn vướng mắc thì ném 409 để cả lần đổi vai trò huỷ. Khoá tư vấn theo chủ lấy trước (chặn lần tạo gian hàng
    * đầu tiên ở Cổng người bán chen vào khi chưa có dòng nào để khoá), rồi mọi gian hàng của chủ đều khoá trước khi đọc cờ dưới khoá,
    * để lần bật lại cờ chạy song song không lọt qua.
+   * `spareAdminToggled`: chủ vốn không còn là DEALER/STAFF/ADMIN (CUSTOMER/AFFILIATE được đặt lại vai trò) thì gian hàng CTV có cờ do
+   * admin bật tay (lần bật mới nhất mang ADMIN_TOGGLE_MARK) giữ nguyên; gian hàng MERCHANT và cờ theo vai trò (Cổng người bán, duyệt đại lý)
+   * vẫn bị tắt/chuyển về CTV sau cùng lần kiểm vướng mắc.
    */
-  async clearPartnerOnRoleLoss(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig, fromRole: string) {
+  async clearPartnerOnRoleLoss(
+    tx: Db,
+    ownerUserId: string,
+    actorId: string,
+    cfg: SettlementConfig,
+    fromRole: string,
+    opts: { spareAdminToggled?: boolean } = {},
+  ) {
     await lockStoreOwner(tx, ownerUserId);
     const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
     let cleared = 0;
@@ -1469,12 +1479,15 @@ export class MerchantFulfilmentService {
       const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
         SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${id} FOR UPDATE`;
       if (!store || !isPartnerStore(store)) continue;
+      if (opts.spareAdminToggled && store.type !== 'MERCHANT' && (await this.isAdminToggled(tx, ownerUserId, id))) continue;
       const blockers = await this.partnerBlockers(tx, id, ownerUserId, cfg, true);
       if (blockers.length) {
         throw new ConflictException(
           fromRole === 'DEALER'
             ? `Chưa thể thu hồi vai trò đại lý vì gian hàng đối tác còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`
-            : `Chưa thể hạ vai trò vì gian hàng đối tác của người này còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại, hoặc đặt vai trò DEALER để giữ nguyên gian hàng.`,
+            : fromRole === 'CUSTOMER' || fromRole === 'AFFILIATE'
+              ? `Cờ đối tác của gian hàng còn vướng do vai trò trước đây: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`
+              : `Chưa thể hạ vai trò vì gian hàng đối tác của người này còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại, hoặc đặt vai trò DEALER để giữ nguyên gian hàng.`,
         );
       }
       await tx.storefront.update({ where: { id }, data: { isPartner: false,...(store.type === 'MERCHANT' ? { type: 'CTV' } : {}) } });
@@ -1484,6 +1497,40 @@ export class MerchantFulfilmentService {
     if (cleared) {
       this.logger.warn(`Đổi vai trò của ${ownerUserId} về khách/CTV: tắt cờ đối tác ${cleared} gian hàng (admin ${actorId}).`);
     }
+  }
+
+  /**
+   * Khoá của đường ẩn danh tài khoản chủ gian hàng: khoá tư vấn theo chủ rồi khoá phiếu từng gian hàng (id tăng dần), đúng thứ tự
+   * clearPartnerOnRoleLoss; dòng gian hàng và users khoá sau, ở người gọi.
+   */
+  async lockOwnerStores(tx: Db, ownerUserId: string) {
+    await lockStoreOwner(tx, ownerUserId);
+    const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
+    for (const { id } of stores) await this.lockStorePayouts(tx, id);
+  }
+
+  /**
+   * Vướng mắc của mọi gian hàng đối tác (MERCHANT hoặc isPartner) của chủ, cùng danh sách với việc thu hồi đại lý (partnerBlockers,
+   * trừ "chủ vẫn là đại lý"). Rỗng nghĩa là đã đối soát xong, không còn gì mồ côi khi tài khoản chủ bị ẩn danh.
+   */
+  async ownerPartnerBlockers(db: Db, ownerUserId: string, cfg: SettlementConfig): Promise<string[]> {
+    const stores = await db.storefront.findMany({
+      where: { ownerUserId, ...PARTNER_STORE_WHERE },
+      select: { id: true, title: true },
+      orderBy: { id: 'asc' },
+    });
+    const out: string[] = [];
+    for (const store of stores) out.push(...(await this.partnerBlockers(db, store.id, ownerUserId, cfg, true)));
+    return out;
+  }
+
+  private async isAdminToggled(tx: Db, ownerUserId: string, storefrontId: string): Promise<boolean> {
+    const latest = await tx.userAdminEvent.findFirst({
+      where: { userId: ownerUserId, kind: 'STOREFRONT_PARTNER', toValue: 'true', reason: { in: [storefrontId, `${storefrontId}${ADMIN_TOGGLE_MARK}`] } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { reason: true },
+    });
+    return latest?.reason === `${storefrontId}${ADMIN_TOGGLE_MARK}`;
   }
 
   private async partnerBlockers(

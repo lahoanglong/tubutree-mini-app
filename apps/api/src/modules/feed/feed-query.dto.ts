@@ -1,4 +1,7 @@
+import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { truncateCodePoints } from '../../common/truncate-code-points';
+import { SEARCH_Q_MAX_LENGTH } from '../catalog/dto/suggest-query.dto';
 
 export const FEED_POST_KINDS = ['MANUAL', 'HARVEST', 'MILESTONE', 'SPECIES', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 export type FeedPostKindValue = (typeof FEED_POST_KINDS)[number];
@@ -14,7 +17,11 @@ export class FeedQuery {
   // Không siết enum: service coi mọi giá trị khác 'popular' là 'new', giá trị lạ không gây lỗi.
   @IsOptional() @IsString() sort?: string;
   @IsOptional() @IsString() @MaxLength(200) cursor?: string;
-  @IsOptional() @IsString() @MaxLength(100) q?: string;
+  // Ô tìm kiếm dán nguyên chuỗi dài: cắt như /search/suggest thay vì 400 làm mất cả bảng tin. Mảng giữ nguyên cho IsString từ chối.
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? truncateCodePoints(value, SEARCH_Q_MAX_LENGTH) : value))
+  @IsString()
+  q?: string;
   @IsOptional() @IsString() unanswered?: string;
   @IsOptional() @IsString() @MaxLength(100) tag?: string;
 }

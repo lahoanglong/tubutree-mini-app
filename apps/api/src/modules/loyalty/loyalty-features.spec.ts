@@ -683,6 +683,24 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(JSON.stringify(card)).not.toContain('u123456');
     });
 
+    // Mặt thẻ/POS không chặn SĐT ngắn (khác maskPhoneOrNull ra '***'): ghim đầu ra để việc gộp helper sau này không đổi nó âm thầm.
+    it.each([
+      ['0987654321', '098****321'],
+      ['012345', '012****345'],
+      ['1', '1****1'],
+      ['', null],
+      [null, null],
+    ])('SĐT %p trên thẻ thành viên → %p', async (phone, expected) => {
+      const prisma = {
+        user: {
+          findUniqueOrThrow: jest.fn().mockResolvedValue({
+            id: 'u1', phone, referralCode: 'AB12CD34', fullName: 'A', pointsBalance: 0, tier: null,
+          }),
+        },
+      } as unknown as PrismaService;
+      expect((await new LoyaltyService(prisma, makeConfig()).getMemberCard('u1')).phone).toBe(expected);
+    });
+
     it('mã trên thẻ tra ra ĐÚNG thành viên đó qua endpoint quét của nhân viên (round-trip)', async () => {
       const { prisma } = makeFakeDb([
         { id: 'staff-1', role: 'STAFF', referralCode: 'STAFF001' },

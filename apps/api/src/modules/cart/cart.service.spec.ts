@@ -164,6 +164,7 @@ describe('CartService guard tồn kho', () => {
     const cartRow = (tierId: string | null) => ({ id: 'c1', couponCode: null, items: [], user: { tierId } });
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue(cartRow('LOC_BIEC')) },
+      membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, tierConfig, flash, analytics, combo);
     expect((await svc.getCart('u1')).freeshipThreshold).toBe(99000);
@@ -242,11 +243,52 @@ describe('CartService guard tồn kho', () => {
       subtotal: 0,
       comboDiscount: 0,
       discount: 0,
+      tierDiscount: 0,
       freeship: false,
       freeshipThreshold: 200000,
       itemCount: 0,
       unavailableItems: [],
     });
+  });
+
+  it('getCart: giảm theo hạng tính trên phần hàng sau mã, làm tròn xuống; không hạng thì 0', async () => {
+    const line = (id: string, price: number) => ({
+      id: `ci-${id}`,
+      variationId: id,
+      quantity: 1,
+      variation: {
+        id,
+        productId: `p-${id}`,
+        name: 'M',
+        retailPrice: price,
+        salePrice: null,
+        stock: 9,
+        weight: null,
+        isActive: true,
+        product: { name: `SP ${id}`, slug: id, thumbnail: null, isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefront: null },
+      },
+    });
+    const build = (tierId: string | null, discountPct: string | null) => {
+      const prisma = {
+        cart: {
+          upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', couponCode: 'SAVE', items: [line('a', 33_333)], user: { tierId } }),
+        },
+        membershipTier: { findUnique: jest.fn().mockResolvedValue(discountPct === null ? null : { discountPct }) },
+      } as unknown as PrismaService;
+      const couponsSvc = {
+        validateAndCompute: jest.fn().mockResolvedValue({ discount: 3_333, freeship: false }),
+      } as unknown as CouponsService;
+      return { prisma, svc: new CartService(prisma, couponsSvc, config, { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as unknown as FlashSaleService, analytics, combo) };
+    };
+    const withTier = build('T1', '0.07');
+    const c = await withTier.svc.getCart('u1', null);
+    // 33.333 − mã 3.333 = 30.000; 7% = 2.100.
+    expect(c).toMatchObject({ subtotal: 33_333, discount: 3_333, tierDiscount: 2_100 });
+    expect(withTier.prisma.membershipTier.findUnique).toHaveBeenCalledWith({ where: { id: 'T1' }, select: { discountPct: true } });
+    const none = build(null, null);
+    expect((await none.svc.getCart('u1', null)).tierDiscount).toBe(0);
+    expect(none.prisma.membershipTier.findUnique).not.toHaveBeenCalled();
   });
 
   it('addItem: không truyền addSource → mặc định "pdp" trong props sự kiện add_to_cart', async () => {
@@ -711,6 +753,7 @@ describe('CartService guard tồn kho', () => {
             ],
           }),
           update: jest.fn().mockResolvedValue({}),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
       }) as any;
     const flashG = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
@@ -741,7 +784,7 @@ describe('CartService guard tồn kho', () => {
       const c = await new CartService(prisma, couponsWith({ code: 'TAT50', isActive: false }), config, flashG, analytics, combo).getCart('u1');
       expect(c.couponCode).toBeNull();
       expect(c.couponRemoved).toEqual({ code: 'TAT50', reason: 'Mã giảm giá đã ngừng áp dụng.' });
-      expect(prisma.cart.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+      expect(prisma.cart.updateMany).toHaveBeenCalledWith({ where: { id: 'c1', couponCode: 'TAT50' }, data: { couponCode: null } });
     });
   });
 
@@ -790,7 +833,7 @@ describe('CartService guard tồn kho', () => {
 
   it('getCart: coupon fail cả trên TOÀN giỏ (hết hạn/hết lượt) → GỠ mã (null)', async () => {
     const validateAndCompute = jest.fn().mockRejectedValue(new BadRequestException('expired'));
-    const update = jest.fn().mockResolvedValue({});
+    const update = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
@@ -806,14 +849,14 @@ describe('CartService guard tồn kho', () => {
             },
           ],
         }),
-        update,
+        updateMany: update,
       },
     } as any;
     const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
     const couponsSvc = { validateAndCompute } as any;
     const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
     expect(cart.couponCode).toBeNull();
-    expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c1', couponCode: 'SALE' }, data: { couponCode: null } });
   });
 
   it('getCart: lỗi hạ tầng (không phải BadRequestException) khi validate coupon → KHÔNG bị nuốt, KHÔNG gỡ mã', async () => {

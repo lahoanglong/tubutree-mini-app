@@ -56,4 +56,15 @@ describe('CartController — không lộ ID chủ gian hàng (R2-MERCHANT-14)', 
     expect(svc.applyCoupon).toHaveBeenCalledWith('u1', 'X', 'shop-a');
     expect(svc.removeCoupon).toHaveBeenCalledWith('u1', 'shop-a');
   });
+
+  it('GET có itemIds: giá của phần chọn (getCartSelection); không có hoặc rỗng: cả giỏ', async () => {
+    const cart = { items: [] };
+    const svc = { getCart: jest.fn().mockResolvedValue(cart), getCartSelection: jest.fn().mockResolvedValue(cart) };
+    const ctl = new CartController(svc as unknown as CartService);
+    await ctl.get('u1', { storefrontSlug: 'shop-a', itemIds: ['i1', 'i2'] });
+    expect(svc.getCartSelection).toHaveBeenCalledWith('u1', 'shop-a', ['i1', 'i2']);
+    expect(svc.getCart).not.toHaveBeenCalled();
+    await ctl.get('u1', { itemIds: [] });
+    expect(svc.getCart).toHaveBeenCalledWith('u1', undefined);
+  });
 });

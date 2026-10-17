@@ -381,8 +381,12 @@ export default function CheckoutPage() {
   // Chưa có báo giá: tiền hàng trừ combo (chỉ khi mua cả giỏ — chọn một phần thì máy chủ tính lại) rồi trừ mã, như checkout trừ.
   // Lựa chọn nhớ lại có thể bằng đúng mọi dòng của giỏ (vd còn lại sau khi dọn món đã xoá): vẫn là cả giỏ.
   const wholeCart = !itemIds || itemIds.length === (cart.data?.items.length ?? 0);
+  // Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ (mã tính trên phần hàng sau combo, hạng trên phần còn lại); mua một phần thì máy chủ tính lại.
   const previewCombo = wholeCart ? (cart.data?.comboDiscount ?? 0) : 0;
-  const previewDiscount = cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
+  const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
+  const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
+  const previewTotal = Math.max(0, previewSubtotal - previewCombo - previewDiscount - previewTier);
+  const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
   const maxRecycleKg = recyclingMaxKg(shownItems);
 
   return (
@@ -914,11 +918,19 @@ export default function CheckoutPage() {
             {previewDiscount > 0 && (
               <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(previewDiscount)}`} tone="success" />
             )}
+            {previewTier > 0 && (
+              <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} tone="success" />
+            )}
+            {previewRecalcNote && (
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                {vi.cart.subsetRecalcNote}
+              </Text>
+            )}
             <KeyValueRow
               label={vi.checkout.shippingFee}
               value={addressId ? 'Đang tính...' : 'Cần chọn địa chỉ giao hàng'}
             />
-            <KeyValueRow label={vi.checkout.total} value={formatVnd(Math.max(0, previewSubtotal - previewCombo - previewDiscount))} emphasis />
+            <KeyValueRow label={vi.checkout.total} value={formatVnd(previewTotal)} emphasis />
           </>
         )}
       </Box>
@@ -1023,8 +1035,8 @@ export default function CheckoutPage() {
             <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(quote.data ? quote.data.comboDiscount : previewCombo)}`} tone="success" />
           )}
 
-          {quote.data && (quote.data.tierDiscount ?? 0) > 0 && (
-            <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data.tierDiscount ?? 0)}`} tone="success" />
+          {(quote.data ? (quote.data.tierDiscount ?? 0) : previewTier) > 0 && (
+            <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data ? (quote.data.tierDiscount ?? 0) : previewTier)}`} tone="success" />
           )}
 
           {quote.data && quote.data.pointsDiscount > 0 && (
@@ -1049,7 +1061,7 @@ export default function CheckoutPage() {
 
           <KeyValueRow
             label="Tổng thanh toán"
-            value={formatVnd(quote.data?.total ?? Math.max(0, previewSubtotal - previewCombo - previewDiscount))}
+            value={formatVnd(quote.data?.total ?? previewTotal)}
             emphasis
           />
 

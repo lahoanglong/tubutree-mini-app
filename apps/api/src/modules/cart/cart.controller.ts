@@ -10,7 +10,9 @@ export class CartController {
 
   @Get()
   async get(@CurrentUser('sub') userId: string, @Query() q: CartQueryDto) {
-    return toPublicCart(await this.cart.getCart(userId, q.storefrontSlug));
+    return toPublicCart(
+      q.itemIds?.length ? await this.cart.getCartSelection(userId, q.storefrontSlug, q.itemIds) : await this.cart.getCart(userId, q.storefrontSlug),
+    );
   }
 
   @Post('items')

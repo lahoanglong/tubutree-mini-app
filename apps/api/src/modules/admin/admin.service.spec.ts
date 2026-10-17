@@ -119,7 +119,10 @@ function makeApproveTx(opts: {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = jest.fn().mockResolvedValue(0);
-  const queryRaw = jest.fn().mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false, metadata: opts.applicantMetadata ?? null }]);
+  const queryRaw = jest
+    .fn()
+    .mockResolvedValueOnce([])
+    .mockResolvedValue([{ role: opts.applicantRole ?? 'CUSTOMER', isBlocked: false, metadata: opts.applicantMetadata ?? null }]);
   const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
@@ -128,6 +131,7 @@ function makeApproveTx(opts: {
       $queryRaw: queryRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
       storefront: { updateMany: storefrontUpdateMany },
+      userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
       user: {
         update: userUpdate,
         findUnique: jest.fn().mockResolvedValue({ role: opts.applicantRole ?? 'CUSTOMER' }),
@@ -447,11 +451,24 @@ describe('AdminService.setUserRole', () => {
       ['DEALER', 'STAFF', false],
       ['DEALER', 'ADMIN', false],
       ['STAFF', 'DEALER', false],
-      ['CUSTOMER', 'AFFILIATE', false],
+      ['CUSTOMER', 'AFFILIATE', true],
+      ['CUSTOMER', 'CUSTOMER', true],
+      ['AFFILIATE', 'CUSTOMER', true],
     ])('%s → %s: xử lý gian hàng = %s', async (from, to, expected) => {
       fulfilment.clearPartnerOnRoleLoss.mockClear();
       await mkAdmin(withRole(from)).setUserRole('admin1', '0899625240', to as 'CUSTOMER', to === 'DEALER' ? 't1' : undefined);
       expect(fulfilment.clearPartnerOnRoleLoss.mock.calls.length > 0).toBe(expected);
+    });
+
+    it.each([
+      ['DEALER', 'CUSTOMER', false],
+      ['STAFF', 'AFFILIATE', false],
+      ['CUSTOMER', 'AFFILIATE', true],
+      ['AFFILIATE', 'CUSTOMER', true],
+    ])('%s → %s: giữ gian hàng có cờ admin bật tay (spareAdminToggled=%s)', async (from, to, spareAdminToggled) => {
+      fulfilment.clearPartnerOnRoleLoss.mockClear();
+      await mkAdmin(withRole(from)).setUserRole('admin1', '0899625240', to as 'CUSTOMER');
+      expect(fulfilment.clearPartnerOnRoleLoss.mock.calls[0]?.[5]).toEqual({ spareAdminToggled });
     });
 
     it('deadlock trong transaction đổi vai trò → 503', async () => {
@@ -572,6 +589,7 @@ describe('AdminService.setUserRole', () => {
       const prisma = makePrisma({
         user: { findUnique: jest.fn().mockResolvedValue(customer), update },
         dealerTier: { findUnique: tierFind },
+        $queryRaw: jest.fn().mockResolvedValue([{ metadata: customer.metadata }]),
       });
       const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', ' dealer_l3 ');
       expect(tierFind).toHaveBeenCalledWith({ where: { id: 'dealer_l3' } });

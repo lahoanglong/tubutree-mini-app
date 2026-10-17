@@ -503,7 +503,7 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
 
   it('listForMerchant: chỉ đơn của gian hàng mình, không lộ tài khoản ngân hàng nhận hoàn của khách', async () => {
     const prisma = {
-      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1' }) },
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', type: 'MERCHANT', isPartner: false }) },
       $queryRaw: jest
         .fn()
         .mockResolvedValueOnce([{ id: 'r1' }])
@@ -542,6 +542,28 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
     expect(JSON.stringify(rows)).not.toContain('0123456789');
     expect(JSON.stringify(rows)).not.toContain('NGUYEN VAN A');
     expect((prisma.$queryRaw as jest.Mock).mock.calls[0].slice(1)).toContain('sf1');
+  });
+
+  it('listForMerchant: gian hàng đã tắt cờ chưa từng có phiếu → 403; đối tác hiện hành không hỏi bảng phiếu', async () => {
+    const off = { storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', type: 'CTV', isPartner: false }) }, merchantPayout: { count: jest.fn().mockResolvedValue(0) } } as unknown as PrismaService;
+    await expect(new OrderReturnsService(off, {} as never, {} as never, {} as never, {} as never, notifications).listForMerchant('u1')).rejects.toThrow('gian hàng đối tác');
+    const on = {
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', type: 'CTV', isPartner: true }) },
+      merchantPayout: { count: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    await new OrderReturnsService(on, {} as never, {} as never, {} as never, {} as never, notifications).listForMerchant('u1');
+    expect((on as unknown as { merchantPayout: { count: jest.Mock } }).merchantPayout.count).not.toHaveBeenCalled();
+  });
+
+  it('listForMerchant: gian hàng đã tắt cờ có phiếu (kể cả chỉ hàng giao hộ, không dòng SALE) → [] thay vì 403, lọc theo dòng SALE', async () => {
+    const off = {
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', type: 'CTV', isPartner: false }) },
+      merchantPayout: { count: jest.fn().mockResolvedValue(1) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    await expect(new OrderReturnsService(off, {} as never, {} as never, {} as never, {} as never, notifications).listForMerchant('u1')).resolves.toEqual([]);
+    expect(JSON.stringify((off.$queryRaw as jest.Mock).mock.calls[0])).toContain("'SALE'");
   });
 
   it('listForMerchant: tài khoản không có gian hàng tự giao → 403', async () => {

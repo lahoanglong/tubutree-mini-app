@@ -8,7 +8,7 @@ import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/sho
 import { getErrorMessage } from '../../services/api';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
-import { useDebounced } from '../../utils/use-debounced';
+import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
 import { Badge } from '../ui/badge';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -39,9 +39,6 @@ export interface VoucherSheetProps {
   previewKey?: string;
   onCouponApplied?: () => void;
 }
-
-/** Chờ lựa chọn/số lượng đứng yên rồi mới hỏi lại, để bấm liên tục không chạm giới hạn 30 lần/phút của API. */
-const PREVIEW_DEBOUNCE_MS = 300;
 
 export function VoucherSheet({
   visible,

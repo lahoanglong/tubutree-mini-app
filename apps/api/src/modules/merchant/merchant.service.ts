@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { paginated, skipTake } from '../../common/pagination';
 import { maskFullName } from '../../common/mask-name';
+import { maskPhoneOrNull } from '../../common/mask-pii';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import {
   normalizeSubdomain,
@@ -24,6 +25,7 @@ import {
 } from './merchant-pancake-link';
 import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
 import { isPartnerStore, lockStoreOwner } from './partner-store';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
@@ -50,17 +52,6 @@ function slugify(str: string): string {
     .replace(/đ/g, 'd')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-/**
- * Cùng công thức che SĐT với `maskPhone` ở loyalty.service.ts (giữ 3 số đầu + 3 số cuối) — không
- * import trực tiếp từ đó (module khác, tránh đụng file agent khác có thể đang sửa song song), chỉ
- * lặp lại ĐÚNG công thức để nhất quán quy ước che dữ liệu toàn hệ thống.
- */
-function maskPhoneNumber(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  if (phone.length <= 6) return '***';
-  return `${phone.slice(0, 3)}****${phone.slice(-3)}`;
 }
 
 type MaskableShippingAddress = {
@@ -269,6 +260,19 @@ export class MerchantService {
     return store;
   }
 
+  /**
+   * Bước trong transaction trước khi một sản phẩm tự giao đang bán được ghi (đăng mới, hoặc mở bán lại): khoá dòng gian hàng FOR KEY SHARE
+   * rồi kiểm lại cờ đối tác (thu hồi đại lý giữ FOR UPDATE cùng dòng trước khi tắt cờ), rồi khoá dòng users của chủ FOR KEY SHARE (ẩn danh giữ
+   * users FOR UPDATE nên ta đợi nó xong rồi thấy isBlocked). Thứ tự gian hàng → users như mọi đường khác; đặt đơn không đụng khoá này.
+   */
+  private async lockSellableStore(tx: Prisma.TransactionClient, storeId: string, ownerUserId: string): Promise<void> {
+    const [store] = await tx.$queryRaw<{ type: string; isPartner: boolean }[]>`
+      SELECT "type"::text AS "type", "isPartner" FROM "storefronts" WHERE "id" = ${storeId} FOR KEY SHARE`;
+    if (!store || !isPartnerStore(store)) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+    const [owner] = await tx.$queryRaw<{ isBlocked: boolean }[]>`SELECT "isBlocked" FROM "users" WHERE "id" = ${ownerUserId} FOR KEY SHARE`;
+    if (!owner || owner.isBlocked) throw new ForbiddenException('Tài khoản đã bị khoá hoặc đã xoá, không thể đăng bán sản phẩm.');
+  }
+
   /** Kiểm mã biến thể Pancake cho "Tubu giao hộ" (form đăng sản phẩm, nút "Kiểm tra"). */
   async checkPancakeVariation(userId: string, code: string): Promise<MerchantPancakeCheck> {
     await this.assertCanSellOwnProducts(userId);
@@ -312,6 +316,7 @@ export class MerchantService {
           const owner = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
           if (owner?.role !== 'DEALER') return false;
           await tx.storefront.update({ where: { id: store.id }, data: { isPartner: true } });
+          await recordUserAdminEvent(tx, { userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: userId });
           return true;
         }).catch(throwIfLockBusy);
         return { ...store, isPartner };
@@ -524,45 +529,50 @@ export class MerchantService {
 
     // PENDING_REVIEW: chưa bán được cho tới khi admin duyệt. Sản phẩm đối tác không mang mã Pancake nào (D4): hàng tự giao đi
     // hàng chờ của đối tác; hàng "Tubu giao hộ" nhận biến thể Pancake thật lúc duyệt.
-    const product = await this.prisma.product.create({
-      data: {
-        name: dto.name,
-        slug: uniqueSlug,
-        pancakeId: null,
-        fulfilment: 'MERCHANT',
-        pancakeLinkCode: link?.pancakeId ?? null,
-        brand: store.title,
-        description: dto.description,
-        shortDesc: dto.shortDesc,
-        basePrice: retailPrice,
-        salePrice,
-        images: dto.images ?? [],
-        thumbnail: dto.thumbnail ?? dto.images?.[0] ?? null,
-        categoryIds: dto.categoryIds ?? [],
-        tags: dto.tags ?? [],
-        forSegment: dto.forSegment ?? [],
-        ingredients: (dto.ingredients as Prisma.InputJsonValue) ?? undefined,
-        certifications: dto.certifications ?? [],
-        storefrontId: store.id,
-        approvalStatus: 'PENDING_REVIEW',
-        isActive: true,
-        variations: {
-          create: {
-            pancakeId: null,
-            sku,
-            name: 'Mặc định',
-            attributes: {},
-            retailPrice,
-            salePrice,
-            stock: link ? 0 : (dto.stock ?? 0),
-            isActive: true,
+    // Chèn dưới FOR KEY SHARE của dòng gian hàng rồi kiểm lại cờ (như checkout.assertPartnerStoresUnderLock): thu hồi đại lý giữ FOR UPDATE
+    // cùng dòng này trước khi tắt cờ, nên hoặc sản phẩm bị từ chối, hoặc thu hồi thấy sản phẩm này và 409, không bao giờ cả hai cùng qua.
+    const product = await this.prisma.$transaction(async (tx) => {
+      await this.lockSellableStore(tx, store.id, userId);
+      return tx.product.create({
+        data: {
+          name: dto.name,
+          slug: uniqueSlug,
+          pancakeId: null,
+          fulfilment: 'MERCHANT',
+          pancakeLinkCode: link?.pancakeId ?? null,
+          brand: store.title,
+          description: dto.description,
+          shortDesc: dto.shortDesc,
+          basePrice: retailPrice,
+          salePrice,
+          images: dto.images ?? [],
+          thumbnail: dto.thumbnail ?? dto.images?.[0] ?? null,
+          categoryIds: dto.categoryIds ?? [],
+          tags: dto.tags ?? [],
+          forSegment: dto.forSegment ?? [],
+          ingredients: (dto.ingredients as Prisma.InputJsonValue) ?? undefined,
+          certifications: dto.certifications ?? [],
+          storefrontId: store.id,
+          approvalStatus: 'PENDING_REVIEW',
+          isActive: true,
+          variations: {
+            create: {
+              pancakeId: null,
+              sku,
+              name: 'Mặc định',
+              attributes: {},
+              retailPrice,
+              salePrice,
+              stock: link ? 0 : (dto.stock ?? 0),
+              isActive: true,
+            },
           },
         },
-      },
-      include: {
-        variations: true,
-      },
-    });
+        include: {
+          variations: true,
+        },
+      });
+    }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
 
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
@@ -983,7 +993,7 @@ export class MerchantService {
             ...order,
             ...(scope.isPartner
               ? {}
-              : { user: user ? { ...user, fullName: maskFullName(user.fullName), phone: maskPhoneNumber(user.phone) } : user }),
+              : { user: user ? { ...user, fullName: maskFullName(user.fullName), phone: maskPhoneOrNull(user.phone) } : user }),
             shippingAddress: maskShippingAddress(order.shippingAddress),
           }));
 

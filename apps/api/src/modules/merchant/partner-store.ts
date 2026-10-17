@@ -30,3 +30,15 @@ export function losesPartnerStore(from: string, to: string): boolean {
 export function isPartnerStore(store: { type: string; isPartner?: boolean | null }): boolean {
   return store.type === 'MERCHANT' || store.isPartner === true;
 }
+
+/** Gian hàng đã có phiếu đối soát nào chưa: cổng chung cho tab "Hàng trả về" (hasPayouts) và `listForMerchant` của chủ đã tắt cờ. */
+export async function storeHasPayouts(db: { merchantPayout: { count(args: { where: { storefrontId: string } }): Promise<number> } }, storefrontId: string): Promise<boolean> {
+  return (await db.merchantPayout.count({ where: { storefrontId } })) > 0;
+}
+
+/**
+ * Dấu ở `reason` của dòng STOREFRONT_PARTNER false → true do admin bật tay (setStorePartner): `<id gian hàng>:ADMIN_TOGGLE`. Cờ bật từ
+ * Cổng người bán hoặc duyệt đại lý ghi `<id gian hàng>` trơn. Cờ CTV có lần bật MỚI NHẤT mang dấu này là cờ admin, không bị đổi
+ * CUSTOMER ↔ AFFILIATE đụng tới; cờ theo vai trò thì tắt khi chủ được đặt về CUSTOMER/AFFILIATE.
+ */
+export const ADMIN_TOGGLE_MARK = ':ADMIN_TOGGLE';

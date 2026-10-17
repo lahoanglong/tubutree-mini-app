@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { recallCheckoutSelection } from '@/lib/checkout-selection';
 
 // BUYERWEB-10: bấm "+" trên dòng hết hàng làm dòng bị xoá (quantity kẹp về 0) mà không báo gì.
@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   removed: [] as string[],
   coupons: [] as unknown[],
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
+  selection: vi.fn<(ids: string[]) => Promise<unknown>>(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -19,6 +20,9 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getCart: async () => state.cart,
   getMyCoupons: async () => state.coupons,
   getCouponPreviews: (p: unknown) => state.previews(p),
+  getCartSelection: (ids: string[]) => state.selection(ids),
+  applyCoupon: async () => state.cart,
+  removeCoupon: async () => state.cart,
   updateCartItem: async (id: string, q: number) => {
     state.updates.push({ id, q });
     return state.cart;
@@ -56,6 +60,8 @@ beforeEach(() => {
   state.coupons = [];
   state.previews.mockReset();
   state.previews.mockResolvedValue([]);
+  state.selection.mockReset();
+  state.selection.mockRejectedValue(new Error('chưa mock'));
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -250,6 +256,17 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
     expect(container.textContent).toContain('Tổng215.000đ');
   });
 
+  it('ưu đãi hạng thành viên: dòng riêng, tổng = tạm tính − combo − mã − hạng; chọn một phần thì ẩn', async () => {
+    state.cart = { ...two(), couponCode: 'WELCOME', comboDiscount: 25000, discount: 10000, tierDiscount: 4000 };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Ưu đãi hạng thành viên');
+    expect(container.textContent).toContain('-4.000đ');
+    expect(container.textContent).toContain('Tổng211.000đ');
+    click(pick(container, 'Dầu gội'));
+    await flush(2);
+    expect(container.textContent).not.toContain('Ưu đãi hạng thành viên');
+  });
+
   it('không có combo (0 hoặc API cũ chưa trả): không có dòng combo, tổng như cũ', async () => {
     state.cart = { ...two(), couponCode: 'WELCOME', comboDiscount: 0, discount: 10000 };
     const { container } = await mount();
@@ -349,5 +366,199 @@ describe('/gio-hang — xem trước mức giảm mã theo đúng giỏ đang ch
     click(container.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="Chọn tất cả sản phẩm"]'));
     await settle();
     expect(state.previews).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấy từ máy chủ (GET /cart?itemIds)', () => {
+  const settle = async () => {
+    await new Promise((r) => setTimeout(r, 350));
+    await flush(6);
+  };
+  const two = () => ({
+    ...cartOf([
+      line({ id: 'i1', productName: 'Dầu gội', quantity: 1, total: 150000 }),
+      line({ id: 'i2', productName: 'Xà phòng', quantity: 2, unitPrice: 50000, total: 100000 }),
+    ]),
+    couponCode: 'WELCOME',
+    comboDiscount: 25000,
+    discount: 10000,
+    tierDiscount: 4000,
+    subtotal: 250000,
+    itemCount: 3,
+  });
+  const pick = (c: HTMLElement, name: string) => c.querySelector<HTMLInputElement>(`input[type="checkbox"][aria-label="Chọn ${name} để thanh toán"]`)!;
+  const selectAll = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="Chọn tất cả sản phẩm"]')!;
+
+  it('bỏ chọn một dòng: hỏi máy chủ đúng itemIds đã chọn, hiện combo, mã, hạng và tổng đúng số máy chủ trả', async () => {
+    state.cart = two();
+    state.selection.mockResolvedValue({
+      ...cartOf([line({ id: 'i2', productName: 'Xà phòng', quantity: 2, unitPrice: 50000, total: 100000 })]),
+      couponCode: 'WELCOME',
+      subtotal: 100000,
+      comboDiscount: 5000,
+      discount: 3000,
+      tierDiscount: 1000,
+    });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(state.selection).toHaveBeenCalledTimes(1);
+    expect(state.selection).toHaveBeenLastCalledWith(['i2']);
+    expect(container.textContent).toContain('Giảm giá combo');
+    expect(container.textContent).toContain('-5.000đ');
+    expect(container.textContent).toContain('-3.000đ');
+    expect(container.textContent).toContain('Ưu đãi hạng thành viên');
+    expect(container.textContent).toContain('-1.000đ');
+    expect(container.textContent).toContain('Tổng91.000đ');
+    expect(container.textContent).not.toContain('tính lại ở bước thanh toán');
+  });
+
+  it('chọn lại tất cả: về giỏ thường đã có trong bộ nhớ, không hỏi thêm máy chủ', async () => {
+    state.cart = two();
+    state.selection.mockResolvedValue({ ...cartOf([]), subtotal: 100000, comboDiscount: 5000, discount: 3000, tierDiscount: 1000 });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(state.selection).toHaveBeenCalledTimes(1);
+    click(selectAll(container));
+    await settle();
+    expect(state.selection).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('-25.000đ');
+    expect(container.textContent).toContain('Tổng211.000đ');
+  });
+
+  it('cả giỏ ngay từ đầu: không gọi giá phần chọn', async () => {
+    state.cart = two();
+    await mount();
+    await settle();
+    expect(state.selection).not.toHaveBeenCalled();
+  });
+
+  it('mã không đạt với phần chọn: không giảm, hiện đúng câu giải thích máy chủ trả', async () => {
+    state.cart = two();
+    state.selection.mockResolvedValue({
+      ...cartOf([line({ id: 'i1', productName: 'Dầu gội', quantity: 1, total: 150000 })]),
+      couponCode: 'WELCOME',
+      subtotal: 150000,
+      comboDiscount: 0,
+      discount: 0,
+      tierDiscount: 0,
+      couponNotice: 'Mã chưa áp cho đơn này: Đơn tối thiểu 200.000đ.',
+    });
+    const { container } = await mount();
+    click(pick(container, 'Xà phòng'));
+    await settle();
+    expect(container.querySelector('[data-testid="coupon-notice"]')!.textContent).toContain('Đơn tối thiểu 200.000đ');
+    expect(container.textContent).toContain('Tổng150.000đ');
+  });
+
+  it('chưa có giá phần chọn (đang chờ hoặc lỗi): không hiện số của cả giỏ, tổng là tạm tính phần chọn', async () => {
+    state.cart = two();
+    state.selection.mockReturnValue(new Promise(() => {}));
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.textContent).not.toContain('Giảm giá combo');
+    expect(container.textContent).toContain('Tổng100.000đ');
+  });
+
+  it('bỏ mã khi đang chọn một phần: hỏi lại giá phần chọn, không còn giảm giá của mã cũ', async () => {
+    state.cart = two();
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 100000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.textContent).toContain('Tổng97.000đ');
+    state.cart = { ...two(), couponCode: null, discount: 0, comboDiscount: 0, tierDiscount: 0 };
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: null, subtotal: 100000, comboDiscount: 0, discount: 0, tierDiscount: 0 });
+    click(container.querySelector('button[aria-label="Bỏ mã giảm giá WELCOME"]'));
+    await settle();
+    expect(state.selection).toHaveBeenCalledTimes(2);
+    expect(container.textContent).not.toContain('-3.000đ');
+    expect(container.textContent).toContain('Tổng100.000đ');
+  });
+
+  it('áp mã khi đang chọn một phần: hỏi lại giá phần chọn và hiện mức giảm của mã mới', async () => {
+    state.cart = { ...two(), couponCode: null, discount: 0, comboDiscount: 0, tierDiscount: 0 };
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: null, subtotal: 100000, comboDiscount: 0, discount: 0, tierDiscount: 0 });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.textContent).toContain('Tổng100.000đ');
+    state.cart = { ...two(), couponCode: 'WELCOME' };
+    state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 100000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+    typeInto(container.querySelector('#coupon-code'), 'welcome');
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Áp dụng')!);
+    await settle();
+    expect(state.selection).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('-3.000đ');
+    expect(container.textContent).toContain('Tổng97.000đ');
+  });
+
+  it('giá phần chọn đổi so với giỏ đã tải (hết giờ vàng): tạm tính và tổng theo chính tạm tính của phần chọn', async () => {
+    state.cart = two();
+    state.selection.mockResolvedValue({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 90000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.textContent).toContain('Tạm tính90.000đ');
+    expect(container.textContent).toContain('Tổng87.000đ');
+    expect(container.textContent).not.toContain('Tổng97.000đ');
+  });
+
+  it('chưa có giá phần chọn: không hiện câu giải thích mã của cả giỏ (không thuộc phần đang chọn)', async () => {
+    state.cart = { ...two(), couponNotice: 'Mã chưa áp cho đơn này: phần giảm combo làm hụt đơn tối thiểu.' };
+    state.selection.mockReturnValue(new Promise(() => {}));
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')).not.toBeNull();
+    click(pick(container, 'Dầu gội'));
+    await settle();
+    expect(container.querySelector('[data-testid="coupon-notice"]')).toBeNull();
+  });
+
+  describe('chỉ hiện giá phần chọn khi đúng phần đã hỏi, đã xong và không đang hỏi lại', () => {
+    const three = () => ({
+      ...cartOf([
+        line({ id: 'i1', productName: 'Dầu gội', quantity: 1, total: 100000 }),
+        line({ id: 'i2', productName: 'Xà phòng', quantity: 1, total: 100000 }),
+        line({ id: 'i3', productName: 'Nước rửa', quantity: 1, total: 100000 }),
+      ]),
+      couponCode: 'WELCOME',
+      subtotal: 300000,
+      itemCount: 3,
+    });
+    const P1 = () => ({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 200000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
+
+    it('đổi lựa chọn: trước khi hết debounce không hiện số của lựa chọn trước, tổng là tạm tính phần mới chọn', async () => {
+      state.cart = three();
+      state.selection.mockResolvedValueOnce(P1());
+      state.selection.mockReturnValue(new Promise(() => {}));
+      const { container } = await mount();
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(container.textContent).toContain('Tổng197.000đ');
+      click(pick(container, 'Nước rửa'));
+      await flush(3);
+      expect(container.textContent).not.toContain('-3.000đ');
+      expect(container.textContent).toContain('Tổng100.000đ');
+    });
+
+    it('hỏi lại cùng lựa chọn (đang tải, còn số cũ trong bộ nhớ): không hiện số cũ cho tới khi trả lời xong', async () => {
+      state.cart = three();
+      state.selection.mockResolvedValueOnce(P1());
+      const { container } = await mount();
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(container.textContent).toContain('Tổng197.000đ');
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(container.textContent).not.toContain('-3.000đ');
+      state.selection.mockReturnValueOnce(new Promise(() => {}));
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(state.selection).toHaveBeenCalledTimes(2);
+      expect(container.textContent).not.toContain('-3.000đ');
+      expect(container.textContent).toContain('Tổng200.000đ');
+    });
   });
 });

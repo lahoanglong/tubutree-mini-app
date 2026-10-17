@@ -7,6 +7,8 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
 import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
 
+type GrantFailures = { count: number; first?: unknown };
+
 export type CronBatchResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { granted: number; scanned: number };
 
 /**
@@ -22,8 +24,10 @@ export class VouchersService {
   private static readonly WELCOME_MAX_PAGES = 25;
   /** Kích thước lô keyset cho birthday/winback (quét đến hết, không có trần số trang). */
   private static readonly BATCH_PAGE = 500;
-  /** Số grant() chạy cùng lúc trong một lô birthday (mỗi grant giữ 1 kết nối Prisma ngắn hạn, pool mặc định nhỏ). */
-  private static readonly BIRTHDAY_CONCURRENCY = 10;
+  /** Số grant() chạy cùng lúc trong một lô birthday/welcome/winback (mỗi grant giữ 1 kết nối Prisma ngắn hạn, pool mặc định nhỏ). */
+  private static readonly GRANT_CONCURRENCY = 10;
+  /** Số dòng log lỗi từng user mỗi lượt; phần còn lại chỉ nằm trong dòng tổng kết. */
+  private static readonly MAX_FAILURE_LOGS = 20;
   /** Cửa sổ NS-1 (analytics-aggregation NS1_WINDOW_DAYS): đơn thứ 2 tính trong 30 ngày kể từ đơn đầu. */
   private static readonly NS1_WINDOW_DAYS = 30;
   private static readonly SECOND_ORDER_PAGE = 200;
@@ -97,6 +101,42 @@ export class VouchersService {
   }
 
   /**
+   * Cấp theo nhóm song song có giới hạn (GRANT_CONCURRENCY), trả số coupon thực sự mới tạo. Một grant lỗi KHÔNG dừng các
+   * nhóm sau: birthday chỉ quét đúng ngày sinh nhật, không có lượt quét lại, nên dừng giữa chừng là mất voucher của những
+   * người đứng sau. Lỗi được ghi vào `failures` (log từng dòng có trần, tổng kết ở `reportGrantFailures`).
+   */
+  private async grantInChunks<T>(
+    label: string,
+    items: T[],
+    toOpts: (item: T) => Parameters<VouchersService['grant']>[0],
+    failures: GrantFailures,
+  ): Promise<number> {
+    let granted = 0;
+    for (let i = 0; i < items.length; i += VouchersService.GRANT_CONCURRENCY) {
+      const chunk = items.slice(i, i + VouchersService.GRANT_CONCURRENCY).map(toOpts);
+      const results = await Promise.allSettled(chunk.map((opts) => this.grant(opts)));
+      results.forEach((r, idx) => {
+        if (r.status === 'fulfilled') {
+          if (r.value) granted++;
+          return;
+        }
+        failures.count++;
+        failures.first ??= r.reason;
+        if (failures.count <= VouchersService.MAX_FAILURE_LOGS) {
+          this.logger.error(`${label} lỗi cấp cho user ${chunk[idx]!.userId}: ${r.reason instanceof Error ? r.reason.message : r.reason}`);
+        }
+      });
+    }
+    return granted;
+  }
+
+  /** Một dòng tổng kết mỗi lượt chạy để cảnh báo vẫn thấy lỗi dù các nhóm sau đã được xử lý tiếp. */
+  private reportGrantFailures(label: string, failures: GrantFailures, granted: number): void {
+    if (failures.count === 0) return;
+    this.logger.error(`${label} lỗi: ${failures.count} lượt cấp thất bại, ${granted} đã cấp (lỗi đầu: ${failures.first instanceof Error ? failures.first.message : failures.first})`);
+  }
+
+  /**
    * Welcome: user mới (24h) chưa có đơn → voucher chào mừng. Chạy mỗi giờ.
    *
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi giữa lúc phân trang ném ra
@@ -105,6 +145,8 @@ export class VouchersService {
    */
   @Cron(CronExpression.EVERY_HOUR, { timeZone: CRON_TZ })
   async welcomeVouchers(): Promise<void> {
+    const failures: GrantFailures = { count: 0 };
+    let granted = 0;
     try {
       const since = new Date(Date.now() - 24 * 3600 * 1000);
       const value = await this.config.get<number>('voucher.welcome_amount', 30000);
@@ -117,7 +159,6 @@ export class VouchersService {
       // một giờ khiến 800 người mới chỉ leo lên top-200 khi lứa cũ rời cửa sổ 24h — mà cả nhóm rời
       // gần như cùng lúc. Hàng trăm khách mới KHÔNG BAO GIỜ nhận voucher chào mừng, không lỗi nào
       // được ghi.
-      let granted = 0;
       let scanned = 0;
       let cursor: string | undefined;
       for (let page = 0; page < VouchersService.WELCOME_MAX_PAGES; page++) {
@@ -133,14 +174,16 @@ export class VouchersService {
         if (users.length === 0) break;
         scanned += users.length;
         cursor = users[users.length - 1]!.id;
-        for (const u of users) {
-          if (await this.grant({ userId: u.id, reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER' })) granted++;
-        }
+        granted += await this.grantInChunks('welcomeVouchers', users, (u) => ({
+          userId: u.id, reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER',
+        }), failures);
         if (users.length < VouchersService.WELCOME_PAGE) break;
       }
       if (granted) this.logger.log(`Welcome vouchers granted: ${granted}/${scanned} user trong cửa sổ 24h.`);
     } catch (err) {
       this.logger.error(`welcomeVouchers lỗi: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      this.reportGrantFailures('welcomeVouchers', failures, granted);
     }
   }
 
@@ -152,6 +195,8 @@ export class VouchersService {
    */
   @Cron('0 1 * * *', { timeZone: CRON_TZ })
   async birthdayVouchers(): Promise<void> {
+    const failures: GrantFailures = { count: 0 };
+    let granted = 0;
     try {
       const { year, month: mm, day: dd } = vnDateParts();
       const defaultValue = await this.config.get<number>('voucher.birthday_amount', 50000);
@@ -160,7 +205,6 @@ export class VouchersService {
       const tiers = await this.prisma.membershipTier.findMany({ select: { id: true, birthdayVoucherAmount: true } });
       const amountByTier = new Map(tiers.map((t) => [t.id, t.birthdayVoucherAmount]));
       const reason = `BIRTHDAY-${year}-${mm}`;
-      let granted = 0;
       // Keyset theo id: trước đây một lần `LIMIT 500` không ORDER BY — ngày có > 500 người cùng
       // sinh nhật thì phần dư không bao giờ được cấp (Postgres trả tập tuỳ ý, mỗi lần chạy như
       // nhau). Chạy lại/2 instance song song vẫn an toàn nhờ code coupon tất định trong grant().
@@ -176,28 +220,18 @@ export class VouchersService {
             AND u.id > ${cursor}
           ORDER BY u.id
           LIMIT ${VouchersService.BATCH_PAGE}`;
-        for (let i = 0; i < users.length; i += VouchersService.BIRTHDAY_CONCURRENCY) {
-          const results = await Promise.allSettled(
-            users.slice(i, i + VouchersService.BIRTHDAY_CONCURRENCY).map((u) => {
-              const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
-              return this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' });
-            }),
-          );
-          // Đợi cả nhóm xong rồi mới ném lỗi đầu tiên: không để grant còn chạy dở sau khi catch ngoài đã ghi log.
-          const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-          // Lỗi đầu tiên được catch ngoài log; các lỗi sau trong cùng nhóm phải log ở đây kẻo mất dấu.
-          for (const f of failures.slice(1)) {
-            this.logger.error(`birthdayVouchers lỗi thêm trong cùng nhóm: ${f.reason instanceof Error ? f.reason.message : f.reason}`);
-          }
-          if (failures.length) throw failures[0]!.reason;
-          granted += results.filter((r) => r.status === 'fulfilled' && r.value).length;
-        }
+        granted += await this.grantInChunks('birthdayVouchers', users, (u) => {
+          const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
+          return { userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' };
+        }, failures);
         if (users.length < VouchersService.BATCH_PAGE) break;
         cursor = users[users.length - 1]!.id;
       }
       if (granted) this.logger.log(`Birthday vouchers granted: ${granted}`);
     } catch (err) {
       this.logger.error(`birthdayVouchers lỗi: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      this.reportGrantFailures('birthdayVouchers', failures, granted);
     }
   }
 
@@ -209,12 +243,13 @@ export class VouchersService {
    */
   @Cron('0 2 * * *', { timeZone: CRON_TZ })
   async winbackVouchers(): Promise<void> {
+    const failures: GrantFailures = { count: 0 };
+    let granted = 0;
     try {
       const days = await this.config.get<number>('voucher.winback_days', 60);
       const cutoff = new Date(Date.now() - days * 864e5);
       const value = await this.config.get<number>('voucher.winback_amount', 50000);
       const reason = `WINBACK-${vnMonthKey()}`;
-      let granted = 0;
       // Keyset theo userId, cùng lý do với birthdayVouchers (LIMIT 500 không ORDER BY bỏ sót).
       let cursor = '';
       for (;;) {
@@ -227,15 +262,17 @@ export class VouchersService {
           HAVING MAX(o."createdAt") < ${cutoff}
           ORDER BY o."userId"
           LIMIT ${VouchersService.BATCH_PAGE}`;
-        for (const r of rows) {
-          if (await this.grant({ userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER' })) granted++;
-        }
+        granted += await this.grantInChunks('winbackVouchers', rows, (r) => ({
+          userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER',
+        }), failures);
         if (rows.length < VouchersService.BATCH_PAGE) break;
         cursor = rows[rows.length - 1]!.userId;
       }
       if (granted) this.logger.log(`Win-back vouchers granted: ${granted}`);
     } catch (err) {
       this.logger.error(`winbackVouchers lỗi: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      this.reportGrantFailures('winbackVouchers', failures, granted);
     }
   }
 

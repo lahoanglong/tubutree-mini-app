@@ -117,7 +117,7 @@ describe('OrderReturnsService — ảnh minh chứng không nhúng base64 trong 
 
   it('listForMerchant: ảnh cũng là đường dẫn, không nhúng base64', async () => {
     const prisma = {
-      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1' }) },
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', type: 'MERCHANT', isPartner: false }) },
       $queryRaw: jest.fn().mockResolvedValueOnce([{ id: 'r1' }]).mockResolvedValueOnce(refRows),
       returnRequest: {
         findMany: jest.fn().mockResolvedValue([

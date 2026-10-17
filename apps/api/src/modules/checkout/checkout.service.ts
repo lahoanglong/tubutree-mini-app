@@ -13,14 +13,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { CartService } from '../cart/cart.service';
 import { CouponsService } from '../coupons/coupons.service';
-import { PricingService } from '../pricing/pricing.service';
+import { PricingService, tierDiscountPctOf } from '../pricing/pricing.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
-import { resolvePublishedStorefront, type ResolvedStorefront } from '../storefront/resolve-storefront';
+import { resolveAttribution } from './attribution';
 import {
   FlashQuotaLineError,
   FlashSaleService,
@@ -190,28 +190,9 @@ export class CheckoutService {
     @Optional() private readonly config?: SystemConfigService,
   ) {}
 
-  /**
-   * Gian hàng đang được ghi công: slug, subdomain hoặc tên miền riêng → gian hàng (đang xuất bản). Đơn lưu slug CHUẨN và id
-   * gian hàng, không lưu chuỗi khách gửi (SELLER-5) — subdomain đổi chủ được, slug thì không.
-   */
-  private resolveStorefront(identifier: string | null | undefined): Promise<ResolvedStorefront | null> {
-    return resolvePublishedStorefront(this.prisma, identifier);
-  }
-
-  /** Map mã giới thiệu → userId CTV (khác người mua). */
-  /**
-   * P0 A5-01 (đường CHÍNH — không phải fallback touch 3 ngày): slug gian hàng CTV mở trong Zalo
-   * là referralCode viết THƯỜNG (storefront.service.ts sinh slug = referralCode.toLowerCase()),
-   * còn User.referralCode luôn lưu HOA. Postgres so khớp `=` phân biệt hoa/thường nên trước đây
-   * referrer luôn null — CTV không bao giờ được ghi hoa hồng cho khách mua ngay trong Zalo (chỉ
-   * fallback touch 3 ngày ở dưới còn hoạt động). Chuẩn hoá HOA trước khi tra, mirror đúng
-   * auth.service.ts:resolveReferrerId().
-   */
-  private async resolveReferrer(referralCode: string | undefined, buyerId: string): Promise<string | null> {
-    if (!referralCode) return null;
-    const ref = await this.prisma.user.findUnique({ where: { referralCode: referralCode.toUpperCase() } });
-    if (!ref || ref.id === buyerId) return null;
-    return ref.id;
+  /** Ghi công của lần mua (người giới thiệu, gian hàng) — dùng chung với giỏ, xem attribution.ts. */
+  private resolveAttribution(userId: string, input: { referralCode?: string; storefrontSlug?: string | null }) {
+    return resolveAttribution(this.prisma, this.affiliate, userId, input);
   }
 
   /** Tính tạm đơn (ship + giảm + điểm) cho màn checkout. */
@@ -237,7 +218,7 @@ export class CheckoutService {
   }
 
   private async quoteInner(userId: string, dto: QuoteDto) {
-    const storefront = await this.resolveStorefront(dto.storefrontSlug);
+    const { storefront } = await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
     const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
     const blockedPaymentMethods: Record<string, string> = {};
@@ -333,24 +314,9 @@ export class CheckoutService {
       throw new BadRequestException('Tính năng gửi lại vật liệu tái chế hiện chưa mở, vui lòng tải lại trang.');
     }
 
-    // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn
-    // "chạm" giới thiệu trong hạn (3 ngày) → fallback. Resolve TRƯỚC compute() để combo +
-    // storefrontSlug dùng đúng slug hiệu lực.
-    let referrerUserId = await this.resolveReferrer(dto.referralCode, userId);
-    let storefront = await this.resolveStorefront(dto.storefrontSlug);
-    // Khách đang mua trong gian hàng CTV mà mã giới thiệu phiên không khớp ai (web suy mã từ subdomain, SELLER-4): chủ gian
-    // hàng là người giới thiệu — trước khi rơi về "chạm" cũ có thể của CTV khác.
-    if (!referrerUserId && storefront?.type === 'CTV' && storefront.ownerUserId && storefront.ownerUserId !== userId) {
-      referrerUserId = storefront.ownerUserId;
-    }
-    if (!referrerUserId || !storefront) {
-      const touch = await this.affiliate.getActiveTouch(userId);
-      if (touch) {
-        if (!referrerUserId) referrerUserId = touch.referrerUserId;
-        // chỉ lấy slug từ touch kind=ctv (brand không gắn storefrontSlug — tránh ô nhiễm analytics)
-        if (!storefront && touch.kind === 'ctv') storefront = await this.resolveStorefront(touch.storefrontSlug);
-      }
-    }
+    // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn "chạm" giới thiệu trong hạn (3 ngày) →
+    // fallback. Resolve TRƯỚC compute() để combo + storefrontSlug dùng đúng slug hiệu lực.
+    const { referrerUserId, storefront } = await this.resolveAttribution(userId, dto);
     const storefrontSlug = storefront?.slug ?? null;
     // Chủ gian hàng đối tác không hưởng hoa hồng giới thiệu trên đơn con do chính gian hàng của mình giao (mua hàng của anh ta qua
     // slug CTV của anh ta); đơn con hàng của người bán khác vẫn ghi hoa hồng như cũ.
@@ -919,7 +885,7 @@ export class CheckoutService {
    * Chỉ đọc: không áp mã vào giỏ, không ghi lượt dùng, không khoá.
    */
   async couponPreviews(userId: string, dto: CouponPreviewDto): Promise<CouponPreviewsResponse> {
-    const storefront = await this.resolveStorefront(dto.storefrontSlug);
+    const { storefront } = await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
     const cart = await this.checkoutLines(userId, dto.itemIds);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const withShipping = !!dto.addressId;
@@ -971,7 +937,7 @@ export class CheckoutService {
    * và xem trước mã dùng chung.
    */
   private async checkoutLines(userId: string, itemIds?: string[]) {
-    const fullCart = await this.cart.getCart(userId);
+    const fullCart = await this.cart.getCart(userId, null);
     // Checkout TẬP CON: chỉ tính trên các dòng được chọn, tính lại subtotal từ subset (combo/
     // coupon/điểm/ship đều dựa subtotal này). Rỗng/thiếu itemIds = toàn giỏ (tương thích ngược).
     const subset = Array.isArray(itemIds) && itemIds.length > 0;
@@ -1069,10 +1035,7 @@ export class CheckoutService {
     // nhất (giữ nguyên vị trí đã có từ trước fix này). Thứ tự cuối: combo → coupon → hạng → điểm.
     // Loại flash khỏi base (đồng bộ combo/coupon ở trên): giá flash là giá đặc biệt
     // server-authoritative, không cộng dồn thêm giảm giá hạng lên trên nó.
-    const tier = user.tierId
-      ? await this.prisma.membershipTier.findUnique({ where: { id: user.tierId }, select: { discountPct: true } })
-      : null;
-    const tierDiscountPct = tier ? Number(tier.discountPct) : 0;
+    const tierDiscountPct = await tierDiscountPctOf(this.prisma, user.tierId);
     const tierDiscount = this.pricing.calcTierDiscount(goodsAfterCoupon, tierDiscountPct);
     const goodsAfterTierDiscount = Math.max(0, goodsAfterCoupon - tierDiscount);
 

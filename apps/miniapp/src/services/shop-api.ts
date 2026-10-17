@@ -143,6 +143,8 @@ export interface CartSummary {
   comboDiscount?: number;
   /** Mức giảm của mã, tính trên phần hàng sau combo (cùng số báo giá checkout trừ). */
   discount: number;
+  /** Ưu đãi hạng thành viên, tính sau combo và mã (cùng số báo giá checkout trừ); API cũ chưa trả → coi như 0. */
+  tierDiscount?: number;
   freeship: boolean;
   /** Ngưỡng freeship từ SystemConfig — cho progress bar khích lệ. */
   freeshipThreshold: number;
@@ -426,6 +428,9 @@ function cartParams(): { params?: { storefrontSlug: string } } {
   return slug ? { params: { storefrontSlug: slug } } : {};
 }
 export const getCart = () => api.get<CartSummary>('/cart', cartParams()).then((r) => r.data);
+/** Giá của MỘT PHẦN giỏ (các dòng đang chọn): combo, mã và hạng tính trên đúng phần đó, cùng số báo giá thanh toán trừ. Chỉ đọc. */
+export const getCartSelection = (itemIds: string[]) =>
+  api.get<CartSummary>('/cart', { params: { ...cartParams().params, itemIds: itemIds.join(',') } }).then((r) => r.data);
 export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification';
 export const addToCart = (variationId: string, quantity: number, addSource?: AddToCartSource) =>
   api

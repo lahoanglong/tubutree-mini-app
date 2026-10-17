@@ -23,7 +23,7 @@ import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
-import { isPartnerStore, PARTNER_STORE_WHERE } from '../merchant/partner-store';
+import { isPartnerStore, storeHasPayouts } from '../merchant/partner-store';
 import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './return-images';
 import { decodeServedImage } from '../../common/served-image';
 import { ATTENTION_PARTIAL_RETURN_ACK } from '../integrations/pancake/pancake-attention';
@@ -497,13 +497,19 @@ export class OrderReturnsService {
 
   /** Yêu cầu trả hàng của các đơn gian hàng tự giao (đang chờ duyệt / đã duyệt) — mục "Hàng trả về" ở Cổng người bán. */
   async listForMerchant(userId: string): Promise<MerchantReturnView[]> {
-    const store = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, ...PARTNER_STORE_WHERE }, select: { id: true } });
-    if (!store) throw new ForbiddenException('Chỉ gian hàng đối tác tự giao hàng mới có hàng trả về.');
+    const owned = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId }, select: { id: true, type: true, isPartner: true } });
+    const partner = !!owned && isPartnerStore(owned);
+    // Gian hàng đã tắt cờ vào được khi có phiếu bất kỳ (đúng cổng hasPayouts của tab, kể cả chỉ bán hàng giao hộ) nhưng chỉ thấy hàng
+    // trả của đơn đã có dòng SALE trên phiếu (cùng quy tắc với `receive`, có thể là danh sách rỗng); chưa từng có phiếu thì 403.
+    const paidOnly = !!owned && !partner && (await storeHasPayouts(this.prisma, owned.id));
+    if (!owned || (!partner && !paidOnly)) throw new ForbiddenException('Chỉ gian hàng đối tác tự giao hàng mới có hàng trả về.');
+    const store = owned;
     const ids = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT rr."id" FROM "return_requests" rr
         JOIN "orders" o ON o."id" = rr."orderId"
        WHERE o."fulfiller" = 'MERCHANT' AND o."fulfillerStorefrontId" = ${store.id}
          AND rr."status" IN ('REQUESTED', 'APPROVED')
+         ${partner ? Prisma.empty : Prisma.sql`AND EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE')`}
        ORDER BY (rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL) DESC, rr."createdAt" DESC
        LIMIT 50`;
     return this.merchantViews(ids.map((r) => r.id));
@@ -562,11 +568,16 @@ export class OrderReturnsService {
         `Hàng của đơn này trả về gian hàng ${owner?.fulfillerStorefront?.title ?? 'đối tác'}, không về kho Tubu — gian hàng xác nhận đã nhận hàng trong Cổng người bán.`,
       );
     }
-    if (
-      actor.kind === 'MERCHANT' &&
-      (!merchantOrder || !owner?.fulfillerStorefront || !isPartnerStore(owner.fulfillerStorefront) || owner.fulfillerStorefront.ownerUserId !== actor.userId)
-    ) {
-      throw new NotFoundException('Không tìm thấy yêu cầu trả hàng của gian hàng bạn.');
+    if (actor.kind === 'MERCHANT') {
+      const store = owner?.fulfillerStorefront;
+      // Gian hàng đã tắt cờ đối tác vẫn nhận hàng trả của đơn Tubu đã trả tiền (đơn có dòng SALE đã lưu trên phiếu): cùng quy tắc
+      // với khoản đảo tiền còn thu (`openLinesOf`); đơn chưa từng được trả thì không.
+      const allowed =
+        merchantOrder &&
+        !!store &&
+        store.ownerUserId === actor.userId &&
+        (isPartnerStore(store) || (await this.prisma.merchantPayoutLine.count({ where: { orderId: req.orderId, kind: 'SALE' } })) > 0);
+      if (!allowed) throw new NotFoundException('Không tìm thấy yêu cầu trả hàng của gian hàng bạn.');
     }
     if (actor.kind === 'ADMIN') assertNotOwnReturn(actor.userId, req);
     const restocked = await this.prisma.$transaction(async (tx) => {

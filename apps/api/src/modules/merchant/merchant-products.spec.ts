@@ -36,7 +36,10 @@ function build(opts: { role?: string; store?: Record<string, unknown>; pancakeRo
     variation: { findFirst: jest.fn().mockResolvedValue(opts.pancakeRow === undefined ? PANCAKE_ROW : opts.pancakeRow) },
     product: { create: productCreate },
     storefrontItem: { count: jest.fn(), create: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([{ type: (opts.store ?? MERCHANT_STORE).type, isPartner: false }]),
+    $transaction: jest.fn(),
   };
+  prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
   const svc = new MerchantService(prisma as unknown as PrismaService, orderStatus, { notify } as never);
   return { svc, prisma, productCreate, notify };
 }
@@ -54,6 +57,20 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     const { svc, productCreate } = build({ role: 'ADMIN', store: { ...MERCHANT_STORE, type: 'CTV' } });
     await expect(svc.createProduct('u1', BASE)).rejects.toThrow(new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT));
     await expect(svc.checkPancakeVariation('u1', 'PK-123')).rejects.toThrow(ForbiddenException);
+    expect(productCreate).not.toHaveBeenCalled();
+  });
+
+  it('cờ đối tác bị tắt giữa lúc kiểm và lúc chèn (đọc lại dưới khoá dòng gian hàng): từ chối, không tạo sản phẩm', async () => {
+    const { svc, prisma, productCreate } = build();
+    prisma.$queryRaw.mockResolvedValue([{ type: 'CTV', isPartner: false }]);
+    await expect(svc.createProduct('u1', BASE)).rejects.toThrow(new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT));
+    expect(productCreate).not.toHaveBeenCalled();
+  });
+
+  it('chủ đã bị khoá/ẩn danh (đọc dưới khoá users): từ chối, không tạo sản phẩm', async () => {
+    const { svc, prisma, productCreate } = build();
+    prisma.$queryRaw.mockResolvedValueOnce([{ type: 'MERCHANT', isPartner: true }]).mockResolvedValueOnce([{ isBlocked: true }]);
+    await expect(svc.createProduct('u1', BASE)).rejects.toThrow(ForbiddenException);
     expect(productCreate).not.toHaveBeenCalled();
   });
 
@@ -301,11 +318,15 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
       data: { productId: 'tubu-shell' },
     });
     expect(t.variation.create.mock.calls[0][0].data).toMatchObject({ productId: 'prod-a', pancakeId: null, stock: 0 });
-    const lock = t.$queryRaw.mock.calls[0] as unknown as [string[], ...unknown[]];
+    const productLock = t.$queryRaw.mock.calls[0] as unknown as [string[], ...unknown[]];
+    expect(productLock[0].join('?')).toContain('"products"');
+    expect(productLock[0].join('?')).toContain('FOR NO KEY UPDATE');
+    expect(productLock[1]).toBe('prod-a');
+    const lock = t.$queryRaw.mock.calls[1] as unknown as [string[], ...unknown[]];
     expect(lock[0].join('?')).toContain('FOR NO KEY UPDATE');
     expect(lock[1]).toBe('var-pk');
     // mốc gỡ liên kết lấy SAU khi giành khoá biến thể
-    expect(t.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(t.merchantPancakeLink.updateMany.mock.invocationCallOrder[0]!);
+    expect(t.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(t.merchantPancakeLink.updateMany.mock.invocationCallOrder[0]!);
     expect(t.product.update).toHaveBeenCalledWith({ where: { id: 'prod-a' }, data: { fulfilment: 'MERCHANT', isActive: false } });
     expect(t.product.updateMany).toHaveBeenCalledWith({ where: { id: 'tubu-shell', isActive: false }, data: { isActive: true } });
   });
@@ -421,6 +442,7 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       },
       productEditDraft: { upsert: draftUpsert, deleteMany: draftDelete },
       variation: { update: variationUpdate, findFirst: variationFindFirst },
+      $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, isBlocked: false }]),
       $transaction: jest.fn(),
     };
     p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle } from 'lucide-react';
 import {
   getCart,
+  getCartSelection,
   updateCartItem,
   removeCartItem,
   addToCart,
@@ -21,7 +22,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
-import { useDebounced } from '../utils/use-debounced';
+import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../utils/use-debounced';
 import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
@@ -73,7 +74,8 @@ export default function CartPage() {
   const { openSnackbar } = useSnackbar();
   const phase = useAuthPhase();
 
-  const cart = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
+  const cartKeyNow = useCartKey();
+  const cart = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
   const [removed, setRemoved] = useState<CartLine | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Chọn từng món: lưu tập ĐÃ BỎ CHỌN (deselected) → món mới auto-chọn, món xoá tự biến mất
@@ -90,6 +92,25 @@ export default function CartPage() {
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
   }, []);
+
+  // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã của VoucherSheet.
+  // Chọn cả giỏ dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá này.
+  const subsetLines = (cart.data?.items ?? []).filter((l) => !deselected.has(l.id));
+  // Mã đang áp nằm trong dấu vân tay: áp/bỏ mã đổi giá phần chọn dù id, số lượng, thành tiền không đổi.
+  const subsetSig =
+    cart.data && subsetLines.length > 0 && subsetLines.length < cart.data.items.length
+      ? JSON.stringify([subsetLines.map((l) => l.id), cartPreviewKey(subsetLines), cart.data.couponCode])
+      : null;
+  const settledSubsetSig = useDebounced(subsetSig, PREVIEW_DEBOUNCE_MS);
+  const selectionQ = useQuery({
+    queryKey: [...cartKeyNow, 'selection', settledSubsetSig],
+    queryFn: () => getCartSelection((JSON.parse(settledSubsetSig!) as [string[], string, string | null])[0]),
+    enabled: phase === 'authenticated' && !!settledSubsetSig,
+    retry: false,
+  });
+  // Số chỉ đúng cho đúng phần đã hỏi: vừa đổi chọn/số lượng (chưa hỏi lại), đang tải lại hoặc lỗi thì không hiện số cũ.
+  const priced =
+    !!subsetSig && settledSubsetSig === subsetSig && selectionQ.isSuccess && !selectionQ.isFetching ? selectionQ.data : null;
 
   const update = useOptimisticCart(
     ({ id, qty }: { id: string; qty: number }) => updateCartItem(id, qty),
@@ -289,6 +310,7 @@ export default function CartPage() {
           selectedSubtotal={selectedSubtotal}
           selectedCount={selectedCount}
           allSelected={allSelected}
+          priced={priced}
           overStock={overStockSelected}
           tubuOnlyFreeship={hasMerchant}
           tubuSelectedSubtotal={tubuSubtotal(selectedItems)}
@@ -615,6 +637,7 @@ function StickySummary({
   selectedSubtotal,
   selectedCount,
   allSelected,
+  priced,
   overStock,
   tubuOnlyFreeship,
   tubuSelectedSubtotal,
@@ -624,6 +647,8 @@ function StickySummary({
   selectedSubtotal: number;
   selectedCount: number;
   allSelected: boolean;
+  /** Giá của phần chọn từ máy chủ (chỉ khi chọn một phần và đã có số đúng); null = chưa có, không hiện giảm giá. */
+  priced: CartSummary | null;
   overStock: boolean;
   /** Giỏ có hàng gian hàng tự giao: miễn phí vận chuyển chỉ áp cho phần Tubu Tree giao. */
   tubuOnlyFreeship: boolean;
@@ -638,10 +663,15 @@ function StickySummary({
   const reached = (!tubuOnlyFreeship && allSelected && summary.freeship) || base >= threshold;
   const progressPct = Math.min(100, Math.round((base / threshold) * 100));
   const remaining = Math.max(0, threshold - base);
-  // Coupon giảm chỉ hiển thị khi chọn TOÀN giỏ (subset re-tính ở checkout — tránh số sai).
-  const discount = allSelected ? summary.discount : 0;
-  // Combo cũng chỉ hiện khi chọn TOÀN giỏ (combo cần đủ bộ sản phẩm; tập con checkout tính lại).
-  const comboDiscount = allSelected ? (summary.comboDiscount ?? 0) : 0;
+  // Cả giỏ lấy số giảm từ giỏ; một phần giỏ lấy từ giá phần chọn của máy chủ (combo cần đủ bộ trong phần chọn); chưa có thì không
+  // hiện số nào (thanh toán tính lại) — tránh số sai.
+  const shown = allSelected ? summary : priced;
+  const discount = shown?.discount ?? 0;
+  const comboDiscount = shown?.comboDiscount ?? 0;
+  const tierDiscount = shown?.tierDiscount ?? 0;
+  // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
+  const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
+  const subsetNotice = !allSelected && priced?.couponCode ? priced.couponNotice : null;
 
   return (
     <StickyActionBar
@@ -687,12 +717,18 @@ function StickySummary({
           {discount > 0 && (
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" />
           )}
+          {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" />}
+          {subsetNotice && (
+            <Text size="xSmall" role="status" data-testid="coupon-notice" style={{ color: 'var(--color-text-warning)' }}>
+              {subsetNotice}
+            </Text>
+          )}
           {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
               là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
           <KeyValueRow
             label={vi.cart.subtotalAfterDiscount}
-            value={formatVnd(Math.max(0, selectedSubtotal - comboDiscount - discount))}
+            value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
           {overStock && (
