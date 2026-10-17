@@ -213,15 +213,22 @@ Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`; nếu lớn hơn 1
 Cập nhật vhost (chỉ khi đang dùng bản phase2, tức đã có chứng chỉ; còn phase1 thì làm theo [ops/README-vietnix-deploy.md](../../ops/README-vietnix-deploy.md) rồi dán phase2 mới. Làm ban ngày được, `graceful` không rớt kết nối đang có; backup lại hai file cũ trước):
 
 ```bash
-for h in api app; do sudo cp /www/server/panel/vhost/apache/$h.tubutree.com.conf /root/$h.tubutree.com.conf.bak.$(date +%Y%m%d); done
-sudo cp ops/vietnix-vhost-api.conf.phase2 /www/server/panel/vhost/apache/api.tubutree.com.conf
-sudo cp ops/vietnix-vhost-app.conf.phase2 /www/server/panel/vhost/apache/app.tubutree.com.conf
-sudo /www/server/apache/bin/apachectl configtest && sudo /www/server/apache/bin/apachectl -k graceful
-httpd -M 2>/dev/null | grep -E 'deflate|remoteip' || /www/server/apache/bin/apachectl -M | grep -E 'deflate|remoteip'
+TS=$(date +%Y%m%d-%H%M%S); V=/www/server/panel/vhost/apache; AP=/www/server/apache/bin/apachectl
+for h in api app; do sudo cp $V/$h.tubutree.com.conf /root/$h.tubutree.com.conf.bak.$TS; done
+sudo cp ops/vietnix-vhost-api.conf.phase2 $V/api.tubutree.com.conf
+sudo cp ops/vietnix-vhost-app.conf.phase2 $V/app.tubutree.com.conf
+if sudo $AP configtest; then
+  sudo $AP -k graceful
+else
+  echo "configtest LỖI: chép lại hai file cũ, KHÔNG graceful" >&2
+  for h in api app; do sudo cp /root/$h.tubutree.com.conf.bak.$TS $V/$h.tubutree.com.conf; done
+  sudo $AP configtest
+fi
+$AP -M 2>/dev/null | grep -E 'deflate|filter|remoteip'
 bash ops/check-edge.sh --local
 ```
 
-`configtest` phải in `Syntax OK`. Không thấy `deflate_module` thì khối nén bị bỏ qua (không lỗi): nén vẫn có khi bật ☁ cam của Cloudflare. Quay lại: chép hai file `.bak.*` về đúng chỗ rồi `configtest` và `graceful`. Nếu error_log vẫn có `error reading status line` lẻ, thêm `disablereuse=On` sau `ttl=30` ở dòng `ProxyPass` của vhost api (mỗi request một kết nối mới, tốn thêm chút độ trễ).
+`configtest` phải in `Syntax OK`. Apache này dùng chung với ChoDeli/WordPress nên khối lệnh tự chép hai file `.bak.$TS` về lại và KHÔNG `graceful` khi `configtest` lỗi (file lỗi để nguyên trên đĩa sẽ làm hỏng lần reload kế tiếp của aaPanel, kéo cả ChoDeli theo); lệnh `configtest` cuối khối phải in lại `Syntax OK`, nếu không thì dừng và báo. Không thấy `deflate_module` hoặc `filter_module` thì khối nén bị bỏ qua (không lỗi): nén vẫn có khi bật ☁ cam của Cloudflare. Quay lại sau khi đã áp dụng: chép hai file `.bak.*` về đúng chỗ rồi `configtest` và `graceful`. Nếu error_log vẫn có `error reading status line` lẻ, thêm `disablereuse=On` sau `ttl=30` ở dòng `ProxyPass` của vhost api (mỗi request một kết nối mới, tốn thêm chút độ trễ).
 
 - [ ] Đã dán lại vhost phase2, `configtest` Syntax OK, `ops/check-edge.sh` không có FAIL
 - [ ] `nproc` đã xem và `*_CPUS` trong `.env` phù hợp (hoặc để mặc định 1 lõi mỗi service)

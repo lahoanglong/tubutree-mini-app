@@ -93,6 +93,25 @@ describe('ops/vietnix-vhost-*.phase2 — Apache phía trước container', () =>
     expect(code.filter((l) => /^\s*ProxyPass \/ http:\/\/127\.0\.0\.1:\d+\/ ttl=30$/.test(l))).toHaveLength(1);
     expect(code.join('\n')).toMatch(/<IfModule mod_deflate\.c>[\s\S]*AddOutputFilterByType DEFLATE[^\n]*application\/json[\s\S]*<\/IfModule>/);
   });
+
+  it.each(['api', 'app'])('%s: AddOutputFilterByType nằm trong <IfModule mod_filter.c> (Apache dùng chung với ChoDeli/WordPress: thiếu module là lỗi configtest, không phải bỏ qua)', (host) => {
+    const code = repoFile(`ops/vietnix-vhost-${host}.conf.phase2`)
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('#'))
+      .join('\n');
+    expect(code).toMatch(/<IfModule mod_filter\.c>[\s\S]*AddOutputFilterByType DEFLATE[\s\S]*<\/IfModule>/);
+    const lines = code.split('\n');
+    const depthAt = (i: number) => lines.slice(0, i).reduce((d, l) => d + (/<IfModule /.test(l) ? 1 : 0) - (/<\/IfModule>/.test(l) ? 1 : 0), 0);
+    lines.forEach((l, i) => {
+      if (/AddOutputFilterByType/.test(l)) expect(depthAt(i)).toBe(2);
+    });
+  });
+
+  it('runbook 1.5: khối cập nhật vhost chép file .bak về lại ngay khi configtest lỗi (Apache chung với ChoDeli)', () => {
+    const runbook = repoFile('docs/launch/deploy-rollback-runbook.md');
+    const block = /### 1\.5[\s\S]*?```bash\n([\s\S]*?)```/.exec(runbook)?.[1] ?? '';
+    expect(block).toMatch(/if sudo \S+ configtest; then[\s\S]*-k graceful[\s\S]*\belse\b[\s\S]*\.bak\.\$TS[\s\S]*configtest[\s\S]*\bfi\b/);
+  });
 });
 
 describe('apps/web/Dockerfile', () => {
