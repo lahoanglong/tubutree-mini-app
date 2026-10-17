@@ -1,8 +1,11 @@
 import 'reflect-metadata';
+import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { PassThrough } from 'node:stream';
 import type { Response } from 'express';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { AdminReportsController, PayoutExportQuery, RefundExportQuery, ReportRangeQuery } from './admin-reports.controller';
@@ -15,6 +18,24 @@ describe('AdminReportsController', () => {
     for (const m of methods) {
       expect(Reflect.getMetadata(ROLES_KEY, AdminReportsController.prototype[m as keyof AdminReportsController])).toBeUndefined();
       expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, AdminReportsController.prototype[m as keyof AdminReportsController])).toBeUndefined();
+    }
+  });
+
+  it('RolesGuard thật: ADMIN qua, khách và nhân viên CSKH/KHO bị chặn ở mọi route báo cáo và xuất file', () => {
+    const guard = new RolesGuard(new Reflector());
+    const methods = Object.getOwnPropertyNames(AdminReportsController.prototype).filter((m) => m !== 'constructor');
+    const ctx = (m: string, user: object) =>
+      ({
+        switchToHttp: () => ({ getRequest: () => ({ user }) }),
+        getHandler: () => AdminReportsController.prototype[m as keyof AdminReportsController],
+        getClass: () => AdminReportsController,
+      }) as unknown as ExecutionContext;
+    expect(methods).toEqual(expect.arrayContaining(['revenue', 'sources', 'exportOrderItems', 'exportTax', 'exportPayouts', 'exportRefunds']));
+    for (const m of methods) {
+      expect(guard.canActivate(ctx(m, { role: 'ADMIN' }))).toBe(true);
+      for (const user of [{ role: 'CUSTOMER' }, { role: 'AFFILIATE' }, { role: 'DEALER' }, { role: 'STAFF', staffPermissions: ['CSKH', 'KHO'] }]) {
+        expect(() => guard.canActivate(ctx(m, user))).toThrow(ForbiddenException);
+      }
     }
   });
 
