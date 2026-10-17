@@ -31,6 +31,7 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
 import { formatVnd, formatSold } from '../utils/format';
+import { soldPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
@@ -397,11 +398,13 @@ export default function ProductDetailPage() {
             <Badge tone="promo" size="sm" style={{ background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' }}>
               -{flashPct}%
             </Badge>
-            <Badge tone="promo" size="sm">
-              {vi.flashSale.endsIn(flashLeft)}
-            </Badge>
+            {flashLeft && (
+              <Badge tone="promo" size="sm">
+                {vi.flashSale.endsIn(flashLeft)}
+              </Badge>
+            )}
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              {vi.flashSale.soldPct(flashItem.quota > 0 ? Math.round((flashItem.soldCount / flashItem.quota) * 100) : 0)}
+              {vi.flashSale.soldPct(soldPercent(flashItem.soldCount, flashItem.quota))}
             </Text>
           </Box>
         )}

@@ -20,6 +20,7 @@ import { QuantitySelector } from '../components/ui/quantity-selector';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd } from '../utils/format';
+import { clampPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../utils/use-debounced';
@@ -485,7 +486,7 @@ function CartLineRow({
             </span>
             {line.soldPct != null && Number.isFinite(line.soldPct) && (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                {vi.flashSale.soldPct(line.soldPct)}
+                {vi.flashSale.soldPct(clampPercent(line.soldPct))}
               </Text>
             )}
           </Box>

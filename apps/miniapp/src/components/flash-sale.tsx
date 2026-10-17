@@ -9,6 +9,7 @@ import {
   type UpcomingFlashItem,
 } from '../services/shop-api';
 import { formatVnd } from '../utils/format';
+import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
@@ -96,15 +97,18 @@ export function FlashSale() {
         <Heading variant="title-sm" as="h2" style={{ color: 'var(--color-promo-fg)' }}>
           {vi.flashSale.sectionTitle}
         </Heading>
-        <span role="timer" aria-label={vi.flashSale.endsIn(timeLeft)}>
-          <Badge tone="promo">{vi.flashSale.endsIn(timeLeft)}</Badge>
-        </span>
+        {/* Hết giờ mà danh sách chưa kịp tải lại (poll 60s): không hiện đồng hồ về 0. */}
+        {timeLeft && (
+          <span role="timer" aria-label={vi.flashSale.endsIn(timeLeft)}>
+            <Badge tone="promo">{vi.flashSale.endsIn(timeLeft)}</Badge>
+          </span>
+        )}
       </div>
 
       <ScrollRow label={vi.flashSale.sectionName} style={CARD_ROW_STYLE}>
         {items.map((item) => {
           const { price, was, pct } = flashDisplay(item);
-          const soldPct = item.quota > 0 ? Math.round((item.soldCount / item.quota) * 100) : 0;
+          const soldPct = soldPercent(item.soldCount, item.quota);
           return (
             <div
               key={item.itemId}
@@ -199,34 +203,37 @@ function UpcomingFlashCard({
         <div style={{ marginTop: 2 }}>
           <PriceTag value={price} flash={{ price }} size="sm" />
         </div>
+        {/* Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem. */}
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-          {vi.flashSale.startsIn(startsIn)}
+          {startsIn ? vi.flashSale.startsIn(startsIn) : vi.flashSale.live}
         </Text>
-        <div
-          role="button"
-          className="tubu-press"
-          onClick={(e: MouseEvent) => {
-            e.stopPropagation();
-            if (pending) return;
-            onToggleRemind();
-          }}
-          style={{
-            marginTop: 8,
-            textAlign: 'center',
-            minHeight: 44,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 'var(--radius-pill)',
-            fontSize: 'var(--type-label-size)',
-            fontWeight: 600,
-            opacity: pending ? 0.6 : 1,
-            background: item.reminded ? 'var(--color-action-secondary-bg)' : 'var(--color-action-primary-bg)',
-            color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
-          }}
-        >
-          {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
-        </div>
+        {startsIn && (
+          <div
+            role="button"
+            className="tubu-press"
+            onClick={(e: MouseEvent) => {
+              e.stopPropagation();
+              if (pending) return;
+              onToggleRemind();
+            }}
+            style={{
+              marginTop: 8,
+              textAlign: 'center',
+              minHeight: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--radius-pill)',
+              fontSize: 'var(--type-label-size)',
+              fontWeight: 600,
+              opacity: pending ? 0.6 : 1,
+              background: item.reminded ? 'var(--color-action-secondary-bg)' : 'var(--color-action-primary-bg)',
+              color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
+            }}
+          >
+            {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
+          </div>
+        )}
       </div>
     </div>
   );

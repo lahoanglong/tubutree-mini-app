@@ -98,6 +98,7 @@ export const vi = {
     priceChangedCta: 'Xem lại giỏ hàng',
     upcomingTitle: '🔔 Sắp diễn ra',
     startsIn: (t: string) => `Bắt đầu sau ${t}`,
+    live: 'Đang diễn ra',
     remindMe: '🔔 Nhắc tôi',
     reminded: '✅ Đã đặt nhắc',
   },

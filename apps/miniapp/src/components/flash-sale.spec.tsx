@@ -131,11 +131,54 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
   });
 
-  it('thanh "đã bán" không vượt 100% khi bán quá suất', async () => {
+  it('bán quá suất: chữ và thanh "đã bán" cùng dừng ở 100%, không in 150%', async () => {
     mocks.fetchActive.mockResolvedValue([{ ...ITEM, quota: 10, soldCount: 15 }]);
     renderFlash();
-    expect(await screen.findByText('Đã bán 150%')).toBeInTheDocument();
+    expect(await screen.findByText('Đã bán 100%')).toBeInTheDocument();
+    expect(screen.queryByText(/150%/)).toBeNull();
     expect(screen.getByTestId('progress-fill')).toHaveStyle({ width: '100%' });
+  });
+
+  it('đã quá giờ kết thúc (chờ lần tải lại kế tiếp): ẩn đồng hồ, không hiện "Còn 0h 00m"', async () => {
+    mocks.fetchActive.mockResolvedValue([{ ...ITEM, endAt: new Date(Date.now() - 60_000).toISOString() }]);
+    renderFlash();
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+    expect(screen.queryByRole('timer')).toBeNull();
+    expect(screen.queryByText(/Còn /)).toBeNull();
+  });
+});
+
+describe('UpcomingFlashSales — mốc bắt đầu', () => {
+  const UPCOMING = {
+    itemId: 'u1', productId: 'p1', productSlug: 'p1', productName: 'Nước rửa chén', thumbnail: null, variationId: 'v1',
+    retailPrice: 100000, flashPrice: 80000, reminded: false, startAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+  };
+  const renderUpcoming = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <UpcomingFlashSales />
+      </QueryClientProvider>,
+    );
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.status = 'authenticated';
+  });
+
+  it('còn thời gian: "Bắt đầu sau Xh YYm" và nút nhắc', async () => {
+    mocks.fetchUpcoming.mockResolvedValue([UPCOMING]);
+    renderUpcoming();
+    expect(await screen.findByText(/^Bắt đầu sau \d+h \d{2}m$/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Nhắc tôi/ })).toBeInTheDocument();
+  });
+
+  it('đã tới giờ bắt đầu: không hiện "Bắt đầu sau 0h 00m", đổi thành "Đang diễn ra" và bỏ nút nhắc', async () => {
+    mocks.fetchUpcoming.mockResolvedValue([{ ...UPCOMING, startAt: new Date(Date.now() - 60_000).toISOString() }]);
+    renderUpcoming();
+    expect(await screen.findByText('Đang diễn ra')).toBeInTheDocument();
+    expect(screen.queryByText(/Bắt đầu sau/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Nhắc tôi|Đã đặt nhắc/ })).toBeNull();
   });
 });
 
