@@ -27,6 +27,7 @@ const MIGRATED = [
   'app/thanh-toan/page.tsx',
   'app/thanh-toan/bank-transfer-panel.tsx',
   'app/tai-khoan/page.tsx',
+  'app/tai-khoan/profile-section.tsx',
   'app/tai-khoan/don-hang/[code]/page.tsx',
   'app/s/[slug]/page.tsx',
   'app/dang-nhap/page.tsx',
