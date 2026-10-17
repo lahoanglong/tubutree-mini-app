@@ -51,6 +51,12 @@ Nhánh `lr/claim`. Chủ dự án in thẻ QR bỏ vào hộp hàng giao từ s�
 
 Chỉ chạy trên DB `tubutree_it` ở cổng 5566. Không chạm DB dev hay PROD. Không build, không chạy Playwright.
 
+**Review Opus (đối kháng, phần chạm tiền)**: không thấy lỗi chặn merge. Reviewer chạy lại race spec (17/17) và 23 suite đơn vị (662 test). Reviewer đã thử từng đường "được tiền hai lần" và kết luận các đường sau đều kín: hai đơn đầu, hai lần dùng mã chỉ-khách-mới, vượt trần nhận, gộp tài khoản, nuôi tài khoản khách, đơn tách kiện, thứ tự khoá, cờ tắt, SQL thô, CSV, lộ mã CLAIM qua trang khác. Có 4 điểm nhỏ:
+- Đã sửa: `POST /cart/coupon` trước đây chỉ có trần mặc định 300 lần/phút, trong khi gõ mã thẻ ở giỏ cũng là nhận mã. Giỏ vì thế thành đường dò mã nhanh gấp 30 lần `/coupons/claim`. Nay route này có trần 10 lần/phút (`cart.controller.ts`, có test).
+- Đã sửa: bật lại một lô thì bật lại mọi mã của lô, kể cả mã đã tắt riêng. Màn admin nay hỏi xác nhận và nói rõ điều này (có test).
+- Để lại: khách vãng lai gõ một mã CLAIM có thật ở giỏ thì nhận câu "đăng nhập Zalo", còn mã không có thật thì nhận "không tồn tại". Đây là cách biết mã có tồn tại hay không, nhưng không nhận được mã. Tốc độ dò bị trần 10 lần/phút mỗi tài khoản và 30 lần đăng nhập khách/phút mỗi IP chặn. Không gian mã khoảng 1,1 nghìn tỉ. Giữ câu chữ hiện tại để khách thật cầm thẻ được hướng dẫn đăng nhập.
+- Để lại: thanh freeship ở giỏ hiện ngưỡng 0 cho khách mới kể cả khi giỏ chỉ có hàng gian hàng đối tác, dù phí giao của đối tác vẫn tính. Hạng Cổ Thụ freeship toàn shop đang có đúng giới hạn này. Lúc đặt đơn, tiền vẫn đúng nhờ chốt `expectedTotal`.
+
 ## 3. Chưa làm hoặc cố ý để lại
 
 - **Trang web `/nhan-uu-dai`**: chưa làm. Link QR mở Mini App. Trên web, khách gõ mã thẻ ở giỏ thì hệ thống tự nhận rồi áp mã (cùng endpoint giỏ), nên mã in trên thẻ vẫn dùng được trên web mà không cần trang riêng.
@@ -83,3 +89,4 @@ Chỉ chạy trên DB `tubutree_it` ở cổng 5566. Không chạm DB dev hay PR
 4. **Định nghĩa đơn đầu**: đơn chờ thanh toán và đơn đã trả hàng đều tính là "đã có đơn", chỉ đơn huỷ không tính. Đơn chờ thanh toán quá hạn sẽ bị cron huỷ và khi đó không còn tính. Anh/chị có đồng ý không?
 5. **Freeship đơn đầu**: có bật không, và ngưỡng tiền hàng là bao nhiêu? Mặc định là tắt, ngưỡng 0. Nếu bật, freeship cộng dồn với mã thẻ chỉ-khách-mới (đơn đầu vừa được giảm vừa được miễn phí giao), và mã FREESHIP của khách sẽ không bị tiêu cho đơn đó. Có muốn chặn cộng dồn không?
 6. **`app.miniapp_base_url`**: cần link Mini App thật trước khi in thẻ. Hiện đang để trống.
+7. **Khách từ chối nhận hàng COD đơn đầu**: Pancake chuyển đơn đó sang `CANCELLED`, nên khách lại được tính là "khách mới" (được freeship đơn đầu và mã chỉ-khách-mới thêm lần nữa). Shop đã mất phí giao của đơn bị từ chối dù có tính năng này hay không, nên không mất thêm tiền mỗi vòng. Chỉ là người hay từ chối hàng giữ được ưu đãi. Có muốn tính cả đơn huỷ đã từng giao (từng ở trạng thái `SHIPPING`) là "đã có đơn" không? Mặc định hiện tại là không tính.
