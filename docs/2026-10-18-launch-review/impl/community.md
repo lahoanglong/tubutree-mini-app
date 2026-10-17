@@ -1,6 +1,6 @@
 # Gói community: báo cáo triển khai
 
-Nhánh `lr/community`, 9 commit tính từ `e82a6d57` (nhánh `review/2026-10-18-launch`), chưa push. Postgres race: cổng 5564, DB `tubutree_it`.
+Nhánh `lr/community`, tính từ `e82a6d57` (nhánh `review/2026-10-18-launch`), chưa push. Có thêm vòng sửa sau review Opus (xem mục 1b). Postgres race: cổng 5564, DB `tubutree_it`.
 
 ## 1. Đã làm theo từng phát hiện
 
@@ -24,7 +24,7 @@ Nhánh `lr/community`, 9 commit tính từ `e82a6d57` (nhánh `review/2026-10-18
 
 ### D4-006: báo tác giả khi có bình luận hoặc lượt thích
 - `toggleReaction` và `addComment` gọi `notifyAuthorOfActivity`: bỏ qua tự thích hoặc tự bình luận, mọi loại bài. Bài QUESTION vẫn giữ luồng `COMMUNITY_NEW_ANSWER` và `COMMUNITY_EXPERT_REPLIED` cũ.
-- Chống spam: tối đa 1 tin cho mỗi bài mỗi giờ (thích và bình luận dùng chung khoá `post-activity:<postId>`). Làm bằng `dedupeWithinMs` mới trong `notify()` (`notifications.service.ts`), kiểm tra bên trong khoá advisory của pg nên 8 lượt thích đồng thời chỉ ra 1 tin.
+- Chống spam: tối đa 1 tin cho mỗi bài mỗi giờ cho mỗi loại (khoá riêng `post-like:<postId>` và `post-comment:<postId>`, xem 1b). Làm bằng `dedupeWithinMs` mới trong `notify()` (`notifications.service.ts`), kiểm tra bên trong khoá advisory của pg nên 8 lượt thích đồng thời chỉ ra 1 tin.
 - Khoá cấu hình `community.author_notify_interval_minutes`, mặc định 60. Đặt 0 là tắt thông báo loại này. Giá trị không hợp lệ rơi về 60.
 - Mẫu thông báo `COMMUNITY_POST_LIKED`, `COMMUNITY_POST_COMMENTED` thêm trong `prisma/seed.ts` và migration dữ liệu `20261018100100_lr_community_templates_config` (prod không chạy seed).
 
@@ -38,6 +38,15 @@ Nhánh `lr/community`, 9 commit tính từ `e82a6d57` (nhánh `review/2026-10-18
 ### D4-010: nhãn bảng xếp hạng
 - `apps/miniapp/src/components/game/weekly-leaderboard.tsx`: tiêu đề thành "Chuỗi điểm danh dài nhất"; bục hiện `🔥 chuỗi` thay cho số cây (dữ liệu là chuỗi dài nhất mọi thời gian). Component và tên file giữ nguyên để diff nhỏ. Sửa 3 spec miniapp. Không làm bảng tuần thật.
 
+### 1b. Vòng sửa sau review Opus (REQUEST_CHANGES nhẹ), mỗi mục một commit
+1. `hidePost` và `deletePost` (`community-feed.service.ts`): chuyển trạng thái bằng `updateMany({ where: { id, status: { not: 'REMOVED' } } })`, chỉ khi `count === 1` mới đảo điểm, rút tin cậy, báo tác giả. Race spec: 6 lượt ẩn song song, và ẩn trộn với ADMIN xoá, đều đúng 1 tin `COMMUNITY_POST_HIDDEN` (đã chạy trên code cũ: đỏ; code mới: xanh).
+2. `rejectPost`: chỉ nhận `PENDING` qua `updateMany where status='PENDING'` và cổng `count === 1`. Bài đã đăng trả 409 "Hãy dùng "Ẩn"". Từ chối lần hai trên bài đã `REMOVED` thì ok, không báo thêm; thua cuộc đua với lượt duyệt thì đọc lại và trả 409. Làm cùng kiểu cho `approvePost` (updateMany `PENDING` -> `PUBLISHED`, `count === 1` mới thưởng/báo) để duyệt song song với từ chối không hồi sinh bài vừa bị gỡ; reviewer không nêu riêng mục này, đây là phía đối xứng của cùng lỗi. Bỏ đảo điểm trong `rejectPost` vì bài chờ duyệt chưa cộng điểm. Tab web: lỗi 409 hoặc 404 làm mới danh sách (và số trên "Việc cần xử lý"), lời giải thích hiện ở đầu tab vì dòng đã biến mất; lỗi khác vẫn hiện trên dòng và không làm mới.
+3. Khoá gộp tách theo loại: `post-like:<postId>` và `post-comment:<postId>`. Một lượt thích không còn chặn tin bình luận 60 phút; bình luận vẫn gộp với nhau.
+4. `hidePost` chỉ nhận bài `PUBLISHED`; bài `PENDING` trả 409 gợi ý dùng "Từ chối". ADMIN gỡ bài người khác qua `deletePost` khi bài còn `PENDING` thì báo `COMMUNITY_POST_REJECTED` ("chưa được đăng") thay vì "đã được ẩn".
+5. `notification-categories.ts`: `COMMUNITY_POST_LIKED` và `COMMUNITY_POST_COMMENTED` vào nhóm `GARDEN` (công tắc "Nhắc nhở Vườn Xanh" của khách), không còn là `TRANSACTIONAL`. `COMMUNITY_POST_HIDDEN` vẫn là giao dịch (khách phải biết bài bị ẩn). Nhãn công tắc trong `apps/miniapp/src/pages/settings.tsx` đổi thành "Nhắc nhở Vườn Xanh & tương tác bài viết" để khách hiểu công tắc này tắt cả hai. Test prefs: nhóm đúng, khách tắt thì không nhận thích/bình luận nhưng vẫn nhận tin bài bị ẩn.
+6. `notifications.service.ts`: `notify()` đọc nhanh `findFirst` trong cửa sổ gộp ngay đầu hàm, trước khi tra template/khách và trước transaction + khoá advisory; thấy tin rồi thì trả về luôn (bài viral không giữ N kết nối). Kiểm lại trong transaction vẫn là cổng quyết định khi hai lượt cùng thấy "chưa có tin".
+7. `dedupeWithinMs` chỉ hợp lệ khi `!= null && > 0`; 0, âm, NaN chặn vĩnh viễn như bỏ trống (trước đây số âm làm cửa sổ nằm ở tương lai, tức là không chặn gì). Có JSDoc.
+
 ### Khoá cấu hình mới (đều có giá trị mặc định trong code)
 - `community.author_notify_interval_minutes` (0..1440, mặc định 60).
 - `community.unanswered_alert_hours` (1..720, mặc định 24).
@@ -49,16 +58,15 @@ Môi trường: `PATH=$HOME/.local/node/node-v22.23.3-darwin-arm64/bin:$PATH`, `
 
 - API jest (feed, ops-inbox, notifications, game-quiz, system-config), từ `apps/api`:
   `npx jest src/modules/feed src/modules/ops/ops-inbox src/modules/notifications src/modules/game/game-quiz src/modules/system-config`
-  -> `Test Suites: 25 passed, 25 total` / `Tests: 670 passed, 670 total`
+  -> `Test Suites: 25 passed, 25 total` / `Tests: 689 passed, 689 total` (sau vòng sửa review)
 - Quyền controller (`community-feed.controller.permissions.spec.ts`, nằm trong lượt trên): ADMIN và CSKH được; KHO, STAFF chưa có nhóm, khách, chưa đăng nhập bị chặn; sự kiện và người thắng chỉ ADMIN.
 - Race (Postgres thật), từ `apps/api`:
-  `npx jest -c test/integration-race/jest.config.js --runInBand test/integration-race/{community-launch,ops-health,feed-like-count,community-reward-concurrency,merchant-admin-todo,referral-notice-reconcile}.race-spec.ts`
-  -> `Test Suites: 6 passed, 6 total` / `Tests: 46 passed, 46 total`
-  `community-launch` chạy riêng thêm 2 lần liên tiếp: `Tests: 9 passed, 9 total` mỗi lần.
+  `npx jest -c test/integration-race/jest.config.js --runInBand` trên: community-launch, ops-health, feed-like-count, community-reward-concurrency, merchant-admin-todo, referral-notice-reconcile, referral-notify, groupbuy-expiry-notify, notification-prefs, wishlist-price-drop-cooldown, zns-delivery, refill-approval
+  -> `Test Suites: 12 passed, 12 total` / `Tests: 79 passed, 79 total` (community-launch riêng: 14 test; thêm các spec dùng `notify()` có `dedupeKey` vì đã đổi đường đọc nhanh)
 - Web, từ `apps/web`: `npx vitest run src/components/admin/community-moderation-tab.spec.tsx src/app/admin/page.spec.tsx src/components/admin`
-  -> `Test Files  36 passed (36)` / `Tests  623 passed (623)`
+  -> `Test Files  39 passed (39)` / `Tests  634 passed (634)` (chạy lại trên `src/components/admin src/app/admin` sau vòng sửa)
 - Miniapp, từ `apps/miniapp`: `npx vitest run src/pages/game-layout.spec.tsx src/pages/game-behavior.spec.tsx src/components/game`
-  -> `Test Files  5 passed (5)` / `Tests  117 passed (117)`
+  -> `Test Files  5 passed (5)` / `Tests  117 passed (117)`; sau vòng sửa chạy rộng `src/pages src/components/game`: `Test Files  63 passed (63)` / `Tests  1167 passed (1167)`
 - `npx tsc --noEmit` ở api, web, miniapp: không lỗi.
 - `npx eslint --max-warnings=0` trên mọi file đã đổi ở api (cả `prisma/seed.ts`), web, miniapp: không lỗi.
 - Drift schema: `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code` -> `No difference detected.`
@@ -78,4 +86,5 @@ Môi trường: `PATH=$HOME/.local/node/node-v22.23.3-darwin-arm64/bin:$PATH`, `
 2. Chống spam thông báo tác giả: đã dùng 1 tin mỗi bài mỗi 60 phút (`community.author_notify_interval_minutes`, đặt 0 để tắt). Muốn gộp thích và bình luận chung một khoá (đang làm) hay tách riêng?
 3. Lời báo khi bài bị ẩn mà không có lý do: đã dùng lý do mặc định về nội quy cộng đồng. Cần sửa câu chữ không? Mẫu `COMMUNITY_POST_HIDDEN` sửa được trong bảng mẫu thông báo.
 4. Hoá đơn VAT chờ xuất chỉ hiện cho ADMIN. Nếu muốn kế toán thấy thẻ này, cần mở thêm quyền cho `issue-invoice` (hiện ADMIN-only), việc này đổi quyền xuất hoá đơn nên chưa tự làm.
-5. Quiz hôm nay quay vòng theo thứ tự `id`. Nếu ngân hàng câu hỏi còn ít, khách sẽ thấy câu lặp theo chu kỳ ngắn; cần nhập thêm câu hỏi trước ngày ra mắt.
+5. Tin "bài của bạn có người thích/bình luận" nay thuộc công tắc "Nhắc nhở Vườn Xanh" (nhóm gần nghĩa nhất đang có: tin kéo quay lại, không phải tiếp thị); nhãn công tắc đã đổi thành "Nhắc nhở Vườn Xanh & tương tác bài viết". Muốn tách thành công tắc riêng thì cần thêm cột trên User và một dòng trong Cài đặt miniapp; chưa làm.
+6. Quiz hôm nay quay vòng theo thứ tự `id`. Nếu ngân hàng câu hỏi còn ít, khách sẽ thấy câu lặp theo chu kỳ ngắn; cần nhập thêm câu hỏi trước ngày ra mắt.
