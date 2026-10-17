@@ -40,6 +40,68 @@ describe.each(COMPOSE_FILES)('%s', (file) => {
   });
 });
 
+describe('docker-compose.vietnix.yml — VPS dùng chung với ChoDeli', () => {
+  const compose = repoFile('docker-compose.vietnix.yml');
+  const svc = services(compose);
+
+  it('mọi service tự khởi động lại sau khi máy chủ reboot hoặc process thoát', () => {
+    for (const [name, block] of Object.entries(svc)) {
+      expect({ name, restart: /\n {4}restart: unless-stopped\n/.test(block) }).toEqual({ name, restart: true });
+    }
+  });
+
+  it('api và web có healthcheck (deploy.sh và depends_on chờ trạng thái healthy)', () => {
+    for (const name of ['api', 'web']) {
+      expect({ name, healthcheck: /\n {4}healthcheck:\n/.test(svc[name] ?? '') }).toEqual({ name, healthcheck: true });
+    }
+  });
+
+  it('mọi service có trần RAM và trần CPU; mặc định CPU không vượt 1 lõi (Docker từ chối khởi động khi cpus lớn hơn số vCPU của máy)', () => {
+    for (const [name, block] of Object.entries(svc)) {
+      expect({ name, mem: /\n {4}mem_limit: \d+m\n/.test(block) }).toEqual({ name, mem: true });
+      const cpus = /\n {4}cpus: (?:\$\{[A-Z_]+:-([\d.]+)\}|([\d.]+))\n/.exec(block);
+      expect({ name, hasCpus: cpus !== null }).toEqual({ name, hasCpus: true });
+      expect(Number(cpus?.[1] ?? cpus?.[2])).toBeGreaterThan(0);
+      expect(Number(cpus?.[1] ?? cpus?.[2])).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('chỉnh CPU qua .env (API_CPUS...) không cần sửa file compose: sửa file trên VPS làm git status bẩn và dừng bước 1 của runbook', () => {
+    for (const v of ['POSTGRES_CPUS', 'REDIS_CPUS', 'API_CPUS', 'WEB_CPUS']) expect(compose).toContain('${' + v + ':-');
+  });
+
+  it('Postgres có shm_size (mặc định 64 MB của Docker quá nhỏ cho truy vấn song song)', () => {
+    expect(svc.postgres).toMatch(/\n {4}shm_size: \d+m\n/);
+  });
+
+  it('Next đóng kết nối rảnh sau 55 s: lớn hơn ttl=30 của Apache, nhỏ hơn headersTimeout mặc định 60 s của Node', () => {
+    const ms = Number(/\n {6}KEEP_ALIVE_TIMEOUT: '?(\d+)'?\n/.exec(svc.web ?? '')?.[1]);
+    expect(ms).toBeGreaterThan(30_000);
+    expect(ms).toBeLessThan(60_000);
+  });
+});
+
+describe('ops/vietnix-vhost-*.phase2 — Apache phía trước container', () => {
+  it.each(['api', 'app'])('%s: ProxyPass có ttl=30 (bỏ kết nối rảnh trước khi Node đóng nó) và bật mod_deflate', (host) => {
+    const vhost = repoFile(`ops/vietnix-vhost-${host}.conf.phase2`);
+    const code = vhost.split('\n').filter((l) => !l.trim().startsWith('#'));
+    expect(code.filter((l) => /^\s*ProxyPass \/ http:\/\/127\.0\.0\.1:\d+\/ ttl=30$/.test(l))).toHaveLength(1);
+    expect(code.join('\n')).toMatch(/<IfModule mod_deflate\.c>[\s\S]*AddOutputFilterByType DEFLATE[^\n]*application\/json[\s\S]*<\/IfModule>/);
+  });
+});
+
+describe('apps/web/Dockerfile', () => {
+  const dockerfile = repoFile('apps/web/Dockerfile');
+  const runner = dockerfile.slice(dockerfile.lastIndexOf('AS runner'));
+
+  it('container web chạy bằng user node, và user đó ghi được .next/cache (Data Cache của fetch)', () => {
+    expect(runner).toMatch(/\nUSER node\n/);
+    expect(runner).toMatch(/mkdir -p apps\/web\/\.next\/cache && chown -R node:node apps\/web\/\.next/);
+    expect(runner.indexOf('chown -R node:node')).toBeLessThan(runner.indexOf('USER node'));
+    expect(runner.indexOf('USER node')).toBeLessThan(runner.indexOf('CMD ['));
+  });
+});
+
 describe('BullMQ giữ job đã xong/thất bại có giới hạn', () => {
   it('removeOnFail không giữ quá 1000 job mỗi queue (stacktrace chiếm bộ nhớ Redis)', () => {
     const src = readFileSync(join(__dirname, '../jobs/queue.module.ts'), 'utf8');

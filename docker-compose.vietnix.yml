@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────
 # Tubu Tree — deploy TẠM trên VPS Vietnix dùng CHUNG với ChoDeli (2026-09-12).
 #
-# Khác docker-compose.prod.yml ở 3 chỗ, vì máy này KHÔNG phải VM riêng:
+# Khác docker-compose.prod.yml ở 4 chỗ, vì máy này KHÔNG phải VM riêng:
 #   1. KHÔNG có service `caddy` — cổng 80/443 đã do nginx aaPanel (WordPress) giữ.
 #      api/web chỉ bind ra 127.0.0.1 (không lộ ra ngoài); aaPanel nginx sẽ reverse-proxy
 #      vào 2 cổng này cho api.tubutree.com / app.tubutree.com — xem hướng dẫn kèm theo.
@@ -9,6 +9,12 @@
 #   3. `mem_limit` mọi service — máy đang chia RAM với ChoDeli + WordPress/MariaDB, giới hạn
 #      cứng để một lượt traffic tăng đột biến của Tubu Tree không kéo sập ChoDeli và ngược lại.
 #      Tổng ngân sách ~2.3GB, để lại ~2GB+ cho ChoDeli/WordPress/hệ điều hành trên máy 7.8GB.
+#   4. `cpus` mọi service — trần CPU cùng lý do với mem_limit. Mặc định <= 1 lõi vì Docker TỪ CHỐI khởi động container
+#      khi cpus lớn hơn số vCPU của máy; máy có nhiều vCPU thì nâng trong .env (không sửa file này: sửa file trên VPS làm
+#      `git status` bẩn và dừng bước 1 của runbook deploy). Chạy `nproc` rồi đặt, ví dụ máy 4 vCPU:
+#        API_CPUS=2   WEB_CPUS=1   POSTGRES_CPUS=1.5   REDIS_CPUS=0.5
+#      Trần chỉ giới hạn mức dùng tối đa, không giữ chỗ. Áp dụng khi container được tạo lại (`up -d`): api/web ở deploy,
+#      Postgres/Redis khi tạo lại ngoài cửa sổ deploy (`docker compose -f docker-compose.vietnix.yml up -d --no-deps postgres`).
 #
 # Khi có VM/VPS riêng: quay lại dùng docker-compose.prod.yml (có Caddy, không giới hạn RAM).
 # ──────────────────────────────────────────────────────────────
@@ -26,6 +32,10 @@ services:
     restart: unless-stopped
     logging: *default-logging
     mem_limit: 512m
+    cpus: ${POSTGRES_CPUS:-1.0}
+    # Mặc định của Docker là 64 MB: truy vấn song song lớn báo "could not resize shared memory segment". Chỉ là trần
+    # (tmpfs chỉ chiếm RAM khi dùng) và vẫn nằm trong mem_limit ở trên.
+    shm_size: 128m
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tubu}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?đặt POSTGRES_PASSWORD trong .env}
@@ -44,6 +54,7 @@ services:
     restart: unless-stopped
     logging: *default-logging
     mem_limit: 192m
+    cpus: ${REDIS_CPUS:-0.5}
     # noeviction là yêu cầu bắt buộc của BullMQ: Redis chỉ chứa job queue (không có cache), nên mọi key
     # đều là dữ liệu — allkeys-lru từng có thể xoá âm thầm job đang chờ retry (huỷ vận đơn Gomdon, retry
     # ZNS không có cron cứu). Đầy 150MB thì lệnh ghi lỗi OOM ngay, enqueue rơi về cron reconcile và
@@ -68,6 +79,7 @@ services:
     stop_grace_period: 30s
     logging: *default-logging
     mem_limit: 768m
+    cpus: ${API_CPUS:-1.0}
     env_file: .env
     environment:
       NODE_ENV: production
@@ -106,9 +118,14 @@ services:
     restart: unless-stopped
     logging: *default-logging
     mem_limit: 512m
+    cpus: ${WEB_CPUS:-1.0}
     environment:
       NODE_ENV: production
       PORT: 3000
+      # Next standalone mặc định đóng kết nối rảnh sau 5 giây, trong khi Apache (ProxyPass ... ttl=30) tái dùng kết nối:
+      # thỉnh thoảng trúng kết nối vừa chết → 502 lẻ. 55 giây lớn hơn ttl của Apache và nhỏ hơn headersTimeout 60 giây của
+      # Node (Next không cho đặt headersTimeout). Tên biến do server.js của Next 14 đọc (KEEP_ALIVE_TIMEOUT, mili giây).
+      KEEP_ALIVE_TIMEOUT: '55000'
       # Docker tự set HOSTNAME=<container id> cho mọi container; Next.js standalone server.js đọc
       # process.env.HOSTNAME làm địa chỉ bind thay vì mặc định 0.0.0.0 — bind nhầm vào IP container
       # trên bridge network, "localhost"/127.0.0.1 bên trong container không kết nối được (dù host

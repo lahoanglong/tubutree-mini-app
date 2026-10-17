@@ -49,8 +49,13 @@ ENV PORT=3000
 
 # Standalone output (rooted ở monorepo) + static assets.
 # (web hiện không có thư mục public/ — thêm COPY public nếu sau này có.)
-COPY --from=builder /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+
+# Không chạy bằng root. Next ghi Data Cache của fetch vào .next/cache lúc chạy: thư mục phải thuộc user node, nếu không
+# mọi lần ghi cache lỗi EACCES (log đầy cảnh báo, trang nào cũng gọi API lại). Đây là chỗ DUY NHẤT web ghi ra đĩa.
+RUN mkdir -p apps/web/.next/cache && chown -R node:node apps/web/.next
+USER node
 
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
