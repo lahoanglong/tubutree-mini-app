@@ -132,6 +132,7 @@ import {
   ToneBadge,
 } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
+import { ReportsTab } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
@@ -178,7 +179,8 @@ type Tab =
   | 'posCredits'
   | 'reviews'
   | 'subscriptions'
-  | 'analytics';
+  | 'analytics'
+  | 'reports';
 /**
  * Mục quản trị theo nhóm việc (ADMINOPS-13): trước đây là một dải 24 tab cuộn ngang. Khoá `k` giữ nguyên để link cũ
  * (`/admin?tab=orders&pancake=attention`...) vẫn mở đúng chỗ.
@@ -190,6 +192,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'inbox', label: 'Việc cần xử lý' },
       { k: 'dashboard', label: 'Tổng quan KPI' },
       { k: 'analytics', label: 'Retention & North-star' },
+      { k: 'reports', label: 'Báo cáo' },
     ],
   },
   {
@@ -483,6 +486,7 @@ export default function AdminPage() {
           {active === 'quickReplies' && <QuickReplyTab />}
           {active === 'notificationTemplates' && <NotificationTemplatesTab />}
           {active === 'analytics' && <AnalyticsTab />}
+          {active === 'reports' && <ReportsTab />}
         </div>
       </div>
     </main>
