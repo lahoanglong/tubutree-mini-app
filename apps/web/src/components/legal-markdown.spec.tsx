@@ -46,6 +46,13 @@ describe('LegalMarkdown — hiển thị nội dung admin dán vào (D5-01)', ()
     expect(out).toContain('z');
   });
 
+  it('đường dẫn có dấu gạch chéo ngược (trình duyệt đọc "/\\host" như "//host") không thành thẻ a', () => {
+    const out = html('[a](/\\evil.example) [b](\\\\evil.example) [c](https://ok.example\\@evil.example) [d](/chinh-sach/doi-tra\\x)');
+    expect(out).not.toContain('<a');
+    expect(out).not.toContain('href=');
+    for (const label of ['a', 'b', 'c', 'd']) expect(out).toContain(label);
+  });
+
   it('HTML thô bị escape, không chạy được script', () => {
     const out = html('<script>alert(1)</script> <img src=x onerror=alert(1)>');
     expect(out).not.toContain('<script');

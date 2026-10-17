@@ -59,6 +59,8 @@ const LINK_CLASS = 'font-medium text-forest-700 underline underline-offset-2 hov
 
 /** Chỉ cho liên kết nội bộ, https, mailto, tel: chặn javascript:/data:/`//host` do admin dán nhầm hoặc bị chèn. */
 function safeHref(url: string): { href: string; external: boolean } | null {
+  // Trình duyệt đọc "/\host" như "//host" (về host khác), nên gạch chéo ngược bị chặn ở mọi dạng đường dẫn.
+  if (url.includes('\\')) return null;
   if (/^\/(?!\/)/.test(url)) return { href: url, external: false };
   if (/^https:\/\//i.test(url) || /^http:\/\//i.test(url)) return { href: url, external: true };
   if (/^(mailto|tel):/i.test(url)) return { href: url, external: false };
