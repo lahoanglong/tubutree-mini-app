@@ -36,16 +36,20 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'retention',
 ];
 
-/** Tiền tố cố ý không nạp, kèm lý do. */
+/**
+ * Tiền tố cố ý không nạp, kèm lý do. Khớp theo `<tiền tố>.` nên một tiền tố hẹp (shipping.gomdon) loại cả họ khoá, kể cả
+ * khoá Gomdon mới thêm sau, mà không kéo theo phần còn lại của `shipping`.
+ */
 export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
   payment: 'tài khoản nhận tiền: seed chứa số tài khoản mẫu; migration 20260625070000 đã tạo dòng, chủ shop nhập số thật ở admin',
   refill: 'thuộc gói đổi vỏ/đổi rác (phiên khác); ba khoá cũ đã có từ migration',
+  'shipping.gomdon': 'thuộc gói đổi rác/Gomdon (phiên khác); migration 20260926100000 đã tạo dòng',
 };
 
 /** Khoá cố ý không nạp (nằm trong tiền tố được nạp), kèm lý do. */
 export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
-  'shipping.gomdon.config': 'thuộc gói đổi rác/Gomdon (phiên khác); migration 20260926100000 đã tạo dòng',
-  'shipping.gomdon.recycling_enabled': 'thuộc gói đổi rác/Gomdon (phiên khác); migration 20260926100000 đã tạo dòng',
+  'shipping.free_threshold': 'phí ship là quyết định của chủ shop: để trống thì go-live:check WARN (db.shipping_rates) buộc xác nhận, nạp 200k sẽ làm WARN biến mất mà chưa ai xác nhận',
+  'shipping.flat_fee_below_threshold': 'như shipping.free_threshold',
 };
 
 /**
@@ -70,9 +74,8 @@ export type ConfigDecision = 'reference' | 'excluded' | 'unclassified';
 
 export function classifyConfigKey(key: string): ConfigDecision {
   if (key in EXCLUDED_CONFIG_KEYS) return 'excluded';
-  const prefix = key.split('.')[0]!;
-  if (prefix in EXCLUDED_CONFIG_PREFIXES) return 'excluded';
-  return REFERENCE_CONFIG_PREFIXES.includes(prefix) ? 'reference' : 'unclassified';
+  if (Object.keys(EXCLUDED_CONFIG_PREFIXES).some((prefix) => key.startsWith(`${prefix}.`))) return 'excluded';
+  return REFERENCE_CONFIG_PREFIXES.includes(key.split('.')[0]!) ? 'reference' : 'unclassified';
 }
 
 /** Dòng SystemConfig sẽ nạp: khoá được duyệt của seed.ts cộng các khoá bổ sung. */
