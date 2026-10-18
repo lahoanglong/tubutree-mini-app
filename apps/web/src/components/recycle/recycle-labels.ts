@@ -24,7 +24,7 @@ export const POINT_VALUE_VND = 1;
 /** Trần bộ đếm cho món không có trần nào; spec không đặt, đây là mức của kế hoạch (cùng Mini App). */
 export const UNCAPPED_QTY_MAX = 999;
 /** Chờ khách ngừng bấm +/- rồi mới xin ước tính, để nhiều lần bấm nhanh chỉ tốn một lời gọi. */
-export const PREVIEW_DEBOUNCE_MS = 400;
+export const PREVIEW_DEBOUNCE_MS = 300;
 
 export const formatPoints = (n: number | null | undefined) => `${formatCount(Number.isFinite(n) ? (n as number) : 0)} điểm`;
 export { formatVnd };
