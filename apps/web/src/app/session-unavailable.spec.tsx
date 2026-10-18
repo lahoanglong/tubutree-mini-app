@@ -50,6 +50,7 @@ import WalletPage from './tai-khoan/vi-tubu/page';
 import RewardsPage from './kho-qua/page';
 import RewardsMinePage from './kho-qua/cua-toi/page';
 import CashbackPage from './hoan-tien/page';
+import CtvPage from './ctv/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -90,7 +91,7 @@ const LOYALTY: PageCase[] = [
   ['/hoan-tien', () => <CashbackPage />],
 ];
 const COMMUNITY: PageCase[] = [];
-const AFFILIATE: PageCase[] = [];
+const AFFILIATE: PageCase[] = [['/ctv', () => <CtvPage />]];
 const GAME: PageCase[] = [];
 const PRO: PageCase[] = [];
 const RECYCLE: PageCase[] = [];

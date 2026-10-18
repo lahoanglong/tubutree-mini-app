@@ -47,7 +47,7 @@
     ]},
     { "lane": "affiliate", "items": [
       { "miniapp": "/s/:slug", "web": "/s/:slug", "private": false },
-      { "miniapp": "/affiliate", "web": "/ctv", "private": true, "pending": true },
+      { "miniapp": "/affiliate", "web": "/ctv", "private": true },
       { "miniapp": "/storefront", "web": "/ctv/gian-hang", "private": true, "pending": true }
     ]},
     { "lane": "pro", "items": [

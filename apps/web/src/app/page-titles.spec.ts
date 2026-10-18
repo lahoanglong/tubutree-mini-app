@@ -13,6 +13,7 @@ import { metadata as notifications } from './tai-khoan/thong-bao/layout';
 import { metadata as rewards } from './kho-qua/layout';
 import { metadata as myRewards } from './kho-qua/cua-toi/layout';
 import { metadata as cashback } from './hoan-tien/layout';
+import { metadata as ctv } from './ctv/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -38,7 +39,7 @@ const LOYALTY: TitleCase[] = [
   ['/hoan-tien', cashback, 'Hoàn tiền — Tubu Tree'],
 ];
 const COMMUNITY: TitleCase[] = [];
-const AFFILIATE: TitleCase[] = [];
+const AFFILIATE: TitleCase[] = [['/ctv', ctv, 'Cộng tác viên — Tubu Tree']];
 const GAME: TitleCase[] = [];
 const PRO: TitleCase[] = [];
 const RECYCLE: TitleCase[] = [];
