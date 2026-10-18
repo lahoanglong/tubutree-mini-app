@@ -68,7 +68,18 @@ import {
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
 import { maskPhone } from '../../common/mask-pii';
-import { actorLabel, assertClaimUsageLimit, assertCouponInput, assertNotOwnCoupon, SYSTEM_ACTOR, type CouponActor } from './coupon-input-rules';
+import {
+  actorLabel,
+  actorUserId,
+  assertClaimUsageLimit,
+  assertCouponInput,
+  assertNotOwnCoupon,
+  assertStaffCouponCaps,
+  assertStaffCreatedCoupons,
+  loadStaffCouponCaps,
+  SYSTEM_ACTOR,
+  type CouponActor,
+} from './coupon-input-rules';
 
 
 function reviewConflict(code: string, message: string) {
@@ -1282,6 +1293,7 @@ export class AdminService {
     const startAt = new Date(data.startAt);
     const endAt = new Date(data.endAt);
     assertCouponInput({ ...data, startAt, endAt });
+    if (actor.staff) assertStaffCouponCaps(data, await loadStaffCouponCaps(this.config));
     // isCouponEligible so đúng id: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được.
     const tierId = data.scope === 'TIER' ? data.scopeMeta?.tierId : undefined;
     if (tierId && !(await this.prisma.membershipTier.findUnique({ where: { id: tierId }, select: { id: true } }))) {
@@ -1310,6 +1322,8 @@ export class AdminService {
           // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
           scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
           newCustomerOnly: data.newCustomerOnly ?? false,
+          createdById: actorUserId(actor),
+          updatedById: actorUserId(actor),
         },
       });
       this.logger.warn(`${actorLabel(actor)} tạo mã giảm giá ${code}: ${JSON.stringify(data)}`);
@@ -1373,6 +1387,14 @@ export class AdminService {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
     if (!coupon) throw new NotFoundException('Không tìm thấy mã giảm giá.');
     if (coupon.scope === 'USER_GROUP') assertNotOwnCoupon(actor, (coupon.scopeMeta as { userId?: string } | null)?.userId);
+    if (actor.staff) {
+      await assertStaffCreatedCoupons(this.prisma, [coupon.createdById]);
+      const turningOffOnly = data.isActive === false && data.endAt === undefined && data.usageLimit === undefined;
+      if (!turningOffOnly) {
+        const usageLimit = data.usageLimit !== undefined ? data.usageLimit : coupon.usageLimit;
+        assertStaffCouponCaps({ ...coupon, usageLimit }, await loadStaffCouponCaps(this.config));
+      }
+    }
     const patch: Prisma.CouponUpdateInput = {};
     if (data.isActive !== undefined) patch.isActive = data.isActive;
     if (data.endAt !== undefined) {
@@ -1390,6 +1412,8 @@ export class AdminService {
       }
       patch.usageLimit = data.usageLimit;
     }
+    const by = actorUserId(actor);
+    if (by) patch.updatedById = by;
     const updated = await this.prisma.coupon.update({ where: { id }, data: patch });
     this.logger.warn(`${actorLabel(actor)} cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
     return updated;

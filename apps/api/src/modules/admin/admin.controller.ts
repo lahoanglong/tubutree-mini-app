@@ -587,7 +587,7 @@ export class AdminController {
   @AllowStaff('MARKETING')
   @Post('coupons')
   createCoupon(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Body() dto: CreateCouponDto) {
-    return this.admin.createCoupon(dto, { id: actorId, staff: role === 'STAFF' });
+    return this.admin.createCoupon(dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   @AllowStaff('MARKETING')
@@ -598,7 +598,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: UpdateCouponDto,
   ) {
-    return this.admin.updateCoupon(id, dto, { id: actorId, staff: role === 'STAFF' });
+    return this.admin.updateCoupon(id, dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   /** Xem trước bảng giá đại lý theo bậc (khớp / không khớp / lỗi / ngoài khoảng giá lẻ) — không ghi gì. */

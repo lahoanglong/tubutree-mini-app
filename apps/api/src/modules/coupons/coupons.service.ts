@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, type Coupon } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { isCouponEligible, requiresRealUser } from './coupon-scope';
+import { OWN_COUPON_MSG, isCouponEligible, isOwnStaffCoupon, requiresRealUser } from './coupon-scope';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { assertFirstOrderInTx, hasPriorOrder } from '../../common/first-order';
 
@@ -197,7 +197,7 @@ export class CouponsService {
     const limitedIds = rows.filter((c) => c.usageLimit != null).map((c) => c.id);
     const claimIds = rows.filter((c) => c.scope === 'CLAIM').map((c) => c.id);
     const [user, mine, all, claims, priorOrder] = await Promise.all([
-      this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true } }),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true, role: true } }),
       ids.length
         ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { userId, couponId: { in: ids } }, _count: { _all: true } })
         : [],
@@ -217,7 +217,8 @@ export class CouponsService {
       const coupon = byCode.get(code) ?? null;
       try {
         assertCouponLive(coupon);
-        if (!isCouponEligible(coupon, { id: userId, tierId: user?.tierId, claimedCouponIds })) throw scopeOwnershipError(coupon);
+        if (isOwnStaffCoupon(coupon, { id: userId, role: user?.role })) throw new BadRequestException(OWN_COUPON_MSG);
+        if (!isCouponEligible(coupon, { id: userId, role: user?.role, tierId: user?.tierId, claimedCouponIds })) throw scopeOwnershipError(coupon);
         if (requiresRealUser(coupon) && !isRealUser(user)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
         if (coupon.newCustomerOnly && priorOrder) throw new BadRequestException(NEW_CUSTOMER_ONLY_MSG);
         assertCouponWindow(coupon, now);
@@ -369,10 +370,15 @@ export class CouponsService {
    * khi được gọi từ redeem(tx) — đọc tier nhất quán với phần còn lại của tx.
    */
   private async assertScopeOwnership(
-    coupon: { id: string; scope?: string | null; scopeMeta?: unknown },
+    coupon: { id: string; scope?: string | null; scopeMeta?: unknown; createdById?: string | null },
     userId: string,
     db: Prisma.TransactionClient | PrismaService,
   ): Promise<void> {
+    let role: string | null | undefined;
+    if (coupon.createdById && coupon.createdById === userId) {
+      role = (await db.user.findUnique({ where: { id: userId }, select: { role: true } }))?.role;
+      if (isOwnStaffCoupon(coupon, { id: userId, role })) throw new BadRequestException(OWN_COUPON_MSG);
+    }
     // Chỉ TIER cần tierId — lazy-load trong cùng db/tx để đọc hạng nhất quán với
     // phần còn lại của tx (PUBLIC/USER_GROUP không tốn query thừa).
     let tierId: string | null | undefined;
@@ -390,7 +396,7 @@ export class CouponsService {
     }
     // Quyết định eligible dùng CHUNG isCouponEligible với LoyaltyService.getAvailableCoupons
     // (list) → list & apply không lệch. Message giữ riêng theo scope cho rõ với user.
-    if (isCouponEligible(coupon, { id: userId, tierId, claimedCouponIds })) return;
+    if (isCouponEligible(coupon, { id: userId, role, tierId, claimedCouponIds })) return;
     throw scopeOwnershipError(coupon);
   }
 }

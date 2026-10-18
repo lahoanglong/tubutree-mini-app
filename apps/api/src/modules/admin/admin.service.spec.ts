@@ -2251,51 +2251,135 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
     code: 'VIP1',
     type: 'AMOUNT' as const,
     value: 50_000,
+    usageLimit: 100,
     startAt: '2026-01-01T00:00:00.000Z',
     endAt: '2099-12-31T00:00:00.000Z',
+    scope: 'PUBLIC' as const,
   };
   const staff = { id: 's1', staff: true };
+  const admin = { id: 'a1', staff: false };
+  const cfg = (values: Record<string, unknown> = {}) =>
+    ({ get: jest.fn(async (k: string, fb: unknown) => (k in values ? values[k] : fb)) }) as unknown as SystemConfigService;
+  const creating = (over: Record<string, unknown> = {}, actor = staff, config = cfg()) => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1', code: 'VIP1' });
+    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }) } });
+    return { create, p: mkAdmin(prisma, { config }).createCoupon({ ...base, ...over } as never, actor) };
+  };
 
-  it('nhân viên không tạo mã cá nhân cho chính mình', async () => {
-    const create = jest.fn().mockResolvedValue({ id: 'c1' });
-    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 's1' }) } });
-    await expect(
-      mkAdmin(prisma).createCoupon({ ...base, scope: 'USER_GROUP', scopeMeta: { userId: 's1' } }, staff),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+  it.each([
+    ['% vượt trần 50%', { type: 'PERCENT', value: 60, maxDiscount: 100_000 }, 'tối đa 50%'],
+    ['% không có Giảm tối đa', { type: 'PERCENT', value: 20, maxDiscount: undefined }, 'Giảm tối đa'],
+    ['% có Giảm tối đa vượt 200.000đ', { type: 'PERCENT', value: 20, maxDiscount: 300_000 }, '200.000'],
+    ['số tiền vượt 200.000đ', { type: 'AMOUNT', value: 250_000, minOrder: 500_000 }, '200.000'],
+    ['không có Tổng lượt dùng', { usageLimit: undefined }, 'Tổng lượt'],
+  ])('nhân viên tạo mã %s → 403, không ghi', async (_label, over, msg) => {
+    const { create, p } = creating(over);
+    await expect(p).rejects.toThrow(ForbiddenException);
+    await expect(creating(over).p).rejects.toThrow(msg as string);
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('nhân viên tạo mã cá nhân cho khách khác được; ghi sổ người tạo', async () => {
+  it('nhân viên tạo mã trong trần → ghi người tạo', async () => {
+    const { create, p } = creating({ type: 'PERCENT', value: 50, maxDiscount: 200_000 });
+    await p;
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ createdById: 's1', updatedById: 's1' }) }));
+  });
+
+  it('trần đọc từ cấu hình coupon.staff_max_percent / coupon.staff_max_amount_vnd', async () => {
+    const config = cfg({ 'coupon.staff_max_percent': 10, 'coupon.staff_max_amount_vnd': 30_000 });
+    await expect(creating({ type: 'PERCENT', value: 15, maxDiscount: 20_000 }, staff, config).p).rejects.toThrow('tối đa 10%');
+    await expect(creating({ value: 40_000 }, staff, config).p).rejects.toThrow('30.000');
+    await creating({ value: 30_000 }, staff, config).p;
+  });
+
+  it('quản trị viên không bị trần nhân viên; vẫn ghi người tạo', async () => {
+    const { create, p } = creating({ type: 'AMOUNT', value: 500_000, minOrder: 1_000_000, usageLimit: undefined }, admin, config);
+    await p;
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ createdById: 'a1' }) }));
+  });
+
+  it('nhân viên không tạo mã cá nhân cho chính mình', async () => {
+    const { create, p } = creating({ scope: 'USER_GROUP', scopeMeta: { userId: 's1' } });
+    await expect(p).rejects.toBeInstanceOf(ForbiddenException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên tạo mã: ghi sổ người tạo', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const create = jest.fn().mockResolvedValue({ id: 'c1', code: 'VIP1' });
-    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }) } });
-    await mkAdmin(prisma).createCoupon({ ...base, scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } }, staff);
-    expect(create).toHaveBeenCalled();
+    await creating().p;
     expect(warn.mock.calls.map((c) => String(c[0])).some((m) => m.includes('s1') && m.includes('VIP1'))).toBe(true);
     warn.mockRestore();
   });
 
-  it('nhân viên không bật lại / gia hạn mã cá nhân của chính mình', async () => {
-    const findUnique = jest.fn().mockResolvedValue({
+  describe('sửa mã', () => {
+    const row = (over: Record<string, unknown> = {}) => ({
       id: 'c1',
-      code: 'BDAY-S1',
-      scope: 'USER_GROUP',
-      scopeMeta: { userId: 's1' },
+      code: 'VIP1',
+      type: 'AMOUNT',
+      value: 50_000,
+      maxDiscount: null,
+      usageLimit: 100,
+      scope: 'PUBLIC',
+      scopeMeta: null,
+      batch: null,
       startAt: new Date('2026-01-01'),
-      endAt: new Date('2026-02-01'),
+      endAt: new Date('2099-01-01'),
+      createdById: 's2',
+      ...over,
     });
-    const update = jest.fn();
-    const prisma = makePrisma({ coupon: { findUnique, update } });
-    await expect(mkAdmin(prisma).updateCoupon('c1', { endAt: '2099-01-01T00:00:00.000Z' }, staff)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-    expect(update).not.toHaveBeenCalled();
-  });
+    const editing = (coupon: Record<string, unknown>, creatorRole: string | null, data: Record<string, unknown>, actor = staff) => {
+      const update = jest.fn().mockResolvedValue({ id: 'c1' });
+      const prisma = makePrisma({
+        coupon: { findUnique: jest.fn().mockResolvedValue(coupon), update },
+        couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+        user: { findMany: jest.fn().mockResolvedValue(creatorRole ? [{ id: coupon.createdById, role: creatorRole }] : []) },
+      });
+      return { update, p: mkAdmin(prisma, { config: cfg() }).updateCoupon('c1', data as never, actor) };
+    };
 
-  it('quản trị viên vẫn tạo mã cá nhân cho tài khoản của mình (thử mã)', async () => {
-    const create = jest.fn().mockResolvedValue({ id: 'c1' });
-    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 'a1' }) } });
-    await mkAdmin(prisma).createCoupon({ ...base, scope: 'USER_GROUP', scopeMeta: { userId: 'a1' } }, { id: 'a1', staff: false });
-    expect(create).toHaveBeenCalled();
+    it('nhân viên sửa mã do nhân viên tạo → được, ghi người sửa', async () => {
+      const { update, p } = editing(row(), 'STAFF', { isActive: false });
+      await p;
+      expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isActive: false, updatedById: 's1' } });
+    });
+
+    it.each([
+      ['mã quản trị viên tạo', row({ createdById: 'a1' }), 'ADMIN'],
+      ['mã hệ thống / mã cũ (không rõ người tạo)', row({ createdById: null }), null],
+    ])('nhân viên không sửa %s (không bật lại mã quản trị viên đã tắt) → 403', async (_label, coupon, role) => {
+      const { update, p } = editing(coupon, role, { isActive: true });
+      await expect(p).rejects.toBeInstanceOf(ForbiddenException);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('nhân viên không bỏ Tổng lượt dùng (kết quả phải còn trong trần)', async () => {
+      const { update, p } = editing(row(), 'STAFF', { usageLimit: null });
+      await expect(p).rejects.toThrow('Tổng lượt');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('mã nhân viên tạo đã vượt trần mới (trần vừa hạ) → nhân viên không bật lại được', async () => {
+      const { update, p } = editing(row({ value: 300_000, minOrder: 1_000_000 }), 'STAFF', { isActive: true });
+      await expect(p).rejects.toThrow('200.000');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('nhân viên không gia hạn mã cá nhân của chính mình', async () => {
+      const { update, p } = editing(row({ scope: 'USER_GROUP', scopeMeta: { userId: 's1' } }), 'STAFF', { endAt: '2099-06-01T00:00:00.000Z' });
+      await expect(p).rejects.toBeInstanceOf(ForbiddenException);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('nhân viên tắt mã nhân viên tạo đã vượt trần mới → được (tắt là thao tác an toàn)', async () => {
+      const { update, p } = editing(row({ value: 300_000, minOrder: 1_000_000 }), 'STAFF', { isActive: false });
+      await p;
+      expect(update).toHaveBeenCalled();
+    });
+
+    it('quản trị viên sửa mọi mã, ghi người sửa', async () => {
+      const { update, p } = editing(row({ createdById: null }), null, { usageLimit: null }, admin);
+      await p;
+      expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usageLimit: null, updatedById: 'a1' } });
+    });
   });
 });

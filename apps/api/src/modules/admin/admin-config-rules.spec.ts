@@ -154,6 +154,17 @@ describe('validateAdminConfigValue', () => {
     expect(v(MAX, 0.95, undefined)).not.toThrow();
   });
 
+  it('trần mã nhân viên tạo: % là số nguyên 1–100, số tiền là số nguyên ≥ 1.000đ', () => {
+    const v = (k: string, n: unknown) => () => validateAdminConfigValue(k, n);
+    expect(v('coupon.staff_max_percent', 50)).not.toThrow();
+    expect(v('coupon.staff_max_percent', 0)).toThrow(/coupon\.staff_max_percent/);
+    expect(v('coupon.staff_max_percent', 101)).toThrow(BadRequestException);
+    expect(v('coupon.staff_max_percent', 0.5)).toThrow(BadRequestException);
+    expect(v('coupon.staff_max_amount_vnd', 200_000)).not.toThrow();
+    expect(v('coupon.staff_max_amount_vnd', 500)).toThrow(/coupon\.staff_max_amount_vnd/);
+    expect(v('coupon.staff_max_amount_vnd', '200000')).toThrow(BadRequestException);
+  });
+
   it('khoá khác: không can thiệp (SystemConfigService tự giữ kiểu/khoảng)', () => {
     ok('shipping.free_threshold', 200000);
     ok('misc.anything', { a: 1 });

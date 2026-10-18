@@ -38,7 +38,7 @@ export class AdminCouponBatchController {
 
   @Post()
   create(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Body() dto: CreateCouponBatchDto) {
-    return this.batches.create(dto, { id: actorId, staff: role === 'STAFF' });
+    return this.batches.create(dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   @Get()
@@ -58,7 +58,12 @@ export class AdminCouponBatchController {
   }
 
   @Patch(':batch')
-  setActive(@Param('batch') batch: string, @Body() dto: SetCouponBatchActiveDto) {
-    return this.batches.setActive(batch, dto.isActive);
+  setActive(
+    @CurrentUser('sub') actorId: string,
+    @CurrentUser('role') role: string,
+    @Param('batch') batch: string,
+    @Body() dto: SetCouponBatchActiveDto,
+  ) {
+    return this.batches.setActive(batch, dto.isActive, { id: actorId, staff: role !== 'ADMIN' });
   }
 }

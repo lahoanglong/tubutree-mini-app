@@ -16,10 +16,21 @@
  *    `claimedCouponIds` cho các mã CLAIM đang xét, thiếu thì DENY.
  *  - BIRTHDAY/INVITE/scope chưa biết: DENY tới khi có logic chính thức.
  */
-export type CouponScopeInfo = { id?: string; scope?: string | null; scopeMeta?: unknown };
-export type EligibilityUser = { id: string; tierId?: string | null; claimedCouponIds?: ReadonlySet<string> };
+export type CouponScopeInfo = { id?: string; scope?: string | null; scopeMeta?: unknown; createdById?: string | null };
+export type EligibilityUser = { id: string; role?: string | null; tierId?: string | null; claimedCouponIds?: ReadonlySet<string> };
+
+export const OWN_COUPON_MSG = 'Mã do chính bạn tạo ở trang quản trị — không dùng cho đơn của mình.';
+
+/**
+ * Mã nhân viên (không phải quản trị viên) tạo thì chính người tạo không dùng được, kể cả mã công khai hay mã thẻ: tạo mã
+ * rồi tự giảm giá cho mình là tự cấp tiền. Không rõ vai trò thì coi như nhân viên.
+ */
+export function isOwnStaffCoupon(coupon: CouponScopeInfo, user: Pick<EligibilityUser, 'id' | 'role'>): boolean {
+  return !!coupon.createdById && coupon.createdById === user.id && user.role !== 'ADMIN';
+}
 
 export function isCouponEligible(coupon: CouponScopeInfo, user: EligibilityUser): boolean {
+  if (isOwnStaffCoupon(coupon, user)) return false;
   if (coupon.scope === 'PUBLIC' || coupon.scope == null) return true;
 
   if (coupon.scope === 'USER_GROUP') {

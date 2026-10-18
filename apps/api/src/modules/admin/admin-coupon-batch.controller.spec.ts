@@ -64,8 +64,10 @@ describe('AdminCouponBatchController (D2-03: lô mã thẻ hộp hàng)', () => 
     await expect(ctrl.list()).resolves.toBe('l');
     await expect(ctrl.codes('SHOPEE11')).resolves.toBe('k');
     expect(svc.codes).toHaveBeenCalledWith('SHOPEE11');
-    await expect(ctrl.setActive('SHOPEE11', { isActive: false })).resolves.toBe('s');
-    expect(svc.setActive).toHaveBeenCalledWith('SHOPEE11', false);
+    await expect(ctrl.setActive('s1', 'STAFF', 'SHOPEE11', { isActive: false })).resolves.toBe('s');
+    expect(svc.setActive).toHaveBeenCalledWith('SHOPEE11', false, { id: 's1', staff: true });
+    await ctrl.setActive('a1', 'ADMIN', 'SHOPEE11', { isActive: true });
+    expect(svc.setActive).toHaveBeenLastCalledWith('SHOPEE11', true, { id: 'a1', staff: false });
     await expect(ctrl.claimUrlBase()).resolves.toEqual({ claimUrlBase: null });
   });
 });
