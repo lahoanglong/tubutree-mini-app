@@ -259,7 +259,7 @@ describe('WasteAdminGiftsService', () => {
       actorRole: 'ADMIN',
       meta: { before: { ids: ['reward-freeship', 'gift-seed', 'gift-tree'] }, after: { ids: ['gift-tree', 'reward-freeship', 'gift-seed'] } },
     });
-    expect(sqlOf($queryRaw.mock.calls[0]!)).toContain('FROM "waste_gifts" ORDER BY "id" FOR UPDATE');
+    expect(sqlOf($queryRaw.mock.calls[0]!)).toContain('FROM "waste_gifts" ORDER BY "id" FOR NO KEY UPDATE');
     expect($queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(wasteGift.update.mock.invocationCallOrder[0]!);
   });
 
