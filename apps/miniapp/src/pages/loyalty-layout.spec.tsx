@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   getLoyalty: vi.fn(),
   getCoupons: vi.fn(),
   getPointsTransactions: vi.fn(),
-  getLoyaltyRewards: vi.fn(),
   getDailyCheckInStatus: vi.fn(),
   getMemberCard: vi.fn(),
 }));
@@ -25,15 +24,14 @@ vi.mock('../store/auth', () => {
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
 });
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } }) }));
 vi.mock('../services/account-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getLoyalty: mocks.getLoyalty,
   getCoupons: mocks.getCoupons,
   getPointsTransactions: mocks.getPointsTransactions,
-  getLoyaltyRewards: mocks.getLoyaltyRewards,
   getDailyCheckInStatus: mocks.getDailyCheckInStatus,
   getMemberCard: mocks.getMemberCard,
-  redeemLoyaltyReward: vi.fn(),
   postDailyCheckIn: vi.fn(),
 }));
 
@@ -56,12 +54,6 @@ const COUPON = {
   minOrder: 199_000,
   maxDiscount: null,
   endAt: new Date(2026, 10, 5, 12).toISOString(),
-};
-const REWARDS = {
-  pointsBalance: 1_250,
-  rewards: [
-    { id: 'r1', title: 'Giảm 50.000đ', description: 'Đơn từ 300.000đ', pointsCost: 5_000, type: 'AMOUNT', value: 50_000, canRedeem: false },
-  ],
 };
 const CHECK_IN = {
   checkedInToday: false,
@@ -91,17 +83,16 @@ describe('LoyaltyPage — kho mã giảm giá lên đầu trang (C-074)', () => 
       { id: 'p1', delta: 1_250, reason: 'ORDER', refType: null, expiresAt: null, createdAt: new Date(2026, 9, 5).toISOString() },
       { id: 'p2', delta: -500, reason: 'REDEEM', refType: null, expiresAt: null, createdAt: new Date(2026, 9, 6).toISOString() },
     ]);
-    mocks.getLoyaltyRewards.mockResolvedValue(REWARDS);
     mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
     mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   });
 
-  it('"Mã giảm giá của tôi" nằm ngay dưới thẻ hạng, trước điểm danh, các hạng, đổi quà và lịch sử', async () => {
+  it('"Mã giảm giá của tôi" nằm ngay dưới thẻ hạng, trước điểm danh, các hạng, Kho quà và lịch sử', async () => {
     renderPage();
     const vouchers = await screen.findByText('Mã giảm giá của tôi');
     const checkIn = await screen.findByText('Điểm danh nhận Điểm Xanh');
     const tiers = await screen.findByText('Các hạng');
-    const rewards = await screen.findByText('Đổi Điểm Xanh nhận mã giảm giá');
+    const rewards = await screen.findByText('Kho quà');
     const history = await screen.findByText('Lịch sử Điểm Xanh');
     const tierCard = await screen.findByText('Tích điểm ×1', { exact: false });
 
@@ -147,7 +138,6 @@ describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C
       { id: 'p1', delta: 1_250, reason: 'ORDER', refType: null, expiresAt: null, createdAt: new Date(2026, 9, 5).toISOString() },
       { id: 'p2', delta: -2_500, reason: 'REDEEM', refType: null, expiresAt: null, createdAt: new Date(2026, 9, 6).toISOString() },
     ]);
-    mocks.getLoyaltyRewards.mockResolvedValue(REWARDS);
     mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
     mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   });
@@ -162,38 +152,13 @@ describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C
     expect(text).toContain('giọt nước');
   });
 
-  it('điểm còn thiếu, ngưỡng hạng, nút đổi quà và lịch sử điểm đều có dấu phân cách nghìn', async () => {
+  it('điểm còn thiếu, ngưỡng hạng và lịch sử điểm đều có dấu phân cách nghìn', async () => {
     renderPage();
     await screen.findByText('Lịch sử Điểm Xanh');
     expect(await screen.findByText('1.250', { selector: 'b' })).toBeInTheDocument();
     expect(screen.getByText(/từ 2\.500 điểm tích luỹ/)).toBeInTheDocument();
-    expect(screen.getByText('Cần 5.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('+1.250')).toBeInTheDocument();
     expect(screen.getByText('-2.500')).toBeInTheDocument();
-  });
-});
-
-describe('LoyaltyPage — nút đổi quà không bị cắt chữ ở màn 360-390px (R6-CHECKOUT-4)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.getLoyalty.mockResolvedValue(LOYALTY);
-    mocks.getCoupons.mockResolvedValue([]);
-    mocks.getPointsTransactions.mockResolvedValue([]);
-    mocks.getLoyaltyRewards.mockResolvedValue({
-      pointsBalance: 1_250,
-      redeemablePoints: 0,
-      rewards: [{ ...REWARDS.rewards[0], pointsCost: 1_000 }],
-    });
-    mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
-    mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
-  });
-
-  it('hàng chân thẻ cho xuống dòng và nút giữ nguyên bề rộng nhãn "Chờ mở khoá điểm"', async () => {
-    renderPage();
-    const label = await screen.findByText('Chờ mở khoá điểm');
-    const button = label.closest('button') as HTMLElement;
-    expect(button.style.flexShrink).toBe('0');
-    expect((button.parentElement as HTMLElement).style.flexWrap).toBe('wrap');
   });
 });
 
@@ -203,7 +168,6 @@ describe('LoyaltyPage — mã tự cấp hiện tên thân thiện (R6-BUYER-3)'
     mocks.getLoyalty.mockResolvedValue(LOYALTY);
     mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'MILESTONE1000000-2026-10-CMV9MLSLB009KFKRUMVZQLRA7' }]);
     mocks.getPointsTransactions.mockResolvedValue([]);
-    mocks.getLoyaltyRewards.mockResolvedValue(REWARDS);
     mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
     mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   });
@@ -222,7 +186,6 @@ describe('LoyaltyPage — một <h1> mỗi trang (C-114)', () => {
     mocks.getLoyalty.mockResolvedValue(LOYALTY);
     mocks.getCoupons.mockResolvedValue([COUPON]);
     mocks.getPointsTransactions.mockResolvedValue([]);
-    mocks.getLoyaltyRewards.mockResolvedValue(REWARDS);
     mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
     mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   });

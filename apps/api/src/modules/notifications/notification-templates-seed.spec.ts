@@ -183,6 +183,17 @@ describe('seed mẫu thông báo', () => {
       'REFERRAL_REWARD_PAID',
       'REFERRAL_MILESTONE_PAID',
       'REFERRAL_REWARD_REVOKED',
+      // Đổi rác lấy quà (M1.5).
+      'WASTE_PARCEL_RECEIVED',
+      'WASTE_POINTS_CREDITED',
+      'WASTE_REQUEST_REJECTED',
+      'WASTE_REQUEST_EXPIRED',
+      'WASTE_PICKUP_STARTED',
+      'WASTE_PICKUP_CANCELLED',
+      'WASTE_POINTS_REVERSED',
+      'WASTE_SHIP_LOCKED',
+      'WASTE_GIFT_CANCELLED',
+      'WASTE_PERK_REVIEWED',
     ];
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {

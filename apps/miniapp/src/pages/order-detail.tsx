@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage, isNotFoundError } from '../services/api';
+import { getWasteRequestByOrder, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -14,8 +15,6 @@ import {
   formatPoints,
   formatDateTime,
   addressLine,
-  recyclingPickupView,
-  type RecyclingTone,
 } from '../utils/format';
 import { shippingEventLabel } from '../utils/format-shipping';
 import {
@@ -50,6 +49,7 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
+import { ListRow } from '../components/ui/list-row';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { SupportContact } from '../components/support-contact';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -72,22 +72,6 @@ import {
   type RefundBankInput,
   type RefundMethodChoice,
 } from '../utils/refund-rules';
-
-/** Màu ô trạng thái thu gom — cùng bảng màu STATUS_COLOR của đơn (order-status.ts): 'progress'
- * dùng cùng cặp token với CONFIRMED/PACKED, 'success' với DELIVERED, 'warning' với PENDING_PAYMENT,
- * 'muted' với RETURNED. */
-const RECYCLING_TONE_BG: Record<RecyclingTone, string> = {
-  progress: 'var(--color-action-secondary-bg)',
-  success: 'var(--color-status-success-bg)',
-  warning: 'var(--color-status-warning-bg)',
-  muted: 'var(--color-status-neutral-bg)',
-};
-const RECYCLING_TONE_FG: Record<RecyclingTone, string> = {
-  progress: 'var(--color-action-secondary-fg)',
-  success: 'var(--color-status-success-fg)',
-  warning: 'var(--color-status-warning-fg)',
-  muted: 'var(--color-status-neutral-fg)',
-};
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
@@ -166,6 +150,13 @@ export default function OrderDetailPage() {
     queryKey: ['orders-total-for-oa-prompt'],
     queryFn: () => fetchOrders({}, 1, 1),
     enabled: hasOA && oaPromptReady && !oaPromptSeen && !!order.data,
+  });
+
+  const wasteQ = useQuery({
+    queryKey: [...WASTE_QUERY_KEYS.all, 'by-order', order.data?.id],
+    queryFn: () => getWasteRequestByOrder(order.data!.id),
+    enabled: !!order.data?.hasRecyclingPickup,
+    retry: (n, e) => !isNotFoundError(e) && n < 2,
   });
 
   const showOaPrompt = shouldShowFollowOaPrompt({
@@ -250,13 +241,13 @@ export default function OrderDetailPage() {
   }
 
   const o = order.data;
+  const wasteReq = wasteQ.data;
   const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
   // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
   const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
   // Đơn CTV lên hộ khách: OrderDTO chung chưa khai báo 2 cột này dù API trả nguyên bản ghi đơn.
   const assisted = o as { placedForCustomer?: boolean; referrerUserId?: string | null };
   const canCancel = canCustomerCancel({ ...o, ...assisted }, meId);
-  const recycling = o.hasRecyclingPickup ? recyclingPickupView(o) : null;
   // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
   // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
   // khách muốn trả tiền cũng không có đường quay lại, chỉ còn cách huỷ đơn rồi đặt lại.
@@ -600,66 +591,16 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
-      {/* ── Thu gom vật liệu tái chế (nếu khách chọn) — trạng thái thật theo gomdonStatus ── */}
-      {recycling && (
-        <Box id="order-recycling" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Box flex alignItems="center" style={{ gap: 10 }}>
-            <Box
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 'var(--radius-control)',
-                background: 'var(--color-bg-subtle)',
-                display: 'grid',
-                placeItems: 'center',
-                flex: '0 0 auto',
-              }}
-            >
-              <Recycle size={18} color="var(--color-text-brand)" />
-            </Box>
-            <Box style={{ flex: 1 }}>
-              <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
-                Thu gom vật liệu tái chế
-              </Text>
-              <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 2 }}>
-                Tubu Tree tài trợ 100% phí thu gom
-              </Text>
-            </Box>
-          </Box>
-          <Box
-            mt={2}
-            p={2}
-            style={{
-              background: RECYCLING_TONE_BG[recycling.tone],
-              borderRadius: 'var(--radius-control)',
-            }}
-          >
-            <Text bold size="xSmall" style={{ color: RECYCLING_TONE_FG[recycling.tone] }}>
-              {recycling.title}
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2, lineHeight: '18px' }}>
-              {recycling.detail}
-            </Text>
-            {recycling.waybill && (
-              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
-                Mã vận đơn BestExpress: <b>{recycling.waybill}</b>
-              </Text>
-            )}
-          </Box>
-          {o.recyclingNote && (
-            <Box
-              mt={2}
-              p={2}
-              style={{
-                background: 'var(--color-bg-canvas)',
-                borderRadius: 'var(--radius-control)',
-              }}
-            >
-              <Text size="xSmall" style={{ color: 'var(--stone-700)' }}>
-                <b>Vật dụng gửi:</b> {o.recyclingNote}
-              </Text>
-            </Box>
-          )}
+      {/* ── Yêu cầu thu rác kèm đơn (§12.2) ── */}
+      {wasteReq && (
+        <Box id="order-waste-request" mt={2}>
+          <ListRow
+            icon={<Icon icon={Recycle} tone="brand" />}
+            title={`Yêu cầu thu rác ${wasteReq.code}`}
+            subtitle="Xem tiến độ thu rác kèm đơn"
+            trailing="chevron"
+            onPress={() => navigate(`/recycle/r/${wasteReq.id}`)}
+          />
         </Box>
       )}
 

@@ -19,22 +19,18 @@ const MISSIONS = [
   { id: 'm-first', code: 'FIRST_ORDER', title: 'Đơn đầu tiên', description: 'Hoàn tất đơn đầu', rewardPoints: 30_000, goal: 1, isRepeatable: false, claimedCount: 12 },
   { id: 'm-streak', code: 'CHECKIN_7', title: 'Điểm danh 7 ngày', description: 'Giữ chuỗi 7 ngày', rewardPoints: 20_000, goal: 7, isRepeatable: true, claimedCount: 3 },
 ];
-const REWARDS = [
-  { id: 'reward-freeship', title: 'Voucher Miễn phí vận chuyển', description: 'x', pointsCost: 20, type: 'FREESHIP', value: 0, minOrder: 99000, redeemedCount: 40, redeemed30d: 9 },
-];
 
 function stub(patch: { status?: number; body: unknown } = { body: { id: 'm-first' } }) {
   const m = mockFetch({
     '/admin/engagement/missions/': () => patch,
     '/admin/engagement/missions': { body: MISSIONS },
-    '/admin/engagement/rewards': { body: REWARDS },
   });
   vi.stubGlobal('fetch', vi.fn(m.fn));
-  return { patches: () => m.calls.filter((c) => c.init?.method === 'PATCH') };
+  return { patches: () => m.calls.filter((c) => c.init?.method === 'PATCH'), calls: m.calls };
 }
 
 describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
-  it('liệt kê nhiệm vụ với mục tiêu, lượt đã nhận; danh mục quà với giá điểm và lượt đổi', async () => {
+  it('liệt kê nhiệm vụ với mục tiêu, lượt đã nhận', async () => {
     stub();
     const { container } = mount(<EngagementTab />);
     await flush();
@@ -42,10 +38,16 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     expect(first.textContent).toContain('12 lượt đã nhận');
     const streak = container.querySelector<HTMLElement>('[data-mission="CHECKIN_7"]')!;
     expect(streak.textContent).toContain('Mục tiêu 7 · lặp lại');
-    const reward = container.querySelector<HTMLElement>('[data-reward="reward-freeship"]')!;
-    expect(reward.textContent).toContain('Voucher Miễn phí vận chuyển');
-    expect(reward.textContent).toContain('20 điểm');
-    expect(reward.textContent).toContain('40 lượt đổi · 9 trong 30 ngày');
+  });
+
+  it('không còn danh mục quà chỉ xem; trỏ sang tab Đổi rác (13.2)', async () => {
+    const api = stub();
+    const { container } = mount(<EngagementTab />);
+    await flush();
+    expect(container.querySelector('[data-reward]')).toBeNull();
+    expect(container.textContent).not.toContain('cố định trong mã nguồn');
+    expect(container.textContent).toContain('Quà đổi Điểm Xanh nay quản lý ở tab Đổi rác, mục Quà.');
+    expect(api.calls.some((c) => c.url.includes('/admin/engagement/rewards'))).toBe(false);
   });
 
   it('sửa điểm thưởng rồi Lưu → PATCH đúng nhiệm vụ', async () => {

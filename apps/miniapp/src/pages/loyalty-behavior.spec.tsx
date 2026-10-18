@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -15,12 +15,11 @@ const mocks = vi.hoisted(() => ({
   getLoyalty: vi.fn(),
   getCoupons: vi.fn(),
   getPointsTransactions: vi.fn(),
-  getLoyaltyRewards: vi.fn(),
   getDailyCheckInStatus: vi.fn(),
   getMemberCard: vi.fn(),
   postDailyCheckIn: vi.fn(),
-  redeemLoyaltyReward: vi.fn(),
   copyText: vi.fn(),
+  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -29,12 +28,12 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/loyalty', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
+const boost = vi.hoisted(() => ({ cfg: { isLoaded: false } as { isLoaded: boolean; loyalty?: Record<string, unknown> } }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ ...mocks.publicConfig, ...boost.cfg }) }));
 vi.mock('../store/auth', () => {
   const state = { status: 'authenticated', user: { id: 'u1' } };
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
 });
-const boost = vi.hoisted(() => ({ cfg: { isLoaded: false } as { isLoaded: boolean; loyalty?: Record<string, unknown> } }));
-vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => boost.cfg }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../components/qr-code', () => ({
@@ -45,11 +44,9 @@ vi.mock('../services/account-api', async (importOriginal) => ({
   getLoyalty: mocks.getLoyalty,
   getCoupons: mocks.getCoupons,
   getPointsTransactions: mocks.getPointsTransactions,
-  getLoyaltyRewards: mocks.getLoyaltyRewards,
   getDailyCheckInStatus: mocks.getDailyCheckInStatus,
   getMemberCard: mocks.getMemberCard,
   postDailyCheckIn: mocks.postDailyCheckIn,
-  redeemLoyaltyReward: mocks.redeemLoyaltyReward,
 }));
 
 import LoyaltyPage from './loyalty';
@@ -65,8 +62,6 @@ const LOYALTY = {
   nextTier: { id: 't2', name: 'Lộc Biếc', minPoints: 2_500, pointsToGo: 1_250 },
   tiers: TIERS,
 };
-const REWARD_OK = { id: 'r-ok', title: 'Giảm 20.000đ', description: 'Đơn từ 150.000đ', pointsCost: 500, type: 'AMOUNT', value: 20_000, canRedeem: true };
-const REWARD_LOCKED = { id: 'r-locked', title: 'Giảm 50.000đ', description: 'Đơn từ 300.000đ', pointsCost: 5_000, type: 'AMOUNT', value: 50_000, canRedeem: false };
 const CHECK_IN = {
   checkedInToday: false,
   streakDays: 2,
@@ -86,6 +81,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.publicConfig.waste.enabled = true;
   try {
     localStorage.clear();
   } catch {
@@ -94,11 +90,9 @@ beforeEach(() => {
   mocks.getLoyalty.mockResolvedValue(LOYALTY);
   mocks.getCoupons.mockResolvedValue([]);
   mocks.getPointsTransactions.mockResolvedValue([]);
-  mocks.getLoyaltyRewards.mockResolvedValue({ pointsBalance: 1_250, rewards: [REWARD_OK, REWARD_LOCKED] });
   mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
   mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   mocks.postDailyCheckIn.mockResolvedValue({ message: 'Điểm danh thành công, +3 điểm' });
-  mocks.redeemLoyaltyReward.mockResolvedValue({ coupon: { code: 'GIFT20K' } });
   mocks.copyText.mockResolvedValue(true);
 });
 
@@ -118,14 +112,36 @@ describe('LoyaltyPage — thẻ hạng', () => {
     expect(container.querySelector('[style*="width: 50%"]')).toBeNull();
   });
 
-  it('các lối tắt dẫn đúng trang: Vườn Cây → /game, Trạm Refill → /refill, mua sắm → /browse', async () => {
+  it('các lối tắt dẫn đúng trang: Vườn Cây → /game, Đổi rác lấy quà → /recycle, Kho quà → /rewards, mua sắm → /browse', async () => {
     renderPage();
     fireEvent.click(await screen.findByText('Vườn Cây Tubu'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
-    fireEvent.click(screen.getByText('Trạm Refill'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/refill');
+    fireEvent.click(screen.getByText('Đổi rác lấy quà'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
+    fireEvent.click(screen.getByRole('button', { name: /Kho quà/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/rewards');
     fireEvent.click(screen.getByText(/Mua sắm để tích thêm Điểm Xanh/));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/browse');
+  });
+});
+
+describe('LoyaltyPage — lối vào Đổi rác theo cờ chương trình', () => {
+  it('chương trình tắt → không có hàng Đổi rác; hàng Kho quà vẫn hiện', async () => {
+    mocks.publicConfig.waste.enabled = false;
+    renderPage();
+    await screen.findByText('Lịch sử Điểm Xanh');
+    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+    expect(screen.queryByText('Trạm Refill')).toBeNull();
+    expect(screen.getByText('Kho quà')).toBeInTheDocument();
+  });
+});
+
+describe('LoyaltyPage — quà đã chuyển sang /rewards', () => {
+  it('trang Điểm Xanh không còn danh mục đổi quà', async () => {
+    renderPage();
+    await screen.findByText('Lịch sử Điểm Xanh');
+    expect(screen.queryByText('Đổi Điểm Xanh nhận mã giảm giá')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Đổi ngay' })).toBeNull();
   });
 });
 
@@ -208,94 +224,6 @@ describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
   });
 });
 
-describe('LoyaltyPage — đổi Điểm Xanh nhận mã giảm giá', () => {
-  it('ưu đãi chưa đủ điểm: nút "Cần 5.000 điểm" tắt, bấm không mở hộp xác nhận', async () => {
-    renderPage();
-    const locked = await screen.findByRole('button', { name: 'Cần 5.000 điểm' });
-    expect(locked).toBeDisabled();
-    fireEvent.click(locked);
-    expect(screen.queryByText('Xác nhận đổi ưu đãi')).not.toBeInTheDocument();
-  });
-
-  it('đủ điểm: bấm "Đổi ngay" mở hộp xác nhận với điểm trừ và điểm còn lại đúng; chưa gọi API', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
-    expect(await screen.findByText('Xác nhận đổi ưu đãi')).toBeInTheDocument();
-    expect(screen.getByText('-500 điểm Xanh')).toBeInTheDocument();
-    expect(screen.getByText('750 điểm Xanh')).toBeInTheDocument();
-    expect(mocks.redeemLoyaltyReward).not.toHaveBeenCalled();
-  });
-
-  it('"Huỷ" đóng hộp xác nhận mà không gọi API', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
-    await screen.findByText('Xác nhận đổi ưu đãi');
-    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
-    await waitFor(() => expect(screen.queryByText('Xác nhận đổi ưu đãi')).not.toBeInTheDocument());
-    expect(mocks.redeemLoyaltyReward).not.toHaveBeenCalled();
-  });
-
-  it('xác nhận: gọi đúng 1 lần với id ưu đãi dù chạm đúp, báo mã mới, đóng hộp và tải lại điểm', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
-    await screen.findByText('Xác nhận đổi ưu đãi');
-    const confirm = screen.getAllByRole('button', { name: 'Đổi ngay' }).at(-1)!;
-    fireEvent.click(confirm);
-    fireEvent.click(confirm);
-    await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({
-        text: 'Đổi thành công! Mã GIFT20K đã vào mục Mã giảm giá của tôi.',
-        type: 'success',
-      }),
-    );
-    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
-    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledWith('r-ok');
-    await waitFor(() => expect(screen.queryByText('Xác nhận đổi ưu đãi')).not.toBeInTheDocument());
-    await waitFor(() => expect(mocks.getLoyaltyRewards).toHaveBeenCalledTimes(2));
-  });
-
-  // BottomSheet (ZaUI Sheet unmountOnClose) giữ nút trong DOM và bấm được thêm ~200ms sau khi đóng:
-  // hành động phải đọc state đang sống, không đọc phần nội dung được giữ lại cho hoạt ảnh.
-  it('bấm "Huỷ" rồi chạm ngay "Đổi ngay" trong hộp đang đóng: không đổi quà', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
-    await screen.findByText('Xác nhận đổi ưu đãi');
-    const confirm = screen.getAllByRole('button', { name: 'Đổi ngay' }).at(-1)!;
-    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
-    expect(confirm.isConnected).toBe(true);
-    fireEvent.click(confirm);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 300));
-    });
-    expect(mocks.redeemLoyaltyReward).not.toHaveBeenCalled();
-  });
-
-  it('đổi thành công rồi chạm lại "Đổi ngay" trong hộp đang đóng: vẫn chỉ gọi API 1 lần', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
-    await screen.findByText('Xác nhận đổi ưu đãi');
-    const confirm = screen.getAllByRole('button', { name: 'Đổi ngay' }).at(-1)!;
-    fireEvent.click(confirm);
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
-    expect(confirm.isConnected).toBe(true);
-    fireEvent.click(confirm);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 300));
-    });
-    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
-  });
-
-  it('đổi lỗi: báo lỗi, vẫn tải lại điểm', async () => {
-    mocks.redeemLoyaltyReward.mockRejectedValue(new Error('boom'));
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
-    await screen.findByText('Xác nhận đổi ưu đãi');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Đổi ngay' }).at(-1)!);
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
-    await waitFor(() => expect(mocks.getLoyaltyRewards).toHaveBeenCalledTimes(2));
-  });
-});
-
 describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
   const WITH_CONVERTED = { ...LOYALTY, pointsBalance: 120, pointsConvertedBalance: 30, pointsTotal: 150 };
 
@@ -306,28 +234,11 @@ describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
     expect(screen.getByText('trong đó 30 điểm không hết hạn')).toBeInTheDocument();
   });
 
-  it('hộp xác nhận đổi mã giảm giá: "Điểm còn lại" là tổng hai lô sau khi trừ, khớp con số ở đầu trang', async () => {
-    // 600 thường + 100 quy đổi, đổi ưu đãi 500 điểm (chỉ trừ lô thường) → còn 200 điểm Xanh, không phải 100.
-    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, pointsBalance: 600, pointsConvertedBalance: 100, pointsTotal: 700 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi ngay' }));
-    await screen.findByText('Xác nhận đổi ưu đãi');
-    expect(screen.getByText('-500 điểm Xanh')).toBeInTheDocument();
-    expect(screen.getByText('200 điểm Xanh')).toBeInTheDocument();
-    expect(screen.queryByText('100 điểm Xanh')).toBeNull();
-  });
-
   it('thẻ thành viên số cũng hiện tổng hai lô', async () => {
     mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
     renderPage();
     fireEvent.click(await screen.findByText('Thẻ thành viên số (mã QR)'));
     expect(await screen.findByText(/Hạng Mầm Xanh · 150 điểm Xanh/)).toBeInTheDocument();
-  });
-
-  it('có điểm không hết hạn thì danh mục đổi quà nói rõ phần đó không dùng để đổi mã giảm giá', async () => {
-    mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
-    renderPage();
-    expect(await screen.findByText(/Điểm không hết hạn chỉ dùng khi thanh toán, không dùng để đổi mã giảm giá/)).toBeInTheDocument();
   });
 
   it('không có lô quy đổi: không hiện dòng "không hết hạn" nào', async () => {
@@ -456,7 +367,7 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
 });
 
 describe('LoyaltyPage — cảnh báo React trùng key', () => {
-  it('mọi danh sách dựng từ dữ liệu đúng hình của API (mã giảm giá, 7 ô điểm danh, hạng, quà, lịch sử) không phát cảnh báo key', async () => {
+  it('mọi danh sách dựng từ dữ liệu đúng hình của API (mã giảm giá, 7 ô điểm danh, hạng, lịch sử) không phát cảnh báo key', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.getCoupons.mockResolvedValue(
       ['GIAM10', 'FREESHIP'].map((code) => ({ code, type: 'AMOUNT', value: 10_000, minOrder: null, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' })),
@@ -467,7 +378,7 @@ describe('LoyaltyPage — cảnh báo React trùng key', () => {
     try {
       renderPage();
       await screen.findByText('2 mã');
-      await screen.findByText('Giảm 20.000đ');
+      await screen.findByText('Lịch sử Điểm Xanh');
       expect(errors.mock.calls.filter((c) => /same key|unique "key"/.test(String(c[0])))).toEqual([]);
     } finally {
       errors.mockRestore();

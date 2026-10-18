@@ -9,6 +9,9 @@ import {
   AccountDeletionService,
 } from '../../src/modules/users/account-deletion.service';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
+import { cleanupWaste, createWarehouse, createWasteItem, createWastePoint, createWasteRequest } from './fixtures/waste-fixtures';
+import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 
 /**
  * C-016 / A1-017 (docs/2026-10-review): yêu cầu xoá tài khoản trước đây chỉ được GHI, không có quy
@@ -335,5 +338,44 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     expect(row!.user?.fullName).toBe('Nguyễn Văn Thật');
     expect(row!.user?.pointsConvertedBalance).toBe(4);
     expect(row!.blockers.map((b) => b.code)).toEqual(expect.arrayContaining(['WALLET_BALANCE', 'CONVERTED_POINTS']));
+  });
+
+  describe('waste blockers (spec 11.1, 14.4)', () => {
+    it('an OPEN waste request blocks with WASTE_REQUEST_OPEN', async () => {
+      const { user, request } = await customerWithRequest();
+      const wh = await createWarehouse(prisma);
+      const item = await createWasteItem(prisma);
+      await createWasteRequest(prisma, { userId: user.id, method: 'DROP_OFF', status: 'OPEN', pointId: wh.id, lines: [{ itemId: item.id, declaredQty: 1 }] });
+      const body = await expectBlocked(request.id, user.id, /yêu cầu Đổi rác chưa xong/);
+      expect(body.blockers.map((b) => b.code)).toContain('WASTE_REQUEST_OPEN');
+      await prisma.wasteRequest.deleteMany({ where: { userId: user.id } });
+      await cleanupWaste(prisma, { itemIds: [item.id] });
+    });
+    it('a waste_user_flags row with shipLockedAt blocks with WASTE_UNDER_REVIEW', async () => {
+      const { user, request } = await customerWithRequest();
+      await prisma.wasteUserFlags.create({ data: { userId: user.id, shipLockedAt: new Date() } });
+      const body = await expectBlocked(request.id, user.id, /Tài khoản đang được Tubu xem xét, liên hệ CSKH/);
+      expect(body.blockers.map((b) => b.code)).toContain('WASTE_UNDER_REVIEW');
+      await prisma.wasteUserFlags.delete({ where: { userId: user.id } });
+    });
+  });
+
+  describe('waste partner point blocker (spec 11.1)', () => {
+    let withPort: AccountDeletionService;
+    beforeAll(() => {
+      withPort = new AccountDeletionService(prisma, new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma)));
+    });
+    it('owner of an ACTIVE PARTNER point is blocked; pausing the point removes the line', async () => {
+      const { user, request } = await customerWithRequest();
+      const point = await createWastePoint(prisma, { kind: 'PARTNER', ownerUserId: user.id });
+      const run = () => withPort.process(request.id, admin.id).then(() => null, (e: unknown) => e);
+      const err = await run();
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(((err as BadRequestException).getResponse() as { message: string }).message).toMatch(/điểm nhận Đổi rác đang hoạt động/);
+      await prisma.wastePoint.update({ where: { id: point.id }, data: { status: 'PAUSED' } });
+      const again = await run();
+      if (again) expect(((again as BadRequestException).getResponse() as { message: string }).message).not.toMatch(/điểm nhận Đổi rác đang hoạt động/);
+      await cleanupWaste(prisma, { pointIds: [point.id], storefrontIds: point.createdStorefront && point.ownerStorefrontId ? [point.ownerStorefrontId] : [] });
+    });
   });
 });

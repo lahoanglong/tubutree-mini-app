@@ -94,34 +94,24 @@ describe('Trần kích thước mảng trong body', () => {
   });
 });
 
-describe('PlaceOrderDto.recycling — validation thu gom vật liệu tái chế', () => {
+describe('PlaceOrderDto.wasteRequestId — thu kèm rác (§12.2 bước 2)', () => {
   const base = { addressId: 'a1', paymentMethod: 'COD' };
 
-  it('hasRecyclingPickup boolean hợp lệ', async () => {
-    const keys = await errorsFor(PlaceOrderDto, { ...base, hasRecyclingPickup: true });
-    expect(keys).toHaveLength(0);
+  it('wasteRequestId là chuỗi → hợp lệ; không gửi → hợp lệ', async () => {
+    expect(await errorsFor(PlaceOrderDto, { ...base, wasteRequestId: 'clx0r1' })).toHaveLength(0);
+    expect(await errorsFor(PlaceOrderDto, base)).toHaveLength(0);
   });
 
-  it('hasRecyclingPickup không phải boolean → lỗi isBoolean', async () => {
-    const keys = await errorsFor(PlaceOrderDto, { ...base, hasRecyclingPickup: 'not-bool' });
-    expect(keys).toContain('isBoolean');
+  it('wasteRequestId không phải chuỗi → isString; dài quá 64 → maxLength; chuỗi rỗng → isNotEmpty', async () => {
+    expect(await errorsFor(PlaceOrderDto, { ...base, wasteRequestId: 42 })).toContain('isString');
+    expect(await errorsFor(PlaceOrderDto, { ...base, wasteRequestId: 'x'.repeat(65) })).toContain('maxLength');
+    expect(await errorsFor(PlaceOrderDto, { ...base, wasteRequestId: '' })).toContain('isNotEmpty');
   });
 
-  it('recyclingNote dài hơn 500 ký tự → lỗi maxLength', async () => {
-    const keys = await errorsFor(PlaceOrderDto, {
-      ...base,
-      hasRecyclingPickup: true,
-      recyclingNote: 'a'.repeat(501),
-    });
-    expect(keys).toContain('maxLength');
-  });
-
-  it('recyclingNote hợp lệ (≤ 500 ký tự) → không lỗi', async () => {
-    const keys = await errorsFor(PlaceOrderDto, {
-      ...base,
-      hasRecyclingPickup: true,
-      recyclingNote: 'Vỏ hộp sữa, túi nilong sạch',
-    });
-    expect(keys).toHaveLength(0);
+  it('hai trường cũ hasRecyclingPickup / recyclingNote bị từ chối khi forbidNonWhitelisted (client cũ nhận 400)', async () => {
+    for (const extra of [{ hasRecyclingPickup: true }, { recyclingNote: 'Vỏ hộp sữa' }]) {
+      const errs = await validate(plainToInstance(PlaceOrderDto, { ...base, ...extra }), { whitelist: true, forbidNonWhitelisted: true });
+      expect(errs.flatMap((e) => Object.keys(e.constraints ?? {}))).toContain('whitelistValidation');
+    }
   });
 });

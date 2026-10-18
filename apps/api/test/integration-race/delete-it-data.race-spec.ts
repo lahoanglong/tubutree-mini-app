@@ -2,6 +2,9 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { createDealer, createOrder, createUser, deleteItData, randCode } from './helpers';
+import {
+  cleanupWaste, createGiftRedemption, createWarehouse, createWastePoint, createWasteItem, createWasteRequest,
+} from './fixtures/waste-fixtures';
 
 /** Dọn dữ liệu spec phải chạy được trên DB thật: không vấp khoá ngoại RESTRICT nào, và không lỗi khi mảng id rỗng. */
 describe('deleteItData (real Postgres)', () => {
@@ -97,6 +100,41 @@ describe('deleteItData (real Postgres)', () => {
     expect(await count('users', 'id', [other.id])).toBe(1);
     await deleteItData(prisma, { userIds: [other.id] });
     expect(await count('users', 'id', [other.id])).toBe(0);
+  });
+
+  it('xoá khách có yêu cầu đổi rác đã xác nhận, lượt đổi quà đã trao, cờ và dòng nhân viên điểm nhận', async () => {
+    const user = await createUser(prisma);
+    const staff = await createUser(prisma);
+    const warehouse = await createWarehouse(prisma);
+    const item = await createWasteItem(prisma);
+    const request = await createWasteRequest(prisma, {
+      userId: user.id, method: 'DROP_OFF', status: 'COMPLETED', pointId: warehouse.id,
+      lines: [{ itemId: item.id, declaredQty: 2, receivedQty: 2 }],
+    });
+    const redemption = await createGiftRedemption(prisma, { userId: user.id, status: 'FULFILLED', giftKind: 'GIFT' });
+    await prisma.wasteUserFlags.create({ data: { userId: user.id, shipLockedAt: new Date() } });
+    const partner = await createWastePoint(prisma, { kind: 'PARTNER', ownerUserId: staff.id });
+    await prisma.wasteEvent.create({ data: { kind: 'REQUEST_CONFIRMED', requestId: request.id, actorUserId: staff.id, actorRole: 'STAFF' } });
+
+    await deleteItData(prisma, { userIds: [user.id, staff.id] });
+
+    expect(await count('waste_requests', 'userId', [user.id])).toBe(0);
+    expect(await count('waste_request_lines', 'requestId', [request.id])).toBe(0);
+    expect(await count('waste_gift_redemptions', 'userId', [user.id])).toBe(0);
+    expect(await count('waste_user_flags', 'userId', [user.id])).toBe(0);
+    expect(await count('waste_point_staff', 'userId', [staff.id])).toBe(0);
+    expect(await count('waste_events', 'requestId', [request.id])).toBe(0);
+    expect(await count('users', 'id', [user.id, staff.id])).toBe(0);
+    expect(await count('waste_points', 'id', [warehouse.id, partner.id])).toBe(2);
+
+    expect(partner.createdStorefront).toBe(true);
+    await cleanupWaste(prisma, {
+      pointIds: [partner.id], itemIds: [item.id], giftIds: [redemption.giftId], storefrontIds: partner.createdStorefront ? [partner.ownerStorefrontId!] : [],
+    });
+    expect(await count('waste_points', 'id', [partner.id])).toBe(0);
+    expect(await count('waste_items', 'id', [item.id])).toBe(0);
+    expect(partner.ownerStorefrontId).not.toBeNull();
+    expect(await count('storefronts', 'id', [partner.ownerStorefrontId!])).toBe(0);
   });
 
   it('chạy được với tham số rỗng và mảng id rỗng', async () => {

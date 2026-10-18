@@ -49,6 +49,7 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
   payment: 'tài khoản nhận tiền: seed chứa số tài khoản mẫu; migration 20260625070000 đã tạo dòng, chủ shop nhập số thật ở admin',
   refill: 'thuộc gói đổi vỏ/đổi rác (phiên khác); ba khoá cũ đã có từ migration',
   'shipping.gomdon': 'thuộc gói đổi rác/Gomdon (phiên khác); migration 20260926100000 đã tạo dòng',
+  waste: 'thuộc gói Đổi rác lấy quà; migration 20261020000000_waste_exchange đã tạo 21 dòng bằng giá trị mặc định (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
 };
 
 /** Khoá cố ý không nạp (nằm trong tiền tố được nạp), kèm lý do. */

@@ -19,8 +19,6 @@ const MIGRATED = [
   'components/copy-button.tsx',
   'components/coupon-box.tsx',
   'components/geo-picker.tsx',
-  'components/recycling-checkout.tsx',
-  'components/recycling-status.tsx',
   'lib/guest-ui.ts',
   'app/san-pham/[slug]/page.tsx',
   'app/gio-hang/page.tsx',

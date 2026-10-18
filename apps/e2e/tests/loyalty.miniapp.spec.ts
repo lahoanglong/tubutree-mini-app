@@ -77,12 +77,26 @@ const REWARDS = [
 function catalog(s: LoyaltyState): RewardCatalogResponse {
   return {
     pointsBalance: s.points,
-    ...(s.locked ? { lockedPoints: s.locked.points, redeemablePoints: redeemable(s) } : {}),
-    rewards: REWARDS.map((r) => ({
-      ...r,
+    pointsConvertedBalance: 0,
+    lockedPoints: s.locked?.points ?? 0,
+    redeemablePoints: redeemable(s),
+    giftClaimDays: 60,
+    claimPoint: null,
+    rewards: REWARDS.map((r, i) => ({
+      id: r.id,
+      kind: 'VOUCHER',
+      name: r.title,
       description: `${r.title} cho đơn từ ${r.minOrder.toLocaleString('vi-VN')}đ`,
+      label: null,
+      pointsCost: r.pointsCost,
+      imageUrl: null,
+      stockRemaining: null,
+      soldOut: false,
       // Như backend: canRedeem theo điểm DÙNG ĐƯỢC, không theo số dư.
       canRedeem: redeemable(s) >= r.pointsCost,
+      claimInstructions: null,
+      voucher: { type: r.type, value: r.value, minOrder: r.minOrder, maxDiscount: null, validDays: 30 },
+      sortOrder: i + 1,
     })),
   };
 }
@@ -136,6 +150,23 @@ function mockLoyalty(
       message: `Đổi thành công ${r.title}!`,
       pointsSpent: r.pointsCost,
       remainingPoints: s.points,
+      redemption: {
+        id: 'red-e2e',
+        giftId: r.id,
+        giftKind: 'VOUCHER',
+        giftName: r.title,
+        pointsCost: r.pointsCost,
+        status: 'FULFILLED',
+        code: null,
+        claimExpiresAt: null,
+        claimPoint: null,
+        fulfilledAt: '2026-10-17T03:00:00.000Z',
+        cancelledAt: null,
+        cancelReason: null,
+        refundedPoints: null,
+        couponCode: coupon.code,
+        createdAt: '2026-10-17T03:00:00.000Z',
+      },
       coupon,
     };
     return res;
@@ -185,7 +216,8 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     expect(api.callsTo('POST', '/me/loyalty/check-in')).toHaveLength(1);
   });
 
-  test('Đổi điểm lấy mã giảm giá: xác nhận → trừ điểm → mã vào Mã giảm giá của tôi, quà không đủ điểm bị khoá', async ({ page, api }) => {
+  // Rewards moved to /rewards (spec 4.8); rewritten in M8.7.
+  test.fixme('Đổi điểm lấy mã giảm giá: xác nhận → trừ điểm → mã vào Mã giảm giá của tôi, quà không đủ điểm bị khoá', async ({ page, api }) => {
     mockLoyalty(api);
     await page.goto('/loyalty');
 
@@ -220,7 +252,8 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     expect(api.callsTo('POST', '/me/loyalty/rewards/:id/redeem')).toHaveLength(1);
   });
 
-  test('Điểm từ đơn mới giao (còn hạn đổi/trả) chưa đổi quà được: nói rõ lý do + ngày mở, không báo "Cần X điểm" sai', async ({ page, api }) => {
+  // Rewards moved to /rewards (spec 4.8); rewritten in M8.7.
+  test.fixme('Điểm từ đơn mới giao (còn hạn đổi/trả) chưa đổi quà được: nói rõ lý do + ngày mở, không báo "Cần X điểm" sai', async ({ page, api }) => {
     // 60 điểm, 40 điểm từ đơn giao gần đây — 2026-10-03T17:30Z = 00:30 04/10 giờ VN.
     mockLoyalty(api, { locked: { points: 40, until: '2026-10-03T17:30:00.000Z' } });
     await page.goto('/loyalty');

@@ -3,7 +3,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -61,6 +61,7 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Ưu đãi giờ vàng' };
   // DEALER_BONUS_PAID / DEALER_REWARD_CLAIM_* — thưởng doanh số & yêu cầu nhận thưởng đại lý.
   if (code.startsWith('DEALER')) return { Icon: Store, title: 'Đại lý' };
+  if (code.startsWith('WASTE')) return { Icon: Recycle, title: 'Đổi rác lấy quà' };
   // OPS_* (vd OPS_GOMDON_ALERT) gửi tới tài khoản ADMIN; admin đăng nhập mini app vẫn thấy trong
   // danh sách (listForUser không lọc theo mã) nên cần nhãn riêng thay vì "Thông báo" chung chung.
   if (code.startsWith('OPS_')) return { Icon: TriangleAlert, title: 'Cảnh báo vận hành' };
@@ -101,6 +102,14 @@ export function notificationAction(templateCode: string, data: Record<string, st
   const route = internalRoute(d.route);
 
   if (templateCode.startsWith('REORDER_REMINDER')) return { kind: 'reorder', label: vi.reorder.reminderCta };
+  if (templateCode.startsWith('WASTE') || templateCode.startsWith('REFILL')) {
+    const requestId = d.request_id ?? d.requestId;
+    if (templateCode === 'WASTE_GIFT_CANCELLED') return { kind: 'link', label: 'Xem quà của tôi', to: '/rewards/mine' };
+    if (templateCode === 'WASTE_PERK_REVIEWED') return { kind: 'link', label: 'Mở màn nhận hàng', to: '/recycle/desk' };
+    if (templateCode === 'WASTE_POINTS_CREDITED' && requestId) return { kind: 'link', label: 'Xem kết quả', to: `/recycle/done/${enc(requestId)}` };
+    if (templateCode.startsWith('WASTE') && requestId) return { kind: 'link', label: 'Xem yêu cầu', to: `/recycle/r/${enc(requestId)}` };
+    return { kind: 'link', label: 'Mở Đổi rác lấy quà', to: '/recycle' };
+  }
   if (notificationOrderLink(templateCode, orderCode)) {
     return { kind: 'link', label: 'Xem chi tiết đơn hàng', to: orderCode ? `/order/${enc(orderCode)}` : '/orders' };
   }
@@ -133,7 +142,6 @@ export function notificationAction(templateCode: string, data: Record<string, st
     return { kind: 'link', label: 'Xem sản phẩm', to: `/product/${enc(productSlug)}` };
   }
   if (templateCode.startsWith('GROUP_BUY')) return { kind: 'link', label: 'Xem mua chung', to: '/group-buy' };
-  if (templateCode.startsWith('REFILL')) return { kind: 'link', label: 'Xem đổi vỏ chai', to: '/refill' };
   return null;
 }
 

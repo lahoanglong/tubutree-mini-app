@@ -31,7 +31,6 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
       ...calls.extra,
     };
   },
-  getPublicConfig: async () => ({ recyclingEnabled: false }),
 }));
 
 import CheckoutPage from './page';

@@ -2,25 +2,14 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  listAdminMissions,
-  listAdminRewardCatalog,
-  updateAdminMission,
-  type AdminMission,
-  type AdminRewardCatalogItem,
-} from '@/lib/admin-client';
-import { formatVnd } from '@/lib/shop-client';
+import { listAdminMissions, updateAdminMission, type AdminMission } from '@/lib/admin-client';
 import { BTN_XS_PRIMARY, INPUT_CLASS, Notice } from './ui';
 
 const REWARD_POINTS_MAX = 500_000;
 
-/**
- * Nhiệm vụ Vườn Xanh và danh mục quà đổi Điểm Xanh. Cách tính tiến độ nhiệm vụ gắn với mã nhiệm vụ nên chỉ sửa được chữ
- * hiển thị và điểm thưởng; quà đổi điểm nằm trong mã nguồn nên chỉ xem, kèm số lượt khách đã đổi.
- */
+/** Nhiệm vụ Vườn Xanh. Cách tính tiến độ nhiệm vụ gắn với mã nhiệm vụ nên chỉ sửa được chữ hiển thị và điểm thưởng. */
 export function EngagementTab() {
   const missionsQ = useQuery({ queryKey: ['admin-missions'], queryFn: listAdminMissions });
-  const rewardsQ = useQuery({ queryKey: ['admin-reward-catalog'], queryFn: listAdminRewardCatalog });
   return (
     <div className="space-y-6">
       <section aria-labelledby="missions-h" className="space-y-3">
@@ -37,15 +26,7 @@ export function EngagementTab() {
         </div>
       </section>
 
-      <section aria-labelledby="rewards-h" className="space-y-3">
-        <h2 id="rewards-h" className="font-display text-lg font-semibold text-stone-900">Quà đổi Điểm Xanh</h2>
-        <Notice tone="info">Danh mục quà đang cố định trong mã nguồn. Muốn thêm quà hoặc đổi giá điểm, báo đội kỹ thuật.</Notice>
-        {rewardsQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-        {rewardsQ.isError && <p className="text-sm text-danger-fg">Không tải được danh mục quà.</p>}
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {rewardsQ.data?.map((r) => <RewardRow key={r.id} item={r} />)}
-        </ul>
-      </section>
+      <Notice tone="info">Quà đổi Điểm Xanh nay quản lý ở tab Đổi rác, mục Quà.</Notice>
     </div>
   );
 }
@@ -122,27 +103,5 @@ function MissionRow({ item }: { item: AdminMission }) {
         )}
       </div>
     </div>
-  );
-}
-
-function rewardValue(r: AdminRewardCatalogItem): string {
-  const min = r.minOrder ? ` · đơn từ ${formatVnd(r.minOrder)}` : '';
-  if (r.type === 'FREESHIP') return `Miễn phí vận chuyển${min}`;
-  if (r.type === 'PERCENT') return `Giảm ${r.value}%${r.maxDiscount ? ` tối đa ${formatVnd(r.maxDiscount)}` : ''}${min}`;
-  return `Giảm ${formatVnd(r.value)}${min}`;
-}
-
-function RewardRow({ item: r }: { item: AdminRewardCatalogItem }) {
-  return (
-    <li data-reward={r.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="min-w-0 font-medium text-stone-900">{r.title}</span>
-        <span className="shrink-0 font-semibold text-forest-700">{r.pointsCost} điểm</span>
-      </div>
-      <div className="mt-1 text-xs text-stone-600">{rewardValue(r)}</div>
-      <div className="mt-1 text-xs text-stone-500">
-        {r.redeemedCount} lượt đổi · {r.redeemed30d} trong 30 ngày
-      </div>
-    </li>
   );
 }

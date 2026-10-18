@@ -26,7 +26,6 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     total: SUBTOTAL + 30000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
     ...calls.extra,
   }),
-  getPublicConfig: async () => ({ recyclingEnabled: false }),
 }));
 
 import CheckoutPage from './page';

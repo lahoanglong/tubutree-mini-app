@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatVnd } from '@/lib/shop-client';
 import {
   getUserDetail,
+  getWasteUserFlags,
   setStaffPermissions,
+  setWasteUserFlags,
   STAFF_PERMISSION_LABELS,
   type AdminUserDetail,
   type AdminUserEvent,
@@ -16,7 +18,8 @@ import { formatDateTime } from '@/lib/format-date';
 import { pointsDebtAmount, pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
 import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
-import { BTN_PRIMARY, Notice, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge } from './ui';
+import { useConfirm } from './confirm-dialog';
 
 const ROLE_LABELS: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -123,6 +126,8 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
       </Section>
 
       {isAdmin && u.role === 'STAFF' && <StaffPermissionsForm userId={u.id} current={u.staffPermissions} />}
+
+      {isAdmin && <WasteFlagsSection userId={u.id} />}
 
       <Section title="Đơn hàng" count={d.orders.total}>
         {d.orders.items.length === 0 ? (
@@ -266,7 +271,7 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
   return (
     <Section title="Nhóm việc nhân viên">
-      <p className="text-xs text-stone-500">Không chọn nhóm nào: nhân viên chỉ dùng quầy thu ngân, đổi vỏ chai và chấm công.</p>
+      <p className="text-xs text-stone-500">Không chọn nhóm nào: nhân viên chỉ dùng quầy thu ngân, tab Đổi rác (hàng đợi kho, quà chờ nhận) và chấm công.</p>
       <div className="mt-2 space-y-1">
         {(Object.keys(STAFF_PERMISSION_LABELS) as StaffPermission[]).map((p) => (
           <label key={p} className="flex min-h-[44px] items-center gap-2 sm:min-h-[32px]">
@@ -290,6 +295,82 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
           </Notice>
         </div>
       )}
+    </Section>
+  );
+}
+
+type FlagChange = { blocked: boolean } | { shipLocked: boolean };
+
+function WasteFlagsSection({ userId }: { userId: string }) {
+  const qc = useQueryClient();
+  const { ask, dialog } = useConfirm();
+  const [err, setErr] = useState<string | null>(null);
+  const flagsQ = useQuery({ queryKey: ['admin-waste-user-flags', userId], queryFn: () => getWasteUserFlags(userId) });
+  const save = useMutation({
+    mutationFn: (v: FlagChange & { reason: string }) => setWasteUserFlags(userId, v),
+    onSuccess: () => {
+      setErr(null);
+      void qc.invalidateQueries({ queryKey: ['admin-waste-user-flags', userId] });
+      void qc.invalidateQueries({ queryKey: ['admin-waste-requests'] });
+      void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
+    },
+    onError: (e) => setErr(e instanceof Error ? e.message : 'Không lưu được.'),
+  });
+  const change = async (title: string, confirmLabel: string, locking: boolean, patch: FlagChange) => {
+    const reason = await ask({
+      title,
+      message: 'Lý do được lưu kèm người thao tác.',
+      confirmLabel,
+      tone: locking ? 'danger' : 'default',
+      input: { label: 'Lý do', required: true, maxLength: 500 },
+    });
+    if (reason) save.mutate({ ...patch, reason });
+  };
+  const f = flagsQ.data;
+  return (
+    <Section title="Đổi rác">
+      {flagsQ.isLoading && <p className="text-stone-500">Đang tải…</p>}
+      {flagsQ.isError && <p className="text-danger-fg">Không tải được trạng thái khoá đổi rác.</p>}
+      {f && !flagsQ.isError && (
+        <div className="space-y-2">
+          {(f.blockedAt || f.shipLockedAt) && (
+            <div className="space-y-1">
+              {f.blockedAt && <ToneBadge tone="danger" wrap>Đang khoá đổi rác từ {formatDateTime(f.blockedAt)}</ToneBadge>}
+              {f.shipLockedAt && <ToneBadge tone="warning" wrap>Đang khoá gửi kho và thu kèm đơn từ {formatDateTime(f.shipLockedAt)}</ToneBadge>}
+              {f.reason && <p className="text-xs text-stone-600">Lý do: {f.reason}</p>}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {f.blockedAt ? (
+              <button type="button" className={BTN_SECONDARY} disabled={save.isPending} onClick={() => void change('Mở khoá đổi rác', 'Mở khoá', false, { blocked: false })}>
+                Mở khoá đổi rác
+              </button>
+            ) : (
+              <button type="button" className={BTN_DANGER_OUTLINE} disabled={save.isPending} onClick={() => void change('Khoá đổi rác', 'Khoá', true, { blocked: true })}>
+                Khoá đổi rác
+              </button>
+            )}
+            {f.shipLockedAt ? (
+              <button type="button" className={BTN_SECONDARY} disabled={save.isPending} onClick={() => void change('Mở khoá gửi kho', 'Mở khoá', false, { shipLocked: false })}>
+                Mở khoá gửi kho
+              </button>
+            ) : (
+              <button type="button" className={BTN_DANGER_OUTLINE} disabled={save.isPending} onClick={() => void change('Khoá gửi kho', 'Khoá', true, { shipLocked: true })}>
+                Khoá gửi kho
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {err && (
+        <div className="mt-2">
+          <Notice tone="danger" role="alert">{err}</Notice>
+        </div>
+      )}
+      <a href={`/admin?tab=waste&wasteUser=${encodeURIComponent(userId)}`} className="mt-2 inline-block text-forest-700 underline">
+        Xem yêu cầu đổi rác của khách
+      </a>
+      {dialog}
     </Section>
   );
 }

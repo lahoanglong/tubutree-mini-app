@@ -2,7 +2,7 @@
 
 import type { BadgeTone } from '../components/ui/badge';
 import { vi } from '../i18n/vi';
-import { formatNumber, formatPoints, isRecyclingPickedUp } from './format';
+import { formatNumber, formatPoints } from './format';
 
 /** Cùng nguồn token với Badge's TONE_STYLE (audit A4-08: trước đây map này dùng hex chép tay
  * "gần giống" — SHIPPING `#EAF2FA` gần nhưng KHÁC `--info-bg` thật, CANCELLED `#FAEAEA` tương tự
@@ -135,6 +135,12 @@ export function isHandedToCarrier(o: CarrierFacts): boolean {
 /** Nhãn trạng thái cho khách: đơn đã đặt hãng thì nói rõ, khỏi để chip "Đang đóng gói" mâu thuẫn lời "đã bàn giao". */
 export function buyerStatusLabel(o: CarrierFacts): string {
   return isCarrierBooked(o) ? vi.orders.carrierBooked : (vi.orderStatus[o.status] ?? o.status);
+}
+
+/** Bưu tá Gomdon đã cầm hàng (mã số khác 1/2/10): luật dự phòng khi API chưa trả `canCancel`. */
+function isRecyclingPickedUp(gomdonStatus: string | null | undefined): boolean {
+  if (!gomdonStatus || !/^\d+$/.test(gomdonStatus)) return false;
+  return !['1', '2', '10'].includes(gomdonStatus);
 }
 
 /**

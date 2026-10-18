@@ -171,7 +171,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
     'đổi voucher (LoyaltyService.redeemReward)': {
       cost: 20_000,
       whenLocked: 'reject',
-      run: (u) => loyalty.redeemReward(u.user.id, 'reward-freeship'),
+      run: (u) => loyalty.redeemReward(u.user.id, 'reward-freeship', `rk-${randCode(12)}`),
     },
     'vòng quay (GameService.spin)': { cost: 10, whenLocked: 'reject', run: (u) => game.spin(u.user.id) },
     'góp quỹ cây (GameService.buyTree)': { cost: 50, whenLocked: 'reject', run: (u) => game.buyTree(u.user.id) },

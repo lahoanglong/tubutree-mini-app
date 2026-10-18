@@ -5,8 +5,8 @@ import { useMutation } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
 
-/** Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví và tài khoản nhận tiền: sửa nhầm là sai tiền ngay ở đơn kế tiếp. */
-const MONEY_PREFIXES = ['payment.', 'loyalty.', 'shipping.', 'wallet.'];
+/** Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp. */
+const MONEY_PREFIXES = ['payment.', 'loyalty.', 'shipping.', 'wallet.', 'waste.'];
 
 /** Một dòng trong "Tất cả tham số (JSON)" của tab Cấu hình. */
 export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {

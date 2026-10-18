@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { ACCOUNT_DELETION_BLOCKED, AccountDeletionService, type PartnerStoreBlockersPort } from './account-deletion.service';
+import { ACCOUNT_DELETION_BLOCKED, AccountDeletionService, type DeletionBlocker, type PartnerStoreBlockersPort } from './account-deletion.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 function build(partnerBlockers: string[]) {
@@ -23,6 +23,8 @@ function build(partnerBlockers: string[]) {
     commission: empty,
     cashbackTransaction: empty,
     dealerCreditLedger: empty,
+    wasteRequest: empty,
+    wasteUserFlags: empty,
   };
   const prisma = { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(tx)) };
   const port: PartnerStoreBlockersPort = {
@@ -93,5 +95,31 @@ describe('AccountDeletionService — gian hàng đối tác của chủ', () => 
     const prisma = { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(tx)) };
     const svc = new AccountDeletionService(prisma as unknown as PrismaService);
     await expect(svc.process('req-1', 'admin-1')).resolves.toMatchObject({ alreadyProcessed: false });
+  });
+});
+
+describe('waste blockers (spec 11.1, 14.4)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  async function blockersFor(overrides: Record<string, unknown>) {
+    const { svc, tx } = build([]);
+    Object.assign(tx, overrides);
+    const err = await svc.process('req-1', 'admin-1').then(() => null, (e: unknown) => e);
+    return { blockers: err ? ((err as BadRequestException).getResponse() as { blockers: DeletionBlocker[] }).blockers : [], tx };
+  }
+
+  it('an OPEN/IN_TRANSIT/RECEIVED request blocks with WASTE_REQUEST_OPEN', async () => {
+    const { blockers, tx } = await blockersFor({ wasteRequest: { groupBy: jest.fn().mockResolvedValue([{ userId: 'u1', _count: { _all: 2 } }]) } });
+    expect(blockers).toContainEqual({ code: 'WASTE_REQUEST_OPEN', message: 'còn 2 yêu cầu Đổi rác chưa xong (đang chờ mang tới, đang gửi hoặc đang chờ đếm)' });
+    expect(tx.wasteRequest.groupBy).toHaveBeenCalledWith({ by: ['userId'], where: { userId: { in: ['u1'] }, status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } }, _count: { _all: true } });
+  });
+  it.each([['blockedAt', { blockedAt: new Date(), shipLockedAt: null }], ['shipLockedAt', { blockedAt: null, shipLockedAt: new Date() }]])('%s blocks with WASTE_UNDER_REVIEW', async (_n, flags) => {
+    const { blockers, tx } = await blockersFor({ wasteUserFlags: { findMany: jest.fn().mockResolvedValue([{ userId: 'u1', ...flags }]) } });
+    expect(blockers).toContainEqual({ code: 'WASTE_UNDER_REVIEW', message: 'Tài khoản đang được Tubu xem xét, liên hệ CSKH' });
+    expect(tx.wasteUserFlags.findMany).toHaveBeenCalledWith({ where: { userId: { in: ['u1'] }, OR: [{ blockedAt: { not: null } }, { shipLockedAt: { not: null } }] }, select: { userId: true } });
+  });
+  it('no waste rows -> no waste blocker', async () => {
+    const { blockers } = await blockersFor({});
+    expect(blockers).toEqual([]);
   });
 });

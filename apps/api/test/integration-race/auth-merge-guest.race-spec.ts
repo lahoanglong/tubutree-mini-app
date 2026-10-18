@@ -11,6 +11,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, summarize, warmPool } from './helpers';
+import { cleanupWaste, createGiftRedemption, createWarehouse, createWasteItem, createWastePoint, createWasteRequest } from './fixtures/waste-fixtures';
 
 type Balances = Partial<
   Record<'pointsBalance' | 'pointsConvertedBalance' | 'walletBalance' | 'coinsBalance' | 'cashbackPending', number>
@@ -515,5 +516,34 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     const winner = await prisma.user.findUniqueOrThrow({ where: { zaloId: zaloIdForNextCall } });
     for (const r of s.fulfilled) expect(r.value.user.id).toBe(winner.id);
     expect(winner.pointsBalance).toBe(7);
+  });
+
+  it('merge: waste rows move; duplicate keys renamed MERGED:<guest>:<key>; flags merged; point staff moved, deduped and promoted', async () => {
+    const { guest, target } = await guestAndTarget({}, {});
+    const wh = await createWarehouse(prisma);
+    const item = await createWasteItem(prisma);
+    const gReq = await createWasteRequest(prisma, { userId: guest.id, method: 'DROP_OFF', status: 'CANCELLED', pointId: wh.id, lines: [{ itemId: item.id, declaredQty: 1 }] });
+    const tReq = await createWasteRequest(prisma, { userId: target.id, method: 'DROP_OFF', status: 'CANCELLED', pointId: wh.id, lines: [{ itemId: item.id, declaredQty: 1 }] });
+    await prisma.wasteRequest.update({ where: { id: gReq.id }, data: { idempotencyKey: tReq.idempotencyKey } });
+    const gRed = await createGiftRedemption(prisma, { userId: guest.id, status: 'FULFILLED' });
+    const early = new Date('2026-09-01T00:00:00Z'); const late = new Date('2026-10-01T00:00:00Z');
+    await prisma.wasteUserFlags.create({ data: { userId: guest.id, shipLockedAt: early, shipUnlockedAt: late, blockedAt: early } });
+    await prisma.wasteUserFlags.create({ data: { userId: target.id, shipLockedAt: late, shipUnlockedAt: early, blockedAt: late } });
+    const dupPoint = await createWastePoint(prisma, { kind: 'PARTNER' });
+    const movePoint = await createWastePoint(prisma, { kind: 'PARTNER' });
+    await prisma.wastePointStaff.create({ data: { pointId: dupPoint.id, userId: guest.id, role: 'OWNER', isActive: true } });
+    await prisma.wastePointStaff.create({ data: { pointId: dupPoint.id, userId: target.id, role: 'STAFF', isActive: false } });
+    await prisma.wastePointStaff.create({ data: { pointId: movePoint.id, userId: guest.id, role: 'STAFF', isActive: true } });
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+    expect(await prisma.wasteRequest.findUniqueOrThrow({ where: { id: gReq.id } })).toMatchObject({ userId: target.id, idempotencyKey: `MERGED:${guest.id}:${tReq.idempotencyKey}` });
+    expect(await prisma.wasteRequest.findUniqueOrThrow({ where: { id: tReq.id } })).toMatchObject({ userId: target.id, idempotencyKey: tReq.idempotencyKey });
+    expect((await prisma.wasteGiftRedemption.findUniqueOrThrow({ where: { id: gRed.id } })).userId).toBe(target.id);
+    expect(await prisma.wasteUserFlags.findUnique({ where: { userId: guest.id } })).toBeNull();
+    expect(await prisma.wasteUserFlags.findUniqueOrThrow({ where: { userId: target.id } })).toMatchObject({ shipLockedAt: early, shipUnlockedAt: late, blockedAt: early });
+    expect(await prisma.wastePointStaff.findMany({ where: { userId: { in: [guest.id, target.id] } }, orderBy: { pointId: 'asc' }, select: { pointId: true, userId: true, role: true, isActive: true } })).toEqual(
+      [{ pointId: dupPoint.id, userId: target.id, role: 'OWNER', isActive: true }, { pointId: movePoint.id, userId: target.id, role: 'STAFF', isActive: true }].sort((a, b) => a.pointId.localeCompare(b.pointId)),
+    );
+    await cleanupWaste(prisma, { pointIds: [dupPoint.id, movePoint.id], itemIds: [item.id], giftIds: [gRed.giftId] });
   });
 });

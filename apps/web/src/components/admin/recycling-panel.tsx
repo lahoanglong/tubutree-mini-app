@@ -130,10 +130,10 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
   const openAlerts = (order.gomdonAlerts ?? []).filter((a) => !resolvedIds.includes(a.id));
 
   return (
-    <section aria-label="Thu gom vật liệu tái chế" className="rounded-card border border-forest-200 bg-stone-0 p-3">
+    <section aria-label="Thu kèm rác (Gomdon)" className="rounded-card border border-forest-200 bg-stone-0 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Recycle className="h-4 w-4 text-forest-700" aria-hidden />
-        <span className="text-xs font-semibold uppercase text-stone-600">Thu gom vật liệu tái chế (Gomdon)</span>
+        <span className="text-xs font-semibold uppercase text-stone-600">Thu kèm rác (Gomdon)</span>
         <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
         {cancelLabel && <ToneBadge tone={cancelLabel.tone}>{cancelLabel.label}</ToneBadge>}
       </div>

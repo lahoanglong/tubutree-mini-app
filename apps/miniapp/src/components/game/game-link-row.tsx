@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { Badge } from '../ui/badge';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
 import { ListRow } from '../ui/list-row';
@@ -7,11 +8,13 @@ export function GameLinkRow({
   icon,
   title,
   hint,
+  badge,
   onClick,
 }: {
   icon: LucideIcon;
   title: string;
   hint: string;
+  badge?: string;
   onClick: () => void;
 }) {
   return (
@@ -33,7 +36,18 @@ export function GameLinkRow({
             <Icon icon={icon} tone="brand" />
           </span>
         }
-        title={title}
+        title={
+          badge ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {title}
+              <Badge tone="brand" size="sm">
+                {badge}
+              </Badge>
+            </span>
+          ) : (
+            title
+          )
+        }
         subtitle={hint}
         trailing="chevron"
         onPress={onClick}

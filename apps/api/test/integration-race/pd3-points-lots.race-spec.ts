@@ -3,7 +3,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
-import { LoyaltyService, DEFAULT_REWARD_CATALOG } from '../../src/modules/loyalty/loyalty.service';
+import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { LoyaltyExpiryService } from '../../src/modules/loyalty/loyalty-expiry.service';
 import { applyPointsDelta } from '../../src/modules/loyalty/points-ledger';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
@@ -78,7 +78,7 @@ describe('PD-3 Điểm Xanh hai lô (real Postgres)', () => {
   }
 
   it('T5: luồng điểm hiện có (điểm danh, đổi voucher) ghi lô STANDARD và không chạm lô quy đổi', async () => {
-    const reward = DEFAULT_REWARD_CATALOG[0]!;
+    const reward = { id: 'reward-freeship', pointsCost: 20_000 };
     const user = await newUser();
     await prisma.$transaction((tx) =>
       applyPointsDelta(tx, { userId: user.id, delta: reward.pointsCost * 3, lot: 'CONVERTED', reason: 'XU_TO_POINTS:IT', refType: 'IT' }),
@@ -86,7 +86,7 @@ describe('PD-3 Điểm Xanh hai lô (real Postgres)', () => {
 
     await loyalty.dailyCheckIn(user.id);
     // Lô quy đổi đủ cho 3 voucher nhưng lô thường chỉ có điểm danh: đổi voucher phải bị từ chối.
-    await expect(loyalty.redeemReward(user.id, reward.id)).rejects.toThrow(/Bạn cần/);
+    await expect(loyalty.redeemReward(user.id, reward.id, `rk-${randCode(12)}`)).rejects.toThrow(/Bạn cần/);
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(after.pointsConvertedBalance).toBe(reward.pointsCost * 3);
@@ -100,7 +100,7 @@ describe('PD-3 Điểm Xanh hai lô (real Postgres)', () => {
     await prisma.$transaction((tx) =>
       applyPointsDelta(tx, { userId: user.id, delta: reward.pointsCost, lot: 'STANDARD', reason: 'IT_TOPUP', refType: 'IT' }),
     );
-    await loyalty.redeemReward(user.id, reward.id);
+    await loyalty.redeemReward(user.id, reward.id, `rk-${randCode(12)}`);
     const after2 = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(after2.pointsConvertedBalance).toBe(reward.pointsCost * 3);
     expect(after2.pointsBalance).toBe(after.pointsBalance);

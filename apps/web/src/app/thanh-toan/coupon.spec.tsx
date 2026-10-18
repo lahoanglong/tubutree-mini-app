@@ -88,7 +88,6 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
       total: SUBTOTAL - discountOf() + 30000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
     };
   },
-  getPublicConfig: async () => ({ recyclingEnabled: false }),
   placeOrder: async (body: Record<string, unknown>) => {
     state.placedBodies.push(body);
     await state.placeGate;
