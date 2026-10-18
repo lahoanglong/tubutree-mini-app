@@ -7,12 +7,14 @@ import { describe, expect, it } from 'vitest';
 // làm tham số từ config công khai. Ngoại lệ thật sự (số không do admin chỉnh, vd. giá niêm yết cố định của một dịch vụ) ghi
 // chú ngay trên dòng:
 //   // hardcoded-amount-ok: <lý do>
-// Kiểu viết nhận ra: "199.000đ", "199.000 đ", "199.000 ₫", "199000đ", "1.250.000 VND", "30k", "5 triệu", "50 nghìn".
-// Đơn vị phải đứng một mình (sau nó không là chữ cái) để "10.000 điểm", "2 đơn", "2 ký tự", "2 kg" không bị tính là tiền.
+// Kiểu viết nhận ra: "199.000đ", "199,000đ", "199 000đ" (cả dấu cách không ngắt), "199.000 đ", "199.000 ₫", "199000đ", "1.250.000 VND",
+// "30k", "1tr", "1,5 tr", "5 triệu", "50 nghìn". Đơn vị phải đứng một mình (sau nó không là chữ cái) để "10.000 điểm", "2 đơn",
+// "2 ký tự", "2 kg", "1 trong 3", "10 trẻ" không bị tính là tiền.
 const UNIT = String.raw`(?:đồng|đ|₫|vnđ|vnd)(?!\p{L})`;
-const SHORT_UNIT = String.raw`(?:k|triệu|nghìn|ngàn)(?!\p{L})`;
+const SHORT_UNIT = String.raw`(?:triệu|tr|nghìn|ngàn|k)(?!\p{L})`;
+const THOUSANDS_SEP = String.raw`[.,\s\u00a0\u202f]`;
 const AMOUNT = new RegExp(
-  String.raw`\d{1,3}(?:\.\d{3})+\s?${UNIT}|\d{4,}\s?${UNIT}|\b\d+(?:[.,]\d+)?\s?${SHORT_UNIT}`,
+  String.raw`\d{1,3}(?:${THOUSANDS_SEP}\d{3})+\s?${UNIT}|\d{4,}\s?${UNIT}|\b\d+(?:[.,]\d+)?\s?${SHORT_UNIT}`,
   'iu',
 );
 const MARKER = /\/\/ hardcoded-amount-ok: (.+)$/;
@@ -43,6 +45,16 @@ describe('chữ hiển thị không viết cứng số tiền', () => {
     'còn 50 nghìn',
     'tối đa 1.250.000 VND',
     'phí 1.000 đồng',
+    'Đơn từ 199,000đ',
+    'Đơn từ 199,000 đ',
+    'Đơn từ 199 000đ',
+    'Đơn từ 199 000 ₫',
+    'Đơn từ 199\u00a0000đ',
+    'Đơn từ 1 250 000đ',
+    'Đơn từ 1tr',
+    'Đơn từ 1 tr',
+    'Đơn từ 1,5tr',
+    'Đơn từ 1.5tr',
   ])('bộ lọc nhận ra số tiền: %s', (text) => {
     expect(AMOUNT.test(text)).toBe(true);
   });
@@ -60,6 +72,15 @@ describe('chữ hiển thị không viết cứng số tiền', () => {
     'Mã BLACK30K',
     'Nhập ít nhất 2 ký tự',
     'nặng 2 kg',
+    'cần 1 000 điểm để lên hạng',
+    'cần 1,000 điểm để lên hạng',
+    'đã dùng 10 000 điểm',
+    'Mua 1 trong 3 đơn',
+    'Có 10 trẻ em',
+    'Mã SALE1TR',
+    'Gọi 0899 149 229',
+    'Số 12 345 đường Lê Lợi',
+    'Điểm danh 7 ngày liên tiếp',
   ])('bộ lọc bỏ qua chữ không phải tiền: %s', (text) => {
     expect(AMOUNT.test(text)).toBe(false);
   });
