@@ -67,7 +67,9 @@ describe('SiteHeader', () => {
     expect(render()).toMatch(/<div [^>]*data-site-search[^>]*>\s*<form[^>]*role="search"/);
   });
 
-  it('nhãn thương hiệu dùng Fraunces (font-display)', () => {
-    expect(render()).toMatch(/font-display[^>]*>Tubu Tree</);
+  it('thương hiệu hiện bằng ảnh logo thật, không còn chữ + biểu tượng dựng tay', () => {
+    const out = render();
+    expect(out).toMatch(/<img[^>]*alt="Tubu Tree"/);
+    expect(out).not.toContain('SỐNG XANH AN LÀNH');
   });
 });

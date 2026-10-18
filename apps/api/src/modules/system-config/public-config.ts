@@ -6,6 +6,7 @@ import { PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
 import { EVENT_REWARD_MAX_POINTS } from '../feed/community-limits';
 import { DEALER_MAX_DISCOUNT_PCT_DEFAULT, DEALER_REVIEW_HOURS_DEFAULT } from '../dealer/dealer-config';
 import { FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
+import { publicCommunityUrl } from './community-links';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
@@ -53,6 +54,9 @@ export async function buildPublicConfig(config: SystemConfigService) {
     communityPublicPreview,
     dealerMaxDiscountPct,
     dealerReviewHours,
+    communityZaloGroupUrl,
+    communityFacebookUrl,
+    communityTiktokUrl,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', 200000),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -85,6 +89,9 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>(PUBLIC_PREVIEW_KEY, false),
     config.get<unknown>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT),
     config.get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT),
+    config.get<unknown>('community.zalo_group_url', ''),
+    config.get<unknown>('community.facebook_url', ''),
+    config.get<unknown>('community.tiktok_url', ''),
   ]);
   return {
     freeshipThreshold,
@@ -120,7 +127,12 @@ export async function buildPublicConfig(config: SystemConfigService) {
       maxDiscountPct: typeof dealerMaxDiscountPct === 'number' && dealerMaxDiscountPct > 0 && dealerMaxDiscountPct <= 1 ? dealerMaxDiscountPct : null,
       reviewHours: Number.isInteger(dealerReviewHours) && (dealerReviewHours as number) >= 1 ? (dealerReviewHours as number) : null,
     },
-    community: { eventRewardMaxPoints: EVENT_REWARD_MAX_POINTS },
+    community: {
+      eventRewardMaxPoints: EVENT_REWARD_MAX_POINTS,
+      zaloGroupUrl: publicCommunityUrl(communityZaloGroupUrl),
+      facebookUrl: publicCommunityUrl(communityFacebookUrl),
+      tiktokUrl: publicCommunityUrl(communityTiktokUrl),
+    },
   };
 }
 

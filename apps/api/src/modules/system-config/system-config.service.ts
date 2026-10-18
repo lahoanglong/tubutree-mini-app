@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PICKUP_PHONE_PATTERN } from '../../common/phone';
+import { COMMUNITY_LINK_KEYS, communityUrlProblem } from './community-links';
 import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
@@ -259,6 +260,8 @@ export class SystemConfigService {
     'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.
     'community.public_preview': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Link kênh cộng đồng mở ra ngoài app qua webview: chỉ https và tên miền mạng xã hội đã duyệt.
+    ...Object.fromEntries(COMMUNITY_LINK_KEYS.map((k) => [k, communityUrlProblem])),
     // Link nhận mã in trong QR thẻ hộp hàng và link chia sẻ của CTV dựng từ khoá này: sai là thẻ đã in mở ra trang lỗi.
     'app.miniapp_base_url': (value) =>
       value === '' || (typeof value === 'string' && /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(value))

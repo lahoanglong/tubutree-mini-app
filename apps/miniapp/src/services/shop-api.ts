@@ -239,7 +239,7 @@ export interface PublicConfig {
   /** Chiết khấu đại lý tối đa (phân số) và số giờ hẹn duyệt hồ sơ; null khi cấu hình hỏng, thiếu khi API cũ → UI bỏ con số. */
   dealer?: { maxDiscountPct: number | null; reviewHours: number | null };
   /** Trần Điểm Xanh thưởng một sự kiện cộng đồng (giới hạn của API). Thiếu khi API cũ. */
-  community?: { eventRewardMaxPoints: number };
+  community?: { eventRewardMaxPoints: number; zaloGroupUrl?: string | null; facebookUrl?: string | null; tiktokUrl?: string | null };
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

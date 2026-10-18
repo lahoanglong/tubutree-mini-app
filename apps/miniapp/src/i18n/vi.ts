@@ -357,6 +357,7 @@ export const vi = {
 
   nav: {
     main: 'Điều hướng chính',
+    gardenHint: 'Trồng cây mỗi ngày, nhận quà thật',
     activeOrders: (n: number) => `${n} đơn đang xử lý`,
     tabWithActiveOrders: (label: string, n: number) => `${label}, ${n} đơn đang xử lý`,
   },
@@ -702,6 +703,10 @@ export const vi = {
   community: {
     title: 'Cộng đồng Vườn Tubu',
     subtitle: 'Hỏi đáp cách dùng, chia sẻ trải nghiệm, cổ vũ nhau 🌿',
+    channelsLabel: 'Kênh cộng đồng của Tubu Tree',
+    channelZalo: 'Nhóm Zalo',
+    channelFacebook: 'Facebook',
+    channelTiktok: 'TikTok',
     tabAll: 'Tất cả',
     sortNew: 'Mới nhất',
     sortPopular: 'Nổi bật',

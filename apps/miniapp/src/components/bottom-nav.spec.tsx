@@ -17,6 +17,7 @@ describe('BottomNav', () => {
     vi.clearAllMocks();
     mocks.pathname = '/';
     mocks.count = 0;
+    localStorage.clear();
   });
 
   it('5 tab trong <nav>, có "Đơn hàng", không còn "Ví & HH"', () => {
@@ -63,5 +64,51 @@ describe('BottomNav', () => {
   it('không còn biến CSS cũ --neutral/--leaf/--primary', () => {
     const { container } = render(<BottomNav />);
     expect(container.innerHTML).not.toMatch(/--(neutral|leaf|primary)-/);
+  });
+
+  describe('bóng gợi ý Vườn Xanh', () => {
+    const HINT = 'Trồng cây mỗi ngày, nhận quà thật';
+
+    it('lần mở đầu hiện, bấm vào bóng thì tắt; mở lại app không hiện nữa', () => {
+      const first = render(<BottomNav />);
+      fireEvent.click(screen.getByText(HINT));
+      expect(screen.queryByText(HINT)).toBeNull();
+      first.unmount();
+      render(<BottomNav />);
+      expect(screen.queryByText(HINT)).toBeNull();
+    });
+
+    it('đã hiện một lần thì không hiện lại dù khách chưa bấm đóng', () => {
+      const first = render(<BottomNav />);
+      expect(screen.getByText(HINT)).toBeInTheDocument();
+      first.unmount();
+      render(<BottomNav />);
+      expect(screen.queryByText(HINT)).toBeNull();
+    });
+
+    it('mở tab Vườn Xanh thì bóng tắt', () => {
+      const { rerender } = render(<BottomNav />);
+      expect(screen.getByText(HINT)).toBeInTheDocument();
+      mocks.pathname = '/game';
+      rerender(<BottomNav />);
+      expect(screen.queryByText(HINT)).toBeNull();
+    });
+
+    it('không hiện ở trang con, và không hiện khi mở thẳng tab Vườn Xanh', () => {
+      mocks.pathname = '/game';
+      render(<BottomNav />);
+      expect(screen.queryByText(HINT)).toBeNull();
+      expect(localStorage.getItem('tubu_garden_hint_seen')).toBe('1');
+    });
+
+    it('storage ném lỗi thì không hiện và không vỡ nav', () => {
+      const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('blocked');
+      });
+      render(<BottomNav />);
+      expect(screen.queryByText(HINT)).toBeNull();
+      expect(screen.getAllByRole('button')).toHaveLength(5);
+      spy.mockRestore();
+    });
   });
 });

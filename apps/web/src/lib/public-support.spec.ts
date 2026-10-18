@@ -46,4 +46,16 @@ describe('getPublicSupport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support: { zaloOaName: '  ' } })));
     expect((await getPublicSupport()).zaloOaName).toBeUndefined();
   });
+
+  it('đọc link kênh cộng đồng: bỏ link rỗng và link không phải https', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        res(200, { community: { zaloGroupUrl: 'https://zalo.me/g/a', facebookUrl: 'http://facebook.com/x', tiktokUrl: null } }),
+      ),
+    );
+    expect((await getPublicSupport()).community).toEqual({ zaloGroupUrl: 'https://zalo.me/g/a' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { community: { eventRewardMaxPoints: 1000 } })));
+    expect((await getPublicSupport()).community).toBeUndefined();
+  });
 });

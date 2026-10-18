@@ -55,4 +55,21 @@ describe('SiteFooter', () => {
     for (const label of ['Điều khoản', 'Bảo mật', 'Đổi trả', 'Vận chuyển']) expect(nav).toContain(label);
     for (const a of nav.match(/<a [^>]*>/g) ?? []) expect(a).toContain('min-h-11');
   });
+
+  it('hiện kênh cộng đồng nào đã có link (mở tab mới, rel an toàn); chưa có thì không vẽ khối', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
+    expect(await html()).not.toContain('Kênh cộng đồng');
+
+    mocks.getPublicSupport.mockResolvedValue({
+      hotline: '0899 149 229',
+      email: 'tubutree@gmail.com',
+      community: { zaloGroupUrl: 'https://zalo.me/g/abc', tiktokUrl: 'https://www.tiktok.com/@tubutree' },
+    });
+    const out = await html();
+    expect(out).toContain('aria-label="Kênh cộng đồng"');
+    expect(out).toMatch(/<a [^>]*href="https:\/\/zalo.me\/g\/abc"[^>]*rel="noopener noreferrer"[^>]*>/);
+    expect(out).toContain('Nhóm Zalo');
+    expect(out).toContain('TikTok');
+    expect(out).not.toContain('Facebook');
+  });
 });

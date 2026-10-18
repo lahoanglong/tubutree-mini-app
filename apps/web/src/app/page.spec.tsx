@@ -203,6 +203,10 @@ describe('HomePage — ảnh thẻ sản phẩm (D6-12)', () => {
 
 // D7 việc 1: khách mới vào trang chủ phải thấy lối vào theo danh mục ngay dưới hero, và cam kết chỉ còn một hàng.
 describe('HomePage — hàng danh mục và hàng cam kết (D7)', () => {
+  it('trang chủ không dùng lời hứa tuyệt đối "100%"', async () => {
+    expect(await render({})).not.toContain('100%');
+  });
+
   it('hàng danh mục liệt kê danh mục còn hàng, bỏ danh mục trống, mỗi liên kết ≥ 44px', async () => {
     const out = await render({});
     expect(out).toContain('aria-label="Mua theo danh mục"');

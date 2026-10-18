@@ -61,8 +61,8 @@ describe('RootLayout — đánh dấu host gian hàng trước khi vẽ', () => 
 describe('biểu tượng site và ảnh chia sẻ mặc định (BUYERWEB-16)', () => {
   const file = (name: string) => readFileSync(fileURLToPath(new URL(`./${name}`, import.meta.url)));
 
-  it('có đủ icon.svg, apple-icon.png, favicon.ico theo quy ước thư mục app', () => {
-    expect(file('icon.svg').toString()).toMatch(/^<svg[^>]+viewBox="0 0 32 32"/);
+  it('có đủ icon.png, apple-icon.png, favicon.ico theo quy ước thư mục app', () => {
+    expect(file('icon.png').subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     expect(file('apple-icon.png').subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     const ico = file('favicon.ico');
     expect([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4)]).toEqual([0, 1, 1]);

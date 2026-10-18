@@ -525,6 +525,9 @@ describe('SystemConfigService.set — freeship đơn đầu và link Mini App ch
     ['shipping.first_order_free_min_subtotal', [0, 99000], [-1, 99000.5, 50_000_001, '99000']],
     ['home.new_customer_layout', [true, false], ['true', 'false', 1, 0, null]],
     ['community.public_preview', [true, false], ['true', 'false', 1, 0, null]],
+    ['community.zalo_group_url', ['', 'https://zalo.me/g/abcxyz', 'https://www.zalo.me/g/abc'], ['http://zalo.me/g/a', 'https://evil.com/zalo.me', 'https://zalo.me.evil.com/g', 'https://facebook.com@evil.com/x', 'zalo.me/g/a', ' https://zalo.me/g/a', 5, null]],
+    ['community.facebook_url', ['', 'https://www.facebook.com/tubutree', 'https://fb.com/tubutree', 'https://m.facebook.com/tubutree'], ['https://notfacebook.com/x', 'javascript:alert(1)', 'https://facebook.com:8080/x']],
+    ['community.tiktok_url', ['', 'https://www.tiktok.com/@tubutree', 'https://vt.tiktok.com/abc'], ['https://tiktok.com.cn/x', 'ftp://tiktok.com/x']],
     ['dealer.review_hours', [1, 24, 720], [0, -1, 1.5, 721, '24', null]],
     ['app.miniapp_base_url', ['', 'https://zalo.me/s/1234567890', 'https://zalo.me/s/1234567890/'], ['zalo.me/s/123', 'http://zalo.me/s/123', 'https://zalo.me/s/1 23', 'https://zalo.me/s/123?x=1', 5]],
   ] as const)('%s: nhận %j, từ chối %j', async (key, goods, bads) => {

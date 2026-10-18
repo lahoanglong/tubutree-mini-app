@@ -10,8 +10,9 @@ const mocks = vi.hoisted(() => ({
   getFeed: vi.fn(),
   getCategories: vi.fn(),
   getPreview: vi.fn(),
-  config: { communityPublicPreview: false } as { communityPublicPreview?: boolean },
+  config: { communityPublicPreview: false } as { communityPublicPreview?: boolean; community?: Record<string, string | null> },
   haptic: vi.fn(),
+  openExternal: vi.fn(),
   search: '',
   auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
 }));
@@ -32,6 +33,7 @@ vi.mock('../store/auth', () => ({
   },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
+vi.mock('../services/zmp-bridge', () => ({ openExternal: mocks.openExternal }));
 vi.mock('../utils/use-debounced', () => ({ useDebounced: <T,>(v: T) => v }));
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
 vi.mock('../components/community/post-composer', () => ({
@@ -88,6 +90,33 @@ beforeEach(() => {
   mocks.getCategories.mockResolvedValue(CATS);
   mocks.getFeed.mockResolvedValue({ posts: [POST('p1', 'Lan Anh'), POST('p2', 'Minh Tâm')], nextCursor: null });
   mocks.getPreview.mockResolvedValue({ posts: [] });
+});
+
+describe('FeedPage — kênh cộng đồng của chủ shop', () => {
+  it('chưa cấu hình link: không vẽ nhóm kênh', async () => {
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.queryByRole('group', { name: 'Kênh cộng đồng của Tubu Tree' })).toBeNull();
+  });
+
+  it('chỉ hiện kênh có link https và mở bằng webview Zalo khi bấm', async () => {
+    mocks.config = {
+      community: { zaloGroupUrl: 'https://zalo.me/g/abc', facebookUrl: null, tiktokUrl: 'http://tiktok.com/x' },
+    };
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.queryByRole('button', { name: 'Facebook' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'TikTok' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Nhóm Zalo' }));
+    expect(mocks.openExternal).toHaveBeenCalledWith('https://zalo.me/g/abc');
+  });
+
+  it('khách chưa đăng nhập vẫn thấy kênh ở màn cổng đăng nhập', () => {
+    mocks.auth.status = 'anonymous';
+    mocks.config = { community: { facebookUrl: 'https://facebook.com/tubutree' } };
+    renderPage();
+    expect(screen.getByRole('button', { name: 'Facebook' })).toBeInTheDocument();
+  });
 });
 
 describe('FeedPage — hành vi giữ nguyên khi chuyển DS v2', () => {

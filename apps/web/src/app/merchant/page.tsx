@@ -574,7 +574,7 @@ function StoreSettingsTab({
             value={headerNote}
             onChange={(e) => setHeaderNote(e.target.value)}
             rows={2}
-            placeholder="Ví dụ: Sản phẩm chăm sóc cơ thể thiên nhiên 100% từ nông sản Việt..."
+            placeholder="Ví dụ: Sản phẩm chăm sóc cơ thể thiên nhiên từ nông sản Việt..."
             className={MERCHANT_INPUT}
           />
         </div>
