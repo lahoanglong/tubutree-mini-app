@@ -220,6 +220,7 @@ describe('WasteReceiveService.receive', () => {
       const h = setup({ row: received(), lastReceived: last });
       expect(await h.svc.receive('s1', 'r1', body())).toEqual({ outcome: 'UNMATCHED', unmatchedId: 'um-new', reason: 'NOT_RECEIVABLE' });
       expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      expect(h.order).not.toContain('notify');
     }
   });
 
@@ -241,6 +242,7 @@ describe('WasteReceiveService.receive', () => {
       },
     });
     noCustomerField(result);
+    expect(h.order).not.toContain('notify');
   });
 
   it('8. COMPLETED, REJECTED, REVERSED and CANCELLED are NOT_RECEIVABLE', async () => {
@@ -249,6 +251,7 @@ describe('WasteReceiveService.receive', () => {
       const h = setup({ row: row({ status }) });
       expect(await h.svc.receive('s1', 'r1', body())).toMatchObject({ outcome: 'UNMATCHED', reason: 'NOT_RECEIVABLE' });
       expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      expect(h.order).not.toContain('notify');
     }
   });
 
@@ -290,8 +293,13 @@ describe('WasteReceiveService.receive', () => {
     expect(await h.svc.receive('s1', 'r1', body())).toEqual({ outcome: 'UNMATCHED', unmatchedId: 'um1', reason: 'EXPIRED_REQUEST' });
     expect(h.tx.wasteUnmatchedParcel.create).not.toHaveBeenCalled();
     expect(writeWasteEvent).not.toHaveBeenCalled();
-    const where = (h.tx.wasteEvent.findFirst.mock.calls.at(-1) as unknown as [{ where: { createdAt: { gt: Date } } }])[0].where;
-    expect(where.createdAt.gt).toBeInstanceOf(Date);
+    expect(h.order).not.toContain('notify');
+    const where = (
+      h.tx.wasteEvent.findFirst.mock.calls.at(-1) as unknown as [{ where: { requestId: string; kind: string; actorUserId: string; createdAt: { gt: Date } } }]
+    )[0].where;
+    expect(where).toMatchObject({ requestId: 'r1', kind: 'PARCEL_UNMATCHED', actorUserId: 's1' });
+    expect(Date.now() - where.createdAt.gt.getTime()).toBeGreaterThanOrEqual(10 * MIN - 1000);
+    expect(Date.now() - where.createdAt.gt.getTime()).toBeLessThanOrEqual(10 * MIN + 1000);
   });
 
   it('10b. a resolved earlier row is not a replay', async () => {
