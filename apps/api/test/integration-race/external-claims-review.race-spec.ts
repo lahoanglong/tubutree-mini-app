@@ -74,6 +74,7 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
       return r.code ?? `HTTP_${(e as HttpException).getStatus()}`;
     }
   };
+  const releaseOpts = (monthlyPointsCap: number) => ({ pendingDays: 14, expiryMonths: 12, reviewAboveVnd: 2_000_000, monthlyPointsCap });
   const events = (claimId: string) => prisma.externalClaimEvent.findMany({ where: { claimId }, orderBy: { createdAt: 'asc' } });
 
   describe('A1: gắn đơn', () => {
@@ -339,7 +340,12 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
         expect(r.status).toBe('REVIEW');
         await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 3_000_000 } });
         await adm().approve(r.claimId!, ADMIN.id);
-        expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'PENDING', points: 20_000 });
+        expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'PENDING', points: 20_000, creditedGoodsValue: 3_000_000 });
+        await prisma.externalOrder.update({ where: { id: o.id }, data: { status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date(Date.now() - 20 * DAY) } });
+        const released = await releaseClaim(prisma, r.claimId!, releaseOpts(20_000));
+        expect(released).toMatchObject({ outcome: 'CREDITED', points: 20_000, userId: u.id });
+        expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'CREDITED', points: 20_000 });
+        expect((await prisma.pointsTransaction.findMany({ where: { userId: u.id, refId: r.claimId! } })).map((t) => t.delta)).toEqual([20_000]);
         const u2 = await mkUser();
         const full = await mkOrder({ goodsValue: null });
         await prisma.externalPointsClaim.create({
@@ -351,6 +357,36 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
       } finally {
         await r1();
       }
+    });
+    it('N3: tiền hàng tăng cao hơn mức đã duyệt trước khi cộng: về REVIEW đúng một lần, duyệt lại thì cộng', async () => {
+      const r1 = await pinConfig(prisma, 'loyalty.marketplace_claim_monthly_points_cap', 20_000);
+      try {
+        const u = await mkUser();
+        const o = await mkOrder({ goodsValue: null });
+        const r = await svc().submit(u.id, o.code);
+        expect(r.status).toBe('REVIEW');
+        await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 3_000_000, status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date(Date.now() - 20 * DAY) } });
+        await adm().approve(r.claimId!, ADMIN.id);
+        await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 4_000_000 } });
+        expect(await releaseClaim(prisma, r.claimId!, releaseOpts(20_000))).toMatchObject({ outcome: 'TO_REVIEW', points: 0 });
+        expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'REVIEW', reviewReason: 'Tiền hàng tăng vượt ngưỡng tự duyệt' });
+        await adm().approve(r.claimId!, ADMIN.id);
+        expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'PENDING', creditedGoodsValue: 4_000_000 });
+        expect(await releaseClaim(prisma, r.claimId!, releaseOpts(20_000))).toMatchObject({ outcome: 'CREDITED', points: 20_000 });
+        expect((await events(r.claimId!)).filter((e) => e.action === 'TO_REVIEW')).toHaveLength(1);
+      } finally {
+        await r1();
+      }
+    });
+    it('N3: claim đơn sàn chưa từng được duyệt (không có mốc tiền hàng đã duyệt): tiền hàng tăng vượt ngưỡng vẫn về REVIEW như trước', async () => {
+      const u = await mkUser();
+      const o = await mkOrder({ status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date(Date.now() - 20 * DAY), goodsValue: 200_000 });
+      const claim = await prisma.externalPointsClaim.create({
+        data: { externalOrderId: o.id, userId: u.id, kind: 'SCAN', state: 'PENDING', ratePct: 1, multiplier: 1, points: 2_000, claimedCode: o.code, dayKey: '2026-10-20', decidedById: ADMIN.id },
+      });
+      await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 3_000_000 } });
+      expect(await releaseClaim(prisma, claim.id, releaseOpts(200_000))).toMatchObject({ outcome: 'TO_REVIEW' });
+      expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: claim.id } })).toMatchObject({ state: 'REVIEW', reviewReason: 'Tiền hàng tăng vượt ngưỡng tự duyệt', creditedGoodsValue: null });
     });
     it('C5: hai đơn sàn khác order_sn dùng chung một vận đơn: đơn thứ hai không bị chặn nhầm', async () => {
       const u = await mkUser();
