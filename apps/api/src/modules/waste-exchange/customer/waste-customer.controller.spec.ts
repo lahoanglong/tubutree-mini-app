@@ -7,8 +7,9 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
-import { WasteCustomerController, WasteNearbyDto, WastePointsQueryDto } from './waste-customer.controller';
+import { WasteCustomerController, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto } from './waste-customer.controller';
 import { WasteMeService } from './waste-me.service';
+import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
 
 const OFF = 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.';
@@ -22,6 +23,7 @@ async function build(enabled: boolean) {
   const me = svc('me', 'rules');
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
   const requests = svc('list', 'detail', 'byOrder');
+  const preview = svc('preview');
   const mod = await Test.createTestingModule({
     controllers: [WasteCustomerController],
     providers: [
@@ -31,9 +33,10 @@ async function build(enabled: boolean) {
       { provide: WasteMeService, useValue: me },
       { provide: WasteCatalogueService, useValue: catalogue },
       { provide: WasteRequestsService, useValue: requests },
+      { provide: WastePreviewService, useValue: preview },
     ],
   }).compile();
-  return { c: mod.get(WasteCustomerController), me, catalogue, requests };
+  return { c: mod.get(WasteCustomerController), me, catalogue, requests, preview };
 }
 
 describe('WasteCustomerController read routes (spec 15.1)', () => {
@@ -67,12 +70,30 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteCustomerController)).toBe('waste');
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
-      ['me', 0, 'me'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'],
+      ['me', 0, 'me'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'],
     ]);
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.nearby)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.nearby)).toBe(30);
     expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.nearby)).toBe(60_000);
+  });
+});
+
+describe('WasteCustomerController.preview (spec 15.2)', () => {
+  it('FULL gate: programme off 403 and the service is not called; otherwise the body is passed through', async () => {
+    const off = await build(false);
+    await expect(off.c.preview('real', { lines: [{ itemId: 'carton', declaredQty: 2 }] })).rejects.toThrow(new ForbiddenException(OFF));
+    expect(off.preview.preview).not.toHaveBeenCalled();
+    const on = await build(true);
+    const body = { lines: [{ itemId: 'carton', declaredQty: 2 }], method: 'MAIL_IN' as const };
+    await expect(on.c.preview('real', body)).resolves.toEqual({ ok: 'preview' });
+    expect(on.preview.preview).toHaveBeenCalledWith('real', body);
+  });
+  it('POST 200 with 60/min', () => {
+    const p = WasteCustomerController.prototype;
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.preview)).toBe(200);
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.preview)).toBe(60);
+    expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.preview)).toBe(60_000);
   });
 });
 
@@ -90,5 +111,18 @@ describe('read DTOs (global ValidationPipe)', () => {
     await expect(run(WastePointsQueryDto, {}, 'query')).resolves.toBeInstanceOf(WastePointsQueryDto);
     await expect(run(WastePointsQueryDto, { provinceCode: 'x'.repeat(21) }, 'query')).rejects.toThrow();
     await expect(run(WastePointsQueryDto, { locationToken: 't' }, 'query')).rejects.toThrow();
+  });
+  it.each([
+    [{ lines: Array.from({ length: 51 }, () => ({ itemId: 'a', declaredQty: 1 })) }],
+    [{ lines: [] }],
+    [{ lines: [{ itemId: 'a', declaredQty: 0 }] }],
+    [{ lines: [{ itemId: 'a', declaredQty: 1001 }] }],
+    [{ lines: [{ itemId: 'a', declaredQty: 1.5 }] }],
+    [{ lines: [{ itemId: 'a', declaredQty: 1 }], method: 'BIKE' }],
+  ])('preview DTO rejects %j', async (body) => {
+    await expect(run(WastePreviewDto, body)).rejects.toThrow();
+  });
+  it('preview DTO accepts a MAIL_IN body with a province', async () => {
+    await expect(run(WastePreviewDto, { lines: [{ itemId: 'a', declaredQty: 1 }], method: 'MAIL_IN', provinceCode: '79' })).resolves.toBeInstanceOf(WastePreviewDto);
   });
 });

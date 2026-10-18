@@ -1,12 +1,14 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
-import type { WasteNearbyRequest } from '@tubutree/shared-types';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { WASTE_METHOD_VALUES, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest } from '@tubutree/shared-types';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { WasteAccessService, type WasteCustomerContext, type WasteGateMode } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
 import { WasteMeService } from './waste-me.service';
+import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
 
 export class WastePointsQueryDto implements Pick<WasteNearbyRequest, 'provinceCode'> {
@@ -33,6 +35,41 @@ export class WasteNearbyDto implements WasteNearbyRequest {
   zaloAccessToken!: string;
 }
 
+export class WasteLineDto implements WasteLineInput {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  itemId!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  declaredQty!: number;
+}
+
+export class WastePreviewDto implements WastePreviewRequest {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => WasteLineDto)
+  lines!: WasteLineDto[];
+
+  @IsOptional()
+  @IsIn(WASTE_METHOD_VALUES)
+  method?: WasteMethod;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  pointId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  provinceCode?: string;
+}
+
 @Controller('waste')
 export class WasteCustomerController {
   constructor(
@@ -41,6 +78,7 @@ export class WasteCustomerController {
     private readonly meSvc: WasteMeService,
     private readonly catalogue: WasteCatalogueService,
     private readonly requests: WasteRequestsService,
+    private readonly previews: WastePreviewService,
   ) {}
 
   private async gate(userId: string, mode: WasteGateMode): Promise<WasteCustomerContext> {
@@ -75,6 +113,14 @@ export class WasteCustomerController {
   async nearby(@CurrentUser('sub') userId: string, @Body() body: WasteNearbyDto) {
     await this.gate(userId, 'FULL');
     return this.catalogue.nearbyPoints(body);
+  }
+
+  @Post('preview')
+  @HttpCode(200)
+  @Throttle({ default: { ttl: 60_000, limit: 60 } })
+  async preview(@CurrentUser('sub') userId: string, @Body() body: WastePreviewDto) {
+    await this.gate(userId, 'FULL');
+    return this.previews.preview(userId, body);
   }
 
   @Get('requests')
