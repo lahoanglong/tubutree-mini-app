@@ -29,6 +29,8 @@ describe('parseTierForm — kiểm tra sớm đúng luật API', () => {
       expect('errors' in parseTierForm({ ...FORM, minOrderVolume: v }, 45, true)).toBe(true);
     }
     expect('value' in parseTierForm({ ...FORM, creditLimit: '2000000000' }, 45, true)).toBe(true);
+    const over = parseTierForm({ ...FORM, creditLimit: '2000000001' }, 45, true);
+    expect('errors' in over && over.errors[0]).toBe('Hạn mức công nợ phải là số đồng nguyên từ 0 đến 2.000.000.000đ.');
   });
 
   it('điều kiện thanh toán PREPAID hoặc NET n; mã bậc chỉ kiểm khi tạo mới', () => {

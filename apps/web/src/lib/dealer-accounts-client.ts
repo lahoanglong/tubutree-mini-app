@@ -122,7 +122,7 @@ export function parseTierForm(
     const t = text.trim();
     const n = /^\d+$/.test(t) ? Number(t) : Number.NaN;
     if (!Number.isInteger(n) || n < 0 || n > TIER_MAX_VND) {
-      errors.push(`${label} phải là số đồng nguyên từ 0 đến ${TIER_MAX_VND.toLocaleString('vi-VN')}.`);
+      errors.push(`${label} phải là số đồng nguyên từ 0 đến ${formatVnd(TIER_MAX_VND)}.`);
       return 0;
     }
     return n;
@@ -144,7 +144,8 @@ export function formatTerms(terms: string | null | undefined): string {
   return m ? `Công nợ ${m[1]} ngày` : terms;
 }
 
-const pctText = (n: number) => `${n.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%`;
+/** Phần trăm chiết khấu bậc, vd 32,5%. */
+export const formatTierPct = (n: number) => `${n.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%`;
 
 /** Các trường khác nhau giữa hai ảnh chụp bậc (`before` null = tạo mới), mỗi dòng một câu tiếng Việt. */
 export function diffTier(before: TierValues | null, after: TierValues): string[] {
@@ -155,7 +156,7 @@ export function diffTier(before: TierValues | null, after: TierValues): string[]
   };
   line('Tên', before?.name ?? null, after.name);
   line('Doanh số tối thiểu', before ? formatVnd(before.minOrderVolume) : null, formatVnd(after.minOrderVolume));
-  line('Chiết khấu', before ? pctText(before.discountPct) : null, pctText(after.discountPct));
+  line('Chiết khấu', before ? formatTierPct(before.discountPct) : null, formatTierPct(after.discountPct));
   line('Hạn mức công nợ', before ? formatVnd(before.creditLimit) : null, formatVnd(after.creditLimit));
   line('Điều kiện thanh toán', before ? formatTerms(before.paymentTerms) : null, formatTerms(after.paymentTerms));
   return out;

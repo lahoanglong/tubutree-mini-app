@@ -7,6 +7,7 @@ import {
   diffTier,
   emptyTierForm,
   formatTerms,
+  formatTierPct,
   listDealerTierHistory,
   listDealerTiersForEdit,
   parseTierForm,
@@ -29,7 +30,6 @@ interface SaveInput {
 }
 
 const INPUT = `${INPUT_CLASS} ${TOUCH_H}`;
-const pct = (n: number) => `${n.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%`;
 
 /**
  * Bậc đại lý (chiết khấu, hạn mức công nợ, điều kiện thanh toán). Chỉ ADMIN sửa được: API chặn 403 với vai trò khác và kiểm
@@ -251,7 +251,7 @@ function TierItem({ tier: t, editing, onEdit }: { tier: DealerTierRow; editing: 
       <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs text-stone-600 sm:grid-cols-2">
         <div>
           <dt className="inline">Chiết khấu: </dt>
-          <dd className="inline font-semibold text-stone-900">{pct(t.discountPct)}</dd>
+          <dd className="inline font-semibold text-stone-900">{formatTierPct(t.discountPct)}</dd>
         </div>
         <div>
           <dt className="inline">Hạn mức công nợ: </dt>
