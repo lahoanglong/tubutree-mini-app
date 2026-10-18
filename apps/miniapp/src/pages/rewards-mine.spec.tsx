@@ -72,6 +72,22 @@ describe('/rewards/mine (§4.8)', () => {
     expect(within(row).getByText('99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM')).toBeInTheDocument();
     expect(within(row).getByText('T2 08:00–17:00')).toBeInTheDocument();
     expect(within(row).getByText('Hạn nhận 17/12/2026')).toBeInTheDocument();
+    expect(within(row).getByText('Chờ nhận')).toBeInTheDocument();
+    expect(within(row).getByTestId('qr-center')).toHaveStyle({ justifyContent: 'center' });
+    expect(within(row).getByTestId('qr-center')).toContainElement(within(row).getByTestId('qr'));
+  });
+  it('mã giảm giá nằm trong cùng kiểu thẻ viền với các lượt quà; lượt đã nhận hoặc đã huỷ không có nhãn Chờ nhận', async () => {
+    mocks.getMyRedemptions.mockResolvedValue([
+      makeGiftRedemption({ id: 'v', giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', status: 'FULFILLED', code: null, couponCode: 'FS-E2E1', claimPoint: null, fulfilledAt: '2026-10-17T03:00:00.000Z' }),
+      makeGiftRedemption({ id: 'f', giftName: 'Túi vải Tubu', status: 'FULFILLED', claimPoint: null, fulfilledAt: '2026-10-25T17:30:00.000Z' }),
+    ]);
+    renderPage();
+    const voucher = (await screen.findByText('Miễn phí vận chuyển')).closest('[data-redemption]') as HTMLElement;
+    const gift = screen.getByText('Túi vải Tubu').closest('[data-redemption]') as HTMLElement;
+    const border = (el: HTMLElement) => (el.firstElementChild as HTMLElement).style.border;
+    expect(border(voucher)).toContain('--color-border-subtle');
+    expect(border(voucher)).toBe(border(gift));
+    expect(screen.queryByText('Chờ nhận')).toBeNull();
   });
   it('CANCELLED: lý do và số điểm đã hoàn (kể cả 0)', async () => {
     mocks.getMyRedemptions.mockResolvedValue([

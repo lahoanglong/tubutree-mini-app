@@ -6,6 +6,7 @@ import { getMyRedemptions } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS } from '../services/waste-api';
 import { AuthGate } from '../components/ui/auth-gate';
+import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
@@ -33,7 +34,9 @@ function RedemptionStatus({ r }: { r: GiftRedemption }) {
     return (
       <>
         <Heading variant="display-md" as="p">{r.code}</Heading>
-        <QrCode value={r.code} size={140} />
+        <div data-testid="qr-center" style={{ display: 'flex', justifyContent: 'center' }}>
+          <QrCode value={r.code} size={140} />
+        </div>
         {cp && (
           <div style={{ ...COLUMN, gap: 2 }}>
             <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{`Nhận tại ${cp.name}`}</Text>
@@ -64,13 +67,16 @@ function RedemptionEntry({ r }: { r: GiftRedemption }) {
   if (r.giftKind === 'VOUCHER') {
     return (
       <div data-redemption>
-        <ListRow
-          icon={<Icon icon={Ticket} tone="brand" />}
-          title={r.giftName}
-          subtitle={r.couponCode ? `Mã ${r.couponCode}` : ''}
-          trailing="chevron"
-          onPress={() => navigate('/loyalty')}
-        />
+        <Card variant="outline" padding={0}>
+          <ListRow
+            icon={<Icon icon={Ticket} tone="brand" />}
+            title={r.giftName}
+            subtitle={r.couponCode ? `Mã ${r.couponCode}` : ''}
+            trailing="chevron"
+            onPress={() => navigate('/loyalty')}
+            style={{ padding: '12px' }}
+          />
+        </Card>
       </div>
     );
   }
@@ -78,7 +84,10 @@ function RedemptionEntry({ r }: { r: GiftRedemption }) {
     <div data-redemption>
       <Card variant="outline">
         <div style={{ ...COLUMN, gap: 8 }}>
-          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{r.giftName}</Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+            <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{r.giftName}</Text>
+            {r.status === 'READY' && <Badge tone="info">Chờ nhận</Badge>}
+          </div>
           <RedemptionStatus r={r} />
         </div>
       </Card>
