@@ -260,17 +260,16 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
             <dd className="font-semibold tabular-nums text-success-fg">{formatVnd(result.order.total)}</dd>
           </div>
         </dl>
-        {/* Đơn chuyển khoản: CTV cần QR/số tài khoản để gửi khách, không thì đơn nằm chờ thanh toán tới khi bị huỷ. */}
-        {bank &&
-          (payReady ? (
-            <Link href={`/thanh-toan/chuyen-khoan/${encodeURIComponent(code)}`} onClick={onClose} className={`${ui.btnPrimary} mt-4 w-full`}>
-              {t.openPayment}
-            </Link>
-          ) : (
-            <p className="mt-4 text-sm text-stone-700">
-              Trang thanh toán chuyển khoản chưa mở trên web, bạn dùng Mini App Tubu Tree để lấy mã QR gửi khách (mã đơn {code}).
-            </p>
-          ))}
+        {/* Đơn chuyển khoản: CTV cần QR/số tài khoản để gửi khách, không thì đơn nằm chờ thanh toán tới khi bị huỷ; trang đơn đã có QR nên dùng làm lối thay khi trang chuyển khoản riêng chưa mở. */}
+        {bank && (payReady || orderReady) && (
+          <Link
+            href={payReady ? `/thanh-toan/chuyen-khoan/${encodeURIComponent(code)}` : `/tai-khoan/don-hang/${encodeURIComponent(code)}`}
+            onClick={onClose}
+            className={`${ui.btnPrimary} mt-4 w-full`}
+          >
+            {t.openPayment}
+          </Link>
+        )}
         <div className={`mt-${bank ? 2 : 5} flex gap-2`}>
           <button
             type="button"
@@ -283,7 +282,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
           >
             {t.createAnother}
           </button>
-          {orderReady && (
+          {orderReady && !(bank && !payReady) && (
             <Link href={`/tai-khoan/don-hang/${encodeURIComponent(code)}`} onClick={onClose} className={`${bank ? ui.btnSecondary : ui.btnPrimary} flex-1`}>
               {t.viewOrder}
             </Link>

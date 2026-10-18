@@ -247,7 +247,7 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm', () => {
     }
   });
 
-  it('chọn Chuyển khoản: aria-pressed đổi, đơn gửi BANK_TRANSFER; trang chuyển khoản chưa mở thì nói rõ và vẫn có lối xem đơn', async () => {
+  it('chọn Chuyển khoản: aria-pressed đổi, đơn gửi BANK_TRANSFER; trang chuyển khoản chưa mở thì lối chính là trang đơn (có QR)', async () => {
     await readyWithAn();
     const cod = btn(/COD/)!;
     const bank = btn(/Chuyển khoản/)!;
@@ -258,8 +258,10 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm', () => {
     click(submit());
     await until(() => text().includes('Đã tạo đơn hộ khách'));
     expect(orderPosts()[0]!.body.paymentMethod).toBe('BANK_TRANSFER');
-    expect(text()).toContain('Trang thanh toán chuyển khoản chưa mở trên web');
-    expect(body().querySelector('a[href="/tai-khoan/don-hang/TUBU9"]')).not.toBeNull();
+    expect(text()).not.toContain('Mini App');
+    const links = body().querySelectorAll('a[href="/tai-khoan/don-hang/TUBU9"]');
+    expect(links).toHaveLength(1);
+    expect(links[0]!.textContent).toBe('Mở trang thanh toán (gửi khách)');
   });
 
   it('trang chuyển khoản đã mở: có lối "Mở trang thanh toán (gửi khách)"', async () => {
