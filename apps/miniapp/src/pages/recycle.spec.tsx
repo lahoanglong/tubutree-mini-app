@@ -150,6 +150,14 @@ describe('/recycle trang vào (§4.1)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yêu cầu của tôi' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/requests');
   });
+  it('thẻ yêu cầu liệt kê từng món dạng "Tên món: số lượng đơn vị", không lặp danh từ đơn vị', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ openRequests: [makeRequestSummary({ lines: [
+      { itemName: 'Thùng carton cũ', unitLabel: 'thùng', declaredQty: 3 },
+      { itemName: 'Vỏ hộp sữa sạch', unitLabel: 'vỏ', declaredQty: 5 },
+    ] })] }));
+    renderPage();
+    expect(await screen.findByText('Thùng carton cũ: 3 thùng, Vỏ hộp sữa sạch: 5 vỏ')).toBeInTheDocument();
+  });
   it('hàng quà dẫn tới /rewards; lối vào đại lý chỉ khi có deskPoints', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }] }));
     renderPage();

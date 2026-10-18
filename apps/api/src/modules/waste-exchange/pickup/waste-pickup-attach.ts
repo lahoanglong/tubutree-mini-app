@@ -48,7 +48,7 @@ export async function lockPickupRequestForCheckout(
 }
 
 export function buildPickupRecyclingNote(req: LockedPickupRequest): string {
-  const note = `Thu kèm rác ${req.code}: ${req.lines.map((l) => `${l.declaredQty} ${l.unitLabel} ${l.itemName}`).join(', ')}`;
+  const note = `Thu kèm rác ${req.code}: ${req.lines.map((l) => `${l.itemName}: ${l.declaredQty} ${l.unitLabel}`).join(', ')}`;
   return note.length > PICKUP_NOTE_MAX ? note.slice(0, PICKUP_NOTE_MAX) : note;
 }
 

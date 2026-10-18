@@ -1029,7 +1029,7 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
       await svc.placeOrder('u1', PICKUP_DTO as never);
       expect(orderCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ hasRecyclingPickup: true, recyclingNote: 'Thu kèm rác TR-ABC23: 12 vỏ Vỏ hộp sữa' }),
+          data: expect.objectContaining({ hasRecyclingPickup: true, recyclingNote: 'Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ' }),
         }),
       );
       expect(lockPickupMock).toHaveBeenCalledWith(prisma, 'u1', 'r1');
@@ -1910,7 +1910,7 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', wasteRequestId: 'r1' } as never);
     const [tubu, shop] = orderCreate.mock.calls.map((c) => c[0].data);
     expect(tubu.hasRecyclingPickup).toBe(true);
-    expect(tubu.recyclingNote).toBe('Thu kèm rác TR-ABC23: 12 vỏ Vỏ hộp sữa');
+    expect(tubu.recyclingNote).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ');
     expect(shop.hasRecyclingPickup).toBe(false);
     expect(shop.recyclingNote).toBeNull();
     expect(attachMock).toHaveBeenCalledTimes(1);

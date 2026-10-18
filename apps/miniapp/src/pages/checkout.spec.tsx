@@ -1238,7 +1238,7 @@ describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
     const toggle = await screen.findByRole('checkbox', { name: 'Thu kèm rác' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByText('TR-PICK1')).toBeInTheDocument();
-    expect(screen.getByText('12 thùng Thùng carton')).toBeInTheDocument();
+    expect(screen.getByText('Thùng carton: 12 thùng')).toBeInTheDocument();
     expect(screen.getByText('Ước tính 12.000 điểm')).toBeInTheDocument();
     const PICKUP_NOTE = 'Ghi mã lên túi, bưu tá lấy khi giao đơn.';
     const PAYMENT_NOTE = 'Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.';

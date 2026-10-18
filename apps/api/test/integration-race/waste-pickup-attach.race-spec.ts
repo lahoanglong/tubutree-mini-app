@@ -184,7 +184,7 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
     expect(row).toMatchObject({ status: 'OPEN', orderId: order.id, expiresAt: null });
     const o = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(o.hasRecyclingPickup).toBe(true);
-    expect(o.recyclingNote).toBe(`Thu kèm rác ${req.code}: 12 vỏ Vỏ hộp sữa`);
+    expect(o.recyclingNote).toBe(`Thu kèm rác ${req.code}: Vỏ hộp sữa: 12 vỏ`);
     expect(await prisma.wasteEvent.count({ where: { requestId: req.id, kind: 'REQUEST_ATTACHED', actorRole: 'CUSTOMER', actorUserId: u.id } })).toBe(1);
     expect(isGomdonRecyclingEnabled).toHaveBeenCalled();
   });

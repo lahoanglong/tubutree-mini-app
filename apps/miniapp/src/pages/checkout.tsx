@@ -44,6 +44,7 @@ import {
 import { convertedPointsNote } from '../utils/points-lots';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { formatLineQty } from '../utils/waste-labels';
 import { PageHeader } from '../components/ui/page-header';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -760,7 +761,7 @@ export default function CheckoutPage() {
                 </Text>
                 {pickupReq.lines.map((l) => (
                   <Text key={`${l.itemName}-${l.unitLabel}`} size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                    {`${l.declaredQty} ${l.unitLabel} ${l.itemName}`}
+                    {formatLineQty(l.itemName, l.declaredQty, l.unitLabel)}
                   </Text>
                 ))}
                 <Text size="xSmall" style={{ color: 'var(--color-text-success)', fontWeight: 600, marginTop: 4 }}>

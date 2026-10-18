@@ -29,6 +29,7 @@ import {
   TIMELINE_STEPS,
   closedLabel,
   equivalentUnits,
+  formatLineQty,
   nextRewardProgress,
   ruleText,
   timelineFor,
@@ -77,7 +78,7 @@ function RequestsBlock({ me, onOpen }: { me: WasteMeDTO; onOpen: (id: string) =>
         const subtitle =
           me.blocked && r.status === 'RECEIVED'
             ? 'Đang chờ Tubu xem lại'
-            : r.lines.map((l) => `${l.declaredQty} ${l.unitLabel} ${l.itemName}`).join(', ');
+            : r.lines.map((l) => formatLineQty(l.itemName, l.declaredQty, l.unitLabel)).join(', ');
         return (
           <Card key={r.id} variant="outline">
             <ListRow title={`${r.code} · ${METHOD_LABELS[r.method]}`} subtitle={subtitle} trailing="chevron" onPress={() => onOpen(r.id)} />

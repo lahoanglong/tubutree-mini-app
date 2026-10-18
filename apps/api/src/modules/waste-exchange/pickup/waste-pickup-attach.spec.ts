@@ -115,7 +115,7 @@ describe('lockPickupRequestForCheckout (§12.2 step 2 (a) and (b))', () => {
 
 describe('buildPickupRecyclingNote (§12.2 step 2 (c))', () => {
   it('server-built: TR code then "N <unit> <item>" lines, no customer text', () => {
-    expect(buildPickupRecyclingNote({ id: 'r1', code: 'TR-ABC23', lines: LINES })).toBe('Thu kèm rác TR-ABC23: 12 vỏ Vỏ hộp sữa, 2 thùng Thùng carton');
+    expect(buildPickupRecyclingNote({ id: 'r1', code: 'TR-ABC23', lines: LINES })).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ, Thùng carton: 2 thùng');
   });
 
   it('never longer than PICKUP_NOTE_MAX (500) and always keeps the code', () => {
