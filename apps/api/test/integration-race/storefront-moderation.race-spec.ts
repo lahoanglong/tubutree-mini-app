@@ -281,6 +281,16 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       expect((await svc.getPublicList()).map((r) => r.slug)).toContain(sf.slug);
     });
 
+    it('gian hàng cũ đang đăng mà 0 sản phẩm: /merchant đổi tên vẫn lưu được (luôn gửi isPublished) và giữ mốc đăng', async () => {
+      const dealer = await user('DEALER');
+      const publishedAt = new Date('2026-09-01T00:00:00Z');
+      const sf = await store(dealer, { type: 'MERCHANT', isPartner: true, publishedAt });
+      const portal = new MerchantService(prisma, {} as never, undefined, config);
+      const saved = await portal.updateStore(dealer.id, { title: 'Tên mới', isPublished: true });
+      expect(saved).toMatchObject({ id: sf.id, title: 'Tên mới', isPublished: true });
+      expect((await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).publishedAt).toEqual(publishedAt);
+    });
+
     it('cờ subdomain tắt: trang công khai, builder và cổng đối tác không lộ subdomain; bật cờ thì lộ', async () => {
       const owner = await user('AFFILIATE');
       const sf = await store(owner, { subdomain: `it-sd-${randCode(6).toLowerCase()}`, customDomain: `it-${randCode(6).toLowerCase()}.example.vn` });

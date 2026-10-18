@@ -452,10 +452,17 @@ export class MerchantService {
       if (key !== 'title' && typeof v === 'string' && v.trim() === '') (updateData as Record<string, unknown>)[key] = null;
     }
 
-    if (dto.isPublished !== undefined) {
-      if (dto.isPublished) await assertCanPublish(this.prisma, store);
-      updateData.isPublished = dto.isPublished;
-      updateData.publishedAt = dto.isPublished ? new Date() : null;
+    // Cổng /merchant luôn gửi lại isPublished kèm mọi lần lưu: chỉ lúc đổi trạng thái mới kiểm điều kiện đăng và đụng tới mốc đăng,
+    // không thì gian hàng cũ chưa có sản phẩm không lưu nổi tên, và gian hàng đang bị gỡ mất mốc đăng mà admin cần để đăng lại.
+    const publishing = dto.isPublished === true && !store.isPublished;
+    const unpublishing = dto.isPublished === false && store.isPublished;
+    if (publishing) {
+      await assertCanPublish(this.prisma, store);
+      updateData.isPublished = true;
+      updateData.publishedAt = new Date();
+    } else if (unpublishing) {
+      updateData.isPublished = false;
+      updateData.publishedAt = null;
     }
 
     if (dto.subdomain !== undefined) {
@@ -510,6 +517,7 @@ export class MerchantService {
 
   async publishStore(userId: string, isPublished: boolean) {
     const store = await this.getOrCreateStore(userId);
+    if (Boolean(store.isPublished) === isPublished) return store;
     if (isPublished) await assertCanPublish(this.prisma, store);
     try {
       return await this.prisma.storefront.update({
