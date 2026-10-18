@@ -3,12 +3,15 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { WasteAccessService } from '../../src/modules/waste-exchange/core/waste-access.service';
+import { WasteHoldService } from '../../src/modules/waste-exchange/core/waste-hold.service';
+import { vnDateKey, vnMonthKey } from '../../src/common/vn-time';
 import { createUser as createItUser, deleteItData, warmPool } from './helpers';
-import { cleanupWaste, createWarehouse, createWastePoint } from './fixtures/waste-fixtures';
+import { cleanupWaste, createWarehouse, createWasteItem, createWastePoint, createWasteRequest } from './fixtures/waste-fixtures';
 
 let moduleRef: TestingModule;
 let prisma: PrismaService;
 let access: WasteAccessService;
+let hold: WasteHoldService;
 const userIds: string[] = [];
 const pointIds: string[] = [];
 const itemIds: string[] = [];
@@ -25,9 +28,10 @@ const reg = (p: Awaited<ReturnType<typeof createWastePoint>>) => {
 };
 
 beforeAll(async () => {
-  moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [WasteAccessService] }).compile();
+  moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [WasteAccessService, WasteHoldService] }).compile();
   prisma = moduleRef.get(PrismaService);
   access = moduleRef.get(WasteAccessService);
+  hold = moduleRef.get(WasteHoldService);
   await warmPool(prisma);
 });
 
@@ -116,5 +120,37 @@ describe('WasteAccessService (real Postgres)', () => {
     const admin = await createUser(prisma, { role: 'ADMIN' });
     await prisma.wasteUserFlags.create({ data: { userId: admin.id, blockedAt: new Date() } });
     await expect(access.assertPointAccess(admin.id, wh.id, ok)).resolves.toMatchObject({ kind: 'WAREHOUSE', actorRole: 'ADMIN' });
+  });
+});
+
+describe('WasteHoldService.capUsage (real Postgres)', () => {
+  it('counts COALESCE(received, declared) over OPEN..REVERSED, skips CANCELLED/REJECTED/EXPIRED, excludes the given request; day keys across all methods', async () => {
+    const u = await createUser(prisma, { phone: phone() });
+    const item = await createWasteItem(prisma, { dailyCapQty: 20, monthlyCapQty: 60 }); itemIds.push(item.id);
+    const wh = await createWarehouse(prisma);
+    const mk = (method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP', status: string, declaredQty: number, receivedQty?: number) =>
+      createWasteRequest(prisma, { userId: u.id, method, status: status as never, pointId: wh.id, lines: [{ itemId: item.id, declaredQty, receivedQty }] });
+    const open = await mk('DROP_OFF', 'OPEN', 3);
+    await mk('MAIL_IN', 'IN_TRANSIT', 4);
+    await mk('MAIL_IN', 'COMPLETED', 9, 5);
+    await mk('DROP_OFF', 'REVERSED', 2, 2);
+    for (const s of ['CANCELLED', 'REJECTED', 'EXPIRED']) await mk('DROP_OFF', s, 7);
+    const today = vnDateKey(); const month = vnMonthKey();
+    const all = await hold.capUsage(prisma, u.id, today, month);
+    expect(all.itemDay.get(item.id)).toBe(14);
+    expect(all.itemMonth.get(item.id)).toBe(14);
+    expect(all.openCount).toBe(2);
+    const without = await hold.capUsage(prisma, u.id, today, month, open.id);
+    expect(without.itemMonth.get(item.id)).toBe(11);
+    expect(all.pointsMonth).toBe(18_000);
+    expect(without.pointsMonth).toBe(15_000);
+  });
+
+  it('a customer with only carton reaches the 15000-point mail-in minimum (spec 18.2 item 19, 17.3)', async () => {
+    const u = await createUser(prisma, { phone: phone() });
+    const carton = await createWasteItem(prisma, { unitsPerPoint: 1, pointsPerGroup: 1_000, dailyCapQty: 20, monthlyCapQty: 60 }); itemIds.push(carton.id);
+    await createWarehouse(prisma);
+    const r = await prisma.$transaction((tx) => hold.validateAndHold(tx, { path: 'CREATE', userId: u.id, method: 'MAIL_IN', lines: [{ itemId: carton.id, declaredQty: 15 }], pointId: null, now: new Date() }, { laneDropoff: true, laneMailin: true, lanePickup: false, mailinMinPoints: 15_000, pickupMinPoints: 10_000, customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7 }));
+    expect(r.estimatedPoints).toBe(15_000);
   });
 });
