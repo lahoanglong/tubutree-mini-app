@@ -73,7 +73,7 @@ export interface SupportContact {
 const DEFAULT_FAQ_CAT = 'Chung';
 
 export const fetchFaqs = async (http: HttpClient): Promise<FaqItem[]> => {
-  const rows = await http.get<FaqEntryDTO[]>('/faqs').then((r) => r.data);
+  const rows = await http.get<{ data: FaqEntryDTO[] }>('/faqs').then((r) => r.data);
   return rows.map((r) => ({ q: r.question, a: r.answer, cat: r.category?.trim() || DEFAULT_FAQ_CAT }));
 };
 
