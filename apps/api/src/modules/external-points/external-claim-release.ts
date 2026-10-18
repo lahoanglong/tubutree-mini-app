@@ -147,6 +147,10 @@ export async function releaseClaim(
       } else {
         finalPoints = Math.min(points ?? 0, row.points);
       }
+    } else if (!reviewReason && row.decidedById !== null && row.creditedGoodsValue !== null && (order.goodsValue ?? 0) <= row.creditedGoodsValue) {
+      // Người kiểm đã duyệt đúng tiền hàng này (hoặc cao hơn) và chốt điểm theo trần lúc duyệt: cộng đúng số đã chốt. Chạy lại ngưỡng tự duyệt
+      // và trần ở đây sẽ đưa claim về REVIEW ở mỗi lần cộng, duyệt bao nhiêu lần cũng không tới được bước cộng.
+      finalPoints = Math.min(points ?? 0, row.points);
     } else if (!reviewReason && points !== null && points > row.points) {
       // Tiền hàng tăng sau lúc claim qua kiểm: vượt ngưỡng tự duyệt thì người kiểm lại; chỉ vượt trần tháng thì cộng ở mức chốt, không dưới điểm đã kiểm.
       const reviewAbove = opts.reviewAboveVnd ?? 2_000_000;
