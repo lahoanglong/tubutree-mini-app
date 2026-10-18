@@ -298,12 +298,17 @@ describe('/tai-khoan/thong-bao: nhắc mua lại (REORDER_REMINDER)', () => {
     route([PURCHASED]);
     mocks.post.mockResolvedValue(CART);
     const { container, cta } = await open();
+    const live = container.querySelector('[role="status"]');
+    expect(live).not.toBeNull();
+    expect(live?.textContent).toBe('');
     click(cta);
     await flush(6);
     click(byText(dialog()!, 'button', 'Thêm vào giỏ (1)'));
     await flush(6);
     expect(dialog()).toBeNull();
     const status = container.querySelector('[role="status"]');
+    expect(status).toBe(live);
+    expect(status?.className).toContain('fixed');
     expect(status?.textContent).toContain('Đã thêm 1 món vào giỏ');
     expect(status?.querySelector('a')?.getAttribute('href')).toBe('/gio-hang');
   });

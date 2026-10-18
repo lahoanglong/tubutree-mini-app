@@ -143,14 +143,21 @@ export default function NotificationsPage() {
 
   return shell(
     <>
-      {addedNotice && (
-        <p role="status" className="mt-4 text-sm font-medium text-success-fg">
-          {addedNotice.message}{' '}
-          <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
-            {reorderText.viewCart}
-          </Link>
-        </p>
-      )}
+      <div
+        role="status"
+        aria-live="polite"
+        className="fixed inset-x-4 z-50 md:left-auto md:right-6 md:w-96"
+        style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}
+      >
+        {addedNotice && (
+          <p className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm font-medium text-success-fg shadow-card">
+            {addedNotice.message}{' '}
+            <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
+              {reorderText.viewCart}
+            </Link>
+          </p>
+        )}
+      </div>
       <ul className="mt-4 grid gap-2 md:grid-cols-2">
         {notifQ.data.map((n) => {
           const m = notificationMeta(n.templateCode);
