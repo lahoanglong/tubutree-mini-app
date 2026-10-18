@@ -90,6 +90,11 @@ describe('lời khoá từ /waste/preview (§4.3)', () => {
     [{ code: 'LANE_DISABLED' }, 'Cách giao này đang tạm dừng'],
     [{ code: 'SHIP_LOCKED' }, 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH.'],
   ] as const)('%o', (block, text) => { expect(L.blockMessage(block as never, ctx)).toBe(text); });
+  it('MONTH_CAP_FOR_MIN nêu đúng đường theo cách giao của thẻ', () => {
+    const block = { code: 'MONTH_CAP_FOR_MIN' } as never;
+    expect(L.blockMessage(block, { ...ctx, method: 'PICKUP' })).toBe('tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
+    expect(L.blockMessage(block, { ...ctx, method: 'MAIL_IN' })).toBe('tháng này bạn không còn đủ trần cho một gói gửi kho');
+  });
 });
 
 describe('phí ship và giá trị điểm (§4.3, §7.2, §14.5)', () => {

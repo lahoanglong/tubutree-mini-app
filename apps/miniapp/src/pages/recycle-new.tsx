@@ -176,6 +176,8 @@ function isLocked(preview: WastePreviewDTO | undefined): boolean {
   return preview?.blocks.some((b) => b.code !== 'NEED_PROVINCE') ?? false;
 }
 
+const STEP1_CAP_BLOCKS: readonly string[] = ['ITEM_MONTH_CAP', 'POINTS_MONTH_CAP', 'ITEM_DAY_CAP'];
+
 const SELECT_STYLE = {
   minHeight: 44,
   padding: '0 12px',
@@ -355,21 +357,28 @@ export default function RecycleNewPage() {
       navigate('/recycle/new?step=method', { state: { draft } });
     };
     const p = debounced.length > 0 ? itemsPreviewQ.data : undefined;
-    const reward = p ? nextRewardProgress(rewardsQ.data, p.estimatedPoints) : null;
+    const capBlock = p?.blocks.find((b) => STEP1_CAP_BLOCKS.includes(b.code));
+    const reward = p && !capBlock ? nextRewardProgress(rewardsQ.data, p.estimatedPoints) : null;
     const summary = p ? (
-      <div>
-        <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
-          {`Ước tính ${formatPoints(p.estimatedPoints)}`}
+      capBlock ? (
+        <Text variant="body-md" tone="danger" as="div" style={{ fontWeight: 600 }}>
+          {blockMessage(capBlock, { items: me.items, maxOpenRequests: me.thresholds.maxOpenRequests, itemCaps: p.itemCaps })}
         </Text>
-        <Text variant="caption" tone="secondary" as="div">
-          {`Dùng như ${formatVnd(p.pointsValueVnd)} khi mua sắm`}
-        </Text>
-        {reward && (
-          <Text variant="caption" tone="tertiary" as="div">
-            {`Còn ${formatPoints(reward.missing)} tới ${reward.rewardName}`}
+      ) : (
+        <div>
+          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
+            {`Ước tính ${formatPoints(p.estimatedPoints)}`}
           </Text>
-        )}
-      </div>
+          <Text variant="caption" tone="secondary" as="div">
+            {`Dùng như ${formatVnd(p.pointsValueVnd)} khi mua sắm`}
+          </Text>
+          {reward && (
+            <Text variant="caption" tone="tertiary" as="div">
+              {`Còn ${formatPoints(reward.missing)} tới ${reward.rewardName}`}
+            </Text>
+          )}
+        </div>
+      )
     ) : undefined;
     return shell(
       <WasteItemStep items={me.items} lines={draft.lines} onChange={onChange} />,
@@ -377,7 +386,7 @@ export default function RecycleNewPage() {
       <StickyActionBar
         summary={summary}
         primary={
-          <Button fullWidth disabled={lineInputs.length === 0} onPress={next}>
+          <Button fullWidth disabled={lineInputs.length === 0 || !!capBlock} onPress={next}>
             Tiếp tục
           </Button>
         }
@@ -394,10 +403,11 @@ export default function RecycleNewPage() {
     null,
   );
   const showShipLocked = !!me.shipLockedAt && ((cfg.waste.mailin && me.laneFlags.mailin) || (cfg.waste.pickup && me.laneFlags.pickup));
-  const ctxFor = (pv: WastePreviewDTO | undefined): BlockContext => ({
+  const ctxFor = (pv: WastePreviewDTO | undefined, method?: WasteMethod): BlockContext => ({
     items: me.items,
     maxOpenRequests: me.thresholds.maxOpenRequests,
     itemCaps: pv?.itemCaps ?? [],
+    method,
   });
 
   const selectMethod = (m: WasteMethod) => {
@@ -494,7 +504,7 @@ export default function RecycleNewPage() {
           )}
           {pv?.blocks.map((b) => (
             <Text key={`${b.code}-${b.itemId ?? ''}`} variant="caption" tone="danger" as="span">
-              {blockMessage(b, ctxFor(pv))}
+              {blockMessage(b, ctxFor(pv, m))}
             </Text>
           ))}
         </button>

@@ -134,6 +134,30 @@ describe('bước 1: chọn món (§4.2)', () => {
     // redeemablePoints 14.000 + 6.000 ước tính = 20.000 → Miễn phí vận chuyển (20.000) đã đủ, quà kế tiếp là Gói hạt giống Tubu (25.000)
     expect(screen.getByText('Còn 5.000 điểm tới Gói hạt giống Tubu')).toBeInTheDocument();
   });
+  it('trần tháng chạm ở bước 1 → thanh dính đáy hiện lời khoá thay cho ước tính, "Tiếp tục" khoá; trong trần thì ước tính và mở khoá', async () => {
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.lines[0]?.declaredQty === 3
+      ? { estimatedPoints: 70_000, pointsValueVnd: 70_000, blocks: [{ code: 'POINTS_MONTH_CAP', pointsRemaining: 60_000 }] }
+      : b.lines[0]?.declaredQty === 2
+        ? { blocks: [{ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }], itemCaps: [{ itemId: 'item-carton', monthRemainingQty: 1, dayRemainingQty: null }] }
+        : {}));
+    renderPage();
+    const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
+    const plus = within(carton).getByRole('button', { name: 'Tăng số lượng' });
+    fireEvent.click(plus);
+    expect(await screen.findByText('Ước tính 6.000 điểm')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled();
+    fireEvent.click(plus);
+    expect(await screen.findByText('Tháng này Thùng carton chỉ còn 1 thùng')).toBeInTheDocument();
+    expect(screen.queryByText(/Ước tính/)).toBeNull();
+    expect(screen.queryByText(/Còn .* tới/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+    fireEvent.click(plus);
+    expect(await screen.findByText('Tháng này bạn chỉ còn 60.000 điểm trong trần tháng')).toBeInTheDocument();
+    expect(screen.queryByText(/Ước tính/)).toBeNull();
+    expect(screen.queryByText(/Dùng như/)).toBeNull();
+    expect(screen.queryByText(/Còn .* tới/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+  });
   it('"Tiếp tục" khoá khi chưa chọn món; bấm → lưu nháp vào mục hiện tại rồi đẩy ?step=method', async () => {
     renderPage();
     const next = await screen.findByRole('button', { name: 'Tiếp tục' });

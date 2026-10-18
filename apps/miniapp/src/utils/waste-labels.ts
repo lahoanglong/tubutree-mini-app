@@ -74,7 +74,12 @@ export const DESK_REJECTION_OPTIONS: { value: WasteRejectionReason; label: strin
 ];
 
 export type WasteTimeline = { steps: readonly string[]; current: number };
-export type BlockContext = { items: readonly WasteItemDTO[]; maxOpenRequests: number; itemCaps: WastePreviewDTO['itemCaps'] };
+export type BlockContext = {
+  items: readonly WasteItemDTO[];
+  maxOpenRequests: number;
+  itemCaps: WastePreviewDTO['itemCaps'];
+  method?: WasteMethod;
+};
 
 export function ruleText(item: WasteItemDTO): string {
   return `${item.unitsPerPoint} ${item.unitLabel} = ${formatPoints(item.pointsPerGroup)}`;
@@ -152,7 +157,7 @@ export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): st
     case 'BELOW_MIN':
       return `cần thêm ${formatPoints(block.missingPoints ?? 0)}`;
     case 'MONTH_CAP_FOR_MIN':
-      return 'tháng này bạn không còn đủ trần cho một gói gửi kho';
+      return `tháng này bạn không còn đủ trần cho một gói ${ctx.method === 'PICKUP' ? 'thu kèm đơn' : 'gửi kho'}`;
     case 'NEED_PROVINCE':
       return 'Chọn tỉnh để ước tính phí ship';
     case 'ITEM_DAY_CAP':
