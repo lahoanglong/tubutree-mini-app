@@ -13,6 +13,7 @@ describe('customerView (spec 15.1: masked unless the re-read role is ADMIN; user
   });
   it('missing name -> Khách Tubu for both', () => {
     expect(customerView({ ...u, fullName: null }, true).name).toBe('Khách Tubu');
+    expect(customerView({ ...u, fullName: '  ' }, true).name).toBe('Khách Tubu');
     expect(customerView({ ...u, fullName: null, phone: null }, false)).toEqual({ name: 'Khách Tubu', phone: null });
   });
 });

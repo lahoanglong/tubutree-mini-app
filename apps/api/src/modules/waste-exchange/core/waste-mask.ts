@@ -8,7 +8,7 @@ export function customerView(
 ): { name: string; phone: string | null; userId?: string } {
   if (!viewerIsAdmin) return { name: maskFullName(u.fullName), phone: maskPhoneOrNull(u.phone) };
   return {
-    name: u.fullName ?? 'Khách Tubu',
+    name: u.fullName?.trim() ? u.fullName : 'Khách Tubu',
     phone: u.phone,
     ...(includeUserId ? { userId: u.id } : {}),
   };
