@@ -25,6 +25,13 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
+import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
+import {
+  attachPickupRequest,
+  buildPickupRecyclingNote,
+  lockPickupRequestForCheckout,
+  readPickupGate,
+} from '../waste-exchange/pickup/waste-pickup-attach';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
 import { resolveAttribution } from './attribution';
@@ -90,9 +97,13 @@ export const STORE_CHANGED_MESSAGE = 'Gian hàng vừa thay đổi, vui lòng đ
 
 /**
  * Lần bấm "Đặt hàng" đến sau khi giỏ đã thành đơn (app báo lỗi mạng/quá thời gian rồi khách bấm lại, có khi với key mới) nhận
- * lại đơn đó nếu đơn mới tạo trong khoảng này và cùng địa chỉ, cách trả tiền, thu gom.
+ * lại đơn đó nếu đơn mới tạo trong khoảng này và cùng địa chỉ, cách trả tiền, thu kèm rác (wasteRequestId).
  */
 const RECENT_ORDER_REPLAY_MS = 2 * 60_000;
+
+const PICKUP_GATE_CLOSED = 'Thu kèm rác hiện chưa mở, vui lòng tắt công tắc hoặc tải lại trang.';
+const PICKUP_NEEDS_TUBU =
+  'Thu kèm rác chỉ đi cùng hàng do Tubu Tree giao. Vui lòng tắt công tắc thu kèm rác hoặc thêm hàng Tubu Tree vào đơn.';
 
 /** Giỏ đã bị đổi khi lần đặt này giành được khoá giỏ; `consumed` = dòng định mua đã biến mất (thường do lần đặt trước). */
 class CartChangedError extends Error {
@@ -318,10 +329,10 @@ export class CheckoutService {
       throw new BadRequestException('Phương thức thanh toán này đã ngừng. Vui lòng chọn phương thức khác.');
     }
 
-    // Thu gom tái chế chỉ nhận khi tính năng đang bật (Gomdon đã cấu hình + admin bật công tắc) —
-    // FE cũ/tự gửi hasRecyclingPickup=true khi tính năng tắt không được hứa thu gom mà không ai đi thu.
-    if (dto.hasRecyclingPickup === true && !(await this.gomdonOrder.isRecyclingEnabled())) {
-      throw new BadRequestException('Tính năng gửi lại vật liệu tái chế hiện chưa mở, vui lòng tải lại trang.');
+    // Thu kèm rác chỉ nhận khi cổng đang mở (waste.enabled + lane_pickup + Gomdon đã cấu hình) — client gửi wasteRequestId
+    // khi tính năng tắt không được hứa thu gom mà không ai đi thu.
+    if (dto.wasteRequestId && !(await readPickupGate(this.config, () => isGomdonRecyclingEnabled(this.config!).catch(() => false)))) {
+      throw new BadRequestException(PICKUP_GATE_CLOSED);
     }
 
     // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn "chạm" giới thiệu trong hạn (3 ngày) →
@@ -373,10 +384,8 @@ export class CheckoutService {
     }
     // Bưu tá thu gom vỏ đi cùng kiện kho Tubu (vận đơn Gomdon đổi hàng) — không có kiện Tubu thì không ai đi thu.
     const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU');
-    if (dto.hasRecyclingPickup === true && !tubuShipment) {
-      throw new BadRequestException(
-        'Thu gom vật liệu tái chế chỉ đi cùng hàng do Tubu Tree giao. Vui lòng bỏ chọn thu gom hoặc thêm hàng Tubu Tree vào đơn.',
-      );
+    if (dto.wasteRequestId && !tubuShipment) {
+      throw new BadRequestException(PICKUP_NEEDS_TUBU);
     }
 
     // WALLET thanh toán ngay (đơn CONFIRMED + PAID).
@@ -408,6 +417,7 @@ export class CheckoutService {
         // khoá sẽ thấy dòng đã mua biến mất thay vì đặt thêm một đơn từ bản giỏ đã đọc trước đó (R2-MONEY-2).
         const change = cartChangeSince(cart.items, await this.cart.lockForCheckout(tx, userId));
         if (change) throw new CartChangedError(change === 'consumed');
+        const pickup = dto.wasteRequestId ? await lockPickupRequestForCheckout(tx, userId, dto.wasteRequestId) : null;
 
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell khi flash-sale/hàng giới hạn:
         // 2 đơn cùng grab variation cuối → chỉ 1 câu UPDATE sửa được dòng; thua thì throw rollback.
@@ -445,7 +455,7 @@ export class CheckoutService {
         const created: Awaited<ReturnType<typeof tx.order.create>>[] = [];
         for (const [i, shipment] of computed.shipments.entries()) {
           const isPrimary = i === 0;
-          const isTubu = shipment.fulfiller.kind === 'TUBU';
+          const withPickup = pickup !== null && shipment === tubuShipment;
           const orderCode = codes[i]!;
           created.push(
             await tx.order.create({
@@ -487,8 +497,8 @@ export class CheckoutService {
                 invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
                 invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
                 note: dto.note,
-                hasRecyclingPickup: isTubu && dto.hasRecyclingPickup === true,
-                recyclingNote: isTubu && dto.hasRecyclingPickup === true ? dto.recyclingNote?.trim() || null : null,
+                hasRecyclingPickup: withPickup,
+                recyclingNote: withPickup ? buildPickupRecyclingNote(pickup) : null,
                 items: {
                   // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
                   // tính trên giá thực trả sau giảm combo (§7.2).
@@ -515,6 +525,8 @@ export class CheckoutService {
             }),
           );
         }
+
+        if (pickup) await attachPickupRequest(tx, userId, pickup.id, created[computed.shipments.indexOf(tubuShipment!)]!.id);
 
         if (computed.pointsUsed > 0) {
           // Khoá dòng user (FOR UPDATE) TRƯỚC khi tính phần khoá (creditOrderPoints/reverseOrderPoints/
@@ -783,7 +795,7 @@ export class CheckoutService {
       paymentMethod: string;
       total?: number;
       shippingAddress: Prisma.JsonValue;
-      hasRecyclingPickup?: boolean;
+      checkoutGroup?: string | null;
     },
     userId: string,
     dto: PlaceOrderDto,
@@ -797,19 +809,27 @@ export class CheckoutService {
     return this.findOrderResponse(existing.id);
   }
 
-  /** Đơn đã có và lần gửi này cùng địa chỉ, cách trả tiền, thu gom (so snapshot địa chỉ bằng stableStringify, xem trên). */
+  /** Đơn đã có và lần gửi này cùng địa chỉ, cách trả tiền, thu kèm rác (wasteRequestId) (so snapshot địa chỉ bằng stableStringify, xem trên). */
   private async isSameRequest(
-    existing: { paymentMethod: string; total?: number; shippingAddress: Prisma.JsonValue; hasRecyclingPickup?: boolean },
+    existing: { id: string; paymentMethod: string; total?: number; shippingAddress: Prisma.JsonValue; checkoutGroup?: string | null },
     dto: PlaceOrderDto,
   ): Promise<boolean> {
     // Đơn 0đ đã bị ép COD (placeOrderInner): khách gửi lại đúng phương thức đã chọn lúc đầu vẫn là
     // cùng một yêu cầu.
     const forcedCod = existing.paymentMethod === 'COD' && existing.total === 0;
     if (existing.paymentMethod !== dto.paymentMethod && !forcedCod) return false;
-    // Bật/tắt thu gom tái chế giữa 2 lần gửi cũng là "yêu cầu khác" — không trả đơn cũ.
-    if (Boolean(existing.hasRecyclingPickup) !== (dto.hasRecyclingPickup === true)) return false;
+    // Gắn yêu cầu thu kèm rác khác (hoặc bật/tắt) giữa 2 lần gửi cũng là "yêu cầu khác" — không trả đơn cũ.
+    if ((await this.attachedWasteRequestId(existing)) !== (dto.wasteRequestId ?? null)) return false;
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     return !!address && stableStringify(this.addressSnapshot(address)) === stableStringify(existing.shippingAddress);
+  }
+
+  private async attachedWasteRequestId(existing: { id: string; checkoutGroup?: string | null }): Promise<string | null> {
+    const row = await this.prisma.wasteRequest.findFirst({
+      where: existing.checkoutGroup ? { order: { checkoutGroup: existing.checkoutGroup } } : { orderId: existing.id },
+      select: { id: true },
+    });
+    return row?.id ?? null;
   }
 
   /**
@@ -824,7 +844,6 @@ export class CheckoutService {
       paymentMethod: true,
       total: true,
       shippingAddress: true,
-      hasRecyclingPickup: true,
     } as const;
     const latest = await this.prisma.order.findFirst({
       where: {

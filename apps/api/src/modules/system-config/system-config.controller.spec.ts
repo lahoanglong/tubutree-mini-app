@@ -79,51 +79,10 @@ describe('SystemConfigController.publicConfig', () => {
     expect(out.freeshipThreshold).toBe(200000);
   });
 
-  describe('recyclingEnabled — cờ hiện lựa chọn "gửi lại vật liệu tái chế" ở checkout', () => {
-    const KEYS = ['GOMDON_BASE_URL', 'GOMDON_PHONE', 'GOMDON_PASSWORD'] as const;
-    const saved: Record<string, string | undefined> = {};
-    beforeEach(() => {
-      for (const k of KEYS) saved[k] = process.env[k];
-    });
-    afterEach(() => {
-      for (const k of KEYS) {
-        if (saved[k] === undefined) delete process.env[k];
-        else process.env[k] = saved[k];
-      }
-    });
-
-    it('mặc định (chưa bật công tắc / chưa cấu hình Gomdon) → false', async () => {
-      const out = await new SystemConfigController(makeConfig()).publicConfig();
-      expect(out.recyclingEnabled).toBe(false);
-    });
-
-    it('công tắc bật nhưng thiếu tài khoản/base URL Gomdon → false (không hứa thu gom khi không ai đi thu)', async () => {
-      for (const k of KEYS) delete process.env[k];
-      const out = await new SystemConfigController(makeConfig({ 'shipping.gomdon.recycling_enabled': true })).publicConfig();
-      expect(out.recyclingEnabled).toBe(false);
-    });
-
-    it('Gomdon đã cấu hình env + công tắc true → true; chỉ trả boolean, không lộ cấu hình/tài khoản', async () => {
-      process.env.GOMDON_BASE_URL = 'https://gomdon.test';
-      process.env.GOMDON_PHONE = '0900';
-      process.env.GOMDON_PASSWORD = 'pw';
-      const out = await new SystemConfigController(makeConfig({ 'shipping.gomdon.recycling_enabled': true })).publicConfig();
-      expect(out.recyclingEnabled).toBe(true);
-      expect(JSON.stringify(out)).not.toContain('pw');
-      expect(JSON.stringify(out)).not.toContain('0900');
-    });
-
-    it('đọc config lỗi → false, không làm hỏng cả endpoint public', async () => {
-      const config = {
-        get: jest.fn(async (key: string, fb?: unknown) => {
-          if (key.startsWith('shipping.gomdon')) throw new Error('db');
-          return fb;
-        }),
-      } as unknown as SystemConfigService;
-      const out = await new SystemConfigController(config).publicConfig();
-      expect(out.recyclingEnabled).toBe(false);
-      expect(out.freeshipThreshold).toBe(200000);
-    });
+  it('không còn recyclingEnabled (§11.5, §13.2): cờ thu kèm rác là waste.pickup', async () => {
+    const out = await new SystemConfigController(makeConfig({ 'shipping.gomdon.recycling_enabled': true })).publicConfig();
+    expect(out).not.toHaveProperty('recyclingEnabled');
+    expect(out).toHaveProperty('waste');
   });
 
   describe('shippingEta — ngày giao dự kiến (chỉ khi chủ shop đã cấu hình)', () => {
@@ -363,10 +322,10 @@ describe('SystemConfigController.publicConfig — aiAdvisorEnabled (công tắc 
 });
 
 describe('SystemConfigController.publicConfig — waste (spec 11.5)', () => {
-  it('defaults -> waste all false, recyclingEnabled still present', async () => {
+  it('defaults -> waste all false', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.waste).toEqual({ enabled: false, dropoff: false, mailin: false, pickup: false });
-    expect(out).toHaveProperty('recyclingEnabled', false);
+    expect(out).not.toHaveProperty('recyclingEnabled');
   });
   it('programme on -> dropoff and mailin on, pickup off by default', async () => {
     const out = await new SystemConfigController(makeConfig({ 'waste.enabled': true })).publicConfig();

@@ -152,8 +152,6 @@ export interface OrderDTO {
 /** GET /config/public — chỉ những giá trị vốn đã hiển thị công khai (xem system-config.controller.ts). */
 export interface PublicConfig {
   freeshipThreshold?: number;
-  /** true khi Gomdon đã cấu hình VÀ admin bật công tắc — chỉ khi đó mới hiện lựa chọn thu gom. */
-  recyclingEnabled?: boolean;
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 
@@ -337,9 +335,6 @@ export const placeOrder = (
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;
-    /** Chỉ có mặt khi tính năng bật VÀ khách chọn — xem recyclingCheckoutFields. */
-    hasRecyclingPickup?: true;
-    recyclingNote?: string;
   },
   idempotencyKey: string,
 ) =>

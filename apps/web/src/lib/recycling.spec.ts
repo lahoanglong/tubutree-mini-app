@@ -4,10 +4,6 @@ import {
   gomdonCancelLabel,
   gomdonStatusLabel,
   needsRecyclingAttention,
-  recyclingBookedAfterPayment,
-  recyclingCheckoutFields,
-  recyclingPickupView,
-  RECYCLING_NOTE_MAX,
   type RecyclingOrderFields,
 } from './recycling';
 
@@ -21,30 +17,6 @@ const base: RecyclingOrderFields = {
   gomdonPartnerCode: null,
   gomdonCancelStatus: null,
 };
-
-describe('recyclingCheckoutFields — chỉ gửi khi tính năng bật VÀ khách chọn', () => {
-  it('tắt tính năng hoặc không chọn → KHÔNG có khoá nào (body y hệt bản cũ)', () => {
-    expect(recyclingCheckoutFields(false, true, 'pin')).toEqual({});
-    expect(recyclingCheckoutFields(true, false, 'pin')).toEqual({});
-    expect('hasRecyclingPickup' in recyclingCheckoutFields(true, false, '')).toBe(false);
-  });
-
-  it('bật + chọn → hasRecyclingPickup true, kèm ghi chú đã trim (bỏ nếu rỗng)', () => {
-    expect(recyclingCheckoutFields(true, true, '  3 cục pin ')).toEqual({ hasRecyclingPickup: true, recyclingNote: '3 cục pin' });
-    expect(recyclingCheckoutFields(true, true, '   ')).toEqual({ hasRecyclingPickup: true });
-  });
-
-  it('ghi chú cắt ở 500 ký tự (khớp @MaxLength(500) của API)', () => {
-    const out = recyclingCheckoutFields(true, true, 'x'.repeat(600));
-    expect(out.recyclingNote).toHaveLength(RECYCLING_NOTE_MAX);
-  });
-
-  it('chuyển khoản / ZaloPay → lịch thu gom đặt SAU khi thanh toán; COD thì không', () => {
-    expect(recyclingBookedAfterPayment('BANK_TRANSFER')).toBe(true);
-    expect(recyclingBookedAfterPayment('ZALOPAY')).toBe(true);
-    expect(recyclingBookedAfterPayment('COD')).toBe(false);
-  });
-});
 
 describe('gomdonStatusLabel / gomdonCancelLabel — nhãn tiếng Việt cho admin', () => {
   it('trạng thái nội bộ', () => {
@@ -183,66 +155,6 @@ describe('gomdonAdminActions — chỉ hiện nút có nghĩa (BE vẫn là ngư
     const a = gomdonAdminActions({ ...base, gomdonStatus: 'MANUAL_HANDLED', gomdonOrderId: 'g1', gomdonPartnerCode: 'BE1' });
     expect(a).toEqual(expect.objectContaining({ canRetry: false, canCancel: false, canMarkHandled: false }));
     expect(gomdonStatusLabel('MANUAL_HANDLED')).toEqual(expect.objectContaining({ label: 'Đã xử lý tay', tone: 'neutral' }));
-  });
-});
-
-describe('recyclingPickupView — lời hứa trung thực cho khách (giống miniapp)', () => {
-  it('trả trước chưa thanh toán → "Chờ thanh toán", không có mã vận đơn', () => {
-    const v = recyclingPickupView({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
-    expect(v.title).toBe('Chờ thanh toán');
-    expect(v.waybill).toBeNull();
-  });
-
-  it('vận đơn lỗi → CSKH sẽ liên hệ (không hứa bưu tá tới)', () => {
-    expect(recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'FAILED' }).title).toBe(
-      'CSKH sẽ liên hệ hẹn thu gom',
-    );
-  });
-
-  it('đã tạo vận đơn → hiện mã BestExpress', () => {
-    const v = recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: '1', gomdonPartnerCode: 'BE123' });
-    expect(v).toEqual(expect.objectContaining({ title: 'Đã đặt lịch thu gom', waybill: 'BE123' }));
-  });
-
-  it('đơn huỷ → "Đã huỷ thu gom", ẩn mã', () => {
-    const v = recyclingPickupView({ status: 'CANCELLED', paymentMethod: 'COD', gomdonStatus: '1', gomdonPartnerCode: 'BE1' });
-    expect(v.title).toBe('Đã huỷ thu gom');
-    expect(v.waybill).toBeNull();
-  });
-
-  // Cùng bảng với apps/miniapp/src/utils/format-recycling.spec.ts — hai nền tảng phải nói y hệt.
-  const NEUTRAL = 'Nếu bưu tá chưa nhận vật liệu tái chế, nhắn Zalo OA Tubu để được hẹn lại.';
-  const noCskhPromise = (v: { title: string; detail: string }) => {
-    expect(`${v.title} ${v.detail}`).not.toMatch(/CSKH/);
-    expect(v.detail).toBe(NEUTRAL);
-  };
-
-  it('đơn ĐÃ GIAO mà Gomdon chưa báo giao (≠7) → không hứa "CSKH sẽ liên hệ"; mã chỉ hiện khi vận đơn Gomdon còn sống', () => {
-    for (const s of [null, 'FAILED', 'NOT_CONFIGURED', 'NEEDS_MANUAL_CHECK', '2', '5', '11']) {
-      const v = recyclingPickupView({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID', gomdonStatus: s, gomdonPartnerCode: 'BE9' });
-      expect(v.title).toBe('Đã giao hàng');
-      expect(v.tone).toBe('muted');
-      noCskhPromise(v);
-      expect(v.waybill).toBe(s === '5' || s === '11' ? 'BE9' : null);
-    }
-  });
-
-  it('"Đã xử lý tay" → trung tính, không hứa CSKH, ẩn mã vận đơn cũ', () => {
-    const v = recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'MANUAL_HANDLED', gomdonPartnerCode: 'BE9' });
-    expect(v.title).toBe('Thu gom được xử lý riêng');
-    noCskhPromise(v);
-    expect(v.waybill).toBeNull();
-  });
-
-  it('chưa có vận đơn tự động mà hàng đã rời kho / kho giao bằng hãng khác → trung tính (hàng đợi CSKH không còn đơn này)', () => {
-    const shipping = recyclingPickupView({ status: 'SHIPPING', paymentMethod: 'COD', gomdonStatus: 'FAILED' });
-    expect(shipping.title).toBe('Đang giao hàng');
-    noCskhPromise(shipping);
-    const other = recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'NOT_CONFIGURED', shippingCode: 'GHN1', shippingPartner: 'GHN' });
-    expect(other.title).toBe('Thu gom được xử lý riêng');
-    noCskhPromise(other);
-    // Còn trong hàng đợi (đơn chưa giao, chưa có hãng khác) → vẫn là "CSKH sẽ liên hệ".
-    expect(recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'FAILED' }).title).toBe('CSKH sẽ liên hệ hẹn thu gom');
   });
 });
 

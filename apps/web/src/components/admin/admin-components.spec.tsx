@@ -6,8 +6,6 @@ import { ClaimRow } from './dealer-claims-tab';
 import { PosScreen } from './pos-screen';
 import { GomdonConfigCard } from './gomdon-config-card';
 import { LoyaltyConfigCard } from './loyalty-config-card';
-import { RecyclingCheckoutSection } from '../recycling-checkout';
-import { RecyclingStatus } from '../recycling-status';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
@@ -560,45 +558,6 @@ describe('GomdonConfigCard', () => {
         },
       },
     ]);
-  });
-});
-
-describe('Web shop — thu gom ở checkout & đơn của tôi', () => {
-  it('chuyển khoản → nói rõ lịch thu gom đặt SAU khi thanh toán; COD thì không', () => {
-    const props = { selected: true, onSelectedChange: () => {}, note: '', onNoteChange: () => {} };
-    const bank = mount(<RecyclingCheckoutSection {...props} paymentMethod="BANK_TRANSFER" />);
-    expect(bank.container.textContent).toContain('Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.');
-    const cod = mount(<RecyclingCheckoutSection {...props} paymentMethod="COD" />);
-    expect(cod.container.textContent).not.toContain('sau khi Tubu nhận được thanh toán');
-  });
-
-  it('chưa bật → không hiện ô ghi chú; bật → ô ghi chú giới hạn 500 ký tự', () => {
-    const off = mount(
-      <RecyclingCheckoutSection selected={false} onSelectedChange={() => {}} note="" onNoteChange={() => {}} paymentMethod="COD" />,
-    );
-    expect(off.container.querySelector('textarea')).toBeNull();
-    const on = mount(<RecyclingCheckoutSection selected onSelectedChange={() => {}} note="" onNoteChange={() => {}} paymentMethod="COD" />);
-    expect(on.container.querySelector('textarea')?.getAttribute('maxlength')).toBe('500');
-  });
-
-  it('đơn của tôi: trạng thái thu gom trung thực', () => {
-    const o = {
-      code: 'TB-1',
-      status: 'PENDING_PAYMENT',
-      subtotal: 0,
-      discount: 0,
-      shippingFee: 0,
-      total: 0,
-      paymentMethod: 'BANK_TRANSFER',
-      paymentStatus: 'UNPAID',
-      createdAt: '2026-09-27T00:00:00.000Z',
-      items: [],
-      hasRecyclingPickup: true,
-    };
-    const { container } = mount(<RecyclingStatus order={o} />);
-    expect(container.textContent).toContain('Chờ thanh toán');
-    const none = mount(<RecyclingStatus order={{ ...o, hasRecyclingPickup: false }} />);
-    expect(none.container.textContent).toBe('');
   });
 });
 

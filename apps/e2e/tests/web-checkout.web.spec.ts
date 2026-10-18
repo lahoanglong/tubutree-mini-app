@@ -31,7 +31,7 @@ function mockBuyer(api: MockApi, balances: Balances) {
   api.get('/me', () => user());
   api.get('/me/addresses', [ADDR]);
   api.get('/me/coupons', []);
-  api.get('/config/public', { freeshipThreshold: 500000, recyclingEnabled: false });
+  api.get('/config/public', { freeshipThreshold: 500000 });
   api.get('/cart', () => {
     const subtotal = LINES.reduce((s, l) => s + l.total, 0);
     return { items: LINES, couponCode: null, subtotal, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 3 };

@@ -33,7 +33,6 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     mocks.quoteCalls += 1;
     return { subtotal: SUBTOTAL, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: SUBTOTAL + 30000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0 };
   },
-  getPublicConfig: async () => ({ recyclingEnabled: false }),
   placeOrder: async (body: Record<string, unknown>, key: string) => {
     mocks.placeCalls.push({ body, key });
     if (mocks.placeImpl) return mocks.placeImpl();

@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
 import { rememberCheckoutSelection, recallCheckoutSelection } from '@/lib/checkout-selection';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // R2-BUYERWEB-2/6/11: checkout web phải ngang Mini App — Ví Tubu, mua một phần giỏ, hoá đơn VAT, mã giới thiệu,
 // ghi chú 500 ký tự, chặn hết hàng ngay ở thanh toán.
@@ -45,7 +48,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   checkoutQuote: (...args: unknown[]) => m.quote(...args),
   placeOrder: (...args: unknown[]) => m.placeOrder(...args),
   recordReferralTouch: (...args: unknown[]) => m.touch(...args),
-  getPublicConfig: async () => ({ recyclingEnabled: false }),
+  getPublicConfig: async () => ({ recyclingEnabled: true }),
 }));
 
 import CheckoutPage from './page';
@@ -369,5 +372,36 @@ describe('/thanh-toan — COD theo từng đơn, báo giá quyết định phư�
     click(placeButton(r));
     await flush(4);
     expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'WALLET' });
+  });
+});
+
+describe('/thanh-toan — web không còn công tắc thu gom cũ (§12.2, §13.2)', () => {
+  it('API cũ còn trả recyclingEnabled: true vẫn không hiện công tắc, không có lời mời "pin, quần áo cũ", đặt đơn không gửi trường thu gom', async () => {
+    const r = await mount();
+    expect(r.container.querySelector('#checkout-recycling')).toBeNull();
+    expect(r.container.textContent).not.toContain('Gửi lại vật liệu tái chế');
+    expect(r.container.textContent).not.toContain('quần áo cũ');
+    click(placeButton(r));
+    await flush(4);
+    const body = m.placeOrder.mock.calls[0]![0] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('hasRecyclingPickup');
+    expect(body).not.toHaveProperty('recyclingNote');
+    expect(body).not.toHaveProperty('wasteRequestId');
+  });
+
+  it('mã web khách không còn nhắc recyclingEnabled (trừ cấu hình Gomdon của admin)', () => {
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const walk = (d: string, out: string[] = []): string[] => {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n);
+        if (statSync(p).isDirectory()) walk(p, out);
+        else if (/\.(ts|tsx)$/.test(n)) out.push(p);
+      }
+      return out;
+    };
+    const offenders = walk(SRC)
+      .filter((f) => !f.includes(`${join('components', 'admin')}`) && !f.endsWith(join('lib', 'admin-client.ts')) && !f.endsWith('checkout-parity.spec.tsx'))
+      .filter((f) => readFileSync(f, 'utf-8').includes('recyclingEnabled'));
+    expect(offenders).toEqual([]);
   });
 });

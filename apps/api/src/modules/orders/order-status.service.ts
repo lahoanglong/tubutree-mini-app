@@ -45,6 +45,7 @@ import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
 import { receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { sendReferralNotices } from '../wallet/referral-notify';
+import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
 export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
@@ -133,6 +134,8 @@ export class OrderStatusService {
     @Optional() private readonly analytics?: AnalyticsEventsService,
     // Optional như trên. Huỷ đơn đã lên Pancake phải huỷ cả bên Pancake (D1); tiền về thì báo Pancake không thu COD.
     @Optional() private readonly pancakeHooks?: PancakeSyncHooks,
+    // Optional như các tham số trên: call site dựng tay không truyền thì bỏ qua hook thu kèm rác.
+    @Optional() private readonly wastePickupHooks?: WastePickupHooks,
   ) {}
 
   /** true nếu transition hợp lệ — dùng để webhook/cron bỏ qua êm thay vì throw. */
@@ -337,6 +340,12 @@ export class OrderStatusService {
         throw new InvalidOrderTransitionError(current.status as OrderStatus, targetStatus);
       }
       return current;
+    }
+    if (targetStatus === 'CANCELLED') {
+      await this.wastePickupHooks?.onOrderCancelled(order.id).catch((err: unknown) => this.logger.error(`Hook thu kèm rác (huỷ) lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
+    }
+    if (targetStatus === 'DELIVERED') {
+      await this.wastePickupHooks?.onOrderDelivered(order.id).catch((err: unknown) => this.logger.error(`Hook thu kèm rác (giao) lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
     }
     await sendReferralNotices(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },

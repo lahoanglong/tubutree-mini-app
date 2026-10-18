@@ -15,14 +15,12 @@ import {
   updateAddress,
   checkoutQuote,
   placeOrder,
-  getPublicConfig,
   getMe,
   formatVnd,
   type AddressDTO,
   type OrderDTO,
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
-import { recyclingCheckoutFields } from '@/lib/recycling';
 import { checkoutPointsOffer, convertedPointsLine, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
@@ -40,8 +38,6 @@ import { orderDetailHref } from '@/lib/order-view';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
-import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
-import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
@@ -120,12 +116,6 @@ export default function CheckoutPage() {
     convertedNote: null,
   });
   const usablePoints = pointsOffer.usable;
-  // Thu gom vật liệu tái chế: CHỈ hiện khi BE xác nhận tính năng đang chạy (Gomdon đã cấu hình + admin
-  // bật). Chưa tải xong / lỗi / API cũ không có field → coi như tắt: không hứa thu gom khi không ai đi thu.
-  const publicQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
-  const recyclingEnabled = publicQ.data?.recyclingEnabled === true;
-  const [hasRecyclingPickup, setHasRecyclingPickup] = useState(false);
-  const [recyclingNote, setRecyclingNote] = useState('');
 
   // Mã giảm giá đổi trên giỏ nên báo giá đang hiện đã cũ cho tới khi tính lại xong: khoá nút đặt hàng
   // trong lúc đó để khách không bấm đặt khi con số trên màn hình chưa phải con số sẽ bị tính.
@@ -195,8 +185,6 @@ export default function CheckoutPage() {
           pointsToUse: usePoints ? usablePoints : 0,
           storefrontSlug: ctvSlug,
           referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
-          // Chỉ có khoá khi bật + chọn (API forbidNonWhitelisted; tắt thì body y hệt bản cũ).
-          ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
         },
         idemKey,
       ),
@@ -278,11 +266,6 @@ export default function CheckoutPage() {
             <p className="mt-2 text-stone-700">
               Mã đơn <span className="font-semibold text-forest-700">{placed.code}</span> · {formatVnd(placed.total)}
             </p>
-          )}
-          {placed.hasRecyclingPickup && (
-            <div className="mx-auto mt-3 max-w-md text-left">
-              <RecyclingStatus order={placed} />
-            </div>
           )}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link href={orderDetailHref(placed.code)} className={ui.btnPrimary}>
@@ -446,17 +429,6 @@ export default function CheckoutPage() {
               {note.length}/{ORDER_NOTE_MAX} ký tự
             </p>
           </section>
-
-          {recyclingEnabled && (
-            <RecyclingCheckoutSection
-              selected={hasRecyclingPickup}
-              onSelectedChange={setHasRecyclingPickup}
-              note={recyclingNote}
-              onNoteChange={setRecyclingNote}
-              paymentMethod={zeroNote ? 'COD' : payment}
-              disabled={place.isPending}
-            />
-          )}
 
           <ReferralCodeBox
             linkedCode={sfCtx.referralCode}

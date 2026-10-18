@@ -461,7 +461,7 @@ function HealthBody({
           />
           {h.pancake.catalog.lastError && <p className="break-words text-xs text-stone-500">Lỗi gần nhất: {h.pancake.catalog.lastError}</p>}
         </Card>
-        <Card title="Gomdon (thu gom tái chế)">
+        <Card title="Gomdon (thu kèm rác)">
           <Row label="Cấu hình" value={h.gomdon.configured ? 'Đã cấu hình' : 'Chưa cấu hình'} />
           <Row
             label="Kết nối Gomdon"
