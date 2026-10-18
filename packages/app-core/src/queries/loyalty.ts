@@ -5,6 +5,7 @@ import {
   getLoyalty,
   getLoyaltyRewards,
   getMemberCard,
+  getMyRedemptions,
   getNewCustomerOffer,
   getPointsTransactions,
   getReferral,
@@ -22,3 +23,4 @@ export const newCustomerOfferQuery = (http: HttpClient, userId: string | undefin
   queryFn: () => getNewCustomerOffer(http),
 });
 export const rewardsQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KEYS.rewards, queryFn: () => getLoyaltyRewards(http) });
+export const myRedemptionsQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KEYS.rewardsMine, queryFn: () => getMyRedemptions(http) });

@@ -1,7 +1,9 @@
 import type { HttpClient } from '../http';
 import type { CategoryDTO, PageResponse, ProductCard } from './catalog';
+import type { NotificationDTO } from './account';
 import type { PublicConfig } from './config';
 import type { FlashSaleActiveItem, UpcomingFlashItem } from './flash-sale';
+import type { NewCustomerOffer } from './loyalty';
 import type { OrderView, PurchasedItemsPage } from './orders';
 import type { SubscriptionDTO } from './subscriptions';
 
@@ -29,10 +31,8 @@ export interface HomeMeDTO {
   activeOrderCount: Block<{ count?: unknown }>;
   shippingOrders: Block<PageResponse<OrderView>>;
   subscriptions: Block<SubscriptionDTO[]>;
-  /** NotificationDTO thuộc miền tài khoản (lane khác); tới khi có kiểu chung ở app-core thì để unknown. */
-  notifications: Block<unknown[]>;
-  /** NewCustomerOffer thuộc miền tài khoản (lane khác); như trên. */
-  newCustomerOffer: Block<unknown>;
+  notifications: Block<NotificationDTO[]>;
+  newCustomerOffer: Block<NewCustomerOffer>;
   purchasedLimit?: number;
 }
 
