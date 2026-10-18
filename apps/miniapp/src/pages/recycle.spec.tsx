@@ -97,6 +97,16 @@ describe('/recycle trang vào (§4.1)', () => {
     renderPage();
     expect(await screen.findByText('Bạn đã gửi khoảng 0,1 kg bao bì cho Tubu')).toBeInTheDocument();
   });
+  it('ranh giới 50 g: đúng 50 g hiện 0,1 kg, 49 g không có dòng', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ impactGrams: 50 }));
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Bạn đã gửi khoảng 0,1 kg bao bì cho Tubu')).toBeInTheDocument();
+    unmount();
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ impactGrams: 49 }));
+    renderPage();
+    await screen.findByText('Điểm Xanh của bạn');
+    expect(screen.queryByText(/kg bao bì/)).toBeNull();
+  });
   it('impactGrams 0 → không có dòng tác động', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ impactGrams: 0 }));
     renderPage();
