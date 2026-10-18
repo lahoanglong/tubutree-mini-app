@@ -4,9 +4,8 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { ExternalClaimsAdminService } from '../../src/modules/external-points/external-claims-admin.service';
 import { ExternalClaimService } from '../../src/modules/external-points/external-claim.service';
-import { backfillChatClaims, ensureChatClaim, linkClaimsByPhone, linkWaitingClaims } from '../../src/modules/external-points/external-chat.claim';
-import { loadChatConfig } from '../../src/modules/external-points/external-chat.config';
-import { releaseClaim, releaseDueClaims } from '../../src/modules/external-points/external-claim-release';
+import { linkClaimsByPhone } from '../../src/modules/external-points/external-chat.claim';
+import { releaseDueClaims } from '../../src/modules/external-points/external-claim-release';
 import { ingestAndApply } from '../../src/modules/external-points/external-order.sync';
 import { createUser, deleteItData, pinConfig, randCode, warmPool } from './helpers';
 
@@ -97,11 +96,7 @@ describe('Trần tháng có cận trên theo tháng tạo claim (real Postgres)'
     if (order && !orderIds.includes(order.id)) orderIds.push(order.id);
     return order;
   }
-  const old = () => new Date(Date.now() - 60_000);
   const claimOf = (id: string) => prisma.externalPointsClaim.findFirst({ where: { externalOrder: { pancakeOrderId: id } } });
-  const balanceOf = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id } })).pointsBalance;
-  const eventsOf = (claimId: string) => prisma.externalClaimEvent.findMany({ where: { claimId }, orderBy: { createdAt: 'asc' } });
-  const releaseOpts = async () => ({ pendingDays: 14, expiryMonths: 12, chat: await loadChatConfig(freshConfig()) });
   const adminSvc = () =>
     new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never));
 
@@ -122,5 +117,94 @@ describe('Trần tháng có cận trên theo tháng tạo claim (real Postgres)'
 
     await adminSvc().approve(claimA.id, admin.id, new Date(), 'đã xác nhận người nhận qua điện thoại');
     expect(await claimOf(a)).toMatchObject({ state: 'PENDING', points: 100_000 });
+  });
+
+  const PAST = () => new Date(Date.now() - 45 * DAY);
+  const claimSvc = () => new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never);
+  async function mkScanOrder(over: Record<string, unknown> = {}) {
+    const code = `IT${randCode(10)}`;
+    const now = new Date();
+    const o = await prisma.externalOrder.create({
+      data: {
+        pancakeOrderId: `EXTMW${randCode(10)}`, source: 'MARKETPLACE', channel: 'shopee', sourceKey: 'x', trackingCode: code, trackingCodes: [code],
+        goodsValue: 200_000, pancakeStatus: 2, status: 'OPEN', pancakeInsertedAt: new Date(now.getTime() - DAY), pancakeUpdatedAt: now, lastPayload: {}, ...over,
+      },
+    });
+    orderIds.push(o.id);
+    return { ...o, code };
+  }
+  const fillerScan = async (userId: string, points: number) =>
+    prisma.externalPointsClaim.create({
+      data: { externalOrderId: (await mkScanOrder()).id, userId, kind: 'SCAN', state: 'PENDING', ratePct: 1, multiplier: 1, points, claimedCode: `FILL${randCode(8)}`, dayKey: '2026-10-20' },
+    });
+
+  describe('các nơi khác tính cửa sổ tháng từ createdAt của claim', () => {
+    it('SCAN duyệt: claim REVIEW từ tháng trước không bị trần đầy của tháng này chặn', async () => {
+      await pin('loyalty.marketplace_claim_enabled', true);
+      await pin('loyalty.marketplace_claim_monthly_points_cap', 20_000);
+      const user = await mkUser();
+      const admin = await mkUser({ role: 'ADMIN' });
+      const o = await mkScanOrder({ goodsValue: null });
+      const r = await claimSvc().submit(user.id, o.code);
+      expect(r.status).toBe('REVIEW');
+      await prisma.externalPointsClaim.update({ where: { id: r.claimId! }, data: { createdAt: PAST() } });
+      await fillerScan(user.id, 20_000);
+      await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 3_000_000 } });
+      await adminSvc().approve(r.claimId!, admin.id);
+      expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'PENDING', points: 20_000 });
+    });
+
+    it('SCAN cộng điểm: tiền hàng tăng, claim tạo tháng trước được chốt theo trần tháng của nó, không theo tháng này', async () => {
+      await pin('loyalty.marketplace_claim_enabled', true);
+      await pin('loyalty.marketplace_claim_monthly_points_cap', 20_000);
+      await pin('loyalty.marketplace_claim_review_above_vnd', 5_000_000);
+      const user = await mkUser();
+      const o = await mkScanOrder({ goodsValue: 200_000 });
+      const r = await claimSvc().submit(user.id, o.code);
+      expect(r.status).toBe('CLAIMED');
+      await prisma.externalPointsClaim.update({ where: { id: r.claimId! }, data: { createdAt: PAST() } });
+      await fillerScan(user.id, 20_000);
+      await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 1_000_000, status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date(Date.now() - 20 * DAY) } });
+      await releaseDueClaims(prisma, freshConfig(), { notify });
+      expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'CREDITED', points: 10_000 });
+    });
+
+    it('chat liên kết: điểm chốt (chatMonthPoints) chỉ tính tháng tạo claim', async () => {
+      await pin('loyalty.chat_order_monthly_points_cap', 100_000);
+      const ph = phone();
+      const tier = await mkTier(2);
+      const id = `CHAT${randCode(10)}`;
+      await ingest(payload({ id, phone: ph, goods: 2_500_000, deliveredDaysAgo: 20 }));
+      const claimA = (await claimOf(id))!;
+      expect(claimA).toMatchObject({ userId: null, points: 50_000 });
+      await prisma.externalPointsClaim.update({ where: { id: claimA.id }, data: { createdAt: PAST() } });
+      const user = await mkUser({ phone: ph, tierId: tier.id });
+      const other = await ingest(payload({ phone: phone(), goods: 500_000, deliveredDaysAgo: 20 }));
+      await prisma.externalPointsClaim.deleteMany({ where: { externalOrderId: other!.id } });
+      await prisma.externalPointsClaim.create({
+        data: { externalOrderId: other!.id, userId: user.id, kind: 'PHONE', state: 'CREDITED', ratePct: 2, multiplier: 1, points: 100_000, orderPhone: ph, dayKey: '2026-10-20' },
+      });
+      await linkClaimsByPhone(prisma, deps(), user);
+      expect(await claimOf(id)).toMatchObject({ userId: user.id, points: 100_000 });
+    });
+
+    it('chat liên kết: trần theo người tạo (creatorMonthPoints) chỉ tính tháng tạo claim', async () => {
+      await pin('loyalty.chat_order_creator_monthly_points', 100_000);
+      const creator = { id: `pc-${randCode(6)}`, name: 'Nhan Vien A' };
+      const ph = phone();
+      const id = `CHAT${randCode(10)}`;
+      await ingest(payload({ id, phone: ph, goods: 2_500_000, deliveredDaysAgo: 20, creator }));
+      const claimA = (await claimOf(id))!;
+      expect(claimA.creatorRef).toBe(creator.id);
+      await prisma.externalPointsClaim.update({ where: { id: claimA.id }, data: { createdAt: PAST() } });
+      const other = await ingest(payload({ phone: phone(), goods: 500_000, deliveredDaysAgo: 20 }));
+      await prisma.externalPointsClaim.deleteMany({ where: { externalOrderId: other!.id } });
+      await prisma.externalPointsClaim.create({
+        data: { externalOrderId: other!.id, userId: null, kind: 'PHONE', state: 'CREDITED', ratePct: 2, multiplier: 1, points: 100_000, orderPhone: phone(), creatorRef: creator.id, dayKey: '2026-10-20' },
+      });
+      const user = await mkUser({ phone: ph });
+      await linkClaimsByPhone(prisma, deps(), user);
+      expect(await claimOf(id)).toMatchObject({ userId: user.id, state: 'PENDING' });
+    });
   });
 });
