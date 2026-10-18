@@ -220,4 +220,23 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await expect(page.getByText('Không tìm thấy yêu cầu')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Xem yêu cầu của tôi' })).toHaveAttribute('href', '/doi-rac/yeu-cau');
   });
+
+  test('sửa yêu cầu: đổi số lượng, thấy ước tính mới, PATCH đúng body rồi về trang yêu cầu', async ({ page, api }) => {
+    mockRecycle(api);
+    api.get('/waste/requests/:id', () => detail());
+    api.post('/waste/preview', () => ({
+      estimatedPoints: 4000, estimatedDrops: 0, estimatedGrams: null, pointsValueVnd: 4000, blocks: [], feeEstimate: null,
+      itemCaps: [], pointsMonthRemaining: 190000,
+    }));
+    api.patch('/waste/requests/:id', () => detail());
+    await page.goto('/doi-rac/yeu-cau/req-1/sua');
+    await expect(page.getByRole('heading', { name: 'Sửa yêu cầu', level: 1 })).toBeVisible();
+    await expect(page.getByText('Hạn giữ chỗ không đổi: 25/10/2026').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Giảm số lượng' }).click();
+    await expect(page.getByText('Ước tính mới 4.000 điểm').first()).toBeVisible();
+    const patched = api.waitForCall('PATCH', '/waste/requests/:id');
+    await page.getByRole('button', { name: 'Lưu thay đổi' }).first().click();
+    expect((await patched).body).toEqual({ lines: [{ itemId: 'item-carton', declaredQty: 4 }], pointId: 'pt-1' });
+    await expect(page).toHaveURL(/\/doi-rac\/yeu-cau\/req-1$/);
+  });
 });
