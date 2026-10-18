@@ -21,7 +21,6 @@ const FILES = [
   'src/pages/community-leaderboard.tsx',
   'src/pages/community-events.tsx',
   'src/pages/community-moderation.tsx',
-  'src/pages/refill.tsx',
   'src/pages/ai-advisor.tsx',
   'src/pages/academy.tsx',
   'src/components/ui/timeline.tsx',

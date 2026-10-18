@@ -1,5 +1,5 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
-import type { AuthUser, LoginResponse, OrderDTO } from '@tubutree/shared-types';
+import type { AuthUser, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
 import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
 import type { CartSummary, PublicConfig } from '../../../miniapp/src/services/shop-api';
 
@@ -439,6 +439,25 @@ export function publicConfig(over: Partial<PublicConfig> = {}): PublicConfig {
     affiliateMinWithdrawBank: 50000,
     cashbackHoldDays: 30,
     waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
+    ...over,
+  };
+}
+
+export function wasteMe(over: Partial<WasteMeDTO> = {}): WasteMeDTO {
+  return {
+    programmeEnabled: false,
+    eligibility: 'OK',
+    blocked: false,
+    shipLockedAt: null,
+    laneFlags: { dropoff: false, mailin: false, pickup: false },
+    parcelLimits: { maxWeightKg: 20, maxEdgeCm: 50 },
+    balance: { pointsBalance: 0, pointsConvertedBalance: 0, redeemablePoints: 0 },
+    monthUsage: { capMonthKey: '2026-10', pointsUsed: 0, pointsCap: 60_000 },
+    impactGrams: null,
+    thresholds: { mailinMinPoints: 15_000, pickupMinPoints: 10_000, maxOpenRequests: 3 },
+    items: [],
+    openRequests: [],
+    deskPoints: [],
     ...over,
   };
 }

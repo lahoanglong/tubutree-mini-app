@@ -161,7 +161,7 @@ describe('body PATCH/PUT: null không phải "bỏ trường" (R5-ADMIN-1)', () 
       'PATCH /admin/coupons/:id',
       'PATCH /admin/flash-sales/:id',
       'PATCH /admin/merchant-fulfilment/stores/:storefrontId/terms',
-      'PATCH /admin/refill-locations/:id',
+      'PATCH /admin/waste/points/:id',
       ...PASS_THROUGH_POSTS,
     ]) {
       expect(byRoute(route)).toBeDefined();

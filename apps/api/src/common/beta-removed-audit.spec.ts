@@ -177,7 +177,7 @@ describe('turbo.json băm scripts/audit và scripts/uiux cho test của apps/api
   });
 
   it('inputs giữ file mặc định của package và thêm hai thư mục script ngoài package', () => {
-    expect(apiTest?.inputs).toEqual(['$TURBO_DEFAULT$', '$TURBO_ROOT$/scripts/audit/**', '$TURBO_ROOT$/scripts/uiux/**']);
+    expect(apiTest?.inputs).toEqual(['$TURBO_DEFAULT$', '$TURBO_ROOT$/scripts/audit/**', '$TURBO_ROOT$/scripts/uiux/**', '$TURBO_ROOT$/docs/**', '$TURBO_ROOT$/README.md']);
   });
 
   it('không làm mất dependsOn và outputs của task test chung', () => {

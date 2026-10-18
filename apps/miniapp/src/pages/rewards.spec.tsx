@@ -155,6 +155,14 @@ describe('/rewards Kho quà (§4.8)', () => {
     await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(2));
     expect(mocks.redeemLoyaltyReward.mock.calls.map((c) => c[1])).toEqual(['key-2', 'key-2']);
   });
+  it('đổi lỗi: làm mới danh sách quà để số dư và tồn hiện đúng', async () => {
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(new Error('Quà này đã hết hoặc đã ngừng đổi'));
+    const { invalidate } = renderPage();
+    fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['loyalty-rewards'] });
+  });
   it('lỗi mạng, đóng khung rồi mở lại CÙNG quà → vẫn CÙNG khoá (§16.1)', async () => {
     mocks.redeemLoyaltyReward.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValue({ success: true, message: 'ok', pointsSpent: 20_000, remainingPoints: 10_000, redemption: makeGiftRedemption({ giftKind: 'VOUCHER' }), coupon: { code: 'X', type: 'FREESHIP', value: 0, minOrder: null, maxDiscount: null, endAt: '2026-11-16T16:59:59.000Z' } });
     renderPage();

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, ShieldCheck, Check, X, Clock, Plus, MessagesSquare, Download } from 'lucide-react';
+import { UserPlus, ShieldCheck, Check, X, Clock, Plus, MessagesSquare } from 'lucide-react';
 import { listStaff, grantStaff, revokeStaff, type StaffRole } from '../services/staff-api';
 import {
   adminGetShifts,
@@ -35,15 +35,13 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { PageHeader } from '../components/ui/page-header';
-import { QuantitySelector } from '../components/ui/quantity-selector';
-import { SearchField } from '../components/ui/search-field';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
 import { PeriodNav } from '../components/period-nav';
-import { formatVnd, formatDateTime } from '../utils/format';
+import { formatVnd } from '../utils/format';
 import {
   mondayKeyOf,
   addDaysKey,
@@ -58,13 +56,6 @@ import {
   shiftYearMonth,
   vnDateKey,
 } from '../utils/week';
-
-import {
-  getPendingRefillReturns,
-  approveRefillReturn,
-  rejectRefillReturn,
-  type PendingRefillItem,
-} from '../services/refill-api';
 
 export default function AdminPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -81,13 +72,12 @@ export default function AdminPage() {
   return <AdminHub />;
 }
 
-type Tab = 'staff' | 'shifts' | 'payroll' | 'refill';
+type Tab = 'staff' | 'shifts' | 'payroll';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'staff', label: 'Nhân sự' },
   { key: 'shifts', label: 'Duyệt ca' },
   { key: 'payroll', label: 'Lương' },
-  { key: 'refill', label: 'Duyệt đổi vỏ' },
 ];
 
 const SECTION_STYLE = { padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 } as const;
@@ -111,10 +101,8 @@ function AdminHub() {
           <StaffSection />
         ) : tab === 'shifts' ? (
           <ShiftsSection />
-        ) : tab === 'payroll' ? (
-          <PayrollSection />
         ) : (
-          <RefillAdminSection />
+          <PayrollSection />
         )}
       </div>
     </Page>
@@ -972,192 +960,5 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
         </div>
       </div>
     </BottomSheet>
-  );
-}
-
-/**
- * Escape 1 field CSV chứa dữ liệu do người dùng nhập (tên, SĐT...):
- * - Nhân đôi dấu " để không vỡ cấu trúc cột (VD tên có dấu ngoặc kép).
- * - Nếu bắt đầu bằng =, +, -, @ thì thêm ' phía trước để Excel/Sheets
- *   không hiểu nhầm là công thức (CSV/formula injection).
- */
-function csvField(value: string): string {
-  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
-  return `"${safe.replace(/"/g, '""')}"`;
-}
-
-function RefillAdminSection() {
-  const qc = useQueryClient();
-  const { openSnackbar } = useSnackbar();
-  const [filterText, setFilterText] = useState('');
-  const [received, setReceived] = useState<Record<string, number>>({});
-  const pendingQ = useQuery({ queryKey: ['admin-refill-pending'], queryFn: getPendingRefillReturns });
-
-  const approveM = useMutation({
-    mutationFn: ({ id, receivedQuantity }: { id: string; receivedQuantity: number }) => approveRefillReturn(id, receivedQuantity),
-    onSuccess: () => {
-      openSnackbar({ text: 'Đã duyệt yêu cầu đổi vỏ chai.', type: 'success' });
-      qc.invalidateQueries({ queryKey: ['admin-refill-pending'] });
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const rejectM = useMutation({
-    mutationFn: (id: string) => rejectRefillReturn(id),
-    onSuccess: () => {
-      openSnackbar({ text: 'Đã từ chối yêu cầu.', type: 'info' });
-      qc.invalidateQueries({ queryKey: ['admin-refill-pending'] });
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const filteredItems = pendingQ.data?.filter((r: PendingRefillItem) => {
-    if (!filterText.trim()) return true;
-    const q = filterText.toLowerCase();
-    const name = (r.user.fullName ?? '').toLowerCase();
-    const phone = (r.user.phone ?? '').toLowerCase();
-    return name.includes(q) || phone.includes(q);
-  }) ?? [];
-
-  const exportCsv = () => {
-    // Xuất đúng những gì admin đang thấy trên màn hình (đã lọc theo ô tìm kiếm),
-    // KHÔNG xuất toàn bộ pendingQ.data — kẻo CSV lệch với danh sách đang lọc.
-    if (filteredItems.length === 0) {
-      openSnackbar({ text: 'Không có dữ liệu để xuất CSV', type: 'info' });
-      return;
-    }
-    const headers = ['ID', 'Khách hàng', 'SĐT', 'Số vỏ chai', 'Số nước', 'Thời gian', 'Điểm nhận'];
-    const rows = filteredItems.map((r: PendingRefillItem) => [
-      r.id,
-      csvField(r.user.fullName ?? ''),
-      csvField(r.user.phone ?? ''),
-      r.quantity,
-      r.seedsAwarded,
-      csvField(formatDateTime(r.createdAt)),
-      csvField(r.pickupLocation?.name ?? ''),
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `bao_cao_doi_vo_chai_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    openSnackbar({ text: 'Đã xuất file báo cáo CSV!', type: 'success' });
-  };
-
-  return (
-    <div style={SECTION_STYLE}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <Heading variant="title-md" as="h2">
-          Duyệt đổi vỏ chai ({filteredItems.length})
-        </Heading>
-        <Button variant="secondary" icon={Download} onPress={exportCsv}>
-          Xuất CSV
-        </Button>
-      </div>
-
-      <SearchField
-        value={filterText}
-        onChange={setFilterText}
-        onSubmit={() => undefined}
-        label="Tìm theo tên hoặc SĐT"
-        clearLabel="Xoá từ khoá tìm"
-        placeholder="Tìm theo tên hoặc SĐT..."
-      />
-
-      {pendingQ.isLoading && <Skeleton height={100} radius="var(--radius-card)" />}
-      {pendingQ.isError && <ErrorState message={getErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />}
-
-      {pendingQ.data && filteredItems.length === 0 && (
-        <EmptyState
-          art={filterText ? 'search' : 'box'}
-          heading={filterText ? 'Không tìm thấy yêu cầu phù hợp' : 'Không có yêu cầu đổi vỏ chai nào đang chờ duyệt'}
-        />
-      )}
-
-      {filteredItems.map((r: PendingRefillItem) => {
-        const name = r.user.fullName ?? r.user.phone ?? 'Khách hàng';
-        // Chỉ yêu cầu đang xử lý có spinner; mọi nút còn lại khoá để không duyệt và từ chối chồng nhau.
-        const approving = approveM.isPending && approveM.variables?.id === r.id;
-        const receivedQuantity = Math.min(received[r.id] ?? r.quantity, r.quantity);
-        const seedsPerBottle = r.quantity > 0 ? r.seedsAwarded / r.quantity : 0;
-        const seedsPreview = Math.round(receivedQuantity * seedsPerBottle);
-        const rejecting = rejectM.isPending && rejectM.variables === r.id;
-        return (
-          <Card key={r.id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Text as="div" style={{ fontWeight: 700 }}>
-                  {name}
-                </Text>
-                <Text variant="caption" tone="secondary" as="div">
-                  {r.user.phone ?? '—'} · Đổi <strong>{r.quantity} vỏ</strong> (+{r.seedsAwarded})
-                </Text>
-                {r.pickupLocation && (
-                  <Text variant="caption" tone="secondary" as="div">
-                    Mang tới: {r.pickupLocation.name} · {r.pickupLocation.address}
-                  </Text>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <Button
-                  variant="ghost"
-                  icon={Check}
-                  aria-label={`Duyệt · ${name}`}
-                  loading={approving}
-                  disabled={rejectM.isPending || (approveM.isPending && !approving)}
-                  onPress={() => approveM.mutate({ id: r.id, receivedQuantity })}
-                >
-                  Duyệt
-                </Button>
-                <Button
-                  variant="ghost"
-                  icon={X}
-                  aria-label={`Từ chối · ${name}`}
-                  style={{ color: 'var(--color-text-danger)' }}
-                  loading={rejecting}
-                  disabled={approveM.isPending || (rejectM.isPending && !rejecting)}
-                  onPress={() => rejectM.mutate(r.id)}
-                >
-                  Từ chối
-                </Button>
-              </div>
-            </div>
-            {r.quantity > 1 && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                  marginTop: 12,
-                  paddingTop: 12,
-                  borderTop: '1px solid var(--color-border-subtle)',
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <Text as="div" style={{ fontWeight: 600 }}>
-                    Vỏ thực nhận
-                  </Text>
-                  <Text variant="caption" tone="secondary" as="div">
-                    Đếm tại điểm nhận · +{seedsPreview} giọt nước
-                  </Text>
-                </div>
-                <QuantitySelector
-                  size="sm"
-                  value={receivedQuantity}
-                  min={1}
-                  max={r.quantity}
-                  onChange={(n) => setReceived((prev) => ({ ...prev, [r.id]: n }))}
-                />
-              </div>
-            )}
-          </Card>
-        );
-      })}
-    </div>
   );
 }

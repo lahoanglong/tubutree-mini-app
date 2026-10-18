@@ -321,7 +321,7 @@
       ]
     },
     {
-      "pattern": "/refill",
+      "pattern": "/recycle",
       "personas": [
         "new_customer",
         "active_customer",
@@ -332,7 +332,107 @@
         "admin"
       ],
       "examples": [
-        "/refill"
+        "/recycle"
+      ]
+    },
+    {
+      "pattern": "/recycle/rules",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/recycle/rules"
+      ]
+    },
+    {
+      "pattern": "/recycle/new",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/recycle/new"
+      ]
+    },
+    {
+      "pattern": "/recycle/points",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/recycle/points"
+      ]
+    },
+    {
+      "pattern": "/recycle/requests",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/recycle/requests"
+      ]
+    },
+    {
+      "pattern": "/rewards",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/rewards"
+      ]
+    },
+    {
+      "pattern": "/rewards/mine",
+      "personas": [
+        "new_customer",
+        "active_customer",
+        "ctv",
+        "dealer",
+        "brand_owner",
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/rewards/mine"
+      ]
+    },
+    {
+      "pattern": "/recycle/desk",
+      "personas": [
+        "staff",
+        "admin"
+      ],
+      "examples": [
+        "/recycle/desk"
       ]
     },
     {

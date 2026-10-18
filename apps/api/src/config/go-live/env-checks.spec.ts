@@ -181,6 +181,12 @@ describe('evaluateEnv', () => {
       expect(status({ GOMDON_PHONE: '' }, 'env.gomdon.credentials')).toBe('FAIL');
     });
     it('đặt đủ thì PASS', () => expect(status({}, 'env.gomdon.credentials')).toBe('PASS'));
+    it('tiêu đề và cách sửa nói đúng đường Thu kèm đơn', () => {
+      const r = byId(evaluateEnv(envWith({ GOMDON_PHONE: '', GOMDON_PASSWORD: '' })), 'env.gomdon.credentials');
+      expect(r.title).toBe('Tài khoản Gomdon (Thu kèm đơn)');
+      expect(r.hint).toContain('Chưa đặt thì cách Thu kèm đơn không mở được cho khách.');
+      expect(r.hint).not.toContain('tái chế');
+    });
     it('đã có tài khoản mà thiếu token webhook thì FAIL', () => {
       expect(status({ GOMDON_WEBHOOK_SECRET: '' }, 'env.gomdon.webhook_secret')).toBe('FAIL');
     });

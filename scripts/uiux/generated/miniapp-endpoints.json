@@ -1199,7 +1199,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:189"
+   "apps/miniapp/src/services/affiliate-api.ts:197"
   ]
  },
  {
@@ -1252,7 +1252,17 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:187"
+   "apps/miniapp/src/services/affiliate-api.ts:195"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/affiliate/click",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/miniapp/src/services/affiliate-api.ts:209"
   ]
  },
  {
@@ -1334,7 +1344,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:134"
+   "apps/miniapp/src/services/affiliate-api.ts:142"
   ]
  },
  {
@@ -1417,7 +1427,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:276"
+   "apps/miniapp/src/services/affiliate-api.ts:301"
   ]
  },
  {
@@ -1515,7 +1525,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:128"
+   "apps/miniapp/src/services/affiliate-api.ts:136"
   ]
  },
  {
@@ -1578,7 +1588,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:130"
+   "apps/miniapp/src/services/affiliate-api.ts:138"
   ]
  },
  {
@@ -1638,7 +1648,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:132"
+   "apps/miniapp/src/services/affiliate-api.ts:140"
   ]
  },
  {
@@ -1652,6 +1662,24 @@
       "k": "bool"
      },
      "opt": false
+    },
+    "canRegister": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "canOrderForCustomer": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "canOpenStorefront": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
     },
     "referralCode": {
      "s": {
@@ -1718,7 +1746,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:113"
+   "apps/miniapp/src/services/affiliate-api.ts:121"
   ]
  },
  {
@@ -1754,7 +1782,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:118"
+   "apps/miniapp/src/services/affiliate-api.ts:126"
   ]
  },
  {
@@ -1940,7 +1968,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:115"
+   "apps/miniapp/src/services/affiliate-api.ts:123"
   ]
  },
  {
@@ -2037,7 +2065,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:258"
+   "apps/miniapp/src/services/affiliate-api.ts:283"
   ]
  },
  {
@@ -2114,7 +2142,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:235"
+   "apps/miniapp/src/services/affiliate-api.ts:260"
   ]
  },
  {
@@ -2212,7 +2240,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:143"
+   "apps/miniapp/src/services/affiliate-api.ts:151"
   ]
  },
  {
@@ -2260,7 +2288,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:155"
+   "apps/miniapp/src/services/affiliate-api.ts:163"
   ]
  },
  {
@@ -2284,7 +2312,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:126"
+   "apps/miniapp/src/services/affiliate-api.ts:134"
   ]
  },
  {
@@ -2393,7 +2421,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:172"
+   "apps/miniapp/src/services/affiliate-api.ts:180"
   ]
  },
  {
@@ -2484,7 +2512,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:114"
+   "apps/miniapp/src/services/affiliate-api.ts:122"
   ]
  },
  {
@@ -2502,7 +2530,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/affiliate-api.ts:193"
+   "apps/miniapp/src/services/affiliate-api.ts:218"
   ]
  },
  {
@@ -2690,7 +2718,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/api.ts:230"
+   "apps/miniapp/src/services/api.ts:233"
   ]
  },
  {
@@ -2801,7 +2829,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/api.ts:210"
+   "apps/miniapp/src/services/api.ts:213"
   ]
  },
  {
@@ -2912,7 +2940,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/api.ts:215"
+   "apps/miniapp/src/services/api.ts:218"
   ]
  },
  {
@@ -3023,7 +3051,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/api.ts:200"
+   "apps/miniapp/src/services/api.ts:202"
   ]
  },
  {
@@ -3846,9 +3874,9 @@
          "s": {
           "k": "enum",
           "v": [
-           "TOUR",
            "GIFT",
-           "OTHER"
+           "OTHER",
+           "TOUR"
           ]
          },
          "opt": false
@@ -3912,7 +3940,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:301"
+   "apps/miniapp/src/services/shop-api.ts:318"
   ]
  },
  {
@@ -4185,7 +4213,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:445"
+   "apps/miniapp/src/services/shop-api.ts:462"
   ]
  },
  {
@@ -4458,7 +4486,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:444"
+   "apps/miniapp/src/services/shop-api.ts:461"
   ]
  },
  {
@@ -4731,7 +4759,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:442"
+   "apps/miniapp/src/services/shop-api.ts:459"
   ]
  },
  {
@@ -5004,7 +5032,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:440"
+   "apps/miniapp/src/services/shop-api.ts:457"
   ]
  },
  {
@@ -5277,7 +5305,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:436"
+   "apps/miniapp/src/services/shop-api.ts:453"
   ]
  },
  {
@@ -5550,8 +5578,8 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:430",
-   "apps/miniapp/src/services/shop-api.ts:433"
+   "apps/miniapp/src/services/shop-api.ts:447",
+   "apps/miniapp/src/services/shop-api.ts:450"
   ]
  },
  {
@@ -5752,8 +5780,8 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:383",
-   "apps/miniapp/src/services/storefront-api.ts:42"
+   "apps/miniapp/src/services/shop-api.ts:400",
+   "apps/miniapp/src/services/storefront-api.ts:53"
   ]
  },
  {
@@ -5806,7 +5834,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:457"
+   "apps/miniapp/src/services/shop-api.ts:474"
   ]
  },
  {
@@ -6280,7 +6308,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:484"
+   "apps/miniapp/src/services/shop-api.ts:500"
   ]
  },
  {
@@ -6482,7 +6510,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:454"
+   "apps/miniapp/src/services/shop-api.ts:471"
   ]
  },
  {
@@ -6541,11 +6569,37 @@
      },
      "opt": false
     },
-    "recyclingEnabled": {
+    "waste": {
      "s": {
-      "k": "bool"
+      "k": "obj",
+      "props": {
+       "enabled": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": false
+       },
+       "dropoff": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": false
+       },
+       "mailin": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": false
+       },
+       "pickup": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": false
+       }
+      }
      },
-     "opt": true
+     "opt": false
     },
     "shippingEta": {
      "s": {
@@ -6618,11 +6672,244 @@
       }
      },
      "opt": true
+    },
+    "newCustomer": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "welcomeVoucher": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "amount": {
+           "s": {
+            "k": "num"
+           },
+           "opt": false
+          },
+          "minOrder": {
+           "s": {
+            "k": "num"
+           },
+           "opt": false
+          }
+         }
+        },
+        "opt": false
+       },
+       "firstOrderFreeShip": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "enabled": {
+           "s": {
+            "k": "bool"
+           },
+           "opt": false
+          },
+          "minSubtotal": {
+           "s": {
+            "k": "num"
+           },
+           "opt": false
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    },
+    "loyalty": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "earnPct": {
+        "s": {
+         "k": "num"
+        },
+        "opt": true
+       },
+       "marketplaceEarnPct": {
+        "s": {
+         "k": "num"
+        },
+        "opt": true
+       },
+       "marketplaceClaimEnabled": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": true
+       },
+       "vndPerPoint": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "vndPerPointRedeem": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "maxRedeemPct": {
+        "s": {
+         "k": "num"
+        },
+        "opt": true
+       },
+       "pointExpireMonths": {
+        "s": {
+         "k": "num"
+        },
+        "opt": true
+       }
+      }
+     },
+     "opt": true
+    },
+    "homeNewCustomerLayout": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "aiAdvisorEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "communityPublicPreview": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "dealer": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "maxDiscountPct": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "reviewHours": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    },
+    "community": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "eventRewardMaxPoints": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "zaloGroupUrl": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "facebookUrl": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "tiktokUrl": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       }
+      }
+     },
+     "opt": true
     }
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:227"
+   "apps/miniapp/src/services/shop-api.ts:244"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/coupons/claim",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "type": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "PERCENT",
+       "AMOUNT",
+       "FREESHIP"
+      ]
+     },
+     "opt": false
+    },
+    "value": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "minOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "maxDiscount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "endAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "newCustomerOnly": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "alreadyClaimed": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/coupon-claim.ts:58"
   ]
  },
  {
@@ -8002,9 +8289,9 @@
          "s": {
           "k": "enum",
           "v": [
-           "TOUR",
            "GIFT",
-           "OTHER"
+           "OTHER",
+           "TOUR"
           ]
          },
          "opt": false
@@ -8256,7 +8543,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/miniapp/src/services/analytics.ts:54"
+   "apps/miniapp/src/services/analytics.ts:71"
   ]
  },
  {
@@ -8295,7 +8582,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/pages/about-data.ts:50"
+   "apps/miniapp/src/pages/about-data.ts:84"
   ]
  },
  {
@@ -8313,7 +8600,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:148"
+   "apps/miniapp/src/services/feed-api.ts:170"
   ]
  },
  {
@@ -8399,7 +8686,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:140"
+   "apps/miniapp/src/services/feed-api.ts:162"
   ]
  },
  {
@@ -8417,7 +8704,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:145"
+   "apps/miniapp/src/services/feed-api.ts:167"
   ]
  },
  {
@@ -8435,7 +8722,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:132"
+   "apps/miniapp/src/services/feed-api.ts:154"
   ]
  },
  {
@@ -8453,8 +8740,8 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:129",
-   "apps/miniapp/src/services/feed-api.ts:200"
+   "apps/miniapp/src/services/feed-api.ts:151",
+   "apps/miniapp/src/services/feed-api.ts:222"
   ]
  },
  {
@@ -8691,7 +8978,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:119"
+   "apps/miniapp/src/services/feed-api.ts:141"
   ]
  },
  {
@@ -8709,7 +8996,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:127"
+   "apps/miniapp/src/services/feed-api.ts:149"
   ]
  },
  {
@@ -8727,7 +9014,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:153"
+   "apps/miniapp/src/services/feed-api.ts:175"
   ]
  },
  {
@@ -8745,7 +9032,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:189"
+   "apps/miniapp/src/services/feed-api.ts:211"
   ]
  },
  {
@@ -8763,7 +9050,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:207"
+   "apps/miniapp/src/services/feed-api.ts:229"
   ]
  },
  {
@@ -8781,7 +9068,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:192"
+   "apps/miniapp/src/services/feed-api.ts:214"
   ]
  },
  {
@@ -8838,7 +9125,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:236"
+   "apps/miniapp/src/services/feed-api.ts:258"
   ]
  },
  {
@@ -8939,7 +9226,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:223"
+   "apps/miniapp/src/services/feed-api.ts:245"
   ]
  },
  {
@@ -9005,7 +9292,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:186"
+   "apps/miniapp/src/services/feed-api.ts:208"
   ]
  },
  {
@@ -9023,7 +9310,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:197"
+   "apps/miniapp/src/services/feed-api.ts:219"
   ]
  },
  {
@@ -9128,7 +9415,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:194"
+   "apps/miniapp/src/services/feed-api.ts:216"
   ]
  },
  {
@@ -9185,7 +9472,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:204"
+   "apps/miniapp/src/services/feed-api.ts:226"
   ]
  },
  {
@@ -9203,7 +9490,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:242"
+   "apps/miniapp/src/services/feed-api.ts:264"
   ]
  },
  {
@@ -9457,7 +9744,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:214"
+   "apps/miniapp/src/services/feed-api.ts:236"
   ]
  },
  {
@@ -9475,7 +9762,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:245"
+   "apps/miniapp/src/services/feed-api.ts:267"
   ]
  },
  {
@@ -9550,7 +9837,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:210"
+   "apps/miniapp/src/services/feed-api.ts:232"
   ]
  },
  {
@@ -9622,7 +9909,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:239"
+   "apps/miniapp/src/services/feed-api.ts:261"
   ]
  },
  {
@@ -9667,7 +9954,134 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:121"
+   "apps/miniapp/src/services/feed-api.ts:143"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/feed/public-preview",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "posts": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "kind": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "MANUAL",
+           "HARVEST",
+           "MILESTONE",
+           "SPECIES",
+           "QUESTION",
+           "SHOWCASE",
+           "TIP"
+          ]
+         },
+         "opt": false
+        },
+        "title": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "snippet": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "image": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "author": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "badge": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "EXPERT"
+          ]
+         },
+         "opt": false
+        },
+        "category": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "slug": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "name": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "icon": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         },
+         "opt": false
+        },
+        "isPinned": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
+        },
+        "likeCount": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "commentCount": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/feed-api.ts:139"
   ]
  },
  {
@@ -9945,7 +10359,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/feed-api.ts:124"
+   "apps/miniapp/src/services/feed-api.ts:146"
   ]
  },
  {
@@ -10026,7 +10440,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:400"
+   "apps/miniapp/src/services/shop-api.ts:417"
   ]
  },
  {
@@ -10036,7 +10450,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:419"
+   "apps/miniapp/src/services/shop-api.ts:436"
   ]
  },
  {
@@ -10046,7 +10460,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:417"
+   "apps/miniapp/src/services/shop-api.ts:434"
   ]
  },
  {
@@ -10121,7 +10535,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:415"
+   "apps/miniapp/src/services/shop-api.ts:432"
   ]
  },
  {
@@ -12107,7 +12521,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:366"
+   "apps/miniapp/src/services/account-api.ts:387"
   ]
  },
  {
@@ -12185,7 +12599,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:364"
+   "apps/miniapp/src/services/account-api.ts:385"
   ]
  },
  {
@@ -12266,7 +12680,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:448"
+   "apps/miniapp/src/services/shop-api.ts:465"
   ]
  },
  {
@@ -12344,7 +12758,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:450"
+   "apps/miniapp/src/services/shop-api.ts:467"
   ]
  },
  {
@@ -12423,7 +12837,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:221"
+   "apps/miniapp/src/services/account-api.ts:215"
   ]
  },
  {
@@ -12453,7 +12867,195 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:141"
+   "apps/miniapp/src/services/account-api.ts:160"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/me/external-points/claims",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "data": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "channel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "maskedCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "state": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "PENDING",
+           "REVERSED",
+           "REVIEW",
+           "HELD_NO_MEMBER",
+           "CREDITED",
+           "VOIDED",
+           "LAPSED"
+          ]
+         },
+         "opt": false
+        },
+        "points": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "expectedCreditAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "creditedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "page": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "total": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "searching": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "maskedCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/external-points-api.ts:21"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/me/external-points/claims",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "CLAIMED",
+       "REVIEW",
+       "SEARCHING"
+      ]
+     },
+     "opt": false
+    },
+    "claimId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "channel": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "maskedCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "points": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "expectedCreditAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "message": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/external-points-api.ts:18"
   ]
  },
  {
@@ -12524,7 +13126,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:227"
+   "apps/miniapp/src/services/account-api.ts:226"
   ]
  },
  {
@@ -12572,7 +13174,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:228"
+   "apps/miniapp/src/services/account-api.ts:227"
   ]
  },
  {
@@ -12626,7 +13228,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:229"
+   "apps/miniapp/src/services/account-api.ts:228"
   ]
  },
  {
@@ -12656,6 +13258,310 @@
     "remainingPoints": {
      "s": {
       "k": "num"
+     },
+     "opt": false
+    },
+    "redemption": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "giftId": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "giftKind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "VOUCHER",
+          "TREE",
+          "SEED_PACK",
+          "GIFT"
+         ]
+        },
+        "opt": false
+       },
+       "giftName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "pointsCost": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "status": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "READY",
+          "FULFILLED",
+          "CANCELLED"
+         ]
+        },
+        "opt": false
+       },
+       "code": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "claimExpiresAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "claimPoint": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "name": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "addressLine": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "communeName": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "provinceName": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "openingHours": {
+           "s": {
+            "k": "obj",
+            "props": {
+             "MON": {
+              "s": {
+               "k": "arr",
+               "of": {
+                "k": "obj",
+                "props": {
+                 "open": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 },
+                 "close": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 }
+                }
+               }
+              },
+              "opt": true
+             },
+             "TUE": {
+              "s": {
+               "k": "arr",
+               "of": {
+                "k": "obj",
+                "props": {
+                 "open": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 },
+                 "close": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 }
+                }
+               }
+              },
+              "opt": true
+             },
+             "WED": {
+              "s": {
+               "k": "arr",
+               "of": {
+                "k": "obj",
+                "props": {
+                 "open": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 },
+                 "close": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 }
+                }
+               }
+              },
+              "opt": true
+             },
+             "THU": {
+              "s": {
+               "k": "arr",
+               "of": {
+                "k": "obj",
+                "props": {
+                 "open": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 },
+                 "close": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 }
+                }
+               }
+              },
+              "opt": true
+             },
+             "FRI": {
+              "s": {
+               "k": "arr",
+               "of": {
+                "k": "obj",
+                "props": {
+                 "open": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 },
+                 "close": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 }
+                }
+               }
+              },
+              "opt": true
+             },
+             "SAT": {
+              "s": {
+               "k": "arr",
+               "of": {
+                "k": "obj",
+                "props": {
+                 "open": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 },
+                 "close": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 }
+                }
+               }
+              },
+              "opt": true
+             },
+             "SUN": {
+              "s": {
+               "k": "arr",
+               "of": {
+                "k": "obj",
+                "props": {
+                 "open": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 },
+                 "close": {
+                  "s": {
+                   "k": "any"
+                  },
+                  "opt": false
+                 }
+                }
+               }
+              },
+              "opt": true
+             }
+            }
+           },
+           "opt": false
+          }
+         }
+        },
+        "opt": false
+       },
+       "fulfilledAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "cancelledAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "cancelReason": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "refundedPoints": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "couponCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "createdAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
      },
      "opt": false
     },
@@ -12703,29 +13609,6 @@
          "k": "str"
         },
         "opt": false
-       },
-       "products": {
-        "s": {
-         "k": "arr",
-         "of": {
-          "k": "obj",
-          "props": {
-           "id": {
-            "s": {
-             "k": "str"
-            },
-            "opt": false
-           },
-           "name": {
-            "s": {
-             "k": "str"
-            },
-            "opt": false
-           }
-          }
-         }
-        },
-        "opt": true
        }
       }
      },
@@ -12734,7 +13617,318 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:224"
+   "apps/miniapp/src/services/account-api.ts:220"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/me/loyalty/rewards/mine",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "giftId": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "giftKind": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "VOUCHER",
+        "TREE",
+        "SEED_PACK",
+        "GIFT"
+       ]
+      },
+      "opt": false
+     },
+     "giftName": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "pointsCost": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "status": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "READY",
+        "FULFILLED",
+        "CANCELLED"
+       ]
+      },
+      "opt": false
+     },
+     "code": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "claimExpiresAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "claimPoint": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "addressLine": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "communeName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "provinceName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "openingHours": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "MON": {
+            "s": {
+             "k": "arr",
+             "of": {
+              "k": "obj",
+              "props": {
+               "open": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "close": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               }
+              }
+             }
+            },
+            "opt": true
+           },
+           "TUE": {
+            "s": {
+             "k": "arr",
+             "of": {
+              "k": "obj",
+              "props": {
+               "open": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "close": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               }
+              }
+             }
+            },
+            "opt": true
+           },
+           "WED": {
+            "s": {
+             "k": "arr",
+             "of": {
+              "k": "obj",
+              "props": {
+               "open": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "close": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               }
+              }
+             }
+            },
+            "opt": true
+           },
+           "THU": {
+            "s": {
+             "k": "arr",
+             "of": {
+              "k": "obj",
+              "props": {
+               "open": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "close": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               }
+              }
+             }
+            },
+            "opt": true
+           },
+           "FRI": {
+            "s": {
+             "k": "arr",
+             "of": {
+              "k": "obj",
+              "props": {
+               "open": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "close": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               }
+              }
+             }
+            },
+            "opt": true
+           },
+           "SAT": {
+            "s": {
+             "k": "arr",
+             "of": {
+              "k": "obj",
+              "props": {
+               "open": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "close": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               }
+              }
+             }
+            },
+            "opt": true
+           },
+           "SUN": {
+            "s": {
+             "k": "arr",
+             "of": {
+              "k": "obj",
+              "props": {
+               "open": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "close": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               }
+              }
+             }
+            },
+            "opt": true
+           }
+          }
+         },
+         "opt": false
+        }
+       }
+      },
+      "opt": false
+     },
+     "fulfilledAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "cancelledAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "cancelReason": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "refundedPoints": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "couponCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "createdAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/account-api.ts:225"
   ]
  },
  {
@@ -12749,17 +13943,230 @@
      },
      "opt": false
     },
+    "pointsConvertedBalance": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
     "lockedPoints": {
      "s": {
       "k": "num"
      },
-     "opt": true
+     "opt": false
     },
     "redeemablePoints": {
      "s": {
       "k": "num"
      },
-     "opt": true
+     "opt": false
+    },
+    "giftClaimDays": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "claimPoint": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
     },
     "rewards": {
      "s": {
@@ -12773,7 +14180,19 @@
          },
          "opt": false
         },
-        "title": {
+        "kind": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "VOUCHER",
+           "TREE",
+           "SEED_PACK",
+           "GIFT"
+          ]
+         },
+         "opt": false
+        },
+        "name": {
          "s": {
           "k": "str"
          },
@@ -12785,50 +14204,94 @@
          },
          "opt": false
         },
+        "label": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
         "pointsCost": {
          "s": {
           "k": "num"
          },
          "opt": false
         },
-        "type": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "PERCENT",
-           "AMOUNT",
-           "FREESHIP"
-          ]
-         },
-         "opt": false
-        },
-        "value": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "minOrder": {
-         "s": {
-          "k": "num"
-         },
-         "opt": true
-        },
-        "maxDiscount": {
-         "s": {
-          "k": "num"
-         },
-         "opt": true
-        },
-        "badge": {
+        "imageUrl": {
          "s": {
           "k": "str"
          },
-         "opt": true
+         "opt": false
+        },
+        "stockRemaining": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "soldOut": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
         },
         "canRedeem": {
          "s": {
           "k": "bool"
+         },
+         "opt": false
+        },
+        "claimInstructions": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "voucher": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "type": {
+            "s": {
+             "k": "enum",
+             "v": [
+              "PERCENT",
+              "AMOUNT",
+              "FREESHIP"
+             ]
+            },
+            "opt": false
+           },
+           "value": {
+            "s": {
+             "k": "num"
+            },
+            "opt": false
+           },
+           "minOrder": {
+            "s": {
+             "k": "num"
+            },
+            "opt": false
+           },
+           "maxDiscount": {
+            "s": {
+             "k": "num"
+            },
+            "opt": false
+           },
+           "validDays": {
+            "s": {
+             "k": "num"
+            },
+            "opt": false
+           }
+          }
+         },
+         "opt": false
+        },
+        "sortOrder": {
+         "s": {
+          "k": "num"
          },
          "opt": false
         }
@@ -12840,7 +14303,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:222"
+   "apps/miniapp/src/services/account-api.ts:218"
   ]
  },
  {
@@ -12887,6 +14350,12 @@
      },
      "opt": true
     },
+    "earnMultiplier": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    },
     "pointsTotal": {
      "s": {
       "k": "num"
@@ -12900,6 +14369,12 @@
      "opt": true
     },
     "tierPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    },
+    "spent12m": {
      "s": {
       "k": "num"
      },
@@ -12994,6 +14469,12 @@
          "k": "num"
         },
         "opt": false
+       },
+       "spendingToGo": {
+        "s": {
+         "k": "num"
+        },
+        "opt": true
        }
       }
      },
@@ -13044,6 +14525,12 @@
      "s": {
       "k": "obj",
       "props": {
+       "earnPct": {
+        "s": {
+         "k": "num"
+        },
+        "opt": true
+       },
        "vndPerPoint": {
         "s": {
          "k": "num"
@@ -13069,7 +14556,68 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:218"
+   "apps/miniapp/src/services/account-api.ts:212"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/me/new-customer-offer",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "isNewCustomer": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "welcomeVoucher": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "code": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "type": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "PERCENT",
+          "AMOUNT",
+          "FREESHIP"
+         ]
+        },
+        "opt": false
+       },
+       "value": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "minOrder": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "endAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/account-api.ts:217"
   ]
  },
  {
@@ -13087,7 +14635,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:358"
+   "apps/miniapp/src/services/account-api.ts:379"
   ]
  },
  {
@@ -13159,7 +14707,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:360"
+   "apps/miniapp/src/services/account-api.ts:381"
   ]
  },
  {
@@ -13226,7 +14774,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:356"
+   "apps/miniapp/src/services/account-api.ts:377"
   ]
  },
  {
@@ -13283,7 +14831,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:132"
+   "apps/miniapp/src/services/account-api.ts:151"
   ]
  },
  {
@@ -13344,7 +14892,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:220"
+   "apps/miniapp/src/services/account-api.ts:214"
   ]
  },
  {
@@ -13451,7 +14999,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:657"
+   "apps/miniapp/src/services/shop-api.ts:673"
   ]
  },
  {
@@ -13536,7 +15084,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:217"
+   "apps/miniapp/src/services/account-api.ts:211"
   ]
  },
  {
@@ -13567,9 +15115,9 @@
      "s": {
       "k": "enum",
       "v": [
+       "CANCELLED",
        "ACTIVE",
-       "PAUSED",
-       "CANCELLED"
+       "PAUSED"
       ]
      },
      "opt": false
@@ -13691,9 +15239,9 @@
      "s": {
       "k": "enum",
       "v": [
+       "CANCELLED",
        "ACTIVE",
-       "PAUSED",
-       "CANCELLED"
+       "PAUSED"
       ]
      },
      "opt": false
@@ -13815,9 +15363,9 @@
      "s": {
       "k": "enum",
       "v": [
+       "CANCELLED",
        "ACTIVE",
-       "PAUSED",
-       "CANCELLED"
+       "PAUSED"
       ]
      },
      "opt": false
@@ -13941,9 +15489,9 @@
       "s": {
        "k": "enum",
        "v": [
+        "CANCELLED",
         "ACTIVE",
-        "PAUSED",
-        "CANCELLED"
+        "PAUSED"
        ]
       },
       "opt": false
@@ -14066,9 +15614,9 @@
      "s": {
       "k": "enum",
       "v": [
+       "CANCELLED",
        "ACTIVE",
-       "PAUSED",
-       "CANCELLED"
+       "PAUSED"
       ]
      },
      "opt": false
@@ -14293,7 +15841,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:337"
+   "apps/miniapp/src/services/account-api.ts:358"
   ]
  },
  {
@@ -14341,7 +15889,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:335"
+   "apps/miniapp/src/services/account-api.ts:356"
   ]
  },
  {
@@ -14534,7 +16082,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:128"
+   "apps/miniapp/src/services/account-api.ts:147"
   ]
  },
  {
@@ -14591,7 +16139,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:130"
+   "apps/miniapp/src/services/account-api.ts:149"
   ]
  },
  {
@@ -15008,7 +16556,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:665"
+   "apps/miniapp/src/services/shop-api.ts:681"
   ]
  },
  {
@@ -15587,7 +17135,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:695"
+   "apps/miniapp/src/services/shop-api.ts:711"
   ]
  },
  {
@@ -15664,7 +17212,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:717"
+   "apps/miniapp/src/services/shop-api.ts:733"
   ]
  },
  {
@@ -15810,7 +17358,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:705"
+   "apps/miniapp/src/services/shop-api.ts:721"
   ]
  },
  {
@@ -15819,18 +17367,6 @@
   "schema": {
    "k": "obj",
    "props": {
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "createdAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
     "code": {
      "s": {
       "k": "str"
@@ -15844,6 +17380,18 @@
        "DEALER",
        "RETAIL"
       ]
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
      },
      "opt": false
     },
@@ -16352,7 +17900,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:630"
+   "apps/miniapp/src/services/shop-api.ts:646"
   ]
  },
  {
@@ -16370,7 +17918,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:633"
+   "apps/miniapp/src/services/shop-api.ts:649"
   ]
  },
  {
@@ -16408,7 +17956,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:747"
+   "apps/miniapp/src/services/shop-api.ts:763"
   ]
  },
  {
@@ -16526,7 +18074,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:749"
+   "apps/miniapp/src/services/shop-api.ts:765"
   ]
  },
  {
@@ -16647,7 +18195,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:744"
+   "apps/miniapp/src/services/shop-api.ts:760"
   ]
  },
  {
@@ -16796,7 +18344,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:740"
+   "apps/miniapp/src/services/shop-api.ts:756"
   ]
  },
  {
@@ -16811,18 +18359,6 @@
       "of": {
        "k": "obj",
        "props": {
-        "id": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "createdAt": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
         "code": {
          "s": {
           "k": "str"
@@ -16836,6 +18372,18 @@
            "DEALER",
            "RETAIL"
           ]
+         },
+         "opt": false
+        },
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
          },
          "opt": false
         },
@@ -17375,7 +18923,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:619"
+   "apps/miniapp/src/services/shop-api.ts:635"
   ]
  },
  {
@@ -17554,7 +19102,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:308"
+   "apps/miniapp/src/services/shop-api.ts:325"
   ]
  },
  {
@@ -17641,7 +19189,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:303"
+   "apps/miniapp/src/services/shop-api.ts:320"
   ]
  },
  {
@@ -17757,7 +19305,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:542"
+   "apps/miniapp/src/services/shop-api.ts:558"
   ]
  },
  {
@@ -17864,7 +19412,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:510"
+   "apps/miniapp/src/services/shop-api.ts:526"
   ]
  },
  {
@@ -17933,7 +19481,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:576"
+   "apps/miniapp/src/services/shop-api.ts:592"
   ]
  },
  {
@@ -18161,7 +19709,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:299"
+   "apps/miniapp/src/services/shop-api.ts:316"
   ]
  },
  {
@@ -18248,7 +19796,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:306"
+   "apps/miniapp/src/services/shop-api.ts:323"
   ]
  },
  {
@@ -18369,418 +19917,10 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:235",
-   "apps/miniapp/src/services/shop-api.ts:248",
-   "apps/miniapp/src/services/shop-api.ts:251",
-   "apps/miniapp/src/services/shop-api.ts:266"
-  ]
- },
- {
-  "method": "POST",
-  "path": "/refill/admin/:id/approve",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "ok": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/miniapp/src/services/refill-api.ts:95"
-  ]
- },
- {
-  "method": "POST",
-  "path": "/refill/admin/:id/reject",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "ok": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/miniapp/src/services/refill-api.ts:97"
-  ]
- },
- {
-  "method": "GET",
-  "path": "/refill/admin/pending",
-  "schema": {
-   "k": "arr",
-   "of": {
-    "k": "obj",
-    "props": {
-     "id": {
-      "s": {
-       "k": "str"
-      },
-      "opt": false
-     },
-     "quantity": {
-      "s": {
-       "k": "num"
-      },
-      "opt": false
-     },
-     "seedsAwarded": {
-      "s": {
-       "k": "num"
-      },
-      "opt": false
-     },
-     "status": {
-      "s": {
-       "k": "enum",
-       "v": [
-        "APPROVED",
-        "REJECTED",
-        "PENDING"
-       ]
-      },
-      "opt": false
-     },
-     "createdAt": {
-      "s": {
-       "k": "str"
-      },
-      "opt": false
-     },
-     "user": {
-      "s": {
-       "k": "obj",
-       "props": {
-        "id": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "fullName": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "phone": {
-         "s": {
-          "k": "str"
-         },
-         "opt": true
-        },
-        "avatarUrl": {
-         "s": {
-          "k": "str"
-         },
-         "opt": true
-        }
-       }
-      },
-      "opt": false
-     },
-     "pickupLocation": {
-      "s": {
-       "k": "obj",
-       "props": {
-        "id": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "name": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "address": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        }
-       }
-      },
-      "opt": true
-     }
-    }
-   }
-  },
-  "sources": [
-   "apps/miniapp/src/services/refill-api.ts:92"
-  ]
- },
- {
-  "method": "GET",
-  "path": "/refill/me",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "pickup": {
-     "s": {
-      "k": "obj",
-      "props": {
-       "address": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "hours": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "phone": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       }
-      }
-     },
-     "opt": true
-    },
-    "pickupLocations": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "id": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "name": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "address": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "hours": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "phone": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        }
-       }
-      }
-     },
-     "opt": true
-    },
-    "perBottle": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "monthlyCap": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "monthlyUsed": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "monthlyRemaining": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "totalRecycled": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "history": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "id": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "quantity": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "seedsAwarded": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "status": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "APPROVED",
-           "REJECTED",
-           "PENDING"
-          ]
-         },
-         "opt": false
-        },
-        "createdAt": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "declaredQuantity": {
-         "s": {
-          "k": "num"
-         },
-         "opt": true
-        },
-        "rejectionReason": {
-         "s": {
-          "k": "str"
-         },
-         "opt": true
-        },
-        "pickupLocation": {
-         "s": {
-          "k": "obj",
-          "props": {
-           "id": {
-            "s": {
-             "k": "str"
-            },
-            "opt": false
-           },
-           "name": {
-            "s": {
-             "k": "str"
-            },
-            "opt": false
-           },
-           "address": {
-            "s": {
-             "k": "str"
-            },
-            "opt": true
-           },
-           "hours": {
-            "s": {
-             "k": "str"
-            },
-            "opt": true
-           },
-           "phone": {
-            "s": {
-             "k": "str"
-            },
-            "opt": true
-           },
-           "isActive": {
-            "s": {
-             "k": "bool"
-            },
-            "opt": true
-           }
-          }
-         },
-         "opt": true
-        }
-       }
-      }
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/miniapp/src/services/refill-api.ts:82"
-  ]
- },
- {
-  "method": "POST",
-  "path": "/refill/return",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "quantity": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "seedsAwarded": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "status": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "APPROVED",
-       "REJECTED",
-       "PENDING"
-      ]
-     },
-     "opt": false
-    },
-    "monthlyRemaining": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "totalRecycled": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/miniapp/src/services/refill-api.ts:86"
+   "apps/miniapp/src/services/shop-api.ts:252",
+   "apps/miniapp/src/services/shop-api.ts:265",
+   "apps/miniapp/src/services/shop-api.ts:268",
+   "apps/miniapp/src/services/shop-api.ts:283"
   ]
  },
  {
@@ -18837,7 +19977,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:554"
+   "apps/miniapp/src/services/shop-api.ts:570"
   ]
  },
  {
@@ -18876,7 +20016,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/shop-api.ts:312"
+   "apps/miniapp/src/services/shop-api.ts:329"
   ]
  },
  {
@@ -19764,7 +20904,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:44"
+   "apps/miniapp/src/services/storefront-api.ts:55"
   ]
  },
  {
@@ -19898,7 +21038,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:82"
+   "apps/miniapp/src/services/storefront-api.ts:93"
   ]
  },
  {
@@ -19908,7 +21048,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:79"
+   "apps/miniapp/src/services/storefront-api.ts:90"
   ]
  },
  {
@@ -19918,7 +21058,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:78"
+   "apps/miniapp/src/services/storefront-api.ts:89"
   ]
  },
  {
@@ -20108,7 +21248,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:76"
+   "apps/miniapp/src/services/storefront-api.ts:87"
   ]
  },
  {
@@ -20118,7 +21258,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:85"
+   "apps/miniapp/src/services/storefront-api.ts:96"
   ]
  },
  {
@@ -20128,7 +21268,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:84"
+   "apps/miniapp/src/services/storefront-api.ts:95"
   ]
  },
  {
@@ -20203,7 +21343,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:87"
+   "apps/miniapp/src/services/storefront-api.ts:98"
   ]
  },
  {
@@ -20217,6 +21357,12 @@
       "k": "bool"
      },
      "opt": false
+    },
+    "publicHiddenReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
     },
     "collections": {
      "s": {
@@ -20407,12 +21553,6 @@
      },
      "opt": false
     },
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
     "type": {
      "s": {
       "k": "enum",
@@ -20421,6 +21561,12 @@
        "CTV",
        "BRAND"
       ]
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
      },
      "opt": false
     },
@@ -20459,6 +21605,12 @@
       "k": "str"
      },
      "opt": false
+    },
+    "referralCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
     },
     "avatarUrl": {
      "s": {
@@ -20537,11 +21689,23 @@
       "k": "str"
      },
      "opt": true
+    },
+    "approved": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "subdomainEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
     }
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:73"
+   "apps/miniapp/src/services/storefront-api.ts:84"
   ]
  },
  {
@@ -20577,7 +21741,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:109"
+   "apps/miniapp/src/services/storefront-api.ts:120"
   ]
  },
  {
@@ -20666,7 +21830,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:107"
+   "apps/miniapp/src/services/storefront-api.ts:118"
   ]
  },
  {
@@ -20743,7 +21907,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:105"
+   "apps/miniapp/src/services/storefront-api.ts:116"
   ]
  },
  {
@@ -20758,6 +21922,12 @@
      },
      "opt": false
     },
+    "publicHiddenReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
     "collections": {
      "s": {
       "k": "arr",
@@ -20947,12 +22117,6 @@
      },
      "opt": false
     },
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
     "type": {
      "s": {
       "k": "enum",
@@ -20961,6 +22125,12 @@
        "CTV",
        "BRAND"
       ]
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
      },
      "opt": false
     },
@@ -20999,6 +22169,12 @@
       "k": "str"
      },
      "opt": false
+    },
+    "referralCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
     },
     "avatarUrl": {
      "s": {
@@ -21077,11 +22253,23 @@
       "k": "str"
      },
      "opt": true
+    },
+    "approved": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "subdomainEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
     }
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:47"
+   "apps/miniapp/src/services/storefront-api.ts:58"
   ]
  },
  {
@@ -21096,6 +22284,12 @@
      },
      "opt": false
     },
+    "publicHiddenReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
     "collections": {
      "s": {
       "k": "arr",
@@ -21285,12 +22479,6 @@
      },
      "opt": false
     },
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
     "type": {
      "s": {
       "k": "enum",
@@ -21299,6 +22487,12 @@
        "CTV",
        "BRAND"
       ]
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
      },
      "opt": false
     },
@@ -21337,6 +22531,12 @@
       "k": "str"
      },
      "opt": false
+    },
+    "referralCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
     },
     "avatarUrl": {
      "s": {
@@ -21415,11 +22615,23 @@
       "k": "str"
      },
      "opt": true
+    },
+    "approved": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "subdomainEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
     }
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:71"
+   "apps/miniapp/src/services/storefront-api.ts:82"
   ]
  },
  {
@@ -21480,6 +22692,12 @@
       "k": "str"
      },
      "opt": false
+    },
+    "referralCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
     },
     "ownerTier": {
      "s": {
@@ -21579,6 +22797,18 @@
      },
      "opt": true
     },
+    "approved": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "subdomainEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
     "collections": {
      "s": {
       "k": "arr",
@@ -21735,7 +22965,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:48"
+   "apps/miniapp/src/services/storefront-api.ts:59"
   ]
  },
  {
@@ -21749,6 +22979,12 @@
       "k": "bool"
      },
      "opt": false
+    },
+    "publicHiddenReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
     },
     "collections": {
      "s": {
@@ -21939,12 +23175,6 @@
      },
      "opt": false
     },
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
     "type": {
      "s": {
       "k": "enum",
@@ -21953,6 +23183,12 @@
        "CTV",
        "BRAND"
       ]
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
      },
      "opt": false
     },
@@ -21991,6 +23227,12 @@
       "k": "str"
      },
      "opt": false
+    },
+    "referralCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
     },
     "avatarUrl": {
      "s": {
@@ -22069,11 +23311,23 @@
       "k": "str"
      },
      "opt": true
+    },
+    "approved": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "subdomainEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
     }
    }
   },
   "sources": [
-   "apps/miniapp/src/services/storefront-api.ts:46"
+   "apps/miniapp/src/services/storefront-api.ts:57"
   ]
  },
  {
@@ -22121,7 +23375,5460 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:339"
+   "apps/miniapp/src/services/account-api.ts:360"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/desk/gifts/fulfil",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "giftId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "giftKind": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "VOUCHER",
+       "TREE",
+       "SEED_PACK",
+       "GIFT"
+      ]
+     },
+     "opt": false
+    },
+    "giftName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "pointsCost": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "READY",
+       "FULFILLED",
+       "CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "claimExpiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "claimPoint": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "fulfilledAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "cancelledAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "cancelReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "refundedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "couponCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:74"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/desk/lookup",
+  "schema": {
+   "k": "union",
+   "of": [
+    {
+     "k": "obj",
+     "props": {
+      "type": {
+       "s": {
+        "k": "lit",
+        "v": "REQUEST"
+       },
+       "opt": false
+      },
+      "request": {
+       "s": {
+        "k": "obj",
+        "props": {
+         "id": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "code": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "method": {
+          "s": {
+           "k": "enum",
+           "v": [
+            "DROP_OFF",
+            "MAIL_IN",
+            "PICKUP"
+           ]
+          },
+          "opt": false
+         },
+         "status": {
+          "s": {
+           "k": "enum",
+           "v": [
+            "CANCELLED",
+            "REJECTED",
+            "COMPLETED",
+            "OPEN",
+            "IN_TRANSIT",
+            "RECEIVED",
+            "EXPIRED",
+            "REVERSED"
+           ]
+          },
+          "opt": false
+         },
+         "pointId": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "customerName": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "customerPhone": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "estimatedPoints": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "lines": {
+          "s": {
+           "k": "arr",
+           "of": {
+            "k": "obj",
+            "props": {
+             "itemId": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "itemName": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "unitLabel": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "unitsPerPoint": {
+              "s": {
+               "k": "num"
+              },
+              "opt": false
+             },
+             "pointsPerGroup": {
+              "s": {
+               "k": "num"
+              },
+              "opt": false
+             },
+             "declaredQty": {
+              "s": {
+               "k": "num"
+              },
+              "opt": false
+             },
+             "receivedQty": {
+              "s": {
+               "k": "num"
+              },
+              "opt": false
+             },
+             "hazardous": {
+              "s": {
+               "k": "bool"
+              },
+              "opt": false
+             }
+            }
+           }
+          },
+          "opt": false
+         }
+        }
+       },
+       "opt": false
+      }
+     }
+    },
+    {
+     "k": "obj",
+     "props": {
+      "type": {
+       "s": {
+        "k": "lit",
+        "v": "GIFT"
+       },
+       "opt": false
+      },
+      "redemption": {
+       "s": {
+        "k": "obj",
+        "props": {
+         "id": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "giftName": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "customerName": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "status": {
+          "s": {
+           "k": "enum",
+           "v": [
+            "READY",
+            "FULFILLED",
+            "CANCELLED"
+           ]
+          },
+          "opt": false
+         },
+         "claimExpiresAt": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         }
+        }
+       },
+       "opt": false
+      }
+     }
+    }
+   ]
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:68"
+  ]
+ },
+ {
+  "method": "PUT",
+  "path": "/waste/desk/points/:p0/perk",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "kind": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WAREHOUSE",
+       "PARTNER"
+      ]
+     },
+     "opt": false
+    },
+    "name": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "giftHandoverEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "myRole": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "STAFF",
+       "OWNER"
+      ]
+     },
+     "opt": false
+    },
+    "quota": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "used": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "remaining": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "perkText": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "perkPendingText": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "staffDailyCapRemaining": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:80"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/desk/points/:p0/report",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "pointId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "month": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "confirmations": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "quotaUsed": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "units": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "qty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:76"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/desk/points",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "kind": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "WAREHOUSE",
+        "PARTNER"
+       ]
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "giftHandoverEnabled": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "myRole": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "STAFF",
+        "OWNER"
+       ]
+      },
+      "opt": false
+     },
+     "quota": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "limit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "used": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "remaining": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      },
+      "opt": false
+     },
+     "perkText": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "perkPendingText": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "staffDailyCapRemaining": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:66"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/desk/requests/:p0/confirm",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "requestId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "lit",
+      "v": "COMPLETED"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "quota": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "used": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "remaining": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "staffDailyCapRemaining": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:70"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/desk/requests/:p0/reject",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "requestId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "lit",
+      "v": "REJECTED"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:72"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/items",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "code": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "unitLabel": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "unitsPerPoint": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "pointsPerGroup": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "dropsPerUnit": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "dailyCapQty": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "monthlyCapQty": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "status": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "ACTIVE",
+        "COMING_SOON",
+        "HIDDEN"
+       ]
+      },
+      "opt": false
+     },
+     "prepInstructions": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "imageUrl": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "gramsPerUnit": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "hazardous": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "sortOrder": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:43"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/me",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "programmeEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "eligibility": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "OK",
+       "GUEST",
+       "NEED_PHONE"
+      ]
+     },
+     "opt": false
+    },
+    "blocked": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "shipLockedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "laneFlags": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "dropoff": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": false
+       },
+       "mailin": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": false
+       },
+       "pickup": {
+        "s": {
+         "k": "bool"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "parcelLimits": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "maxWeightKg": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "maxEdgeCm": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "balance": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "pointsBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "pointsConvertedBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "redeemablePoints": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "monthUsage": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "capMonthKey": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "pointsUsed": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "pointsCap": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "thresholds": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "mailinMinPoints": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "pickupMinPoints": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "maxOpenRequests": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "monthRemainingQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dayRemainingQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dailyCapQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "monthlyCapQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "ACTIVE",
+           "COMING_SOON",
+           "HIDDEN"
+          ]
+         },
+         "opt": false
+        },
+        "prepInstructions": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "imageUrl": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "hazardous": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
+        },
+        "sortOrder": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "openRequests": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "method": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "DROP_OFF",
+           "MAIL_IN",
+           "PICKUP"
+          ]
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "CANCELLED",
+           "REJECTED",
+           "COMPLETED",
+           "OPEN",
+           "IN_TRANSIT",
+           "RECEIVED",
+           "EXPIRED",
+           "REVERSED"
+          ]
+         },
+         "opt": false
+        },
+        "closeReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "HOLD_EXPIRED",
+           "PICKUP_NO_SHOW",
+           "PICKUP_NOT_DISPATCHED",
+           "LOST",
+           "LOST_AT_WAREHOUSE",
+           "SHIP_LOCKED",
+           "ORDER_CANCELLED"
+          ]
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "expiresAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "estimatedPoints": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "orderCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "lines": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "itemName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "unitLabel": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "declaredQty": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "deskPoints": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "kind": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "WAREHOUSE",
+           "PARTNER"
+          ]
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:42"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/points/nearby",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "kind": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "WAREHOUSE",
+        "PARTNER"
+       ]
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "addressLine": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "provinceCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "provinceName": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "communeCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "communeName": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "lat": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "lng": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "phone": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "openingHours": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "MON": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "TUE": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "WED": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "THU": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "FRI": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "SAT": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "SUN": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      },
+      "opt": false
+     },
+     "acceptedItemIds": {
+      "s": {
+       "k": "arr",
+       "of": {
+        "k": "str"
+       }
+      },
+      "opt": false
+     },
+     "perkText": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "quotaFull": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "distanceKm": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:47"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/points",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "kind": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "WAREHOUSE",
+        "PARTNER"
+       ]
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "addressLine": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "provinceCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "provinceName": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "communeCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "communeName": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "lat": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "lng": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "phone": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "openingHours": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "MON": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "TUE": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "WED": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "THU": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "FRI": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "SAT": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "SUN": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "open": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "close": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      },
+      "opt": false
+     },
+     "acceptedItemIds": {
+      "s": {
+       "k": "arr",
+       "of": {
+        "k": "str"
+       }
+      },
+      "opt": false
+     },
+     "perkText": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "quotaFull": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "distanceKm": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:45"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/preview",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "estimatedDrops": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "estimatedGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsValueVnd": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "blocks": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "code": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "SHIP_LOCKED",
+           "BELOW_MIN",
+           "MONTH_CAP_FOR_MIN",
+           "ITEM_MONTH_CAP",
+           "ITEM_DAY_CAP",
+           "POINTS_MONTH_CAP",
+           "POINT_QUOTA_FULL",
+           "POINT_UNAVAILABLE",
+           "ITEM_NOT_ACTIVE",
+           "POINT_MISSING_ITEMS",
+           "LANE_DISABLED",
+           "MAX_OPEN",
+           "PICKUP_PENDING",
+           "NEED_PROVINCE"
+          ]
+         },
+         "opt": false
+        },
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "missingPoints": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "openCount": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "pickupRequestCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "pointsRemaining": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "feeEstimate": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "zoneName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "low": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "high": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "itemCaps": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "monthRemainingQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dayRemainingQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointsMonthRemaining": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:49"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/requests/:p0/cancel",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED",
+           "OTHER"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OTHER",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "CANCELLED",
+       "REJECTED",
+       "COMPLETED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:59"
+  ]
+ },
+ {
+  "method": "PUT",
+  "path": "/waste/requests/:p0/tracking",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED",
+           "OTHER"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OTHER",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "CANCELLED",
+       "REJECTED",
+       "COMPLETED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:57"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/requests/:p0",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED",
+           "OTHER"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OTHER",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "CANCELLED",
+       "REJECTED",
+       "COMPLETED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:62"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/waste/requests/:p0",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED",
+           "OTHER"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OTHER",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "CANCELLED",
+       "REJECTED",
+       "COMPLETED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:55"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/requests/by-order/:p0",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED",
+           "OTHER"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OTHER",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "CANCELLED",
+       "REJECTED",
+       "COMPLETED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:64"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/requests",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "code": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "method": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "DROP_OFF",
+        "MAIL_IN",
+        "PICKUP"
+       ]
+      },
+      "opt": false
+     },
+     "status": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "CANCELLED",
+        "REJECTED",
+        "COMPLETED",
+        "OPEN",
+        "IN_TRANSIT",
+        "RECEIVED",
+        "EXPIRED",
+        "REVERSED"
+       ]
+      },
+      "opt": false
+     },
+     "closeReason": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "HOLD_EXPIRED",
+        "PICKUP_NO_SHOW",
+        "PICKUP_NOT_DISPATCHED",
+        "LOST",
+        "LOST_AT_WAREHOUSE",
+        "SHIP_LOCKED",
+        "ORDER_CANCELLED"
+       ]
+      },
+      "opt": false
+     },
+     "createdAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "expiresAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "estimatedPoints": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "pointsAwarded": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "pointName": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "orderCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "lines": {
+      "s": {
+       "k": "arr",
+       "of": {
+        "k": "obj",
+        "props": {
+         "itemName": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "unitLabel": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "declaredQty": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         }
+        }
+       }
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:60"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/waste/requests",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED",
+           "OTHER"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OTHER",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "CANCELLED",
+       "REJECTED",
+       "COMPLETED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:51"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/waste/rules",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "text": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/miniapp/src/services/waste-api.ts:65"
   ]
  }
 ]

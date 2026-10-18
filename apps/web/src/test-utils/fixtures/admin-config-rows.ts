@@ -81,8 +81,6 @@ export const ADMIN_CONFIG_ROWS: ConfigRow[] = [
   {"key": "referral.min_order_amount", "value": 200000, "description": "Chỉ đơn có tổng tiền từ mức này mới được tính là đơn đầu/đơn thứ 2 của chương trình giới thiệu", "category": "referral"},
   {"key": "referral.referrer_reward_points", "value": 5000, "description": "Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)", "category": "referral"},
   {"key": "referral.window_days", "value": 30, "description": "Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng Điểm Xanh", "category": "referral"},
-  {"key": "refill.monthly_cap_bottles", "value": 20, "description": "Trần số vỏ chai đổi được mỗi tháng/user (chống lạm dụng)", "category": "refill"},
-  {"key": "refill.seeds_per_bottle", "value": 50, "description": "💧 thưởng cho mỗi vỏ chai đổi", "category": "refill"},
   {"key": "remarketing.cart_abandon_max_hours", "value": 72, "description": "Không nhắc giỏ cũ quá N giờ", "category": "remarketing"},
   {"key": "remarketing.cart_abandon_min_hours", "value": 6, "description": "Giỏ bỏ quên ít nhất N giờ mới nhắc", "category": "remarketing"},
   {"key": "remarketing.voucher_expiry_days", "value": 3, "description": "Nhắc voucher cá nhân sắp hết hạn trong N ngày tới", "category": "remarketing"},

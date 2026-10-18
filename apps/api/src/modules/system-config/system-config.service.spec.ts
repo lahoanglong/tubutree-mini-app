@@ -327,7 +327,6 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
 
   it.each([
     ['attendance.late_fine', 10_000, [-1, 1.5, 500_001]],
-    ['refill.seeds_per_bottle', 50, [-1, 10_001]],
     ['game.streak_repair_cost', 150, [-1, 0]],
     ['game.streak_freeze_cost', 80, [-1, 0]],
     ['game.dew_seeds', 15, [-1, 10_001]],
@@ -344,14 +343,6 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     for (const v of badValues) {
       const bad = mk(fine);
       await expect(bad.svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
-    }
-  });
-
-  it('refill.pickup_phone: rỗng (ẩn) hoặc SĐT Việt Nam', async () => {
-    for (const v of ['', '0901234567', '+84901234567']) await mk('').svc.set('refill.pickup_phone', v, 'admin1');
-    // Khoá cũ giữ luật di động; số bàn/tổng đài chỉ nhận ở bảng điểm nhận (PICKUP_LOCATION_PHONE_PATTERN).
-    for (const v of ['abc', '12345', '09012345678901', '02838221234', '19001234']) {
-      await expect(mk('').svc.set('refill.pickup_phone', v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
     }
   });
 

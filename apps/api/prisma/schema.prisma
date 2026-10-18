@@ -2186,6 +2186,7 @@ model GardenPlot {
   @@map("garden_plots")
 }
 
+// Chỉ còn cho bảng bottle_returns đã ngừng dùng (Refill đã gỡ). KHÔNG DROP.
 enum RefillStatus {
   PENDING
   APPROVED
@@ -2193,6 +2194,7 @@ enum RefillStatus {
 }
 
 // Refill / đổi vỏ chai (§6.14.6) — mỗi lần khách đổi vỏ chai rỗng lấy thưởng 💧.
+/// @deprecated Refill đã gỡ (Đổi rác lấy quà thay thế, spec 13). Không còn code nào đọc hay ghi; bản cũ khi quay lại vẫn dùng bảng này nên KHÔNG DROP.
 model BottleReturn {
   id               String                @id @default(cuid())
   userId           String
@@ -2219,6 +2221,7 @@ model BottleReturn {
   @@map("bottle_returns")
 }
 
+/// @deprecated Refill đã gỡ (Đổi rác lấy quà thay thế, spec 13). Điểm nhận mới ở waste_points, không chép dữ liệu cũ sang. KHÔNG DROP.
 /// Điểm nhận vỏ chai rỗng (admin quản lý ở tab Đổi vỏ chai). Thay cho ba khoá SystemConfig refill.pickup_*, các khoá đó
 /// vẫn được đọc khi bảng chưa có dòng nào. Không xoá cứng: tắt isActive để giữ lịch sử các yêu cầu đã chọn điểm này.
 model RefillPickupLocation {

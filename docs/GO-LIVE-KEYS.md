@@ -14,7 +14,8 @@ Tóm tắt việc cần làm (theo độ ưu tiên):
 | **Zalo OA + ZNS** | Gửi thông báo ZNS (đơn hàng, voucher) + đăng nhập web | OA ~3–5 ngày, **template ZNS ~7–14 ngày** | `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN` |
 | **Accesstrade** | Hoàn tiền (cashback) mua sàn ngoài | ~3–7 ngày duyệt publisher | `ACCESSTRADE_TOKEN`, `ACCESSTRADE_PUBLISHER_ID`, `ACCESSTRADE_WEBHOOK_SECRET` |
 | **Pancake POS** (bắt buộc) | Nguồn chân lý catalog, tồn kho, đơn và vận chuyển | Có ngay (tài khoản shop) | `PANCAKE_API_KEY`, `PANCAKE_SHOP_ID`, `PANCAKE_WEBHOOK_SECRET` — mục 6 |
-| **Gomdon** (nếu bật thu gom tái chế) | Vận đơn đổi hàng BestExpress | Liên hệ quản trị Gomdon | `GOMDON_PHONE`, `GOMDON_PASSWORD`, `GOMDON_WEBHOOK_SECRET` — mục 7 |
+| **Gomdon** (nếu bật Thu kèm đơn) | Vận đơn đổi hàng BestExpress | Liên hệ quản trị Gomdon | `GOMDON_PHONE`, `GOMDON_PASSWORD`, `GOMDON_WEBHOOK_SECRET` — mục 7 |
+| **Zalo Mini App: vị trí (Đổi rác, "Gần tôi")** | Tìm điểm nhận rác gần khách | Cấp quyền trong quản lý ứng dụng Zalo, vài phút | `ZALO_APP_SECRET` phải là giá trị thật; quyền `scope.userLocation` phải được cấp cho Mini App — mục 7b |
 | **Kênh báo động vận hành** (khuyến nghị) | Báo sự cố Pancake/Gomdon/hàng đợi ra Slack/Google Chat/n8n và/hoặc email | Tạo ngay (incoming webhook; hộp thư SMTP) | `OPS_ALERT_WEBHOOK_URL`; email: `OPS_ALERT_EMAIL_TO`, `SMTP_HOST`, `SMTP_FROM`… — mục 8 |
 
 > **Pancake khác các dịch vụ còn lại:** production thiếu `PANCAKE_API_KEY`/`PANCAKE_SHOP_ID`/`PANCAKE_WEBHOOK_SECRET`
@@ -234,7 +235,11 @@ Chi tiết đầy đủ ở `docs/integrations/gomdon.md` mục 3. Tóm tắt:
    `GOMDON_WEBHOOK_SECRET` thì API **không khởi động**.
 3. Nhờ quản trị Gomdon đăng ký webhook: có header thì URL `https://api.tubutree.com/api/webhooks/gomdon`
    kèm `x-webhook-token: <secret>`; chỉ nhập được URL thì `https://api.tubutree.com/api/webhooks/gomdon/<secret>`.
-4. Bật lựa chọn ở checkout: SystemConfig `shipping.gomdon.recycling_enabled = true` (mặc định `false`).
+4. `shipping.gomdon.recycling_enabled` là công tắc kỹ thuật (mặc định `false`). Khách chỉ thấy Thu kèm đơn khi bật thêm waste.enabled và waste.lane_pickup_enabled; `waste.lane_pickup_enabled` giữ tắt cho tới khi Gomdon trả lời bằng văn bản và một đơn thử chạy đạt (spec 12.4). Seed chỉ ghi mô tả của dòng này trên database mới (create-only), nên trên database đã có chạy một lần trong cửa sổ deploy:
+
+```sql
+UPDATE system_configs SET description = 'Công tắc kỹ thuật Gomdon. Khách chỉ thấy Thu kèm đơn khi bật thêm waste.enabled và waste.lane_pickup_enabled (cần Gomdon đã cấu hình env).' WHERE key = 'shipping.gomdon.recycling_enabled';
+```
 
 ```bash
 gh secret set GOMDON_PHONE --body "<sdt>"
@@ -249,6 +254,10 @@ gh workflow run ops.yml -f action=set-env
 > `set-env`/`audit`; chưa cập nhật thì đặt key thẳng vào `/opt/tubutree/.env` trên VPS rồi tạo lại container api.
 
 ---
+
+## 7b) Vị trí cho Đổi rác ("Gần tôi")
+
+`ZALO_APP_SECRET` phải là giá trị thật (API dùng nó để đổi mã lấy số điện thoại và thông tin người dùng). Mini App cần quyền `scope.userLocation` được cấp trong quản lý ứng dụng Zalo thì nút "Gần tôi" mới lấy được vị trí. Kiểm trên điện thoại thật; thiếu quyền thì khách vẫn chọn điểm theo tỉnh, việc này không chặn ra mắt.
 
 ## 8) Báo động vận hành (kênh ngoài app)
 
