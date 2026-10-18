@@ -102,6 +102,8 @@ describe('WasteReverseService.reverse', () => {
   it('takes the whole award when recoverable and balance cover it, touching neither drops nor quota', async () => {
     const { svc, tx, order } = setup();
     await expect(svc.reverse('a1', 'r1', BODY)).resolves.toEqual({ requestId: 'r1', status: 'REVERSED', pointsTaken: 20_000, shortfallPoints: 0 });
+    expect(loadPointExpiryTxns).toHaveBeenCalledWith(tx, 'u1');
+    expect(lotRecoverable).toHaveBeenCalledWith([], 'RECYCLE:r1');
     expect(applyPointsDelta).toHaveBeenCalledWith(tx, {
       userId: 'u1',
       delta: -20_000,
@@ -251,8 +253,9 @@ describe('WasteReverseService.reverse', () => {
   });
 
   it('makes a PICKUP transition conditional on its orderId', async () => {
-    const { svc, tx } = setup({ row: row({ method: 'PICKUP', orderId: 'o1' }) });
+    const { svc, tx, shipLock } = setup({ row: row({ method: 'PICKUP', orderId: 'o1' }) });
     await svc.reverse('a1', 'r1', BODY);
     expect(tx.wasteRequest.updateMany.mock.calls[0]![0].where).toEqual({ id: 'r1', status: 'COMPLETED', orderId: 'o1' });
+    expect(shipLock.evaluateAndLock).toHaveBeenCalledWith('u1', CFG);
   });
 });
