@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { getStorefront, formatSold } from '@/lib/api';
+import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
 import { EmptyState } from '@/components/empty-state';
@@ -29,25 +30,16 @@ export async function generateMetadata({
   const { slug } = await params;
   const sf = await getStorefront(slug);
   if (!sf) return { title: 'Gian hàng — Tubu Tree' };
-  const firstImg =
-    sf.collections?.[0]?.items?.[0]?.product?.thumbnail ?? sf.coverUrl ?? undefined;
+  // Ảnh chia sẻ do opengraph-image.tsx của trang này dựng: ảnh gốc có thể là base64 nên không đưa thẳng vào og:image.
+  const canonical = `${SITE_URL}/s/${sf.slug}`;
   const title = `${sf.title} — Tubu Tree`;
   const description = sf.headerNote ?? 'Gian hàng sống xanh trên Tubu Tree';
   return {
     title,
     description,
-    openGraph: {
-      title,
-      description,
-      images: firstImg ? [firstImg] : [],
-      type: 'website',
-    },
-    twitter: {
-      card: firstImg ? 'summary_large_image' : 'summary',
-      title,
-      description,
-      images: firstImg ? [firstImg] : [],
-    },
+    alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 

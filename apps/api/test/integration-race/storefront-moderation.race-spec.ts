@@ -296,4 +296,24 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       expect(await portalOn.presentStore(sf)).toMatchObject({ subdomain: sf.subdomain, subdomainEnabled: true });
     });
   });
+
+  describe('ảnh base64 của gian hàng (D3-10)', () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    it('JSON công khai không chứa base64; endpoint ảnh trả đúng byte; gỡ đăng thì ảnh cũng 404', async () => {
+      const owner = await user('AFFILIATE');
+      const adminUser = await user('ADMIN');
+      const sf = await store(owner, { avatarUrl: PNG, coverUrl: 'https://cdn.example/c.jpg' });
+      const pub = await svc.getPublicBySlug(sf.slug);
+      expect(JSON.stringify(pub)).not.toContain('base64');
+      expect(pub.coverUrl).toBe('https://cdn.example/c.jpg');
+      const version = pub.avatarUrl!.split('v=')[1];
+      const img = await svc.getPublicImage(sf.id, 'avatar', version);
+      expect(img).toMatchObject({ mime: 'image/png', versionOk: true });
+      expect(img.data.equals(Buffer.from(PNG.split(',')[1]!, 'base64'))).toBe(true);
+      await expect(svc.getPublicImage(sf.id, 'cover', 'x')).rejects.toBeInstanceOf(NotFoundException);
+      await admin.takeDown(adminUser.id, sf.id, 'x');
+      await expect(svc.getPublicImage(sf.id, 'avatar', version)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 });

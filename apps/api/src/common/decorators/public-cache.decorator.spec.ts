@@ -9,6 +9,7 @@ import { FlashSaleController } from '../../modules/flash-sale/flash-sale.control
 import { FaqController } from '../../modules/faq/faq.controller';
 import { GeoController } from '../../modules/integrations/pancake/geo.controller';
 import { BrandController } from '../../modules/brand/brand.controller';
+import { StorefrontController } from '../../modules/storefront/storefront.controller';
 
 type Ctor = { prototype: object };
 
@@ -39,6 +40,8 @@ describe('Cache-Control cho API công khai (C-039)', () => {
     ['GET /geo/provinces', GeoController, 'provinces'],
     ['GET /geo/communes', GeoController, 'communes'],
     ['GET /brand/public/:slug', BrandController, 'publicView'],
+    ['GET /storefront/public/:slug', StorefrontController, 'publicView'],
+    ['GET /storefront/by-host', StorefrontController, 'byHost'],
   ];
 
   it.each(cacheable)('%s: public + max-age/s-maxage ngắn', (_label, ctor, method) => {
@@ -53,6 +56,7 @@ describe('Cache-Control cho API công khai (C-039)', () => {
     expect(cacheControl(CatalogController, 'forYou')).toBeUndefined();
     expect(cacheControl(FlashSaleController, 'upcoming')).toBeUndefined();
     expect(cacheControl(HomeController, 'me')).toBe('private, no-store');
+    expect(cacheControl(StorefrontController, 'me')).toBeUndefined();
   });
 
   it('/search/suggest không bị gói này đụng tới', () => {

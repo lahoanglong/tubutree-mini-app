@@ -136,3 +136,35 @@ describe('trang gian hàng /s/[slug] — link subdomain theo cờ (D3-11)', () =
     expect((await html()).textContent).toContain('https://linh-xanh.tubutree.com');
   });
 });
+
+describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)', () => {
+  const meta = async (slug = 'linh') => {
+    const { generateMetadata } = await import('./page');
+    return generateMetadata({ params: Promise.resolve({ slug }) });
+  };
+
+  it('canonical là /s/<slug> trên gốc web, dù khách vào bằng subdomain hay chữ hoa/thường khác', async () => {
+    const m = await meta('LINH');
+    expect(m.alternates?.canonical).toBe('https://app.tubutree.com/s/linh');
+    expect((m.openGraph as { url?: string }).url).toBe('https://app.tubutree.com/s/linh');
+  });
+
+  it('ảnh chia sẻ do opengraph-image của trang dựng: metadata không nhét ảnh gốc (kể cả base64) vào og:image', async () => {
+    mocks.sf = {
+      ...SF, coverUrl: 'data:image/png;base64,AAAA',
+      collections: [{ id: 'c1', title: 'A', items: [{ id: 'i1', product: { ...PRODUCT, thumbnail: 'data:image/png;base64,BBBB' } }] }],
+    };
+    const m = await meta();
+    expect((m.openGraph as { images?: unknown }).images).toBeUndefined();
+    expect((m.twitter as { images?: unknown }).images).toBeUndefined();
+    expect(JSON.stringify(m)).not.toContain('base64');
+    expect((m.twitter as { card?: string }).card).toBe('summary_large_image');
+  });
+
+  it('không có gian hàng: tiêu đề mặc định, không canonical', async () => {
+    mocks.sf = null;
+    const m = await meta();
+    expect(m.title).toBe('Gian hàng — Tubu Tree');
+    expect(m.alternates).toBeUndefined();
+  });
+});

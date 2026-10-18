@@ -8,6 +8,8 @@ import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifier
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
+import { decodeServedImage } from '../../common/served-image';
+import { isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
 import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
 import { isStorefrontApproved, ownerHiddenReason, publicStorefrontWhere } from './storefront-visibility';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
@@ -297,8 +299,8 @@ export class StorefrontService {
       approved: isStorefrontApproved(sf),
       title: sf.title,
       headerNote: sf.headerNote,
-      avatarUrl: sf.avatarUrl,
-      coverUrl: sf.coverUrl,
+      avatarUrl: publicStorefrontImage(sf.id, 'avatar', sf.avatarUrl),
+      coverUrl: publicStorefrontImage(sf.id, 'cover', sf.coverUrl),
       theme: sf.theme,
       themeColor: sf.themeColor ?? '#16a34a',
       // Kho gửi hàng chỉ có ở gian hàng đối tác tự giao; gian hàng CTV có thể còn dữ liệu cũ nhập nhầm (SELLER-8).
@@ -355,6 +357,20 @@ export class StorefrontService {
       take: 500,
     });
     return stores;
+  }
+
+  /** Byte ảnh base64 của gian hàng khách đang thấy; ảnh URL thường không qua đây (JSON trả thẳng URL). */
+  async getPublicImage(id: string, kind: string, version: unknown): Promise<{ mime: string; data: Buffer; versionOk: boolean }> {
+    const notFound = () => new NotFoundException('Không tìm thấy ảnh.');
+    if (!isStorefrontImageKind(kind)) throw notFound();
+    const sf = await this.prisma.storefront.findFirst({
+      where: { id, ...publicStorefrontWhere(await this.visibilityOptions()) },
+      select: { id: true, avatarUrl: true, coverUrl: true },
+    });
+    const image = kind === 'avatar' ? sf?.avatarUrl : sf?.coverUrl;
+    const decoded = decodeServedImage(image);
+    if (!sf || !image || !decoded) throw notFound();
+    return { ...decoded, versionOk: matchesStorefrontImageVersion(version, sf.id, kind, image) };
   }
 
   async getPublicByHost(host: string) {

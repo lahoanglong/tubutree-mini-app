@@ -3,7 +3,7 @@ import { Box, Page, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Share2, Sprout, MessageSquare, MapPin, CheckCircle2 } from 'lucide-react';
 import { getPublicStorefront } from '../services/storefront-api';
-import { getErrorMessage, isNotFoundError } from '../services/api';
+import { apiMediaUrl, getErrorMessage, isNotFoundError } from '../services/api';
 import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -65,9 +65,9 @@ export default function StorefrontViewPage() {
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)' }}>
       <StorePageShell
-        coverUrl={sf.coverUrl}
+        coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : sf.coverUrl}
         coverHeight={84}
-        avatarUrl={sf.avatarUrl}
+        avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : sf.avatarUrl}
         avatarFallback={<Sprout size={28} color="var(--color-text-inverse)" />}
         avatarSize={58}
         title={sf.title}

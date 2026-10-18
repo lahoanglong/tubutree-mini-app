@@ -22,9 +22,10 @@ vi.mock('../components/share-sheet', () => ({
   },
 }));
 vi.mock('../components/store-page-shell', () => ({
-  StorePageShell: ({ title, badges, stickyBar, children }: { title: string; badges?: ReactNode; stickyBar?: ReactNode; children: ReactNode }) => (
+  StorePageShell: ({ title, coverUrl, avatarUrl, badges, stickyBar, children }: { title: string; coverUrl?: string | null; avatarUrl?: string | null; badges?: ReactNode; stickyBar?: ReactNode; children: ReactNode }) => (
     <div>
       <h1>{title}</h1>
+      <span data-testid="shell-urls">{`${coverUrl ?? ''}|${avatarUrl ?? ''}`}</span>
       {badges}
       {children}
       {stickyBar}
@@ -154,5 +155,20 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm sản phẩm' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/storefront');
     expect(screen.queryByRole('button', { name: 'Xem sản phẩm' })).not.toBeInTheDocument();
+  });
+});
+
+describe('StorefrontViewPage — ảnh do API phục vụ (D3-10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStorefrontContext.getState().clear();
+    useAuthStore.setState({ user: null });
+  });
+
+  it('ảnh bìa và ảnh đại diện dạng đường dẫn tương đối API được ghép với gốc API; URL tuyệt đối giữ nguyên', async () => {
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ coverUrl: '/storefront/image/sf1/cover?v=a', avatarUrl: 'https://cdn.x/a.jpg', ...withItems }));
+    renderPage('abcd1234');
+    const urls = (await screen.findByTestId('shell-urls')).textContent!;
+    expect(urls).toMatch(/^https?:\/\/[^|]+\/storefront\/image\/sf1\/cover\?v=a\|https:\/\/cdn\.x\/a\.jpg$/);
   });
 });

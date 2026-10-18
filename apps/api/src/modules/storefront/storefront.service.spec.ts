@@ -1111,3 +1111,57 @@ describe('link subdomain theo cờ storefront.subdomain_enabled (D3-11)', () => 
     expect(sf).not.toHaveProperty('owner');
   });
 });
+
+describe('ảnh gian hàng trong JSON công khai (D3-10)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 's1', slug: 'abcd1234', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9', collections: [],
+    owner: { referralCode: 'ABCD1234', role: 'AFFILIATE', isBlocked: false }, avatarUrl: null, coverUrl: null, ...over,
+  });
+
+  it('ảnh đại diện và ảnh bìa base64 được thay bằng đường dẫn tới endpoint ảnh: JSON công khai không chứa base64', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row({ avatarUrl: PNG, coverUrl: PNG })) } });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('abcd1234');
+    expect(r.avatarUrl).toMatch(/^\/storefront\/image\/s1\/avatar\?v=[0-9a-f]{32}$/);
+    expect(r.coverUrl).toMatch(/^\/storefront\/image\/s1\/cover\?v=[0-9a-f]{32}$/);
+    expect(JSON.stringify(r)).not.toContain('base64');
+  });
+
+  it('URL https giữ nguyên', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row({ avatarUrl: 'https://cdn.x/a.jpg' })) } });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('abcd1234');
+    expect(r.avatarUrl).toBe('https://cdn.x/a.jpg');
+    expect(r.coverUrl).toBeNull();
+  });
+
+  describe('getPublicImage', () => {
+    const svc = (found: unknown) => {
+      const findFirst = jest.fn().mockResolvedValue(found);
+      return { findFirst, svc: new StorefrontService(makePrisma({ storefront: { findFirst } }), config, affiliate) };
+    };
+
+    it('chỉ tìm trong gian hàng khách đang thấy (gỡ đăng, chủ bị khoá… thì ảnh cũng không phục vụ)', async () => {
+      const { findFirst, svc: s } = svc({ id: 's1', avatarUrl: PNG, coverUrl: null });
+      await s.getPublicImage('s1', 'avatar', 'x');
+      expect(findFirst.mock.calls[0][0].where).toMatchObject({ id: 's1', isPublished: true, takenDownAt: null });
+    });
+
+    it('trả byte và loại ảnh; mã v khớp nội dung thì versionOk', async () => {
+      const { svc: s } = svc({ id: 's1', avatarUrl: PNG, coverUrl: null });
+      const version = (await new StorefrontService(makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row({ avatarUrl: PNG })) } }), config, affiliate).getPublicBySlug('abcd1234')).avatarUrl!.split('v=')[1];
+      const ok = await s.getPublicImage('s1', 'avatar', version);
+      expect(ok.mime).toBe('image/png');
+      expect(ok.data.length).toBeGreaterThan(0);
+      expect(ok.versionOk).toBe(true);
+      expect((await s.getPublicImage('s1', 'avatar', 'sai')).versionOk).toBe(false);
+      expect((await s.getPublicImage('s1', 'avatar', undefined)).versionOk).toBe(false);
+    });
+
+    it('không có gian hàng, không có ảnh, ảnh không phải base64 phục vụ được, loại ảnh lạ: 404', async () => {
+      await expect(svc(null).svc.getPublicImage('s1', 'avatar', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+      await expect(svc({ id: 's1', avatarUrl: null, coverUrl: null }).svc.getPublicImage('s1', 'avatar', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+      await expect(svc({ id: 's1', avatarUrl: 'https://cdn.x/a.jpg', coverUrl: null }).svc.getPublicImage('s1', 'avatar', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+      await expect(svc({ id: 's1', avatarUrl: PNG, coverUrl: null }).svc.getPublicImage('s1', 'banner', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+    });
+  });
+});
