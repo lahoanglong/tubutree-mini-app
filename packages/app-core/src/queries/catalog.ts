@@ -48,3 +48,8 @@ export const suggestedRailQuery = (http: HttpClient) => ({
   queryKey: ['products', 'suggested-rail'] as const,
   queryFn: () => fetchProducts(http, { limit: SUGGESTED_LIMIT, sort: 'best_seller' }),
 });
+/** Trang Duyệt: dùng với useInfiniteQuery (initialPageParam 1); `urlKey` là chuỗi bộ lọc trên URL, `query` dựng truy vấn từ số trang. */
+export const browseQuery = (http: HttpClient, urlKey: string, query: (page: number) => CatalogQuery) => ({
+  queryKey: ['products', 'browse', urlKey] as const,
+  queryFn: ({ pageParam }: { pageParam: number }) => fetchCatalog(http, query(pageParam)),
+});

@@ -7,6 +7,7 @@ import {
   getWasteMe,
   getWastePoints,
   getWasteRequest,
+  getWasteRequestByOrder,
   getWasteRules,
   listWasteRequests,
 } from '../api/waste';
@@ -30,4 +31,8 @@ export const deskPointsQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KE
 export const deskPointReportQuery = (http: HttpClient, pointId: string, month: string) => ({
   queryKey: [...WASTE_QUERY_KEYS.desk, 'report', pointId, month] as const,
   queryFn: () => getDeskPointReport(http, pointId, month),
+});
+export const wasteByOrderQuery = (http: HttpClient, orderId: string) => ({
+  queryKey: [...WASTE_QUERY_KEYS.all, 'by-order', orderId] as const,
+  queryFn: () => getWasteRequestByOrder(http, orderId),
 });
