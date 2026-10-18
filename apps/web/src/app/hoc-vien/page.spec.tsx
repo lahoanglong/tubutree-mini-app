@@ -17,10 +17,10 @@ afterEach(() => {
 });
 
 describe('/hoc-vien — trang công khai', () => {
-  it('có metadata công khai: tiêu đề, mô tả, cho lập chỉ mục', () => {
+  it('có metadata: tiêu đề, mô tả, không lập chỉ mục (API chỉ cho CTV/đại lý/nhân viên)', () => {
     expect(metadata.title).toBe('Học viện — Tubu Tree');
     expect(typeof metadata.description).toBe('string');
-    expect(metadata.robots).toBeUndefined();
+    expect(metadata.robots).toEqual({ index: false });
   });
 
   it('danh sách: server render sẵn tiêu đề và phụ đề, đúng một h1', async () => {
