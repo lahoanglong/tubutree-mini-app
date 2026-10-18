@@ -3,12 +3,15 @@
       // khách không đủ điều kiện; kết quả cấp không đổi vì chỉ có hit khi spent >= mốc thấp nhất.
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
 import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
+import { COUNTED_ORDER_WHERE } from '../../common/first-order';
+import { voucherCode } from './voucher-code';
 
 type GrantFailures = { count: number; first?: unknown };
 
@@ -23,6 +26,7 @@ export type CronBatchResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { gr
 @Injectable()
 export class VouchersService {
   private static readonly WELCOME_PAGE = 200;
+  private static readonly WELCOME_WINDOW_MS = 24 * 3600 * 1000;
   /** Trần an toàn: 200 × 25 = 5.000 user/giờ, đủ cho mọi chiến dịch thực tế. */
   private static readonly WELCOME_MAX_PAGES = 25;
   /** Kích thước lô keyset cho birthday/winback (quét đến hết, không có trần số trang). */
@@ -67,10 +71,8 @@ export class VouchersService {
     endAt?: Date;
     templateCode: string;
   }): Promise<boolean> {
-    // Code DETERMINISTIC theo (reason, full userId) → dựa vào coupon.code @unique
-    // làm chốt idempotency thật (chống 2 cron instance cấp trùng). Dùng full userId
-    // (không slice 6) để tránh false-skip khi 2 cuid trùng tiền tố.
-    const code = `${opts.reason}-${opts.userId}`.toUpperCase();
+    // Dùng full userId (không slice 6) để tránh false-skip khi 2 cuid trùng tiền tố.
+    const code = voucherCode(opts.reason, opts.userId);
     const existed = await this.prisma.coupon.findUnique({ where: { code } });
     if (existed) return false;
 
@@ -148,6 +150,43 @@ export class VouchersService {
   }
 
   /**
+   * Khách thật, chưa có đơn nào ngoài đơn huỷ (cùng định nghĩa với hasPriorOrder), tạo trong cửa sổ 24h: một điều kiện cho cả cron lẫn đường cấp ngay lúc đăng ký.
+   * `anyAge` bỏ riêng cửa sổ 24h cho tài khoản vừa thành khách thật: createdAt của dòng vãng lai nâng cấp là ngày dùng app lần đầu.
+   */
+  private welcomeWhere(anyAge = false): Prisma.UserWhereInput {
+    return {
+      ...(anyAge ? {} : { createdAt: { gte: new Date(Date.now() - VouchersService.WELCOME_WINDOW_MS) } }),
+      role: 'CUSTOMER',
+      orders: { none: COUNTED_ORDER_WHERE },
+      mergedIntoId: null,
+      ...REAL_USER_WHERE,
+    };
+  }
+
+  private async welcomeTerms(): Promise<Omit<Parameters<VouchersService['grant']>[0], 'userId'>> {
+    const value = await this.config.get<number>('voucher.welcome_amount', 30000);
+    const minOrder = await this.config.get<number>('voucher.welcome_min_order', 199000);
+    return { reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER' };
+  }
+
+  /**
+   * D2-07a: cấp voucher chào mừng NGAY khi tài khoản thật được tạo, để lần mở đầu khách đã thấy mã thay vì chờ cron giờ sau.
+   * Cùng điều kiện và cùng grant() (code tất định WELCOME-<userId>) với cron nên gọi trùng, hay chạy song song với cron, vẫn
+   * chỉ một mã; cron vẫn là lưới khi bước này lỗi. Trả true khi vừa tạo mã mới.
+   *
+   * `becameRealNow` chỉ cho hai đường vừa thành khách thật (tạo tài khoản Zalo mới, nâng cấp từ khách vãng lai): khách vãng lai
+   * dùng app quá 24h rồi mới đăng nhập Zalo vẫn nhận mã. Cron không truyền nên giữ nguyên cửa sổ 24h.
+   */
+  async grantWelcomeNow(userId: string, opts: { becameRealNow?: boolean } = {}): Promise<boolean> {
+    const eligible = await this.prisma.user.findFirst({
+      where: { id: userId, ...this.welcomeWhere(opts.becameRealNow === true) },
+      select: { id: true },
+    });
+    if (!eligible) return false;
+    return this.grant({ userId, ...(await this.welcomeTerms()) });
+  }
+
+  /**
    * Welcome: user mới (24h) chưa có đơn → voucher chào mừng. Chạy mỗi giờ.
    *
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi giữa lúc phân trang ném ra
@@ -159,9 +198,8 @@ export class VouchersService {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
     try {
-      const since = new Date(Date.now() - 24 * 3600 * 1000);
-      const value = await this.config.get<number>('voucher.welcome_amount', 30000);
-      const minOrder = await this.config.get<number>('voucher.welcome_min_order', 199000);
+      const terms = await this.welcomeTerms();
+      const where = this.welcomeWhere();
 
       // Quét HẾT cửa sổ 24h bằng cursor thay vì lấy đúng 200 user cũ nhất.
       //
@@ -174,9 +212,8 @@ export class VouchersService {
       let cursor: string | undefined;
       for (let page = 0; page < VouchersService.WELCOME_MAX_PAGES; page++) {
         const users = await this.prisma.user.findMany({
-          // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
-          // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
-          where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} }, ...REAL_USER_WHERE },
+          // Thiếu filter `orders: { none: ... }` thì user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
+          where,
           orderBy: { id: 'asc' }, // khoá cursor ổn định (createdAt có thể trùng nhau hàng loạt)
           take: VouchersService.WELCOME_PAGE,
           ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -185,9 +222,7 @@ export class VouchersService {
         if (users.length === 0) break;
         scanned += users.length;
         cursor = users[users.length - 1]!.id;
-        granted += await this.grantInChunks('welcomeVouchers', users, (u) => ({
-          userId: u.id, reason: 'WELCOME', type: 'AMOUNT', value, minOrder, validDays: 30, templateCode: 'WELCOME_VOUCHER',
-        }), failures);
+        granted += await this.grantInChunks('welcomeVouchers', users, (u) => ({ userId: u.id, ...terms }), failures);
         if (users.length < VouchersService.WELCOME_PAGE) break;
       }
       if (granted) this.logger.log(`Welcome vouchers granted: ${granted}/${scanned} user trong cửa sổ 24h.`);

@@ -13,7 +13,7 @@ export default function ProductPagination({
 }: {
   page: number;
   totalPages: number;
-  filter: { brand?: string; q?: string };
+  filter: { brand?: string; category?: string; q?: string };
 }) {
   if (totalPages <= 1) return null;
   return (

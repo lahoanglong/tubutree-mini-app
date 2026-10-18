@@ -3,6 +3,7 @@ import { Page, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChevronDown, ExternalLink, TreePine } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import { requestAccountDeletion } from '../services/account-api';
@@ -20,7 +21,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
-import { DEFAULT_SUPPORT, FALLBACK_FAQ, fetchFaqs, fetchSupportContact } from './about-data';
+import { DEFAULT_SUPPORT, fallbackFaq, fetchFaqs, fetchSupportContact } from './about-data';
 
 const ALL_CATS = 'Tất cả';
 
@@ -81,8 +82,9 @@ export default function AboutPage() {
   const [faqCat, setFaqCat] = useState<string>(ALL_CATS);
   // FAQ do admin nhập (tab Câu hỏi thường gặp); chưa có dòng nào hoặc lỗi mạng thì dùng bản dự phòng.
   const faqQ = useQuery({ queryKey: ['faqs'], queryFn: fetchFaqs, staleTime: 10 * 60_000 });
+  const publicConfig = usePublicConfig();
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
-  const faq = faqQ.data && faqQ.data.length > 0 ? faqQ.data : faqQ.isLoading ? [] : FALLBACK_FAQ;
+  const faq = faqQ.data && faqQ.data.length > 0 ? faqQ.data : faqQ.isLoading ? [] : fallbackFaq(publicConfig);
   const faqCats = [ALL_CATS, ...new Set(faq.map((f) => f.cat))];
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   // Dòng chưa có giá trị thì ẩn hẳn (Q-17), không hiện nhãn trống.

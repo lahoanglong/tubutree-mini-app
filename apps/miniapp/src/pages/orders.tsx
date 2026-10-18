@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
+import { getNewCustomerOffer } from '../services/account-api';
+import { useAuthStore } from '../store/auth';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { formatVnd } from '../utils/format';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Button } from '../components/ui/button';
@@ -49,6 +52,19 @@ export default function OrdersPage() {
   });
   const list = orders.data?.pages.flatMap((pg) => pg.data) ?? [];
 
+  // Chỉ nhắc mã chào mừng khi khách thật sự đang có mã (API trả kèm mã còn dùng được), số lấy từ chính mã đó: config có mệnh giá
+  // không có nghĩa khách nhận được (chưa cấp, đã dùng, hết hạn, tài khoản vãng lai). Cùng khoá với khối "Quà khách mới" ở Trang chủ.
+  const userId = useAuthStore((st) => st.user?.id);
+  const showWelcomeHint = phase === 'authenticated' && tab === 'all' && orders.isSuccess && list.length === 0;
+  const offerQ = useQuery({ queryKey: ['new-customer-offer', userId], queryFn: getNewCustomerOffer, enabled: showWelcomeHint, retry: false });
+  const welcome = offerQ.data?.isNewCustomer ? offerQ.data.welcomeVoucher : null;
+  const emptyBody =
+    welcome && welcome.type === 'AMOUNT' && welcome.value > 0
+      ? welcome.minOrder
+        ? vi.orders.emptyBody(formatVnd(welcome.minOrder), formatVnd(welcome.value))
+        : vi.orders.emptyBodyNoMin(formatVnd(welcome.value))
+      : undefined;
+
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(76px + var(--safe-bottom))' }}>
       <PageHeader title={vi.orders.tabTitle} back={false} />
@@ -81,7 +97,7 @@ export default function OrdersPage() {
             <EmptyState
               art="box"
               heading={vi.orders.emptyHeading}
-              body={vi.orders.emptyBody}
+              body={emptyBody}
               ctaLabel={vi.orders.emptyCta}
               onCta={() => navigate('/browse')}
             />
