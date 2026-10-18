@@ -5,6 +5,74 @@ Mỗi câu đã có sẵn phương án mặc định do agent đề xuất. Đ�
 - Kết quả làm trong đêm: xem `02-tong-hop-va-ke-hoach.md`.
 - Mọi thay đổi đang nằm ở nhánh cục bộ `review/2026-10-18-launch`. Chưa push, chưa deploy.
 - Những câu hỏi chi tiết hơn (cách dùng từng tính năng) nằm trong `impl/<gói>.md`, mục "Câu hỏi".
+- **Đã chốt toàn bộ ngày 2026-10-18.** Xem mục "Quyết định đã chốt" ngay dưới đây. Các bảng phía sau giữ nguyên để tra lại đề xuất ban đầu.
+
+## Quyết định đã chốt (chủ dự án trả lời 2026-10-18)
+
+Chỗ nào khác đề xuất ban đầu thì có ghi "(đổi)".
+
+### Nhóm A
+
+| # | Quyết định |
+|---|---|
+| A1 | (đổi) Hoa hồng 8% cho mọi sản phẩm |
+| A2 | Chỉ CTV và đại lý hưởng hoa hồng |
+| A3 | Không trả hoa hồng CTV cho hàng của gian hàng đối tác |
+| A4 | (đổi) Giữ cả ba mã WELCOME30, FREESHIP, XANH10. Chủ dự án chấp nhận khách mới có thể được giảm hai lần (WELCOME30 + voucher chào mừng). Kiểm go-live không được báo FAIL vì ba mã này |
+| A5 | (đổi) Tắt 44 sản phẩm demo, giữ danh mục. Đồng bộ toàn bộ sản phẩm từ Pancake sang Tubu |
+| A6 | (đổi) Tài khoản nhận chuyển khoản: CONG TY TNHH TUBU TREE, số 8386790906, Ngân hàng TMCP Kỹ Thương Việt Nam (Techcombank) |
+| A7 | Giữ nguyên các số tiền trong migration |
+| A8 | Nạp bộ giá trị kinh doanh mặc định (`--with-business-defaults`) |
+| A9 | Agent soạn nháp 4 trang pháp lý, chủ dự án duyệt. Pháp nhân: CÔNG TY TNHH TUBU TREE, MST 0319585995, Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam. Email tubutree@gmail.com |
+| A10 | Bỏ chữ "100%" |
+| A11 | Backup lưu trên Google Drive |
+| A12 | Thẻ hộp hàng sàn: giảm 30.000đ, đơn từ 199.000đ, hạn 60 ngày, chỉ khách mới, mỗi thẻ một mã |
+
+### Nhóm B
+
+| # | Quyết định |
+|---|---|
+| B1 | Đại lý nhập hàng về bán offline và bán online. Gian hàng trên Tubu là một trong các kênh online của đại lý |
+| B2 | Giữ hoa hồng 10 ngày sau khi giao |
+| B3 | Gian hàng CTV phải được duyệt lần đầu: bật `storefront.require_approval` |
+| B4 | Chủ dự án làm DNS wildcard + SSL. Agent hướng dẫn, kiểm xong mới bật `storefront.subdomain_enabled` |
+| B5 | (đổi) Freeship đơn đầu bật, áp cho đơn từ 199.000đ |
+| B6 | (đổi) Xem mục "Điểm Xanh kiểu mới" bên dưới |
+| B7 | Kế toán được bấm "Đã chi". Duyệt rút tiền vẫn chỉ ADMIN |
+| B8 | CSKH duyệt bài cộng đồng trong 4 giờ làm việc. Chỉ ADMIN ghim bài và chọn người thắng |
+| B9 | (đổi) Đơn CSKH lên trên Pancake (chat, điện thoại) tự cộng điểm theo SĐT khách, không cần quét. Tỉ lệ như đơn app, chờ giao xong + 14 ngày, báo khách qua Zalo OA. SĐT chưa vào Mini App thì giữ điểm 30 ngày; khách vào Mini App bằng SĐT đó trong hạn thì tự nhận |
+| B10 | Giữ logo. Màu cam của logo làm màu khuyến mãi. Web dùng file logo thật |
+| B11 | (đổi) Giữ email tubutree@gmail.com |
+| B12 | Giữ tên "Vườn Xanh", thêm gợi ý lần đầu |
+| B13 | Bật `home.new_customer_layout` khi ra mắt |
+| B14 | Bật `community.public_preview` khi ra mắt |
+| B15 | CTV bị hạ vai trò vẫn nhận hoa hồng của các đơn đặt trước đó |
+| B16 | Giữ như đã làm: gian hàng ẩn khi chủ bị hạ vai trò, đơn ghi công theo luật chung |
+| B17 | Giữ trừ TNCN 10% cho mọi vai trò. Chủ dự án hỏi kế toán |
+| B18 | (đổi) Mở hết cho kế toán: công nợ đại lý, "Đã nhận tiền" đơn chuyển khoản, hoá đơn VAT, chi thưởng đại lý, duyệt hoàn tiền mua trên sàn. Thêm tab Đơn hàng cho kế toán |
+| B19 | (đổi) Trần mã do nhân viên tạo: tối đa 30% / 100.000đ mỗi đơn, 10 triệu đồng/ngày/người. Giữ 1.000 lượt mỗi mã |
+| C | Đồng ý toàn bộ Nhóm C. Quà sự kiện cộng đồng đổi sang điểm mới: 20.000–50.000 điểm |
+
+### Điểm Xanh kiểu mới (B6, B6a–B6e, B9)
+
+- **1 điểm = 1đ.** Điểm nhận được bằng tiền hàng sau mọi giảm giá (không tính phí ship) nhân tỉ lệ.
+- **Đơn trong app:** 2%, nhân hệ số hạng (Mầm Xanh ×1, Lộc Biếc ×1,2, Đại Thụ ×1,5, Cổ Thụ ×2), tức 2% / 2,4% / 3% / 4%. Ví dụ: đơn 199.000đ ở hạng Mầm Xanh được 3.980 điểm.
+- **Đơn sàn** (Shopee, Lazada, TikTok; cả 3 sàn đã nối vào Pancake): 1%, không nhân hệ số, không tính vào xét hạng.
+  - Khách quét hoặc nhập mã vận đơn trong Mini App.
+  - Mã phải khớp một đơn sàn trong Pancake. Mỗi mã chỉ tích một lần.
+  - Điểm ở trạng thái chờ. Đơn giao xong 14 ngày (hạn trả hàng của sàn) thì thành điểm dùng được. Đơn hoàn thì huỷ.
+- **Đơn CSKH lên trên Pancake:** theo B9.
+- **Mọi con số điểm khác nhân 1.000:** điểm danh, vòng quay, quà đổi điểm, đổi rác, thưởng cộng đồng, ngưỡng hạng. Phiên "đổi rác lấy quà" phải đổi theo.
+- **Dòng "Mua trong Mini App được tích gấp đôi"** hiện ở màn quét mã vận đơn, trang sản phẩm, trang chủ và ví điểm.
+
+### Sự thật chủ dự án xác nhận
+
+- Shopee, Lazada, TikTok đã nối vào cùng shop Pancake.
+- Chiến dịch đầu dự kiến 100–300 khách cùng lúc: VPS hiện tại đủ, theo dõi khi chạy.
+- VPS có từ 8 vCPU: đặt `API_CPUS=2`.
+- AI tư vấn chạy bằng Antigravity CLI, theo cách ChoDeli đang làm. Agent đã báo rủi ro: dùng gói tài khoản cá nhân cho chatbot công khai có thể trái điều khoản của nhà cung cấp.
+- Đã có nhóm Zalo, Fanpage Facebook, TikTok để dẫn khách vào cộng đồng.
+- Kho gom đơn "Fuwa3e Tubu HCM": địa chỉ đúng, SĐT đổi thành 0899149229.
 
 ## Nhóm A — chốt trước ra mắt (tiền, pháp lý, dữ liệu thật)
 
