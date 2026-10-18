@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { readApiSql, runSqlScriptIn, splitSqlStatements } from './sql-script';
 
@@ -24,9 +25,13 @@ const TABLES = [
   'membership_tiers',
   'system_configs',
   'system_config_history',
+  'notification_logs',
+  'notification_templates',
+  'xu_points_conversions',
 ];
 const OLD_TS = '2026-01-02 03:04:05';
 const REDEEM_KEY = 'loyalty.vnd_per_point_redeem';
+const MARKER_ID = `sch_pts1d_${createHash('md5').update(REDEEM_KEY).digest('hex')}`;
 
 describe('points-1d migration nhân 1.000 số điểm (real Postgres)', () => {
   const prisma = new PrismaClient();
@@ -67,6 +72,18 @@ describe('points-1d migration nhân 1.000 số điểm (real Postgres)', () => {
     await exec(`INSERT INTO ${SCHEMA}.membership_tiers ("id", "name", "minPoints", "minSpending", "perks", "sortOrder") VALUES
       ('MAM_XANH', 'Mầm Xanh', 0, NULL, '[]', 0), ('LOC_BIEC', 'Lộc Biếc', 500, 5000000, '[]', 1),
       ('DAI_THU', 'Đại Thụ', 2000, 20000000, '[]', 2), ('CO_THU', 'Cổ Thụ', 5000, 50000000, '[]', 3)`);
+    await exec(`INSERT INTO ${SCHEMA}.points_transactions ("id", "userId", "delta", "reason", "refType", "refId") VALUES
+      ('d1', 'u1', 0, 'REFERRAL_ORDER2_DEBT:ref1:2', 'REFERRAL_DEBT', 'o1'),
+      ('d2', 'u1', 0, 'REFERRAL_ORDER2_PARTIAL_DEBT:ref1:req1:3', 'REFERRAL_DEBT', 'o1'),
+      ('d3', 'u1', 0, 'REFERRAL_MILESTONE_DEBT:u1:3#0:7', 'REFERRAL_DEBT', 'u1'),
+      ('d4', 'u1', 0, 'REFERRAL_ORDER2_REVOKE:ref1:2', 'REFERRAL', 'o1')`);
+    await exec(`INSERT INTO ${SCHEMA}.notification_templates ("id", "code", "channel", "bodyTemplate")
+                VALUES ('nt1', 'XU_CONVERTED', 'INAPP', '{{xu}} xu cũ đã thành {{points}} Điểm Xanh.')`);
+    await exec(`INSERT INTO ${SCHEMA}.xu_points_conversions ("userId", "coinsBefore", "pointsBefore", "convertedBefore", "pointsGranted", "roundingVnd", "pointsTxId", "coinTxId")
+                VALUES ('u1', 5500, 0, 0, 6, 500, 'pt1', 'ct1')`);
+    await exec(`INSERT INTO ${SCHEMA}.notification_logs ("id", "userId", "templateCode", "channel", "payload", "status") VALUES
+      ('nlog_xu2pts_u1', 'u1', 'XU_CONVERTED', 'INAPP', '{"body": "5.500 xu cũ đã thành 6 Điểm Xanh.", "data": {"xu": "5.500", "points": "6"}}'::jsonb, 'SENT'),
+      ('nlog_other', 'u1', 'ORDER_DELIVERED', 'INAPP', '{"body": "Đơn đã giao, +25 điểm"}'::jsonb, 'SENT')`);
     await exec(`INSERT INTO ${SCHEMA}.system_config_history ("id", "key", "oldValue", "newValue", "changedBy") VALUES ('old_h', 'k', '1'::jsonb, '2'::jsonb, 'admin')`);
     await cfg(REDEEM_KEY, 1000);
     await cfg('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 2]);
@@ -131,7 +148,7 @@ describe('points-1d migration nhân 1.000 số điểm (real Postgres)', () => {
     expect((await row('users', 'u1')).updatedAt).toEqual(new Date(`${OLD_TS.replace(' ', 'T')}.000Z`));
     expect(await row('users', 'u2')).toMatchObject({ pointsBalance: 0, pointsConvertedBalance: 0 });
 
-    const ledger = await q<{ id: string; delta: number; expiresAt: Date | null }>(`SELECT "id", "delta", "expiresAt" FROM ${SCHEMA}.points_transactions ORDER BY "id"`);
+    const ledger = await q<{ id: string; delta: number; expiresAt: Date | null }>(`SELECT "id", "delta", "expiresAt" FROM ${SCHEMA}.points_transactions WHERE "id" LIKE 'pt%' ORDER BY "id"`);
     expect(ledger.map((l) => [l.id, l.delta])).toEqual([['pt1', 150_000], ['pt2', -30_000], ['pt3', 0]]);
     expect(ledger[0]!.expiresAt).toEqual(new Date('2027-05-06T00:00:00.000Z'));
 
@@ -330,6 +347,72 @@ describe('points-1d migration nhân 1.000 số điểm (real Postgres)', () => {
     await run();
     expect(await q(`SELECT 1 FROM ${SCHEMA}.system_config_history`)).toHaveLength(rows.length + 1);
     expect((await row('system_config_history', 'old_h')).changedBy).toBe('admin');
+  });
+
+
+  it('dấu đã chạy là dòng lịch sử do CHÍNH migration ghi: redeem = 1 do seed đặt trước và DB có điểm → RAISE, không ghi gì', async () => {
+    await cfg(REDEEM_KEY, 1);
+    const before = await snapshot();
+    await expect(run()).rejects.toThrow(/redeem=1 bị đặt trước migrate/);
+    expect(await snapshot()).toEqual(before);
+    expect(await row('users', 'u1')).toMatchObject({ pointsBalance: 120 });
+  });
+
+  it('redeem = 1 do seed đặt trước nhưng chỉ có sổ điểm (số dư 0) vẫn RAISE', async () => {
+    await cfg(REDEEM_KEY, 1);
+    await exec(`UPDATE ${SCHEMA}.users SET "pointsBalance" = 0, "pointsConvertedBalance" = 0`);
+    await expect(run()).rejects.toThrow(/redeem=1 bị đặt trước migrate/);
+  });
+
+  it('redeem = 1 do seed đặt trước nhưng DB chưa có điểm nào → chạy tiếp, ghi dấu, chạy lại là no-op', async () => {
+    await cfg(REDEEM_KEY, 1);
+    await exec(`DELETE FROM ${SCHEMA}.points_transactions`);
+    await exec(`UPDATE ${SCHEMA}.users SET "pointsBalance" = 0, "pointsConvertedBalance" = 0`);
+    await run();
+    expect((await q(`SELECT 1 FROM ${SCHEMA}.system_config_history WHERE "id" = '${MARKER_ID}' AND "changedBy" = 'migration:points_1d'`))).toHaveLength(1);
+    expect(await cfgValue(REDEEM_KEY)).toBe(1);
+    const once = await snapshot();
+    await run();
+    expect(await snapshot()).toEqual(once);
+  });
+
+  it('missions và sự kiện cộng đồng đã ở đơn vị mới (vượt trần cũ) không bị nhân lần nữa; POS cap đã lớn không nhân tiếp', async () => {
+    await exec(`INSERT INTO ${SCHEMA}.missions ("id", "code", "title", "description", "rewardPoints") VALUES ('m9', 'NEW_UNITS', 'T', 'D', 20000000)`);
+    await exec(`UPDATE ${SCHEMA}.community_events SET "rewardPoints" = 1000000 WHERE "id" = 'ev1'`);
+    await cfg('loyalty.pos_staff_daily_points_cap', 20_000_000);
+    await run();
+    expect(await row('missions', 'm9')).toMatchObject({ rewardPoints: 20_000_000 });
+    expect(await row('missions', 'm1')).toMatchObject({ rewardPoints: 20_000 });
+    expect(await row('community_events', 'ev1')).toMatchObject({ rewardPoints: 1_000_000 });
+    expect(await cfgValue('loyalty.pos_staff_daily_points_cap')).toBe(20_000_000);
+  });
+
+  it('dòng nợ thưởng giới thiệu: số điểm thiếu ở cuối reason nhân 1.000 (REFERRAL_DEBT), dòng khác giữ nguyên', async () => {
+    await run();
+    const r = async (id: string) => (await row('points_transactions', id)).reason;
+    expect(await r('d1')).toBe('REFERRAL_ORDER2_DEBT:ref1:2000');
+    expect(await r('d2')).toBe('REFERRAL_ORDER2_PARTIAL_DEBT:ref1:req1:3000');
+    expect(await r('d3')).toBe('REFERRAL_MILESTONE_DEBT:u1:3#0:7000');
+    expect(await r('d4')).toBe('REFERRAL_ORDER2_REVOKE:ref1:2');
+    expect(await r('pt3')).toBe('ORDER_REVERSED:X');
+  });
+
+  it('thông báo XU_CONVERTED của migration PD-3 dựng lại theo điểm ×1.000; thông báo khác không đụng', async () => {
+    await run();
+    expect((await row('notification_logs', 'nlog_xu2pts_u1')).payload).toEqual({
+      body: '5.500 xu cũ đã thành 6.000 Điểm Xanh.',
+      data: { xu: '5.500', points: '6.000' },
+    });
+    expect((await row('notification_logs', 'nlog_other')).payload).toEqual({ body: 'Đơn đã giao, +25 điểm' });
+  });
+
+  it('hạng không có mốc chi tiêu mà minPoints > 0 (còn trong trần cũ) nhân 1.000; đã lớn thì giữ', async () => {
+    await exec(`INSERT INTO ${SCHEMA}.membership_tiers ("id", "name", "minPoints", "minSpending", "perks", "sortOrder") VALUES
+      ('P_OLD', 'Cũ', 300, NULL, '[]', 4), ('P_NEW', 'Mới', 30000, NULL, '[]', 5)`);
+    await run();
+    expect(await row('membership_tiers', 'P_OLD')).toMatchObject({ minPoints: 300_000 });
+    expect(await row('membership_tiers', 'P_NEW')).toMatchObject({ minPoints: 30_000 });
+    expect(await row('membership_tiers', 'MAM_XANH')).toMatchObject({ minPoints: 0 });
   });
 
   it('guard hoàn tác PD-3: sau points_1d (redeem = 1) file pd3_xu_to_points_rollback.sql từ chối chạy, không đổi gì', async () => {

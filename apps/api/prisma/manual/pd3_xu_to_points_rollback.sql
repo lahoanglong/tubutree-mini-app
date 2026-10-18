@@ -35,8 +35,9 @@ DECLARE
   redeem JSONB;
 BEGIN
   SELECT "value" INTO redeem FROM "system_configs" WHERE "key" = 'loyalty.vnd_per_point_redeem';
-  IF FOUND AND jsonb_typeof(redeem) = 'number' AND (redeem #>> '{}')::numeric = 1 THEN
-    RAISE EXCEPTION 'PD-3 rollback: points-1d đã chạy (loyalty.vnd_per_point_redeem = 1, mọi điểm đã nhân 1.000); không dùng file này nữa. Đối soát tay hoặc dùng prisma/manual/points_1d_rollback.sql rồi mới xem xét hoàn tác PD-3';
+  IF (FOUND AND jsonb_typeof(redeem) = 'number' AND (redeem #>> '{}')::numeric = 1)
+     OR EXISTS (SELECT 1 FROM "system_config_history" WHERE "id" = 'sch_pts1d_' || md5('loyalty.vnd_per_point_redeem') AND "changedBy" = 'migration:points_1d') THEN
+    RAISE EXCEPTION 'PD-3 rollback: points-1d đã chạy (mọi điểm đã nhân 1.000); không dùng file này nữa. Hoàn tác = khôi phục backup chụp ngay trước khi chạy migration points_1d (tools/backup/restore-db.sh), rồi mới xem xét hoàn tác PD-3';
   END IF;
 END $$;
 
