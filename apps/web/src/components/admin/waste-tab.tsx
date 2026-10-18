@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download } from 'lucide-react';
+import { ChevronDown, Download } from 'lucide-react';
 import type { WasteAlertDTO, WasteMonthMetrics, WasteOverviewDTO } from '@tubutree/shared-types';
 import { downloadWasteMonthlyCsv, getConfig, getWasteOverview } from '@/lib/admin-client';
 import { formatCount } from '@/lib/checkout-points';
@@ -226,8 +226,11 @@ function MonthDetails({ data }: { data: WasteOverviewDTO }) {
   });
 
   return (
-    <details className="rounded-control border border-stone-200 p-3" data-month-details>
-        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-stone-900">Xem báo cáo tháng</summary>
+    <details className="group rounded-control border border-stone-200 p-3" data-month-details>
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-sm font-semibold text-stone-900">
+          Xem báo cáo tháng
+          <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Scalar
           k="requestsCreated"
