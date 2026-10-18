@@ -4,8 +4,9 @@ import { AcademyController } from '../academy/academy.controller';
 import { ContentKitController } from '../content-kit/content-kit.controller';
 
 /**
- * Màn CTV và trang sản phẩm miniapp hiện bộ nội dung bán hàng và Academy cho mọi tài khoản có isAffiliate (hasAffiliateAccess),
- * gồm đại lý còn gian hàng CTV hoặc hoa hồng (D3-03). Hai controller này phải cho đại lý vào, nếu không nút ở màn CTV trả 403.
+ * Màn CTV và trang sản phẩm miniapp hiện bộ nội dung bán hàng và Academy cho mọi tài khoản có isAffiliate, gồm đại lý còn gian
+ * hàng CTV hoặc hoa hồng (D3-03). Hai controller phải cho vai trò DEALER vào, nếu không nút ở màn CTV trả 403. Quyền mở theo vai
+ * trò, cho mọi đại lý (khớp D3-13): không route nào ở đây ghi vào sổ tiền.
  */
 describe('Công cụ CTV mở cho đại lý (D3-03)', () => {
   it.each([
