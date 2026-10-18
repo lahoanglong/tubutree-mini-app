@@ -388,12 +388,12 @@ describe('/dai-ly — đặt đơn (tiền: cùng endpoint, body, Idempotency-Ke
     expect(after[2]).not.toBe(keys[0]);
   });
 
-  it('lỗi mạng rồi đổi phương thức hoặc giỏ: dùng Idempotency-Key mới, không lấy lại đơn cũ của lần trước', async () => {
+  it('lỗi mạng rồi đổi phương thức cùng giỏ: giữ Idempotency-Key, máy chủ trả đơn công nợ cũ thì không chuyển trang', async () => {
     let n = 0;
     m.post['/dealer/orders'] = () => {
       n += 1;
-      if (n <= 2) throw new Error('Mất kết nối');
-      return { code: `TUBU${n}`, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', items: [] };
+      if (n === 1) throw new Error('Mất kết nối');
+      return { code: 'TUBU2', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', items: [] };
     };
     await mount();
     click(plus());
@@ -401,12 +401,29 @@ describe('/dai-ly — đặt đơn (tiền: cùng endpoint, body, Idempotency-Ke
     await flush();
     click(button('Trả trước'));
     await flush();
+    const keys = posts('/dealer/orders').map((p) => p.headers?.['Idempotency-Key']);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+    expect(m.push).not.toHaveBeenCalled();
+  });
+
+  it('lỗi mạng rồi đổi giỏ: dùng Idempotency-Key mới', async () => {
+    let n = 0;
+    m.post['/dealer/orders'] = () => {
+      n += 1;
+      if (n === 1) throw new Error('Mất kết nối');
+      return { code: `TUBU${n}`, status: 'CONFIRMED', paymentMethod: 'CREDIT', items: [] };
+    };
+    await mount();
     click(plus());
-    click(button('Trả trước'));
+    click(button('Ghi công nợ'));
+    await flush();
+    click(plus());
+    click(button('Ghi công nợ'));
     await flush();
     const keys = posts('/dealer/orders').map((p) => p.headers?.['Idempotency-Key']);
-    expect(keys).toHaveLength(3);
-    expect(new Set(keys).size).toBe(3);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
   });
 
   it('Trả trước nhưng máy chủ trả đơn không chờ chuyển khoản (công nợ): không chuyển sang trang chuyển khoản', async () => {

@@ -168,7 +168,8 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
     if (placeBusy.current) return;
     placeBusy.current = true;
     setNotice(null);
-    const attempt = `${method}|${cart.map(([id, n]) => `${id}:${n}`).join(',')}`;
+    // Chỉ đổi khoá khi giỏ đổi: đổi phương thức cùng giỏ sau lỗi mạng phải trả lại đơn đã tạo, không tạo đơn thứ hai (Mini App giữ khoá tới khi thành công).
+    const attempt = cart.map(([id, n]) => `${id}:${n}`).join(',');
     if (lastAttempt.current !== null && lastAttempt.current !== attempt) orderKey.current = newIdempotencyKey();
     lastAttempt.current = attempt;
     place.mutate(method);
