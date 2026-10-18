@@ -218,7 +218,7 @@ export function PayrollAdminTab() {
               {qrRow.profile.bankAccountName} · {qrRow.profile.bankAccountNo}
             </p>
           )}
-          <p className="text-xs text-stone-600">Quét chuyển khoản rồi bấm "Đã chuyển" để tải ảnh xác nhận.</p>
+          <p className="text-xs text-stone-600">Quét chuyển khoản rồi bấm &quot;Đã chuyển&quot; để tải ảnh xác nhận.</p>
         </div>
       </Sheet>
 
