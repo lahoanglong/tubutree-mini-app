@@ -49,6 +49,9 @@ import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
 import { createOrderKeyRing } from '@/lib/order-key-ring';
 
+// Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
+const PRICE_CHANGED = 'PRICE_CHANGED';
+
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
@@ -200,7 +203,15 @@ export default function CheckoutPage() {
       invalidateBalances(qc);
     },
     onError: (e) => {
-      if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
+      if (e instanceof ApiError && e.code === 'CART_CHANGED') {
+        // Giỏ vừa đổi ở nơi khác (hoặc lần bấm trước đã đặt xong): dựng lại giỏ, báo giá và danh sách đơn.
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+        void qc.invalidateQueries({ queryKey: ['orders'] });
+        void qc.invalidateQueries({ queryKey: ['quote'] });
+      } else if (e instanceof Error && e.message === PRICE_CHANGED) {
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+        void qc.invalidateQueries({ queryKey: ['quote'] });
+      } else if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
         void qc.invalidateQueries({ queryKey: ['quote'] });
         void qc.invalidateQueries({ queryKey: ['cart'] });
       } else if (e instanceof ApiError && e.code === 'PAYMENT_METHOD_NOT_ALLOWED') {
@@ -313,7 +324,8 @@ export default function CheckoutPage() {
   }
 
   const cart = cartQ.data;
-  const placeErrorMessage = place.error instanceof Error ? place.error.message : null;
+  const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
+  const placeErrorMessage = place.error instanceof Error && !priceChanged ? place.error.message : null;
   const cartIssue = overStock
     ? overStockMessage(overStock.productName, overStock.stock)
     : placeErrorMessage && isCartFixableError(placeErrorMessage)
@@ -330,10 +342,25 @@ export default function CheckoutPage() {
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
   const totalText = quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
-  const barHint = cartIssue ?? (place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
+  const barHint = cartIssue ?? (priceChanged ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.' : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
 
   return (
     <Shell>
+      {priceChanged && (
+        <div
+          role="alert"
+          data-testid="checkout-price-changed"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Giá ưu đãi đã thay đổi</p>
+            <p className="mt-0.5">Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.</p>
+          </div>
+          <Link href="/gio-hang" className={ui.btnSecondary}>
+            Xem lại giỏ hàng
+          </Link>
+        </div>
+      )}
       {cartIssue && (
         <div
           role="alert"
@@ -581,7 +608,7 @@ export default function CheckoutPage() {
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
-          {place.isError && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
+          {place.isError && !priceChanged && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
               {place.error instanceof NetworkError && (
