@@ -53,3 +53,22 @@ export function createServerHttp(init?: { revalidate?: number }): HttpClient {
     delete: readOnly,
   };
 }
+
+/**
+ * Lấy danh sách cho trang ISR tĩnh, cùng hành vi fetchList của lib/api.ts: lỗi lúc runtime phải ném (trả [] làm Next
+ * lưu bản rỗng tới hết revalidate), riêng `next build` thường chạy khi API chưa lên nên lỗi API trả [] để build không hỏng.
+ */
+export async function getListOrEmptyAtBuild<T>(
+  http: HttpClient,
+  path: string,
+  select: (json: unknown) => T[],
+  opts?: RequestOptions,
+): Promise<T[]> {
+  try {
+    return select(await http.get<unknown>(path, opts));
+  } catch (err) {
+    const apiFailure = err instanceof ApiUnavailableError || err instanceof ApiNotFoundError;
+    if (apiFailure && process.env.NEXT_PHASE === 'phase-production-build') return [];
+    throw err;
+  }
+}

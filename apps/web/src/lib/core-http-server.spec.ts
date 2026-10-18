@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createServerHttp, ApiNotFoundError } from './core-http-server';
+import { createServerHttp, getListOrEmptyAtBuild, ApiNotFoundError } from './core-http-server';
 import { ApiUnavailableError } from './api';
 
 function res(status: number, body: unknown = {}): Response {
@@ -78,5 +78,54 @@ describe('core-http-server — fetch ISR cho server component', () => {
     await expect(http.patch('/x', {})).rejects.toThrow(/server component/i);
     await expect(http.delete('/x')).rejects.toThrow(/server component/i);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('getListOrEmptyAtBuild — danh sách cho trang ISR tĩnh', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const select = (json: unknown) => (json as { items: string[] }).items;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('API sống: trả đúng phần tử do select chọn', async () => {
+    fetchMock.mockResolvedValue(res(200, { items: ['a', 'b'] }));
+    await expect(getListOrEmptyAtBuild(createServerHttp(), '/brands', select)).resolves.toEqual(['a', 'b']);
+  });
+
+  it('lúc next build: mất kết nối trả [] để build không hỏng', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    await expect(getListOrEmptyAtBuild(createServerHttp(), '/brands', select)).resolves.toEqual([]);
+  });
+
+  it.each([404, 429, 503])('lúc next build: HTTP %i trả [] như fetchList', async (status) => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    fetchMock.mockResolvedValue(res(status));
+    await expect(getListOrEmptyAtBuild(createServerHttp(), '/brands', select)).resolves.toEqual([]);
+  });
+
+  it('lúc runtime: mất kết nối vẫn ném để Next giữ bản đã render', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    await expect(getListOrEmptyAtBuild(createServerHttp(), '/brands', select)).rejects.toBeInstanceOf(ApiUnavailableError);
+  });
+
+  it('lúc runtime: 5xx ném ApiUnavailableError, 404 ném ApiNotFoundError', async () => {
+    fetchMock.mockResolvedValueOnce(res(503));
+    await expect(getListOrEmptyAtBuild(createServerHttp(), '/brands', select)).rejects.toBeInstanceOf(ApiUnavailableError);
+    fetchMock.mockResolvedValueOnce(res(404));
+    await expect(getListOrEmptyAtBuild(createServerHttp(), '/brands', select)).rejects.toBeInstanceOf(ApiNotFoundError);
+  });
+
+  it('lúc next build: lỗi không phải của API (select hỏng) vẫn ném, không nuốt', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    fetchMock.mockResolvedValue(res(200, {}));
+    const strict = (json: unknown) => (json as { items: string[] }).items.map((x) => x);
+    await expect(getListOrEmptyAtBuild(createServerHttp(), '/brands', strict)).rejects.toBeInstanceOf(TypeError);
   });
 });
