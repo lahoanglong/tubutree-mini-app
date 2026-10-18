@@ -10,12 +10,14 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as string, initialized: true, sessionUnavailable: false, user: { id: 'u1' } as unknown, logout: vi.fn() },
   get: vi.fn(),
+  serverGet: vi.fn(),
   post: vi.fn(),
   oaAvailable: false,
   openChat: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
+vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: mocks.serverGet }) }));
 vi.mock('@/lib/platform-bridge', () => ({
   platformBridge: {
     oa: {
@@ -38,7 +40,7 @@ const FAQS = [
 
 let mounted: Rendered[] = [];
 const mount = async () => {
-  const r = render(<AboutPage />);
+  const r = render(await AboutPage());
   mounted.push(r);
   await flush(6);
   return r;
@@ -66,6 +68,7 @@ beforeEach(() => {
   mocks.auth.sessionUnavailable = false;
   mocks.auth.logout.mockReset().mockResolvedValue(undefined);
   mocks.get.mockReset();
+  mocks.serverGet.mockReset().mockRejectedValue(new Error('server down'));
   mocks.post.mockReset().mockResolvedValue({ message: 'Đã ghi nhận yêu cầu' });
   mocks.oaAvailable = false;
   mocks.openChat.mockReset().mockResolvedValue(undefined);
@@ -92,6 +95,24 @@ describe('/gioi-thieu: trang công khai', () => {
     expect(container.textContent).toContain('0984 606 774');
     expect(byText(container, 'button', 'Xóa tài khoản')).toBeNull();
     expect(byText(container, 'button', 'Đăng xuất')).toBeNull();
+  });
+
+  it('HTML dựng sẵn đã có FAQ: trang server nạp /faqs và /config/public, client không gọi lại', async () => {
+    mocks.serverGet.mockImplementation(async (path: string) => (path === '/faqs' ? FAQS : { support: SUPPORT }));
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/faqs') throw new Error('client không được gọi /faqs');
+      return { support: SUPPORT };
+    });
+    const { container } = await mount();
+    expect(container.textContent).toContain('Bao lâu thì nhận hàng?');
+    expect(mocks.get).not.toHaveBeenCalledWith('/faqs', expect.anything());
+    expect(mocks.get.mock.calls.map((c) => c[0])).not.toContain('/faqs');
+  });
+
+  it('server không đọc được FAQ: vẫn dựng trang, client tự tải như trước', async () => {
+    const { container } = await mount();
+    expect(container.textContent).toContain('Bao lâu thì nhận hàng?');
+    expect(mocks.get.mock.calls.map((c) => c[0])).toContain('/faqs');
   });
 
   it('đúng một h1 "Về Tubu Tree", các khối là h2, không lỗi a11y', async () => {

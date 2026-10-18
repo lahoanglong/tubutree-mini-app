@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, TreePine } from 'lucide-react';
 import { requestAccountDeletion } from '@tubutree/app-core/api/account';
-import type { SupportContact } from '@tubutree/app-core/api/config';
+import type { FaqItem, PublicConfig, SupportContact } from '@tubutree/app-core/api/config';
 import { faqsQuery, publicConfigQuery, supportContactQuery } from '@tubutree/app-core/queries/config';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,7 +36,7 @@ const POLICY_LINKS = [
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
 /** Về Tubu Tree (cùng nội dung với `about.tsx` của Mini App): giới thiệu, FAQ, liên hệ, chính sách; khách đã đăng nhập có thêm xoá tài khoản và đăng xuất. */
-export function AboutView() {
+export function AboutView({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; initialConfig?: PublicConfig }) {
   const phase = useAuthPhase();
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -52,7 +52,7 @@ export function AboutView() {
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="md:col-span-2">
-          <FaqSection />
+          <FaqSection initialFaqs={initialFaqs} initialConfig={initialConfig} />
         </div>
         <SupportSection />
         <Section title="Điều khoản & Chính sách">
@@ -86,9 +86,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function FaqSection() {
-  const faqQ = useQuery({ ...faqsQuery(coreHttp), staleTime: STALE_MS });
-  const configQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: STALE_MS });
+function FaqSection({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; initialConfig?: PublicConfig }) {
+  const faqQ = useQuery({ ...faqsQuery(coreHttp), staleTime: STALE_MS, initialData: initialFaqs });
+  const configQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: STALE_MS, initialData: initialConfig });
   const [open, setOpen] = useState<number | null>(0);
   const [cat, setCat] = useState(ALL_CATS);
 
