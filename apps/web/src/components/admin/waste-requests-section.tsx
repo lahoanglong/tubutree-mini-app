@@ -17,6 +17,7 @@ import {
   listWasteUnmatched,
   lookupWasteRequests,
   receiveWasteRequest,
+  rejectWasteRequest,
   resolveWasteUnmatched,
 } from '@/lib/admin-client';
 import { formatCount } from '@/lib/checkout-points';
@@ -291,9 +292,12 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
   const [weight, setWeight] = useState('');
   const [result, setResult] = useState<WasteReceiveResultDTO | null>(null);
   const [recorded, setRecorded] = useState(false);
+  const [doorRejected, setDoorRejected] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { ask, dialog } = useConfirm();
   // React Query re-renders only after a zero-delay timer, so a second synchronous click still sees the button enabled.
   const receiveInFlight = useRef(false);
+  const doorInFlight = useRef(false);
   const unmatchedInFlight = useRef(false);
 
   const refresh = () => {
@@ -311,6 +315,17 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
     onError: (e) => setErr(errText(e)),
     onSettled: () => {
       receiveInFlight.current = false;
+    },
+  });
+  const rejectAtDoor = useMutation({
+    mutationFn: (body: Parameters<typeof rejectWasteRequest>[1]) => rejectWasteRequest(row.id, body),
+    onSuccess: () => {
+      setDoorRejected(true);
+      refresh();
+    },
+    onError: (e) => setErr(errText(e)),
+    onSettled: () => {
+      doorInFlight.current = false;
     },
   });
   const record = useMutation({
@@ -336,20 +351,47 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
   const hasMatch = code !== '' || phoneMatchConfirmed;
   const ready = weightValid && (!isMail || hasMatch);
 
+  const buildMatch = (): WasteMatchInput | null => {
+    const match: WasteMatchInput = {};
+    if (code !== '') match.parcelCode = code;
+    else if (isMail) match.phoneMatchConfirmed = true;
+    const tracking = parcelTracking.trim();
+    if (isMail && tracking !== '') match.parcelTracking = tracking;
+    return Object.keys(match).length > 0 ? match : null;
+  };
   const submit = () => {
     if (receiveInFlight.current || receive.isPending || !ready) return;
     receiveInFlight.current = true;
     setErr(null);
     setResult(null);
     const body: Parameters<typeof receiveWasteRequest>[1] = {};
-    const match: WasteMatchInput = {};
-    if (code !== '') match.parcelCode = code;
-    else if (isMail) match.phoneMatchConfirmed = true;
-    const tracking = parcelTracking.trim();
-    if (isMail && tracking !== '') match.parcelTracking = tracking;
-    if (Object.keys(match).length > 0) body.match = match;
+    const match = buildMatch();
+    if (match) body.match = match;
     if (weightTrim !== '') body.receivedWeightGrams = Number(weightTrim);
     receive.mutate(body);
+  };
+  // RECEIVED parcels are refused from the request detail; at the door only a parcel still on its way can be refused.
+  const canRejectAtDoor = (row.status === 'OPEN' || row.status === 'IN_TRANSIT') && (isMail || row.method === 'PICKUP');
+  const submitDoorReject = async () => {
+    if (doorInFlight.current || rejectAtDoor.isPending || (isMail && !hasMatch)) return;
+    doorInFlight.current = true;
+    const note = await ask({
+      title: 'Từ chối tại cửa (chưa trả cước)',
+      message: `Từ chối cả yêu cầu ${row.code} với lý do chưa trả đủ cước. Kiện sẽ không được nhận vào kho.`,
+      confirmLabel: 'Từ chối kiện',
+      tone: 'danger',
+      input: { label: 'Ghi chú (tuỳ chọn)', maxLength: NOTE_MAX },
+    });
+    if (note === null) {
+      doorInFlight.current = false;
+      return;
+    }
+    setErr(null);
+    const body: Parameters<typeof rejectWasteRequest>[1] = { rejectionReason: 'UNPAID_POSTAGE' };
+    if (note !== '') body.rejectionNote = note;
+    const match = buildMatch();
+    if (match) body.match = match;
+    rejectAtDoor.mutate(body);
   };
   const submitUnmatched = () => {
     if (unmatchedInFlight.current || record.isPending || recorded) return;
@@ -407,11 +449,22 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
       {!weightValid && <Notice tone="danger" role="alert">{WEIGHT_ERROR}</Notice>}
       {isMail && !hasMatch && <p className="text-xs text-stone-600">Nhập mã TR- trên kiện hoặc tick đối chiếu số điện thoại</p>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
-      {result === null && (
-        <button type="button" className={BTN_PRIMARY} disabled={!ready || receive.isPending} onClick={submit}>
+      {result === null && !doorRejected && (
+        <button type="button" className={BTN_PRIMARY} disabled={!ready || receive.isPending || rejectAtDoor.isPending} onClick={submit}>
           Xác nhận đã nhận kiện
         </button>
       )}
+      {canRejectAtDoor && result === null && !doorRejected && (
+        <button
+          type="button"
+          className={BTN_SECONDARY}
+          disabled={(isMail && !hasMatch) || receive.isPending || rejectAtDoor.isPending}
+          onClick={() => void submitDoorReject()}
+        >
+          Từ chối tại cửa (chưa trả cước)
+        </button>
+      )}
+      {doorRejected && <Notice tone="success" role="status">Đã từ chối kiện tại cửa.</Notice>}
       {result?.outcome === 'RECEIVED' && (
         <Notice tone="success" role="status">{`Đã nhận kiện lúc ${formatDateTime(result.receivedAt).slice(0, 5)}. Mở màn đếm để đếm số thực nhận.`}</Notice>
       )}
@@ -432,6 +485,7 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
           )}
         </div>
       )}
+      {dialog}
     </div>
   );
 }

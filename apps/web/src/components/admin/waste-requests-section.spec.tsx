@@ -24,9 +24,11 @@ const PAGE_ONE = {
 };
 
 async function mount(
-  opts: { isAdmin?: boolean; seed?: WasteSeed | null; initialUserId?: string | null; queue?: Route; lookup?: Route; receive?: Route; receive9?: Route; unmatched?: Route } = {},
+  opts: { isAdmin?: boolean; seed?: WasteSeed | null; initialUserId?: string | null; queue?: Route; lookup?: Route; receive?: Route; receive9?: Route; reject?: Route; reject9?: Route; unmatched?: Route } = {},
 ) {
   const api = mockFetch({
+    '/admin/waste/requests/r1/reject': opts.reject ?? { body: { requestId: 'r1' } },
+    '/admin/waste/requests/r9/reject': opts.reject9 ?? { body: { requestId: 'r9' } },
     '/admin/waste/unmatched/un1/resolve': { body: wasteUnmatched({ status: 'RESOLVED' }) },
     '/admin/waste/unmatched/un3/resolve': { body: wasteUnmatched({ id: 'un3', status: 'RESOLVED' }) },
     '/admin/waste/requests/lookup': opts.lookup ?? { body: [] },
@@ -60,6 +62,8 @@ const lookupRow = (c: HTMLElement, id: string) => c.querySelector<HTMLElement>(`
 const requestUrls = (api: { calls: { url: string }[] }) => api.calls.map((x) => x.url).filter((u) => u.includes('/admin/waste/requests'));
 const posts = (api: { calls: { url: string; init?: RequestInit }[] }, part: string) =>
   api.calls.filter((x) => x.url.includes(part) && x.init?.method === 'POST');
+const DOOR_REJECT = 'Từ chối tại cửa (chưa trả cước)';
+const doorBtn = (c: HTMLElement) => btn(c.querySelector('[data-receive-panel]')!, DOOR_REJECT);
 const confirmBtn = (c: HTMLElement) => btn(c.querySelector('[data-receive-panel]')!, 'Xác nhận đã nhận kiện')!;
 
 async function lookup(c: HTMLElement, code = 'GHN123456') {
@@ -216,6 +220,111 @@ describe('WasteRequestsSection', () => {
     await flush();
     const sent = posts(api, '/admin/waste/requests/r1/receive');
     expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ match: { parcelCode: 'TR-7K3M9Q', parcelTracking: 'GHN999' } });
+  });
+
+  describe('từ chối tại cửa (chưa trả cước)', () => {
+    const PICKUP_OPEN = wasteRequestRow({ id: 'r9', code: 'TR-PICK99', method: 'PICKUP', status: 'OPEN', orderCode: 'TUBU2026101546241', carrier: null, trackingCode: null });
+
+    it('chỉ có cho gửi kho đang gửi và lấy hàng đang mở; không có cho mang tới điểm nhận hay đã nhận', async () => {
+      const { c } = await mount({
+        lookup: {
+          body: [
+            wasteRequestRow(),
+            PICKUP_OPEN,
+            wasteRequestRow({ id: 'r5', code: 'TR-RECV55', status: 'RECEIVED', receivedAt: '2026-10-12T02:00:00.000Z' }),
+            wasteRequestRow({ id: 'r6', code: 'TR-DROP66', method: 'DROP_OFF', status: 'OPEN', carrier: null, trackingCode: null }),
+          ],
+        },
+      });
+      await lookup(c);
+      click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
+      expect(doorBtn(c)).not.toBeNull();
+      click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
+      expect(doorBtn(c)).not.toBeNull();
+      click(btn(lookupRow(c, 'r5'), 'Nhận kiện'));
+      expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
+      expect(doorBtn(c)).toBeNull();
+      expect(btn(lookupRow(c, 'r6'), 'Nhận kiện')).toBeNull();
+    });
+
+    it('gửi kho: cần căn cứ đối chiếu như khi nhận kiện', async () => {
+      const { c } = await mount({ lookup: { body: [wasteRequestRow()] } });
+      await lookup(c);
+      click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
+      expect(doorBtn(c)!.disabled).toBe(true);
+      typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-7K3M9Q');
+      expect(doorBtn(c)!.disabled).toBe(false);
+    });
+
+    it('xác nhận gửi lý do UNPAID_POSTAGE cùng căn cứ đối chiếu của nhận kiện, không gửi cân nặng', async () => {
+      const { c, api } = await mount({ lookup: { body: [wasteRequestRow()] } });
+      await lookup(c);
+      click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
+      typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-7K3M9Q');
+      typeInto(c.querySelector('input[name="parcelTracking"]'), '  GHN999  ');
+      typeInto(c.querySelector('input[name="receivedWeightGrams"]'), '1200');
+      click(doorBtn(c));
+      await flush();
+      expect(posts(api, '/reject')).toHaveLength(0);
+      const d = confirmDialog()!;
+      expect(d.textContent).toContain(DOOR_REJECT);
+      typeInto(d.querySelector('textarea'), '  Khách chưa trả cước  ');
+      answerConfirm(true);
+      await flush();
+      const sent = posts(api, '/admin/waste/requests/r1/reject');
+      expect(sent).toHaveLength(1);
+      expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({
+        rejectionReason: 'UNPAID_POSTAGE',
+        rejectionNote: 'Khách chưa trả cước',
+        match: { parcelCode: 'TR-7K3M9Q', parcelTracking: 'GHN999' },
+      });
+      expect(posts(api, '/receive')).toHaveLength(0);
+      expect(c.textContent).toContain('Đã từ chối kiện tại cửa.');
+      expect(confirmBtn(c)).toBeNull();
+      expect(doorBtn(c)).toBeNull();
+      expect(api.calls.filter((x) => x.url.includes('/admin/waste/requests?')).length).toBeGreaterThan(1);
+    });
+
+    it('lấy hàng: không có mã TR- thì không gửi căn cứ, ghi chú để trống thì không gửi ghi chú', async () => {
+      const { c, api } = await mount({ lookup: { body: [PICKUP_OPEN] } });
+      await lookup(c, 'TR-PICK99');
+      click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
+      click(doorBtn(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const sent = posts(api, '/admin/waste/requests/r9/reject');
+      expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ rejectionReason: 'UNPAID_POSTAGE' });
+    });
+
+    it('huỷ hộp thoại thì không gửi gì và panel vẫn mở', async () => {
+      const { c, api } = await mount({ lookup: { body: [wasteRequestRow()] } });
+      await lookup(c);
+      click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
+      typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-7K3M9Q');
+      click(doorBtn(c));
+      await flush();
+      answerConfirm(false);
+      await flush();
+      expect(posts(api, '/reject')).toHaveLength(0);
+      expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
+      expect(doorBtn(c)).not.toBeNull();
+    });
+
+    it('lỗi máy chủ: hiện đúng thông báo và giữ panel mở', async () => {
+      const { c } = await mount({ lookup: { body: [wasteRequestRow()] }, reject: { status: 409, body: { message: 'Căn cứ đối chiếu không hợp lệ' } } });
+      await lookup(c);
+      click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
+      typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-7K3M9Q');
+      click(doorBtn(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const panel = c.querySelector('[data-receive-panel]')!;
+      expect(panel.querySelector('[role="alert"]')!.textContent).toContain('Căn cứ đối chiếu không hợp lệ');
+      expect(doorBtn(c)).not.toBeNull();
+      expect(c.textContent).not.toContain('Đã từ chối kiện tại cửa.');
+    });
   });
 
   it('cân nặng ngoài 1..100000 gram bị chặn', async () => {
