@@ -154,4 +154,75 @@ describe('Nạp đơn ngoài app: song song cùng đơn Pancake (real Postgres)'
     await prisma.order.delete({ where: { id: order.id } });
     await prisma.user.delete({ where: { id: user.id } });
   });
+
+  it('(g) webhook một phần sau bản đầy đủ không đè nguồn/tiền/payload; không có updated_at không đè trạng thái đã giao', async () => {
+    const pid = `EXT${randCode(10)}`;
+    pids.push(pid);
+    await send(body(pid, 3, '2026-10-13T15:30:00'));
+    await send({ id: pid, status: 3, updated_at: '2026-10-14T10:00:00' });
+    await send({ id: pid, status: 1 });
+    const row = await prisma.externalOrder.findUniqueOrThrow({ where: { pancakeOrderId: pid } });
+    expect(row).toMatchObject({ source: 'MARKETPLACE', channel: 'shopee', sourceKey: '-3|shopee_it|-3', goodsValue: 200_000, status: 'DELIVERED' });
+    expect(row.lastPayload).toHaveProperty('items');
+    expect(JSON.stringify(row.lastPayload)).not.toContain('0912345678');
+    expect(row.phone).toBe('0912345678');
+  });
+
+  it('(h) giá trị vượt Int4 không làm sự kiện FAILED', async () => {
+    const pid = `EXT${randCode(10)}`;
+    pids.push(pid);
+    const ev = await send(
+      body(pid, 3, '2026-10-13T15:30:00', {
+        items: [{ quantity: 1, discount_each_product: 0, variation_info: { retail_price: 5_000_000_000 } }],
+        total_price: 5_000_000_000,
+      }),
+    );
+    expect(ev.status).toBe('PROCESSED');
+    expect((await prisma.externalOrder.findUniqueOrThrow({ where: { pancakeOrderId: pid } })).goodsValue).toBeNull();
+    const huge = `EXT${randCode(10)}`;
+    pids.push(huge);
+    expect((await send(body(huge, 1e12, '2026-10-13T15:30:00'))).status).toBe('PROCESSED');
+  });
+
+  it('(i) dòng UNKNOWN đã có claim: đơn app ghép được vẫn xử lý bình thường, dòng giữ nguyên (FK), không FAILED', async () => {
+    const pid = `EXT${randCode(10)}`;
+    pids.push(pid);
+    const bare = { id: pid, status: 1, updated_at: '2026-10-15T10:00:00', partner: { extend_code: `GHN${randCode(8)}` } };
+    expect((await send(bare)).status).toBe('UNMATCHED');
+    const ext = await prisma.externalOrder.findUniqueOrThrow({ where: { pancakeOrderId: pid } });
+    await prisma.externalPointsClaim.create({
+      data: { externalOrderId: ext.id, kind: 'SCAN', ratePct: 0.01, multiplier: 1, dayKey: '2026-10-15' },
+    });
+    const user = await createUser(prisma);
+    const order = await createOrder(prisma, { userId: user.id, pancakeOrderId: pid });
+    const retry = await send({ ...bare, updated_at: '2026-10-15T10:05:00' });
+    expect(retry.status).toBe('PROCESSED');
+    expect(await prisma.externalOrder.count({ where: { pancakeOrderId: pid } })).toBe(1);
+    await prisma.externalPointsClaim.deleteMany({ where: { externalOrderId: ext.id } });
+    await prisma.order.delete({ where: { id: order.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  });
+
+  it('(j) retention: xoá SĐT đơn ngoài quá hạn, giữ dòng; đơn còn claim chờ giữ SĐT', async () => {
+    const old = new Date(Date.now() - 200 * 86_400_000);
+    const mk = async (phone: string) => {
+      const pid = `EXT${randCode(10)}`;
+      pids.push(pid);
+      await send(body(pid, 3, '2026-10-13T15:30:00', { bill_phone_number: phone }));
+      await prisma.$executeRaw`UPDATE external_orders SET "updatedAt" = ${old} WHERE "pancakeOrderId" = ${pid}`;
+      return pid;
+    };
+    const plain = await mk('0911111111');
+    const claimed = await mk('0922222222');
+    const claimedRow = await prisma.externalOrder.findUniqueOrThrow({ where: { pancakeOrderId: claimed } });
+    await prisma.externalPointsClaim.create({
+      data: { externalOrderId: claimedRow.id, kind: 'PHONE', ratePct: 0.01, multiplier: 1, dayKey: '2026-10-15' },
+    });
+    const { DataRetentionService } = await import('../../src/modules/data-retention/data-retention.service');
+    const { SystemConfigService } = await import('../../src/modules/system-config/system-config.service');
+    await new DataRetentionService(prisma, new SystemConfigService(prisma)).runAll({ pauseMs: 0 });
+    expect(await prisma.externalOrder.findUniqueOrThrow({ where: { pancakeOrderId: plain } })).toMatchObject({ phone: null, status: 'DELIVERED' });
+    expect((await prisma.externalOrder.findUniqueOrThrow({ where: { pancakeOrderId: claimed } })).phone).toBe('0922222222');
+    await prisma.externalPointsClaim.deleteMany({ where: { externalOrderId: claimedRow.id } });
+  });
 });

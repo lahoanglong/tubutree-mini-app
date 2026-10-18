@@ -27,7 +27,8 @@ export function orderSourceMapProblem(value: unknown): string | null {
   const ids = v['marketplaceIds'];
   if (!ids || typeof ids !== 'object' || Array.isArray(ids)) return 'marketplaceIds phải là object dạng {"-3":"shopee"}';
   for (const [id, channel] of Object.entries(ids)) {
-    if (!/^-?\d{1,9}$/.test(id)) return `marketplaceIds: khoá "${id}" phải là số nguyên`;
+    // Dạng chuẩn: "03" hay "-0" không bao giờ khớp String(Number(marketplace_id)) nên sẽ im lặng không có tác dụng.
+    if (!/^-?\d{1,9}$/.test(id) || String(Number(id)) !== id) return `marketplaceIds: khoá "${id}" phải là số nguyên dạng chuẩn (-3, không phải 03 hay -0)`;
     if (typeof channel !== 'string' || !CHANNEL_NAME.test(channel)) {
       return `marketplaceIds["${id}"] phải là tên sàn viết thường, vd "shopee"`;
     }
@@ -35,8 +36,9 @@ export function orderSourceMapProblem(value: unknown): string | null {
   const chat = v['chatSources'];
   if (!Array.isArray(chat) || chat.length > MAX_CHAT_SOURCES) return `chatSources phải là mảng tối đa ${MAX_CHAT_SOURCES} khoá nguồn`;
   for (const s of chat) {
-    if (typeof s !== 'string' || !s.trim() || s.length > MAX_SOURCE_KEY_LENGTH) {
-      return 'chatSources chỉ gồm chuỗi khoá nguồn không rỗng (order_sources|account|marketplace_id)';
+    // Khoá toàn dấu | (đơn thiếu cả ba field) sẽ xếp MỌI đơn không rõ nguồn thành đơn chat.
+    if (typeof s !== 'string' || !s.replace(/\|/g, '').trim() || s.length > MAX_SOURCE_KEY_LENGTH) {
+      return 'chatSources chỉ gồm khoá nguồn có nội dung (order_sources|account|marketplace_id), không được rỗng hay chỉ toàn dấu |';
     }
   }
   return null;

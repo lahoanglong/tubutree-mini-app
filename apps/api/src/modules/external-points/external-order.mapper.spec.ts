@@ -9,6 +9,7 @@ import {
   goodsValue,
   normalizeTrackingCode,
   pancakeTime,
+  payloadForStorage,
   sourceKeyOf,
 } from './external-order.mapper';
 import { DEFAULT_ORDER_SOURCE_MAP, orderSourceMapProblem, resolveOrderSourceMap } from './external-order.config';
@@ -228,6 +229,11 @@ describe('pancake.order_source_map', () => {
     ['thiếu chatSources', { marketplaceIds: {} }],
     ['chatSources có chuỗi rỗng', { marketplaceIds: {}, chatSources: [''] }],
     ['chatSources có số', { marketplaceIds: {}, chatSources: [1] }],
+    ['chatSources khoá toàn dấu |', { marketplaceIds: {}, chatSources: ['||'] }],
+    ['chatSources khoá rỗng chữ', { marketplaceIds: {}, chatSources: ['|  |'] }],
+    ['marketplaceIds khoá 03', { marketplaceIds: { '03': 'shopee' }, chatSources: [] }],
+    ['marketplaceIds khoá -0', { marketplaceIds: { '-0': 'shopee' }, chatSources: [] }],
+    ['marketplaceIds khoá +3', { marketplaceIds: { '+3': 'shopee' }, chatSources: [] }],
   ])('từ chối: %s', (_label, value) => {
     expect(orderSourceMapProblem(value)).not.toBeNull();
   });
@@ -237,5 +243,47 @@ describe('pancake.order_source_map', () => {
     const ok = { marketplaceIds: { '-5': 'sendo' }, chatSources: ['a|b|c'] };
     expect(resolveOrderSourceMap(ok)).toEqual(ok);
     expect(resolveOrderSourceMap(ok)).not.toBe(ok);
+  });
+});
+
+describe('giá trị vượt cột Int', () => {
+  it('goodsValue lớn hơn 2^31-1 là null, không để Prisma ném', () => {
+    const data = {
+      items: [{ quantity: 1, discount_each_product: 0, variation_info: { retail_price: 3_000_000_000 } }],
+      total_price: 3_000_000_000,
+      total_discount: 0,
+    };
+    expect(goodsValue(data)).toBeNull();
+  });
+
+  it('status ngoài miền Int hoặc âm: pancakeStatus null, trạng thái OPEN', () => {
+    expect(externalStatusOf({ status: 1e12 })).toEqual({ pancakeStatus: null, status: 'OPEN' });
+    expect(externalStatusOf({ status: -5 })).toEqual({ pancakeStatus: null, status: 'OPEN' });
+    expect(externalStatusOf({ status: 2_147_483_647 }).pancakeStatus).toBe(2_147_483_647);
+  });
+});
+
+describe('payloadForStorage', () => {
+  it('giữ field phân loại/tiền/trạng thái/mã vận đơn, bỏ PII và ghi chú; kết quả vẫn phân loại và tính tiền như bản gốc', () => {
+    const raw = {
+      ...fixture('synthetic-shopee.json'),
+      bill_full_name: 'Nguyen Van A',
+      bill_phone_number: '0912345678',
+      note: 'ghi chú tự do',
+      shipping_address: { phone_number: '0912345678', full_name: 'A', address: 'x' },
+      tags: [{ id: 1, name: 'WEB', color: 'red' }, 'VIP'],
+      items: [{ quantity: 2, discount_each_product: 10000, product_name: 'Tên', variation_info: { retail_price: 150000, name: 'Biến thể' } }],
+    };
+    const kept = payloadForStorage(raw);
+    const text = JSON.stringify(kept);
+    for (const pii of ['Nguyen Van A', '0912345678', 'ghi chú', 'shipping_address', 'bill_', 'Tên', 'Biến thể', 'color']) expect(text).not.toContain(pii);
+    expect(kept['tags']).toEqual([{ name: 'WEB' }, 'VIP']);
+    const shopee = fixture('synthetic-shopee.json');
+    const keptShopee = payloadForStorage(shopee);
+    expect(classifyPancakeOrder(keptShopee, MAP)).toEqual(classifyPancakeOrder(shopee, MAP));
+    expect(goodsValue(keptShopee)).toBe(goodsValue(shopee));
+    expect(extractTrackingCodes(keptShopee)).toEqual(extractTrackingCodes(shopee));
+    expect(deliveredAt(keptShopee)).toEqual(deliveredAt(shopee));
+    expect(sourceKeyOf(keptShopee)).toBe(sourceKeyOf(shopee));
   });
 });

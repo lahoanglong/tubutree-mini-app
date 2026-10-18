@@ -106,6 +106,8 @@ export function marketplaceOrderSn(data: Data): string | null {
 }
 
 const GOODS_TOLERANCE = 0.01;
+/** Cột Int của Postgres: số lớn hơn làm Prisma ném và sự kiện FAILED mãi. */
+const INT4_MAX = 2_147_483_647;
 
 /**
  * Tiền hàng khách trả, không cộng ship: Σ số lượng × (giá lẻ − giảm mỗi món) − total_discount. Đối chiếu với
@@ -130,6 +132,7 @@ export function goodsValue(data: Data): number | null {
   const value = Math.round(lines - discount);
   const reference = totalPrice - discount;
   if (value <= 0 || reference <= 0) return null;
+  if (value > INT4_MAX) return null;
   return Math.abs(value - reference) / reference <= GOODS_TOLERANCE ? value : null;
 }
 
@@ -190,6 +193,40 @@ const STATUS_BY_CODE: Record<number, ExternalOrderStatusName> = {
 /** Mã trạng thái Pancake → trạng thái đơn ngoài. Mã chưa chốt (mới, đã gửi hàng, chờ in…) là OPEN. */
 export function externalStatusOf(data: Data): { pancakeStatus: number | null; status: ExternalOrderStatusName } {
   const code = finiteNumber(data['status']);
-  const pancakeStatus = code !== null && Number.isInteger(code) ? code : null;
+  const pancakeStatus = code !== null && Number.isInteger(code) && code >= 0 && code <= INT4_MAX ? code : null;
   return { pancakeStatus, status: (pancakeStatus !== null ? STATUS_BY_CODE[pancakeStatus] : undefined) ?? 'OPEN' };
+}
+
+/**
+ * Bản payload lưu ở `external_orders.lastPayload`: chỉ các field phục vụ phân loại, tính tiền, trạng thái và mã vận đơn. Không giữ
+ * tên, SĐT, địa chỉ, ghi chú tự do — bảng này không nằm dưới hạn xoá của pancake_webhook_events nên không được giữ PII vô hạn.
+ */
+export function payloadForStorage(data: Data): Data {
+  const pick = (src: Data | null, keys: readonly string[]): Data => {
+    const out: Data = {};
+    for (const k of keys) if (src && src[k] !== undefined) out[k] = src[k];
+    return out;
+  };
+  const partner = asRecord(data['partner']);
+  const out = pick(data, [
+    'id', 'order_id', 'status', 'status_name', 'marketplace_id', 'is_from_ecommerce', 'order_sources', 'account', 'custom_id',
+    'tags', 'total_price', 'total_discount', 'total_price_after_sub_discount', 'shipping_fee', 'order_number_vtp',
+    'tracking_number', 'inserted_at', 'updated_at',
+  ]);
+  if (Array.isArray(out['tags'])) out['tags'] = (out['tags'] as unknown[]).map((t) => (typeof t === 'string' ? t : pick(asRecord(t), ['name'])));
+  if (data['items'] !== undefined) {
+    out['items'] = asArray(data['items']).map((i) => {
+      const rec = asRecord(i);
+      return { ...pick(rec, ['quantity', 'discount_each_product']), variation_info: pick(asRecord(rec?.['variation_info']), ['retail_price']) };
+    });
+  }
+  if (partner) {
+    out['partner'] = {
+      ...pick(partner, ['extend_code']),
+      extend_update: asArray(partner['extend_update']).map((u) => pick(asRecord(u), ['tracking_id'])),
+    };
+  }
+  if (data['invoice_info_list'] !== undefined) out['invoice_info_list'] = asArray(data['invoice_info_list']).map((i) => pick(asRecord(i), ['order_sn']));
+  if (data['status_history'] !== undefined) out['status_history'] = asArray(data['status_history']).map((h) => pick(asRecord(h), ['status', 'updated_at']));
+  return out;
 }

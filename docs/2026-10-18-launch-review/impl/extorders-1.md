@@ -39,3 +39,18 @@ Chỉ sự kiện mang nguyên object đơn (`orders`, `order`, `order.updated`,
 - Đơn app thiếu dấu và tới trước khi lưu pancakeOrderId: lưu UNKNOWN, giữ UNMATCHED, cron ghép lại rồi dọn dòng UNKNOWN. Đơn app không bao giờ ghép được sẽ ở lại là UNKNOWN (thấy ở tab, không cộng điểm).
 - `goodsValue` theo công thức plan; `total_price` được giả định là tổng sau giảm theo dòng (để `total_price − total_discount` đối chiếu được). Chưa kiểm bằng payload thật; sai thì đơn ra "chưa tính được" chứ không cộng sai.
 - Dữ liệu kiểm thử là tự dựng: `apps/api/test/fixtures/pancake/synthetic-*.json`.
+
+## Sau review (F1-F7)
+
+- F1: webhook một phần không đè source/channel/sourceKey (chỉ khi loại mới khác UNKNOWN hoặc payload có marketplace_id/order_sources), goodsValue (chỉ khi khác null), lastPayload (chỉ khi payload có items). `chatSources` từ chối khoá chỉ toàn dấu `|` hay rỗng.
+- F2/F6: dọn dòng UNKNOWN chỉ xoá dòng chưa có claim (`claim: { is: null }`), bọc try/catch + log warn, chạy bất kể cờ nạp.
+- F3: `lastPayload` lưu bản đã lọc (`payloadForStorage`): không SĐT, tên, địa chỉ, ghi chú, tên sản phẩm. Retention: thêm vào mục `webhook_events` (cùng khoá `retention.webhook_events_days`, mặc định 90, sàn 14) một lượt UPDATE xoá `external_orders.phone` của dòng quá hạn không còn claim PENDING/REVIEW/HELD_NO_MEMBER. Lý do: SĐT không được sống lâu hơn payload gốc ở `pancake_webhook_events` cùng hạn 90 ngày; dòng đơn (mã vận đơn, trạng thái, tiền hàng) giữ lại vì không có PII. Bước 3 cần SĐT cho claim chờ nên claim chờ được loại trừ.
+- F4: sự kiện không có `updated_at` chỉ áp lên dòng chưa có mốc Pancake.
+- F5: `goodsValue` và `pancakeStatus` vượt Int4 (hoặc status âm) thành null.
+- F7: khoá `marketplaceIds` phải ở dạng chuẩn `String(Number(id)) === id` (từ chối "03", "-0", "+3").
+
+## Giả định phải kiểm bằng payload thật
+
+- Múi giờ `pancakeTime`: chuỗi không múi giờ đang đọc là +07:00; có thể Pancake gửi UTC không hậu tố. Sai thì `deliveredAt` lệch 7 giờ (ảnh hưởng mốc cộng điểm ở bước 2) và so `updated_at` vẫn nhất quán nhưng mốc giao sai.
+- `total_discount` có thể đã gồm `discount_each_product` (giảm theo dòng); công thức hiện tại trừ cả hai nên có thể tính hụt, và đối chiếu 1% với `total_price − total_discount` sẽ cho null (vào REVIEW) chứ không cộng sai.
+- Mã `marketplace_id` -3/-4/-9 cho Shopee/Lazada/TikTok chỉ là mặc định theo yêu cầu, chưa thấy trên payload thật.

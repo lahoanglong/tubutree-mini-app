@@ -215,10 +215,9 @@ export class PancakeProcessor extends WorkerHost {
         }
         return 'UNMATCHED';
       }
-      // Lần ghép lại thành công: dòng UNKNOWN từng lưu cho đơn này là "đơn ngoài app" giả.
-      if (match.pancakeId && (await this.captureEnabled())) {
-        await this.prisma.externalOrder.deleteMany({ where: { pancakeOrderId: match.pancakeId, source: 'UNKNOWN' } });
-      }
+      // Lần ghép lại thành công: dòng UNKNOWN từng lưu cho đơn này là "đơn ngoài app" giả. Chạy bất kể cờ nạp (cờ tắt sau khi đã lưu
+      // vẫn phải dọn). Chỉ dọn dòng chưa có claim (FK RESTRICT), và lỗi dọn không bao giờ được làm hỏng đường xử lý đơn app.
+      if (match.pancakeId) await this.dropUnknownExternal(match.pancakeId);
       // D4: đơn gian hàng đối tác tự giao không bao giờ lên Pancake — đơn Pancake nào mang mã của nó là đơn lạ (nhân viên
       // tạo tay/đơn bù ghi nhầm mã), không được giao/huỷ/hoàn/cộng điểm hộ đối tác.
       if (isMerchantFulfilledOrder(match.order)) {
@@ -320,6 +319,14 @@ export class PancakeProcessor extends WorkerHost {
         'trả đơn Pancake về đúng nội dung đơn Tubu.',
       ATTENTION_TOTAL_MISMATCH,
     );
+  }
+
+  private async dropUnknownExternal(pancakeOrderId: string): Promise<void> {
+    try {
+      await this.prisma.externalOrder.deleteMany({ where: { pancakeOrderId, source: 'UNKNOWN', claim: { is: null } } });
+    } catch (err) {
+      this.logger.warn(`Không dọn được dòng đơn ngoài UNKNOWN của đơn Pancake #${pancakeOrderId}: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   private async captureEnabled(): Promise<boolean> {

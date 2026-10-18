@@ -11,6 +11,7 @@ import {
   goodsValue,
   marketplaceOrderSn,
   pancakeTime,
+  payloadForStorage,
   sourceKeyOf,
 } from './external-order.mapper';
 
@@ -57,18 +58,22 @@ export async function ingestExternalOrder(
   const insertedAt = pancakeTime(data['inserted_at']);
   const sn = marketplaceOrderSn(data);
 
-  const identity = {
-    source: klass.kind,
-    channel: klass.channel,
-    sourceKey: sourceKeyOf(data),
-    goodsValue: goodsValue(data),
-    lastPayload: data as Prisma.InputJsonValue,
-  };
+  const sourceKey = sourceKeyOf(data);
+  const goods = goodsValue(data);
+  const stored = payloadForStorage(data) as Prisma.InputJsonValue;
+  const hasItems = Array.isArray(data['items']) && data['items'].length > 0;
+  // Webhook một phần (vd {id, status, updated_at}) không mang nguồn nên phân thành UNKNOWN: không được đè loại, khoá nguồn,
+  // tiền hàng hay payload đã biết bằng thứ rỗng.
+  const carriesSource = klass.kind !== 'UNKNOWN' || data['marketplace_id'] != null || data['order_sources'] != null;
 
   const created = await prisma.externalOrder.createMany({
     data: [
       {
-        ...identity,
+        source: klass.kind,
+        channel: klass.channel,
+        sourceKey,
+        goodsValue: goods,
+        lastPayload: stored,
         pancakeOrderId,
         trackingCode: codes[0] ?? null,
         trackingCodes: codes,
@@ -91,10 +96,13 @@ export async function ingestExternalOrder(
   const updated = await prisma.externalOrder.updateMany({
     where: {
       pancakeOrderId,
-      ...(updatedAt ? { OR: [{ pancakeUpdatedAt: null }, { pancakeUpdatedAt: { lte: updatedAt } }] } : {}),
+      // Sự kiện không có updated_at không có gì để so: chỉ được áp lên dòng cũng chưa có mốc, không đè bản đã có mốc.
+      ...(updatedAt ? { OR: [{ pancakeUpdatedAt: null }, { pancakeUpdatedAt: { lte: updatedAt } }] } : { pancakeUpdatedAt: null }),
     },
     data: {
-      ...identity,
+      ...(carriesSource ? { source: klass.kind, channel: klass.channel, sourceKey } : {}),
+      ...(goods !== null ? { goodsValue: goods } : {}),
+      ...(hasItems ? { lastPayload: stored } : {}),
       ...(codes.length > 0 ? { trackingCode: codes[0]!, trackingCodes: codes } : {}),
       ...(sn ? { marketplaceOrderSn: sn } : {}),
       ...(phone ? { phone, phoneLast3: phone.slice(-3) } : {}),

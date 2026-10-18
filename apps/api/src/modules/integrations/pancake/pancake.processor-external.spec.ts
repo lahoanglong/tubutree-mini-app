@@ -119,16 +119,27 @@ describe('PancakeProcessor — nạp đơn ngoài app', () => {
     const t = setup(fixture('synthetic-shopee.json'), { matched });
     t.proc['onOrderEvent' as never] = jest.fn().mockResolvedValue(undefined) as never;
     await t.run();
-    expect(t.externalOrder.deleteMany).toHaveBeenCalledWith({ where: { pancakeOrderId: '910001', source: 'UNKNOWN' } });
+    expect(t.externalOrder.deleteMany).toHaveBeenCalledWith({ where: { pancakeOrderId: '910001', source: 'UNKNOWN', claim: { is: null } } });
     expect(t.finalStatus()).toMatchObject({ status: 'PROCESSED' });
   });
 
-  it('công tắc nạp tắt thì không dọn gì khi đã khớp đơn Tubu', async () => {
+  it('dọn UNKNOWN chạy cả khi công tắc nạp đã tắt (cờ tắt sau khi đã lưu vẫn phải dọn)', async () => {
     const matched = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', fulfiller: 'TUBU', pancakeOrderId: '910001' };
     const t = setup(fixture('synthetic-shopee.json'), { matched, config: { [EXTERNAL_CAPTURE_ENABLED_KEY]: false } });
     t.proc['onOrderEvent' as never] = jest.fn().mockResolvedValue(undefined) as never;
     await t.run();
-    expect(t.externalOrder.deleteMany).not.toHaveBeenCalled();
+    expect(t.externalOrder.deleteMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi khi dọn UNKNOWN (vd FK claim) không làm hỏng đường xử lý đơn app', async () => {
+    const matched = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', fulfiller: 'TUBU', pancakeOrderId: '910001' };
+    const t = setup(fixture('synthetic-shopee.json'), { matched });
+    const onOrderEvent = jest.fn().mockResolvedValue(undefined);
+    t.proc['onOrderEvent' as never] = onOrderEvent as never;
+    t.externalOrder.deleteMany.mockRejectedValue(new Error('FK external_points_claims'));
+    await expect(t.run()).resolves.toBeUndefined();
+    expect(onOrderEvent).toHaveBeenCalledTimes(1);
+    expect(t.finalStatus()).toMatchObject({ status: 'PROCESSED' });
   });
 
   it('đơn lạ mang mã Tubu đã gắn đơn Pancake khác (foreign): không lưu', async () => {
@@ -233,5 +244,52 @@ describe('PancakeProcessor — nạp đơn ngoài app', () => {
     await t.run();
     expect(t.finalStatus()).toMatchObject({ status: 'UNMATCHED' });
     expect(t.externalOrder.createMany).not.toHaveBeenCalled();
+  });
+
+  const updateArgs = (t: ReturnType<typeof setup>) =>
+    t.externalOrder.updateMany.mock.calls.map(([a]) => a as { where: Record<string, unknown>; data: Record<string, unknown> })[0]!;
+
+  it('webhook một phần {id, status, updated_at} không đè loại, khoá nguồn, tiền hàng và payload đã lưu', async () => {
+    const t = setup({ id: 910001, status: 3, updated_at: '2026-10-14T00:00:00' }, { createCount: 0 });
+    await t.run();
+    const { data } = updateArgs(t);
+    for (const k of ['source', 'channel', 'sourceKey', 'goodsValue', 'lastPayload']) expect(data).not.toHaveProperty(k);
+    expect(data).toMatchObject({ status: 'DELIVERED' });
+  });
+
+  it('webhook đầy đủ ghi đè nguồn, tiền hàng và payload', async () => {
+    const t = setup(fixture('synthetic-shopee.json'), { createCount: 0 });
+    await t.run();
+    const { data } = updateArgs(t);
+    expect(data).toMatchObject({ source: 'MARKETPLACE', channel: 'shopee', sourceKey: '-3|shopee_gian_hang|-3', goodsValue: 320_000 });
+    expect(data).toHaveProperty('lastPayload');
+  });
+
+  it('webhook một phần nhưng có marketplace_id vẫn cập nhật loại', async () => {
+    const t = setup({ id: 910001, status: 3, marketplace_id: -4, updated_at: '2026-10-14T00:00:00' }, { createCount: 0 });
+    await t.run();
+    expect(updateArgs(t).data).toMatchObject({ source: 'MARKETPLACE', channel: 'lazada' });
+  });
+
+  it('webhook không có updated_at chỉ áp lên dòng chưa có mốc Pancake (không đè bản đã có mốc)', async () => {
+    const t = setup({ id: 910001, status: 1, marketplace_id: -3 }, { createCount: 0 });
+    await t.run();
+    expect(updateArgs(t).where).toEqual({ pancakeOrderId: '910001', pancakeUpdatedAt: null });
+  });
+
+  it('lastPayload lưu bản đã lọc: không SĐT, tên, địa chỉ, ghi chú', async () => {
+    const raw = {
+      ...fixture('synthetic-shopee.json'),
+      bill_full_name: 'Nguyen Van A',
+      note: 'giao gấp, SĐT 0912345678',
+      shipping_address: { full_name: 'Nguyen Van A', phone_number: '0912345678', address: '1 Le Loi' },
+    };
+    const t = setup(raw);
+    await t.run();
+    const row = (t.externalOrder.createMany.mock.calls[0]![0] as { data: { lastPayload: Record<string, unknown> }[] }).data[0]!;
+    const text = JSON.stringify(row.lastPayload);
+    for (const pii of ['Nguyen Van A', '0912345678', 'Le Loi', 'giao gấp', 'bill_phone_number', 'shipping_address']) expect(text).not.toContain(pii);
+    expect(row.lastPayload).toMatchObject({ id: 910001, marketplace_id: -3, total_price: 340000 });
+    expect(row.lastPayload['items']).toHaveLength(2);
   });
 });
