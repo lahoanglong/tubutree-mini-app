@@ -54,6 +54,7 @@ const APPROVED_LOADED_KEYS = [
     'community.rep_thresholds',
     'community.unanswered_alert_hours',
     'dealer.max_discount_pct',
+    'dealer.review_hours',
     'dealer.reward_claim_grace_days',
     'flashsale.default_per_user_limit',
     'flashsale.max_discount_pct',

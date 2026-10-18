@@ -18,6 +18,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { resolveDealerRecipient } from './dealer-recipient';
+import { DEALER_MAX_DISCOUNT_PCT_DEFAULT } from './dealer-config';
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { forBuyer } from '../orders/buyer-order-fields';
 
@@ -1504,7 +1505,7 @@ export class DealerService {
     const tierId = (user.metadata as { dealerTierId?: string } | null)?.dealerTierId;
     const tier = tierId ? await this.prisma.dealerTier.findUnique({ where: { id: tierId } }) : null;
 
-    const maxDiscount = await this.config.get<number>('dealer.max_discount_pct', 0.45);
+    const maxDiscount = await this.config.get<number>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT);
     const rules = (tier?.discountRules as { default?: number } | undefined) ?? {};
     const discountPct = Math.min(rules.default ?? 0.2, maxDiscount);
     return { discountPct, tier };

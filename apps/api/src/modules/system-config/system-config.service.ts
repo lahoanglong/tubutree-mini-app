@@ -93,6 +93,7 @@ export class SystemConfigService {
     'flashsale.max_discount_pct': { min: 0.01, max: 1, note: 'phân số (0.9 = giá flash ≥ 10% giá đang bán; 1 = không chặn)' },
     'flashsale.max_duration_days': { min: 1, max: 366, note: 'số ngày tối đa của một đợt flash sale', integer: true },
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },
+    'dealer.review_hours': { min: 1, max: 720, note: 'số giờ nguyên Tubu hẹn xét duyệt hồ sơ đại lý (chỉ để hiện chữ cho người đăng ký)', integer: true },
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },
     'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)', integer: true },
     'cashback.hold_days': { min: 0, max: 365, note: 'số ngày', integer: true },

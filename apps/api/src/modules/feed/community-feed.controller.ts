@@ -12,6 +12,7 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
+import { EVENT_REWARD_MAX_POINTS } from './community-limits';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
@@ -58,7 +59,7 @@ export class CreateEventDto {
   @IsDateString() endAt!: string;
   // Điểm Xanh (1 điểm = 1.000đ). Trần 1.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
   // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
-  @OptionalNotNull() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(EVENT_REWARD_MAX_POINTS) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;

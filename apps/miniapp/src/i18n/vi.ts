@@ -315,7 +315,9 @@ export const vi = {
     /** Đơn chưa "Đang giao" nhưng kho đã đặt hãng (có mã vận đơn) — không tự huỷ được nữa. */
     carrierBooked: 'Đã đặt đơn vị vận chuyển',
     emptyHeading: 'Bạn chưa có đơn nào',
-    emptyBody: 'Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ',
+    // Số do admin đặt (voucher.welcome_amount, voucher.welcome_min_order): nhận từ config công khai, không viết cứng ở đây.
+    emptyBody: (minOrder: string, amount: string) => `Đơn đầu từ ${minOrder} dùng được mã giảm giá chào mừng ${amount}`,
+    emptyBodyNoMin: (amount: string) => `Đơn đầu dùng được mã giảm giá chào mừng ${amount}`,
     emptyCta: 'Bắt đầu mua',
     tabAll: 'Tất cả',
     tabTitle: 'Đơn hàng',
@@ -647,6 +649,13 @@ export const vi = {
     mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
   },
 
+  dealerApply: {
+    pitch: (pct: string) => `Giá sỉ đến ${pct} · công nợ · đặt hàng nhanh số lượng lớn.`,
+    pitchGeneric: 'Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.',
+    pendingBody: (hours: number) => `Đội ngũ Tubu sẽ xét duyệt trong vòng ${hours} giờ và liên hệ lại với bạn qua Zalo.`,
+    pendingBodyGeneric: 'Đội ngũ Tubu sẽ xét duyệt và liên hệ lại với bạn qua Zalo.',
+  },
+
   dealerOrder: {
     outOfStockPreorder: 'Hết hàng — được đặt trước',
     preorderLine: (n: number) => `Đặt trước ${n}, giao khi hàng về`,
@@ -768,7 +777,8 @@ export const vi = {
     eventDescPlaceholder: 'Mô tả sự kiện (không bắt buộc)',
     eventCoverLabel: 'Ảnh bìa sự kiện',
     eventRewardLabel: 'Thưởng Điểm Xanh',
-    eventRewardHint: '1 điểm = 1.000đ, tối đa 1.000 điểm',
+    eventRewardHint: (redeem: string, maxPoints: string) => `1 điểm = ${redeem}, tối đa ${maxPoints} điểm`,
+    eventRewardHintGeneric: 'Điểm Xanh thưởng cho người thắng sự kiện',
     createEvent: 'Tạo sự kiện',
     eventCreated: 'Đã tạo sự kiện 🎉',
     closeEvent: 'Đóng',

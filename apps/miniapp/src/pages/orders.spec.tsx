@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), fetchOrders: vi.fn(), fetchPurchasedItems: vi.fn(), repurchaseOrder: vi.fn(),
   getSubscriptions: vi.fn(), search: '',
+  getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -19,7 +20,7 @@ vi.mock('../services/shop-api', () => ({
   fetchPurchasedItems: mocks.fetchPurchasedItems,
   repurchaseOrder: mocks.repurchaseOrder,
   addToCart: vi.fn(),
-  getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
+  getPublicConfig: mocks.getPublicConfig,
   getAddresses: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../services/subscriptions-api', () => ({
@@ -163,5 +164,46 @@ describe('OrdersPage (tab gốc)', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Thử lại/ }));
     expect(await screen.findByRole('button', { name: 'Đơn TUBU-777' })).toBeInTheDocument();
+  });
+});
+
+// D5-10: dòng gợi ý trên màn đơn hàng trống lấy mệnh giá và ngưỡng voucher chào mừng từ config công khai.
+describe('OrdersPage — đơn hàng trống nói đúng voucher chào mừng theo cấu hình (D5-10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search = '';
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 20, total: 0 } });
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.getSubscriptions.mockResolvedValue([]);
+  });
+  const cfg = (welcomeVoucher: { amount: number; minOrder: number }) => ({
+    subscribeDiscountPct: 0.12,
+    newCustomer: { welcomeVoucher, firstOrderFreeShip: { enabled: false, minSubtotal: 0 } },
+  });
+
+  it('số trong chữ theo cấu hình, không theo số cũ', async () => {
+    mocks.getPublicConfig.mockResolvedValue(cfg({ amount: 15000, minOrder: 99000 }));
+    renderPage();
+    expect(await screen.findByText('Đơn đầu từ 99.000đ dùng được mã giảm giá chào mừng 15.000đ')).toBeInTheDocument();
+  });
+
+  it('mã không đòi đơn tối thiểu: bỏ cụm "từ …"', async () => {
+    mocks.getPublicConfig.mockResolvedValue(cfg({ amount: 30000, minOrder: 0 }));
+    renderPage();
+    expect(await screen.findByText('Đơn đầu dùng được mã giảm giá chào mừng 30.000đ')).toBeInTheDocument();
+  });
+
+  it('admin tắt voucher chào mừng (mệnh giá 0) hoặc API cũ chưa trả số: không nhắc voucher', async () => {
+    mocks.getPublicConfig.mockResolvedValue(cfg({ amount: 0, minOrder: 199000 }));
+    const off = renderPage();
+    expect(await screen.findByText('Bạn chưa có đơn nào')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    expect(screen.queryByText(/mã giảm giá chào mừng/)).toBeNull();
+    off.unmount();
+
+    mocks.getPublicConfig.mockResolvedValue({ subscribeDiscountPct: 0.12 });
+    renderPage();
+    expect(await screen.findByText('Bạn chưa có đơn nào')).toBeInTheDocument();
+    expect(screen.queryByText(/mã giảm giá chào mừng/)).toBeNull();
   });
 });

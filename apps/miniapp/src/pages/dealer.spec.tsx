@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { preorderQty, realDiscountPct, DEALER_MAX_QTY } from './dealer-pricing';
 
 const mocks = vi.hoisted(() => ({
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getTemplates: vi.fn(),
   saveTemplate: vi.fn(),
   deleteTemplate: vi.fn(),
+  config: { isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: 24 } } as Record<string, unknown>,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -44,6 +45,7 @@ vi.mock('../services/dealer-api', async (importOriginal) => ({
   saveTemplate: mocks.saveTemplate,
   deleteTemplate: mocks.deleteTemplate,
 }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.config }));
 vi.mock('../components/image-upload', () => ({ ImageUpload: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -444,5 +446,47 @@ describe('DealerPage — đơn hàng, công nợ, báo cáo', () => {
     openTab('Báo cáo');
     await screen.findByText('Phần thưởng đại lý');
     expect(document.body.textContent).not.toContain('✓');
+  });
+});
+
+// D5-10: lời chào trang đăng ký đại lý và lời hẹn duyệt hồ sơ lấy số từ config công khai, không viết cứng 45% / 24 giờ.
+describe('DealerPage — số trong chữ theo cấu hình (D5-10)', () => {
+  const DEFAULT_CONFIG = { isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: 24 } };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.config = DEFAULT_CONFIG;
+  });
+  afterAll(() => {
+    mocks.config = DEFAULT_CONFIG;
+  });
+
+  it('trang đăng ký: "Giá sỉ đến X%" theo chiết khấu tối đa admin đặt', async () => {
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'NONE' });
+    mocks.config = { isLoaded: true, dealer: { maxDiscountPct: 0.4, reviewHours: 24 } };
+    renderPage();
+    expect(await screen.findByText('Giá sỉ đến 40% · công nợ · đặt hàng nhanh số lượng lớn.')).toBeInTheDocument();
+  });
+
+  it('chưa có số (API cũ, cấu hình hỏng, chưa tải xong): bỏ con số, không hiện số mặc định', async () => {
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'NONE' });
+    for (const config of [{ isLoaded: false }, { isLoaded: true }, { isLoaded: true, dealer: { maxDiscountPct: null, reviewHours: null } }]) {
+      mocks.config = config;
+      const view = renderPage();
+      expect(await screen.findByText('Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.')).toBeInTheDocument();
+      expect(screen.queryByText(/\d+%/)).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it('hồ sơ chờ duyệt: số giờ theo cấu hình; không có số thì không hẹn giờ', async () => {
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'PENDING' });
+    mocks.config = { isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: 48 } };
+    const withHours = renderPage();
+    expect(await screen.findByText('Đội ngũ Tubu sẽ xét duyệt trong vòng 48 giờ và liên hệ lại với bạn qua Zalo.')).toBeInTheDocument();
+    withHours.unmount();
+
+    mocks.config = { isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: null } };
+    renderPage();
+    expect(await screen.findByText('Đội ngũ Tubu sẽ xét duyệt và liên hệ lại với bạn qua Zalo.')).toBeInTheDocument();
   });
 });

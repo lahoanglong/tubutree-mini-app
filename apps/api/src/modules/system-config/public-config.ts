@@ -3,6 +3,8 @@ import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
 import { toShippingEta } from './shipping-eta';
 import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../affiliate/affiliate.service';
 import { PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
+import { EVENT_REWARD_MAX_POINTS } from '../feed/community-limits';
+import { DEALER_MAX_DISCOUNT_PCT_DEFAULT, DEALER_REVIEW_HOURS_DEFAULT } from '../dealer/dealer-config';
 import { FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
 
 /** Admin để trống (hoặc lưu sai kiểu) thì trả null để miniapp ẩn dòng, không hiện thông tin giả. */
@@ -43,6 +45,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     vndPerPointRedeem,
     homeNewCustomerLayout,
     communityPublicPreview,
+    dealerMaxDiscountPct,
+    dealerReviewHours,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', 200000),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -71,6 +75,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<number>('loyalty.vnd_per_point_redeem', 1000),
     config.get<unknown>('home.new_customer_layout', false),
     config.get<unknown>(PUBLIC_PREVIEW_KEY, false),
+    config.get<unknown>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT),
+    config.get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT),
   ]);
   return {
     freeshipThreshold,
@@ -95,6 +101,12 @@ export async function buildPublicConfig(config: SystemConfigService) {
     homeNewCustomerLayout: homeNewCustomerLayout === true,
     // Miniapp chỉ gọi /feed/public-preview khi cờ này true (API vẫn tự kiểm cờ và trả 404 khi tắt).
     communityPublicPreview: communityPublicPreview === true,
+    // Chữ trên trang đăng ký đại lý ("giá sỉ đến X%", "xét duyệt trong N giờ"). Giá trị hỏng → null để miniapp bỏ con số.
+    dealer: {
+      maxDiscountPct: typeof dealerMaxDiscountPct === 'number' && dealerMaxDiscountPct > 0 && dealerMaxDiscountPct <= 1 ? dealerMaxDiscountPct : null,
+      reviewHours: Number.isInteger(dealerReviewHours) && (dealerReviewHours as number) >= 1 ? (dealerReviewHours as number) : null,
+    },
+    community: { eventRewardMaxPoints: EVENT_REWARD_MAX_POINTS },
   };
 }
 

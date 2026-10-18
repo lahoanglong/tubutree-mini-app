@@ -5,8 +5,10 @@ import { fetchOrders } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { formatVnd } from '../utils/format';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Button } from '../components/ui/button';
@@ -29,6 +31,15 @@ export default function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const phase = useAuthPhase();
+  // Gợi ý voucher chào mừng ở màn trống: số theo config công khai; admin tắt voucher (mệnh giá 0) hoặc chưa có số thì không nhắc.
+  const config = usePublicConfig();
+  const welcome = config.isLoaded ? config.newCustomer?.welcomeVoucher : undefined;
+  const emptyBody =
+    welcome && welcome.amount > 0
+      ? welcome.minOrder > 0
+        ? vi.orders.emptyBody(formatVnd(welcome.minOrder), formatVnd(welcome.amount))
+        : vi.orders.emptyBodyNoMin(formatVnd(welcome.amount))
+      : undefined;
   const [tab, setTab] = useState<OrdersTabKey>(() => parseOrdersTab(location.search));
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
@@ -81,7 +92,7 @@ export default function OrdersPage() {
             <EmptyState
               art="box"
               heading={vi.orders.emptyHeading}
-              body={vi.orders.emptyBody}
+              body={emptyBody}
               ctaLabel={vi.orders.emptyCta}
               onCta={() => navigate('/browse')}
             />
