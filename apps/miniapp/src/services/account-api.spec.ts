@@ -65,6 +65,11 @@ describe('pointsReasonLabel', () => {
     ['RECYCLE_REVERSED:TR-8K2M9', 'Thu hồi điểm đổi rác'],
     ['GIFT_REDEEM:gift-seed', 'Đổi điểm lấy quà'],
     ['GIFT_REFUND:QG-8K2M9P4T', 'Hoàn điểm quà'],
+    ['PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên'],
+    ['PANCAKE_CHAT_ORDER_REVERSED:1234567', 'Thu hồi điểm đơn đặt qua tư vấn viên'],
+    ['MARKETPLACE_ORDER:2610A1B2C3', 'Tích điểm đơn mua trên sàn'],
+    ['MARKETPLACE_ORDER_REVERSED:2610A1B2C3', 'Thu hồi điểm đơn mua trên sàn'],
+    ['MERGED:guest-1:PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên'],
     ['MERGED:guest-1:RECYCLE:TR-8K2M9', 'Đổi rác lấy quà'],
     ['LOYALTY_REDEEM_VOUCHER:reward-freeship', 'Đổi điểm lấy mã giảm giá'],
   ])('%s → %s', (reason, label) => {
