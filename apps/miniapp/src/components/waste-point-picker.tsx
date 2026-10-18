@@ -165,7 +165,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 12px 12px 42px' }}>
               {locked && (
                 <div>
-                  <Badge tone="warning">{p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}</Badge>
+                  <Badge tone="warning" style={{ whiteSpace: 'normal', display: 'inline-block' }}>{p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}</Badge>
                 </div>
               )}
               {p.perkText && (

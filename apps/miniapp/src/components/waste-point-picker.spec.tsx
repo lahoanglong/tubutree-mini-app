@@ -53,6 +53,12 @@ describe('WastePointPicker (§4.4, §16.1)', () => {
     fireEvent.click(r);
     expect(onChange).not.toHaveBeenCalled();
   });
+  it('lý do khoá dài (nhiều món) được xuống dòng, không bị cắt', () => {
+    const none = makeWastePoint({ id: 'pt-none', name: 'Đại lý Không', acceptedItemIds: [], distanceKm: 0.4 });
+    renderPicker({ points: [none] });
+    const reason = screen.getByText('Điểm này không nhận: Thùng carton, Vỏ hộp sữa');
+    expect(reason.style.whiteSpace).not.toBe('nowrap');
+  });
   it('thẻ khoá: chỉ radio và phần chữ bị làm mờ; lý do, Chỉ đường và Gọi giữ nguyên độ đậm', () => {
     renderPicker();
     const r = screen.getByRole('radio', { name: /Đại lý Hết/ });
