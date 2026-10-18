@@ -75,7 +75,7 @@ describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)',
     const r = doc('docs/launch/deploy-rollback-runbook.md');
     for (const gone of ['refill_pickup_locations', 'db.refill_location', 'Đổi vỏ chai']) expect(r).not.toContain(gone);
     for (const stale of ['năm cái của đợt', 'năm cái đó', 'tối đa năm cái', 'năm migration của đợt', 'năm tên này']) expect(r).not.toContain(stale);
-    for (const must of ['20261020000000_waste_exchange', 'db.waste_point', 'points_transactions_recycle_ref_key', 'points_transactions_recycle_reverse_key', 'points_transactions_gift_refund_key', 'waste_points_one_warehouse_key', 'waste_point_staff_one_owner_key', 'verify-full.sh', 'khởi động lại API', 'sáu tên này']) expect(r).toContain(must);
+    for (const must of ['20261020000000_waste_exchange', 'db.waste_point', 'points_transactions_recycle_ref_key', 'points_transactions_recycle_reverse_key', 'points_transactions_gift_refund_key', 'waste_points_one_warehouse_key', 'waste_point_staff_one_owner_key', 'verify-full.sh', 'khởi động lại API', 'sáu tên này', 'hashtext(id) IN (731001,731002,731003,731004)']) expect(r).toContain(must);
   });
   it('playbook: Phần 7 là Đổi rác, không còn bảng Refill hay ô tick tái chế cũ', () => {
     const p = doc('docs/launch/pilot-order-playbook.md');
