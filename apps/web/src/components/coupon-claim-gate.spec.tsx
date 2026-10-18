@@ -15,12 +15,13 @@ const mocks = vi.hoisted(() => ({
   storage: {} as Record<string, string>,
   post: vi.fn(),
   push: vi.fn(),
+  pathname: '/',
   cartCount: 0,
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.post } }));
 vi.mock('@/lib/shop-client', () => ({ getCart: async () => ({ itemCount: mocks.cartCount }) }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => mocks.pathname }));
 vi.mock('@/lib/platform-bridge', () => ({
   platformBridge: {
     storage: {
@@ -83,6 +84,7 @@ beforeEach(() => {
   mocks.cartCount = 0;
   mocks.post.mockReset();
   mocks.push.mockReset();
+  mocks.pathname = '/';
   setPhase('authenticated');
   open('/');
 });
@@ -127,6 +129,27 @@ describe('CouponClaimGate: nhận ưu đãi từ thẻ QR hộp hàng (D2-03)', 
     expect(login.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/san-pham/x')}`);
     click(byText(body, 'button', 'Để sau'));
     expect(sheet()).toBeNull();
+  });
+
+  it('chưa đăng nhập: bấm "Đăng nhập với Zalo" thì đóng sheet để không che trang đăng nhập', async () => {
+    open('/tai-khoan?claim=SHOPEE-AB12CD34');
+    setPhase('guest');
+    const body = await mount();
+    const login = byText(body, 'a', 'Đăng nhập với Zalo');
+    login!.addEventListener('click', (e) => e.preventDefault());
+    click(login);
+    await flush(4);
+    expect(sheet()).toBeNull();
+    expect(mocks.storage[PENDING_CLAIM_KEY]).toBe('SHOPEE-AB12CD34');
+  });
+
+  it('đang ở trang /dang-nhap thì không mở sheet mời đăng nhập', async () => {
+    open('/dang-nhap?claim=SHOPEE-AB12CD34');
+    mocks.pathname = '/dang-nhap';
+    setPhase('guest');
+    await mount();
+    expect(sheet()).toBeNull();
+    expect(mocks.storage[PENDING_CLAIM_KEY]).toBe('SHOPEE-AB12CD34');
   });
 
   it('lần mở sau (không còn link) đã đăng nhập: mã chờ trên máy tự vào ví', async () => {

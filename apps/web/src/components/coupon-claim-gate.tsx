@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
 import { claimCoupon, type ClaimedCoupon } from '@tubutree/app-core/api/coupon-claim';
@@ -41,6 +41,7 @@ type Phase =
 export function CouponClaimGate() {
   const phaseAuth = useAuthPhase();
   const router = useRouter();
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phaseAuth === 'authenticated' });
   const cartCount = cartQ.data?.itemCount ?? 0;
@@ -101,7 +102,8 @@ export function CouponClaimGate() {
   useEffect(() => {
     if (!pending || stopped) return;
     if (phaseAuth === 'guest') {
-      if (phase.kind === 'closed') setPhase({ kind: 'needLogin' });
+      // Trang đăng nhập có nút riêng; sheet phủ lên sẽ che nó.
+      if (phase.kind === 'closed' && !pathname.startsWith('/dang-nhap')) setPhase({ kind: 'needLogin' });
       return;
     }
     if (phaseAuth !== 'authenticated') return;
@@ -110,7 +112,7 @@ export function CouponClaimGate() {
     if (phase.kind !== 'closed' && phase.kind !== 'needLogin') return;
     autoTried.current = pending;
     void claim(pending);
-  }, [pending, stopped, phaseAuth, phase.kind, claim]);
+  }, [pending, stopped, phaseAuth, phase.kind, pathname, claim]);
 
   const close = () => {
     setStopped(true);
@@ -138,7 +140,11 @@ export function CouponClaimGate() {
   } else if (phase.kind === 'needLogin') {
     footer = (
       <div className="grid gap-2">
-        <Link href={loginHref(withoutClaimParam(window.location.href))} className={`${ui.btnPrimary} w-full`}>
+        <Link
+          href={loginHref(withoutClaimParam(window.location.href))}
+          onClick={close}
+          className={`${ui.btnPrimary} w-full`}
+        >
           Đăng nhập với Zalo
         </Link>
         <button type="button" onClick={close} className={`${ui.btnSecondary} w-full`}>
