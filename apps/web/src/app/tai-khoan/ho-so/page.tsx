@@ -113,7 +113,8 @@ export default function EditProfilePage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const base = { fullName: fullName.trim() || undefined, email: email.trim() || undefined, dob: dob || undefined };
+      // API chỉ cho đặt ngày sinh một lần và từ chối cả khi gửi lại đúng giá trị cũ, nên đã có thì không gửi.
+      const base = { fullName: fullName.trim() || undefined, email: email.trim() || undefined, dob: !me?.dob && dob ? dob : undefined };
       try {
         return { avatarSkipped: false, res: await updateMe(coreHttp, { ...base, avatarUrl: avatarUrl ?? undefined }) };
       } catch (err) {
@@ -243,11 +244,11 @@ export default function EditProfilePage() {
 
       <div>
         <Field label="Ngày sinh">
-          <input type="date" value={dob} autoComplete="bday" onChange={(e) => setDob(e.target.value)} className={ui.field} />
+          <input type="date" value={dob} readOnly={Boolean(me?.dob)} autoComplete="bday" onChange={(e) => setDob(e.target.value)} className={ui.field} />
         </Field>
         <p className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">
           <Gift className="h-3.5 w-3.5" aria-hidden="true" />
-          Nhận mã giảm giá quà tặng vào tháng sinh nhật.
+          Nhận mã giảm giá quà tặng vào tháng sinh nhật.{me?.dob ? ' Ngày sinh chỉ đặt được một lần, cần chỉnh lại thì liên hệ CSKH.' : ''}
         </p>
       </div>
 

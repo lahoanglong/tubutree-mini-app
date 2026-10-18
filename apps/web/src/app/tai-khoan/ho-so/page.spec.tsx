@@ -184,18 +184,33 @@ describe('/tai-khoan/ho-so — các ô nhập', () => {
 });
 
 describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
-  it('gửi tên, email, ngày sinh đã cắt khoảng trắng; báo thành công; đồng bộ phiên và làm mới /me', async () => {
+  it('gửi tên, email đã cắt khoảng trắng, không gửi lại ngày sinh đã đặt (API chỉ cho đặt một lần); báo thành công; đồng bộ phiên và làm mới /me', async () => {
     const { container } = await mount();
     typeInto(field(container, 'Họ và tên'), '  Lan B  ');
-    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
     click(saveBtn(container));
     await flush(6);
     expect(mocks.patch).toHaveBeenCalledTimes(1);
     expect(mocks.patch.mock.calls[0]![0]).toBe('/me');
-    expect(mocks.patch.mock.calls[0]![1]).toEqual({ fullName: 'Lan B', email: 'lan@tubu.vn', avatarUrl: undefined, dob: '1991-02-03' });
+    expect(mocks.patch.mock.calls[0]![1]).toEqual({ fullName: 'Lan B', email: 'lan@tubu.vn', avatarUrl: undefined, dob: undefined });
     expect(statusText(container)).toContain('Đã cập nhật hồ sơ');
     expect(mocks.auth.updateProfile).toHaveBeenCalledWith({ fullName: 'Lan B', avatarUrl: null });
     expect(mocks.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('đã có ngày sinh: ô chỉ đọc kèm lời nhắn liên hệ CSKH', async () => {
+    const { container } = await mount();
+    expect(field(container, 'Ngày sinh').readOnly).toBe(true);
+    expect(container.textContent).toContain('CSKH');
+  });
+
+  it('chưa có ngày sinh: nhập được và gửi một lần', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    expect(field(container, 'Ngày sinh').readOnly).toBe(false);
+    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    click(saveBtn(container));
+    await flush(6);
+    expect(mocks.patch.mock.calls[0]![1]).toMatchObject({ dob: '1991-02-03' });
   });
 
   it('tên để trống thì không gửi tên và giữ tên cũ trong phiên', async () => {
@@ -213,7 +228,7 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     click(saveBtn(container));
     await flush(8);
     expect(mocks.patch).toHaveBeenCalledTimes(2);
-    expect(mocks.patch.mock.calls[1]![1]).toEqual({ fullName: 'Lan', email: 'lan@tubu.vn', dob: '1990-05-01' });
+    expect(mocks.patch.mock.calls[1]![1]).toEqual({ fullName: 'Lan', email: 'lan@tubu.vn', dob: undefined });
     expect('avatarUrl' in (mocks.patch.mock.calls[1]![1] as object)).toBe(false);
     expect(statusText(container)).toContain('Đã cập nhật hồ sơ');
   });
