@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -269,6 +269,40 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     const { container } = await mount();
     expect(mocks.qr.calls).toBeGreaterThan(0);
     expect(container.textContent).toContain('Đơn đang chờ bạn chuyển khoản');
+  });
+
+  it('QR đã hiện lúc còn hạn thì ở lại khi trang dựng lại sau hạn, để lần dò thấy PAID vẫn báo "Đã nhận thanh toán"', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-19T11:59:50Z'));
+      mocks.order = { ...ORDER, paymentDeadline: '2026-10-19T12:00:00Z' };
+      let bump = () => {};
+      const Host = () => {
+        const [, set] = useState(0);
+        bump = () => set((n) => n + 1);
+        return <OrderDetailPage />;
+      };
+      const r = render(<Host />);
+      mounted.push(r);
+      await flush(8);
+      const { container } = r;
+      expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
+
+      vi.setSystemTime(new Date('2026-10-19T12:00:05Z'));
+      await act(async () => bump());
+      await flush(4);
+      expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
+
+      mocks.qr.paymentStatus = 'PAID';
+      const check = buttons(container).find((b) => (b.textContent ?? '').includes('kiểm tra lại'))!;
+      await act(async () => {
+        check.click();
+      });
+      await flush(12);
+      expect(container.textContent).toContain('Đã nhận thanh toán!');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('đơn đã hủy: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã hủy)', async () => {

@@ -68,6 +68,10 @@ export default function OrderDetailPage() {
   // Tiền về thì đơn hết "chờ thanh toán" và `canPayNow` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
   // "Đã nhận thanh toán" bị gỡ ngay sau khi vừa hiện. Ghi nhớ trong trang tới khi khách rời trang.
   const [paidNotice, setPaidNotice] = useState(false);
+  // Khung QR đã dựng lúc còn hạn thì giữ tới khi rời trang (như trang chuyển khoản của Mini App): qua hạn giữa chừng mà
+  // gỡ khung là mất lần dò thấy tiền về của khách vừa chuyển sát giờ.
+  const [qrShown, setQrShown] = useState(false);
+  if (!qrShown && orderQ.data && canPayNow(orderQ.data)) setQrShown(true);
   const refreshOrder = useCallback(() => {
     setPaidNotice(true);
     void qc.invalidateQueries({ queryKey: ['order', code] });
@@ -185,7 +189,7 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      {(canPayNow(o) || paidNotice) && (
+      {(canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice) && (
         <div className="mt-2">
           {canPayNow(o) && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
