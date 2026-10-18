@@ -49,6 +49,7 @@ const MIGRATED = [
   'components/admin/product-picker.tsx',
   'components/admin/waste-tab.tsx',
   'lib/waste-labels.ts',
+  'components/admin/waste-items-section.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');

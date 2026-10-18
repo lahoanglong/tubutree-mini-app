@@ -17,6 +17,7 @@ import {
   type WasteSection,
 } from '@/lib/waste-labels';
 import { BTN_SECONDARY, chipClass, FIELD_XS, Notice, ToneBadge } from './ui';
+import { WasteItemsSection } from './waste-items-section';
 
 /** Thẻ hộp việc nhờ tab mở một hàng đợi; `n` là Date.now() lúc bấm để trang remount tab bằng `key`. */
 export type WasteSeed = { section: 'points' | 'requests' | 'gifts'; preset: string; n: number };
@@ -54,7 +55,7 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
           </button>
         ))}
       </div>
-      <div data-waste-section={section} />
+      <div data-waste-section={section}>{section === 'items' && <WasteItemsSection />}</div>
     </div>
   );
 }
