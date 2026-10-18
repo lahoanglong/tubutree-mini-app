@@ -226,7 +226,7 @@ export default function AccountPage() {
                       </button>
                       {noticeOpen && (
                         <div id={`${noticeId}-notice`}>
-                          <MiniAppOnlyNotice path={item.to} />
+                          <MiniAppOnlyNotice miniappPath={item.to} />
                         </div>
                       )}
                     </li>
