@@ -56,6 +56,30 @@ describe('OpsInboxTab — việc với đối tác (R4-ADMIN-7)', () => {
     expect(r.container.textContent).not.toContain('Không tải được');
   });
 
+  it('hộp việc có tám khoá đổi rác, không còn đổi vỏ chai, không có khoá cảnh báo (13.2, 5.5)', async () => {
+    expect(Object.keys(INBOX_LABELS)).toEqual(
+      expect.arrayContaining(['wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending', 'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch']),
+    );
+    expect(Object.keys(INBOX_LABELS)).not.toContain('refillPending');
+    expect(Object.keys(INBOX_LABELS).filter((k) => /alert/i.test(k))).toEqual([]);
+    stubInbox([
+      { key: 'wasteToCount', count: 3 },
+      { key: 'wasteGiftOverdue', count: 1 },
+      { key: 'refillPending', count: 5 },
+    ]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    const toCount = root.querySelector<HTMLButtonElement>('[data-inbox="wasteToCount"]')!;
+    expect(toCount.textContent).toContain('Kiện đổi rác chờ đếm');
+    expect(toCount.textContent).toContain('3');
+    expect(root.querySelector('[data-inbox="refillPending"]')).toBeNull();
+    click(root.querySelector<HTMLButtonElement>('[data-inbox="wasteGiftOverdue"]')!);
+    expect(onOpen).toHaveBeenCalledWith('wasteGiftOverdue');
+  });
+
   it('mọi khoá của hộp việc có nhãn tiếng Việt có dấu và gợi ý', () => {
     for (const [key, l] of Object.entries(INBOX_LABELS)) {
       expect(l.title.length, key).toBeGreaterThan(5);

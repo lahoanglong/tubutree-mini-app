@@ -141,7 +141,7 @@ import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
-import { WasteTab } from '@/components/admin/waste-tab';
+import { WasteTab, type WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
@@ -294,6 +294,27 @@ const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
   KE_TOAN: ['inbox', 'orders', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
+type WasteInboxKey =
+  | 'wasteToCount'
+  | 'wasteUnmatched'
+  | 'wasteBlockedPending'
+  | 'wastePointsPending'
+  | 'wastePerksPending'
+  | 'wasteTransitOverdue'
+  | 'wasteGiftOverdue'
+  | 'wasteOrderMismatch';
+const WASTE_INBOX_SEEDS: Record<WasteInboxKey, Omit<WasteSeed, 'n'>> = {
+  wasteToCount: { section: 'requests', preset: 'toCount' },
+  wasteUnmatched: { section: 'requests', preset: 'unmatched' },
+  wasteBlockedPending: { section: 'requests', preset: 'customerBlocked' },
+  wastePointsPending: { section: 'points', preset: 'pending' },
+  wastePerksPending: { section: 'points', preset: 'perk' },
+  wasteTransitOverdue: { section: 'requests', preset: 'transitOverdue' },
+  wasteGiftOverdue: { section: 'gifts', preset: 'overdue' },
+  wasteOrderMismatch: { section: 'requests', preset: 'orderMismatch' },
+};
+const isWasteInboxKey = (k: InboxKey): k is WasteInboxKey => k in WASTE_INBOX_SEEDS;
+
 function staffTabs(perms: readonly string[]): Set<Tab> {
   const out = new Set<Tab>(STAFF_TABS.BASE);
   for (const p of perms) for (const t of STAFF_TABS[p as StaffPermission] ?? []) out.add(t);
@@ -338,6 +359,7 @@ export default function AdminPage() {
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
   const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter } | null>(null);
   const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
+  const [wasteSeed, setWasteSeed] = useState<WasteSeed | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
   const [consignmentSeed, setConsignmentSeed] = useState(0);
   const role = user?.role;
@@ -403,6 +425,10 @@ export default function AdminPage() {
       setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : 'pending', n: Date.now() });
       return setTab('community');
     }
+    if (isWasteInboxKey(k)) {
+      setWasteSeed({ ...WASTE_INBOX_SEEDS[k], n: Date.now() });
+      return setTab('waste');
+    }
     if (k === 'invoicePending') {
       setOrdersRecycling('');
       setOrdersPancake('');
@@ -422,6 +448,7 @@ export default function AdminPage() {
         | 'communityPending'
         | 'communityUnanswered'
         | 'invoicePending'
+        | WasteInboxKey
       >,
       Tab
     > = {
@@ -433,7 +460,6 @@ export default function AdminPage() {
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
       payouts: 'payouts',
-      refillPending: 'waste',
     };
     setTab(target[k]);
   };
@@ -525,7 +551,7 @@ export default function AdminPage() {
           {active === 'users' && isAdmin && <AccountDeletionPanel />}
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
-          {active === 'waste' && <WasteTab isAdmin={isAdmin} />}
+          {active === 'waste' && <WasteTab key={wasteSeed?.n ?? 0} isAdmin={isAdmin} seed={wasteSeed} />}
           {active === 'config' && <ConfigTab />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}

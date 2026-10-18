@@ -1653,7 +1653,14 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
-  | 'refillPending'
+  | 'wasteToCount'
+  | 'wasteUnmatched'
+  | 'wasteBlockedPending'
+  | 'wastePointsPending'
+  | 'wastePerksPending'
+  | 'wasteTransitOverdue'
+  | 'wasteGiftOverdue'
+  | 'wasteOrderMismatch'
   | 'communityPending'
   | 'communityUnanswered'
   | 'invoicePending';
@@ -2034,22 +2041,9 @@ export interface AdminMission {
   isRepeatable: boolean;
   claimedCount: number;
 }
-export interface AdminRewardCatalogItem {
-  id: string;
-  title: string;
-  description: string;
-  pointsCost: number;
-  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP' | string;
-  value: number;
-  minOrder?: number | null;
-  maxDiscount?: number | null;
-  redeemedCount: number;
-  redeemed30d: number;
-}
 export const listAdminMissions = () => apiFetch<AdminMission[]>('/admin/engagement/missions');
 export const updateAdminMission = (id: string, body: { title: string; description: string; rewardPoints: number }) =>
   apiFetch<AdminMission>(`/admin/engagement/missions/${encodeURIComponent(id)}`, { method: 'PATCH', body });
-export const listAdminRewardCatalog = () => apiFetch<AdminRewardCatalogItem[]>('/admin/engagement/rewards');
 
 export interface DealerPriceChange {
   id: string;

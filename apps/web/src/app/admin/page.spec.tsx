@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   payouts: 0,
   refundsPending: 0,
   returnsArgs: [] as unknown[][],
+  wasteArgs: [] as unknown[][],
   dealerArgs: [] as unknown[][],
   orders: [] as unknown[],
   users: [
@@ -126,7 +127,14 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'customerRefunds', count: 4 },
           { key: 'returnsPending', count: 1 },
           { key: 'returnsToReceive', count: 2 },
-          { key: 'refillPending', count: 0 },
+          { key: 'wasteToCount', count: 3 },
+          { key: 'wasteUnmatched', count: 2 },
+          { key: 'wasteBlockedPending', count: 1 },
+          { key: 'wastePointsPending', count: 1 },
+          { key: 'wastePerksPending', count: 1 },
+          { key: 'wasteTransitOverdue', count: 1 },
+          { key: 'wasteGiftOverdue', count: 1 },
+          { key: 'wasteOrderMismatch', count: 0 },
           { key: 'communityPending', count: 3 },
           { key: 'communityUnanswered', count: 1 },
           { key: 'invoicePending', count: 2 },
@@ -150,11 +158,11 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     listLiveAttendance: async () => [],
     getWasteOverview: () => new Promise(() => undefined),
     listWasteItems: async () => [],
-    listWastePoints: async () => [],
-    listWasteRequests: async () => ({ rows: [], nextCursor: null }),
-    listWasteUnmatched: async () => [],
+    listWastePoints: async (...args: unknown[]) => (mocks.wasteArgs.push(['listWastePoints', ...args]), []),
+    listWasteRequests: async (...args: unknown[]) => (mocks.wasteArgs.push(['listWasteRequests', ...args]), { rows: [], nextCursor: null }),
+    listWasteUnmatched: async (...args: unknown[]) => (mocks.wasteArgs.push(['listWasteUnmatched', ...args]), []),
     listWasteGifts: async () => [],
-    listGiftRedemptions: async () => [],
+    listGiftRedemptions: async (...args: unknown[]) => (mocks.wasteArgs.push(['listGiftRedemptions', ...args]), []),
     getWasteUserFlags: async (userId: string) => ({ userId, shipLockedAt: null, shipUnlockedAt: null, blockedAt: null, reason: null, setByUserId: null, updatedAt: null }),
     downloadOrdersCsv: async (...args: unknown[]) => {
       mocks.downloadOrders(...args);
@@ -277,6 +285,7 @@ beforeEach(() => {
   mocks.payouts = 0;
   mocks.refundsPending = 0;
   mocks.returnsArgs = [];
+  mocks.wasteArgs = [];
   mocks.dealerArgs = [];
   mocks.orders = [];
   mocks.users = [
@@ -2217,10 +2226,33 @@ describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {
     expect(card.textContent).toContain('2');
     expect(card.textContent).toContain('Cần xử lý Pancake');
     expect(container.querySelector('[data-inbox="returnsPending"]')!.textContent).toContain('Yêu cầu đổi / trả chờ duyệt');
-    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Đổi vỏ chai chờ duyệt · 0')).toBe(true);
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Thu kèm đơn lệch với đơn · 0')).toBe(true);
     click(card);
     await flush();
     expect(window.location.search).toBe('?tab=orders&pancake=attention');
+  });
+
+  it.each([
+    ['wasteToCount', 'Kiện đổi rác chờ đếm', 'requests', 'Kho cần đếm', 'listWasteRequests', { filter: 'TO_COUNT' }],
+    ['wasteUnmatched', 'Kiện không rõ chủ', 'requests', 'Hàng không rõ chủ', 'listWasteUnmatched', undefined],
+    ['wasteBlockedPending', 'Yêu cầu đổi rác của khách bị khoá', 'requests', 'Chờ vì khách bị khoá', 'listWasteRequests', { filter: 'CUSTOMER_BLOCKED' }],
+    ['wastePointsPending', 'Điểm nhận chờ duyệt', 'points', 'Chờ duyệt', 'listWastePoints', { status: 'PENDING' }],
+    ['wastePerksPending', 'Ưu đãi riêng chờ duyệt', 'points', 'Ưu đãi chờ duyệt', 'listWastePoints', { perkPending: true }],
+    ['wasteTransitOverdue', 'Kiện gửi kho quá hạn xem lại', 'requests', 'Gửi kho quá hạn xem lại', 'listWasteRequests', { filter: 'TRANSIT_OVERDUE' }],
+    ['wasteGiftOverdue', 'Quà quá hạn nhận', 'gifts', 'Quá hạn nhận', 'listGiftRedemptions', { status: 'READY', overdue: true }],
+    ['wasteOrderMismatch', 'Thu kèm đơn lệch với đơn', 'requests', 'Mâu thuẫn với đơn', 'listWasteRequests', { filter: 'ORDER_MISMATCH' }],
+  ] as const)('thẻ việc %s mở đúng hàng đợi, số trên thẻ khớp số dòng (13.2, D3)', async (key, title, section, chip, fn, query) => {
+    const { container } = await mount();
+    const target =
+      container.querySelector<HTMLElement>(`[data-inbox="${key}"]`) ??
+      [...container.querySelectorAll('button')].find((b) => b.textContent === `${title} · 0`)!;
+    click(target);
+    await flush();
+    expect(window.location.search).toBe('?tab=waste');
+    expect(container.querySelector('[data-waste-section]')!.getAttribute('data-waste-section')).toBe(section);
+    const pressed = [...container.querySelectorAll('button[aria-pressed="true"]')].map((b) => b.textContent ?? '');
+    expect(pressed.some((t) => t.includes(chip))).toBe(true);
+    expect(mocks.wasteArgs.some((a) => a[0] === fn && (query === undefined || JSON.stringify(a[1]) === JSON.stringify(query)))).toBe(true);
   });
 
   // R4-ADMIN-3: thẻ đếm chờ đối soát + chờ chuyển khoản + đang chuyển khoản; bấm vào trước đây mở bộ lọc chỉ "Chờ chuyển khoản".
