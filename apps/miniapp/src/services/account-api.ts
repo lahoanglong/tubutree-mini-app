@@ -269,7 +269,27 @@ export function pointsReasonLabel(rawReason: string): string {
 }
 
 export { lockedPointsNote, rewardCardState, type RewardCardState } from '@tubutree/app-core/reward-rules';
-export { checkInView, memberCardHint, tierProgressPercent } from '@tubutree/app-core/loyalty-copy';
+export { checkInView, memberCardHint } from '@tubutree/app-core/loyalty-copy';
+
+/**
+ * % tiến độ lên hạng kế. Hạng có mốc chi tiêu thì đo theo TIỀN MUA 12 tháng (spent12m, cùng số backend dùng để xét hạng
+ * và tính spendingToGo); hạng không có mốc chi tiêu hoặc API cũ chưa trả spent12m thì đo theo điểm XÉT HẠNG (tierPoints).
+ * Đo theo số dư (có điểm danh/POS) sẽ vẽ thanh gần đầy trong khi backend không bao giờ cho lên hạng.
+ */
+export function tierProgressPercent(ov: LoyaltyOverview): number {
+  const next = ov.nextTier;
+  if (!next) return 100;
+  const curTier = ov.tiers.find((t) => t.id === ov.tier?.id);
+  if (next.minSpending != null && ov.spent12m !== undefined) {
+    const curSpend = curTier?.minSpending ?? 0;
+    if (next.minSpending <= curSpend) return 100;
+    return Math.min(100, Math.max(0, Math.round(((ov.spent12m - curSpend) / (next.minSpending - curSpend)) * 100)));
+  }
+  const curMin = curTier?.minPoints ?? 0;
+  if (next.minPoints <= curMin) return 100;
+  const pts = ov.tierPoints ?? ov.pointsBalance;
+  return Math.min(100, Math.max(0, Math.round(((pts - curMin) / (next.minPoints - curMin)) * 100)));
+}
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
