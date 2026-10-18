@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./api', () => ({ api: { post: vi.fn() } }));
 
 import { api } from './api';
-import { buyTree } from './game-api';
+import { buyTree, unlockPlot } from './game-api';
 
 const post = vi.mocked(api.post);
 
@@ -20,5 +20,17 @@ describe('buyTree — góp quỹ trồng cây', () => {
       headers: { 'Idempotency-Key': '0b7e9c1e-5f0a-4d6e-9c2b-3a1f2d4e5f60' },
     });
     expect(r).toEqual({ certificateCode: 'TUBU-1' });
+  });
+});
+
+describe('unlockPlot — mở lô đất', () => {
+  it('kèm slot khách định mở trong body', async () => {
+    await unlockPlot(3);
+    expect(post).toHaveBeenCalledWith('/game/garden/unlock', { currency: 'SEEDS', slot: 3 });
+  });
+
+  it('không có slot thì body như cũ', async () => {
+    await unlockPlot();
+    expect(post).toHaveBeenCalledWith('/game/garden/unlock', { currency: 'SEEDS' });
   });
 });
