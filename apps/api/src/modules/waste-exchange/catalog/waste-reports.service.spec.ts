@@ -251,13 +251,13 @@ describe('buildWasteMonthMetrics edges and month range', () => {
       wastePoint: { findMany: jest.fn().mockResolvedValue([]) },
       wastePointUsage: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
-      order: { count: jest.fn().mockResolvedValue(0) },
+      order: { count: jest.fn(({ where }: { where: { userId: object } }) => Promise.resolve('in' in where.userId ? 3 : 7)) },
     };
     const config = { snapshot: jest.fn() };
     const access = { assertPointAccess: jest.fn() };
     const service = new WasteReportsService(prisma as never, access as never, config as never);
 
-    await service.monthly('2026-10', 'P1');
+    const res = await service.monthly('2026-10', 'P1');
 
     const wheres = [...wasteRequest.findMany.mock.calls, ...wasteRequest.count.mock.calls].map((c) => c[0].where as Record<string, unknown>);
     expect(wheres).toHaveLength(5);
@@ -267,6 +267,11 @@ describe('buildWasteMonthMetrics edges and month range', () => {
     expect(wheres).toContainEqual(expect.objectContaining({ reversedAt: range }));
     expect(wheres).toContainEqual(expect.objectContaining({ status: 'EXPIRED', closedAt: range }));
     expect(prisma.wastePointUsage.findMany).toHaveBeenCalledWith({ where: { monthKey: '2026-10', pointId: 'P1' } });
+    const lookback = { gte: new Date(start.getTime() - 60 * 24 * 3_600_000), lt: end };
+    expect(wheres).toContainEqual(expect.objectContaining({ status: { in: ['COMPLETED', 'REVERSED'] }, completedAt: lookback }));
+    expect(prisma.order.count).toHaveBeenCalledWith({ where: { createdAt: range, status: { not: 'CANCELLED' }, userId: { in: [] } } });
+    expect(prisma.order.count).toHaveBeenCalledWith({ where: { createdAt: range, status: { not: 'CANCELLED' }, userId: { notIn: [] } } });
+    expect(res.metrics).toMatchObject({ ordersOfExchangers: 3, ordersOfNonExchangers: 7 });
   });
 });
 
