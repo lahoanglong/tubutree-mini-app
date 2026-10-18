@@ -114,12 +114,17 @@ export function RecycleNew() {
   const [draft, setDraft] = useState<WasteWizardDraft>(EMPTY_DRAFT);
   const [ready, setReady] = useState(false);
   const submitted = useRef(false);
+  const toPicker = useRef(false);
+  const resumeSeen = useRef<boolean | null>(null);
   // Nháp đọc ở client sau khi gắn vào cây: lần render đầu của server và client phải giống nhau.
   useEffect(() => {
     const back = takeReturn();
     if (back) saveDraft(back);
     // Bước 2 chỉ đọc cờ (nạp lại trang vẫn giữ nháp); bước 1 đọc rồi xoá cờ, nên vào mới từ trang chủ thì không có cờ.
-    const resume = step === 'method' ? peekResume() : takeResume();
+    // Ref giữ giá trị đã đọc qua lần chạy lại của StrictMode, vì cleanup bên dưới đã xoá cờ.
+    const resume = resumeSeen.current ?? (step === 'method' ? peekResume() : takeResume());
+    resumeSeen.current = resume;
+    if (resume && step === 'method') markResume();
     const next = back ?? (resume ? loadDraft() : null);
     if (!next && step === 'items') clearDraft();
     // Hàm cập nhật giữ giá trị đã đọc khi effect chạy lần hai (StrictMode), vì cờ đã bị xoá ở lần đầu.
@@ -127,6 +132,13 @@ export function RecycleNew() {
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Rời wizard (trừ sang trang chọn điểm) thì bỏ cờ: Next không remount khi đổi ?step, nên cờ không tự mất ở lần vào sau.
+  useEffect(
+    () => () => {
+      if (!toPicker.current) takeResume();
+    },
+    [],
+  );
   useEffect(() => {
     if (phase === 'guest') clearWizardStorage();
   }, [phase]);
@@ -309,6 +321,7 @@ export function RecycleNew() {
   const pickPoint = () => {
     saveDraft(draft);
     markResume();
+    toPicker.current = true;
     savePointsNav({ returnTo: METHOD_STEP_PATH, draft, selectedItemIds: lineInputs.map((l) => l.itemId) });
     router.replace('/doi-rac/diem-nhan');
   };

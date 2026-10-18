@@ -12,6 +12,7 @@ import {
 } from './client-api';
 import { clearSavedInvoices } from './saved-invoice';
 import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
+import { clearWizardStorage } from './recycle-wizard';
 import { readFirstTouchCookie } from './entry-source';
 
 export interface WebUser {
@@ -206,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     qc.clear(); // xóa cache giỏ/đơn để không hiện dữ liệu user cũ
     clearSavedInvoices();
     clearRecentCustomers();
+    clearWizardStorage();
   }, [qc]);
 
   const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName' | 'avatarUrl'>>) => {

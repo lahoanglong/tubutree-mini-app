@@ -4,7 +4,7 @@ import type { WastePreviewDTO, WastePreviewRequest } from '@tubutree/shared-type
 import { byText, click, flush, render, selectValue, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
-import { EMPTY_DRAFT, loadDraft, loadPointsNav, markResume, saveDraft, saveReturn, type WasteWizardDraft } from '@/lib/recycle-wizard';
+import { EMPTY_DRAFT, loadDraft, loadPointsNav, markResume, peekResume, saveDraft, saveReturn, type WasteWizardDraft } from '@/lib/recycle-wizard';
 import { makeRequestDetail, makeWasteMe, makeWastePoint } from './recycle-fixtures';
 
 // Chép ý recycle-new.spec.tsx (Mini App, §4.2, §4.3, §15.2, §16.1): chọn món, ước tính debounce, chọn cách giao, cam kết,
@@ -232,6 +232,29 @@ describe('bước 1: chọn món (§4.2)', () => {
     const c = await mount();
     expect(card(c, 'Thùng carton').textContent).not.toContain('7');
     expect(toLineInputsOf(loadDraft())).toEqual([]);
+  });
+  it('rời wizard ở bước 2 rồi vào mới bước 1 → nháp rỗng (cờ nạp lại không sống sót sau khi rời)', async () => {
+    const first = render(<RecycleNew />);
+    await flush(10);
+    click(stepper(first.container, 'Thùng carton', 'Tăng số lượng'));
+    await flush(10);
+    click(barButton(first.container, 'Tiếp tục'));
+    expect(peekResume()).toBe(true);
+    first.unmount();
+    expect(peekResume()).toBe(false);
+    const c = await mount();
+    expect(card(c, 'Thùng carton').textContent).toMatch(/0$/);
+    expect(barButton(c, 'Tiếp tục').disabled).toBe(true);
+    expect(toLineInputsOf(loadDraft())).toEqual([]);
+  });
+  it('sang trang chọn điểm không coi là rời wizard: cờ nạp lại còn nguyên', async () => {
+    atStep2();
+    const r = render(<RecycleNew />);
+    await flush(10);
+    click(method(r.container, 'DROP_OFF'));
+    click(byText(r.container, 'button', 'Chọn điểm nhận'));
+    r.unmount();
+    expect(peekResume()).toBe(true);
   });
   it('chương trình tắt hoặc tài khoản bị khoá → về /doi-rac', async () => {
     state.me = makeWasteMe({ blocked: true });
