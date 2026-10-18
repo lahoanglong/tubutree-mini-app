@@ -1,7 +1,7 @@
 import { expect, test, type MockApi } from './support/mock-api';
 
 /**
- * Web khách: Đổi rác lấy quà (/doi-rac, /doi-rac/yeu-cau, /doi-rac/quy-dinh). Mọi lời gọi /api/** đi qua mock (fixture `api`).
+ * Web khách: Đổi rác lấy quà (/doi-rac, /doi-rac/yeu-cau, /doi-rac/quy-dinh, /doi-rac/tao, /doi-rac/diem-nhan). Mọi lời gọi /api/** đi qua mock (fixture `api`).
  * Khách chưa đủ điều kiện (thiếu SĐT đã xác minh) chỉ thấy lời chỉ sang Zalo, không có lối đổi rác nào trên web.
  */
 
@@ -109,5 +109,60 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await page.goto('/doi-rac/quy-dinh');
     await expect(page.getByRole('heading', { name: 'Thể lệ Đổi rác lấy quà', level: 1 })).toBeVisible();
     await expect(page.getByText(/Điểm Xanh là ưu đãi cho khách\./)).toBeVisible();
+  });
+
+  test('tạo yêu cầu: chọn món, chọn điểm nhận theo tỉnh, gửi đúng body và Idempotency-Key', async ({ page, api }) => {
+    mockRecycle(api, me({ openRequests: [] }));
+    const POINT = {
+      id: 'pt-1', kind: 'PARTNER', name: 'Đại lý Cô Ba', addressLine: '12 Lê Lợi', provinceCode: '79', provinceName: 'TP.HCM',
+      communeCode: '26734', communeName: 'Phường Bến Thành', lat: 10.77, lng: 106.7, phone: '0901234567',
+      openingHours: { MON: [{ open: '08:00', close: '18:00' }] }, acceptedItemIds: ['item-carton'], perkText: null, quotaFull: false, distanceKm: null,
+    };
+    api.get('/waste/points', () => [POINT]);
+    api.get('/geo/provinces', () => [{ code: '79', name: 'TP.HCM' }]);
+    api.post('/waste/preview', () => ({
+      estimatedPoints: 3000, estimatedDrops: 0, estimatedGrams: null, pointsValueVnd: 3000, blocks: [], feeEstimate: null,
+      itemCaps: [], pointsMonthRemaining: 190000,
+    }));
+    api.post('/waste/requests', () => summary({ id: 'req-new', code: 'TR-NEW01', lines: [] }));
+
+    await page.goto('/doi-rac/tao');
+    await expect(page.getByRole('heading', { name: 'Đổi rác', level: 1 })).toBeVisible();
+    await expect(page.getByText('Bước 1/3: Chọn món')).toBeVisible();
+    const next = page.getByRole('button', { name: 'Tiếp tục' });
+    await expect(next).toBeDisabled();
+    const plus = page.getByRole('button', { name: 'Tăng số lượng' });
+    await plus.click();
+    await plus.click();
+    await plus.click();
+    await expect(page.getByText('Ước tính 3.000 điểm')).toBeVisible();
+    await next.click();
+
+    await expect(page.getByText('Bước 2/3: Chọn cách giao')).toBeVisible();
+    await page.getByRole('radio', { name: /Mang tới điểm nhận/ }).click();
+    await page.getByRole('button', { name: 'Chọn điểm nhận' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Điểm nhận gần bạn', level: 1 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Dùng vị trí của tôi' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Gần tôi' })).toHaveCount(0);
+    await page.getByRole('radio', { name: /Đại lý Cô Ba/ }).click();
+    await page.getByRole('button', { name: 'Chọn điểm này' }).click();
+
+    await expect(page.getByText('Bước 2/3: Chọn cách giao')).toBeVisible();
+    await expect(page.getByText('Đại lý Cô Ba', { exact: true })).toBeVisible();
+    await page.getByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' }).check();
+    const created = api.waitForCall('POST', '/waste/requests');
+    await page.getByRole('button', { name: 'Tạo yêu cầu' }).click();
+    const call = await created;
+    expect(call.body).toEqual({ method: 'DROP_OFF', lines: [{ itemId: 'item-carton', declaredQty: 3 }], pointId: 'pt-1', consent: true });
+    expect(call.headers['idempotency-key']).toMatch(/\S+/);
+  });
+
+  test('thiếu SĐT đã xác minh: /doi-rac/tao và /doi-rac/diem-nhan chỉ thấy lời chỉ sang Zalo', async ({ page, api }) => {
+    mockRecycle(api, me({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, openRequests: [] }));
+    await page.goto('/doi-rac/tao');
+    await expect(page.getByText('Tính năng này cần mở Tubu Tree trên Zalo.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tiếp tục' })).toHaveCount(0);
+    await expect(page.getByText(/số điện thoại/i)).toHaveCount(0);
   });
 });

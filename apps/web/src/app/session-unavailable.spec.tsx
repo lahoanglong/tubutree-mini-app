@@ -60,6 +60,8 @@ import CtvPage from './ctv/page';
 import CtvStorefrontPage from './ctv/gian-hang/page';
 import RecyclePage from './doi-rac/page';
 import RecycleRequestsPage from './doi-rac/yeu-cau/page';
+import RecycleNewPage from './doi-rac/tao/page';
+import RecyclePointsPage from './doi-rac/diem-nhan/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -115,6 +117,8 @@ const PRO: PageCase[] = [];
 const RECYCLE: PageCase[] = [
   ['/doi-rac', () => <RecyclePage />],
   ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />],
+  ['/doi-rac/tao', () => <RecycleNewPage />],
+  ['/doi-rac/diem-nhan', () => <RecyclePointsPage />],
 ];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
