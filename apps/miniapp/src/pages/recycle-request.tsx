@@ -28,7 +28,7 @@ import { Heading, Text } from '../components/ui/text';
 import { Timeline } from '../components/ui/timeline';
 import { copyText } from '../utils/clipboard';
 import { formatDate, formatNumber } from '../utils/format';
-import { METHOD_LABELS, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, timelineFor } from '../utils/waste-labels';
+import { METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, timelineFor } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const BLOCK: CSSProperties = {
@@ -196,6 +196,9 @@ export default function RecycleRequestPage() {
   const pickupPaused = !!me?.blocked || !!me?.shipLockedAt || !cfg.waste.pickup;
   const pausedPickup = r.method === 'PICKUP' && open && !r.orderCode && pickupPaused;
 
+  const dropOffPaused =
+    r.method === 'DROP_OFF' && open && (!cfg.waste.enabled || me?.programmeEnabled === false || !!me?.blocked);
+
   const quotaFull =
     r.method === 'DROP_OFF' &&
     open &&
@@ -228,13 +231,13 @@ export default function RecycleRequestPage() {
         {recipient && (
           <div data-recipient style={{ ...COLUMN, gap: 2 }}>
             <Text variant="body-md" style={{ fontWeight: 600 }}>{recipient.name}</Text>
-            <Text variant="body-sm">{recipient.phone}</Text>
+            {recipient.phone && <Text variant="body-sm">{recipient.phone}</Text>}
             <Text variant="body-sm">{pointAddress(recipient)}</Text>
             <div style={{ marginTop: 8 }}>
               <Button
                 variant="secondary"
                 onPress={async () => {
-                  if (await copyText(`${recipient.name}\n${recipient.phone}\n${pointAddress(recipient)}`)) {
+                  if (await copyText([recipient.name, recipient.phone, pointAddress(recipient)].filter(Boolean).join('\n'))) {
                     openSnackbar({ text: 'Đã sao chép', type: 'success' });
                   }
                 }}
@@ -299,9 +302,12 @@ export default function RecycleRequestPage() {
       )}
       {open && (
         <div style={{ ...COLUMN, gap: 10 }}>
-          {r.method === 'DROP_OFF' && (
-            <Button fullWidth onPress={() => setQrOpen(true)}>Xem mã QR</Button>
-          )}
+          {r.method === 'DROP_OFF' &&
+            (dropOffPaused ? (
+              <Text variant="body-sm">{PAUSED_TEXT}</Text>
+            ) : (
+              <Button fullWidth onPress={() => setQrOpen(true)}>Xem mã QR</Button>
+            ))}
           {canEdit && (
             <Button variant="secondary" fullWidth onPress={() => navigate(editPath)}>
               Sửa món

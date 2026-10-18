@@ -137,6 +137,26 @@ describe('/recycle/r/:id — Mang tới điểm nhận (§4.5, §4.6)', () => {
     expect(within(sheet).getByText('Điểm nhận đang tạm ngừng, hãy chọn điểm khác')).toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: 'Đổi điểm nhận' })).toBeInTheDocument();
   });
+  it('chương trình tạm dừng: yêu cầu mang tới điểm không còn "Xem mã QR", có câu tạm dừng và vẫn huỷ được', async () => {
+    mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
+    renderPage();
+    expect(await screen.findByText('Chương trình đang tạm dừng')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xem mã QR' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeEnabled();
+  });
+  it('khách bị khoá: cùng câu trung tính, không lộ việc bị khoá, vẫn huỷ được', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }));
+    renderPage();
+    expect(await screen.findByText('Chương trình đang tạm dừng')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xem mã QR' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeEnabled();
+    expect(screen.queryByText(/khoá/i)).toBeNull();
+  });
+  it('bình thường: có "Xem mã QR" và không có câu tạm dừng', async () => {
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Xem mã QR' })).toBeInTheDocument();
+    expect(screen.queryByText('Chương trình đang tạm dừng')).toBeNull();
+  });
   it('điểm của yêu cầu đã hết hạn mức tháng → nhắc đổi điểm khác + "Đổi điểm nhận" (§11.4)', async () => {
     const r = makeRequestDetail();
     mocks.getWasteRequest.mockResolvedValue(r);
@@ -173,6 +193,16 @@ describe('/recycle/r/:id — Gửi về kho (§4.5b)', () => {
     expect(screen.getByText('Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn')).toBeInTheDocument();
     expect(screen.getByText('Kho từ chối kiện còn cước phải trả khi nhận')).toBeInTheDocument();
     expect(screen.getByText('Nhập trước 25/10')).toBeInTheDocument();
+  });
+  it.each([null, ''])('kho không có số điện thoại (%j): khối người nhận không có dòng trống và Sao chép bỏ dòng số', async (phone) => {
+    mocks.getWasteRequest.mockResolvedValue(MAIL({ point: makeWarehouseContact({ phone }) }));
+    renderPage();
+    await screen.findByText('Ghi mã này lên kiện, mỗi kiện một yêu cầu');
+    const block = document.querySelector('[data-recipient]') as HTMLElement;
+    expect(block.children).toHaveLength(3);
+    expect(block).not.toHaveTextContent('null');
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép' }));
+    expect(mocks.copyText).toHaveBeenCalledWith('Kho Tubu TP.HCM\n99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM');
   });
   it('"Đã gửi" khoá tới khi có Hãng và Mã vận đơn; gửi PUT tracking rồi làm mới khoá', async () => {
     mocks.getWasteRequest.mockResolvedValue(MAIL());
