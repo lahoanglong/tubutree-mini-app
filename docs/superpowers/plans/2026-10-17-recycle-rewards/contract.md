@@ -6,7 +6,7 @@ Conventions that hold for every table: Postgres table and column names are quote
 
 ## 1. Migration and database objects (item v and vi)
 
-Migration folder: `apps/api/prisma/migrations/20261019000000_waste_exchange/migration.sql` (decision 4, review repo F17). It sorts after the newest folder on `main`/`feat/recycle-rewards` (`20261018000100_n1_indexes`) and after the unmerged launch-review folders (on 2026-10-17 the newest was `20261018130000_lr_source_click_dedupe` on branch `lr/source`; re-run the proof, the value changes as other branches land). Before M1.1 (M1.1 Step 4a) and again before M8.2, run from the repository root:
+Migration folder: `apps/api/prisma/migrations/20261020000000_waste_exchange/migration.sql` (decision 4, review repo F17). It sorts after the newest folder of the base `feat/recycle-rewards` (`20261019120000_merchant_link_prev_rate`, from the launch branch) and after the folders of every other local branch (on 2026-10-18 both proof commands printed that same folder; re-run the proof, the value changes as other branches land). Before M1.1 (M1.1 Step 4a) and again before M8.2, run from the repository root:
 
 ```
 for b in $(git for-each-ref --format='%(refname:short)' refs/heads); do git ls-tree --name-only $b apps/api/prisma/migrations/; done | xargs -n1 basename | grep -E '^[0-9]{14}_' | sort | tail -1
@@ -45,7 +45,7 @@ Plain unique constraints and indexes come from `schema.prisma` (generated, not h
 
 Error text the database gives (used by tests): CHECK violation message contains `violates check constraint "<name>"`; unique violation contains `violates unique constraint "<name>"` for raw SQL, and Prisma client calls fail with `code: 'P2002'`.
 
-Race-suite facts (not run in CI): container `tubu_it_main`, port 5550, database `tubutree_it` (main checkout; a lane running in parallel uses its own `tubu_it_rr_<lane>` container and port, registry 4.14 "Lane databases"). `apps/api/tsconfig.json` excludes `test/`, so race specs are not type-checked by `pnpm --filter @tubutree/api typecheck`; the race run itself is their check.
+Race-suite facts (`ci.yml` does not run them; `.github/workflows/race.yml` runs the whole suite on a PR into main that touches `apps/api/**`, `packages/shared-types/**` or `pnpm-lock.yaml`, nightly and by hand): container `tubu_it_main`, port 5550, database `tubutree_it` (main checkout; a lane running in parallel uses its own `tubu_it_rr_<lane>` container and port, registry 4.14 "Lane databases"). `apps/api/tsconfig.json` excludes `test/`, so race specs are not type-checked by `pnpm --filter @tubutree/api typecheck`, and ts-jest transpiles them with `isolatedModules: true`, so no tool reports a type error in them (read them for types at review); the race run is their check of behaviour.
 
 ## 2. Prisma enums (item ii, part 1) and models (item i)
 
@@ -68,7 +68,7 @@ Fourteen enums, values in this exact order:
 - `WasteGiftStatus`: ACTIVE, HIDDEN
 - `WasteGiftRedemptionStatus`: READY, FULFILLED, CANCELLED
 
-The voucher discount type reuses the existing enum `CouponType { PERCENT AMOUNT FREESHIP }` (`schema.prisma:1292`, used by `Coupon.type` at :1309; registry 4.1 and 8.27, resolved by review repo F14 and coverage F13, decision 1). `WasteGift.voucherType CouponType?`. Shared types reuse the existing `CouponType` of `st/enums.ts:58-63` (a const object plus a type of the same name) for `RewardItemDTO.voucher.type`.
+The voucher discount type reuses the existing enum `CouponType { PERCENT AMOUNT FREESHIP }` (`schema.prisma:1314`, used by `Coupon.type` at :1333; registry 4.1 and 8.27, resolved by review repo F14 and coverage F13, decision 1). `WasteGift.voucherType CouponType?`. Shared types reuse the existing `CouponType` of `st/enums.ts:58-63` (a const object plus a type of the same name) for `RewardItemDTO.voucher.type`.
 
 Twelve models. Notation: `name:Type`, `?` = nullable, `=x` = default. FK `onDelete` is stated per relation. All FKs not listed do not exist.
 
@@ -135,7 +135,7 @@ Single record in `wx/waste-config.keys.ts` (M1.4). Twenty-one keys, category `wa
 | `waste.alert_thresholds` | json | `{"quotaPacePct":60,"quotaPaceDays":10,"fullMatchPct":95,"fullMatchMinSample":10,"repeatCustomerCount":3,"repeatCustomerDays":7,"avgUnitsFactor":2,"lookupMissCount":10,"lookupMissDays":1,"staffDirectCount":5,"staffDirectDays":7}` | JSON rule below | Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai. |
 | `waste.rules_text` | string | `""` | string of at most 8000 characters | Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có. |
 
-Keys ending in `_points` (four: `waste.mailin_min_points`, `waste.pickup_min_points`, `waste.customer_monthly_cap_points`, `waste.staff_daily_cap_points`) are also entries of `POINTS_NUMBER_KEYS` with `max` 1000000, 1000000, 2000000, 20000000, so a value 1000 times too large is rejected.
+Keys ending in `_points` (four: `waste.mailin_min_points`, `waste.pickup_min_points`, `waste.customer_monthly_cap_points`, `waste.staff_daily_cap_points`) are also entries of `POINTS_NUMBER_KEYS` with `max` 1000000, 1000000, 2000000, 20000000, so `max + 1` is rejected and the guard finds a bound for every `_points` key.
 
 JSON rules (author decisions; the spec only says "JSON_RULES"):
 - `waste.mailin_fee_table`: an object with `zones` (array of at most 20 items) and `defaultZone`. A zone is `{ name: non-empty string up to 60 chars, provinceCodes: array of non-empty strings (no code may appear in two zones), low: integer 0 to 500000, high: integer from low to 500000 }`; `defaultZone` is `{ name, low, high }` with the same rules.
@@ -179,7 +179,7 @@ Items (id, code, name, unitLabel, unitsPerPoint to pointsPerGroup, dropsPerUnit,
 
 The unit label and the names are author drafts; the spec fixes only the rates and caps (§5.1 and registry 4.1.4). The battery unit "viên" and its 1 to 1000 rate exist only to satisfy the CHECKs.
 
-Gifts (all `status ACTIVE`, `stock` null, `claimInstructions` null; vouchers have `voucherValidDays` 30; type, value, minOrder, maxDiscount, description and label (= the old `badge`) copied from `DEFAULT_REWARD_CATALOG`, `loyalty.service.ts:1487-1532`; names per decision 6 and review coverage F11, which are the names of mockup 16):
+Gifts (all `status ACTIVE`, `stock` null, `claimInstructions` null; vouchers have `voucherValidDays` 30; type, value, minOrder, maxDiscount, description and label (= the old `badge`) copied from `DEFAULT_REWARD_CATALOG`, `loyalty.service.ts:1537-1582`; names per decision 6 and review coverage F11, which are the names of mockup 16):
 
 | id | kind | name | pointsCost | label | voucher type, value, minOrder, maxDiscount | sort |
 |---|---|---|---|---|---|---|
@@ -314,4 +314,4 @@ Not exported from shared-types (stay inside the API): `WasteMonthlyReport` (name
 7. Spec 4.2 does not define what "thêm N vỏ nữa" shows when the quantity is already an exact multiple; `unitsToNextPoint` returns the full group size in that case.
 8. Spec 11.1 gives `consentVersion` as "hằng trong mã" without a value; registry 4.3 fixes `2026-10-17.1`.
 9. Resolved (decision 6, review coverage F11): the four voucher names are "Miễn phí vận chuyển", "Giảm 50.000đ", "Giảm 15%", "Giảm 100.000đ" (mockup 16); ids, values, descriptions and labels stay as in `DEFAULT_REWARD_CATALOG` (section 6).
-10. Still open, not covered by review repo F14 (UNVERIFIED): that `prisma migrate diff --script` run on a database migrated up to `20261018000100_n1_indexes` produces exactly the objects of section 2 (the implementer of M1.1 confirms with the drift command); the exact shape of the Prisma client error for a CHECK violation (raw SQL is used in tests to avoid depending on it).
+10. Still open, not covered by review repo F14 (UNVERIFIED): that `prisma migrate diff --script` run on a database migrated up to `20261019120000_merchant_link_prev_rate` produces exactly the objects of section 2 (the implementer of M1.1 confirms with the drift command); the exact shape of the Prisma client error for a CHECK violation (raw SQL is used in tests to avoid depending on it).
