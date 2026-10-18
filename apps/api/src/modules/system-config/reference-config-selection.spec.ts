@@ -113,6 +113,7 @@ const APPROVED_LOADED_KEYS = [
     'ops.alert_webhook_failed',
     'orders.dealer_pending_payment_ttl_hours',
     'orders.pending_payment_ttl_hours',
+    'pancake.total_mismatch_check',
     'referral.min_order_amount',
     'referral.referrer_reward_points',
     'referral.window_days',

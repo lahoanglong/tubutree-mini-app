@@ -36,6 +36,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'reorder',
   'attendance',
   'retention',
+  'pancake',
 ];
 
 /**
@@ -82,6 +83,7 @@ export interface ExtraConfig extends ConfigSeed {
 const FEED = 'src/modules/feed/community-feed.service.ts';
 const COMMISSION_RATE = 'src/modules/affiliate/commission-rate-csv.ts';
 const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
+const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_post', value: 5, category: 'community', description: 'Điểm uy tín cộng cho người có bài cộng đồng được đăng', fallbackSource: { file: FEED, text: "get<number>('community.rep_post', 5)" } },
@@ -91,6 +93,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_thresholds', value: [0, 50, 200, 500], category: 'community', description: 'Mốc điểm uy tín để lên cấp 1 đến 4 (Mầm, Cây non, Cây trưởng thành, Cổ thụ)', fallbackSource: { file: FEED, text: 'const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];' } },
   { key: 'affiliate.max_rate_pct', value: 50, category: 'affiliate', description: 'Trần % hoa hồng CTV admin được đặt cho một biến thể (phần trăm, 50 = 50%)', fallbackSource: { file: COMMISSION_RATE, text: 'export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;' } },
   { key: 'affiliate.commission_eligible_roles', value: ['AFFILIATE', 'DEALER'], category: 'affiliate', description: 'Vai trò được ghi công đơn và hưởng hoa hồng CTV (thêm "CUSTOMER" nếu khách thường chia sẻ cũng được hưởng)', fallbackSource: { file: COMMISSION_ROLES, text: 'DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];' } },
+  { key: 'pancake.total_mismatch_check', value: true, category: 'pancake', description: 'So tổng tiền Pancake với đơn Tubu mỗi lần webhook; lệch thì đưa đơn vào "Cần xử lý Pancake" (false = tắt khi báo nhầm hàng loạt)', fallbackSource: { file: PANCAKE_PROCESSOR, text: 'get<boolean>(PANCAKE_TOTAL_CHECK_KEY, true)' } },
 ];
 
 export type ConfigDecision = 'reference' | 'business' | 'excluded' | 'unclassified';
