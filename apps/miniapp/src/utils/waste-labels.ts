@@ -12,6 +12,7 @@ import type {
   WasteRequestStatus,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
+import { pointAddress } from '@tubutree/app-core/reward-rules';
 import { formatNumber, formatPoints, formatVnd } from './format';
 
 export { PREVIEW_DEBOUNCE_MS } from './use-debounced';
@@ -238,9 +239,7 @@ export function isOpenNow(hours: WasteOpeningHours, now: Date): boolean {
 
 type PointAddress = Pick<WastePointContactDTO, 'addressLine' | 'communeName' | 'provinceName'>;
 
-export function pointAddress(p: PointAddress): string {
-  return `${p.addressLine}, ${p.communeName}, ${p.provinceName}`;
-}
+export { pointAddress };
 
 export function mapsUrl(p: PointAddress): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pointAddress(p))}`;
