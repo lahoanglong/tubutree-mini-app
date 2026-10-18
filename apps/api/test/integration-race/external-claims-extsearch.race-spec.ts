@@ -156,18 +156,42 @@ describe('Gửi mã khi người khác đang chờ cùng mã (real Postgres)', (
       expect(closed.resolvedAt).not.toBeNull();
     });
 
-    it('N3b: B gửi khi lượt chờ của A đã quá hạn: đóng lượt A, B chờ (SEARCHING); A gửi lại thì CLAIMED_BY_OTHER; CSKH thấy A trong otherSubmitters của B', async () => {
+    it('C1: B gửi khi lượt chờ của A đã quá hạn: B nhận CLAIMED_BY_OTHER, lượt A vẫn mở và nằm trong "Cần xử lý" kèm B ở otherSubmitters', async () => {
       const [a, b] = [await mkUser(), await mkUser()];
       const code = `EXS${randCode(10)}`;
       await service().submit(a.id, code);
       await ageAttempts(code, a.id, 4);
-      expect((await service().submit(b.id, code)).status).toBe('SEARCHING');
+      expect((await service().submit(b.id, code)).status).toBe('CLAIMED_BY_OTHER');
       const open = await openAttempts(code);
-      expect(open.map((x) => x.userId)).toEqual([b.id]);
-      expect((await service().submit(a.id, code)).status).toBe('CLAIMED_BY_OTHER');
-      await ageAttempts(code, b.id, 4);
-      const rowB = (await adminSvc().listAttempts(1, 200)).data.find((r) => r.userId === b.id)!;
-      expect(rowB.otherSubmitters!.map((x) => x.userId)).toContain(a.id);
+      expect(open.map((x) => x.userId)).toEqual([a.id]);
+      const attempts = await prisma.externalClaimAttempt.findMany({ where: { code, userId: b.id } });
+      expect(attempts.map((x) => x.result)).toEqual(['NOT_FOUND']);
+      const list = (await adminSvc().listAttempts(1, 500)).data;
+      const rowA = list.find((r) => r.userId === a.id)!;
+      expect(rowA.otherSubmitters!.map((x) => x.userId)).toEqual([b.id]);
+      expect(list.some((r) => r.userId === b.id)).toBe(false);
+      expect((await service().submit(b.id, code)).status).toBe('CLAIMED_BY_OTHER');
+    });
+
+    it('Q1: đơn về sau khi B gửi (sàn che SĐT): claim không được ghép cho B, lượt của A không biến mất, B không được báo', async () => {
+      const [a, b] = [await mkUser(), await mkUser()];
+      const code = `EXH${randCode(10)}`;
+      await service().submit(a.id, code);
+      await ageAttempts(code, a.id, 4);
+      await service().submit(b.id, code);
+      const now = new Date();
+      const o = await prisma.externalOrder.create({
+        data: {
+          pancakeOrderId: `EXO${randCode(10)}`, source: 'MARKETPLACE', channel: 'shopee', sourceKey: '-3|it|-3', trackingCode: code, trackingCodes: [code],
+          goodsValue: 200_000, pancakeStatus: 3, status: 'DELIVERED', deliveredAt: new Date(now.getTime() - DAY), pancakeInsertedAt: new Date(now.getTime() - 5 * DAY), pancakeUpdatedAt: now,
+          lastPayload: {}, phone: null, phoneLast3: null,
+        } as never,
+      });
+      orderIds.push(o.id);
+      await service().rematchUnmatched(new Date());
+      expect(await prisma.externalPointsClaim.count({ where: { externalOrderId: o.id, userId: b.id } })).toBe(0);
+      expect((await openAttempts(code)).map((x) => x.userId)).toEqual([a.id]);
+      expect((await adminSvc().listAttempts(1, 500)).data.some((r) => r.userId === a.id)).toBe(true);
     });
   });
 });

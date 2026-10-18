@@ -21,7 +21,7 @@ Khách A gửi mã X khi đơn chưa về: A có attempt UNMATCHED (chờ tìm l
 Đỏ trước khi sửa (a4a7e908): race N1, N2, N3a, N3b đỏ; unit M1 hai ca đỏ.
 - N1: `waitingOther` được xét trước `unknown`: đơn nguồn UNKNOWN mà A đang chờ thì B nhận `CLAIMED_BY_OTHER`, không còn REVIEW "không cần làm gì".
 - N2: dòng attempt chờ trong danh sách admin (`listAttempts`) có `otherSubmittersCount` và `otherSubmitters` (tối đa 10 người khác, SĐT che, giờ gửi; lượt UNMATCHED hoặc NOT_FOUND cùng mã trong 30 ngày, kể cả lượt đã đóng). Tab admin hiện "N người khác cùng gửi mã này" kèm danh sách. Dòng của A đã nằm trong "Cần xử lý" nên không thêm hàng đợi. Comment ở `persist` đã sửa.
-- N3: lượt chờ quá 3 ngày (cron không còn quét) bị đóng bằng `resolvedAt` + ghi chú khi có người gửi lại mã (chỉ lượt chưa thấy đơn; lượt đã thấy đơn chờ CSKH thì giữ). A gửi lại hoặc B gửi: mở lượt chờ mới, trả SEARCHING. Lượt cũ còn trong lịch sử và hiện trong `otherSubmitters`. Không thêm cột hay migration.
+- N3 (đã sửa lại ở C1 bên dưới): lượt chờ quá 3 ngày của CHÍNH khách gửi lại được đóng bằng `resolvedAt` + ghi chú rồi mở lượt mới, trả SEARCHING; lượt cũ còn trong lịch sử. Lượt của người khác không bao giờ bị đóng.
 - M1: `createMany` đụng unique mà `findFirst` ra null (lượt chờ vừa đóng): thử `createMany` lại một lần; vẫn không được thì ghi NOT_FOUND và trả `CLAIMED_BY_OTHER`.
 
 ## Hai mục nhỏ từ review nhanh chatpts (74862043)
@@ -30,3 +30,10 @@ Khách A gửi mã X khi đơn chưa về: A có attempt UNMATCHED (chờ tìm l
 
 ## Giới hạn đã biết
 `maskVnPhonesInText` (che SĐT trong ghi chú) không đổi và còn sót vài dạng: `901 234 567` (không đầu 0), `0084...`, số ngăn bằng dấu phẩy; ngược lại có thể che nhầm một đoạn số bắt đầu bằng 0 trong mã vận đơn. Người duyệt vẫn được nhắc không ghi SĐT đầy đủ.
+
+## Sửa lỗi chặn C1 (review lượt 2)
+Bản N3 đầu đóng lượt chờ quá hạn của BẤT KỲ ai cùng mã nên B chiếm được mã của A (đơn về thì ghép cho B, A không được báo và biến khỏi "Cần xử lý"). Probe Q1 thành race test, đỏ trên 3abb0efc (B nhận SEARCHING, claim ghép cho B).
+- `updateMany` đóng lượt quá hạn giờ có `userId` của người đang gửi: chỉ chủ lượt gửi lại mới đóng và mở lượt mới (SEARCHING).
+- Người khác gửi trùng luôn nhận `CLAIMED_BY_OTHER` và ghi NOT_FOUND, kể cả khi lượt của A đã quá hạn. Lượt quá hạn của A vẫn mở, vẫn nằm trong "Cần xử lý" kèm `otherSubmitters` có B để CSKH quyết.
+- Race: N3b thay bằng "C1" (B gửi khi lượt A quá hạn: CLAIMED_BY_OTHER, lượt A mở, A có trong `listAttempts` kèm B) và "Q1" (đơn về sau khi B gửi: không có claim cho B, lượt của A còn mở, vẫn trong hàng đợi). Lưu ý: cron `rematchUnmatched` chỉ quét lượt trong 3 ngày nên KHÔNG tự ghép lượt quá hạn của A khi đơn về; CSKH gắn tay từ "Cần xử lý" (không đúng như dự kiến "cron ghép cho A").
+- S-a: cột `result` là chuỗi tự do chứ không có enum, và không có giá trị "đã hết hạn" sẵn có, nên lượt đã đóng giữ `result = 'UNMATCHED'` với `resolvedAt` và ghi chú "Quá hạn tìm lại...". Không thêm migration. Giới hạn: truy vấn theo `result` một mình không phân biệt lượt hết hạn với lượt chưa đóng, phải lọc thêm `resolvedAt`.

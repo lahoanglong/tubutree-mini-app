@@ -398,11 +398,12 @@ export class ExternalClaimService {
       if (a.attemptId) {
         if (unknown) await tx.externalClaimAttempt.updateMany({ where: { id: a.attemptId, resolvedAt: null }, data: { externalOrderId, note } });
       } else {
-        // Lượt chờ quá hạn tìm lại (cron chỉ quét 3 ngày) không còn ai tìm: đóng để mã được chờ lại, đừng hứa "sẽ tự tìm" bằng lượt chết.
-        // Chỉ lượt chưa thấy đơn; lượt đã thấy đơn (nguồn UNKNOWN) chờ CSKH nên không đóng. Lượt cũ còn trong lịch sử.
+        // Lượt chờ của CHÍNH khách này đã quá hạn tìm lại (cron chỉ quét 3 ngày): đóng để mở lượt mới, đừng hứa "sẽ tự tìm" bằng lượt chết.
+        // Lượt của người khác không bao giờ bị đóng ở đây (người gửi sau không được chiếm mã): họ nhận CLAIMED_BY_OTHER, lượt quá hạn
+        // vẫn nằm ở "Cần xử lý" cho CSKH quyết. Chỉ lượt chưa thấy đơn; lượt đã thấy đơn (nguồn UNKNOWN) chờ CSKH nên không đóng.
         await tx.externalClaimAttempt.updateMany({
-          where: { code, result: 'UNMATCHED', resolvedAt: null, externalOrderId: null, createdAt: { lt: new Date(now.getTime() - UNMATCHED_RETRY_DAYS * DAY_MS) } },
-          data: { resolvedAt: now, note: 'Quá hạn tìm lại, mở lượt chờ mới theo lần gửi sau' },
+          where: { userId, code, result: 'UNMATCHED', resolvedAt: null, externalOrderId: null, createdAt: { lt: new Date(now.getTime() - UNMATCHED_RETRY_DAYS * DAY_MS) } },
+          data: { resolvedAt: now, note: 'Quá hạn tìm lại, khách gửi lại nên mở lượt chờ mới' },
         });
         // createMany skipDuplicates: unique một phần theo mã (một lần chờ mỗi mã). Trùng thì ghi NOT_FOUND mà không làm hỏng transaction (25P02).
         const row = { userId, code, result: 'UNMATCHED', dayKey, externalOrderId, note };
