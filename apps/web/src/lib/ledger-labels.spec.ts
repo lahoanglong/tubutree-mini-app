@@ -27,7 +27,7 @@ describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng t
  * checkout.service (ORDER_REDEEM, ORDER_REDEEM_CONVERTED), order-reversal.service (ORDER_REFUND_*, RETURN_*),
  * wallet/referral-reward + reward-points.service (REFERRAL_*), feed/community-reward.service (COMMUNITY_*),
  * storefront-quest.service, affiliate.service (CTV_MILESTONE), game.service (GAME_*, MISSION), season-pass.service,
- * reviews.service (REVIEW, REVIEW_DELETE), waste-exchange (RECYCLE, RECYCLE_REVERSED), gift redemptions (GIFT_REDEEM, GIFT_REFUND), migration pd3_xu_to_points (XU_TO_POINTS), auth.service gộp phiên (tiền tố MERGED:<id>:).
+ * reviews.service (REVIEW, REVIEW_DELETE), waste-exchange (RECYCLE, RECYCLE_REVERSED), gift redemptions (GIFT_REDEEM, GIFT_REFUND), external-points (PANCAKE_CHAT_ORDER, MARKETPLACE_ORDER và hai mã _REVERSED), migration pd3_xu_to_points (XU_TO_POINTS), auth.service gộp phiên (tiền tố MERGED:<id>:).
  * Thêm mã mới ở API thì thêm một dòng ở đây và ở ledger-labels.ts (và account-api.ts của miniapp).
  */
 const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail: string]> = [
@@ -71,6 +71,10 @@ const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail
   ['REVIEW_DELETE:prod1', 'Thu hồi điểm đánh giá đã xoá', 'Thu hồi điểm đánh giá đã xoá'],
   ['RECYCLE:TR-7K3M9Q', 'Đổi rác lấy quà', 'Đổi rác lấy quà'],
   ['RECYCLE_REVERSED:TR-7K3M9Q', 'Thu hồi điểm đổi rác', 'Thu hồi điểm đổi rác'],
+  ['PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên', 'Tích điểm đơn đặt qua tư vấn viên'],
+  ['PANCAKE_CHAT_ORDER_REVERSED:1234567', 'Thu hồi điểm đơn đặt qua tư vấn viên', 'Thu hồi điểm đơn đặt qua tư vấn viên'],
+  ['MARKETPLACE_ORDER:2610A1B2C3', 'Tích điểm đơn mua trên sàn', 'Tích điểm đơn mua trên sàn'],
+  ['MARKETPLACE_ORDER_REVERSED:2610A1B2C3', 'Thu hồi điểm đơn mua trên sàn', 'Thu hồi điểm đơn mua trên sàn'],
   ['GIFT_REDEEM:gr1', 'Đổi điểm lấy quà', 'Đổi điểm lấy quà'],
   ['GIFT_REFUND:gr1', 'Hoàn điểm quà', 'Hoàn điểm quà'],
 ];
