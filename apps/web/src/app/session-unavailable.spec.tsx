@@ -50,6 +50,7 @@ import WalletPage from './tai-khoan/vi-tubu/page';
 import RewardsPage from './kho-qua/page';
 import RewardsMinePage from './kho-qua/cua-toi/page';
 import CashbackPage from './hoan-tien/page';
+import WishlistPage from './tai-khoan/yeu-thich/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -75,7 +76,7 @@ const CORE: PageCase[] = [
   ['/tai-khoan/don-hang/[code]', () => <OrderDetailPage />],
   ['/tai-khoan/dia-chi', () => <AddressBookPage />],
 ];
-const SHOP: PageCase[] = [];
+const SHOP: PageCase[] = [['/tai-khoan/yeu-thich', () => <WishlistPage />]];
 const ORDER: PageCase[] = [];
 const ACCOUNT: PageCase[] = [
   ['/tai-khoan/ho-so', () => <EditProfilePage />],

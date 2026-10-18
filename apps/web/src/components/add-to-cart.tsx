@@ -55,7 +55,9 @@ export default function AddToCart({
   const [localId, setLocalId] = useState<string>((inStock[0] ?? isrVariations[0])?.id ?? '');
   const selectedId = shared?.selectedId ?? localId;
   const setSelectedId = shared?.setSelectedId ?? setLocalId;
-  const [qty, setQty] = useState(1);
+  const [localQty, setLocalQty] = useState(1);
+  const qty = shared?.quantity ?? localQty;
+  const setQty = shared?.setQuantity ?? setLocalQty;
   const [busy, setBusy] = useState(false);
   // Đang làm "Mua ngay" (thêm giỏ rồi đi tiếp) hay chỉ "Thêm vào giỏ": quyết định chữ trên nút nào đang quay.
   const [buying, setBuying] = useState(false);
@@ -76,12 +78,12 @@ export default function AddToCart({
   // Đổi phân loại → reset số lượng về 1 thay vì giữ số lượng cũ (có thể vượt tồn kho mới).
   useEffect(() => {
     setQty(1);
-  }, [selectedId]);
+  }, [selectedId, setQty]);
 
   // Tồn kho thật vừa về thấp hơn số đang chọn → kéo số lượng xuống cho khớp.
   useEffect(() => {
     setQty((q) => Math.min(q, maxQty));
-  }, [maxQty]);
+  }, [maxQty, setQty]);
 
   // Khách vào từ thẻ ghi giá Giờ vàng thì mở đúng phân loại đang giảm (cùng cách Mini App), trừ khi khách đã tự chọn hoặc
   // phân loại đó hết hàng.

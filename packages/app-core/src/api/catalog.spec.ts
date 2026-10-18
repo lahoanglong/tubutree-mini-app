@@ -12,6 +12,7 @@ import {
   fetchProductsBySlugs,
   fetchRelated,
   suggestProducts,
+  type BrandCount,
   type PageResponse,
   type ProductCard,
 } from './catalog';
@@ -22,6 +23,11 @@ const page = (n: number, ids: string[]): PageResponse<ProductCard> => ({
 });
 
 describe('catalog — hợp đồng gọi API', () => {
+  it('nhãn có thể kèm slug trang /brand/:slug (kiểm bằng typecheck)', () => {
+    const rows: BrandCount[] = [{ brand: 'Tubu', count: 3, slug: 'tubu-xanh' }, { brand: 'A&B', count: 1, slug: null }, { brand: 'C', count: 2 }];
+    expect(rows.map((b) => b.slug ?? null)).toEqual(['tubu-xanh', null, null]);
+  });
+
   it('đường dẫn, method, query của các hàm GET đơn', async () => {
     const { http, calls } = fakeHttp();
     await fetchProduct(http, 'sua-tam');

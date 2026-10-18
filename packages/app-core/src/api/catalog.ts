@@ -163,7 +163,13 @@ export const fetchProducts = async (http: HttpClient, params: Record<string, str
   };
 };
 export const fetchProduct = (http: HttpClient, slug: string) => http.get<ProductDetail>(`/products/${slug}`);
-export const fetchBrands = (http: HttpClient) => http.get<{ brand: string; count: number }[]>('/brands');
+/** `slug` có khi nhãn đã công khai trang /brand/:slug; API cũ chưa trả thì thiếu. */
+export interface BrandCount {
+  brand: string;
+  count: number;
+  slug?: string | null;
+}
+export const fetchBrands = (http: HttpClient) => http.get<BrandCount[]>('/brands');
 export const fetchRelated = (http: HttpClient, slug: string) => http.get<ProductCard[]>(`/products/${slug}/related`);
 /** Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập). */
 export const fetchForYou = (http: HttpClient) => http.get<ProductCard[]>('/products/for-you');

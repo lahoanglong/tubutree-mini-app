@@ -13,6 +13,7 @@ import { metadata as notifications } from './tai-khoan/thong-bao/layout';
 import { metadata as rewards } from './kho-qua/layout';
 import { metadata as myRewards } from './kho-qua/cua-toi/layout';
 import { metadata as cashback } from './hoan-tien/layout';
+import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -24,7 +25,7 @@ const CORE: TitleCase[] = [
   ['/tai-khoan/dia-chi', addresses, 'Sổ địa chỉ — Tubu Tree'],
   ['/tai-khoan/vi-tubu', wallet, 'Ví Tubu — Tubu Tree'],
 ];
-const SHOP: TitleCase[] = [];
+const SHOP: TitleCase[] = [['/tai-khoan/yeu-thich', wishlist, 'Sản phẩm yêu thích — Tubu Tree']];
 const ORDER: TitleCase[] = [];
 const ACCOUNT: TitleCase[] = [
   ['/tai-khoan/ho-so', editProfile, 'Sửa hồ sơ — Tubu Tree'],

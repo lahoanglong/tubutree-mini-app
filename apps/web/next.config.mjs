@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { buildCatalogRedirects } from './src/lib/catalog-redirects.mjs';
 import { buildMiniappRedirects } from './src/lib/miniapp-redirects.mjs';
 
 const require = createRequire(import.meta.url);
@@ -73,7 +74,8 @@ const nextConfig = {
   },
   // Link cũ/đường dẫn Mini App dán lên web đi tới route web tương ứng (307, Next giữ query của đường vào).
   async redirects() {
-    return buildMiniappRedirects(routeMap.routes);
+    // Danh mục sản phẩm đã chuyển từ "/" sang /san-pham: link cũ "/?q|category|brand" đi theo (xem catalog-redirects.mjs).
+    return [...buildCatalogRedirects(), ...buildMiniappRedirects(routeMap.routes)];
   },
   // API đã có `helmet()` (apps/api/src/main.ts) nhưng web (trang khách hàng/admin thấy
   // trực tiếp) trước giờ không có header bảo mật nào — Caddy chỉ reverse-proxy thuần,
