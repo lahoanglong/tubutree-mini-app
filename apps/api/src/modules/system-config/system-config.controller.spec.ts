@@ -197,13 +197,13 @@ describe('SystemConfigController.publicConfig — link kênh cộng đồng', ()
 
 // D2-07b: khối "Quà khách mới" và các chữ có số (D5-10) đọc từ đây. Mặc định phải bằng mặc định trong mã của nơi dùng số đó.
 describe('SystemConfigController.publicConfig — số cho khách mới và Điểm Xanh', () => {
-  it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu từ 199.000đ, 10.000đ = 1 điểm, 1 điểm = 1.000đ', async () => {
+  it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu từ 199.000đ, tích 2% tiền hàng, 1 điểm = 1đ', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.newCustomer).toEqual({
       welcomeVoucher: { amount: 30000, minOrder: 199000 },
       firstOrderFreeShip: { enabled: true, minSubtotal: 199000 },
     });
-    expect(out.loyalty).toEqual({ vndPerPoint: 10000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2, pointExpireMonths: 12 });
+    expect(out.loyalty).toEqual({ earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1, maxRedeemPct: 0.2, pointExpireMonths: 12 });
     expect(out.homeNewCustomerLayout).toBe(true);
     expect(out.communityPublicPreview).toBe(true);
   });
@@ -215,7 +215,7 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
         'voucher.welcome_min_order': 150000,
         'shipping.first_order_free_enabled': true,
         'shipping.first_order_free_min_subtotal': 99000,
-        'loyalty.vnd_per_point': 20000,
+        'loyalty.earn_pct': 4,
         'home.new_customer_layout': true,
         'community.public_preview': true,
       }),
@@ -224,7 +224,8 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
       welcomeVoucher: { amount: 25000, minOrder: 150000 },
       firstOrderFreeShip: { enabled: true, minSubtotal: 99000 },
     });
-    expect(out.loyalty.vndPerPoint).toBe(20000);
+    expect(out.loyalty.earnPct).toBe(4);
+    expect(out.loyalty.vndPerPoint).toBe(25);
     expect(out.homeNewCustomerLayout).toBe(true);
     expect(out.communityPublicPreview).toBe(true);
   });
@@ -267,10 +268,10 @@ describe('SystemConfigController.publicConfig — trần dùng điểm và hạn
 
 // D5-10: chữ trong miniapp từng viết cứng 45%, 24 giờ, "tối đa 1.000 điểm"; giờ đọc từ config công khai.
 describe('SystemConfigController.publicConfig — số trong chữ đại lý và sự kiện cộng đồng (D5-10)', () => {
-  it('chưa cấu hình → đúng mặc định hiện hành: chiết khấu đại lý tối đa 45%, duyệt hồ sơ 24 giờ, thưởng sự kiện tối đa 1.000 điểm', async () => {
+  it('chưa cấu hình → đúng mặc định hiện hành: chiết khấu đại lý tối đa 45%, duyệt hồ sơ 24 giờ, thưởng sự kiện tối đa 1.000.000 điểm', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.dealer).toEqual({ maxDiscountPct: 0.45, reviewHours: 24 });
-    expect(out.community).toMatchObject({ eventRewardMaxPoints: 1000 });
+    expect(out.community).toMatchObject({ eventRewardMaxPoints: 1_000_000 });
   });
 
   it('admin đổi → trả giá trị mới của đúng khoá mà dealer.service đang kẹp chiết khấu', async () => {

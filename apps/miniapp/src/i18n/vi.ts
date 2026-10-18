@@ -101,7 +101,7 @@ export const vi = {
       freeShipFirst: 'Miễn phí giao cho đơn đầu tiên',
       freeShipFirstFrom: (min: string) => `Miễn phí giao cho đơn đầu tiên từ ${min}`,
       freeShipFrom: (min: string) => `Miễn phí giao cho đơn từ ${min}`,
-      points: (spend: string, redeem: string) => `Mỗi ${spend} mua hàng được 1 Điểm Xanh, 1 điểm giảm ${redeem}`,
+      points: (pct: string, redeem: string) => `Mỗi đơn tích ${pct} tiền hàng thành Điểm Xanh, 1 điểm giảm ${redeem}`,
       subscribe: (pct: number) => `Đặt định kỳ giảm ${pct}% mỗi đơn`,
     },
     strip: {

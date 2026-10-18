@@ -94,21 +94,21 @@ A. Sáu khoá cấu hình (giá trị khác mặc định trong mã):
 
 | Khoá | Giá trị nạp | Mặc định mã nếu không nạp | Ảnh hưởng |
 |---|---|---|---|
-| `game.spin_prizes` | 8 giải, tổng trọng số 100: 5 điểm Xanh (30), 10 điểm (22), 20 điểm (12), voucher 20k (10), 30 💧 (15), voucher 50k (4), 50 điểm (5), "Chúc may mắn" (2). Một lượt mua giá 10 điểm Xanh (`game.spin_buy_cost_points`) | `[]`: "Vòng quay chưa cấu hình" | Trung bình mỗi lượt trả 8,6 điểm (8.600đ) cộng 4.000đ mệnh giá voucher cộng 4,5 💧. Muốn đóng sau khi nạp: đặt khoá này = `[]` (luật ghi cho phép) |
-| `referral.milestones_points` | mốc 3 / 5 / 10 bạn giới thiệu thành công thưởng 20 / 40 / 100 điểm Xanh | `[]`: không thưởng mốc | Tổng tối đa 160 điểm (160.000đ) cho một người giới thiệu đủ 10 bạn |
+| `game.spin_prizes` | 8 giải, tổng trọng số 100: 5.000 điểm Xanh (30), 10.000 điểm (22), 20.000 điểm (12), voucher 20k (10), 30 💧 (15), voucher 50k (4), 50.000 điểm (5), "Chúc may mắn" (2). Một lượt mua giá 10.000 điểm Xanh (`game.spin_buy_cost_points`) | `[]`: "Vòng quay chưa cấu hình" | Trung bình mỗi lượt trả 8,6 điểm (8.600đ) cộng 4.000đ mệnh giá voucher cộng 4,5 💧. Muốn đóng sau khi nạp: đặt khoá này = `[]` (luật ghi cho phép) |
+| `referral.milestones_points` | mốc 3 / 5 / 10 bạn giới thiệu thành công thưởng 20.000 / 40.000 / 100.000 điểm Xanh | `[]`: không thưởng mốc | Tổng tối đa 160.000 điểm (160.000đ) cho một người giới thiệu đủ 10 bạn |
 | `subscribe.discount_tiers` | 1 gói định kỳ đang chạy 12%, 3 gói 14%, 5 gói 15% | một bậc 12% (bằng `subscribe.discount_pct`) | Giảm giá đơn định kỳ cho khách có nhiều gói |
 | `shipping.tier_freeship_overrides` | Lộc Biếc freeship từ đơn 99.000đ; Đại Thụ và Cổ Thụ freeship mọi đơn | `{}`: không hạng nào freeship sớm | Đi cùng 4 hạng thành viên bên dưới: lời hứa "Freeship" trên thẻ hạng chỉ thực hiện khi có khoá này |
 | `game.streak_7_bonus` | `{ seeds: 10, free_spins: 1 }` | `{ seeds: 20 }` | Thưởng 💧 mỗi chuỗi điểm danh 7 ngày. Seed ít hơn mặc định mã (10 so với 20); `free_spins` không có code nào đọc |
-| `seasonpass.tiers` | 5 bậc, XP 30/70/120/200/300: miễn phí 20/30/40/60/80 💧; trả phí 5/8/12/20/30 điểm Xanh | `[]` | Season Pass đang ẩn trong miniapp (`SEASON_PASS_ENABLED=false`), nạp chưa hiện gì |
+| `seasonpass.tiers` | 5 bậc, XP 30/70/120/200/300: miễn phí 20/30/40/60/80 💧; trả phí 5.000/8.000/12.000/20.000/30.000 điểm Xanh | `[]` | Season Pass đang ẩn trong miniapp (`SEASON_PASS_ENABLED=false`), nạp chưa hiện gì |
 
 B. Bốn hạng thành viên (`membership_tiers`):
 
-| Hạng | Điểm tối thiểu (12 tháng) | hoặc chi tiêu 12 tháng | Nhân điểm | Giảm mọi đơn | Voucher sinh nhật | Quyền lợi ghi trên thẻ |
+| Hạng | Điểm hiển thị (minPoints, = chi tiêu / 50; hạng xét theo chi tiêu) | Chi tiêu 12 tháng để lên hạng | Nhân điểm | Giảm mọi đơn | Voucher sinh nhật | Quyền lợi ghi trên thẻ |
 |---|---|---|---|---|---|---|
 | Mầm Xanh (`MAM_XANH`) | 0 | không | x1 | 0 | không | Tích Điểm Xanh x1 |
-| Lộc Biếc (`LOC_BIEC`) | 500 | 5.000.000đ | x1,2 | 0 | 50.000đ | x1,2; freeship đơn từ 99k; voucher sinh nhật 50k |
-| Đại Thụ (`DAI_THU`) | 2.000 | 20.000.000đ | x1,5 | 0 | 150.000đ | x1,5; freeship toàn shop; voucher sinh nhật 150k |
-| Cổ Thụ (`CO_THU`) | 5.000 | 50.000.000đ | x2 | 5% | 300.000đ | x2; freeship và giảm 5% mọi đơn; voucher sinh nhật 300k |
+| Lộc Biếc (`LOC_BIEC`) | 30.000 | 1.500.000đ | x1,2 | 0 | 50.000đ | x1,2; freeship đơn từ 99k; voucher sinh nhật 50k |
+| Đại Thụ (`DAI_THU`) | 400.000 | 20.000.000đ | x1,5 | 0 | 150.000đ | x1,5; freeship toàn shop; voucher sinh nhật 150k |
+| Cổ Thụ (`CO_THU`) | 1.000.000 | 50.000.000đ | x2 | 5% | 300.000đ | x2; freeship và giảm 5% mọi đơn; voucher sinh nhật 300k |
 
 C. Bốn bậc đại lý (`dealer_tiers`):
 
@@ -123,10 +123,10 @@ D. Bốn nhiệm vụ (`missions`), đều làm một lần:
 
 | Mã | Tên | Điều kiện | Thưởng |
 |---|---|---|---|
-| `FIRST_ORDER` | Đơn hàng đầu tiên | nhận thành công 1 đơn | 20 điểm Xanh |
-| `CHECKIN_7` | Chăm chỉ 7 ngày | điểm danh Vườn Xanh 7 ngày liên tiếp | 30 điểm Xanh |
-| `REVIEW_3` | Nhà phê bình | viết 3 đánh giá có ảnh | 15 điểm Xanh |
-| `INVITE_3` | Lan tỏa sống xanh | mời 3 bạn mua hàng thành công | 50 điểm Xanh |
+| `FIRST_ORDER` | Đơn hàng đầu tiên | nhận thành công 1 đơn | 20.000 điểm Xanh |
+| `CHECKIN_7` | Chăm chỉ 7 ngày | điểm danh Vườn Xanh 7 ngày liên tiếp | 30.000 điểm Xanh |
+| `REVIEW_3` | Nhà phê bình | viết 3 đánh giá có ảnh | 15.000 điểm Xanh |
+| `INVITE_3` | Lan tỏa sống xanh | mời 3 bạn mua hàng thành công | 50.000 điểm Xanh |
 
 Hệ quả nếu KHÔNG nạp nhóm này (hành vi mặc định): không có hạng thành viên; không duyệt được hồ sơ đại lý hay cấp vai trò DEALER (cần có ít nhất một bậc); vòng quay báo "chưa cấu hình"; không thưởng mốc giới thiệu; Vườn Xanh không có nhiệm vụ; chiết khấu Subscribe & Save chỉ một bậc 12%.
 
@@ -146,7 +146,7 @@ Mặc định chung: KHÔNG nạp nhóm giá trị kinh doanh (chạy không c�
 
 1. Duyệt bảng ở mục 3.2? Câu này chặn: chưa duyệt thì chưa có hạng thành viên và CHƯA DUYỆT ĐƯỢC ĐẠI LÝ/CTV (cần ít nhất một bậc đại lý). Khuyên: duyệt trước ngày mở đăng ký đại lý; duyệt xong chạy có cờ một lần. Mặc định: không nạp.
 2. Thang hạng thành viên (bảng B): giữ ngưỡng hiện tại không? D2-09 gợi ý hạ Lộc Biếc xuống khoảng 1,5 triệu. Cổ Thụ giảm 5% mọi đơn và voucher sinh nhật 50k/150k/300k có phải đúng ý? Mặc định: không nạp.
-3. Bảng giải vòng quay (8 giải; trả trung bình 8,6 điểm cho lượt giá 10 điểm, chưa tính voucher và 💧): mở ngay hay đóng tới khi duyệt? Mặc định: không nạp (vòng quay "chưa cấu hình"). Nếu duyệt nạp mà vẫn muốn đóng: đặt `game.spin_prizes` = `[]`.
+3. Bảng giải vòng quay (8 giải; trả trung bình 8.600 điểm cho lượt giá 10.000 điểm, chưa tính voucher và 💧): mở ngay hay đóng tới khi duyệt? Mặc định: không nạp (vòng quay "chưa cấu hình"). Nếu duyệt nạp mà vẫn muốn đóng: đặt `game.spin_prizes` = `[]`.
 4. Bốn bậc đại lý (bảng C: chiết khấu 20/30/38/45%, công nợ 0/20/50/150 triệu, PREPAID/NET 15/NET 30/NET 30): giữ không? Mặc định: không nạp.
 5. Thưởng mốc giới thiệu (3/5/10 bạn thưởng 20/40/100 điểm), bậc Subscribe & Save 12/14/15%, thưởng chuỗi 7 ngày (seed 10 💧, mã mặc định 20 💧): dùng giá trị nào? Mặc định: không nạp, mã chạy theo mặc định của nó (không thưởng mốc, một bậc 12%, 20 💧).
 6. Bốn nhiệm vụ (20/30/15/50 điểm Xanh): giữ không? Mặc định: không nạp.

@@ -16,11 +16,11 @@ export const LOYALTY_KEYS = {
 
 /** Mặc định trùng BE (loyalty.service.ts DEFAULT_CHECKIN_POINTS / POS_DEFAULTS) khi khoá chưa seed. */
 export const LOYALTY_DEFAULTS = {
-  checkinPoints: [1, 1, 1, 1, 1, 1, 2],
+  checkinPoints: [1000, 1000, 1000, 1000, 1000, 1000, 2000],
   posEnabled: false,
   posMaxOrderTotal: 5_000_000,
-  posStaffDailyCap: 3_000,
-  posMemberDailyCap: 1_000,
+  posStaffDailyCap: 3_000_000,
+  posMemberDailyCap: 1_000_000,
 };
 
 export function configValue<T>(rows: ConfigRow[] | undefined, key: string, fallback: T): T {
@@ -87,15 +87,15 @@ export const WAREHOUSE_LABEL: Record<keyof WarehouseForm, string> = {
 
 // ── Tích điểm ──
 
-/** 7 ô nhập → mảng 7 số nguyên 0..100, hoặc câu lỗi. */
+/** 7 ô nhập → mảng 7 số nguyên 0..100.000, hoặc câu lỗi. */
 export function parseCheckinPoints(inputs: string[]): { value?: number[]; error?: string } {
   if (inputs.length !== 7) return { error: 'Cần đúng 7 ô điểm (ngày 1 → ngày 7).' };
   const out: number[] = [];
   for (let i = 0; i < 7; i++) {
     const raw = inputs[i]!.trim();
     const n = Number(raw);
-    if (raw === '' || !Number.isInteger(n) || n < 0 || n > 100) {
-      return { error: `Ngày ${i + 1}: nhập số nguyên 0–100.` };
+    if (raw === '' || !Number.isInteger(n) || n < 0 || n > 100_000) {
+      return { error: `Ngày ${i + 1}: nhập số nguyên 0–100.000.` };
     }
     out.push(n);
   }

@@ -19,14 +19,14 @@ describe('thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(partialRevokeTarget(points(100), 50_000, 0)).toBe(0);
   });
 
-  it('thưởng xu cũ: quy ra điểm (legacyXuToPoints) trước rồi làm tròn xuống theo điểm, không thu dư', () => {
-    expect(partialRevokeTarget(xu(5000), 100_000, 300_000)).toBe(1); // floor(5 × 1/3)
-    expect(partialRevokeTarget(xu(5000), 200_000, 300_000)).toBe(3); // floor(5 × 2/3)
-    expect(partialRevokeTarget(xu(5000), 3_000, 300_000)).toBe(0); // 1%: floor(0.05), không ceil lên 1
-    expect(partialRevokeTarget(xu(5000), 300_000, 300_000)).toBe(5);
-    expect(partialRevokeTarget(xu(4500), 300_000, 300_000)).toBe(5); // trả hết = đúng referralGrantDue
-    expect(partialRevokeTarget(xu(4500), 299_999, 300_000)).toBe(4);
-    expect(referralGrantDue(xu(5000))).toBe(5);
+  it('thưởng xu cũ: quy ra điểm 1 xu = 1 điểm (legacyXuToPoints) rồi làm tròn xuống, không thu dư', () => {
+    expect(partialRevokeTarget(xu(5000), 100_000, 300_000)).toBe(1666); // floor(5000 × 1/3)
+    expect(partialRevokeTarget(xu(5000), 200_000, 300_000)).toBe(3333); // floor(5000 × 2/3)
+    expect(partialRevokeTarget(xu(5000), 3_000, 300_000)).toBe(50); // 1%
+    expect(partialRevokeTarget(xu(5000), 300_000, 300_000)).toBe(5000);
+    expect(partialRevokeTarget(xu(4500), 300_000, 300_000)).toBe(4500); // trả hết = đúng referralGrantDue
+    expect(partialRevokeTarget(xu(4500), 299_999, 300_000)).toBe(4499);
+    expect(referralGrantDue(xu(5000))).toBe(5000);
     expect(referralGrantDue(points(100))).toBe(100);
   });
 

@@ -195,7 +195,7 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
   });
 
   it('T6: đơn tiêu hai lô chạy chồng với quay thưởng ×5, đổi voucher ×3, góp quỹ cây ×2 → không lô nào âm; quay/voucher chỉ chạm STANDARD', async () => {
-    const { u, addr } = await buyer(100, 100);
+    const { u, addr } = await buyer(20_100, 100);
     const results = await Promise.allSettled([
       checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 120 } as never),
       ...Array.from({ length: 5 }, () => game.spin(u.id)),

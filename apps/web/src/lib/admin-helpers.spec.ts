@@ -87,10 +87,10 @@ describe('Form cấu hình Gomdon — chỉ sửa kho + cân nặng, giữ nguy�
 });
 
 describe('Form tích điểm', () => {
-  it('check-in: đúng 7 số nguyên 0..100', () => {
+  it('check-in: đúng 7 số nguyên 0..100.000', () => {
     expect(parseCheckinPoints(['1', '1', '1', '1', '1', '1', '2'])).toEqual({ value: [1, 1, 1, 1, 1, 1, 2] });
     expect(parseCheckinPoints(['1', '1', '1', '1', '1', '1']).error).toBeDefined();
-    expect(parseCheckinPoints(['1', '1', '1', '1', '1', '1', '101']).error).toMatch(/Ngày 7/);
+    expect(parseCheckinPoints(['1', '1', '1', '1', '1', '1', '100001']).error).toMatch(/Ngày 7/);
     expect(parseCheckinPoints(['1', '', '1', '1', '1', '1', '1']).error).toMatch(/Ngày 2/);
     expect(parseCheckinPoints(['1', '1.5', '1', '1', '1', '1', '1']).error).toMatch(/Ngày 2/);
   });

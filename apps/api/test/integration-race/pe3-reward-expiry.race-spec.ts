@@ -13,10 +13,10 @@ import { ReviewsService } from '../../src/modules/reviews/reviews.service';
 import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 const DAY = 864e5;
-const SPIN_COST = 10;
-const SPIN_WIN = 25;
-const MISSION_POINTS = 20;
-const REVIEW_POINTS = 5;
+const SPIN_COST = 10_000;
+const SPIN_WIN = 25_000;
+const MISSION_POINTS = 20_000;
+const REVIEW_POINTS = 5_000;
 
 /**
  * PE-3 (OQ-1): thưởng vòng quay (GAME_SPIN_WIN), nhiệm vụ Vườn Xanh (MISSION) và điểm đánh giá (REVIEW) là Điểm Xanh
@@ -143,7 +143,7 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
   describe('từng nguồn ghi expiresAt ≈ bây giờ + 12 tháng, lô STANDARD, số dư khớp sổ', () => {
     it('vòng quay trúng điểm: GAME_SPIN_WIN có hạn, GAME_SPIN_COST không hạn, đúng số điểm', async () => {
       const { user } = await player();
-      await legacyUnlimited(user.id, 100);
+      await legacyUnlimited(user.id, 100_000);
       const before = new Date();
       await game.spin(user.id);
       const after = new Date();
@@ -153,7 +153,7 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
       expectMonthsAhead(win.expiresAt, before, after);
       const cost = await rowOf(user.id, 'GAME_SPIN_COST');
       expect(cost).toMatchObject({ delta: -SPIN_COST, lot: 'STANDARD', expiresAt: null });
-      expect(await balance(user.id)).toBe(100 - SPIN_COST + SPIN_WIN);
+      expect(await balance(user.id)).toBe(100_000 - SPIN_COST + SPIN_WIN);
     });
 
     it('nhận thưởng nhiệm vụ: MISSION:FIRST_ORDER:0 có hạn, đúng số điểm', async () => {
@@ -190,7 +190,7 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
 
     it('cả ba nguồn: không dòng cộng nào của game/nhiệm vụ/đánh giá còn expiresAt NULL', async () => {
       const { user, product } = await player();
-      await legacyUnlimited(user.id, 50);
+      await legacyUnlimited(user.id, 50_000);
       await game.spin(user.id);
       await game.claimMission(user.id, 'FIRST_ORDER');
       await reviews.create(user.id, product.slug, { rating: 4 });
@@ -227,20 +227,20 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
 
     it('5 lượt quay song song (đủ điểm, dưới trần ngày) → 5 dòng thắng đều có hạn, số dư khớp sổ', async () => {
       const { user } = await player();
-      await legacyUnlimited(user.id, 100);
+      await legacyUnlimited(user.id, 100_000);
       const s = summarize(await Promise.allSettled(Array.from({ length: 5 }, () => game.spin(user.id))));
       expect(s.errors).toEqual([]);
       const wins = await prisma.pointsTransaction.findMany({ where: { userId: user.id, reason: 'GAME_SPIN_WIN:win' } });
       expect(wins).toHaveLength(5);
       expect(wins.every((w) => w.expiresAt instanceof Date)).toBe(true);
-      expect(await balance(user.id)).toBe(100 + 5 * (SPIN_WIN - SPIN_COST));
+      expect(await balance(user.id)).toBe(100_000 + 5 * (SPIN_WIN - SPIN_COST));
     });
   });
 
   describe('xoá đánh giá khi điểm thưởng đã hết hạn: không trừ hai lần', () => {
     const reviewDeleteRows = (userId: string) => prisma.pointsTransaction.findMany({ where: { userId, reason: { startsWith: 'REVIEW_DELETE:' } } });
 
-    it.each([[30], [0]])('cron đã trừ điểm đánh giá rồi mới xoá (còn %i điểm khác): xoá không trừ lần hai, số dư không âm', async (other) => {
+    it.each([[30_000], [0]])('cron đã trừ điểm đánh giá rồi mới xoá (còn %i điểm khác): xoá không trừ lần hai, số dư không âm', async (other) => {
       const { user, product } = await player();
       if (other > 0) await legacyUnlimited(user.id, other);
       const review = await reviews.create(user.id, product.slug, { rating: 5 });
@@ -258,25 +258,25 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
       expect(await balance(user.id)).toBe(other);
     });
 
-    it('quá hạn nhưng cron chưa chạy rồi xoá: không thu hồi; cron đêm đó trừ đúng 5 một lần', async () => {
+    it('quá hạn nhưng cron chưa chạy rồi xoá: không thu hồi; cron đêm đó trừ đúng 5.000 một lần', async () => {
       const { user, product } = await player();
-      await legacyUnlimited(user.id, 30);
+      await legacyUnlimited(user.id, 30_000);
       const review = await reviews.create(user.id, product.slug, { rating: 5 });
       await ageLedger(user.id, 13);
 
       await reviews.remove(user.id, 'ADMIN', review.id);
       expect(await reviewDeleteRows(user.id)).toHaveLength(0);
-      expect(await balance(user.id)).toBe(30 + REVIEW_POINTS);
+      expect(await balance(user.id)).toBe(30_000 + REVIEW_POINTS);
 
       await expiry.expirePoints();
       await expiry.expirePoints();
       expect((await expiredRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
-      expect(await balance(user.id)).toBe(30);
+      expect(await balance(user.id)).toBe(30_000);
     });
 
     it('điểm còn hạn: xoá vẫn thu hồi đúng số điểm đã thưởng (chống tạo → xoá → tạo lại để farm điểm)', async () => {
       const { user, product } = await player();
-      await legacyUnlimited(user.id, 30);
+      await legacyUnlimited(user.id, 30_000);
       const review = await reviews.create(user.id, product.slug, { rating: 5 });
       await ageLedger(user.id, 11); // còn 1 tháng
 
@@ -284,12 +284,12 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
 
       const rows = await reviewDeleteRows(user.id);
       expect(rows.map((r) => [r.delta, r.lot])).toEqual([[-REVIEW_POINTS, 'STANDARD']]);
-      expect(await balance(user.id)).toBe(30);
+      expect(await balance(user.id)).toBe(30_000);
     });
 
     it('lô đánh giá chạm hạn đúng lúc cron đang giữ khoá user và trừ nó: remove chờ khoá rồi đọc lại hạn, không thu hồi thêm', async () => {
       const { user, product } = await player();
-      await legacyUnlimited(user.id, 30);
+      await legacyUnlimited(user.id, 30_000);
       const review = await reviews.create(user.id, product.slug, { rating: 5 });
       await ageLedger(user.id, 11); // còn một tháng: remove (đọc trước khi cron commit) thấy chưa hết hạn
 
@@ -322,10 +322,10 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
       await Promise.all([cron, removal]);
 
       expect(await reviewDeleteRows(user.id)).toHaveLength(0);
-      expect(await balance(user.id)).toBe(30);
+      expect(await balance(user.id)).toBe(30_000);
       await expiry.expirePoints();
-      expect(await balance(user.id)).toBe(30);
-      expect(await standardSum(user.id)).toBe(30);
+      expect(await balance(user.id)).toBe(30_000);
+      expect(await standardSum(user.id)).toBe(30_000);
     });
 
     it('dòng thưởng đánh giá cũ không hạn (trước PE-3): xoá vẫn thu hồi như cũ', async () => {
@@ -356,19 +356,19 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
 
     it('lô cũ không hạn 30: tạo rồi xoá đánh giá còn hạn, qua hạn, cron hai lần → còn 30, không có POINTS_EXPIRED', async () => {
       const { user, product } = await player();
-      await legacyUnlimited(user.id, 30);
+      await legacyUnlimited(user.id, 30_000);
       const review = await reviews.create(user.id, product.slug, { rating: 5 });
       await reviews.remove(user.id, 'USER', review.id);
       expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
-      expect(await balance(user.id)).toBe(30);
+      expect(await balance(user.id)).toBe(30_000);
 
       await ageLedger(user.id, 13);
       await expiry.expirePoints();
       await expiry.expirePoints();
 
       expect(await expiredRows(user.id)).toHaveLength(0);
-      expect(await balance(user.id)).toBe(30);
-      expect(await standardSum(user.id)).toBe(30);
+      expect(await balance(user.id)).toBe(30_000);
+      expect(await standardSum(user.id)).toBe(30_000);
     });
 
     it('admin hạ loyalty.point_expire_months 12 → 3: đánh giá hạn 3 tháng nằm sau lô cũ hạn 12 tháng, xoá rồi qua 4 tháng → lô cũ còn nguyên', async () => {
@@ -406,19 +406,19 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
         status: 'DELIVERED',
         items: { create: [{ variationId: variation.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
       });
-      await legacyUnlimited(first.user.id, 30);
+      await legacyUnlimited(first.user.id, 30_000);
       await reviews.create(first.user.id, first.product.slug, { rating: 5 }); // +5, hạn T+12
       await ageLedger(first.user.id, 1);
       const newer = await reviews.create(first.user.id, second.slug, { rating: 5 }); // +5, hạn T+12 tính từ lúc sau, muộn hơn 1 tháng
       await reviews.remove(first.user.id, 'USER', newer.id);
-      expect(await balance(first.user.id)).toBe(35);
+      expect(await balance(first.user.id)).toBe(35_000);
 
       await ageLedger(first.user.id, 13); // cả hai lô đánh giá đã quá hạn nếu còn nằm trong sổ
       for (let night = 0; night < 3; night++) await expiry.expirePoints();
 
       expect((await expiredRows(first.user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]); // chỉ lô đánh giá còn lại (cũ hơn)
-      expect(await balance(first.user.id)).toBe(30);
-      expect(await standardSum(first.user.id)).toBe(30);
+      expect(await balance(first.user.id)).toBe(30_000);
+      expect(await standardSum(first.user.id)).toBe(30_000);
     });
   });
 
@@ -446,16 +446,16 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
 
     it('lô không hạn cũ + thưởng đánh giá/vòng quay/nhiệm vụ hết hạn lần lượt: mỗi lô bị trừ đúng một lần, lô không hạn còn nguyên', async () => {
       const { user, product } = await player();
-      await legacyUnlimited(user.id, 30); // số dư 30 = lô cũ không hạn
+      await legacyUnlimited(user.id, 30_000); // số dư 30 = lô cũ không hạn
 
       await reviews.create(user.id, product.slug, { rating: 5 }); // +5, hết hạn sau 12 tháng
       await ageLedger(user.id, 2);
       await game.spin(user.id); // -10 (ăn lô cũ nhất), +25 hết hạn sau 12 tháng (còn 10 tháng so với lô đánh giá: 10)
-      await spend(user.id, 12); // -12, ăn lô cũ nhất
+      await spend(user.id, 12_000); // -12.000, ăn lô cũ nhất
       await ageLedger(user.id, 2);
       await game.claimMission(user.id, 'FIRST_ORDER'); // +20 hết hạn sau 12 tháng
-      expect(await balance(user.id)).toBe(30 + 5 - SPIN_COST + SPIN_WIN - 12 + MISSION_POINTS); // 58
-      expect(await standardSum(user.id)).toBe(58);
+      expect(await balance(user.id)).toBe(30_000 + REVIEW_POINTS - SPIN_COST + SPIN_WIN - 12_000 + MISSION_POINTS); // 58.000
+      expect(await standardSum(user.id)).toBe(58_000);
 
       // Hạn: đánh giá còn 8 tháng, vòng quay còn 10 tháng, nhiệm vụ còn 12 tháng tính từ bây giờ.
       const [rv, win, ms] = await Promise.all([
@@ -474,23 +474,23 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
       await expiry.expirePoints();
       await expiry.expirePoints();
       expect((await expiredRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
-      expect(await balance(user.id)).toBe(58 - 5);
+      expect(await balance(user.id)).toBe(58_000 - REVIEW_POINTS);
 
       // 2 tháng sau nữa: lô vòng quay (25) quá hạn, lô nhiệm vụ còn hạn.
       await ageLedger(user.id, 2);
       await expiry.expirePoints();
       await expiry.expirePoints();
       expect((await expiredRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS, -SPIN_WIN]);
-      expect(await balance(user.id)).toBe(58 - 5 - 25);
+      expect(await balance(user.id)).toBe(58_000 - REVIEW_POINTS - SPIN_WIN);
 
-      // 2 tháng sau nữa: lô nhiệm vụ (20) quá hạn; chỉ còn phần lô không hạn cũ chưa tiêu (30 - 10 - 12 = 8).
+      // 2 tháng sau nữa: lô nhiệm vụ (20) quá hạn; chỉ còn phần lô không hạn cũ chưa tiêu (30.000 - 10.000 - 12.000 = 8.000).
       await ageLedger(user.id, 2);
       await expiry.expirePoints();
       await expiry.expirePoints();
       await expiry.expirePoints();
       expect((await expiredRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS, -SPIN_WIN, -MISSION_POINTS]);
-      expect(await balance(user.id)).toBe(8);
-      expect(await standardSum(user.id)).toBe(8);
+      expect(await balance(user.id)).toBe(8_000);
+      expect(await standardSum(user.id)).toBe(8_000);
     });
 
     it('admin hạ loyalty.point_expire_months từ 12 xuống 3 giữa chừng: lô mới hết hạn TRƯỚC lô cũ, mỗi lô bị trừ đúng một lần qua nhiều đêm', async () => {

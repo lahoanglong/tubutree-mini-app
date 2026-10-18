@@ -180,7 +180,7 @@ export class ReviewsService {
     // Cùng luật với CreateReviewDto (MONEY-10): media lọt qua DTO bằng đường khác vẫn không được thưởng thêm.
     const hasVideo = isUploadedMediaUrl(dto.videoUrl);
     const hasImages = (dto.images ?? []).some((img) => isUploadedImage(img, PUBLIC_CONTENT_IMAGE));
-    const rewardPoints = hasVideo ? 15 : hasImages ? 10 : 5;
+    const rewardPoints = hasVideo ? 15_000 : hasImages ? 10_000 : 5_000;
     // Điểm đánh giá là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Đọc cấu hình NGOÀI tx để không giữ
     // kết nối tx; lượt thua race P2002 ở bước tạo chỉ tốn một lần đọc cấu hình.
     const expiresAt = await this.loyalty.pointsExpiresAt(new Date());

@@ -40,8 +40,8 @@ describe('spinPrizeProblem', () => {
     }
   });
 
-  it('giải POINTS có trần nghiệp vụ 100 Điểm Xanh: đúng trần qua, hơn trần một điểm bị từ chối', () => {
-    expect(SPIN_POINTS_PRIZE_MAX).toBe(100);
+  it('giải POINTS có trần nghiệp vụ 100.000 Điểm Xanh: đúng trần qua, hơn trần một điểm bị từ chối', () => {
+    expect(SPIN_POINTS_PRIZE_MAX).toBe(100_000);
     expect(spinPrizeProblem({ ...ok, value: SPIN_POINTS_PRIZE_MAX })).toBeNull();
     expect(spinPrizeProblem({ ...ok, value: 1 })).toBeNull();
     expect(spinPrizeProblem({ ...ok, value: SPIN_POINTS_PRIZE_MAX + 1 })).toMatch(/POINTS.*100/);

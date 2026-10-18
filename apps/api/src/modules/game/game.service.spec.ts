@@ -374,7 +374,7 @@ describe('GameService.spin', () => {
         ['SEEDS value lẻ', { id: 'bad', name: 'x', weight: 100, rewardType: 'SEEDS', value: 2.5 }],
         ['COUPON value lẻ', { id: 'bad', name: 'x', weight: 100, rewardType: 'COUPON', value: 20000.5 }],
         ['COUPON value vượt cột Int của DB', { id: 'bad', name: 'x', weight: 100, rewardType: 'COUPON', value: 3e9 }],
-        ['POINTS value vượt trần 100 Điểm Xanh (cấu hình lưu từ trước khi có trần)', { id: 'bad', name: 'x', weight: 100, rewardType: 'POINTS', value: 101 }],
+        ['POINTS value vượt trần 100.000 Điểm Xanh (cấu hình lưu từ trước khi có trần)', { id: 'bad', name: 'x', weight: 100, rewardType: 'POINTS', value: 100_001 }],
       ])('%s không bao giờ được chọn dù là giải đầu và trọng số lớn nhất', async (_label, bad) => {
         jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
         const prisma = makePrisma();
@@ -1028,76 +1028,76 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('PD-3: góp quỹ = game.tree_points_price (mặc định 50) Điểm Xanh, đủ lô STANDARD → chỉ trừ STANDARD', async () => {
-    const { prisma, state, entries } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 100 });
+  it('PD-3: góp quỹ = game.tree_points_price (mặc định 50.000) Điểm Xanh, đủ lô STANDARD → chỉ trừ STANDARD', async () => {
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 100_000 });
     const svc = buyService(prisma);
     const r = await svc.buyTree('u1');
-    expect(r).toMatchObject({ cost: 50, pointsUsed: 50, pointsUsedConverted: 0 });
+    expect(r).toMatchObject({ cost: 50_000, pointsUsed: 50_000, pointsUsedConverted: 0 });
     expect(r.certificateCode).toMatch(/^TUBU-/);
-    expect(state).toEqual({ pointsBalance: 30, pointsConvertedBalance: 100 });
+    expect(state).toEqual({ pointsBalance: 30_000, pointsConvertedBalance: 100_000 });
     expect(entries).toEqual([
-      expect.objectContaining({ delta: -50, lot: 'STANDARD', reason: `GAME_BUY_TREE:${r.certificateCode}`, refType: 'GAME' }),
+      expect.objectContaining({ delta: -50_000, lot: 'STANDARD', reason: `GAME_BUY_TREE:${r.certificateCode}`, refType: 'GAME' }),
     ]);
     expect((prisma.plantedTree.create as jest.Mock).mock.calls[0][0].data.certificateCode).toBe(r.certificateCode);
   });
 
   it('PD-3 (OQ-5): STANDARD thiếu → tiêu hết STANDARD rồi phần còn lại từ lô quy đổi, 2 dòng sổ đúng lô', async () => {
-    const { prisma, state, entries } = buyPrisma({ pointsBalance: 20, pointsConvertedBalance: 100 });
-    const svc = buyService(prisma, makeConfig({ 'game.tree_points_price': 50 }));
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 20_000, pointsConvertedBalance: 100_000 });
+    const svc = buyService(prisma, makeConfig({ 'game.tree_points_price': 50_000 }));
     const r = await svc.buyTree('u1');
-    expect(r).toMatchObject({ cost: 50, pointsUsed: 50, pointsUsedConverted: 30 });
-    expect(state).toEqual({ pointsBalance: 0, pointsConvertedBalance: 70 });
+    expect(r).toMatchObject({ cost: 50_000, pointsUsed: 50_000, pointsUsedConverted: 30_000 });
+    expect(state).toEqual({ pointsBalance: 0, pointsConvertedBalance: 70_000 });
     expect(entries.map((e) => [e.lot, e.delta])).toEqual([
-      ['STANDARD', -20],
-      ['CONVERTED', -30],
+      ['STANDARD', -20_000],
+      ['CONVERTED', -30_000],
     ]);
   });
 
   it('PD-3: tổng hai lô không đủ → 400, không trừ gì, không tạo PlantedTree', async () => {
-    const { prisma, state, entries } = buyPrisma({ pointsBalance: 20, pointsConvertedBalance: 29 });
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 20_000, pointsConvertedBalance: 29_000 });
     const svc = buyService(prisma);
     await expect(svc.buyTree('u1')).rejects.toBeInstanceOf(BadRequestException);
-    expect(state).toEqual({ pointsBalance: 20, pointsConvertedBalance: 29 });
+    expect(state).toEqual({ pointsBalance: 20_000, pointsConvertedBalance: 29_000 });
     expect(entries).toHaveLength(0);
     expect(prisma.plantedTree.create).not.toHaveBeenCalled();
   });
 
   it('PD-3: khoá dòng user (FOR UPDATE) trước khi chia lô', async () => {
-    const { prisma } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+    const { prisma } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
     await buyService(prisma).buyTree('u1');
     const raw = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw;
     expect((raw.mock.calls[0][0] as string[]).join('?')).toMatch(/FROM "users"[\s\S]*FOR UPDATE/);
   });
 
   it('review C1: điểm thường đang khoá không bị tiêu, phần còn lại lấy từ lô quy đổi (đọc khoá SAU khi khoá dòng user)', async () => {
-    const { prisma, state, entries } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 100 });
-    const loyalty = loyaltyWithLock(60);
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 100_000 });
+    const loyalty = loyaltyWithLock(60_000);
     const r = await buyService(prisma, makeConfig(), loyalty).buyTree('u1');
     // 80 − 60 khoá = 20 dùng được → thường 20, quy đổi 30.
-    expect(r).toMatchObject({ pointsUsed: 50, pointsUsedConverted: 30 });
-    expect(state).toEqual({ pointsBalance: 60, pointsConvertedBalance: 70 });
+    expect(r).toMatchObject({ pointsUsed: 50_000, pointsUsedConverted: 30_000 });
+    expect(state).toEqual({ pointsBalance: 60_000, pointsConvertedBalance: 70_000 });
     expect(entries.map((e) => [e.lot, e.delta])).toEqual([
-      ['STANDARD', -20],
-      ['CONVERTED', -30],
+      ['STANDARD', -20_000],
+      ['CONVERTED', -30_000],
     ]);
     expect((loyalty.lockedOrderPoints as jest.Mock).mock.calls[0][0]).toBe('u1');
   });
 
   it('review C1: toàn bộ điểm thường đang khoá và không có điểm quy đổi → 400 kèm lý do khoá, không trừ gì', async () => {
-    const { prisma, state, entries } = buyPrisma({ pointsBalance: 60, pointsConvertedBalance: 0 });
-    const err = await buyService(prisma, makeConfig(), loyaltyWithLock(60))
+    const { prisma, state, entries } = buyPrisma({ pointsBalance: 60_000, pointsConvertedBalance: 0 });
+    const err = await buyService(prisma, makeConfig(), loyaltyWithLock(60_000))
       .buyTree('u1')
       .then(() => new Error('không ném lỗi'), (e: unknown) => e as Error);
     expect(err).toBeInstanceOf(BadRequestException);
-    expect(err.message).toMatch(/Cần 50 Điểm Xanh/);
+    expect(err.message).toMatch(/Cần 50000 Điểm Xanh/);
     expect(err.message).toMatch(/chưa dùng được/);
-    expect(state).toEqual({ pointsBalance: 60, pointsConvertedBalance: 0 });
+    expect(state).toEqual({ pointsBalance: 60_000, pointsConvertedBalance: 0 });
     expect(entries).toHaveLength(0);
     expect(prisma.plantedTree.create).not.toHaveBeenCalled();
   });
 
   it('PF-6a (b): góp quỹ đọc cửa sổ đổi/trả NGOÀI tx (trước $transaction), truyền vào lockedOrderPoints; không có lần đọc cấu hình nào trong tx', async () => {
-    const { prisma } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+    const { prisma } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
     const loyalty = loyaltyWithLock(0);
     const { config, configGets } = trackTx(prisma);
 
@@ -1111,7 +1111,7 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
   });
 
   it('PF-6a (b): góp quỹ phát lại theo Idempotency-Key (không đi tới lockedOrderPoints) vẫn không đọc cấu hình trong tx', async () => {
-    const { prisma } = buyPrisma({ pointsBalance: 200, pointsConvertedBalance: 0 });
+    const { prisma } = buyPrisma({ pointsBalance: 200_000, pointsConvertedBalance: 0 });
     const loyalty = loyaltyWithLock(0);
     const { config, configGets } = trackTx(prisma);
     const svc = buyService(prisma, config, loyalty);
@@ -1125,9 +1125,9 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
   });
 
   it('review C1: dựng GameService không có LoyaltyService thì góp quỹ ném lỗi (không âm thầm bỏ qua khoá), không trừ gì', async () => {
-    const { prisma, state } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+    const { prisma, state } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
     await expect(new GameService(prisma, makeConfig(), analytics).buyTree('u1')).rejects.toThrow(/LoyaltyService/);
-    expect(state).toEqual({ pointsBalance: 80, pointsConvertedBalance: 0 });
+    expect(state).toEqual({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -1139,35 +1139,35 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
     const KEY = 'tree-buy-key-0001';
 
     it('có key: mã chứng nhận suy ra tất định từ (user, key), dòng sổ mang đúng mã đó', async () => {
-      const { prisma, entries } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+      const { prisma, entries } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
       const r = await buyService(prisma).buyTree('u1', KEY);
       expect(r.certificateCode).toBe(treeCertificateCodeFor('u1', KEY));
       expect(entries).toEqual([expect.objectContaining({ reason: `GAME_BUY_TREE:${r.certificateCode}`, userId: 'u1' })]);
     });
 
     it('gọi lại cùng (user, key): trả ĐÚNG kết quả lượt đầu, KHÔNG trừ thêm, KHÔNG tạo cây thứ hai', async () => {
-      const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+      const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
       const svc = buyService(prisma);
       const first = await svc.buyTree('u1', KEY);
       const second = await svc.buyTree('u1', KEY);
       expect(second).toEqual(first);
-      expect(state).toEqual({ pointsBalance: 30, pointsConvertedBalance: 0 });
+      expect(state).toEqual({ pointsBalance: 30_000, pointsConvertedBalance: 0 });
       expect(entries).toHaveLength(1);
       expect(trees).toHaveLength(1);
       expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
     });
 
     it('replay trả đúng phần quy đổi và giá của lượt đầu dù giá cấu hình đã đổi sau đó', async () => {
-      const { prisma, state } = buyPrisma({ pointsBalance: 20, pointsConvertedBalance: 100 });
-      const first = await buyService(prisma, makeConfig({ 'game.tree_points_price': 50 })).buyTree('u1', KEY);
-      expect(first).toMatchObject({ cost: 50, pointsUsed: 50, pointsUsedConverted: 30 });
-      const replay = await buyService(prisma, makeConfig({ 'game.tree_points_price': 80 })).buyTree('u1', KEY);
+      const { prisma, state } = buyPrisma({ pointsBalance: 20_000, pointsConvertedBalance: 100_000 });
+      const first = await buyService(prisma, makeConfig({ 'game.tree_points_price': 50_000 })).buyTree('u1', KEY);
+      expect(first).toMatchObject({ cost: 50_000, pointsUsed: 50_000, pointsUsedConverted: 30_000 });
+      const replay = await buyService(prisma, makeConfig({ 'game.tree_points_price': 80_000 })).buyTree('u1', KEY);
       expect(replay).toEqual(first);
-      expect(state).toEqual({ pointsBalance: 0, pointsConvertedBalance: 70 });
+      expect(state).toEqual({ pointsBalance: 0, pointsConvertedBalance: 70_000 });
     });
 
     it('khoá dòng user (FOR UPDATE) TRƯỚC khi kiểm tra key đã dùng: hai request song song không cùng thấy "chưa có"', async () => {
-      const { prisma } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+      const { prisma } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
       await buyService(prisma).buyTree('u1', KEY);
       const raw = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw;
       const lookup = prisma.plantedTree.findUnique as jest.Mock;
@@ -1176,35 +1176,35 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
     });
 
     it('key khác nhau → hai lượt góp riêng với hai mã khác nhau', async () => {
-      const { prisma, state } = buyPrisma({ pointsBalance: 200, pointsConvertedBalance: 0 });
+      const { prisma, state } = buyPrisma({ pointsBalance: 200_000, pointsConvertedBalance: 0 });
       const svc = buyService(prisma);
       const a = await svc.buyTree('u1', KEY);
       const b = await svc.buyTree('u1', 'tree-buy-key-0002');
       expect(a.certificateCode).not.toBe(b.certificateCode);
-      expect(state.pointsBalance).toBe(100);
+      expect(state.pointsBalance).toBe(100_000);
     });
 
     it('thiếu điểm với key → 400, không để lại cây hay dòng sổ; nạp thêm rồi dùng lại CÙNG key thì góp được', async () => {
-      const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 20, pointsConvertedBalance: 0 });
+      const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 20_000, pointsConvertedBalance: 0 });
       const svc = buyService(prisma);
       await expect(svc.buyTree('u1', KEY)).rejects.toBeInstanceOf(BadRequestException);
       expect(entries).toHaveLength(0);
       expect(trees).toHaveLength(0);
-      state.pointsBalance = 80;
+      state.pointsBalance = 80_000;
       const r = await svc.buyTree('u1', KEY);
-      expect(r.pointsUsed).toBe(50);
+      expect(r.pointsUsed).toBe(50_000);
       expect(trees).toHaveLength(1);
     });
 
     it('mã suy ra từ key đã là của người dùng khác (va chạm/cố ý mài key) → 400, không trừ điểm, không lộ dữ liệu của họ', async () => {
-      const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+      const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
       trees.push({ userId: 'someone-else', certificateCode: treeCertificateCodeFor('u1', KEY), treeType: 'Cây khác' });
       const err = await buyService(prisma)
         .buyTree('u1', KEY)
         .then(() => new Error('không ném lỗi'), (e: unknown) => e as Error);
       expect(err).toBeInstanceOf(BadRequestException);
       expect(err.message).not.toMatch(/someone-else|Cây khác/);
-      expect(state.pointsBalance).toBe(80);
+      expect(state.pointsBalance).toBe(80_000);
       expect(entries).toHaveLength(0);
       expect(prisma.plantedTree.create).not.toHaveBeenCalled();
     });
@@ -1217,7 +1217,7 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
       ['có dấu hai chấm (tách được thành "user:key" khác)', 'tree:buy:key:0001'],
       ['có ký tự ngoài ASCII', 'tree-buy-key-0001-đ'],
     ])('key %s → 400 tiếng Việt, không mở transaction, không trừ gì', async (_name, bad) => {
-      const { prisma, state } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+      const { prisma, state } = buyPrisma({ pointsBalance: 80_000, pointsConvertedBalance: 0 });
       const err = await buyService(prisma)
         .buyTree('u1', bad)
         .then(() => new Error('không ném lỗi'), (e: unknown) => e as Error);
@@ -1225,42 +1225,42 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
       expect(err.message).toMatch(/Idempotency-Key/);
       expect(err.message).toMatch(/8.+128/);
       expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(state.pointsBalance).toBe(80);
+      expect(state.pointsBalance).toBe(80_000);
     });
 
     it('key đúng ở hai biên 8 và 128 ký tự được nhận', async () => {
-      const { prisma } = buyPrisma({ pointsBalance: 200, pointsConvertedBalance: 0 });
+      const { prisma } = buyPrisma({ pointsBalance: 200_000, pointsConvertedBalance: 0 });
       const svc = buyService(prisma);
-      await expect(svc.buyTree('u1', 'a-_Z0129')).resolves.toMatchObject({ cost: 50 });
-      await expect(svc.buyTree('u1', 'k'.repeat(128))).resolves.toMatchObject({ cost: 50 });
+      await expect(svc.buyTree('u1', 'a-_Z0129')).resolves.toMatchObject({ cost: 50_000 });
+      await expect(svc.buyTree('u1', 'k'.repeat(128))).resolves.toMatchObject({ cost: 50_000 });
     });
 
     it('không key: như cũ, mã ngẫu nhiên mỗi lần, không tra bản ghi cũ', async () => {
-      const { prisma, state } = buyPrisma({ pointsBalance: 200, pointsConvertedBalance: 0 });
+      const { prisma, state } = buyPrisma({ pointsBalance: 200_000, pointsConvertedBalance: 0 });
       const svc = buyService(prisma);
       const a = await svc.buyTree('u1');
       const b = await svc.buyTree('u1');
       expect(a.certificateCode).not.toBe(b.certificateCode);
       expect(a.certificateCode).toMatch(/^TUBU-[0-9A-F]{8}$/);
-      expect(state.pointsBalance).toBe(100);
+      expect(state.pointsBalance).toBe(100_000);
       expect(prisma.plantedTree.findUnique).not.toHaveBeenCalled();
     });
   });
 
-  it('getProfile trả spinCostPoints theo game.spin_buy_cost_points (mặc định 10)', async () => {
+  it('getProfile trả spinCostPoints theo game.spin_buy_cost_points (mặc định 10.000)', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile());
-    const custom = (await new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 20 }), analytics).getProfile('u1')) as Record<string, unknown>;
-    expect(custom.spinCostPoints).toBe(20);
+    const custom = (await new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 20_000 }), analytics).getProfile('u1')) as Record<string, unknown>;
+    expect(custom.spinCostPoints).toBe(20_000);
     const def = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as Record<string, unknown>;
-    expect(def.spinCostPoints).toBe(10);
+    expect(def.spinCostPoints).toBe(10_000);
   });
 
   it('PD-3: getProfile trả treePointsPrice, bỏ xuPerSeed/treeXuPrice', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile());
-    const r = (await new GameService(prisma, makeConfig({ 'game.tree_points_price': 50 }), analytics).getProfile('u1')) as Record<string, unknown>;
-    expect(r.treePointsPrice).toBe(50);
+    const r = (await new GameService(prisma, makeConfig({ 'game.tree_points_price': 50_000 }), analytics).getProfile('u1')) as Record<string, unknown>;
+    expect(r.treePointsPrice).toBe(50_000);
     expect(r).not.toHaveProperty('xuPerSeed');
     expect(r).not.toHaveProperty('treeXuPrice');
   });

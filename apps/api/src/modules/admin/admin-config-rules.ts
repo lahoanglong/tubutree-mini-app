@@ -23,11 +23,12 @@ import {
  */
 
 /** Trần 1 ô điểm danh — trùng CHECKIN_MAX_POINTS_PER_DAY ở loyalty.service.ts. */
-const CHECKIN_MAX_POINTS = 100;
+const CHECKIN_MAX_POINTS = 100_000;
 /** Trùng POS_ORDER_TOTAL_HARD_MAX (dto/loyalty-staff.dto.ts) và @Min(1000) của orderTotal. */
 const POS_ORDER_TOTAL_MIN = 1000;
 const POS_ORDER_TOTAL_MAX = 1_000_000_000;
-const POS_POINTS_CAP_MAX = 10_000_000;
+// Giữ dưới INT4 (cột points là INTEGER): 1 tỷ điểm ≈ 50 tỷ đồng doanh thu quầy mỗi ngày, đã là không giới hạn thực tế.
+const POS_POINTS_CAP_MAX = 1_000_000_000;
 /** Cân nặng mặc định mỗi sản phẩm (gram) cho vận đơn Gomdon — 1g..50kg. */
 const GOMDON_WEIGHT_MAX = 50_000;
 const VN_PHONE = /^(0|\+84)\d{9,10}$/;

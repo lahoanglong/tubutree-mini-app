@@ -151,7 +151,7 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
     });
 
     it('sửa tay mỗi nhóm tham chiếu một dòng rồi chạy lại: mọi chỉnh sửa còn nguyên, không tạo thêm', async () => {
-      await pa.systemConfig.update({ where: { key: 'loyalty.vnd_per_point' }, data: { value: 12345 } });
+      await pa.systemConfig.update({ where: { key: 'loyalty.earn_pct' }, data: { value: 3 } });
       await pa.systemConfig.update({ where: { key: 'community.rep_post' }, data: { value: 9 } });
       await pa.notificationTemplate.update({ where: { code: 'ORDER_DELIVERED' }, data: { bodyTemplate: 'Admin đã sửa lời tin', zaloTemplateId: '123456' } });
       await pa.communityCategory.update({ where: { slug: 'meo-hay' }, data: { name: 'Mẹo (sửa)', isActive: false } });
@@ -164,7 +164,7 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
 
       const after = await snapshot(pa);
       expect(after).toEqual(before);
-      expect(after.configs.find((c) => c.key === 'loyalty.vnd_per_point')?.value).toBe(12345);
+      expect(after.configs.find((c) => c.key === 'loyalty.earn_pct')?.value).toBe(3);
       expect(after.templates.find((t) => t.code === 'ORDER_DELIVERED')?.zaloTemplateId).toBe('123456');
       expect(after.categories.find((c) => c.slug === 'meo-hay')?.isActive).toBe(false);
       // Mốc admin đã chốt (DONE) không bị thay bằng một mốc ACTIVE mới.
