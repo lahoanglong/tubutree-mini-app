@@ -69,7 +69,20 @@ const ACCOUNT: string[] = [
   'components/account/avatar-crop-sheet.tsx',
 ];
 const LOYALTY: string[] = [];
-const COMMUNITY: string[] = [];
+const COMMUNITY: string[] = [
+  'app/cong-dong/page.tsx',
+  'app/cong-dong/feed-view.tsx',
+  'app/cong-dong/feed-shell.tsx',
+  'app/cong-dong/xep-hang/page.tsx',
+  'components/community/community-channels.tsx',
+  'components/community/image-upload.tsx',
+  'components/community/post-card.tsx',
+  'components/community/post-composer.tsx',
+  'components/community/post-parts.tsx',
+  'components/community/product-picker.tsx',
+  'components/community/public-preview-list.tsx',
+  'components/community/rank.tsx',
+];
 const AFFILIATE: string[] = [];
 const GAME: string[] = [];
 const PRO: string[] = [];

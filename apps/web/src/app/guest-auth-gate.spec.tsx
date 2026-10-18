@@ -44,6 +44,7 @@ import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
 import EditProfilePage from './tai-khoan/ho-so/page';
 import SettingsPage from './tai-khoan/cai-dat/page';
 import NotificationsPage from './tai-khoan/thong-bao/page';
+import LeaderboardPage from './cong-dong/xep-hang/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -77,7 +78,7 @@ const ACCOUNT: PageCase[] = [
   ['/tai-khoan/thong-bao', () => <NotificationsPage />, '/tai-khoan/thong-bao'],
 ];
 const LOYALTY: PageCase[] = [];
-const COMMUNITY: PageCase[] = [];
+const COMMUNITY: PageCase[] = [['/cong-dong/xep-hang', () => <LeaderboardPage />, '/cong-dong/xep-hang']];
 const AFFILIATE: PageCase[] = [];
 const GAME: PageCase[] = [];
 const PRO: PageCase[] = [];
