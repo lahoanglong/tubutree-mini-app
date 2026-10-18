@@ -78,7 +78,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng Điểm Xanh', createOnly: true },
   { key: 'referral.min_order_amount', value: 200000, category: 'referral', description: 'Chỉ đơn có tổng tiền từ mức này mới được tính là đơn đầu/đơn thứ 2 của chương trình giới thiệu', createOnly: true },
   // Q-17: liên hệ hiển thị ở trang Về Tubu Tree (GET /config/public). Để trống thì miniapp ẩn dòng đó.
-  { key: 'support.hotline', value: '0899 149 229', category: 'support', description: 'Hotline CSKH hiển thị cho khách', createOnly: true },
+  { key: 'support.hotline', value: '0984 606 774', category: 'support', description: 'Hotline CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.email', value: 'tubutree@gmail.com', category: 'support', description: 'Email CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.zalo_oa_name', value: '', category: 'support', description: 'Tên Zalo OA hiển thị cho khách (để trống khi chưa có OA)', createOnly: true },
   {

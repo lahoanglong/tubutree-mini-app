@@ -89,7 +89,7 @@ export async function fetchFaqs(): Promise<FaqItem[]> {
 const cleanText = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 
 /** Khớp mặc định của API và web (DEFAULT_SUPPORT): khi không đọc được cấu hình vẫn còn đường liên hệ. */
-export const DEFAULT_SUPPORT: SupportContact = { hotline: '0899 149 229', email: 'tubutree@gmail.com', zaloOaName: null };
+export const DEFAULT_SUPPORT: SupportContact = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null };
 
 export async function fetchSupportContact(): Promise<SupportContact> {
   const cfg = (await getPublicConfig()) as { support?: Partial<Record<keyof SupportContact, unknown>> };

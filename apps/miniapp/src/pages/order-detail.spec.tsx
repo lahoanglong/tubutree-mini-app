@@ -326,7 +326,7 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
   });
 
   it('chưa gắn OA vẫn có đường liên hệ thật: gọi hotline', async () => {
-    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0899 149 229', email: null, zaloOaName: null } });
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0984 606 774', email: null, zaloOaName: null } });
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
     renderPage();
     expect(await screen.findByRole('button', { name: /Gọi hotline/ })).toBeInTheDocument();

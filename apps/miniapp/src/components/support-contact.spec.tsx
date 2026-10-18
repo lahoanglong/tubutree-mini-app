@@ -44,14 +44,14 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasOA = false;
-    mocks.fetchSupportContact.mockResolvedValue({ hotline: '0899 149 229', email: 'tubutree@gmail.com', zaloOaName: null });
+    mocks.fetchSupportContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null });
     mocks.copyText.mockResolvedValue(true);
   });
 
   it('chưa có OA: vẫn có nút gọi hotline (gọi đúng số) và email để sao chép', async () => {
     renderBlock();
-    fireEvent.click(await screen.findByRole('button', { name: /Gọi hotline 0899 149 229/ }));
-    expect(mocks.callPhone).toHaveBeenCalledWith('0899 149 229');
+    fireEvent.click(await screen.findByRole('button', { name: /Gọi hotline 0984 606 774/ }));
+    expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
     expect(screen.queryByRole('button', { name: /Zalo OA/ })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /tubutree@gmail.com/ }));
@@ -92,6 +92,6 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
   it('không đọc được cấu hình → rơi về hotline/email mặc định của Tubu', async () => {
     mocks.fetchSupportContact.mockRejectedValue(new Error('mạng'));
     renderBlock();
-    expect(await screen.findByRole('button', { name: /Gọi hotline 0899 149 229/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Gọi hotline 0984 606 774/ })).toBeInTheDocument();
   });
 });

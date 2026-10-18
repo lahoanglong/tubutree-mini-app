@@ -24,7 +24,7 @@ const supportRows = () => seededConfigs().filter((r) => r.key.startsWith('suppor
 describe('Khoá liên hệ CSKH trong seed (Q-17)', () => {
   it('đúng ba khoá, giá trị chủ dự án chốt, Zalo OA để trống (không bịa)', () => {
     expect(Object.fromEntries(supportRows().map((r) => [r.key, r.value]))).toEqual({
-      'support.hotline': '0899 149 229',
+      'support.hotline': '0984 606 774',
       'support.email': 'tubutree@gmail.com',
       'support.zalo_oa_name': '',
     });
