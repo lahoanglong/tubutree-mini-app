@@ -40,7 +40,7 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
     await page.getByLabel('Mã vận đơn hoặc mã đơn trên sàn').fill('SPXVN0123456789');
     await page.getByRole('button', { name: 'Tích điểm' }).click();
 
-    await expect(page.getByRole('alert').filter({ hasText: 'Mã này đã được tích điểm rồi.' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('alert').filter({ hasText: 'Mã này đã được dùng để tích điểm trước đó.' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('claim-result')).toHaveCount(0);
   });
 

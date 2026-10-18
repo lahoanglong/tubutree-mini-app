@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, Page } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ScanLine } from 'lucide-react';
+import { CheckCircle2, Clock, ScanLine } from 'lucide-react';
 import {
   externalClaimRejectCode,
   getMyExternalClaims,
@@ -29,6 +29,7 @@ import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
 const PAGE_SIZE = 10;
+const DEAD_STATES: readonly MyExternalClaimItem['state'][] = ['VOIDED', 'REVERSED', 'LAPSED'];
 const t = vi.externalPoints;
 
 export function claimStateView(item: Pick<MyExternalClaimItem, 'state' | 'expectedCreditAt'>): { label: string; tone: BadgeTone } {
@@ -55,19 +56,28 @@ function claimDetail(item: MyExternalClaimItem): string | null {
   return null;
 }
 
+/** Mốc dự kiến đã qua mà API vẫn trả CLAIMED: khách gửi lại mã đã được cộng hoặc sắp cộng, dùng câu của API thay vì hứa "sẽ cộng". */
+function isPastMilestone(r: SubmitExternalClaimResponse): boolean {
+  return r.status === 'CLAIMED' && r.expectedCreditAt != null && Date.parse(r.expectedCreditAt) <= Date.now();
+}
+
 function ResultCard({ result }: { result: SubmitExternalClaimResponse }) {
+  const past = isPastMilestone(result);
   const detail =
     result.status === 'SEARCHING'
       ? t.resultSearching
       : result.status === 'REVIEW'
         ? t.resultReview
-        : result.expectedCreditAt
-          ? t.resultCreditAt(formatDate(result.expectedCreditAt))
-          : t.resultAfterDelivery;
+        : past
+          ? result.message
+          : result.expectedCreditAt
+            ? t.resultCreditAt(formatDate(result.expectedCreditAt))
+            : t.resultAfterDelivery;
+  const waiting = result.status === 'SEARCHING' || result.status === 'REVIEW';
   return (
     <Card variant="outline" padding={16} style={{ marginTop: 12 }}>
       <div role="status" data-testid="claim-result" style={{ display: 'flex', gap: 10 }}>
-        <Icon icon={CheckCircle2} tone="brand" />
+        <Icon icon={waiting ? Clock : CheckCircle2} tone={waiting ? 'muted' : 'brand'} />
         <div style={{ minWidth: 0 }}>
           {result.status !== 'SEARCHING' && (
             <Text variant="label" as="div">
@@ -76,7 +86,7 @@ function ResultCard({ result }: { result: SubmitExternalClaimResponse }) {
           )}
           {result.points != null && (
             <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 600 }}>
-              {t.resultPoints(result.points)}
+              {past ? `${formatNumber(result.points)} Điểm Xanh` : t.resultPoints(result.points)}
             </Text>
           )}
           <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
@@ -130,7 +140,11 @@ function ClaimList() {
                     <Badge tone={view.tone}>{view.label}</Badge>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-                    <Text variant="body-sm" tone={item.points != null ? 'brand' : 'tertiary'} style={{ fontWeight: 600 }}>
+                    <Text
+                      variant="body-sm"
+                      tone={item.points != null && !DEAD_STATES.includes(item.state) ? 'brand' : 'tertiary'}
+                      style={{ fontWeight: 600, textDecoration: DEAD_STATES.includes(item.state) ? 'line-through' : undefined }}
+                    >
                       {item.points != null ? `${formatNumber(item.points)} Điểm Xanh` : t.pointsPending}
                     </Text>
                     {detail && <Text variant="caption" tone="secondary">{detail}</Text>}
@@ -185,11 +199,11 @@ function ClaimForm() {
   };
 
   const scan = async () => {
-    const content = await scanCode();
-    if (content) {
-      setCode(content);
+    const res = await scanCode();
+    if (res.kind === 'ok') {
+      setCode(res.content);
       setError(null);
-    } else {
+    } else if (res.kind === 'failed') {
       setError(t.scanFailed);
     }
   };

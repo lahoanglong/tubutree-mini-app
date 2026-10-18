@@ -257,6 +257,10 @@ describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)'
     expect(off.loyalty.marketplaceEarnPct).toBe(1);
     const on = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_enabled': true, 'loyalty.marketplace_earn_pct': 1.5 })).publicConfig();
     expect(on.loyalty).toMatchObject({ marketplaceClaimEnabled: true, marketplaceEarnPct: 1.5 });
+    const high = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': 25 })).publicConfig();
+    expect(high.loyalty.marketplaceEarnPct).toBe(20);
+    const junk = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': -3 })).publicConfig();
+    expect(junk.loyalty.marketplaceEarnPct).toBe(1);
   });
 
   it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) coi là tắt: không hứa tích điểm đơn sàn', async (bad) => {
@@ -264,9 +268,14 @@ describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)'
     expect(out.loyalty.marketplaceClaimEnabled).toBe(false);
   });
 
-  it.each(['1', 0, -1, 99, null])('tỉ lệ sai (%p) rơi về 1%', async (bad) => {
+  it.each(['1', 0, -1, null])('tỉ lệ sai (%p) rơi về 1%', async (bad) => {
     const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': bad })).publicConfig();
     expect(out.loyalty.marketplaceEarnPct).toBe(1);
+  });
+
+  it('tỉ lệ quá trần (99) bị kẹp về 20%, cùng quy tắc với phía cộng điểm', async () => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': 99 })).publicConfig();
+    expect(out.loyalty.marketplaceEarnPct).toBe(20);
   });
 });
 

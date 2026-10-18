@@ -1,6 +1,6 @@
 # extui: UI của B6 bước 2 (tích điểm đơn sàn)
 
-Nhánh `lr2/extui` (từ `lr2/extclaim` 3d333fb7). Trạng thái: miniapp và dải "gấp đôi" xong; tab admin mới là bản nháp, chờ API của `lr2/extclaim` đổi theo review.
+Nhánh `lr2/extui` (từ `lr2/extclaim` 3d333fb7, đã gộp tiếp các commit sửa của `lr2/extclaim` đến f4960802). Trạng thái: miniapp, dải "gấp đôi" và tab admin đã xong, đã sửa theo review Opus lượt 1.
 
 ## Miniapp
 
@@ -17,8 +17,9 @@ Một component `components/loyalty/points-boost-strip.tsx` (logic thuần `poin
 Chỗ đặt:
 - Màn quét mã: đầu trang (dải đầy đủ).
 - Trang sản phẩm: ngay dưới dòng "Nhận … Điểm Xanh" có sẵn, dạng gọn. Lý do: dòng đó đã là chỗ nói về điểm, dải bổ sung "so với sàn".
-- Trang chủ: trong khối `orderStrip` (khối thứ 3, tự rỗng với khách mới) nên không đổi thứ tự khối `homeBlockOrder`. Chọn trang chủ thay vì Ví vì chủ dự án muốn thấy ở nơi khách mua.
-- Cờ claim tắt: trang chủ chỉ hiện "Tích {e}% Điểm Xanh khi mua trong Mini App"; trang sản phẩm không thêm gì (dòng "Nhận … Điểm Xanh" đã có, không thêm dòng trùng; dòng đó không sửa chữ).
+- Trang chủ: khách mới thì dải nằm trong khối `welcome`, ngay sau "Quà khách mới", nên "Quà khách mới" vẫn là khối đầu sau ô tìm khi bật `home.new_customer_layout`; khách cũ thì dải nằm trong khối `orderStrip`, ngay sau dải đơn. Không đổi `homeBlockOrder`.
+- Trang Điểm Xanh (`/loyalty`, ví điểm): trên cùng, trên thẻ hạng; chỉ khi cờ claim bật (cờ tắt thì trang đã có dòng "Tích … tiền hàng").
+- Cờ claim tắt: trang chủ của khách cũ chỉ hiện "Tích {e}% tiền hàng thành Điểm Xanh khi mua trong Mini App" (khách mới đã có dòng mức tích trong "Quà khách mới" nên không nói lại); trang sản phẩm và trang Điểm Xanh không thêm gì (dòng "Nhận … Điểm Xanh" đã có, không thêm dòng trùng; dòng đó không sửa chữ).
 
 ## Test
 
@@ -39,3 +40,19 @@ Chỗ đặt:
 ## Ảnh chụp
 
 `extui-img/extui-scan.png` (màn quét mã) và `extui-img/extui-home.png` (dải ở trang chủ; các thẻ "Chưa mock" trong ảnh là do mock e2e). Chưa chụp trang sản phẩm và tab admin (cần mock sản phẩm / chạy Next).
+
+## Sửa sau review
+
+- Hộp thoại "Gắn đơn" nói đúng luật API: vẫn áp tuổi đơn, mốc bắt đầu, trần đơn/ngày và trần điểm/tháng; vẫn có thể vào chờ duyệt; mã không khớp hoặc nguồn chưa xác định chỉ ADMIN gắn, cần ghi chú, không cần người khác duyệt, ghi vào lịch sử (`attachDialogMessage`, có test khoá câu chữ).
+- Gửi lại mã đã được cộng: nếu `expectedCreditAt` đã qua thì dùng `message` của API, không hứa "đang chờ cộng". Không cần thêm trường API.
+- Dải ở trang Điểm Xanh; dải ở trang chủ không còn nằm trong `orderStrip` của khách mới (test khoá thứ tự khối cho khách mới và cũ, cờ bật và tắt, layout bật và tắt).
+- Lỗi API admin có câu cho nhân viên cho cả 14 mã từ chối và 5 mã admin (ví dụ "Khách đã đạt trần điểm đơn sàn trong tháng này").
+- `isIntroducer` tính cả VOID_REOPEN; nhãn lịch sử cho mọi action API ghi (bỏ SYNC_RELEASE và NONE vì không ghi vào nhật ký); trạng thái đơn dùng nhãn tiếng Việt; hộp thoại huỷ có nút "Đóng"; bấm chip trạng thái xoá bộ lọc chú ý.
+- Miniapp: điểm của claim huỷ, thu hồi, hết hạn nhạt và gạch ngang; "Cần duyệt" thành "Đang kiểm tra"; ALREADY_CLAIMED dùng câu trung tính; kết quả đang tìm/đang kiểm tra dùng icon đồng hồ; `boostPlain` theo giọng `earnRuleLine`.
+- API: `marketplaceEarnPct` ở public config kẹp về 20 như phía cộng điểm (hằng số chung `MAX_MARKETPLACE_EARN_PCT`), có test.
+
+### Giới hạn
+
+- Quét mã: SDK không công bố mã lỗi khi khách tự đóng camera. `scanCode` chỉ nhận ra "huỷ" khi message lỗi có chữ huỷ/cancel (khi đó không báo lỗi); các lỗi khác vẫn gợi ý nhập tay.
+- Tab admin: API chỉ trả `decidedById` và `actorId` (không có tên), nên "Người xử lý" và lịch sử hiện mã người dùng. Muốn hiện tên thì API phải trả thêm tên.
+- Ô "Cần xử lý" `externalPoints` là số gộp nên bấm vào mở tab với bộ lọc mặc định (Cần duyệt), không mở theo từng bộ lọc chú ý.

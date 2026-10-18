@@ -127,14 +127,21 @@ export async function callPhone(phone: string) {
   }
 }
 
-/** Quét mã bằng camera Zalo. Trả nội dung mã; null khi khách thoát, không có quyền camera hoặc SDK không đọc được. */
-export async function scanCode(): Promise<string | null> {
+export type ScanCodeResult = { kind: 'ok'; content: string } | { kind: 'cancelled' } | { kind: 'failed' };
+
+/**
+ * Quét mã bằng camera Zalo. SDK không công bố mã lỗi riêng cho việc khách tự đóng camera, nên "cancelled" chỉ nhận ra được khi
+ * lỗi có chữ huỷ/cancel trong message; các lỗi khác (không có quyền camera, không đọc được) là "failed" và màn quét gợi ý nhập tay.
+ */
+export async function scanCode(): Promise<ScanCodeResult> {
   try {
     const res = await scanQRCode();
     const content = typeof res?.content === 'string' ? res.content.trim() : '';
-    return content || null;
-  } catch {
-    return null;
+    return content ? { kind: 'ok', content } : { kind: 'failed' };
+  } catch (e) {
+    const raw = (e as { message?: unknown } | null)?.message;
+    const text = Array.isArray(raw) ? raw.join(' ') : String(raw ?? '');
+    return /cancel|hu[yỷ]|hủy/i.test(text) ? { kind: 'cancelled' } : { kind: 'failed' };
   }
 }
 

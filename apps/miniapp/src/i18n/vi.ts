@@ -541,7 +541,7 @@ export const vi = {
     boostTitleMore: 'Mua trong Mini App tích nhiều hơn',
     boostSub: (marketplacePct: string, appPct: string) =>
       `Đơn sàn ${marketplacePct} · Mua trong Mini App từ ${appPct}, nhân theo hạng`,
-    boostPlain: (appPct: string) => `Tích ${appPct} Điểm Xanh khi mua trong Mini App`,
+    boostPlain: (appPct: string) => `Tích ${appPct} tiền hàng thành Điểm Xanh khi mua trong Mini App`,
     inputLabel: 'Mã vận đơn hoặc mã đơn trên sàn',
     inputPlaceholder: 'Ví dụ: SPXVN0123456789',
     inputHelp: 'Mã nằm trong chi tiết đơn hàng trên Shopee, Lazada hoặc TikTok Shop.',
@@ -567,7 +567,7 @@ export const vi = {
     state: {
       waitDelivery: 'Chờ giao hàng',
       waitCredit: 'Chờ cộng điểm',
-      review: 'Cần duyệt',
+      review: 'Đang kiểm tra',
       credited: 'Đã cộng',
       voided: 'Đã huỷ',
       reversed: 'Đã thu hồi',
@@ -586,7 +586,7 @@ export const vi = {
       TOO_OLD: 'Đơn này đã quá thời hạn được tích điểm.',
       BEFORE_SINCE: 'Đơn này được đặt trước ngày bắt đầu chương trình nên chưa tích điểm được.',
       CLOSED: 'Đơn này đã huỷ hoặc hoàn nên không tích điểm được.',
-      ALREADY_CLAIMED: 'Mã này đã được tích điểm rồi.',
+      ALREADY_CLAIMED: 'Mã này đã được dùng để tích điểm trước đó. Cần hỗ trợ, bạn liên hệ Tubu nhé.',
       DAILY_MAX: 'Hôm nay bạn đã tích đủ số đơn cho phép. Bạn quay lại vào ngày mai nhé.',
       MONTHLY_CAP: 'Bạn đã đạt mức điểm tối đa từ đơn ngoài app trong tháng này.',
       ZERO_POINTS: 'Giá trị đơn nhỏ quá nên chưa quy ra được Điểm Xanh.',

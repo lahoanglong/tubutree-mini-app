@@ -89,7 +89,7 @@ describe('Trang Tích điểm đơn ngoài app', () => {
     renderPage();
     fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value: 'SPXVN123456789' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được tích điểm rồi.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được dùng để tích điểm trước đó.');
     expect(screen.queryByText('máy chủ')).toBeNull();
     expect(screen.queryByTestId('claim-result')).toBeNull();
   });
@@ -104,12 +104,19 @@ describe('Trang Tích điểm đơn ngoài app', () => {
   it('quét được: điền mã vào ô; quét lỗi: gợi ý nhập tay', async () => {
     renderPage();
     const input = (await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn')) as HTMLInputElement;
-    mocks.scanCode.mockResolvedValueOnce('SPXVN999999999');
+    mocks.scanCode.mockResolvedValueOnce({ kind: 'ok', content: 'SPXVN999999999' });
     fireEvent.click(screen.getByRole('button', { name: 'Quét mã' }));
     await waitFor(() => expect(input.value).toBe('SPXVN999999999'));
-    mocks.scanCode.mockResolvedValueOnce(null);
+    mocks.scanCode.mockResolvedValueOnce({ kind: 'failed' });
     fireEvent.click(screen.getByRole('button', { name: 'Quét mã' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Bạn nhập mã bằng tay');
+    mocks.scanCode.mockResolvedValueOnce({ kind: 'ok', content: 'SPXVN111111111' });
+    fireEvent.click(screen.getByRole('button', { name: 'Quét mã' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    mocks.scanCode.mockResolvedValueOnce({ kind: 'cancelled' });
+    fireEvent.click(screen.getByRole('button', { name: 'Quét mã' }));
+    await waitFor(() => expect(mocks.scanCode).toHaveBeenCalledTimes(4));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('danh sách: trạng thái, điểm, mốc cộng và phân trang', async () => {
@@ -137,13 +144,50 @@ describe('Trang Tích điểm đơn ngoài app', () => {
     expect(screen.getByText('Dự kiến 05/11/2026')).toBeInTheDocument();
     expect(screen.getByText('Đã cộng 20/10/2026')).toBeInTheDocument();
     expect(screen.getByText('Đã huỷ')).toBeInTheDocument();
-    expect(screen.getByText('Cần duyệt')).toBeInTheDocument();
+    expect(screen.getByText('Đang kiểm tra')).toBeInTheDocument();
     expect(screen.getByText('Điểm chưa tính được')).toBeInTheDocument();
     expect(screen.getByText('Đang tìm đơn')).toBeInTheDocument();
     expect(screen.getByText('Trang 1/2')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sau' }));
     expect(await screen.findByText('LZ***6')).toBeInTheDocument();
     expect(screen.getByText('Trang 2/2')).toBeInTheDocument();
+  });
+
+  it('gửi lại mã đã được cộng: mốc đã qua thì dùng câu của API, không hứa "đang chờ cộng"', async () => {
+    mocks.submitExternalClaim.mockResolvedValue({
+      status: 'CLAIMED', claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250,
+      expectedCreditAt: '2026-01-05T05:00:00.000Z', message: 'Mã này đã được tích điểm cho bạn rồi.',
+    });
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+    const result = await screen.findByTestId('claim-result');
+    expect(result).toHaveTextContent('Mã này đã được tích điểm cho bạn rồi.');
+    expect(result).not.toHaveTextContent('đang chờ cộng');
+    expect(result).not.toHaveTextContent('Dự kiến cộng từ');
+  });
+
+  it('đang tìm đơn: icon đồng hồ, không phải dấu tích', async () => {
+    mocks.submitExternalClaim.mockResolvedValue({
+      status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
+    });
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+    const result = await screen.findByTestId('claim-result');
+    expect(result.querySelector('.lucide-clock')).not.toBeNull();
+    expect(result.querySelector('.lucide-circle-check, .lucide-check-circle-2')).toBeNull();
+  });
+
+  it('claim đã huỷ, thu hồi, hết hạn: điểm nhạt và gạch ngang, không dùng màu thương hiệu', async () => {
+    const mk = (id: string, state: string) => ({ id, channel: 'Lazada', maskedCode: `LZ***${id}`, state, points: 500, expectedCreditAt: null, creditedAt: null, createdAt: '2026-10-01T00:00:00.000Z' });
+    mocks.getMyExternalClaims.mockResolvedValue({ data: [mk('1', 'VOIDED'), mk('2', 'REVERSED'), mk('3', 'LAPSED'), mk('4', 'CREDITED')], meta: { page: 1, limit: 10, total: 4 }, searching: [] });
+    renderPage();
+    const points = await screen.findAllByText('500 Điểm Xanh');
+    expect(points).toHaveLength(4);
+    expect(points.slice(0, 3).every((p) => p.style.textDecoration === 'line-through')).toBe(true);
+    expect(points[3]!.style.textDecoration).toBe('');
+    expect(points[0]!.style.color).not.toBe(points[3]!.style.color);
   });
 
   it('claimStateView: REVERSED và LAPSED có nhãn riêng', () => {

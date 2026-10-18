@@ -103,10 +103,11 @@ export default function HomePage() {
       ) : (
         <PurchasedRail source="home_rail" />
       ),
+    // Khách mới: ô này rỗng và "Quà khách mới" phải là khối đầu sau ô tìm, nên dải đi cùng khối welcome; khách cũ thấy dải ngay sau dải đơn.
     orderStrip: (
       <>
         <OrderStrip />
-        <PointsBoostStrip placement="home" />
+        {kind === 'returning' && <PointsBoostStrip placement="home" />}
       </>
     ),
     flash: (
@@ -143,7 +144,13 @@ export default function HomePage() {
     ),
     extras: <HomeExtras />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
-    welcome: kind === 'new' ? <NewCustomerGift /> : null,
+    welcome:
+      kind === 'new' ? (
+        <>
+          <NewCustomerGift />
+          <PointsBoostStrip placement="home" omitPlain />
+        </>
+      ) : null,
   };
 
   return (

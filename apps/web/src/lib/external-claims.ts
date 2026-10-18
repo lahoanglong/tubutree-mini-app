@@ -1,4 +1,4 @@
-import type { AdminExternalClaimAttentionFilter, ExternalClaimAdminErrorCode, ExternalClaimState } from '@tubutree/shared-types';
+import type { AdminExternalClaimAttentionFilter, ExternalClaimAdminErrorCode, ExternalClaimRejectCode, ExternalClaimState } from '@tubutree/shared-types';
 import type { Tone } from './recycling';
 
 export const CLAIM_STATE_ORDER: ExternalClaimState[] = ['REVIEW', 'PENDING', 'HELD_NO_MEMBER', 'CREDITED', 'VOIDED', 'REVERSED', 'LAPSED'];
@@ -68,38 +68,69 @@ export function claimActions(
 export const creditedOnClosedOrder = (c: { state: ExternalClaimState; orderStatus: string }) =>
   c.state === 'CREDITED' && CLOSED_ORDER.includes(c.orderStatus);
 
-/** Người đã gắn đơn hoặc đưa claim vào chờ duyệt không được tự duyệt (SAME_INTRODUCER). */
+const INTRODUCER_ACTIONS = ['ATTACH', 'TO_REVIEW', 'VOID_REOPEN'];
+
+/** Người đã gắn đơn, đưa claim vào chờ duyệt hoặc mở lại mã không được tự duyệt (SAME_INTRODUCER). */
 export function isIntroducer(events: readonly { action: string; actorId: string | null }[], meId: string | undefined): boolean {
-  return !!meId && events.some((e) => (e.action === 'ATTACH' || e.action === 'TO_REVIEW') && e.actorId === meId);
+  return !!meId && events.some((e) => INTRODUCER_ACTIONS.includes(e.action) && e.actorId === meId);
 }
 
 export const EVENT_ACTION_LABEL: Record<string, string> = {
+  CLAIM_CREATED: 'Khách gửi mã, tạo yêu cầu',
   ATTACH: 'Gắn đơn cho lần gửi mã',
   TO_REVIEW: 'Đưa vào chờ duyệt',
   APPROVE: 'Duyệt',
   VOID: 'Huỷ',
+  VOID_REOPEN: 'Huỷ và mở lại mã',
+  REOPEN_CLAIM: 'Nhận lại mã đã mở',
   AUTO_VOID: 'Hệ thống tự huỷ',
   CREDIT: 'Cộng điểm',
-  SYNC_RELEASE: 'Đồng bộ mốc cộng',
   FLAG_PARTIAL: 'Gắn cờ đơn hoàn một phần',
   KEEP_POINTS: 'Giữ điểm, gỡ cờ',
   REVERSE: 'Đảo điểm',
-  NONE: 'Không đổi',
+  AUTO_REVERSE: 'Hệ thống tự đảo điểm',
 };
 
-const ADMIN_ERROR_TEXT: Record<ExternalClaimAdminErrorCode, string> = {
+const ADMIN_ERROR_TEXT: Record<ExternalClaimAdminErrorCode | ExternalClaimRejectCode, string> = {
   SELF_ACTION: 'Bạn không được xử lý yêu cầu hay lần gửi mã của chính mình. Nhờ người khác xử lý.',
-  SAME_INTRODUCER: 'Bạn đã gắn đơn hoặc đưa yêu cầu này vào chờ duyệt nên không tự duyệt được. Nhờ người khác duyệt.',
+  SAME_INTRODUCER: 'Bạn đã gắn đơn, đưa yêu cầu vào chờ duyệt hoặc mở lại mã này nên không tự duyệt được. Nhờ người khác duyệt.',
   ATTACH_ADMIN_ONLY: 'Mã khách gửi không trùng mã trên đơn, hoặc nguồn đơn chưa xác định. Chỉ ADMIN được gắn trường hợp này.',
   NOTE_REQUIRED: 'Trường hợp này cần ghi chú lý do. Bạn nhập ghi chú rồi thử lại.',
   NOT_FLAGGED: 'Yêu cầu này không còn cờ cần xử lý (có thể người khác vừa xử lý). Tải lại danh sách.',
+  DISABLED: 'Tính năng tích điểm đơn sàn đang tắt (cờ loyalty.marketplace_claim_enabled).',
+  NOT_ELIGIBLE_USER: 'Khách chưa đủ điều kiện tích điểm: cần tài khoản thật, có số điện thoại và không bị khoá.',
+  INVALID_CODE: 'Mã không hợp lệ (cần 8 đến 30 chữ và số).',
+  LOCKED: 'Khách đang bị khoá 24 giờ vì nhập mã không tìm thấy quá nhiều lần.',
+  DAILY_ATTEMPTS: 'Khách đã hết số lần nhập mã trong ngày.',
+  APP_ORDER: 'Đây là đơn đặt trong Mini App, điểm đã được tích theo đơn app.',
+  CHAT_ORDER: 'Đây là đơn chat/điện thoại, điểm cộng tự động theo số điện thoại, không tích bằng mã.',
+  TOO_OLD: 'Đơn quá cũ, vượt tuổi đơn tối đa được tích điểm.',
+  BEFORE_SINCE: 'Đơn đặt trước mốc bắt đầu chương trình tích điểm đơn sàn.',
+  CLOSED: 'Đơn đã huỷ hoặc hoàn nên không tích điểm được.',
+  ALREADY_CLAIMED: 'Mã này đã có yêu cầu tích điểm khác.',
+  DAILY_MAX: 'Khách đã tích đủ số đơn cho phép trong ngày.',
+  MONTHLY_CAP: 'Khách đã đạt trần điểm đơn sàn trong tháng này.',
+  ZERO_POINTS: 'Giá trị đơn quá nhỏ, quy ra 0 điểm.',
 };
 
-/** Câu tiếng Việt cho lỗi của API admin: theo `code` nếu biết, không thì nguyên văn message của API. */
+/** Câu tiếng Việt cho lỗi của API admin (viết cho nhân viên, không phải câu của khách): theo `code` nếu biết, không thì nguyên văn message của API. */
 export function adminClaimErrorText(e: unknown): string {
   const code = (e as { code?: unknown } | null)?.code;
-  if (typeof code === 'string' && code in ADMIN_ERROR_TEXT) return ADMIN_ERROR_TEXT[code as ExternalClaimAdminErrorCode];
+  if (typeof code === 'string' && code in ADMIN_ERROR_TEXT) return ADMIN_ERROR_TEXT[code as keyof typeof ADMIN_ERROR_TEXT];
   return e instanceof Error ? e.message : 'Thao tác thất bại.';
+}
+
+/**
+ * Lời nhắc trước khi gắn lần gửi mã vào đơn, đúng luật API: gắn vẫn áp tuổi đơn, mốc bắt đầu, trần đơn/ngày và trần điểm/tháng
+ * (chỉ khoá 24 giờ và số lần nhập được bỏ qua); claim vẫn có thể vào chờ duyệt; mã không khớp hoặc nguồn chưa xác định thì chỉ ADMIN gắn.
+ */
+export function attachDialogMessage(maskedCode: string, isAdmin: boolean): string {
+  const base =
+    `Gắn mã ${maskedCode} của khách vào một đơn Pancake. Vẫn áp tuổi đơn, mốc bắt đầu chương trình, trần số đơn mỗi ngày và trần điểm mỗi tháng. ` +
+    'Yêu cầu vẫn có thể vào chờ duyệt (đơn vượt ngưỡng, 3 số cuối SĐT khác, đơn hoàn một phần, mã vừa được mở lại).';
+  return isAdmin
+    ? `${base} Mã không khớp đơn hoặc nguồn chưa xác định: cần ghi chú, không cần người khác duyệt, thao tác được ghi vào lịch sử.`
+    : `${base} Mã không khớp đơn hoặc nguồn chưa xác định: chỉ ADMIN gắn được.`;
 }
 
 /** Số nguyên có dấu chấm nghìn: 1250000 → "1.250.000". */

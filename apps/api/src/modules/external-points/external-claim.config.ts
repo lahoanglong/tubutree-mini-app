@@ -1,4 +1,4 @@
-import { DEFAULT_MARKETPLACE_EARN_PCT, MARKETPLACE_EARN_PCT_KEY } from '../loyalty/earn-rates';
+import { DEFAULT_MARKETPLACE_EARN_PCT, MARKETPLACE_EARN_PCT_KEY, MAX_MARKETPLACE_EARN_PCT } from '../loyalty/earn-rates';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
 /** Khoá cấu hình tích điểm đơn sàn (B6). Mọi đường cộng điểm nằm sau `loyalty.marketplace_claim_enabled` (mặc định tắt). */
@@ -39,7 +39,6 @@ export const CLAIM_CONFIG_DEFAULTS: ClaimConfig = {
   externalSince: null,
 };
 
-const MAX_EARN_PCT = 20;
 const MAX_AGE_DAYS_CEILING = 365;
 
 function intIn(raw: unknown, fallback: number, min: number, max: number): number {
@@ -65,7 +64,7 @@ export async function loadClaimConfig(config: Pick<SystemConfigService, 'get'>):
   const sinceDate = sinceText === '' ? null : new Date(/^\d{4}-\d{2}-\d{2}$/.test(sinceText) ? `${sinceText}T00:00:00+07:00` : sinceText);
   return {
     enabled: enabled === true,
-    earnPct: typeof earnPct === 'number' && Number.isFinite(earnPct) && earnPct > 0 ? Math.min(earnPct, MAX_EARN_PCT) : d.earnPct,
+    earnPct: typeof earnPct === 'number' && Number.isFinite(earnPct) && earnPct > 0 ? Math.min(earnPct, MAX_MARKETPLACE_EARN_PCT) : d.earnPct,
     dailyAttempts: intIn(dailyAttempts, d.dailyAttempts, 1, 1000),
     dailyMax: intIn(dailyMax, d.dailyMax, 1, 1000),
     monthlyPointsCap: intIn(cap, d.monthlyPointsCap, 1, 100_000_000),

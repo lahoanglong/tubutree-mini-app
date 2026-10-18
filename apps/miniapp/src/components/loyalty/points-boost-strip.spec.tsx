@@ -29,8 +29,25 @@ describe('PointsBoostStrip', () => {
   it('cờ tắt ở trang chủ: chỉ dòng "Tích {e}%", không so với sàn', () => {
     mocks.cfg = { isLoaded: true, loyalty: { ...LOYALTY, marketplaceClaimEnabled: false } };
     render(<PointsBoostStrip placement="home" />);
-    expect(screen.getByTestId('points-boost')).toHaveTextContent('Tích 2% Điểm Xanh khi mua trong Mini App');
+    expect(screen.getByTestId('points-boost')).toHaveTextContent('Tích 2% tiền hàng thành Điểm Xanh khi mua trong Mini App');
     expect(screen.queryByText(/Đơn sàn/)).toBeNull();
+  });
+
+  it('trang Điểm Xanh: cờ bật thì có dải so sánh, cờ tắt thì không thêm dòng', () => {
+    const { rerender, container } = render(<PointsBoostStrip placement="wallet" />);
+    expect(screen.getByText('Mua trong Mini App: tích gấp đôi')).toBeInTheDocument();
+    mocks.cfg = { isLoaded: true, loyalty: { ...LOYALTY, marketplaceClaimEnabled: false } };
+    rerender(<PointsBoostStrip placement="wallet" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('omitPlain: cờ tắt ở trang chủ không nói lại mức tích; cờ bật vẫn so sánh', () => {
+    mocks.cfg = { isLoaded: true, loyalty: { ...LOYALTY, marketplaceClaimEnabled: false } };
+    const { container, rerender } = render(<PointsBoostStrip placement="home" omitPlain />);
+    expect(container).toBeEmptyDOMElement();
+    mocks.cfg = { isLoaded: true, loyalty: { ...LOYALTY } };
+    rerender(<PointsBoostStrip placement="home" omitPlain />);
+    expect(screen.getByText('Mua trong Mini App: tích gấp đôi')).toBeInTheDocument();
   });
 
   it('cờ tắt ở trang sản phẩm: không thêm dòng (đã có dòng Nhận Điểm Xanh dưới giá)', () => {

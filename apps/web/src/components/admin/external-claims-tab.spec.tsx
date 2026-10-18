@@ -229,4 +229,35 @@ describe('ExternalClaimsTab', () => {
     expect(last.url).toContain('attention=closed_credited');
     expect(last.url).not.toContain('state=');
   });
+
+  it('hộp thoại Gắn đơn nói đúng luật; hộp thoại huỷ có nút Đóng thay cho Huỷ', async () => {
+    stub({ claims: [claim()], attempts: [attempt()] });
+    const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+    await flush();
+    click(btn(r.container.querySelector('[data-external-attempt]')!, 'Gắn đơn'));
+    await flush();
+    const text = confirmDialog()!.textContent!;
+    expect(text).toContain('Vẫn áp tuổi đơn, mốc bắt đầu chương trình, trần số đơn mỗi ngày và trần điểm mỗi tháng');
+    expect(text).toContain('không cần người khác duyệt, thao tác được ghi vào lịch sử');
+    answerConfirm(false);
+    await flush();
+    click(btn(r.container.querySelector('[data-external-claim]')!, 'Huỷ'));
+    await flush();
+    expect(confirmDialog()!.querySelector('[data-confirm="cancel"]')!.textContent).toBe('Đóng');
+  });
+
+  it('bấm chip trạng thái thì bỏ bộ lọc chú ý', async () => {
+    const m = stub({ claims: [] });
+    const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+    await flush();
+    const select = r.container.querySelector<HTMLSelectElement>('select[aria-label="Lọc việc cần chú ý"]')!;
+    selectValue(select, 'stale');
+    await flush();
+    click([...r.container.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Đã cộng')!);
+    await flush();
+    const last = m.calls.filter((c) => c.url.includes('/admin/external-claims?')).at(-1)!;
+    expect(last.url).toContain('state=CREDITED');
+    expect(last.url).not.toContain('attention=');
+    expect(select.value).toBe('');
+  });
 });

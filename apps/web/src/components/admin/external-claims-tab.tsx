@@ -21,6 +21,7 @@ import {
 import {
   ATTENTION_FILTER_LABEL,
   EVENT_ACTION_LABEL,
+  attachDialogMessage,
   ORDER_STATUS_LABEL,
   adminClaimErrorText,
   creditedOnClosedOrder,
@@ -74,7 +75,10 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
           {[...CLAIM_STATE_ORDER, ''].map((s) => (
-            <button key={s || 'all'} type="button" role="tab" aria-selected={state === s} onClick={() => setState(s as ExternalClaimState | '')} className={chipClass(state === s)}>
+            <button key={s || 'all'} type="button" role="tab" aria-selected={state === s} onClick={() => {
+                setState(s as ExternalClaimState | '');
+                setAttention('');
+              }} className={chipClass(state === s)}>
               {s ? CLAIM_STATE_LABEL[s as ExternalClaimState] : 'Tất cả'}
             </button>
           ))}
@@ -168,6 +172,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
         ? `Huỷ yêu cầu ${c.maskedCode} và mở lại mã: khách (hoặc người khác) có thể nhập lại mã này. Khách nhận thông báo điểm không được cộng.`
         : `Huỷ yêu cầu ${c.maskedCode}: điểm chờ không được cộng và mã này bị chặn nhập lại. Khách nhận thông báo điểm không được cộng.`,
       confirmLabel: reopen ? 'Huỷ và mở lại mã' : 'Huỷ yêu cầu',
+      cancelLabel: 'Đóng',
       tone: 'danger',
       input: { label: 'Lý do (khách sẽ thấy trong thông báo)', maxLength: 300, required: true },
     });
@@ -210,7 +215,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
         <div>SĐT trên đơn: {c.orderPhoneMasked ?? 'không có hoặc bị che'}</div>
         <div>Tiền hàng: {c.goodsValue === null ? 'chưa tính được' : formatVnd(c.goodsValue)}</div>
         <div>Điểm: {c.points > 0 ? `${groupThousands(c.points)} điểm` : 'chưa tính được'}</div>
-        <div>Trạng thái đơn: {c.orderStatus}</div>
+        <div>Trạng thái đơn: {ORDER_STATUS_LABEL[c.orderStatus] ?? c.orderStatus}</div>
         <div>Gửi lúc: {formatDateTime(c.createdAt)}</div>
         {c.reviewReason && <div className="sm:col-span-2">{c.state === 'CREDITED' ? 'Cờ cần xử lý' : 'Lý do cần duyệt'}: <span className="font-medium text-warning-fg">{c.reviewReason}</span></div>}
         {c.voidReason && <div className="sm:col-span-2">Lý do huỷ: <span className="font-medium text-danger-fg">{c.voidReason}</span></div>}
@@ -331,7 +336,7 @@ function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who
   const attach = async () => {
     const id = await ask({
       title: 'Gắn lần gửi mã vào đơn',
-      message: `Gắn mã ${a.maskedCode} của khách vào một đơn Pancake. Đơn khớp mã thì yêu cầu vào thẳng chờ cộng điểm, bỏ qua trần ngày, trần tháng và tuổi đơn. Nếu mã không khớp đơn hoặc nguồn đơn chưa xác định thì chỉ ADMIN gắn được, cần ghi chú, và yêu cầu vào chờ duyệt để người khác duyệt.`,
+      message: attachDialogMessage(a.maskedCode, who.isAdmin),
       confirmLabel: 'Tiếp tục',
       input: { label: 'Mã đơn Pancake', maxLength: 100, required: true },
     });
