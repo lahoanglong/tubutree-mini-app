@@ -347,11 +347,11 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
   describe('Reward Catalog & Redemption', () => {
     it('getRewardCatalog đọc waste_gifts ACTIVE theo sortOrder; giá TREE lấy từ game.tree_points_price; voucher có đủ trường', async () => {
       const prisma = catalogPrisma({ balance: 0 });
-      const res = await new LoyaltyService(prisma, makeConfig({ 'game.tree_points_price': 50_000 })).getRewardCatalog('u1');
+      const res = await new LoyaltyService(prisma, makeConfig({ 'game.tree_points_price': 60_000 })).getRewardCatalog('u1');
       expect(prisma.wasteGift.findMany).toHaveBeenCalledWith({ where: { status: 'ACTIVE' }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] });
       expect(res.rewards.map((r) => r.id)).toEqual(['reward-freeship', 'reward-discount-50k', 'reward-percent-15pct', 'reward-discount-100k', 'gift-tree']);
       expect(res.rewards[0]).toEqual({ id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: FREESHIP.description, label: 'Phổ biến', pointsCost: 20_000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: false, claimInstructions: null, voucher: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, validDays: 30 }, sortOrder: 10 });
-      expect(res.rewards[4]).toMatchObject({ id: 'gift-tree', kind: 'TREE', pointsCost: 50_000, voucher: null });
+      expect(res.rewards[4]).toMatchObject({ id: 'gift-tree', kind: 'TREE', pointsCost: 60_000, voucher: null });
     });
 
     it('TREE: 28.000 STANDARD + 30.000 CONVERTED so với giá 50.000 → canRedeem true (luật chia lô của buyTree); voucher 50.000 điểm chỉ xét STANDARD → false', async () => {
@@ -378,6 +378,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));
       expect(byId.get('reward-freeship')).toBe(true);
       expect(byId.get('reward-discount-50k')).toBe(false);
+      expect(byId.get('gift-tree')).toBe(false);
     });
 
     it('điểm khoá lớn hơn số dư → redeemablePoints 0, không âm, không quà nào đổi được', async () => {
@@ -412,7 +413,8 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     it('getMyRedemptions: lượt READY kèm mã QG- và nơi nhận; lượt voucher FULFILLED kèm mã coupon, không có nơi nhận; lượt quà đã trao không còn mã QG-', async () => {
       const voucher = redemptionRow({ id: 'r2', giftId: 'reward-freeship', giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', pointsCost: 20_000, status: 'FULFILLED', code: null, couponId: 'cp1', claimExpiresAt: null, fulfilledAt: new Date('2026-10-16T00:00:00Z'), createdAt: new Date('2026-10-16T00:00:00Z') });
       const used = redemptionRow({ id: 'r3', status: 'FULFILLED', fulfilledAt: new Date('2026-10-15T00:00:00Z'), createdAt: new Date('2026-10-15T00:00:00Z') });
-      const findMany = jest.fn().mockResolvedValue([redemptionRow(), voucher, used]);
+      const cancelled = redemptionRow({ id: 'r4', status: 'CANCELLED', cancelledAt: new Date('2026-10-14T00:00:00Z'), cancelReason: 'Hết hàng', refundedPoints: 0, createdAt: new Date('2026-10-14T00:00:00Z') });
+      const findMany = jest.fn().mockResolvedValue([redemptionRow(), voucher, used, cancelled]);
       const prisma = {
         wasteGiftRedemption: { findMany },
         coupon: { findMany: jest.fn().mockResolvedValue([{ id: 'cp1', code: 'REWARD-FRESHIP-ABCDEFGH' }]) },
@@ -423,6 +425,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(rows[0]).toEqual({ id: 'r1', giftId: 'g1', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, status: 'READY', code: 'QG-ABCDEFGH', claimExpiresAt: '2026-12-16T00:00:00.000Z', claimPoint: WAREHOUSE, fulfilledAt: null, cancelledAt: null, cancelReason: null, refundedPoints: null, couponCode: null, createdAt: '2026-10-17T00:00:00.000Z' });
       expect(rows[1]).toMatchObject({ id: 'r2', status: 'FULFILLED', code: null, claimPoint: null, couponCode: 'REWARD-FRESHIP-ABCDEFGH', fulfilledAt: '2026-10-16T00:00:00.000Z' });
       expect(rows[2]).toMatchObject({ id: 'r3', status: 'FULFILLED', code: null, claimPoint: null, fulfilledAt: '2026-10-15T00:00:00.000Z' });
+      expect(rows[3]).toMatchObject({ id: 'r4', status: 'CANCELLED', code: null, claimPoint: null, cancelledAt: '2026-10-14T00:00:00.000Z', cancelReason: 'Hết hàng', refundedPoints: 0 });
     });
 
     it('getMyRedemptions: coupon đã bị dọn (cron xoá coupon) → couponCode null, không lỗi', async () => {
