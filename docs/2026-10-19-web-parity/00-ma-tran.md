@@ -30,12 +30,12 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 18 | `/edit-profile` | edit-profile.tsx | khối sửa tên trong `/tai-khoan` | `/tai-khoan/ho-so` | xong b76526a7 | account | riêng tư | Thêm email, ngày sinh, ảnh đại diện (Cloudinary + crop). SĐT chỉ đọc |
 | 19 | `/settings` | settings.tsx | — | `/tai-khoan/cai-dat` | xong b76526a7 | account | riêng tư | Thông báo (server), cỡ chữ (localStorage). Theo dõi OA = link `zalo.me`; xin quyền gửi thông báo Zalo không có trên web. Không chép đồng bộ `tubu_prefs` cũ |
 | 20 | `/notifications` | notifications.tsx | — | `/tai-khoan/thong-bao` | xong b76526a7 | account | riêng tư | Link hành động trỏ sang route web tương ứng |
-| 21 | `/loyalty` | loyalty.tsx | `/tai-khoan/diem-xanh` (một phần) | giữ | thiếu | loyalty | riêng tư | Điểm danh, thẻ thành viên QR, mã giảm giá, hạng, lịch sử. **Điểm: 2 lượt review** |
-| 22 | `/wallet` | wallet.tsx | `/tai-khoan/vi-tubu` (một phần) | giữ | thiếu | loyalty | riêng tư | Rút tiền (idempotency, phí/mức tối thiểu), giới thiệu bạn, lịch sử. **Tiền: 2 lượt review** |
-| 23 | `/rewards` | rewards.tsx | — | `/kho-qua` | mới | loyalty | riêng tư | Đổi điểm lấy quà. **Điểm: 2 lượt review** |
-| 24 | `/rewards/mine` | rewards-mine.tsx | — | `/kho-qua/cua-toi` | mới | loyalty | riêng tư | QR mã quà |
+| 21 | `/loyalty` | loyalty.tsx | `/tai-khoan/diem-xanh` (một phần) | giữ | xong cb5c0d58 | loyalty | riêng tư | Điểm danh, thẻ thành viên QR, mã giảm giá, hạng, lịch sử. **Điểm: 2 lượt review** |
+| 22 | `/wallet` | wallet.tsx | `/tai-khoan/vi-tubu` (một phần) | giữ | xong cb5c0d58 | loyalty | riêng tư | Rút tiền (idempotency, phí/mức tối thiểu), giới thiệu bạn, lịch sử. **Tiền: 2 lượt review** |
+| 23 | `/rewards` | rewards.tsx | — | `/kho-qua` | xong cb5c0d58 | loyalty | riêng tư | Đổi điểm lấy quà. **Điểm: 2 lượt review** |
+| 24 | `/rewards/mine` | rewards-mine.tsx | — | `/kho-qua/cua-toi` | xong cb5c0d58 | loyalty | riêng tư | QR mã quà |
 | 25 | `/refill` | (chuyển sang `/recycle`) | — | — | skip | — | — | Nhánh đổi rác gỡ Refill (0b258d34), Mini App chỉ còn `<Navigate to="/recycle">`; route map để skip |
-| 26 | `/cashback` | cashback.tsx | — | `/hoan-tien` | mới | loyalty | công khai một phần | Giữ cờ `CASHBACK_ENABLED` (đang tắt). `openAffiliateLink` thành mở tab mới |
+| 26 | `/cashback` | cashback.tsx | — | `/hoan-tien` | xong cb5c0d58 | loyalty | công khai một phần | Giữ cờ `CASHBACK_ENABLED` (đang tắt). `openAffiliateLink` thành mở tab mới |
 | 27 | `/points/scan` | external-points.tsx | — | — | skip | — | — | Q2: quét mã đơn sàn chỉ ở Mini App (cần SĐT đã xác minh và máy quét QR). Web không có route; hub tài khoản trên web hiện lời dặn mở Mini App khi cờ bật |
 | 28 | `/game` | game.tsx | — | `/vuon-xanh` | mới | game | riêng tư | Lớn nhất (103 test). Không dùng Zalo SDK |
 | 29 | `/feed` | feed.tsx | — | `/cong-dong` | mới | community | công khai một phần | Khách: bản xem trước công khai |
