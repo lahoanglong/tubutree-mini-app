@@ -358,7 +358,7 @@ Không đạt thì để `AI_ADVISOR_ENABLED=false`: Mini App ẩn lối vào, k
 ### 1.8 Đổi rác lấy quà: ghi chú khi deploy
 
 - Kiểm chỉ mục từng phần (partial index) chạy trên một database CHƯA áp `20261020000000_waste_exchange` (ví dụ PROD trước khi deploy) sẽ báo THIẾU năm chỉ mục của migration này: ba khoá chống cộng điểm hai lần của `points_transactions` (`points_transactions_recycle_ref_key`, `points_transactions_recycle_reverse_key`, `points_transactions_gift_refund_key`), rồi `waste_points_one_warehouse_key` và `waste_point_staff_one_owner_key`. Kiểm này còn báo thiếu các chỉ mục từng phần của migration khác đang chờ áp trên database đó (ví dụ ba chỉ mục của `20261019100000_external_orders` nếu nó đi cùng lần deploy này). Đó là đúng, vì kiểm đọc thư mục migration của mã đang chạy. Sau khi migrate nó phải báo không thiếu cái nào.
-- Bộ test race (gồm `partial-unique-indexes` pin 23) chỉ chạy qua `docs/2026-10-review/handoff/verify-full.sh`, không bao giờ chạy trong CI.
+- Bộ test race (gồm `partial-unique-indexes` pin 23) chạy trong workflow `.github/workflows/race.yml` (PR vào main có đụng `apps/api`, và hằng đêm) và trong `docs/2026-10-review/handoff/verify-full.sh`. Check "Race suite" đỏ trên PR phát hành là chặn phát hành.
 - Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API (xoá bộ đệm cấu hình) và xoá bộ đệm proxy/CDN nếu có.
 - Kiểm khoá mã giảm giá trùng lớp khoá Đổi rác (rủi ro đã chấp nhận, spec 10.1). Chạy sau mỗi lần tạo mã có giới hạn mỗi khách:
 
