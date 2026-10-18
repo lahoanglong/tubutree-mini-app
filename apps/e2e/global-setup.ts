@@ -98,8 +98,12 @@ function signTestJwt(secret: string): string {
 }
 
 export default async function globalSetup() {
-  // Spec miniapp mock toàn bộ API: không ghi vào DB nào (apps/api/.env thường trỏ DB dev dùng chung).
-  if (process.env.E2E_SCOPE === 'miniapp' || process.env.npm_lifecycle_event === 'test:miniapp') {
+  // Spec miniapp và web-admin mock toàn bộ API: không ghi vào DB nào (apps/api/.env thường trỏ DB dev dùng chung).
+  if (
+    process.env.E2E_SCOPE === 'miniapp' ||
+    process.env.E2E_SCOPE === 'web-admin' ||
+    process.env.npm_lifecycle_event === 'test:miniapp'
+  ) {
     process.env.E2E_API_TOKEN = '';
     return;
   }
