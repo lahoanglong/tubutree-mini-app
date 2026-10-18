@@ -158,11 +158,11 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const point = points.find((p) => p.id === pointId) ?? points[0]!;
 
   const find = useMutation({
-    mutationFn: () => deskLookup(code),
-    onSuccess: (res) => {
+    mutationFn: (c: string) => deskLookup(c),
+    onSuccess: (res, c) => {
       setLookup(res.type === 'REQUEST' ? res.request : null);
       setGift(res.type === 'GIFT' ? res.redemption : null);
-      setLookedUpCode(code.trim());
+      setLookedUpCode(c.trim());
       setReceived({});
       setReasons({});
     },
@@ -251,7 +251,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
         <Field label="Mã yêu cầu hoặc mã nhận quà">
           <Input value={code} onChange={(e) => setCode(e.target.value)} />
         </Field>
-        <Button fullWidth disabled={code.trim() === ''} loading={find.isPending} onPress={() => find.mutate()}>
+        <Button fullWidth disabled={code.trim() === ''} loading={find.isPending} onPress={() => find.mutate(code)}>
           Tra mã
         </Button>
       </div>

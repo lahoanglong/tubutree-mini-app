@@ -325,6 +325,17 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
     await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'QG-AAAAAAAA', pointId: 'wh-1' }));
   });
+  it('Trao quà dùng mã đã gửi tra, kể cả khi ô mã đổi lúc đang tra', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.deskLookup.mockReturnValue(new Promise((r) => { resolve = r; }));
+    mocks.deskFulfilGift.mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
+    renderPage();
+    await lookUp('QG-AAAAAAAA');
+    fireEvent.change(screen.getByLabelText('Mã yêu cầu hoặc mã nhận quà'), { target: { value: 'QG-BBBBBBBB' } });
+    resolve({ type: 'GIFT', redemption: GIFT });
+    fireEvent.click(await screen.findByRole('button', { name: 'Trao quà' }));
+    await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'QG-AAAAAAAA', pointId: 'wh-1' }));
+  });
   it('"Trao quà" khoá khi đang gửi: bấm hai lần chỉ gọi một lần', async () => {
     mocks.deskFulfilGift.mockReturnValue(new Promise(() => {}));
     renderPage();
