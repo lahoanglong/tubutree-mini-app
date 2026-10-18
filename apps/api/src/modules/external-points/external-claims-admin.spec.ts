@@ -35,6 +35,7 @@ describe('ExternalClaimsAdminController: phân quyền', () => {
   });
   it('chỉ ADMIN đảo điểm đã cộng: @AllowStaff() rỗng ở handler ghi đè nhóm CSKH của lớp', () => {
     expect(perms('reverse')).toEqual([]);
+    expect(perms('keepPoints')).toEqual([]);
   });
 });
 

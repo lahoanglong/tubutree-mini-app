@@ -7,7 +7,7 @@ import { buildAdminOrderWhere } from '../admin/admin-order-filter';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; extReview?: number; extAttempts?: number; extPartial?: number; config?: Record<string, unknown> } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; config?: Record<string, unknown> } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn().mockResolvedValue(over.invoices ?? 0);
@@ -19,7 +19,9 @@ const build = (
   const linkCount = jest.fn().mockResolvedValue(over.links ?? 0);
   const payoutCount = jest.fn().mockResolvedValue(over.slips ?? 0);
   const refundCount = jest.fn().mockResolvedValue(over.refunds ?? 0);
-  const extClaimCount = jest.fn((args: { where: { state: string } }) => Promise.resolve(args.where.state === 'REVIEW' ? (over.extReview ?? 0) : (over.extPartial ?? 0)));
+  const extClaimCount = jest.fn((args: { where: { state: string; reviewReason?: unknown } }) =>
+    Promise.resolve(args.where.state === 'REVIEW' ? (over.extReview ?? 0) : args.where.reviewReason ? (over.extPartial ?? 0) : (over.extClosed ?? 0)),
+  );
   const extAttemptCount = jest.fn().mockResolvedValue(over.extAttempts ?? 0);
   const prisma = {
     product: { count: productCount },
@@ -181,13 +183,14 @@ describe('OpsInboxService — cộng đồng và hoá đơn VAT (launch review D
 });
 
 describe('OpsInboxService — externalPoints', () => {
-  it('cộng claim chờ duyệt, lần gửi mã quá hạn tự ghép và claim đã cộng mà đơn hoàn một phần', async () => {
-    const { svc, extAttemptCount, extClaimCount } = build({ extReview: 2, extAttempts: 3, extPartial: 1 });
+  it('cộng claim chờ duyệt, lần gửi mã quá hạn tự ghép, claim đã cộng mà đơn hoàn một phần và claim đã cộng mà đơn đã đóng', async () => {
+    const { svc, extAttemptCount, extClaimCount } = build({ extReview: 2, extAttempts: 3, extPartial: 1, extClosed: 4 });
 
     const res = await svc.counts({ role: 'ADMIN' }, new Date('2026-10-20T00:00:00.000Z'));
 
-    expect(res.items.find((i) => i.key === 'externalPoints')?.count).toBe(6);
+    expect(res.items.find((i) => i.key === 'externalPoints')?.count).toBe(10);
     expect(extClaimCount).toHaveBeenCalledWith({ where: { state: 'REVIEW' } });
+    expect(extClaimCount).toHaveBeenCalledWith({ where: { state: 'CREDITED', externalOrder: { status: { in: ['CANCELLED', 'RETURNED', 'DELETED'] } } } });
     expect(extClaimCount).toHaveBeenCalledWith({ where: { state: 'CREDITED', reviewReason: { not: null } } });
     expect(extAttemptCount).toHaveBeenCalledWith({
       where: {

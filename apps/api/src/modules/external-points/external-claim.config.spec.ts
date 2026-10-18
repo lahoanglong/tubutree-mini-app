@@ -33,8 +33,8 @@ describe('loadClaimConfig', () => {
     expect(c.earnPct).toBe(0.5);
     expect(c.maxAgeDays).toBe(365);
   });
-  it('external_since đọc chuỗi ngày hợp lệ; rác thì null', async () => {
-    expect((await loadClaimConfig(cfg({ 'loyalty.external_since': '2026-10-01' }) as never)).externalSince?.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+  it('external_since YYYY-MM-DD là 00:00 giờ Việt Nam (17:00 UTC hôm trước); rác thì null', async () => {
+    expect((await loadClaimConfig(cfg({ 'loyalty.external_since': '2026-10-01' }) as never)).externalSince?.toISOString()).toBe('2026-09-30T17:00:00.000Z');
     expect((await loadClaimConfig(cfg({ 'loyalty.external_since': 'abc' }) as never)).externalSince).toBeNull();
     expect((await loadClaimConfig(cfg({ 'loyalty.external_since': '' }) as never)).externalSince).toBeNull();
   });

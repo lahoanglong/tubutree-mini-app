@@ -60,7 +60,9 @@ export async function loadClaimConfig(config: Pick<SystemConfigService, 'get'>):
     config.get<unknown>(EXTERNAL_PENDING_DAYS_KEY, d.pendingDays),
     config.get<unknown>(EXTERNAL_SINCE_KEY, null),
   ]);
-  const sinceDate = typeof since === 'string' && since.trim() !== '' ? new Date(since.trim()) : null;
+  // Ngày thuần YYYY-MM-DD là 00:00 giờ Việt Nam, không phải 00:00 UTC (lệch 7 tiếng làm đơn đầu ngày bị loại nhầm).
+  const sinceText = typeof since === 'string' ? since.trim() : '';
+  const sinceDate = sinceText === '' ? null : new Date(/^\d{4}-\d{2}-\d{2}$/.test(sinceText) ? `${sinceText}T00:00:00+07:00` : sinceText);
   return {
     enabled: enabled === true,
     earnPct: typeof earnPct === 'number' && Number.isFinite(earnPct) && earnPct > 0 ? Math.min(earnPct, MAX_EARN_PCT) : d.earnPct,

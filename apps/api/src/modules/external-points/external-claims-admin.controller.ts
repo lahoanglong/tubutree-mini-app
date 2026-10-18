@@ -20,8 +20,14 @@ export class ClaimReasonDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(300) reason!: string;
 }
 
+export class ClaimNoteDto {
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(300) note!: string;
+}
+
 export class AttachAttemptDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(100) pancakeOrderId!: string;
+  /** Bắt buộc khi mã không trùng mã trên đơn hoặc đơn nguồn UNKNOWN (chỉ ADMIN). */
+  @IsOptional() @Trim() @IsString() @MaxLength(300) note?: string;
 }
 
 export class RejectAttemptDto {
@@ -53,7 +59,7 @@ export class ExternalClaimsAdminController {
 
   @Post('attempts/:id/attach')
   attach(@Param('id') id: string, @Body() dto: AttachAttemptDto, @CurrentUser() user: JwtPayload) {
-    return this.admin.attach(id, dto.pancakeOrderId, user.sub);
+    return this.admin.attach(id, dto.pancakeOrderId, { id: user.sub, role: user.role }, dto.note);
   }
 
   @Post('attempts/:id/reject')
@@ -80,6 +86,12 @@ export class ExternalClaimsAdminController {
   @Post(':id/void-and-reopen')
   voidAndReopen(@Param('id') id: string, @Body() dto: ClaimReasonDto, @CurrentUser() user: JwtPayload) {
     return this.admin.voidClaim(id, user.sub, dto.reason, true);
+  }
+
+  @Post(':id/keep-points')
+  @AllowStaff()
+  keepPoints(@Param('id') id: string, @Body() dto: ClaimNoteDto, @CurrentUser() user: JwtPayload) {
+    return this.admin.keepPoints(id, user.sub, dto.note);
   }
 
   @Post(':id/reverse')

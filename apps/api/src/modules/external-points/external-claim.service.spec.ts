@@ -16,20 +16,26 @@ function build(opts: { config?: Record<string, unknown>; order?: Record<string, 
       calls.push('rowlock');
       return [];
     }),
-    user: { findUnique: jest.fn(async () => (opts.user === undefined ? { id: 'u1', phone: '0912345678', zaloId: 'z1', isBlocked: false } : opts.user)) },
+    user: { findUnique: jest.fn(async () => (opts.user === undefined ? { id: 'u1', phone: '0912345678', zaloId: 'z1', isBlocked: false, role: 'CUSTOMER' } : opts.user)) },
     externalClaimAttempt: {
       findMany: jest.fn(async () => []),
       count: jest.fn(async () => 0),
       create: attemptCreate,
       createMany: jest.fn(async () => ({ count: 1 })),
+      findFirst: jest.fn(async () => null as unknown),
+      findUnique: jest.fn(async () => null as unknown),
+      updateMany: jest.fn(async () => ({ count: 1 })),
     },
+    externalClaimEvent: { create: jest.fn(async () => ({})) },
     order: { findFirst: jest.fn(async () => (opts.appOrder ? { id: 'o1' } : null)) },
     externalOrder: {
       findFirst: jest.fn(async () => (opts.order ? { id: 'x1' } : null)),
       findUniqueOrThrow: jest.fn(async () => opts.order),
     },
     externalPointsClaim: {
-      findUnique: jest.fn(async () => null),
+      findUnique: jest.fn(async () => null as unknown),
+      findUniqueOrThrow: jest.fn(async () => ({ points: 2_000, releaseAt: null })),
+      findFirst: jest.fn(async () => null as unknown),
       count: jest.fn(async () => 0),
       aggregate: jest.fn(async () => ({ _sum: { points: 0 } })),
       createManyAndReturn: jest.fn(async () => [{ id: 'c1' }]),
@@ -50,6 +56,8 @@ const order = (over: Record<string, unknown> = {}) => ({
   channel: 'shopee',
   status: 'OPEN',
   trackingCode: 'SPXVN0123456789',
+  trackingCodes: ['SPXVN0123456789'],
+  marketplaceOrderSn: null,
   goodsValue: 200_000,
   phoneLast3: '678',
   pancakeInsertedAt: new Date(NOW.getTime() - 864e5),
@@ -121,5 +129,72 @@ describe('ExternalClaimService.submit', () => {
     tx.externalPointsClaim.createManyAndReturn.mockResolvedValue([]);
     expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('ALREADY_CLAIMED');
     expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_ALREADY_CLAIMED' }) });
+  });
+  it('nhân viên tự gửi mã: vào REVIEW, không báo PENDING', async () => {
+    const { svc, notifications } = build({ config: flagOn, order: order(), user: { id: 'u1', phone: '0912345678', zaloId: 'z1', isBlocked: false, role: 'STAFF' } });
+    expect(await svc.submit('u1', 'SPXVN0123456789')).toMatchObject({ status: 'REVIEW' });
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+  it('ghi nhật ký CLAIM_CREATED cùng transaction với claim', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order() });
+    await svc.submit('u1', 'SPXVN0123456789');
+    expect(tx.externalClaimEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ claimId: 'c1', action: 'CLAIM_CREATED', actorId: 'u1', toState: 'PENDING', userIdAfter: 'u1' }) });
+  });
+  it('C5: đơn khác cùng mã đã có claim còn hiệu lực: 409 ALREADY_CLAIMED, không tạo claim', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order() });
+    tx.externalPointsClaim.findFirst.mockResolvedValue({ id: 'other' });
+    expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('ALREADY_CLAIMED');
+    expect(tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+    expect(tx.externalPointsClaim.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ state: { not: 'VOIDED' }, externalOrderId: { not: 'x1' } }) }),
+    );
+  });
+  it('C2: gửi lại mã của chính mình trả trạng thái hiện có, không ghi attempt, không tạo claim', async () => {
+    const { svc, tx, attemptCreate } = build({ config: flagOn, order: order() });
+    tx.externalPointsClaim.findUnique.mockResolvedValue({ id: 'c7', state: 'PENDING', claimedCode: 'SPXVN0123456789', decidedById: null, userId: 'u1' });
+    const res = await svc.submit('u1', 'SPXVN0123456789');
+    expect(res).toMatchObject({ status: 'CLAIMED', claimId: 'c7', points: 2_000 });
+    expect(attemptCreate).not.toHaveBeenCalled();
+    expect(tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+  it('C2: claim của người khác vẫn là ALREADY_CLAIMED', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order() });
+    tx.externalPointsClaim.findUnique.mockResolvedValue({ id: 'c7', state: 'PENDING', claimedCode: 'X', decidedById: null, userId: 'u2' });
+    expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('ALREADY_CLAIMED');
+  });
+  it('C2: mã đang chờ ghép là của chính khách: SEARCHING, không ghi NOT_FOUND (không tính khoá 24h)', async () => {
+    const { svc, tx, attemptCreate } = build({ config: flagOn, order: null });
+    tx.externalClaimAttempt.createMany.mockResolvedValue({ count: 0 });
+    tx.externalClaimAttempt.findFirst.mockResolvedValue({ userId: 'u1' });
+    expect((await svc.submit('u1', 'SPXVN0123456789')).status).toBe('SEARCHING');
+    expect(attemptCreate).not.toHaveBeenCalled();
+  });
+  it('C2: mã đang chờ của người khác: vẫn ghi NOT_FOUND', async () => {
+    const { svc, tx, attemptCreate } = build({ config: flagOn, order: null });
+    tx.externalClaimAttempt.createMany.mockResolvedValue({ count: 0 });
+    tx.externalClaimAttempt.findFirst.mockResolvedValue({ userId: 'u2' });
+    await svc.submit('u1', 'SPXVN0123456789');
+    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'NOT_FOUND' }) });
+  });
+});
+
+describe('ExternalClaimService.rematchOne', () => {
+  const rematch = (svc: ExternalClaimService) => (svc as unknown as { rematchOne: (id: string, cfg: unknown, now: Date) => Promise<string> }).rematchOne('a1', { ...cfgOn }, NOW);
+  const cfgOn = { enabled: true, earnPct: 1, dailyAttempts: 10, dailyMax: 3, monthlyPointsCap: 200_000, maxAgeDays: 60, reviewAboveVnd: 2_000_000, pendingDays: 14, externalSince: null };
+  it('C3: gặp ALREADY_CLAIMED với claim của chính khách: đóng lần thử, KHÔNG báo "chưa tìm thấy"', async () => {
+    const { svc, tx, notifications } = build({ config: flagOn, order: order() });
+    tx.externalClaimAttempt.findUnique.mockResolvedValue({ id: 'a1', userId: 'u1', code: 'SPXVN0123456789', result: 'UNMATCHED', externalOrderId: null, resolvedAt: null });
+    tx.externalOrder.findFirst.mockResolvedValue({ id: 'x1' });
+    tx.externalPointsClaim.findUnique.mockResolvedValue({ id: 'c7', state: 'VOIDED', claimedCode: 'X', decidedById: 'adm', userId: 'u1' });
+    expect(await rematch(svc)).toBe('RESOLVED');
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+  it('claim của người khác: vẫn báo khách chưa tìm thấy', async () => {
+    const { svc, tx, notifications } = build({ config: flagOn, order: order() });
+    tx.externalClaimAttempt.findUnique.mockResolvedValue({ id: 'a1', userId: 'u1', code: 'SPXVN0123456789', result: 'UNMATCHED', externalOrderId: null, resolvedAt: null });
+    tx.externalOrder.findFirst.mockResolvedValue({ id: 'x1' });
+    tx.externalPointsClaim.findUnique.mockResolvedValue({ id: 'c7', state: 'PENDING', claimedCode: 'X', decidedById: null, userId: 'u2' });
+    expect(await rematch(svc)).toBe('RESOLVED');
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'EXTERNAL_POINTS_CLAIM_NOT_FOUND', expect.anything(), expect.anything());
   });
 });

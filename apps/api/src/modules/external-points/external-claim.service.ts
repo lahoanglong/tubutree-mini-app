@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig, type ClaimConfig } from './external-claim.config';
+import { recordClaimEvent } from './external-claim-audit';
 import { ExternalClaimLookupService } from './external-claim-lookup.service';
 import { evaluateClaimRules, lockedUntil, type ClaimDecision, type ClaimFacts } from './external-claim.rules';
 import { normalizeTrackingCode } from './external-order.mapper';
@@ -56,6 +57,7 @@ interface UserRow {
   phone: string | null;
   zaloId: string | null;
   isBlocked: boolean;
+  role: 'CUSTOMER' | 'STAFF' | 'ADMIN' | string;
 }
 
 export interface ClaimOrderRow {
@@ -65,6 +67,8 @@ export interface ClaimOrderRow {
   channel: string | null;
   status: ExternalOrderStatus;
   trackingCode: string | null;
+  trackingCodes: string[];
+  marketplaceOrderSn: string | null;
   goodsValue: number | null;
   phoneLast3: string | null;
   pancakeInsertedAt: Date | null;
@@ -85,7 +89,18 @@ export type Persisted =
   | { kind: 'REJECT'; code: ExternalClaimRejectCode }
   | { kind: 'SEARCHING' }
   | { kind: 'UNKNOWN_SOURCE' }
+  | { kind: 'OWN'; own: OwnClaim }
   | { kind: 'CLAIM'; created: CreatedClaim };
+
+/** Claim sẵn có của chính khách gửi mã: trả lại trạng thái, không ghi lần thử. */
+export interface OwnClaim {
+  claimId: string;
+  state: string;
+  points: number;
+  channel: string | null;
+  maskedCode: string;
+  expectedCreditAt: Date | null;
+}
 
 const last3 = (phone: string | null): string | null => (phone && phone.length >= 3 ? phone.slice(-3) : null);
 
@@ -99,7 +114,7 @@ export function findExternalOrderByCode(db: Pick<Tx, 'externalOrder'>, code: str
 
 export const advisoryUserLock = (tx: Tx, userId: string) => tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`ext-claim:${userId}`}))`;
 
-const USER_SELECT = { id: true, phone: true, zaloId: true, isBlocked: true } as const;
+export const USER_SELECT = { id: true, phone: true, zaloId: true, isBlocked: true, role: true } as const;
 
 @Injectable()
 export class ExternalClaimService {
@@ -130,7 +145,7 @@ export class ExternalClaimService {
         await advisoryUserLock(tx, userId);
         const user = await tx.user.findUnique({ where: { id: userId }, select: USER_SELECT });
         const g = await this.gatherFacts(tx, user, code, cfg, now);
-        return this.persist(tx, { userId, code, cfg, now, decision: evaluateClaimRules(g.facts), order: g.order, existingClaimId: g.existingClaimId, attemptId: null });
+        return this.persist(tx, { userId, code, cfg, now, decision: evaluateClaimRules(g.facts), order: g.order, existingClaimId: g.existingClaimId, existingClaimOwnerId: g.existingClaimOwnerId, attemptId: null });
       },
       { timeout: 15_000, maxWait: 10_000 },
     );
@@ -159,8 +174,28 @@ export class ExternalClaimService {
         message: 'Đơn này cần nhân viên Tubu Tree kiểm tra trước khi tích điểm. Bạn không cần làm gì thêm.',
       };
     }
+    if (persisted.kind === 'OWN') return this.toOwnResponse(persisted.own);
     await this.notifyPending(userId, persisted.created);
     return this.toSubmitResponse(persisted.created, cfg);
+  }
+
+  private toOwnResponse(o: OwnClaim): SubmitExternalClaimResponse {
+    const review = o.state === 'REVIEW';
+    const message =
+      o.state === 'CREDITED'
+        ? 'Mã này đã được tích điểm cho bạn rồi.'
+        : review
+          ? 'Mã này đang được nhân viên Tubu Tree kiểm tra. Bạn không cần gửi lại.'
+          : 'Mã này bạn đã gửi rồi, điểm đang chờ cộng.';
+    return {
+      status: review ? 'REVIEW' : 'CLAIMED',
+      claimId: o.claimId,
+      channel: o.channel,
+      maskedCode: o.maskedCode,
+      points: o.points > 0 ? o.points : null,
+      expectedCreditAt: o.expectedCreditAt?.toISOString() ?? null,
+      message,
+    };
   }
 
   /** "Đơn ngoài app của bạn": không trả SĐT hay payload, mã che bớt. */
@@ -223,8 +258,8 @@ export class ExternalClaimService {
     code: string,
     cfg: ClaimConfig,
     now: Date,
-    opts: { skipAttemptLimits?: boolean } = {},
-  ): Promise<{ facts: ClaimFacts; order: ClaimOrderRow | null; existingClaimId: string | null }> {
+    opts: { skipAttemptLimits?: boolean; orderId?: string } = {},
+  ): Promise<{ facts: ClaimFacts; order: ClaimOrderRow | null; existingClaimId: string | null; existingClaimOwnerId: string | null }> {
     const userId = user?.id ?? '';
     const sinceNotFound = new Date(now.getTime() - 2 * DAY_MS);
     const [notFound, attemptsToday, appOrder, found] = await Promise.all([
@@ -236,19 +271,40 @@ export class ExternalClaimService {
         where: { OR: [{ shippingCode: { equals: code, mode: 'insensitive' } }, { gomdonPartnerCode: { equals: code, mode: 'insensitive' } }] },
         select: { id: true },
       }),
-      findExternalOrderByCode(tx, code),
+      opts.orderId ? tx.externalOrder.findUnique({ where: { id: opts.orderId } }) : findExternalOrderByCode(tx, code),
     ]);
 
     let order: ClaimOrderRow | null = null;
-    let claim: { id: string; reopenable: boolean } | null = null;
+    let claim: { id: string; reopenable: boolean; own: boolean; state: string; ownerId: string | null } | null = null;
+    let codeTaken = false;
     if (found) {
       await tx.$queryRaw`SELECT "id" FROM "external_orders" WHERE "id" = ${found.id} FOR UPDATE`;
       order = (await tx.externalOrder.findUniqueOrThrow({ where: { id: found.id } })) as ClaimOrderRow;
       const existing = await tx.externalPointsClaim.findUnique({
         where: { externalOrderId: found.id },
-        select: { id: true, state: true, claimedCode: true, decidedById: true },
+        select: { id: true, state: true, claimedCode: true, decidedById: true, userId: true },
       });
-      if (existing) claim = { id: existing.id, reopenable: existing.state === 'VOIDED' && existing.claimedCode === null && existing.decidedById !== null };
+      if (existing) {
+        claim = {
+          id: existing.id,
+          reopenable: existing.state === 'VOIDED' && existing.claimedCode === null && existing.decidedById !== null,
+          own: !!user && existing.userId === user.id,
+          state: existing.state,
+          ownerId: existing.userId,
+        };
+      }
+      // Pancake đôi khi tách một vận đơn thành nhiều dòng: một mã chỉ được tích một lần dù khác externalOrderId.
+      const codes = [...new Set([code, ...order.trackingCodes, ...(order.trackingCode ? [order.trackingCode] : [])])];
+      const sn = order.marketplaceOrderSn;
+      const other = await tx.externalPointsClaim.findFirst({
+        where: {
+          state: { not: 'VOIDED' },
+          externalOrderId: { not: order.id },
+          externalOrder: { OR: [{ trackingCodes: { hasSome: codes } }, ...(sn ? [{ marketplaceOrderSn: sn }] : [])] },
+        },
+        select: { id: true },
+      });
+      codeTaken = !!other;
     }
 
     const [claimsToday, month] = await Promise.all([
@@ -264,17 +320,19 @@ export class ExternalClaimService {
       cfg,
       userOk: !!user && isRealUser(user) && !!user.phone && !user.isBlocked,
       userPhoneLast3: last3(user?.phone ?? null),
+      userIsStaff: user?.role === 'STAFF' || user?.role === 'ADMIN',
       lockedUntil: lockedUntil(notFound.map((n) => n.createdAt), now),
       attemptsToday,
       isAppOrder: !!appOrder,
       order: order
         ? { source: order.source, status: order.status, insertedAt: order.pancakeInsertedAt ?? order.firstSeenAt, goodsValue: order.goodsValue, phoneLast3: order.phoneLast3 }
         : null,
-      claim: claim ? { reopenable: claim.reopenable } : null,
+      claim: claim ? { id: claim.id, reopenable: claim.reopenable, own: claim.own, state: claim.state } : null,
+      codeTaken,
       claimsToday,
       monthPoints: month._sum.points ?? 0,
     };
-    return { facts, order, existingClaimId: claim?.reopenable ? claim.id : null };
+    return { facts, order, existingClaimId: claim?.reopenable ? claim.id : null, existingClaimOwnerId: claim?.reopenable ? claim.ownerId : null };
   }
 
   /** Ghi kết quả quyết định (attempt, claim). Không ném trong transaction: lỗi nghiệp vụ trả về để commit attempt rồi mới ném ra ngoài. */
@@ -288,6 +346,7 @@ export class ExternalClaimService {
       decision: ClaimDecision;
       order: ClaimOrderRow | null;
       existingClaimId: string | null;
+      existingClaimOwnerId?: string | null;
       /** Rematch: attempt UNMATCHED đã có, cập nhật thay vì thêm dòng mới. */
       attemptId: string | null;
     },
@@ -303,6 +362,19 @@ export class ExternalClaimService {
       if (!UNRECORDED.includes(decision.code)) await addAttempt(`REJECTED_${decision.code}`, { externalOrderId: order?.id ?? null });
       return { kind: 'REJECT', code: decision.code };
     }
+    if (decision.kind === 'OWN_CLAIM') {
+      const own = await tx.externalPointsClaim.findUniqueOrThrow({ where: { id: decision.claimId }, select: { points: true, releaseAt: true } });
+      if (a.attemptId) {
+        await tx.externalClaimAttempt.updateMany({
+          where: { id: a.attemptId, resolvedAt: null },
+          data: { result: 'MATCHED', resolvedAt: now, externalOrderId: order?.id ?? null, note: 'Khách đã có claim cho mã này' },
+        });
+      }
+      return {
+        kind: 'OWN',
+        own: { claimId: decision.claimId, state: decision.state, points: own.points, channel: order?.channel ?? null, maskedCode: maskClaimCode(code), expectedCreditAt: own.releaseAt },
+      };
+    }
     if (decision.kind === 'UNMATCHED' || decision.kind === 'UNKNOWN_SOURCE') {
       const unknown = decision.kind === 'UNKNOWN_SOURCE';
       const externalOrderId = unknown ? (order?.id ?? null) : null;
@@ -312,7 +384,11 @@ export class ExternalClaimService {
       } else {
         // createMany skipDuplicates: unique một phần theo mã (một lần chờ mỗi mã). Trùng thì ghi NOT_FOUND mà không làm hỏng transaction (25P02).
         const res = await tx.externalClaimAttempt.createMany({ data: [{ userId, code, result: 'UNMATCHED', dayKey, externalOrderId, note }], skipDuplicates: true });
-        if (res.count === 0) await addAttempt('NOT_FOUND', { externalOrderId, note });
+        if (res.count === 0) {
+          // Mã đang chờ chính là của khách này (gửi lại): không ghi NOT_FOUND để không tính vào khoá 24h.
+          const waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
+          if (waiting?.userId !== userId) await addAttempt('NOT_FOUND', { externalOrderId, note });
+        }
       }
       return unknown ? { kind: 'UNKNOWN_SOURCE' } : { kind: 'SEARCHING' };
     }
@@ -349,6 +425,16 @@ export class ExternalClaimService {
       await addAttempt('REJECTED_ALREADY_CLAIMED', { externalOrderId: order.id });
       return { kind: 'REJECT', code: 'ALREADY_CLAIMED' };
     }
+    await recordClaimEvent(tx, {
+      claimId,
+      action: a.existingClaimId ? 'REOPEN_CLAIM' : 'CLAIM_CREATED',
+      actorId: userId,
+      fromState: a.existingClaimId ? 'VOIDED' : null,
+      toState: decision.state,
+      userIdBefore: a.existingClaimId ? (a.existingClaimOwnerId ?? null) : null,
+      userIdAfter: userId,
+      note: decision.reviewReason,
+    });
     if (a.attemptId) {
       await tx.externalClaimAttempt.updateMany({
         where: { id: a.attemptId, resolvedAt: null },
@@ -432,6 +518,7 @@ export class ExternalClaimService {
         decision: evaluateClaimRules(g.facts),
         order: g.order,
         existingClaimId: g.existingClaimId,
+        existingClaimOwnerId: g.existingClaimOwnerId,
         attemptId,
       });
       if (persisted.kind === 'REJECT') {
@@ -440,13 +527,14 @@ export class ExternalClaimService {
           data: { result: `REJECTED_${persisted.code}`, resolvedAt: now, externalOrderId: g.order?.id ?? null, note: 'Ghép tự động nhưng không đủ điều kiện' },
         });
       }
-      return { persisted, userId: attempt.userId, code: attempt.code };
+      return { persisted, userId: attempt.userId, code: attempt.code, ownClaim: g.facts.claim?.own === true };
     });
     if (!out) return 'NONE';
     if (out.persisted.kind === 'CLAIM') {
       await this.notifyPending(out.userId, out.persisted.created);
       return 'MATCHED';
     }
+    if (out.persisted.kind === 'OWN' || (out.persisted.kind === 'REJECT' && out.persisted.code === 'ALREADY_CLAIMED' && out.ownClaim)) return 'RESOLVED';
     if (out.persisted.kind === 'REJECT') {
       const detail = REJECT_HTTP[out.persisted.code].message.replace(/\.$/, '');
       await this.notifications
