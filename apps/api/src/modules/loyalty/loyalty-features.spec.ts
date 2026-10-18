@@ -669,12 +669,12 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     it('người dùng thật đổi GIFT → READY, mã QG-, hạn nhận theo waste.gift_claim_days, trừ tồn kho, sổ GIFT_REDEEM', async () => {
       const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', ...realUser }], { gifts: [giftRow({ stock: 2 })] });
       const before = Date.now();
-      const res = await new LoyaltyService(prisma, makeConfig({ 'waste.gift_claim_days': 60 })).redeemReward('u1', 'g1', 'key-00000012');
+      const res = await new LoyaltyService(prisma, makeConfig({ 'waste.gift_claim_days': 45 })).redeemReward('u1', 'g1', 'key-00000012');
       const r = db.redemptions[0]!;
       expect(r).toMatchObject({ status: 'READY', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, couponId: null });
       expect(r.code).toMatch(/^QG-[2-9A-HJKMNP-TV-Z]{8}$/);
-      expect((r.claimExpiresAt as Date).getTime() - before).toBeGreaterThanOrEqual(60 * DAY - 1000);
-      expect((r.claimExpiresAt as Date).getTime() - before).toBeLessThanOrEqual(60 * DAY + 5000);
+      expect((r.claimExpiresAt as Date).getTime() - before).toBeGreaterThanOrEqual(45 * DAY - 1000);
+      expect((r.claimExpiresAt as Date).getTime() - before).toBeLessThanOrEqual(45 * DAY + 5000);
       expect(db.gifts.get('g1')!.stock).toBe(1);
       expect(db.ledger).toEqual([expect.objectContaining({ delta: -30_000, reason: 'GIFT_REDEEM:g1', refType: 'GIFT', refId: r.id })]);
       expect(res).toMatchObject({ success: true, message: 'Đổi thành công Túi vải Tubu!', pointsSpent: 30_000, remainingPoints: 70_000, coupon: null });
