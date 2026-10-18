@@ -15,17 +15,19 @@ const placed = (over: Record<string, unknown> = {}) => ({
   paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: '2026-10-19T00:00:00Z', items: [], ...over,
 });
 
-const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn(), replace: vi.fn(), push: vi.fn() }));
+const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn(), replace: vi.fn(), push: vi.fn(), cartCalls: 0, twoLines: false }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: m.replace, push: m.push }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getCart: async () => ({
-    items: [{ id: 'i1', variationId: 'v1', productName: 'Dầu gội', variationName: null, slug: 'dau-goi', thumbnail: null, unitPrice: 100000, quantity: 1, stock: 5, total: 100000 }],
-    couponCode: null, subtotal: 100000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 1,
-  }),
+  getCart: async () => {
+    const line = (id: string) => ({ id, variationId: `v-${id}`, productName: 'Dầu gội', variationName: null, slug: 'dau-goi', thumbnail: null, unitPrice: 100000, quantity: 1, stock: 5, total: 100000 });
+    m.cartCalls += 1;
+    const items = m.twoLines ? (m.cartCalls === 1 ? [line('i1'), line('i2')] : [line('i2')]) : [line('i1')];
+    return { items, couponCode: null, subtotal: 100000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: items.length };
+  },
   getMe: async () => ({ pointsBalance: 0, walletBalance: 0 }),
   getMyCoupons: async () => [],
   getAddresses: async () => [ADDR],
@@ -55,6 +57,8 @@ beforeEach(() => {
   m.placeOrder.mockReset();
   m.replace.mockReset();
   m.push.mockReset();
+  m.cartCalls = 0;
+  m.twoLines = false;
 });
 afterEach(() => {
   mounted.forEach((x) => x.unmount());
@@ -101,5 +105,21 @@ describe('/thanh-toan — chuyển khoản sang trang QR riêng', () => {
     await flush(8);
     expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'COD' });
     expect(m.replace).not.toHaveBeenCalled();
+  });
+
+  it('đặt xong mà chưa kịp chuyển trang, giỏ nạp lại còn dòng khác → khoá trang, không còn nút Đặt hàng', async () => {
+    m.twoLines = true;
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['i1'] }));
+    m.placeOrder.mockResolvedValue(placed());
+    const r = await mount();
+    click(radio(r, 'Chuyển khoản ngân hàng'));
+    await flush(4);
+    click(byText(r.container, 'button', 'Đặt hàng'));
+    await flush(10);
+    expect(m.replace).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-9');
+    expect(r.container.textContent).not.toContain('Đặt hàng thành công');
+    expect(byText(r.container, 'button', 'Đặt hàng')).toBeFalsy();
+    expect(r.container.querySelector('a[href="/thanh-toan/chuyen-khoan/TB-9"]')).not.toBeNull();
+    expect(m.placeOrder).toHaveBeenCalledTimes(1);
   });
 });

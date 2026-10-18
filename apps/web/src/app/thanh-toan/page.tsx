@@ -51,6 +51,7 @@ import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoic
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
 import { createOrderKeyRing } from '@/lib/order-key-ring';
+import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 
@@ -75,6 +76,8 @@ export default function CheckoutPage() {
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [attachWaste, setAttachWaste] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
+  // Mã đơn chuyển khoản đã đặt xong, đang chờ router.replace hoàn tất: trang khoá lại, nếu không giỏ nạp lại còn dòng khác thì nút Đặt hàng bật lại và bấm thêm sẽ tạo đơn thứ hai với key mới.
+  const [redirectingCode, setRedirectingCode] = useState<string | null>(null);
   // Một key cho một nội dung đơn trong phiên thanh toán: bấm lại sau lỗi mạng gửi lại cùng đơn; đổi nội dung thì key mới.
   const orderKeys = useRef(createOrderKeyRing());
 
@@ -92,7 +95,9 @@ export default function CheckoutPage() {
     queryFn: () => getWasteMe(coreHttp),
     enabled: phase === 'authenticated' && pickupFlag,
   });
-  const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
+  const attachable = attachablePickup(wasteMeQ.data, pickupFlag);
+  // Chưa có yêu cầu thu kèm thì dòng dẫn sang màn tạo yêu cầu; màn đó chưa có trên web thì ẩn dòng, không dẫn khách tới 404.
+  const pickupReq = attachable === null && !isWebRouteReady('/doi-rac/tao') ? undefined : attachable;
 
   // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
   // chuyển sang tính tiền cả giỏ). Chỉ đối chiếu với giỏ thật khi đã tải xong để không xoá nhầm lựa chọn.
@@ -221,6 +226,7 @@ export default function CheckoutPage() {
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);
       // Chuyển khoản: sang trang VietQR để khách trả ngay (đối soát xong đơn tự xác nhận), như Mini App.
+      if (paymentToSend === 'BANK_TRANSFER') setRedirectingCode(order.code);
       if (paymentToSend === 'BANK_TRANSFER') router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
     onError: (e) => {
@@ -270,6 +276,21 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo="/thanh-toan" />
+      </Shell>
+    );
+  }
+
+  if (redirectingCode) {
+    return (
+      <Shell>
+        <div className="py-16 text-center">
+          <p role="status" className="text-stone-700">
+            Đang chuyển tới trang thanh toán…
+          </p>
+          <Link href={`/thanh-toan/chuyen-khoan/${encodeURIComponent(redirectingCode)}`} className={`mt-4 inline-block ${ui.btnPrimary}`}>
+            Mở trang thanh toán
+          </Link>
+        </div>
       </Shell>
     );
   }
