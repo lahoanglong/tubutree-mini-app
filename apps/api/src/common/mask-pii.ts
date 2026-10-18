@@ -24,3 +24,9 @@ export function maskPhoneKeepLast3(phone: string | null | undefined): string {
   if (!phone) return '';
   return `${'*'.repeat(Math.max(phone.length - 3, 0))}${phone.slice(-3)}`;
 }
+
+/**
+ * Dãy từ 8 chữ số trở lên, giữa hai chữ số liền nhau có tối đa 2 ký tự cách (khoảng trắng . , - _ /): SĐT hay số tài khoản
+ * viết tách (`0912-345-678`, `0912,345,678`, `1903 1234 5678`). Kiểm trên chuỗi đã chuẩn hoá NFKC.
+ */
+export const PHONE_LIKE_RUN = /\p{Nd}(?:[\s.,\-_/]{0,2}\p{Nd}){7,}/u;

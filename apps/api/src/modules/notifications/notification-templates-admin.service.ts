@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PHONE_LIKE_RUN } from '../../common/mask-pii';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { UpdateNotificationTemplateDto } from './dto/update-notification-template.dto';
@@ -188,38 +189,80 @@ interface ShopLinks {
   miniApp: string | null;
 }
 
-const LINK_TOKEN = /(?:https?:\/*|www\.)[^\s]*|(?:[a-z0-9-]+\.)*zalo\.me\b[^\s]*/gi;
-const LONG_NUMBER = /\d(?:[\s.]*\d){7,}/;
+const SCHEME_LINK = /(?:https?:[/\\]*|www\.)\S+/giu;
+const BARE_DOMAIN = /(?<![\p{L}\p{N}_@.\-/\\])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?/giu;
+const PLACEHOLDER = /\{\{[^{}]*\}\}/g;
+/** Đuôi tên miền hay gặp ở link rút gọn / lừa đảo: tên miền trần không có đường dẫn chỉ tính là link khi có đuôi này (để "Tp.HCM" không bị chặn). */
+const COMMON_TLDS = new Set(
+  (
+    'com net org info biz vn io ly me co cc xyz top site online shop store app dev link click live pro asia tk ml ga cf gq ' +
+    'ru cn us uk de fr jp kr sg th id my ph in ai gg to tv ws so pw fun icu vip win bid club life today world space website ' +
+    'tech page one cloud digital email name mobi'
+  ).split(' '),
+);
+const TRAILING_PUNCT = /[),.;:!?'"]+$/u;
 const TUBUTREE_HOST = /(^|\.)tubutree\.(com|vn|com\.vn)$/i;
 
 const stripScheme = (url: string) => url.replace(/^https?:\/*/i, '').replace(/^www\./i, '');
 
-function isShopLink(token: string, shop: ShopLinks): boolean {
-  const bare = stripScheme(token);
-  const host = bare.split(/[/?#]/, 1)[0]!.toLowerCase();
-  if (TUBUTREE_HOST.test(host)) return true;
-  if (host !== 'zalo.me') return false;
-  const rest = bare.slice(host.length).replace(/^\//, '');
-  if (shop.oaId && rest.split(/[/?#]/, 1)[0] === shop.oaId) return true;
-  if (!shop.miniApp || !bare.startsWith(shop.miniApp)) return false;
-  const after = bare.slice(shop.miniApp.length);
-  return after === '' || /^[/?#]/.test(after);
+/** Mọi chuỗi dạng link trong nội dung: có scheme / www., hoặc tên miền trần (`bit.ly/abc`). Biến `{{key}}` không phải link. */
+function linkTokens(text: string): string[] {
+  const blank = (m: string) => ' '.repeat(m.length);
+  let rest = text.replace(PLACEHOLDER, blank);
+  const out: string[] = [];
+  for (const re of [SCHEME_LINK, BARE_DOMAIN]) {
+    for (const m of rest.matchAll(re)) {
+      const t = m[0].replace(TRAILING_PUNCT, '');
+      if (t && (re === SCHEME_LINK || /[/?#:]/.test(t) || COMMON_TLDS.has(t.split('.').pop()!.toLowerCase()))) out.push(t);
+    }
+    rest = rest.replace(re, blank);
+  }
+  return out;
 }
 
 /**
- * Nội dung nhân viên sửa không được mang số tài khoản / SĐT (dãy từ 8 chữ số, kể cả cách bằng dấu cách hay chấm) hay link
- * ngoài tubutree và OA / Mini App của shop: tin gửi từ kênh chính thức, khách tin là lời Tubu.
+ * Link của shop: tubutree.com|vn|com.vn, Zalo OA (`zalo.me/<ZALO_OA_ID>`) và Mini App (`app.miniapp_base_url`). Trả mã số
+ * định danh của OA / Mini App trong link (để không tính vào dãy chữ số), chuỗi rỗng nếu là link tubutree, null nếu không phải
+ * link shop. Host đọc bằng URL; có `\` trong phần host thì không nhận.
+ */
+function shopLinkId(token: string, shop: ShopLinks): string | null {
+  const url = /^https?:/i.test(token) ? token : `https://${token}`;
+  const authority = url.replace(/^https?:[/\\]*/i, '').split(/[/?#]/, 1)[0]!;
+  if (authority.includes('\\')) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.toLowerCase();
+  if (TUBUTREE_HOST.test(host)) return '';
+  if (host !== 'zalo.me') return null;
+  const first = u.pathname.split('/')[1] ?? '';
+  if (shop.oaId && first === shop.oaId) return shop.oaId;
+  const where = `${host}${u.pathname}`;
+  if (shop.miniApp && (where === shop.miniApp || where.startsWith(`${shop.miniApp}/`))) return shop.miniApp.split('/').pop() ?? '';
+  return null;
+}
+
+/**
+ * Nội dung nhân viên sửa không được mang link ngoài tubutree và OA / Mini App của shop, hay số tài khoản / SĐT (dãy từ 8
+ * chữ số, kể cả viết tách hay nằm trong query của link): tin gửi từ kênh chính thức, khách tin là lời Tubu. Chuẩn hoá NFKC
+ * trước (chữ số, chữ toàn chiều rộng thành ASCII).
  */
 function assertStaffBody(body: string, shop: ShopLinks): void {
-  const tokens = (body.match(LINK_TOKEN) ?? []).map((t) => t.replace(/[),.;:!?]+$/, ''));
-  const foreign = tokens.find((t) => !isShopLink(t, shop));
-  if (foreign) {
-    throw new BadRequestException(`Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link "${foreign}".`);
+  const text = body.normalize('NFKC');
+  let digits = text;
+  for (const token of linkTokens(text)) {
+    const id = shopLinkId(token, shop);
+    if (id === null) {
+      throw new BadRequestException(`Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link "${token}".`);
+    }
+    if (id) digits = digits.split(token).join(token.replace(id, ''));
   }
-  const rest = tokens.reduce((acc, t) => acc.split(t).join(' '), body);
-  if (LONG_NUMBER.test(rest)) {
+  if (PHONE_LIKE_RUN.test(digits)) {
     throw new BadRequestException(
-      'Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại). Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.',
+      'Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể cả viết tách. Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.',
     );
   }
 }
