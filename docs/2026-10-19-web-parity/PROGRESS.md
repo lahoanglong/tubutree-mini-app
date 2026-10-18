@@ -33,3 +33,8 @@ Phiên chạy: `tubutree-mini-app-8c` (Opus 5.5). Nền: `web/base` db9adca0. Nh
 ## Lịch chạy (đổi lúc 2026-10-18 23:00)
 
 Cuốn chiếu thay vì chờ hết đợt: luôn giữ tối đa 4 lane chạy (Q8); lane nào gộp xong thì lane kế tiếp theo thứ tự Q7 vào ngay. Hàng đợi sau đợt 0b: shop, order, account, loyalty, community, affiliate, game, pro, recycle. Lý do: kịp xong trước sáng 2026-10-19 theo yêu cầu chủ dự án.
+
+## Việc chưa xong ở lane account
+
+- Thông báo REORDER_REMINDER: Mini App mở ReorderSheet (tra purchased-items theo variation_id, chọn mặt hàng bằng pickReminderItem); web hiện chỉ có link tới trang sản phẩm vì ReorderSheet của lane order chưa gộp vào web/integration. Chưa ngang Mini App. Làm tiếp sau khi lane order gộp: nhánh 'reorder' trong `thong-bao/page.tsx` gọi purchased-items, mở sheet, có ref chặn bấm đúp, chỉ rơi về link khi không tìm thấy.
+- Lỗi chung với Mini App (ngoài phạm vi lane): `edit-profile.tsx` của Mini App gửi `dob` ở mọi lần lưu; API chỉ cho đặt ngày sinh một lần nên khách đã có ngày sinh sẽ bị 400 và không lưu được tên/email. Web đã sửa (không gửi lại dob đã đặt); Mini App cần chủ duyệt sửa.
