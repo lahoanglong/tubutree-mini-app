@@ -29,6 +29,8 @@ import { isGomdonRecyclingEnabled } from '../../src/modules/integrations/gomdon/
 import { PICKUP_PAUSED_MESSAGE, PICKUP_REQUEST_GONE_MESSAGE } from '../../src/modules/waste-exchange/pickup/waste-pickup-attach';
 import { WasteNotifierService } from '../../src/modules/waste-exchange/core/waste-notifier.service';
 import { WasteShipLockService } from '../../src/modules/waste-exchange/core/waste-ship-lock.service';
+import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-config.service';
+import { WasteExpiryCron } from '../../src/modules/waste-exchange/pickup/waste-expiry.cron';
 import { cleanupWaste, createWarehouse, createWasteItem, createWasteRequest, raceWithHold } from './fixtures/waste-fixtures';
 import { createUser, deleteItData, randCode, setConfig, summarize, warmPool } from './helpers';
 
@@ -47,6 +49,7 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
   let checkout: CheckoutService;
   let cart: CartService;
   let shipLock: WasteShipLockService;
+  let expiry: WasteExpiryCron;
   let warehouse: Awaited<ReturnType<typeof createWarehouse>>;
   let item: Awaited<ReturnType<typeof createWasteItem>>;
   let savedConfig: { key: string; value: unknown }[] = [];
@@ -81,6 +84,8 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
         { provide: LifecycleService, useValue: { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefined) } },
         { provide: CashbackProviderRegistry, useValue: { all: () => [] } },
         WasteShipLockService,
+        WasteConfigService,
+        WasteExpiryCron,
         { provide: WasteNotifierService, useValue: { shipLocked: jest.fn().mockResolvedValue(undefined), requestExpired: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
@@ -90,6 +95,7 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
     checkout = moduleRef.get(CheckoutService);
     cart = moduleRef.get(CartService);
     shipLock = moduleRef.get(WasteShipLockService);
+    expiry = moduleRef.get(WasteExpiryCron);
     savedConfig = await prisma.systemConfig.findMany({ where: { key: { in: CONFIG_KEYS } } });
     await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.2);
@@ -247,5 +253,38 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
     expect((s.rejected[0]!.reason as Error).message).toBe(PICKUP_PAUSED_MESSAGE);
     expect(await prisma.order.count({ where: { userId: u.id } })).toBe(0);
     expect(await prisma.wasteRequest.findUniqueOrThrow({ where: { id: req.id } })).toMatchObject({ status: 'CANCELLED', closeReason: 'SHIP_LOCKED' });
+  });
+
+  it('attach day 5 then expiry cron day 7 does not close (§17.3)', async () => {
+    const { u, addr, req } = await pickupCustomer();
+    const DAY = 86_400_000;
+    await prisma.wasteRequest.update({ where: { id: req.id }, data: { createdAt: new Date(Date.now() - 5 * DAY), expiresAt: new Date(Date.now() + 2 * DAY) } });
+    await place(u, addr, req);
+    await expiry.run(new Date(Date.now() + 2 * DAY + 60_000));
+    expect(await prisma.wasteRequest.findUniqueOrThrow({ where: { id: req.id } })).toMatchObject({ status: 'OPEN', expiresAt: null, closeReason: null });
+    expect(await prisma.wasteEvent.count({ where: { requestId: req.id, kind: 'REQUEST_EXPIRED' } })).toBe(0);
+  });
+
+  it('checkout attach then expiry cron', async () => {
+    const { u, addr, req } = await pickupCustomer();
+    await prisma.wasteRequest.update({ where: { id: req.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    const s = summarize<unknown>(await raceWithHold(prisma, requestRow(req.id), () => place(u, addr, req), () => expiry.run(new Date())));
+    expectNoErrors(s);
+    const row = await prisma.wasteRequest.findUniqueOrThrow({ where: { id: req.id } });
+    expect(row.status).toBe('OPEN');
+    expect(row.orderId).not.toBeNull();
+    expect(await prisma.wasteEvent.count({ where: { requestId: req.id, kind: 'REQUEST_EXPIRED' } })).toBe(0);
+  });
+
+  it('expiry cron then checkout attach', async () => {
+    const { u, addr, req } = await pickupCustomer();
+    await prisma.wasteRequest.update({ where: { id: req.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    const s = summarize<unknown>(await raceWithHold(prisma, requestRow(req.id), () => expiry.run(new Date()), () => place(u, addr, req)));
+    expect(s.errors.join()).not.toMatch(/40P01|P2034/);
+    expect(s.rejected).toHaveLength(1);
+    expect((s.rejected[0]!.reason as Error).message).toBe(PICKUP_REQUEST_GONE_MESSAGE);
+    expect(await prisma.order.count({ where: { userId: u.id } })).toBe(0);
+    expect(await prisma.wasteRequest.findUniqueOrThrow({ where: { id: req.id } })).toMatchObject({ status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' });
+    expect(await prisma.wasteEvent.count({ where: { requestId: req.id, kind: 'REQUEST_EXPIRED' } })).toBe(1);
   });
 });
