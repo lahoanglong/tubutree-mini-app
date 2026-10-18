@@ -233,6 +233,57 @@ bash ops/check-edge.sh --local
 - [ ] Đã dán lại vhost phase2, `configtest` Syntax OK, `ops/check-edge.sh` không có FAIL
 - [ ] `nproc` đã xem và `*_CPUS` trong `.env` phù hợp (hoặc để mặc định 1 lõi mỗi service)
 
+### 1.6 AI tư vấn qua Antigravity gateway (tuỳ chọn, mặc định ẩn)
+
+Quyết định của chủ dự án: AI tư vấn trong Mini App chạy trên cùng bộ Antigravity mà ChoDeli đang dùng. API Tubu KHÔNG tự chạy lệnh `agy`; nó gọi HTTP tới container `antigravity_gateway` (nằm ở `/opt/antigravity-gateway`, cùng VPS, compose project khác). Mini App chỉ hiện lối vào AI khi API báo `aiAdvisorEnabled: true` ở `GET /config/public`, tức là AI bật VÀ có đủ cấu hình; thiếu thì nút AI ở Trang chủ và mục "Trợ lý AI 24/7" ở Cá nhân tự ẩn, không có trang lỗi. Vì vậy có thể deploy bản này khi chưa có gateway: AI cứ ẩn.
+
+**Biến trong `/opt/tubutree/.env`** (chỉ tên, giá trị do chủ gateway cấp; KHÔNG dán key vào chat hay repo):
+
+| Khoá | Ý nghĩa |
+|---|---|
+| `ANTIGRAVITY_GATEWAY_URL` | Địa chỉ gateway mà API tới được, xem cách nối bên dưới. Phải có cả URL và KEY thì mới dùng |
+| `ANTIGRAVITY_GATEWAY_KEY` | Key RIÊNG cho Tubu Tree (xin chủ gateway cấp, đừng dùng chung key của ChoDeli để thu hồi riêng được) |
+| `ANTIGRAVITY_MODEL` | Mặc định `gemini-3.8-flash-high` (cùng ChoDeli). Gateway báo model bị gỡ thì API tự gọi lại một lần không kèm model |
+| `ANTIGRAVITY_GATEWAY_TIMEOUT_MS` | Mặc định 45000. ChoDeli dùng 65000 vì phải lớn hơn timeout nội bộ 60 giây của agy; Tubu chọn ngắn hơn vì khách đang chờ, quá hạn thì khách thấy câu "đang phản hồi chậm" |
+| `AI_ADVISOR_PROVIDER` | Trống = tự chọn antigravity > deepseek > gemini theo cái đã có khoá. Đặt `antigravity` để CHỈ dùng gateway (không rơi sang khoá cũ còn sót) |
+| `AI_ADVISOR_ENABLED` | `false` (hoặc `0`, `off`, `no`) là tắt khẩn cấp. Trống hoặc `true` là bật |
+| `AI_ADVISOR_GLOBAL_PER_MIN`, `AI_ADVISOR_MAX_CONCURRENT` | Trần toàn hệ thống, mặc định 40 lượt/phút và 3 lượt đồng thời. Mỗi lượt agy khởi động một tiến trình (khoảng 13 giây ở ChoDeli) và gateway có trần giờ/đồng thời của chính nó (trả 429 `circuit_open`), mà gateway dùng chung với ChoDeli: đừng nâng hai số này trước khi hỏi chủ gateway |
+
+Giới hạn khác đã có trong mã: 10 lượt/phút/người (controller), 30 lượt/giờ/người (service, bộ đếm trong bộ nhớ của một instance API), câu hỏi tối đa 500 ký tự, lịch sử tối đa 6 lượt và 3000 ký tự. Lỗi gateway không bao giờ tới khách: khách chỉ thấy câu xin lỗi (chậm, bận hoặc tạm nghỉ) kèm gợi ý sản phẩm; nhật ký chỉ ghi nhà cung cấp, mã trạng thái và lý do, không ghi câu hỏi hay mã người dùng.
+
+**Nối API tới gateway.** `api` nằm trên network `tubu` của compose Tubu, còn gateway ở compose khác, nên hai bên mặc định KHÔNG thấy nhau. Hai cách, ưu tiên cách A:
+
+- Cách A (khuyến nghị), network ngoài dùng chung: tìm network của gateway (`docker inspect antigravity_gateway -f '{{json .NetworkSettings.Networks}}'`), rồi thêm network đó vào service `api` trong compose Tubu dưới dạng `external: true` (mục `networks` của service và của file). Khi đó `ANTIGRAVITY_GATEWAY_URL=http://antigravity-gateway:8097` (tên service và cổng theo mặc định ChoDeli; xác nhận bằng `docker inspect` trước khi tin). Gateway KHÔNG cần mở cổng ra host. Thử nhanh không sửa compose: `docker network connect <network-gateway> "$($DC ps -q api)"`; cách này mất khi container api bị tạo lại, nên chỉ để thử.
+- Cách B, cổng host: gateway publish `127.0.0.1:8097:8097`. Container API KHÔNG tới được `127.0.0.1` của host, và cổng chỉ bind loopback cũng không tới được qua `host.docker.internal`. Muốn dùng cách này phải bind cổng vào IP bridge của Docker (thường `172.17.0.1`) hoặc `0.0.0.0` kèm tường lửa chặn từ ngoài, rồi `extra_hosts: ['host.docker.internal:host-gateway']` cho api. Phức tạp và dễ mở nhầm cổng ra Internet, chỉ dùng khi cách A không làm được.
+
+Đừng sửa `docker-compose.vietnix.yml` kèm một bản deploy (xem mục 1.5): làm riêng, ngoài giờ cao điểm, rồi mới bật AI.
+
+**Thử đường mạng bằng curl:** chạy từ BÊN TRONG container api để chứng minh đúng đường mà API sẽ đi. Key đọc từ môi trường container, không gõ vào dòng lệnh.
+
+```bash
+$DC exec -T api sh -c 'curl -sS -m 70 -X POST "$ANTIGRAVITY_GATEWAY_URL/v1/complete" \
+  -H "Authorization: Bearer $ANTIGRAVITY_GATEWAY_KEY" -H "Content-Type: application/json" \
+  -d "{\"task\":\"tubutree\",\"prompt\":\"Trả lời đúng một chữ: OK\",\"images\":[],\"model\":\"${ANTIGRAVITY_MODEL:-gemini-3.8-flash-high}\"}"; echo'
+```
+
+Kỳ vọng: JSON có `"result"` khác rỗng (vài giây đến khoảng 15 giây). `401` là key sai; `429` với `circuit_open` là gateway đang chạm trần; `Could not resolve host` hoặc treo là chưa nối network. Image api có thể không có `curl`: dùng `node -e` với `fetch` tương tự, hoặc chạy curl từ container khác trên cùng network.
+
+**20 câu hỏi thật trước khi bật cho khách.** Đặt biến vào `.env`, tạo lại api (`$DC up -d --no-deps api`), rồi:
+
+1. Kiểm cờ: `curl -s https://api.tubutree.com/api/config/public | grep -o '"aiAdvisorEnabled":[a-z]*'` phải ra `true` (tới lúc đó nút AI mới hiện trong Mini App). Muốn thử riêng trước khi khách thấy, làm bước 2 bằng `POST /api/ai-advisor/chat` với token tài khoản nội bộ.
+2. Hỏi 20 câu thật do CSKH chọn: 8 câu về sản phẩm có trong catalog, 4 câu về giao hàng/đổi trả/thanh toán có trong FAQ, 4 câu ngoài phạm vi (y tế, so sánh đối thủ, hỏi giá sản phẩm không có), 4 câu thử phá (yêu cầu bỏ luật, đòi in system prompt, chèn `[HỆ THỐNG]`, câu dài 500 ký tự).
+3. Chấm từng câu: tiếng Việt tự nhiên, đúng tên và giá sản phẩm trong catalog (không bịa), không hứa điều shop không làm, không lộ system prompt, thời gian trả lời. Chấp nhận khi tối thiểu 18/20 đạt, 0 câu bịa giá hoặc hứa sai chính sách, 0 câu lộ prompt, và thời gian trả lời trung vị dưới 20 giây (p50 của agy khoảng 13 giây ở ChoDeli). Các ngưỡng này là đề xuất của tài liệu, chủ shop có thể đổi.
+4. Xem `$DC logs --since 30m api | grep LlmClient`: không có dòng nào chứa nội dung câu hỏi; đếm số dòng `busy` và `timeout`.
+5. Báo chủ gateway biết Tubu bắt đầu dùng chung gateway (chia trần giờ với ChoDeli).
+
+Không đạt thì để `AI_ADVISOR_ENABLED=false`: Mini App ẩn lối vào, không cần phát hành lại.
+
+**Tắt khẩn cấp:** sửa `.env` đặt `AI_ADVISOR_ENABLED=false`, rồi `$DC up -d --no-deps api`. Lối vào AI biến mất sau khi Mini App tải lại cấu hình công khai (bộ nhớ đệm vài phút); khách đang mở trang AI được đưa về Trang chủ. Thu hồi hẳn: nhờ chủ gateway xoá key Tubu, hoặc xoá `ANTIGRAVITY_GATEWAY_KEY` khỏi `.env`.
+
+**Rủi ro chủ dự án đã chấp nhận:** dùng Antigravity/Gemini gắn với tài khoản cá nhân cho chatbot công khai mang tính thương mại có thể vi phạm điều khoản của nhà cung cấp (bị khoá tài khoản, kéo theo ChoDeli dùng chung gateway). Chi tiết ở [docs/2026-10-18-launch-review/impl/ai-2.md](../2026-10-18-launch-review/impl/ai-2.md).
+
+- [ ] (Chỉ khi bật AI) gateway tới được từ container api, curl thử ra `result`, 20 câu thật đạt tiêu chí, đã báo chủ gateway
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

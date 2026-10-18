@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -9,6 +9,11 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   aiChat: vi.fn(),
+  getPublicConfig: vi.fn(async () => ({})),
+}));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getPublicConfig: mocks.getPublicConfig,
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -57,6 +62,7 @@ async function ask(text: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.aiChat.mockResolvedValue(REPLY());
+  mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: true });
 });
 
 describe('AiAdvisorPage — hành vi giữ nguyên khi chuyển DS v2', () => {
@@ -88,9 +94,9 @@ describe('AiAdvisorPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(await screen.findByText('Mình gợi ý bạn thử loại này')).toBeInTheDocument();
   });
 
-  it('ô nhập giới hạn 2000 ký tự', () => {
+  it('ô nhập giới hạn 500 ký tự', () => {
     renderPage();
-    expect(input().maxLength).toBe(2000);
+    expect(input().maxLength).toBe(500);
   });
 
   it('ô nhập trống hoặc chỉ có khoảng trắng: nút Gửi khoá, không gửi', () => {
@@ -292,11 +298,11 @@ describe('AiAdvisorPage — cuộn, phím Enter, lưu ý, thử lại (D5-12)', 
     expect(mocks.aiChat).toHaveBeenCalledTimes(1);
   });
 
-  it('ô nhập là ô nhiều dòng (textarea) vẫn giữ tên truy cập và giới hạn 2000 ký tự', () => {
+  it('ô nhập là ô nhiều dòng (textarea) vẫn giữ tên truy cập và giới hạn 500 ký tự', () => {
     renderPage();
     expect(input().tagName).toBe('TEXTAREA');
     expect(screen.getByRole('textbox', { name: 'Nhập câu hỏi' })).toBe(input());
-    expect(input().maxLength).toBe(2000);
+    expect(input().maxLength).toBe(500);
   });
 
   it('luôn có dòng nhỏ "Gợi ý chỉ để tham khảo" — cả lúc chưa chat và sau khi có trả lời', async () => {
@@ -358,5 +364,20 @@ describe('AiAdvisorPage — cuộn, phím Enter, lưu ý, thử lại (D5-12)', 
     await ask('Câu 2');
     await screen.findByText('Ổn rồi');
     expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+  });
+});
+
+describe('Công tắc tắt AI', () => {
+  it('server báo tắt → link cũ vào trang được đưa về Trang chủ, không hiện khung chat lỗi', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: false });
+    renderPage();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true }));
+  });
+
+  it('server báo bật hoặc chưa biết → không chuyển hướng', async () => {
+    renderPage();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    await act(async () => {});
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 });

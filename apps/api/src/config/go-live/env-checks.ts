@@ -1,4 +1,5 @@
 import { envSchema } from '../env.validation';
+import { isAdvisorEnabled, providerConfigured, resolveProviderOrder } from '../../modules/ai-advisor/advisor-config';
 import { resolveOpsEmailConfig } from '../ops-email-config';
 import { describeSecret, envValue, looksLikePlaceholder } from './secrets';
 import { fail, pass, warn, type CheckResult, type Env } from './types';
@@ -11,6 +12,7 @@ const G_ZALOPAY = 'ZaloPay';
 const G_AT = 'Accesstrade';
 const G_IMG = 'Ảnh (Cloudinary)';
 const G_OPS = 'Báo động vận hành';
+const G_AI = 'AI tư vấn';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
@@ -324,6 +326,24 @@ function cloudinaryChecks(env: Env): CheckResult[] {
   ];
 }
 
+function aiChecks(env: Env): CheckResult[] {
+  const title = 'AI tư vấn (Antigravity gateway)';
+  const get = (k: string) => envValue(env, k);
+  if (!isAdvisorEnabled(get)) {
+    return [pass(G_AI, 'env.ai_advisor', title, 'AI_ADVISOR_ENABLED đang tắt: Mini App ẩn lối vào AI')];
+  }
+  const half = ['ANTIGRAVITY_GATEWAY_URL', 'ANTIGRAVITY_GATEWAY_KEY'].filter((k) => !get(k));
+  if (half.length === 1) {
+    return [warn(G_AI, 'env.ai_advisor', title, `thiếu ${half[0]}`, 'Đặt đủ ANTIGRAVITY_GATEWAY_URL và ANTIGRAVITY_GATEWAY_KEY hoặc xoá cả hai; thiếu một thì gateway không được dùng.')];
+  }
+  if (resolveProviderOrder(get).length === 0) {
+    const picked = get('AI_ADVISOR_PROVIDER');
+    const why = picked && !providerConfigured(get, picked as 'antigravity' | 'deepseek' | 'gemini') ? `AI_ADVISOR_PROVIDER=${picked} nhưng provider đó chưa đủ khoá` : 'chưa có provider nào';
+    return [warn(G_AI, 'env.ai_advisor', title, `${why}: Mini App sẽ ẩn lối vào AI`, 'Chủ ý chưa bật AI thì bỏ qua. Muốn bật: đặt ANTIGRAVITY_GATEWAY_URL và ANTIGRAVITY_GATEWAY_KEY (runbook mục AI), chạy thử 20 câu hỏi thật rồi mới mở.')];
+  }
+  return [pass(G_AI, 'env.ai_advisor', title, `provider dùng: ${resolveProviderOrder(get).join(' > ')}`)];
+}
+
 function opsChecks(env: Env): CheckResult[] {
   const out: CheckResult[] = [];
 
@@ -406,6 +426,7 @@ export function evaluateEnv(env: Env): CheckResult[] {
     ...zalopayChecks(env),
     ...accesstradeChecks(env),
     ...cloudinaryChecks(env),
+    ...aiChecks(env),
     ...opsChecks(env),
   ];
 }

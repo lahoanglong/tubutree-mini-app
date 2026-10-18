@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Page, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation } from '@tanstack/react-query';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
@@ -38,6 +39,13 @@ export default function AiAdvisorPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  const cfg = usePublicConfig();
+  const aiOff = cfg.isLoaded && cfg.aiAdvisorEnabled !== true;
+
+  // Link cũ/đã lưu tới trang khi AI bị tắt: đưa về Trang chủ thay vì để khách gõ rồi nhận lỗi.
+  useEffect(() => {
+    if (aiOff) navigate('/', { replace: true });
+  }, [aiOff, navigate]);
 
   const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
     list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
@@ -226,7 +234,7 @@ export default function AiAdvisorPage() {
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            maxLength={2000}
+            maxLength={500}
           />
         </div>
         {/* Không gộp isPending vào disabled: Button tự chặn bấm lại khi loading, còn disabled sẽ tắt luôn spinner. */}

@@ -7,6 +7,7 @@ import { EVENT_REWARD_MAX_POINTS } from '../feed/community-limits';
 import { DEALER_MAX_DISCOUNT_PCT_DEFAULT, DEALER_REVIEW_HOURS_DEFAULT } from '../dealer/dealer-config';
 import { FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
 import { publicCommunityUrl } from './community-links';
+import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
@@ -120,6 +121,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
       pointExpireMonths: normalizePointExpireMonths(pointExpireMonths),
     },
     homeNewCustomerLayout: homeNewCustomerLayout === true,
+    // Chỉ boolean: true khi AI bật VÀ có provider dùng được. Miniapp ẩn mọi lối vào AI khi không phải true (kể cả API cũ không trả).
+    aiAdvisorEnabled: isAdvisorAvailable((k) => process.env[k]),
     // Miniapp chỉ gọi /feed/public-preview khi cờ này true (API vẫn tự kiểm cờ và trả 404 khi tắt).
     communityPublicPreview: communityPublicPreview === true,
     // Chữ trên trang đăng ký đại lý ("giá sỉ đến X%", "xét duyệt trong N giờ"). Giá trị hỏng → null để miniapp bỏ con số.

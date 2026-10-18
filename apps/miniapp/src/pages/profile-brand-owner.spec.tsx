@@ -18,6 +18,10 @@ vi.mock('../services/account-api', () => ({
   getWallet: vi.fn().mockResolvedValue({ walletBalance: 0 }),
   getCoupons: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getPublicConfig: vi.fn().mockResolvedValue({}),
+}));
 vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: mocks.getOwnedBrand }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));

@@ -26,7 +26,7 @@ class ChatTurnDto {
 }
 
 class ChatDto {
-  @IsString() @MinLength(1) @MaxLength(2000) message!: string;
+  @IsString() @MinLength(1) @MaxLength(500) message!: string;
   // Cap rộng chỉ để chặn payload quá khổ — AiAdvisorService tự cắt còn MAX_HISTORY (6) lượt
   // gần nhất trước khi gọi LLM. Cap hẹp hơn số lượt hội thoại thực tế sẽ khiến ValidationPipe
   // (forbidNonWhitelisted) chặn cứng mọi request sau vài lượt chat, hỏng cả tính năng.
