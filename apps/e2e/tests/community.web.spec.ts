@@ -102,4 +102,57 @@ test.describe('Web khách: cộng đồng', () => {
     await page.goto('/cong-dong/xep-hang');
     await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/cong-dong/xep-hang')}`);
   });
+
+  test('chi tiết bài: hiện bài và câu trả lời, thả tim, gửi trả lời, báo cáo bình luận', async ({ page, api }) => {
+    mockSession(api);
+    api.get('/feed/p1', POST('p1', 'Lan Anh', { kind: 'QUESTION', title: 'Rửa bình sữa thế nào?', body: 'Mình cần mẹo rửa bình', commentCount: 1 }));
+    api.get('/feed/p1/comments', {
+      items: [{ id: 'c1', body: 'Ngâm nước ấm trước', author: 'Hạnh', avatar: null, badge: null, authorLevel: 1, isAccepted: false, createdAt: NOW, isOwner: false }],
+      nextCursor: null,
+    });
+    api.post('/feed/p1/react', { liked: true });
+    api.post('/feed/p1/comments', { id: 'c2' });
+    api.post('/feed/p1/report', { ok: true });
+    await page.goto('/cong-dong/p1');
+    await expect(page.getByRole('heading', { name: 'Rửa bình sữa thế nào?' })).toBeVisible();
+    await expect(page.getByText('Ngâm nước ấm trước')).toBeVisible();
+
+    const liked = api.waitForCall('POST', '/feed/p1/react');
+    await page.getByRole('button', { name: /Lượt thích/ }).click();
+    await liked;
+
+    await page.getByLabel('Viết trả lời…').fill('  Cảm ơn bạn  ');
+    const commented = api.waitForCall('POST', '/feed/p1/comments');
+    await page.getByRole('button', { name: 'Gửi', exact: true }).click();
+    expect((await commented).body).toEqual({ body: 'Cảm ơn bạn' });
+
+    await page.getByTestId('comment-row').getByRole('button', { name: 'Báo cáo' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Báo cáo' });
+    await dialog.getByLabel('Lý do báo cáo…').fill('Spam');
+    const reported = api.waitForCall('POST', '/feed/p1/report');
+    await dialog.getByRole('button', { name: 'Báo cáo', exact: true }).click();
+    expect((await reported).body).toEqual({ targetType: 'COMMENT', targetId: 'c1', reason: 'Spam' });
+    await expect(page.getByRole('status')).toContainText('Đã gửi báo cáo');
+  });
+
+  test('chi tiết bài của chủ bài: xoá xong về bảng tin', async ({ page, api }) => {
+    mockSession(api);
+    api.get('/config/public', {});
+    api.get('/feed', { posts: [], nextCursor: null });
+    api.get('/feed/p1', POST('p1', 'Lan', { isOwner: true }));
+    api.get('/feed/p1/comments', { items: [], nextCursor: null });
+    api.delete('/feed/p1', { ok: true });
+    await page.goto('/cong-dong/p1');
+    await page.getByRole('button', { name: 'Xoá', exact: true }).click();
+    const removed = api.waitForCall('DELETE', '/feed/p1');
+    await page.getByRole('dialog', { name: 'Xoá bài viết này?' }).getByRole('button', { name: 'Xoá', exact: true }).click();
+    await removed;
+    await expect(page).toHaveURL(/\/cong-dong$/);
+  });
+
+  test('chi tiết bài khi chưa đăng nhập: mời đăng nhập và quay lại đúng bài', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
+    await page.goto('/cong-dong/p1');
+    await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/cong-dong/p1')}`);
+  });
 });

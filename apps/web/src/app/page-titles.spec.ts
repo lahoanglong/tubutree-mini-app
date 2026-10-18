@@ -11,6 +11,7 @@ import { metadata as editProfile } from './tai-khoan/ho-so/layout';
 import { metadata as settings } from './tai-khoan/cai-dat/layout';
 import { metadata as notifications } from './tai-khoan/thong-bao/layout';
 import { metadata as leaderboard } from './cong-dong/xep-hang/layout';
+import { metadata as postDetail } from './cong-dong/[id]/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -31,7 +32,10 @@ const ACCOUNT: TitleCase[] = [
   ['/tai-khoan/thong-bao', notifications, 'Thông báo — Tubu Tree'],
 ];
 const LOYALTY: TitleCase[] = [];
-const COMMUNITY: TitleCase[] = [['/cong-dong/xep-hang', leaderboard, 'Bảng xếp hạng — Tubu Tree']];
+const COMMUNITY: TitleCase[] = [
+  ['/cong-dong/xep-hang', leaderboard, 'Bảng xếp hạng — Tubu Tree'],
+  ['/cong-dong/[id]', postDetail, 'Bài viết cộng đồng — Tubu Tree'],
+];
 const AFFILIATE: TitleCase[] = [];
 const GAME: TitleCase[] = [];
 const PRO: TitleCase[] = [];

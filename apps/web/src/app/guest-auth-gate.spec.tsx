@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  useParams: () => ({ code: 'TB-77' }),
+  useParams: () => ({ code: 'TB-77', id: 'p1' }),
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -45,6 +45,7 @@ import EditProfilePage from './tai-khoan/ho-so/page';
 import SettingsPage from './tai-khoan/cai-dat/page';
 import NotificationsPage from './tai-khoan/thong-bao/page';
 import LeaderboardPage from './cong-dong/xep-hang/page';
+import PostDetailPage from './cong-dong/[id]/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -78,7 +79,10 @@ const ACCOUNT: PageCase[] = [
   ['/tai-khoan/thong-bao', () => <NotificationsPage />, '/tai-khoan/thong-bao'],
 ];
 const LOYALTY: PageCase[] = [];
-const COMMUNITY: PageCase[] = [['/cong-dong/xep-hang', () => <LeaderboardPage />, '/cong-dong/xep-hang']];
+const COMMUNITY: PageCase[] = [
+  ['/cong-dong/xep-hang', () => <LeaderboardPage />, '/cong-dong/xep-hang'],
+  ['/cong-dong/[id]', () => <PostDetailPage />, '/cong-dong/p1'],
+];
 const AFFILIATE: PageCase[] = [];
 const GAME: PageCase[] = [];
 const PRO: PageCase[] = [];
