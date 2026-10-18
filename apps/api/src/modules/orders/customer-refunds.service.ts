@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { CustomerRefundKind, CustomerRefundStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -44,6 +44,23 @@ const DISMISS_REASON_MIN = 5;
  * tay theo SĐT, không bắt gõ tài khoản nhận trước. Gồm cả khoản huỷ/trả/tiền về muộn/trả dư của đơn hộ, không riêng END_CUSTOMER.
  */
 const isEndCustomerRow = (row: { kind: CustomerRefundKind; userId: string | null }) => row.kind === 'END_CUSTOMER' || row.userId === null;
+
+/**
+ * Nhân viên Kế toán chuyển khoản thay quản trị viên nhưng không tự xử lý khoản hoàn của chính mình, và không thay tài khoản
+ * nhận khách đã có: đổi tài khoản là đổi người nhận tiền, khách báo đổi thì quản trị viên sửa.
+ */
+function assertStaffMayHandle(
+  byStaff: boolean | undefined,
+  actorId: string,
+  row: { userId: string | null; bankAccountNo: string | null },
+  typedBank: BankDetails | null,
+): void {
+  if (!byStaff) return;
+  if (row.userId === actorId) throw new ForbiddenException('Không xử lý khoản hoàn tiền của chính mình — nhờ quản trị viên.');
+  if (typedBank && row.bankAccountNo) {
+    throw new ForbiddenException('Khoản này đã có tài khoản nhận của khách. Nhân viên không đổi tài khoản nhận — khách báo đổi thì nhờ quản trị viên.');
+  }
+}
 
 const MINE_SELECT = {
   id: true,
@@ -155,11 +172,12 @@ export class CustomerRefundsService {
   async claim(
     adminId: string,
     id: string,
-    opts: { bankName?: string; accountNumber?: string; accountName?: string } = {},
+    opts: { bankName?: string; accountNumber?: string; accountName?: string; byStaff?: boolean } = {},
   ) {
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     const typedBank = opts.accountNumber?.trim() ? normalizeBankDetails(opts) : null;
+    assertStaffMayHandle(opts.byStaff, adminId, row, typedBank);
     if (!isEndCustomerRow(row) && !row.bankAccountNo && !typedBank) {
       throw new BadRequestException('Khoản này chưa có tài khoản nhận. Nhập tài khoản khách cung cấp trước khi chuyển khoản.');
     }
@@ -212,6 +230,7 @@ export class CustomerRefundsService {
       accountName?: string;
       takeOver?: boolean;
       takeOverReason?: string;
+      byStaff?: boolean;
     } = {},
   ) {
     const bankRef = opts.bankRef?.trim();
@@ -219,6 +238,7 @@ export class CustomerRefundsService {
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     const typedBank = opts.accountNumber?.trim() ? normalizeBankDetails(opts) : null;
+    assertStaffMayHandle(opts.byStaff, adminId, row, typedBank);
     // Khoản của khách có tài khoản (huỷ/trả/tiền về muộn) phải có tài khoản nhận; khoản khách cuối đơn CTV chuyển theo SĐT.
     if (!isEndCustomerRow(row) && !row.bankAccountNo && !typedBank) {
       throw new BadRequestException('Khoản này chưa có tài khoản nhận. Nhập tài khoản khách cung cấp trước khi xác nhận.');
@@ -299,9 +319,10 @@ export class CustomerRefundsService {
    * vượt số đó); phần còn lại ghi thành khoản đã bỏ qua để tổng các khoản dư vẫn bằng số Pancake đã báo (báo lại không đẻ
    * khoản mới). Guard UNVERIFIED trong câu ghi: hai admin bấm cùng lúc (xác nhận / bỏ qua) chỉ một người thắng.
    */
-  async verifyOverpayment(adminId: string, id: string, input: { amount?: number; note?: string }) {
+  async verifyOverpayment(adminId: string, id: string, input: { amount?: number; note?: string; byStaff?: boolean }) {
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
+    assertStaffMayHandle(input.byStaff, adminId, row, null);
     if (row.kind !== 'OVERPAYMENT' || row.status !== 'UNVERIFIED') {
       throw new BadRequestException('Khoản này không còn chờ đối soát — vui lòng tải lại.');
     }
@@ -359,10 +380,11 @@ export class CustomerRefundsService {
   }
 
   /** Không phải tiền khách trả dư (cùng một lần chuyển, nhân viên sửa đơn trên Pancake…): đóng khoản, không báo khách. */
-  async dismissOverpayment(adminId: string, id: string, input: { reason: string }) {
+  async dismissOverpayment(adminId: string, id: string, input: { reason: string; byStaff?: boolean }) {
     const reason = input.reason?.trim() ?? '';
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
+    assertStaffMayHandle(input.byStaff, adminId, row, null);
     if (row.kind !== 'OVERPAYMENT' || row.status !== 'UNVERIFIED') {
       throw new BadRequestException('Khoản này không còn chờ đối soát — vui lòng tải lại.');
     }
