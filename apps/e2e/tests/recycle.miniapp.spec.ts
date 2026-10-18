@@ -141,7 +141,7 @@ test.describe('Đổi rác lấy quà — khách', () => {
     await page.goto('/recycle/r/wr-e2e-1');
     await expect(page.getByText('Xem kết quả cộng điểm')).toBeVisible();
     await page.getByRole('button', { name: 'Xem kết quả cộng điểm' }).click();
-    await expect(page.getByText('Đã cộng 3.000 điểm')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Đã cộng 3.000 điểm' })).toBeVisible();
   });
 
   test('gửi về kho: nhập mã vận đơn', async ({ page, api }) => {

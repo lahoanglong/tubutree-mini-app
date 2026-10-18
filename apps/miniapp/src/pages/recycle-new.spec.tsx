@@ -122,6 +122,19 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(within(milk).getByText('thêm 3 vỏ nữa được +1.000 điểm')).toBeInTheDocument();
     expect(within(milk).getByTestId('progress-fill')).toHaveStyle({ width: '40%' });
   });
+  it('trần tháng đã bớt hoặc hết: thẻ món nói lý do dưới câu trần', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [{ ...ITEM_CARTON, monthRemainingQty: 3 }, { ...ITEM_MILK, monthRemainingQty: 0 }] }));
+    renderPage();
+    const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
+    expect(within(carton).getByText('Tháng này còn 3 thùng')).toBeInTheDocument();
+    const milk = screen.getByText('Vỏ hộp sữa').closest('[data-item]') as HTMLElement;
+    expect(within(milk).getByText('Tháng này bạn đã đủ trần cho món này')).toBeInTheDocument();
+  });
+  it('trần tháng còn nguyên: không có dòng "Tháng này còn"', async () => {
+    renderPage();
+    await screen.findByText('Thùng carton');
+    expect(screen.queryByText(/Tháng này còn/)).toBeNull();
+  });
   it('thanh dính đáy: điểm ước tính từ /waste/preview, quy ra tiền, câu so với quà kế tiếp; một lần gọi cho nhiều lần bấm nhanh', async () => {
     renderPage();
     const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
@@ -256,11 +269,11 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     expect(screen.getByRole('button', { name: 'Chọn Mang tới điểm nhận' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chọn Thu kèm đơn mua' })).toBeInTheDocument();
   });
-  it('dưới ngưỡng gửi kho → thẻ khoá với "cần thêm N điểm"; MAX_OPEN khoá mọi thẻ', async () => {
+  it('dưới ngưỡng gửi kho → thẻ khoá với "Cần thêm N điểm"; MAX_OPEN khoá mọi thẻ', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview({ blocks: b.method === 'MAIL_IN' ? [{ code: 'BELOW_MIN', missingPoints: 6000 }, { code: 'MAX_OPEN', openCount: 3 }] : [{ code: 'MAX_OPEN', openCount: 3 }] }));
     atStep2();
     renderPage();
-    expect(await screen.findByText('cần thêm 6.000 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Cần thêm 6.000 điểm')).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByRole('radio').every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true));
     expect(screen.getAllByText('Bạn đang có 3 yêu cầu chưa xong').length).toBeGreaterThan(0);
   });
@@ -270,17 +283,40 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     renderPage();
     const pickup = await screen.findByRole('radio', { name: /Thu kèm đơn/ });
     const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
-    expect(await within(pickup).findByText('tháng này bạn không còn đủ trần cho một gói thu kèm đơn')).toBeInTheDocument();
-    expect(within(mail).getByText('tháng này bạn không còn đủ trần cho một gói gửi kho')).toBeInTheDocument();
+    expect(await within(pickup).findByText('Tháng này bạn không còn đủ trần cho một gói thu kèm đơn')).toBeInTheDocument();
+    expect(within(mail).getByText('Tháng này bạn không còn đủ trần cho một gói gửi kho')).toBeInTheDocument();
     expect(within(pickup).queryByText(/gói gửi kho/)).toBeNull();
   });
   it('NEED_PROVINCE → ô chọn tỉnh trên thẻ Gửi về kho; chọn → preview lại với provinceCode', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' && !b.provinceCode ? { blocks: [{ code: 'NEED_PROVINCE' }] } : {}));
     atStep2();
     renderPage();
+    fireEvent.click(await screen.findByRole('radio', { name: /Gửi về kho/ }));
     const select = await screen.findByRole('combobox', { name: 'Chọn tỉnh để ước tính phí ship' });
     fireEvent.change(select, { target: { value: '01' } });
     await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' })));
+  });
+  it('chưa chọn Gửi về kho: không có ô chọn tỉnh và không có lời nhắc chọn tỉnh; chọn xong thì lời nhắc không dùng màu lỗi', async () => {
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' && !b.provinceCode ? { blocks: [{ code: 'NEED_PROVINCE' }] } : {}));
+    atStep2();
+    renderPage();
+    const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
+    await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith(expect.objectContaining({ method: 'MAIL_IN' })));
+    expect(screen.queryByRole('combobox', { name: 'Chọn tỉnh để ước tính phí ship' })).toBeNull();
+    expect(within(mail).queryByText('Chọn tỉnh để ước tính phí ship')).toBeNull();
+    fireEvent.click(mail);
+    const prompt = await within(await screen.findByRole('radio', { name: /Gửi về kho/ })).findByText('Chọn tỉnh để ước tính phí ship');
+    expect(prompt.style.color).toBe('var(--color-text-secondary)');
+  });
+  it('thẻ khoá: chỉ phần tên, mô tả và ước tính bị làm mờ; lý do giữ nguyên độ đậm', async () => {
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview({ blocks: b.method === 'MAIL_IN' ? [{ code: 'BELOW_MIN', missingPoints: 6000 }] : [] }));
+    atStep2();
+    renderPage();
+    const reason = await screen.findByText('Cần thêm 6.000 điểm');
+    expect(reason.closest('[style*="opacity"]')).toBeNull();
+    const card = screen.getByRole('radio', { name: /Gửi về kho/ });
+    expect((card.querySelector('[style*="opacity: 0.6"]') as HTMLElement).textContent).toContain('Gửi về kho Tubu HCM');
+    expect(card.style.opacity).toBe('');
   });
   it('khoá đường kho → ẩn Gửi về kho và Thu kèm, hiện câu ghim', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z', laneFlags: { dropoff: true, mailin: true, pickup: true } }));

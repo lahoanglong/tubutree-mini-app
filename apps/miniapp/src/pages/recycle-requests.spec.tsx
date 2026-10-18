@@ -88,6 +88,20 @@ describe('/recycle/requests (§4.6, §16.1)', () => {
     fireEvent.click(screen.getByRole('button', { name: /TR-DDDDD/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/r/r-exp');
   });
+  it('tab Đang xử lý: trạng thái theo cách giao, không còn "Đang mở"', async () => {
+    renderPage();
+    expect(await screen.findByRole('button', { name: /TR-AAAAA/ })).toHaveTextContent('Chờ bạn mang tới');
+    expect(screen.getByRole('button', { name: /TR-BBBBB/ })).toHaveTextContent('Đang vận chuyển');
+    expect(screen.queryByText(/Đang mở/)).toBeNull();
+  });
+  it('COMPLETED 0 điểm: "Chưa đủ để cộng điểm", không "Đã cộng"', async () => {
+    mocks.listWasteRequests.mockResolvedValue([makeRequestSummary({ id: 'r-zero', code: 'TR-ZZZZZ', status: 'COMPLETED', pointsAwarded: 0 })]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: /Đã đóng/ }));
+    const row = screen.getByRole('button', { name: /TR-ZZZZZ/ });
+    expect(row).toHaveTextContent('Chưa đủ để cộng điểm');
+    expect(row).not.toHaveTextContent('Đã cộng');
+  });
   it('ngày tạo theo giờ VN', async () => {
     renderPage();
     expect(await screen.findAllByText(/17\/10\/2026/)).not.toHaveLength(0);

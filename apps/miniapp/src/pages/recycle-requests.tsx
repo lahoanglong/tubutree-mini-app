@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import type { WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, listWasteRequests } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -12,32 +11,11 @@ import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
-import { formatDate, formatPoints } from '../utils/format';
-import { METHOD_LABELS, closedLabel } from '../utils/waste-labels';
+import { formatDate } from '../utils/format';
+import { METHOD_LABELS, requestStatusText } from '../utils/waste-labels';
 
 const OPEN_STATUSES: readonly string[] = ['OPEN', 'IN_TRANSIT', 'RECEIVED'];
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
-
-function statusText(r: WasteRequestSummaryDTO): string {
-  switch (r.status) {
-    case 'OPEN':
-      return 'Đang mở';
-    case 'IN_TRANSIT':
-      return 'Đang vận chuyển';
-    case 'RECEIVED':
-      return 'Kho đã nhận, đang đếm';
-    case 'COMPLETED':
-      return `Đã cộng ${formatPoints(r.pointsAwarded ?? 0)}`;
-    case 'REJECTED':
-      return 'Bị từ chối';
-    case 'CANCELLED':
-      return 'Đã huỷ';
-    case 'REVERSED':
-      return 'Đã thu hồi điểm';
-    default:
-      return closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null })!.label;
-  }
-}
 
 export default function RecycleRequestsPage() {
   const navigate = useNavigate();
@@ -79,7 +57,7 @@ export default function RecycleRequestsPage() {
           <ListRow
             key={r.id}
             title={`${r.code} · ${METHOD_LABELS[r.method]}`}
-            subtitle={`${statusText(r)} · ${formatDate(r.createdAt)}`}
+            subtitle={`${requestStatusText(r)} · ${formatDate(r.createdAt)}`}
             trailing="chevron"
             onPress={() => navigate(r.status === 'COMPLETED' ? `/recycle/done/${r.id}` : `/recycle/r/${r.id}`)}
           />

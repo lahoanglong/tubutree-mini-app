@@ -31,6 +31,7 @@ import {
   equivalentUnits,
   formatLineQty,
   nextRewardProgress,
+  requestStatusText,
   ruleText,
   timelineFor,
 } from '../utils/waste-labels';
@@ -75,15 +76,18 @@ function RequestsBlock({ me, onOpen }: { me: WasteMeDTO; onOpen: (id: string) =>
       {me.openRequests.map((r) => {
         const tl = timelineFor(r);
         const closed = tl ? null : closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null });
-        const subtitle =
-          me.blocked && r.status === 'RECEIVED'
-            ? 'Đang chờ Tubu xem lại'
-            : r.lines.map((l) => formatLineQty(l.itemName, l.declaredQty, l.unitLabel)).join(', ');
+        const subtitle = r.lines.map((l) => formatLineQty(l.itemName, l.declaredQty, l.unitLabel)).join(', ');
+        const status = requestStatusText(r, { blocked: me.blocked });
         return (
           <Card key={r.id} variant="outline">
             <ListRow title={`${r.code} · ${METHOD_LABELS[r.method]}`} subtitle={subtitle} trailing="chevron" onPress={() => onOpen(r.id)} />
             {tl ? (
-              <Timeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div>
+                  <Badge tone="brand">{status}</Badge>
+                </div>
+                <Timeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} />
+              </div>
             ) : (
               closed && (
                 <Text variant="caption" tone="tertiary" as="div">

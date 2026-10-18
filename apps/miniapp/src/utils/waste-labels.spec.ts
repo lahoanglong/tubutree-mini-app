@@ -60,9 +60,9 @@ describe('nhãn trạng thái đóng (§4.6, §14.1)', () => {
     [{ status: 'EXPIRED', closeReason: null }, 'Đã hết hạn', null],
     [{ status: 'EXPIRED', closeReason: 'SHIP_LOCKED' }, 'Đã hết hạn', null],
     [{ status: 'CANCELLED', closeReason: 'HOLD_EXPIRED' }, 'Đã huỷ', null],
-    [{ status: 'CANCELLED', closeReason: null }, 'Đã huỷ', 'bạn huỷ'],
-    [{ status: 'CANCELLED', closeReason: 'ORDER_CANCELLED' }, 'Đã huỷ', 'đơn mua bị huỷ'],
-    [{ status: 'CANCELLED', closeReason: 'SHIP_LOCKED' }, 'Đã huỷ', 'đường kho tạm dừng'],
+    [{ status: 'CANCELLED', closeReason: null }, 'Đã huỷ', 'Bạn đã huỷ yêu cầu này'],
+    [{ status: 'CANCELLED', closeReason: 'ORDER_CANCELLED' }, 'Đã huỷ', 'Đơn mua đã bị huỷ'],
+    [{ status: 'CANCELLED', closeReason: 'SHIP_LOCKED' }, 'Đã huỷ', 'Đường kho đang tạm dừng'],
     [{ status: 'REVERSED', reversedPoints: 4000, reversalReason: 'Kiểm tra lại số lượng' }, 'Đã thu hồi 4.000 điểm', 'Kiểm tra lại số lượng'],
   ])('%o', (over, label, reason) => { expect(L.closedLabel({ ...base, ...over } as never)).toEqual({ label, reason }); });
   it('trạng thái chưa đóng → null', () => { expect(L.closedLabel({ ...base, status: 'OPEN' } as never)).toBeNull(); });
@@ -77,8 +77,8 @@ describe('lời khoá từ /waste/preview (§4.3)', () => {
   it.each([
     [{ code: 'MAX_OPEN', openCount: 2 }, 'Bạn đang có 3 yêu cầu chưa xong'],
     [{ code: 'PICKUP_PENDING', pickupRequestCode: 'TR-ABCDE' }, 'Bạn đã có yêu cầu thu kèm TR-ABCDE, hãy gắn vào đơn kế tiếp'],
-    [{ code: 'BELOW_MIN', missingPoints: 6000 }, 'cần thêm 6.000 điểm'],
-    [{ code: 'MONTH_CAP_FOR_MIN' }, 'tháng này bạn không còn đủ trần cho một gói gửi kho'],
+    [{ code: 'BELOW_MIN', missingPoints: 6000 }, 'Cần thêm 6.000 điểm'],
+    [{ code: 'MONTH_CAP_FOR_MIN' }, 'Tháng này bạn không còn đủ trần cho một gói gửi kho'],
     [{ code: 'NEED_PROVINCE' }, 'Chọn tỉnh để ước tính phí ship'],
     [{ code: 'ITEM_DAY_CAP', itemId: 'item-carton' }, 'Thùng carton: mang tới điểm nhận hôm nay chỉ còn 2 thùng'],
     [{ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }, 'Tháng này Thùng carton chỉ còn 4 thùng'],
@@ -92,8 +92,8 @@ describe('lời khoá từ /waste/preview (§4.3)', () => {
   ] as const)('%o', (block, text) => { expect(L.blockMessage(block as never, ctx)).toBe(text); });
   it('MONTH_CAP_FOR_MIN nêu đúng đường theo cách giao của thẻ', () => {
     const block = { code: 'MONTH_CAP_FOR_MIN' } as never;
-    expect(L.blockMessage(block, { ...ctx, method: 'PICKUP' })).toBe('tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
-    expect(L.blockMessage(block, { ...ctx, method: 'MAIL_IN' })).toBe('tháng này bạn không còn đủ trần cho một gói gửi kho');
+    expect(L.blockMessage(block, { ...ctx, method: 'PICKUP' })).toBe('Tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
+    expect(L.blockMessage(block, { ...ctx, method: 'MAIL_IN' })).toBe('Tháng này bạn không còn đủ trần cho một gói gửi kho');
   });
 });
 
@@ -126,6 +126,8 @@ describe('tiến độ tới quà kế tiếp (§4.1, §16.1: dùng redeemablePo
   it('chọn quà rẻ nhất chưa đủ, bỏ quà đã hết và TREE', () => {
     const c = makeRewardCatalog({ redeemablePoints: 14_000, rewards: [makeRewardItem({ pointsCost: 20_000 }), makeRewardItem({ id: 'x', pointsCost: 10_000 }), makeRewardItem({ id: 'y', pointsCost: 15_000, soldOut: true }), makeRewardItem({ id: 't', kind: 'TREE', pointsCost: 16_000 })] });
     expect(L.nextRewardProgress(c)).toEqual({ rewardName: 'mã giảm giá Miễn phí vận chuyển', cost: 20_000, have: 14_000, missing: 6000 });
+    const sale = makeRewardCatalog({ redeemablePoints: 14_000, rewards: [makeRewardItem({ name: 'Giảm 50.000đ', pointsCost: 20_000 })] });
+    expect(L.nextRewardProgress(sale)?.rewardName).toBe('mã giảm 50.000đ');
     const seed = makeRewardCatalog({ redeemablePoints: 14_000, rewards: [makeRewardItem({ id: 's', kind: 'SEED_PACK', name: 'Gói hạt giống Tubu', voucher: null, pointsCost: 25_000 })] });
     expect(L.nextRewardProgress(seed)?.rewardName).toBe('Gói hạt giống Tubu');
   });
@@ -160,4 +162,36 @@ describe('điểm nhận (§4.4)', () => {
     expect(L.isOpenNow(hours, new Date('2026-10-20T02:00:00.000Z'))).toBe(false); // Thứ Ba
   });
   it('dd/mm theo giờ VN', () => { expect(L.dayMonth('2026-10-24T17:30:00.000Z')).toBe('25/10'); });
+});
+
+describe('requestStatusText (F0, F7, §4.6)', () => {
+  const base = { method: 'DROP_OFF', status: 'OPEN', closeReason: null, orderCode: null, pointsAwarded: null } as const;
+  it.each([
+    [{ method: 'DROP_OFF', status: 'OPEN' }, 'Chờ bạn mang tới'],
+    [{ method: 'MAIL_IN', status: 'OPEN' }, 'Chờ bạn gửi kiện'],
+    [{ method: 'PICKUP', status: 'OPEN', orderCode: null }, 'Chờ gắn vào đơn'],
+    [{ method: 'PICKUP', status: 'OPEN', orderCode: 'TB123' }, 'Chờ kho nhận'],
+    [{ method: 'MAIL_IN', status: 'IN_TRANSIT' }, 'Đang vận chuyển'],
+    [{ method: 'MAIL_IN', status: 'RECEIVED' }, 'Kho đã nhận, đang đếm'],
+    [{ status: 'COMPLETED', pointsAwarded: 4000 }, 'Đã cộng 4.000 điểm'],
+    [{ status: 'COMPLETED', pointsAwarded: 0 }, 'Chưa đủ để cộng điểm'],
+    [{ status: 'COMPLETED', pointsAwarded: null }, 'Chưa đủ để cộng điểm'],
+    [{ status: 'REJECTED' }, 'Bị từ chối'],
+    [{ status: 'CANCELLED' }, 'Đã huỷ'],
+    [{ status: 'REVERSED' }, 'Đã thu hồi điểm'],
+    [{ status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' }, 'Hết hạn giữ chỗ'],
+  ])('%o', (over, text) => { expect(L.requestStatusText({ ...base, ...over } as never)).toBe(text); });
+  it('khách bị khoá: RECEIVED đọc "Đang chờ Tubu xem lại"', () => {
+    expect(L.requestStatusText({ ...base, method: 'MAIL_IN', status: 'RECEIVED' }, { blocked: true })).toBe('Đang chờ Tubu xem lại');
+  });
+});
+
+describe('monthRemainingText (F3)', () => {
+  const item = { monthlyCapQty: 120, unitLabel: 'chai' };
+  it('hết trần → nói rõ', () => { expect(L.monthRemainingText({ ...item, monthRemainingQty: 0 })).toBe('Tháng này bạn đã đủ trần cho món này'); });
+  it('còn ít hơn trần → còn N đơn vị', () => { expect(L.monthRemainingText({ ...item, monthRemainingQty: 45 })).toBe('Tháng này còn 45 chai'); });
+  it('còn nguyên trần hoặc không có trần → không có dòng', () => {
+    expect(L.monthRemainingText({ ...item, monthRemainingQty: 120 })).toBeNull();
+    expect(L.monthRemainingText({ monthlyCapQty: null, unitLabel: 'chai', monthRemainingQty: null })).toBeNull();
+  });
 });

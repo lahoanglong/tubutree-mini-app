@@ -330,3 +330,69 @@ describe('/recycle/r/:id — trạng thái đóng và kết quả (§4.6)', () =
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
   });
 });
+
+describe('/recycle/r/:id — trạng thái, ước tính, tiêu đề (F2, F10)', () => {
+  it('Mang tới + OPEN: nhãn trạng thái, bước 2 ghi điểm nhận, địa chỉ và hạn; dòng "Ước tính"', async () => {
+    renderPage();
+    const tl = await screen.findByRole('list', { name: 'Tiến độ yêu cầu' });
+    const step = within(tl).getByText('Mang tới điểm').closest('li') as HTMLElement;
+    expect(step).toHaveTextContent('Mang tới Đại lý Cô Ba trước 25/10');
+    expect(step).toHaveTextContent('12 Lê Lợi');
+    expect(screen.getByText('Chờ bạn mang tới')).toBeInTheDocument();
+    expect(screen.getByText('Ước tính 5.000 điểm')).toBeInTheDocument();
+  });
+  it('điểm nhận tạm ngừng: bước 2 không dặn mang tới điểm đó', async () => {
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ pointAvailable: false }));
+    renderPage();
+    const tl = await screen.findByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(within(tl).getByText('Mang tới điểm').closest('li')).not.toHaveTextContent('Mang tới Đại lý Cô Ba');
+  });
+  it('điểm hết hạn mức tháng: bước 2 không dặn mang tới điểm đó', async () => {
+    const r = makeRequestDetail();
+    mocks.getWasteRequest.mockResolvedValue(r);
+    mocks.getWastePoints.mockResolvedValue([makeWastePoint({ id: r.point!.id, quotaFull: true })]);
+    renderPage();
+    await screen.findByText('Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác');
+    const tl = screen.getByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(within(tl).getByText('Mang tới điểm').closest('li')).not.toHaveTextContent('Mang tới Đại lý Cô Ba');
+  });
+  it('chương trình tạm dừng: bước 2 không dặn mang tới điểm', async () => {
+    mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
+    renderPage();
+    await screen.findByText('Chương trình đang tạm dừng');
+    const tl = screen.getByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(within(tl).getByText('Mang tới điểm').closest('li')).not.toHaveTextContent('Mang tới Đại lý Cô Ba');
+  });
+  it('REJECTED và COMPLETED: không còn dòng "Ước tính" (chỉ yêu cầu đang chạy mới ước tính)', async () => {
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'REJECTED', rejectionReason: 'WET', editable: false, cancellable: false }));
+    const first = renderPage();
+    await screen.findByText('Bị từ chối');
+    expect(screen.queryByText(/Ước tính/)).toBeNull();
+    first.unmount();
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 2000, editable: false, cancellable: false }));
+    renderPage();
+    await screen.findByRole('button', { name: 'Xem kết quả cộng điểm' });
+    expect(screen.queryByText(/Ước tính/)).toBeNull();
+  });
+  it('Gửi về kho + OPEN: có dòng "Ước tính", số điện thoại người nhận nhóm 4-3-3, tiêu đề trang không lặp mã', async () => {
+    mocks.getWasteRequest.mockResolvedValue(MAIL({ point: makeWarehouseContact({ phone: '0984606774' }) }));
+    renderPage();
+    await screen.findByText('Ghi mã này lên kiện, mỗi kiện một yêu cầu');
+    expect(screen.getByText('Ước tính 5.000 điểm')).toBeInTheDocument();
+    expect(screen.getByText('0984 606 774')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Yêu cầu đổi rác');
+    expect(screen.getAllByText('TR-8K2M9')).toHaveLength(1);
+  });
+  it('Thu kèm đơn + OPEN: tiêu đề trang không lặp mã; Mang tới giữ mã ở tiêu đề', async () => {
+    mocks.getWasteRequest.mockResolvedValue(PICKUP());
+    const first = renderPage();
+    await screen.findByText('Ghi mã này lên túi');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Yêu cầu đổi rác');
+    first.unmount();
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail());
+    renderPage();
+    await screen.findByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('TR-8K2M9');
+  });
+});
+

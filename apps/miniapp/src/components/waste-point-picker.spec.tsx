@@ -53,6 +53,32 @@ describe('WastePointPicker (§4.4, §16.1)', () => {
     fireEvent.click(r);
     expect(onChange).not.toHaveBeenCalled();
   });
+  it('lý do khoá dài (nhiều món) được xuống dòng, không bị cắt', () => {
+    const none = makeWastePoint({ id: 'pt-none', name: 'Đại lý Không', acceptedItemIds: [], distanceKm: 0.4 });
+    renderPicker({ points: [none] });
+    const reason = screen.getByText('Điểm này không nhận: Thùng carton, Vỏ hộp sữa');
+    expect(reason.style.whiteSpace).not.toBe('nowrap');
+  });
+  it('thẻ khoá: chỉ radio và phần chữ bị làm mờ; lý do, Chỉ đường và Gọi giữ nguyên độ đậm', () => {
+    renderPicker();
+    const r = screen.getByRole('radio', { name: /Đại lý Hết/ });
+    const card = r.parentElement as HTMLElement;
+    expect(card.style.opacity).toBe('');
+    expect((r.querySelector('[data-point-body]') as HTMLElement).style.opacity).toBe('0.55');
+    for (const el of [screen.getByText('Tạm hết hạn mức tháng này'), ...within(card).getAllByRole('button').filter((b) => b !== r)]) {
+      expect(el.closest('[style*="opacity"]')).toBeNull();
+    }
+    const open = screen.getByRole('radio', { name: /Đại lý Gần/ });
+    expect((open.querySelector('[data-point-body]') as HTMLElement).style.opacity).toBe('1');
+  });
+  it('món nhận hiện thành chip riêng, món không nhận vẫn gạch ngang kèm "Không nhận"', () => {
+    renderPicker();
+    const r = screen.getByRole('radio', { name: /Đại lý Thiếu/ });
+    const accepted = within(r).getByText('Thùng carton');
+    expect(accepted.style.borderRadius).toBe('var(--radius-pill)');
+    expect(accepted.closest('s, del')).toBeNull();
+    expect(within(r).getByText('Vỏ hộp sữa').closest('s')).not.toBeNull();
+  });
   it('có vị trí: "Gần nhất" ở điểm chọn được gần nhất + khoảng cách', () => {
     renderPicker();
     expect(within(screen.getByRole('radio', { name: /Đại lý Gần/ })).getByText('Gần nhất')).toBeInTheDocument();
