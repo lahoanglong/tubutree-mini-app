@@ -49,14 +49,14 @@ describe('webPathToFileCandidates', () => {
 describe('checkParity dòng thiếu web', () => {
   it('đỏ có thông báo khi dòng không có web lẫn skip, không ném lỗi', () => {
     const b = base();
-    b.map.routes[0].items.push({ miniapp: '/x' } as never);
+    b.map.routes[0]!.items.push({ miniapp: '/x' } as never);
     const r = checkParity({ ...b, miniappRoutes: ['/', '/browse', '/x'] });
     expect(r.errors.join('\n')).toMatch(/\/x thiếu web và skip/);
   });
 
   it('đỏ cả khi dòng pending mà thiếu web', () => {
     const b = base();
-    b.map.routes[0].items.push({ miniapp: '/x', pending: true } as never);
+    b.map.routes[0]!.items.push({ miniapp: '/x', pending: true } as never);
     const r = checkParity({ ...b, miniappRoutes: ['/', '/browse', '/x'] });
     expect(r.errors.join('\n')).toMatch(/\/x thiếu web và skip/);
   });
