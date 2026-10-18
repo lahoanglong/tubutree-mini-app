@@ -50,17 +50,8 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
   const enabledRow = config.data?.find((r) => r.key === 'waste.enabled');
   const showOff = isAdmin && config.isSuccess && enabledRow?.value !== true;
 
-  return (
-    <div className="space-y-4" data-waste-tab={isAdmin ? 'admin' : 'staff'}>
-      <h2 className="font-display text-lg font-semibold text-stone-900">Đổi rác lấy quà</h2>
-      {showOff && (
-        <Notice tone="info">
-          Chương trình đang tắt với khách (waste.enabled). Admin vẫn đăng ký kho, điểm nhận và quà được; kho vẫn xử lý kiện đang về.
-        </Notice>
-      )}
-      {isAdmin && overview.isError && <Notice tone="danger" role="alert">Không tải được số liệu tháng.</Notice>}
-      {isAdmin && overview.data && <AlertList alerts={overview.data.alerts} />}
-      {isAdmin && overview.data && <MonthStrip data={overview.data} />}
+  const sectionBlock = (
+    <>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Mục đổi rác">
         {sections.map((s) => (
           <button key={s} type="button" aria-pressed={section === s} className={chipClass(section === s)} onClick={() => setSection(s)}>
@@ -69,6 +60,22 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
         ))}
       </div>
       <div data-waste-section={section}>{section === 'items' && <WasteItemsSection />}{section === 'points' && <WastePointsSection seed={seed} />}{section === 'requests' && <WasteRequestsSection isAdmin={isAdmin} seed={seed} initialUserId={wasteUserId} />}{section === 'gifts' && <WasteGiftsSection isAdmin={isAdmin} seed={seed} />}{section === 'config' && isAdmin && <WasteConfigCard rows={config.data} loyaltyRows={loyaltyConfig.data} />}</div>
+    </>
+  );
+
+  return (
+    <div className="space-y-4" data-waste-tab={isAdmin ? 'admin' : 'staff'}>
+      <h2 className="font-display text-lg font-semibold text-stone-900">Đổi rác lấy quà</h2>
+      {showOff && (
+        <Notice tone="info">
+          Chương trình đang tắt với khách. Bật lại ở Cấu hình chung. Admin vẫn đăng ký kho, điểm nhận và quà được; kho vẫn xử lý kiện đang về.
+        </Notice>
+      )}
+      {isAdmin && overview.isError && <Notice tone="danger" role="alert">Không tải được số liệu tháng.</Notice>}
+      {isAdmin && overview.data && <AlertList alerts={overview.data.alerts} />}
+      {isAdmin && overview.data && <MonthStrip data={overview.data} />}
+      {sectionBlock}
+      {isAdmin && overview.data && <MonthDetails data={overview.data} />}
     </div>
   );
 }
@@ -122,11 +129,62 @@ function ListCard({ k, label, lines, foot }: { k: string; label: string; lines: 
   );
 }
 
+function StripTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={CARD}>
+      <dt className={LABEL}>{label}</dt>
+      <dd className={VALUE}>{value}</dd>
+    </div>
+  );
+}
+
 function MonthStrip({ data }: { data: WasteOverviewDTO }) {
   const { current: cur, previous: prev } = data;
   const [month, setMonth] = useState(data.month);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const created = sumMethods(cur);
+  const net = cur.pointsIssued - cur.pointsReversed;
+  const prevNet = prev.pointsIssued - prev.pointsReversed;
+  const download = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await downloadWasteMonthlyCsv(month);
+    } catch {
+      setErr('Không tải được tệp CSV.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3" aria-label="Số liệu tháng">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display text-base font-semibold text-stone-900">{titleOfMonth(data.month)} so với {titleOfMonth(data.previousMonth)}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="month" aria-label="Tháng xuất CSV" className={FIELD_XS} value={month} onChange={(e) => setMonth(e.target.value)} />
+          <button type="button" className={`${BTN_SECONDARY} inline-flex items-center gap-1`} disabled={busy || !month} onClick={download}>
+            <Download size={14} aria-hidden="true" />
+            Tải CSV
+          </button>
+        </div>
+      </div>
+      {err && <Notice tone="danger" role="alert">{err}</Notice>}
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-month-strip>
+        <StripTile label="Yêu cầu tạo mới" value={formatCount(created)} />
+        <StripTile label="Hoàn tất" value={formatCount(cur.requestsByStatus.COMPLETED)} />
+        <StripTile label="Điểm đã cộng" value={formatCount(cur.pointsIssued)} />
+        <StripTile label="Điểm phải trả danh nghĩa" value={formatCount(net)} />
+        <StripTile label="Hết hạn" value={formatCount(cur.expiredCount)} />
+        <StripTile label="Phí ship đã nhập" value={formatVnd(cur.carrierCostVnd)} />
+      </dl>
+    </section>
+  );
+}
+
+function MonthDetails({ data }: { data: WasteOverviewDTO }) {
+  const { current: cur, previous: prev } = data;
   const created = sumMethods(cur);
   const net = cur.pointsIssued - cur.pointsReversed;
   const prevNet = prev.pointsIssued - prev.pointsReversed;
@@ -167,31 +225,9 @@ function MonthStrip({ data }: { data: WasteOverviewDTO }) {
     return `${r.pointName} · ${formatCount(r.used)} / ${r.quota === null ? 'Không hạn mức' : formatCount(r.quota)} · ${formatCount(r.confirmations)} lượt${prevTag(p ? `${formatCount(p.used)} · ${formatCount(p.confirmations)} lượt` : undefined)}`;
   });
 
-  const download = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      await downloadWasteMonthlyCsv(month);
-    } catch {
-      setErr('Không tải được tệp CSV.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
-    <section className="space-y-3" aria-label="Số liệu tháng">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-base font-semibold text-stone-900">{titleOfMonth(data.month)} so với {titleOfMonth(data.previousMonth)}</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <input type="month" aria-label="Tháng xuất CSV" className={FIELD_XS} value={month} onChange={(e) => setMonth(e.target.value)} />
-          <button type="button" className={`${BTN_SECONDARY} inline-flex items-center gap-1`} disabled={busy || !month} onClick={download}>
-            <Download size={14} aria-hidden="true" />
-            Tải CSV
-          </button>
-        </div>
-      </div>
-      {err && <Notice tone="danger" role="alert">{err}</Notice>}
+    <details className="rounded-control border border-stone-200 p-3" data-month-details>
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-stone-900">Xem báo cáo tháng</summary>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Scalar
           k="requestsCreated"
@@ -228,6 +264,6 @@ function MonthStrip({ data }: { data: WasteOverviewDTO }) {
           foot="Chỉ để xem, không kết luận nhân quả"
         />
       </div>
-    </section>
+    </details>
   );
 }

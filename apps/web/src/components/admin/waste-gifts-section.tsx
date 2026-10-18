@@ -348,11 +348,11 @@ function GiftCatalogue() {
                 </td>
                 <td className={TD}>{g.name}</td>
                 <td className={TD}>{WASTE_GIFT_KIND_LABELS[g.kind]}</td>
-                <td className={TD}>{g.kind === 'TREE' ? 'Giá theo cấu hình game.tree_points_price' : `${formatCount(g.pointsCost)} điểm`}</td>
+                <td className={TD}>{g.kind === 'TREE' ? (g.treePointsPrice === undefined ? '—' : `${formatCount(g.treePointsPrice)} điểm (giá Vườn Xanh)`) : `${formatCount(g.pointsCost)} điểm`}</td>
                 <td className={TD}>{stockText(g.stock)}</td>
                 <td className={TD}>
                   <div>{formatCount(g.redemptionCount)} lượt đổi</div>
-                  {g.kind === 'TREE' && g.fundTreeTotal !== undefined && <div className="text-xs text-stone-600">Tổng lượt góp quỹ: {formatCount(g.fundTreeTotal)}</div>}
+                  {g.kind === 'TREE' && g.fundTreeTotal !== undefined && <div className="text-xs text-stone-600">Tổng số cây của quỹ (gồm cây thu hoạch trong game): {formatCount(g.fundTreeTotal)}</div>}
                 </td>
                 <td className={TD}>
                   <select

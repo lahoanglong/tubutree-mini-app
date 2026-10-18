@@ -117,7 +117,7 @@ describe('DTO shapes compile as written in the contract (checked by pnpm --filte
   };
   const treeGift: ST.AdminWasteGiftDTO = {
     id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng cây', description: null, label: null, pointsCost: 0, status: 'ACTIVE', sortOrder: 50,
-    imageUrl: null, stock: null, claimInstructions: null, voucher: null, redemptionCount: 3, fundTreeTotal: 12,
+    imageUrl: null, stock: null, claimInstructions: null, voucher: null, redemptionCount: 3, fundTreeTotal: 12, treePointsPrice: 50_000,
   };
   const pointQuery: ST.AdminWastePointQuery = { status: 'PENDING', perkPending: true };
   const creditLogQuery: ST.AdminWasteRequestQuery = { status: 'COMPLETED', pointId: 'p1', limit: 20 };

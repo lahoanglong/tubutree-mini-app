@@ -109,6 +109,14 @@ describe('WasteRequestsSection', () => {
     expect(requestUrls(api).some((u) => u.endsWith('?filter=TRANSIT_OVERDUE'))).toBe(true);
   });
 
+  it('mã yêu cầu nằm trên một dòng và dùng chữ đơn cách', async () => {
+    const { c } = await mount();
+    const codeCell = row(c, 'r1').querySelector('td')!;
+    expect(codeCell.textContent).toBe('TR-7K3M9Q');
+    expect(codeCell.className).toContain('whitespace-nowrap');
+    expect(codeCell.className).toContain('font-mono');
+  });
+
   it('lọc theo cách giao và trạng thái', async () => {
     const { c, api } = await mount();
     selectValue(c.querySelector('select[aria-label="Cách giao"]'), 'MAIL_IN');
@@ -584,9 +592,15 @@ describe('hàng không rõ chủ', () => {
     expect(panel.querySelectorAll('input[type="radio"]')).toHaveLength(0);
   });
 
+  it('nút đóng kiện không đọc như đóng bảng', async () => {
+    const { c } = await openView();
+    expect(btn(unRow(c, 'un1'), 'Đóng')).toBeNull();
+    expect(btn(unRow(c, 'un1'), 'Đóng kiện')).not.toBeNull();
+  });
+
   it('đóng kiện hỏi ghi chú rồi gửi CLOSE', async () => {
     const { c, api } = await openView();
-    click(btn(unRow(c, 'un1'), 'Đóng'));
+    click(btn(unRow(c, 'un1'), 'Đóng kiện'));
     await flush();
     const d = confirmDialog()!;
     expect(d.textContent).toContain('Đóng kiện không rõ chủ');
@@ -603,7 +617,7 @@ describe('hàng không rõ chủ', () => {
 
   it('huỷ hộp thoại đóng kiện thì không gửi gì', async () => {
     const { c, api } = await openView();
-    click(btn(unRow(c, 'un1'), 'Đóng'));
+    click(btn(unRow(c, 'un1'), 'Đóng kiện'));
     await flush();
     answerConfirm(false);
     await flush();
@@ -615,7 +629,7 @@ describe('hàng không rõ chủ', () => {
     const s3 = unRow(staff.c, 'un3');
     expect(btn(s3, 'Khớp yêu cầu')).toBeNull();
     expect(s3.textContent).toContain('Chỉ admin khớp được kiện này');
-    expect(btn(s3, 'Đóng')).not.toBeNull();
+    expect(btn(s3, 'Đóng kiện')).not.toBeNull();
     expect(btn(unRow(staff.c, 'un1'), 'Khớp yêu cầu')).not.toBeNull();
     const admin = await openView({ isAdmin: true });
     expect(btn(unRow(admin.c, 'un3'), 'Khớp yêu cầu')).not.toBeNull();

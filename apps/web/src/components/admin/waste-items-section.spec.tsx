@@ -131,7 +131,8 @@ describe('WasteItemsSection', () => {
     const { c, api } = await mount();
     fillNew(c);
     expect(c.textContent).toContain('Hướng dẫn chuẩn bị (không ghi số trần; câu trần do hệ thống dựng)');
-    expect(c.textContent).toContain('Chỉ nhập cho món có đầu ra thật: Tubu dùng lại để đóng gói hoặc giao cho bên thu mua có hợp đồng (5.7).');
+    expect(c.textContent).toContain('Chỉ nhập cho món có đầu ra thật: Tubu dùng lại để đóng gói hoặc giao cho bên thu mua có hợp đồng.');
+    expect(c.textContent).not.toContain('(5.7)');
     const pv = c.querySelector('[data-item-preview]')!.textContent!;
     expect(pv).toContain('Vỏ hộp sữa');
     expect(pv).toContain('5 vỏ = 1.000 điểm');

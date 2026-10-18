@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   AdminWasteItemDTO,
   AdminWastePointDTO,
@@ -12,7 +12,8 @@ import type {
   WasteWeekday,
 } from '@tubutree/shared-types';
 import { createWastePoint, updateWastePoint } from '@/lib/admin-client';
-import { EMPTY_GEO, GeoPicker, type GeoValue } from '@/components/geo-picker';
+import { EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
+import { getCommunes, getProvinces } from '@/lib/geo-client';
 import { WASTE_ITEM_STATUS_LABELS, WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 
@@ -129,6 +130,67 @@ function toBody(f: Form): WastePointUpsertRequest {
   };
 }
 
+/** Hai ô chọn địa giới có nhãn nhìn thấy; khi sửa điểm, phường/xã đã lưu hiện ngay trong lúc danh sách còn đang tải. */
+function GeoFields({ value, onChange }: { value: GeoValue; onChange: (v: GeoValue) => void }) {
+  const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity });
+  const communesQ = useQuery({
+    queryKey: ['geo-communes', value.provinceCode],
+    queryFn: () => getCommunes(value.provinceCode),
+    enabled: !!value.provinceCode,
+    staleTime: Infinity,
+  });
+  const provinces = provincesQ.data ?? [];
+  const communes = communesQ.data ?? [];
+  const savedProvince = value.provinceCode && !provinces.some((p) => p.code === value.provinceCode);
+  const savedWard = value.wardCode && !communes.some((c) => c.code === value.wardCode);
+  return (
+    <>
+      <Field label="Tỉnh/thành">
+        <select
+          aria-label="Tỉnh/thành"
+          className={INPUT_CLASS}
+          value={value.provinceCode}
+          onChange={(e) => {
+            const code = e.target.value;
+            onChange({ province: provinces.find((p) => p.code === code)?.name ?? '', provinceCode: code, ward: '', wardCode: '' });
+          }}
+        >
+          <option value="">{provincesQ.isLoading ? 'Đang tải…' : 'Chọn tỉnh/thành'}</option>
+          {savedProvince && <option value={value.provinceCode}>{value.province}</option>}
+          {provinces.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+        </select>
+        {provincesQ.isError && <GeoLoadFailed what="tỉnh/thành" onRetry={() => void provincesQ.refetch()} />}
+      </Field>
+      <Field label="Phường/xã">
+        <select
+          aria-label="Phường/xã"
+          className={INPUT_CLASS}
+          value={value.wardCode}
+          disabled={!value.provinceCode}
+          onChange={(e) => {
+            const code = e.target.value;
+            onChange({ ...value, ward: communes.find((c) => c.code === code)?.name ?? '', wardCode: code });
+          }}
+        >
+          <option value="">{!value.provinceCode ? 'Chọn tỉnh/thành trước' : communesQ.isLoading ? 'Đang tải…' : 'Chọn phường/xã'}</option>
+          {savedWard && <option value={value.wardCode}>{value.ward}</option>}
+          {communes.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+        </select>
+        {communesQ.isError && <GeoLoadFailed what="phường/xã" onRetry={() => void communesQ.refetch()} />}
+      </Field>
+    </>
+  );
+}
+
+function GeoLoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <span role="alert" className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-danger-fg">
+      <span>{`Không tải được danh sách ${what}.`}</span>
+      <button type="button" className={BTN_XS_SECONDARY} onClick={onRetry}>Thử lại</button>
+    </span>
+  );
+}
+
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function diffBody(full: WastePointUpsertRequest, base: AdminWastePointDTO, f: Form, initial: Form): Partial<WastePointUpsertRequest> {
@@ -173,6 +235,8 @@ export function WastePointForm({
   const [initial] = useState(() => toForm(point));
   const [f, setF] = useState<Form>(initial);
   const [err, setErr] = useState<string | null>(null);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (k: string) => setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
   const set = (p: Partial<Form>) => setF((cur) => ({ ...cur, ...p }));
   const errors = validate(f);
   const warehouse = f.kind === 'WAREHOUSE';
@@ -245,7 +309,7 @@ export function WastePointForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Tên điểm"><input name="name" className={INPUT_CLASS} value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
         <Field label="Địa chỉ"><input name="addressLine" className={INPUT_CLASS} value={f.addressLine} onChange={(e) => set({ addressLine: e.target.value })} /></Field>
-        <GeoPicker value={f.geo} onChange={(geo) => set({ geo })} />
+        <GeoFields value={f.geo} onChange={(geo) => set({ geo })} />
         <Field label="Vĩ độ" hint={errors.lat}><input name="lat" inputMode="decimal" className={INPUT_CLASS} value={f.lat} onChange={(e) => set({ lat: e.target.value })} /></Field>
         <Field label="Kinh độ" hint={errors.lng}><input name="lng" inputMode="decimal" className={INPUT_CLASS} value={f.lng} onChange={(e) => set({ lng: e.target.value })} /></Field>
         <Field label="Số điện thoại"><input name="phone" inputMode="tel" className={INPUT_CLASS} value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
@@ -283,7 +347,7 @@ export function WastePointForm({
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Trạng thái" hint={warehouse ? 'Kho luôn Đang nhận; muốn dừng nhận mới thì tắt waste.enabled hoặc cờ waste.lane_*' : needsOwner ? 'Đang nhận: gắn chủ điểm rồi mới kích hoạt' : undefined}>
+        <Field label="Trạng thái" hint={warehouse ? 'Kho luôn Đang nhận; muốn dừng nhận mới thì tắt ở Cấu hình chung' : needsOwner ? 'Đang nhận: gắn chủ điểm rồi mới kích hoạt' : undefined}>
           <select
             name="status"
             className={INPUT_CLASS}
@@ -297,9 +361,9 @@ export function WastePointForm({
         {!warehouse && (
           <div>
             <Field label="Hạn mức điểm mỗi tháng" hint="Đề xuất 100.000 điểm cho điểm mới, 300.000 cho điểm đã chạy ổn">
-              <input name="monthlyQuotaPoints" inputMode="numeric" className={INPUT_CLASS} value={f.quota} onChange={(e) => set({ quota: e.target.value })} />
+              <input name="monthlyQuotaPoints" inputMode="numeric" className={INPUT_CLASS} value={f.quota} onChange={(e) => { touch('quota'); set({ quota: e.target.value }); }} onBlur={() => touch('quota')} />
             </Field>
-            {errors.quota && <p className="mt-0.5 text-[11px] text-danger-fg">{errors.quota}</p>}
+            {errors.quota && touched.quota && <p className="mt-0.5 text-[11px] text-danger-fg">{errors.quota}</p>}
           </div>
         )}
         {warehouse && (

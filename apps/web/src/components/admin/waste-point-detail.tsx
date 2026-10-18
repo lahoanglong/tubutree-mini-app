@@ -177,7 +177,7 @@ export function WastePointDetail({
               </button>
             </div>
             {full && <p className="text-xs text-warning-fg">Tối đa 5 người ở một điểm</p>}
-            <p className="text-xs text-stone-600">Chỉ admin gắn người ở điểm. Chủ điểm phải là chủ gian hàng đối tác (15.1).</p>
+            <p className="text-xs text-stone-600">Chỉ admin gắn người ở điểm. Chủ điểm phải là chủ gian hàng đối tác.</p>
           </>
         ) : (
           <p className="text-sm text-stone-700">Kho phân quyền theo vai trò nhân viên, không gắn người ở điểm.</p>
@@ -212,7 +212,7 @@ export function WastePointDetail({
                 <th className={TH}>Mã</th>
                 <th className={TH}>Khách</th>
                 <th className={TH}>Điểm</th>
-                <th className={TH}>Ngày</th>
+                <th className={TH}>Ngày tạo yêu cầu</th>
               </tr>
             </thead>
             <tbody>
@@ -220,7 +220,7 @@ export function WastePointDetail({
                 <tr key={r.id} className="border-b border-stone-100">
                   <td className={TD}>{r.code}</td>
                   <td className={TD}>{r.customerName}</td>
-                  <td className={TD}>{`${formatCount(r.pointsAwarded ?? 0)} điểm`}</td>
+                  <td className={TD}>{r.pointsAwarded === null ? '—' : `${formatCount(r.pointsAwarded)} điểm`}</td>
                   <td className={TD}>{formatDateTime(r.createdAt)}</td>
                 </tr>
               ))}
