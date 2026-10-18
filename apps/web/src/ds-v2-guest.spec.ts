@@ -133,7 +133,7 @@ const AFFILIATE: string[] = [
   'components/affiliate/storefront-inline.tsx',
   'components/affiliate/storefront-rules.ts',
 ];
-const GAME: string[] = [];
+const GAME: string[] = ['app/vuon-xanh/page.tsx', 'app/vuon-xanh/layout.tsx', 'components/game/checkin-streak.tsx', 'components/game/eco-impact.tsx', 'components/game/format.ts', 'components/game/game-card.tsx', 'components/game/game-link-row.tsx', 'components/game/game-notice.tsx', 'components/game/game-states.tsx', 'components/game/game-tabs.tsx', 'components/game/game-utils.ts', 'components/game/garden-hero.tsx', 'components/game/lucky-wheel-card.tsx', 'components/game/missions-card.tsx', 'components/game/quiz-card.tsx', 'components/game/season-banner.tsx', 'components/game/streak-repair.tsx', 'components/game/tree-actions.tsx', 'components/game/tree-health-alert.tsx', 'components/game/use-game-actions.ts', 'components/game/use-game-data.ts', 'components/game/use-locked-mutation.ts', 'components/game/use-wheel-prize.ts', 'components/game/wheel-prize-sheet.tsx', 'components/game/wheel.tsx', 'components/game/community-goal.tsx', 'components/game/friend-gifts.tsx', 'components/game/garden-plots.tsx', 'components/game/harvest-celebration.tsx', 'components/game/season-leaderboard.tsx', 'components/game/season-pass.tsx', 'components/game/species-codex.tsx', 'components/game/weekly-leaderboard.tsx', 'app/tu-van/page.tsx', 'app/tu-van/layout.tsx'];
 const PRO: string[] = [];
 const RECYCLE: string[] = [];
 const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];

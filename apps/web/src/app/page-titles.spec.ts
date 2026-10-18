@@ -12,6 +12,8 @@ import { metadata as settings } from './tai-khoan/cai-dat/layout';
 import { metadata as notifications } from './tai-khoan/thong-bao/layout';
 import { metadata as rewards } from './kho-qua/layout';
 import { metadata as myRewards } from './kho-qua/cua-toi/layout';
+import { metadata as game } from './vuon-xanh/layout';
+import { metadata as advisor } from './tu-van/layout';
 import { metadata as cashback } from './hoan-tien/layout';
 import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
 import { metadata as orders } from './tai-khoan/don-hang/layout';
@@ -50,7 +52,10 @@ const AFFILIATE: TitleCase[] = [
   ['/ctv', ctv, 'Cộng tác viên — Tubu Tree'],
   ['/ctv/gian-hang', ctvStorefront, 'Gian hàng của tôi — Tubu Tree'],
 ];
-const GAME: TitleCase[] = [];
+const GAME: TitleCase[] = [
+  ['/vuon-xanh', game, 'Vườn Xanh — Tubu Tree'],
+  ['/tu-van', advisor, 'Trợ lý AI Tubu — Tubu Tree'],
+];
 const PRO: TitleCase[] = [];
 const RECYCLE: TitleCase[] = [];
 const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
