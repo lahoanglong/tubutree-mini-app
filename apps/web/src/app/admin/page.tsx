@@ -146,6 +146,7 @@ import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
+import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
 import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
@@ -173,6 +174,7 @@ type Tab =
   | 'payouts'
   | 'customerRefunds'
   | 'orders'
+  | 'externalOrders'
   | 'returns'
   | 'users'
   | 'config'
@@ -211,6 +213,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Đơn hàng & giao vận',
     items: [
       { k: 'orders', label: 'Đơn hàng' },
+      { k: 'externalOrders', label: 'Đơn ngoài app' },
       { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
     ],
   },
@@ -283,7 +286,7 @@ const DEFAULT_TAB: Tab = 'inbox';
  */
 const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['refill'],
-  CSKH: ['inbox', 'orders', 'returns', 'users', 'quickReplies', 'community'],
+  CSKH: ['inbox', 'orders', 'externalOrders', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
   MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
   KE_TOAN: ['inbox', 'reports', 'merchantFulfilment', 'customerRefunds', 'payouts'],
@@ -486,6 +489,7 @@ export default function AdminPage() {
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
           {active === 'engagement' && <EngagementTab />}
+          {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}
