@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ordersListQuery } from '@tubutree/app-core/queries/orders';
@@ -29,7 +29,7 @@ const PAGE_LIMIT = 20;
  * Tab gốc "Đơn hàng" như `orders.tsx` của Mini App: tab trạng thái (kèm Định kỳ) → thẻ đơn có ảnh, số món, "Mua lại" → kệ Mua lại
  * (chỉ tab "Tất cả"). Tab đang chọn nằm ở `?tab=`. Hub `/tai-khoan` vẫn có khối OrdersSection riêng (có ô tìm).
  */
-export default function OrdersPage() {
+function OrdersPageBody() {
   const phase = useAuthPhase();
   const { user } = useAuth();
   const [tab, setTab] = useTabParam(ORDERS_TAB_KEYS, 'all');
@@ -147,5 +147,14 @@ export default function OrdersPage() {
       {body}
       <ReorderSheet target={reorderTarget} source="order_card" navigateToCart onNotice={setNotice} onClose={() => setReorderTarget(null)} />
     </main>
+  );
+}
+
+// useTabParam đọc useSearchParams: build tĩnh bắt buộc có Suspense bao ngoài.
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<AuthLoading />}>
+      <OrdersPageBody />
+    </Suspense>
   );
 }
