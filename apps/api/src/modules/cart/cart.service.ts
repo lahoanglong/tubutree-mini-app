@@ -327,7 +327,7 @@ export class CartService {
     // Tăng ATOMIC bằng increment (không set giá trị tuyệt đối newQty) — 2 request add-to-cart
     // đồng thời (double-tap/2 tab) cho cùng variation đều đọc `existing` trước khi request kia
     // ghi xong sẽ mất 1 lần cộng dồn nếu dùng `update: { quantity: newQty }`. Cùng pattern với
-    // refill.service.ts / flash-sale.service.ts.
+    // flash-sale.service.ts.
     // Bọc upsert + sự kiện add_to_cart trong CÙNG transaction nhỏ (Task 11) — ghi event ATOMIC
     // với thay đổi giỏ hàng, không dùng recordBestEffort (best-effort ngoài tx sẽ ghi sự kiện dù
     // upsert rollback nếu có lỗi hạ tầng giữa chừng).

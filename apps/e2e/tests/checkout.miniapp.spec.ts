@@ -126,6 +126,7 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     expect(call.body).toMatchObject({ addressId: CHECKOUT_ADDRESS.id, paymentMethod: 'COD', pointsToUse: 0 });
     expect(call.body).not.toHaveProperty('hasRecyclingPickup');
     expect(call.body).not.toHaveProperty('recyclingNote');
+    // default publicConfig has waste.pickup false, so the checkout makes no /waste/* call and shows no switch
     expect(call.body).not.toHaveProperty('wasteRequestId');
     expect(call.headers['idempotency-key'] ?? '').not.toBe('');
 

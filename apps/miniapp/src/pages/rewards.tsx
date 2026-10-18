@@ -89,7 +89,10 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
       await invalidateAfterRedeem(qc);
       onDone(outcome);
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
+    },
     onSettled: () => {
       busyRef.current = false;
     },

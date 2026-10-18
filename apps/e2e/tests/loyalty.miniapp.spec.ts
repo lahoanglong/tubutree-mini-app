@@ -5,9 +5,8 @@ import type {
   CouponDTO,
   LoyaltyOverview,
   MemberCardResponse,
-  RedeemRewardResult,
-  RewardCatalogResponse,
 } from '../../miniapp/src/services/account-api';
+import type { RedeemRewardResultDTO, RewardCatalogDTO } from '@tubutree/shared-types';
 import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
 import { flushEvents } from './support/events';
 
@@ -74,7 +73,7 @@ const REWARDS = [
   { id: 'reward-discount-100k', title: 'Voucher Giảm 100.000đ', pointsCost: 100, type: 'AMOUNT', value: 100000, minOrder: 600000 },
 ] as const;
 
-function catalog(s: LoyaltyState): RewardCatalogResponse {
+function catalog(s: LoyaltyState): RewardCatalogDTO {
   return {
     pointsBalance: s.points,
     pointsConvertedBalance: 0,
@@ -133,7 +132,8 @@ function mockLoyalty(
     };
     return res;
   });
-  api.post('/me/loyalty/rewards/:id/redeem', ({ params }) => {
+  api.post('/me/loyalty/rewards/:id/redeem', ({ params, call }) => {
+    expect(call.headers['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
     const r = REWARDS.find((x) => x.id === params.id)!;
     s.points -= r.pointsCost;
     const coupon: CouponDTO = {
@@ -145,7 +145,7 @@ function mockLoyalty(
       endAt: '2026-10-20T16:59:59.000Z',
     };
     s.coupons = [...s.coupons, coupon];
-    const res: RedeemRewardResult = {
+    const res: RedeemRewardResultDTO = {
       success: true,
       message: `Đổi thành công ${r.title}!`,
       pointsSpent: r.pointsCost,
@@ -216,58 +216,45 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     expect(api.callsTo('POST', '/me/loyalty/check-in')).toHaveLength(1);
   });
 
-  // Rewards moved to /rewards (spec 4.8); rewritten in M8.7.
-  test.fixme('Đổi điểm lấy mã giảm giá: xác nhận → trừ điểm → mã vào Mã giảm giá của tôi, quà không đủ điểm bị khoá', async ({ page, api }) => {
+  test('Đổi điểm lấy mã giảm giá: xác nhận → trừ điểm → mã vào Mã giảm giá của tôi, quà không đủ điểm bị khoá', async ({ page, api }) => {
     mockLoyalty(api);
     await page.goto('/loyalty');
 
-    await expect(page.getByText('Đổi Điểm Xanh nhận mã giảm giá')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('3 ưu đãi')).toBeVisible();
-    // 60 điểm < 100 → nút của quà 100k khoá.
-    await expect(page.getByRole('button', { name: 'Cần 100 điểm' })).toBeDisabled();
+    await page.getByText('Kho quà', { exact: true }).click({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/rewards$/);
 
-    const card50k = page
-      .locator('div')
-      .filter({ has: page.getByText('Voucher Giảm 50.000đ', { exact: true }) })
-      .filter({ has: page.getByRole('button', { name: 'Đổi ngay' }) })
-      .last();
-    await card50k.getByRole('button', { name: 'Đổi ngay' }).click();
+    const card = (name: string) => page.locator('[data-reward]').filter({ hasText: name });
+    // 60 điểm < 100 → quà 100 điểm không có nút Đổi.
+    await expect(card('Voucher Giảm 100.000đ').getByText('Cần thêm 40 điểm')).toBeVisible({ timeout: 15_000 });
+    await expect(card('Voucher Giảm 100.000đ').getByRole('button', { name: 'Đổi' })).toHaveCount(0);
 
-    // Gốc .zaui-sheet có kích thước 0 (nội dung định vị fixed) nên Playwright coi là "hidden": chỉ assert trên nội dung bên trong.
-    const modal = page.locator('.zaui-sheet').filter({ hasText: 'Xác nhận đổi ưu đãi' });
-    await expect(modal.getByText('-50 điểm Xanh')).toBeVisible();
-    await expect(modal.getByText('10 điểm Xanh')).toBeVisible();
-
+    await card('Voucher Giảm 50.000đ').getByRole('button', { name: 'Đổi' }).click();
     const redeemed = api.waitForCall('POST', '/me/loyalty/rewards/:id/redeem');
-    await modal.getByRole('button', { name: 'Đổi ngay' }).click();
+    await page.getByRole('button', { name: 'Xác nhận đổi' }).click();
     const call = await redeemed;
     expect(call.path).toBe('/me/loyalty/rewards/reward-discount-50k/redeem');
 
-    await expect(page.getByText('Đổi thành công! Mã LOYAL50K-E2E1 đã vào mục Mã giảm giá của tôi.')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Xác nhận đổi ưu đãi')).toHaveCount(0);
-    // Mã giảm giá của tôi tải lại (invalidate ['coupons']).
+    await expect(page.getByText('Mã LOYAL50K-E2E1 đã vào ví mã giảm giá')).toBeVisible({ timeout: 5_000 });
+    await page.getByRole('button', { name: 'Xem ví mã' }).click();
+    await expect(page).toHaveURL(/\/loyalty$/);
     await expect(page.getByText('Mã LOYAL50K-E2E1 · đơn từ 300.000đ')).toBeVisible({ timeout: 5_000 });
-    // Số dư sau đổi: 60 − 50 = 10 (GET /me/loyalty tải lại).
     await expect(page.getByText('Tích điểm ×1 · 10 điểm Xanh')).toBeVisible();
     expect(api.callsTo('POST', '/me/loyalty/rewards/:id/redeem')).toHaveLength(1);
   });
 
-  // Rewards moved to /rewards (spec 4.8); rewritten in M8.7.
-  test.fixme('Điểm từ đơn mới giao (còn hạn đổi/trả) chưa đổi quà được: nói rõ lý do + ngày mở, không báo "Cần X điểm" sai', async ({ page, api }) => {
+  test('Điểm từ đơn mới giao (còn hạn đổi/trả) chưa đổi quà được: nói rõ lý do + ngày mở, không báo "Cần X điểm" sai', async ({ page, api }) => {
     // 60 điểm, 40 điểm từ đơn giao gần đây — 2026-10-03T17:30Z = 00:30 04/10 giờ VN.
     mockLoyalty(api, { locked: { points: 40, until: '2026-10-03T17:30:00.000Z' } });
-    await page.goto('/loyalty');
+    await page.goto('/rewards');
 
-    await expect(page.getByText('Đổi Điểm Xanh nhận mã giảm giá')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('loyalty-locked-points')).toContainText(
-      'Đổi quà dùng được 20 điểm: 40 điểm từ đơn mới giao sẽ dùng được sau ngày 04/10/2026 (hết hạn đổi/trả hàng).',
-    );
-    // Quà 50 điểm: số dư 60 đủ nhưng chỉ dùng được 20 → nút khoá, KHÔNG ghi "Cần 50 điểm".
-    await expect(page.getByRole('button', { name: 'Chờ mở khoá điểm' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Cần 50 điểm' })).toHaveCount(0);
-    // Quà 20 điểm vẫn đổi được; quà 100 điểm vượt cả số dư → "Cần 100 điểm".
-    await expect(page.getByRole('button', { name: 'Đổi ngay' })).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Cần 100 điểm' })).toBeDisabled();
+    await expect(
+      page.getByText('Đổi quà dùng được 20 điểm: 40 điểm từ đơn mới giao sẽ dùng được sau ngày 04/10/2026 (hết hạn đổi/trả hàng).'),
+    ).toBeVisible({ timeout: 15_000 });
+    const card = (name: string) => page.locator('[data-reward]').filter({ hasText: name });
+    // Chỉ dùng được 20 điểm: quà 50 điểm thiếu 30, quà 100 điểm thiếu 80; quà 20 điểm vẫn đổi được.
+    await expect(card('Voucher Giảm 50.000đ').getByText('Cần thêm 30 điểm')).toBeVisible();
+    await expect(card('Voucher Giảm 100.000đ').getByText('Cần thêm 80 điểm')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đổi', exact: true })).toHaveCount(1);
   });
 
   test('Thẻ thành viên: QR thật của memberCode, chép mã, lời nhắc KHÔNG hứa tích điểm tại quầy khi tắt', async ({ page, api }) => {

@@ -47,6 +47,12 @@ export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'eco.real_tree_monthly_budget': 'Chưa có luồng trồng cây thật đọc khoá này.',
   'beta.features': 'Chương trình Beta Tester đã gỡ cùng 4 route /beta/* (Q-19); không còn nơi nào đọc danh sách tính năng beta.',
   'rbac.admin_phones': 'Quyền admin cấp ở bảng role_grants (tab Nhân sự), không đọc khoá này.',
+  // Refill đã gỡ (Đổi rác lấy quà thay thế, spec 13.2). Dòng DB giữ nguyên.
+  'refill.seeds_per_bottle': 'Refill đã gỡ; giọt nước của vỏ chai Tubu nằm ở waste_items.dropsPerUnit (Đổi rác).',
+  'refill.monthly_cap_bottles': 'Refill đã gỡ; trần tháng theo món nằm ở waste_items.monthlyCapQty (Đổi rác).',
+  'refill.pickup_address': 'Refill đã gỡ; địa chỉ nhận nằm ở bảng waste_points (Đổi rác).',
+  'refill.pickup_hours': 'Refill đã gỡ; giờ mở cửa nằm ở waste_points.openingHours (Đổi rác).',
+  'refill.pickup_phone': 'Refill đã gỡ; số điện thoại điểm nhận nằm ở waste_points.phone (Đổi rác).',
 };
 
 export function isDeadConfigKey(key: string): boolean {

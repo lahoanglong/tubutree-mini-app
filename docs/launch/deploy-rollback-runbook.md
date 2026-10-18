@@ -2,7 +2,7 @@
 
 Dành cho chủ shop và người giúp việc gõ lệnh theo từng bước. Không cần biết lập trình: mỗi bước ghi rõ gõ gì, thấy gì thì đúng, thấy gì khác thì DỪNG và gọi người.
 
-Phạm vi: lần phát hành đưa PROD từ bản đang chạy lên SHA đã chốt. Ba migration `20261014213300_r6_admin_orders_recipient_search`, `20261015070000_r8_refill_locations_table`, `20261015150000_r8_multi_reviews_unique_per_order` là phần cuối của đợt, nhưng danh sách migration thật phải áp phụ thuộc bản PROD đang chạy và có thể dài hơn rất nhiều (hàng chục cái nếu PROD còn ở bản cũ). Vì vậy việc đầu tiên là mục 1.0: xác định bản đang chạy và đếm đủ migration chờ áp. Kịch bản thử đơn thật sau khi lên bản mới nằm ở [pilot-order-playbook.md](pilot-order-playbook.md).
+Phạm vi: lần phát hành đưa PROD từ bản đang chạy lên SHA đã chốt. Ba migration `20261014213300_r6_admin_orders_recipient_search`, `20261015070000_r8_refill_locations_table`, `20261015150000_r8_multi_reviews_unique_per_order` là phần cuối của đợt (cùng `20261015160000_r9_sync_stock_same_clock_markers`, `20261015170000_r10_legacy_returns_received` và `20261020000000_waste_exchange` của Đổi rác lấy quà), nhưng danh sách migration thật phải áp phụ thuộc bản PROD đang chạy và có thể dài hơn rất nhiều (hàng chục cái nếu PROD còn ở bản cũ). Vì vậy việc đầu tiên là mục 1.0: xác định bản đang chạy và đếm đủ migration chờ áp. Kịch bản thử đơn thật sau khi lên bản mới nằm ở [pilot-order-playbook.md](pilot-order-playbook.md).
 
 ## 0. Đọc trước
 
@@ -16,7 +16,7 @@ Phạm vi: lần phát hành đưa PROD từ bản đang chạy lên SHA đã ch
 2. DỪNG API cũ TRƯỚC khi chạy `prisma migrate deploy` (migration đổi chỉ mục duy nhất của bảng đánh giá).
 3. Web mới lên CÙNG LÚC hoặc TRƯỚC API mới. Tab admin đã mở từ trước deploy phải được tải lại (xem mục 5, bước 12).
 4. Migration `20261014213300` khoá bảng `orders` (khoảng 14 giây cho mỗi 300.000 đơn, khoảng 2 giây dưới 50.000 đơn). Nếu PROD còn ở bản cũ, danh sách chờ áp còn có các migration nặng khác trên `orders` và `users` (bảng ở mục 1.0). Cách chọn giờ nằm ở mục 3.
-5. Quay lại bằng image chỉ hợp lệ khi schema sau migrate vẫn tương thích với image cũ (mục 7.0). Nếu danh sách chờ áp có BẤT KỲ migration nào ngoài năm migration của đợt (ba chính: r6, r8 điểm nhận vỏ, r8 đánh giá; hai nhỏ thêm sau: r9 mốc tồn kho, r10 hàng trả cũ) thì đường quay lại duy nhất là khôi phục bản backup (7.3).
+5. Quay lại bằng image chỉ hợp lệ khi schema sau migrate vẫn tương thích với image cũ (mục 7.0). Nếu danh sách chờ áp có BẤT KỲ migration nào ngoài sáu migration của đợt (ba chính: r6, r8 điểm nhận vỏ, r8 đánh giá; hai nhỏ thêm sau: r9 mốc tồn kho, r10 hàng trả cũ; một mới: Đổi rác lấy quà `20261020000000_waste_exchange`) thì đường quay lại duy nhất là khôi phục bản backup (7.3).
 
 ### 0.3 Hạ tầng hiện tại (đọc kỹ)
 
@@ -55,7 +55,7 @@ Tick từng ô. Chưa tick hết thì chưa chọn giờ deploy. Làm 1.0 TRƯ�
 
 ### 1.0 Việc đầu tiên: biết chính xác PROD đang chạy bản nào và sẽ áp những migration nào
 
-Không suy ra từ trí nhớ hay tài liệu cũ. `docs/2026-10-review/HANDOFF.md` (ghi ngày 2026-10-11) nói PROD chạy `cb92dc8` (115 migration); nhánh `main` hiện là `c7bfbdcd` (132 migration); SHA đã chốt cho lần này có nhiều hơn nữa (đếm lại bằng lệnh dưới; ngày 2026-10-15 là 181). Trong repo không có bằng chứng `main` đã được deploy sau ngày 2026-10-11, nên có thể 48 đến 65 migration sẽ được áp, không phải chỉ năm cái của đợt nêu ở đầu tài liệu. Mọi con số về cửa sổ (mục 3) và về quay lại (mục 7) phải tính từ danh sách thật.
+Không suy ra từ trí nhớ hay tài liệu cũ. `docs/2026-10-review/HANDOFF.md` (ghi ngày 2026-10-11) nói PROD chạy `cb92dc8` (115 migration); nhánh `main` hiện là `c7bfbdcd` (132 migration); SHA đã chốt cho lần này có nhiều hơn nữa (đếm lại bằng lệnh dưới; ngày 2026-10-15 là 181). Trong repo không có bằng chứng `main` đã được deploy sau ngày 2026-10-11, nên có thể 48 đến 65 migration sẽ được áp, không phải chỉ sáu cái của đợt nêu ở đầu tài liệu. Mọi con số về cửa sổ (mục 3) và về quay lại (mục 7) phải tính từ danh sách thật.
 
 Chủ dự án xác nhận ngày 2026-10-15: bản trên VPS vẫn chỉ là bản thử, không có dữ liệu khách thật (giữ giả định ngày 2026-10-11). Vẫn làm Phần A và B bên dưới để ghi số migration thật cho cửa sổ và đường quay lại; không cần thêm cổng bảo vệ số dư, đơn, điểm của khách thật. Nếu trước ngày deploy có khách thật dùng bản thử, quyết định này hết hiệu lực và phải làm lại mục này.
 
@@ -111,7 +111,7 @@ psqlq -tAc "SELECT value FROM system_configs WHERE key = 'loyalty.vnd_per_point_
 
 Hai số đầu phải là `0`; dòng thứ ba phải không có dòng nào (mặc định 1000) hoặc `1000`. Khác đi: đối soát tay với Tech lead TRƯỚC ngày deploy (đây là điều kiện sửa được trước, không phải lý do dừng giữa lúc đang bảo trì).
 
-Các migration còn lại trong danh sách chủ yếu thêm cột hoặc bảng nhỏ. Khi danh sách có migration ngoài năm cái của đợt, mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
+Các migration còn lại trong danh sách chủ yếu thêm cột hoặc bảng nhỏ. Khi danh sách có migration ngoài sáu cái của đợt, mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
 
 - [ ] Đã ghi bản PROD đang chạy (image khớp DB) và số migration chờ áp
 - [ ] Đã đối chiếu từng tên với bảng migration nặng; PD-3 (nếu có) đã kiểm 0, 0, 1000
@@ -355,6 +355,19 @@ Không đạt thì để `AI_ADVISOR_ENABLED=false`: Mini App ẩn lối vào, k
 
 - [ ] (Chỉ khi bật AI) gateway tới được từ container api, curl thử ra `result`, 20 câu thật đạt tiêu chí, đã báo chủ gateway
 
+### 1.8 Đổi rác lấy quà: ghi chú khi deploy
+
+- Kiểm chỉ mục từng phần (partial index) chạy trên một database CHƯA áp `20261020000000_waste_exchange` (ví dụ PROD trước khi deploy) sẽ báo THIẾU năm chỉ mục của migration này: ba khoá chống cộng điểm hai lần của `points_transactions` (`points_transactions_recycle_ref_key`, `points_transactions_recycle_reverse_key`, `points_transactions_gift_refund_key`), rồi `waste_points_one_warehouse_key` và `waste_point_staff_one_owner_key`. Kiểm này còn báo thiếu các chỉ mục từng phần của migration khác đang chờ áp trên database đó (ví dụ ba chỉ mục của `20261019100000_external_orders` nếu nó đi cùng lần deploy này). Đó là đúng, vì kiểm đọc thư mục migration của mã đang chạy. Sau khi migrate nó phải báo không thiếu cái nào.
+- Bộ test race (gồm `partial-unique-indexes` pin 23) chỉ chạy qua `docs/2026-10-review/handoff/verify-full.sh`, không bao giờ chạy trong CI.
+- Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API (xoá bộ đệm cấu hình) và xoá bộ đệm proxy/CDN nếu có.
+- Kiểm khoá mã giảm giá trùng lớp khoá Đổi rác (rủi ro đã chấp nhận, spec 10.1). Chạy sau mỗi lần tạo mã có giới hạn mỗi khách:
+
+  ```bash
+  psqlq -c "SELECT id, code FROM coupons WHERE \"perUserLimit\" > 0 AND hashtext(id) IN (731001,731002,731003,731004)"
+  ```
+
+  Kỳ vọng: 0 dòng. Có dòng: tắt mã đó (isActive = false) và tạo mã mới (id mới).
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
@@ -421,7 +434,7 @@ psqlq -c "SELECT extract(hour FROM \"createdAt\" AT TIME ZONE 'Asia/Ho_Chi_Minh'
 
 Tránh: giờ có flash sale hoặc chiến dịch, và lúc có đơn thu gom Gomdon đang chạy. Webhook của Gomdon chỉ thử lại 3 lần cách nhau 30 giây (xem [docs/integrations/gomdon.md](../integrations/gomdon.md)); sự kiện nào đến lúc API đang dừng quá lâu sẽ mất. Webhook Pancake và các cron đối soát (đẩy đơn mỗi 15 phút, sự kiện mỗi 10 phút) sẽ bù lại sau khi API chạy lại.
 
-### 3.4 Đo thật bằng diễn tập migrate trên bản sao (bắt buộc khi danh sách chờ áp có migration ngoài năm cái của đợt)
+### 3.4 Đo thật bằng diễn tập migrate trên bản sao (bắt buộc khi danh sách chờ áp có migration ngoài sáu cái của đợt)
 
 Các migration ngoài r6 chưa được đo riêng, và PD-3 có thể dừng giữa chừng vì dữ liệu. Cách duy nhất biết chắc là chạy toàn bộ `migrate deploy` lên một bản sao của DB thật, bằng image MỚI. Cần mã mới và image mới đã có trên máy chủ: làm bước 1, bước 2 và bước 3 của mục 5 vào buổi tối trước (chúng không đổi container đang chạy; bước 2 đứng trước bước 3 để image cũ vẫn được ghi và gắn thẻ `rollback`), rồi diễn tập ngoài giờ cao điểm vì máy dùng chung và phải có chỗ đĩa cho một bản DB nữa:
 
@@ -510,9 +523,9 @@ $DC run --rm --no-deps -T api pnpm exec prisma migrate status 2>&1 | tr -d '\r' 
 
 Kỳ vọng:
 - `check-env` in `Cấu hình môi trường hợp lệ.` và thoát 0.
-- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài năm cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `db.refill_location` ("bảng điểm nhận vỏ chưa có": bảng đó do migration `20261015070000` tạo); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; `db.demo_products`, `db.demo_coupons` ("sẽ dọn ở runbook mục 5, bước 7c"); và các dòng backup `không kiểm được` (xem ghi chú). Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
-- Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có năm migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
-- Dòng `db.pending_scope` (chỉ có khi có migration ngoài năm cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
+- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài sáu cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; `db.demo_products`, `db.demo_coupons` ("sẽ dọn ở runbook mục 5, bước 7c"); và các dòng backup `không kiểm được` (xem ghi chú). `db.waste_point` là PASS khi `waste.enabled` chưa có (trước deploy; bảng `waste_points` do migration `20261020000000_waste_exchange` tạo) và không nằm trong các WARN được phép. Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
+- Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có sáu migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
+- Dòng `db.pending_scope` (chỉ có khi có migration ngoài sáu cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
 - Dòng `db.orders_lock` cho số đơn và ước tính (đã nhân theo số migration nặng trên `orders`). Đối chiếu với mục 3.
 
 Ghi chú về các dòng backup: lệnh này chạy BÊN TRONG container nên không nhìn thấy crontab và rclone của máy chủ (kết quả là WARN "không kiểm được", không phải FAIL). Gắn thêm `-v ...:ro` như trên cho dòng `backup.recent` (tuổi bản backup gần nhất) kiểm được. Hai việc còn lại kiểm tay trên máy chủ:
@@ -559,10 +572,10 @@ COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB 
 ROLLBACK_DUMP=$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1)
 echo "$ROLLBACK_DUMP" | tee .rollback-dump
 ls -lh "$ROLLBACK_DUMP" && gunzip -t "$ROLLBACK_DUMP" && echo "gunzip OK"
-psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM bottle_returns), (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)"
+psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)"
 ```
 
-Kỳ vọng: backup in `OK`, `gunzip OK`, dung lượng cùng cỡ bản hôm qua. Ghi bộ 5 số đếm: orders ______ users ______ reviews ______ bottle_returns ______ migrations đã áp xong ______ (chỉ đếm dòng `finished_at IS NOT NULL AND rolled_back_at IS NULL`, cùng cách đếm với mục 1.0 phần A, 7.1 điểm 2 và mục 7.3). Điểm dừng: lỗi hoặc file quá nhỏ.
+Kỳ vọng: backup in `OK`, `gunzip OK`, dung lượng cùng cỡ bản hôm qua. Ghi bộ 4 số đếm: orders ______ users ______ reviews ______ migrations đã áp xong ______ (chỉ đếm dòng `finished_at IS NOT NULL AND rolled_back_at IS NULL`, cùng cách đếm với mục 1.0 phần A, 7.1 điểm 2 và mục 7.3). Điểm dừng: lỗi hoặc file quá nhỏ.
 
 ### Bước 7. Migrate bằng image MỚI
 
@@ -572,7 +585,7 @@ time $DC run --rm --no-deps api pnpm exec prisma migrate deploy
 date '+%H:%M:%S'
 ```
 
-Kỳ vọng: liệt kê các migration "Applying migration `...`" gồm MỌI tên trong `.pending-migrations` (kể cả năm migration của đợt), kết thúc bằng `All migrations have been successfully applied.` Thời gian khớp "tổng thời gian migrate" ở mục 3.2 (cho phép gấp vài lần vì máy dùng chung). Điểm dừng: bất kỳ lỗi nào (mục 7.1).
+Kỳ vọng: liệt kê các migration "Applying migration `...`" gồm MỌI tên trong `.pending-migrations` (kể cả sáu migration của đợt), kết thúc bằng `All migrations have been successfully applied.` Thời gian khớp "tổng thời gian migrate" ở mục 3.2 (cho phép gấp vài lần vì máy dùng chung). Điểm dừng: bất kỳ lỗi nào (mục 7.1).
 
 Xác minh sau migrate:
 
@@ -581,11 +594,11 @@ psqlq -tAc "SELECT count(*) AS da_ap_xong FROM _prisma_migrations WHERE finished
 psqlq -c "SELECT migration_name, finished_at IS NOT NULL AS xong FROM _prisma_migrations ORDER BY migration_name DESC LIMIT 4"
 psqlq -c "SELECT count(*) AS dang_do FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL"
 psqlq -c "SELECT indexname FROM pg_indexes WHERE tablename='reviews' AND indexname LIKE 'reviews_userId_productId%'"
-psqlq -c "SELECT count(*) AS diem_nhan_vo FROM refill_pickup_locations"
+psqlq -c "SELECT count(*) FILTER (WHERE \"kind\" = 'WAREHOUSE') AS kho, count(*) AS diem_doi_rac FROM waste_points"
 psqlq -c "SELECT count(*) AS thieu_tim_kiem FROM orders WHERE COALESCE(\"shippingAddress\" ->> 'recipient','') <> '' AND \"recipientSearch\" = ''"
 ```
 
-Kỳ vọng: `da_ap_xong` bằng (số "migrations" ghi ở bước 6) cộng (số chờ áp ở bước 4); bốn migration mới nhất đều `xong = t`; `dang_do = 0`; chỉ còn đúng một chỉ mục `reviews_userId_productId_orderId_key` (chỉ mục cũ `reviews_userId_productId_key` đã mất); `diem_nhan_vo` bằng 0 hoặc 1 (1 nếu trước đó đã có địa chỉ `refill.pickup_address`); `thieu_tim_kiem = 0`.
+Kỳ vọng: `da_ap_xong` bằng (số "migrations" ghi ở bước 6) cộng (số chờ áp ở bước 4); bốn migration mới nhất (có `20261020000000_waste_exchange`) đều `xong = t`; `dang_do = 0`; chỉ còn đúng một chỉ mục `reviews_userId_productId_orderId_key` (chỉ mục cũ `reviews_userId_productId_key` đã mất); lần deploy đầu: `kho = 0`, `diem_doi_rac = 0` (admin tự nhập kho trước khi bật waste.enabled); `thieu_tim_kiem = 0`.
 
 ### Bước 7b. Nạp dữ liệu tham chiếu (lần deploy đầu, hoặc DB mới)
 
@@ -732,7 +745,7 @@ $DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnp
 
 Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (ba mã `WELCOME30`, `FREESHIP`, `XANH10` luôn được tính là đã duyệt vì chủ dự án giữ chúng cho đợt ra mắt, không cần đặt gì; mã demo khác mà chủ shop duyệt giữ thì chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
 
-Một FAIL sửa được ngay mà không cần quay lại: `db.refill_location` ("chưa có điểm nhận vỏ nào"). Migration `20261015070000` chỉ chuyển địa chỉ cũ `refill.pickup_address` thành điểm đầu tiên khi địa chỉ đó đã có; PROD chưa từng điền thì bảng rỗng và khách không có chỗ mang vỏ tới. Thêm ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ rồi chạy lại lệnh trên. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
+Một FAIL sửa được ngay mà không cần quay lại: `db.waste_point` ("waste.enabled đang bật nhưng chưa có kho (WAREHOUSE) nào đang hoạt động"). Chỉ FAIL khi `waste.enabled` bật và chưa có kho ACTIVE. Sửa: tắt `waste.enabled` ở Quản trị, Cấu hình, hoặc thêm một kho đang hoạt động ở Quản trị, Đổi rác, Điểm nhận rồi chạy lại lệnh trên. Ba dòng WARN của kiểm này: (1) `waste.lane_pickup_enabled` bật nhưng Gomdon chưa sẵn sàng (công tắc `shipping.gomdon.recycling_enabled` hoặc `GOMDON_PHONE`/`GOMDON_PASSWORD`): đường Thu kèm đơn vẫn ẩn với khách, tắt `waste.lane_pickup_enabled` cho tới khi Gomdon trả lời bằng văn bản; (2) `waste.mailin_min_points` lớn hơn `waste.customer_monthly_cap_points`: đường Gửi về kho đóng với mọi khách; (3) `waste.pickup_min_points` lớn hơn `waste.customer_monthly_cap_points`: đường Thu kèm đơn đóng với mọi khách. Hai dòng sau sửa bằng cách hạ ngưỡng tối thiểu hoặc nâng trần tháng ở Quản trị, Cấu hình, nhóm waste. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
 
 ### Bước 11. Kiểm tra khói (smoke test)
 
@@ -758,7 +771,7 @@ Giao diện:
 
 - [ ] Quản trị, Sức khoẻ hệ thống: không có dòng đỏ; bấm "Gửi email thử" (nếu đã cấu hình SMTP): email tới hộp thư báo động trong vài phút.
 - [ ] Quản trị, Đơn hàng: ô tìm kiếm gõ tên người nhận (có dấu và không dấu) ra kết quả (migration `recipientSearch`).
-- [ ] Quản trị, Đổi vỏ chai, Điểm nhận vỏ: danh sách mở được, thấy các điểm đã có.
+- [ ] Quản trị, Đổi rác, Điểm nhận: mở được (danh sách trống ở lần đầu).
 - [ ] Quản trị, Duyệt SP đối tác: mở được; mở một sản phẩm chờ duyệt thấy hộp Pancake. KHÔNG bấm duyệt thật ở bước này.
 - [ ] Web khách (đăng nhập bằng tài khoản thử): trang một sản phẩm đã mua hiện khối đánh giá (API trả dữ liệu `can-review` mới với `reviewableOrders` và `myReviews`).
 - [ ] Đăng nhập Zalo trên web hoạt động (xem [pilot-order-playbook.md](pilot-order-playbook.md) mục 1).
@@ -820,20 +833,21 @@ cat .pending-migrations
 | Tình huống | Đường | Mất dữ liệu? |
 |---|---|---|
 | Migrate lỗi (chưa bật API) | 7.1 | Không |
-| Migrate xong, API/web mới lỗi, API mới CHƯA nhận khách (vài phút đầu), danh sách chờ áp CHỈ gồm các migration của đợt (r6, r8 điểm nhận vỏ, r8 đánh giá, r9 mốc tồn kho, r10 hàng trả cũ), và không có đánh giá trùng | 7.2 (chỉ quay image) | Không |
-| Migrate xong nhưng danh sách chờ áp có BẤT KỲ migration nào ngoài năm cái đó (p1, p4, p8, PD-3, hoặc tên khác), hoặc `.pending-migrations` không còn | 7.3 (khôi phục bản backup). KHÔNG dùng 7.2 | Mất mọi thứ ghi sau bước 6 |
+| Migrate xong, API/web mới lỗi, API mới CHƯA nhận khách (vài phút đầu), danh sách chờ áp CHỈ gồm các migration của đợt (r6, r8 điểm nhận vỏ, r8 đánh giá, r9 mốc tồn kho, r10 hàng trả cũ, Đổi rác lấy quà), và không có đánh giá trùng | 7.2 (chỉ quay image) | Không |
+| Migrate xong nhưng danh sách chờ áp có BẤT KỲ migration nào ngoài sáu cái đó (p1, p4, p8, PD-3, hoặc tên khác), hoặc `.pending-migrations` không còn | 7.3 (khôi phục bản backup). KHÔNG dùng 7.2 | Mất mọi thứ ghi sau bước 6 |
+| Migration `20261020000000_waste_exchange` (Đổi rác lấy quà) chỉ THÊM bảng, cột, enum và chỉ mục, tương thích với image cũ: quay về image trước là an toàn vì các bảng, enum và cột của Refill được giữ nguyên và không có lệnh DROP nào (R13.1.9) | 7.2 nếu mọi điều kiện của 7.2 thoả | Không |
 | Quay image nhưng đã có khách ghi đánh giá lần hai cho cùng một sản phẩm | 7.3 (khôi phục bản backup) hoặc gộp tay đánh giá rồi 7.2 (chỉ khi danh sách chờ áp chỉ là các migration của đợt) | 7.3 mất dữ liệu sau điểm backup |
 | Hỏng nặng, không rõ nguyên nhân, cần về đúng trạng thái trước deploy | 7.3 | Mất mọi thứ ghi sau bước 6 |
 | Chỉ lỗi giao diện hoặc lỗi nhỏ, schema ổn | KHÔNG quay lại: sửa tiến bằng hotfix, deploy lại theo mục 5 (bỏ bước migrate nếu không có migration mới) | Không |
 
-**Điều cần hiểu trước (quay image có an toàn không):** quay lại bằng image chỉ hợp lệ khi image cũ chạy đúng trên schema SAU migrate. "Image cũ" ở đây là image đã ghi ở mục 5 bước 2, và nó mong đợi schema của bản PROD cũ (mục 1.0). Chỉ riêng năm migration của đợt thì schema sau migrate vẫn tương thích với image cũ (chúng chỉ thêm cột, bảng, chỉ mục, hoặc đánh dấu `receivedAt` cho hàng trả cũ mà code cũ không đọc, trừ chỉ mục đánh giá, xem dưới). Nhưng nếu PROD cũ hơn thì danh sách chờ áp còn chứa các migration đổi dữ liệu và ràng buộc mà image cũ không chịu nổi, ví dụ:
+**Điều cần hiểu trước (quay image có an toàn không):** quay lại bằng image chỉ hợp lệ khi image cũ chạy đúng trên schema SAU migrate. "Image cũ" ở đây là image đã ghi ở mục 5 bước 2, và nó mong đợi schema của bản PROD cũ (mục 1.0). Chỉ riêng sáu migration của đợt thì schema sau migrate vẫn tương thích với image cũ (chúng chỉ thêm cột, bảng, chỉ mục, hoặc đánh dấu `receivedAt` cho hàng trả cũ mà code cũ không đọc, trừ chỉ mục đánh giá, xem dưới). Nhưng nếu PROD cũ hơn thì danh sách chờ áp còn chứa các migration đổi dữ liệu và ràng buộc mà image cũ không chịu nổi, ví dụ:
 
 - p8 (`20261014003831_p8_seller_merchant_fulfilment`) đổi hoa hồng PAID của lệnh rút REQUESTED hoặc APPROVED về APPROVED, cho `products.pancakeId` và `variations.pancakeId` cho phép NULL và đặt NULL cho mã `MCH_`: code cũ khai báo cột này là chuỗi bắt buộc và duy nhất nên đọc các dòng đó bị lỗi.
 - PD-3 quy đổi số dư xu về 0 và thêm ràng buộc `coinsBalance = 0`: code cũ vẫn ghi xu sẽ bị từ chối, và số dư xu đã bị đổi thành điểm không tự quay lại.
 - `20261018210000_points_1d` nhân 1.000 mọi số điểm: image cũ đọc số điểm theo đơn vị cũ nên giá quà, trần và số dư sai nghiêm trọng. Hoàn tác = khôi phục backup trước migrate (7.3); không quay image, không có script đảo ngược.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
 
-Vì vậy: danh sách chờ áp có migration ngoài năm cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
+Vì vậy: danh sách chờ áp có migration ngoài sáu cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
 
 Migration `20261015150000` (đánh giá nhiều lần) còn là **một chiều (forward-only)**. Sau khi áp, một khách có thể có nhiều đánh giá cho cùng một sản phẩm (mỗi lần mua một đánh giá). Chỉ mục cũ (một đánh giá cho mỗi khách và sản phẩm) không thể dựng lại nếu đã có đánh giá trùng. Vì vậy quay schema về bản cũ chỉ làm được bằng một trong hai cách: (a) khôi phục bản backup trước deploy (7.3), hoặc (b) khi danh sách chờ áp chỉ là các migration của đợt: gộp các đánh giá trùng trước rồi dựng lại chỉ mục cũ (7.2). Các migration `20261014213300` (cột tìm kiếm người nhận + trigger) và `20261015070000` (bảng điểm nhận vỏ + cột `pickupLocationId` cho phép rỗng) chỉ THÊM, bản code cũ bỏ qua chúng nên không cần hoàn tác.
 
@@ -869,13 +883,13 @@ Kỳ vọng: `api=healthy`, log có "No pending migrations to apply" và không 
 
 Chỉ đúng khi image cũ khớp schema sau migrate (mục 7.0). Hai điều kiện BẮT BUỘC (nếu không thoả, sang 7.3):
 
-1. Danh sách chờ áp đã áp ở mục 5 bước 7 chỉ gồm các migration của đợt (tối đa năm cái, không thêm cái nào khác):
+1. Danh sách chờ áp đã áp ở mục 5 bước 7 chỉ gồm các migration của đợt (tối đa sáu cái, không thêm cái nào khác):
 
 ```bash
 cat .pending-migrations
 ```
 
-Mọi dòng phải nằm trong năm tên này (PROD đã ở bản gần đây thì có thể chỉ thấy một vài dòng trong số đó): `20261014213300_r6_admin_orders_recipient_search`, `20261015070000_r8_refill_locations_table`, `20261015150000_r8_multi_reviews_unique_per_order`, `20261015160000_r9_sync_stock_same_clock_markers`, `20261015170000_r10_legacy_returns_received`. Có dòng tên khác, hoặc không còn file: DỪNG, đây là trường hợp 7.3 (7.0 nói vì sao: p8, PD-3... không quay lại được bằng image).
+Mọi dòng phải nằm trong sáu tên này (PROD đã ở bản gần đây thì có thể chỉ thấy một vài dòng trong số đó): `20261014213300_r6_admin_orders_recipient_search`, `20261015070000_r8_refill_locations_table`, `20261015150000_r8_multi_reviews_unique_per_order`, `20261015160000_r9_sync_stock_same_clock_markers`, `20261015170000_r10_legacy_returns_received`, `20261020000000_waste_exchange`. Có dòng tên khác, hoặc không còn file: DỪNG, đây là trường hợp 7.3 (7.0 nói vì sao: p8, PD-3... không quay lại được bằng image).
 
 2. Không có đánh giá trùng. Kiểm này làm trong khối lệnh dưới, SAU khi đã dừng API và web, vì nếu API mới còn phục vụ thì khách vẫn ghi thêm đánh giá giữa lúc kiểm và lúc dựng chỉ mục.
 
@@ -915,7 +929,7 @@ psqlq -c 'DROP INDEX "reviews_userId_productId_key"'
 
 MẤT mọi dữ liệu ghi sau bước 6 (đơn, thanh toán, đánh giá, đăng ký mới...). Chỉ làm khi Chủ shop đồng ý bằng lời trong nhóm chat.
 
-Thứ tự quan trọng: phải đưa container về image CŨ trước, vì `restore-db.sh` bật lại API bằng `docker compose start api` (khởi động lại đúng container hiện có). Nếu container đó đang là bản mới, API mới sẽ bật lên trên DB cũ và `prisma migrate deploy` áp lại toàn bộ các migration chờ áp (`.pending-migrations`). Đây cũng là đường quay lại bắt buộc khi danh sách chờ áp có migration ngoài năm cái của đợt (7.0): bản backup ở bước 6 là bản DUY NHẤT còn nguyên schema cũ.
+Thứ tự quan trọng: phải đưa container về image CŨ trước, vì `restore-db.sh` bật lại API bằng `docker compose start api` (khởi động lại đúng container hiện có). Nếu container đó đang là bản mới, API mới sẽ bật lên trên DB cũ và `prisma migrate deploy` áp lại toàn bộ các migration chờ áp (`.pending-migrations`). Đây cũng là đường quay lại bắt buộc khi danh sách chờ áp có migration ngoài sáu cái của đợt (7.0): bản backup ở bước 6 là bản DUY NHẤT còn nguyên schema cũ.
 
 ```bash
 . ./.rollback-images
@@ -932,11 +946,11 @@ COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB 
 
 ```bash
 $DC start web
-psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM bottle_returns), (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)"
+psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)"
 curl -s http://127.0.0.1:14001/api/health; echo
 ```
 
-Kỳ vọng: bộ 5 số khớp bộ ghi ở bước 6 (migrations là số cũ, không có migration nào trong `.pending-migrations`), `health` ổn. Image cũ chạy `prisma migrate deploy` lúc khởi động trên DB đã khôi phục sẽ thấy đúng các migration của nó đã áp, nên không áp gì thêm.
+Kỳ vọng: bộ 4 số khớp bộ ghi ở bước 6 (migrations là số cũ, không có migration nào trong `.pending-migrations`), `health` ổn. Image cũ chạy `prisma migrate deploy` lúc khởi động trên DB đã khôi phục sẽ thấy đúng các migration của nó đã áp, nên không áp gì thêm.
 
 Việc sau khôi phục:
 

@@ -59,17 +59,17 @@ describe('runGoLiveCheck', () => {
       ...GOOD_DB,
       appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => !required.includes(m)),
       orderCount: 300_000,
-      refill: { totalRows: 0, activeRows: 0, tableExists: false },
-      configs: Object.fromEntries(Object.entries(GOOD_DB.configs).filter(([k]) => k !== 'refill.pickup_address')),
+      waste: { tableExists: false, totalPoints: 0, activeWarehouses: 0 },
+      configs: { ...GOOD_DB.configs },
     };
     const c = { ...good, db: async () => oldProd, redis: async () => ({ ...GOOD_REDIS, maxmemoryPolicy: 'allkeys-lru' }) };
     const pre = await runGoLiveCheck({ env: GOOD_ENV, phase: 'pre-deploy' }, c);
     expect(pre.filter((x) => x.status === 'FAIL')).toEqual([]);
     expect(exitCodeFor(pre)).toBe(0);
-    expect(byId(pre, 'db.refill_location').status).toBe('WARN');
+    expect(byId(pre, 'db.waste_point').status).toBe('PASS');
     expect(byId(pre, 'redis.policy').status).toBe('WARN');
     const post = await runGoLiveCheck({ env: GOOD_ENV, phase: 'post-deploy' }, c);
-    expect(post.filter((x) => x.status === 'FAIL').map((x) => x.id).sort()).toEqual(['db.migrations_pending', 'db.refill_location', 'db.required_migrations', 'redis.policy']);
+    expect(post.filter((x) => x.status === 'FAIL').map((x) => x.id).sort()).toEqual(['db.migrations_pending', 'db.required_migrations', 'redis.policy']);
   });
 
   it('DB không kết nối được: một dòng FAIL, các nhóm khác vẫn chạy, không lộ thông điệp lỗi', async () => {
