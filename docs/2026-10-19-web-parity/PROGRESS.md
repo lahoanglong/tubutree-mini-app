@@ -13,6 +13,7 @@ Phiên chạy: `tubutree-mini-app-8c` (Opus 5.5). Nền: `web/base` db9adca0. Nh
 
 - `review/2026-10-18-launch` đã gộp tới d2dcbe0b (`lr2/polish` 2cea7a1b chưa vào launch lúc tạo nền).
 - `feat/recycle-rewards` đã gộp tới ef5ad5ed (`feat/recycle-L8` b2d54e77 chưa vào lúc tạo nền).
+- 23:10: gộp `feat/recycle-rewards` mới (đã chứa launch f58650f0) vào `web/integration` → 3d50df11; gộp trực tiếp launch thì xung đột `public-config.ts` (phiên đổi rác đã giải ở ef4f11b1), nên chỉ gộp nhánh đổi rác. tsc web/miniapp/api: 0 lỗi.
 
 ## Mốc test trên web/base (trước khi sửa)
 
