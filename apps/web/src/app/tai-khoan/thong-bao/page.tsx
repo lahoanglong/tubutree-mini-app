@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { markAllNotificationsRead, markNotificationRead, type NotificationDTO } from '@tubutree/app-core/api/account';
+import { fetchPurchasedItems } from '@tubutree/app-core/api/orders';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -13,6 +15,9 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/empty-state';
+import { ReorderSheet } from '@/components/reorder/reorder-sheet';
+import { pickReminderItem, reorderReminderAction } from '@/components/reorder/reorder-reminder';
+import { itemReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
@@ -24,7 +29,22 @@ const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message :
 export default function NotificationsPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
+  const router = useRouter();
   const [selected, setSelected] = useState<NotificationDTO | null>(null);
+  // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target.
+  const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  // Chặn chạm đúp đồng bộ (state chỉ cập nhật sau lần render kế tiếp).
+  const reminderBusyRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  selectedIdRef.current = selected?.id ?? null;
   const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: phase === 'authenticated' });
 
   // onSettled: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào; nạp lại cả hai trường hợp, không báo lỗi vì là thao tác nền.
@@ -41,6 +61,30 @@ export default function NotificationsPage() {
   const onTap = (n: NotificationDTO) => {
     if (n.status !== 'READ') readMut.mutate(n.id);
     setSelected(n);
+  };
+
+  // Tra đúng variation trong payload qua purchased-items (đơn đã giao của chính khách). Lỗi / API cũ 404 / hết hàng → điều hướng dự phòng.
+  const openReorderReminder = async (n: NotificationDTO, fallbackTo: string) => {
+    if (reminderBusyRef.current) return;
+    reminderBusyRef.current = true;
+    setReminderBusy(true);
+    try {
+      const variationId = n.payload.data?.variation_id;
+      const item = variationId
+        ? await fetchPurchasedItems(coreHttp, { variationId, limit: 1 })
+            .then((p) => pickReminderItem(p.items, variationId))
+            .catch(() => null)
+        : null;
+      // Khách đã đóng chi tiết / đổi sang thông báo khác / rời trang trong lúc tra cứu → không mở sheet hay điều hướng muộn.
+      if (!mountedRef.current || selectedIdRef.current !== n.id) return;
+      const next = reorderReminderAction(fallbackTo, item);
+      setSelected(null);
+      if (next.kind === 'sheet') setReorderTarget(itemReorderTarget(next.item));
+      else router.push(next.to);
+    } finally {
+      reminderBusyRef.current = false;
+      if (mountedRef.current) setReminderBusy(false);
+    }
   };
 
   const shell = (body: ReactNode) => (
@@ -118,13 +162,14 @@ export default function NotificationsPage() {
       </ul>
 
       <Sheet open={selected !== null} onClose={() => setSelected(null)} title="Chi tiết thông báo">
-        {selected && <Detail n={selected} onNavigate={() => setSelected(null)} />}
+        {selected && <Detail n={selected} busy={reminderBusy} onNavigate={() => setSelected(null)} onReorder={(to) => void openReorderReminder(selected, to)} />}
       </Sheet>
+      <ReorderSheet target={reorderTarget} source="notification" onClose={() => setReorderTarget(null)} />
     </>,
   );
 }
 
-function Detail({ n, onNavigate }: { n: NotificationDTO; onNavigate: () => void }) {
+function Detail({ n, busy, onNavigate, onReorder }: { n: NotificationDTO; busy: boolean; onNavigate: () => void; onReorder: (fallbackTo: string) => void }) {
   const m = notificationMeta(n.templateCode);
   const action = notificationAction(n.templateCode, n.payload.data);
   return (
@@ -142,7 +187,12 @@ function Detail({ n, onNavigate }: { n: NotificationDTO; onNavigate: () => void 
       </div>
       <hr className="border-stone-200" />
       <p className="whitespace-pre-line text-sm leading-relaxed text-stone-900">{n.payload.body || ''}</p>
-      {action && (
+      {action?.kind === 'reorder' && (
+        <button type="button" disabled={busy} aria-busy={busy || undefined} onClick={() => onReorder(action.to)} className={`${ui.btnPrimary} w-full`}>
+          {action.label}
+        </button>
+      )}
+      {action?.kind === 'link' && (
         <Link href={action.to} onClick={onNavigate} className={`${ui.btnPrimary} w-full`}>
           {action.label}
         </Link>
