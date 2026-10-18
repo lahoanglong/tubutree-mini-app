@@ -92,7 +92,7 @@ export class MerchantAdminController {
     @Param('id') id: string,
     @Body() dto: MarkMerchantPayoutPaidDto,
   ) {
-    return this.fulfilment.markPayoutPaid(adminId, id, dto.bankRef, { byStaff: role === 'STAFF' });
+    return this.fulfilment.markPayoutPaid(adminId, id, dto.bankRef, { byStaff: role !== 'ADMIN' });
   }
 
   @AllowStaff('KE_TOAN')

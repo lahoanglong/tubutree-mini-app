@@ -11,8 +11,8 @@ import { STAFF_PERMISSIONS, STAFF_PERMISSIONS_KEY, type StaffPermission } from '
 jest.mock('../config/env.validation', () => ({ validateEnv: (config: Record<string, unknown>) => config }));
 
 /**
- * Bảng quyền nhân viên (ADMINOPS-10, D1-05): MỌI route quản trị (@Roles chỉ ADMIN, route mở cho STAFF, hoặc có @AllowStaff) đọc
- * từ metadata decorator thật của đồ thị module, so với bảng duyệt dưới đây. Route mới chưa khai vào bảng, hay một @AllowStaff
+ * Bảng quyền nhân viên (ADMINOPS-10, D1-05): MỌI route quản trị (@Roles chỉ ADMIN, route mở cho STAFF, có @AllowStaff, hoặc có
+ * đoạn `/admin` ở bất kỳ đâu trong đường dẫn) đọc từ metadata decorator thật của đồ thị module, so với bảng duyệt dưới đây. Route mới chưa khai vào bảng, hay một @AllowStaff
  * gắn thêm/bớt, làm spec đỏ thay vì lặng lẽ mở hoặc đóng quyền.
  *
  * Giá trị: `ADMIN_ONLY` = chỉ ADMIN; `[nhóm…]` = ADMIN và nhân viên có một trong các nhóm đó; `STAFF` = mọi nhân viên kể cả chưa
@@ -297,8 +297,12 @@ function allRoutes(): AnyRoute[] {
   return out;
 }
 
-/** Route quản trị: chỉ ADMIN, mở cho STAFF, hoặc có @AllowStaff. */
-const inScope = (r: AnyRoute) => (r.roles.length === 1 && r.roles[0] === 'ADMIN') || r.roles.includes('STAFF') || r.allowed.length > 0;
+/** Có đoạn `/admin` ở bất kỳ vị trí nào trong đường dẫn (`/admin/…`, `/feed/admin/…`, `/refill/admin/…`). */
+const isAdminPath = (r: { key: string }) => /^\S+ \S*\/admin(\/|$)/.test(r.key);
+
+/** Route quản trị: chỉ ADMIN, mở cho STAFF, có @AllowStaff, hoặc nằm dưới một đoạn `/admin` dù khai vai trò gì. */
+const inScope = (r: AnyRoute) =>
+  (r.roles.length === 1 && r.roles[0] === 'ADMIN') || r.roles.includes('STAFF') || r.allowed.length > 0 || isAdminPath(r);
 
 const ALL_ROUTES = allRoutes();
 const ROUTES: AdminRoute[] = ALL_ROUTES.filter(inScope);
@@ -325,8 +329,14 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
     expect(Object.fromEntries(ROUTES.map((r) => [r.key, r.access]))).toEqual(EXPECTED);
   });
 
-  it('route dưới /admin luôn khai vai trò: quên @Roles là route công khai, lọt khỏi bảng này', () => {
-    expect(ALL_ROUTES.filter((r) => /^\S+ \/admin(\/|$)/.test(r.key) && r.roles.length === 0).map((r) => r.key)).toEqual([]);
+  it('route có /admin ở bất kỳ vị trí nào luôn khai vai trò: quên @Roles là route công khai, lọt khỏi bảng này', () => {
+    expect(ALL_ROUTES.filter((r) => isAdminPath(r) && r.roles.length === 0).map((r) => r.key)).toEqual([]);
+  });
+
+  it('route có /admin ở bất kỳ vị trí nào (kể cả /feed/admin/*, /refill/admin/*) đều có trong bảng duyệt', () => {
+    const admin = ALL_ROUTES.filter(isAdminPath).map((r) => r.key);
+    expect(admin.filter((k) => !/^\S+ \/admin(\/|$)/.test(k)).length).toBeGreaterThan(0);
+    expect(admin.filter((k) => !(k in EXPECTED))).toEqual([]);
   });
 
   it('@AllowStaff chỉ dùng nhóm việc có thật (chuỗi gõ sai không bao giờ khớp nhân viên nào)', () => {

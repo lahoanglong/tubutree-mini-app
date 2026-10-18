@@ -75,6 +75,6 @@ export class PayoutAdminController {
     @Param('id') id: string,
     @Body() dto: MarkPayoutPaidDto,
   ) {
-    return this.affiliate.markPayoutPaid(adminId, id, { ...dto, byStaff: role === 'STAFF' });
+    return this.affiliate.markPayoutPaid(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 }

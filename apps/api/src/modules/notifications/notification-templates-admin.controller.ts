@@ -23,6 +23,6 @@ export class NotificationTemplatesAdminController {
     @Param('code') code: string,
     @Body() dto: UpdateNotificationTemplateDto,
   ) {
-    return this.templates.update(code, dto, { id: actorId, staff: role === 'STAFF' });
+    return this.templates.update(code, dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 }
