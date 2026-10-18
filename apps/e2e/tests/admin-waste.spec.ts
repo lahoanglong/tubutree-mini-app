@@ -179,7 +179,7 @@ test.describe('Admin — Đổi rác lấy quà', () => {
     await page.getByRole('button', { name: 'Yêu cầu', exact: true }).click();
     const row = page.locator('[data-request="wr-c-1"]');
     await expect(row).toContainText('TR-C0MPL', { timeout: 15_000 });
-    await row.getByRole('button').first().click();
+    await row.getByRole('button', { name: 'Mở', exact: true }).click();
     await page.getByRole('button', { name: 'Thu hồi điểm', exact: true }).click();
 
     const dialog = page.getByRole('alertdialog');
