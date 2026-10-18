@@ -117,7 +117,7 @@ describe('MilestoneRewards — Nhận tất cả', () => {
     renderRewards(two());
     fireEvent.click(screen.getByRole('button', { name: /Nhận tất cả/ }));
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Mốc B: Mốc này đã nhận rồi');
+    expect(alert).toHaveTextContent('Mốc B (tháng 10/2026): Mốc này đã nhận rồi');
     expect(alert).not.toHaveTextContent('Mốc C');
     expect(mocks.claim).toHaveBeenCalledTimes(3);
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã nhận 2/3 mốc. Có 1 mốc chưa nhận được, xem bên dưới.', type: 'warning' });
@@ -131,18 +131,35 @@ describe('MilestoneRewards — Nhận tất cả', () => {
     renderRewards(two());
     fireEvent.click(screen.getByRole('button', { name: /Nhận tất cả/ }));
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Mốc P1: Lỗi mạng');
-    expect(alert).toHaveTextContent('Mốc B: Lỗi mạng');
-    expect(alert).toHaveTextContent('Mốc C: Lỗi mạng');
+    expect(alert).toHaveTextContent('Mốc P1 (tháng 9/2026): Lỗi mạng');
+    expect(alert).toHaveTextContent('Mốc B (tháng 10/2026): Lỗi mạng');
+    expect(alert).toHaveTextContent('Mốc C (tháng 10/2026): Lỗi mạng');
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Chưa nhận được mốc nào. Xem lý do bên dưới.', type: 'error' });
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+  });
+
+  it('cùng một mốc lỗi ở cả hai tháng: hai dòng riêng, mỗi dòng ghi đúng tháng, không trùng key', async () => {
+    mocks.claim.mockRejectedValue(new Error('Lỗi mạng'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderRewards(data({
+      milestones: [claimable('B')],
+      previousMonth: { monthKey: '2026-09', revenue: 3_000_000, milestones: [claimable('B')] },
+    }));
+    fireEvent.click(screen.getByRole('button', { name: /Nhận tất cả/ }));
+    const alert = await screen.findByRole('alert');
+    expect(Array.from(alert.children).map((c) => c.textContent)).toEqual([
+      'Mốc B (tháng 9/2026): Lỗi mạng',
+      'Mốc B (tháng 10/2026): Lỗi mạng',
+    ]);
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+    consoleError.mockRestore();
   });
 
   it('bấm lại thì xoá danh sách lỗi cũ', async () => {
     mocks.claim.mockRejectedValueOnce(new Error('A hỏng')).mockResolvedValue({ success: true, message: 'ok', rewardPoints: 1, monthKey: 'x' });
     renderRewards(data({ milestones: [claimable('B'), claimable('C')] }));
     fireEvent.click(screen.getByRole('button', { name: /Nhận tất cả/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Mốc B: A hỏng');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mốc B (tháng 10/2026): A hỏng');
     fireEvent.click(screen.getByRole('button', { name: /Nhận tất cả/ }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });

@@ -22,6 +22,8 @@ interface ClaimTarget {
 }
 
 interface ClaimFailure {
+  id: string;
+  month: string;
   title: string;
   message: string;
 }
@@ -34,7 +36,7 @@ const toTargets = (items: CtvMilestoneItem[], month: string): ClaimTarget[] =>
 /**
  * Thưởng mốc doanh số tháng (Điểm Xanh): mỗi mốc một dòng gọn, và "Nhận tất cả" khi có từ hai mốc nhận được.
  * Nhận tất cả chỉ gọi lần lượt API nhận từng mốc sẵn có (không có API gộp), tháng trước trước vì hết hạn sớm hơn;
- * mốc nào lỗi thì báo đúng tên mốc, các mốc còn lại vẫn được nhận.
+ * mốc nào lỗi thì báo đúng tên mốc và tháng, các mốc còn lại vẫn được nhận.
  */
 export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const { openSnackbar } = useSnackbar();
@@ -72,7 +74,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
         try {
           await claimCtvMilestone(t.id, t.month);
         } catch (e) {
-          failed.push({ title: t.title, message: getErrorMessage(e) });
+          failed.push({ id: t.id, month: t.month, title: t.title, message: getErrorMessage(e) });
         }
       }
       return { total: list.length, failed };
@@ -194,8 +196,8 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       {failures.length > 0 && (
         <div role="alert" style={{ marginBottom: 8 }}>
           {failures.map((f) => (
-            <Text key={f.title} variant="caption" tone="danger" as="div">
-              {f.title}: {f.message}
+            <Text key={`${f.month}:${f.id}`} variant="caption" tone="danger" as="div">
+              {f.title} ({monthLabel(f.month)}): {f.message}
             </Text>
           ))}
         </div>
