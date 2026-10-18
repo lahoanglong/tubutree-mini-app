@@ -449,7 +449,7 @@ function RateCsvImport() {
     <section aria-label="Nhập % hoa hồng từ CSV" className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3">
       <h3 className="text-sm font-semibold text-stone-900">Nhập % hoa hồng từ Excel (CSV &ldquo;sku,%&rdquo;)</h3>
       <p className="text-xs text-stone-600">
-        Dán 2 cột SKU và % từ Excel, mỗi dòng một SKU; gõ "mặc định" ở cột % để xoá % riêng (về mức mặc định). Xem trước rồi mới áp; còn dòng lỗi (sai định dạng, vượt trần, SKU lặp) thì
+        Dán 2 cột SKU và % từ Excel, mỗi dòng một SKU; gõ &ldquo;mặc định&rdquo; ở cột % để xoá % riêng (về mức mặc định). Xem trước rồi mới áp; còn dòng lỗi (sai định dạng, vượt trần, SKU lặp) thì
         không dòng nào được ghi.
       </p>
       <textarea

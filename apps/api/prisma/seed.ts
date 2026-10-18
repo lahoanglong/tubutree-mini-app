@@ -7,6 +7,7 @@
  */
 import { PrismaClient, Prisma } from '@prisma/client';
 import { seedGameQuiz } from './seed-game-quiz';
+import { assertPoints1dApplied } from './seed-reference';
 import { configSeedUpsertArgs, type ConfigSeed } from '../src/modules/system-config/config-seed';
 import { assertSeedAllowed } from '../src/modules/system-config/seed-guard';
 import {
@@ -914,6 +915,7 @@ async function seedWasteReferenceData() {
 
 async function main() {
   assertSeedAllowed(process.env);
+  await assertPoints1dApplied(prisma);
   console.log('🌱 Seeding SystemConfig...');
   for (const cfg of SYSTEM_CONFIGS) {
     // Key createOnly (admin sở hữu giá trị) chỉ tạo khi chưa có — xem config-seed.ts.

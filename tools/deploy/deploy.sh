@@ -17,6 +17,20 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vietnix.yml}"
 DEPLOY_HEALTH_TIMEOUT="${DEPLOY_HEALTH_TIMEOUT:-180}"
 
 cd "$REPO_ROOT"
+# Giá trị một khoá trong .env theo cách đọc của compose: bỏ \r, bỏ dấu nháy bao quanh, bỏ chú thích ` #...` cuối dòng không nháy.
+# CHỈ truyền cho tiến trình backup, không export: compose đọc cùng các biến này để thay vào DATABASE_URL.
+env_value() {
+  local line v
+  line="$(grep -E "^$1=" .env 2>/dev/null | tail -n1 || true)"
+  v="${line#*=}"
+  v="${v%$'\r'}"
+  case "$v" in
+    \"*) v="${v#\"}"; v="${v%%\"*}" ;;
+    \'*) v="${v#\'}"; v="${v%%\'*}" ;;
+    *) v="${v%%[[:space:]]#*}"; v="${v%"${v##*[![:space:]]}"}" ;;
+  esac
+  printf '%s' "$v"
+}
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 dc() { docker compose -f "$COMPOSE_FILE" "$@"; }
 
@@ -47,7 +61,19 @@ running_image() {
 rollback_hint() {
   local svc="$1" prev="$2" id name
   read -r id name <<<"$prev"
-  if migration_applied "$POINTS_1D_MIGRATION"; then
+  local state=1
+  # Chỉ lần chạy này mới là lần áp points_1d (hoặc không biết lúc đầu) thì mới chặn quay image: deploy sau đó chồng lên bản đã
+  # qua points_1d vẫn quay image được, còn khôi phục backup mới làm mất dữ liệu ghi từ lúc backup.
+  if [ "${POINTS_1D_PENDING_AT_START:-0}" = 1 ]; then
+    state=0
+    migration_state "$POINTS_1D_MIGRATION" || state=$?
+  fi
+  if [ "$state" -eq 2 ]; then
+    log "CẢNH BÁO: không đọc được DB để biết migration $POINTS_1D_MIGRATION (nhân 1.000 mọi số điểm) đã áp chưa — KHÔNG quay lại image $svc cũ khi chưa kiểm."
+    log "Kiểm trước: SELECT migration_name, finished_at, rolled_back_at FROM _prisma_migrations WHERE migration_name = '$POINTS_1D_MIGRATION'. Đã áp thì làm như đoạn khôi phục backup (runbook mục 7.3); chưa áp thì mới xem mục 7 để quay image."
+    return 0
+  fi
+  if [ "$state" -eq 0 ]; then
     log "KHÔNG quay lại image $svc cũ: migration $POINTS_1D_MIGRATION đã nhân 1.000 mọi số điểm, code cũ đọc điểm theo 1 điểm = 1.000đ nên sẽ trừ/đổi sai tiền."
     log "Cách xử lý: sửa lỗi của bản mới rồi deploy lại, hoặc khôi phục backup chụp ngay trước deploy này (tools/backup/restore-db.sh, ops/backup-predeploy.sh) rồi mới chạy lại image cũ."
     return 0
@@ -73,12 +99,26 @@ api_running() {
   [ -n "$id" ] && [ "$(docker inspect -f '{{.State.Running}}' "$id" 2>/dev/null || echo false)" = true ]
 }
 
-# Đọc DB bằng biến môi trường của chính container postgres, nên không cần đọc .env. Không đọc được thì coi như CHƯA áp.
-migration_applied() {
-  local applied
+# Đọc DB bằng biến môi trường của chính container postgres, nên không cần đọc .env.
+# migration_state: 0 = đã áp, 1 = chưa áp, 2 = không đọc được DB (không chắc).
+migration_state() {
+  local applied rc=0
   applied="$(printf '%s\n' "SELECT count(*) FROM _prisma_migrations WHERE migration_name = '$1' AND finished_at IS NOT NULL AND rolled_back_at IS NULL" \
-    | dc exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' 2>/dev/null || true)"
-  [ "$(printf '%s' "$applied" | tr -d '[:space:]')" = 1 ]
+    | dc exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' 2>/dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] || return 2
+  applied="$(printf '%s' "$applied" | tr -d '[:space:]')"
+  case "$applied" in
+    1) return 0 ;;
+    0) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# Không đọc được thì coi như CHƯA áp (dùng cho việc chặn/đợi migration; nơi cần phân biệt "không chắc" gọi migration_state).
+migration_applied() {
+  local state=0
+  migration_state "$1" || state=$?
+  [ "$state" -eq 0 ]
 }
 
 migration_pending() {
@@ -97,25 +137,87 @@ if api_running && guarded_migration_pending; then
   exit 2
 fi
 
-if api_running && migration_pending "$POINTS_1D_MIGRATION"; then
-  log "ERROR: bản này có migration $POINTS_1D_MIGRATION (đổi 1 Điểm Xanh = 1.000đ thành 1đ, nhân 1.000 mọi số điểm) chưa áp, mà API cũ đang chạy — DỪNG, chưa build hay migrate gì."
-  log "Làm đúng thứ tự: 1) backup ngay trước (ops/backup-predeploy.sh), 2) dừng API: docker compose -f $COMPOSE_FILE stop api, 3) chạy lại deploy.sh này (build, migrate bằng image mới, bật API mới), 4) seed-reference nếu cần (nó từ chối chạy khi migration chưa xong). Không quay lại image cũ sau bước 3: hoàn tác = khôi phục backup. Chi tiết: docs/launch/deploy-rollback-runbook.md."
-  exit 2
+# Tính một lần trước build: chưa áp (hoặc không đọc được DB, bảo thủ). Không phụ thuộc API đang chạy, để chạy lại sau khi
+# migrate/seed lỗi (API đã dừng) vẫn đi đủ luồng points_1d, gồm seed-reference.
+POINTS_1D_PENDING_AT_START=0
+if migration_pending "$POINTS_1D_MIGRATION"; then
+  POINTS_1D_PENDING_AT_START=1
 fi
+# seed-reference chạy khi points_1d còn chờ, hoặc API đang tắt (chạy lại sau lần seed lỗi, lúc migration đã áp): chỉ tạo dòng
+# thiếu nên chạy lại an toàn, và nó tự từ chối nếu points_1d chưa xong. Tính trước khi script dừng API.
+RUN_SEED_REFERENCE=0
+if [ "$POINTS_1D_PENDING_AT_START" = 1 ] || ! api_running; then
+  RUN_SEED_REFERENCE=1
+fi
+STOP_API_FOR_POINTS_1D=0
+if [ "$POINTS_1D_PENDING_AT_START" = 1 ] && api_running; then
+  STOP_API_FOR_POINTS_1D=1
+  log "Bản này có migration $POINTS_1D_MIGRATION (đổi 1 Điểm Xanh = 1.000đ thành 1đ, nhân 1.000 mọi số điểm) chưa áp, API cũ đang chạy: sẽ build trước (API cũ vẫn phục vụ), rồi dừng API, backup, migrate, seed-reference, bật API mới."
+fi
+
+# Câu mô tả trạng thái API cho các thông báo lỗi, theo API đang chạy hay đã tắt lúc lỗi.
+api_state_note() {
+  if api_running; then
+    echo "Container cũ vẫn phục vụ."
+  else
+    echo "API đang tắt và KHÔNG tự bật lại."
+  fi
+}
 
 log "1/5 Build image api + web (container cũ vẫn chạy)"
 dc build api web
 
 log "2/5 Kiểm cấu hình môi trường (.env) bằng image MỚI"
 if ! dc run --rm --no-deps api node dist/config/check-env.js; then
-  log "ERROR: .env không qua kiểm tra của bản mới — DỪNG. Container cũ vẫn phục vụ. Sửa .env (ops.yml set-env) rồi deploy lại."
+  log "ERROR: .env không qua kiểm tra của bản mới — DỪNG. $(api_state_note) Sửa .env (ops.yml set-env) rồi deploy lại."
   exit 2
+fi
+
+if [ "$STOP_API_FOR_POINTS_1D" = 1 ]; then
+  log "Dừng API cũ trước khi migrate $POINTS_1D_MIGRATION (từ đây API ngừng phục vụ tới khi API mới healthy)"
+  if ! dc stop api; then
+    log "ERROR: không dừng được API cũ — DỪNG, chưa backup, chưa migrate. Kiểm tra: docker compose -f $COMPOSE_FILE ps api"
+    exit 2
+  fi
+fi
+
+# Migration một chiều: luôn backup NGAY trước khi áp, kể cả khi API đã tắt từ trước (chạy lại sau lần lỗi: bản backup lần trước
+# có thể đã cũ vì API từng được bật phục vụ khách). API đã dừng nên không còn ghi nào lọt giữa bản backup và migration.
+if [ "$POINTS_1D_PENDING_AT_START" = 1 ]; then
+  log "Backup DB ngay trước migrate $POINTS_1D_MIGRATION (ops/backup-predeploy.sh)"
+  backup_rc=0
+  POSTGRES_USER="$(env_value POSTGRES_USER)" POSTGRES_DB="$(env_value POSTGRES_DB)" COMPOSE_FILE="$COMPOSE_FILE" \
+    bash "$REPO_ROOT/ops/backup-predeploy.sh" || backup_rc=$?
+  if [ "$backup_rc" -ne 0 ]; then
+    if [ "$backup_rc" -eq 3 ]; then
+      log "ERROR: bản backup local đã tạo nhưng đẩy ra ngoài máy (RCLONE_REMOTE) lỗi — vẫn DỪNG cho chắc, chưa migrate gì. Sửa rclone rồi chạy lại, hoặc tự quyết dùng bản local."
+    else
+      log "ERROR: backup local lỗi (exit $backup_rc) — DỪNG, chưa migrate gì."
+    fi
+    if [ "$STOP_API_FOR_POINTS_1D" = 1 ]; then
+      log "Bật lại API cũ (chính script này đã dừng nó)."
+      dc start api || log "ERROR: không bật lại được API cũ — chạy tay: docker compose -f $COMPOSE_FILE start api"
+    fi
+    exit 2
+  fi
 fi
 
 log "3/5 Áp migration bằng image MỚI"
 if ! dc run --rm --no-deps api pnpm exec prisma migrate deploy; then
-  log "ERROR: migration lỗi — DỪNG. Container cũ vẫn phục vụ. Xử lý theo mục Rollback của runbook."
+  if api_running; then
+    log "ERROR: migration lỗi — DỪNG. $(api_state_note) Xử lý theo mục Rollback của runbook."
+  else
+    log "ERROR: migration lỗi — DỪNG. $(api_state_note) Migration có thể đã áp dở: xử lý theo mục Rollback của runbook (7.0 và 7.3) trước khi bật API; chạy lại deploy.sh sẽ đi lại đủ luồng points_1d."
+  fi
   exit 2
+fi
+
+if [ "$RUN_SEED_REFERENCE" = 1 ]; then
+  log "3b/5 Nạp dữ liệu tham chiếu (seed-reference, chỉ tạo dòng thiếu) khi API còn dừng"
+  if ! dc run --rm --no-deps api pnpm run prisma:seed:reference; then
+    log "ERROR: seed-reference lỗi — DỪNG. $(api_state_note) Migration đã áp nên KHÔNG quay lại image cũ. Đọc lỗi rồi chạy lại deploy.sh (đi lại đủ luồng, seed-reference an toàn chạy lại)."
+    exit 2
+  fi
 fi
 
 log "4/5 Thay container api"

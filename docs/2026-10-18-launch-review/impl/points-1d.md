@@ -20,7 +20,7 @@ Nhánh `lr2/points1d`, dựa trên `review/2026-10-18-launch`. Kế hoạch: `po
 - Dấu đã chạy: `system_configs.loyalty.vnd_per_point_redeem = 1`. Có dấu thì no-op. Dòng có mà khác 1 và khác 1000 thì RAISE, không ghi gì.
 - Kiểm tràn INT4 trước khi ghi, RAISE nêu bảng.cột.
 - Nhân 1.000 các cột điểm của 14 bảng, khoá cấu hình có trần chống nhân đôi, ghi lịch sử `system_config_history` (changedBy `migration:points_1d`). Không đụng `updatedAt`.
-- Thứ tự vận hành: dừng API, `prisma migrate deploy`, `seed-reference`, bật API. Chạy seed-reference trước migrate sẽ ghi dấu = 1 và bỏ qua việc nhân.
+- Thứ tự vận hành: build image, kiểm .env, dừng API, backup, `prisma migrate deploy`, `seed-reference`, bật API (`deploy.sh` tự làm khi API đang chạy mà `points_1d` chưa áp). Chạy seed-reference trước migrate sẽ ghi dấu = 1 và bỏ qua việc nhân.
 - Rollback: `prisma/manual/pd3_xu_to_points_rollback.sql` từ chối chạy khi dấu đã có. Chưa có script rollback riêng cho points-1d (cần sao lưu DB trước migrate).
 
 ## Kiểm chứng (DB tạm `lr2p1d-pg`, cổng 5565)
@@ -48,7 +48,7 @@ Nhánh `lr2/points1d`, dựa trên `review/2026-10-18-launch`. Kế hoạch: `po
 Mỗi nhóm là commit mới, không amend.
 - Dấu migration: chỉ bỏ qua khi có dòng lịch sử `sch_pts1d_<md5 của loyalty.vnd_per_point_redeem>` do `migration:points_1d` ghi. Redeem = 1 mà không có dấu: RAISE nếu có user số dư điểm khác 0 hoặc có bất kỳ `points_transactions`; DB rỗng điểm thì chạy tiếp. Test race: preset redeem=1 có dữ liệu, chỉ có sổ điểm, DB rỗng, chạy lại là no-op.
 - `seed-reference.ts`: `assertPoints1dApplied` đọc `_prisma_migrations` (xong, chưa rollback), từ chối nạp nếu `points_1d` chưa xong. Test trong `seed-reference-cli.spec.ts`.
-- `deploy.sh`: thoát mã 2 trước build/migrate khi API đang chạy mà `points_1d` còn chờ; `rollback_hint` không gợi ý image cũ sau khi `points_1d` đã áp. 4 ca mới trong `deploy-scripts.spec.ts`.
+- `deploy.sh`: khi API đang chạy mà `points_1d` còn chờ: build, kiểm .env, dừng API, migrate, `prisma:seed:reference`, bật API (xem mục Sửa sau review lượt 2); `rollback_hint` không gợi ý image cũ sau khi `points_1d` đã áp hoặc khi không đọc được DB.
 - Điều kiện chống nhân đôi theo trần cũ: nhiệm vụ `rewardPoints <= 500`, sự kiện cộng đồng `<= 1000`, trần POS `<= 10_000_000`.
 - Lý do nợ giới thiệu (`REFERRAL_*_DEBT:...:<số>`): số cuối nhân 1.000.
 - Thông báo `XU_CONVERTED` (`nlog_xu2pts_*`) dựng lại từ `xu_points_conversions` và mẫu hiện tại, số có dấu chấm nghìn.
@@ -59,3 +59,28 @@ Mỗi nhóm là commit mới, không amend.
 - Web: đăng ký `engagement-tab.tsx` (`REWARD_POINTS_MAX`) trong `no-raw-date-format.spec.ts`; `npx vitest run src/lib`: 59 file, 810 ca đạt.
 - Runbook `deploy-rollback-runbook.md`: thêm dòng bảng migration, mục 7.0 và thứ tự backup, dừng API, migrate, seed-reference, bật API.
 - Chưa làm: dòng "Mua trong Mini App tích gấp đôi" (để bước 2 marketplace).
+
+## Sửa sau review lượt 2 (nhánh `lr2/pts1dpolish`)
+1. `tools/deploy/deploy.sh`: API đang chạy mà `points_1d` chưa áp không còn thoát mã 2. Luồng: build image, kiểm .env, `dc stop api`, migrate, `prisma:seed:reference`, bật API/web. Build hoặc .env lỗi thì API cũ vẫn chạy; migrate hoặc seed lỗi thì API đã dừng, thoát mã 2, không tự bật lại. Deploy thường (đã áp, hoặc API đang dừng) giữ nguyên luồng cũ. Ca mới trong `deploy-scripts.spec.ts`: luồng dừng-API đúng thứ tự, build lỗi, migrate lỗi, seed lỗi, luồng thường không dừng/seed.
+2. `rollback_hint`: thêm `migration_state` (0 đã áp, 1 chưa áp, 2 không đọc được). Không đọc được DB thì in cảnh báo kiểm `points_1d` và KHÔNG in lệnh quay image cũ. Ca spec dùng `FAKE_PSQL_FAIL`.
+3. Runbook (bảng migration dòng `points_1d`, đoạn thứ tự sau bước 7b) và mục Migration ở trên khớp luồng mới.
+4. Số điểm gửi khách qua `formatPoints`: `order-returns.service.ts` (Đã hoàn N Điểm Xanh), `checkout.service.ts` (3 câu: dùng/khoá, số dư không đủ, lô quy đổi đổi giữa chừng), `account-deletion.service.ts` (CONVERTED_POINTS). Quét thêm `apps/api/src`: các chỗ còn lại là log nội bộ hoặc đã qua `formatPoints`/`toLocaleString('vi-VN')`. Spec: 7.000 Điểm Xanh, 123.456 điểm, 7.000 trong lý do chặn xoá, `200/1.000 điểm`.
+5. `prisma/seed.ts`: gọi `assertPoints1dApplied` ngay sau `assertSeedAllowed` trong `main()`.
+6. `referral-notice-reconcile.cron.ts`: hàm `shownPointsMatch` coi log đã gửi khi `data.points` bằng `delta` hoặc `data.points * 1000` bằng `delta`. Spec mới `referral-notice-reconcile.cron.spec.ts`.
+7. `points-1d-migration.race-spec.ts:185`: đổi tên ca thành dấu dòng lịch sử `sch_pts1d_<md5>`.
+
+
+### Bổ sung sau soát của reviewer
+- Backup chạy SAU `dc stop api` (`ops/backup-predeploy.sh`, dùng trong `deploy.sh`), vì backup ở đầu workflow chạy trước `git pull` và build nên khôi phục nó mất mọi ghi trong lúc build. Backup lỗi thì `dc start api`, thoát mã 2, chưa migrate. `deploy.yml` và `ops/README-vietnix-deploy.md` đã cập nhật.
+- `POINTS_1D_PENDING_AT_START` tính trước build, không phụ thuộc API đang chạy: chạy lại khi API đã dừng sau lần lỗi vẫn chạy seed-reference. Chỉ dừng API khi cờ bật và API đang chạy. Câu báo lỗi chọn theo API đang chạy hay đã tắt. `dc stop api` lỗi in câu báo rồi thoát mã 2.
+- `rollback_hint` chỉ chặn quay image khi cờ đó bật (points_1d áp trong chính lần chạy này, hoặc lúc đầu không đọc được DB). Deploy chồng lên bản đã qua points_1d vẫn in lệnh quay image.
+- `formatPoints` cho thêm: `system-config.service.ts` (trần POINTS của seasonpass), `order-reversal.service.ts` (hai log thu hồi thưởng giới thiệu). Spec: `points-unit-guard.spec.ts`.
+- Giới hạn đã biết: tin ZNS đã xếp hàng trước migrate mang chữ dựng sẵn theo đơn vị cũ (`notifications.service.ts:165`, `templateData` lưu trong job). Chỉ là hiển thị, không sửa.
+- Chưa kiểm: `deploy.sh` chỉ chạy với docker giả, chưa chạy compose thật.
+
+### Lượt 3
+- `deploy.sh`: backup `ops/backup-predeploy.sh` chạy MỖI lần `points_1d` còn chờ (kể cả API đã tắt sẵn), ngay trước migrate; backup lỗi thì không migrate, chỉ `dc start api` khi chính script đã dừng API; exit 3 của backup (rclone lỗi, bản local tốt) có câu báo riêng nhưng vẫn dừng.
+- seed-reference chạy khi `points_1d` còn chờ hoặc API đang tắt (chọn cách này thay vì sửa câu báo: chạy lại deploy.sh sau lần seed lỗi sẽ không bỏ seed; seed chỉ tạo dòng thiếu và tự từ chối khi migration chưa xong).
+- Bỏ `export POSTGRES_USER/POSTGRES_DB/COMPOSE_FILE` (compose đọc cùng biến để thay vào `DATABASE_URL`); chỉ truyền cho tiến trình backup, `env_value` bỏ dấu nháy, chú thích cuối dòng và `\r`. Bỏ phần export trong `deploy.yml`.
+- Race `pd3-xu-migration`: schema nháp thêm `system_config_history` (khối hoàn tác đọc dấu `sch_pts1d_<md5>`), thêm ca dấu đó khiến hoàn tác RAISE. Các race spec khác chạy SQL trong schema nháp không đọc bảng này.
+

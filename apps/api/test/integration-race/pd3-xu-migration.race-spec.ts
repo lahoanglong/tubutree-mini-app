@@ -76,7 +76,7 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
   beforeAll(async () => {
     await exec(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
     await exec(`CREATE SCHEMA ${SCHEMA}`);
-    for (const t of ['users', 'points_transactions', 'coin_transactions', 'system_configs', 'notification_logs']) {
+    for (const t of ['users', 'points_transactions', 'coin_transactions', 'system_configs', 'system_config_history', 'notification_logs']) {
       await exec(`CREATE TABLE ${SCHEMA}.${t} (LIKE public.${t} INCLUDING ALL)`);
     }
     // Schema nháp dựng trạng thái TRƯỚC migration C (deploy thật: B chạy trước C): LIKE ... INCLUDING ALL
@@ -321,6 +321,19 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
     expect(await invariants()).toEqual({ converted_drift: 0, standard_drift: 0, coin_drift: 0 });
     // Bảng chụp và dòng quy đổi gốc vẫn còn (không xoá gì).
     expect((await counts()).snapshots).toBe(8);
+  });
+
+  it('T21: dấu lịch sử sch_pts1d_<md5> của migration points_1d (kể cả khi redeem khác 1) → hoàn tác RAISE, không ghi gì', async () => {
+    await exec(`INSERT INTO ${SCHEMA}.system_config_history ("id", "key", "oldValue", "newValue", "changedBy", "changedAt")
+                VALUES ('sch_pts1d_' || md5('loyalty.vnd_per_point_redeem'), 'loyalty.vnd_per_point_redeem', '1000'::jsonb, '1'::jsonb, 'migration:points_1d', now())`);
+    await exec(`INSERT INTO ${SCHEMA}.system_configs ("key", "value", "category", "updatedAt")
+                VALUES ('loyalty.vnd_per_point_redeem', '500'::jsonb, 'loyalty', now())
+                ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value"`);
+    const before = await rollbackFootprint();
+    await expect(runRollback()).rejects.toThrow(/points-1d đã chạy/);
+    expect(await rollbackFootprint()).toEqual(before);
+    await exec(`DELETE FROM ${SCHEMA}.system_config_history WHERE "id" = 'sch_pts1d_' || md5('loyalty.vnd_per_point_redeem')`);
+    await exec(`DELETE FROM ${SCHEMA}.system_configs WHERE "key" = 'loyalty.vnd_per_point_redeem'`);
   });
 
   it('T21: hoàn tác từ chối khi đã có đơn tiêu điểm quy đổi', async () => {

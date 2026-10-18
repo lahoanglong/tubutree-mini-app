@@ -182,7 +182,7 @@ describe('points-1d migration nhân 1.000 số điểm (real Postgres)', () => {
     expect(Number(after!.ledger)).toBe(after!.balance);
   });
 
-  it('chạy lần hai không làm gì (dấu loyalty.vnd_per_point_redeem = 1), không nhân lần nữa', async () => {
+  it('chạy lần hai không làm gì (dấu là dòng lịch sử sch_pts1d_<md5> của chính migration), không nhân lần nữa', async () => {
     await run();
     const once = await snapshot();
     await run();
