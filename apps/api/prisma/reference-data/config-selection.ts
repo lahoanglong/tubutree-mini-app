@@ -52,6 +52,10 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
 export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'shipping.free_threshold': 'phí ship là quyết định của chủ shop: để trống thì go-live:check WARN (db.shipping_rates) buộc xác nhận, nạp 200k sẽ làm WARN biến mất mà chưa ai xác nhận',
   'shipping.flat_fee_below_threshold': 'như shipping.free_threshold',
+  'shipping.first_order_free_enabled': 'migration 20261018150010_claim_freeship_config đã tạo dòng với giá trị bằng mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
+  'shipping.first_order_free_min_subtotal': 'như shipping.first_order_free_enabled',
+  'app.miniapp_base_url': 'như shipping.first_order_free_enabled (mặc định rỗng, không rơi về biến môi trường: link thiếu thì QR dùng đường dẫn tương đối)',
+  'merchant.consignment_settle_from': 'mốc đối soát hàng giao hộ là quyết định của chủ shop: thiếu dòng thì go-live:check WARN (db.consignment_from) buộc đặt mốc; nạp ngày nào cũng làm WARN thành PASS mà chưa ai xác nhận, và nạp null chỉ đổi WARN sang thông báo "giá trị không hợp lệ". Chủ shop đặt ở Quản trị, Cấu hình (ghi được dù chưa có dòng nhờ luật ghi trong SystemConfigService.JSON_RULES), theo gợi ý của go-live:check',
 };
 
 /**
