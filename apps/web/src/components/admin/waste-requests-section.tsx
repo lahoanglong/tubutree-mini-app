@@ -239,7 +239,7 @@ function RequestTable({
             const tracking = [r.carrier, r.trackingCode].filter((x): x is string => x !== null && x !== '').join(' · ');
             return (
               <tr key={r.id} data-request={r.id} className="border-b border-stone-100">
-                <td className={`${TD} font-medium text-stone-900`}>{r.code}</td>
+                <td className={`${TD} whitespace-nowrap font-mono font-medium text-stone-900`}>{r.code}</td>
                 <td className={TD}>
                   <div>{WASTE_METHOD_LABELS[r.method]}</div>
                   <div className="text-xs text-stone-600">
@@ -683,7 +683,7 @@ function UnmatchedRow({
           ) : (
             <button type="button" className={BTN_XS_SECONDARY} aria-pressed={matching} onClick={onMatch}>Khớp yêu cầu</button>
           )}
-          <button type="button" className={BTN_XS_SECONDARY} disabled={busy} onClick={onClose}>Đóng</button>
+          <button type="button" className={BTN_XS_SECONDARY} disabled={busy} onClick={onClose}>Đóng kiện</button>
         </div>
       )}
       {open && matching && !adminOnly && <MatchPanel busy={busy} onSubmit={onSubmitMatch} />}
