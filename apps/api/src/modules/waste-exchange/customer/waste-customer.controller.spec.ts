@@ -8,7 +8,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
-import { WasteCreateDto, WasteCustomerController, WasteEditDto, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto } from './waste-customer.controller';
+import { WasteCreateDto, WasteCustomerController, WasteEditDto, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto, WasteTrackingDto } from './waste-customer.controller';
 import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
@@ -24,7 +24,7 @@ const svc = <T extends string>(...m: T[]) => Object.fromEntries(m.map((k) => [k,
 async function build(enabled: boolean) {
   const me = svc('me', 'rules');
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
-  const requests = svc('list', 'detail', 'byOrder', 'create', 'edit');
+  const requests = svc('list', 'detail', 'byOrder', 'create', 'edit', 'setTracking', 'cancel');
   const preview = svc('preview');
   const mod = await Test.createTestingModule({
     controllers: [WasteCustomerController],
@@ -74,6 +74,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     expect(routes).toEqual([
       ['me', 0, 'me'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
+      ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.nearby)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.nearby)).toBe(30);
@@ -146,6 +147,30 @@ describe('WasteCustomerController.edit (spec 15.2 PATCH)', () => {
   });
 });
 
+describe('WasteCustomerController.setTracking and cancel (spec 15.1 OWN)', () => {
+  const body = { carrier: 'GHTK', trackingCode: 'S1' };
+  it('OWN gate: programme off and a waste-blocked customer still reach the service; guest and no phone are 403', async () => {
+    const off = await build(false);
+    await expect(off.c.setTracking('blocked', 'r1', body)).resolves.toEqual({ ok: 'setTracking' });
+    await expect(off.c.cancel('blocked', 'r1')).resolves.toEqual({ ok: 'cancel' });
+    expect(off.requests.setTracking).toHaveBeenCalledWith('blocked', 'r1', body);
+    expect(off.requests.cancel).toHaveBeenCalledWith('blocked', 'r1');
+    const on = await build(true);
+    await expect(on.c.setTracking('guest', 'r1', body)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(on.c.cancel('nophone', 'r1')).rejects.toThrow(new ForbiddenException('Bạn cần chia sẻ số điện thoại để dùng Đổi rác lấy quà.'));
+    expect(on.requests.setTracking).not.toHaveBeenCalled();
+    expect(on.requests.cancel).not.toHaveBeenCalled();
+  });
+  it('PUT tracking and POST cancel with 10/min; cancel answers 200', () => {
+    const p = WasteCustomerController.prototype;
+    for (const m of [p.setTracking, p.cancel]) {
+      expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, m)).toBe(10);
+      expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, m)).toBe(60_000);
+    }
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.cancel)).toBe(200);
+  });
+});
+
 describe('read DTOs (global ValidationPipe)', () => {
   const pipe = createValidationPipe();
   const run = (metatype: unknown, value: unknown, type: 'body' | 'query' = 'body') => pipe.transform(value, { type, metatype: metatype as never, data: '' });
@@ -190,5 +215,18 @@ describe('read DTOs (global ValidationPipe)', () => {
     await expect(run(WasteEditDto, { lines: [{ itemId: 'carton', declaredQty: 2 }], method: 'MAIL_IN' })).rejects.toThrow();
     await expect(run(WasteEditDto, { lines: [] })).rejects.toThrow();
     await expect(run(WasteEditDto, { lines: [{ itemId: 'carton', declaredQty: 2 }] })).resolves.toBeInstanceOf(WasteEditDto);
+  });
+  it.each([
+    [{ carrier: '  ', trackingCode: 'S1' }],
+    [{ carrier: 'x'.repeat(61), trackingCode: 'S1' }],
+    [{ carrier: 'GHTK', trackingCode: 'x'.repeat(65) }],
+    [{ carrier: null, trackingCode: 'S1' }],
+    [{ trackingCode: 'S1' }],
+    [{ carrier: 'GHTK' }],
+  ])('tracking DTO rejects %j', async (b) => {
+    await expect(run(WasteTrackingDto, b)).rejects.toThrow();
+  });
+  it('tracking DTO trims both fields', async () => {
+    await expect(run(WasteTrackingDto, { carrier: ' GHTK ', trackingCode: ' S1 ' })).resolves.toMatchObject({ carrier: 'GHTK', trackingCode: 'S1' });
   });
 });

@@ -243,3 +243,110 @@ describe('WasteRequestsService.edit (spec 15.2 PATCH)', () => {
     expect(tx.wasteEvent.create).not.toHaveBeenCalled();
   });
 });
+
+function makeTracking(o: { row: unknown; dup?: unknown }) {
+  const order: string[] = [];
+  const tx = {
+    $executeRaw: jest.fn(async (...args: unknown[]) => {
+      order.push((args[0] as TemplateStringsArray).join('?').includes('pg_advisory_xact_lock') ? 'lockTracking' : 'conflict');
+      return 1;
+    }),
+    $queryRaw: jest.fn(async (..._sql: unknown[]) => { order.push('forUpdate'); return o.row ? [o.row] : []; }),
+    wasteRequest: {
+      findFirst: jest.fn(async (_args: unknown) => { order.push('ownDup'); return o.dup ?? null; }),
+      updateMany: jest.fn(async (_args: { where: Record<string, unknown>; data: Record<string, unknown> }) => { order.push('update'); return { count: 1 }; }),
+    },
+    wasteEvent: { create: jest.fn(async (_args: { data: Record<string, unknown> }) => { order.push('event'); return { id: 'e1' }; }) },
+  };
+  const prisma = { $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)) };
+  const svc = new WasteRequestsService(prisma as never, {} as never, {} as never, { snapshot: jest.fn().mockResolvedValue(SNAP) } as never, {} as never);
+  const loadDetail = jest.spyOn(svc, 'loadDetail').mockResolvedValue({ id: 'r1' } as never);
+  return { svc, tx, loadDetail, order };
+}
+function makeCancel(o: { row: unknown }) {
+  const tx = {
+    $queryRaw: jest.fn(async (..._sql: unknown[]) => (o.row ? [o.row] : [])),
+    wasteRequest: { updateMany: jest.fn(async (_args: { where: Record<string, unknown>; data: Record<string, unknown> }) => ({ count: 1 })) },
+    wasteEvent: { create: jest.fn(async (_args: { data: Record<string, unknown> }) => ({ id: 'e1' })) },
+  };
+  const prisma = { $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)) };
+  const svc = new WasteRequestsService(prisma as never, {} as never, {} as never, { snapshot: jest.fn().mockResolvedValue(SNAP) } as never, {} as never);
+  const loadDetail = jest.spyOn(svc, 'loadDetail').mockResolvedValue({ id: 'r1' } as never);
+  return { svc, tx, loadDetail };
+}
+
+describe('WasteRequestsService.setTracking (spec 15.2)', () => {
+  const open = { id: 'r1', method: 'MAIL_IN', status: 'OPEN', carrier: null, trackingCode: null, trackingNorm: null };
+  it('TRACKING lock first, then own row FOR UPDATE, own-duplicate check, OPEN->IN_TRANSIT with inTransitAt and expiresAt null, conflict statement, TRACKING_SET', async () => {
+    const { svc, tx, order } = makeTracking({ row: open });
+    await svc.setTracking('u1', 'r1', { carrier: 'GHTK', trackingCode: ' s 123 abc ' });
+    expect(order).toEqual(['lockTracking', 'forUpdate', 'ownDup', 'update', 'conflict', 'event']);
+    const [lockStrings] = tx.$executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    expect(lockStrings.join('?')).toContain('pg_advisory_xact_lock(731002, 0)');
+    expect(tx.wasteRequest.findFirst).toHaveBeenCalledWith({ where: { userId: 'u1', id: { not: 'r1' }, trackingNorm: 'S123ABC', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } }, select: { id: true } });
+    const upd = tx.wasteRequest.updateMany.mock.calls[0]![0];
+    expect(upd.where).toEqual({ id: 'r1', userId: 'u1', method: 'MAIL_IN', status: 'OPEN' });
+    expect(upd.data).toMatchObject({ status: 'IN_TRANSIT', carrier: 'GHTK', trackingCode: 's 123 abc', trackingNorm: 'S123ABC', expiresAt: null, inTransitAt: expect.any(Date) });
+    expect(tx.wasteEvent.create.mock.calls[0]![0].data).toMatchObject({ kind: 'TRACKING_SET', actorRole: 'CUSTOMER', actorUserId: 'u1', requestId: 'r1' });
+  });
+  it('IN_TRANSIT edit changes carrier and code only, TRACKING_EDITED; trackingConflict is never cleared', async () => {
+    const { svc, tx } = makeTracking({ row: { ...open, status: 'IN_TRANSIT', carrier: 'GHTK', trackingCode: 'S123', trackingNorm: 'S123' } });
+    await svc.setTracking('u1', 'r1', { carrier: 'GHN', trackingCode: 'S124' });
+    const upd = tx.wasteRequest.updateMany.mock.calls[0]![0];
+    expect(upd.where).toEqual({ id: 'r1', userId: 'u1', method: 'MAIL_IN', status: 'IN_TRANSIT' });
+    expect(Object.keys(upd.data).sort()).toEqual(['carrier', 'trackingCode', 'trackingNorm']);
+    expect(tx.wasteEvent.create.mock.calls[0]![0].data.kind).toBe('TRACKING_EDITED');
+  });
+  it('re-sending the same carrier and code on IN_TRANSIT is a no-op: no write, no event', async () => {
+    const { svc, tx } = makeTracking({ row: { ...open, status: 'IN_TRANSIT', carrier: 'GHTK', trackingCode: 'S123', trackingNorm: 'S123' } });
+    await svc.setTracking('u1', 'r1', { carrier: 'GHTK', trackingCode: 's123' });
+    expect(tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(tx.wasteEvent.create).not.toHaveBeenCalled();
+  });
+  it.each<[string, unknown, unknown, unknown]>([
+    ['foreign or missing id', null, null, new NotFoundException('Không tìm thấy yêu cầu')],
+    ['PICKUP', { ...open, method: 'PICKUP' }, null, new ConflictException('Yêu cầu này không dùng mã vận đơn')],
+    ['DROP_OFF', { ...open, method: 'DROP_OFF' }, null, new ConflictException('Yêu cầu này không dùng mã vận đơn')],
+    ['RECEIVED', { ...open, status: 'RECEIVED' }, null, new ConflictException('Yêu cầu này không còn nhập mã vận đơn được')],
+    ['EXPIRED', { ...open, status: 'EXPIRED' }, null, new ConflictException('Yêu cầu này không còn nhập mã vận đơn được')],
+    ['own duplicate', open, { id: 'r2' }, new ConflictException('Bạn đã dùng mã vận đơn này cho một yêu cầu khác')],
+  ])('%s -> error, nothing written', async (_n, row, dup, err) => {
+    const { svc, tx } = makeTracking({ row, dup });
+    const call = svc.setTracking('u1', 'r1', { carrier: 'GHTK', trackingCode: 'S123' });
+    await expect(call).rejects.toThrow(err as Error);
+    await expect(call).rejects.toBeInstanceOf((err as Error).constructor);
+    expect(tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(tx.wasteEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('WasteRequestsService.cancel (spec 15.2)', () => {
+  it('OPEN unattached: FOR UPDATE then conditional updateMany with closedAt, one CUSTOMER event', async () => {
+    const { svc, tx } = makeCancel({ row: { id: 'r1', status: 'OPEN', orderId: null, closeReason: null } });
+    await svc.cancel('u1', 'r1');
+    const upd = tx.wasteRequest.updateMany.mock.calls[0]![0];
+    expect(upd.where).toEqual({ id: 'r1', userId: 'u1', status: 'OPEN', orderId: null });
+    expect(upd.data).toEqual({ status: 'CANCELLED', closedAt: expect.any(Date) });
+    expect(tx.wasteEvent.create.mock.calls[0]![0].data).toMatchObject({ kind: 'REQUEST_CANCELLED', actorRole: 'CUSTOMER', actorUserId: 'u1', requestId: 'r1' });
+  });
+  it('already cancelled by the customer (closeReason null): replay, no write, no event', async () => {
+    const { svc, tx, loadDetail } = makeCancel({ row: { id: 'r1', status: 'CANCELLED', orderId: null, closeReason: null } });
+    await svc.cancel('u1', 'r1');
+    expect(tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(tx.wasteEvent.create).not.toHaveBeenCalled();
+    expect(loadDetail).toHaveBeenCalled();
+  });
+  it.each<[string, unknown, unknown]>([
+    ['foreign or missing id', null, new NotFoundException('Không tìm thấy yêu cầu')],
+    ['cancelled by the ship lock', { id: 'r1', status: 'CANCELLED', orderId: null, closeReason: 'SHIP_LOCKED' }, new ConflictException('Yêu cầu này không còn huỷ được')],
+    ['cancelled with its order', { id: 'r1', status: 'CANCELLED', orderId: 'o1', closeReason: 'ORDER_CANCELLED' }, new ConflictException('Yêu cầu này không còn huỷ được')],
+    ['attached PICKUP', { id: 'r1', status: 'OPEN', orderId: 'o1', closeReason: null }, new ConflictException('Yêu cầu này không còn huỷ được')],
+    ['IN_TRANSIT', { id: 'r1', status: 'IN_TRANSIT', orderId: null, closeReason: null }, new ConflictException('Yêu cầu này không còn huỷ được')],
+  ])('%s -> error, nothing written', async (_n, row, err) => {
+    const { svc, tx } = makeCancel({ row });
+    const call = svc.cancel('u1', 'r1');
+    await expect(call).rejects.toThrow(err as Error);
+    await expect(call).rejects.toBeInstanceOf((err as Error).constructor);
+    expect(tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+  });
+});

@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import type { WasteCreateRequest, WasteEditRequest, WasteMethod, WasteRequestDetailDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
+import type { WasteCreateRequest, WasteEditRequest, WasteMethod, WasteRequestDetailDTO, WasteRequestSummaryDTO, WasteTrackingRequest } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { WasteAccessService } from '../core/waste-access.service';
@@ -9,9 +9,9 @@ import { writeWasteEvent } from '../core/waste-events';
 import { WasteHoldService, type WasteHoldConfig } from '../core/waste-hold.service';
 import { WASTE_MESSAGES } from '../core/waste-messages';
 import { computeWastePublicFlags } from '../core/waste-public-config';
-import { generateWasteCode } from '../waste-codes';
-import { lockWasteCustomer } from '../waste-locks';
-import { WASTE_CONSENT_VERSION } from '../waste.constants';
+import { generateWasteCode, normalizeTracking } from '../waste-codes';
+import { lockWasteCustomer, lockWasteTracking } from '../waste-locks';
+import { WASTE_CONSENT_VERSION, WASTE_OPEN_STATUSES } from '../waste.constants';
 import { toRequestDetail, toRequestSummary, WASTE_REQUEST_FULL_INCLUDE, WASTE_REQUEST_SUMMARY_INCLUDE, type WasteRequestFull } from './waste-request.mapper';
 
 const CREATE_PRIOR_SELECT = { id: true, method: true, pointId: true, lines: { select: { itemId: true, declaredQty: true } } } as const;
@@ -89,6 +89,75 @@ export class WasteRequestsService {
       requestHoldDays: snap.requestHoldDays,
     };
     await this.prisma.$transaction((tx) => this.editInTx(tx, userId, id, body, holdCfg));
+    return this.loadDetail(this.prisma, userId, id);
+  }
+
+  async setTracking(userId: string, id: string, body: WasteTrackingRequest): Promise<WasteRequestDetailDTO> {
+    const carrier = body.carrier.trim();
+    const trackingCode = body.trackingCode.trim();
+    const norm = normalizeTracking(trackingCode);
+    await this.prisma.$transaction(async (tx) => {
+      await lockWasteTracking(tx);
+      const rows = await tx.$queryRaw<
+        { id: string; method: WasteMethod; status: string; carrier: string | null; trackingCode: string | null; trackingNorm: string | null }[]
+      >`SELECT id, method::text AS method, status::text AS status, carrier, "trackingCode", "trackingNorm" FROM waste_requests WHERE id = ${id} AND "userId" = ${userId} FOR UPDATE`;
+      const row = rows[0];
+      if (!row) throw new NotFoundException(WASTE_MESSAGES.REQUEST_NOT_FOUND);
+      if (row.method !== 'MAIL_IN') throw new ConflictException(WASTE_MESSAGES.NOT_MAIL_IN);
+      if (row.status !== 'OPEN' && row.status !== 'IN_TRANSIT') throw new ConflictException(WASTE_MESSAGES.TRACKING_CLOSED);
+      if (row.status === 'IN_TRANSIT' && row.carrier === carrier && row.trackingNorm === norm) return;
+      const own = await tx.wasteRequest.findFirst({
+        where: { userId, id: { not: id }, trackingNorm: norm, status: { in: [...WASTE_OPEN_STATUSES] } },
+        select: { id: true },
+      });
+      if (own) throw new ConflictException(WASTE_MESSAGES.TRACKING_DUPLICATE_OWN);
+      const first = row.status === 'OPEN';
+      const updated = await tx.wasteRequest.updateMany({
+        where: { id, userId, method: 'MAIL_IN', status: first ? 'OPEN' : 'IN_TRANSIT' },
+        data: first
+          ? { status: 'IN_TRANSIT', carrier, trackingCode, trackingNorm: norm, expiresAt: null, inTransitAt: new Date() }
+          : { carrier, trackingCode, trackingNorm: norm },
+      });
+      if (updated.count !== 1) throw new ConflictException(WASTE_MESSAGES.TRACKING_CLOSED);
+      await tx.$executeRaw`UPDATE waste_requests r SET "trackingConflict" = true, "updatedAt" = now()
+        WHERE r."trackingNorm" = ${norm} AND r.status::text IN ('OPEN', 'IN_TRANSIT', 'RECEIVED') AND NOT r."trackingConflict"
+          AND EXISTS (SELECT 1 FROM waste_requests o WHERE o."trackingNorm" = ${norm} AND o.status::text IN ('OPEN', 'IN_TRANSIT', 'RECEIVED') AND o."userId" <> r."userId")`;
+      await writeWasteEvent(tx, {
+        kind: first ? 'TRACKING_SET' : 'TRACKING_EDITED',
+        actorUserId: userId,
+        actorRole: 'CUSTOMER',
+        requestId: id,
+        meta: {
+          before: { status: row.status, carrier: row.carrier, trackingCode: row.trackingCode },
+          after: { status: 'IN_TRANSIT', carrier, trackingCode },
+        },
+      });
+    });
+    return this.loadDetail(this.prisma, userId, id);
+  }
+
+  async cancel(userId: string, id: string): Promise<WasteRequestDetailDTO> {
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<
+        { id: string; status: string; orderId: string | null; closeReason: string | null }[]
+      >`SELECT id, status::text AS status, "orderId", "closeReason"::text AS "closeReason" FROM waste_requests WHERE id = ${id} AND "userId" = ${userId} FOR UPDATE`;
+      const row = rows[0];
+      if (!row) throw new NotFoundException(WASTE_MESSAGES.REQUEST_NOT_FOUND);
+      if (row.status === 'CANCELLED' && row.closeReason === null && row.orderId === null) return;
+      if (row.status !== 'OPEN' || row.orderId !== null) throw new ConflictException(WASTE_MESSAGES.NOT_CANCELLABLE);
+      const updated = await tx.wasteRequest.updateMany({
+        where: { id, userId, status: 'OPEN', orderId: null },
+        data: { status: 'CANCELLED', closedAt: new Date() },
+      });
+      if (updated.count !== 1) throw new ConflictException(WASTE_MESSAGES.NOT_CANCELLABLE);
+      await writeWasteEvent(tx, {
+        kind: 'REQUEST_CANCELLED',
+        actorUserId: userId,
+        actorRole: 'CUSTOMER',
+        requestId: id,
+        meta: { before: { status: 'OPEN' }, after: { status: 'CANCELLED' } },
+      });
+    });
     return this.loadDetail(this.prisma, userId, id);
   }
 

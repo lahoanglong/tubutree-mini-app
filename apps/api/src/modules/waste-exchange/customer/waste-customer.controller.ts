@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
-import { WASTE_METHOD_VALUES, type WasteCreateRequest, type WasteEditRequest, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest } from '@tubutree/shared-types';
+import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { WASTE_METHOD_VALUES, type WasteCreateRequest, type WasteEditRequest, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest, type WasteTrackingRequest } from '@tubutree/shared-types';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 import { requireIdempotencyKey } from '../../../common/idempotency-key';
 import { WasteAccessService, type WasteCustomerContext, type WasteGateMode } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
@@ -114,6 +115,20 @@ export class WasteEditDto implements WasteEditRequest {
   pointId?: string;
 }
 
+export class WasteTrackingDto implements WasteTrackingRequest {
+  @Trim()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  carrier!: string;
+
+  @Trim()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  trackingCode!: string;
+}
+
 @Controller('waste')
 export class WasteCustomerController {
   constructor(
@@ -197,5 +212,20 @@ export class WasteCustomerController {
   async edit(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() body: WasteEditDto) {
     await this.gate(userId, 'FULL');
     return this.requests.edit(userId, id, body);
+  }
+
+  @Put('requests/:id/tracking')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  async setTracking(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() body: WasteTrackingDto) {
+    await this.gate(userId, 'OWN');
+    return this.requests.setTracking(userId, id, body);
+  }
+
+  @Post('requests/:id/cancel')
+  @HttpCode(200)
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  async cancel(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    await this.gate(userId, 'OWN');
+    return this.requests.cancel(userId, id);
   }
 }
