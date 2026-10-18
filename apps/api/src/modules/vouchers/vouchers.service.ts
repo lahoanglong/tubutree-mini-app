@@ -158,6 +158,7 @@ export class VouchersService {
       ...(anyAge ? {} : { createdAt: { gte: new Date(Date.now() - VouchersService.WELCOME_WINDOW_MS) } }),
       role: 'CUSTOMER',
       orders: { none: COUNTED_ORDER_WHERE },
+      mergedIntoId: null,
       ...REAL_USER_WHERE,
     };
   }

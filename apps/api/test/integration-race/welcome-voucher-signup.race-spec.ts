@@ -160,6 +160,19 @@ describe('Voucher chào mừng lúc đăng ký song song với cron (real Postgr
     expect(await welcomeOf(delivered.id)).toHaveLength(0);
   });
 
+  it('dòng đã gộp vào tài khoản khác không được cấp (đường ngay, becameRealNow và cron), tài khoản đích vẫn được', async () => {
+    const target = await createUser(prisma, { zaloId: newZaloId() });
+    const merged = await createUser(prisma, { zaloId: newZaloId(), mergedIntoId: target.id });
+
+    expect(await vouchers.grantWelcomeNow(merged.id)).toBe(false);
+    expect(await vouchers.grantWelcomeNow(merged.id, { becameRealNow: true })).toBe(false);
+    expect(await vouchers.grantWelcomeNow(target.id)).toBe(true);
+    await vouchers.welcomeVouchers();
+
+    expect(await welcomeOf(merged.id)).toHaveLength(0);
+    expect(await welcomeOf(target.id)).toHaveLength(1);
+  });
+
   it('đăng nhập khách vãng lai không cấp; nâng cấp tại chỗ lên tài khoản Zalo thật thì cấp đúng 1 lần, kể cả khi cron chạy cùng lúc', async () => {
     const deviceId = randCode(12);
     const session = await auth.loginAsGuest(deviceId);

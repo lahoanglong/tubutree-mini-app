@@ -798,6 +798,15 @@ describe('VouchersService.grantWelcomeNow', () => {
     expect(priorOrderWhere('u1')).toMatchObject(where.orders.none);
   });
 
+  it('dòng đã gộp vào tài khoản khác (mergedIntoId) không được cấp: cả đường ngay lẫn khi becameRealNow', async () => {
+    const { svc, findFirst } = setup(true);
+
+    await svc.grantWelcomeNow('u1');
+    await svc.grantWelcomeNow('u1', { becameRealNow: true });
+
+    for (const [call] of findFirst.mock.calls) expect(call.where).toMatchObject({ mergedIntoId: null });
+  });
+
   // Khách vãng lai dùng app quá 24h rồi mới đăng nhập Zalo: createdAt là của dòng vãng lai nên cửa sổ 24h loại họ sai.
   it('becameRealNow: bỏ điều kiện createdAt, giữ nguyên mọi điều kiện còn lại', async () => {
     const { svc, findFirst, create } = setup(true);
