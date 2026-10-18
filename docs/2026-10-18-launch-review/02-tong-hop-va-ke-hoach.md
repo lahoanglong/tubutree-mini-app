@@ -193,3 +193,75 @@ Hai cờ chờ payload Pancake thật (runbook Bước 15) và ít nhất 2 ngư
 - đăng ký Bộ Công Thương (footer tubutree.com đang ghi "Website đang chờ đăng ký bộ công thương");
 - DNS wildcard;
 - rclone Google Drive.
+
+## 8. Đợt 3: review chéo toàn nhánh (đêm 2026-10-18 → 19)
+
+Mỗi gói đã được review riêng. Đợt này soát lỗi chỉ lộ ra khi các gói chạy cùng nhau, bằng 3 reviewer Opus độc lập theo 3 trục: điểm và tiền, quyền và dữ liệu cá nhân, migration và deploy. Sau khi sửa, gói sửa được soát thêm 2 lượt Opus.
+
+**Kết quả review chéo:**
+- Điểm và tiền: không có lỗi chặn. Migration `points_1d` nhân đủ 16 cột điểm, chạy lại không nhân đôi. Mọi trần và ngưỡng so cùng đơn vị.
+- Quyền và dữ liệu cá nhân: có 2 đường vòng (mục a, b dưới). Không có route admin nào mà khách, CTV hay đại lý gọi được.
+- Migration và deploy: chỉ có cảnh báo. Không thêm migration nào.
+
+**Đã sửa (gói `lr3/fixes`, `lr3/e2eadmin`, `lr3/raceci`):**
+
+a. **Nhân viên Marketing không còn xem được mã của lô thẻ QR do ADMIN hay nhân viên khác tạo.**
+   - Trước đây có hai đường lộ mã: `GET /admin/coupon-batches/:batch/codes` và tìm kiếm `GET /admin/coupons?q=`. Có mã thì nhân viên tự nhận được thẻ, vượt trần B19.
+   - Nay nhân viên chỉ thấy mã của lô mình tạo.
+   - Danh sách lô có thêm cờ `mine`. Lô của người khác thì web ẩn nút tải CSV.
+
+b. **Kế toán không còn thấy đủ SĐT khách ở hàng chờ hoàn tiền** (`GET /admin/customer-refunds` và các thao tác của hàng chờ) **và ở CSV hoàn tiền.**
+   - SĐT chỉ còn 3 số cuối.
+   - Ghi chú tự do chỉ che dãy giống SĐT VN, nên số tiền và mã giao dịch ngân hàng vẫn đọc được.
+   - Số tài khoản và tên chủ tài khoản vẫn hiện đủ, vì cần để chuyển tiền.
+   - SĐT đã che thì không có nút "Chép SĐT".
+   - CSV thuế vẫn giữ SĐT và MST của CTV, vì CTV là người nhận tiền.
+
+c. **Trần tháng của claim đơn sàn và đơn chat có thêm cận trên.**
+   - Lỗi cũ: duyệt muộn một claim của tháng trước thì bị tính chung với claim của tháng này, nên có thể báo `MONTHLY_CAP` sai và khách mất điểm.
+   - Nay cửa sổ tính trần là đúng tháng tạo claim, ở cả 5 chỗ: duyệt PHONE, duyệt SCAN, cron cộng SCAN, liên kết chat (trần tháng), liên kết chat (trần người tạo).
+   - Mỗi chỗ có ca race riêng, và ca đó đỏ khi bỏ cận trên.
+
+d. **Trợ lý AI:** mọi tài khoản khách vãng lai (tạo theo deviceId) dùng chung trần 10 lượt mỗi phút, nên một người xoay vòng tài khoản khách không chiếm hết hạn mức của khách thật. Lượt bị từ chối không bị trừ vào hạn mức theo giờ.
+
+e. **Hiển thị sau đổi 1 điểm = 1đ:**
+   - Popup "lên hạng" không còn hiện sai, vì khoá lưu mốc hạng đổi sang `_v2`.
+   - Giá vòng quay khi chưa tải hồ sơ là 10.000.
+   - Web thanh toán ghi "Điểm Xanh (25.000)".
+
+f. **Bộ kiểm partial index** có thêm 3 khoá chống cộng trùng của điểm đơn ngoài app.
+
+g. **Playwright web admin cho tab "Tích điểm đơn sàn":**
+   - duyệt claim có SĐT cũ thì bắt ghi chú;
+   - duyệt claim có SĐT mới thì hiện hộp xác nhận thường;
+   - hiện khối "người khác cùng gửi".
+
+h. **CI race:**
+   - Lần đầu chạy trên GitHub, bộ race quá 60 phút và trượt hàng loạt. Lý do: Prisma chỉ mở 5 kết nối trên runner 2 vCPU.
+   - Cách sửa: chia 3 phần song song, mỗi phần có Postgres riêng, và `connection_limit=20`.
+
+i. **Runbook và tài liệu:**
+   - Bước kiểm trước deploy: đếm gian hàng CTV đang đăng mà chưa duyệt. Mặc định B3 bật, nên các gian hàng này sẽ bị ẩn.
+   - `pancake.external_capture_enabled` lưu đơn ngoài app kèm SĐT người mua.
+   - Bật B9 sẽ tạo claim bù cho đơn chat trong 60 ngày gần nhất.
+   - `coupons.createdAt` của mã cũ bằng giờ chạy migration.
+
+**Ghi nhận, không sửa:**
+- Gian hàng CTV có từ trước deploy bị ẩn cho tới khi admin duyệt. Đây là đúng quyết định B3 ("duyệt lần đầu"), và hiện chưa có dữ liệu thật.
+- Đơn chat được tính vào xét hạng, đúng như `impl/extpoints-plan.md`. Đơn sàn thì không.
+
+**Kiểm chứng trên tip `5913fd80`** (đã gộp `main` #19):
+
+| Lệnh | Kết quả |
+|---|---|
+| tsc 4 app, `pnpm lint`, `lint:vars` | sạch |
+| `prisma migrate deploy` + drift + partial index | 206 migration, không lệch, 25/25 |
+| jest API | 371 suite, 8112 ca |
+| race toàn bộ | 235 suite, 1750 ca |
+| vitest miniapp (VN và UTC) | 3803 ca mỗi lần |
+| vitest web (VN và UTC) | 2755 ca mỗi lần |
+| Playwright Mini App | 166 ca |
+| Playwright Web Admin | 14 ca |
+| `pnpm build` | 4/4 |
+
+Playwright Web Admin chạy bằng config tạm chỉ dựng web server. Không dựng API, nên không đụng DB dùng chung.
