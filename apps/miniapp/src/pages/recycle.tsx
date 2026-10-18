@@ -198,7 +198,14 @@ export default function RecyclePage() {
       </>,
     );
   }
-  if (me.eligibility !== 'OK') return shell(loginCard(sharePhone));
+  if (me.eligibility !== 'OK') {
+    return shell(
+      <>
+        {loginCard(sharePhone)}
+        {deskRow && <div>{deskRow}</div>}
+      </>,
+    );
+  }
   if (me.blocked) {
     return shell(
       <>
