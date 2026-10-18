@@ -18,3 +18,9 @@ export function maskPhoneOrNull(phone: string | null | undefined): string | null
 export function maskPhone(phone: string | null | undefined): string {
   return maskPhoneOrNull(phone) ?? '(không có SĐT)';
 }
+
+/** Chỉ giữ 3 số cuối, giữ độ dài: `0912345123` → `*******123`. Trống trả chuỗi rỗng. */
+export function maskPhoneKeepLast3(phone: string | null | undefined): string {
+  if (!phone) return '';
+  return `${'*'.repeat(Math.max(phone.length - 3, 0))}${phone.slice(-3)}`;
+}

@@ -816,8 +816,11 @@ export class AdminService {
   }
 
   /** File CSV mọi đơn khớp bộ lọc (admin-export.ts đọc theo lô). */
-  async orderCsv(f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>): Promise<AsyncGenerator<string>> {
-    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f));
+  async orderCsv(
+    f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>,
+    opts: { maskPhones?: boolean } = {},
+  ): Promise<AsyncGenerator<string>> {
+    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f), opts);
   }
 
   userCsv(search?: string): AsyncGenerator<string> {

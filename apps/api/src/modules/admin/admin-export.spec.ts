@@ -72,6 +72,34 @@ describe('orderCsvChunks', () => {
   });
 });
 
+describe('orderCsvChunks — người xuất không phải quản trị viên (D1-05)', () => {
+  function withReferrer() {
+    const [o] = fakeOrders(1);
+    const { prisma } = cursorPrisma([{ ...o!, referrerUserId: 'ctv1' }], 'order');
+    (prisma as unknown as Record<string, unknown>).user = {
+      findMany: jest.fn().mockResolvedValue([{ id: 'ctv1', fullName: 'CTV Hoa', phone: '0922222333' }]),
+    };
+    return prisma;
+  }
+
+  it('che SĐT khách, người nhận và CTV, chỉ giữ 3 số cuối; họ tên giữ nguyên', async () => {
+    const csv = await collect(orderCsvChunks(withReferrer(), {}, { maskPhones: true }));
+    expect(csv).toContain('*******111');
+    expect(csv).toContain('*******000');
+    expect(csv).toContain('*******333');
+    for (const full of ['0911111111', '0900000000', '0922222333']) expect(csv).not.toContain(full);
+    expect(csv).toContain('"Khách ""Một"""');
+    expect(csv).toContain('"A, B"');
+    expect(csv).toContain('CTV Hoa');
+  });
+
+  it('quản trị viên (mặc định) vẫn thấy đủ SĐT', async () => {
+    const csv = await collect(orderCsvChunks(withReferrer(), {}));
+    expect(csv).toContain('0911111111');
+    expect(csv).toContain('0922222333');
+  });
+});
+
 // R3-UI-3: đơn COD đã giao giữ paymentStatus UNPAID (chốt hoàn tiền một lần) nhưng bưu tá đã thu tiền: CSV phải ghi như giao diện
 // ("Đã thu COD"), không ghi "Chưa thanh toán" làm kế toán đòi lại tiền đã thu.
 describe('cột Trạng thái TT trong CSV đơn hàng (R3-UI-3)', () => {

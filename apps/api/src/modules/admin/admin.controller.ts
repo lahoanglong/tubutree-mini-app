@@ -459,8 +459,8 @@ export class AdminController {
    */
   @AllowStaff('KE_TOAN')
   @Get('orders/export')
-  async exportOrders(@Query() q: ExportOrdersQuery, @Res() res: Response) {
-    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q));
+  async exportOrders(@Query() q: ExportOrdersQuery, @CurrentUser('role') role: string, @Res() res: Response) {
+    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q, { maskPhones: role !== 'ADMIN' }));
   }
 
   @Get('users/export')

@@ -294,6 +294,17 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     expect(returns.listForAdmin).toHaveBeenCalledWith(undefined, 2, 10, undefined);
   });
 
+  it('xuất CSV đơn: người xuất không phải quản trị viên thì che SĐT (D1-05)', async () => {
+    async function* empty(): AsyncGenerator<string> {}
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    await ctrl.exportOrders({} as never, 'STAFF', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: true });
+    await ctrl.exportOrders({} as never, 'ADMIN', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: false });
+  });
+
   it('DealerPriceHistoryQuery nhận variationId', async () => {
     const q = (await asQuery(DealerPriceHistoryQuery, { variationId: 'v1' })) as DealerPriceHistoryQuery;
     expect(q.variationId).toBe('v1');

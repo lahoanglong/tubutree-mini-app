@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
+import { maskPhoneKeepLast3 } from '../../common/mask-pii';
 import { OPEN_REFUND_FOR_EXPORT } from '../orders/refund-queue';
 import { orderPlatformLabel, orderSourceLabel } from './order-channel';
 
@@ -153,16 +154,17 @@ const ORDER_SELECT = {
 type ExportOrder = Prisma.OrderGetPayload<{ select: typeof ORDER_SELECT }>;
 type Referrer = { fullName: string | null; phone: string | null };
 
-function orderRow(o: ExportOrder, referrers: ReadonlyMap<string, Referrer>): string {
+function orderRow(o: ExportOrder, referrers: ReadonlyMap<string, Referrer>, maskPhones: boolean): string {
   const referrer = o.referrerUserId ? referrers.get(o.referrerUserId) : undefined;
   const addr = (o.shippingAddress ?? {}) as { recipient?: string; phone?: string };
+  const phone = (p: string | null | undefined) => (maskPhones ? text(maskPhoneKeepLast3(p)) : text(p));
   return row([
     o.code,
     formatVnDateTime(o.createdAt),
     o.user?.fullName ?? 'Khách lẻ',
-    text(o.user?.phone),
+    phone(o.user?.phone),
     addr.recipient ?? '',
-    text(addr.phone),
+    phone(addr.phone),
     o.type === 'DEALER' ? 'Đại lý' : 'Bán lẻ',
     o.fulfiller === 'MERCHANT' ? `Gian hàng tự giao: ${o.fulfillerStorefront?.title ?? ''}` : 'Kho Tubu',
     PAYMENT_METHOD[o.paymentMethod] ?? o.paymentMethod,
@@ -183,7 +185,7 @@ function orderRow(o: ExportOrder, referrers: ReadonlyMap<string, Referrer>): str
     orderPlatformLabel(o.platform),
     orderSourceLabel(o.source),
     referrer?.fullName ?? '',
-    text(referrer?.phone),
+    phone(referrer?.phone),
     o.storefront?.title ?? '',
   ]);
 }
@@ -199,8 +201,14 @@ export async function loadReferrers(prisma: PrismaService, orders: readonly { re
 /**
  * Lần lượt từng lô theo con trỏ (createdAt giảm dần, id làm mốc), đẩy ra từng đoạn CSV — không dựng cả file trong
  * bộ nhớ và không giới hạn số dòng. Cùng `where` với danh sách đơn đang lọc (AdminService.adminOrderWhere).
+ * `maskPhones`: người xuất không phải quản trị viên (kế toán) chỉ thấy 3 số cuối SĐT khách, người nhận, CTV — đối soát
+ * tiền không cần SĐT đầy đủ, file CSV dễ bị chuyển tiếp ra ngoài.
  */
-export async function* orderCsvChunks(prisma: PrismaService, where: Prisma.OrderWhereInput): AsyncGenerator<string> {
+export async function* orderCsvChunks(
+  prisma: PrismaService,
+  where: Prisma.OrderWhereInput,
+  opts: { maskPhones?: boolean } = {},
+): AsyncGenerator<string> {
   yield row(ORDER_CSV_HEADERS);
   let cursor: string | undefined;
   for (;;) {
@@ -213,7 +221,7 @@ export async function* orderCsvChunks(prisma: PrismaService, where: Prisma.Order
     });
     if (batch.length === 0) return;
     const referrers = await loadReferrers(prisma, batch);
-    yield batch.map((o) => orderRow(o, referrers)).join('');
+    yield batch.map((o) => orderRow(o, referrers, opts.maskPhones === true)).join('');
     if (batch.length < EXPORT_BATCH) return;
     cursor = batch[batch.length - 1]!.id;
   }
