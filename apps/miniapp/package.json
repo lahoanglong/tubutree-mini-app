@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.7",
+    "@tubutree/app-core": "workspace:*",
     "@tubutree/design-tokens": "workspace:*",
     "@tubutree/shared-types": "workspace:*",
     "axios": "^1.7.9",
