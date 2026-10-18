@@ -5,7 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { LoyaltyService, DEFAULT_REWARD_CATALOG, DEFAULT_CHECKIN_POINTS } from './loyalty.service';
+import { LoyaltyService, DEFAULT_CHECKIN_POINTS } from './loyalty.service';
+import { REAL_USER_REQUIRED_MSG } from '../../common/real-user';
+import { WASTE_SEED_GIFTS } from '../waste-exchange/waste-seed-data';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -66,20 +68,22 @@ function applyData(target: Row, data: Row) {
  */
 type LockedRow = { delta: number; deliveredAt: Date; pendingReturn: boolean };
 
-function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: LockedRow[] } = {}) {
+function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: LockedRow[]; gifts?: GiftRow[] } = {}) {
   const advisoryLock = opts.advisoryLock ?? true;
   const db = {
     lockedRows: opts.lockedRows ?? ([] as LockedRow[]),
     users: new Map<string, Row>(
       users.map((u) => [
         u.id,
-        { pointsBalance: 0, role: 'CUSTOMER', isBlocked: false, tier: null, phone: null, fullName: null, ...u },
+        { pointsBalance: 0, role: 'CUSTOMER', isBlocked: false, mergedIntoId: null, tier: null, phone: null, fullName: null, ...u },
       ]),
     ),
     checkIns: [] as Row[],
     ledger: [] as Row[],
     coupons: [] as Row[],
     posCredits: [] as Row[],
+    gifts: new Map<string, GiftRow>((opts.gifts ?? SEEDED_GIFTS).map((g) => [g.id as string, { ...g }])),
+    redemptions: [] as Row[],
     gameProfileTouched: false,
   };
   const lock = new Mutex();
@@ -174,7 +178,28 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
           db.coupons.push(row);
           return { ...row };
         },
+        findUnique: async ({ where }: any) => { await tick(); const c = db.coupons.find((x) => x.id === where.id); return c ? { ...c } : null; },
       },
+      wasteGift: {
+        findUnique: async ({ where }: any) => { await tick(); const g = db.gifts.get(where.id); return g ? { ...g } : null; },
+      },
+      wasteGiftRedemption: {
+        findUnique: async ({ where }: any) => {
+          await tick();
+          const k = where.userId_idempotencyKey;
+          const r = k ? db.redemptions.find((x) => x.userId === k.userId && x.idempotencyKey === k.idempotencyKey) : db.redemptions.find((x) => x.code === where.code);
+          return r ? { ...r } : null;
+        },
+        create: async ({ data }: any) => {
+          await tick();
+          if (db.redemptions.some((x) => x.userId === data.userId && x.idempotencyKey === data.idempotencyKey)) throw p2002('waste_gift_redemptions_userId_idempotencyKey_key');
+          if (data.code && db.redemptions.some((x) => x.code === data.code)) throw p2002('waste_gift_redemptions_code_key');
+          const row = { id: nextId('rd'), createdAt: new Date(), cancelledAt: null, cancelReason: null, refundedPoints: null, fulfilledAt: null, claimExpiresAt: null, couponId: null, code: null, ...data };
+          db.redemptions.push(row);
+          return { ...row };
+        },
+      },
+      wastePoint: { findFirst: async () => null },
       posPointCredit: {
         findUnique: async ({ where }: any) => {
           await tick();
@@ -205,8 +230,16 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
         db.gameProfileTouched = true;
         throw new Error('loyalty KHÔNG được đụng game_profiles');
       },
-      $executeRaw: async () => {
-        if (!ctx) throw new Error('advisory lock gọi ngoài transaction');
+      $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        if (!ctx) throw new Error('advisory lock / UPDATE waste_gifts gọi ngoài transaction');
+        const sql = strings.join('?');
+        if (/UPDATE "waste_gifts"/.test(sql)) {
+          await tick();
+          const g = db.gifts.get(String(values[0]));
+          if (!g || g.status !== 'ACTIVE' || (g.stock !== null && (g.stock as number) < 1)) return 0;
+          if (g.stock !== null) (g as Row).stock -= 1;
+          return 1;
+        }
         if (!advisoryLock) return 1; // mô phỏng "không có khoá" cho bài tự kiểm harness
         const release = await lock.acquire();
         ctx.releases.push(release);
@@ -278,6 +311,33 @@ describe('fake DB (tự kiểm)', () => {
   });
 });
 
+type GiftRow = Record<string, unknown>;
+const giftRow = (over: GiftRow = {}): GiftRow => ({
+  id: 'g1', kind: 'GIFT', name: 'Túi vải Tubu', description: null, label: null, pointsCost: 30_000, status: 'ACTIVE',
+  sortOrder: 60, imageUrl: null, stock: null, claimInstructions: null, voucherType: null, voucherValue: null,
+  voucherMinOrder: null, voucherMaxDiscount: null, voucherValidDays: null, ...over,
+});
+const voucherRow = (id: string, name: string, description: string, label: string, pointsCost: number, sortOrder: number,
+  t: 'FREESHIP' | 'AMOUNT' | 'PERCENT', value: number, minOrder: number, maxDiscount: number | null) =>
+  giftRow({ id, kind: 'VOUCHER', name, description, label, pointsCost, sortOrder, voucherType: t, voucherValue: value,
+    voucherMinOrder: minOrder, voucherMaxDiscount: maxDiscount, voucherValidDays: 30 });
+const FREESHIP = voucherRow('reward-freeship', 'Miễn phí vận chuyển', 'Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop.', 'Phổ biến', 20_000, 10, 'FREESHIP', 0, 99000, null);
+const D50K = voucherRow('reward-discount-50k', 'Giảm 50.000đ', 'Giảm ngay 50.000đ cho đơn hàng từ 300.000đ', 'Tiết kiệm', 50_000, 20, 'AMOUNT', 50000, 300000, null);
+const P15 = voucherRow('reward-percent-15pct', 'Giảm 15%', 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ', 'Đặc quyền', 75_000, 30, 'PERCENT', 15, 250000, 80000);
+const D100K = voucherRow('reward-discount-100k', 'Giảm 100.000đ', 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ', 'HOT', 100_000, 40, 'AMOUNT', 100000, 600000, null);
+const TREE = giftRow({ id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng cây', description: 'Dùng Điểm Xanh góp vào quỹ trồng cây của Tubu Tree.', pointsCost: 0, sortOrder: 50 });
+const SEEDED_GIFTS = [FREESHIP, D50K, P15, D100K, TREE];
+const WAREHOUSE = { name: 'Kho Tubu HCM', addressLine: '1 Đường A', communeName: 'Phường B', provinceName: 'TP.HCM', openingHours: { MON: [{ open: '08:00', close: '17:00' }] } };
+
+function catalogPrisma(o: { balance: number; converted?: number; locked?: LockedRow[]; gifts?: GiftRow[]; warehouse?: unknown }) {
+  return {
+    user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: o.balance, pointsConvertedBalance: o.converted ?? 0 }) },
+    $queryRaw: jest.fn().mockResolvedValue(o.locked ?? []),
+    wasteGift: { findMany: jest.fn().mockResolvedValue(o.gifts ?? SEEDED_GIFTS) },
+    wastePoint: { findFirst: jest.fn().mockResolvedValue(o.warehouse ?? null) },
+  } as unknown as PrismaService & { wasteGift: { findMany: jest.Mock }; wastePoint: { findFirst: jest.Mock } };
+}
+
 describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -285,49 +345,117 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
   // ───────────────────────────── Reward catalog ─────────────────────────────
   describe('Reward Catalog & Redemption', () => {
-    it('getRewardCatalog trả về danh sách phần thưởng kèm cờ canRedeem', async () => {
-      const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 60_000 }) },
-        $queryRaw: jest.fn().mockResolvedValue([]),
-      } as unknown as PrismaService;
-
-      const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
-      expect(res.pointsBalance).toBe(60_000);
-      expect(res.rewards.length).toBe(DEFAULT_REWARD_CATALOG.length);
-      for (const r of res.rewards) expect(r.canRedeem).toBe(60_000 >= r.pointsCost);
+    it('getRewardCatalog đọc waste_gifts ACTIVE theo sortOrder; giá TREE lấy từ game.tree_points_price; voucher có đủ trường', async () => {
+      const prisma = catalogPrisma({ balance: 0 });
+      const res = await new LoyaltyService(prisma, makeConfig({ 'game.tree_points_price': 60_000 })).getRewardCatalog('u1');
+      expect(prisma.wasteGift.findMany).toHaveBeenCalledWith({ where: { status: 'ACTIVE' }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] });
+      expect(res.rewards.map((r) => r.id)).toEqual(['reward-freeship', 'reward-discount-50k', 'reward-percent-15pct', 'reward-discount-100k', 'gift-tree']);
+      expect(res.rewards[0]).toEqual({ id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: FREESHIP.description, label: 'Phổ biến', pointsCost: 20_000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: false, claimInstructions: null, voucher: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, validDays: 30 }, sortOrder: 10 });
+      expect(res.rewards[4]).toMatchObject({ id: 'gift-tree', kind: 'TREE', pointsCost: 60_000, voucher: null });
     });
 
-    it('getRewardCatalog: canRedeem theo điểm DÙNG ĐƯỢC (số dư − điểm đơn mới giao còn trong hạn đổi/trả)', async () => {
-      const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 120_000 }) },
-        $queryRaw: jest.fn().mockResolvedValue([
-          { delta: 80_000, deliveredAt: new Date(Date.now() - 2 * DAY), pendingReturn: false },
-        ]),
-      } as unknown as PrismaService;
+    it('TREE: 28.000 STANDARD + 30.000 CONVERTED so với giá 50.000 → canRedeem true (luật chia lô của buyTree); voucher 50.000 điểm chỉ xét STANDARD → false', async () => {
+      const res = await new LoyaltyService(catalogPrisma({ balance: 28_000, converted: 30_000 }), makeConfig({ 'game.tree_points_price': 50_000 })).getRewardCatalog('u1');
+      const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));
+      expect(byId.get('gift-tree')).toBe(true);
+      expect(byId.get('reward-discount-50k')).toBe(false);
+      expect(byId.get('reward-freeship')).toBe(true);
+      expect(res).toMatchObject({ pointsBalance: 28_000, pointsConvertedBalance: 30_000, lockedPoints: 0, redeemablePoints: 28_000 });
+    });
+
+    it('quà stock 0 → soldOut true, canRedeem false dù đủ điểm; stock 3 → còn 3, đổi được; stock null → không giới hạn', async () => {
+      const gifts = [giftRow({ id: 'g0', stock: 0 }), giftRow({ id: 'g3', stock: 3 }), giftRow({ id: 'gn', stock: null })];
+      const res = await new LoyaltyService(catalogPrisma({ balance: 500_000, gifts }), makeConfig()).getRewardCatalog('u1');
+      expect(res.rewards.map((r) => [r.id, r.stockRemaining, r.soldOut, r.canRedeem])).toEqual([
+        ['g0', 0, true, false], ['g3', 3, false, true], ['gn', null, false, true],
+      ]);
+    });
+
+    it('canRedeem theo điểm DÙNG ĐƯỢC: số dư 120.000, khoá 80.000 → dùng được 40.000', async () => {
+      const prisma = catalogPrisma({ balance: 120_000, locked: [{ delta: 80_000, deliveredAt: new Date(Date.now() - 2 * DAY), pendingReturn: false }] });
       const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
       expect(res).toMatchObject({ pointsBalance: 120_000, lockedPoints: 80_000, redeemablePoints: 40_000 });
       const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));
-      expect(byId.get('reward-freeship')).toBe(true); // 20.000 ≤ 40.000
-      expect(byId.get('reward-discount-50k')).toBe(false); // 50.000 > 40.000 dù số dư 120.000
+      expect(byId.get('reward-freeship')).toBe(true);
+      expect(byId.get('reward-discount-50k')).toBe(false);
+      expect(byId.get('gift-tree')).toBe(false);
+    });
+
+    it('điểm khoá lớn hơn số dư → redeemablePoints 0, không âm, không quà nào đổi được', async () => {
+      const prisma = catalogPrisma({ balance: 20_000, locked: [{ delta: 90_000, deliveredAt: new Date(), pendingReturn: false }] });
+      const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
+      expect(res.redeemablePoints).toBe(0);
+      expect(res.rewards.every((r) => !r.canRedeem)).toBe(true);
+    });
+
+    it('giftClaimDays đọc waste.gift_claim_days; claimPoint là kho WAREHOUSE đang ACTIVE, null khi chưa có', async () => {
+      const withWh = catalogPrisma({ balance: 0, warehouse: WAREHOUSE });
+      const res = await new LoyaltyService(withWh, makeConfig({ 'waste.gift_claim_days': 45 })).getRewardCatalog('u1');
+      expect(res.giftClaimDays).toBe(45);
+      expect(res.claimPoint).toEqual(WAREHOUSE);
+      expect(withWh.wastePoint.findFirst).toHaveBeenCalledWith({ where: { kind: 'WAREHOUSE', status: 'ACTIVE' }, select: { name: true, addressLine: true, communeName: true, provinceName: true, openingHours: true } });
+      const none = await new LoyaltyService(catalogPrisma({ balance: 0 }), makeConfig()).getRewardCatalog('u1');
+      expect(none).toMatchObject({ giftClaimDays: 60, claimPoint: null });
+    });
+
+    it('getRewardCatalog chạy cả khi waste.enabled tắt (§8: route quà không bị cờ đổi rác chặn)', async () => {
+      const res = await new LoyaltyService(catalogPrisma({ balance: 100_000 }), makeConfig({ 'waste.enabled': false })).getRewardCatalog('u1');
+      expect(res.rewards).toHaveLength(5);
+    });
+
+    const redemptionRow = (over: GiftRow = {}) => ({
+      id: 'r1', userId: 'u1', giftId: 'g1', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, status: 'READY',
+      code: 'QG-ABCDEFGH', couponId: null, idempotencyKey: 'key-00000001', claimExpiresAt: new Date('2026-12-16T00:00:00Z'),
+      fulfilledAt: null, fulfilledByUserId: null, fulfilledPointId: null, cancelledAt: null, cancelledByUserId: null,
+      cancelReason: null, refundedPoints: null, createdAt: new Date('2026-10-17T00:00:00Z'), ...over,
+    });
+
+    it('getMyRedemptions: lượt READY kèm mã QG- và nơi nhận; lượt voucher FULFILLED kèm mã coupon, không có nơi nhận; lượt quà đã trao không còn mã QG-', async () => {
+      const voucher = redemptionRow({ id: 'r2', giftId: 'reward-freeship', giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', pointsCost: 20_000, status: 'FULFILLED', code: null, couponId: 'cp1', claimExpiresAt: null, fulfilledAt: new Date('2026-10-16T00:00:00Z'), createdAt: new Date('2026-10-16T00:00:00Z') });
+      const used = redemptionRow({ id: 'r3', status: 'FULFILLED', fulfilledAt: new Date('2026-10-15T00:00:00Z'), createdAt: new Date('2026-10-15T00:00:00Z') });
+      const cancelled = redemptionRow({ id: 'r4', status: 'CANCELLED', cancelledAt: new Date('2026-10-14T00:00:00Z'), cancelReason: 'Hết hàng', refundedPoints: 0, createdAt: new Date('2026-10-14T00:00:00Z') });
+      const findMany = jest.fn().mockResolvedValue([redemptionRow(), voucher, used, cancelled]);
+      const prisma = {
+        wasteGiftRedemption: { findMany },
+        coupon: { findMany: jest.fn().mockResolvedValue([{ id: 'cp1', code: 'REWARD-FRESHIP-ABCDEFGH' }]) },
+        wastePoint: { findFirst: jest.fn().mockResolvedValue(WAREHOUSE) },
+      } as unknown as PrismaService;
+      const rows = await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
+      expect(findMany).toHaveBeenCalledWith({ where: { userId: 'u1' }, orderBy: { createdAt: 'desc' }, take: 100 });
+      expect(rows[0]).toEqual({ id: 'r1', giftId: 'g1', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, status: 'READY', code: 'QG-ABCDEFGH', claimExpiresAt: '2026-12-16T00:00:00.000Z', claimPoint: WAREHOUSE, fulfilledAt: null, cancelledAt: null, cancelReason: null, refundedPoints: null, couponCode: null, createdAt: '2026-10-17T00:00:00.000Z' });
+      expect(rows[1]).toMatchObject({ id: 'r2', status: 'FULFILLED', code: null, claimPoint: null, couponCode: 'REWARD-FRESHIP-ABCDEFGH', fulfilledAt: '2026-10-16T00:00:00.000Z' });
+      expect(rows[2]).toMatchObject({ id: 'r3', status: 'FULFILLED', code: null, claimPoint: null, fulfilledAt: '2026-10-15T00:00:00.000Z' });
+      expect(rows[3]).toMatchObject({ id: 'r4', status: 'CANCELLED', code: null, claimPoint: null, cancelledAt: '2026-10-14T00:00:00.000Z', cancelReason: 'Hết hàng', refundedPoints: 0 });
+    });
+
+    it('getMyRedemptions: coupon đã bị dọn (cron xoá coupon) → couponCode null, không lỗi', async () => {
+      const prisma = {
+        wasteGiftRedemption: { findMany: jest.fn().mockResolvedValue([redemptionRow({ status: 'FULFILLED', giftKind: 'VOUCHER', code: null, couponId: 'gone', claimExpiresAt: null })]) },
+        coupon: { findMany: jest.fn().mockResolvedValue([]) },
+        wastePoint: { findFirst: jest.fn().mockResolvedValue(null) },
+      } as unknown as PrismaService;
+      const [row] = await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
+      expect(row).toMatchObject({ couponCode: null, claimPoint: null });
     });
 
     it('voucher freeship mô tả ĐÚNG hành vi checkout (miễn toàn bộ phí ship, không ghi "tối đa 25k")', () => {
-      const fs = DEFAULT_REWARD_CATALOG.find((r) => r.type === 'FREESHIP')!;
-      expect(fs.title).not.toMatch(/25/);
+      const fs = WASTE_SEED_GIFTS.find((g) => g.id === 'reward-freeship')!;
+      expect(fs.name).not.toMatch(/25|voucher/i);
       expect(fs.description).not.toMatch(/tối đa/i);
       // Dưới ngưỡng freeship mặc định 200k mới có ý nghĩa.
-      expect(fs.minOrder!).toBeLessThan(200_000);
+      expect(fs.voucherMinOrder as number).toBeLessThan(200_000);
     });
 
     it('redeemReward ném NotFoundException nếu rewardId không tồn tại', async () => {
-      const svc = new LoyaltyService({} as unknown as PrismaService, makeConfig());
-      await expect(svc.redeemReward('u1', 'invalid-id')).rejects.toThrow(NotFoundException);
+      const prisma = { wasteGift: { findUnique: jest.fn().mockResolvedValue(null) } } as unknown as PrismaService;
+      const svc = new LoyaltyService(prisma, makeConfig());
+      await expect(svc.redeemReward('u1', 'invalid-id', 'key-00000001')).rejects.toThrow(NotFoundException);
     });
 
     it('không đủ điểm → BadRequest, KHÔNG tạo coupon/ledger, số dư giữ nguyên', async () => {
       const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 20_000, referralCode: 'AAAA1111' }]);
       const svc = new LoyaltyService(prisma, makeConfig());
-      await expect(svc.redeemReward('u1', 'reward-discount-50k')).rejects.toThrow(BadRequestException);
+      await expect(svc.redeemReward('u1', 'reward-discount-50k', 'key-00000002')).rejects.toThrow(BadRequestException);
       expect(db.users.get('u1')!.pointsBalance).toBe(20_000);
       expect(db.coupons).toHaveLength(0);
       expect(db.ledger).toHaveLength(0);
@@ -336,13 +464,17 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     it('trừ điểm bằng updateMany có guard gte (atomic) rồi mới tạo coupon cá nhân + ledger REWARD', async () => {
       const { db, prisma } = makeFakeDb([{ id: 'user-abc', pointsBalance: 100_000, referralCode: 'AAAA1111' }]);
       const svc = new LoyaltyService(prisma, makeConfig());
-      const res = await svc.redeemReward('user-abc', 'reward-discount-50k');
+      const res = await svc.redeemReward('user-abc', 'reward-discount-50k', 'key-00000003');
 
       expect(res.success).toBe(true);
       expect(res.pointsSpent).toBe(50_000);
       expect(res.remainingPoints).toBe(50_000);
-      expect(res.coupon.code).toMatch(/^REWARD-AMO50K-[A-Z0-9]{8}$/);
-      expect(res.coupon.value).toBe(50000);
+      expect(res.coupon!.code).toMatch(/^REWARD-AMO50K-[A-Z0-9]{8}$/);
+      expect(res.coupon!.value).toBe(50000);
+      expect(db.redemptions).toEqual([
+        expect.objectContaining({ giftId: 'reward-discount-50k', giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponId: db.coupons[0]!.id, claimExpiresAt: null, idempotencyKey: 'key-00000003' }),
+      ]);
+      expect(res.redemption).toMatchObject({ status: 'FULFILLED', code: null, couponCode: res.coupon!.code });
       expect(db.users.get('user-abc')!.pointsBalance).toBe(50_000);
       expect(db.coupons).toHaveLength(1);
       expect(db.coupons[0]).toMatchObject({ usageLimit: 1, perUserLimit: 1, scope: 'USER_GROUP', scopeMeta: { userId: 'user-abc' } });
@@ -363,10 +495,12 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         user: { updateMany, findUnique: jest.fn().mockResolvedValue({ pointsBalance: 99_999 }) },
         coupon: { create: jest.fn() },
         pointsTransaction: { create: jest.fn() },
+        wasteGiftRedemption: { findUnique: jest.fn().mockResolvedValue(null) },
+        $executeRaw: jest.fn().mockResolvedValue(1),
         $queryRaw: jest.fn().mockResolvedValue([]),
       };
-      const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
-      await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-100k')).rejects.toThrow(
+      const prisma = { wasteGift: { findUnique: jest.fn().mockResolvedValue(D100K) }, $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+      await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-100k', 'key-00000004')).rejects.toThrow(
         /cần 100[.]?000 Điểm Xanh.*hiện có 99[.]?999/,
       );
       expect(updateMany).toHaveBeenCalledWith({
@@ -381,7 +515,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }]);
       const svc = new LoyaltyService(prisma, makeConfig());
       const results = await Promise.allSettled(
-        Array.from({ length: 5 }, () => svc.redeemReward('u1', 'reward-discount-100k')),
+        Array.from({ length: 5 }, (_, i) => svc.redeemReward('u1', 'reward-discount-100k', `key-${i}-000000`)),
       );
       const ok = results.filter((r) => r.status === 'fulfilled');
       const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
@@ -408,7 +542,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
           lockedRows: [{ delta: 60_000, deliveredAt, pendingReturn: false }],
         });
         const err = await new LoyaltyService(prisma, makeConfig())
-          .redeemReward('u1', 'reward-discount-50k')
+          .redeemReward('u1', 'reward-discount-50k', 'key-00000005')
           .catch((e: unknown) => e);
         expect(err).toBeInstanceOf(BadRequestException);
         const unlock = vnDate(new Date(deliveredAt.getTime() + 7 * DAY)); // returns.window_days mặc định 7
@@ -425,7 +559,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
           lockedRows: [{ delta: 60_000, deliveredAt, pendingReturn: false }],
         });
         const err = await new LoyaltyService(prisma, makeConfig({ 'returns.window_days': 14 }))
-          .redeemReward('u1', 'reward-discount-50k')
+          .redeemReward('u1', 'reward-discount-50k', 'key-00000006')
           .catch((e: unknown) => e);
         expect((err as Error).message).toContain(vnDate(new Date(deliveredAt.getTime() + 14 * DAY)));
       });
@@ -435,7 +569,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
           lockedRows: [{ delta: 70_000, deliveredAt: new Date(Date.now() - 20 * DAY), pendingReturn: true }],
         });
         const err = await new LoyaltyService(prisma, makeConfig())
-          .redeemReward('u1', 'reward-discount-50k')
+          .redeemReward('u1', 'reward-discount-50k', 'key-00000007')
           .catch((e: unknown) => e);
         expect(err).toBeInstanceOf(BadRequestException);
         expect((err as Error).message).toMatch(/70[.]?000 điểm từ đơn đang chờ xử lý đổi\/trả/);
@@ -445,7 +579,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 150_000, referralCode: 'AAAA1111' }], {
           lockedRows: [{ delta: 60_000, deliveredAt: new Date(Date.now() - DAY), pendingReturn: false }],
         });
-        const res = await new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-50k');
+        const res = await new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-50k', 'key-00000008');
         expect(res.success).toBe(true);
         expect(db.users.get('u1')!.pointsBalance).toBe(100_000);
       });
@@ -460,10 +594,12 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
           user: { updateMany, findUnique: jest.fn().mockResolvedValue({ pointsBalance: 150_000 }) },
           coupon: { create: jest.fn() },
           pointsTransaction: { create: jest.fn() },
+          wasteGiftRedemption: { findUnique: jest.fn().mockResolvedValue(null) },
+          $executeRaw: jest.fn().mockResolvedValue(1),
           $queryRaw,
         };
-        const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
-        await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-100k')).rejects.toThrow(
+        const prisma = { wasteGift: { findUnique: jest.fn().mockResolvedValue(D100K) }, $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+        await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-100k', 'key-00000009')).rejects.toThrow(
           BadRequestException,
         );
         const firstSql = ($queryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
@@ -481,7 +617,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         });
         const svc = new LoyaltyService(prisma, makeConfig());
         const results = await Promise.allSettled(
-          Array.from({ length: 5 }, () => svc.redeemReward('u1', 'reward-discount-50k')),
+          Array.from({ length: 5 }, (_, i) => svc.redeemReward('u1', 'reward-discount-50k', `key-${i}-000000`)),
         );
         expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
         const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
@@ -513,16 +649,114 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         expect(ov).toMatchObject({ pointsBalance: 100, lockedPoints: 40, lockedReturnPoints: 10, redeemablePoints: 60 });
         expect(ov.lockedUntil).toBe(new Date(deliveredAt.getTime() + 7 * DAY).toISOString());
       });
+    });
 
-      it('điểm khoá lớn hơn số dư (đã tiêu lúc thanh toán) → redeemablePoints = 0, không âm', async () => {
-        const prisma = {
-          user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 20 }) },
-          $queryRaw: jest.fn().mockResolvedValue([{ delta: 90, deliveredAt: new Date(), pendingReturn: false }]),
-        } as unknown as PrismaService;
-        const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
-        expect(res.redeemablePoints).toBe(0);
-        expect(res.rewards.every((r) => !r.canRedeem)).toBe(true);
+    const realUser = { phone: '0987000111' };
+    it('quà TREE → 400 chỉ dùng nút Góp cây, không mở transaction', async () => {
+      const prisma = { wasteGift: { findUnique: jest.fn().mockResolvedValue(TREE) }, $transaction: jest.fn() } as unknown as PrismaService;
+      await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'gift-tree', 'key-00000010')).rejects.toThrow(
+        new BadRequestException('Quà góp quỹ trồng cây đổi bằng nút Góp cây ở Vườn Xanh.'),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+    it.each(['GIFT', 'SEED_PACK'] as const)('khách vãng lai đổi %s → 403 REAL_USER_REQUIRED_MSG, không trừ điểm, không trừ tồn kho', async (kind) => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', zaloId: 'guest_dev-1' }], { gifts: [giftRow({ kind, stock: 2 })] });
+      await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'g1', 'key-00000011')).rejects.toThrow(new ForbiddenException(REAL_USER_REQUIRED_MSG));
+      expect(db.users.get('u1')!.pointsBalance).toBe(100_000);
+      expect(db.gifts.get('g1')!.stock).toBe(2);
+      expect(db.ledger).toHaveLength(0);
+    });
+    it('người dùng thật đổi GIFT → READY, mã QG-, hạn nhận theo waste.gift_claim_days, trừ tồn kho, sổ GIFT_REDEEM', async () => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', ...realUser }], { gifts: [giftRow({ stock: 2 })] });
+      const before = Date.now();
+      const res = await new LoyaltyService(prisma, makeConfig({ 'waste.gift_claim_days': 45 })).redeemReward('u1', 'g1', 'key-00000012');
+      const r = db.redemptions[0]!;
+      expect(r).toMatchObject({ status: 'READY', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, couponId: null });
+      expect(r.code).toMatch(/^QG-[2-9A-HJKMNP-TV-Z]{8}$/);
+      expect((r.claimExpiresAt as Date).getTime() - before).toBeGreaterThanOrEqual(45 * DAY - 1000);
+      expect((r.claimExpiresAt as Date).getTime() - before).toBeLessThanOrEqual(45 * DAY + 5000);
+      expect(db.gifts.get('g1')!.stock).toBe(1);
+      expect(db.ledger).toEqual([expect.objectContaining({ delta: -30_000, reason: 'GIFT_REDEEM:g1', refType: 'GIFT', refId: r.id })]);
+      expect(res).toMatchObject({ success: true, message: 'Đổi thành công Túi vải Tubu!', pointsSpent: 30_000, remainingPoints: 70_000, coupon: null });
+      expect(res.redemption).toMatchObject({ status: 'READY', code: r.code, couponCode: null });
+    });
+    it.each([
+      ['đã ẩn', { status: 'HIDDEN' }],
+      ['hết tồn kho', { stock: 0 }],
+    ])('voucher %s → 400 "Quà này đã hết hoặc đã ngừng đổi", không trừ điểm', async (_n, over) => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }], { gifts: [{ ...D50K, ...over }] });
+      await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-50k', 'key-00000013')).rejects.toThrow(
+        new BadRequestException('Quà này đã hết hoặc đã ngừng đổi'),
+      );
+      expect(db.users.get('u1')!.pointsBalance).toBe(100_000);
+      expect(db.coupons).toHaveLength(0);
+      expect(db.ledger).toHaveLength(0);
+    });
+    it('gọi lại cùng khoá cùng quà → trả đúng kết quả cũ, không trừ thêm điểm hay tồn kho', async () => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', ...realUser }], { gifts: [giftRow({ stock: 5 })] });
+      const svc = new LoyaltyService(prisma, makeConfig());
+      const first = await svc.redeemReward('u1', 'g1', 'key-00000014');
+      const again = await svc.redeemReward('u1', 'g1', 'key-00000014');
+      expect(again.redemption.id).toBe(first.redemption.id);
+      expect(again).toMatchObject({ success: true, pointsSpent: 30_000, remainingPoints: 70_000 });
+      expect(db.users.get('u1')!.pointsBalance).toBe(70_000);
+      expect(db.gifts.get('g1')!.stock).toBe(4);
+      expect(db.redemptions).toHaveLength(1);
+      expect(db.ledger).toHaveLength(1);
+    });
+    it('cùng khoá nhưng quà khác → 409', async () => {
+      const { prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 200_000, referralCode: 'AAAA1111' }]);
+      const svc = new LoyaltyService(prisma, makeConfig());
+      await svc.redeemReward('u1', 'reward-freeship', 'key-00000015');
+      await expect(svc.redeemReward('u1', 'reward-discount-50k', 'key-00000015')).rejects.toThrow(
+        new ConflictException('Idempotency-Key này đã dùng cho một lượt đổi quà khác, hãy tạo khoá khác.'),
+      );
+    });
+    describe('P2002 trên (userId, idempotencyKey) bắt ngoài transaction', () => {
+      const stored = { id: 'rd-9', userId: 'u1', giftId: 'reward-freeship', giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', pointsCost: 20_000, status: 'FULFILLED', code: null, couponId: 'cp-9', idempotencyKey: 'key-00000016', claimExpiresAt: null, fulfilledAt: new Date(), cancelledAt: null, cancelReason: null, refundedPoints: null, createdAt: new Date() };
+      const prismaWith = (giftId: string) => ({
+        wasteGift: { findUnique: jest.fn().mockResolvedValue(giftId === 'reward-freeship' ? FREESHIP : D50K) },
+        $transaction: jest.fn().mockRejectedValue(p2002('waste_gift_redemptions_userId_idempotencyKey_key')),
+        wasteGiftRedemption: { findUnique: jest.fn().mockResolvedValue(stored) },
+        user: { findUnique: jest.fn().mockResolvedValue({ pointsBalance: 80_000 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ pointsBalance: 80_000 }) },
+        coupon: { findUnique: jest.fn().mockResolvedValue({ id: 'cp-9', code: 'REWARD-FRESHIP-ABCDEFGH', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, endAt: new Date('2026-11-16T00:00:00Z') }) },
+        wastePoint: { findFirst: jest.fn().mockResolvedValue(null) },
+      }) as unknown as PrismaService;
+      it('đọc lại dòng: cùng quà → trả kết quả đã lưu', async () => {
+        const res = await new LoyaltyService(prismaWith('reward-freeship'), makeConfig()).redeemReward('u1', 'reward-freeship', 'key-00000016');
+        expect(res).toMatchObject({ success: true, pointsSpent: 20_000, remainingPoints: 80_000, coupon: { code: 'REWARD-FRESHIP-ABCDEFGH' } });
+        expect(res.redemption.id).toBe('rd-9');
       });
+      it('đọc lại dòng: quà khác → 409', async () => {
+        await expect(new LoyaltyService(prismaWith('reward-discount-50k'), makeConfig()).redeemReward('u1', 'reward-discount-50k', 'key-00000016')).rejects.toBeInstanceOf(ConflictException);
+      });
+    });
+    it('số ngày hiệu lực lấy từ từng quà (voucherValidDays 7 → coupon hết hạn sau 7 ngày)', async () => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }], { gifts: [{ ...FREESHIP, voucherValidDays: 7 }] });
+      const before = Date.now();
+      await new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-freeship', 'key-00000017');
+      const days = ((db.coupons[0]!.endAt as Date).getTime() - before) / DAY;
+      expect(days).toBeGreaterThan(6.9);
+      expect(days).toBeLessThan(7.1);
+    });
+    it('cờ waste.enabled tắt và khách bị khoá đổi rác vẫn đổi được mã giảm giá (§8, spec 13.2)', async () => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }]);
+      const flags = jest.fn().mockResolvedValue({ userId: 'u1', blockedAt: new Date(), shipLockedAt: new Date() });
+      (prisma as unknown as Record<string, unknown>).wasteUserFlags = { findUnique: flags, findFirst: flags };
+      const res = await new LoyaltyService(prisma, makeConfig({ 'waste.enabled': false })).redeemReward('u1', 'reward-freeship', 'key-00000018');
+      expect(res).toMatchObject({ success: true, pointsSpent: 20_000 });
+      expect(db.users.get('u1')!.pointsBalance).toBe(80_000);
+      expect(flags).not.toHaveBeenCalled();
+    });
+    it('P2002 trên mã (coupons_code_key) → chạy lại cả lượt đúng một lần; lần sau vẫn trùng thì ném lỗi', async () => {
+      const result = { success: true, message: 'Đổi thành công Miễn phí vận chuyển!', pointsSpent: 20_000, remainingPoints: 80_000, redemption: {}, coupon: null };
+      const withTx = (tx: jest.Mock) => ({ wasteGift: { findUnique: jest.fn().mockResolvedValue(FREESHIP) }, $transaction: tx }) as unknown as PrismaService;
+      const once = jest.fn().mockRejectedValueOnce(p2002('coupons_code_key')).mockResolvedValueOnce(result);
+      await expect(new LoyaltyService(withTx(once), makeConfig()).redeemReward('u1', 'reward-freeship', 'key-00000019')).resolves.toEqual(result);
+      expect(once).toHaveBeenCalledTimes(2);
+      const always = jest.fn().mockRejectedValue(p2002('coupons_code_key'));
+      await expect(new LoyaltyService(withTx(always), makeConfig()).redeemReward('u1', 'reward-freeship', 'key-00000020')).rejects.toMatchObject({ code: 'P2002' });
+      expect(always).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -719,21 +953,30 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
   // ───────────────────────────── Staff lookup ─────────────────────────────
   describe('Tra cứu thành viên (nhân viên)', () => {
-    const staff = { id: 'staff-1', role: 'STAFF', isBlocked: false };
+    const staff = { id: 'staff-1', role: 'STAFF', isBlocked: false, mergedIntoId: null };
     function lookupPrisma(found: Row[] = []) {
       const findMany = jest.fn().mockResolvedValue(found);
       const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue(staff), findMany },
+        user: { findUnique: jest.fn().mockResolvedValue(staff), findMany },
       } as unknown as PrismaService;
       return { prisma, findMany };
     }
 
     it('người gọi không phải STAFF/ADMIN (role trong DB) → Forbidden', async () => {
       const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u-cust', role: 'CUSTOMER' }) },
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u-cust', role: 'CUSTOMER', isBlocked: false, mergedIntoId: null }) },
       } as unknown as PrismaService;
       await expect(new LoyaltyService(prisma, makeConfig()).lookupMemberByStaff('u-cust', 'TUBUAB12CD34')).rejects.toThrow(
         ForbiddenException,
+      );
+    });
+
+    it('nhân viên đã gộp vào tài khoản khác (mergedIntoId) → Forbidden với đúng câu cũ', async () => {
+      const merged = { id: 'staff-1', role: 'STAFF', isBlocked: false, mergedIntoId: 'u-real' };
+      const m = jest.fn().mockResolvedValue(merged);
+      const prisma = { user: { findUnique: m, findMany: jest.fn() } } as unknown as PrismaService;
+      await expect(new LoyaltyService(prisma, makeConfig()).lookupMemberByStaff('staff-1', 'TUBUAB12CD34')).rejects.toThrow(
+        new ForbiddenException('Chỉ nhân viên hoặc quản trị viên mới có quyền quét thẻ thành viên.'),
       );
     });
 

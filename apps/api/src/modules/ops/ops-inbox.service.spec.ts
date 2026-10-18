@@ -5,9 +5,19 @@ import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
 import { buildAdminOrderWhere } from '../admin/admin-order-filter';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import {
+  WASTE_PERKS_PENDING_WHERE,
+  WASTE_POINTS_PENDING_WHERE,
+  WASTE_TO_COUNT_WHERE,
+  WASTE_UNMATCHED_OPEN_WHERE,
+  wasteCustomerBlockedWhere,
+  wasteGiftOverdueWhere,
+  wasteOrderMismatchWhere,
+  wasteTransitOverdueWhere,
+} from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown> } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn().mockResolvedValue(over.invoices ?? 0);
@@ -23,6 +33,10 @@ const build = (
     Promise.resolve(args.where.state === 'REVIEW' ? (over.extReview ?? 0) : args.where.reviewReason ? (over.extPartial ?? 0) : args.where.OR ? (over.extStuck ?? 0) : (over.extClosed ?? 0)),
   );
   const extAttemptCount = jest.fn().mockResolvedValue(over.extAttempts ?? 0);
+  const wasteReqCount = jest.fn().mockResolvedValue(0);
+  const unmatchedCount = jest.fn().mockResolvedValue(0);
+  const pointCount = jest.fn().mockResolvedValue(0);
+  const giftCount = jest.fn().mockResolvedValue(0);
   const prisma = {
     product: { count: productCount },
     order: { count: orderCount },
@@ -32,7 +46,10 @@ const build = (
     dealerApplication: zero,
     dealerRewardClaim: zero,
     payout: zero,
-    bottleReturn: zero,
+    wasteRequest: { count: wasteReqCount },
+    wasteUnmatchedParcel: { count: unmatchedCount },
+    wastePoint: { count: pointCount },
+    wasteGiftRedemption: { count: giftCount },
     merchantPancakeLink: { count: linkCount },
     merchantPayout: { count: payoutCount },
     externalPointsClaim: { count: extClaimCount },
@@ -43,7 +60,8 @@ const build = (
     countOverdue: jest.fn().mockResolvedValue(0),
     countStoresToSettle: jest.fn().mockResolvedValue(over.settle ?? 0),
   } as unknown as MerchantFulfilmentService;
-  return { svc: new OpsInboxService(prisma, merchant, config as unknown as SystemConfigService), productCount, linkCount, payoutCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount };
+  const svc = new OpsInboxService(prisma, merchant, over.noConfig ? undefined : (config as unknown as SystemConfigService));
+  return { svc, config, productCount, linkCount, payoutCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount, wasteReqCount, unmatchedCount, pointCount, giftCount };
 };
 
 describe('OpsInboxService — merchantProducts', () => {
@@ -212,17 +230,104 @@ describe('OpsInboxService — externalPoints', () => {
 describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình xử lý được (D1-05)', () => {
   const keysFor = async (perms: string[]) => (await build().svc.counts({ role: 'STAFF', staffPermissions: perms })).items.map((i) => i.key).sort();
 
-  it('MARKETING: chỉ hai hàng đợi cộng đồng (cùng CSKH) và đổi vỏ chai (mọi nhân viên)', async () => {
-    expect(await keysFor(['MARKETING'])).toEqual(['communityPending', 'communityUnanswered', 'refillPending']);
+  it('MARKETING: chỉ hai hàng đợi cộng đồng (cùng CSKH) và hai hàng đợi đổi rác của mọi nhân viên', async () => {
+    expect(await keysFor(['MARKETING'])).toEqual(['communityPending', 'communityUnanswered', 'wasteToCount', 'wasteUnmatched']);
   });
 
   it('KE_TOAN: hoàn tiền khách, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
-    expect(await keysFor(['KE_TOAN'])).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'refillPending']);
+    expect(await keysFor(['KE_TOAN'])).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'wasteToCount', 'wasteUnmatched']);
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
-    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'refillPending', 'returnsPending']);
-    expect(await keysFor(['KHO'])).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'refillPending', 'returnsToReceive']);
-    expect(await keysFor([])).toEqual(['refillPending']);
+    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'returnsPending', 'wasteToCount', 'wasteUnmatched']);
+    expect(await keysFor(['KHO'])).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'returnsToReceive', 'wasteToCount', 'wasteUnmatched']);
+    expect(await keysFor([])).toEqual(['wasteToCount', 'wasteUnmatched']);
+  });
+});
+
+describe('OpsInboxService — đổi rác (spec 13.2)', () => {
+  const now = new Date('2026-10-17T03:00:00Z');
+  const keys = (res: { items: { key: string }[] }) => res.items.map((i) => i.key);
+
+  it('ADMIN thấy đủ khoá theo đúng thứ tự, không còn refillPending', async () => {
+    const { svc } = build();
+
+    const res = await svc.counts({ role: 'ADMIN' }, now);
+
+    expect(keys(res)).toEqual([
+      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'merchantOverdue', 'merchantProducts',
+      'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'payouts', 'communityPending',
+      'communityUnanswered', 'invoicePending', 'externalPoints', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
+      'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
+    ]);
+  });
+
+  it('nhân viên chưa có nhóm chỉ thấy wasteToCount và wasteUnmatched; không tốn truy vấn điểm nhận hay quà', async () => {
+    const { svc, pointCount, giftCount } = build();
+
+    const res = await svc.counts({ role: 'STAFF', staffPermissions: [] }, now);
+
+    expect(keys(res)).toEqual(['wasteToCount', 'wasteUnmatched']);
+    expect(pointCount).not.toHaveBeenCalled();
+    expect(giftCount).not.toHaveBeenCalled();
+  });
+
+  it('CSKH và KHO giữ khoá nhóm mình cộng hai khoá đổi rác của mọi nhân viên', async () => {
+    const { svc } = build();
+
+    expect(keys(await svc.counts({ role: 'STAFF', staffPermissions: ['CSKH'] }, now))).toEqual([
+      'returnsPending', 'communityPending', 'communityUnanswered', 'externalPoints', 'wasteToCount', 'wasteUnmatched',
+    ]);
+    expect(keys(await svc.counts({ role: 'STAFF', staffPermissions: ['KHO'] }, now))).toEqual([
+      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'returnsToReceive', 'wasteToCount', 'wasteUnmatched',
+    ]);
+  });
+
+  it('mỗi khoá đếm đúng một hàng đợi bằng bộ lọc dùng chung và số rơi đúng khoá', async () => {
+    const { svc, wasteReqCount, unmatchedCount, pointCount, giftCount } = build();
+    wasteReqCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1).mockResolvedValueOnce(4).mockResolvedValueOnce(2);
+    pointCount.mockResolvedValueOnce(5).mockResolvedValueOnce(6);
+    unmatchedCount.mockResolvedValueOnce(7);
+    giftCount.mockResolvedValueOnce(8);
+
+    const res = await svc.counts({ role: 'ADMIN' }, now);
+
+    expect(wasteReqCount).toHaveBeenCalledWith({ where: WASTE_TO_COUNT_WHERE });
+    expect(wasteReqCount).toHaveBeenCalledWith({ where: wasteCustomerBlockedWhere() });
+    expect(wasteReqCount).toHaveBeenCalledWith({ where: wasteTransitOverdueWhere(now, 30) });
+    expect(wasteReqCount).toHaveBeenCalledWith({ where: wasteOrderMismatchWhere() });
+    expect(unmatchedCount).toHaveBeenCalledWith({ where: WASTE_UNMATCHED_OPEN_WHERE });
+    expect(pointCount).toHaveBeenCalledWith({ where: WASTE_POINTS_PENDING_WHERE });
+    expect(pointCount).toHaveBeenCalledWith({ where: WASTE_PERKS_PENDING_WHERE });
+    expect(giftCount).toHaveBeenCalledWith({ where: wasteGiftOverdueWhere(now) });
+    expect(res.items).toEqual(
+      expect.arrayContaining([
+        { key: 'wasteToCount', count: 3 },
+        { key: 'wasteUnmatched', count: 7 },
+        { key: 'wasteBlockedPending', count: 1 },
+        { key: 'wastePointsPending', count: 5 },
+        { key: 'wastePerksPending', count: 6 },
+        { key: 'wasteTransitOverdue', count: 2 },
+        { key: 'wasteGiftOverdue', count: 8 },
+        { key: 'wasteOrderMismatch', count: 4 },
+      ]),
+    );
+  });
+
+  it('khoá waste.in_transit_review_days đổi ngưỡng quá hạn đang chuyển', async () => {
+    const { svc, config, wasteReqCount } = build({ config: { 'waste.in_transit_review_days': 45 } });
+
+    await svc.counts({ role: 'ADMIN' }, now);
+
+    expect(config.get).toHaveBeenCalledWith('waste.in_transit_review_days', 30);
+    expect(wasteReqCount).toHaveBeenCalledWith({ where: wasteTransitOverdueWhere(now, 45) });
+  });
+
+  it('dựng với hai đối số (không có SystemConfigService) vẫn dùng ngưỡng 30 ngày', async () => {
+    const { svc, wasteReqCount } = build({ noConfig: true });
+
+    await svc.counts({ role: 'ADMIN' }, now);
+
+    expect(wasteReqCount).toHaveBeenCalledWith({ where: wasteTransitOverdueWhere(now, 30) });
   });
 });

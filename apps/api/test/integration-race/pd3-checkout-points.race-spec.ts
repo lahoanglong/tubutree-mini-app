@@ -202,7 +202,7 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
     const results = await Promise.allSettled([
       checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 120 } as never),
       ...Array.from({ length: 5 }, () => game.spin(u.id)),
-      ...Array.from({ length: 3 }, () => loyalty.redeemReward(u.id, 'reward-freeship')),
+      ...Array.from({ length: 3 }, () => loyalty.redeemReward(u.id, 'reward-freeship', `rk-${randCode(12)}`)),
       ...Array.from({ length: 2 }, () => game.buyTree(u.id)),
     ]);
     const s = summarize(results);
