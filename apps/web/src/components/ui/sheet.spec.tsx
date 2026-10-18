@@ -4,6 +4,7 @@ import { act } from 'react';
 import { click, render, type Rendered } from '@/test-utils/dom';
 import { createRoot } from 'react-dom/client';
 import { Sheet } from './sheet';
+import { ConfirmDialog } from '../admin/confirm-dialog';
 
 // render() của test-utils bọc QueryClientProvider nên root.render lại sẽ remount; ở đây cần cùng cây để thử đổi prop.
 function mountPlain(ui: React.ReactElement) {
@@ -125,6 +126,30 @@ describe('Sheet', () => {
     expect(innerDialog.contains(document.activeElement)).toBe(true);
     key('Escape');
     expect(innerClose).toHaveBeenCalledTimes(1);
+    expect(outerClose).not.toHaveBeenCalled();
+  });
+
+  it('ConfirmDialog mở chồng lên Sheet: Esc chỉ trả lời hộp xác nhận, Tab xoay vòng trong hộp', () => {
+    const outerClose = vi.fn();
+    const onAnswer = vi.fn();
+    mount(
+      <>
+        <Sheet open onClose={outerClose} title="Rút tiền">x</Sheet>
+        <ConfirmDialog options={{ title: 'Xác nhận rút', message: 'Chắc chưa?' }} onAnswer={onAnswer} />
+      </>,
+    );
+    const confirm = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(confirm.contains(document.activeElement)).toBe(true);
+    const labels = () => (document.activeElement as HTMLElement).textContent;
+    const start = labels();
+    key('Tab');
+    const second = labels();
+    expect(second).not.toBe(start);
+    expect(confirm.contains(document.activeElement)).toBe(true);
+    key('Tab');
+    expect(labels()).toBe(start);
+    key('Escape');
+    expect(onAnswer).toHaveBeenCalledWith(false);
     expect(outerClose).not.toHaveBeenCalled();
   });
 

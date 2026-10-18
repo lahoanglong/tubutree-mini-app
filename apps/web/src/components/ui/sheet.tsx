@@ -58,6 +58,9 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
 
     const onKey = (e: KeyboardEvent) => {
       if (openStack[openStack.length - 1] !== id) return;
+      // Hộp modal khác (ConfirmDialog) không vào openStack; portal mở sau luôn nằm cuối DOM nên nó giữ bàn phím.
+      const modals = document.querySelectorAll('[aria-modal="true"]');
+      if (modals[modals.length - 1] !== panel) return;
       if (e.key === 'Escape' && dismissibleRef.current) {
         e.stopPropagation();
         onCloseRef.current();
