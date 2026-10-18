@@ -49,6 +49,7 @@ import {
   UNCAPPED_QTY_MAX,
   blockMessage,
   capSentence,
+  monthRemainingText,
   feeExceedsPoints,
   feeRangeText,
   groupProgressText,
@@ -115,6 +116,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
       {sorted.map((item) => {
         const qty = lines[item.id] ?? 0;
         const cap = capSentence(item);
+        const monthLeft = monthRemainingText(item);
         const progress = groupProgressText(qty, item);
         const comingSoon = item.status === 'COMING_SOON';
         return (
@@ -153,6 +155,11 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
               {cap && (
                 <Text variant="caption" tone="tertiary" as="div">
                   {cap}
+                </Text>
+              )}
+              {monthLeft && (
+                <Text variant="caption" tone={item.monthRemainingQty === 0 ? 'warning' : 'secondary'} as="div">
+                  {monthLeft}
                 </Text>
               )}
               {item.status === 'ACTIVE' && (
@@ -457,7 +464,9 @@ export default function RecycleNewPage() {
     const locked = isLocked(pv);
     const checked = selected === m;
     const fee = m === 'MAIL_IN' ? pv?.feeEstimate : null;
-    const showProvince = m === 'MAIL_IN' && provincesQ.data && (draft.provinceCode !== null || pv?.blocks.some((b) => b.code === 'NEED_PROVINCE'));
+    // Tỉnh chưa có điểm nhận thì API trả chính mã tỉnh làm tên; khi danh sách tỉnh chưa về thì bỏ cụm tên tỉnh, không in mã số.
+    const feeProvince = fee ? (provincesQ.data?.find((pr) => pr.code === fee.provinceCode)?.name ?? (fee.provinceName === fee.provinceCode ? null : fee.provinceName)) : null;
+    const showProvince = m === 'MAIL_IN' && checked && provincesQ.data && (draft.provinceCode !== null || pv?.blocks.some((b) => b.code === 'NEED_PROVINCE'));
     return (
       <Card
         key={m}
@@ -485,9 +494,9 @@ export default function RecycleNewPage() {
             color: 'inherit',
             textAlign: 'left',
             cursor: locked ? 'default' : 'pointer',
-            opacity: locked ? 0.6 : 1,
           }}
         >
+          <span style={{ ...COLUMN, gap: 4, opacity: locked ? 0.6 : 1 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Text variant="body-md" as="span" style={{ fontWeight: 600 }}>
               {METHOD_LABELS[m]}
@@ -504,7 +513,7 @@ export default function RecycleNewPage() {
           )}
           {fee && (
             <Text variant="caption" tone="secondary" as="span">
-              {`Phí ship ước tính từ ${fee.provinceName}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}
+              {`Phí ship ước tính${feeProvince ? ` từ ${feeProvince}` : ''}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}
             </Text>
           )}
           {m === 'MAIL_IN' && (
@@ -517,11 +526,14 @@ export default function RecycleNewPage() {
               {`Tối thiểu ${formatPoints(me.thresholds.pickupMinPoints)} ước tính`}
             </Text>
           )}
-          {pv?.blocks.map((b) => (
-            <Text key={`${b.code}-${b.itemId ?? ''}`} variant="caption" tone="danger" as="span">
-              {blockMessage(b, ctxFor(pv, m))}
-            </Text>
-          ))}
+          </span>
+          {pv?.blocks
+            .filter((b) => b.code !== 'NEED_PROVINCE' || checked)
+            .map((b) => (
+              <Text key={`${b.code}-${b.itemId ?? ''}`} variant="caption" tone={b.code === 'NEED_PROVINCE' ? 'secondary' : 'warning'} as="span">
+                {blockMessage(b, ctxFor(pv, m))}
+              </Text>
+            ))}
         </button>
         <div style={{ ...COLUMN, gap: 8, marginTop: 8 }}>
           {showProvince && (

@@ -59,7 +59,7 @@ describe('runGoLiveCheck', () => {
       ...GOOD_DB,
       appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => !required.includes(m)),
       orderCount: 300_000,
-      waste: { tableExists: false, totalPoints: 0, activeWarehouses: 0 },
+      waste: { tableExists: false, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0 },
       configs: { ...GOOD_DB.configs },
     };
     const c = { ...good, db: async () => oldProd, redis: async () => ({ ...GOOD_REDIS, maxmemoryPolicy: 'allkeys-lru' }) };

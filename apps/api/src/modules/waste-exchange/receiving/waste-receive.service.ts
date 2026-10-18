@@ -174,8 +174,8 @@ export class WasteReceiveService {
           matchBasis: m.basis,
           phoneMatchConfirmed: body.match?.phoneMatchConfirmed ?? false,
           parcelTrackingNorm: parcelNorm,
-          // A differing tracking code is only logged, never blocks the tick.
-          trackingMismatch: parcelNorm === null ? null : parcelNorm !== req.trackingNorm,
+          // A differing tracking code is only logged, never blocks the tick; a request the customer gave no code has nothing to differ from.
+          trackingMismatch: parcelNorm === null || req.trackingNorm === null ? null : parcelNorm !== req.trackingNorm,
           subjectUserId: req.userId,
           before: { status },
           after: { status: 'RECEIVED' },

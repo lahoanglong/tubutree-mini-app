@@ -443,7 +443,7 @@
 - R13.2.32 [DATA] [M1] Add `points_transactions_recycle_reverse_key` to `KNOWN_PARTIAL_UNIQUE_INDEXES`. (L434)
 - R13.2.33 [DATA] [M1] Add `points_transactions_gift_refund_key` to `KNOWN_PARTIAL_UNIQUE_INDEXES`. (L434)
 - R13.2.34 [TEST] [M1] In `partial-unique-indexes.race-spec.ts` change the pinned length from 20 to 23 (see 11.3). (L434)
-- R13.2.36 [TEST] [M1] Gate: the CI check (`check-partial-indexes.ts` after `migrate deploy`) goes red if an index is wrongly formed or missing; the race spec `partial-unique-indexes` runs only via `verify-full.sh`, not in CI. (L434)
+- R13.2.36 [TEST] [M1] Gate: the CI check (`check-partial-indexes.ts` after `migrate deploy`) goes red if an index is wrongly formed or missing; the race spec `partial-unique-indexes` runs in `race.yml` and `verify-full.sh`. (L434)
 - R13.2.37 [REMOVE] [M1] Remove `REFILL_APPROVED` and `REFILL_REJECTED` from `seed.ts` (template rows already in the DB stay). (L435)
 - R13.2.38 [REMOVE] [M1] Remove `REFILL_APPROVED` and `REFILL_REJECTED` from the `CODES` array of `notification-templates-seed.spec.ts`. (L435)
 - R13.2.39 [TEMPLATE] [M1] Add the 10 `WASTE_*` template codes of section 11.6 to the seed and to `CODES` of `notification-templates-seed.spec.ts`. (L435)

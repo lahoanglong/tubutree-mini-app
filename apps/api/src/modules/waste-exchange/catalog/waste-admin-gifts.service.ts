@@ -6,6 +6,7 @@ import { assertActiveAdmin } from '../../../common/staff-access';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { COUPON_AMOUNT_MAX } from '../../admin/admin.controller';
 import { voucherSpecOf } from '../../loyalty/loyalty.service';
+import { SystemConfigService } from '../../system-config/system-config.service';
 import { formatVnd } from '../../orders/refund-destination';
 import { writeWasteEvent } from '../core/waste-events';
 
@@ -42,7 +43,7 @@ export function assertVoucherSpec(v: WasteVoucherSpec): void {
   }
 }
 
-function toAdminGiftDTO(row: WasteGift, redemptionCount: number, fundTreeTotal?: number): AdminWasteGiftDTO {
+function toAdminGiftDTO(row: WasteGift, redemptionCount: number, tree?: { fundTreeTotal: number; treePointsPrice: number }): AdminWasteGiftDTO {
   return {
     id: row.id,
     kind: row.kind,
@@ -57,13 +58,16 @@ function toAdminGiftDTO(row: WasteGift, redemptionCount: number, fundTreeTotal?:
     claimInstructions: row.claimInstructions,
     voucher: row.kind === 'VOUCHER' ? voucherSpecOf(row) : null,
     redemptionCount,
-    ...(row.kind === 'TREE' ? { fundTreeTotal } : {}),
+    ...(row.kind === 'TREE' && tree ? tree : {}),
   };
 }
 
 @Injectable()
 export class WasteAdminGiftsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: SystemConfigService,
+  ) {}
 
   async list(adminUserId: string): Promise<AdminWasteGiftDTO[]> {
     await assertActiveAdmin(this.prisma, adminUserId);
@@ -177,14 +181,15 @@ export class WasteAdminGiftsService {
   }
 
   private async toDtos(rows: WasteGift[]): Promise<AdminWasteGiftDTO[]> {
-    const [grouped, treeCount, fundTreeTotal] = await Promise.all([
+    const [grouped, treeCount, fundTreeTotal, treePointsPrice] = await Promise.all([
       this.prisma.wasteGiftRedemption.groupBy({ by: ['giftId'], where: { status: { in: ['READY', 'FULFILLED'] } }, _count: { _all: true } }),
       rows.some((r) => r.kind === 'TREE')
         ? this.prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(DISTINCT "reason")::int AS "n" FROM "points_transactions" WHERE "reason" LIKE 'GAME_BUY_TREE:%'`
         : Promise.resolve([{ n: 0 }]),
       rows.some((r) => r.kind === 'TREE') ? this.prisma.plantedTree.count() : Promise.resolve(0),
+      rows.some((r) => r.kind === 'TREE') ? this.config.get<number>('game.tree_points_price', 50_000) : Promise.resolve(50_000),
     ]);
     const counts = new Map(grouped.map((g) => [g.giftId, g._count._all]));
-    return rows.map((r) => toAdminGiftDTO(r, r.kind === 'TREE' ? (treeCount[0]?.n ?? 0) : (counts.get(r.id) ?? 0), fundTreeTotal));
+    return rows.map((r) => toAdminGiftDTO(r, r.kind === 'TREE' ? (treeCount[0]?.n ?? 0) : (counts.get(r.id) ?? 0), { fundTreeTotal, treePointsPrice }));
   }
 }

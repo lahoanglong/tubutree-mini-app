@@ -238,6 +238,7 @@ const listRow = (o: Record<string, unknown> = {}) => ({
   expiresAt: null,
   inTransitAt: null,
   receivedAt: null,
+  completedAt: null,
   estimatedPoints: 10_000,
   pointsAwarded: null,
   pointId: 'wh',
@@ -344,6 +345,14 @@ describe('WasteAdminRequestsService.queue', () => {
     expect(out.rows[0]).toMatchObject({ customerName: 'An***', customerPhone: '090****567', pointName: 'Kho Tubu', createdAt: CREATED.toISOString() });
     expect(out.rows[0]).not.toHaveProperty('userId');
     expect(out.nextCursor).toBeNull();
+  });
+
+  it('exposes completedAt as an ISO string for a COMPLETED request and null for an OPEN one', async () => {
+    const DONE = new Date('2026-10-05T09:30:00.000Z');
+    const { service } = adminSetup({ rows: [listRow({ id: 'r1', status: 'COMPLETED', completedAt: DONE }), listRow({ id: 'r2', status: 'OPEN' })] });
+    const out = await service.queue('a1', { filter: 'TO_COUNT' });
+    expect(out.rows[0]).toMatchObject({ id: 'r1', completedAt: DONE.toISOString(), createdAt: CREATED.toISOString() });
+    expect(out.rows[1]).toMatchObject({ id: 'r2', completedAt: null });
   });
 
   it('returns the raw name, phone and userId for ADMIN', async () => {

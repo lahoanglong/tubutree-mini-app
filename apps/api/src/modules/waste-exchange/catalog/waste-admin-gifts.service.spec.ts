@@ -44,7 +44,8 @@ function setup(role = 'ADMIN') {
     $queryRaw,
     $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
   };
-  return { svc: new WasteAdminGiftsService(prisma as never), prisma, tx, wasteGift, wasteGiftRedemption, plantedTree, $queryRaw };
+  const config = { get: jest.fn(async (_k: string, d: unknown) => d) };
+  return { svc: new WasteAdminGiftsService(prisma as never, config as never), config, prisma, tx, wasteGift, wasteGiftRedemption, plantedTree, $queryRaw };
 }
 
 describe('WasteAdminGiftsService', () => {
@@ -73,7 +74,22 @@ describe('WasteAdminGiftsService', () => {
     expect(out[0]).not.toHaveProperty('fundTreeTotal');
     expect(out[1]).toMatchObject({ id: 'gift-seed', kind: 'SEED_PACK', stock: 3, redemptionCount: 2, voucher: null });
     expect(out[1]).not.toHaveProperty('fundTreeTotal');
-    expect(out[2]).toMatchObject({ id: 'gift-tree', kind: 'TREE', redemptionCount: 7, fundTreeTotal: 31 });
+    expect(out[2]).toMatchObject({ id: 'gift-tree', kind: 'TREE', redemptionCount: 7, fundTreeTotal: 31, treePointsPrice: 50_000 });
+    expect(out[0]).not.toHaveProperty('treePointsPrice');
+    expect(out[1]).not.toHaveProperty('treePointsPrice');
+  });
+
+  it('list reads the TREE price from game.tree_points_price and skips the read when there is no TREE gift', async () => {
+    const { svc, wasteGift, config } = setup();
+    wasteGift.findMany.mockResolvedValue([SEED_ROW]);
+    await svc.list('a1');
+    expect(config.get).not.toHaveBeenCalled();
+
+    wasteGift.findMany.mockResolvedValue([TREE_ROW]);
+    config.get.mockResolvedValue(80_000);
+    const out = await svc.list('a1');
+    expect(config.get).toHaveBeenCalledWith('game.tree_points_price', 50_000);
+    expect(out[0]).toMatchObject({ kind: 'TREE', treePointsPrice: 80_000 });
   });
 
   it('list counts only READY and FULFILLED redemptions and counts TREE by distinct reason', async () => {

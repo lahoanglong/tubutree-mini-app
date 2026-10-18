@@ -166,3 +166,17 @@ describe('Button', () => {
     expect((container.querySelector('.zaui-btn') as HTMLElement).style.minHeight).toBe('48px');
   });
 });
+
+describe('Button danger tone', () => {
+  it('enabled danger carries the danger background', () => {
+    const { container } = render(<Button variant="danger">Xoá</Button>);
+    expect((container.querySelector('.zaui-btn') as HTMLElement).style.background).toContain('--color-action-danger-bg');
+  });
+
+  it('disabled danger drops the danger background so it reads as disabled', () => {
+    const { container } = render(<Button variant="danger" disabled>Xoá</Button>);
+    const btn = container.querySelector('.zaui-btn') as HTMLElement;
+    expect(btn.style.background).toBe('');
+    expect(btn.style.color).toBe('');
+  });
+});

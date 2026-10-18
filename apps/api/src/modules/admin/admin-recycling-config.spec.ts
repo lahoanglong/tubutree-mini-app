@@ -278,6 +278,33 @@ describe('AdminService.gomdonStatus — chỉ trả boolean, không lộ tài kh
   });
 });
 
+describe('AdminService.gomdonStatus — pickupVisible là cổng thật của khách', () => {
+  const statusWith = (flags: Record<string, unknown>, gomdonEnabled: boolean) =>
+    mkAdmin(
+      {},
+      {
+        gomdonClient: { getConfig: jest.fn().mockResolvedValue({ baseUrl: 'https://g', phone: '0900111222', password: 'pw' }), getHealth: jest.fn() },
+        gomdonOrder: { isRecyclingEnabled: jest.fn().mockResolvedValue(gomdonEnabled) },
+        config: { get: jest.fn(async (key: string, fallback?: unknown) => (key in flags ? flags[key] : fallback)) as SystemConfigService['get'] },
+      },
+    ).gomdonStatus();
+
+  it('công tắc Gomdon bật mà waste.enabled và waste.lane_pickup_enabled mặc định tắt: recyclingEnabled true, pickupVisible false', async () => {
+    const res = await statusWith({ 'shipping.gomdon.recycling_enabled': true }, true);
+    expect(res).toEqual(expect.objectContaining({ recyclingEnabled: true, pickupVisible: false }));
+  });
+
+  it('thiếu một trong ba điều kiện thì pickupVisible false', async () => {
+    expect((await statusWith({ 'waste.enabled': true, 'waste.lane_pickup_enabled': false }, true)).pickupVisible).toBe(false);
+    expect((await statusWith({ 'waste.enabled': false, 'waste.lane_pickup_enabled': true }, true)).pickupVisible).toBe(false);
+    expect((await statusWith({ 'waste.enabled': true, 'waste.lane_pickup_enabled': true }, false)).pickupVisible).toBe(false);
+  });
+
+  it('chương trình, đường Thu kèm đơn và Gomdon cùng bật: pickupVisible true', async () => {
+    expect((await statusWith({ 'waste.enabled': true, 'waste.lane_pickup_enabled': true }, true)).pickupVisible).toBe(true);
+  });
+});
+
 describe('AdminService.getConfig / setConfig — che bí mật khi đọc, không ghi đè bí mật bằng chuỗi che', () => {
   it('GET không category: che password/secret/token đệ quy trong value và cả khoá bí mật', async () => {
     const prisma = {

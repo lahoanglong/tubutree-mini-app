@@ -58,7 +58,7 @@ describe('Partial unique indexes after migrate deploy (real Postgres)', () => {
       expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toContain(name);
       expect(report.present).toContain(name);
     }
-    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(23);
+    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(26);
   });
 
   it('Đổi rác lấy quà: the five hand-written waste and points_transactions keys exist after migrate deploy', async () => {

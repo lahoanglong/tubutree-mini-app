@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Gift } from 'lucide-react';
+import { Gift, Leaf, Sprout, Ticket } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import { REWARD_TABS, openingHoursText } from '@tubutree/app-core/reward-rules';
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
 import { getErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
 import { AuthGate } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
@@ -24,6 +26,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
+import { pointsRulesNote } from '../utils/points-rules-note';
 import { pointAddress } from '../utils/waste-labels';
 
 export { REWARD_TABS, openingHoursText };
@@ -111,30 +114,48 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
   );
 }
 
+const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
+  VOUCHER: Ticket,
+  TREE: Sprout,
+  SEED_PACK: Leaf,
+  GIFT: Gift,
+};
+
 function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void }) {
   const s = rewardCardState(reward, catalog);
   return (
     <Card variant="outline">
-      <div data-reward style={{ ...COLUMN, gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{reward.name}</Text>
-          {reward.label && <Badge tone="brand">{reward.label}</Badge>}
-        </div>
-        {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
-        <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
-        {reward.stockRemaining != null && !reward.soldOut && (
-          <Text variant="caption" tone="tertiary" as="div">{`Còn ${formatNumber(reward.stockRemaining)}`}</Text>
-        )}
-        {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
-        {s.kind === 'redeem' && <Button onPress={onRedeem}>Đổi</Button>}
-        {s.kind === 'soldOut' && <div><Badge>Đã hết</Badge></div>}
-        {s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
-        {s.kind === 'need' && (
-          <div style={{ ...COLUMN, gap: 6 }}>
-            <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>
-            <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />
+      <div data-reward style={{ ...COLUMN, gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <span
+            data-testid="reward-icon"
+            style={{
+              flexShrink: 0, width: 40, height: 40, borderRadius: 'var(--radius-control)',
+              background: 'var(--color-action-secondary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Icon icon={KIND_ICON[reward.kind]} tone="brand" />
+          </span>
+          <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+              <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{reward.name}</Text>
+              {reward.label && <Badge tone="brand">{reward.label}</Badge>}
+            </div>
+            {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
+            {reward.stockRemaining != null && !reward.soldOut && (
+              <Text variant="caption" tone="tertiary" as="div">{`Còn ${formatNumber(reward.stockRemaining)}`}</Text>
+            )}
+            {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
           </div>
-        )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
+          {s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
+          {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
+          {s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
+          {s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
+        </div>
+        {s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
       </div>
     </Card>
   );
@@ -171,6 +192,7 @@ function RewardsBody() {
   const navigate = useNavigate();
   const rewardsQ = useQuery({ queryKey: WASTE_QUERY_KEYS.rewards, queryFn: getLoyaltyRewards });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty });
+  const cfg = usePublicConfig();
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
   const [confirmReward, setConfirmReward] = useState<RewardItemDTO | null>(null);
   const [result, setResult] = useState<RedeemOutcome | null>(null);
@@ -183,13 +205,18 @@ function RewardsBody() {
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
   const shown = c.rewards.filter((r) => kinds.includes(r.kind)).sort((a, b) => a.sortOrder - b.sortOrder);
+  const total = pointsSummary(c).total;
+  const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;
 
   return (
     <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
       <div style={{ ...COLUMN, gap: 4 }}>
-        <Heading variant="display-md" as="div">{formatPoints(pointsSummary(c).total)}</Heading>
-        <Text variant="body-sm" tone="secondary" as="div">{`Đổi quà dùng được ${formatPoints(c.redeemablePoints)}`}</Text>
+        <Heading variant="display-md" as="div">{formatPoints(total)}</Heading>
+        {c.redeemablePoints !== total && (
+          <Text variant="body-sm" tone="secondary" as="div">{`Đổi quà dùng được ${formatPoints(c.redeemablePoints)}`}</Text>
+        )}
+        {rulesNote && <Text variant="caption" tone="secondary" as="div">{rulesNote}</Text>}
         {lockedNote && <Text variant="caption" tone="tertiary" as="div">{lockedNote}</Text>}
         {c.pointsConvertedBalance > 0 && (
           <Text variant="caption" tone="tertiary" as="div">

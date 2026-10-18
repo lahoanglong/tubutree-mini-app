@@ -12521,7 +12521,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:387"
+   "apps/miniapp/src/services/account-api.ts:392"
   ]
  },
  {
@@ -12599,7 +12599,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:385"
+   "apps/miniapp/src/services/account-api.ts:390"
   ]
  },
  {
@@ -12888,6 +12888,16 @@
          },
          "opt": false
         },
+        "kind": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "SCAN",
+           "PHONE"
+          ]
+         },
+         "opt": false
+        },
         "channel": {
          "s": {
           "k": "str"
@@ -12928,6 +12938,12 @@
          "opt": false
         },
         "creditedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "holdUntil": {
          "s": {
           "k": "str"
          },
@@ -13011,7 +13027,8 @@
       "v": [
        "CLAIMED",
        "REVIEW",
-       "SEARCHING"
+       "SEARCHING",
+       "CLAIMED_BY_OTHER"
       ]
      },
      "opt": false
@@ -14635,7 +14652,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:379"
+   "apps/miniapp/src/services/account-api.ts:384"
   ]
  },
  {
@@ -14707,7 +14724,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:381"
+   "apps/miniapp/src/services/account-api.ts:386"
   ]
  },
  {
@@ -14774,7 +14791,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:377"
+   "apps/miniapp/src/services/account-api.ts:382"
   ]
  },
  {
@@ -15841,7 +15858,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:358"
+   "apps/miniapp/src/services/account-api.ts:363"
   ]
  },
  {
@@ -15889,7 +15906,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:356"
+   "apps/miniapp/src/services/account-api.ts:361"
   ]
  },
  {
@@ -23375,7 +23392,7 @@
    }
   },
   "sources": [
-   "apps/miniapp/src/services/account-api.ts:360"
+   "apps/miniapp/src/services/account-api.ts:365"
   ]
  },
  {

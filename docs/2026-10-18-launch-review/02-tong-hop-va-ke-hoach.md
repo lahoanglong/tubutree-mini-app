@@ -193,3 +193,91 @@ Hai cờ chờ payload Pancake thật (runbook Bước 15) và ít nhất 2 ngư
 - đăng ký Bộ Công Thương (footer tubutree.com đang ghi "Website đang chờ đăng ký bộ công thương");
 - DNS wildcard;
 - rclone Google Drive.
+
+## 8. Đợt 3: review chéo toàn nhánh (đêm 2026-10-18 → 19)
+
+Mỗi gói đã được review riêng. Đợt này soát lỗi chỉ lộ ra khi các gói chạy cùng nhau, bằng 3 reviewer Opus độc lập theo 3 trục: điểm và tiền, quyền và dữ liệu cá nhân, migration và deploy. Sau khi sửa, gói sửa được soát thêm 2 lượt Opus.
+
+**Kết quả review chéo:**
+- Điểm và tiền: không có lỗi chặn. Migration `points_1d` nhân đủ 16 cột điểm, chạy lại không nhân đôi. Mọi trần và ngưỡng so cùng đơn vị.
+- Quyền và dữ liệu cá nhân: có 2 đường vòng (mục a, b dưới). Không có route admin nào mà khách, CTV hay đại lý gọi được.
+- Migration và deploy: chỉ có cảnh báo. Không thêm migration nào.
+
+**Đã sửa (gói `lr3/fixes`, `lr3/e2eadmin`, `lr3/raceci`):**
+
+a. **Nhân viên Marketing không còn xem được mã của lô thẻ QR do ADMIN hay nhân viên khác tạo.**
+   - Trước đây có hai đường lộ mã: `GET /admin/coupon-batches/:batch/codes` và tìm kiếm `GET /admin/coupons?q=`. Có mã thì nhân viên tự nhận được thẻ, vượt trần B19.
+   - Nay nhân viên chỉ thấy mã của lô mình tạo.
+   - Danh sách lô có thêm cờ `mine`. Lô của người khác thì web ẩn nút tải CSV.
+
+b. **Kế toán không còn thấy đủ SĐT khách ở hàng chờ hoàn tiền** (`GET /admin/customer-refunds` và các thao tác của hàng chờ) **và ở CSV hoàn tiền.**
+   - SĐT chỉ còn 3 số cuối.
+   - Ghi chú tự do chỉ che dãy giống SĐT VN, nên số tiền và mã giao dịch ngân hàng vẫn đọc được.
+   - Số tài khoản và tên chủ tài khoản vẫn hiện đủ, vì cần để chuyển tiền.
+   - SĐT đã che thì không có nút "Chép SĐT".
+   - CSV thuế vẫn giữ SĐT và MST của CTV, vì CTV là người nhận tiền.
+
+c. **Trần tháng của claim đơn sàn và đơn chat có thêm cận trên.**
+   - Lỗi cũ: duyệt muộn một claim của tháng trước thì bị tính chung với claim của tháng này, nên có thể báo `MONTHLY_CAP` sai và khách mất điểm.
+   - Nay cửa sổ tính trần là đúng tháng tạo claim, ở cả 5 chỗ: duyệt PHONE, duyệt SCAN, cron cộng SCAN, liên kết chat (trần tháng), liên kết chat (trần người tạo).
+   - Mỗi chỗ có ca race riêng, và ca đó đỏ khi bỏ cận trên.
+
+d. **Trợ lý AI:** mọi tài khoản khách vãng lai (tạo theo deviceId) dùng chung trần 10 lượt mỗi phút, nên một người xoay vòng tài khoản khách không chiếm hết hạn mức của khách thật. Lượt bị từ chối không bị trừ vào hạn mức theo giờ.
+
+e. **Hiển thị sau đổi 1 điểm = 1đ:**
+   - Popup "lên hạng" không còn hiện sai, vì khoá lưu mốc hạng đổi sang `_v2`.
+   - Giá vòng quay khi chưa tải hồ sơ là 10.000.
+   - Web thanh toán ghi "Điểm Xanh (25.000)".
+
+f. **Bộ kiểm partial index** có thêm 3 khoá chống cộng trùng của điểm đơn ngoài app.
+
+g. **Playwright web admin cho tab "Tích điểm đơn sàn":**
+   - duyệt claim có SĐT cũ thì bắt ghi chú;
+   - duyệt claim có SĐT mới thì hiện hộp xác nhận thường;
+   - hiện khối "người khác cùng gửi".
+
+h. **CI race:**
+   - Lần đầu chạy trên GitHub, bộ race quá 60 phút và trượt hàng loạt. Lý do: Prisma chỉ mở 5 kết nối trên runner 2 vCPU.
+   - Cách sửa: chia 3 phần song song, mỗi phần có Postgres riêng, và `connection_limit=20`.
+
+i. **Runbook và tài liệu:**
+   - Bước kiểm trước deploy: đếm gian hàng CTV đang đăng mà chưa duyệt. Mặc định B3 bật, nên các gian hàng này sẽ bị ẩn.
+   - `pancake.external_capture_enabled` lưu đơn ngoài app kèm SĐT người mua.
+   - Bật B9 sẽ tạo claim bù cho đơn chat trong 60 ngày gần nhất.
+   - `coupons.createdAt` của mã cũ bằng giờ chạy migration.
+
+j. **Mở lô đất (Vườn Xanh):** `POST /game/garden/unlock` nhận `slot` (ô khách định mở). Bấm đúp, hay lệnh đến sau khi lệnh kia đã xong, trả lại đúng ô đó thay vì mở thêm ô thứ hai và trừ thêm 💧. Lỗi có sẵn từ trước; race CI bắt được khi pool đủ lớn. Mini App mới gửi `slot`, nên API phải lên trước Mini App (đúng ràng buộc 1 của runbook).
+
+k. **Từ review của phiên đổi rác trên module external-points:**
+   - Claim chat đã được admin duyệt tay không bị cron đưa về REVIEW vì lệch SĐT nữa.
+   - Claim PHONE chưa có chủ và đã mất `orderPhone` thì không duyệt được (báo huỷ claim).
+   - Sổ điểm có nhãn cho 4 mã của đơn chat và đơn sàn, thay cho "Điều chỉnh Điểm Xanh".
+   - Claim SCAN đã duyệt (tiền hàng trên ngưỡng tự duyệt, hoặc bị trần tháng cắt) trước đây bị cron đưa về REVIEW ở mỗi lần cộng. Nay cộng đúng số điểm đã chốt khi tiền hàng không tăng; tiền hàng tăng thì vẫn kiểm lại.
+
+l. **Pancake báo "Hoàn một phần" (15) cùng lúc admin bấm "Đã nhận hàng về":**
+   - Lỗi cũ: webhook đọc danh sách yêu cầu trả trước khi lần bấm nhận hàng commit, nên tưởng còn chờ. Câu ghi không ghi gì, và lời nhắc lúc duyệt ("Khách trả một phần đơn …") nằm lại mãi trong "Cần xử lý Pancake".
+   - Nay webhook khoá dòng đơn, đếm lại yêu cầu chờ nhận trong cùng giao dịch, rồi mới ghi nhắc hoặc gỡ cả hai lời nhắc.
+   - Race CI trên `963d10cf` bắt được lỗi này. Ca race (d) mới chèn đúng khe đó: đỏ trên code cũ (cùng câu CI báo), xanh trên code mới.
+   - Ghi nhận, không sửa (có từ trước): nếu yêu cầu R2 được duyệt và nhận hàng trước khi có phiếu Pancake, một webhook 15 gửi lại sẽ gỡ luôn nhắc "tạo phiếu" của R2.
+
+CI GitHub trên `1b98b388`: CI, Docker build, Playwright E2E đầy đủ và Race suite (3 phần) đều xanh. Đây là lần đầu race xanh trên GitHub.
+
+**Ghi nhận, không sửa:**
+- Gian hàng CTV có từ trước deploy bị ẩn cho tới khi admin duyệt. Đây là đúng quyết định B3 ("duyệt lần đầu"), và hiện chưa có dữ liệu thật.
+- Đơn chat được tính vào xét hạng, đúng như `impl/extpoints-plan.md`. Đơn sàn thì không.
+
+**Kiểm chứng trên tip `5913fd80`** (đã gộp `main` #19):
+
+| Lệnh | Kết quả |
+|---|---|
+| tsc 4 app, `pnpm lint`, `lint:vars` | sạch |
+| `prisma migrate deploy` + drift + partial index | 206 migration, không lệch, 25/25 |
+| jest API | 371 suite, 8112 ca |
+| race toàn bộ | 235 suite, 1750 ca |
+| vitest miniapp (VN và UTC) | 3803 ca mỗi lần |
+| vitest web (VN và UTC) | 2755 ca mỗi lần |
+| Playwright Mini App | 166 ca |
+| Playwright Web Admin | 14 ca |
+| `pnpm build` | 4/4 |
+
+Playwright Web Admin chạy bằng config tạm chỉ dựng web server. Không dựng API, nên không đụng DB dùng chung.

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isRealUser } from '../../common/real-user';
 import { FaqService } from '../faq/faq.service';
 import { MAX_INPUT_CHARS } from './gateway-prompt';
 import { LlmClient, LlmUnavailableException, type ChatMessage, type LlmFailureReason } from './llm.client';
@@ -41,6 +42,9 @@ const USER_LIMIT_REPLY = 'Bạn đã hỏi khá nhiều trong giờ qua, mình x
 const USER_PER_HOUR = 30;
 const USER_WINDOW_MS = 60 * 60_000;
 const USER_MAP_MAX = 5000;
+// Tài khoản khách (guest_<deviceId>) tạo vô hạn bằng deviceId mới: gom chung một xô để một người xoay khách không làm cạn trần LLM dùng chung của khách thật.
+const GUEST_PER_MIN = 10;
+const GUEST_WINDOW_MS = 60_000;
 
 /** Chỉ hứa "gợi ý bên dưới" khi thật sự có sản phẩm kèm theo. */
 const offlineReply = (products: readonly ProductSuggestion[]): string =>
@@ -57,6 +61,8 @@ export class AiAdvisorService {
 
   // Bộ đếm trong bộ nhớ của một instance API (compose Vietnix chạy một instance); khởi động lại là về 0.
   private readonly userHits = new Map<string, { count: number; resetAt: number }>();
+
+  private guestHits = { count: 0, resetAt: 0 };
 
   constructor(
     private readonly prisma: PrismaService,
@@ -77,6 +83,12 @@ export class AiAdvisorService {
     // Chỉ tốn round-trip DB lấy FAQ khi LLM thực sự được gọi (offline đã return ở trên).
     if (!this.allowUser(userId)) return { reply: USER_LIMIT_REPLY, products };
 
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(user) && !this.allowGuest()) {
+      this.refundUser(userId);
+      return { reply: BUSY_REPLY, products };
+    }
+
     const faqs = await this.faq.listActive();
 
     const messages: ChatMessage[] = [
@@ -96,6 +108,19 @@ export class AiAdvisorService {
       const reply = reason === 'timeout' ? SLOW_REPLY : reason === 'busy' ? BUSY_REPLY : offlineReply(products);
       return { reply, products };
     }
+  }
+
+  /** Lượt bị từ chối không gọi LLM nên không được tốn hạn mức giờ của người hỏi. */
+  private refundUser(userId: string): void {
+    const hit = this.userHits.get(userId);
+    if (hit && hit.count > 0) hit.count -= 1;
+  }
+
+  private allowGuest(): boolean {
+    const now = Date.now();
+    if (this.guestHits.resetAt <= now) this.guestHits = { count: 0, resetAt: now + GUEST_WINDOW_MS };
+    this.guestHits.count += 1;
+    return this.guestHits.count <= GUEST_PER_MIN;
   }
 
   private allowUser(userId: string): boolean {

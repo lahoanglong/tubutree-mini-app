@@ -22,6 +22,7 @@ import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.servi
 import { losesPartnerStore } from '../merchant/partner-store';
 import { throwIfLockBusy } from '../../common/lock-busy';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
+import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
@@ -1293,6 +1294,7 @@ export class AdminService {
       this.gomdonOrder.isRecyclingEnabled(),
       this.gomdonClient.getHealth(),
     ]);
+    const pickupVisible = await computeWastePublicFlags(this.config, async () => enabled).then((f) => f.pickup, () => false);
     return {
       baseUrlSet: Boolean(cfg.baseUrl),
       credentialsSet: Boolean(cfg.phone && cfg.password),
@@ -1300,6 +1302,8 @@ export class AdminService {
       webhookSecretSet: Boolean(process.env.GOMDON_WEBHOOK_SECRET?.trim()),
       recyclingToggle: toggle === true,
       recyclingEnabled: enabled,
+      // Cổng thật của khách: chương trình, đường Thu kèm đơn và Gomdon cùng bật (recyclingEnabled chỉ là công tắc kỹ thuật).
+      pickupVisible,
       // Lần gọi Gomdon gần nhất (chung mọi replica): đăng nhập bị từ chối thì checkout tự ẩn lựa chọn thu gom.
       connection,
     };
@@ -1427,13 +1431,15 @@ export class AdminService {
    * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó, và mã thuộc lô thẻ hộp hàng
    * (xem theo lô ở AdminCouponBatchService) trừ khi tìm theo mã.
    */
-  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }) {
+  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }, actor: CouponActor = SYSTEM_ACTOR) {
     const now = new Date();
     const keyword = q.q ? normalizeCouponCode(q.q) : '';
     const where: Prisma.CouponWhereInput = {
       ...(keyword ? { code: { contains: escapePrismaLike(keyword) } } : {}),
       ...(q.scope ? { scope: q.scope as Prisma.CouponWhereInput['scope'] } : keyword ? {} : { scope: { not: 'USER_GROUP' } }),
       ...(keyword ? {} : { batch: null }),
+      // Tìm theo mã bỏ lọc lô; nhân viên chỉ được thấy mã lô do chính mình tạo, không thì dò `q=-` là lộ cả mã thẻ của lô khác để đem nhận.
+      ...(actor.staff ? { OR: [{ batch: null }, { createdById: actor.id }] } : {}),
       ...(q.status === 'active' ? { isActive: true, endAt: { gte: now } } : {}),
       ...(q.status === 'inactive' ? { isActive: false } : {}),
       ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),

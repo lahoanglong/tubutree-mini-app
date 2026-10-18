@@ -6,6 +6,9 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { vnDateKey } from '../../common/vn-time';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtPayload } from '@tubutree/shared-types';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { seesFullOrderPhones } from './order-actor-transitions';
 import { AdminService } from './admin.service';
 import { ExportOrdersQuery } from './admin.controller';
 import { orderItemCsvChunks } from './admin-order-items-export';
@@ -89,8 +92,8 @@ export class AdminReportsController {
   /** Khoản hoàn tiền khách theo ngày tạo khoản hoàn, lọc trạng thái/loại nếu có. */
   @AllowStaff('KE_TOAN')
   @Get('exports/refunds')
-  async exportRefunds(@Query() q: RefundExportQuery, @Res() res: Response) {
+  async exportRefunds(@Query() q: RefundExportQuery, @Res() res: Response, @CurrentUser() viewer: JwtPayload) {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
-    await streamCsv(res, `hoan-tien-khach-${range.from}-${range.to}.csv`, refundCsvChunks(this.prisma, refundExportWhere(range, q.status, q.kind)));
+    await streamCsv(res, `hoan-tien-khach-${range.from}-${range.to}.csv`, refundCsvChunks(this.prisma, refundExportWhere(range, q.status, q.kind), { maskPhones: !seesFullOrderPhones(viewer) }));
   }
 }

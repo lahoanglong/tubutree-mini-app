@@ -55,10 +55,11 @@ async function lookUp(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Tra mã' }).click();
 }
 
-async function receiveAll(page: Page, times: number): Promise<void> {
+async function lowerReceived(page: Page, times: number): Promise<void> {
   const line = page.locator('[data-line]').filter({ hasText: 'Thùng carton cũ' });
   await expect(line).toBeVisible();
-  for (let i = 0; i < times; i++) await line.getByRole('button', { name: 'Tăng số lượng' }).click();
+  await expect(line.getByText('Tối đa 3')).toBeVisible();
+  for (let i = 0; i < times; i++) await line.getByRole('button', { name: 'Giảm số lượng' }).click();
 }
 
 test.describe('Đổi rác lấy quà — quầy nhận', () => {
@@ -74,7 +75,7 @@ test.describe('Đổi rác lấy quà — quầy nhận', () => {
     setup(api);
     api.post('/waste/desk/requests/:id/confirm', reply(409, { statusCode: 409, message: 'Bạn đã chạm trần điểm xác nhận hôm nay' }));
     await lookUp(page);
-    await receiveAll(page, 3);
+    await lowerReceived(page, 0);
     await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
     await expect(page.getByText('Bạn đã chạm trần điểm xác nhận hôm nay')).toBeVisible();
     await expect(page.getByText('TR-7K3QP')).toBeVisible();
@@ -84,7 +85,7 @@ test.describe('Đổi rác lấy quà — quầy nhận', () => {
     setup(api);
     api.post('/waste/desk/requests/:id/confirm', reply(409, { statusCode: 409, message: 'Khách vừa sửa yêu cầu, vui lòng tra lại mã' }));
     await lookUp(page);
-    await receiveAll(page, 3);
+    await lowerReceived(page, 0);
     await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
     await expect(page.getByText('Khách vừa sửa yêu cầu, vui lòng tra lại mã')).toBeVisible();
   });
@@ -101,7 +102,7 @@ test.describe('Đổi rác lấy quà — quầy nhận', () => {
       staffDailyCapRemaining: 998_000,
     });
     await lookUp(page);
-    await receiveAll(page, 2);
+    await lowerReceived(page, 1);
     const confirm = page.getByRole('button', { name: 'Xác nhận đã nhận' });
     await expect(confirm).toBeDisabled();
     await page.getByLabel('Lý do nhận thiếu: Thùng carton cũ').selectOption({ label: SHORTFALL_LABELS.WET });
@@ -110,6 +111,9 @@ test.describe('Đổi rác lấy quà — quầy nhận', () => {
     await confirm.click();
     const sent = await confirmed;
     expect(sent.body).toEqual({ lines: [{ itemId: 'wi-carton', declaredQty: 3, receivedQty: 2, shortfallReason: 'WET' }] });
+    await expect(page.getByText('Đã ghi nhận. Tubu sẽ cộng 2.000 điểm cho khách', { exact: true })).toBeVisible();
+    await expect(page.getByText('Yêu cầu TR-7K3QP của K*** E2E đã xong')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Nhận yêu cầu khác' })).toBeVisible();
   });
 
   test('/recycle/desk không tràn ngang', async ({ page, api }) => {

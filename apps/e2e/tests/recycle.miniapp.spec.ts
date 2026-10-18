@@ -127,10 +127,10 @@ test.describe('Đổi rác lấy quà — khách', () => {
     await page.getByRole('button', { name: 'Tra mã' }).click();
     const line = page.locator('[data-line]').filter({ hasText: 'Thùng carton cũ' });
     await expect(line).toBeVisible();
-    for (let i = 0; i < 3; i++) await line.getByRole('button', { name: 'Tăng số lượng' }).click();
     await expect(page.getByText('Điểm Tubu sẽ cộng cho khách: 3.000 điểm')).toBeVisible();
     await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
-    await expect(page.getByText('Tubu sẽ cộng 3.000 điểm cho khách')).toBeVisible();
+    await expect(page.getByText('Tubu sẽ cộng 3.000 điểm cho khách', { exact: true })).toBeVisible();
+    await expect(page.getByText('Đã ghi nhận. Tubu sẽ cộng 3.000 điểm cho khách', { exact: true })).toBeVisible();
     const [confirmed] = api.callsTo('POST', '/waste/desk/requests/:id/confirm');
     expect(confirmed?.path).toBe('/waste/desk/requests/wr-e2e-1/confirm');
     expect(confirmed?.body).toEqual({ lines: [{ itemId: 'wi-carton', declaredQty: 3, receivedQty: 3 }] });
@@ -141,7 +141,7 @@ test.describe('Đổi rác lấy quà — khách', () => {
     await page.goto('/recycle/r/wr-e2e-1');
     await expect(page.getByText('Xem kết quả cộng điểm')).toBeVisible();
     await page.getByRole('button', { name: 'Xem kết quả cộng điểm' }).click();
-    await expect(page.getByText('Đã cộng 3.000 điểm')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Đã cộng 3.000 điểm' })).toBeVisible();
   });
 
   test('gửi về kho: nhập mã vận đơn', async ({ page, api }) => {

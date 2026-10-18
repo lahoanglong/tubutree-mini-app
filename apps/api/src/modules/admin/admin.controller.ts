@@ -618,8 +618,8 @@ export class AdminController {
 
   @AllowStaff('MARKETING')
   @Get('coupons')
-  listCoupons(@Query() q: ListCouponsQuery) {
-    return this.admin.listCoupons(q);
+  listCoupons(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Query() q: ListCouponsQuery) {
+    return this.admin.listCoupons(q, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   @AllowStaff('MARKETING')

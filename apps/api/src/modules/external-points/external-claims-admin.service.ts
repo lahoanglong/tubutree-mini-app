@@ -12,7 +12,7 @@ import { formatPoints } from '../../common/format-points';
 import { maskPhoneOrNull, maskVnPhonesInText } from '../../common/mask-pii';
 import { paginated, skipTake } from '../../common/pagination';
 import { parseTypedVnPhone } from '../../common/phone';
-import { startOfVnMonth, vnDateKey } from '../../common/vn-time';
+import { startOfNextVnMonth, startOfVnMonth, vnDateKey } from '../../common/vn-time';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -268,6 +268,11 @@ export class ExternalClaimsAdminService {
       await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${id} FOR UPDATE`;
       const c = await tx.externalPointsClaim.findUniqueOrThrow({ where: { id }, include: { externalOrder: true } });
       if (c.state !== 'REVIEW') throw new ConflictException('Claim không ở trạng thái chờ duyệt.');
+      // Liên kết và releaseClaim chỉ đọc orderPhone của claim, không đọc SĐT hiện trên đơn (webhook đầy đủ có thể ghi lại SĐT đơn sau khi
+      // retention đã xoá): claim chưa có chủ mà orderPhone đã mất thì không ai liên kết được, cron đưa về REVIEW mỗi lần và duyệt chỉ lặp vô ích.
+      if (c.kind === 'PHONE' && !c.userId && !c.orderPhone) {
+        throw new BadRequestException('Claim chưa có chủ và không còn SĐT để liên kết nên không có ai để cộng điểm. Hãy huỷ claim.');
+      }
       await this.forbidSelf(actorId, c.userId, tx);
       const actorRoot = await canonicalUserId(tx, actorId);
       let introduced = false;
@@ -300,13 +305,13 @@ export class ExternalClaimsAdminService {
         // Trần tháng theo SĐT. Không có SĐT (đã xoá khỏi đơn) thì không còn gì để cộng dồn: duyệt nguyên điểm.
         const capPhone = c.orderPhone ?? o.phone;
         if (capPhone) {
-          const others = await chatMonthPoints(tx, { phone: capPhone, userId: c.userId, since: startOfVnMonth(c.createdAt), excludeClaimId: id });
+          const others = await chatMonthPoints(tx, { phone: capPhone, userId: c.userId, since: startOfVnMonth(c.createdAt), until: startOfNextVnMonth(c.createdAt), excludeClaimId: id });
           points = settlePoints({ newPoints: fullPoints, checkedPoints: c.points, others, cap: chatCfg.monthlyPointsCap });
           if (points <= 0) throw rejectionOf('MONTHLY_CAP');
         }
       } else if (c.userId) {
         const month = await tx.externalPointsClaim.aggregate({
-          where: { userId: c.userId, kind: 'SCAN', id: { not: id }, createdAt: { gte: startOfVnMonth(c.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
+          where: { userId: c.userId, kind: 'SCAN', id: { not: id }, createdAt: { gte: startOfVnMonth(c.createdAt), lt: startOfNextVnMonth(c.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
           _sum: { points: true },
         });
         // Duyệt ở mức chốt thay vì ném lỗi: khách không mất phần điểm hợp lệ. Hết chỗ trần (chốt = 0) thì mới từ chối.
@@ -315,7 +320,7 @@ export class ExternalClaimsAdminService {
       }
       const releaseAt =
         o.status === 'DELIVERED' && o.deliveredAt ? new Date(o.deliveredAt.getTime() + cfg.pendingDays * 864e5) : o.status === 'PARTIAL_RETURN' ? new Date(now.getTime() + cfg.pendingDays * 864e5) : null;
-      const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null, ...(c.kind === 'PHONE' ? { multiplier, creditedGoodsValue: o.goodsValue } : {}) } });
+      const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null, creditedGoodsValue: o.goodsValue, ...(c.kind === 'PHONE' ? { multiplier } : {}) } });
       if (res.count !== 1) throw new ConflictException('Claim vừa được xử lý bởi người khác.');
       await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, orderStatus: o.status, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: [points < fullPoints ? `Chốt theo trần tháng: ${points} thay vì ${fullPoints} điểm` : `${points} điểm`, staleNote].filter(Boolean).join(' | ') });
       return { userId: c.userId, points, channel: o.channel, trackingCode: o.trackingCode, releaseAt, kind: c.kind };

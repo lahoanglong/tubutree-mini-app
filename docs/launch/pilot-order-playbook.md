@@ -32,7 +32,7 @@ Mọi thao tác "Quản trị" trên Quản trị cần tài khoản có quyền
 
 ### A.3 Cách xem bằng chứng
 
-1. **Màn Quản trị** (đủ cho 90% việc). Các mục dùng trong tài liệu này, theo đúng tên trên menu: Việc cần xử lý, Đơn hàng, Đơn đối tác & đối soát, Đổi / Trả, Hoàn tiền khách, Duyệt SP đối tác, Đánh giá, Đổi rác, Mẫu thông báo, Cấu hình, Sức khoẻ hệ thống. Mở một đơn trong tab Đơn hàng để thấy khối "Kho Pancake", "Thu gom vật liệu tái chế" và lịch sử trạng thái.
+1. **Màn Quản trị** (đủ cho 90% việc). Các mục dùng trong tài liệu này, theo đúng tên trên menu: Việc cần xử lý, Đơn hàng, Đơn đối tác & đối soát, Đổi / Trả, Hoàn tiền khách, Duyệt SP đối tác, Đánh giá, Đổi rác, Mẫu thông báo, Cấu hình, Sức khoẻ hệ thống. Mở một đơn trong tab Đơn hàng để thấy khối "Kho Pancake", "Thu kèm rác (Gomdon)" và lịch sử trạng thái.
 2. **Câu SQL chỉ-đọc** (Phụ lục P). Chỉ làm khi có người quen dòng lệnh. Mỗi câu chỉ `SELECT`. Cần `psqlq` đã định nghĩa ở mục 0.4 của [deploy-rollback-runbook.md](deploy-rollback-runbook.md).
 3. **Pancake POS**: màn đơn hàng của Pancake. Đơn do Tubu đẩy sang có `custom_id` bằng mã đơn Tubu, ghi chú bắt đầu bằng `Order code: <mã đơn>`, kèm tag nền tảng (`MINIAPP` hoặc `WEB`), `RETAIL`, và một tag tiền: `COD`, `DA_THANH_TOAN` (đã trả trước, KHÔNG thu COD), `CHO_CHUYEN_KHOAN` hoặc `CONG_NO`. Đơn thu gom tái chế có thêm tag `RECYCLING`, và `GOMDON` khi đã có vận đơn.
 
@@ -55,6 +55,7 @@ Mọi thao tác "Quản trị" trên Quản trị cần tài khoản có quyền
 ### B.2 Người và thiết bị
 
 - [ ] Người thử: Zalo cá nhân, SĐT thật, địa chỉ nhận hàng thật trong vùng giao của Gomdon (Phần 3). Tên: ______ SĐT: ______
+- [ ] Người thử chưa có yêu cầu Đổi rác nào còn mở và chưa có yêu cầu nào trong tháng này (Mini App, Đổi rác, Yêu cầu của tôi). Bảng gói rác ở B.7 tính trần 3 yêu cầu mở cùng lúc, trần 60.000 điểm một tháng và trần từng món từ mức không; yêu cầu cũ chưa huỷ, kể cả đã hoàn tất, làm các con số đó sai. Đã có thì dùng tài khoản Zalo khác làm Người thử.
 - [ ] Quản trị: tên ______
 - [ ] Kho Pancake đã được báo: "các đơn của SĐT ______ trong hai ngày tới là đơn thử, làm đúng theo yêu cầu từng bước". Tên người kho: ______
 - [ ] Đối tác thử: tài khoản Zalo thứ hai, đã có gian hàng đã xuất bản (Phần 6). Tên: ______
@@ -67,7 +68,7 @@ Chọn một sản phẩm Tubu giao (không phải hàng đối tác) thoả đ�
 
 - [ ] giá rẻ nhất trong danh mục đang bán (đơn dưới 200.000đ còn cộng phí giao 19.000đ theo `shipping.flat_fee_below_threshold`)
 - [ ] có đúng một biến thể, không phải combo, không đang Flash Sale, không áp mã giảm giá tự động
-- [ ] tồn kho Tubu từ 10 trở lên (cần khoảng 8 đơn vị cho cả kịch bản)
+- [ ] tồn kho Tubu đủ cho cả hai mức, lấy mức lớn hơn: từ 10 trở lên (khoảng 8 đơn vị cho T1 đến T12 cùng lúc), và từ 2 + (99.000đ chia giá, làm tròn lên) trở lên (lúc làm 7.4, T2 và T3 giao thật đã lấy 2 đơn vị, các đơn huỷ đã trả lại tồn, và đơn T13 cần số đơn vị để giỏ đạt 99.000đ)
 - [ ] có khai báo cân nặng (Gomdon tính theo gram, thiếu thì lấy 500 g)
 
 Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
@@ -94,8 +95,8 @@ Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
 |---|---|
 | Sáng ngày 1 | B (chuẩn bị), Phần 1, 2.1 đến 2.4 (đơn T1), đặt T3 và T4 sớm (Phần 3) để bưu tá kịp tới lấy trong ngày |
 | Trưa ngày 1 | T2 (2.5 đến 2.7), Phần 4 (T5, T6, T7, T8), Phần 5, Phần 9 |
-| Chiều ngày 1 | Phần 2.9 và 2.10, Phần 6.1 đến 6.4 và 6.6, Phần 7 |
-| Ngày 2 | Phần 3.3 (giao thật), Phần 8 (cần T2 và T3 đã giao), Phần 4.3 (xác nhận tiền hoàn ngân hàng về) |
+| Chiều ngày 1 | Phần 2.9 và 2.10, Phần 6.1 đến 6.4 và 6.6, Phần 7.1 và 7.2 (tạo yêu cầu và gửi kiện) |
+| Ngày 2 | Phần 3.3 (giao thật), Phần 7.2 (kho đếm khi kiện về), 7.3 (kho đếm khi kiện thu kèm về), 7.4 (khi kho đã đếm 7.1 và 7.2), Phần 8 (cần T2 và T3 đã giao), Phần 4.3 (xác nhận tiền hoàn ngân hàng về). 7.5 làm sau cùng, khi kho đã đếm cả 7.2 và 7.3 (nếu có làm 7.3; có thể sang ngày sau nếu kiện chưa về kho), vì 7.5 khoá tài khoản Người thử |
 | Ngày +7 | Phần 6.5 và 6.7 (lập phiếu và chi đối soát). Điền ngày hẹn: ______ |
 | Sau cùng | Phần 10 (dọn dẹp) và điền mục 11 |
 
@@ -105,8 +106,8 @@ Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
 |---|---|---|---|---|---|
 | T1 | SP-MIN x1 | COD | Đẩy Pancake, huỷ TRƯỚC bàn giao, ZNS xác nhận | Huỷ | |
 | T2 | SP-MIN x1 | COD | Webhook trạng thái, bàn giao rồi KHÔNG huỷ được, giao thật | Giao | |
-| T3 | SP-MIN x1, tick thu gom | COD | Vận đơn Gomdon, webhook, giao thật | Giao | |
-| T4 | SP-MIN x1, tick thu gom | COD | Huỷ rồi tạo lại vận đơn, huỷ cả đơn | Huỷ | |
+| T3 | SP-MIN x1, kèm yêu cầu Thu kèm đơn 10 thùng carton (gói T3 ở bảng dưới), bật công tắc Thu kèm rác ở thanh toán | COD | Vận đơn Gomdon, webhook, giao thật | Giao | |
+| T4 | SP-MIN x1, kèm yêu cầu Thu kèm đơn 50 vỏ hộp sữa (gói T4 ở bảng dưới), bật công tắc Thu kèm rác ở thanh toán | COD | Huỷ rồi tạo lại vận đơn, huỷ cả đơn | Huỷ | |
 | T5 | SP-MIN x1 | Chuyển khoản, trả thật | Pancake xác nhận tiền, huỷ rồi hoàn về Ví Tubu | Huỷ, tiền về Ví | |
 | T6 | SP-MIN x1 | Chuyển khoản, trả thật | Huỷ rồi hoàn về ngân hàng (hàng đợi admin) | Huỷ, tiền về ngân hàng | |
 | T7 | SP-MIN x1 | Chuyển khoản, CHƯA trả | Huỷ, rồi chuyển tiền muộn | Huỷ, hoàn | |
@@ -115,6 +116,20 @@ Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
 | T10 | Hàng đối tác tự giao x1 | Ví Tubu | Đơn đối tác, đối soát | Giao | |
 | T11 | Hàng đối tác "Tubu giao hộ" x1 | COD | Ký gửi, kho Tubu giao, đối soát | Giao | |
 | T12 (tuỳ chọn) | Nhiều hàng, sát 5.000.000đ | COD | Trần COD | Huỷ ngay | |
+| T13 | SP-MIN, số lượng để giỏ nằm từ 99.000đ đến dưới 200.000đ (bước 7.4) | COD | Dùng voucher "Miễn phí vận chuyển" đã đổi bằng Điểm Xanh | Huỷ hoặc Giao | |
+
+**Gói rác của các yêu cầu Đổi rác thử.** Thu kèm đơn cần ít nhất 10.000 điểm ước tính (`waste.pickup_min_points` = 10.000) và Gửi về kho cần ít nhất 15.000 (`waste.mailin_min_points` = 15.000); dưới mức đó máy chủ từ chối ngay khi tạo yêu cầu. Điểm ước tính của một món = phần nguyên của (số lượng chia số đơn vị mỗi nhóm) nhân điểm mỗi nhóm.
+
+| Bước | Cách giao | Gói | Tính | Điểm ước tính |
+|---|---|---|---|---|
+| T3 (3.2) | Thu kèm đơn | 10 thùng Thùng carton cũ | 10 chia 1 = 10 nhóm, nhân 1.000 | 10.000 |
+| T4 (3.4) | Thu kèm đơn | 50 vỏ Vỏ hộp sữa sạch | 50 chia 5 = 10 nhóm, nhân 1.000 | 10.000 |
+| 7.1 | Mang tới điểm nhận | 3 túi lớn Nilon chống sốc | 3 chia 1 = 3 nhóm, nhân 1.000 | 3.000 |
+| 7.2 | Gửi về kho | 20 thùng Thùng carton cũ | 20 chia 1 = 20 nhóm, nhân 1.000 | 20.000 |
+
+Vì sao chọn như vậy: (1) trần ngày của món (carton 10 thùng, nilon 10 túi, vỏ sữa 50 vỏ) chỉ được kiểm khi tạo yêu cầu Mang tới điểm nhận, nhưng số đã dùng trong ngày gồm yêu cầu của mọi cách giao; T3 đã dùng hết 10 thùng carton của ngày, nên bước 7.1 dùng món khác (nilon, T3 và T4 không đụng tới). (2) Tổng điểm ước tính cả đợt thử là 10.000 + 10.000 + 3.000 + 20.000 = 43.000, dưới trần `waste.customer_monthly_cap_points` = 60.000 của một khách trong tháng (T4 bị huỷ ở 3.5 thì phần 10.000 được trả lại). (3) Carton dùng 10 + 20 = 30 thùng trên trần tháng 60 thùng; vỏ sữa 50 trên 300; nilon 3 trên 60. (4) Một khách mở tối đa 3 yêu cầu cùng lúc (`waste.max_open_requests` = 3): T3, T4 và một yêu cầu thử khác chạy cùng nhau vẫn vừa; làm 7.2 sau 7.1 vì yêu cầu 7.1 đã hoàn tất tại quầy. (5) 7.2 lấy 20 thùng, nhiều hơn mức tối thiểu 15.000, để 7.1 và 7.2 cộng lại 23.000 điểm: đủ đổi voucher rẻ nhất (20.000 điểm) ở 7.4 mà không cần chờ Thu kèm đơn ở 7.3, kể cả khi quầy đếm ít hơn số khai vài thùng.
+
+Nếu chủ shop đã bỏ món "Vỏ hộp sữa sạch" khỏi giai đoạn 1 (checklist mục 3): T4 dùng 10 túi lớn Nilon chống sốc (10 chia 1 = 10 nhóm, nhân 1.000 = 10.000 điểm), và ghi chú vận đơn của T4 ở bước 3.4 là "Nilon chống sốc: 10 túi lớn". Khi đó carton (T3) và nilon (T4) đều hết trần ngày trong lúc T4 còn mở, nên làm bước 7.1 sau khi T4 đã huỷ ở 3.5 (huỷ đơn trả lại phần trần ngày của nilon), hoặc vào ngày hôm sau (trần ngày tính theo ngày tạo yêu cầu, giờ Việt Nam).
 
 ## C. Điều kiện DỪNG và gọi ai
 
@@ -356,11 +371,19 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 
 ### 3.1 Kết nối và công tắc
 
-- **Ai**: Quản trị. **Ở đâu**: Quản trị, Cấu hình, thẻ "Thu gom vật liệu tái chế (Gomdon)".
-- **Làm**: (1) bấm "Kiểm tra kết nối" (đăng nhập thật, không tạo đơn). (2) Kiểm tra "Kho lấy hàng (người gửi trên vận đơn)": tên, SĐT, địa chỉ, phường, quận, tỉnh là địa chỉ kho THẬT theo địa giới hành chính hiện hành. (3) Bật ô "Hiện lựa chọn thu gom ở checkout".
-- **Đúng là**: (1) báo đăng nhập được; không có chữ "từ chối". (3) hiện "Đã BẬT lựa chọn thu gom ở checkout." Khi waste.enabled và waste.lane_pickup_enabled cùng bật, bước thanh toán Mini App hiện công tắc "Thu kèm rác" cho khách có yêu cầu Thu kèm đơn chưa gắn đơn.
+- **Ai**: Quản trị. **Ở đâu**: Quản trị, Cấu hình, thẻ "Thu kèm rác qua Gomdon (kỹ thuật)".
+- **Làm**: (1) bấm "Kiểm tra kết nối" (đăng nhập thật, không tạo đơn). (2) Kiểm tra "Kho lấy hàng (người gửi trên vận đơn)": tên, SĐT, địa chỉ, phường, quận, tỉnh là địa chỉ kho THẬT theo địa giới hành chính hiện hành. (3) Bật ô "Công tắc kỹ thuật Gomdon".
+- **Đúng là**: (1) báo đăng nhập được; không có chữ "từ chối". (3) hiện "Đã BẬT công tắc kỹ thuật Gomdon." Công tắc này một mình chưa làm khách thấy gì. Khi waste.enabled và waste.lane_pickup_enabled cũng bật, dòng "Khách ĐANG thấy lựa chọn thu gom" hiện và bước thanh toán Mini App hiện công tắc "Thu kèm rác" cho khách có yêu cầu Thu kèm đơn chưa gắn đơn.
 - **Bằng chứng**: chụp thẻ; Phụ lục P11 cho khoá `shipping.gomdon.recycling_enabled` phải là `true` (kiểu boolean).
 - **Hoàn tác**: tắt lại ô công tắc.
+
+Trước khi sang 3.2, bật thêm hai công tắc của khách để thẻ "Thu kèm đơn mua" hiện ra (cho lần chạy nội bộ này):
+
+- **Ai**: Quản trị. **Ở đâu**: Quản trị, Khách hàng, Đổi rác, Cấu hình chung.
+- **Trước khi làm**: kho HCMC đã đăng ký ở Quản trị, Khách hàng, Đổi rác, Điểm nhận (loại "Kho Tubu", luôn ở trạng thái "Đang nhận", ô "Số điện thoại" có số thật; checklist mục 2). Chưa có kho mà bật `waste.enabled` thì `go-live:check` báo FAIL `db.waste_point`, và 3.2 bị từ chối với câu "Điểm nhận đang tạm ngừng, hãy chọn điểm khác".
+- **Làm**: bật "Bật chương trình với khách" (`waste.enabled`) và "Cách Thu kèm đơn (còn cần cờ Gomdon)" (`waste.lane_pickup_enabled`), rồi lưu và xác nhận. Cả hai là cờ toàn cục: chỉ bật trên bản chưa mở cho khách thật (checklist mục 1 và mục 5). `waste.enabled` còn mở luôn hai cách Mang tới điểm nhận và Gửi về kho (mặc định đang bật), nên nếu bản này đã mở cho khách thật thì mọi khách thấy cả ba cách, không chỉ Thu kèm đơn.
+- **Đúng là**: thẻ "Thu kèm rác qua Gomdon (kỹ thuật)" hiện dòng "Khách ĐANG thấy lựa chọn thu gom"; ở Mini App, bước chọn cách giao có thẻ "Thu kèm đơn mua". Thiếu một trong ba công tắc (hai công tắc này và công tắc kỹ thuật Gomdon) thì thẻ không hiện và 3.2 không làm được.
+- **Hoàn tác**: mục 10 (dọn dẹp). Nếu Gomdon chưa trả lời bằng văn bản, hoặc T3 chưa đạt, thì tắt lại ngay sau 3.3 (checklist mục 4), không chờ tới cuối.
 
 > **Giả định cần xác nhận:** (1) Địa chỉ kho mặc định trong hệ thống là "Thành phố Thủ Đức" (địa giới cũ): phải đổi theo địa giới mới trước khi bật (UAT GOMDON-7, [gomdon.md](../integrations/gomdon.md) mục 5, điều 6). (2) Gomdon có chấp nhận địa chỉ hai cấp (không quận): Tubu gửi tên phường vào ô quận. Cách kiểm: đặt T3 bằng địa chỉ hai cấp. Nếu Gomdon từ chối thì đơn thành "Tạo vận đơn thất bại" ngay lần thử đầu.
 
@@ -369,8 +392,8 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 ### 3.2 Tạo vận đơn: đặt T3
 
 - **Ai**: Người thử. **Ở đâu**: Mini App.
-- **Làm**: tạo một yêu cầu Đổi rác cách Thu kèm đơn (Mini App, Đổi rác, Đổi rác ngay, chọn 3 thùng carton, cách giao "Thu kèm đơn mua"), thêm SP-MIN vào giỏ, vào thanh toán, bật công tắc "Thu kèm rác" (thẻ tóm tắt hiện mã TR-), chọn COD, đặt hàng. Ghi mã đơn và mã TR-.
-- **Đúng là**: trong khoảng 1 phút, Quản trị, mở đơn: khối "Thu gom vật liệu tái chế (Gomdon)" ghi trạng thái "Tạo đơn thành công" (mã 1) và có dòng "Mã vận đơn BestExpress:" kèm mã. Pancake POS: đơn có tag `RECYCLING` và `GOMDON`; kho KHÔNG đặt thêm hãng khác. Ghi chú vận đơn do máy chủ dựng: mã TR- và "Thùng carton cũ: 3 thùng", không có chữ khách gõ.
+- **Làm**: tạo một yêu cầu Đổi rác cách Thu kèm đơn (Mini App, Đổi rác, Đổi rác ngay, chọn 10 thùng carton, cách giao "Thu kèm đơn mua"; gói này ước tính 10.000 điểm, đúng bằng mức tối thiểu của Thu kèm đơn, ít hơn thì máy chủ không cho tạo yêu cầu), thêm SP-MIN vào giỏ, vào thanh toán, bật công tắc "Thu kèm rác" (thẻ tóm tắt hiện mã TR-), chọn COD, đặt hàng. Ghi mã đơn và mã TR-.
+- **Đúng là**: trong khoảng 1 phút, Quản trị, mở đơn: khối "Thu kèm rác (Gomdon)" ghi trạng thái "Tạo đơn thành công" (mã 1) và có dòng "Mã vận đơn BestExpress:" kèm mã. Pancake POS: đơn có tag `RECYCLING` và `GOMDON`; kho KHÔNG đặt thêm hãng khác. Ghi chú vận đơn do máy chủ dựng: mã TR- và "Thùng carton cũ: 10 thùng", không có chữ khách gõ (nhiều món thì nối bằng dấu phẩy và một dấu cách).
 - **Bằng chứng**: Phụ lục P1: `gomdonStatus = 1`, `gomdonOrderId` và `gomdonPartnerCode` có giá trị, `shippingPartner = BestExpress`.
 - **Hoàn tác**: bước 3.4 và 3.5 (T3 thì để giao thật, T4 dùng để thử huỷ).
 
@@ -393,8 +416,8 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 
 ### 3.4 Huỷ vận đơn bằng tay (admin), rồi tạo lại: T4
 
-- **Ai**: Người thử đặt T4 (giống 3.2, cùng tick thu gom). Quản trị làm tiếp.
-- **Làm**: khi T4 đã có "Tạo đơn thành công" và bưu tá CHƯA tới lấy: Quản trị mở đơn T4, khối "Thu gom vật liệu tái chế (Gomdon)", bấm "Huỷ vận đơn Gomdon", xác nhận. Xem trạng thái. Rồi đánh dấu ô "Tôi đã kiểm tra Pancake/Gomdon: kho CHƯA tạo vận đơn tay cho đơn này." và bấm "Tạo lại vận đơn Gomdon".
+- **Ai**: Người thử đặt T4 (giống 3.2 nhưng gói là 50 vỏ Vỏ hộp sữa sạch, ước tính 10.000 điểm, và ghi chú vận đơn sẽ là "Vỏ hộp sữa sạch: 50 vỏ"; tạo một yêu cầu Thu kèm đơn mới rồi bật công tắc Thu kèm rác ở thanh toán; T4 cần yêu cầu riêng vì yêu cầu của T3 đã gắn vào đơn T3). Quản trị làm tiếp.
+- **Làm**: khi T4 đã có "Tạo đơn thành công" và bưu tá CHƯA tới lấy: Quản trị mở đơn T4, khối "Thu kèm rác (Gomdon)", bấm "Huỷ vận đơn Gomdon", xác nhận. Xem trạng thái. Rồi đánh dấu ô "Tôi đã kiểm tra Pancake/Gomdon: kho CHƯA tạo vận đơn tay cho đơn này." và bấm "Tạo lại vận đơn Gomdon".
 - **Đúng là**: sau khi huỷ, trạng thái thành "Đơn hủy" (mã 2) và đơn Tubu vẫn còn hiệu lực. Sau "Tạo lại vận đơn Gomdon", có mã vận đơn MỚI (khác mã cũ).
 - **Bằng chứng**: Phụ lục P1: `gomdonCancelStatus` (CANCELLED), `gomdonAttempt` tăng 1; Phụ lục P6.
 - **Hoàn tác**: bước 3.5 (huỷ cả đơn sẽ huỷ luôn vận đơn mới).
@@ -419,9 +442,9 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 
 KHÔNG thử cố ý trên tài khoản thật (sai mật khẩu nhiều lần có thể làm Gomdon khoá tài khoản). Biết sẵn để nhận ra và xử lý nếu xảy ra thật:
 
-- **Dấu hiệu**: thẻ Gomdon ở Cấu hình báo "Gomdon từ chối…"; ô thu gom ở checkout TỰ ẨN; Sức khoẻ hệ thống, "Kết nối Gomdon" báo lỗi; báo động vận hành `gomdon.credentials` ("Gomdon từ chối đăng nhập — khách không chọn được thu gom") qua email/webhook.
+- **Dấu hiệu**: thẻ Gomdon ở Cấu hình báo "Gomdon từ chối…"; công tắc Thu kèm rác ở thanh toán tự ẩn; Sức khoẻ hệ thống, "Kết nối Gomdon" báo lỗi; báo động vận hành `gomdon.credentials` ("Gomdon từ chối đăng nhập — khách không chọn được thu gom") qua email/webhook.
 - **Việc cần làm**: Tech lead sửa `GOMDON_PHONE`/`GOMDON_PASSWORD` trong `/opt/tubutree/.env` rồi tạo lại container API (sửa env rồi khởi động lại là gỡ cờ vì API đăng nhập thử lúc khởi động); hoặc bấm "Kiểm tra kết nối" khi đã đúng. Cron cũng thử lại mỗi 30 phút.
-- **Đúng là sau khi sửa**: "Kiểm tra kết nối" báo thành công, ô thu gom ở checkout hiện lại.
+- **Đúng là sau khi sửa**: "Kiểm tra kết nối" báo thành công, công tắc Thu kèm rác ở thanh toán hiện lại.
 
 > **Giả định cần xác nhận:** Mã HTTP Gomdon trả cho sai tài khoản (Tubu coi mọi 4xx trừ 429, và `result:false`, là "từ chối"): [gomdon.md](../integrations/gomdon.md) mục 5, điều 14.
 
@@ -648,12 +671,12 @@ Quy tắc: đơn của gian hàng đối tác TỰ GIAO không bao giờ lên Pa
 
 ## Phần 7. Đổi rác lấy quà (chạy nội bộ)
 
-Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đưa rác tới Tubu; Điểm Xanh chỉ được cộng khi kho hoặc điểm nhận đếm thực nhận và xác nhận. Dữ liệu nằm ở các bảng `waste_points`, `waste_requests`, `waste_events`. Các số mặc định là đề xuất cho giai đoạn thử. Đường Thu kèm đơn chỉ thử sau khi xong các mục ở [recycle-rewards-launch-checklist.md](recycle-rewards-launch-checklist.md) mục 4. Chạy nội bộ: chỉ Tubu staff, build chưa mở cho khách thật (checklist mục 5).
+Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đưa rác tới Tubu; Điểm Xanh chỉ được cộng khi kho hoặc điểm nhận đếm thực nhận và xác nhận. Dữ liệu nằm ở các bảng `waste_points`, `waste_requests`, `waste_events`. Các số mặc định là đề xuất cho giai đoạn thử. Đường Thu kèm đơn chỉ thử theo thứ tự ở [recycle-rewards-launch-checklist.md](recycle-rewards-launch-checklist.md) mục 4 (bật để thử trên bản chưa mở cho khách, tắt lại nếu Gomdon chưa trả lời bằng văn bản) và chỉ để bật lâu dài khi đủ các dòng còn lại của mục 4. Chạy nội bộ: chỉ Tubu staff, build chưa mở cho khách thật (checklist mục 5). Cần "Bật chương trình với khách" (`waste.enabled`) đang bật và kho HCMC đã đăng ký (checklist mục 2): bật như ở bước 3.1; riêng "Cách Thu kèm đơn" chỉ bật để chạy T3 ở 3.1 và 3.2 (T3 chính là nguồn của 7.3).
 
 ### 7.1 Mang tới kho (xác nhận tại quầy)
 
-- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác; Quản trị, Đổi rác.
-- **Làm**: Người thử tạo yêu cầu "Mang tới điểm nhận" cho kho HCMC với 3 thùng carton. Nhân viên kho mở yêu cầu theo mã, đếm thực nhận và xác nhận tại quầy.
+- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác; Quản trị, Khách hàng, Đổi rác.
+- **Làm**: Người thử tạo yêu cầu "Mang tới điểm nhận" cho kho HCMC với 3 túi lớn Nilon chống sốc (không dùng carton vì T3 đã dùng hết trần ngày của carton). Nhân viên kho mở yêu cầu theo mã, đếm thực nhận và xác nhận tại quầy.
 - **Đúng là**: yêu cầu chuyển sang hoàn tất (COMPLETED) ngay sau khi nhân viên xác nhận; Điểm Xanh được cộng đúng theo số thực nhận (không theo số khai); khách thấy số điểm trong lịch sử.
 - **Bằng chứng**: Phụ lục P12 (`status`, `pointsAwarded`, sự kiện trong `waste_events`).
 - **Hoàn tác**: thu hồi điểm (7.5).
@@ -663,17 +686,18 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 ### 7.2 Gửi về kho (mã TR- và vận đơn)
 
 - **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác, cách "Gửi về kho Tubu HCM".
-- **Làm**: tạo yêu cầu "Gửi về kho Tubu HCM", ghi mã TR- hiện trên màn, dán mã đó lên kiện, gửi bằng hãng thường, nhập mã vận đơn vào yêu cầu. Kho nhận kiện theo mã TR- (không theo mã vận đơn của hãng), đếm và xác nhận.
-- **Đúng là**: yêu cầu có mã TR- và mã vận đơn; sau khi kho xác nhận, Điểm Xanh được cộng theo số thực nhận.
+- **Trước khi làm**: kho HCMC phải có số điện thoại thật ở ô "Số điện thoại" (Quản trị, Khách hàng, Đổi rác, Điểm nhận). Đó là số người nhận trên nhãn kiện. Để trống thì màn yêu cầu chỉ hiện tên và địa chỉ kho, và nút "Sao chép" không chép số nào.
+- **Làm**: tạo yêu cầu "Gửi về kho Tubu HCM" với 20 thùng carton (ước tính 20.000 điểm; mức tối thiểu của Gửi về kho là 15.000), ghi mã TR- hiện trên màn, dán mã đó lên kiện, gửi bằng hãng thường, nhập mã vận đơn vào yêu cầu. Kho nhận kiện theo mã TR- (không theo mã vận đơn của hãng), đếm và xác nhận.
+- **Đúng là**: khối người nhận trên màn có tên, số điện thoại và địa chỉ kho; yêu cầu có mã TR- và mã vận đơn; sau khi kho xác nhận, Điểm Xanh được cộng theo số thực nhận.
 - **Bằng chứng**: Phụ lục P12.
 - **Hoàn tác**: kho từ chối kèm lý do (khách thấy lý do, không cộng điểm).
 
 `[ ] Đạt  [ ] Không đạt`
 
-### 7.3 Thu kèm đơn (chỉ sau checklist mục 4)
+### 7.3 Thu kèm đơn (theo checklist mục 4)
 
-- **Làm**: theo Phần 3, bước 3.1 và 3.2 (cần `waste.enabled` và `waste.lane_pickup_enabled` cùng bật, Gomdon đã trả lời bằng văn bản). Khi kho nhận kiện thu kèm, đếm và xác nhận.
-- **Đúng là**: ghi chú vận đơn là `Thu kèm rác TR-…: Thùng carton cũ: 3 thùng`; điểm chỉ được cộng khi kho đếm.
+- **Làm**: bước này là chính đơn T3 và yêu cầu Thu kèm đơn của nó (làm theo Phần 3, bước 3.1 và 3.2 từ ngày 1; không tạo thêm đơn hay yêu cầu mới; cần `waste.enabled` và `waste.lane_pickup_enabled` cùng bật; các cờ này là cờ toàn cục, nên chỉ bật để thử trên bản chưa mở cho khách thật, và tắt lại nếu Gomdon chưa trả lời bằng văn bản). Khi kho nhận kiện thu kèm, đếm và xác nhận.
+- **Đúng là**: ghi chú vận đơn là `Thu kèm rác TR-…: Thùng carton cũ: 10 thùng`; điểm chỉ được cộng khi kho đếm.
 - **Hoàn tác**: huỷ đơn mua trước khi bưu tá lấy hàng (bước 3.5); yêu cầu thu kèm tự đóng theo đơn. Yêu cầu đã gắn đơn thì khách không huỷ riêng được.
 
 `[ ] Đạt  [ ] Không đạt`
@@ -681,19 +705,21 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 ### 7.4 Quà (voucher và cây qua Vườn Xanh)
 
 - **Ai**: Người thử. **Ở đâu**: Mini App, Quà (`/rewards`), Quà của tôi (`/rewards/mine`).
-- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Đổi quà TREE: cây được trồng trong Vườn Xanh.
-- **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần; quà TREE xuất hiện ở Vườn Xanh.
-- **Bằng chứng**: Phụ lục P12 và `points_transactions` của người thử.
-- **Hoàn tác**: huỷ quà vật lý với hoàn điểm (`refundPoints`) theo checklist mục 7.
+- **Trước khi làm**: kiểm số Điểm Xanh của Người thử (bảng B.5, Mini App, Điểm Xanh). Điểm chỉ có sau khi kho đếm và xác nhận: 7.1 cộng 3.000 ngay trong ngày; 7.2 cộng 20.000 khi kiện về tới kho (vài ngày sau); 7.3 cộng thêm 10.000 khi kiện thu kèm về kho. Voucher rẻ nhất trong danh mục gieo sẵn là "Miễn phí vận chuyển", giá 20.000 điểm: đủ sau khi kho đã đếm 7.1 và 7.2 (23.000 điểm), nên làm 7.4 sau khi kiện của 7.2 đã về kho; chưa đủ điểm thì để 7.4 sang lúc đó, đừng bỏ qua. Quà TREE có giá `game.tree_points_price` (mặc định 50.000 điểm, sửa ở Quản trị, Cấu hình; ở Quản trị, Khách hàng, Đổi rác, Quà chỉ xem được), nên tối đa 33.000 điểm của 7.1 đến 7.3 chưa đủ: chỉ đổi TREE khi số dư đủ giá, nếu không thì ghi "không thử TREE: thiếu điểm" ở bảng kết quả. Giá của các quà khác do admin đặt ở Quản trị, Khách hàng, Đổi rác, Quà: xem lại trước khi làm.
+- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Voucher "Miễn phí vận chuyển" chỉ dùng cho giỏ từ 99.000đ (giỏ dưới mức đó bị từ chối), còn đơn từ 200.000đ vốn đã miễn phí giao: tăng số lượng SP-MIN cho đơn này để giỏ nằm từ 99.000đ đến dưới 200.000đ thì mới thấy mã có tác dụng. Ghi mã đơn vào dòng T13 của B.7. Khi T13 còn mở, thử dùng lại đúng mã voucher đó ở màn thanh toán của một giỏ khác từ 99.000đ (không cần đặt đơn): phải bị từ chối với câu "Bạn đã dùng hết lượt cho mã này." Sau đó mới đưa T13 tới trạng thái cuối (Đã giao hoặc Đã huỷ). Đổi quà TREE: cây được trồng trong Vườn Xanh.
+- **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần (kiểm khi T13 còn mở); quà TREE xuất hiện ở Vườn Xanh.
+- **Bằng chứng**: Phụ lục P7 (`points_transactions` của người thử: dòng điểm trừ cho từng quà).
+- **Hoàn tác**: không hoàn tác được voucher và quà TREE: voucher thành coupon ngay, quà TREE đi qua Vườn Xanh, nên không bao giờ ở trạng thái chờ nhận. Điểm đã trừ là chi phí thử, ghi vào cột "Sau" của bảng B.5. Huỷ T13 thì hệ thống trả lượt dùng, mã quay lại tài khoản Người thử và dùng lại được: tắt mã đó ở Quản trị, Khuyến mãi, Voucher, nút "Tắt mã". Muốn thử huỷ có hoàn điểm thì đổi thêm một quà loại "Gói hạt giống" hoặc "Quà tặng" (hiện ở trạng thái "Chờ nhận"), rồi huỷ ở Quản trị, Khách hàng, Đổi rác, Quà với `refundPoints` (checklist mục 7).
 
 `[ ] Đạt  [ ] Không đạt`
 
 ### 7.5 Thu hồi điểm
 
-- **Ai**: Quản trị. **Ở đâu**: Quản trị, Đổi rác, Yêu cầu.
+- **Ai**: Quản trị. **Ở đâu**: Quản trị, Khách hàng, Đổi rác, Yêu cầu.
+- **Trước khi làm**: làm bước này sau cùng của Phần 7, khi kho đã đếm và xác nhận cả 7.2 và 7.3 (nếu có làm 7.3). Thứ tự xử lý gian lận ở checklist mục 7 có bước "Khoá đổi rác"; khi Người thử đã bị khoá thì không ai xác nhận được yêu cầu của họ (máy chủ báo "Khách đang bị khoá, không cộng điểm được", hoặc "Yêu cầu này đang chờ Tubu xử lý, chưa xác nhận được tại điểm" khi người xác nhận là nhân viên điểm nhận), nên khoá trước khi 7.2 hoặc 7.3 được đếm là làm hỏng hai bước đó.
 - **Làm**: mở yêu cầu đã cộng điểm ở 7.1, bấm thu hồi và nhập lý do. Làm đúng thứ tự xử lý gian lận ở checklist mục 7.
 - **Đúng là**: yêu cầu đóng với lý do thu hồi; số điểm đã cộng bị trừ lại (chỉ thu tối đa số Điểm Xanh thường khách còn; phần không thu được ghi ở reversalShortfallPoints; số dư không bao giờ âm).
-- **Hoàn tác**: không.
+- **Hoàn tác**: điểm đã thu hồi không trả lại được. Phải mở khoá cho Người thử khi xong: Quản trị, Khách hàng, Người dùng, mở khách, mục "Đổi rác", bấm "Mở khoá đổi rác" và nhập lý do.
 
 `[ ] Đạt  [ ] Không đạt`
 
@@ -824,16 +850,19 @@ WEBHOOK_URL=$(grep -E '^OPS_ALERT_WEBHOOK_URL=' .env | cut -d= -f2-)
 
 Không bỏ sót: để lại cấu hình thử là rủi ro thật.
 
-- [ ] Mọi đơn T1 đến T12 ở trạng thái cuối (Đã giao, Đã huỷ). Không còn đơn "Chờ thanh toán" nào của Người thử.
+- [ ] Mọi đơn T1 đến T13 ở trạng thái cuối (Đã giao, Đã huỷ). Không còn đơn "Chờ thanh toán" nào của Người thử.
 - [ ] Quản trị, Hoàn tiền khách, bộ lọc "Đang mở": không còn khoản nào của các đơn thử.
 - [ ] Quản trị, Việc cần xử lý: không còn dòng nào của đơn thử.
+- [ ] Trước khi mở bán cho khách thật, "Bật chương trình với khách" (`waste.enabled`) và "Cách Thu kèm đơn" (`waste.lane_pickup_enabled`) ở Quản trị, Khách hàng, Đổi rác, Cấu hình chung đã tắt lại (mặc định của cả hai là tắt; cả hai là cờ toàn cục). Chỉ để `waste.enabled` bật khi các mục phần 3 của checklist đã xong (trừ Gomdon) hoặc chủ dự án đã chấp nhận rủi ro bằng văn bản (checklist mục 5), và chỉ để `waste.lane_pickup_enabled` bật khi đủ mọi dòng của checklist mục 4 (văn bản của Gomdon, đơn thử T3 đạt, bảng phí gửi về kho đã chỉnh, chủ dự án đồng ý).
 - [ ] Cấu hình: `merchant.settlement_hold_days` về **7** (nếu đã đổi ở 6.4); `shipping.gomdon.recycling_enabled` đúng ý định mở bán; mẫu ZNS giữ nguyên.
 - [ ] Pancake POS: các đơn huỷ đã huỷ hẳn; hàng thử đã giao thật; tồn Pancake và tồn Tubu khớp (chạy "Đồng bộ danh mục Pancake" nếu lệch, KHÔNG dùng "Đồng bộ + ghi đè tồn kho" trừ khi Tech lead đồng ý).
 - [ ] SP-THỬ: "Gỡ liên kết" nếu muốn trả biến thể; sản phẩm đối tác thử tạm nghỉ hoặc xoá; xoá SP-THỬ trên Pancake POS và đồng bộ lại.
 - [ ] Gian hàng đối tác thử: tạm nghỉ hoặc huỷ xuất bản nếu không phải đối tác thật.
 - [ ] Đánh giá thử: giữ hoặc ẩn ở Quản trị, Đánh giá.
 - [ ] Mã đơn thử đã ghi đủ ở B.7 để loại khỏi báo cáo doanh số/chuyển đổi (hệ thống không có cờ "đơn thử").
-- [ ] Số dư Ví Tubu, Điểm Xanh, ngân hàng đối chiếu với bảng B.5 (cột "Sau"). Chênh lệch phải giải thích được bằng chính các đơn thử.
+- [ ] Nếu T13 đã huỷ: mã voucher "Miễn phí vận chuyển" của Người thử đã tắt (Quản trị, Khuyến mãi, Voucher, nút "Tắt mã"), vì huỷ đơn trả lại lượt dùng của mã.
+- [ ] Người thử không còn bị khoá Đổi rác (bước 7.5 đã khoá): Quản trị, Khách hàng, Người dùng, mở khách, mục "Đổi rác" hiện nút "Khoá đổi rác" và không hiện "Mở khoá đổi rác".
+- [ ] Số dư Ví Tubu, Điểm Xanh, ngân hàng đối chiếu với bảng B.5 (cột "Sau"). Chênh lệch phải giải thích được bằng chính các đơn thử, điểm Đổi rác đã cộng ở 7.1 đến 7.3 và đã thu hồi ở 7.5, điểm thưởng đánh giá ở 8.2, và các quà đã đổi ở 7.4 (voucher và quà TREE không hoàn lại điểm).
 
 ## 11. Bảng kết quả (chủ shop điền)
 

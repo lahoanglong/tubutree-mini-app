@@ -251,6 +251,7 @@ const EXPECTED: Record<string, Access> = {
   'DELETE /admin/waste/points/:id/staff/:userId': ADMIN_ONLY,
   'POST /admin/waste/points/:id/perk/approve': ADMIN_ONLY,
   'POST /admin/waste/points/:id/perk/reject': ADMIN_ONLY,
+  'POST /admin/waste/points/:id/perk/clear': ADMIN_ONLY,
   'GET /admin/waste/requests': STAFF,
   'GET /admin/waste/requests/lookup': STAFF,
   'GET /admin/waste/requests/:id': STAFF,

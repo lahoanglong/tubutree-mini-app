@@ -10,7 +10,7 @@ import type { ClaimNotifier } from './external-claim-status';
 import { advisoryPhoneLock, last3, phoneDiffers, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, type ChatConfig } from './external-chat.config';
 import { holdUntilOf, PHONE_STALE_REASON, phoneVerifiedFresh, releaseAtOf, STALE_APPROVE_MARK } from './external-chat.rules';
-import { startOfVnMonth } from '../../common/vn-time';
+import { startOfNextVnMonth, startOfVnMonth } from '../../common/vn-time';
 import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
 import { advisoryUserLock } from './external-claim.service';
 import { lockOrderThenClaim } from './external-claim-status';
@@ -133,7 +133,7 @@ export async function releaseClaim(
     if (!user) reviewReason = 'Tài khoản không còn';
     else if (user.isBlocked) reviewReason = 'Tài khoản đang bị khoá';
     else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
-    else if (chat && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
+    else if (chat && row.decidedById === null && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
     else if (chat && (user.role === 'STAFF' || user.role === 'ADMIN') && row.decidedById === null) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
     else if (chat && !phoneVerifiedFresh(user.phoneVerifiedAt, { now, maxDays: opts.chat!.phoneVerifiedMaxDays }) && !(await approvedDespiteStale(tx, row))) reviewReason = PHONE_STALE_REASON;
     let finalPoints = points ?? 0;
@@ -147,6 +147,10 @@ export async function releaseClaim(
       } else {
         finalPoints = Math.min(points ?? 0, row.points);
       }
+    } else if (!reviewReason && row.decidedById !== null && row.creditedGoodsValue !== null && (order.goodsValue ?? 0) <= row.creditedGoodsValue) {
+      // Người kiểm đã duyệt đúng tiền hàng này (hoặc cao hơn) và chốt điểm theo trần lúc duyệt: cộng đúng số đã chốt. Chạy lại ngưỡng tự duyệt
+      // và trần ở đây sẽ đưa claim về REVIEW ở mỗi lần cộng, duyệt bao nhiêu lần cũng không tới được bước cộng.
+      finalPoints = Math.min(points ?? 0, row.points);
     } else if (!reviewReason && points !== null && points > row.points) {
       // Tiền hàng tăng sau lúc claim qua kiểm: vượt ngưỡng tự duyệt thì người kiểm lại; chỉ vượt trần tháng thì cộng ở mức chốt, không dưới điểm đã kiểm.
       const reviewAbove = opts.reviewAboveVnd ?? 2_000_000;
@@ -157,7 +161,7 @@ export async function releaseClaim(
         const others =
           (
             await tx.externalPointsClaim.aggregate({
-              where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
+              where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt), lt: startOfNextVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
               _sum: { points: true },
             })
           )._sum.points ?? 0;

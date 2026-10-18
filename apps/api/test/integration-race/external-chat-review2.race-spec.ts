@@ -206,5 +206,60 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
       expect((await releaseClaim(prisma, c.id, await releaseOpts())).outcome).toBe('TO_REVIEW');
       expect(await claimOf(id)).toMatchObject({ state: 'REVIEW', holdUntil: null });
     });
+
+    it('duyệt từ chối claim chưa chủ mà orderPhone của claim đã mất (400, claim vẫn REVIEW, không ghi gì), kể cả khi SĐT trên đơn được ghi lại sau đó', async () => {
+      const actor = await mkUser();
+      const id = `CHAT${randCode(10)}`;
+      const order = (await ingest(payload({ id, phone: phone(), goods: 500_000, deliveredDaysAgo: 20 })))!;
+      const c = (await claimOf(id))!;
+      await prisma.externalOrder.update({ where: { id: order.id }, data: { phone: null } });
+      await prisma.externalPointsClaim.update({ where: { id: c.id }, data: { orderPhone: null } });
+      expect((await releaseClaim(prisma, c.id, await releaseOpts())).outcome).toBe('TO_REVIEW');
+      const eventsBefore = (await eventsOf(c.id)).length;
+
+      await expect(adminSvc().approve(c.id, actor.id)).rejects.toMatchObject({
+        status: 400,
+        message: 'Claim chưa có chủ và không còn SĐT để liên kết nên không có ai để cộng điểm. Hãy huỷ claim.',
+      });
+      expect(await claimOf(id)).toMatchObject({ state: 'REVIEW', decidedById: null });
+      expect((await eventsOf(c.id)).length).toBe(eventsBefore);
+
+      await prisma.externalOrder.update({ where: { id: order.id }, data: { phone: phone() } });
+      await expect(adminSvc().approve(c.id, actor.id)).rejects.toMatchObject({ status: 400 });
+      expect(await claimOf(id)).toMatchObject({ state: 'REVIEW', decidedById: null });
+      expect((await eventsOf(c.id)).length).toBe(eventsBefore);
+    });
+  });
+
+  describe('SĐT thành viên đổi sau khi tạo claim', () => {
+    async function claimWithChangedMemberPhone() {
+      const member = await mkUser();
+      const orderPhone = member.phone!;
+      const id = `CHAT${randCode(10)}`;
+      await ingest(payload({ id, phone: orderPhone, goods: 500_000, deliveredDaysAgo: 20 }));
+      const c = (await claimOf(id))!;
+      expect(c).toMatchObject({ userId: member.id, state: 'PENDING' });
+      await prisma.user.update({ where: { id: member.id }, data: { phone: phone() } });
+      expect((await releaseClaim(prisma, c.id, await releaseOpts())).outcome).toBe('TO_REVIEW');
+      expect((await claimOf(id))!.reviewReason).toContain('không còn khớp');
+      return { member, c, id };
+    }
+
+    it('claim đã được người duyệt: lần cộng kế tiếp cộng cho thành viên, không quay lại REVIEW', async () => {
+      const actor = await mkUser();
+      const { member, c, id } = await claimWithChangedMemberPhone();
+      await adminSvc().approve(c.id, actor.id);
+      const res = await releaseClaim(prisma, c.id, await releaseOpts());
+      expect(res).toMatchObject({ outcome: 'CREDITED', userId: member.id });
+      expect(await claimOf(id)).toMatchObject({ state: 'CREDITED', decidedById: actor.id });
+      expect(await balanceOf(member.id)).toBeGreaterThan(0);
+    });
+
+    it('claim chưa ai duyệt: SĐT thành viên lệch vẫn đưa về REVIEW, không cộng', async () => {
+      const { member, c } = await claimWithChangedMemberPhone();
+      await prisma.externalPointsClaim.update({ where: { id: c.id }, data: { state: 'PENDING', reviewReason: null } });
+      expect((await releaseClaim(prisma, c.id, await releaseOpts())).outcome).toBe('TO_REVIEW');
+      expect(await balanceOf(member.id)).toBe(0);
+    });
   });
 });

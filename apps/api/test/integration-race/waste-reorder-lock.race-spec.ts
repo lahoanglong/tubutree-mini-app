@@ -4,6 +4,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { WasteAdminItemsService } from '../../src/modules/waste-exchange/catalog/waste-admin-items.service';
 import { WasteAdminGiftsService } from '../../src/modules/waste-exchange/catalog/waste-admin-gifts.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { createUser, deleteItData, warmPool } from './helpers';
 import { cleanupWaste, createWasteGift, createWasteItem, holdLock } from './fixtures/waste-fixtures';
 
@@ -46,7 +47,7 @@ describe('waste reorder vs foreign-key KEY SHARE (real Postgres)', () => {
   };
 
   beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [WasteAdminItemsService, WasteAdminGiftsService] }).compile();
+    moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [SystemConfigService, WasteAdminItemsService, WasteAdminGiftsService] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);

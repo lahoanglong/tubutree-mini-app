@@ -10,6 +10,7 @@ import type {
   WasteRejectionReason,
   WasteRequestDetailDTO,
   WasteRequestStatus,
+  WasteRequestSummaryDTO,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { pointAddress } from '@tubutree/app-core/reward-rules';
@@ -93,6 +94,14 @@ export function capSentence(item: WasteItemDTO): string | null {
   return parts.length ? parts.join('. ') : null;
 }
 
+/** Trần tháng còn lại, chỉ khi đã bớt so với trần (hoặc hết hẳn) để khách hiểu vì sao bộ đếm bị chặn. */
+export function monthRemainingText(item: Pick<WasteItemDTO, 'monthlyCapQty' | 'unitLabel'> & { monthRemainingQty?: number | null }): string | null {
+  const left = item.monthRemainingQty;
+  if (left == null || item.monthlyCapQty == null) return null;
+  if (left <= 0) return 'Tháng này bạn đã đủ trần cho món này';
+  return left < item.monthlyCapQty ? `Tháng này còn ${formatNumber(left)} ${item.unitLabel}` : null;
+}
+
 export function groupProgressText(qty: number, item: WasteItemDTO): string | null {
   if (qty <= 0 || item.unitsPerPoint <= 1) return null;
   return `thêm ${item.unitsPerPoint - (qty % item.unitsPerPoint)} ${item.unitLabel} nữa được +${formatPoints(item.pointsPerGroup)}`;
@@ -120,8 +129,8 @@ const EXPIRED_LABELS: Partial<Record<string, string>> = {
 };
 
 const CANCELLED_REASONS: Partial<Record<string, string>> = {
-  ORDER_CANCELLED: 'đơn mua bị huỷ',
-  SHIP_LOCKED: 'đường kho tạm dừng',
+  ORDER_CANCELLED: 'Đơn mua đã bị huỷ',
+  SHIP_LOCKED: 'Đường kho đang tạm dừng',
 };
 
 export function closedLabel(
@@ -137,11 +146,54 @@ export function closedLabel(
     case 'EXPIRED':
       return { label: (r.closeReason && EXPIRED_LABELS[r.closeReason]) || 'Đã hết hạn', reason: null };
     case 'CANCELLED':
-      return { label: 'Đã huỷ', reason: r.closeReason === null ? 'bạn huỷ' : (CANCELLED_REASONS[r.closeReason] ?? null) };
+      return { label: 'Đã huỷ', reason: r.closeReason === null ? 'Bạn đã huỷ yêu cầu này' : (CANCELLED_REASONS[r.closeReason] ?? null) };
     case 'REVERSED':
       return { label: `Đã thu hồi ${formatPoints(r.reversedPoints ?? 0)}`, reason: r.reversalReason };
     default:
       return null;
+  }
+}
+
+export interface RequestPauseFacts {
+  programmeEnabled?: boolean;
+  blocked?: boolean;
+  shipLockedAt?: string | null;
+  cfg: { enabled: boolean; pickup: boolean; isLoaded: boolean };
+}
+
+/** Yêu cầu đang mở mà bước khách phải làm tiếp đang tạm dừng (chương trình tắt, khách bị khoá, kênh Thu kèm đơn tắt). */
+export function isRequestPaused(r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'orderCode'>, f: RequestPauseFacts): boolean {
+  if (r.status !== 'OPEN') return false;
+  if (r.method === 'DROP_OFF') return (f.cfg.isLoaded && !f.cfg.enabled) || f.programmeEnabled === false || !!f.blocked;
+  if (r.method === 'PICKUP') return !r.orderCode && (f.programmeEnabled === false || !!f.blocked || !!f.shipLockedAt || !f.cfg.pickup);
+  return false;
+}
+
+/** Dòng trạng thái của một yêu cầu cho khách (danh sách, thẻ trang chủ, trang chi tiết); tên bước theo §4.6. */
+export function requestStatusText(
+  r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'closeReason' | 'orderCode' | 'pointsAwarded'>,
+  opts: { blocked?: boolean; paused?: boolean } = {},
+): string {
+  switch (r.status) {
+    case 'OPEN':
+      if (opts.paused && (r.method === 'DROP_OFF' || (r.method === 'PICKUP' && !r.orderCode))) return 'Đang tạm dừng';
+      if (r.method === 'DROP_OFF') return 'Chờ bạn mang tới';
+      if (r.method === 'MAIL_IN') return 'Chờ bạn gửi kiện';
+      return r.orderCode ? 'Chờ kho nhận' : 'Chờ gắn vào đơn';
+    case 'IN_TRANSIT':
+      return 'Đang vận chuyển';
+    case 'RECEIVED':
+      return opts.blocked ? 'Đang chờ Tubu xem lại' : 'Kho đã nhận, đang đếm';
+    case 'COMPLETED':
+      return (r.pointsAwarded ?? 0) > 0 ? `Đã cộng ${formatPoints(r.pointsAwarded ?? 0)}` : 'Chưa đủ để cộng điểm';
+    case 'REJECTED':
+      return 'Bị từ chối';
+    case 'CANCELLED':
+      return 'Đã huỷ';
+    case 'REVERSED':
+      return 'Đã thu hồi điểm';
+    default:
+      return closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null })!.label;
   }
 }
 
@@ -161,9 +213,9 @@ export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): st
     case 'PICKUP_PENDING':
       return `Bạn đã có yêu cầu thu kèm ${block.pickupRequestCode ?? ''}, hãy gắn vào đơn kế tiếp`;
     case 'BELOW_MIN':
-      return `cần thêm ${formatPoints(block.missingPoints ?? 0)}`;
+      return `Cần thêm ${formatPoints(block.missingPoints ?? 0)}`;
     case 'MONTH_CAP_FOR_MIN':
-      return `tháng này bạn không còn đủ trần cho một gói ${ctx.method === 'PICKUP' ? 'thu kèm đơn' : 'gửi kho'}`;
+      return `Tháng này bạn không còn đủ trần cho một gói ${ctx.method === 'PICKUP' ? 'thu kèm đơn' : 'gửi kho'}`;
     case 'NEED_PROVINCE':
       return 'Chọn tỉnh để ước tính phí ship';
     case 'ITEM_DAY_CAP':
@@ -195,6 +247,10 @@ export function feeRangeText(fee: WasteFeeEstimate): string {
   return `${formatVnd(fee.low)} – ${formatVnd(fee.high)}`;
 }
 
+function voucherPhrase(name: string): string {
+  return /^giảm/i.test(name) ? `mã ${name.charAt(0).toLowerCase()}${name.slice(1)}` : `mã giảm giá ${name}`;
+}
+
 export function nextRewardProgress(
   catalog: RewardCatalogDTO | undefined,
   extraPoints = 0,
@@ -206,7 +262,7 @@ export function nextRewardProgress(
     .sort((a, b) => a.pointsCost - b.pointsCost || a.sortOrder - b.sortOrder)[0];
   if (!next) return null;
   return {
-    rewardName: next.kind === 'VOUCHER' ? `mã giảm giá ${next.name}` : next.name,
+    rewardName: next.kind === 'VOUCHER' ? voucherPhrase(next.name) : next.name,
     cost: next.pointsCost,
     have,
     missing: next.pointsCost - have,

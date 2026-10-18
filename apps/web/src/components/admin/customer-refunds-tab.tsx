@@ -443,7 +443,8 @@ export function CustomerRefundRow({
               {r.phone ? (
                 <>
                   <span className="font-medium text-stone-800">{r.phone}</span>
-                  <CopyButton text={r.phone} label="Chép SĐT" />
+                  {/* Kế toán nhận SĐT đã che (API), chép số che chỉ gây nhầm. */}
+                  {!r.phone.includes('*') && <CopyButton text={r.phone} label="Chép SĐT" />}
                 </>
               ) : (
                 <span className="text-warning-fg">Chưa có SĐT</span>

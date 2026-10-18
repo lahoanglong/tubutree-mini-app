@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { WasteDeskLookupDTO, WasteDeskPointDTO, WastePerkSubmitRequest } from '@tubutree/shared-types';
 import { vnMonthKey } from '../../../common/vn-time';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { lockPoint } from '../catalog/waste-admin-points.service';
 import { WasteAccessService, type WastePointAccess } from '../core/waste-access.service';
 import { WasteConfigService, type WasteConfigSnapshot } from '../core/waste-config.service';
 import { writeWasteEvent } from '../core/waste-events';
@@ -64,8 +65,11 @@ export class WasteDeskService {
     if (!text) throw new BadRequestException(PERK_EMPTY);
 
     await this.prisma.$transaction(async (tx) => {
-      const row = await tx.wastePoint.findUnique({ where: { id: pointId }, select: { perkPendingText: true } });
-      const before = row?.perkPendingText ?? null;
+      // Same point lock as removeStaff, so an owner removed after the access check above cannot put a perk back.
+      const locked = await lockPoint(tx, pointId);
+      const stillOwner = await tx.wastePointStaff.findFirst({ where: { pointId, userId, role: 'OWNER', isActive: true }, select: { id: true } });
+      if (!stillOwner) throw new ForbiddenException(PERK_OWNER_ONLY);
+      const before = locked.perkPendingText;
       await tx.wastePoint.update({ where: { id: pointId }, data: { perkPendingText: text } });
       await writeWasteEvent(tx, {
         kind: 'PERK_SUBMITTED',

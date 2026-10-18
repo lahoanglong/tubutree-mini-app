@@ -21,6 +21,9 @@ export interface WastePointPickerProps {
   now?: Date;
 }
 
+/** Thẻ khoá chỉ mờ phần chọn và tên; lý do, chỉ đường và gọi vẫn dùng được nên giữ nguyên độ đậm. */
+const DIMMED = 0.55;
+
 function missingItemIds(p: WastePointDTO, selectedItemIds: readonly string[]): string[] {
   return selectedItemIds.filter((id) => !p.acceptedItemIds.includes(id));
 }
@@ -64,7 +67,6 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
               background: selected ? 'var(--color-bg-subtle)' : 'var(--color-bg-surface)',
               borderRadius: 'var(--radius-control)',
               overflow: 'hidden',
-              opacity: locked ? 0.55 : 1,
             }}
           >
             <button
@@ -106,11 +108,12 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                   border: `2px solid ${selected ? 'var(--color-border-selected)' : 'var(--color-border-default)'}`,
                   display: 'grid',
                   placeItems: 'center',
+                  opacity: locked ? DIMMED : 1,
                 }}
               >
                 {selected && <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--color-action-primary-bg)' }} />}
               </span>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
+              <span data-point-body style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1, opacity: locked ? DIMMED : 1 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text variant="body-sm" as="span" style={{ fontWeight: 600 }}>
                     {p.name}
@@ -142,9 +145,9 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {items.map((it) =>
                     p.acceptedItemIds.includes(it.id) ? (
-                      <Text key={it.id} variant="body-sm" as="span">
+                      <Badge key={it.id} tone="neutral" size="sm">
                         {it.name}
-                      </Text>
+                      </Badge>
                     ) : (
                       <span key={it.id} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                         <Text variant="body-sm" as="span">
@@ -161,9 +164,9 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
             </button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 12px 12px 42px' }}>
               {locked && (
-                <Text variant="body-sm" as="p" style={{ margin: 0 }}>
-                  {p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}
-                </Text>
+                <div>
+                  <Badge tone="warning" style={{ whiteSpace: 'normal', display: 'inline-block' }}>{p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}</Badge>
+                </div>
               )}
               {p.perkText && (
                 <Text variant="body-sm" as="p" style={{ margin: 0 }}>

@@ -268,7 +268,7 @@ export function WasteItemsSection() {
                   ))}
                 </select>
               </Field>
-              <Field label="Gram mỗi đơn vị" hint="Chỉ nhập cho món có đầu ra thật: Tubu dùng lại để đóng gói hoặc giao cho bên thu mua có hợp đồng (5.7).">
+              <Field label="Gram mỗi đơn vị" hint="Chỉ nhập cho món có đầu ra thật: Tubu dùng lại để đóng gói hoặc giao cho bên thu mua có hợp đồng.">
                 <input name="gramsPerUnit" inputMode="numeric" className={INPUT_CLASS} value={f.gramsPerUnit} onChange={(e) => setForm({ gramsPerUnit: e.target.value })} />
               </Field>
             </div>

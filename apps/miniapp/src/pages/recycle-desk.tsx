@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Input, Page, useSnackbar } from 'zmp-ui';
+import { CheckCircle2, ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   WasteConfirmLineInput,
@@ -20,9 +21,12 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
+import { Icon } from '../components/ui/icon';
+import { ProgressBar } from '../components/ui/progress-bar';
 import { PageHeader } from '../components/ui/page-header';
 import { WasteDeskPerk, WasteDeskReport } from '../components/waste-desk-perk';
 import { QuantitySelector } from '../components/ui/quantity-selector';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
@@ -31,8 +35,11 @@ import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS } 
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const SELECT_STYLE: CSSProperties = {
-  minHeight: 44,
-  padding: '0 12px',
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  width: '100%',
+  height: 44,
+  padding: '0 40px 0 12px',
   borderRadius: 'var(--radius-control)',
   border: '1px solid var(--color-border-subtle)',
   background: 'var(--color-bg-surface)',
@@ -44,6 +51,14 @@ const GIFT_STATUS_TEXT: Record<Exclude<WasteDeskGiftDTO['status'], 'READY'>, str
   FULFILLED: 'Quà đã được trao',
   CANCELLED: 'Lượt đổi quà đã huỷ',
 };
+
+interface DeskDone {
+  code: string;
+  customerName: string;
+  pointsAwarded: number;
+  /** Chỉ số máy chủ trả về; null khi điểm không giới hạn hạn mức. */
+  remaining: { label: string; value: number } | null;
+}
 
 type DeskLine = WasteDeskRequestDTO['lines'][number];
 
@@ -59,6 +74,8 @@ export function deskPreviewPoints(
     return sum + Math.floor(qty / l.unitsPerPoint) * l.pointsPerGroup;
   }, 0);
 }
+
+const isReadOnly = (r: WasteDeskRequestDTO) => r.status === 'COMPLETED' || r.status === 'REJECTED';
 
 const isShort = (l: DeskLine, received: Readonly<Record<string, number>>) => !l.hazardous && (received[l.itemId] ?? 0) < l.declaredQty;
 
@@ -77,7 +94,8 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
         {point.quota ? (
           <>
             <Text variant="body-md" as="div">{`Đã dùng ${formatNumber(point.quota.used)} / ${formatNumber(point.quota.limit)} điểm`}</Text>
-            <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{`Còn ${formatNumber(point.quota.remaining)} điểm`}</Text>
+            {point.quota.limit > 0 && <ProgressBar value={point.quota.used} max={point.quota.limit} />}
+            <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{`Còn lại ${formatNumber(point.quota.remaining)} điểm`}</Text>
           </>
         ) : (
           <Text variant="body-md" as="div">Không giới hạn hạn mức tháng</Text>
@@ -136,6 +154,7 @@ function RejectSheet({
             </label>
           ))}
         </div>
+        {reason === null && <Text variant="body-sm" tone="secondary" as="div">Chọn một lý do</Text>}
         <Field label={noteRequired ? 'Ghi chú (bắt buộc với lý do Khác)' : 'Ghi chú (không bắt buộc)'}>
           <Input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
@@ -155,6 +174,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [received, setReceived] = useState<Record<string, number>>({});
   const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [done, setDone] = useState<DeskDone | null>(null);
 
   const point = points.find((p) => p.id === pointId) ?? points[0]!;
 
@@ -164,14 +184,19 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setLookup(res.type === 'REQUEST' ? res.request : null);
       setGift(res.type === 'GIFT' ? res.redemption : null);
       setLookedUpCode(c.trim());
-      setReceived({});
+      setDone(null);
+      setReceived(
+        res.type === 'REQUEST' && !isReadOnly(res.request)
+          ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.hazardous ? 0 : l.declaredQty]))
+          : {},
+      );
       setReasons({});
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   const request = lookup;
-  const readOnly = request?.status === 'COMPLETED' || request?.status === 'REJECTED';
+  const readOnly = !!request && isReadOnly(request);
   // Bưu kiện tra bằng mã TR- ghi trên kiện (cơ sở khớp TR_CODE); không có cơ sở khớp máy chủ trả 409 (spec 15.3, 15.5).
   const match: WasteMatchInput | undefined =
     request && request.method !== 'DROP_OFF' && request.status !== 'RECEIVED' ? { parcelCode: request.code } : undefined;
@@ -202,6 +227,18 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       qc.setQueryData<WasteDeskPointDTO[]>(WASTE_QUERY_KEYS.desk, (old) =>
         old?.map((p) => (p.id === target ? { ...p, quota: res.quota, staffDailyCapRemaining: res.staffDailyCapRemaining } : p)),
       );
+      const targetPoint = points.find((p) => p.id === target) ?? point;
+      setDone({
+        code: req.code,
+        customerName: req.customerName,
+        pointsAwarded: res.pointsAwarded,
+        remaining: res.quota
+          ? { label: 'Hạn mức còn lại', value: res.quota.remaining }
+          : targetPoint.kind === 'WAREHOUSE'
+            ? { label: 'Còn được xác nhận hôm nay', value: res.staffDailyCapRemaining }
+            : null,
+      });
+      setCode('');
       finish();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -241,9 +278,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       {points.length > 1 && (
         <SegmentedTabs scroll value={pointId} onChange={setPointId} items={points.map((p) => ({ key: p.id, label: p.name }))} />
       )}
+      {points.length === 1 && <Text variant="body-sm" tone="secondary" as="div">{point.name}</Text>}
       <QuotaCard point={point} />
-      <WasteDeskPerk point={point} />
-      <WasteDeskReport pointId={point.id} />
       <Text variant="body-sm" tone="secondary" as="div">
         Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.
       </Text>
@@ -256,6 +292,31 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
           Tra mã
         </Button>
       </div>
+
+      {done && (
+        <Card>
+          <div role="status" style={{ ...COLUMN, gap: 12, alignItems: 'center', textAlign: 'center' }}>
+            <Icon icon={CheckCircle2} size="lg" tone="brand" />
+            <Heading variant="title-md" as="h2">{`Đã ghi nhận. Tubu sẽ cộng ${formatPoints(done.pointsAwarded)} cho khách`}</Heading>
+            <Text variant="body-md" as="div">{`Yêu cầu ${done.code} của ${done.customerName} đã xong`}</Text>
+            {done.remaining && (
+              <Text variant="body-sm" tone="secondary" as="div">{`${done.remaining.label}: ${formatPoints(done.remaining.value)}`}</Text>
+            )}
+            <Button
+              fullWidth
+              variant="secondary"
+              onPress={() => {
+                setDone(null);
+                setCode('');
+                setLookup(null);
+                setGift(null);
+              }}
+            >
+              Nhận yêu cầu khác
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {request && (
         <Card>
@@ -287,7 +348,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                       <Text variant="body-sm" tone="danger" as="div">Không nhận món này</Text>
                     ) : (
                       <>
-                        <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <QuantitySelector
                             size="sm"
                             min={0}
@@ -295,19 +356,28 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                             value={received[l.itemId] ?? 0}
                             onChange={(n) => setReceived((r) => ({ ...r, [l.itemId]: n }))}
                           />
+                          <Text variant="caption" tone="tertiary" as="span">{`Tối đa ${l.declaredQty}`}</Text>
                         </div>
                         {isShort(l, received) && (
-                          <select
-                            aria-label={`Lý do nhận thiếu: ${l.itemName}`}
-                            value={reasons[l.itemId] ?? ''}
-                            onChange={(e) => setReasons((r) => ({ ...r, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
-                            style={SELECT_STYLE}
-                          >
-                            <option value="" />
-                            {Object.entries(SHORTFALL_LABELS).map(([value, label]) => (
-                              <option key={value} value={value}>{label}</option>
-                            ))}
-                          </select>
+                          <div style={{ ...COLUMN, gap: 4 }}>
+                            <Text variant="body-sm" tone="secondary" as="div">Lý do nhận thiếu</Text>
+                            <div style={{ position: 'relative' }}>
+                              <select
+                                aria-label={`Lý do nhận thiếu: ${l.itemName}`}
+                                value={reasons[l.itemId] ?? ''}
+                                onChange={(e) => setReasons((r) => ({ ...r, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
+                                style={SELECT_STYLE}
+                              >
+                                <option value="" disabled>Chọn lý do</option>
+                                {Object.entries(SHORTFALL_LABELS).map(([value, label]) => (
+                                  <option key={value} value={value}>{label}</option>
+                                ))}
+                              </select>
+                              <span style={{ position: 'absolute', right: 12, top: 0, bottom: 0, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <Icon icon={ChevronDown} size="sm" tone="muted" />
+                              </span>
+                            </div>
+                          </div>
                         )}
                       </>
                     )}
@@ -318,18 +388,6 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
             {!readOnly && (
               <>
-                <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
-                  {`Điểm Tubu sẽ cộng cho khách: ${formatPoints(preview)}`}
-                </Text>
-                <Button
-                  size="lg"
-                  fullWidth
-                  disabled={missingReason}
-                  loading={confirm.isPending}
-                  onPress={() => confirm.mutate(request)}
-                >
-                  Xác nhận đã nhận
-                </Button>
                 <Button fullWidth variant="secondary" onPress={() => setRejectOpen(true)}>
                   Từ chối cả yêu cầu
                 </Button>
@@ -366,6 +424,32 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
             )}
           </div>
         </Card>
+      )}
+
+      <WasteDeskPerk point={point} />
+      <WasteDeskReport pointId={point.id} />
+
+      {request && !readOnly && (
+        <>
+          <div aria-hidden style={{ height: 150 }} />
+          <StickyActionBar
+            summary={
+              <div style={{ ...COLUMN, gap: 2 }}>
+                <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
+                  {`Điểm Tubu sẽ cộng cho khách: ${formatPoints(preview)}`}
+                </Text>
+                {missingReason && (
+                  <Text variant="body-sm" tone="secondary" as="div">Chọn lý do cho món nhận thiếu để xác nhận</Text>
+                )}
+              </div>
+            }
+            primary={
+              <Button size="lg" fullWidth disabled={missingReason} loading={confirm.isPending} onPress={() => confirm.mutate(request)}>
+                Xác nhận đã nhận
+              </Button>
+            }
+          />
+        </>
       )}
 
       {request && (

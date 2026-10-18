@@ -243,6 +243,11 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('RECYCLE:')) return 'Đổi rác lấy quà';
   if (reason.startsWith('GIFT_REDEEM:')) return 'Đổi điểm lấy quà';
   if (reason.startsWith('GIFT_REFUND:')) return 'Hoàn điểm quà';
+  // Hậu tố _REVERSED phải đứng trước mã ngắn hơn vì cùng khớp startsWith.
+  if (reason.startsWith('PANCAKE_CHAT_ORDER_REVERSED:')) return 'Thu hồi điểm đơn đặt qua tư vấn viên';
+  if (reason.startsWith('PANCAKE_CHAT_ORDER:')) return 'Tích điểm đơn đặt qua tư vấn viên';
+  if (reason.startsWith('MARKETPLACE_ORDER_REVERSED:')) return 'Thu hồi điểm đơn mua trên sàn';
+  if (reason.startsWith('MARKETPLACE_ORDER:')) return 'Tích điểm đơn mua trên sàn';
   if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
   if (reason.startsWith('ORDER_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';

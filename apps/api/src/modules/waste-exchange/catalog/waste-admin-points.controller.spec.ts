@@ -6,7 +6,7 @@ import { plainToInstance } from 'class-transformer';
 import { NOT_NULL_CONSTRAINT } from '../../../common/decorators/optional-not-null.decorator';
 import { ROLES_KEY } from '../../../common/decorators/roles.decorator';
 import {
-  AdminWastePointQueryDto, WastePointCreateDto, WastePointStaffAddDto, WastePointUpdateDto, WasteAdminPointsController,
+  AdminWastePointQueryDto, WastePointCreateDto, WastePerkReviewDto, WastePointStaffAddDto, WastePointUpdateDto, WasteAdminPointsController,
 } from './waste-admin-points.controller';
 
 type VErr = { constraints?: Record<string, string>; children?: VErr[] };
@@ -70,6 +70,7 @@ describe('WasteAdminPointsController', () => {
       [proto.removeStaff, ':id/staff/:userId', RequestMethod.DELETE],
       [proto.approvePerk, ':id/perk/approve', RequestMethod.POST],
       [proto.rejectPerk, ':id/perk/reject', RequestMethod.POST],
+      [proto.clearPerk, ':id/perk/clear', RequestMethod.POST],
     ] as const;
     for (const [h, path, method] of routes) {
       expect(Reflect.getMetadata(PATH_METADATA, h)).toBe(path);
@@ -79,8 +80,21 @@ describe('WasteAdminPointsController', () => {
     }
     const p = WasteAdminPointsController.prototype;
     expect(Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).sort()).toEqual([
-      'addStaff', 'approvePerk', 'create', 'list', 'rejectPerk', 'removeStaff', 'reorder', 'update',
+      'addStaff', 'approvePerk', 'clearPerk', 'create', 'list', 'rejectPerk', 'removeStaff', 'reorder', 'update',
     ]);
+  });
+
+  it('requires the reviewed perk text on approve and reject and forwards it', async () => {
+    expect(await errorKeys(WastePerkReviewDto, {})).not.toEqual([]);
+    expect(await errorKeys(WastePerkReviewDto, { expectedPendingText: 'x'.repeat(301) })).not.toEqual([]);
+    expect(await errorKeys(WastePerkReviewDto, { expectedPendingText: 'Giảm 10%' })).toEqual([]);
+
+    const svc = { approvePerk: jest.fn().mockResolvedValue('ok'), rejectPerk: jest.fn().mockResolvedValue('ok') };
+    const ctrl = new WasteAdminPointsController(svc as never);
+    await ctrl.approvePerk('a1', 'p1', { expectedPendingText: 'Giảm 10%' });
+    await ctrl.rejectPerk('a1', 'p1', { expectedPendingText: 'Giảm 10%' });
+    expect(svc.approvePerk).toHaveBeenCalledWith('a1', 'p1', 'Giảm 10%');
+    expect(svc.rejectPerk).toHaveBeenCalledWith('a1', 'p1', 'Giảm 10%');
   });
 
   it('validates the staff add body: only OWNER and STAFF roles', async () => {

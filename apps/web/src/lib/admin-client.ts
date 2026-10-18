@@ -6,7 +6,7 @@ import type {
   AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, AdminWasteItemDTO, AdminWastePointDTO, AdminWastePointQuery,
   AdminWasteRequestQuery, AdminWasteRequestRowDTO, GiftRedemptionDTO, GiftRedemptionsQuery,
   WasteCloseLostRequest, WasteConfirmRequest, WasteConfirmResultDTO, WasteCostRequest, WasteGiftCancelRequest,
-  WasteGiftUpsertRequest, WasteItemUpsertRequest, WastePointMonthlyReportDTO, WastePointStaffAddRequest,
+  WasteGiftUpsertRequest, WasteItemUpsertRequest, WastePerkReviewRequest, WastePointMonthlyReportDTO, WastePointStaffAddRequest,
   WastePointUpsertRequest, WasteOverviewDTO, WasteReceiveRequest, WasteReceiveResultDTO, WasteRejectRequest,
   WasteRejectResultDTO, WasteReopenRequest, WasteRequestAdminDetailDTO, WasteReverseRequest, WasteReverseResultDTO,
   WasteUnmatchedCreateRequest, WasteUnmatchedDTO, WasteUnmatchedResolveRequest, WasteUnmatchedStatus,
@@ -683,6 +683,8 @@ export interface GomdonIntegrationStatus {
   webhookSecretSet: boolean;
   recyclingToggle: boolean;
   recyclingEnabled: boolean;
+  /** Cổng thật của khách: chương trình, đường Thu kèm đơn và Gomdon cùng bật. */
+  pickupVisible: boolean;
   /** Lần gọi Gomdon gần nhất của API (từ lúc khởi động). Bản API cũ không có. */
   connection?: GomdonConnectionHealth;
 }
@@ -790,6 +792,8 @@ export interface CouponBatchCodes {
 }
 export interface CouponBatchSummary {
   batch: string;
+  /** false = lô do người khác tạo: nhân viên không xem/tải được mã (API trả 403). */
+  mine: boolean;
   total: number;
   claimed: number;
   used: number;
@@ -1890,10 +1894,18 @@ export const removeWastePointStaff = (pointId: string, userId: string) =>
     `/admin/waste/points/${encodeURIComponent(pointId)}/staff/${encodeURIComponent(userId)}`,
     { method: 'DELETE' },
   );
-export const approveWastePerk = (pointId: string) =>
-  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/approve`, { method: 'POST' });
-export const rejectWastePerk = (pointId: string) =>
-  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/reject`, { method: 'POST' });
+export const approveWastePerk = (pointId: string, expectedPendingText: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/approve`, {
+    method: 'POST',
+    body: { expectedPendingText } satisfies WastePerkReviewRequest,
+  });
+export const rejectWastePerk = (pointId: string, expectedPendingText: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/reject`, {
+    method: 'POST',
+    body: { expectedPendingText } satisfies WastePerkReviewRequest,
+  });
+export const clearWastePerk = (pointId: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/clear`, { method: 'POST' });
 
 export const listWasteRequests = (q: AdminWasteRequestQuery = {}) =>
   apiFetch<{ rows: AdminWasteRequestRowDTO[]; nextCursor: string | null }>(

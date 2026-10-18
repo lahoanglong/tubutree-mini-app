@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  WASTE_ACTOR_ROLE_LABELS,
   WASTE_ADMIN_SECTIONS,
+  WASTE_EVENT_KIND_LABELS,
+  WASTE_MATCH_BASIS_LABELS,
+  summarizeOpeningHours,
+  wasteActorRoleLabel,
+  wasteEventKindLabel,
+  wasteEventMetaLines,
   WASTE_CLOSE_REASON_LABELS,
   WASTE_GIFT_KIND_LABELS,
   WASTE_GIFT_REDEMPTION_STATUS_LABELS,
@@ -60,5 +67,60 @@ describe('waste-labels', () => {
       WASTE_SECTION_LABELS,
     ];
     expectNoBannedCopy(records.flatMap((r) => Object.values(r)).join(' '));
+  });
+
+  it('nhật ký sự kiện: nhãn có chữ, kind lạ là "Sự kiện khác", meta chỉ ra câu đã biết', () => {
+    expect(wasteEventKindLabel('REQUEST_CONFIRMED')).toBe('Xác nhận và cộng điểm');
+    expect(wasteEventKindLabel('NOPE')).toBe('Sự kiện khác');
+    expect(wasteEventKindLabel('toString')).toBe('Sự kiện khác');
+    expect(wasteActorRoleLabel('SYSTEM')).toBe('Hệ thống');
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', null)).toEqual([]);
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', { subjectUserId: 'u-1', device: { ua: 'x' }, before: { status: 'OPEN' } })).toEqual([]);
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', { after: { pointsAwarded: 3000 } })).toEqual(['Cộng 3.000 điểm']);
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', { pointsAwarded: 0 })).toEqual(['Cộng 0 điểm']);
+    expect(wasteEventMetaLines('POINTS_REVERSED', { reason: 'Nhầm', pointsAwarded: 17000, pointsTaken: 5000, shortfallPoints: 12000 })).toEqual([
+      'Thu hồi 5.000 điểm',
+      'Còn thiếu 12.000 điểm chưa thu hồi được',
+      'Lý do: Nhầm',
+    ]);
+    expect(wasteEventMetaLines('POINTS_REVERSED', { pointsTaken: 500, shortfallPoints: 0, reason: ' Nhầm ' })).toEqual(['Thu hồi 500 điểm', 'Lý do: Nhầm']);
+    const unmatched = wasteEventMetaLines('PARCEL_UNMATCHED', { reason: 'EXPIRED_REQUEST', unmatchedId: 'x' });
+    expect(unmatched).toEqual(['Lý do: Yêu cầu đã hết hạn']);
+    expect(unmatched.join(' ')).not.toContain('EXPIRED_REQUEST');
+    expect(wasteEventMetaLines('PARCEL_UNMATCHED', { reason: 'SOMETHING_NEW' })).toEqual([]);
+    for (const k of ['POINTS_REVERSED', 'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'USER_FLAGS_UPDATED', 'GIFT_CANCELLED']) {
+      expect(wasteEventMetaLines(k, { reason: 'Khách nhờ' })).toEqual(['Lý do: Khách nhờ']);
+    }
+    expect(wasteEventMetaLines('UNMATCHED_CLOSED', { reason: 'NO_MATCH' })).toEqual([]);
+    expectNoBannedCopy([...Object.values(WASTE_EVENT_KIND_LABELS), ...Object.values(WASTE_ACTOR_ROLE_LABELS), ...Object.values(WASTE_MATCH_BASIS_LABELS)].join(' '));
+  });
+
+  it('nhật ký sự kiện: mã vận đơn cũ và mới, kiện khác mã khách nhập', () => {
+    const edited = { before: { status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN111' }, after: { status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN777' } };
+    expect(wasteEventMetaLines('TRACKING_EDITED', edited)).toEqual(['Mã vận đơn: GHN · GHN111 → GHN · GHN777']);
+    const first = { before: { status: 'OPEN', carrier: null, trackingCode: null }, after: { status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN111' } };
+    expect(wasteEventMetaLines('TRACKING_SET', first)).toEqual(['Mã vận đơn: GHN · GHN111']);
+    expect(wasteEventMetaLines('TRACKING_SET', { after: first.after })).toEqual(['Mã vận đơn: GHN · GHN111']);
+    const same = { before: { carrier: 'GHN', trackingCode: 'GHN111' }, after: { carrier: 'GHN', trackingCode: 'GHN111' } };
+    expect(wasteEventMetaLines('TRACKING_EDITED', same)).toEqual([]);
+    expect(wasteEventMetaLines('TRACKING_EDITED', { before: edited.before })).toEqual([]);
+    expect(wasteEventMetaLines('REQUEST_EDITED', edited)).toEqual([]);
+    const mismatch = 'Mã vận đơn trên kiện khác mã khách nhập';
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE', parcelTrackingNorm: 'X', trackingMismatch: true })).toEqual([
+      'Khớp theo mã TR-',
+      mismatch,
+    ]);
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE', trackingMismatch: false })).toEqual(['Khớp theo mã TR-']);
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE', trackingMismatch: null })).toEqual(['Khớp theo mã TR-']);
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE' })).toEqual(['Khớp theo mã TR-']);
+    expect(wasteEventMetaLines('TRACKING_EDITED', { ...edited, subjectUserId: 'u-1', device: { ua: 'x' } }).join(' ')).not.toMatch(/u-1|ua/);
+  });
+
+  it('giờ mở cửa: gộp ngày liền nhau cùng khung giờ, bỏ ngày nghỉ', () => {
+    const wk = [{ open: '08:00', close: '17:00' }];
+    expect(summarizeOpeningHours({})).toEqual([]);
+    expect(summarizeOpeningHours({ MON: wk, TUE: wk, WED: wk, SAT: [{ open: '08:00', close: '12:00' }] })).toEqual(['T2–T4 08:00–17:00', 'T7 08:00–12:00']);
+    expect(summarizeOpeningHours({ MON: wk, WED: wk })).toEqual(['T2 08:00–17:00', 'T4 08:00–17:00']);
+    expect(summarizeOpeningHours({ SUN: [{ open: '08:00', close: '11:00' }, { open: '14:00', close: '17:00' }] })).toEqual(['CN 08:00–11:00, 14:00–17:00']);
   });
 });

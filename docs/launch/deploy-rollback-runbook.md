@@ -236,7 +236,15 @@ bash ops/check-edge.sh --local
 
 ### 1.6 Việc của chủ dự án quanh ngày ra mắt (cấu hình đã chốt 2026-10-18)
 
-Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, bố cục khách mới, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay. Việc dưới đây thì chủ dự án làm, theo thứ tự.
+Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, bố cục khách mới, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay, TRỪ duyệt gian hàng (xem ngay dưới). Việc dưới đây thì chủ dự án làm, theo thứ tự.
+
+**Duyệt gian hàng lần đầu cần việc tay (B3).** `storefront.require_approval` nay mặc định `true`, và migration `20261018170000_lr_storefront_moderation` KHÔNG điền `approvedAt` cho gian hàng có sẵn. Vì vậy mọi gian hàng CTV đã đăng trước ngày deploy bị ẨN khỏi khách (và ngừng ghi nhận đơn cho CTV) cho tới khi admin duyệt. Trước deploy, đếm trên PROD:
+
+```sql
+SELECT count(*) FROM storefronts WHERE type='CTV' AND "isPublished" AND "approvedAt" IS NULL AND "takenDownAt" IS NULL AND NOT "isPartner";
+```
+
+Số khác 0 thì chọn một: (a) ngay sau deploy, vào Quản trị, tab "Gian hàng", lọc "Chờ duyệt" và duyệt từng gian hàng đáng tin; hoặc (b) tạm đặt `storefront.require_approval` = `false` ở tab Cấu hình để giữ nguyên hiện trạng, duyệt xong hàng loạt rồi bật lại `true`.
 
 #### 1.6.1 Đồng bộ TOÀN BỘ sản phẩm Pancake sang Tubu Tree (A5)
 
@@ -358,7 +366,7 @@ Không đạt thì để `AI_ADVISOR_ENABLED=false`: Mini App ẩn lối vào, k
 ### 1.8 Đổi rác lấy quà: ghi chú khi deploy
 
 - Kiểm chỉ mục từng phần (partial index) chạy trên một database CHƯA áp `20261020000000_waste_exchange` (ví dụ PROD trước khi deploy) sẽ báo THIẾU năm chỉ mục của migration này: ba khoá chống cộng điểm hai lần của `points_transactions` (`points_transactions_recycle_ref_key`, `points_transactions_recycle_reverse_key`, `points_transactions_gift_refund_key`), rồi `waste_points_one_warehouse_key` và `waste_point_staff_one_owner_key`. Kiểm này còn báo thiếu các chỉ mục từng phần của migration khác đang chờ áp trên database đó (ví dụ ba chỉ mục của `20261019100000_external_orders` nếu nó đi cùng lần deploy này). Đó là đúng, vì kiểm đọc thư mục migration của mã đang chạy. Sau khi migrate nó phải báo không thiếu cái nào.
-- Bộ test race (gồm `partial-unique-indexes` pin 23) chỉ chạy qua `docs/2026-10-review/handoff/verify-full.sh`, không bao giờ chạy trong CI.
+- Bộ test race (gồm `partial-unique-indexes` pin 26) chạy trong workflow `.github/workflows/race.yml` (PR vào main có đụng `apps/api`, và hằng đêm) và trong `docs/2026-10-review/handoff/verify-full.sh`. Check "Race suite" đỏ trên PR phát hành là chặn phát hành.
 - Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API (xoá bộ đệm cấu hình) và xoá bộ đệm proxy/CDN nếu có.
 - Kiểm khoá mã giảm giá trùng lớp khoá Đổi rác (rủi ro đã chấp nhận, spec 10.1). Chạy sau mỗi lần tạo mã có giới hạn mỗi khách:
 
@@ -745,7 +753,7 @@ $DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnp
 
 Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (ba mã `WELCOME30`, `FREESHIP`, `XANH10` luôn được tính là đã duyệt vì chủ dự án giữ chúng cho đợt ra mắt, không cần đặt gì; mã demo khác mà chủ shop duyệt giữ thì chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
 
-Một FAIL sửa được ngay mà không cần quay lại: `db.waste_point` ("waste.enabled đang bật nhưng chưa có kho (WAREHOUSE) nào đang hoạt động"). Chỉ FAIL khi `waste.enabled` bật và chưa có kho ACTIVE. Sửa: tắt `waste.enabled` ở Quản trị, Cấu hình, hoặc thêm một kho đang hoạt động ở Quản trị, Đổi rác, Điểm nhận rồi chạy lại lệnh trên. Ba dòng WARN của kiểm này: (1) `waste.lane_pickup_enabled` bật nhưng Gomdon chưa sẵn sàng (công tắc `shipping.gomdon.recycling_enabled` hoặc `GOMDON_PHONE`/`GOMDON_PASSWORD`): đường Thu kèm đơn vẫn ẩn với khách, tắt `waste.lane_pickup_enabled` cho tới khi Gomdon trả lời bằng văn bản; (2) `waste.mailin_min_points` lớn hơn `waste.customer_monthly_cap_points`: đường Gửi về kho đóng với mọi khách; (3) `waste.pickup_min_points` lớn hơn `waste.customer_monthly_cap_points`: đường Thu kèm đơn đóng với mọi khách. Hai dòng sau sửa bằng cách hạ ngưỡng tối thiểu hoặc nâng trần tháng ở Quản trị, Cấu hình, nhóm waste. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
+Một FAIL sửa được ngay mà không cần quay lại: `db.waste_point`. Có hai nội dung FAIL: ("waste.enabled đang bật nhưng chưa có kho (WAREHOUSE) nào đang hoạt động") và ("waste.enabled đang bật, đường Gửi về kho đang bật nhưng kho đang hoạt động chưa có số điện thoại"). Chỉ FAIL khi `waste.enabled` bật và một trong hai điều sau đúng: chưa có kho ACTIVE; hoặc đường Gửi về kho đang bật (khoá `waste.lane_mailin_enabled` vắng cũng tính là bật) mà kho chưa có số điện thoại. Sửa: tắt `waste.enabled` ở Quản trị, Cấu hình, hoặc thêm một kho đang hoạt động ở Quản trị, Khách hàng, Đổi rác, Điểm nhận. Với FAIL thiếu số điện thoại: mở kho và điền ô "Số điện thoại" bằng số thật của kho, hoặc tắt `waste.lane_mailin_enabled` ở Quản trị, Cấu hình. Rồi chạy lại lệnh trên. Ba dòng WARN của kiểm này: (1) `waste.lane_pickup_enabled` bật nhưng Gomdon chưa sẵn sàng (công tắc `shipping.gomdon.recycling_enabled` hoặc `GOMDON_PHONE`/`GOMDON_PASSWORD`): đường Thu kèm đơn vẫn ẩn với khách. Cờ này là cờ toàn cục, không có danh sách theo khách: chỉ bật nó để chạy đơn thử trên bản chưa mở cho khách thật, và chỉ để bật lâu dài khi Gomdon đã trả lời bằng văn bản và đơn thử chạy đạt, nếu không thì tắt lại; (2) `waste.mailin_min_points` lớn hơn `waste.customer_monthly_cap_points`: đường Gửi về kho đóng với mọi khách; (3) `waste.pickup_min_points` lớn hơn `waste.customer_monthly_cap_points`: đường Thu kèm đơn đóng với mọi khách. Hai dòng sau sửa bằng cách hạ ngưỡng tối thiểu hoặc nâng trần tháng ở Quản trị, Cấu hình, nhóm waste. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
 
 ### Bước 11. Kiểm tra khói (smoke test)
 
@@ -771,7 +779,7 @@ Giao diện:
 
 - [ ] Quản trị, Sức khoẻ hệ thống: không có dòng đỏ; bấm "Gửi email thử" (nếu đã cấu hình SMTP): email tới hộp thư báo động trong vài phút.
 - [ ] Quản trị, Đơn hàng: ô tìm kiếm gõ tên người nhận (có dấu và không dấu) ra kết quả (migration `recipientSearch`).
-- [ ] Quản trị, Đổi rác, Điểm nhận: mở được (danh sách trống ở lần đầu).
+- [ ] Quản trị, Khách hàng, Đổi rác, Điểm nhận: mở được (danh sách trống ở lần đầu).
 - [ ] Quản trị, Duyệt SP đối tác: mở được; mở một sản phẩm chờ duyệt thấy hộp Pancake. KHÔNG bấm duyệt thật ở bước này.
 - [ ] Web khách (đăng nhập bằng tài khoản thử): trang một sản phẩm đã mua hiện khối đánh giá (API trả dữ liệu `can-review` mới với `reviewableOrders` và `myReviews`).
 - [ ] Đăng nhập Zalo trên web hoạt động (xem [pilot-order-playbook.md](pilot-order-playbook.md) mục 1).
@@ -798,6 +806,8 @@ Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã 
 - [ ] Làm [pilot-order-playbook.md](pilot-order-playbook.md) (đơn thử thật) trước khi mở bán rộng.
 
 ### Bước 15. Bắt payload thật của đơn ngoài app (làm ngay sau khi lên bản mới, không chặn deploy)
+
+Lưu ý B6/B9 (chủ dự án đọc trước khi lên bản): (a) từ lúc deploy, `pancake.external_capture_enabled` (mặc định `true`) lưu các đơn Pancake không đặt trong app vào `external_orders` KÈM SĐT đầy đủ của người mua; (b) khi bật B9 (`loyalty.chat_order_points_enabled`), bước bù `backfillChatClaims` (`apps/api/src/modules/external-points/external-chat.claim.ts`) tạo claim cho các đơn chat đã lưu trong vòng `loyalty.marketplace_claim_max_age_days` ngày gần nhất (mặc định 60), nên chủ dự án quyết số ngày này trước khi bật. Ngoài ra migration `20261018180000` đặt `coupons.createdAt` bằng thời điểm migrate cho mọi mã có sẵn (ngân sách ngày của nhân viên tính theo cột này).
 
 Từ bản này API lưu mọi đơn Pancake không đặt trong app (đơn sàn Shopee/Lazada/TikTok, đơn chat, đơn gọi điện) vào bảng `external_orders` và hiện ở tab "Đơn ngoài app". Chưa cộng điểm cho đơn nào. Cách nhận biết đơn đang theo tên field trong tài liệu Pancake POS, CHƯA đối chiếu với payload webhook thật, nên cần vài đơn thật để chốt. Cờ `pancake.external_capture_enabled` (tab Cấu hình, nhóm pancake) mặc định bật; đặt `false` nếu cần dừng lưu đơn ngay.
 

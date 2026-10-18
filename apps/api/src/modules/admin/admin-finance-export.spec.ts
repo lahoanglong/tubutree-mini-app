@@ -206,4 +206,34 @@ describe('refundExportWhere / refundCsvChunks (danh sách hoàn tiền, D1-14)',
     expect(c[col('Loại khoản')]).toBe('Tiền về muộn');
     expect(c[col('Trạng thái')]).toBe('Chờ đối soát');
   });
+
+  it('maskPhones: SĐT người nhận chỉ còn 3 số cuối, số tài khoản và tên chủ tài khoản vẫn đủ (kế toán cần để chuyển tiền)', async () => {
+    const run = async (opts?: { maskPhones: boolean }) => {
+      const findMany = cursorModel([refund(1, { adminNote: 'Khách gọi 0988 777 666' })]);
+      const lines = (await collect(refundCsvChunks({ orderCustomerRefund: { findMany } } as unknown as PrismaService, {}, opts))).trimEnd().split('\r\n');
+      return parseLine(lines[1]!);
+    };
+    const col = (n: string) => REFUND_CSV_HEADERS.indexOf(n);
+    const masked = await run({ maskPhones: true });
+    expect(masked[col('SĐT người nhận')]).toBe('*******333');
+    expect(masked[col('Số tài khoản')]).toBe('="0099887766"');
+    expect(masked[col('Chủ tài khoản')]).toBe('KHACH A');
+    expect(masked[col('Ghi chú admin')]).not.toContain('0988 777 666');
+    expect(masked[col('Ghi chú admin')]).toContain('666');
+    expect((await run())[col('SĐT người nhận')]).toBe('="0911222333"');
+    expect((await run())[col('Ghi chú admin')]).toContain('0988 777 666');
+  });
+
+  it('maskPhones: ghi chú giữ số tiền và mã FT…, chỉ che SĐT', async () => {
+    const note = 'xác nhận 10.000.000đ/12.500.000đ mã FT26270123456789, gọi 0988 777 666 hoặc 0912345678';
+    const findMany = cursorModel([refund(1, { adminNote: note })]);
+    const lines = (await collect(refundCsvChunks({ orderCustomerRefund: { findMany } } as unknown as PrismaService, {}, { maskPhones: true }))).trimEnd().split('\r\n');
+    const masked = parseLine(lines[1]!)[REFUND_CSV_HEADERS.indexOf('Ghi chú admin')]!;
+    expect(masked).toContain('10.000.000đ/12.500.000đ');
+    expect(masked).toContain('FT26270123456789');
+    expect(masked).not.toContain('0988 777');
+    expect(masked).not.toContain('0912345');
+    expect(masked).toContain('666');
+    expect(masked).toContain('678');
+  });
 });

@@ -543,19 +543,22 @@ export class PancakeProcessor extends WorkerHost {
       );
       return;
     }
-    const waiting = approved.filter((r) => !r.receivedAt).length;
-    if (waiting > 0) {
+    // Khoá dòng đơn rồi mới đếm lại ở câu lệnh sau (snapshot mới): danh sách đọc ở trên có thể cũ hơn lần admin vừa bấm "Đã nhận hàng về".
+    // receive() cũng khoá dòng đơn trước khi commit, nên hoặc lần đếm này thấy đã nhận và gỡ luôn nhắc lúc duyệt, hoặc nhắc được ghi trước
+    // và câu gỡ nhắc chạy sau commit của receive() thấy nó.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
+      const waiting = await tx.returnRequest.count({ where: { orderId: order.id, status: 'APPROVED', receivedAt: null } });
+      if (waiting === 0) {
+        await clearPancakeAttention(tx, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
+        return;
+      }
       const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để cộng kho.`;
-      // Kiểm "còn yêu cầu chưa nhận" ngay trong câu ghi: admin bấm "Đã nhận hàng về" chen giữa (đã gỡ nhắc sau commit)
-      // thì không ghi lại lời nhắc cũ.
-      await this.prisma.$executeRaw`
-        UPDATE "orders" SET "pancakeAttention" = ${reason}, "pancakeAttentionAt" = NOW()
-        WHERE "id" = ${order.id}
-          AND ("pancakeAttention" IS NULL OR "pancakeAttention" <> ${reason})
-          AND EXISTS (SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = ${order.id} AND rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL)`;
-    } else {
-      await clearPancakeAttention(this.prisma, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
-    }
+      await tx.order.updateMany({
+        where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
+        data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
+      });
+    });
     const note = `${ATTENTION_PARTIAL_RETURN_ACK} (Pancake #${order.pancakeOrderId ?? '?'})`;
     const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
     if (!logged) {

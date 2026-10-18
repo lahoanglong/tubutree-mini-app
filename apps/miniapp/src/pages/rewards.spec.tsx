@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
   login: vi.fn(),
   ensurePhone: vi.fn(),
-  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
+  publicConfig: { isLoaded: true, loyalty: undefined as undefined | { maxRedeemPct?: number; pointExpireMonths?: number }, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
   getLoyaltyRewards: vi.fn(),
   redeemLoyaltyReward: vi.fn(),
   getLoyalty: vi.fn(),
@@ -87,6 +87,21 @@ describe('/rewards Kho quà (§4.8)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Quà của tôi/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/rewards/mine');
   });
+  it('ghi chú luật dùng điểm từ cấu hình công khai; không hiện khi cấu hình chưa tải', async () => {
+    mocks.publicConfig.loyalty = { maxRedeemPct: 0.2, pointExpireMonths: 12 };
+    try {
+      renderPage();
+      expect(await screen.findByText('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.')).toBeInTheDocument();
+    } finally {
+      mocks.publicConfig.loyalty = undefined;
+    }
+  });
+  it('không lặp số dư: dòng "Đổi quà dùng được" chỉ hiện khi khác tổng', async () => {
+    mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ pointsBalance: 42_000, pointsConvertedBalance: 0, lockedPoints: 0, redeemablePoints: 42_000 }));
+    renderPage();
+    expect(await screen.findByText('42.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByText(/Đổi quà dùng được/)).toBeNull();
+  });
   it('ba tab theo loại quà', async () => {
     renderPage();
     expect((await screen.findAllByRole('tab')).map((t) => t.textContent)).toEqual(['Mã giảm giá', 'Cây và hạt', 'Quà nhỏ']);
@@ -103,6 +118,19 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(within(c50).getByText('Cần thêm 20.000 điểm')).toBeInTheDocument();
     expect(within(c50).getByTestId('progress-fill')).toHaveStyle({ width: '60%' });
     expect(within(c50).queryByRole('button', { name: 'Đổi' })).toBeNull();
+  });
+  it('thẻ quà: biểu tượng theo loại, giá và nút Đổi cùng một hàng', async () => {
+    renderPage();
+    const voucher = await waitFor(() => card('Miễn phí vận chuyển'));
+    expect(within(voucher).getByTestId('reward-icon').querySelector('svg.lucide-ticket')).not.toBeNull();
+    const price = within(voucher).getByText(/điểm$/, { selector: 'div' });
+    const button = within(voucher).getByRole('button', { name: 'Đổi' });
+    expect(price.parentElement).toBe(button.parentElement);
+    fireEvent.click(screen.getByRole('tab', { name: 'Cây và hạt' }));
+    expect(within(card('Gói hạt giống Tubu')).getByTestId('reward-icon').querySelector('svg.lucide-leaf')).not.toBeNull();
+    expect(within(card('Góp quỹ trồng cây')).getByTestId('reward-icon').querySelector('svg.lucide-sprout')).not.toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Quà nhỏ' }));
+    expect(within(card('Túi vải Tubu')).getByTestId('reward-icon').querySelector('svg.lucide-gift')).not.toBeNull();
   });
   it('"Đã hết" theo soldOut của máy chủ: không có thanh tiến độ, không "Cần thêm"', async () => {
     renderPage();

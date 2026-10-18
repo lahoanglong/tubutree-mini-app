@@ -15,7 +15,7 @@ describe('evaluateDb', () => {
   });
 
   it('mọi WARN/FAIL đều có cách sửa, PASS thì không', () => {
-    const worst = dbWith({ adminCount: 0, unfinishedMigrations: ['x'], waste: { tableExists: true, totalPoints: 0, activeWarehouses: 0 }, configs: { 'waste.enabled': true }, znsTemplates: [] });
+    const worst = dbWith({ adminCount: 0, unfinishedMigrations: ['x'], waste: { tableExists: true, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0 }, configs: { 'waste.enabled': true }, znsTemplates: [] });
     for (const r of run(worst)) {
       if (r.status === 'PASS') expect(r.hint).toBe('');
       else expect(r.hint.length).toBeGreaterThan(10);
@@ -201,7 +201,7 @@ describe('evaluateDb', () => {
         const r = W({ totalPoints: 3, activeWarehouses: 0 }, { 'waste.enabled': true }, phase);
         expect(r.status).toBe('FAIL');
         expect(r.detail).toContain('chưa có kho');
-        expect(r.hint.length).toBeGreaterThan(10);
+        expect(r.hint).toContain('Quản trị, Khách hàng, Đổi rác, Điểm nhận');
       }
     });
     it('waste.enabled bật và có một kho ACTIVE: PASS, nêu số kho và số điểm', () => {
@@ -209,6 +209,21 @@ describe('evaluateDb', () => {
       expect(r.status).toBe('PASS');
       expect(r.detail).toContain('1 kho');
       expect(r.detail).toContain('4 điểm');
+    });
+    it('waste.enabled bật, Gửi về kho bật, kho ACTIVE chưa có số điện thoại: FAIL, hint nêu màn hình và ô', () => {
+      const r = W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true });
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('số điện thoại');
+      expect(r.hint).toContain('Quản trị, Khách hàng, Đổi rác, Điểm nhận');
+      expect(r.hint).toContain('Số điện thoại');
+      expect(W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true, 'waste.lane_mailin_enabled': true }).status).toBe('FAIL');
+    });
+    it('thiếu số điện thoại kho nhưng Gửi về kho tắt rõ ràng hoặc chương trình tắt: không FAIL', () => {
+      expect(W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true, 'waste.lane_mailin_enabled': false }).status).toBe('PASS');
+      expect(W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': false }).status).toBe('PASS');
+    });
+    it('kho có số điện thoại: PASS', () => {
+      expect(W({ activeWarehouses: 2, activeWarehousesWithPhone: 1 }, { 'waste.enabled': true }).status).toBe('PASS');
     });
     it('waste.enabled là chuỗi "true" không tính là bật: không FAIL', () => {
       expect(W({ totalPoints: 0, activeWarehouses: 0 }, { 'waste.enabled': 'true' }).status).toBe('PASS');
@@ -218,6 +233,8 @@ describe('evaluateDb', () => {
       expect(r.status).toBe('WARN');
       expect(r.detail).toContain('Gomdon');
       expect(r.hint.length).toBeGreaterThan(10);
+      expect(r.hint).toContain('chạy đơn thử trên bản chưa mở cho khách thật');
+      expect(r.hint).toContain('cờ toàn cục');
     });
     it('waste.lane_pickup_enabled bật mà thiếu tài khoản Gomdon: WARN', () => {
       expect(W({}, { 'waste.enabled': true, 'waste.lane_pickup_enabled': true }, 'post-deploy', noCreds).status).toBe('WARN');
@@ -249,7 +266,7 @@ describe('evaluateDb', () => {
       expect(both.status).toBe('WARN');
       expect(both.detail).toContain('waste.mailin_min_points (61000)');
       expect(both.detail).toContain('waste.pickup_min_points (70000)');
-      expect(W({ activeWarehouses: 0 }, { 'waste.enabled': true, 'waste.mailin_min_points': 61_000 }).status).toBe('FAIL');
+      expect(W({ activeWarehouses: 0, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true, 'waste.mailin_min_points': 61_000 }).status).toBe('FAIL');
     });
     it('không còn dòng db.refill_location', () => {
       expect(run(GOOD_DB).some((r) => r.id === 'db.refill_location')).toBe(false);
