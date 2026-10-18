@@ -19,6 +19,11 @@ describe('MiniAppOnlyNotice', () => {
     expect(renderToStaticMarkup(<MiniAppOnlyNotice path="/khong-co" />)).toContain('href="https://zalo.me/s/123/"');
   });
 
+  it('miniappPath: mở thẳng đường dẫn Mini App, không tra ngược route map', () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '123');
+    expect(renderToStaticMarkup(<MiniAppOnlyNotice miniappPath="/points/scan" />)).toContain('href="https://zalo.me/s/123/points/scan"');
+  });
+
   it('chưa cấu hình app id: chỉ còn dòng giải thích, không có nút', () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '');
     const html = renderToStaticMarkup(<MiniAppOnlyNotice path="/doi-rac/quay" />);

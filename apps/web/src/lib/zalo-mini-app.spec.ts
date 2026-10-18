@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { miniAppLink } from './zalo-mini-app';
+import { miniAppLink, miniAppPathLink } from './zalo-mini-app';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -32,5 +32,14 @@ describe('miniAppLink', () => {
     expect(miniAppLink('/tai-khoan/don-hang/TT1')).toBe('https://zalo.me/s/123/order/TT1');
     expect(miniAppLink('/tai-khoan/don-hang?tab=subscriptions')).toBe('https://zalo.me/s/123/subscriptions');
     expect(miniAppLink('/doi-rac/quay')).toBe('https://zalo.me/s/123/recycle/desk');
+  });
+});
+
+describe('miniAppPathLink', () => {
+  it('mở thẳng đường dẫn Mini App đã biết; chưa cấu hình app id thì null', () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '123');
+    expect(miniAppPathLink('/points/scan')).toBe('https://zalo.me/s/123/points/scan');
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '');
+    expect(miniAppPathLink('/points/scan')).toBeNull();
   });
 });

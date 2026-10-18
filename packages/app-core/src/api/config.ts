@@ -73,8 +73,9 @@ export interface SupportContact {
 const DEFAULT_FAQ_CAT = 'Chung';
 
 export const fetchFaqs = async (http: HttpClient): Promise<FaqItem[]> => {
-  const rows = await http.get<{ data: FaqEntryDTO[] }>('/faqs').then((r) => r.data);
-  return rows.map((r) => ({ q: r.question, a: r.answer, cat: r.category?.trim() || DEFAULT_FAQ_CAT }));
+  const rows = await http.get<FaqEntryDTO[]>('/faqs');
+  // Hình dạng lạ thì coi như chưa có FAQ để trang rơi về bản dự phòng thay vì ném lỗi.
+  return (Array.isArray(rows) ? rows : []).map((r) => ({ q: r.question, a: r.answer, cat: r.category?.trim() || DEFAULT_FAQ_CAT }));
 };
 
 /** Chuỗi rỗng/toàn khoảng trắng hoặc sai kiểu = chưa có giá trị: trang ẩn dòng đó thay vì hiện nhãn trống. */

@@ -25,7 +25,6 @@ const CORE: string[] = [
   'app/thanh-toan/page.tsx',
   'app/thanh-toan/bank-transfer-panel.tsx',
   'app/tai-khoan/page.tsx',
-  'app/tai-khoan/profile-section.tsx',
   'app/tai-khoan/don-hang/[code]/page.tsx',
   'app/s/[slug]/page.tsx',
   'app/dang-nhap/page.tsx',
@@ -53,7 +52,22 @@ const CORE: string[] = [
 ];
 const SHOP: string[] = [];
 const ORDER: string[] = [];
-const ACCOUNT: string[] = [];
+const ACCOUNT: string[] = [
+  'app/tai-khoan/ho-so/page.tsx',
+  'app/tai-khoan/cai-dat/page.tsx',
+  'components/account/font-scale.ts',
+  'app/tai-khoan/thong-bao/page.tsx',
+  'components/account/notification-view.ts',
+  'app/gioi-thieu/page.tsx',
+  'app/gioi-thieu/about-view.tsx',
+  'lib/faq-fallback.ts',
+  'components/coupon-claim-gate.tsx',
+  'components/onboarding-gate.tsx',
+  'components/account/coupon-claim.ts',
+  'components/account/onboarding-rules.ts',
+  'components/account/account-menu.ts',
+  'components/account/avatar-crop-sheet.tsx',
+];
 const LOYALTY: string[] = [];
 const COMMUNITY: string[] = [];
 const AFFILIATE: string[] = [];

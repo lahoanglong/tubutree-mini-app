@@ -1,0 +1,152 @@
+'use client';
+
+import { useState, type ReactNode } from 'react';
+import Link from 'next/link';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
+import { markAllNotificationsRead, markNotificationRead, type NotificationDTO } from '@tubutree/app-core/api/account';
+import { notificationsQuery } from '@tubutree/app-core/queries/account';
+import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { ErrorState } from '@/components/ui/error-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { Sheet } from '@/components/ui/sheet';
+import { LineItemSkeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/empty-state';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { coreHttp } from '@/lib/core-http';
+import { formatDateTime } from '@/lib/format-date';
+import { ui } from '@/lib/guest-ui';
+
+const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+
+/** Thông báo (cùng nội dung với `notifications.tsx` của Mini App): danh sách, chấm chưa đọc, đọc một/đọc hết, chi tiết kèm nút hành động theo loại tin. */
+export default function NotificationsPage() {
+  const phase = useAuthPhase();
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState<NotificationDTO | null>(null);
+  const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: phase === 'authenticated' });
+
+  // onSettled: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào; nạp lại cả hai trường hợp, không báo lỗi vì là thao tác nền.
+  const readMut = useMutation({
+    mutationFn: (id: string) => markNotificationRead(coreHttp, id),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+  const readAllMut = useMutation({
+    mutationFn: () => markAllNotificationsRead(coreHttp),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+  const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+
+  const onTap = (n: NotificationDTO) => {
+    if (n.status !== 'READ') readMut.mutate(n.id);
+    setSelected(n);
+  };
+
+  const shell = (body: ReactNode) => (
+    <main className="mx-auto max-w-3xl px-4 py-6">
+      <PageHeader
+        title="Thông báo"
+        backHref="/tai-khoan"
+        backLabel="Quay lại tài khoản"
+        actions={
+          phase === 'authenticated' && unreadCount > 0 ? (
+            <button type="button" disabled={readAllMut.isPending} onClick={() => readAllMut.mutate()} className={`${ui.btnText} text-forest-700`}>
+              {readAllMut.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Đọc tất cả
+            </button>
+          ) : undefined
+        }
+      />
+      {body}
+    </main>
+  );
+
+  if (phase === 'loading') return shell(<AuthLoading />);
+  if (phase === 'unavailable') return shell(<SessionUnavailable />);
+  if (phase === 'guest') return shell(<LoginRequired message="Đăng nhập để xem thông báo của bạn." returnTo="/tai-khoan/thong-bao" />);
+
+  if (notifQ.isLoading) {
+    return shell(
+      <div className="mt-4 flex flex-col gap-2">
+        <LineItemSkeleton />
+        <LineItemSkeleton />
+      </div>,
+    );
+  }
+  if (notifQ.isError && !notifQ.data) {
+    return shell(
+      <div className="mt-4">
+        <ErrorState message={errorText(notifQ.error)} onRetry={() => void notifQ.refetch()} />
+      </div>,
+    );
+  }
+  if (!notifQ.data || notifQ.data.length === 0) {
+    return shell(<EmptyState title="Chưa có thông báo nào" body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây." actionHref="/" actionLabel="Về trang chủ" />);
+  }
+
+  return shell(
+    <>
+      <ul className="mt-4 grid gap-2 md:grid-cols-2">
+        {notifQ.data.map((n) => {
+          const m = notificationMeta(n.templateCode);
+          const unread = n.status !== 'READ';
+          return (
+            <li key={n.id}>
+              <button
+                type="button"
+                onClick={() => onTap(n)}
+                className={`flex min-h-11 w-full gap-3 rounded-card border p-3 text-left shadow-card transition active:scale-[0.99] ${
+                  unread ? 'border-forest-200 bg-forest-50' : 'border-stone-200 bg-stone-0'
+                }`}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-100 text-forest-600">
+                  <m.Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-sm font-semibold text-stone-900">{m.title}</span>
+                    {unread && <span role="img" aria-label="chưa đọc" className="h-2 w-2 rounded-full bg-forest-600" />}
+                  </span>
+                  {n.payload.body && <span className="mt-0.5 block text-sm text-stone-700">{n.payload.body}</span>}
+                  <span className="mt-1 block text-xs text-stone-600">{relativeTime(n.sentAt)}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <Sheet open={selected !== null} onClose={() => setSelected(null)} title="Chi tiết thông báo">
+        {selected && <Detail n={selected} onNavigate={() => setSelected(null)} />}
+      </Sheet>
+    </>,
+  );
+}
+
+function Detail({ n, onNavigate }: { n: NotificationDTO; onNavigate: () => void }) {
+  const m = notificationMeta(n.templateCode);
+  const action = notificationAction(n.templateCode, n.payload.data);
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-stone-100 text-forest-600">
+          <m.Icon className="h-6 w-6" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-stone-900">{m.title}</p>
+          <p className="mt-0.5 text-xs text-stone-600">
+            {formatDateTime(n.sentAt)} ({relativeTime(n.sentAt)})
+          </p>
+        </div>
+      </div>
+      <hr className="border-stone-200" />
+      <p className="whitespace-pre-line text-sm leading-relaxed text-stone-900">{n.payload.body || ''}</p>
+      {action && (
+        <Link href={action.to} onClick={onNavigate} className={`${ui.btnPrimary} w-full`}>
+          {action.label}
+        </Link>
+      )}
+    </div>
+  );
+}

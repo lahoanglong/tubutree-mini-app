@@ -20,11 +20,11 @@
       { "miniapp": "/addresses", "web": "/tai-khoan/dia-chi", "private": true }
     ]},
     { "lane": "account", "items": [
-      { "miniapp": "/about", "web": "/gioi-thieu", "private": false, "pending": true },
+      { "miniapp": "/about", "web": "/gioi-thieu", "private": false },
       { "miniapp": "/profile", "web": "/tai-khoan", "private": true },
-      { "miniapp": "/edit-profile", "web": "/tai-khoan/ho-so", "private": true, "pending": true },
-      { "miniapp": "/settings", "web": "/tai-khoan/cai-dat", "private": true, "pending": true },
-      { "miniapp": "/notifications", "web": "/tai-khoan/thong-bao", "private": true, "pending": true }
+      { "miniapp": "/edit-profile", "web": "/tai-khoan/ho-so", "private": true },
+      { "miniapp": "/settings", "web": "/tai-khoan/cai-dat", "private": true },
+      { "miniapp": "/notifications", "web": "/tai-khoan/thong-bao", "private": true }
     ]},
     { "lane": "loyalty", "items": [
       { "miniapp": "/loyalty", "web": "/tai-khoan/diem-xanh", "private": true },
@@ -75,8 +75,8 @@
     ]}
   ],
   "features": [
-    { "id": "coupon-claim", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "CouponClaimGate"], "web": ["apps/web/src/components/app-gates.tsx", "CouponClaimGate"], "pending": true },
-    { "id": "onboarding", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "OnboardingGate"], "web": ["apps/web/src/components/app-gates.tsx", "OnboardingGate"], "pending": true },
+    { "id": "coupon-claim", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "CouponClaimGate"], "web": ["apps/web/src/components/app-gates.tsx", "CouponClaimGate"] },
+    { "id": "onboarding", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "OnboardingGate"], "web": ["apps/web/src/components/app-gates.tsx", "OnboardingGate"] },
     { "id": "storefront-source", "lane": "core", "miniapp": ["apps/miniapp/src/components/app.tsx", "recordReferralTouch"], "web": ["apps/web/src/components/storefront-tracker.tsx", "rememberEntryLink"] }
   ]
 }

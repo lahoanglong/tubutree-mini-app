@@ -15,3 +15,10 @@ export function miniAppLink(returnTo?: string | null): string | null {
   const target = returnTo ? miniappPathFor(returnTo) : null;
   return `${base}${target ?? '/'}`;
 }
+
+/** Mở thẳng một đường dẫn Mini App đã biết (ví dụ `/points/scan`), cho màn không có trang web tương ứng để tra ngược. */
+export function miniAppPathLink(miniappPath: string): string | null {
+  const home = miniAppLink();
+  if (!home) return null;
+  return `${home.replace(/\/$/, '')}${miniappPath.startsWith('/') ? miniappPath : `/${miniappPath}`}`;
+}

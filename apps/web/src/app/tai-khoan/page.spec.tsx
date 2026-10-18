@@ -119,8 +119,7 @@ describe('/tai-khoan — danh sách đơn nhiều hơn 20 (BUYERWEB-8)', () => {
 
   it('có lối vào Sổ địa chỉ (BUYERWEB-14)', async () => {
     const { container } = await mount();
-    const link = container.querySelector<HTMLAnchorElement>('nav[aria-label="Quản lý tài khoản"] a');
-    expect(link?.getAttribute('href')).toBe('/tai-khoan/dia-chi');
+    const link = container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/dia-chi"]');
     expect(link?.textContent).toContain('Sổ địa chỉ');
   });
 
@@ -135,17 +134,17 @@ describe('/tai-khoan — danh sách đơn nhiều hơn 20 (BUYERWEB-8)', () => {
   });
 });
 
-describe('/tai-khoan — thông tin cá nhân (D5-14)', () => {
-  it('có khối Thông tin cá nhân: họ tên và số điện thoại lấy từ /me (không phải ảnh chụp lúc đăng nhập)', async () => {
+describe('/tai-khoan — thẻ hồ sơ (D5-14)', () => {
+  it('tên lấy từ /me (không phải ảnh chụp lúc đăng nhập) và thẻ dẫn tới trang sửa hồ sơ', async () => {
     const { container } = await mount();
-    const section = container.querySelector('section[aria-label="Thông tin cá nhân"]')!;
-    expect(section.textContent).toContain('Nguyễn An Khang');
-    expect(section.textContent).toContain('0912 345 678');
-    expect(byText(section as HTMLElement, 'button', 'Sửa tên')).not.toBeNull();
+    const head = container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/ho-so"]')!;
+    expect(head.textContent).toContain('Nguyễn An Khang');
+    expect(head.textContent).toContain('Sửa hồ sơ');
     expect(container.querySelector('section[aria-label="Thông tin tài khoản"]')?.textContent).toContain('Nguyễn An Khang');
+    expect(byText(container, 'button', 'Sửa tên')).toBeNull();
   });
 
-  it('vẫn đúng một h1 và không nhảy cấp heading khi có thêm khối hồ sơ', async () => {
+  it('vẫn đúng một h1 và không nhảy cấp heading khi có thêm các nhóm menu', async () => {
     const { container } = await mount();
     expect(headingProblems(container)).toEqual([]);
   });

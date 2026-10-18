@@ -42,6 +42,9 @@ import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
 import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
 import AddressBookPage from './tai-khoan/dia-chi/page';
+import EditProfilePage from './tai-khoan/ho-so/page';
+import SettingsPage from './tai-khoan/cai-dat/page';
+import NotificationsPage from './tai-khoan/thong-bao/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -69,7 +72,11 @@ const CORE: PageCase[] = [
 ];
 const SHOP: PageCase[] = [];
 const ORDER: PageCase[] = [];
-const ACCOUNT: PageCase[] = [];
+const ACCOUNT: PageCase[] = [
+  ['/tai-khoan/ho-so', () => <EditProfilePage />],
+  ['/tai-khoan/cai-dat', () => <SettingsPage />],
+  ['/tai-khoan/thong-bao', () => <NotificationsPage />],
+];
 const LOYALTY: PageCase[] = [];
 const COMMUNITY: PageCase[] = [];
 const AFFILIATE: PageCase[] = [];
