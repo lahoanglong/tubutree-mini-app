@@ -7,7 +7,8 @@ import { withQuery } from './core-query';
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 // Không truyền gì thừa cho apiFetch: auth, refresh 401, timeout và lỗi ApiError/NetworkError giữ nguyên như trước.
-function call<T>(method: Method, path: string, body: unknown, opts?: RequestOptions): Promise<T> {
+// async để mọi lỗi (kể cả URIError khi dựng query) thành promise bị từ chối như axios bên Mini App, không ném đồng bộ.
+async function call<T>(method: Method, path: string, body: unknown, opts?: RequestOptions): Promise<T> {
   return apiFetch<T>(withQuery(path, opts?.query), {
     method,
     ...(body !== undefined ? { body } : {}),

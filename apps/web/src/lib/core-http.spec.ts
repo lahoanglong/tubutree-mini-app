@@ -58,4 +58,10 @@ describe('core-http (web client) — bọc apiFetch', () => {
     apiFetch.mockRejectedValueOnce(err);
     await expect(coreHttp.get('/x')).rejects.toBe(err);
   });
+
+  it('chuỗi query không mã hoá được trả về promise bị từ chối, không ném đồng bộ', async () => {
+    const pending = coreHttp.get('/search', { query: { q: '\uD83D' } });
+    await expect(pending).rejects.toThrow(URIError);
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
 });
