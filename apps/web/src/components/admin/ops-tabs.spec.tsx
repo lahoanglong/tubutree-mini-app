@@ -188,7 +188,7 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     const attention = c.querySelector('section[aria-label="Đơn cần xử lý tay trên Pancake"]')!;
     expect(attention.textContent).toContain('TUBU2026101414013');
     expect(attention.textContent).toContain('shipper không thu tiền lần nữa');
-    const gomdon = c.querySelector('section[aria-label="Gomdon (thu gom tái chế)"]')!;
+    const gomdon = c.querySelector('section[aria-label="Gomdon (thu kèm rác)"]')!;
     expect(gomdon.textContent).toContain('Lỗi 09:30 14/10/2026');
     expect(gomdon.textContent).toContain('Đơn thu gom chờ vận đơn quá 15 phút1');
     expect(c.querySelector('section[aria-label="Báo động Gomdon chưa đóng"]')!.textContent).toContain('tránh giao trùng');

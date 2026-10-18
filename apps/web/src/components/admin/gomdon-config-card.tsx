@@ -131,7 +131,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Recycle className="h-4 w-4 text-forest-700" aria-hidden />
-          <h2 className="font-display text-sm font-semibold text-stone-900">Thu gom vật liệu tái chế (Gomdon)</h2>
+          <h2 className="font-display text-sm font-semibold text-stone-900">Thu kèm rác qua Gomdon (kỹ thuật)</h2>
         </div>
         <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm sm:min-h-0">
           <input
