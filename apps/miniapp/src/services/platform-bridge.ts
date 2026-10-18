@@ -1,5 +1,5 @@
 import { getStorage, setStorage } from 'zmp-sdk/apis';
-import type { PlatformBridge } from '@tubutree/app-core/bridge';
+import { isHttpUrl, type PlatformBridge } from '@tubutree/app-core/bridge';
 import { callPhone, followOA, hasOA, openExternal, openOAChat, shareLink } from './zmp-bridge';
 
 const ZMP_USER_CANCEL = -2003;
@@ -19,6 +19,7 @@ export const platformBridge: PlatformBridge = {
   },
 
   openExternal(url) {
+    if (!isHttpUrl(url)) return;
     void openExternal(url).catch(() => {});
   },
 

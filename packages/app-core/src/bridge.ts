@@ -32,3 +32,13 @@ export interface PlatformBridge {
     set(key: string, value: string): Promise<void>;
   };
 }
+
+/** URL từ API/admin chỉ được mở khi là http(s): javascript:/data: chạy với origin của app. */
+export function isHttpUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
+}

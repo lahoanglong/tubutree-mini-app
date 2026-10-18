@@ -61,6 +61,11 @@ describe('platform-bridge (Mini App)', () => {
     expect(zmp.callPhone).toHaveBeenCalledWith('1800 6868');
   });
 
+  it.each(['javascript:alert(1)', 'data:text/html,x', 'not a url'])('openExternal không chuyển URL ngoài http(s) cho zmp: %s', (url) => {
+    platformBridge.openExternal(url);
+    expect(zmp.openExternal).not.toHaveBeenCalled();
+  });
+
   it('oa.openChat và follow chuyển cho zmp-bridge', async () => {
     zmp.followOA.mockResolvedValue(true);
     await platformBridge.oa.openChat('hi');
