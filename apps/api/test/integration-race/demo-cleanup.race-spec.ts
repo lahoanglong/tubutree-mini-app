@@ -163,7 +163,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(page.collections[0]!.items.map((i) => i.product.id)).toEqual([demoProduct.id]);
     await expect(assertVariationsSellable(prisma, [{ variationId: demoVariation.id }])).resolves.toBeUndefined();
     await expect(coupons().validateAndCompute('WELCOME30', userId, 250_000)).resolves.toMatchObject({ code: 'WELCOME30', discount: 30_000 });
-    expect(await goLive()).toEqual({ 'db.demo_products': 'FAIL', 'db.demo_coupons': 'FAIL' });
+    expect(await goLive()).toEqual({ 'db.demo_products': 'FAIL', 'db.demo_coupons': 'WARN' });
   });
 
   it('xem trước: đúng số dòng của migration, nêu dòng tham chiếu, nêu sản phẩm demo đã sửa sau khi nạp, không ghi gì', async () => {
@@ -257,7 +257,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     await expect(assertVariationsSellable(prisma, [{ variationId: demoVariation.id }])).rejects.toMatchObject({
       response: { code: PRODUCT_DISCONTINUED },
     });
-    expect(await goLive()).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'FAIL' });
+    expect(await goLive()).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'WARN' });
   });
 
   it('sau khi tắt: mua chung, giờ vàng sắp tới, các tin nhắc (giờ vàng, yêu thích, mua lại, mời đánh giá, giỏ bỏ quên), chip bài cộng đồng đều bỏ hàng đã tắt', async () => {
@@ -348,7 +348,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(await prisma.variation.count({ where: { sku: { startsWith: 'DEMO-DEMO-' } } })).toBe(0);
   });
 
-  it('--coupons=expire --keep-coupon=WELCOME30: tắt hai mã còn lại, WELCOME30 vẫn dùng được; go-live FAIL tới khi chấp nhận giữ', async () => {
+  it('--coupons=expire --keep-coupon=WELCOME30: tắt hai mã còn lại, WELCOME30 vẫn dùng được; go-live chỉ WARN vì ba mã chủ dự án giữ', async () => {
     const { result } = await applyDemoCleanup(prisma, { coupons: 'expire', keepCoupons: ['WELCOME30'] });
     expect(result.couponsExpired).toBe(2);
     const byCode = Object.fromEntries((await prisma.coupon.findMany({ where: { id: { in: DEMO_COUPONS.map((c) => c.id) } } })).map((c) => [c.code, c]));
@@ -357,7 +357,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(byCode.XANH10!.isActive).toBe(false);
     await expect(coupons().validateAndCompute('WELCOME30', userId, 250_000)).resolves.toMatchObject({ discount: 30_000 });
     await expect(coupons().validateAndCompute('XANH10', userId, 300_000)).rejects.toThrow(/ngừng áp dụng/);
-    expect(await goLive()).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'FAIL' });
+    expect(await goLive()).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'WARN' });
     expect(await goLive({ GO_LIVE_ACCEPT_DEMO_COUPONS: 'WELCOME30' })).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'WARN' });
     expect((await applyDemoCleanup(prisma, { coupons: 'expire', keepCoupons: ['WELCOME30', 'FREESHIP', 'XANH10'] })).result.couponsExpired).toBe(0);
   });
@@ -402,7 +402,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     }
   });
 
-  it('mã do seed tạo (id khác migration, điều kiện như seed.ts) vẫn là mã demo: go-live FAIL, --coupons=expire tắt, --keep-coupon giữ; mã chỉ trùng tên thì không đụng, WARN', async () => {
+  it('mã do seed tạo (id khác migration, điều kiện như seed.ts) vẫn là mã demo: go-live WARN (ba mã chủ dự án giữ), --coupons=expire tắt, --keep-coupon giữ; mã chỉ trùng tên thì không đụng, WARN', async () => {
     const seedTerms = { startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), scope: 'PUBLIC' as const };
     const ids = { WELCOME30: `${SEED_LIKE_PREFIX}${tag}-welcome30`, FREESHIP: `${SEED_LIKE_PREFIX}${tag}-freeship`, XANH10: `${SEED_LIKE_PREFIX}${tag}-xanh10` };
     await hideMigrationCoupons();
@@ -416,7 +416,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
         ],
       });
       const status = async (env: Record<string, string> = {}) => (await goLive(env))['db.demo_coupons'];
-      expect(await status()).toBe('FAIL');
+      expect(await status()).toBe('WARN');
       expect((await previewDemoCleanup(prisma)).coupons.map((c) => [c.code, c.kind])).toEqual([
         ['FREESHIP', 'seed'],
         ['WELCOME30', 'seed'],
@@ -438,7 +438,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
       const row = async (id: string) => (await prisma.coupon.findUniqueOrThrow({ where: { id } }));
       expect((await row(ids.WELCOME30)).isActive).toBe(true);
       expect((await row(ids.FREESHIP)).isActive).toBe(false);
-      expect(await status()).toBe('FAIL');
+      expect(await status()).toBe('WARN');
       expect(await status({ GO_LIVE_ACCEPT_DEMO_COUPONS: 'WELCOME30' })).toBe('WARN');
 
       expect((await applyDemoCleanup(prisma, { coupons: 'expire' })).result.couponsExpired).toBe(1);

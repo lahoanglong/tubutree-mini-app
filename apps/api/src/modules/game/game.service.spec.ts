@@ -1089,7 +1089,7 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
       .buyTree('u1')
       .then(() => new Error('không ném lỗi'), (e: unknown) => e as Error);
     expect(err).toBeInstanceOf(BadRequestException);
-    expect(err.message).toMatch(/Cần 50000 Điểm Xanh/);
+    expect(err.message).toMatch(/Cần 50\.000 Điểm Xanh/);
     expect(err.message).toMatch(/chưa dùng được/);
     expect(state).toEqual({ pointsBalance: 60_000, pointsConvertedBalance: 0 });
     expect(entries).toHaveLength(0);

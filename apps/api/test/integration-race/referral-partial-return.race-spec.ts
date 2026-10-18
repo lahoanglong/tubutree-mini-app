@@ -140,7 +140,7 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     const refId = `${a.id}:${b.id}`;
     if (opts.ledger === 'COIN') {
       await prisma.coinTransaction.create({ data: { userId: referrer.id, delta: LEGACY_REWARD_XU, reason, refType: 'REFERRAL', refId } });
-      const points = LEGACY_REWARD_XU;
+      const points = Math.ceil(LEGACY_REWARD_XU / 1000) * 1000; // PD-3 ceil(xu/1000) rồi points_1d ×1.000
       await prisma.coinTransaction.create({
         data: { userId: referrer.id, delta: -LEGACY_REWARD_XU, reason: `XU_TO_POINTS:${points}`, refType: 'XU_MIGRATION', refId: referrer.id },
       });

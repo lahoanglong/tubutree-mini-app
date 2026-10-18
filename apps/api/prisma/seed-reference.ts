@@ -27,6 +27,24 @@ import { COMMUNITY_CATEGORIES } from '../src/modules/feed/community-categories-s
 
 export const WITH_BUSINESS_DEFAULTS_FLAG = '--with-business-defaults';
 
+export const POINTS_1D_MIGRATION = '20261018210000_points_1d';
+
+/**
+ * Seed gieo `loyalty.vnd_per_point_redeem` = 1 (createOnly). Migration points_1d từng coi dòng đó là dấu "đã nhân 1.000", nên seed
+ * chạy trước migrate làm phép nhân bị bỏ qua. Dấu giờ là dòng lịch sử của chính migration, nhưng vẫn từ chối seed khi migration chưa
+ * hoàn tất để không dựng cấu hình theo đơn vị mới trên dữ liệu còn đơn vị cũ.
+ */
+export async function assertPoints1dApplied(prisma: Pick<PrismaClient, '$queryRaw'>): Promise<void> {
+  const rows = await prisma.$queryRaw<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM "_prisma_migrations"
+     WHERE "migration_name" = ${POINTS_1D_MIGRATION} AND "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL`;
+  if (rows[0]?.n !== 1) {
+    throw new Error(
+      `seed-reference: migration ${POINTS_1D_MIGRATION} chưa hoàn tất trên DB này. Chạy \`prisma migrate deploy\` trước (API đã dừng, đã backup), rồi mới seed-reference.`,
+    );
+  }
+}
+
 export interface SeedReferenceOptions {
   now?: Date;
   /**
@@ -49,6 +67,7 @@ export interface GroupResult {
 
 export async function seedReference(prisma: PrismaClient, options: SeedReferenceOptions = {}): Promise<GroupResult[]> {
   const { now = new Date(), withBusinessDefaults = false } = options;
+  await assertPoints1dApplied(prisma);
   const results: GroupResult[] = [];
   const add = (group: string, total: number, created: number, note?: string) => results.push({ group, total, created, note });
   const strip = <T extends { createOnly?: boolean }>({ createOnly: _createOnly, ...row }: T) => row;

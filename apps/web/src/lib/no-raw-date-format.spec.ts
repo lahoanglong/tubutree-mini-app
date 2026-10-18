@@ -42,6 +42,7 @@ const NUMBER_TO_LOCALE_STRING: Record<string, { count: number; why: string }> = 
   'app/tai-khoan/page.tsx': { count: 1, why: 'points.total (tổng Điểm Xanh)' },
   'app/tai-khoan/orders-section.tsx': { count: 2, why: 'số đơn đang hiển thị / tổng số đơn' },
   'app/thanh-toan/page.tsx': { count: 2, why: 'quote.pointsUsed, usablePoints (Điểm Xanh)' },
+  'components/admin/engagement-tab.tsx': { count: 1, why: 'REWARD_POINTS_MAX: cận trên của ô điểm thưởng nhiệm vụ' },
   'components/admin/pos-credits-tab.tsx': { count: 1, why: 'sum.points (điểm đã tích)' },
   'components/admin/ns1-card.tsx': { count: 1, why: 'formatPct: phần trăm làm tròn 1 chữ số' },
   'components/settlement-table.tsx': { count: 1, why: 'formatPct: phần trăm phí sàn / phí Tubu giao hộ' },

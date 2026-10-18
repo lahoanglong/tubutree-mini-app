@@ -1,4 +1,5 @@
-import { formatResults, parseArgs, WITH_BUSINESS_DEFAULTS_FLAG } from '../../../prisma/seed-reference';
+import type { PrismaClient } from '@prisma/client';
+import { assertPoints1dApplied, formatResults, parseArgs, seedReference, WITH_BUSINESS_DEFAULTS_FLAG } from '../../../prisma/seed-reference';
 
 describe('seed-reference: dòng lệnh', () => {
   it('không cờ thì không nạp giá trị kinh doanh', () => {
@@ -25,5 +26,21 @@ describe('seed-reference: dòng lệnh', () => {
       '[seed-reference] system_configs: +3 mới, 115 đã có',
       `[seed-reference] chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt): membership_tiers, missions. Chạy lại với ${WITH_BUSINESS_DEFAULTS_FLAG} sau khi duyệt.`,
     ]);
+  });
+
+  describe('chỉ chạy sau migration points_1d (seed gieo loyalty.vnd_per_point_redeem = 1 làm migration bỏ qua phép nhân)', () => {
+    const prismaWith = (n: number | null) =>
+      ({ $queryRaw: jest.fn().mockResolvedValue(n === null ? [] : [{ n }]), systemConfig: { createMany: jest.fn() } }) as unknown as PrismaClient;
+
+    it.each([[0], [null]])('migration chưa hoàn tất (%s dòng) → từ chối, nói rõ phải migrate deploy trước', async (n) => {
+      const prisma = prismaWith(n);
+      await expect(assertPoints1dApplied(prisma)).rejects.toThrow(/20261018210000_points_1d.*migrate deploy/s);
+      await expect(seedReference(prisma)).rejects.toThrow(/migrate deploy/);
+      expect((prisma as unknown as { systemConfig: { createMany: jest.Mock } }).systemConfig.createMany).not.toHaveBeenCalled();
+    });
+
+    it('migration đã hoàn tất → cho qua', async () => {
+      await expect(assertPoints1dApplied(prismaWith(1))).resolves.toBeUndefined();
+    });
   });
 });

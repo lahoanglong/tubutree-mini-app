@@ -64,6 +64,19 @@ export async function setConfig(prisma: PrismaService, key: string, value: Prism
 }
 
 /**
+ * Ghim tạm một khoá cấu hình và trả hàm khôi phục đúng giá trị trước đó (xoá dòng nếu trước đó chưa có). Spec ghim tỉ giá điểm
+ * phải khôi phục: DB dùng chung mà để lại loyalty.vnd_per_point_redeem = 1000 thì seed/migration sau đó thấy tỉ giá cũ.
+ */
+export async function pinConfig(prisma: PrismaService, key: string, value: Prisma.InputJsonValue): Promise<() => Promise<void>> {
+  const prev = await prisma.systemConfig.findUnique({ where: { key } });
+  await setConfig(prisma, key, value);
+  return async () => {
+    if (prev) await prisma.systemConfig.update({ where: { key }, data: { value: prev.value as Prisma.InputJsonValue } });
+    else await prisma.systemConfig.deleteMany({ where: { key } });
+  };
+}
+
+/**
  * Đơn dựng thẳng ở DELIVERED mặc định đã xong việc sau giao (có mốc deliveredEffectsAt), như đơn đi qua setStatus thật: nếu không,
  * DB dùng chung đầy đơn "giao mà chưa xong việc" và cron chạy lại / Sức khoẻ hệ thống của spec khác thấy chúng. Ca cần đơn chưa
  * xong thì truyền `deliveredEffectsAt: null`.

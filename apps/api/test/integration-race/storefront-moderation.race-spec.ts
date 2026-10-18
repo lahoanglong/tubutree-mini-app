@@ -56,6 +56,8 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
   beforeEach(async () => {
     notify.mockClear();
     await prisma.systemConfig.deleteMany({ where: { key: { in: KEYS } } });
+    // Mặc định hệ thống nay bật duyệt gian hàng; spec này kiểm ẩn/hiện theo lý do khác nên ghim tắt, ca về cờ duyệt tự bật lại.
+    await setConfig(prisma, 'storefront.require_approval', false);
     rebuild();
   });
 

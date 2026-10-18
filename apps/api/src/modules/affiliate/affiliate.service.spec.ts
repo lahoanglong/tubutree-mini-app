@@ -2079,3 +2079,61 @@ describe('AffiliateService — báo cáo khấu trừ thuế TNCN (SELLER-11)', 
     expect(r.items.map((i) => i.id)).toEqual(['p1', 'p2']);
   });
 });
+
+describe('AffiliateService.createCommissionForOrder — mức mặc định affiliate.default_rate_pct', () => {
+  const order = {
+    id: 'o1',
+    userId: 'buyer',
+    referrerUserId: 'ctv',
+    total: 300000,
+    items: [{ id: 'i1', variationId: 'v1', total: 100000 }, { id: 'i2', variationId: 'v2', total: 100000 }, { id: 'i3', variationId: 'v3', total: 100000 }],
+  };
+  const cfgWith = (pct: unknown) =>
+    ({ get: async <T>(k: string, fb?: T) => (k === 'affiliate.default_rate_pct' ? pct : fb) }) as unknown as SystemConfigService;
+  const runSpy = async (variations: unknown[], pct: unknown = 8) => {
+    const create = jest.fn();
+    const prisma = prismaWith(order, variations, create);
+    await new AffiliateService(prisma, cfgWith(pct), pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    return create.mock.calls.length ? create.mock.calls[0][0].data : null;
+  };
+
+  it('chưa đặt % → 8% mặc định; 0 tường minh vẫn 0; 12 tường minh thắng', async () => {
+    const data = await runSpy([
+      { id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } },
+      { id: 'v2', affiliateRate: 0, product: { affiliateBlocked: false, storefrontId: null } },
+      { id: 'v3', affiliateRate: 12, product: { affiliateBlocked: false, storefrontId: null } },
+    ]);
+    expect(data.amount).toBe(8000 + 0 + 12000);
+    expect(data.lineAmounts).toEqual({ i1: 8000, i3: 12000 });
+  });
+
+  it('bị chặn → 0; hàng đối tác chưa đặt → 0, có đặt → theo mức đó', async () => {
+    const data = await runSpy([
+      { id: 'v1', affiliateRate: null, product: { affiliateBlocked: true, storefrontId: null } },
+      { id: 'v2', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: 'sf1' } },
+      { id: 'v3', affiliateRate: 5, product: { affiliateBlocked: false, storefrontId: 'sf1' } },
+    ]);
+    expect(data.lineAmounts).toEqual({ i3: 5000 });
+  });
+
+  it('đại lý (DEALER) hưởng cùng mức mặc định như CTV, không theo bậc giá sỉ', async () => {
+    const create = jest.fn();
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } }], create, 'DEALER');
+    await new AffiliateService(prisma, cfgWith(8), pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    expect(create.mock.calls[0][0].data.lineAmounts).toEqual({ i1: 8000 });
+  });
+
+  it('mặc định không vượt trần max_rate_pct hiện hành (trần hạ sau khi đặt mặc định)', async () => {
+    const cfg = { get: async <T>(k: string, fb?: T) => (k === 'affiliate.default_rate_pct' ? 20 : k === 'affiliate.max_rate_pct' ? 10 : fb) } as unknown as SystemConfigService;
+    const create = jest.fn();
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } }], create);
+    await new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    expect(create.mock.calls[0][0].data.lineAmounts).toEqual({ i1: 10000 });
+  });
+
+  it('đổi mặc định về 0 → biến thể chưa đặt ra 0đ; giá trị cấu hình hỏng → quay về 8%', async () => {
+    const v = [{ id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } }];
+    expect(await runSpy(v, 0)).toBeNull();
+    expect((await runSpy(v, 'abc')).lineAmounts).toEqual({ i1: 8000 });
+  });
+});

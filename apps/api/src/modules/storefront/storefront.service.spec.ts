@@ -610,6 +610,22 @@ describe('StorefrontService.pickerProducts', () => {
   });
 });
 
+describe('StorefrontService.pickerProducts — huy hiệu theo luật hoa hồng thực', () => {
+  it('NULL: hàng Tubu hiện mặc định 8%, hàng đối tác 0; hàng đối tác có % riêng hiện % đó', async () => {
+    const prisma = makePrisma({
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
+      product: { findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', name: 'Tubu', storefrontId: null, variations: [{ affiliateRate: null }] },
+        { id: 'p2', name: 'Đối tác', storefrontId: 'sf1', variations: [{ affiliateRate: null }] },
+        { id: 'p3', name: 'Đối tác có %', storefrontId: 'sf1', variations: [{ affiliateRate: '5' }] },
+      ]) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).pickerProducts('u1', {});
+    expect(r.map((p) => p.maxAffiliateRate)).toEqual([8, 0, 5]);
+    expect(r.every((p) => !('storefrontId' in p))).toBe(true);
+  });
+});
+
 describe('StorefrontService.pickerProducts cho đại lý (D3-03)', () => {
   const picker = (role: string, trace: { storefront?: boolean; commission?: boolean }) => {
     const prisma = makePrisma({

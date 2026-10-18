@@ -60,6 +60,7 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
+import { loadDefaultRate, resolveVariationRate } from './commission-rate';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
@@ -86,7 +87,7 @@ function blockedCtvPaymentMethods(total: number): Partial<Record<'COD' | 'BANK_T
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
- * Commission: rate theo từng variation (variation.affiliateRate). Vòng đời:
+ * Commission: rate theo từng variation (variation.affiliateRate), chưa đặt thì mức mặc định `affiliate.default_rate_pct`. Vòng đời:
  * PENDING (đặt) → LOCKED (DELIVERED) → APPROVED (sau hold_days) → PAID (payout).
  */
 export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
@@ -893,8 +894,9 @@ export class AffiliateService {
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({
       where: { id: { in: variationIds } },
-      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
+      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true, storefrontId: true } } },
     });
+    const defaultPct = await loadDefaultRate(this.config);
     const ownConsignment = await this.ownConsignmentVariationIds(order.id, order.referrerUserId, db);
     // Sản phẩm bị chặn affiliate (product.affiliateBlocked) → rate=0, KHÔNG tính hoa hồng cho
     // dòng hàng đó, dù link/CTV nào đã trót chia sẻ trước khi bị chặn (mirror storefront/brand
@@ -905,11 +907,13 @@ export class AffiliateService {
     const rateMap = new Map(
       variations.map((v) => [
         v.id,
-        v.product?.affiliateBlocked || ownConsignment.has(v.id)
-          ? 0
-          : v.affiliateRate
-            ? Number(v.affiliateRate)
-            : 0,
+        resolveVariationRate({
+          explicit: v.affiliateRate,
+          blocked: !!v.product?.affiliateBlocked,
+          partnerProduct: !!v.product?.storefrontId,
+          ownConsignment: ownConsignment.has(v.id),
+          defaultPct,
+        }),
       ]),
     );
 

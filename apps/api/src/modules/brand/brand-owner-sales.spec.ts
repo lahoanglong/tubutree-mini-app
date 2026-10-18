@@ -3,6 +3,9 @@ import { NotFoundException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { BrandService } from './brand.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+
+const brandConfig = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 import { BrandSalesQueryDto } from './dto/brand.dto';
 
 function makePrisma() {
@@ -31,13 +34,13 @@ describe('BrandService.getOwnedSales (C-034, Q-18): doanh thu nhãn chỉ-đọc
       { id: 'v2', product: { id: 'p1', name: 'Nước rửa chén', slug: 'nrc' } },
       { id: 'v3', product: { id: 'p2', name: 'Xà bông', slug: 'xb' } },
     ]);
-    return { prisma, svc: new BrandService(prisma) };
+    return { prisma, svc: new BrandService(prisma, brandConfig) };
   };
 
   it('user không sở hữu nhãn nào -> 404, không chạm bảng đơn hàng', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue(null);
-    await expect(new BrandService(prisma).getOwnedSales('stranger', '30d', NOW)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(new BrandService(prisma, brandConfig).getOwnedSales('stranger', '30d', NOW)).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.brand.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { ownerUserId: 'stranger' } }));
     expect(prisma.variation.findMany).not.toHaveBeenCalled();
     expect(prisma.orderItem.groupBy).not.toHaveBeenCalled();

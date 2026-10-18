@@ -307,6 +307,7 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'community.daily_rep_cap',
         'community.rep_thresholds',
         'affiliate.max_rate_pct',
+        'affiliate.default_rate_pct',
         'affiliate.commission_eligible_roles',
         'storefront.require_approval',
         'storefront.subdomain_enabled',

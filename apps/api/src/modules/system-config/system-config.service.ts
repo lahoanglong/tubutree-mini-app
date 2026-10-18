@@ -9,6 +9,8 @@ import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY
 import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliate/commission-eligibility';
 import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pancake/pancake-category-map';
+import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from '../affiliate/commission-rate';
+import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate } from '../affiliate/commission-rate-csv';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 
@@ -181,6 +183,8 @@ export class SystemConfigService {
     'affiliate.attribution_days': { min: 1, max: 365, note: 'số ngày', integer: true },
     // Trần % hoa hồng CTV admin được đặt cho biến thể (commission-admin.service). PHẦN TRĂM, không phải phân số như pit_withhold_pct.
     'affiliate.max_rate_pct': { min: 0, max: 100, note: 'phần trăm (50 = 50%)' },
+    // % hoa hồng CTV cho biến thể chưa đặt riêng (commission-rate.ts). Số nguyên như mức từng biến thể (RATE_MAX_DECIMALS = 0).
+    'affiliate.default_rate_pct': { min: 0, max: 50, note: 'phần trăm (8 = 8%)', integer: true },
     'flashsale.default_per_user_limit': { min: 1, max: 1000, note: 'số sản phẩm mỗi người', integer: true },
     // ADMINOPS-3 (vòng 3, R3-UI-4): các khoá số còn lại nhận số âm, số khổng lồ hay số thực nên "đã lưu" mà tính năng chạy sai
     // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.
@@ -397,12 +401,31 @@ export class SystemConfigService {
     }
   }
 
+  /** Mức mặc định hoa hồng không được vượt trần % mỗi biến thể: kiểm cả khi hạ trần xuống dưới mặc định đang áp. */
+  private async assertRateCapsConsistent(key: string, value: unknown): Promise<void> {
+    if (typeof value !== 'number') return;
+    if (key === AFFILIATE_DEFAULT_RATE_KEY) {
+      const max = sanitizeMaxRate(await this.get<unknown>(AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT));
+      if (value > max) {
+        throw new BadRequestException(`"${key}" (${value}%) vượt trần ${max}% của "${AFFILIATE_MAX_RATE_KEY}". Nâng trần trước.`);
+      }
+    } else if (key === AFFILIATE_MAX_RATE_KEY) {
+      const def = sanitizeDefaultRate(await this.get<unknown>(AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT));
+      if (value < def) {
+        throw new BadRequestException(`"${key}" (${value}%) thấp hơn mức mặc định ${def}% của "${AFFILIATE_DEFAULT_RATE_KEY}". Hạ mức mặc định trước.`);
+      }
+    }
+  }
+
   async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
     const unset = value === null && SystemConfigService.NULLABLE_KEYS.has(key);
     if ((value === null && !unset) || value === undefined) {
       throw new BadRequestException(`Giá trị cho SystemConfig "${key}" không được null/undefined.`);
     }
-    if (!unset) this.assertInRange(key, value);
+    if (!unset) {
+      this.assertInRange(key, value);
+      await this.assertRateCapsConsistent(key, value);
+    }
     const stored = unset ? Prisma.JsonNull : (value as object);
     const dotIndex = key.indexOf('.');
     const category = dotIndex > 0 ? key.slice(0, dotIndex) : 'misc';
