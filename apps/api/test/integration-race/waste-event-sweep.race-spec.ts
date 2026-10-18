@@ -5,7 +5,8 @@ jest.mock('../../src/modules/integrations/gomdon/gomdon-config', () => ({
 
 import { randomInt } from 'node:crypto';
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { Prisma } from '@prisma/client';
+import { ConflictException } from '@nestjs/common';
+import type { Prisma, WasteRequestStatus } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
@@ -122,7 +123,7 @@ const newStaff = () => newUser({ role: 'STAFF' });
 const newAdmin = () => newUser({ role: 'ADMIN' });
 
 const lines = (declaredQty: number) => [{ itemId: item.id, declaredQty }];
-const mailIn = (userId: string, status: 'OPEN' | 'IN_TRANSIT' | 'RECEIVED', over: Partial<Parameters<typeof createWasteRequest>[1]> = {}) =>
+const mailIn = (userId: string, status: WasteRequestStatus, over: Partial<Parameters<typeof createWasteRequest>[1]> = {}) =>
   createWasteRequest(prisma, { userId, method: 'MAIL_IN', status, pointId: wh.id, lines: lines(10), ...over });
 const dropOff = (userId: string) => createWasteRequest(prisma, { userId, method: 'DROP_OFF', status: 'OPEN', pointId: dropPoint.id, lines: lines(5) });
 
@@ -756,7 +757,10 @@ describe('Exactly one WasteEvent per successful write, across all routes (real P
     expect(rows).toHaveLength(1);
 
     if (replay) {
-      await replay().catch((e: Error) => e.message);
+      await replay().catch((e: unknown) => {
+        if (!(kind.startsWith('GIFT_') && e instanceof ConflictException)) throw e;
+        return e.message;
+      });
       expect(await prisma.wasteEvent.count({ where })).toBe(1);
     }
 
