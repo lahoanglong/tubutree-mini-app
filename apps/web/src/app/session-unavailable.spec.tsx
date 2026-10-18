@@ -67,6 +67,14 @@ import DealerPage from './dai-ly/page';
 import StaffPage from './nhan-vien/page';
 import MyPayrollPage from './nhan-vien/bang-luong/page';
 import BrandOwnerPage from './chu-thuong-hieu/page';
+import RecyclePage from './doi-rac/page';
+import RecycleRequestsPage from './doi-rac/yeu-cau/page';
+import RecycleNewPage from './doi-rac/tao/page';
+import RecyclePointsPage from './doi-rac/diem-nhan/page';
+import RecycleRequestDetailPage from './doi-rac/yeu-cau/[id]/page';
+import RecycleEditPage from './doi-rac/yeu-cau/[id]/sua/page';
+import RecycleDonePage from './doi-rac/xong/[id]/page';
+import RecycleDeskPage from './doi-rac/quay/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -130,7 +138,16 @@ const PRO: PageCase[] = [
   ['/nhan-vien/bang-luong', () => <MyPayrollPage />],
   ['/chu-thuong-hieu', () => <BrandOwnerPage />],
 ];
-const RECYCLE: PageCase[] = [];
+const RECYCLE: PageCase[] = [
+  ['/doi-rac', () => <RecyclePage />],
+  ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />],
+  ['/doi-rac/tao', () => <RecycleNewPage />],
+  ['/doi-rac/diem-nhan', () => <RecyclePointsPage />],
+  ['/doi-rac/yeu-cau/[id]', () => <RecycleRequestDetailPage params={{ id: 'req-77' }} />],
+  ['/doi-rac/yeu-cau/[id]/sua', () => <RecycleEditPage params={{ id: 'req-77' }} />],
+  ['/doi-rac/xong/[id]', () => <RecycleDonePage params={{ id: 'req-77' }} />],
+  ['/doi-rac/quay', () => <RecycleDeskPage />],
+];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 describe.each(PAGES)('mở %s khi cờ phiên còn mà API không trả lời', (_name, page) => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import routeMap from '@tubutree/app-core/route-map.json';
 import {
   isWebRouteReady,
@@ -18,18 +18,26 @@ describe('isWebRouteReady', () => {
     expect(isWebRouteReady('/')).toBe(true);
   });
 
-  it('mọi đích mà web rẽ nhánh theo isWebRouteReady đã mở, trừ đổi rác còn pending', () => {
+  it('mọi đích mà web rẽ nhánh theo isWebRouteReady đã mở', () => {
     const opened = [
       '/thanh-toan/chuyen-khoan/x', '/tai-khoan/don-hang/x', '/tai-khoan/don-hang', '/tai-khoan/don-hang?tab=subscriptions',
       '/tai-khoan/thong-bao', '/cong-dong', '/cong-dong/xep-hang', '/cong-dong/su-kien', '/hoc-vien', '/tu-van', '/san-pham',
       '/vuon-xanh', '/kho-qua', '/ctv', '/ctv/gian-hang', '/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong', '/chu-thuong-hieu',
+      '/doi-rac', '/doi-rac/tao', '/doi-rac/yeu-cau/x',
     ];
     for (const p of opened) expect(isWebRouteReady(p), p).toBe(true);
-    for (const p of ['/doi-rac', '/doi-rac/tao', '/doi-rac/yeu-cau/x']) expect(isWebRouteReady(p), p).toBe(false);
   });
 
-  it('route còn pending thì chưa sẵn sàng', () => {
-    expect(isWebRouteReady('/doi-rac')).toBe(false);
+  it('route còn pending thì chưa sẵn sàng (bản đồ giả, không phụ thuộc lane nào đã xong chưa)', async () => {
+    vi.resetModules();
+    vi.doMock('@tubutree/app-core/route-map.json', () => ({
+      default: { routes: [{ lane: 't', items: [{ miniapp: '/x', web: '/chua-xong', pending: true }, { miniapp: '/y', web: '/da-xong' }] }] },
+    }));
+    const fake = await import('./route-map');
+    expect(fake.isWebRouteReady('/chua-xong')).toBe(false);
+    expect(fake.isWebRouteReady('/da-xong')).toBe(true);
+    vi.doUnmock('@tubutree/app-core/route-map.json');
+    vi.resetModules();
   });
 
   it('khớp cả dòng có tham số và bỏ qua query của đường vào', () => {
@@ -104,10 +112,21 @@ describe('publicStaticRoutes', () => {
       .flatMap((g) => g.items)
       .filter((i) => i.pending && !i.private && i.web && !i.web.includes(':') && !i.web.includes('?'))
       .map((i) => i.web!);
-    expect(pendingPublic.length).toBeGreaterThan(0);
     for (const w of pendingPublic) expect(r).not.toContain(w);
     expect(r).toContain('/gioi-thieu');
     expect(r.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
+  });
+
+  it('bỏ route công khai còn pending (bản đồ giả: bản đồ thật nay không còn route pending)', async () => {
+    vi.resetModules();
+    vi.doMock('@tubutree/app-core/route-map.json', () => ({
+      default: { routes: [{ lane: 't', items: [{ miniapp: '/x', web: '/chua-xong', pending: true }, { miniapp: '/y', web: '/da-xong' }] }] },
+    }));
+    const fake = await import('./route-map');
+    expect(fake.publicStaticRoutes()).toContain('/da-xong');
+    expect(fake.publicStaticRoutes()).not.toContain('/chua-xong');
+    vi.doUnmock('@tubutree/app-core/route-map.json');
+    vi.resetModules();
   });
 });
 
