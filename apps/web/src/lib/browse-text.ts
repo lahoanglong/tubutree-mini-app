@@ -1,5 +1,9 @@
+import { formatVnd } from './format-vnd';
+
 /** Chữ của trang Danh mục / Tìm kiếm, giữ y như `vi.browse` của Mini App. */
-const formatNumber = (n: number) => n.toLocaleString('vi-VN');
+
+const numberFormat = new Intl.NumberFormat('vi-VN');
+const formatNumber = (n: number) => numberFormat.format(n);
 
 /** 50000 → "50k", 1500000 → "1,5tr"; số lẻ không tròn nghìn thì in đủ để không nói sai con số (như formatVndShort của Mini App). */
 export function formatVndShort(amount: number): string {
@@ -8,7 +12,7 @@ export function formatVndShort(amount: number): string {
   const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
   if (v >= 1_000_000 && v % 100_000 === 0) return `${trim(v / 1_000_000)}tr`;
   if (v >= 1_000 && v % 1_000 === 0) return `${Math.round(v / 1_000)}k`;
-  return `${v.toLocaleString('vi-VN')}đ`;
+  return formatVnd(v);
 }
 
 export const browseText = {

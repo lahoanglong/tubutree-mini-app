@@ -10,6 +10,7 @@ import { accessibleName, smallTouchTargets, unnamedControls } from '@/test-utils
 const push = vi.hoisted(() => vi.fn());
 // useSearchParams giả có thể đổi giữa chừng (như điều hướng mềm đổi ?q=) để kiểm ô nhập đồng bộ theo URL.
 const nav = vi.hoisted(() => ({
+  pathname: '/',
   params: new URLSearchParams(),
   listeners: new Set<() => void>(),
 }));
@@ -17,6 +18,7 @@ vi.mock('next/navigation', async () => {
   const React = await import('react');
   return {
     useRouter: () => ({ push }),
+    usePathname: () => nav.pathname,
     useSearchParams: () =>
       React.useSyncExternalStore(
         (cb) => {
@@ -52,6 +54,7 @@ const submit = (container: HTMLElement) => {
 beforeEach(() => {
   push.mockReset();
   nav.params = new URLSearchParams();
+  nav.pathname = '/';
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -59,7 +62,7 @@ afterEach(() => {
 });
 
 describe('SiteSearch', () => {
-  it('vào thẳng /?q=... thì ô nhập hiện từ khoá đang tìm', () => {
+  it('vào thẳng /san-pham?q=... thì ô nhập hiện từ khoá đang tìm', () => {
     nav.params = new URLSearchParams('q=dầu gội');
     const { container } = mount();
     expect(container.querySelector('input')!.value).toBe('dầu gội');
@@ -91,12 +94,12 @@ describe('SiteSearch', () => {
     expect(smallTouchTargets(container)).toEqual([]);
   });
 
-  it('gửi: về trang chủ kèm từ khoá đã chuẩn hoá và neo danh sách sản phẩm', () => {
+  it('gửi: sang trang danh mục /san-pham kèm từ khoá đã chuẩn hoá', () => {
     const { container } = mount();
     typeInto(container.querySelector('input'), '  dầu   gội  ');
     submit(container);
     expect(push).toHaveBeenCalledTimes(1);
-    expect(push).toHaveBeenCalledWith(`/?${new URLSearchParams({ q: 'dầu gội' }).toString()}#san-pham`);
+    expect(push).toHaveBeenCalledWith(`/san-pham?${new URLSearchParams({ q: 'dầu gội' }).toString()}`);
   });
 
   it('từ khoá rỗng hoặc chỉ có khoảng trắng: không điều hướng', () => {
@@ -107,10 +110,16 @@ describe('SiteSearch', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it('không có JS vẫn tìm được: form GET về trang chủ với tham số q', () => {
+  it('trên chính trang danh mục thì ẩn: trang đó có ô tìm riêng kèm gợi ý, không để hai ô tìm trùng tên', () => {
+    nav.pathname = '/san-pham';
+    const { container } = mount();
+    expect(container.querySelector('form')).toBeNull();
+  });
+
+  it('không có JS vẫn tìm được: form GET về /san-pham với tham số q', () => {
     const { container } = mount();
     const form = container.querySelector('form')!;
-    expect(form.getAttribute('action')).toBe('/');
+    expect(form.getAttribute('action')).toBe('/san-pham');
     expect(form.method).toBe('get');
   });
 });

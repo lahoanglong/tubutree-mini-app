@@ -99,6 +99,14 @@ export function serializeSearchState(s: SearchState): URLSearchParams {
   return p;
 }
 
+/** Trang danh mục trên web: cùng bộ tham số với Mini App, đặt dưới /san-pham. */
+export const BROWSE_PATH = '/san-pham';
+
+export function browseHref(s: SearchState): string {
+  const qs = serializeSearchState(s).toString();
+  return qs ? `${BROWSE_PATH}?${qs}` : BROWSE_PATH;
+}
+
 export function toCatalogQuery(s: SearchState, page: number, limit: number): CatalogQuery {
   return {
     page,

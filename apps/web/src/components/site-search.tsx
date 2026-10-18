@@ -1,27 +1,29 @@
 'use client';
 
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
-import { SEARCH_MAX_LENGTH, homeHref, normalizeSearchQuery } from '@/lib/catalog-filter';
+import { SEARCH_MAX_LENGTH, normalizeSearchQuery } from '@/lib/catalog-filter';
+import { BROWSE_PATH, EMPTY_SEARCH_STATE, browseHref } from '@/lib/search-state';
 import { tenantSubdomainOf } from '@/lib/site';
 
 const FIELD_CLASS =
   'min-h-11 min-w-0 flex-1 rounded-control border border-stone-450 bg-stone-0 px-3 text-sm text-stone-900 placeholder:text-stone-500';
 
 /**
- * Ô tìm kiếm sản phẩm ở header khách. Là form GET về `/` nên vẫn tìm được khi JS chưa chạy; khi đã có JS
- * thì điều hướng mềm kèm neo `#san-pham` để kết quả hiện ngay. Từ khoá rỗng thì không làm gì (không đưa
- * khách về trang chủ chỉ vì bấm nhầm nút).
+ * Ô tìm kiếm sản phẩm ở header khách. Là form GET về `/san-pham` nên vẫn tìm được khi JS chưa chạy; khi đã có JS
+ * thì điều hướng mềm. Từ khoá rỗng thì không làm gì (không đưa khách sang trang danh mục chỉ vì bấm nhầm nút).
  *
- * Trên host gian hàng CTV, `/` bị rewrite sang /s/{subdomain} và bỏ qua ?q= nên không hiển thị ô này.
+ * Trên host gian hàng CTV, `/` bị rewrite sang /s/{subdomain} và bỏ qua ?q= nên không hiển thị ô này. Trên chính
+ * /san-pham cũng ẩn: trang đó có ô tìm riêng kèm gợi ý, hai ô trùng tên sẽ làm trình đọc màn hình đọc đôi.
  */
 export default function SiteSearch() {
+  const onBrowsePage = usePathname() === BROWSE_PATH;
   const [onTenantHost, setOnTenantHost] = useState(false);
   useEffect(() => {
     setOnTenantHost(tenantSubdomainOf(window.location.host) !== null);
   }, []);
-  if (onTenantHost) return null;
+  if (onTenantHost || onBrowsePage) return null;
 
   // useSearchParams buộc trang tĩnh phải có Suspense; khung chờ vẫn là form GET dùng được khi chưa có JS.
   return (
@@ -46,7 +48,7 @@ function UrlSyncedSearch() {
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = normalizeSearchQuery(value);
-    if (q) router.push(homeHref({ q }));
+    if (q) router.push(browseHref({ ...EMPTY_SEARCH_STATE, q }));
   };
 
   return (
@@ -65,7 +67,7 @@ function SearchFormShell({
 }) {
   const controlled = value !== undefined && onChange !== undefined;
   return (
-    <form role="search" action="/" method="get" onSubmit={onSubmit} className="flex min-w-0 flex-1 items-center gap-2">
+    <form role="search" action={BROWSE_PATH} method="get" onSubmit={onSubmit} className="flex min-w-0 flex-1 items-center gap-2">
       <label htmlFor="site-search-q" className="sr-only">
         Tìm sản phẩm
       </label>

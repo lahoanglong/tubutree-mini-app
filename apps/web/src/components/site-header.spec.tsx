@@ -6,7 +6,7 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mocks.cart }) }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
 vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => p === '/' || p === '/tai-khoan' }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
 
 import SiteHeader from './site-header';
 

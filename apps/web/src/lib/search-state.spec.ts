@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PRICE_RANGES, activeFilterChips, activeFilterCount, changedFilterTypes,
-  draftFromState, isBrowseRoot, parseSearchState, priceRangeLabel, serializeSearchState, toCatalogQuery, type SearchState,
+  browseHref, draftFromState, isBrowseRoot, parseSearchState, priceRangeLabel, serializeSearchState, toCatalogQuery, type SearchState,
 } from './search-state';
 
 const parse = (s: string) => parseSearchState(new URLSearchParams(s));
@@ -112,5 +112,13 @@ describe('parseSearchState — giới hạn độ dài', () => {
     expect(parse(`q=${'a'.repeat(150)}`).q).toBe('a'.repeat(100));
     expect(parse(`q=${'a'.repeat(99)}+${'b'.repeat(50)}`).q).toBe('a'.repeat(99));
     expect(parse(`q=${'a'.repeat(100)}`).q).toBe('a'.repeat(100));
+  });
+});
+
+describe('browseHref', () => {
+  it('đường dẫn trang danh mục theo trạng thái; không có gì thì về /san-pham trơn', () => {
+    expect(browseHref(EMPTY_SEARCH_STATE)).toBe('/san-pham');
+    expect(browseHref({ ...EMPTY_SEARCH_STATE, q: 'dầu gội' })).toBe(`/san-pham?${new URLSearchParams({ q: 'dầu gội' }).toString()}`);
+    expect(browseHref({ ...EMPTY_SEARCH_STATE, category: 'c1', brands: ['A&B'] })).toBe('/san-pham?category=c1&brand=A%26B');
   });
 });
