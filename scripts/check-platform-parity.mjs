@@ -45,6 +45,10 @@ export function checkParity({ miniappRoutes, map, webFileExists, fileHasSymbol, 
         errors.push(`dòng ${label} thừa: app.tsx không có <Route> này`);
         continue;
       }
+      if (!('skip' in item) && typeof item.web !== 'string') {
+        errors.push(`dòng ${label} thiếu web và skip`);
+        continue;
+      }
       if ('skip' in item) {
         if (typeof item.skip !== 'string' || item.skip.trim() === '') {
           errors.push(`dòng skip ${label} thiếu lý do`);
