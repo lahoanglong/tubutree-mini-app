@@ -98,6 +98,18 @@ describe('WasteItemsSection', () => {
     expect(c.querySelector('table input[type="checkbox"][role="switch"]')).toBeNull();
   });
 
+  it('dòng đang mở panel Sửa: khoá bộ chọn trạng thái và nút đổi thứ tự để Lưu không ghi đè', async () => {
+    const { c } = await mount();
+    const sel = c.querySelector<HTMLSelectElement>('select[aria-label="Trạng thái Vỏ hộp sữa"]')!;
+    click(Array.from(row(c, 'i2').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    expect(sel.disabled).toBe(true);
+    expect(row(c, 'i2').querySelector<HTMLButtonElement>('button[aria-label="Đưa Vỏ hộp sữa lên"]')!.disabled).toBe(true);
+    expect(row(c, 'i2').querySelector<HTMLButtonElement>('button[aria-label="Đưa Vỏ hộp sữa xuống"]')!.disabled).toBe(true);
+    expect(c.querySelector<HTMLSelectElement>('select[aria-label="Trạng thái Pin đã dùng"]')!.disabled).toBe(false);
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Đóng')!);
+    expect(sel.disabled).toBe(false);
+  });
+
   it('món nguy hại: không bỏ được cờ, không chọn được Đang nhận (14.1)', async () => {
     const { c, api } = await mount();
     const opt = row(c, 'i5').querySelector<HTMLOptionElement>('option[value="ACTIVE"]')!;

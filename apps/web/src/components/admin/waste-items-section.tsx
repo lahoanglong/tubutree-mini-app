@@ -208,10 +208,10 @@ export function WasteItemsSection() {
               <tr key={i.id} data-item={i.id} className="border-b border-stone-100">
                 <td className={TD}>
                   <div className="flex gap-1">
-                    <button type="button" className={BTN_XS_SECONDARY} aria-label={`Đưa ${i.name} lên`} disabled={idx === 0 || reorder.isPending} onClick={() => move(idx, -1)}>
+                    <button type="button" className={BTN_XS_SECONDARY} aria-label={`Đưa ${i.name} lên`} disabled={idx === 0 || reorder.isPending || panel?.id === i.id} onClick={() => move(idx, -1)}>
                       <ChevronUp size={14} aria-hidden="true" />
                     </button>
-                    <button type="button" className={BTN_XS_SECONDARY} aria-label={`Đưa ${i.name} xuống`} disabled={idx === sorted.length - 1 || reorder.isPending} onClick={() => move(idx, 1)}>
+                    <button type="button" className={BTN_XS_SECONDARY} aria-label={`Đưa ${i.name} xuống`} disabled={idx === sorted.length - 1 || reorder.isPending || panel?.id === i.id} onClick={() => move(idx, 1)}>
                       <ChevronDown size={14} aria-hidden="true" />
                     </button>
                   </div>
@@ -229,6 +229,7 @@ export function WasteItemsSection() {
                     aria-label={`Trạng thái ${i.name}`}
                     className={FIELD_XS}
                     value={i.status}
+                    disabled={panel?.id === i.id}
                     onChange={(e) => patch.mutate({ id: i.id, body: { status: e.target.value as WasteItemStatus } })}
                   >
                     {STATUSES.map((s) => (
