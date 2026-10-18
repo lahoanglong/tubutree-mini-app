@@ -133,16 +133,15 @@ const openTab = async (label: string) => {
 };
 const tableRow = (root: ParentNode, productName: string) =>
   Array.from(root.querySelectorAll('tbody tr')).find((r) => r.textContent?.includes(productName))!;
-// Thao tác phụ của hàng sản phẩm nằm trong menu "⋯": mở menu của đúng hàng rồi bấm mục.
+// Thao tác phụ của hàng sản phẩm nằm trong menu "⋯" dựng ra body (không nằm trong hàng): mở menu của đúng hàng rồi tìm mục theo aria-controls.
 const openRowMenu = (row: Element) => {
   const trigger = row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
   if (trigger.getAttribute('aria-expanded') !== 'true') click(trigger);
-  return Array.from(row.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+  const menu = document.getElementById(trigger.getAttribute('aria-controls')!)!;
+  return Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
 };
 const rowAction = (root: ParentNode, productName: string, item: string) => {
-  const row = tableRow(root, productName);
-  openRowMenu(row);
-  click(byText(row, '[role="menuitem"]', item));
+  click(openRowMenu(tableRow(root, productName)).find((b) => b.textContent === item)!);
 };
 const FIELD = 'input,textarea,select';
 const inputByLabel = (root: ParentNode, label: string) => {
@@ -1021,6 +1020,8 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(trigger.className).toContain('min-h-[44px]');
     expect(byText(tableRow(root, 'SP a'), 'button', 'Sửa')).toBeNull();
     expect(openRowMenu(tableRow(root, 'SP a')).map((b) => b.textContent)).toEqual(['Sửa', 'Ngừng bán']);
+    // Khung bảng cuộn ngang (overflow-x) sẽ cắt menu ở hàng cuối nếu menu nằm trong nó.
+    expect(document.getElementById(trigger.getAttribute('aria-controls')!)!.closest('[role="region"]')).toBeNull();
 
     click(byText(root, 'button', 'Sản phẩm Tubu Tree bán lại'));
     expect(thumbSrc('SP r')).toBe('https://cdn.example/r-1.jpg');
