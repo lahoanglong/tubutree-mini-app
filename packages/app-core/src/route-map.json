@@ -5,8 +5,8 @@
       { "miniapp": "/browse", "web": "/san-pham", "private": false },
       { "miniapp": "/product/:slug", "web": "/san-pham/:slug", "private": false },
       { "miniapp": "/wishlist", "web": "/tai-khoan/yeu-thich", "private": true },
-      { "miniapp": "/group-buy", "web": "/mua-chung", "private": false, "pending": true },
-      { "miniapp": "/group-buy/:id", "web": "/mua-chung/:id", "private": false, "pending": true },
+      { "miniapp": "/group-buy", "web": "/mua-chung", "private": false },
+      { "miniapp": "/group-buy/:id", "web": "/mua-chung/:id", "private": false },
       { "miniapp": "/brand/:slug", "web": "/brand/:slug", "private": false },
       { "miniapp": "/brand-story", "web": "/cau-chuyen", "private": false, "pending": true }
     ]},

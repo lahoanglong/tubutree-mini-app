@@ -79,6 +79,9 @@ const SHOP: string[] = [
   'components/reorder/purchased-rail.tsx',
   'components/reorder/reorder-sheet.tsx',
   'app/tai-khoan/yeu-thich/page.tsx',
+  'app/mua-chung/page.tsx',
+  'app/mua-chung/[id]/page.tsx',
+  'app/mua-chung/group-buy-view.tsx',
 ];
 const ORDER: string[] = [];
 const ACCOUNT: string[] = [];
