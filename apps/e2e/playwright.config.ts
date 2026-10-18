@@ -11,6 +11,8 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
  *               Ghi đè bằng E2E_API_PORT nếu cần.
  *   Web Admin / Web Customer → http://localhost:3112 (Next.js, apps/web/package.json)
  *   Mini App  → http://localhost:3113 (Vite / ZMA, apps/miniapp/package.json)
+ *   Ghi đè bằng E2E_WEB_PORT / E2E_MINIAPP_PORT khi máy dùng chung và cổng mặc định đang bị
+ *   chương trình khác giữ (reuseExistingServer sẽ dùng nhầm server lạ).
  *
  * Phạm vi chạy:
  *   - Mặc định: cả 4 project (API, Web Admin, Web Customer, Zalo Mini App) + 3 webServer.
@@ -37,8 +39,13 @@ function apiPortFromEnvFile(): string | undefined {
 
 const API_PORT = process.env.E2E_API_PORT ?? apiPortFromEnvFile() ?? '3001';
 const API_URL = `http://localhost:${API_PORT}`;
-const WEB_URL = 'http://localhost:3112';
-const MINIAPP_URL = 'http://localhost:3113';
+const WEB_PORT = process.env.E2E_WEB_PORT ?? '3112';
+const MINIAPP_PORT = process.env.E2E_MINIAPP_PORT ?? '3113';
+const WEB_URL = `http://localhost:${WEB_PORT}`;
+const MINIAPP_URL = `http://localhost:${MINIAPP_PORT}`;
+// Cổng mặc định nằm trong script `dev` của từng app: chỉ khi ghi đè cổng mới gọi thẳng bộ dựng với cổng mới.
+const WEB_COMMAND = process.env.E2E_WEB_PORT ? `pnpm --filter @tubutree/web exec next dev -H 0.0.0.0 -p ${WEB_PORT}` : 'pnpm --filter @tubutree/web dev';
+const MINIAPP_COMMAND = process.env.E2E_MINIAPP_PORT ? `pnpm --filter @tubutree/miniapp exec vite --host 0.0.0.0 --port ${MINIAPP_PORT}` : 'pnpm --filter @tubutree/miniapp dev';
 
 // `test:miniapp` (package.json) không cần cross-env: npm/pnpm đặt npm_lifecycle_event = tên script.
 const miniappOnly =
@@ -56,7 +63,7 @@ const apiServer: WebServer = {
   reuseExistingServer: !process.env.CI,
 };
 const webServer: WebServer = {
-  command: 'pnpm --filter @tubutree/web dev',
+  command: WEB_COMMAND,
   url: WEB_URL,
   cwd: '../..',
   // Web admin gọi đúng API vừa start (mặc định next.config.mjs là :3001).
@@ -65,7 +72,7 @@ const webServer: WebServer = {
   reuseExistingServer: !process.env.CI,
 };
 const miniappServer: WebServer = {
-  command: 'pnpm --filter @tubutree/miniapp dev',
+  command: MINIAPP_COMMAND,
   url: MINIAPP_URL,
   cwd: '../..',
   timeout: 180_000,
