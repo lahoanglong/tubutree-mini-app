@@ -127,6 +127,17 @@ describe('WasteAccessService (real Postgres)', () => {
     await prisma.wasteUserFlags.create({ data: { userId: admin.id, blockedAt: new Date() } });
     await expect(access.assertPointAccess(admin.id, wh.id, ok)).resolves.toMatchObject({ kind: 'WAREHOUSE', actorRole: 'ADMIN' });
   });
+
+  it('listOperablePoints: programme off drops PARTNER points; a waste-blocked non-admin gets [] (spec 15.1 read exception)', async () => {
+    const owner = await createUser(prisma, { phone: phone() });
+    const p = await createWastePoint(prisma, { kind: 'PARTNER', ownerUserId: owner.id }); reg(p);
+    expect((await access.listOperablePoints(owner.id, true)).map((x) => x.pointId)).toEqual([p.id]);
+    expect(await access.listOperablePoints(owner.id, false)).toEqual([]);
+    const s = await createUser(prisma, { phone: phone() });
+    await prisma.wastePointStaff.create({ data: { pointId: p.id, userId: s.id, role: 'STAFF' } });
+    await prisma.wasteUserFlags.create({ data: { userId: s.id, blockedAt: new Date() } });
+    expect(await access.listOperablePoints(s.id, true)).toEqual([]);
+  });
 });
 
 describe('WasteHoldService.capUsage (real Postgres)', () => {
