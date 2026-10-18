@@ -9,9 +9,13 @@ const ADDR = {
 };
 const QUOTE = { subtotal: 100000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 130000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0 };
 
-const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn(), cart: vi.fn(), wasteMe: vi.fn(), pickupFlag: true }));
+const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn(), cart: vi.fn(), wasteMe: vi.fn(), pickupFlag: true, routeReady: true }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+vi.mock('@/lib/route-map', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/route-map')>()),
+  isWebRouteReady: () => m.routeReady,
+}));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -55,6 +59,7 @@ beforeEach(() => {
   m.quote.mockReset().mockResolvedValue(QUOTE);
   m.placeOrder.mockReset().mockReturnValue(new Promise(() => undefined));
   m.pickupFlag = true;
+  m.routeReady = true;
   m.wasteMe.mockReset().mockResolvedValue(ME());
   m.cart.mockReset().mockResolvedValue({
     items: [{ id: 'i1', variationId: 'v1', productName: 'Dầu gội', variationName: null, slug: 'dau-goi', thumbnail: null, unitPrice: 100000, quantity: 1, stock: 5, total: 100000 }],
@@ -118,6 +123,14 @@ describe('/thanh-toan — Thu kèm rác (đổi rác lấy quà, §12.2 bước 
     expect(link.getAttribute('href')).toBe('/doi-rac/tao');
     expect(link.textContent).toContain('Thu kèm rác');
     expect(waste(r)!.querySelector('input[type="checkbox"]')).toBeNull();
+  });
+
+  it('chưa có yêu cầu và route tạo yêu cầu còn pending → không có dòng dẫn', async () => {
+    m.routeReady = false;
+    m.wasteMe.mockResolvedValue(ME({ openRequests: [] }));
+    const r = await mount();
+    expect(waste(r)).toBeNull();
+    expect(r.container.querySelector('a[href="/doi-rac/tao"]')).toBeNull();
   });
 
   it.each([
