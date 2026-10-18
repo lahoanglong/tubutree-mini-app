@@ -145,6 +145,7 @@ import { RefillTab } from '@/components/admin/refill-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
+import { ProductCategoriesTab } from '@/components/admin/product-categories-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
 import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
@@ -168,6 +169,7 @@ type Tab =
   | 'dealerAccounts'
   | 'dealerPrices'
   | 'commissionRates'
+  | 'productCategories'
   | 'engagement'
   | 'community'
   | 'payouts'
@@ -230,6 +232,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
       { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
+      { k: 'productCategories', label: 'Danh mục sản phẩm' },
       { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
       { k: 'storefronts', label: 'Gian hàng' },
@@ -485,6 +488,7 @@ export default function AdminPage() {
           {active === 'dealerAccounts' && <DealerAccountsTab />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
+          {active === 'productCategories' && <ProductCategoriesTab />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}

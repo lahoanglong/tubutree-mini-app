@@ -11,6 +11,15 @@ import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 import { RunLease } from '../../../common/cron-leader/run-lease';
+import { SystemConfigService } from '../../system-config/system-config.service';
+import {
+  PANCAKE_CATEGORY_MAP_KEY,
+  flattenPancakeCategories,
+  mapPancakeCategories,
+  pancakeCategoryRefs,
+  type FlatPancakeCategory,
+  type PancakeCategoryMap,
+} from './pancake-category-map';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
 export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as const;
@@ -82,7 +91,42 @@ export class PancakeSyncService implements OnModuleInit {
     private readonly client: PancakeClient,
     private readonly lifecycle: LifecycleService,
     @Optional() private readonly cronLeader?: CronLeaderService,
+    @Optional() private readonly systemConfig?: SystemConfigService,
   ) {}
+
+  /** Danh mục Tubu hợp lệ để ánh xạ tới; nhớ 60 giây để lượt đồng bộ hàng trăm sản phẩm không hỏi lại mỗi dòng. */
+  private categoryIdsCache: { ids: Set<string>; at: number } | null = null;
+
+  private async validCategoryIds(): Promise<Set<string>> {
+    if (this.categoryIdsCache && Date.now() - this.categoryIdsCache.at < 60_000) return this.categoryIdsCache.ids;
+    const rows = await this.prisma.category.findMany({ select: { id: true } });
+    this.categoryIdsCache = { ids: new Set(rows.map((r) => r.id)), at: Date.now() };
+    return this.categoryIdsCache.ids;
+  }
+
+  /**
+   * Danh mục Tubu cho sản phẩm mới/chưa có danh mục theo `pancake.category_map`. Lỗi đọc cấu hình/danh mục chỉ
+   * bỏ qua việc ánh xạ (không chặn đồng bộ giá, tồn).
+   */
+  private async mappedCategoryIds(p: PancakeProductDTO): Promise<string[]> {
+    if (!this.systemConfig || pancakeCategoryRefs(p).length === 0) return [];
+    try {
+      const map = await this.systemConfig.get<PancakeCategoryMap>(PANCAKE_CATEGORY_MAP_KEY, {});
+      if (!map || Object.keys(map).length === 0) return [];
+      return mapPancakeCategories(p, map, await this.validCategoryIds());
+    } catch (e) {
+      this.logger.warn(`Không ánh xạ được nhóm hàng Pancake cho ${p.id}: ${e instanceof Error ? e.message : e}`);
+      return [];
+    }
+  }
+
+  /** Nhóm hàng Pancake kèm danh mục Tubu đã ánh xạ (màn "Danh mục sản phẩm" của admin). */
+  async listPancakeCategories(): Promise<Array<FlatPancakeCategory & { mappedTo: string | null }>> {
+    const flat = flattenPancakeCategories(await this.client.fetchCategories());
+    const map = (await this.systemConfig?.get<PancakeCategoryMap>(PANCAKE_CATEGORY_MAP_KEY, {})) ?? {};
+    const byKey = new Map(Object.entries(map).map(([k, v]) => [k.trim().toLowerCase(), v]));
+    return flat.map((c) => ({ ...c, mappedTo: byKey.get(c.id.toLowerCase()) ?? byKey.get(c.name.trim().toLowerCase()) ?? null }));
+  }
 
   /**
    * Sync lần đầu khi boot — không chặn khởi động, lỗi chỉ log.
@@ -370,6 +414,8 @@ export class PancakeSyncService implements OnModuleInit {
     // forSegment: suy từ tên để segment pills (Cho mẹ&bé / Nhà bếp xanh / Chăm sóc cá nhân / Sống xanh)
     // có hàng. Chỉ set khi tạo mới hoặc khi product cũ CHƯA có segment (không đè tag thủ công).
     const inferred = this.inferSegments(p.name);
+    // Danh mục: admin gán tay là của admin — đồng bộ chỉ điền khi sản phẩm CHƯA có danh mục nào.
+    const mappedCats = (existing?.categoryIds?.length ?? 0) === 0 ? await this.mappedCategoryIds(p) : [];
 
     const product = existing
       ? await this.prisma.product.update({
@@ -378,6 +424,7 @@ export class PancakeSyncService implements OnModuleInit {
             ...baseData,
             ...productHold,
             ...((existing.forSegment?.length ?? 0) === 0 ? { forSegment: inferred } : {}),
+            ...(mappedCats.length ? { categoryIds: mappedCats } : {}),
           },
         })
       : await this.prisma.product.create({
@@ -388,6 +435,7 @@ export class PancakeSyncService implements OnModuleInit {
             brand: 'Tubu Tree',
             slug: this.slugify(p.name, pancakeId),
             forSegment: inferred,
+            categoryIds: mappedCats,
           },
         });
 

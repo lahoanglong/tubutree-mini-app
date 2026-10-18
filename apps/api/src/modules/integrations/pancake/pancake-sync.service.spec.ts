@@ -707,3 +707,34 @@ describe('PancakeSyncService — một lượt đồng bộ một lúc trên c�
     }
   });
 });
+
+describe('PancakeSyncService — ánh xạ nhóm hàng Pancake sang danh mục Tubu', () => {
+  const withCats = (id: string, cats: number[]) => ({ ...prod(id), category_ids: cats });
+  const config = (map: unknown) => ({ get: jest.fn().mockResolvedValue(map) }) as never;
+  const catPrisma = (over: Record<string, unknown> = {}) =>
+    makePrisma({ category: { findMany: jest.fn().mockResolvedValue([{ id: 'catA' }]) }, ...over });
+
+  it('sản phẩm mới: ghi categoryIds theo bản đồ, bỏ id Tubu không tồn tại', async () => {
+    const prisma = catPrisma();
+    const svc = new PancakeSyncService(prisma, makeClient([[withCats('a', [11, 12])]]), lifecycle, undefined, config({ '11': 'catA', '12': 'ghost' }));
+    await svc.syncProducts();
+    expect((prisma.product.create as jest.Mock).mock.calls[0][0].data.categoryIds).toEqual(['catA']);
+  });
+
+  it('sản phẩm đã có danh mục (admin gán) thì không bị đè', async () => {
+    const prisma = catPrisma({ product: { findUnique: jest.fn().mockResolvedValue({ id: 'e', categoryIds: ['adminCat'], forSegment: ['x'] }) } });
+    const svc = new PancakeSyncService(prisma, makeClient([[withCats('a', [11])]]), lifecycle, undefined, config({ '11': 'catA' }));
+    await svc.syncProducts();
+    expect((prisma.product.update as jest.Mock).mock.calls[0][0].data).not.toHaveProperty('categoryIds');
+  });
+
+  it('sản phẩm có sẵn nhưng chưa có danh mục thì được điền; bản đồ rỗng/không có cấu hình thì không đụng', async () => {
+    const existing = { id: 'e', categoryIds: [], forSegment: ['x'] };
+    const p1 = catPrisma({ product: { findUnique: jest.fn().mockResolvedValue(existing) } });
+    await new PancakeSyncService(p1, makeClient([[withCats('a', [11])]]), lifecycle, undefined, config({ '11': 'catA' })).syncProducts();
+    expect((p1.product.update as jest.Mock).mock.calls[0][0].data.categoryIds).toEqual(['catA']);
+    const p2 = catPrisma();
+    await new PancakeSyncService(p2, makeClient([[withCats('a', [11])]]), lifecycle, undefined, config({})).syncProducts();
+    expect((p2.product.create as jest.Mock).mock.calls[0][0].data.categoryIds).toEqual([]);
+  });
+});

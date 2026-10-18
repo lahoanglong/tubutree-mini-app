@@ -8,6 +8,7 @@ import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
 import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliate/commission-eligibility';
+import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pancake/pancake-category-map';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 
 const DISPLAY_NAME_MAX = 100;
@@ -255,6 +256,8 @@ export class SystemConfigService {
     // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để cờ tắt không vô tình bật freeship đơn đầu.
     'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Công tắc kiểm lệch tổng Pancake (PANCAKE_TOTAL_CHECK_KEY): chỉ `false` mới tắt, nên chuỗi "false" phải bị từ chối chứ không được lưu.
+    // Nhóm hàng Pancake → danh mục Tubu (PancakeSyncService.mappedCategoryIds): sai dạng thì đồng bộ lặng lẽ không gán danh mục nào.
+    [PANCAKE_CATEGORY_MAP_KEY]: categoryMapProblem,
     'pancake.total_mismatch_check': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.
     'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),

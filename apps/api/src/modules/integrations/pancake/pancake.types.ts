@@ -25,6 +25,18 @@ export interface PancakeProductDTO {
   images?: string[];
   variations?: PancakeVariationDTO[];
   is_removed?: boolean;
+  /** Mã nhóm hàng Pancake (Open API schema "Product": `category_ids`, số nguyên). Đọc phòng thủ: bản trả về có thể là chuỗi. */
+  category_ids?: Array<number | string> | null;
+  /** Dạng đối tượng nếu Pancake trả kèm tên nhóm (không có trong tài liệu GET; chỉ đọc khi có). */
+  categories?: Array<{ id?: number | string; name?: string; text?: string } | number | string> | null;
+}
+
+/** Nút trong cây `GET /shops/{SHOP_ID}/categories`. */
+export interface PancakeCategoryNode {
+  id: number | string;
+  text?: string;
+  name?: string;
+  nodes?: PancakeCategoryNode[];
 }
 
 export interface PancakeProductsResponse {
