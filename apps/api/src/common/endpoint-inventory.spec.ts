@@ -7,8 +7,7 @@ jest.mock('../config/env.validation', () => ({ validateEnv: (config: Record<stri
 
 /**
  * Sổ endpoint của C-098 (gỡ endpoint không FE nào gọi). Hai bảng:
- * - REMOVED: đã gỡ vì không có lời gọi nào ở apps/miniapp, apps/web (HEAD và commit PROD cb92dc8), không
- *   phải callback/cron ngoài, không có e2e/loadtest/script/ops gọi. Đừng thêm lại mà không có FE đi kèm.
+ * - REMOVED: route đã gỡ. Bảng này chỉ để CHẶN đăng ký lại (spec fail nếu route còn hoặc được thêm lại); nó KHÔNG báo khi ai đó quên gỡ một route khác. Đừng thêm lại mà không có FE đi kèm.
  * - KEPT_WITHOUT_FE: cũng không có lời gọi FE nhưng cố ý GIỮ; mỗi dòng nói vì sao. Gỡ một dòng ở đây
  *   nghĩa là có người quyết định bỏ hẳn tính năng đó (bảng bằng chứng ở docs/2026-10-review/impl/PD-2.md).
  */
@@ -22,6 +21,16 @@ const REMOVED = [
   'POST /beta/join',
   'POST /beta/leave',
   'POST /beta/feedback',
+  'GET /refill/me',
+  'POST /refill/return',
+  'GET /refill/admin/pending',
+  'POST /refill/admin/:id/approve',
+  'POST /refill/admin/:id/reject',
+  'GET /admin/refill-locations',
+  'POST /admin/refill-locations',
+  'PUT /admin/refill-locations/order',
+  'PATCH /admin/refill-locations/:id',
+  'GET /admin/engagement/rewards',
 ] as const;
 
 const KEPT_WITHOUT_FE: ReadonlyArray<readonly [route: string, why: string]> = [

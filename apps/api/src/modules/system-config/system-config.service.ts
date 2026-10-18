@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PICKUP_PHONE_PATTERN } from '../../common/phone';
 import { formatPoints } from '../../common/format-points';
 import { COMMUNITY_LINK_KEYS, communityUrlProblem } from './community-links';
 import { spinPrizeProblem } from './spin-prizes';
@@ -188,7 +187,6 @@ export class SystemConfigService {
     'affiliate.pit_withhold_threshold': { min: 0, max: 100000000, note: 'đồng', integer: true },
     // ADMINOPS-3 (vòng 2): tiền phạt đi trễ đi thẳng vào bảng lương (âm = cộng tiền), giá/thưởng 💧 âm đảo chiều ví game.
     'attendance.late_fine': { min: 0, max: 500_000, note: 'đồng mỗi lần đi trễ', integer: true },
-    'refill.seeds_per_bottle': { min: 0, max: 10_000, note: '💧 mỗi vỏ chai', integer: true },
     'game.streak_repair_cost': { min: 1, max: 100_000, note: '💧 hồi sinh chuỗi', integer: true },
     'game.streak_freeze_cost': { min: 1, max: 100_000, note: '💧 mỗi vé giữ lửa', integer: true },
     'game.dew_seeds': { min: 0, max: 10_000, note: '💧 giọt sương mỗi ngày', integer: true },
@@ -223,7 +221,6 @@ export class SystemConfigService {
     'game.plot_target': { min: 1, max: 100_000, note: '💧 cần để thu hoạch cây ở lô phụ', integer: true },
     'seasonpass.checkin_xp': { min: 0, max: 1000, note: 'XP mỗi lần điểm danh', integer: true },
     'groupbuy.window_hours': { min: 1, max: 720, note: 'số giờ nhóm mua chung mở', integer: true },
-    'refill.monthly_cap_bottles': { min: 0, max: 1000, note: 'số vỏ chai được thưởng mỗi tháng/người (0 = không thưởng)', integer: true },
     'remarketing.cart_abandon_min_hours': { min: 1, max: 720, note: 'số giờ giỏ bỏ quên trước khi nhắc', integer: true },
     'remarketing.cart_abandon_max_hours': { min: 1, max: 720, note: 'số giờ tối đa còn nhắc giỏ bỏ quên', integer: true },
     'remarketing.voucher_expiry_days': { min: 1, max: 60, note: 'số ngày báo trước voucher sắp hết hạn', integer: true },
@@ -261,10 +258,6 @@ export class SystemConfigService {
     // VietQR dựng từ hai khoá này: sai một ký tự là tiền khách chuyển vào tài khoản khác hoặc QR không quét được.
     'payment.bank_account_no': (value) =>
       typeof value === 'string' && /^\d{6,20}$/.test(value) ? null : 'phải là chuỗi 6–20 chữ số, không khoảng trắng',
-    'refill.pickup_phone': (value) =>
-      value === '' || (typeof value === 'string' && PICKUP_PHONE_PATTERN.test(value))
-        ? null
-        : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
     // Vai trò được ghi công đơn và hưởng hoa hồng CTV (affiliate.service createCommissionForOrder / findEligibleReferrer).
     [COMMISSION_ELIGIBLE_ROLES_KEY]: eligibleRolesProblem,
     // Cờ gian hàng: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.

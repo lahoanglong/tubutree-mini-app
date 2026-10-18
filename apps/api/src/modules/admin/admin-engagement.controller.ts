@@ -32,9 +32,4 @@ export class AdminEngagementController {
   updateMission(@Param('id') id: string, @Body() dto: UpdateMissionDto) {
     return this.engagement.updateMission(id, dto);
   }
-
-  @Get('rewards')
-  rewards() {
-    return this.engagement.rewardCatalog();
-  }
 }
