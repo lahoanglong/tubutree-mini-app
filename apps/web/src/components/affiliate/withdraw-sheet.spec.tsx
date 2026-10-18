@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   calls: [] as { path: string; body?: unknown; headers?: Record<string, string> }[],
   config: { affiliateMinWithdrawBank: 70_000 } as Record<string, unknown>,
   configGate: null as null | Promise<unknown>,
+  configFail: false,
   payout: (() => ({ ok: true })) as () => unknown,
 }));
 
@@ -16,6 +17,7 @@ vi.mock('@/lib/core-http', () => ({
     get: async (path: string) => {
       if (path === '/config/public') {
         await state.configGate;
+        if (state.configFail) throw new Error('config lỗi');
         return state.config;
       }
       throw new Error(`GET lạ ${path}`);
@@ -45,6 +47,7 @@ beforeEach(() => {
   state.calls = [];
   state.config = { affiliateMinWithdrawBank: 70_000 };
   state.configGate = null;
+  state.configFail = false;
   state.payout = () => ({ ok: true });
   done.mockReset();
 });
@@ -156,6 +159,39 @@ describe('WithdrawSheet — rút hoa hồng', () => {
     click(submitBtn());
     await flush();
     expect(posts()[0]!.body).not.toHaveProperty('taxId');
+  });
+
+  it('ví: config chưa về thì nút khoá và ghi Đang tải…', async () => {
+    let release!: (v?: unknown) => void;
+    state.configGate = new Promise((r) => (release = r));
+    mount();
+    await flush();
+    const btn = Array.from(dialog().querySelectorAll('button')).find((b) => b.textContent === 'Đang tải…') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(0);
+    release();
+    await flush();
+    expect(submitBtn().disabled).toBe(false);
+  });
+
+  it('config lỗi: báo lỗi và nút Thử lại, không gửi lệnh rút tới khi config về', async () => {
+    state.configFail = true;
+    mount();
+    await flush();
+    expect(dialog().querySelector('[role="alert"]')?.textContent).toContain('Chưa tải được cấu hình rút tiền.');
+    expect(dialog().textContent).not.toContain('Đang tải…');
+    const gate = Array.from(dialog().querySelectorAll('button')).find((b) => b.textContent === 'Thử lại sau') as HTMLButtonElement;
+    expect(gate.disabled).toBe(true);
+    state.configFail = false;
+    click(Array.from(dialog().querySelectorAll('button')).find((b) => b.textContent === 'Thử lại') ?? null);
+    await flush();
+    expect(posts()).toHaveLength(0);
+    click(submitBtn());
+    await flush();
+    expect(posts()).toHaveLength(1);
+    expect(posts()[0]!.path).toBe('/affiliate/payouts');
   });
 
   it('dashboard lỗi (knownMax=false): báo chưa tải được số rút và khoá nút gửi', async () => {

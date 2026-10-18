@@ -130,9 +130,19 @@ function WithdrawForm({ max, knownMax, taxIdOnFile, onDone }: Omit<WithdrawSheet
         </div>
       )}
 
+      {cfgQ.isError && (
+        <div className="mt-3 flex items-center gap-2">
+          <p role="alert" className="text-xs text-danger-fg">
+            Chưa tải được cấu hình rút tiền.
+          </p>
+          <button type="button" onClick={() => void cfgQ.refetch()} className="text-xs font-semibold text-stone-900 underline">
+            Thử lại
+          </button>
+        </div>
+      )}
       <div role="alert">{error && <p className={`mt-3 ${ui.error}`}>{error}</p>}</div>
       <button type="button" onClick={submit} disabled={!view.valid} className={`${ui.btnPrimary} mt-5 w-full`}>
-        {mut.isPending ? 'Đang gửi…' : !cfgLoaded ? 'Đang tải…' : method === 'WALLET_BALANCE' ? `Nhận ${formatVnd(view.net)} vào Ví` : `Rút ${formatVnd(view.amount)}`}
+        {mut.isPending ? 'Đang gửi…' : cfgQ.isError ? 'Thử lại sau' : !cfgLoaded ? 'Đang tải…' : method === 'WALLET_BALANCE' ? `Nhận ${formatVnd(view.net)} vào Ví` : `Rút ${formatVnd(view.amount)}`}
       </button>
     </div>
   );
