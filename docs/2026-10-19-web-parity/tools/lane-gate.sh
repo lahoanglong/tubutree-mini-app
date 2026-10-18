@@ -11,11 +11,22 @@ cd "$WT" || exit 2
 SUMMARY="$OUT/summary.txt"
 : >"$SUMMARY"
 
+# Dừng gate (kill PID của script) phải dọn cả cây con: worker vitest là cháu của pnpm, bị bỏ lại sẽ giữ vài GB RAM mỗi con
+# và làm cả máy chậm tới mức test của mọi phiên hết giờ.
+kill_tree() {
+  local c
+  for c in $(pgrep -P "$1"); do kill_tree "$c"; done
+  kill "$1" 2>/dev/null
+}
+trap 'for c in $(pgrep -P $$); do kill_tree "$c"; done; exit 143' TERM INT HUP
+
 step() {
   local name="$1"
   shift
   local log="$OUT/$name.log"
-  "$@" >"$log" 2>&1
+  # Chạy nền rồi wait: bash chỉ chạy trap sau khi lệnh tiền cảnh kết thúc, còn wait bị tín hiệu ngắt ngay.
+  "$@" >"$log" 2>&1 &
+  wait $!
   local rc=$?
   local tail
   tail=$(grep -E "Tests +[0-9]|Test Files|error TS|✖|problems|ERR_|Failed|failed|Compiled|lint:parity|OK —|Lỗi|warning" "$log" | tail -3 | tr '\n' ' ')
