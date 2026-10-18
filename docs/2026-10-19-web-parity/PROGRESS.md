@@ -18,7 +18,7 @@ Phiên chạy: `tubutree-mini-app-8c` (Opus 5.5). Nền: `web/base` db9adca0. Nh
 | 2026-10-19 01:40 | 5. `community` | đang chạy | wf_e825b3de-061, nhánh từ b76526a7, `miniappFloor` 4214 |
 | 2026-10-19 02:15 | 4b. `loyalty` | xong, đã gộp | gate xanh (app-core 462, web 3362, miniapp 4214, lint:parity 37 pending); review 3 lượt, lượt 3 còn MAJOR e2e hoàn tiền (bắt tab đối tác) đã sửa ở aa9f4a81, phiên chính đọc lại: đúng (`context.route`, `waitForURL`, `opener` null). Lane chuyển hàm chữ điểm, `reward-rules`, `unique-by-id`, `wallet-rules` của Mini App sang app-core rồi re-export; phiên chính đối chiếu 189 dòng bị xoá: thân hàm giống hệt, `vnDate`/`formatNumber` giống hệt, Mini App 4214/4214 xanh. Gộp → cb5c0d58 (xung đột bốn spec danh sách, giải bằng `tools/resolve_lists.py`). Báo cáo `impl/loyalty.md` (5 câu hỏi) |
 | 2026-10-19 02:15 | 4c. `order` | hoàn tất dở | workflow lane xong nhưng gate run4 đỏ 1 ca (`guest-pages.a11y.spec.tsx`: sau đặt đơn hiện trang chuyển khoản thay vì "Đặt hàng thành công!", đỏ từ run3 sau a8f3e8b0) và lượt 3 còn MAJOR đặt đơn hai lần sau lỗi mạng (ee816fd9 sửa bằng đóng băng yêu cầu, lệch Mini App). Chạy `tools/web-lane-finish.workflow.js` wf_76a07742-f30: sửa ca đỏ, gate run5, Opus review lại đường đặt đơn so với Mini App tối đa 2 lượt |
-| 2026-10-19 02:15 | 6. `affiliate` | đang chạy | wf_b3d8b0a1-f57, nhánh từ cb5c0d58. Gate integration sau account + loyalty đang chạy (`gate-logs/integration/after-loyalty`) |
+| 2026-10-19 02:15 | 6. `affiliate` | đang chạy | wf_b3d8b0a1-f57, nhánh từ cb5c0d58. Gate integration sau account + loyalty (cb5c0d58, `gate-logs/integration/after-loyalty`): XANH — app-core 462, web 3680 (cả TZ=UTC), miniapp 4214, lint:parity 31 pending, build sạch |
 
 ## Nhánh nguồn cần theo dõi
 
