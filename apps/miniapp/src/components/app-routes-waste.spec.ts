@@ -8,6 +8,7 @@ const src = readFileSync(join(process.cwd(), 'src', 'components', 'app.tsx'), 'u
 const ROUTES: ReadonlyArray<readonly [path: string, component: string, page: string]> = [
   ['/recycle', 'RecyclePage', 'recycle'],
   ['/recycle/rules', 'RecycleRulesPage', 'recycle-rules'],
+  ['/recycle/new', 'RecycleNewPage', 'recycle-new'],
 ];
 
 describe('route Đổi rác lấy quà ở app.tsx (§16.1: một dòng lazy và một Route)', () => {
