@@ -1,14 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateIf,
 } from 'class-validator';
-import { WASTE_POINT_KIND_VALUES, WASTE_POINT_STATUS_VALUES } from '@tubutree/shared-types';
+import { WASTE_POINT_KIND_VALUES, WASTE_POINT_STAFF_ROLE_VALUES, WASTE_POINT_STATUS_VALUES } from '@tubutree/shared-types';
 import type {
   AdminWastePointQuery,
   WasteOpeningHours,
   WastePointKind,
+  WastePointStaffAddRequest,
+  WastePointStaffRole,
   WastePointStatus,
   WastePointUpsertRequest,
   WasteReorderRequest,
@@ -197,6 +199,15 @@ export class WasteReorderDto implements WasteReorderRequest {
   ids!: string[];
 }
 
+export class WastePointStaffAddDto implements WastePointStaffAddRequest {
+  @IsString()
+  @Length(1, 64)
+  userId!: string;
+
+  @IsIn(WASTE_POINT_STAFF_ROLE_VALUES)
+  role!: WastePointStaffRole;
+}
+
 @Controller('admin/waste/points')
 export class WasteAdminPointsController {
   constructor(private readonly points: WasteAdminPointsService) {}
@@ -226,5 +237,36 @@ export class WasteAdminPointsController {
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   update(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() body: WastePointUpdateDto) {
     return this.points.update(adminId, id, body);
+  }
+
+  @Post(':id/staff')
+  @HttpCode(200)
+  @Roles('ADMIN')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  addStaff(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() body: WastePointStaffAddDto) {
+    return this.points.addStaff(adminId, id, body);
+  }
+
+  @Delete(':id/staff/:userId')
+  @Roles('ADMIN')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  removeStaff(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Param('userId') userId: string) {
+    return this.points.removeStaff(adminId, id, userId);
+  }
+
+  @Post(':id/perk/approve')
+  @HttpCode(200)
+  @Roles('ADMIN')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  approvePerk(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.points.approvePerk(adminId, id);
+  }
+
+  @Post(':id/perk/reject')
+  @HttpCode(200)
+  @Roles('ADMIN')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  rejectPerk(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.points.rejectPerk(adminId, id);
   }
 }

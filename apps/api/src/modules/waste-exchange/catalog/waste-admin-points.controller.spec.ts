@@ -5,7 +5,9 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { NOT_NULL_CONSTRAINT } from '../../../common/decorators/optional-not-null.decorator';
 import { ROLES_KEY } from '../../../common/decorators/roles.decorator';
-import { AdminWastePointQueryDto, WastePointCreateDto, WastePointUpdateDto, WasteAdminPointsController } from './waste-admin-points.controller';
+import {
+  AdminWastePointQueryDto, WastePointCreateDto, WastePointStaffAddDto, WastePointUpdateDto, WasteAdminPointsController,
+} from './waste-admin-points.controller';
 
 type VErr = { constraints?: Record<string, string>; children?: VErr[] };
 const keysOf = (errs: VErr[]): string[] => errs.flatMap((e) => [...Object.keys(e.constraints ?? {}), ...keysOf(e.children ?? [])]);
@@ -60,5 +62,29 @@ describe('WasteAdminPointsController', () => {
 
     expect(await errorKeys(WastePointCreateDto, { ...body, monthlyQuotaPoints: 0 })).not.toEqual([]);
     expect(await errorKeys(WastePointCreateDto, { ...body, monthlyQuotaPoints: 100_000 })).toEqual([]);
+  });
+
+  it('declares the staff and perk routes: ADMIN only, 30 per minute, and no other handler (points are never hard-deleted)', () => {
+    const routes = [
+      [proto.addStaff, ':id/staff', RequestMethod.POST],
+      [proto.removeStaff, ':id/staff/:userId', RequestMethod.DELETE],
+      [proto.approvePerk, ':id/perk/approve', RequestMethod.POST],
+      [proto.rejectPerk, ':id/perk/reject', RequestMethod.POST],
+    ] as const;
+    for (const [h, path, method] of routes) {
+      expect(Reflect.getMetadata(PATH_METADATA, h)).toBe(path);
+      expect(Reflect.getMetadata(METHOD_METADATA, h)).toBe(method);
+      expect(Reflect.getMetadata(ROLES_KEY, h)).toEqual(['ADMIN']);
+      expect(Reflect.getMetadata('THROTTLER:LIMITdefault', h)).toBe(30);
+    }
+    const p = WasteAdminPointsController.prototype;
+    expect(Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).sort()).toEqual([
+      'addStaff', 'approvePerk', 'create', 'list', 'rejectPerk', 'removeStaff', 'reorder', 'update',
+    ]);
+  });
+
+  it('validates the staff add body: only OWNER and STAFF roles', async () => {
+    expect(await errorKeys(WastePointStaffAddDto, { userId: 'u1', role: 'MANAGER' })).not.toEqual([]);
+    expect(await errorKeys(WastePointStaffAddDto, { userId: 'u1', role: 'OWNER' })).toEqual([]);
   });
 });
