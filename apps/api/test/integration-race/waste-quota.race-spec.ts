@@ -11,6 +11,7 @@ let prisma: PrismaService;
 const userIds: string[] = [];
 const pointIds: string[] = [];
 const itemIds: string[] = [];
+const storefrontIds: string[] = [];
 const monthKey = vnMonthKey();
 
 async function partnerPoint() {
@@ -18,6 +19,7 @@ async function partnerPoint() {
   userIds.push(owner.id);
   const point = await createWastePoint(prisma, { kind: 'PARTNER', ownerUserId: owner.id, quota: 100_000 });
   pointIds.push(point.id);
+  if (point.createdStorefront) storefrontIds.push(point.ownerStorefrontId!);
   return point;
 }
 
@@ -29,7 +31,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await cleanupWaste(prisma, { pointIds, itemIds });
+  await cleanupWaste(prisma, { pointIds, itemIds, storefrontIds });
   await deleteItData(prisma, { userIds });
   await moduleRef.close();
 });
