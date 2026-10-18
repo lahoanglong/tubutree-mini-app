@@ -439,6 +439,7 @@ export function publicConfig(over: Partial<PublicConfig> = {}): PublicConfig {
     affiliateMinWithdrawBank: 50000,
     cashbackHoldDays: 30,
     recyclingEnabled: false,
+    waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
     ...over,
   };
 }

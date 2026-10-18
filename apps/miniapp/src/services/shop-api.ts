@@ -1,7 +1,7 @@
 import { isAxiosError } from 'axios';
 import { api } from './api';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
-import type { CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
+import type { CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
 import { cartStorefrontSlug } from './cart-key';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 
@@ -209,6 +209,8 @@ export interface PublicConfig {
   affiliatePitWithhold?: { pct: number; threshold: number };
   /** Số ngày giữ trước khi hoàn tiền sàn ngoài về Ví. */
   cashbackHoldDays: number;
+  /** Cờ công khai của Đổi rác lấy quà (§11.5). */
+  waste: WastePublicFlags;
   /**
    * Hiện lựa chọn "Gửi lại vật liệu tái chế" ở checkout — true chỉ khi Gomdon đã cấu hình VÀ admin
    * bật. Optional: API bản cũ không trả field này → coi như tắt.
