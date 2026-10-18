@@ -52,15 +52,15 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 40 | `/brand-owner` | brand-owner.tsx (+ brand-owner-sales.tsx) | — | `/chu-thuong-hieu` | xong cff53ab7 | pro | riêng tư | |
 | 41 | `/admin` | admin.tsx | `/admin` (nhiều tab, có "Chấm công") | `/admin?tab=...` | xong cff53ab7 | pro | riêng tư | Thiếu: nhân sự (cấp/thu quyền), duyệt ca, mẫu ca, lương, sửa phiên công, duyệt đổi vỏ. Kiểm tab đã có trước khi làm |
 | 42 | `/admin/community` | community-moderation.tsx | tab community trong `/admin` | `/admin?tab=community` | có | — | riêng tư | Chỉ cần ánh xạ |
-| 43 | `/recycle` | recycle.tsx | — | `/doi-rac` | mới | recycle | riêng tư | `eligibility !== 'OK'` (thiếu SĐT) thì hiện lời dặn mở Mini App (Q2) |
-| 44 | `/recycle/rules` | recycle-rules.tsx | — | `/doi-rac/quy-dinh` | mới | recycle | công khai | |
-| 45 | `/recycle/new` | recycle-new.tsx | — | `/doi-rac/tao` | mới | recycle | riêng tư | "Điểm gần tôi" cần token vị trí Zalo (`waste-customer.controller.ts:34`). Web đợt này: chỉ chọn theo tỉnh. Lý do: `next.config.mjs:80` đặt `Permissions-Policy: geolocation=()` cho mọi trang; mở ra là đổi header bảo mật, để chủ quyết |
-| 46 | `/recycle/points` | recycle-points.tsx | — | `/doi-rac/diem-nhan` | mới | recycle | riêng tư | Như dòng 45 |
-| 47 | `/recycle/r/:id` | recycle-request.tsx | — | `/doi-rac/yeu-cau/[id]` | mới | recycle | riêng tư | |
-| 48 | `/recycle/r/:id/edit` | recycle-edit.tsx | — | `/doi-rac/yeu-cau/[id]/sua` | mới | recycle | riêng tư | |
-| 49 | `/recycle/requests` | recycle-requests.tsx | — | `/doi-rac/yeu-cau` | mới | recycle | riêng tư | |
-| 50 | `/recycle/done/:id` | recycle-done.tsx | — | `/doi-rac/xong/[id]` | mới | recycle | riêng tư | |
-| 51 | `/recycle/desk` | recycle-desk.tsx | — | `/doi-rac/quay` | mới | recycle | riêng tư | Quầy nhận: nhập mã tay (Mini App cũng không quét) |
+| 43 | `/recycle` | recycle.tsx | — | `/doi-rac` | xong ce888470 | recycle | riêng tư | `eligibility !== 'OK'` (thiếu SĐT) thì hiện lời dặn mở Mini App (Q2) |
+| 44 | `/recycle/rules` | recycle-rules.tsx | — | `/doi-rac/quy-dinh` | xong ce888470 | recycle | công khai | |
+| 45 | `/recycle/new` | recycle-new.tsx | — | `/doi-rac/tao` | xong ce888470 | recycle | riêng tư | "Điểm gần tôi" cần token vị trí Zalo (`waste-customer.controller.ts:34`). Web đợt này: chỉ chọn theo tỉnh. Lý do: `next.config.mjs:80` đặt `Permissions-Policy: geolocation=()` cho mọi trang; mở ra là đổi header bảo mật, để chủ quyết |
+| 46 | `/recycle/points` | recycle-points.tsx | — | `/doi-rac/diem-nhan` | xong ce888470 | recycle | riêng tư | Như dòng 45 |
+| 47 | `/recycle/r/:id` | recycle-request.tsx | — | `/doi-rac/yeu-cau/[id]` | xong ce888470 | recycle | riêng tư | |
+| 48 | `/recycle/r/:id/edit` | recycle-edit.tsx | — | `/doi-rac/yeu-cau/[id]/sua` | xong ce888470 | recycle | riêng tư | |
+| 49 | `/recycle/requests` | recycle-requests.tsx | — | `/doi-rac/yeu-cau` | xong ce888470 | recycle | riêng tư | |
+| 50 | `/recycle/done/:id` | recycle-done.tsx | — | `/doi-rac/xong/[id]` | xong ce888470 | recycle | riêng tư | |
+| 51 | `/recycle/desk` | recycle-desk.tsx | — | `/doi-rac/quay` | xong ce888470 | recycle | riêng tư | Quầy nhận: nhập mã tay (Mini App cũng không quét) |
 
 Chức năng mức ứng dụng (không phải `<Route>`, gắn trong `app.tsx`):
 
