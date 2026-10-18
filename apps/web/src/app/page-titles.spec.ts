@@ -8,6 +8,7 @@ import { metadata as addresses } from './tai-khoan/dia-chi/layout';
 import { metadata as points } from './tai-khoan/diem-xanh/layout';
 import { metadata as wallet } from './tai-khoan/vi-tubu/layout';
 import { metadata as rewards } from './kho-qua/layout';
+import { metadata as myRewards } from './kho-qua/cua-toi/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -25,6 +26,7 @@ const ACCOUNT: TitleCase[] = [];
 const LOYALTY: TitleCase[] = [
   ['/tai-khoan/diem-xanh', points, 'Hạng thành viên & Điểm Xanh — Tubu Tree'],
   ['/kho-qua', rewards, 'Kho quà — Tubu Tree'],
+  ['/kho-qua/cua-toi', myRewards, 'Quà của tôi — Tubu Tree'],
 ];
 const COMMUNITY: TitleCase[] = [];
 const AFFILIATE: TitleCase[] = [];

@@ -45,6 +45,7 @@ import AddressBookPage from './tai-khoan/dia-chi/page';
 import LoyaltyPage from './tai-khoan/diem-xanh/page';
 import WalletPage from './tai-khoan/vi-tubu/page';
 import RewardsPage from './kho-qua/page';
+import RewardsMinePage from './kho-qua/cua-toi/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -77,6 +78,7 @@ const LOYALTY: PageCase[] = [
   ['/tai-khoan/diem-xanh', () => <LoyaltyPage />],
   ['/tai-khoan/vi-tubu', () => <WalletPage />],
   ['/kho-qua', () => <RewardsPage />],
+  ['/kho-qua/cua-toi', () => <RewardsMinePage />],
 ];
 const COMMUNITY: PageCase[] = [];
 const AFFILIATE: PageCase[] = [];
