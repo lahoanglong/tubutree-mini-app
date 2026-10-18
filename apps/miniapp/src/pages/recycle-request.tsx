@@ -288,7 +288,7 @@ export default function RecycleRequestPage() {
     ) : null;
 
   const stepHints =
-    r.method === 'DROP_OFF' && open && r.point
+    r.method === 'DROP_OFF' && open && r.point && r.pointAvailable && !quotaFull && !dropOffPaused
       ? {
           1: (
             <>

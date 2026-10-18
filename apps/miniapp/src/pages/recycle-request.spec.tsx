@@ -341,6 +341,28 @@ describe('/recycle/r/:id — trạng thái, ước tính, tiêu đề (F2, F10)'
     expect(screen.getByText('Chờ bạn mang tới')).toBeInTheDocument();
     expect(screen.getByText('Ước tính 5.000 điểm')).toBeInTheDocument();
   });
+  it('điểm nhận tạm ngừng: bước 2 không dặn mang tới điểm đó', async () => {
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ pointAvailable: false }));
+    renderPage();
+    const tl = await screen.findByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(within(tl).getByText('Mang tới điểm').closest('li')).not.toHaveTextContent('Mang tới Đại lý Cô Ba');
+  });
+  it('điểm hết hạn mức tháng: bước 2 không dặn mang tới điểm đó', async () => {
+    const r = makeRequestDetail();
+    mocks.getWasteRequest.mockResolvedValue(r);
+    mocks.getWastePoints.mockResolvedValue([makeWastePoint({ id: r.point!.id, quotaFull: true })]);
+    renderPage();
+    await screen.findByText('Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác');
+    const tl = screen.getByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(within(tl).getByText('Mang tới điểm').closest('li')).not.toHaveTextContent('Mang tới Đại lý Cô Ba');
+  });
+  it('chương trình tạm dừng: bước 2 không dặn mang tới điểm', async () => {
+    mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
+    renderPage();
+    await screen.findByText('Chương trình đang tạm dừng');
+    const tl = screen.getByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(within(tl).getByText('Mang tới điểm').closest('li')).not.toHaveTextContent('Mang tới Đại lý Cô Ba');
+  });
   it('REJECTED và COMPLETED: không còn dòng "Ước tính" (chỉ yêu cầu đang chạy mới ước tính)', async () => {
     mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'REJECTED', rejectionReason: 'WET', editable: false, cancellable: false }));
     const first = renderPage();
