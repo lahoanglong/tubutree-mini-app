@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const FORBIDDEN_MODULES = [
-  /^react$/,
+  /^react(\/|$)/,
   /^react-dom(\/|$)/,
   /^next(\/|$)/,
   /^zmp-sdk(\/|$)/,
@@ -14,7 +14,7 @@ const FORBIDDEN_MODULES = [
   /^@tanstack\//,
 ];
 
-const BROWSER_GLOBALS = new Set(['window', 'document', 'localStorage']);
+const BROWSER_GLOBALS = new Set(['window', 'document', 'localStorage', 'sessionStorage', 'navigator', 'self']);
 
 function isFunctionLike(node: ts.Node): boolean {
   return (
@@ -29,8 +29,9 @@ function isFunctionLike(node: ts.Node): boolean {
 }
 
 /** Trả danh sách vi phạm của một đoạn mã nguồn TS: import cấm và dùng global trình duyệt ở mức module. */
-function findViolations(source: string): string[] {
-  const file = ts.createSourceFile('x.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+function findViolations(source: string, fileName = 'x.ts'): string[] {
+  const kind = /\.[cm]?tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, kind);
   const found: string[] = [];
 
   const checkSpecifier = (spec: string) => {
@@ -54,6 +55,14 @@ function findViolations(source: string): string[] {
     if (!insideFunction) {
       if (ts.isIdentifier(node) && BROWSER_GLOBALS.has(node.text) && isValueReference(node)) {
         found.push(`${node.text} ở mức module`);
+      }
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'globalThis' &&
+        BROWSER_GLOBALS.has(node.name.text)
+      ) {
+        found.push(`globalThis.${node.name.text} ở mức module`);
       }
       if (
         ts.isPropertyAccessExpression(node) &&
@@ -83,11 +92,15 @@ function isValueReference(id: ts.Identifier): boolean {
   return true;
 }
 
+function isScannedSource(name: string): boolean {
+  return /\.[cm]?tsx?$/.test(name) && !/\.spec\.[cm]?tsx?$/.test(name);
+}
+
 function listSourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) return listSourceFiles(full);
-    return name.endsWith('.ts') && !name.endsWith('.spec.ts') ? [full] : [];
+    return isScannedSource(name) ? [full] : [];
   });
 }
 
@@ -116,6 +129,12 @@ describe('findViolations tự kiểm', () => {
     ["import axios from 'axios';", 'import "axios"'],
     ["import { useQuery } from '@tanstack/react-query';", 'import "@tanstack/react-query"'],
     ["export * from 'react';", 'import "react"'],
+    ["import { jsx } from 'react/jsx-runtime';", 'import "react/jsx-runtime"'],
+    ["const s = sessionStorage.getItem('k');", 'sessionStorage ở mức module'],
+    ['const n = navigator.userAgent;', 'navigator ở mức module'],
+    ['const s = self.location;', 'self ở mức module'],
+    ["const v = globalThis.localStorage;", 'globalThis.localStorage ở mức module'],
+    ['const v = globalThis.window;', 'globalThis.window ở mức module'],
     ["const m = await import('axios');", 'import "axios"'],
     ["const a = require('zmp-sdk');", 'import "zmp-sdk"'],
     ['const w = window.innerWidth;', 'window ở mức module'],
@@ -138,7 +157,25 @@ describe('findViolations tự kiểm', () => {
     ['class A { m() { return window.x; } }'],
     ['const o = { window: 1 }; const n = o.window;'],
     ['type T = typeof process;'],
+    ['export function f() { return globalThis.localStorage; }'],
+    ['export const g = () => navigator.userAgent;'],
+    ['const o = { self: 1 }; const n = o.self;'],
   ])('cho qua %s', (source) => {
     expect(findViolations(source)).toEqual([]);
+  });
+});
+
+describe('quét file nguồn', () => {
+  it.each(['a.ts', 'a.tsx', 'a.mts', 'a.cts', 'a.d.ts'])('quét %s', (name) => {
+    expect(isScannedSource(name)).toBe(true);
+  });
+
+  it.each(['a.spec.ts', 'a.spec.tsx', 'a.spec.mts', 'a.json', 'a.mjs'])('bỏ qua %s', (name) => {
+    expect(isScannedSource(name)).toBe(false);
+  });
+
+  it('bắt import react và global trình duyệt trong file .tsx', () => {
+    const source = "import { useState } from 'react';\nconst el = <div />;\nconst w = window.innerWidth;";
+    expect(findViolations(source, 'x.tsx')).toEqual(['import "react"', 'window ở mức module']);
   });
 });
