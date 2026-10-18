@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient } from '@tanstack/react-query';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { UserDetailDrawer } from './user-detail-drawer';
 import { answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -210,6 +211,50 @@ describe('UserDetailDrawer — Đổi rác (15.4)', () => {
     click(byText(section(body, 'Đổi rác'), 'button', 'Mở khoá đổi rác'));
     await answerWithReason('Đã làm rõ');
     expect(putBody()).toEqual({ blocked: false, reason: 'Đã làm rõ' });
+  });
+
+  it('khoá hoặc mở khoá làm mới cả danh sách yêu cầu đổi rác và hộp việc cần xử lý', async () => {
+    const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    try {
+      const body = await open();
+      click(byText(section(body, 'Đổi rác'), 'button', 'Khoá đổi rác'));
+      await answerWithReason('Gian lận số lượng');
+      const keys = spy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
+      expect(keys).toContain(JSON.stringify(['admin-waste-user-flags', 'u1']));
+      expect(keys).toContain(JSON.stringify(['admin-waste-requests']));
+      expect(keys).toContain(JSON.stringify(['admin-ops-inbox']));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('tải lại trạng thái khoá lỗi sau khi đã tải được: chỉ còn câu lỗi, không còn nhãn và nút khoá cũ', async () => {
+    let failFlags = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        if (url.includes('/admin/waste/users/')) {
+          if (failFlags && init?.method !== 'PUT') return new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          return new Response(JSON.stringify(NO_FLAGS), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify(DETAIL), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const r = render(<UserDetailDrawer userId="u1" isAdmin onClose={() => undefined} />);
+    mounted.push(r);
+    await flush();
+    const body = document.body;
+    expect(byText(section(body, 'Đổi rác'), 'button', 'Khoá đổi rác')).not.toBeNull();
+    failFlags = true;
+    click(byText(section(body, 'Đổi rác'), 'button', 'Khoá đổi rác'));
+    await answerWithReason('Gian lận số lượng');
+    await flush();
+    const text = section(body, 'Đổi rác').textContent ?? '';
+    expect(text).toContain('Không tải được trạng thái khoá đổi rác.');
+    expect(byText(section(body, 'Đổi rác'), 'button', 'Khoá đổi rác')).toBeNull();
+    expect(byText(section(body, 'Đổi rác'), 'button', 'Khoá gửi kho')).toBeNull();
+    expect(text).not.toContain('Đang khoá');
   });
 
   it('không phải admin: không có mục Đổi rác và không gọi flags', async () => {

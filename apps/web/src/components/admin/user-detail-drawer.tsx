@@ -311,6 +311,8 @@ function WasteFlagsSection({ userId }: { userId: string }) {
     onSuccess: () => {
       setErr(null);
       void qc.invalidateQueries({ queryKey: ['admin-waste-user-flags', userId] });
+      void qc.invalidateQueries({ queryKey: ['admin-waste-requests'] });
+      void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
     },
     onError: (e) => setErr(e instanceof Error ? e.message : 'Không lưu được.'),
   });
@@ -329,7 +331,7 @@ function WasteFlagsSection({ userId }: { userId: string }) {
     <Section title="Đổi rác">
       {flagsQ.isLoading && <p className="text-stone-500">Đang tải…</p>}
       {flagsQ.isError && <p className="text-danger-fg">Không tải được trạng thái khoá đổi rác.</p>}
-      {f && (
+      {f && !flagsQ.isError && (
         <div className="space-y-2">
           {(f.blockedAt || f.shipLockedAt) && (
             <div className="space-y-1">
