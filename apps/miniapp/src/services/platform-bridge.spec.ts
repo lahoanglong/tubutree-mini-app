@@ -42,6 +42,16 @@ describe('platform-bridge (Mini App)', () => {
     expect(await platformBridge.share({ title: 't', path: '/a' })).toBe('failed');
   });
 
+  it('share bị khách huỷ hộp thoại (mã -2003): cancelled, không phải failed', async () => {
+    zmp.shareLink.mockRejectedValue({ code: -2003, message: 'User cancel' });
+    expect(await platformBridge.share({ title: 't', path: '/a' })).toBe('cancelled');
+  });
+
+  it('oa.openChat không ném khi SDK từ chối mở chat', async () => {
+    zmp.openOAChat.mockRejectedValue(new Error('denied'));
+    await expect(platformBridge.oa.openChat('hi')).resolves.toBeUndefined();
+  });
+
   it('openExternal, callPhone chuyển nguyên đối số và không ném khi hàm gốc reject', () => {
     zmp.openExternal.mockRejectedValue(new Error('x'));
     zmp.callPhone.mockRejectedValue(new Error('x'));

@@ -2,6 +2,8 @@ import { getStorage, setStorage } from 'zmp-sdk/apis';
 import type { PlatformBridge } from '@tubutree/app-core/bridge';
 import { callPhone, followOA, hasOA, openExternal, openOAChat, shareLink } from './zmp-bridge';
 
+const ZMP_USER_CANCEL = -2003;
+
 /** Cầu nối nền tảng cho Mini App: chỉ bọc hàm sẵn có của zmp-bridge (storage chung dùng thẳng getStorage/setStorage của SDK). */
 export const platformBridge: PlatformBridge = {
   platform: 'miniapp',
@@ -11,8 +13,8 @@ export const platformBridge: PlatformBridge = {
     try {
       await shareLink({ title, description: text ?? title, path });
       return 'shared';
-    } catch {
-      return 'failed';
+    } catch (err) {
+      return (err as { code?: number } | null)?.code === ZMP_USER_CANCEL ? 'cancelled' : 'failed';
     }
   },
 
@@ -26,7 +28,7 @@ export const platformBridge: PlatformBridge = {
 
   oa: {
     available: hasOA,
-    openChat: (message) => openOAChat(message),
+    openChat: (message) => openOAChat(message).catch(() => {}),
     follow: () => followOA(),
   },
 
