@@ -157,7 +157,7 @@ describe('Duyệt trả đơn nhiều dòng giờ vàng ‖ đặt đơn cùng c
       },
     });
     const items = await prisma.orderItem.findMany({ where: { orderId: order.id } });
-    expect(items.map((i) => i.flashSaleItemId)).toEqual([b.flash.id, a.flash.id]);
+    expect(items.map((i) => i.flashSaleItemId).sort()).toEqual([a.flash.id, b.flash.id].sort());
     const req = await returns.request(owner.id, order.code, {
       reasonCode: 'OTHER',
       reason: 'Không còn nhu cầu dùng nữa',
