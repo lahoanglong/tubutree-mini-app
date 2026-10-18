@@ -1,7 +1,7 @@
-import { expect, test, type MockApi } from './support/mock-api';
+import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
- * Web: kênh đại lý /dai-ly,  ca làm /nhan-vien, bảng lương /nhan-vien/bang-luong. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`); host phải là localhost
+ * Web: kênh đại lý /dai-ly,  ca làm /nhan-vien, bảng lương /nhan-vien/bang-luong, chủ thương hiệu /chu-thuong-hieu. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`); host phải là localhost
  * (baseURL) vì middleware coi nhãn đầu của Host là subdomain gian hàng.
  */
 
@@ -156,5 +156,69 @@ test.describe('Web bảng lương', () => {
     const call = await saved;
     expect(call.body).toMatchObject({ bankBin: '970407', bankAccountNo: '9876543210', bankAccountName: 'NGUYEN VAN A' });
     await expect(page.getByText('Đã lưu thông tin nhận lương.')).toBeVisible();
+  });
+});
+
+const OWNER_BRAND = {
+  id: 'b1', slug: 'sachi', name: 'Sachi', logoUrl: null, coverUrl: null, tagline: null, story: null, origin: null,
+  isVerified: true, isPublished: true, followerCount: 12,
+  promotions: [{ id: 'p1', title: 'MUA 2 TẶNG 1', subtitle: null, couponCode: 'TUBU20', startAt: '2026-10-01T00:00:00.000Z', endAt: '2026-10-30T00:00:00.000Z', isActive: true }],
+};
+
+function mockOwner(api: MockApi) {
+  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
+  api.get('/me', USER);
+  api.get('/brand/owner/me', OWNER_BRAND);
+  api.get('/config/public', {});
+}
+
+test.describe('Web chủ thương hiệu', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+  });
+
+  test('chưa được cấp nhãn (404): báo rõ, không có nút thử lại', async ({ page, api }) => {
+    api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
+    api.get('/me', USER);
+    api.get('/config/public', {});
+    api.get('/brand/owner/me', () => reply(404, { message: 'Not Found' }));
+    await page.goto('/chu-thuong-hieu');
+    await expect(page.getByRole('heading', { name: 'Quản lý nhãn hàng', level: 1 })).toBeVisible();
+    await expect(page.getByText('Bạn chưa được cấp quyền quản lý nhãn nào.')).toBeVisible();
+  });
+
+  test('thêm khuyến mãi gắn mã gửi POST với mã viết hoa; mã bị từ chối thì hiện lỗi máy chủ', async ({ page, api }) => {
+    mockOwner(api);
+    api.post('/brand/owner/me/promotions', () => reply(400, { message: 'Mã giảm giá "MASAI" chưa có trong hệ thống.' }));
+    await page.goto('/chu-thuong-hieu');
+    await expect(page.getByText('Sachi', { exact: true })).toBeVisible();
+
+    await page.getByLabel('Tiêu đề (MUA 2 TẶNG 1)').fill('Giảm sốc');
+    await page.getByLabel('Mã giảm giá (tuỳ chọn) — VD: TUBU20').fill('masai');
+    const sent = api.waitForCall('POST', '/brand/owner/me/promotions');
+    await page.getByRole('button', { name: 'Thêm khuyến mãi' }).click();
+    const call = await sent;
+    expect(call.body).toMatchObject({ title: 'Giảm sốc', couponCode: 'MASAI' });
+    await expect(page.getByRole('alert')).toContainText('chưa có trong hệ thống');
+  });
+
+  test('tab Doanh thu: đổi kỳ gọi lại với kỳ mới', async ({ page, api }) => {
+    mockOwner(api);
+    api.get('/brand/owner/me/sales', {
+      period: '30d', from: '2026-09-10T00:00:00.000Z', to: '2026-10-10T00:00:00.000Z',
+      orderCount: 12, unitsSold: 31, revenue: 4_560_000, delivered: { orderCount: 9, revenue: 3_200_000 },
+      topProducts: [{ productId: 'p1', name: 'Nước rửa chén Sachi', slug: 'nrc', quantity: 20, revenue: 3_000_000 }],
+    });
+    await page.goto('/chu-thuong-hieu?tab=sales');
+    await expect(page.getByText('4.560.000đ')).toBeVisible();
+    const next = api.waitForCall('GET', '/brand/owner/me/sales');
+    await page.getByRole('tab', { name: 'Tháng trước' }).click();
+    expect((await next).query.get('period')).toBe('prev_month');
   });
 });

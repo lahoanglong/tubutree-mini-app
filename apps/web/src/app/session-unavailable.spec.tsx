@@ -57,6 +57,7 @@ import WishlistPage from './tai-khoan/yeu-thich/page';
 import DealerPage from './dai-ly/page';
 import StaffPage from './nhan-vien/page';
 import MyPayrollPage from './nhan-vien/bang-luong/page';
+import BrandOwnerPage from './chu-thuong-hieu/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -106,6 +107,7 @@ const PRO: PageCase[] = [
   ['/dai-ly', () => <DealerPage />],
   ['/nhan-vien', () => <StaffPage />],
   ['/nhan-vien/bang-luong', () => <MyPayrollPage />],
+  ['/chu-thuong-hieu', () => <BrandOwnerPage />],
 ];
 const RECYCLE: PageCase[] = [];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];

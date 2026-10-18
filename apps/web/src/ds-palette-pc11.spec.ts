@@ -84,6 +84,13 @@ const PRO: string[] = [
   'app/nhan-vien/bang-luong/page.tsx',
   'components/staff/payroll-hub.tsx',
   'lib/week.ts',
+  'app/chu-thuong-hieu/page.tsx',
+  'components/brand-owner/brand-owner-hub.tsx',
+  'components/brand-owner/profile-tab.tsx',
+  'components/brand-owner/sales-tab.tsx',
+  'components/brand-owner/brand-image-field.tsx',
+  'components/brand-owner/view-brand-link.tsx',
+  'lib/brand-owner-view.ts',
 ];
 const RECYCLE: string[] = [];
 const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
