@@ -1,0 +1,24 @@
+{
+ "lane": "core-ui",
+ "effort": "medium",
+ "reviewRounds": 1,
+ "maxRounds": 2,
+ "reviewFocus": "PlatformBridge đúng interface 01 mục 1.2, bản web an toàn (Web Share dự phòng chép link, localStorage try/catch, OA từ NEXT_PUBLIC_ZALO_OA_ID, không lộ gì), bản Mini App chỉ bọc zmp-bridge; primitive web truy cập được (focus trap, Esc, aria, vùng chạm 44px), Sheet đáy/hộp thoại theo breakpoint, design tokens v2; hạ tầng e2e cô lập thật (không đụng DB/Redis/cổng dùng chung, dọn container).",
+ "tasks": [
+  {
+   "title": "PlatformBridge",
+   "prompt": "Theo 01-thiet-ke.md mục 1.2. `packages/app-core/src/bridge.ts` (interface + kiểu), `apps/web/src/lib/platform-bridge.ts` (web), `apps/miniapp/src/services/platform-bridge.ts` (chỉ bọc hàm có sẵn trong `zmp-bridge.ts`, không đổi zmp-bridge). Spec cho cả hai. Không chuyển code Mini App cũ sang dùng bridge."
+  },
+  {
+   "title": "Primitive giao diện web",
+   "prompt": "Theo 01-thiet-ke.md mục 2. Trong `apps/web/src/components/ui/`: `sheet.tsx`, `segmented-tabs.tsx`, `page-header.tsx`, `error-state.tsx`, `skeleton.tsx`, `badge.tsx`, `progress-bar.tsx`, `quantity-selector.tsx`, `qr-code.tsx` (thêm gói `qrcode` + `@types/qrcode` cho web, cùng phiên bản Mini App đang dùng), `field.tsx`. Kiểm `apps/web/src/components/` trước: cái nào đã có (empty-state, copy-button, share-button, sticky-action-bar, confirm-dialog, login-required…) thì không tạo trùng; nếu `add-to-cart` đã có bộ chọn số lượng thì tách ra dùng chung chỉ khi không đổi hành vi. Hành vi và chữ tham chiếu primitive tương ứng của Mini App (`apps/miniapp/src/components/ui/`). Dùng `lib/guest-ui.ts` và design tokens v2; vùng chạm ≥44px; Sheet có focus trap, Esc, khoá cuộn nền, aria-modal. Spec cho từng primitive. Thêm các file mới vào mảng `MIGRATED` của `ds-v2-guest.spec.ts` (thêm ở cuối, lane core-shell đang tách mảng này thành khối; xung đột sẽ được gộp tay)."
+  },
+  {
+   "title": "Hạ tầng e2e web cô lập",
+   "prompt": "Theo 02-ke-hoach.md mục Gate (đoạn Playwright) và review lần 1 mục 7. Đọc `apps/e2e/playwright.config.ts`, `apps/e2e/global-setup.ts`, `apps/e2e/package.json`.\n1. Hỗ trợ `E2E_SCOPE=web`: chỉ project web (khách + admin nếu cần), chỉ bật server API + web, không bật server Mini App.\n2. Cổng cấu hình qua biến môi trường (`E2E_WEB_PORT`, `E2E_MINIAPP_PORT`, giữ mặc định 3112/3113 và `E2E_API_PORT` hiện có).\n3. Project 'Web Customer Mobile' (thiết bị di động của Playwright) chạy cùng `*.web.spec.ts`.\n4. `apps/e2e/scripts/web-gate.sh`: dựng Postgres + Redis tạm bằng `docker run --rm --tmpfs` ở cổng trống (kiểm cổng trước), chờ sẵn sàng, `prisma migrate deploy` + seed vào DB tạm (DATABASE_URL tạm, chạy trong apps/api), xuất `DATABASE_URL`, `REDIS_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (và biến bắt buộc khác của API — đọc `apps/api/src/config/env.validation.ts`), `CI=1`, cổng riêng, rồi chạy `E2E_SCOPE=web` Playwright; `trap` dọn `docker rm -f -v` khi thoát. Không đọc `apps/api/.env`.\n5. Chứng minh: chạy `web-gate.sh` một lần với các spec web hiện có (`web-checkout.web.spec.ts`, `web-customer.web.spec.ts`). Trước khi chạy, kiểm không có tiến trình nào nghe ở các cổng sẽ dùng. Ghi kết quả. Nếu Playwright chưa cài trình duyệt, cài bằng lệnh của repo (`npx playwright install chromium`)."
+  }
+ ],
+ "wt": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-core-ui",
+ "branch": "web/core-ui",
+ "gate": "export PATH=$HOME/.local/node/node-v22.23.3-darwin-arm64/bin:$PATH\npnpm install --prefer-offline\npnpm --filter @tubutree/shared-types build\npnpm --filter @tubutree/app-core typecheck && pnpm --filter @tubutree/app-core test\npnpm --filter @tubutree/web typecheck && pnpm --filter @tubutree/web lint && pnpm --filter @tubutree/web test\n(cd apps/web && TZ=UTC npx vitest run)\npnpm --filter @tubutree/miniapp typecheck && pnpm --filter @tubutree/miniapp lint && pnpm --filter @tubutree/miniapp test   # Tests >= 4243\npnpm lint:vars\n(grep -q '\"lint:parity\"' package.json && pnpm lint:parity) || echo \"lint:parity chưa có ở nhánh này\"\npnpm --filter @tubutree/web build && pnpm --filter @tubutree/miniapp build"
+}
