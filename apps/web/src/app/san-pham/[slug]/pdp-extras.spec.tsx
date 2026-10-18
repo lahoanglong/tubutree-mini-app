@@ -220,7 +220,7 @@ describe('PdpGroupBuyRow', () => {
     click(byText(container, 'button', /Mở nhóm mua chung/));
     await flush();
     expect(mocks.http.post).toHaveBeenCalledWith('/group-buy', { productId: 'p1' });
-    expect(mocks.push).toHaveBeenCalledWith('/mua-chung/g1');
+    expect(mocks.push).toHaveBeenCalledWith('/mua-chung/g1?moi=1');
   });
   it('bấm hai lần liên tiếp chỉ tạo một nhóm', async () => {
     let resolve!: (v: unknown) => void;

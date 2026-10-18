@@ -71,6 +71,24 @@ beforeEach(() => {
   });
   mocks.post.mockReset().mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
 });
+describe('lời báo vừa mở nhóm (?moi=1)', () => {
+  afterEach(() => window.history.replaceState(null, '', '/'));
+
+  it('có cờ → hiện lời báo như Mini App rồi gỡ cờ khỏi địa chỉ, giữ tham số khác', async () => {
+    window.history.replaceState(null, '', '/mua-chung/g1?ref=A&moi=1');
+    mocks.one = GROUP('g1', { isOwner: true, joined: true });
+    const c = await mount('g1');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé');
+    expect(window.location.search).toBe('?ref=A');
+  });
+
+  it('không có cờ → không có lời báo', async () => {
+    mocks.one = GROUP('g1', { isOwner: true, joined: true });
+    const c = await mount('g1');
+    expect(c.querySelector('[role="status"]')).toBeNull();
+  });
+});
+
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];

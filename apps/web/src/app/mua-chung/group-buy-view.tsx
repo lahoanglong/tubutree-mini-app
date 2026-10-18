@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -24,6 +24,7 @@ import { withReferral } from '@/lib/share-link';
 
 type Note = { text: string; error: boolean } | null;
 
+const JUST_CREATED_PARAM = 'moi';
 const FALLBACK_ERROR = 'Đã có lỗi xảy ra — Vui lòng thử lại';
 const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : FALLBACK_ERROR);
 
@@ -46,6 +47,15 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   const { user, retrySession } = useAuth();
   const authed = phase === 'authenticated';
   const [note, setNote] = useState<Note>(null);
+
+  // `?moi=1` do trang sản phẩm đặt khi vừa mở nhóm: báo một lần như Mini App rồi gỡ cờ để tải lại không báo nữa.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(JUST_CREATED_PARAM) !== '1') return;
+    url.searchParams.delete(JUST_CREATED_PARAM);
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    setNote({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', error: false });
+  }, []);
 
   const listQ = useQuery(groupBuyListQuery(coreHttp));
   // Nhóm được mời có thể không nằm trong 30 nhóm mới nhất của danh sách chung.

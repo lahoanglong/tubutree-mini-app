@@ -205,7 +205,7 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
   const [error, setError] = useState<string | null>(null);
   const create = useMutation({
     mutationFn: () => createGroupBuy(coreHttp, productId),
-    onSuccess: (group) => router.push(`/mua-chung/${encodeURIComponent(group.id)}`),
+    onSuccess: (group) => router.push(`/mua-chung/${encodeURIComponent(group.id)}?moi=1`),
     onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Không mở được nhóm mua chung.'),
   });
 
