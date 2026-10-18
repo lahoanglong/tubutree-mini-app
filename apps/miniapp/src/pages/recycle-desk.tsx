@@ -22,9 +22,11 @@ import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { Icon } from '../components/ui/icon';
+import { ProgressBar } from '../components/ui/progress-bar';
 import { PageHeader } from '../components/ui/page-header';
 import { WasteDeskPerk, WasteDeskReport } from '../components/waste-desk-perk';
 import { QuantitySelector } from '../components/ui/quantity-selector';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
@@ -84,6 +86,7 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
         {point.quota ? (
           <>
             <Text variant="body-md" as="div">{`Đã dùng ${formatNumber(point.quota.used)} / ${formatNumber(point.quota.limit)} điểm`}</Text>
+            {point.quota.limit > 0 && <ProgressBar value={point.quota.used} max={point.quota.limit} />}
             <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{`Còn ${formatNumber(point.quota.remaining)} điểm`}</Text>
           </>
         ) : (
@@ -253,9 +256,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       {points.length > 1 && (
         <SegmentedTabs scroll value={pointId} onChange={setPointId} items={points.map((p) => ({ key: p.id, label: p.name }))} />
       )}
+      {points.length === 1 && <Text variant="body-sm" tone="secondary" as="div">{point.name}</Text>}
       <QuotaCard point={point} />
-      <WasteDeskPerk point={point} />
-      <WasteDeskReport pointId={point.id} />
       <Text variant="body-sm" tone="secondary" as="div">
         Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.
       </Text>
@@ -339,21 +341,6 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
             {!readOnly && (
               <>
-                <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
-                  {`Điểm Tubu sẽ cộng cho khách: ${formatPoints(preview)}`}
-                </Text>
-                {missingReason && (
-                  <Text variant="body-sm" tone="secondary" as="div">Chọn lý do cho món nhận thiếu để xác nhận</Text>
-                )}
-                <Button
-                  size="lg"
-                  fullWidth
-                  disabled={missingReason}
-                  loading={confirm.isPending}
-                  onPress={() => confirm.mutate(request)}
-                >
-                  Xác nhận đã nhận
-                </Button>
                 <Button fullWidth variant="secondary" onPress={() => setRejectOpen(true)}>
                   Từ chối cả yêu cầu
                 </Button>
@@ -390,6 +377,32 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
             )}
           </div>
         </Card>
+      )}
+
+      <WasteDeskPerk point={point} />
+      <WasteDeskReport pointId={point.id} />
+
+      {request && !readOnly && (
+        <>
+          <div aria-hidden style={{ height: 150 }} />
+          <StickyActionBar
+            summary={
+              <div style={{ ...COLUMN, gap: 2 }}>
+                <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
+                  {`Điểm Tubu sẽ cộng cho khách: ${formatPoints(preview)}`}
+                </Text>
+                {missingReason && (
+                  <Text variant="body-sm" tone="secondary" as="div">Chọn lý do cho món nhận thiếu để xác nhận</Text>
+                )}
+              </div>
+            }
+            primary={
+              <Button size="lg" fullWidth disabled={missingReason} loading={confirm.isPending} onPress={() => confirm.mutate(request)}>
+                Xác nhận đã nhận
+              </Button>
+            }
+          />
+        </>
       )}
 
       {request && (

@@ -135,6 +135,31 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
     expect(screen.getByText('Còn 380.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.')).toBeInTheDocument();
   });
+  it('một điểm: tên điểm hiện dưới tiêu đề; hạn mức có thanh tiến độ theo đã dùng trên giới hạn', async () => {
+    renderPage();
+    expect(await screen.findByText('Đại lý Cô Ba')).toBeInTheDocument();
+    expect(screen.getByTestId('progress-fill')).toHaveStyle({ width: '24%' });
+  });
+  it('nhiều điểm: tên điểm chỉ nằm trên các tab, không lặp thành dòng riêng', async () => {
+    mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Đại lý Cô Ba' });
+    expect(screen.getAllByText('Đại lý Cô Ba')).toHaveLength(1);
+  });
+  it('thứ tự: hạn mức, ô nhập mã, thẻ yêu cầu, rồi ưu đãi và báo cáo; xác nhận nằm trong thanh dính đáy', async () => {
+    renderPage();
+    await screen.findByText('Hạn mức điểm tháng này');
+    await lookUp();
+    await screen.findByText('Ng*** A');
+    const before = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const quota = screen.getByText('Hạn mức điểm tháng này');
+    const input = screen.getByLabelText('Mã yêu cầu hoặc mã nhận quà');
+    const card = screen.getByText('Ng*** A');
+    const perk = screen.getByText('Ưu đãi riêng của cửa hàng');
+    const report = screen.getByText('Báo cáo tháng này');
+    expect(before(quota, input) && before(input, card) && before(card, perk) && before(perk, report)).toBe(true);
+    expect(within(screen.getByTestId('sticky-bar')).getByRole('button', { name: 'Xác nhận đã nhận' })).toBeInTheDocument();
+  });
   it('kho: không có thẻ hạn mức; có dòng trần nhân viên trong ngày', async () => {
     mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]);
     renderPage();
