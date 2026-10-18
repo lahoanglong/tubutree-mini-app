@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { AcademyService } from './academy.service';
 import { CreateCourseDto, CreateLessonDto, UpdateCourseDto, UpdateLessonDto } from './dto/academy.dto';
 
 /** Admin: quản lý khoá học/bài học CTV Academy (courses + lessons CRUD). */
 @Roles('ADMIN')
+@AllowStaff('MARKETING')
 @Controller('admin/academy')
 export class AcademyAdminController {
   constructor(private readonly academy: AcademyService) {}

@@ -137,7 +137,7 @@ import {
   ToneBadge,
 } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
-import { ReportsTab } from '@/components/admin/reports-tab';
+import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
@@ -285,6 +285,8 @@ const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['refill'],
   CSKH: ['inbox', 'orders', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
+  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
+  KE_TOAN: ['inbox', 'reports', 'merchantFulfilment', 'customerRefunds', 'payouts'],
 };
 function staffTabs(perms: readonly string[]): Set<Tab> {
   const out = new Set<Tab>(STAFF_TABS.BASE);
@@ -473,7 +475,7 @@ export default function AdminPage() {
           groups={groups}
           active={active}
           onSelect={setTab}
-          badge={(k) => (isAdmin && k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
+          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
@@ -485,8 +487,8 @@ export default function AdminPage() {
           {active === 'commissionRates' && <CommissionRatesTab />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
-          {active === 'payouts' && <PayoutAdminTab />}
-          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} />}
+          {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
+          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}
           {active === 'orders' && (
             <OrdersTab
               key={orderSeed?.n ?? 0}
@@ -528,9 +530,9 @@ export default function AdminPage() {
           {active === 'contentKit' && <ContentKitTab />}
           {active === 'academy' && <AcademyTab />}
           {active === 'quickReplies' && <QuickReplyTab />}
-          {active === 'notificationTemplates' && <NotificationTemplatesTab />}
+          {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab />}
-          {active === 'reports' && <ReportsTab />}
+          {active === 'reports' && <ReportsTab sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
         </div>
       </div>
     </main>

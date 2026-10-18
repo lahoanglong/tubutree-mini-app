@@ -54,6 +54,14 @@ describe('catalog-filter — phân trang trang chủ (BUYERWEB-7)', () => {
     expect(homeHref({ brand: 'Tubu', page: 1 })).toBe('/?brand=Tubu#san-pham');
   });
 
+  it('homeHref/pageHref mang theo danh mục (?category=) cùng các bộ lọc khác', () => {
+    expect(homeHref({ category: 'c1' })).toBe('/?category=c1#san-pham');
+    expect(homeHref({ category: '' })).toBe('/');
+    expect(homeHref({ category: 'c1', brand: 'Tubu', page: 2 })).toBe('/?brand=Tubu&category=c1&page=2#san-pham');
+    expect(pageHref({ category: 'c1' }, 1)).toBe('/?category=c1#san-pham');
+    expect(pageHref({ category: 'c1' }, 3)).toBe('/?category=c1&page=3#san-pham');
+  });
+
   it('pageHref luôn neo #san-pham, kể cả trang 1 không bộ lọc', () => {
     expect(pageHref({}, 1)).toBe('/#san-pham');
     expect(pageHref({}, 2)).toBe('/?page=2#san-pham');

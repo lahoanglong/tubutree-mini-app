@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { NotificationsService } from './notifications.service';
+import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ZnsClient } from '../integrations/zns/zns.client';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -106,6 +107,11 @@ describe('seed mẫu thông báo', () => {
 
   it('PD-3 OQ-10: "xu cũ" chỉ xuất hiện ở mẫu báo quy đổi XU_CONVERTED', () => {
     expect(templates.filter((t) => /xu cũ/iu.test(t.bodyTemplate)).map((t) => t.code)).toEqual(['XU_CONVERTED']);
+  });
+
+  it('mẫu nhân viên Marketing sửa được đều có trong seed (gõ sai mã thì quyền sửa vô tác dụng)', () => {
+    const codes = new Set(seededTemplates().map((t) => t.code));
+    expect([...MARKETING_TEMPLATE_CODES].filter((c) => !codes.has(c))).toEqual([]);
   });
 
   it('id và code không trùng nhau (upsert theo id, code là unique ở DB)', () => {

@@ -152,6 +152,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                     onCreate={() => createMut.mutate(s)}
                     onToggle={(kind) => toggle(s.storefrontId, kind)}
                     partner={partnerToggle}
+                    canEditFees={isAdmin}
                   />
                 ))}
               </ul>
@@ -179,6 +180,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                         onCreate={() => createMut.mutate(s)}
                         onToggle={(kind) => toggle(s.storefrontId, kind)}
                         partner={partnerToggle}
+                        canEditFees={isAdmin}
                       />
                     ))}
                   </tbody>
@@ -192,7 +194,11 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                 {panel.kind === 'lines' ? `Khoản chờ lập phiếu · ${panelStore.title}` : `Phí của ${panelStore.title}`}
               </h4>
               {panel.kind === 'lines' ? (
-                <StatementLines storefrontId={panelStore.storefrontId} title={panelStore.title} onOpenConsignmentConfirm={onOpenConsignmentConfirm} />
+                <StatementLines
+                  storefrontId={panelStore.storefrontId}
+                  title={panelStore.title}
+                  onOpenConsignmentConfirm={isAdmin ? onOpenConsignmentConfirm : undefined}
+                />
               ) : (
                 <StoreTermsForm
                   key={panelStore.storefrontId}
@@ -248,7 +254,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
         )}
         <ul className="space-y-2">
           {slips.items.map((p) => (
-            <PayoutRow key={p.id} payout={p} onDone={refresh} onError={onError} />
+            <PayoutRow key={p.id} payout={p} onDone={refresh} onError={onError} canConfirmToTubu={isAdmin} />
           ))}
         </ul>
         {slips.hasMore && (
@@ -277,9 +283,11 @@ interface StoreRowProps {
   onToggle: (kind: 'lines' | 'fees') => void;
   /** Chỉ ADMIN: nút bật/tắt cờ đối tác (chỉ gian hàng CTV, loại khác API từ chối). */
   partner?: { onToggle: (s: OverviewStore) => void; pending: boolean };
+  /** Chỉ ADMIN: sửa phí sàn/phí giao hộ (PATCH terms). Kế toán đối soát được nhưng không đổi phí. */
+  canEditFees?: boolean;
 }
 
-function StoreActions({ store: s, creating, open, onCreate, onToggle, partner }: StoreRowProps) {
+function StoreActions({ store: s, creating, open, onCreate, onToggle, partner, canEditFees }: StoreRowProps) {
   return (
     <>
       <button type="button" disabled={s.settleableLines === 0 || creating} onClick={onCreate} className={BTN_XS_PRIMARY}>
@@ -288,7 +296,7 @@ function StoreActions({ store: s, creating, open, onCreate, onToggle, partner }:
       <button type="button" disabled={s.settleableLines === 0} aria-expanded={open === 'lines'} onClick={() => onToggle('lines')} className={BTN_XS_SECONDARY}>
         Xem khoản
       </button>
-      {(s.isPartner || s.type === 'MERCHANT') && (
+      {canEditFees && (s.isPartner || s.type === 'MERCHANT') && (
         <button type="button" aria-expanded={open === 'fees'} onClick={() => onToggle('fees')} className={BTN_XS_SECONDARY}>
           Sửa phí
         </button>
@@ -486,7 +494,17 @@ function StoreTermsForm({
   );
 }
 
-function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onDone: () => void; onError: (e: unknown) => void }) {
+function PayoutRow({
+  payout: p,
+  onDone,
+  onError,
+  canConfirmToTubu,
+}: {
+  payout: MerchantPayout;
+  onDone: () => void;
+  onError: (e: unknown) => void;
+  canConfirmToTubu: boolean;
+}) {
   const [bankRef, setBankRef] = useState('');
   const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onSuccess: onDone, onError });
   const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onSuccess: onDone, onError });
@@ -548,7 +566,7 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
               ? bank?.accountNo
                 ? `Chuyển vào ${bank.bankName ?? ''} ${bank.accountNo} (${bank.accountName ?? ''})`
                 : 'Gian hàng chưa khai tài khoản nhận đối soát: nhắc đối tác khai trước khi chuyển.'
-              : `Đối tác nộp ${formatVnd(-p.amount)} cho Tubu${p.transferMemo ? `, nội dung "${p.transferMemo}"` : ''}${p.dueAt ? `, hạn ${formatDate(p.dueAt)}` : ''}. Đối chiếu sao kê rồi bấm Đã thu.`}
+              : `Đối tác nộp ${formatVnd(-p.amount)} cho Tubu${p.transferMemo ? `, nội dung "${p.transferMemo}"` : ''}${p.dueAt ? `, hạn ${formatDate(p.dueAt)}` : ''}. ${canConfirmToTubu ? 'Đối chiếu sao kê rồi bấm Đã thu.' : 'Quản trị viên xác nhận "Đã thu" sau khi đối chiếu sao kê.'}`}
           </p>
           <form
             className="flex flex-wrap items-end gap-2"
@@ -557,13 +575,17 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
               paidMut.mutate();
             }}
           >
-            <label className="text-stone-700">
-              {toTubu ? 'Mã giao dịch đối tác nộp' : 'Mã giao dịch ngân hàng'}
-              <input value={bankRef} onChange={(e) => setBankRef(e.target.value)} required maxLength={100} className={`mt-1 block w-48 ${FIELD_XS}`} />
-            </label>
-            <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
-              {toTubu ? 'Đã thu' : 'Đã chuyển'}
-            </button>
+            {(!toTubu || canConfirmToTubu) && (
+              <>
+                <label className="text-stone-700">
+                  {toTubu ? 'Mã giao dịch đối tác nộp' : 'Mã giao dịch ngân hàng'}
+                  <input value={bankRef} onChange={(e) => setBankRef(e.target.value)} required maxLength={100} className={`mt-1 block w-48 ${FIELD_XS}`} />
+                </label>
+                <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
+                  {toTubu ? 'Đã thu' : 'Đã chuyển'}
+                </button>
+              </>
+            )}
             <button type="button" disabled={busy} onClick={() => void askCancel()} className={BTN_XS_DANGER}>
               Huỷ phiếu
             </button>

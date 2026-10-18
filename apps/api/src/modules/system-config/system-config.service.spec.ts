@@ -523,6 +523,9 @@ describe('SystemConfigService.set — freeship đơn đầu và link Mini App ch
     ['shipping.first_order_free_enabled', [true, false], ['true', 'false', 1, 0, null]],
     ['pancake.total_mismatch_check', [true, false], ['true', 'false', 1, 0, null]],
     ['shipping.first_order_free_min_subtotal', [0, 99000], [-1, 99000.5, 50_000_001, '99000']],
+    ['home.new_customer_layout', [true, false], ['true', 'false', 1, 0, null]],
+    ['community.public_preview', [true, false], ['true', 'false', 1, 0, null]],
+    ['dealer.review_hours', [1, 24, 720], [0, -1, 1.5, 721, '24', null]],
     ['app.miniapp_base_url', ['', 'https://zalo.me/s/1234567890', 'https://zalo.me/s/1234567890/'], ['zalo.me/s/123', 'http://zalo.me/s/123', 'https://zalo.me/s/1 23', 'https://zalo.me/s/123?x=1', 5]],
   ] as const)('%s: nhận %j, từ chối %j', async (key, goods, bads) => {
     for (const ok of goods) {

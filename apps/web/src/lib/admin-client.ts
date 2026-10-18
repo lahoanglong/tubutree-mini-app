@@ -787,6 +787,8 @@ export interface CouponBatchSummary {
 export const createCouponBatch = (input: CouponBatchInput) =>
   apiFetch<CouponBatchCodes & { created: number }>('/admin/coupon-batches', { method: 'POST', body: input });
 export const listCouponBatches = () => apiFetch<CouponBatchSummary[]>('/admin/coupon-batches');
+/** Link gốc Mini App (app.miniapp_base_url) để in QR mã chung; null = chưa đặt. */
+export const getCouponClaimUrlBase = () => apiFetch<{ claimUrlBase: string | null }>('/admin/coupon-batches/claim-url-base');
 export const getCouponBatchCodes = (batch: string) =>
   apiFetch<CouponBatchCodes>(`/admin/coupon-batches/${encodeURIComponent(batch)}/codes`);
 export const setCouponBatchActive = (batch: string, isActive: boolean) =>
@@ -1045,6 +1047,8 @@ export interface AdminNotificationTemplate {
   /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
   znsFailed30d?: number;
   znsLastError?: { text: string; at: string } | null;
+  /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
+  staffEditable?: boolean;
 }
 export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
 export const updateNotificationTemplate = (
@@ -1649,10 +1653,12 @@ export interface OpsInbox {
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
 
-export type StaffPermission = 'CSKH' | 'KHO';
+export type StaffPermission = 'CSKH' | 'KHO' | 'MARKETING' | 'KE_TOAN';
 export const STAFF_PERMISSION_LABELS: Record<StaffPermission, string> = {
-  CSKH: 'CSKH — đơn, đổi trả, người dùng, mẫu tin nhanh',
+  CSKH: 'CSKH — đơn, đổi trả, người dùng, mẫu tin nhanh, kiểm duyệt cộng đồng',
   KHO: 'Kho — trạng thái đơn, đẩy lại Pancake, vận đơn thu gom, nhận hàng trả',
+  MARKETING: 'Marketing — voucher, flash sale, FAQ, Content Kit, Academy, mẫu thông báo, kiểm duyệt cộng đồng, báo cáo nguồn khách',
+  KE_TOAN: 'Kế toán — hoàn tiền khách, chi lệnh rút đã duyệt, đối soát đối tác, báo cáo doanh thu, file CSV tài chính',
 };
 export interface OpsAccess {
   role: string;

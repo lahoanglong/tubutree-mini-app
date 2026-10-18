@@ -405,6 +405,30 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     await expect(svc.createPayout('admin-1', 'sf-a')).rejects.toThrow('Không có đơn nào đủ điều kiện');
   });
 
+  it('nhân viên Kế toán không xác nhận "Đã thu" phiếu gian hàng nợ Tubu (xoá nợ), D1-05', async () => {
+    const { svc, prisma, notify } = build();
+    prisma.merchantPayout.findUnique.mockResolvedValue({ id: 'p1', status: 'PENDING', amount: -80_236, storefront: { ownerUserId: 'u1' } });
+    await expect(svc.markPayoutPaid('s1', 'p1', 'FT9', { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.merchantPayout.updateMany).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên Kế toán không xác nhận đã chuyển phiếu của gian hàng chính mình làm chủ', async () => {
+    const { svc, prisma } = build();
+    prisma.merchantPayout.findUnique.mockResolvedValue({ id: 'p1', status: 'PENDING', amount: 200_000, storefront: { ownerUserId: 's1' } });
+    await expect(svc.markPayoutPaid('s1', 'p1', 'FT9', { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.merchantPayout.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên Kế toán xác nhận đã chuyển phiếu Tubu trả gian hàng được', async () => {
+    const { svc, prisma, notify } = build();
+    prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
+    prisma.merchantPayout.findUnique.mockResolvedValue({ id: 'p1', status: 'PENDING', amount: 200_000, storefront: { ownerUserId: 'u1' } });
+    await svc.markPayoutPaid('s1', 'p1', 'FT123', { byStaff: true });
+    expect(prisma.merchantPayout.updateMany).toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_PAID', { amount: '200.000', bank_ref: 'FT123' });
+  });
+
   it('đánh dấu đã chuyển: chỉ phiếu PENDING, báo đối tác kèm mã giao dịch', async () => {
     const { svc, prisma, notify } = build();
     prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });

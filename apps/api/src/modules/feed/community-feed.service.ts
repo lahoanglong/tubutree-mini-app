@@ -9,7 +9,9 @@ import { authorBadge } from './author-badge';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { startOfVnDay } from '../../common/vn-time';
 import { decodeServedImage } from '../../common/served-image';
+import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
+import { PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
 import { DEFAULT_UNANSWERED_ALERT_HOURS, listUnansweredQuestions, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from './community-unanswered';
 
@@ -369,6 +371,37 @@ export class CommunityFeedService {
     };
   }
 
+  /**
+   * Xem trước công khai cho khách chưa đăng nhập (D5-07): vài bài đã đăng, chỉ trường công khai (xem
+   * toPublicPreviewItem). Cờ tắt thì 404 như route không tồn tại. Đọc chi tiết, thích, bình luận, đăng bài vẫn qua các
+   * route cần đăng nhập.
+   */
+  async publicPreview() {
+    if ((await this.config.get<unknown>(PUBLIC_PREVIEW_KEY, false)) !== true) throw new NotFoundException('Không tìm thấy.');
+    const rows = await this.prisma.feedPost.findMany({
+      where: { status: 'PUBLISHED', kind: { in: [...PUBLIC_PREVIEW_KINDS] } },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      take: PUBLIC_PREVIEW_POSTS,
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        body: true,
+        isPinned: true,
+        createdAt: true,
+        user: { select: { fullName: true, role: true } },
+        category: { select: { slug: true, name: true, icon: true } },
+      },
+    });
+    const ids = rows.map((r) => r.id);
+    const [counts, images] = await Promise.all([this.countsForPage(ids), loadFeedImages(this.prisma, ids, true)]);
+    return {
+      posts: rows.map((r) =>
+        toPublicPreviewItem(r, { likes: counts.likes.get(r.id) ?? 0, comments: counts.comments.get(r.id) ?? 0 }, images.get(r.id)?.images[0] ?? null),
+      ),
+    };
+  }
+
   async getPost(userId: string, postId: string) {
     const p = await this.prisma.feedPost.findUnique({
       where: { id: postId },
@@ -434,7 +467,8 @@ export class CommunityFeedService {
     const isPublic = row.status === 'PUBLISHED';
     const versionOk = matchesFeedImageVersion(version, postId, index, row.img);
     if (!isPublic) {
-      const isModerator = viewer?.role === 'ADMIN' || (viewer?.role === 'STAFF' && !!viewer.staffPermissions?.includes('CSKH'));
+      const isModerator =
+        viewer?.role === 'ADMIN' || (viewer?.role === 'STAFF' && COMMUNITY_MODERATORS.some((p) => viewer.staffPermissions?.includes(p)));
       const allowed =
         isModerator ||
         (!!viewer && viewer.sub === row.userId) ||

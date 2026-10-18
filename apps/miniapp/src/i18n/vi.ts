@@ -88,6 +88,22 @@ export const vi = {
     retry: 'Thử lại',
     retryLabel: (title: string) => `Thử lại ${title}`,
     loadErrorTitle: 'Chưa tải được Trang chủ',
+    // D2-07b: mọi số tiền/điểm/phần trăm truyền vào từ cấu hình công khai, không viết cứng ở đây.
+    newGift: {
+      title: 'Quà khách mới',
+      voucherAmount: (amount: string) => `Voucher chào mừng ${amount}`,
+      voucherPercent: (pct: number) => `Voucher chào mừng giảm ${pct}%`,
+      voucherFreeship: 'Voucher chào mừng miễn phí giao',
+      voucherMinOrder: (min: string) => `Cho đơn từ ${min}`,
+      voucherExpires: (date: string) => `Dùng đến ${date}`,
+      cta: 'Chọn sản phẩm',
+      benefitsTitle: 'Mua trực tiếp tại Tubu Tree',
+      freeShipFirst: 'Miễn phí giao cho đơn đầu tiên',
+      freeShipFirstFrom: (min: string) => `Miễn phí giao cho đơn đầu tiên từ ${min}`,
+      freeShipFrom: (min: string) => `Miễn phí giao cho đơn từ ${min}`,
+      points: (spend: string, redeem: string) => `Mỗi ${spend} mua hàng được 1 Điểm Xanh, 1 điểm giảm ${redeem}`,
+      subscribe: (pct: number) => `Đặt định kỳ giảm ${pct}% mỗi đơn`,
+    },
     strip: {
       title: 'Đơn của bạn',
       shipping: (code: string) => `Đơn ${code} đang giao`,
@@ -127,6 +143,10 @@ export const vi = {
     viewCart: 'Xem giỏ hàng',
     chatWithShop: 'Chat với Tubu Tree',
     chatAbout: (name: string) => `Mình muốn hỏi về sản phẩm: ${name}`,
+    // "Tối đa": giảm giá/mã/điểm dùng ở bước thanh toán làm giá trị hàng tính điểm thấp đi, số này là trước các khoản đó.
+    pointsEarn: (points: number, valueVnd: number) =>
+      `Nhận tối đa ${formatNumber(points)} Điểm Xanh (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
+    pointsEarnGeneric: 'Nhận Điểm Xanh khi đơn giao thành công',
   },
 
   subscriptions: {
@@ -295,7 +315,9 @@ export const vi = {
     /** Đơn chưa "Đang giao" nhưng kho đã đặt hãng (có mã vận đơn) — không tự huỷ được nữa. */
     carrierBooked: 'Đã đặt đơn vị vận chuyển',
     emptyHeading: 'Bạn chưa có đơn nào',
-    emptyBody: 'Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ',
+    // Số do admin đặt (voucher.welcome_amount, voucher.welcome_min_order): nhận từ config công khai, không viết cứng ở đây.
+    emptyBody: (minOrder: string, amount: string) => `Đơn đầu từ ${minOrder} dùng được mã giảm giá chào mừng ${amount}`,
+    emptyBodyNoMin: (amount: string) => `Đơn đầu dùng được mã giảm giá chào mừng ${amount}`,
     emptyCta: 'Bắt đầu mua',
     tabAll: 'Tất cả',
     tabTitle: 'Đơn hàng',
@@ -642,6 +664,13 @@ export const vi = {
     mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
   },
 
+  dealerApply: {
+    pitch: (pct: string) => `Giá sỉ đến ${pct} · công nợ · đặt hàng nhanh số lượng lớn.`,
+    pitchGeneric: 'Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.',
+    pendingBody: (hours: number) => `Đội ngũ Tubu sẽ xét duyệt trong vòng ${hours} giờ và liên hệ lại với bạn qua Zalo.`,
+    pendingBodyGeneric: 'Đội ngũ Tubu sẽ xét duyệt và liên hệ lại với bạn qua Zalo.',
+  },
+
   dealerOrder: {
     outOfStockPreorder: 'Hết hàng — được đặt trước',
     preorderLine: (n: number) => `Đặt trước ${n}, giao khi hàng về`,
@@ -705,6 +734,8 @@ export const vi = {
     viewSolution: 'Xem sản phẩm gợi ý',
     emptyHeading: 'Chưa có bài viết nào',
     emptyBody: 'Hãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!',
+    emptyCta: 'Đăng bài đầu tiên',
+    previewLead: 'Vài bài mới trong cộng đồng. Đăng nhập để đọc tiếp, thích và bình luận.',
     hasBestAnswer: 'Đã có câu trả lời hay',
     loadMore: 'Xem thêm',
     edit: 'Sửa',
@@ -761,7 +792,8 @@ export const vi = {
     eventDescPlaceholder: 'Mô tả sự kiện (không bắt buộc)',
     eventCoverLabel: 'Ảnh bìa sự kiện',
     eventRewardLabel: 'Thưởng Điểm Xanh',
-    eventRewardHint: '1 điểm = 1.000đ, tối đa 1.000 điểm',
+    eventRewardHint: (redeem: string, maxPoints: string) => `1 điểm = ${redeem}, tối đa ${maxPoints} điểm`,
+    eventRewardHintGeneric: 'Điểm Xanh thưởng cho người thắng sự kiện',
     createEvent: 'Tạo sự kiện',
     eventCreated: 'Đã tạo sự kiện 🎉',
     closeEvent: 'Đóng',

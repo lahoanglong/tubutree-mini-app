@@ -95,6 +95,7 @@ export class SystemConfigService {
     'flashsale.max_discount_pct': { min: 0.01, max: 1, note: 'phân số (0.9 = giá flash ≥ 10% giá đang bán; 1 = không chặn)' },
     'flashsale.max_duration_days': { min: 1, max: 366, note: 'số ngày tối đa của một đợt flash sale', integer: true },
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },
+    'dealer.review_hours': { min: 1, max: 720, note: 'số giờ nguyên Tubu hẹn xét duyệt hồ sơ đại lý (chỉ để hiện chữ cho người đăng ký)', integer: true },
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },
     'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)', integer: true },
     'cashback.hold_days': { min: 0, max: 365, note: 'số ngày', integer: true },
@@ -254,6 +255,10 @@ export class SystemConfigService {
     'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Công tắc kiểm lệch tổng Pancake (PANCAKE_TOTAL_CHECK_KEY): chỉ `false` mới tắt, nên chuỗi "false" phải bị từ chối chứ không được lưu.
     'pancake.total_mismatch_check': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.
+    'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.
+    'community.public_preview': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Link nhận mã in trong QR thẻ hộp hàng và link chia sẻ của CTV dựng từ khoá này: sai là thẻ đã in mở ra trang lỗi.
     'app.miniapp_base_url': (value) =>
       value === '' || (typeof value === 'string' && /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(value))
@@ -353,6 +358,10 @@ export class SystemConfigService {
   /** Khoá có luật ghi riêng (biên số hoặc luật JSON): hệ thống biết khoá này, dù DB chưa có dòng. */
   static hasWriteRule(key: string): boolean {
     return key in SystemConfigService.RANGES || key in SystemConfigService.JSON_RULES;
+  }
+
+  static writeRuleKeys(): string[] {
+    return [...Object.keys(SystemConfigService.RANGES), ...Object.keys(SystemConfigService.JSON_RULES)];
   }
 
   private assertInRange(key: string, value: unknown): void {

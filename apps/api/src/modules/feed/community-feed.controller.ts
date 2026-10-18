@@ -6,11 +6,13 @@ import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
-import { AllowStaff } from '../../common/staff-permissions';
+import { AllowStaff, COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
+import { EVENT_REWARD_MAX_POINTS } from './community-limits';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
@@ -57,7 +59,7 @@ export class CreateEventDto {
   @IsDateString() endAt!: string;
   // Điểm Xanh (1 điểm = 1.000đ). Trần 1.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
   // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
-  @OptionalNotNull() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(EVENT_REWARD_MAX_POINTS) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;
@@ -85,6 +87,14 @@ export class CommunityFeedController {
     return this.feed.getCategories();
   }
 
+  // Xem trước công khai cho khách chưa đăng nhập (cờ community.public_preview, tắt thì 404). Literal path: khai TRƯỚC @Get(':id').
+  @Public()
+  @PublicCache('USER_CONTENT')
+  @Get('public-preview')
+  publicPreview() {
+    return this.feed.publicPreview();
+  }
+
   // Literal path (leaderboard) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
   @Get('leaderboard')
   leaderboard() {
@@ -92,31 +102,31 @@ export class CommunityFeedController {
   }
 
   // Admin (literal paths) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
-  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn/ghim, báo cáo) mở cho nhóm CSKH để bài của khách không nằm chờ chủ shop;
+  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn/ghim, báo cáo) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop;
   // sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/pending')
   adminPending() {
     return this.feed.adminPending();
   }
 
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/published')
   adminPublished(@Query() query: CursorPageQuery) {
     return this.feed.adminPublished(query.take ? Number(query.take) : undefined, query.cursor);
   }
 
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/unanswered')
   adminUnanswered() {
     return this.feed.adminUnanswered();
   }
 
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/reports')
   adminReports() {
     return this.feed.adminReports();
@@ -276,14 +286,14 @@ export class CommunityFeedController {
   }
 
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/approve')
   approve(@Param('id') id: string) {
     return this.feed.approvePost(id);
   }
 
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/reject')
   reject(@Param('id') id: string, @Body() dto: RejectPostDto) {
     return this.feed.rejectPost(id, dto?.reason);
@@ -291,21 +301,21 @@ export class CommunityFeedController {
 
   /** Ẩn bài đã đăng kèm lý do (tác giả được báo). `DELETE /feed/:id` vẫn dành cho chủ bài và ADMIN. */
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/hide')
   hide(@Param('id') id: string, @Body() dto: RejectPostDto) {
     return this.feed.hidePost(id, dto?.reason);
   }
 
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/reports/:id/resolve')
   resolveReport(@Param('id') id: string) {
     return this.feed.resolveReport(id);
   }
 
   @Roles('ADMIN')
-  @AllowStaff('CSKH')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/pin')
   pin(@Param('id') id: string, @Body() body: PinDto) {
     return this.feed.pinPost(id, body?.pinned !== false);

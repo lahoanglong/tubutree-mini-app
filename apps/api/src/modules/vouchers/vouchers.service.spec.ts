@@ -2,6 +2,8 @@ import { VouchersService } from './vouchers.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import { REAL_USER_WHERE } from '../../common/real-user';
+import { priorOrderWhere } from '../../common/first-order';
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -737,5 +739,104 @@ describe('VouchersService — lịch giờ VN, độc lập TZ host (C-026)', ()
     }
     const data = ((prisma as unknown as { coupon: { create: jest.Mock } }).coupon.create).mock.calls[0][0].data;
     expect(data.scopeMeta.reason).toBe('WINBACK-2026-10');
+  });
+});
+
+// D2-07a: voucher chào mừng cấp ngay khi tài khoản thật xuất hiện, cron mỗi giờ vẫn là lưới. Cả hai đi qua cùng
+// grant() (code tất định WELCOME-<userId>) nên gọi trùng không tạo thêm mã.
+describe('VouchersService.grantWelcomeNow', () => {
+  function setup(eligible: boolean, config: Record<string, unknown> = {}) {
+    const findFirst = jest.fn().mockResolvedValue(eligible ? { id: 'u1' } : null);
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: { findFirst },
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    return { svc: new VouchersService(prisma, makeConfig(config), notify), findFirst, create, notify };
+  }
+
+  it('user đủ điều kiện → cấp đúng mã WELCOME-<userId> với giá trị/đơn tối thiểu đọc từ cấu hình, hạn 30 ngày', async () => {
+    const { svc, create, notify } = setup(true, { 'voucher.welcome_amount': 25000, 'voucher.welcome_min_order': 150000 });
+
+    await expect(svc.grantWelcomeNow('u1')).resolves.toBe(true);
+
+    const data = create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ code: 'WELCOME-U1', type: 'AMOUNT', value: 25000, minOrder: 150000, usageLimit: 1, perUserLimit: 1 });
+    expect(data.scopeMeta).toEqual({ userId: 'u1', reason: 'WELCOME' });
+    expect(Math.round((data.endAt.getTime() - data.startAt.getTime()) / 864e5)).toBe(30);
+    expect(notify.notify).toHaveBeenCalledWith('u1', 'WELCOME_VOUCHER', expect.objectContaining({ value: '25.000' }));
+  });
+
+  it('giá trị mặc định khi chưa có cấu hình giống cron (30.000đ cho đơn từ 199.000đ)', async () => {
+    const { svc, create } = setup(true);
+    await svc.grantWelcomeNow('u1');
+    expect(create.mock.calls[0][0].data).toMatchObject({ value: 30000, minOrder: 199000 });
+  });
+
+  it('điều kiện đúng như cron: khách thật, role CUSTOMER, chưa có đơn, tạo trong 24h', async () => {
+    const { svc, findFirst } = setup(true);
+    const before = Date.now();
+
+    await svc.grantWelcomeNow('u1');
+
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where).toMatchObject({ id: 'u1', role: 'CUSTOMER', orders: { none: {} }, OR: REAL_USER_WHERE.OR });
+    const since = (where.createdAt.gte as Date).getTime();
+    expect(before - since).toBeGreaterThanOrEqual(24 * 3600 * 1000 - 1000);
+    expect(before - since).toBeLessThanOrEqual(24 * 3600 * 1000 + 5000);
+  });
+
+  // "Chưa có đơn" của voucher chào mừng là cùng định nghĩa với freeship đơn đầu và mã newCustomerOnly: đơn đã huỷ không tính.
+  it('"chưa có đơn" dùng chung định nghĩa với hasPriorOrder: đơn huỷ không chặn voucher', async () => {
+    const { svc, findFirst } = setup(true);
+
+    await svc.grantWelcomeNow('u1');
+
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where.orders).toEqual({ none: { status: { not: 'CANCELLED' } } });
+    expect(priorOrderWhere('u1')).toMatchObject(where.orders.none);
+  });
+
+  it('dòng đã gộp vào tài khoản khác (mergedIntoId) không được cấp: cả đường ngay lẫn khi becameRealNow', async () => {
+    const { svc, findFirst } = setup(true);
+
+    await svc.grantWelcomeNow('u1');
+    await svc.grantWelcomeNow('u1', { becameRealNow: true });
+
+    for (const [call] of findFirst.mock.calls) expect(call.where).toMatchObject({ mergedIntoId: null });
+  });
+
+  // Khách vãng lai dùng app quá 24h rồi mới đăng nhập Zalo: createdAt là của dòng vãng lai nên cửa sổ 24h loại họ sai.
+  it('becameRealNow: bỏ điều kiện createdAt, giữ nguyên mọi điều kiện còn lại', async () => {
+    const { svc, findFirst, create } = setup(true);
+
+    await expect(svc.grantWelcomeNow('u1', { becameRealNow: true })).resolves.toBe(true);
+
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('createdAt');
+    expect(where).toMatchObject({ id: 'u1', role: 'CUSTOMER', orders: { none: {} }, OR: REAL_USER_WHERE.OR });
+    expect(create.mock.calls[0][0].data.code).toBe('WELCOME-U1');
+  });
+
+  it.each([[undefined], [{}], [{ becameRealNow: false }]])('không truyền becameRealNow (%j): vẫn giữ cửa sổ 24h như cron', async (opts) => {
+    const { svc, findFirst } = setup(true);
+    await svc.grantWelcomeNow('u1', opts);
+    expect(findFirst.mock.calls[0][0].where.createdAt.gte).toBeInstanceOf(Date);
+  });
+
+  it('khách vãng lai / đã có đơn / quá 24h (findFirst rỗng) → không cấp, không thông báo', async () => {
+    const { svc, create, notify } = setup(false);
+    await expect(svc.grantWelcomeNow('u1')).resolves.toBe(false);
+    expect(create).not.toHaveBeenCalled();
+    expect(notify.notify).not.toHaveBeenCalled();
+  });
+
+  it('đã có mã (cron cấp trước) → false, không tạo thêm', async () => {
+    const { svc, create } = setup(true);
+    const prismaInternal = (svc as unknown as { prisma: { coupon: { findUnique: jest.Mock } } }).prisma;
+    prismaInternal.coupon.findUnique.mockResolvedValue({ id: 'c1' });
+    await expect(svc.grantWelcomeNow('u1')).resolves.toBe(false);
+    expect(create).not.toHaveBeenCalled();
   });
 });

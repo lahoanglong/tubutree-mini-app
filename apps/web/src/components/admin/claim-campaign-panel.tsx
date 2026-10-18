@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createCoupon,
   createCouponBatch,
-  getConfig,
   getCouponBatchCodes,
+  getCouponClaimUrlBase,
   listCouponBatches,
   setCouponBatchActive,
   type CouponBatchSummary,
@@ -67,9 +67,8 @@ export function ClaimCampaignPanel() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
 
-  const configQ = useQuery({ queryKey: ['admin-config', 'app'], queryFn: () => getConfig('app') });
-  const baseRow = configQ.data?.find((r) => r.key === MINIAPP_BASE_URL_KEY);
-  const base = typeof baseRow?.value === 'string' ? baseRow.value.trim() : '';
+  const configQ = useQuery({ queryKey: ['admin-coupon-claim-url-base'], queryFn: getCouponClaimUrlBase });
+  const base = configQ.data?.claimUrlBase?.trim() ?? '';
   const batchesQ = useQuery({ queryKey: ['admin-coupon-batches'], queryFn: listCouponBatches });
 
   const money = () => ({

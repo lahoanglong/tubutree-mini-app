@@ -1,3 +1,4 @@
+import { pointsForGoods } from './points-earn';
 import { firstOrderFreeShipFrom, firstOrderShippingFee, freeShipThreshold, PricingService } from './pricing.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -49,6 +50,23 @@ describe('PricingService', () => {
     });
     it('áp multiplier 1.5x (Đại Thụ)', async () => {
       expect(await svc.calcPointsEarned(200000, 1.5)).toBe(30);
+    });
+    // Miniapp (PDP "Nhận N Điểm Xanh") dùng chung công thức qua pointsForGoods: đổi một bên phải khớp bên kia.
+    it('calcPointsEarned đúng bằng pointsForGoods với cấu hình đang dùng, kể cả mốc làm tròn xuống và cấu hình hỏng', async () => {
+      for (const vnd of [10000, 7500, 1, 0, -5]) {
+        const s = new PricingService(makeConfig({ ...DEFAULTS, 'loyalty.vnd_per_point': vnd }));
+        for (const goods of [0, 1, 9999, 10000, 19999, 20000, 249999, 1_000_000]) {
+          for (const mult of [undefined, 1, 1.2, 1.5, 2]) {
+            expect(await s.calcPointsEarned(goods, mult)).toBe(pointsForGoods(goods, vnd, mult));
+          }
+        }
+      }
+    });
+    it('pointsForGoods: làm tròn xuống, nhân hệ số hạng, mốc ≤ 0 thì không tích', () => {
+      expect(pointsForGoods(19999, 10000)).toBe(1);
+      expect(pointsForGoods(19999, 10000, 1.5)).toBe(2);
+      expect(pointsForGoods(9999, 10000, 1.2)).toBe(1);
+      expect(pointsForGoods(500000, 0, 2)).toBe(0);
     });
   });
 

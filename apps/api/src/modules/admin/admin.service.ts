@@ -70,7 +70,21 @@ import {
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
 import { maskPhone } from '../../common/mask-pii';
-import { assertClaimUsageLimit, assertCouponInput } from './coupon-input-rules';
+import {
+  actorLabel,
+  actorUserId,
+  assertClaimUsageLimit,
+  assertCouponInput,
+  assertNotOwnCoupon,
+  assertStaffCouponCaps,
+  assertStaffCreatedCoupons,
+  assertStaffDailyBudget,
+  loadStaffCouponCaps,
+  staffCouponExposure,
+  SYSTEM_ACTOR,
+  type CouponActor,
+  type StaffCouponCaps,
+} from './coupon-input-rules';
 
 
 function reviewConflict(code: string, message: string) {
@@ -586,8 +600,9 @@ export class AdminService {
     if (user.role !== 'STAFF') {
       throw new BadRequestException('Chỉ gán nhóm việc cho tài khoản Nhân viên (STAFF) — cấp vai trò nhân viên trước.');
     }
+    // So và ghi sổ theo tập đã sắp xếp: thứ tự lưu là thứ tự STAFF_PERMISSIONS, không trùng thứ tự chữ cái.
     const before = [...user.staffPermissions].sort().join(',');
-    const after = perms.join(',');
+    const after = [...perms].sort().join(',');
     if (before === after) return { id: userId, staffPermissions: perms, changed: false };
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: userId }, data: { staffPermissions: perms } }),
@@ -806,8 +821,8 @@ export class AdminService {
   }
 
   /** File CSV mọi đơn khớp bộ lọc (admin-export.ts đọc theo lô). */
-  async orderCsv(f: AdminOrderFilterInput): Promise<AsyncGenerator<string>> {
-    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f));
+  async orderCsv(f: AdminOrderFilterInput, opts: { maskPhones?: boolean } = {}): Promise<AsyncGenerator<string>> {
+    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f), opts);
   }
 
   userCsv(search?: string): AsyncGenerator<string> {
@@ -1296,22 +1311,25 @@ export class AdminService {
     // DTO (RequiredScopeMeta) đã bắt buộc đúng field khi scope=TIER/USER_GROUP trước khi tới đây.
     scopeMeta?: { tierId?: string; userId?: string };
     newCustomerOnly?: boolean;
-  }) {
+  }, actor: CouponActor = SYSTEM_ACTOR) {
     const startAt = new Date(data.startAt);
     const endAt = new Date(data.endAt);
     assertCouponInput({ ...data, startAt, endAt });
+    const staffCaps = actor.staff ? await loadStaffCouponCaps(this.config) : null;
+    if (staffCaps) assertStaffCouponCaps(data, staffCaps);
     // isCouponEligible so đúng id: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được.
     const tierId = data.scope === 'TIER' ? data.scopeMeta?.tierId : undefined;
     if (tierId && !(await this.prisma.membershipTier.findUnique({ where: { id: tierId }, select: { id: true } }))) {
       throw new BadRequestException(`Hạng thành viên "${tierId}" không tồn tại — mã tạo ra sẽ không ai dùng được.`);
     }
     const ownerId = data.scope === 'USER_GROUP' ? data.scopeMeta?.userId : undefined;
+    assertNotOwnCoupon(actor, ownerId);
     if (ownerId && !(await this.prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } }))) {
       throw new BadRequestException(`Không tìm thấy người dùng "${ownerId}" — mã cá nhân tạo ra sẽ không ai dùng được.`);
     }
     const code = normalizeCouponCode(data.code);
     try {
-      return await this.prisma.coupon.create({
+      const write = (db: Prisma.TransactionClient | PrismaService) => db.coupon.create({
         data: {
           code,
           type: data.type,
@@ -1327,8 +1345,18 @@ export class AdminService {
           // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
           scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
           newCustomerOnly: data.newCustomerOnly ?? false,
+          createdById: actorUserId(actor),
+          updatedById: actorUserId(actor),
         },
       });
+      const created = staffCaps
+        ? await this.prisma.$transaction(async (tx) => {
+            await assertStaffDailyBudget(tx, actor.id, new Date(), staffCouponExposure(data, staffCaps), staffCaps);
+            return write(tx);
+          })
+        : await write(this.prisma);
+      this.logger.warn(`${actorLabel(actor)} tạo mã giảm giá ${code}: ${JSON.stringify(data)}`);
+      return created;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException(`Mã ${code} đã tồn tại.`);
@@ -1380,9 +1408,26 @@ export class AdminService {
   }
 
   /** Sửa nhanh mã đang chạy: tắt/bật, gia hạn/rút ngắn, đổi tổng lượt. Không sửa giá trị (tạo mã mới). */
-  async updateCoupon(id: string, data: { isActive?: boolean; endAt?: string; usageLimit?: number | null }) {
+  async updateCoupon(
+    id: string,
+    data: { isActive?: boolean; endAt?: string; usageLimit?: number | null },
+    actor: CouponActor = SYSTEM_ACTOR,
+  ) {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
     if (!coupon) throw new NotFoundException('Không tìm thấy mã giảm giá.');
+    if (coupon.scope === 'USER_GROUP') assertNotOwnCoupon(actor, (coupon.scopeMeta as { userId?: string } | null)?.userId);
+    let raise = 0;
+    let staffCaps: StaffCouponCaps | null = null;
+    if (actor.staff) {
+      await assertStaffCreatedCoupons(this.prisma, [coupon.createdById]);
+      const turningOffOnly = data.isActive === false && data.endAt === undefined && data.usageLimit === undefined;
+      if (!turningOffOnly) {
+        staffCaps = await loadStaffCouponCaps(this.config);
+        const usageLimit = data.usageLimit !== undefined ? data.usageLimit : coupon.usageLimit;
+        assertStaffCouponCaps({ ...coupon, usageLimit }, staffCaps);
+        raise = staffCouponExposure({ ...coupon, usageLimit }, staffCaps) - staffCouponExposure(coupon, staffCaps);
+      }
+    }
     const patch: Prisma.CouponUpdateInput = {};
     if (data.isActive !== undefined) patch.isActive = data.isActive;
     if (data.endAt !== undefined) {
@@ -1400,8 +1445,16 @@ export class AdminService {
       }
       patch.usageLimit = data.usageLimit;
     }
-    const updated = await this.prisma.coupon.update({ where: { id }, data: patch });
-    this.logger.warn(`Admin cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
+    const by = actorUserId(actor);
+    if (by) patch.updatedById = by;
+    const updated =
+      staffCaps && raise > 0
+        ? await this.prisma.$transaction(async (tx) => {
+            await assertStaffDailyBudget(tx, coupon.createdById!, coupon.createdAt, raise, staffCaps);
+            return tx.coupon.update({ where: { id }, data: patch });
+          })
+        : await this.prisma.coupon.update({ where: { id }, data: patch });
+    this.logger.warn(`${actorLabel(actor)} cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
     return updated;
   }
 

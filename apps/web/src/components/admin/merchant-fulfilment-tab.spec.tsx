@@ -211,7 +211,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
 
   it('Q8: admin sửa phí sàn riêng và phí Tubu giao hộ — gửi phân số; để trống phí sàn là về mặc định', async () => {
     const api = setup();
-    const r = render(<MerchantFulfilmentTab />);
+    const r = render(<MerchantFulfilmentTab isAdmin />);
     mounted.push(r);
     await flush();
     const row = Array.from(r.container.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Mật ong Linh'))!;
@@ -323,7 +323,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
       '/admin/merchant-fulfilment/payouts/mp1/paid': { body: { ...NEG, status: 'PAID' } },
       '/admin/merchant-fulfilment/payouts?': { body: { data: [NEG], meta: { page: 1, limit: 20, total: 1 } } },
     });
-    const r = render(<MerchantFulfilmentTab />);
+    const r = render(<MerchantFulfilmentTab isAdmin />);
     mounted.push(r);
     await flush();
     const root = r.container;
@@ -453,7 +453,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
       },
     });
     const onOpenConsignmentConfirm = vi.fn();
-    const r = render(<MerchantFulfilmentTab onOpenConsignmentConfirm={onOpenConsignmentConfirm} />);
+    const r = render(<MerchantFulfilmentTab isAdmin onOpenConsignmentConfirm={onOpenConsignmentConfirm} />);
     mounted.push(r);
     await flush();
     const row = Array.from(r.container.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Trà Shan giao hộ'))!;
@@ -470,7 +470,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
         body: { ...STATEMENT, lines: [], total: 0, consignmentExcluded: excluded([line('i2', 'BEFORE_SETTLE_FROM')]) },
       },
     });
-    const r2 = render(<MerchantFulfilmentTab onOpenConsignmentConfirm={onOpenConsignmentConfirm} />);
+    const r2 = render(<MerchantFulfilmentTab isAdmin onOpenConsignmentConfirm={onOpenConsignmentConfirm} />);
     mounted.push(r2);
     await flush();
     const row2 = Array.from(r2.container.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Trà Shan giao hộ'))!;
@@ -499,7 +499,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
           body: { ...STATEMENT, lines: [], total: 0, consignmentExcluded: { settleFrom: null, total: lines.length, lines } },
         },
       });
-      const r = render(<MerchantFulfilmentTab onOpenConsignmentConfirm={vi.fn()} />);
+      const r = render(<MerchantFulfilmentTab isAdmin onOpenConsignmentConfirm={vi.fn()} />);
       mounted.push(r);
       await flush();
       const row = Array.from(r.container.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Trà Shan giao hộ'))!;
@@ -553,6 +553,54 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     click(Array.from(r.container.querySelectorAll('button')).find((b) => b.textContent === 'Lập phiếu đối soát')!);
     await flush();
     expect(r.container.querySelector('[role="alert"]')!.textContent).toContain('Một phiếu đối soát khác');
+  });
+});
+
+// D1-05: kế toán (không phải ADMIN) đối soát được — lập phiếu, xem khoản, đã chuyển/huỷ — nhưng không sửa phí sàn
+// (PATCH terms chỉ ADMIN) và không có lối sang màn xác nhận hàng ký gửi (tab Duyệt SP đối tác chỉ ADMIN).
+describe('MerchantFulfilmentTab — nhân viên kế toán (isAdmin=false)', () => {
+  it('phiếu âm (đối tác nộp Tubu): không có "Đã thu" — quản trị viên xác nhận sau khi đối chiếu sao kê; vẫn huỷ được phiếu', async () => {
+    const NEG = { ...PAYOUT, amount: -103500, direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt: '2026-10-19T03:00:00.000Z' };
+    setup({ '/admin/merchant-fulfilment/payouts?': { body: { data: [NEG], meta: { page: 1, limit: 20, total: 1 } } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(root.textContent).toContain('TUBU DS ABCD1234');
+    expect(byText(root, 'button', 'Đã thu')).toBeNull();
+    expect(root.textContent).toContain('Quản trị viên xác nhận "Đã thu"');
+    expect(byText(root, 'button', 'Huỷ phiếu')).not.toBeNull();
+  });
+
+  it('có "Lập phiếu đối soát", "Xem khoản" và nút xử lý phiếu; không có "Sửa phí" và "Xác nhận hàng ký gửi"', async () => {
+    setup({
+      '/admin/merchant-fulfilment/statements/': {
+        body: {
+          ...STATEMENT,
+          lines: [],
+          total: 0,
+          consignmentExcluded: {
+            settleFrom: '2026-10-01T00:00:00.000Z',
+            total: 1,
+            lines: [
+              { orderId: 'o-i1', orderCode: 'TT-i1', orderItemId: 'i1', productName: 'Bột sắn dây', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: null, reason: 'TAKEOVER_UNCONFIRMED' },
+            ],
+          },
+        },
+      },
+    });
+    const r = render(<MerchantFulfilmentTab onOpenConsignmentConfirm={vi.fn()} />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(byText(root, 'button', 'Lập phiếu đối soát')).not.toBeNull();
+    expect(byText(root, 'button', 'Sửa phí')).toBeNull();
+    expect(byText(root, 'button', 'Đã chuyển')).not.toBeNull();
+    const row = Array.from(root.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Trà Shan giao hộ'))!;
+    click(byText(row, 'button', 'Xem khoản'));
+    await flush();
+    expect(root.textContent).toContain('Bột sắn dây');
+    expect(byText(root, 'button', 'Xác nhận hàng ký gửi')).toBeNull();
   });
 });
 

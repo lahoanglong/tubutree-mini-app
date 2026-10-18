@@ -23,8 +23,9 @@ const DELIVERY: Record<NotificationDelivery, { tone: Tone; label: string }> = {
  * là kênh ZNS VÀ có mã mẫu; còn lại thông báo chỉ hiện khi khách tự mở app. Danh sách xếp mẫu cần
  * xử lý (ZNS thiếu mã) lên đầu, rồi theo số lượt gửi 30 ngày để biết nên xin duyệt mẫu nào trước.
  */
-export function NotificationTemplatesTab() {
+export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: boolean }) {
   const q = useQuery({ queryKey: ['admin-notification-templates'], queryFn: listNotificationTemplates });
+  const rows = canEditAll ? q.data : q.data?.filter((t) => t.staffEditable);
   const missing = q.data?.filter((t) => t.delivery === 'ZNS_MISSING_TEMPLATE_ID').length ?? 0;
   const zns = q.data?.filter((t) => t.delivery === 'ZNS').length ?? 0;
 
@@ -37,16 +38,21 @@ export function NotificationTemplatesTab() {
         {missing > 0 && `${missing} mẫu kênh ZNS chưa có mã mẫu nên đang chỉ gửi trong app. `}
         Đăng ký mẫu ZNS trên Zalo (duyệt 7–14 ngày, xem docs/GO-LIVE-KEYS.md mục 2), duyệt xong thì nhập mã mẫu ở đây.
       </Notice>
+      {!canEditAll && (
+        <Notice tone="info">
+          Mẫu đơn hàng, tiền, đối tác chỉ quản trị viên sửa. Đổi kênh gửi hay mã mẫu ZNS (tính phí mỗi tin) nhờ quản trị viên.
+        </Notice>
+      )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách mẫu thông báo.</p>}
       <div className="space-y-2">
-        {q.data?.map((t) => <TemplateRow key={t.code} item={t} />)}
+        {rows?.map((t) => <TemplateRow key={t.code} item={t} canEditDelivery={canEditAll} />)}
       </div>
     </div>
   );
 }
 
-function TemplateRow({ item }: { item: AdminNotificationTemplate }) {
+function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplate; canEditDelivery: boolean }) {
   const qc = useQueryClient();
   const [f, setF] = useState({
     channel: item.channel === 'ZNS' ? 'ZNS' : 'INAPP',
@@ -92,6 +98,7 @@ function TemplateRow({ item }: { item: AdminNotificationTemplate }) {
             name="channel"
             value={f.channel}
             onChange={(e) => setF({ ...f, channel: e.target.value })}
+            disabled={!canEditDelivery}
             className={FIELD_XS}
           >
             <option value="INAPP">Trong app</option>
@@ -106,6 +113,7 @@ function TemplateRow({ item }: { item: AdminNotificationTemplate }) {
             placeholder="vd 231570"
             value={f.zaloTemplateId}
             onChange={(e) => setF({ ...f, zaloTemplateId: e.target.value })}
+            disabled={!canEditDelivery}
             className={`${FIELD_XS} w-36`}
           />
         </label>

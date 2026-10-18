@@ -1,9 +1,20 @@
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { assertCouponInput } from './coupon-input-rules';
+import {
+  actorLabel,
+  actorUserId,
+  assertCouponInput,
+  assertStaffCouponCaps,
+  assertStaffCreatedCoupons,
+  assertStaffDailyBudget,
+  loadStaffCouponCaps,
+  staffCouponPerUse,
+  SYSTEM_ACTOR,
+  type CouponActor,
+} from './coupon-input-rules';
 
 /** Trần mã mỗi lô: một lần in thẻ; lô lớn hơn thì chia nhiều tiền tố. */
 export const COUPON_BATCH_MAX = 2000;
@@ -69,16 +80,20 @@ export interface BatchSummary {
  */
 @Injectable()
 export class AdminCouponBatchService {
+  private readonly logger = new Logger(AdminCouponBatchService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
   ) {}
 
-  async create(input: CouponBatchInput) {
+  async create(input: CouponBatchInput, actor: CouponActor = SYSTEM_ACTOR) {
     const batch = input.prefix.trim().toUpperCase();
     const startAt = new Date(input.startAt);
     const endAt = new Date(input.endAt);
     assertCouponInput({ ...input, startAt, endAt });
+    const staffCaps = actor.staff ? await loadStaffCouponCaps(this.config) : null;
+    if (staffCaps) assertStaffCouponCaps({ ...input, usageLimit: 1 }, staffCaps);
     const base = await this.claimUrlBase();
 
     const codes = await this.prisma.$transaction(
@@ -87,6 +102,9 @@ export class AdminCouponBatchService {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${BATCH_LOCK}), hashtext(${batch}))`;
         if ((await tx.coupon.count({ where: { batch } })) > 0) {
           throw new ConflictException(`Tiền tố ${batch} đã dùng cho một lô khác. Chọn tiền tố khác (vd thêm tháng: ${batch}11).`);
+        }
+        if (staffCaps) {
+          await assertStaffDailyBudget(tx, actor.id, new Date(), input.quantity * staffCouponPerUse(input, staffCaps), staffCaps);
         }
         const row = (code: string): Prisma.CouponCreateManyInput => ({
           code,
@@ -101,6 +119,8 @@ export class AdminCouponBatchService {
           scope: 'CLAIM',
           newCustomerOnly: input.newCustomerOnly ?? false,
           batch,
+          createdById: actorUserId(actor),
+          updatedById: actorUserId(actor),
         });
         let created = 0;
         for (let round = 0; round < MAX_FILL_ROUNDS && created < input.quantity; round++) {
@@ -115,6 +135,7 @@ export class AdminCouponBatchService {
       },
       { timeout: 60_000 },
     );
+    this.logger.warn(`${actorLabel(actor)} tạo lô mã ${batch} (${codes.length} mã): ${JSON.stringify(input)}`);
     return {
       batch,
       created: codes.length,
@@ -172,11 +193,30 @@ export class AdminCouponBatchService {
   }
 
   /** Tắt cả lô khi thẻ bị lộ (hoặc bật lại). Lượt đã dùng giữ nguyên. */
-  async setActive(rawBatch: string, isActive: boolean) {
+  async setActive(rawBatch: string, isActive: boolean, actor: CouponActor = SYSTEM_ACTOR) {
     const batch = rawBatch.trim().toUpperCase();
-    const res = await this.prisma.coupon.updateMany({ where: { batch }, data: { isActive } });
+    if (actor.staff) {
+      const rows = await this.prisma.coupon.findMany({
+        where: { batch },
+        distinct: ['createdById', 'type', 'value', 'maxDiscount', 'usageLimit'],
+        select: { createdById: true, type: true, value: true, maxDiscount: true, usageLimit: true },
+      });
+      if (rows.length === 0) throw new NotFoundException('Không tìm thấy lô mã.');
+      await assertStaffCreatedCoupons(this.prisma, rows.map((r) => r.createdById));
+      if (isActive) {
+        const caps = await loadStaffCouponCaps(this.config);
+        for (const r of rows) assertStaffCouponCaps(r, caps);
+      }
+    }
+    const by = actorUserId(actor);
+    const res = await this.prisma.coupon.updateMany({ where: { batch }, data: { isActive, ...(by ? { updatedById: by } : {}) } });
     if (res.count === 0) throw new NotFoundException('Không tìm thấy lô mã.');
+    this.logger.warn(`${actorLabel(actor)} ${isActive ? 'bật' : 'tắt'} lô mã ${batch} (${res.count} mã).`);
     return { batch, updated: res.count };
+  }
+
+  async claimBase(): Promise<{ claimUrlBase: string | null }> {
+    return { claimUrlBase: (await this.claimUrlBase()) || null };
   }
 
   private async claimUrlBase(): Promise<string> {

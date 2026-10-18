@@ -1,6 +1,6 @@
 import { api, getAccessToken } from './api';
-import type { CategoryDTO, FlashSaleActiveItem, OrderView, PageResponse, ProductCard, PurchasedItemsPage, UpcomingFlashItem } from './shop-api';
-import type { NotificationDTO } from './account-api';
+import type { CategoryDTO, FlashSaleActiveItem, OrderView, PageResponse, ProductCard, PublicConfig, PurchasedItemsPage, UpcomingFlashItem } from './shop-api';
+import type { NewCustomerOffer, NotificationDTO } from './account-api';
 import type { SubscriptionDTO } from './subscriptions-api';
 
 /**
@@ -22,6 +22,8 @@ export interface HomePublicDTO {
   flashActive: Block<FlashSaleActiveItem[]>;
   categories: Block<CategoryDTO[]>;
   brands: Block<{ brand: string; count: number }[]>;
+  /** Cùng nội dung GET /config/public: khối "Quà khách mới" cần số công khai mà không tốn thêm request khi mở Trang chủ. */
+  publicConfig: Block<PublicConfig>;
 }
 
 export interface HomeMeDTO {
@@ -32,6 +34,7 @@ export interface HomeMeDTO {
   shippingOrders: Block<PageResponse<OrderView>>;
   subscriptions: Block<SubscriptionDTO[]>;
   notifications: Block<NotificationDTO[]>;
+  newCustomerOffer: Block<NewCustomerOffer>;
   purchasedLimit?: number;
 }
 

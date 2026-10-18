@@ -219,6 +219,20 @@ describe('CouponsService.validateAndCompute scope ownership', () => {
   });
 });
 
+describe('CouponsService — nhân viên không dùng mã do chính mình tạo (D1-05)', () => {
+  it('mã công khai do nhân viên tạo: chính người tạo áp mã → từ chối, nói rõ lý do', async () => {
+    const svc = makeServiceScoped(coupon({ scope: 'PUBLIC', createdById: 'u1' }), { ...REAL_USER, role: 'STAFF' });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('Mã do chính bạn tạo');
+  });
+
+  it('quản trị viên áp mã mình tạo, khách áp mã nhân viên tạo → bình thường', async () => {
+    const own = makeServiceScoped(coupon({ scope: 'PUBLIC', createdById: 'u1', type: 'AMOUNT', value: 20000 }), { ...REAL_USER, role: 'ADMIN' });
+    expect((await own.validateAndCompute('SALE', 'u1', 100000)).discount).toBe(20000);
+    const other = makeServiceScoped(coupon({ scope: 'PUBLIC', createdById: 's9', type: 'AMOUNT', value: 20000 }), { ...REAL_USER, role: 'CUSTOMER' });
+    expect((await other.validateAndCompute('SALE', 'u1', 100000)).discount).toBe(20000);
+  });
+});
+
 describe('CouponsService.validateAndCompute — mã ẩn CLAIM và mã chỉ khách mới (D2-03)', () => {
   const GUEST = { id: 'u1', tierId: null, phone: null, zaloId: 'guest_abc' };
 
@@ -588,6 +602,8 @@ describe('CouponsService.previewMany', () => {
     { name: 'chỉ khách mới + chưa có đơn', c: { code: 'P', newCustomerOnly: true }, extra: { priorOrder: false } },
     { name: 'chỉ khách mới + đã có đơn', c: { code: 'Q', newCustomerOnly: true }, extra: { priorOrder: true } },
     { name: 'chỉ khách mới + khách vãng lai', c: { code: 'R', newCustomerOnly: true, perUserLimit: 0 }, user: GUEST },
+    { name: 'mã nhân viên tự tạo', c: { code: 'S', createdById: 'u1' }, user: { ...REAL_USER, role: 'STAFF' } },
+    { name: 'mã quản trị viên tự tạo', c: { code: 'T', createdById: 'u1' }, user: { ...REAL_USER, role: 'ADMIN' } },
   ];
   const lines = [
     { productId: 'p1', total: 30000 },

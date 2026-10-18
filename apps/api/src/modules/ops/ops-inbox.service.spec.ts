@@ -175,3 +175,21 @@ describe('OpsInboxService — cộng đồng và hoá đơn VAT (launch review D
     expect(queryRaw.mock.calls.some((c) => !Array.isArray(c[0]) && (c[0] as { sql: string }).sql.includes('feed_posts'))).toBe(false);
   });
 });
+
+describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình xử lý được (D1-05)', () => {
+  const keysFor = async (perms: string[]) => (await build().svc.counts({ role: 'STAFF', staffPermissions: perms })).items.map((i) => i.key).sort();
+
+  it('MARKETING: chỉ hai hàng đợi cộng đồng (cùng CSKH) và đổi vỏ chai (mọi nhân viên)', async () => {
+    expect(await keysFor(['MARKETING'])).toEqual(['communityPending', 'communityUnanswered', 'refillPending']);
+  });
+
+  it('KE_TOAN: hoàn tiền khách, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
+    expect(await keysFor(['KE_TOAN'])).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'refillPending']);
+  });
+
+  it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
+    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'refillPending', 'returnsPending']);
+    expect(await keysFor(['KHO'])).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'refillPending', 'returnsToReceive']);
+    expect(await keysFor([])).toEqual(['refillPending']);
+  });
+});

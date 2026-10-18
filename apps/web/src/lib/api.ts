@@ -195,6 +195,18 @@ export function publicMediaUrl<T extends string | null | undefined>(src: T): T |
   return typeof src === 'string' && src.startsWith('/') && !src.startsWith('//') ? `${PUBLIC_API_BASE}${src}` : src;
 }
 
+export interface CategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  /** Số sản phẩm đang bán; API cũ chưa trả thì thiếu. */
+  productCount?: number;
+}
+export async function getCategories(): Promise<CategoryItem[]> {
+  return fetchList<CategoryItem>('/categories', 600, (json) => json as CategoryItem[]);
+}
+
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
   const sf = await fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
   if (!sf) return sf;

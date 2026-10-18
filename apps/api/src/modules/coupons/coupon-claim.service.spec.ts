@@ -149,6 +149,20 @@ describe('CouponClaimService.claim (D2-03: nhận mã từ thẻ trong hộp hà
   });
 });
 
+describe('CouponClaimService — nhân viên không nhận mã do chính mình tạo (D1-05)', () => {
+  it.each(['CLAIM', 'PUBLIC'])('mã %s do nhân viên tạo: chính người tạo nhận → từ chối, không ghi', async (scope) => {
+    const { svc, createMany } = make({ coupon: coupon({ scope, createdById: 'u1' }), user: { ...REAL, role: 'STAFF' } });
+    await expect(svc.claim('u1', 'SHOPEE-AB12CD34')).rejects.toThrow('Mã do chính bạn tạo');
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('khách nhận mã nhân viên tạo → bình thường', async () => {
+    const { svc, createMany } = make({ coupon: coupon({ createdById: 's9' }), user: { ...REAL, role: 'CUSTOMER' } });
+    await svc.claim('u1', 'SHOPEE-AB12CD34');
+    expect(createMany).toHaveBeenCalled();
+  });
+});
+
 describe('CouponClaimService.claimHiddenForCart (gõ mã thẻ ở giỏ)', () => {
   it('mã CLAIM chưa nhận → nhận luôn', async () => {
     const { svc, createMany } = make();
