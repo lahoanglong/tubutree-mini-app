@@ -1,4 +1,7 @@
+import { decimalVi, earnPctOf, pointsToSpend } from '@tubutree/app-core/loyalty-copy';
 import { formatNumber, formatVnd } from './format';
+
+export { earnPctOf, earnRuleLine, percentLabel, pointsToSpend } from '@tubutree/app-core/loyalty-copy';
 
 /** Quy tắc tích/đổi Điểm Xanh do API trả từ SystemConfig (loyalty.earn_pct, vnd_per_point_redeem, max_redeem_pct). */
 export interface LoyaltyRates {
@@ -10,38 +13,9 @@ export interface LoyaltyRates {
   maxRedeemPct: number;
 }
 
-/** Số thập phân kiểu Việt, bỏ ",0": 1.2 → "1,2", 5 → "5". */
-function decimalVi(n: number): string {
-  return String(Math.round(n * 10) / 10).replace('.', ',');
-}
-
 /** Tiền gọn cho mốc hạng: ≥ 1 triệu → "5 triệu"/"12,5 triệu", nhỏ hơn thì "750.000đ". */
 export function moneyShort(n: number): string {
   return n >= 1_000_000 ? `${decimalVi(n / 1_000_000)} triệu` : formatVnd(n);
-}
-
-export function pointsToSpend(points: number, rates: LoyaltyRates): number {
-  return points * rates.vndPerPoint;
-}
-
-/** Phần trăm tiền hàng tích thành điểm: ưu tiên `earnPct`, API cũ chỉ có `vndPerPoint` thì quy ngược; null khi không có số dùng được. */
-export function earnPctOf(rates: { earnPct?: number; vndPerPoint?: number }): number | null {
-  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
-  if (ok(rates.earnPct)) return rates.earnPct;
-  return ok(rates.vndPerPoint) ? 100 / rates.vndPerPoint : null;
-}
-
-/** "2%" / "2,4%": phần trăm tiền hàng, bỏ ",0". */
-export function percentLabel(pct: number): string {
-  return `${decimalVi(pct)}%`;
-}
-
-/** "Tích 2% tiền hàng thành Điểm Xanh" (kèm "hạng ×1,2 = 2,4%" khi hệ số > 1). */
-export function earnRuleLine(rates: LoyaltyRates, multiplier = 1): string {
-  const pct = earnPctOf(rates);
-  if (pct == null) return 'Mỗi đơn đã giao được tích Điểm Xanh';
-  const base = `Tích ${percentLabel(pct)} tiền hàng thành Điểm Xanh`;
-  return multiplier > 1 ? `${base} (hạng ×${decimalVi(multiplier)} = ${percentLabel(pct * multiplier)})` : base;
 }
 
 /** Giá trị 1 điểm khi dùng; trần % chỉ nói khi admin còn cho dùng điểm ở thanh toán. */

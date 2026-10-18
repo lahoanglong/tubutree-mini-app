@@ -10,6 +10,9 @@ import { metadata as wallet } from './tai-khoan/vi-tubu/layout';
 import { metadata as editProfile } from './tai-khoan/ho-so/layout';
 import { metadata as settings } from './tai-khoan/cai-dat/layout';
 import { metadata as notifications } from './tai-khoan/thong-bao/layout';
+import { metadata as rewards } from './kho-qua/layout';
+import { metadata as myRewards } from './kho-qua/cua-toi/layout';
+import { metadata as cashback } from './hoan-tien/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -19,7 +22,6 @@ const CORE: TitleCase[] = [
   ['/dang-nhap', login, 'Đăng nhập — Tubu Tree'],
   ['/tai-khoan', account, 'Tài khoản — Tubu Tree'],
   ['/tai-khoan/dia-chi', addresses, 'Sổ địa chỉ — Tubu Tree'],
-  ['/tai-khoan/diem-xanh', points, 'Lịch sử Điểm Xanh — Tubu Tree'],
   ['/tai-khoan/vi-tubu', wallet, 'Ví Tubu — Tubu Tree'],
 ];
 const SHOP: TitleCase[] = [];
@@ -29,7 +31,12 @@ const ACCOUNT: TitleCase[] = [
   ['/tai-khoan/cai-dat', settings, 'Cài đặt — Tubu Tree'],
   ['/tai-khoan/thong-bao', notifications, 'Thông báo — Tubu Tree'],
 ];
-const LOYALTY: TitleCase[] = [];
+const LOYALTY: TitleCase[] = [
+  ['/tai-khoan/diem-xanh', points, 'Hạng thành viên & Điểm Xanh — Tubu Tree'],
+  ['/kho-qua', rewards, 'Kho quà — Tubu Tree'],
+  ['/kho-qua/cua-toi', myRewards, 'Quà của tôi — Tubu Tree'],
+  ['/hoan-tien', cashback, 'Hoàn tiền — Tubu Tree'],
+];
 const COMMUNITY: TitleCase[] = [];
 const AFFILIATE: TitleCase[] = [];
 const GAME: TitleCase[] = [];

@@ -45,6 +45,11 @@ import AddressBookPage from './tai-khoan/dia-chi/page';
 import EditProfilePage from './tai-khoan/ho-so/page';
 import SettingsPage from './tai-khoan/cai-dat/page';
 import NotificationsPage from './tai-khoan/thong-bao/page';
+import LoyaltyPage from './tai-khoan/diem-xanh/page';
+import WalletPage from './tai-khoan/vi-tubu/page';
+import RewardsPage from './kho-qua/page';
+import RewardsMinePage from './kho-qua/cua-toi/page';
+import CashbackPage from './hoan-tien/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -77,7 +82,13 @@ const ACCOUNT: PageCase[] = [
   ['/tai-khoan/cai-dat', () => <SettingsPage />],
   ['/tai-khoan/thong-bao', () => <NotificationsPage />],
 ];
-const LOYALTY: PageCase[] = [];
+const LOYALTY: PageCase[] = [
+  ['/tai-khoan/diem-xanh', () => <LoyaltyPage />],
+  ['/tai-khoan/vi-tubu', () => <WalletPage />],
+  ['/kho-qua', () => <RewardsPage />],
+  ['/kho-qua/cua-toi', () => <RewardsMinePage />],
+  ['/hoan-tien', () => <CashbackPage />],
+];
 const COMMUNITY: PageCase[] = [];
 const AFFILIATE: PageCase[] = [];
 const GAME: PageCase[] = [];

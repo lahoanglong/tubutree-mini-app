@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ getProducts: vi.fn(), getStorefrontList: vi.fn() }));
+const flags = vi.hoisted(() => ({ cashback: false }));
+vi.mock('@tubutree/app-core/features', () => ({
+  get CASHBACK_ENABLED() {
+    return flags.cashback;
+  },
+}));
 const routeMocks = vi.hoisted(() => ({ publicStaticRoutes: vi.fn(() => ['/']) }));
 vi.mock('@/lib/route-map', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/route-map')>()),
@@ -31,6 +37,18 @@ describe('sitemap', () => {
     const urls = (await sitemap()).map((e) => e.url);
     expect(urls).toContain('https://app.tubutree.com/gioi-thieu');
     expect(urls.filter((u) => u === 'https://app.tubutree.com/')).toHaveLength(1);
+  });
+
+  it('/hoan-tien chỉ vào sitemap khi CASHBACK_ENABLED bật, vì trang đang noindex khi cờ tắt', async () => {
+    routeMocks.publicStaticRoutes.mockReturnValue(['/', '/hoan-tien']);
+    try {
+      flags.cashback = false;
+      expect((await sitemap()).map((e) => e.url)).not.toContain('https://app.tubutree.com/hoan-tien');
+      flags.cashback = true;
+      expect((await sitemap()).map((e) => e.url)).toContain('https://app.tubutree.com/hoan-tien');
+    } finally {
+      routeMocks.publicStaticRoutes.mockImplementation(() => ['/']);
+    }
   });
 
   it('không bao giờ xin limit vượt trần của API', async () => {

@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
-import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours } from '@tubutree/shared-types';
+import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
+import { REWARD_TABS, openingHoursText } from '@tubutree/app-core/reward-rules';
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
 import { getErrorMessage } from '../services/api';
@@ -25,28 +26,7 @@ import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
 import { pointAddress } from '../utils/waste-labels';
 
-export const REWARD_TABS = [
-  { key: 'coupon', label: 'Mã giảm giá', kinds: ['VOUCHER'] },
-  { key: 'tree', label: 'Cây và hạt', kinds: ['TREE', 'SEED_PACK'] },
-  { key: 'gift', label: 'Quà nhỏ', kinds: ['GIFT'] },
-] as const;
-
-const WEEKDAYS = [
-  ['MON', 'T2'],
-  ['TUE', 'T3'],
-  ['WED', 'T4'],
-  ['THU', 'T5'],
-  ['FRI', 'T6'],
-  ['SAT', 'T7'],
-  ['SUN', 'CN'],
-] as const;
-
-export function openingHoursText(h: WasteOpeningHours): string {
-  return WEEKDAYS.flatMap(([day, label]) => {
-    const slots = h[day];
-    return slots && slots.length > 0 ? [`${label} ${slots.map((s) => `${s.open}–${s.close}`).join(', ')}`] : [];
-  }).join(' · ');
-}
+export { REWARD_TABS, openingHoursText };
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 

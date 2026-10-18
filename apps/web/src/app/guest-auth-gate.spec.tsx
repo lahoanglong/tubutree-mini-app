@@ -44,6 +44,11 @@ import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
 import EditProfilePage from './tai-khoan/ho-so/page';
 import SettingsPage from './tai-khoan/cai-dat/page';
 import NotificationsPage from './tai-khoan/thong-bao/page';
+import LoyaltyPage from './tai-khoan/diem-xanh/page';
+import WalletPage from './tai-khoan/vi-tubu/page';
+import RewardsPage from './kho-qua/page';
+import RewardsMinePage from './kho-qua/cua-toi/page';
+import CashbackPage from './hoan-tien/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -76,7 +81,13 @@ const ACCOUNT: PageCase[] = [
   ['/tai-khoan/cai-dat', () => <SettingsPage />, '/tai-khoan/cai-dat'],
   ['/tai-khoan/thong-bao', () => <NotificationsPage />, '/tai-khoan/thong-bao'],
 ];
-const LOYALTY: PageCase[] = [];
+const LOYALTY: PageCase[] = [
+  ['/tai-khoan/diem-xanh', () => <LoyaltyPage />, '/tai-khoan/diem-xanh'],
+  ['/tai-khoan/vi-tubu', () => <WalletPage />, '/tai-khoan/vi-tubu'],
+  ['/kho-qua', () => <RewardsPage />, '/kho-qua'],
+  ['/kho-qua/cua-toi', () => <RewardsMinePage />, '/kho-qua/cua-toi'],
+  ['/hoan-tien', () => <CashbackPage />, '/hoan-tien'],
+];
 const COMMUNITY: PageCase[] = [];
 const AFFILIATE: PageCase[] = [];
 const GAME: PageCase[] = [];
