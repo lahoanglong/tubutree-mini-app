@@ -60,6 +60,7 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
+import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -114,7 +115,7 @@ export class AffiliateService {
 
   async register(userId: string, termsVersion?: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (user.role === 'DEALER' || user.role === 'ADMIN' || user.role === 'STAFF') {
+    if (!canRegisterAsAffiliate(user.role)) {
       throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
     }
     const data: Prisma.UserUpdateInput = {};
@@ -142,9 +143,13 @@ export class AffiliateService {
   async getMe(userId: string, now: Date = new Date()) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const monthRevenue = await this.confirmedRevenue(this.prisma, userId, vnMonthBounds(now));
+    const access = await affiliateAccess(this.prisma, user);
 
     return {
-      isAffiliate: user.role === 'AFFILIATE' || user.role === 'ADMIN',
+      isAffiliate: access.hasAccess,
+      canRegister: canRegisterAsAffiliate(user.role),
+      canOrderForCustomer: canPlaceOrderForCustomer(user.role),
+      canOpenStorefront: access.canOpenStorefront,
       referralCode: user.referralCode,
       walletBalance: user.walletBalance,
       personalTaxId: user.personalTaxId,
@@ -538,10 +543,10 @@ export class AffiliateService {
     return Math.round(gross * Math.min(pct, 1));
   }
 
-  /** Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng. */
+  /** Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng (canPlaceOrderForCustomer). */
   private async customerOrderPlacer(ctvId: string) {
     const ctv = await this.prisma.user.findUniqueOrThrow({ where: { id: ctvId } });
-    if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
+    if (!canPlaceOrderForCustomer(ctv.role)) {
       throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
     }
     return ctv;

@@ -37,6 +37,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'reorder',
   'attendance',
   'retention',
+  'pancake',
 ];
 
 /**
@@ -53,6 +54,10 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
 export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'shipping.free_threshold': 'phí ship là quyết định của chủ shop: để trống thì go-live:check WARN (db.shipping_rates) buộc xác nhận, nạp 200k sẽ làm WARN biến mất mà chưa ai xác nhận',
   'shipping.flat_fee_below_threshold': 'như shipping.free_threshold',
+  'shipping.first_order_free_enabled': 'migration 20261018150010_claim_freeship_config đã tạo dòng với giá trị bằng mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
+  'shipping.first_order_free_min_subtotal': 'như shipping.first_order_free_enabled',
+  'app.miniapp_base_url': 'như shipping.first_order_free_enabled (mặc định rỗng, không rơi về biến môi trường: link thiếu thì QR dùng đường dẫn tương đối)',
+  'merchant.consignment_settle_from': 'mốc đối soát hàng giao hộ là quyết định của chủ shop: thiếu dòng thì go-live:check WARN (db.consignment_from) buộc đặt mốc; nạp ngày nào cũng làm WARN thành PASS mà chưa ai xác nhận, và nạp null chỉ đổi WARN sang thông báo "giá trị không hợp lệ". Chủ shop đặt ở Quản trị, Cấu hình (ghi được dù chưa có dòng nhờ luật ghi trong SystemConfigService.JSON_RULES), theo gợi ý của go-live:check',
 };
 
 /**
@@ -79,6 +84,7 @@ export interface ExtraConfig extends ConfigSeed {
 const FEED = 'src/modules/feed/community-feed.service.ts';
 const COMMISSION_RATE = 'src/modules/affiliate/commission-rate-csv.ts';
 const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
+const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_post', value: 5, category: 'community', description: 'Điểm uy tín cộng cho người có bài cộng đồng được đăng', fallbackSource: { file: FEED, text: "get<number>('community.rep_post', 5)" } },
@@ -88,6 +94,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_thresholds', value: [0, 50, 200, 500], category: 'community', description: 'Mốc điểm uy tín để lên cấp 1 đến 4 (Mầm, Cây non, Cây trưởng thành, Cổ thụ)', fallbackSource: { file: FEED, text: 'const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];' } },
   { key: 'affiliate.max_rate_pct', value: 50, category: 'affiliate', description: 'Trần % hoa hồng CTV admin được đặt cho một biến thể (phần trăm, 50 = 50%)', fallbackSource: { file: COMMISSION_RATE, text: 'export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;' } },
   { key: 'affiliate.commission_eligible_roles', value: ['AFFILIATE', 'DEALER'], category: 'affiliate', description: 'Vai trò được ghi công đơn và hưởng hoa hồng CTV (thêm "CUSTOMER" nếu khách thường chia sẻ cũng được hưởng)', fallbackSource: { file: COMMISSION_ROLES, text: 'DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];' } },
+  { key: 'pancake.total_mismatch_check', value: true, category: 'pancake', description: 'So tổng tiền Pancake với đơn Tubu mỗi lần webhook; lệch thì đưa đơn vào "Cần xử lý Pancake" (false = tắt khi báo nhầm hàng loạt)', fallbackSource: { file: PANCAKE_PROCESSOR, text: 'get<boolean>(PANCAKE_TOTAL_CHECK_KEY, true)' } },
 ];
 
 export type ConfigDecision = 'reference' | 'business' | 'excluded' | 'unclassified';

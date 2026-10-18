@@ -53,6 +53,9 @@ import { FulfilOrdersTab } from './fulfil-orders-tab';
 import { SettlementTab } from './settlement-tab';
 import { MerchantReturnsSection } from './merchant-returns';
 import { CreateProductModal, EditProductModal, MerchantProductPrice } from './product-form';
+import { ImageUrlField } from './image-url-field';
+import { ProductThumb } from './product-thumb';
+import { RowMenu } from './row-menu';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -572,26 +575,20 @@ function StoreSettingsTab({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="merchant-store-avatar-url" className="block text-xs font-medium text-stone-700">URL Logo thương hiệu</label>
-            <input
-              id="merchant-store-avatar-url"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder="https://..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
-          <div>
-            <label htmlFor="merchant-store-cover-url" className="block text-xs font-medium text-stone-700">URL Ảnh bìa (Cover Banner)</label>
-            <input
-              id="merchant-store-cover-url"
-              value={coverUrl}
-              onChange={(e) => setCoverUrl(e.target.value)}
-              placeholder="https://..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
+          <ImageUrlField
+            id="merchant-store-avatar-url"
+            label="URL Logo thương hiệu"
+            value={avatarUrl}
+            onChange={setAvatarUrl}
+            shape="avatar"
+          />
+          <ImageUrlField
+            id="merchant-store-cover-url"
+            label="URL Ảnh bìa (Cover Banner)"
+            value={coverUrl}
+            onChange={setCoverUrl}
+            shape="cover"
+          />
         </div>
 
         <div className="flex items-center gap-3 rounded-control border border-stone-200 bg-stone-50 p-3">
@@ -1129,8 +1126,13 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                   return (
                     <tr key={p.id} className="hover:bg-stone-50/50">
                       <td className="px-3 py-2.5">
-                        <div className="font-semibold text-stone-900">{p.name}</div>
-                        {p.shortDesc && <div className="line-clamp-1 text-xs text-stone-500">{p.shortDesc}</div>}
+                        <div className="flex items-center gap-3">
+                          <ProductThumb product={p} />
+                          <div className="min-w-0">
+                            <div className="font-semibold text-stone-900">{p.name}</div>
+                            {p.shortDesc && <div className="line-clamp-1 text-xs text-stone-500">{p.shortDesc}</div>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 font-semibold text-forest-700"><MerchantProductPrice product={p} /></td>
                       <td className="px-3 py-2.5 text-xs text-stone-600">{p.variations?.[0]?.stock ?? '—'}</td>
@@ -1162,35 +1164,24 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                         {formatDate(p.createdAt)}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex flex-wrap justify-end gap-2">
-                          <button type="button" onClick={() => setEditing(p)} className={`${BTN_SMALL} inline-flex items-center gap-1`}>
-                            <Pencil className="h-3 w-3" aria-hidden="true" />
-                            <span>Sửa</span>
-                          </button>
-                          {p.isActive === false ? (
-                            <button
-                              type="button"
-                              disabled={activeMut.isPending}
-                              onClick={() => activeMut.mutate({ id: p.id, active: true })}
-                              className={BTN_SMALL}
-                            >
-                              Mở bán lại
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={activeMut.isPending}
-                              onClick={() => {
-                                if (window.confirm(`Ngừng bán ${p.name}? Khách sẽ không đặt được sản phẩm này nữa.`)) {
-                                  activeMut.mutate({ id: p.id, active: false });
-                                }
-                              }}
-                              className={`${BTN_LINK_DANGER} text-xs`}
-                            >
-                              Ngừng bán
-                            </button>
-                          )}
-                        </div>
+                        <RowMenu
+                          label={`Thao tác với ${p.name}`}
+                          items={[
+                            { label: 'Sửa', onSelect: () => setEditing(p) },
+                            p.isActive === false
+                              ? { label: 'Mở bán lại', disabled: activeMut.isPending, onSelect: () => activeMut.mutate({ id: p.id, active: true }) }
+                              : {
+                                  label: 'Ngừng bán',
+                                  tone: 'danger',
+                                  disabled: activeMut.isPending,
+                                  onSelect: () => {
+                                    if (window.confirm(`Ngừng bán ${p.name}? Khách sẽ không đặt được sản phẩm này nữa.`)) {
+                                      activeMut.mutate({ id: p.id, active: false });
+                                    }
+                                  },
+                                },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );
@@ -1222,22 +1213,28 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                 q.data.resellProducts.map((p) => (
                   <tr key={p.id}>
                     <td className="px-3 py-2.5">
-                      <div className="font-semibold text-stone-900">{p.name}</div>
+                      <div className="flex items-center gap-3">
+                        <ProductThumb product={p} />
+                        <div className="min-w-0 font-semibold text-stone-900">{p.name}</div>
+                      </div>
                     </td>
                     <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(p.basePrice)}</td>
                     <td className="px-3 py-2.5 text-right">
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`Gỡ sản phẩm ${p.name} khỏi gian hàng?`)) {
-                            removeMut.mutate(p.id);
-                          }
-                        }}
-                        disabled={removeMut.isPending}
-                        className={`${BTN_LINK_DANGER} gap-1 text-xs`}
-                      >
-                        <Trash2 className="h-3 w-3" aria-hidden="true" />
-                        <span>{removeMut.isPending ? 'Đang gỡ…' : 'Gỡ khỏi shop'}</span>
-                      </button>
+                      <RowMenu
+                        label={`Thao tác với ${p.name}`}
+                        items={[
+                          {
+                            label: removeMut.isPending ? 'Đang gỡ…' : 'Gỡ khỏi shop',
+                            tone: 'danger',
+                            disabled: removeMut.isPending,
+                            onSelect: () => {
+                              if (window.confirm(`Gỡ sản phẩm ${p.name} khỏi gian hàng?`)) {
+                                removeMut.mutate(p.id);
+                              }
+                            },
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))

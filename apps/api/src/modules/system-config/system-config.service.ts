@@ -248,6 +248,8 @@ export class SystemConfigService {
     'payment.bank_account_name': (value) => displayNameProblem(value, 'tên chủ tài khoản in hoa không dấu, vd "CONG TY TUBU TREE"'),
     // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để cờ tắt không vô tình bật freeship đơn đầu.
     'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Công tắc kiểm lệch tổng Pancake (PANCAKE_TOTAL_CHECK_KEY): chỉ `false` mới tắt, nên chuỗi "false" phải bị từ chối chứ không được lưu.
+    'pancake.total_mismatch_check': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Link nhận mã in trong QR thẻ hộp hàng và link chia sẻ của CTV dựng từ khoá này: sai là thẻ đã in mở ra trang lỗi.
     'app.miniapp_base_url': (value) =>
       value === '' || (typeof value === 'string' && /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(value))
@@ -347,6 +349,10 @@ export class SystemConfigService {
   /** Khoá có luật ghi riêng (biên số hoặc luật JSON): hệ thống biết khoá này, dù DB chưa có dòng. */
   static hasWriteRule(key: string): boolean {
     return key in SystemConfigService.RANGES || key in SystemConfigService.JSON_RULES;
+  }
+
+  static writeRuleKeys(): string[] {
+    return [...Object.keys(SystemConfigService.RANGES), ...Object.keys(SystemConfigService.JSON_RULES)];
   }
 
   private assertInRange(key: string, value: unknown): void {

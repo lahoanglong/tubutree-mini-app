@@ -56,6 +56,8 @@ Hệ thống chỉ **hoàn tiền**. Khách muốn đổi sang sản phẩm khá
 
 ## Xử lý tình huống
 
+**Đơn hiện lý do "Tổng tiền Pancake lệch với Tubu".** Kho hoặc ai đó đã sửa đơn trên Pancake (thêm bớt món, đổi giảm giá, phí ship). Khách vẫn thấy và vẫn được tính tiền, hoàn tiền, hoa hồng theo tổng của Tubu. Gọi khách xác nhận nội dung đúng, rồi huỷ đơn ở Tubu cho khách đặt lại, hoặc nhờ kho trả đơn Pancake về đúng đơn Tubu. Không tự sửa số trên Pancake để "cho khớp" mà không hỏi khách.
+
 **Khách gọi đổi địa chỉ.** Hệ thống không sửa được địa chỉ đơn (**⏳ đang làm**). **Không sửa trên Pancake.**
 - Đơn chưa có mã vận đơn (Chờ thanh toán, Đã xác nhận, Đã đóng gói): báo khách "Tubu huỷ đơn cũ, bạn đặt lại với địa chỉ mới". Bạn bấm "Hủy đơn". Nếu khách đã trả tiền, tiền về Ví Tubu và khách dùng ví trả đơn mới. Bạn chưa đặt hộ được (**⏳ đang làm**): gửi link sản phẩm, hướng dẫn khách đặt trong app.
 - Đơn đã có mã vận đơn hoặc "Đang vận chuyển": Tubu không huỷ được. Gọi hãng vận chuyển theo mã vận đơn (nhìn dòng "Vận chuyển" ở chi tiết đơn) để xin đổi địa chỉ giao (cần xác nhận hãng có đổi được không). Không đổi được thì khách từ chối nhận, hàng hoàn về kho, đơn tự huỷ.

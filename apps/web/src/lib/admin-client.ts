@@ -442,6 +442,26 @@ export type RecyclingFilter = 'attention' | 'all';
 export type InvoiceFilter = 'pending' | 'issued' | 'all';
 /** attention = hàng đợi "Cần xử lý Pancake"; unsynced = đơn còn trong kho mà chưa lên Pancake. */
 export type PancakeFilter = 'attention' | 'unsynced';
+/** retail = đơn lẻ; ctv = có mã người giới thiệu; dealer = đơn đại lý; ctv_assisted = CTV lên đơn hộ; storefront = qua gian hàng. */
+export type OrderKind = 'retail' | 'ctv' | 'dealer' | 'ctv_assisted' | 'storefront';
+export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
+export type OrderListPlatform = 'miniapp' | 'web';
+/** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
+export interface OrderListExtra {
+  kind?: OrderKind;
+  payment?: OrderPaymentFilter;
+  platform?: OrderListPlatform;
+  referrerUserId?: string;
+  storefront?: string;
+  order?: 'asc' | 'desc';
+}
+/** Bộ lọc cho file CSV: bỏ thứ tự sắp xếp (file xuất không nhận `order`, API từ chối tham số lạ). */
+export const orderExtraFilters = ({ order: _order, ...filters }: OrderListExtra) => filters;
+const orderExtraQuery = (extra: OrderListExtra = {}) =>
+  (Object.entries(extra) as [string, string | undefined][])
+    .filter(([, v]) => v)
+    .map(([k, v]) => `&${k}=${encodeURIComponent(v!)}`)
+    .join('');
 export const listOrders = (
   page = 1,
   status?: string,
@@ -452,11 +472,12 @@ export const listOrders = (
   pancake?: PancakeFilter,
   from?: string,
   to?: string,
+  extra?: OrderListExtra,
 ) =>
   apiFetch<Page<AdminOrder>>(
     `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
       recycling ? `&recycling=${recycling}` : ''
-    }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`,
+    }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}${orderExtraQuery(extra)}`,
   );
 /** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
 export const countInvoicePending = () =>
@@ -1585,6 +1606,11 @@ export interface OrderExportFilter {
   /** 'YYYY-MM-DD' theo giờ VN, tính cả hai đầu. */
   from?: string;
   to?: string;
+  kind?: OrderKind;
+  payment?: OrderPaymentFilter;
+  platform?: OrderListPlatform;
+  referrerUserId?: string;
+  storefront?: string;
 }
 function orderFilterParams(f: OrderExportFilter): URLSearchParams {
   const q = new URLSearchParams();

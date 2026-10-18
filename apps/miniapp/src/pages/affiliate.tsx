@@ -16,18 +16,16 @@ import {
   getProductBreakdown,
   getCtvTiers,
   getCtvMilestones,
-  claimCtvMilestone,
   type AffiliatePayout,
   type Commission,
   type CommissionStatus,
   type PayoutStatus,
-  type CtvMilestoneItem,
 } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
 import { useShareWithFallback } from '../components/share-sheet';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { formatDate, formatPoints, formatVnd, formatVndShort } from '../utils/format';
+import { formatDate, formatVnd, formatVndShort } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { PERSONAL_TAX_ID_PATTERN } from '../utils/tax-id';
@@ -45,14 +43,10 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Heading, Text } from '../components/ui/text';
 import { ChoiceCard } from '../components/affiliate/choice-card';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
-import {
-  milestoneStatusText,
-  monthLabel,
-  progressPct,
-  revenueRuleText,
-  tierRewardLabel,
-} from '../components/affiliate/milestone-copy';
-import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Trophy, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { CtvShortcuts } from '../components/affiliate/ctv-shortcuts';
+import { MilestoneRewards } from '../components/affiliate/milestone-rewards';
+import { progressPct, tierRewardLabel } from '../components/affiliate/milestone-copy';
+import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Wallet, ChevronDown, ChevronUp } from 'lucide-react';
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
@@ -124,7 +118,25 @@ export default function AffiliatePage() {
     );
   }
 
-  return meQ.data?.isAffiliate ? <Dashboard /> : <RegisterGate />;
+  if (meQ.data?.isAffiliate) return <Dashboard />;
+  // Đại lý/nhân viên không đăng ký CTV một chạm được (API từ chối): đưa form đăng ký là ngõ cụt.
+  return meQ.data?.canRegister === false ? <CannotRegister /> : <RegisterGate />;
+}
+
+function CannotRegister() {
+  const navigate = useNavigate();
+  return (
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={PAGE_TITLE} />
+      <EmptyState
+        art="leaf"
+        heading="Tài khoản này không đăng ký CTV được"
+        body="Màn hoa hồng CTV hiện khi tài khoản đã có gian hàng CTV hoặc đã có hoa hồng."
+        ctaLabel="Về Hồ sơ"
+        onCta={() => navigate('/profile')}
+      />
+    </Page>
+  );
 }
 
 function RegisterGate() {
@@ -269,75 +281,6 @@ function Dashboard() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
 
-  // Thưởng mốc cộng Điểm Xanh (lô thường) — làm mới số dư điểm ở hub/Ví/Điểm Xanh (['loyalty']).
-  // `month` = tháng của mốc (tháng này hoặc tháng trước).
-  const claimMilestoneMut = useMutation({
-    mutationFn: (v: { id: string; month: string }) => claimCtvMilestone(v.id, v.month),
-    onSuccess: (res) => {
-      haptic('heavy');
-      openSnackbar({ text: res.message || 'Đã nhận thưởng mốc thành công!', type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['affiliate-milestones'] });
-      void qc.invalidateQueries({ queryKey: ['loyalty'] });
-    },
-    onError: (e) => {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Lỗi "đã nhận"/"chưa đạt" → trạng thái trên máy đã cũ, tải lại để nút khớp backend.
-      void qc.invalidateQueries({ queryKey: ['affiliate-milestones'] });
-    },
-  });
-
-  const renderMilestone = (m: CtvMilestoneItem, month: string, confirmedRevenue: number) => (
-    <div
-      key={`${month}:${m.id}`}
-      style={{
-        padding: 12,
-        borderRadius: 'var(--radius-control)',
-        background: m.canClaim ? 'var(--color-bg-subtle)' : 'var(--color-bg-canvas)',
-        border: m.canClaim ? '1px solid var(--color-action-secondary-border)' : '1px solid var(--color-border-subtle)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text variant="body-sm" style={BOLD}>{m.title}</Text>
-            {m.claimed && <Badge size="sm">Đã nhận</Badge>}
-          </div>
-          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
-            {m.description}
-          </Text>
-        </div>
-        <Text variant="body-sm" tone="brand" style={{ ...BOLD, marginLeft: 8 }}>
-          +{formatPoints(m.rewardPoints)}
-        </Text>
-      </div>
-
-      {/* Thanh tiến độ mốc (backend tính: chưa đạt tối đa 99%) */}
-      <div style={{ marginTop: 8 }}>
-        <ProgressBar value={m.progressPct} max={100} />
-      </div>
-
-      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Text variant="caption" tone="tertiary">
-          {milestoneStatusText(m, confirmedRevenue)}
-        </Text>
-
-        <Button
-          variant={m.canClaim ? 'primary' : 'secondary'}
-          icon={m.claimed ? Check : undefined}
-          disabled={!m.canClaim}
-          loading={
-            claimMilestoneMut.isPending &&
-            claimMilestoneMut.variables?.id === m.id &&
-            claimMilestoneMut.variables?.month === month
-          }
-          onPress={() => claimMilestoneMut.mutate({ id: m.id, month })}
-        >
-          {m.claimed ? 'Đã nhận' : m.canClaim ? 'Nhận thưởng' : 'Chưa đạt'}
-        </Button>
-      </div>
-    </div>
-  );
-
   const createLink = useMutation({
     mutationFn: () => createAffiliateLink('HOMEPAGE'),
     onSuccess: () => {
@@ -404,23 +347,60 @@ function Dashboard() {
         )}
       </div>
 
-      {/* Lối tắt "Lên đơn hộ" ngay dưới thẻ hoa hồng: việc CTV làm nhiều lần mỗi ngày, trước đây
-          nằm sau thẻ bậc, thưởng mốc và nút rút nên phải cuộn qua ~3 màn mới thấy. */}
+      {/* Đại lý không có lối tắt Lên đơn hộ (API từ chối) và chỉ có Gian hàng khi còn gian hàng CTV (trình dựng trả 400 nếu không). */}
       <div style={BLOCK_GAP}>
-        <Button
-          fullWidth
-          icon={Receipt}
-          onPress={() => {
-            haptic('light');
-            setCtvOrdering(true);
-          }}
-        >
-          {vi.ctvOrder.entry}
-        </Button>
-        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
-          {vi.ctvOrder.entryHint}
-        </Text>
+        <CtvShortcuts
+          items={[
+            { key: 'share', label: 'Chia sẻ', ariaLabel: 'Chia sẻ link và mã giới thiệu', icon: Link2, onPress: shareReferral },
+            ...(meQ.data?.canOpenStorefront !== false
+              ? [{ key: 'store', label: 'Gian hàng', ariaLabel: 'Gian hàng của tôi', icon: Store, onPress: () => navigate('/storefront') }]
+              : []),
+            ...(meQ.data?.canOrderForCustomer !== false
+              ? [
+                  {
+                    key: 'order',
+                    label: 'Lên đơn hộ',
+                    ariaLabel: vi.ctvOrder.entry,
+                    icon: Receipt,
+                    onPress: () => {
+                      haptic('light');
+                      setCtvOrdering(true);
+                    },
+                  },
+                ]
+              : []),
+            {
+              key: 'withdraw',
+              label: 'Rút tiền',
+              ariaLabel: 'Rút tiền hoa hồng',
+              icon: Wallet,
+              // Khi dashQ lỗi: cho phép mở WithdrawForm để BE tự validate số dư (CTV không bị kẹt
+              // do dashboard lỗi tạm thời mà không rút được commission đã APPROVED).
+              disabled: !dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0,
+              onPress: () => setWithdrawing(true),
+            },
+          ]}
+        />
       </div>
+
+      {/* Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để WithdrawForm tự query số dư riêng. */}
+      <div style={{ ...BLOCK_GAP, display: 'flex', gap: 10 }}>
+        <KpiCard
+          label="Đang chờ"
+          hint="đơn chưa giao hoặc đang giữ"
+          value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)}
+        />
+        <KpiCard
+          label="Có thể rút"
+          value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)}
+          highlight
+        />
+      </div>
+      {(d?.withdrawingCommission ?? 0) > 0 && (
+        <Text variant="caption" tone="secondary" as="p" style={{ ...BLOCK_GAP, marginTop: -4 }}>
+          Đang rút {formatVnd(d!.withdrawingCommission!)} về ngân hàng — chờ Tubu Tree duyệt và chuyển khoản.
+        </Text>
+      )}
 
       {/* Bậc doanh số tháng (§6.8.2) & Danh sách 5 bậc CTV */}
       {d?.tier && (
@@ -526,96 +506,17 @@ function Dashboard() {
       )}
 
       {/* Thưởng mốc doanh số tháng — thưởng bằng Điểm Xanh (tiêu trong app, không rút được) */}
-      {milestonesQ.data && milestonesQ.data.milestones.length > 0 && (
+      {milestonesQ.isError ? (
         <Card padding={16} style={BLOCK_GAP}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 'var(--radius-control)',
-                background: 'var(--color-action-secondary-bg)',
-                display: 'grid',
-                placeItems: 'center',
-              }}
-            >
-              <Icon icon={Trophy} size="md" tone="brand" />
-            </div>
-            <div>
-              <Text variant="body-sm" as="div" style={BOLD}>Thưởng Mốc Doanh Số Tháng</Text>
-              <Text variant="caption" tone="tertiary" as="div">
-                {monthLabel(milestonesQ.data.monthKey)} · Đã chốt {formatVnd(milestonesQ.data.currentRevenue)}
-              </Text>
-            </div>
-          </div>
-
-          <Text variant="caption" tone="tertiary" as="div" style={{ marginBottom: 4 }}>
-            {revenueRuleText(milestonesQ.data.holdDays)}
-          </Text>
-          {milestonesQ.data.pendingRevenue > 0 && (
-            <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 8 }}>
-              Đang chờ chốt: <b>{formatVnd(milestonesQ.data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
-            </Text>
-          )}
-
-          {milestonesQ.data.previousMonth && (
-            <div style={{ marginBottom: 12 }}>
-              <Text variant="caption" tone="brand" as="div" style={{ ...BOLD, marginBottom: 6 }}>
-                Còn thưởng {monthLabel(milestonesQ.data.previousMonth.monthKey)} chưa nhận — nhận trước khi hết {monthLabel(milestonesQ.data.monthKey)}
-              </Text>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {milestonesQ.data.previousMonth.milestones.map((m) =>
-                  renderMilestone(m, milestonesQ.data!.previousMonth!.monthKey, milestonesQ.data!.previousMonth!.revenue),
-                )}
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {milestonesQ.data.milestones.map((m) =>
-              renderMilestone(m, milestonesQ.data!.monthKey, milestonesQ.data!.currentRevenue),
-            )}
-          </div>
+          <ErrorState variant="inline" message={getErrorMessage(milestonesQ.error)} onRetry={() => void milestonesQ.refetch()} />
         </Card>
-      )}
-
-      {/* Rút tiền — luôn hiển thị nút Rút (CTV vẫn có thể rút khi dashboard lỗi transient).
-          Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để WithdrawForm tự query số dư riêng. */}
-      <div style={{ ...BLOCK_GAP, display: 'flex', gap: 10 }}>
-        <KpiCard
-          label="Đang chờ"
-          hint="đơn chưa giao hoặc đang giữ"
-          value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)}
-        />
-        <KpiCard
-          label="Có thể rút"
-          value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)}
-          highlight
-        />
-      </div>
-      <div style={BLOCK_GAP}>
-        <Button
-          fullWidth
-          variant="secondary"
-          // Khi dashQ lỗi: cho phép mở WithdrawForm để BE tự validate số dư (CTV không bị kẹt
-          // do dashboard lỗi tạm thời mà không rút được commission đã APPROVED).
-          disabled={!dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0}
-          onPress={() => setWithdrawing(true)}
-        >
-          Rút hoa hồng
-        </Button>
-        {(d?.withdrawingCommission ?? 0) > 0 && (
-          <Text variant="caption" tone="secondary" as="p" style={{ margin: '6px 0 0' }}>
-            Đang rút {formatVnd(d!.withdrawingCommission!)} về ngân hàng — chờ Tubu Tree duyệt và chuyển khoản.
-          </Text>
-        )}
-      </div>
-
-      <div style={BLOCK_GAP}>
-        <Button fullWidth variant="secondary" icon={Store} onPress={() => navigate('/storefront')}>
-          Gian hàng của tôi
-        </Button>
-      </div>
+      ) : milestonesQ.isLoading ? (
+        <Card padding={16} style={BLOCK_GAP}>
+          <SectionSkeleton />
+        </Card>
+      ) : milestonesQ.data ? (
+        <MilestoneRewards data={milestonesQ.data} />
+      ) : null}
 
       <div style={BLOCK_GAP}>
         <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => navigate('/academy')}>
@@ -1178,7 +1079,7 @@ function KpiCard({
   hint?: string;
 }) {
   return (
-    <Card variant={highlight ? 'flat' : 'raised'} style={{ flex: 1 }}>
+    <Card style={{ flex: 1 }}>
       <Text variant="price-md" tone={highlight ? 'brand' : 'primary'} as="div">
         {value}
       </Text>

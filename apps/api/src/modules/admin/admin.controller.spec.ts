@@ -10,6 +10,7 @@ import {
   CreateCouponDto,
   DealerAppsQuery,
   DealerPriceHistoryQuery,
+  ExportOrdersQuery,
   GomdonMarkHandledDto,
   GomdonRetryDto,
   ListOrdersQuery,
@@ -305,6 +306,23 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: false });
   });
 
+  it('xuất CSV đơn có bộ lọc mới (loại đơn, thanh toán, ngày, gian hàng): kế toán vẫn bị che SĐT, bộ lọc giữ nguyên (D1-05, D1-17)', async () => {
+    async function* empty(): AsyncGenerator<string> {}
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const q = Object.assign(new ExportOrdersQuery(), {
+      kind: 'ctv' as const,
+      payment: 'PAID' as const,
+      platform: 'miniapp' as const,
+      from: '2026-10-01',
+      to: '2026-10-18',
+      storefront: 'an',
+    });
+    await ctrl.exportOrders(q, 'STAFF', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith(q, { maskPhones: true });
+  });
+
   it('DealerPriceHistoryQuery nhận variationId', async () => {
     const q = (await asQuery(DealerPriceHistoryQuery, { variationId: 'v1' })) as DealerPriceHistoryQuery;
     expect(q.variationId).toBe('v1');
@@ -347,7 +365,7 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     await ctrl.cancelGomdonWaybill('admin-1', 'o1');
     expect(admin.cancelGomdonWaybill).toHaveBeenCalledWith('admin-1', 'o1');
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }), VIEWER);
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined, undefined, undefined, VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined, undefined, undefined, VIEWER, {});
   });
 
   it('POST orders/:id/gomdon/mark-handled chuyển adminId + id + note xuống AdminService', async () => {
@@ -367,7 +385,7 @@ describe('AdminController — hàng đợi "Cần xử lý Pancake"', () => {
     const admin = { listOrders: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
     const ctrl = new AdminController(admin as never, {} as never);
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 1, pancake: 'attention' as const }), VIEWER);
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention', undefined, undefined, VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention', undefined, undefined, VIEWER, {});
   });
 
   it('POST orders/:id/pancake-attention/resolve: chỉ ADMIN, chuyển adminId + id + note; note ≤ 500, chặn field lạ', async () => {

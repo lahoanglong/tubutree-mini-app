@@ -39,6 +39,7 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 | Đã nhận, Đã thu tiền | Đã giao hàng (cộng Điểm Xanh, bắt đầu giữ hoa hồng) |
 | Đã hủy | Đã hủy |
 | Đang hoàn, Hoàn một phần, Đã xoá | Nhãn đỏ "Pancake: cần xử lý" |
+| Bạn sửa món, giảm giá hoặc phí ship của đơn khiến tổng tiền đổi | Nhãn đỏ "Pancake: cần xử lý", lý do "Tổng tiền Pancake lệch với Tubu" kèm số lệch. Tubu không đổi tổng đơn của khách. |
 | Đã hoàn | Đơn tự huỷ (chưa giao) hoặc "Đã trả hàng" (đã giao); tồn kho cộng lại |
 
 **Chỉ bấm "Đã nhận" hoặc "Đã thu tiền" khi hàng đã giao thật.** Không bấm hoàn thành hàng loạt: khách nhận điểm, hoa hồng bắt đầu giữ, đơn không huỷ được nữa.
@@ -83,6 +84,8 @@ Báo động Gomdon hiện ngay trong chi tiết đơn, bấm "Đã xử lý" sa
 ## Xử lý tình huống
 
 **Đơn có món hết hàng ngoài kho.** Kho không huỷ được đơn trên Tubu (chỉ CSKH và admin huỷ). Báo CSKH: huỷ đơn ở Tubu, ghi lý do "hết hàng", tiền về Ví Tubu của khách. Hệ thống chưa có "bỏ một món khỏi đơn" (**⏳ đang làm**): khách đặt lại phần còn hàng. Sửa tồn trên Pancake để Tubu ngừng nhận đơn.
+
+**Thấy lý do "Tổng tiền Pancake lệch với Tubu".** Ai đó đã sửa đơn này trên Pancake. **Không sửa tiếp.** Báo CSKH hoặc admin: huỷ đơn ở Tubu và khách đặt lại, hoặc bạn trả đơn Pancake về đúng nội dung đơn Tubu (lý do tự biến mất khi Pancake báo lại đơn đúng tổng). Bấm "Đã xử lý" khi xong.
 
 **Khách gọi đổi địa chỉ.** **Không sửa địa chỉ trên Pancake**, Tubu không biết và hoàn tiền, đối soát theo địa chỉ cũ. Chưa giao hãng: báo CSKH huỷ và khách đặt lại. Đã giao hãng: gọi hãng, nhờ CSKH báo khách. Xem [cskh.md](cskh.md).
 

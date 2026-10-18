@@ -5,6 +5,7 @@ import { Prisma, type Order } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { SystemConfigService } from '../../system-config/system-config.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
@@ -13,6 +14,7 @@ import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_PARTIAL_RETURN_ACK,
   ATTENTION_RETURN_APPROVED,
+  ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   clearPancakeAttention,
 } from './pancake-attention';
@@ -24,7 +26,8 @@ import {
   pancakeEventData,
   pancakeEventOrderCode,
 } from './pancake-webhook-dedupe';
-import { isMerchantFulfilledOrder } from './pancake-fulfilment';
+import { isMerchantFulfilledOrder, isPancakeFulfilledLine } from './pancake-fulfilment';
+import { pancakeStatusSkipsTotalCheck, pancakeTotalMismatch } from './pancake-total';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
@@ -58,6 +61,9 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 
 /** `ignored`: cố ý không áp — lý do ghi vào sự kiện để người vận hành đọc. */
 type HandleOutcome = 'PROCESSED' | 'UNMATCHED' | { ignored: string };
+
+/** Công tắc so tổng tiền Pancake với đơn Tubu (mặc định bật); tắt nếu hợp đồng field thật làm báo nhầm hàng loạt. */
+export const PANCAKE_TOTAL_CHECK_KEY = 'pancake.total_mismatch_check';
 
 const CLOSED_ORDER_STATUSES = ['CANCELLED', 'RETURNED'] as const;
 const isClosedOrder = (status: string): boolean => (CLOSED_ORDER_STATUSES as readonly string[]).includes(status);
@@ -123,6 +129,7 @@ export class PancakeProcessor extends WorkerHost {
     // PancakeModule tự provide GomdonAlertService (chỉ phụ thuộc Prisma + Notifications) — không import
     // GomdonModule nên không có vòng module. Call site dựng tay thiếu tham số → tự dựng, vẫn báo thật.
     @Optional() alerts?: GomdonAlertService,
+    @Optional() private readonly systemConfig?: SystemConfigService,
   ) {
     super();
     this.alerts = alerts ?? new GomdonAlertService(prisma, notifications);
@@ -240,12 +247,79 @@ export class PancakeProcessor extends WorkerHost {
       if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
         await this.onShippingUpdated(data);
       }
+      await this.onTotalReconcile(data);
     } finally {
       // Đặt bưu tá thu gom SAU khi đã ghi trạng thái + vận đơn của cùng sự kiện: kho đã giao bằng hãng khác thì
       // job Gomdon thấy ngay và không tạo vận đơn thứ hai (GOMDON-3). Lần chạy lại sau lỗi không lật PAID nữa
       // nên vẫn phải xếp ở đây.
       if (paidNow) await this.orderStatus.enqueueGomdonAfterPaid(paidNow);
     }
+  }
+
+  /**
+   * Nhân viên sửa đơn (thêm/bớt món, đổi giảm giá, phí ship) trên Pancake thì Tubu không hay: hoàn tiền, hoa hồng và đối
+   * soát vẫn tính theo `order.total` cũ. Chỉ BÁO — không bao giờ sửa đơn Tubu theo số Pancake. Phần phụ: lỗi ở đây chỉ ghi log,
+   * không được chặn việc ghi trạng thái/thanh toán/vận chuyển của cùng sự kiện.
+   */
+  private async onTotalReconcile(data: Record<string, unknown>): Promise<void> {
+    try {
+      await this.reconcileTotal(data);
+    } catch (err) {
+      this.logger.warn(`Không so được tổng tiền Pancake: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  private async reconcileTotal(data: Record<string, unknown>): Promise<void> {
+    if (pancakeStatusSkipsTotalCheck(data)) return;
+    const order = await this.findOrder(data);
+    if (!order || isClosedOrder(order.status) || isMerchantFulfilledOrder(order)) return;
+    if (!(await this.totalCheckEnabled())) return;
+
+    const mismatch = pancakeTotalMismatch(data, order);
+    const own = order.pancakeAttention?.startsWith(ATTENTION_TOTAL_MISMATCH) ?? false;
+    if (!mismatch) {
+      if (own) await clearPancakeAttention(this.prisma, order.id, ATTENTION_TOTAL_MISMATCH);
+      return;
+    }
+    // Hàng đợi chỉ có một ô lý do: đang chờ việc khác (khách chuyển thiếu, huỷ chưa tới Pancake…) thì không ghi đè. Dòng này chỉ
+    // bỏ sớm cho đỡ tốn truy vấn; việc chặn thật nằm trong điều kiện updateMany vì job khác có thể ghi chen sau lúc đọc đơn.
+    if (order.pancakeAttention && !own) return;
+    // Đơn có dòng do đối tác tự giao chỉ gửi phần dòng kho Tubu lên Pancake nên tổng Pancake thấp hơn là đúng thiết kế.
+    if (await this.hasNonPancakeLines(order.id)) return;
+
+    const sign = mismatch.diff > 0 ? '+' : '-';
+    await this.flagAttention(
+      order,
+      `${ATTENTION_TOTAL_MISMATCH}: Pancake ghi ${formatVnd(mismatch.pancakeTotal)}, Tubu ghi ${formatVnd(order.total)}, ` +
+        `lệch ${sign}${formatVnd(Math.abs(mismatch.diff))}. Có thể đơn đã bị sửa trên Pancake (món, giảm giá hoặc phí ship). ` +
+        'Tubu KHÔNG tự sửa đơn, hoàn tiền/hoa hồng/đối soát vẫn tính theo số của Tubu. Cách xử lý: huỷ đơn rồi đặt lại, hoặc ' +
+        'trả đơn Pancake về đúng nội dung đơn Tubu.',
+      ATTENTION_TOTAL_MISMATCH,
+    );
+  }
+
+  private async totalCheckEnabled(): Promise<boolean> {
+    if (!this.systemConfig) return true;
+    try {
+      return (await this.systemConfig.get<boolean>(PANCAKE_TOTAL_CHECK_KEY, true)) !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  private async hasNonPancakeLines(orderId: string): Promise<boolean> {
+    const items = await this.prisma.orderItem.findMany({ where: { orderId }, select: { variationId: true } });
+    const ids = items.map((i) => i.variationId);
+    if (ids.length === 0) return false;
+    const variations = await this.prisma.variation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, pancakeId: true, product: { select: { fulfilment: true } } },
+    });
+    const byId = new Map(variations.map((v) => [v.id, v]));
+    return ids.some((id) => {
+      const v = byId.get(id);
+      return !v || !isPancakeFulfilledLine({ pancakeId: v.pancakeId, fulfilment: v.product?.fulfilment ?? null });
+    });
   }
 
   /**
@@ -286,9 +360,19 @@ export class PancakeProcessor extends WorkerHost {
    * lại (Pancake gửi lại webhook mỗi lần đơn đổi). Best-effort về báo động; lỗi ghi DB ném tiếp để retry.
    */
   /** Trả true khi vừa gắn (lời nhắc khác lời đang gắn); cùng lời thì không báo lại. */
-  private async flagAttention(order: Pick<Order, 'id' | 'code'>, reason: string): Promise<boolean> {
+  private async flagAttention(
+    order: Pick<Order, 'id' | 'code'>,
+    reason: string,
+    onlyReplacingPrefix?: string,
+  ): Promise<boolean> {
+    const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
     const r = await this.prisma.order.updateMany({
-      where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
+      where: onlyReplacingPrefix
+        ? {
+            id: order.id,
+            AND: [changed, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }],
+          }
+        : { id: order.id, ...changed },
       data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
     });
     if (r.count === 0) return false;

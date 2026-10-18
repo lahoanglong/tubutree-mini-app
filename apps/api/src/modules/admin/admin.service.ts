@@ -26,11 +26,13 @@ import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
+  NO_SUCH_STOREFRONT_ID,
   normalizeAdminOrderSearch,
   recipientPhoneVariants,
   searchPhone,
-  type AdminOrderFilter,
+  type AdminOrderFilterInput,
   type InvoiceFilter,
+  type OrderListExtra,
   type PancakeFilter,
   type RecyclingFilter,
 } from './admin-order-filter';
@@ -816,10 +818,7 @@ export class AdminService {
   }
 
   /** File CSV mọi đơn khớp bộ lọc (admin-export.ts đọc theo lô). */
-  async orderCsv(
-    f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>,
-    opts: { maskPhones?: boolean } = {},
-  ): Promise<AsyncGenerator<string>> {
+  async orderCsv(f: AdminOrderFilterInput, opts: { maskPhones?: boolean } = {}): Promise<AsyncGenerator<string>> {
     return orderCsvChunks(this.prisma, await this.adminOrderWhere(f), opts);
   }
 
@@ -828,12 +827,28 @@ export class AdminService {
   }
 
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */
-  async adminOrderWhere(f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>): Promise<Prisma.OrderWhereInput> {
-    const [searchUserIds, searchOrderIds] = await Promise.all([
+  async adminOrderWhere(f: AdminOrderFilterInput): Promise<Prisma.OrderWhereInput> {
+    const { storefront, ...filter } = f;
+    const [searchUserIds, searchOrderIds, storefrontId] = await Promise.all([
       this.findSearchUserIds(f.search),
       this.findSearchOrderIds(f.search),
+      this.findStorefrontId(storefront),
     ]);
-    return buildAdminOrderWhere({ ...f, searchUserIds, searchOrderIds });
+    return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, ...(storefrontId ? { storefrontId } : {}) });
+  }
+
+  /**
+   * Slug hoặc subdomain gian hàng → id. Gõ không khớp gian hàng nào thì trả id không thể trùng ai (danh sách rỗng): bỏ lọc
+   * sẽ hiện mọi đơn như thể đã lọc xong.
+   */
+  private async findStorefrontId(raw?: string): Promise<string | undefined> {
+    const s = raw?.trim().toLowerCase();
+    if (!s) return undefined;
+    const row = await this.prisma.storefront.findFirst({
+      where: { OR: [{ slug: { equals: s, mode: 'insensitive' } }, { subdomain: { equals: s, mode: 'insensitive' } }] },
+      select: { id: true },
+    });
+    return row?.id ?? NO_SUCH_STOREFRONT_ID;
   }
 
   /**
@@ -853,12 +868,13 @@ export class AdminService {
     from?: string,
     to?: string,
     viewer: OrderActor = { role: 'ADMIN' },
+    { order = 'desc', ...extra }: OrderListExtra = {},
   ) {
-    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to });
+    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to, ...extra });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: order },
         ...skipTake(page, limit),
         include: {
           items: true,

@@ -76,6 +76,8 @@ import {
   type RecyclingFilter,
   type PancakeFilter,
   type InvoiceFilter,
+  type OrderListExtra,
+  orderExtraFilters,
   downloadOrdersCsv,
   downloadUsersCsv,
   getOpsAccess,
@@ -110,6 +112,7 @@ import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel'
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
+import { OrderExtraFilters } from '@/components/admin/order-extra-filters';
 import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
 import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
@@ -138,6 +141,7 @@ import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import { RefillTab } from '@/components/admin/refill-tab';
+import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
@@ -160,6 +164,7 @@ type Tab =
   | 'dashboard'
   | 'dealers'
   | 'dealerClaims'
+  | 'dealerAccounts'
   | 'dealerPrices'
   | 'commissionRates'
   | 'engagement'
@@ -220,6 +225,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'dealers', label: 'Đại lý' },
       { k: 'dealerClaims', label: 'Thưởng đại lý' },
+      { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
       { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
       { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
@@ -473,6 +479,7 @@ export default function AdminPage() {
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab />}
+          {active === 'dealerAccounts' && <DealerAccountsTab />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
           {active === 'engagement' && <EngagementTab />}
@@ -932,6 +939,7 @@ function OrdersTab({
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [extra, setExtra] = useState<OrderListExtra>({});
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
@@ -939,7 +947,7 @@ function OrdersTab({
   const badRange = !!from && !!to && from > to;
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to],
+    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to, extra],
     queryFn: () =>
       listOrders(
         page,
@@ -951,6 +959,7 @@ function OrdersTab({
         pancake || undefined,
         from || undefined,
         to || undefined,
+        extra,
       ),
     enabled: !badRange,
   });
@@ -966,6 +975,7 @@ function OrdersTab({
         pancake: pancake || undefined,
         from: from || undefined,
         to: to || undefined,
+        ...orderExtraFilters(extra),
       });
       setExportMsg({ ok: true, text: `Đã tải ${r.filename} — mọi đơn khớp bộ lọc, không chỉ trang đang xem.` });
     } catch (e) {
@@ -1104,6 +1114,15 @@ function OrdersTab({
           </p>
         )}
       </div>
+
+      <OrderExtraFilters
+        value={extra}
+        onChange={(v) => {
+          setPage(1);
+          setExpandedId(null);
+          setExtra(v);
+        }}
+      />
 
       {/* Bộ lọc thu gom tái chế (Gomdon) */}
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu gom tái chế">

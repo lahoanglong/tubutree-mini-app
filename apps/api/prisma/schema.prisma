@@ -1081,6 +1081,11 @@ model Order {
   @@index([fulfillerStorefrontId, status, createdAt])
   @@index([storefrontId, createdAt])
   @@index([checkoutGroup])
+  // Bộ lọc danh sách đơn admin (loại đơn, thanh toán, nền tảng; admin-order-filter.ts): mỗi lọc kèm sắp xếp createdAt.
+  @@index([paymentStatus, createdAt])
+  @@index([type, createdAt])
+  @@index([platform, createdAt])
+  @@index([placedForCustomer, createdAt])
   @@map("orders")
 }
 
@@ -1889,6 +1894,23 @@ model DealerTier {
   paymentTerms   String?
 
   @@map("dealer_tiers")
+}
+
+/// Lịch sử sửa bậc đại lý (chiết khấu, hạn mức, điều kiện): ai đổi gì lúc nào. Không FK để dòng lịch sử sống lâu hơn bậc.
+model DealerTierHistory {
+  id        String   @id @default(cuid())
+  tierId    String
+  /// CREATE | UPDATE
+  action    String
+  /// Ảnh chụp trước khi sửa (null khi tạo): { name, minOrderVolume, discountPct, creditLimit, paymentTerms }.
+  oldValue  Json?
+  newValue  Json
+  changedBy String
+  changedAt DateTime @default(now())
+
+  @@index([tierId, changedAt])
+  @@index([changedAt])
+  @@map("dealer_tier_history")
 }
 
 model DealerCreditLedger {

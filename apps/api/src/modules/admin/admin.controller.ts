@@ -32,7 +32,19 @@ import { streamCsv } from './admin-export';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { vnDateKey } from '../../common/vn-time';
 import { CatalogService } from '../catalog/catalog.service';
-import { ADMIN_ORDER_STATUSES, PANCAKE_FILTERS, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
+import {
+  ADMIN_ORDER_STATUSES,
+  ORDER_KINDS,
+  ORDER_LIST_PLATFORMS,
+  ORDER_PAYMENT_STATUSES,
+  PANCAKE_FILTERS,
+  type InvoiceFilter,
+  type OrderKind,
+  type OrderListPlatform,
+  type OrderPaymentFilter,
+  type PancakeFilter,
+  type RecyclingFilter,
+} from './admin-order-filter';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { DEALER_PRICE_CSV_MAX_LENGTH } from './dealer-price-import';
 import { soldExternalRowsOrThrow } from './sold-external-csv';
@@ -300,6 +312,16 @@ export class ListOrdersQuery extends PaginationQuery {
   /** Khoảng ngày đặt (giờ VN, tính cả hai đầu). */
   @IsOptional() @IsCalendarDate() from?: string;
   @IsOptional() @IsCalendarDate() to?: string;
+  /** Loại đơn: lẻ / CTV / đại lý / CTV lên hộ / gian hàng (xem ORDER_KINDS). */
+  @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
+  @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
+  @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
+  @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
+  /** Slug hoặc subdomain của gian hàng được ghi công. */
+  @IsOptional() @IsString() @MaxLength(100) storefront?: string;
+  /** Thứ tự theo ngày đặt; mặc định mới nhất trước. */
+  @IsOptional() @IsIn([...SORT_ORDERS]) order?: SortOrder;
 }
 
 /** Bộ lọc của file CSV — đúng bộ lọc danh sách đơn, không phân trang. */
@@ -311,6 +333,11 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
   @IsOptional() @IsCalendarDate() from?: string;
   @IsOptional() @IsCalendarDate() to?: string;
+  @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
+  @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
+  @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
+  @IsOptional() @IsString() @MaxLength(100) storefront?: string;
 }
 
 export class ExportUsersQuery {
@@ -450,7 +477,15 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer);
+    const { kind, payment, platform, referrerUserId, storefront, order } = q;
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
+      kind,
+      payment,
+      platform,
+      referrerUserId,
+      storefront,
+      order,
+    });
   }
 
   /**

@@ -102,12 +102,41 @@ const INVOICE_STATUS_WHERE: Record<InvoiceFilter, Prisma.OrderWhereInput> = {
   all: { OR: [INVOICE_OPEN_WHERE, INVOICE_ISSUED_WHERE] },
 };
 
+/**
+ * Loại đơn, loại trừ nhau theo thứ tự ưu tiên: đại lý > CTV lên hộ > qua gian hàng > qua CTV > lẻ. Đại lý và CTV lên hộ là
+ * hai nhóm hiếm nên có index riêng (orders_type_createdAt_idx, orders_placedForCustomer_createdAt_idx); "qua CTV" / "qua gian
+ * hàng" / "lẻ" đủ nhiều đơn để quét ngược orders_createdAt_idx dừng sớm.
+ * "CTV" = có mã người giới thiệu: khách thường chia sẻ link cũng được ghi nhận người giới thiệu (nhưng không có hoa hồng).
+ */
+export const ORDER_KINDS = ['retail', 'ctv', 'dealer', 'ctv_assisted', 'storefront'] as const;
+export type OrderKind = (typeof ORDER_KINDS)[number];
+const ORDER_KIND_WHERE: Record<OrderKind, Prisma.OrderWhereInput> = {
+  dealer: { type: 'DEALER' },
+  ctv_assisted: { type: 'RETAIL', placedForCustomer: true },
+  storefront: { type: 'RETAIL', placedForCustomer: false, storefrontId: { not: null } },
+  ctv: { type: 'RETAIL', placedForCustomer: false, storefrontId: null, referrerUserId: { not: null } },
+  retail: { type: 'RETAIL', placedForCustomer: false, storefrontId: null, referrerUserId: null },
+};
+
+export const ORDER_PAYMENT_STATUSES = ['UNPAID', 'PAID', 'REFUNDED', 'FAILED'] as const;
+export type OrderPaymentFilter = (typeof ORDER_PAYMENT_STATUSES)[number];
+/** Chỉ hai nền tảng checkout ghi (checkout.service.ts); 'system'/'pos' có nhãn ở order-channel.ts nhưng không đơn nào mang. */
+export const ORDER_LIST_PLATFORMS = ['miniapp', 'web'] as const;
+export type OrderListPlatform = (typeof ORDER_LIST_PLATFORMS)[number];
+
 export interface AdminOrderFilter {
   status?: string;
   search?: string;
   recycling?: RecyclingFilter;
   invoice?: InvoiceFilter;
   pancake?: PancakeFilter;
+  kind?: OrderKind;
+  payment?: OrderPaymentFilter;
+  platform?: OrderListPlatform;
+  /** Id CTV / người giới thiệu (Order.referrerUserId). */
+  referrerUserId?: string;
+  /** Id gian hàng được ghi công (Order.storefrontId); web gửi slug, AdminService.adminOrderWhere đổi sang id. */
+  storefrontId?: string;
   /** Khoảng ngày đặt theo giờ VN, 'YYYY-MM-DD', tính cả hai đầu. */
   from?: string;
   to?: string;
@@ -120,6 +149,23 @@ export interface AdminOrderFilter {
   /** Id đơn có SĐT người nhận (shippingAddress.phone) khớp `search` — tra trước bằng index biểu thức. */
   searchOrderIds?: string[];
 }
+
+/** Các bộ lọc thêm của danh sách đơn admin (D1-17) cùng thứ tự sắp xếp theo ngày đặt. `storefront` là slug/subdomain gõ tay. */
+export interface OrderListExtra {
+  kind?: OrderKind;
+  payment?: OrderPaymentFilter;
+  platform?: OrderListPlatform;
+  referrerUserId?: string;
+  storefront?: string;
+  order?: 'asc' | 'desc';
+}
+
+/** Đầu vào của AdminService.adminOrderWhere/orderCsv: bộ lọc đơn, gian hàng đưa vào dạng slug chứ chưa phải id. */
+export type AdminOrderFilterInput = Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds' | 'storefrontId'> &
+  Pick<OrderListExtra, 'storefront'>;
+
+/** Id không thể trùng gian hàng nào (cuid không có dấu gạch) — dùng khi slug gõ vào không khớp gian hàng. */
+export const NO_SUCH_STOREFRONT_ID = 'no-such-storefront';
 
 /**
  * Chuỗi tìm trông như SĐT (chỉ số, khoảng trắng, chấm, gạch, ngoặc, dấu + đầu) → dạng nội địa 0xxxxxxxxx như
@@ -236,6 +282,11 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.invoice) and.push(INVOICE_STATUS_WHERE[f.invoice]);
   if (f.pancake === 'attention') and.push({ pancakeAttentionAt: { not: null } });
   else if (f.pancake === 'unsynced') and.push(pancakeUnsyncedWhere());
+  if (f.kind) and.push(ORDER_KIND_WHERE[f.kind]);
+  if (f.payment) and.push({ paymentStatus: f.payment });
+  if (f.platform) and.push({ platform: f.platform });
+  if (f.referrerUserId) and.push({ referrerUserId: f.referrerUserId });
+  if (f.storefrontId) and.push({ storefrontId: f.storefrontId });
   if (and.length === 0) return {};
   return and.length === 1 ? and[0]! : { AND: and };
 }
