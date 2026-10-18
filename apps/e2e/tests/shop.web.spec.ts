@@ -1,4 +1,4 @@
-import { expect, reply, test, type MockApi } from './support/mock-api';
+import { expect, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
 
 /**
  * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
@@ -203,6 +203,112 @@ test.describe('Web khách: Trang chủ /', () => {
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto('/');
     await expect(page.getByText('Bán chạy nhất')).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+/**
+ * Trang sản phẩm /san-pham/[slug] (00-ma-tran dòng 3). Phần server của Next (getProduct, gợi ý) gọi API thật nên không mock được:
+ * spec lấy một sản phẩm có sẵn trong DB e2e và tự bỏ qua khi DB không có sản phẩm nào; mọi lời gọi từ trình duyệt đi qua mock.
+ */
+test.describe('Web khách: trang sản phẩm', () => {
+  const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT ?? '3001'}`;
+
+  async function firstProduct(request: import('@playwright/test').APIRequestContext) {
+    const res = await request.get(`${API_ORIGIN}/api/products?limit=1`).catch(() => null);
+    if (!res?.ok()) return null;
+    const first = ((await res.json()) as { data?: { slug: string }[] }).data?.[0];
+    if (!first) return null;
+    const detail = await request.get(`${API_ORIGIN}/api/products/${encodeURIComponent(first.slug)}`);
+    return detail.ok() ? ((await detail.json()) as { id: string; slug: string; variations: { id: string; stock: number }[] }) : null;
+  }
+
+  function mockPdp(api: MockApi, p: { slug: string; variations: { id: string; stock: number }[] }, over: { affiliate?: boolean } = {}) {
+    api.get('/flash-sales/active', []);
+    api.get(`/products/${p.slug}`, { variations: p.variations });
+    api.get(`/products/${p.slug}/related`, []);
+    api.get(`/products/${p.slug}/bought-together`, []);
+    api.get(`/products/${p.slug}/reviews`, { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
+    api.get('/me/wishlist/ids', []);
+    api.get('/me/coupons', [
+      { code: 'GIAM20', type: 'AMOUNT', value: 20000, minOrder: 100000, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z' },
+    ]);
+    api.get('/affiliate/me', { isAffiliate: over.affiliate === true });
+    api.get('/me/addresses', [
+      { id: 'a1', recipient: 'Nguyễn Văn An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Phường Ba Đình', street: '12 Phố Huế', provinceCode: '84_VN01', districtCode: '', wardCode: '84_VN01_00004', isDefault: true },
+    ]);
+    api.get('/me/wallet', { walletBalance: 300000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0, withdrawMin: 0, withdrawFee: 0 });
+  }
+
+  const signIn = (page: import('@playwright/test').Page) =>
+    page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+
+  test('khách chưa đăng nhập bấm Mở nhóm mua chung: sang đăng nhập kèm returnTo về đúng sản phẩm, không tạo nhóm', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    mockPdp(api, p!);
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.goto(`/san-pham/${p!.slug}`);
+    await page.getByRole('button', { name: /Mở nhóm mua chung/ }).click();
+    await page.waitForURL(/\/dang-nhap/);
+    expect(new URL(page.url()).searchParams.get('returnTo')).toBe(`/san-pham/${p!.slug}`);
+    expect(api.callsTo('POST', '/group-buy')).toHaveLength(0);
+  });
+
+  test('đăng nhập: chép mã giảm giá, mở nhóm mua chung gửi {productId} rồi sang /mua-chung/:id', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await signIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123' }));
+    mockPdp(api, p!);
+    api.post('/group-buy', { id: 'g1' });
+    await page.goto(`/san-pham/${p!.slug}`);
+    await expect(page.getByRole('button', { name: 'Sao chép mã GIAM20' })).toBeVisible();
+    const call = async () => {
+      await page.getByRole('button', { name: /Mở nhóm mua chung/ }).click();
+      return (await api.waitForCall('POST', '/group-buy')).body;
+    };
+    expect(await call()).toEqual({ productId: p!.id });
+    await expect(page).toHaveURL(/\/mua-chung\/g1$/);
+  });
+
+  test('đặt định kỳ: sheet gửi đúng body tạo subscription và báo đơn đầu', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    const inStock = p?.variations.find((v) => v.stock > 0);
+    test.skip(!p || !inStock, 'DB e2e chưa có sản phẩm còn hàng');
+    await signIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123' }));
+    mockPdp(api, p!);
+    api.post('/me/subscriptions', {
+      id: 's1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: '2026-11-07T00:00:00.000Z', productName: 'x',
+      firstOrder: { id: 'o1', code: 'TB-1', status: 'CONFIRMED', paymentMethod: 'COD', total: 100000 },
+    });
+    await page.goto(`/san-pham/${p!.slug}`);
+    await page.getByRole('button', { name: /Đặt định kỳ/ }).click();
+    const dialog = page.getByRole('dialog', { name: /Đặt định kỳ/ });
+    await dialog.getByRole('button', { name: '6 tuần' }).click();
+    await dialog.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }).click();
+    const body = (await api.waitForCall('POST', '/me/subscriptions')).body as Record<string, unknown>;
+    expect(body).toMatchObject({ quantity: 1, intervalWeeks: 6, addressId: 'a1', paymentMethod: 'COD' });
+    expect(body).not.toHaveProperty('startDate');
+    await expect(page.getByText(/Đã tạo lịch định kỳ và đơn đầu TB-1/)).toBeVisible();
+  });
+
+  test('điện thoại 320px: không cuộn ngang', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    mockPdp(api, p!);
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(`/san-pham/${p!.slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });
