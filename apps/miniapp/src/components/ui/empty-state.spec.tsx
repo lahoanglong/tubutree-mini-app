@@ -56,7 +56,7 @@ describe('ErrorState', () => {
 describe('ErrorState — khác trạng thái rỗng (D7 mục 5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.fetchSupportContact.mockResolvedValue({ hotline: '0899 149 229', email: null, zaloOaName: null });
+    mocks.fetchSupportContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null });
   });
 
   it('icon cảnh báo riêng, không dùng minh hoạ lá/rổ/hộp của trạng thái rỗng', () => {
@@ -84,10 +84,10 @@ describe('ErrorState — khác trạng thái rỗng (D7 mục 5)', () => {
 
   it('lỗi cả trang: dòng "Cần hỗ trợ? Gọi <hotline đọc từ cấu hình>" bấm là gọi', async () => {
     render(withClient(<ErrorState message="Lỗi" onRetry={() => {}} />));
-    const call = await screen.findByRole('button', { name: /Gọi 0899 149 229/ });
+    const call = await screen.findByRole('button', { name: /Gọi 0984 606 774/ });
     expect(screen.getByText('Cần hỗ trợ?')).toBeInTheDocument();
     fireEvent.click(call);
-    expect(mocks.callPhone).toHaveBeenCalledWith('0899 149 229');
+    expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
   });
 
   it('cấu hình không có hotline → không có dòng hỗ trợ', async () => {
@@ -100,7 +100,7 @@ describe('ErrorState — khác trạng thái rỗng (D7 mục 5)', () => {
   it('không đọc được cấu hình → rơi về hotline mặc định, vẫn còn đường liên hệ', async () => {
     mocks.fetchSupportContact.mockRejectedValue(new Error('boom'));
     render(withClient(<ErrorState message="Lỗi" onRetry={() => {}} />));
-    expect(await screen.findByRole('button', { name: /Gọi 0899 149 229/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Gọi 0984 606 774/ })).toBeInTheDocument();
   });
 
   it('khối nhúng trong mục (inline) gọn: không có dòng hỗ trợ và không gọi cấu hình', () => {

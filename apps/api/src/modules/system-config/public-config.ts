@@ -72,7 +72,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     isGomdonRecyclingEnabled(config).catch(() => false),
     config.get<number | null>('shipping.eta_min_days', null),
     config.get<number | null>('shipping.eta_max_days', null),
-    config.get<unknown>('support.hotline', '0899 149 229'),
+    config.get<unknown>('support.hotline', '0984 606 774'),
     config.get<unknown>('support.email', 'tubutree@gmail.com'),
     config.get<unknown>('support.zalo_oa_name', ''),
     // Mặc định phải khớp GroupBuyService.create và OrdersService.requestReturn (cùng khoá, cùng fallback).
@@ -97,8 +97,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT),
     config.get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT),
     config.get<unknown>('community.zalo_group_url', ''),
-    config.get<unknown>('community.facebook_url', ''),
-    config.get<unknown>('community.tiktok_url', ''),
+    config.get<unknown>('community.facebook_url', 'https://www.facebook.com/tubutree'),
+    config.get<unknown>('community.tiktok_url', 'https://www.tiktok.com/@tubutree.com'),
   ]);
   return {
     freeshipThreshold,

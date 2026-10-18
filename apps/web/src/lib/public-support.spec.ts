@@ -12,8 +12,8 @@ afterEach(() => {
 // Hotline/email ở footer lấy từ GET /config/public (admin đổi được), nhưng footer không bao giờ
 // được trống hay làm sập trang chủ khi API hỏng — luôn rơi về thông tin liên hệ mặc định.
 describe('getPublicSupport', () => {
-  it('mặc định là hotline 0899 149 229 và tubutree@gmail.com', () => {
-    expect(DEFAULT_SUPPORT).toEqual({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
+  it('mặc định là hotline 0984 606 774 và tubutree@gmail.com', () => {
+    expect(DEFAULT_SUPPORT).toEqual({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
   });
 
   it('lấy hotline và email admin đã cấu hình', async () => {

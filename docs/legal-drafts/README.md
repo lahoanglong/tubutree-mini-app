@@ -32,7 +32,7 @@ Soạn ngày 2026-10-18, nhánh `lr2/legal`. Chưa luật sư nào xem. Đây l�
 | Dấu | Có ở | Ghi chú |
 |---|---|---|
 | `[NGÀY HIỆU LỰC]` | cả 4 file, dòng đầu | ngày mở bán hoặc ngày dán |
-| `[SỐ HOTLINE]` | cả 4 file | trong mã đang mặc định `0899 149 229` (`apps/api/src/modules/system-config/public-config.ts:66`, `apps/api/prisma/seed.ts:80`, `apps/web/src/lib/api.ts:336`). Nếu đó là số thật, điền số này và nhớ khoá `support.hotline` phải trùng |
+| `[SỐ HOTLINE]` | cả 4 file | trong mã đang mặc định `0984 606 774` (`apps/api/src/modules/system-config/public-config.ts:66`, `apps/api/prisma/seed.ts:80`, `apps/web/src/lib/api.ts:336`). Nếu đó là số thật, điền số này và nhớ khoá `support.hotline` phải trùng |
 | `[NGƯỜI ĐẠI DIỆN]` | cả 4 file | người đại diện theo pháp luật theo giấy phép kinh doanh |
 | `[SỐ NGÀY GIAO NỘI THÀNH]`, `[SỐ NGÀY GIAO TỈNH KHÁC]` | `van-chuyen.md` mục 5 | chưa có quy tắc nào trong mã: `shipping.eta_min_days` và `shipping.eta_max_days` mặc định null nên app ẩn dòng "Giao dự kiến" (`apps/api/prisma/seed.ts:222-223`) |
 | `[SỐ XÁC NHẬN THÔNG BÁO / ĐĂNG KÝ]` | `dieu-khoan.md` mục 18 | số thông báo hoặc đăng ký website với Bộ Công Thương. Câu hỏi A9 vẫn chưa có trả lời. Chưa có thì xoá cả dòng, nhưng nên hỏi luật sư trước |

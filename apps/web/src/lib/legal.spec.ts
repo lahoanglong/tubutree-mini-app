@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug } from './legal';
 
 const VARS = { returnWindowDays: 7, freeshipThreshold: 200000 };
-const SUPPORT = { hotline: '0899 149 229', email: 'tubutree@gmail.com' };
+const SUPPORT = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
 
 describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
   it('đúng bốn trang, theo thứ tự hiển thị ở chân trang', () => {
@@ -28,7 +28,7 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
     it('có nội dung đủ dài, có mục đánh số và nêu cách liên hệ lấy từ cấu hình hỗ trợ', () => {
       expect(text.length).toBeGreaterThan(600);
       expect(text).toMatch(/^## 1\./m);
-      expect(text).toContain('0899 149 229');
+      expect(text).toContain('0984 606 774');
       expect(text).toContain('tubutree@gmail.com');
     });
 

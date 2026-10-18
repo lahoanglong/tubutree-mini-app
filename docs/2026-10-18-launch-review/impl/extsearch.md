@@ -29,7 +29,7 @@ Khách A gửi mã X khi đơn chưa về: A có attempt UNMATCHED (chờ tìm l
 - S2: `INVISIBLE` chuyển sang `external-claim-note.ts` với `/[\p{Cf}͏ᅟᅠ឴឵᠎⠀ㅤﾠ]/gu` (nhóm Cf gồm U+00AD, U+200B..U+200F, U+202A..U+202E, U+2060..U+2064, U+FEFF); web dùng cùng biểu thức. Test từng nhóm ký tự ở API (`external-claim-note.spec.ts`, race) và web (`lib/external-claims.spec.ts`, tab).
 
 ## Giới hạn đã biết
-`maskVnPhonesInText` (che SĐT trong ghi chú) không đổi và còn sót vài dạng: `901 234 567` (không đầu 0), `0084...`, số ngăn bằng dấu phẩy; ngược lại có thể che nhầm một đoạn số bắt đầu bằng 0 trong mã vận đơn. Người duyệt vẫn được nhắc không ghi SĐT đầy đủ.
+`maskVnPhonesInText` (che SĐT trong ghi chú) nay che thêm `0084...`, số ngăn bằng dấu phẩy (`0901,234,567`) và số có U+00AD giữa các chữ số; không che dãy số liền sau chữ hoặc chữ số (`SPXVN0123456789`), nên `sdt0912345678` (dính chữ) không còn bị che. `GHN 0912345678` vẫn bị che (mơ hồ, chấp nhận). Còn sót có chủ ý: `901 234 567` (không đầu 0), vì thêm luật sẽ che nhầm số tiền. Còn nguy cơ che nhầm: số tiền lớn viết `84.000.000.000` hoặc `84,000,000,000` (đầu 84 + 9 số). Người duyệt vẫn được nhắc không ghi SĐT đầy đủ.
 
 ## Sửa lỗi chặn C1 (review lượt 2)
 Bản N3 đầu đóng lượt chờ quá hạn của BẤT KỲ ai cùng mã nên B chiếm được mã của A (đơn về thì ghép cho B, A không được báo và biến khỏi "Cần xử lý"). Probe Q1 thành race test, đỏ trên 3abb0efc (B nhận SEARCHING, claim ghép cho B).
