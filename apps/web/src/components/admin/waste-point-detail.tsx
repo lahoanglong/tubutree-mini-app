@@ -104,10 +104,14 @@ export function WastePointDetail({
   });
   const creditRows = (credits.data?.pages ?? []).flatMap((p) => p.rows);
 
-  const askRemove = async (userId: string, name: string) => {
+  const askRemove = async (userId: string, name: string, staffRole: WastePointStaffRole) => {
+    const hasPerk = point.perkText !== null || point.perkPendingText !== null;
     const ok = await confirm({
       title: 'Gỡ người khỏi điểm',
-      message: `${name} không còn xác nhận được ở ${point.name}.`,
+      message:
+        staffRole === 'OWNER'
+          ? `Gỡ chủ điểm sẽ dừng cả điểm: khách không thấy điểm, người ở điểm không xác nhận được cho tới khi thêm chủ mới.${hasPerk ? ' Ưu đãi của điểm cũng được gỡ.' : ''}`
+          : `${name} không còn xác nhận được ở ${point.name}.`,
       confirmLabel: 'Gỡ',
       tone: 'danger',
     });
@@ -169,7 +173,7 @@ export function WastePointDetail({
                       </td>
                       <td className={TD}>
                         {s.isActive && (
-                          <button type="button" className={BTN_XS_DANGER} disabled={remove.isPending} onClick={() => void askRemove(s.userId, s.fullName ?? 'Người này')}>
+                          <button type="button" className={BTN_XS_DANGER} disabled={remove.isPending} onClick={() => void askRemove(s.userId, s.fullName ?? 'Người này', s.role)}>
                             Gỡ
                           </button>
                         )}

@@ -146,6 +146,31 @@ describe('WastePointDetail', () => {
     expect(dels[0]!.url.endsWith('/admin/waste/points/p1/staff/u-owner')).toBe(true);
   });
 
+  it('gỡ chủ điểm: cảnh báo dừng cả điểm (kèm câu ưu đãi khi có ưu đãi), gỡ nhân viên giữ câu cũ', async () => {
+    const OWNER_MSG = 'Gỡ chủ điểm sẽ dừng cả điểm: khách không thấy điểm, người ở điểm không xác nhận được cho tới khi thêm chủ mới.';
+    const a = await mount(wastePoint({ perkText: 'Tặng túi vải' }));
+    click(btn(a.c, 'Gỡ'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain(`${OWNER_MSG} Ưu đãi của điểm cũng được gỡ.`);
+    answerConfirm(false);
+    await flush();
+
+    const b = await mount(wastePoint({ perkText: null, perkPendingText: null }));
+    click(btn(b.c, 'Gỡ'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain(OWNER_MSG);
+    expect(confirmDialog()!.textContent).not.toContain('Ưu đãi của điểm');
+    answerConfirm(false);
+    await flush();
+
+    const c = await mount(wastePoint({ staff: [{ userId: 'u-s1', role: 'STAFF', isActive: true, fullName: 'Nhân viên 1', phone: '0902000001' }] }));
+    click(btn(c.c, 'Gỡ'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Nhân viên 1 không còn xác nhận được ở Tạp hoá Cô Ba.');
+    expect(confirmDialog()!.textContent).not.toContain('dừng cả điểm');
+    answerConfirm(false);
+  });
+
   it('kho không có người ở điểm', async () => {
     const { c } = await mount(wastePoint({ id: 'wh', kind: 'WAREHOUSE', staff: [] }));
     expect(c.textContent).toContain('Kho phân quyền theo vai trò nhân viên, không gắn người ở điểm.');
