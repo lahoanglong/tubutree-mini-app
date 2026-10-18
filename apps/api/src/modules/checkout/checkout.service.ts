@@ -36,6 +36,7 @@ import {
   type FlashQuotaOutcome,
 } from '../flash-sale/flash-sale.service';
 import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
+import { formatPoints } from '../../common/format-points';
 import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
@@ -537,10 +538,10 @@ export class CheckoutService {
             if (lock.locked > 0 && balance >= usedStandard) {
               const usable = Math.max(0, balance - lock.locked);
               throw new BadRequestException(
-                `Đơn này dùng ${usedStandard} Điểm Xanh nhưng hiện bạn chỉ dùng được ${usable}/${balance} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
+                `Đơn này dùng ${formatPoints(usedStandard)} Điểm Xanh nhưng hiện bạn chỉ dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
               );
             }
-            throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${balance} điểm).`);
+            throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${formatPoints(balance)} điểm).`);
           }
           // Sổ điểm theo từng đơn: huỷ một đơn của lần đặt bị tách chỉ hoàn đúng phần điểm của đơn đó.
           for (const [i, shipment] of computed.shipments.entries()) {
@@ -571,7 +572,7 @@ export class CheckoutService {
           });
           if (!conv.applied) {
             throw new BadRequestException(
-              `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${computed.pointsUsedConverted} điểm). Vui lòng tải lại trang thanh toán.`,
+              `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${formatPoints(computed.pointsUsedConverted)} điểm). Vui lòng tải lại trang thanh toán.`,
             );
           }
         }

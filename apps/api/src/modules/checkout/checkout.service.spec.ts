@@ -730,7 +730,7 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as Error).message).toBe(
-      'Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1000 điểm: 800 điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong. Vui lòng tải lại trang thanh toán.',
+      'Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1.000 điểm: 800 điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong. Vui lòng tải lại trang thanh toán.',
     );
   });
 
@@ -740,6 +740,13 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 500 } as never),
     ).rejects.toThrow('Số điểm Xanh không đủ (hiện có 100 điểm).');
+  });
+
+  it('placeOrder: lô quy đổi đổi giữa chừng → số điểm trong câu báo khách có dấu chấm nghìn', async () => {
+    const { svc } = build({ pointsBalance: 1000, pointsConvertedBalance: 200_000, pointsUsedConverted: 123_456, decCount: 0 });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 123_456 } as never),
+    ).rejects.toThrow('đơn này cần 123.456 điểm');
   });
 
   it('placeOrder không dùng điểm → KHÔNG khoá dòng user, KHÔNG đọc phần khoá trong tx', async () => {
