@@ -252,31 +252,56 @@ interface AdminRoute {
   access: Access;
 }
 
-function adminRoutes(): AdminRoute[] {
-  const out: AdminRoute[] = [];
-  for (const c of collectControllers(AppModule as unknown as Ctor)) {
-    const prefix = String(Reflect.getMetadata(PATH_METADATA, c) ?? '');
-    const proto = c.prototype as Record<string, unknown>;
-    for (const name of Object.getOwnPropertyNames(proto)) {
-      const h = proto[name];
-      if (typeof h !== 'function') continue;
-      const method = Reflect.getMetadata(METHOD_METADATA, h) as RequestMethod | undefined;
-      if (method === undefined) continue;
-      const path = `/${[prefix, String(Reflect.getMetadata(PATH_METADATA, h) ?? '')].filter(Boolean).join('/')}`.replace(/\/+/g, '/').replace(/\/$/, '');
-      // Cùng thứ tự đọc với RolesGuard (getAllAndOverride: handler trước, lớp sau).
-      const roles = (Reflect.getMetadata(ROLES_KEY, h) as string[] | undefined) ?? (Reflect.getMetadata(ROLES_KEY, c) as string[] | undefined) ?? [];
-      const allowed =
-        (Reflect.getMetadata(STAFF_PERMISSIONS_KEY, h) as string[] | undefined) ?? (Reflect.getMetadata(STAFF_PERMISSIONS_KEY, c) as string[] | undefined) ?? [];
-      const adminOnly = roles.length === 1 && roles[0] === 'ADMIN';
-      if (!adminOnly && !roles.includes('STAFF') && allowed.length === 0) continue;
-      const access: Access = roles.includes('STAFF') ? STAFF : STAFF_PERMISSIONS.filter((p) => allowed.includes(p));
-      out.push({ key: `${RequestMethod[method]} ${path}`, controller: c, handler: h, access });
+/** Mọi handler của lớp, kể cả kế thừa từ lớp cha: Nest đăng ký cả route khai ở lớp cha. */
+function handlersOf(c: Ctor): object[] {
+  const seen = new Set<string>();
+  const out: object[] = [];
+  for (let p = c.prototype as object | null; p && p !== Object.prototype; p = Object.getPrototypeOf(p) as object | null) {
+    for (const name of Object.getOwnPropertyNames(p)) {
+      if (name === 'constructor' || seen.has(name)) continue;
+      seen.add(name);
+      const h: unknown = Object.getOwnPropertyDescriptor(p, name)?.value;
+      if (typeof h === 'function') out.push(h);
     }
   }
   return out;
 }
 
-const ROUTES = adminRoutes();
+/** @Controller / @Get nhận cả mảng đường dẫn: mỗi đường dẫn là một route riêng phải có trong bảng. */
+const pathsOf = (meta: unknown): string[] => (Array.isArray(meta) ? meta.map(String) : [String(meta ?? '')]);
+
+interface AnyRoute extends AdminRoute {
+  roles: string[];
+  allowed: string[];
+}
+
+function allRoutes(): AnyRoute[] {
+  const out: AnyRoute[] = [];
+  for (const c of collectControllers(AppModule as unknown as Ctor)) {
+    for (const h of handlersOf(c)) {
+      const method = Reflect.getMetadata(METHOD_METADATA, h) as RequestMethod | undefined;
+      if (method === undefined) continue;
+      // Cùng thứ tự đọc với RolesGuard (getAllAndOverride: handler trước, lớp sau).
+      const roles = (Reflect.getMetadata(ROLES_KEY, h) as string[] | undefined) ?? (Reflect.getMetadata(ROLES_KEY, c) as string[] | undefined) ?? [];
+      const allowed =
+        (Reflect.getMetadata(STAFF_PERMISSIONS_KEY, h) as string[] | undefined) ?? (Reflect.getMetadata(STAFF_PERMISSIONS_KEY, c) as string[] | undefined) ?? [];
+      const access: Access = roles.includes('STAFF') ? STAFF : STAFF_PERMISSIONS.filter((p) => allowed.includes(p));
+      for (const prefix of pathsOf(Reflect.getMetadata(PATH_METADATA, c))) {
+        for (const sub of pathsOf(Reflect.getMetadata(PATH_METADATA, h))) {
+          const path = `/${[prefix, sub].filter(Boolean).join('/')}`.replace(/\/+/g, '/').replace(/\/$/, '');
+          out.push({ key: `${RequestMethod[method]} ${path}`, controller: c, handler: h, access, roles, allowed });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Route quản trị: chỉ ADMIN, mở cho STAFF, hoặc có @AllowStaff. */
+const inScope = (r: AnyRoute) => (r.roles.length === 1 && r.roles[0] === 'ADMIN') || r.roles.includes('STAFF') || r.allowed.length > 0;
+
+const ALL_ROUTES = allRoutes();
+const ROUTES: AdminRoute[] = ALL_ROUTES.filter(inScope);
 const byKey = new Map(ROUTES.map((r) => [r.key, r]));
 
 function guardAllows(route: AdminRoute, user: object): boolean {
@@ -298,6 +323,10 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
     expect(ROUTES.length).toBeGreaterThan(150);
     expect(new Set(ROUTES.map((r) => r.key)).size).toBe(ROUTES.length);
     expect(Object.fromEntries(ROUTES.map((r) => [r.key, r.access]))).toEqual(EXPECTED);
+  });
+
+  it('route dưới /admin luôn khai vai trò: quên @Roles là route công khai, lọt khỏi bảng này', () => {
+    expect(ALL_ROUTES.filter((r) => /^\S+ \/admin(\/|$)/.test(r.key) && r.roles.length === 0).map((r) => r.key)).toEqual([]);
   });
 
   it('@AllowStaff chỉ dùng nhóm việc có thật (chuỗi gõ sai không bao giờ khớp nhân viên nào)', () => {
