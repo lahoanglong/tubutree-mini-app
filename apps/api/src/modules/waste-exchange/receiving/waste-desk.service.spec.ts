@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { writeWasteEvent } from '../core/waste-events';
+import { vnMonthKey } from '../../../common/vn-time';
 import { lookupMissMeta } from '../waste-codes';
 import { pointUsage, staffConfirmedToday } from './waste-quota';
 import { WasteDeskService } from './waste-desk.service';
@@ -99,6 +100,9 @@ describe('WasteDeskService.points', () => {
     const { svc, access } = setup({ accessList: [partner(), partner({ pointId: 'p2', giftHandoverEnabled: false, name: 'Cửa hàng B' }), wh()], usage: 30_000, confirmedToday: 10_000 });
     const out = await svc.points('s1');
     expect(access.listOperablePoints).toHaveBeenCalledWith('s1', true);
+    expect(pointUsage).toHaveBeenCalledWith(expect.anything(), 'p1', vnMonthKey(new Date()));
+    expect(pointUsage).not.toHaveBeenCalledWith(expect.anything(), 'wh', expect.anything());
+    expect(staffConfirmedToday).toHaveBeenCalledWith(expect.anything(), 's1', expect.any(Date));
     expect(out[0]).toEqual({
       id: 'p1', kind: 'PARTNER', name: 'Cửa hàng An', giftHandoverEnabled: true, myRole: 'OWNER',
       quota: { limit: 100_000, used: 30_000, remaining: 70_000 }, perkText: null, perkPendingText: null, staffDailyCapRemaining: 990_000,
@@ -182,8 +186,8 @@ describe('WasteDeskService.lookup', () => {
   });
 
   it('groups a miss of a warehouse + partner caller under the partner point', async () => {
-    const { svc } = setup({ accessList: [wh(), partner({ pointId: 'p2' })], request: null });
-    await expect(svc.lookup('s1', 'TR-ABCDE')).rejects.toBeInstanceOf(NotFoundException);
+    const { svc } = setup({ accessList: [wh(), partner({ pointId: 'p2' })], request: reqRow({ pointId: 'other' }) });
+    await expect(svc.lookup('s1', 'TR-ABCDE')).rejects.toThrow(new NotFoundException('Không tìm thấy mã'));
     missCall({ pointId: 'p2', actorRole: 'STAFF', meta: expect.objectContaining({ route: 'DESK', pointIds: ['wh', 'p2'] }) });
   });
 
