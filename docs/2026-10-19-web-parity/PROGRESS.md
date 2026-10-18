@@ -26,3 +26,7 @@ Phiên chạy: `tubutree-mini-app-8c` (Opus 5.5). Nền: `web/base` db9adca0. Nh
 - Script workflow lane dùng chung: `/Users/longla/.claude/projects/-Users-longla-coding-tubutree-mini-app/9e3e1e72-df67-4778-878f-c97b54c7b02f/workflows/scripts/web-lane-wf_3e2cabec-848.js` (args: lane, wt, branch, base, effort, reviewRounds, maxRounds, reviewFocus, gate, tasks).
 - Args từng lane ở `lanes/<lane>.json` (thêm `base` = tip `web/integration` lúc tạo nhánh lane).
 - Chạy lại một lane dở: `Workflow({scriptPath, args, resumeFromRunId})`.
+
+## Lịch chạy (đổi lúc 2026-10-18 23:00)
+
+Cuốn chiếu thay vì chờ hết đợt: luôn giữ tối đa 4 lane chạy (Q8); lane nào gộp xong thì lane kế tiếp theo thứ tự Q7 vào ngay. Hàng đợi sau đợt 0b: shop, order, account, loyalty, community, affiliate, game, pro, recycle. Lý do: kịp xong trước sáng 2026-10-19 theo yêu cầu chủ dự án.
