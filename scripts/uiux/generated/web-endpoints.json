@@ -26505,6 +26505,12 @@
          },
          "opt": false
         },
+        "completedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
         "estimatedPoints": {
          "s": {
           "k": "num"
@@ -29644,6 +29650,12 @@
       "opt": false
      },
      "receivedAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "completedAt": {
       "s": {
        "k": "str"
       },
