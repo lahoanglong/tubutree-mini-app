@@ -59,7 +59,8 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
 
   const catalog = () => new CatalogService(prisma);
   const flash = () => new FlashSaleService(prisma, {} as never, {} as never, {} as never);
-  const storefront = () => new StorefrontService(prisma, {} as never, {} as never);
+  const storefront = () =>
+    new StorefrontService(prisma, { get: async (_k: string, fallback: unknown) => fallback } as never, { commissionEligibleRoles: async () => new Set(['AFFILIATE', 'DEALER']) } as never);
   const coupons = () => new CouponsService(prisma);
   const demoSlugsShown = async () =>
     (await catalog().list({ page: 1, limit: 100, brand: demoBrandNames } as never)).data.map((p: { slug: string }) => p.slug);
