@@ -1892,6 +1892,23 @@ model DealerTier {
   @@map("dealer_tiers")
 }
 
+/// Lịch sử sửa bậc đại lý (chiết khấu, hạn mức, điều kiện): ai đổi gì lúc nào. Không FK để dòng lịch sử sống lâu hơn bậc.
+model DealerTierHistory {
+  id        String   @id @default(cuid())
+  tierId    String
+  /// CREATE | UPDATE
+  action    String
+  /// Ảnh chụp trước khi sửa (null khi tạo): { name, minOrderVolume, discountPct, creditLimit, paymentTerms }.
+  oldValue  Json?
+  newValue  Json
+  changedBy String
+  changedAt DateTime @default(now())
+
+  @@index([tierId, changedAt])
+  @@index([changedAt])
+  @@map("dealer_tier_history")
+}
+
 model DealerCreditLedger {
   id        String   @id @default(cuid())
   userId    String

@@ -141,6 +141,7 @@ import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import { RefillTab } from '@/components/admin/refill-tab';
+import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
@@ -163,6 +164,7 @@ type Tab =
   | 'dashboard'
   | 'dealers'
   | 'dealerClaims'
+  | 'dealerAccounts'
   | 'dealerPrices'
   | 'commissionRates'
   | 'engagement'
@@ -223,6 +225,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'dealers', label: 'Đại lý' },
       { k: 'dealerClaims', label: 'Thưởng đại lý' },
+      { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
       { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
       { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
@@ -474,6 +477,7 @@ export default function AdminPage() {
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab />}
+          {active === 'dealerAccounts' && <DealerAccountsTab />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
           {active === 'engagement' && <EngagementTab />}

@@ -38,7 +38,11 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
         findMany: jest.fn().mockResolvedValue(opts.admins ?? [{ id: 'admin1' }]),
       },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue(opts.entries ?? [{ delta: 200_000 }]), create: ledgerCreate },
+      dealerCreditLedger: {
+        findMany: jest.fn().mockResolvedValue(opts.entries ?? [{ delta: 200_000 }]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: (opts.entries ?? [{ delta: 200_000 }]).reduce((a, e) => a + e.delta, 0) } }),
+        create: ledgerCreate,
+      },
     };
     const notifications = { notify };
     const svc = new DealerService(prisma as unknown as PrismaService, makeConfig(), notifications as never);
@@ -89,7 +93,10 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]) },
+      dealerCreditLedger: {
+        findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 200_000 } }),
+      },
     } as unknown as PrismaService;
     const svc = new DealerService(prisma, makeConfig());
     await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
@@ -269,7 +276,10 @@ describe('DealerService.reportCreditPayment — báo admin (đặc tả notifyAd
     const prisma = {
       user,
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]) },
+      dealerCreditLedger: {
+        findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 200_000 } }),
+      },
     } as unknown as PrismaService;
     const svc = new DealerService(prisma, makeConfig(), opts.wired === false ? undefined : ({ notify } as never));
     return { svc, user, notify };
