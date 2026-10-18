@@ -19,6 +19,8 @@ export interface ReorderSheetProps {
   target: ReorderTarget | null;
   source?: ReorderSource;
   onClose: () => void;
+  /** Thêm đủ mà không điều hướng sang giỏ: trang gọi dùng kết quả để tự báo, vì sheet đóng ngay. */
+  onDone?: (summary: ReorderSummary) => void;
   navigateToCart?: boolean;
 }
 
@@ -27,7 +29,7 @@ export interface ReorderSheetProps {
  * giữ nguyên lựa chọn; chỉ đóng khi đã thêm đủ. Có dòng không thêm được (hết hàng, thiếu tồn) thì ở lại nêu lý do kèm lối vào giỏ,
  * vì web không có snackbar để báo sau khi đóng.
  */
-export function ReorderSheet({ target, source, onClose, navigateToCart }: ReorderSheetProps) {
+export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }: ReorderSheetProps) {
   // Nội dung dựng từ `shown` = target KHÁC null gần nhất để dòng không rút cạn ngay lúc đóng.
   const [shown, setShown] = useState<ReorderTarget | null>(target);
   const [sel, setSel] = useState<Record<string, LineSelection>>(() => (target ? initialSelection(target) : {}));
@@ -74,7 +76,10 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
       inFlight.current = false;
     }
     if (!summary || !mounted.current) return;
-    if (summary.addedUnits > 0 && !summary.hasProblems) onClose();
+    if (summary.addedUnits > 0 && !summary.hasProblems) {
+      onDone?.(summary);
+      onClose();
+    }
     else {
       setNotice({ kind: 'problem', text: summary.message });
       if (summary.addedUnits > 0) setPartiallyAdded(true);

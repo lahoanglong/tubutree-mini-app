@@ -17,11 +17,15 @@ import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/empty-state';
 import { ReorderSheet } from '@/components/reorder/reorder-sheet';
 import { pickReminderItem, reorderReminderAction } from '@/components/reorder/reorder-reminder';
+import type { ReorderSummary } from '@/components/reorder/reorder-summary';
+import { reorderText } from '@/lib/home-text';
 import { itemReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+
+const NOTICE_MS = 4000;
 
 const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -36,6 +40,13 @@ export default function NotificationsPage() {
   const [reminderBusy, setReminderBusy] = useState(false);
   // Chặn chạm đúp đồng bộ (state chỉ cập nhật sau lần render kế tiếp).
   const reminderBusyRef = useRef(false);
+  // Sheet đóng ngay khi thêm đủ nên báo kết quả ở trang (như snackbar "Xem giỏ" của Mini App), tự tắt sau vài giây.
+  const [addedNotice, setAddedNotice] = useState<ReorderSummary | null>(null);
+  useEffect(() => {
+    if (!addedNotice) return;
+    const t = setTimeout(() => setAddedNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [addedNotice]);
   const selectedIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -67,6 +78,7 @@ export default function NotificationsPage() {
   const openReorderReminder = async (n: NotificationDTO, fallbackTo: string) => {
     if (reminderBusyRef.current) return;
     reminderBusyRef.current = true;
+    setAddedNotice(null);
     setReminderBusy(true);
     try {
       const variationId = n.payload.data?.variation_id;
@@ -131,6 +143,14 @@ export default function NotificationsPage() {
 
   return shell(
     <>
+      {addedNotice && (
+        <p role="status" className="mt-4 text-sm font-medium text-success-fg">
+          {addedNotice.message}{' '}
+          <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
+            {reorderText.viewCart}
+          </Link>
+        </p>
+      )}
       <ul className="mt-4 grid gap-2 md:grid-cols-2">
         {notifQ.data.map((n) => {
           const m = notificationMeta(n.templateCode);
@@ -164,7 +184,7 @@ export default function NotificationsPage() {
       <Sheet open={selected !== null} onClose={() => setSelected(null)} title="Chi tiết thông báo">
         {selected && <Detail n={selected} busy={reminderBusy} onNavigate={() => setSelected(null)} onReorder={(to) => void openReorderReminder(selected, to)} />}
       </Sheet>
-      <ReorderSheet target={reorderTarget} source="notification" onClose={() => setReorderTarget(null)} />
+      <ReorderSheet target={reorderTarget} source="notification" onDone={setAddedNotice} onClose={() => setReorderTarget(null)} />
     </>,
   );
 }
@@ -189,6 +209,7 @@ function Detail({ n, busy, onNavigate, onReorder }: { n: NotificationDTO; busy: 
       <p className="whitespace-pre-line text-sm leading-relaxed text-stone-900">{n.payload.body || ''}</p>
       {action?.kind === 'reorder' && (
         <button type="button" disabled={busy} aria-busy={busy || undefined} onClick={() => onReorder(action.to)} className={`${ui.btnPrimary} w-full`}>
+          {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />}
           {action.label}
         </button>
       )}
