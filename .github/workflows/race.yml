@@ -26,6 +26,11 @@ jobs:
   race:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Một job nối tiếp trên runner 2 vCPU vượt 60 phút; chia 3 phần, mỗi phần có Postgres service riêng.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16-alpine
@@ -41,7 +46,9 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://tubu:tubu@localhost:5432/tubutree_it?schema=public
+      # Prisma mặc định mở num_cpus*2+1 = 5 kết nối trên runner 2 vCPU; ca race giữ khoá ở vài giao dịch song song
+      # rồi truy vấn pg_stat_activity nên cạn pool ("Timed out fetching a new connection").
+      DATABASE_URL: postgresql://tubu:tubu@localhost:5432/tubutree_it?schema=public&connection_limit=20&pool_timeout=30
     steps:
       - uses: actions/checkout@v4
 
@@ -70,6 +77,6 @@ jobs:
           pnpm --filter @tubutree/api exec prisma migrate diff
           --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
 
-      - name: Race suite (nối tiếp, Postgres thật)
+      - name: Race suite (nối tiếp, Postgres thật, phần ${{ matrix.shard }}/3)
         working-directory: apps/api
-        run: npx jest -c test/integration-race/jest.config.js --runInBand
+        run: npx jest -c test/integration-race/jest.config.js --runInBand --shard=${{ matrix.shard }}/3
