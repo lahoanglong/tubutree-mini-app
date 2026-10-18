@@ -81,7 +81,8 @@ export default function FeedPage() {
     queryKey: ['community', 'public-preview'],
     queryFn: getFeedPublicPreview,
     enabled: phase === 'guest' && config.communityPublicPreview === true,
-    staleTime: 5 * 60_000,
+    // Nội dung người dùng tự viết, API cache 60 giây: bộ nhớ đệm máy khách không giữ lâu hơn để bài đã gỡ biến mất nhanh.
+    staleTime: 30_000,
   });
   const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
   const filtering = Boolean(dq || unanswered || tag);

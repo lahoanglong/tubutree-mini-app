@@ -86,7 +86,8 @@ Mỗi mục đều viết test đỏ trước rồi mới sửa mã (đã thấy
 - D2-06 dài hạn (đường gửi tin OA theo người theo dõi, ánh xạ `User.zaloId` sang ID người theo dõi OA, thưởng nhỏ khi theo dõi) chưa làm; chỉ làm phần sửa lời ngắn hạn như yêu cầu.
 - PDP không gọi thêm API `/me/loyalty` để biết hệ số hạng (PDP là trang đông khách nhất). Tài khoản có hạng, chưa mở màn Điểm Xanh/Ví/Hồ sơ/Thanh toán trong phiên sẽ thấy dòng chung không số. Chỉ tài khoản chưa có hạng mới luôn có số (hệ số 1). Nếu chủ dự án muốn luôn có số, thêm một query dùng chung khoá `['loyalty']` (cần cập nhật mock `account-api` của 10 spec product-detail).
 - Giảm theo hạng (tier discount), mã giảm giá và điểm dùng ở thanh toán không được tính ở PDP (nên ghi "tối đa").
-- `/feed/public-preview` cache `USER_CONTENT` (30 giây trình duyệt, 60 giây proxy/CDN, chỉ khi thành công). Tắt cờ hoặc gỡ bài vi phạm thì bản đã cache có thể còn hiện tối đa 1 phút ở CDN.
+- `/feed/public-preview` cache `USER_CONTENT` (30 giây trình duyệt, 60 giây proxy/CDN, chỉ khi thành công) và máy khách giữ bản xem trước tối đa 30 giây (`staleTime` ở `feed.tsx`; trước đó 5 phút nên bài đã gỡ có thể còn hiện khoảng 6 phút). Tắt cờ hoặc gỡ bài vi phạm thì bài còn hiện tối đa khoảng 2 phút trong trường hợp xấu nhất (60 giây ở CDN, rồi 30 giây ở bộ nhớ đệm HTTP của máy, rồi 30 giây `staleTime`); đây là ước tính từ các hằng số, chưa đo.
+- Xem trước công khai hiện bài `PUBLISHED`. Bài của người đã được tin cậy (nhân viên, đại lý, CTV, người có bài từng được duyệt, người đã có đơn giao thành công) và không dính bộ lọc từ cấm hay liên kết lạ được đăng `PUBLISHED` ngay, không qua duyệt tay. Vì vậy khi bật `community.public_preview`, một bài rác không dính bộ lọc vẫn hiện ở phần xem trước cho tới khi CSKH gỡ.
 - Xem trước công khai chỉ cho đọc đoạn đầu bài; chạm vào thẻ không mở bài (chi tiết cần đăng nhập). Không có SEO cho bài cộng đồng.
 - Web home: hàng danh mục không có số đếm sản phẩm trên chip, không có ảnh danh mục. Không đụng D5-08 (câu "100% Thuần Chay/Nguyên bản Việt Nam" chờ chủ dự án).
 - Cron `welcomeVouchers` vẫn quét hết cửa sổ 24 giờ mỗi giờ như cũ; chưa tối ưu (không thuộc phạm vi).
@@ -120,7 +121,7 @@ Số trong `about-data.ts` không nằm trong config: chỉ còn "100%" của l�
 ## 4. Câu hỏi cho chủ dự án
 
 1. Bật bố cục Trang chủ cho khách mới (`home.new_customer_layout`) từ ngày nào? Mặc định đã dùng: tắt (thứ tự cũ, khối "Quà khách mới" đứng sau Danh mục).
-2. Cho khách chưa đăng nhập xem trước cộng đồng (`community.public_preview`)? Mặc định đã dùng: tắt. Báo cáo D5 đề xuất "có"; nên bật sau khi D4 nạp bài hạt giống và ít nhất vài bài thật đã được duyệt, vì phần xem trước hiện tối đa 5 bài mới nhất và ghim.
+2. Cho khách chưa đăng nhập xem trước cộng đồng (`community.public_preview`)? Mặc định đã dùng: tắt. Báo cáo D5 đề xuất "có"; nên bật sau khi D4 nạp bài hạt giống và ít nhất vài bài thật đã được duyệt, vì phần xem trước hiện tối đa 5 bài mới nhất và ghim. Chỉ nên bật khi đã có người trực duyệt và gỡ bài (bài của người tin cậy lên ngay, không qua duyệt tay; xem mục 3).
 3. Số giờ hẹn duyệt hồ sơ đại lý (`dealer.review_hours`) có đúng 24 không? Mặc định đã dùng: 24 (đúng chữ cũ). Tubu có thật sự duyệt trong số giờ này không? Nếu không chắc thì đặt số dài hơn (khoá không có giá trị "tắt": giá trị hợp lệ nhỏ nhất là 1 giờ).
 4. Dòng điểm ở PDP dùng chữ "Nhận tối đa N Điểm Xanh (≈N.000đ)". Muốn bỏ chữ "tối đa" (ngắn hơn, nhưng có thể lệch khi có mã giảm giá hoặc giảm theo hạng)? Mặc định đã dùng: giữ "tối đa".
 5. Hạn mã đổi quà "30 ngày" ở `loyalty.tsx`: có muốn thành khoá SystemConfig công khai không? Mặc định đã dùng: để nguyên (file thuộc phiên đổi-rác).

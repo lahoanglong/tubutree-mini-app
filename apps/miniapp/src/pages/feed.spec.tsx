@@ -346,6 +346,39 @@ describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, c
     expect(screen.getByTestId('feed-preview-loading')).toBeInTheDocument();
   });
 
+  // Bài vi phạm đã gỡ không được nằm lại trong bộ nhớ đệm của khách quá lâu: API cache 60 giây, bộ nhớ đệm máy khách không dài hơn.
+  it('xem trước chỉ tươi tối đa 60 giây: trong 10 giây mở lại dùng bản cũ, sau 61 giây tải lại', async () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1')] });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const mount = () =>
+        render(
+          <QueryClientProvider client={qc}>
+            <FeedPage />
+          </QueryClientProvider>,
+        );
+
+      const first = mount();
+      await screen.findByText('Pha nước rửa chén từ vỏ bưởi');
+      first.unmount();
+      expect(mocks.getPreview).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(Date.now() + 10_000);
+      const soon = mount();
+      await screen.findByText('Pha nước rửa chén từ vỏ bưởi');
+      soon.unmount();
+      expect(mocks.getPreview).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(Date.now() + 61_000);
+      mount();
+      await waitFor(() => expect(mocks.getPreview).toHaveBeenCalledTimes(2));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('đã đăng nhập thì không bao giờ gọi API xem trước', async () => {
     mocks.auth.status = 'authenticated';
     mocks.config = { communityPublicPreview: true };
