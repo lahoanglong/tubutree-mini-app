@@ -79,23 +79,22 @@ describe('/s/[slug] — gian hàng mở qua subdomain', () => {
   };
   const COL = { id: 'c1', title: 'Bếp xanh', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, items: [ITEM] };
 
-  it('chủ gian hàng (mã giới thiệu khớp, không phân biệt hoa thường) thấy nút Thêm sản phẩm tới /ctv/gian-hang', async () => {
+  it('chủ gian hàng (mã giới thiệu khớp, không phân biệt hoa thường) thấy nút Chia sẻ gian hàng thay cho Xem sản phẩm', async () => {
     api.storefront = { ...SF, collections: [COL] };
     auth.user = { referralCode: 'ctvone1' };
     mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
-    const a = Array.from(mounted.container.querySelectorAll('a')).find((x) => x.textContent === 'Thêm sản phẩm');
-    expect(a?.getAttribute('href')).toBe('/ctv/gian-hang');
+    expect(Array.from(mounted.container.querySelectorAll('button')).some((x) => x.textContent === 'Chia sẻ gian hàng')).toBe(true);
     expect(mounted.container.textContent).not.toContain('Xem sản phẩm');
   });
 
   it('khách và người khác không thấy nút của chủ', async () => {
     api.storefront = { ...SF, collections: [COL] };
     mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
-    expect(mounted.container.textContent).not.toContain('Thêm sản phẩm');
+    expect(mounted.container.textContent).not.toContain('Chia sẻ gian hàng');
     mounted.unmount();
     auth.user = { referralCode: 'KHAC99' };
     mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
-    expect(mounted.container.textContent).not.toContain('Thêm sản phẩm');
+    expect(mounted.container.textContent).not.toContain('Chia sẻ gian hàng');
   });
 
   it('gian hàng không có sản phẩm khách xem được: khách thấy lối Xem sản phẩm, chủ thấy lời nhắn thêm sản phẩm', async () => {
