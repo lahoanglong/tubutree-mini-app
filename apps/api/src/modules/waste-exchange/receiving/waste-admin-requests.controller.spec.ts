@@ -16,6 +16,7 @@ import {
   WasteCloseLostDto,
   WasteCostDto,
   WasteLookupQueryDto,
+  WasteReceiveDto,
   WasteReopenDto,
   WasteReverseDto,
   WasteUnmatchedCreateDto,
@@ -177,6 +178,9 @@ describe('WasteAdminRequestsController validation', () => {
     ['resolve CLOSE blank note', WasteUnmatchedResolveDto, { action: 'CLOSE', note: ' ' }],
     ['resolve MATCH without requestId', WasteUnmatchedResolveDto, { action: 'MATCH', note: 'x' }],
     ['unmatched description of 201 characters', WasteUnmatchedCreateDto, { description: 'a'.repeat(201) }],
+    ['receive weight 0', WasteReceiveDto, { receivedWeightGrams: 0 }],
+    ['receive weight 100001', WasteReceiveDto, { receivedWeightGrams: 100001 }],
+    ['receive match parcelCode not a string', WasteReceiveDto, { match: { parcelCode: 5 } }],
   ])('rejects %s with 400', async (_name, cls, body) => {
     await expect(bad('body', cls, body)).resolves.toBe(true);
   });
@@ -186,6 +190,7 @@ describe('WasteAdminRequestsController validation', () => {
     await expect(bad('body', WasteUserFlagsDto, { blocked: false, reason: 'x' })).resolves.toBe(false);
     await expect(bad('body', WasteUnmatchedResolveDto, { action: 'MATCH', requestId: 'r1', note: 'x' })).resolves.toBe(false);
     await expect(bad('body', WasteUnmatchedResolveDto, { action: 'CLOSE', note: 'x' })).resolves.toBe(false);
+    await expect(bad('body', WasteReceiveDto, { match: { parcelCode: 'TR-1' }, receivedWeightGrams: 100000 })).resolves.toBe(false);
   });
 
   it('validates the query DTOs', async () => {
