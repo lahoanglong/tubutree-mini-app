@@ -25,7 +25,6 @@ const CORE: string[] = [
   'app/thanh-toan/page.tsx',
   'app/thanh-toan/bank-transfer-panel.tsx',
   'app/tai-khoan/page.tsx',
-  'app/tai-khoan/profile-section.tsx',
   'app/tai-khoan/don-hang/[code]/page.tsx',
   'app/s/[slug]/page.tsx',
   'app/dang-nhap/page.tsx',
@@ -55,6 +54,7 @@ const SHOP: string[] = [];
 const ORDER: string[] = [];
 const ACCOUNT: string[] = [
   'app/tai-khoan/ho-so/page.tsx',
+  'components/account/account-menu.ts',
   'components/account/avatar-crop-sheet.tsx',
 ];
 const LOYALTY: string[] = [];
