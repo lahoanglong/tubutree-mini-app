@@ -131,7 +131,9 @@ export function WastePointDetail({
   const askClear = async () => {
     const ok = await confirm({
       title: 'Gỡ ưu đãi đang hiện',
-      message: `Ưu đãi "${point.perkText}" sẽ không còn hiện cho khách ở ${point.name}.`,
+      message:
+        `Ưu đãi "${point.perkText}" sẽ không còn hiện cho khách ở ${point.name}.` +
+        (point.perkPendingText !== null ? ` Ưu đãi đang chờ duyệt "${point.perkPendingText}" cũng bị bỏ.` : ''),
       confirmLabel: 'Gỡ ưu đãi',
       tone: 'danger',
     });
