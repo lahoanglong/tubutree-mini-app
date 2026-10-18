@@ -236,7 +236,15 @@ bash ops/check-edge.sh --local
 
 ### 1.6 Việc của chủ dự án quanh ngày ra mắt (cấu hình đã chốt 2026-10-18)
 
-Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, bố cục khách mới, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay. Việc dưới đây thì chủ dự án làm, theo thứ tự.
+Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, bố cục khách mới, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay, TRỪ duyệt gian hàng (xem ngay dưới). Việc dưới đây thì chủ dự án làm, theo thứ tự.
+
+**Duyệt gian hàng lần đầu cần việc tay (B3).** `storefront.require_approval` nay mặc định `true`, và migration `20261018170000_lr_storefront_moderation` KHÔNG điền `approvedAt` cho gian hàng có sẵn. Vì vậy mọi gian hàng CTV đã đăng trước ngày deploy bị ẨN khỏi khách (và ngừng ghi nhận đơn cho CTV) cho tới khi admin duyệt. Trước deploy, đếm trên PROD:
+
+```sql
+SELECT count(*) FROM storefronts WHERE type='CTV' AND "isPublished" AND "approvedAt" IS NULL AND "takenDownAt" IS NULL AND NOT "isPartner";
+```
+
+Số khác 0 thì chọn một: (a) ngay sau deploy, vào Quản trị, tab "Gian hàng", lọc "Chờ duyệt" và duyệt từng gian hàng đáng tin; hoặc (b) tạm đặt `storefront.require_approval` = `false` ở tab Cấu hình để giữ nguyên hiện trạng, duyệt xong hàng loạt rồi bật lại `true`.
 
 #### 1.6.1 Đồng bộ TOÀN BỘ sản phẩm Pancake sang Tubu Tree (A5)
 
@@ -785,6 +793,8 @@ Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã 
 - [ ] Làm [pilot-order-playbook.md](pilot-order-playbook.md) (đơn thử thật) trước khi mở bán rộng.
 
 ### Bước 15. Bắt payload thật của đơn ngoài app (làm ngay sau khi lên bản mới, không chặn deploy)
+
+Lưu ý B6/B9 (chủ dự án đọc trước khi lên bản): (a) từ lúc deploy, `pancake.external_capture_enabled` (mặc định `true`) lưu các đơn Pancake không đặt trong app vào `external_orders` KÈM SĐT đầy đủ của người mua; (b) khi bật B9 (`loyalty.chat_order_points_enabled`), bước bù `backfillChatClaims` (`apps/api/src/modules/external-points/external-chat.claim.ts`) tạo claim cho các đơn chat đã lưu trong vòng `loyalty.marketplace_claim_max_age_days` ngày gần nhất (mặc định 60), nên chủ dự án quyết số ngày này trước khi bật. Ngoài ra migration `20261018180000` đặt `coupons.createdAt` bằng thời điểm migrate cho mọi mã có sẵn (ngân sách ngày của nhân viên tính theo cột này).
 
 Từ bản này API lưu mọi đơn Pancake không đặt trong app (đơn sàn Shopee/Lazada/TikTok, đơn chat, đơn gọi điện) vào bảng `external_orders` và hiện ở tab "Đơn ngoài app". Chưa cộng điểm cho đơn nào. Cách nhận biết đơn đang theo tên field trong tài liệu Pancake POS, CHƯA đối chiếu với payload webhook thật, nên cần vài đơn thật để chốt. Cờ `pancake.external_capture_enabled` (tab Cấu hình, nhóm pancake) mặc định bật; đặt `false` nếu cần dừng lưu đơn ngay.
 
