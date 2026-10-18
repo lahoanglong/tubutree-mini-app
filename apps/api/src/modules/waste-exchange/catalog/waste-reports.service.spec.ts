@@ -336,6 +336,25 @@ describe('WasteReportsService overview, csv and point reports', () => {
     ).toBe(true);
   });
 
+  it('csv labels received-versus-declared per point with the point name, and the id only when the point has no units row', async () => {
+    const svc = build();
+    jest.spyOn(svc, 'monthly').mockResolvedValue({
+      ...fixtureReport,
+      metrics: {
+        ...fixtureReport.metrics,
+        receivedDeclaredPctByPoint: [...fixtureReport.metrics.receivedDeclaredPctByPoint, { pointId: 'GONE', pct: 50 }],
+      },
+    });
+
+    const text = await svc.csv('2026-10');
+
+    expect(text).toContain('\r\nreceivedDeclaredPctByPoint.Tạp hoá Cô Ba,86.7\r\n');
+    expect(text).toContain('\r\nreceivedDeclaredPctByPoint.Kho Tubu HCM,85.7\r\n');
+    expect(text).toContain('\r\nreceivedDeclaredPctByPoint.GONE,50\r\n');
+    expect(text).not.toContain('receivedDeclaredPctByPoint.P1');
+    expect(text).not.toContain('receivedDeclaredPctByPoint.WH');
+  });
+
   it('csv quotes a point name with a comma and neutralises a leading equals sign', async () => {
     const svc = build();
     jest.spyOn(svc, 'monthly').mockResolvedValue(withPoints(['Cô Ba, Q.1', '=HYPERLINK("x")']));
