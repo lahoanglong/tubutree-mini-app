@@ -42,8 +42,8 @@
       { "miniapp": "/feed/leaderboard", "web": "/cong-dong/xep-hang", "private": true },
       { "miniapp": "/feed/events", "web": "/cong-dong/su-kien", "private": true },
       { "miniapp": "/feed/:id", "web": "/cong-dong/:id", "private": true },
-      { "miniapp": "/academy", "web": "/hoc-vien", "private": false, "pending": true },
-      { "miniapp": "/academy/:courseId", "web": "/hoc-vien/:courseId", "private": false, "pending": true }
+      { "miniapp": "/academy", "web": "/hoc-vien", "private": false },
+      { "miniapp": "/academy/:courseId", "web": "/hoc-vien/:courseId", "private": false }
     ]},
     { "lane": "affiliate", "items": [
       { "miniapp": "/s/:slug", "web": "/s/:slug", "private": false },

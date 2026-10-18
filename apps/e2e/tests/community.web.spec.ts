@@ -185,4 +185,33 @@ test.describe('Web khách: cộng đồng', () => {
     await page.goto('/cong-dong/su-kien');
     await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/cong-dong/su-kien')}`);
   });
+
+  test('học viện: danh sách khoá, mở khoá, đánh dấu đã học gửi đúng bài', async ({ page, api }) => {
+    mockSession(api);
+    api.get('/academy/courses', [{ id: 'c1', title: 'Khoá bán hàng', description: 'Học cách chốt đơn', coverUrl: null, sortOrder: 1, isPublished: true, lessonCount: 2, completedCount: 0, isCompleted: false }]);
+    api.get('/academy/courses/c1', {
+      id: 'c1', title: 'Khoá bán hàng', description: 'Học cách chốt đơn', coverUrl: null, isPublished: true, completedLessonIds: [],
+      lessons: [
+        { id: 'l1', courseId: 'c1', title: 'Giới thiệu', contentType: 'VIDEO', videoUrl: 'https://video.test/1', body: null, sortOrder: 1 },
+        { id: 'l2', courseId: 'c1', title: 'Kịch bản', contentType: 'ARTICLE', videoUrl: null, body: 'Bước 1', sortOrder: 2 },
+      ],
+    });
+    api.post('/academy/lessons/l1/complete', { ok: true });
+    await page.goto('/hoc-vien');
+    await expect(page.getByRole('heading', { name: 'CTV Academy', level: 1 })).toBeVisible();
+    await expect(page.getByText('0/2 bài đã học')).toBeVisible();
+    await page.getByRole('link', { name: /Khoá bán hàng/ }).click();
+    await expect(page).toHaveURL(/\/hoc-vien\/c1$/);
+    await expect(page.getByRole('link', { name: 'Mở video bài học' })).toHaveAttribute('href', 'https://video.test/1');
+    const sent = api.waitForCall('POST', '/academy/lessons/l1/complete');
+    await page.getByRole('button', { name: 'Đánh dấu đã học' }).first().click();
+    await sent;
+    await expect(page.getByRole('status')).toContainText('Đã đánh dấu hoàn thành bài học!');
+  });
+
+  test('học viện khi chưa đăng nhập: mời đăng nhập và quay lại đúng khoá', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
+    await page.goto('/hoc-vien/c1');
+    await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/hoc-vien/c1')}`);
+  });
 });

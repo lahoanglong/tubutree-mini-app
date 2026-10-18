@@ -48,6 +48,8 @@ import NotificationsPage from './tai-khoan/thong-bao/page';
 import LeaderboardPage from './cong-dong/xep-hang/page';
 import EventsPage from './cong-dong/su-kien/page';
 import PostDetailPage from './cong-dong/[id]/page';
+import { CourseList } from './hoc-vien/course-list';
+import { CourseDetailView } from './hoc-vien/[courseId]/course-detail';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -85,6 +87,8 @@ const COMMUNITY: PageCase[] = [
   ['/cong-dong/xep-hang', () => <LeaderboardPage />],
   ['/cong-dong/su-kien', () => <EventsPage />],
   ['/cong-dong/[id]', () => <PostDetailPage />],
+  ['/hoc-vien', () => <CourseList />],
+  ['/hoc-vien/[courseId]', () => <CourseDetailView courseId="c1" />],
 ];
 const AFFILIATE: PageCase[] = [];
 const GAME: PageCase[] = [];
