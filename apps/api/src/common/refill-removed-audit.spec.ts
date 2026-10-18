@@ -86,6 +86,17 @@ describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)',
     for (const must of ['waste_requests', 'Thu kèm rác', 'Thùng carton cũ: 10 thùng']) expect(p).toContain(must);
     expect(p).not.toContain('Thùng carton cũ: 3 thùng');
   });
+  it('playbook: nói chỗ bật hai công tắc của khách bằng đúng nhãn trên màn Cấu hình chung và dặn tắt lại ở bước dọn dẹp', () => {
+    const p = doc('docs/launch/pilot-order-playbook.md');
+    const card = doc('apps/web/src/components/admin/waste-config-card.tsx');
+    for (const label of ['Bật chương trình với khách', 'Cách Thu kèm đơn (còn cần cờ Gomdon)']) {
+      expect(card).toContain(`label: '${label}'`);
+      expect(p).toContain(label);
+    }
+    const cleanup = p.slice(p.indexOf('## 10. Dọn dẹp sau khi thử'), p.indexOf('## 11. Bảng kết quả'));
+    expect(cleanup).toContain('waste.lane_pickup_enabled');
+    expect(cleanup).toContain('đã tắt lại');
+  });
   it('Gomdon và khoá go-live nói đúng công tắc mới', () => {
     expect(doc('docs/integrations/gomdon.md')).toContain('wasteRequestId');
     const k = doc('docs/GO-LIVE-KEYS.md');

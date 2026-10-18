@@ -373,6 +373,13 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 - **Bằng chứng**: chụp thẻ; Phụ lục P11 cho khoá `shipping.gomdon.recycling_enabled` phải là `true` (kiểu boolean).
 - **Hoàn tác**: tắt lại ô công tắc.
 
+Trước khi sang 3.2, bật thêm hai công tắc của khách để thẻ "Thu kèm đơn mua" hiện ra (cho lần chạy nội bộ này):
+
+- **Ai**: Quản trị. **Ở đâu**: Quản trị, Khách hàng, Đổi rác, Cấu hình chung.
+- **Làm**: bật "Bật chương trình với khách" (`waste.enabled`) và "Cách Thu kèm đơn (còn cần cờ Gomdon)" (`waste.lane_pickup_enabled`), rồi lưu và xác nhận. Cả hai là cờ toàn cục: chỉ bật trên bản chưa mở cho khách thật (checklist mục 1 và mục 5), nếu không mọi khách đều thấy Thu kèm đơn.
+- **Đúng là**: thẻ "Thu kèm rác qua Gomdon (kỹ thuật)" hiện dòng "Khách ĐANG thấy lựa chọn thu gom"; ở Mini App, bước chọn cách giao có thẻ "Thu kèm đơn mua". Thiếu một trong ba công tắc (hai công tắc này và công tắc kỹ thuật Gomdon) thì thẻ không hiện và 3.2 không làm được.
+- **Hoàn tác**: mục 10 (dọn dẹp).
+
 > **Giả định cần xác nhận:** (1) Địa chỉ kho mặc định trong hệ thống là "Thành phố Thủ Đức" (địa giới cũ): phải đổi theo địa giới mới trước khi bật (UAT GOMDON-7, [gomdon.md](../integrations/gomdon.md) mục 5, điều 6). (2) Gomdon có chấp nhận địa chỉ hai cấp (không quận): Tubu gửi tên phường vào ô quận. Cách kiểm: đặt T3 bằng địa chỉ hai cấp. Nếu Gomdon từ chối thì đơn thành "Tạo vận đơn thất bại" ngay lần thử đầu.
 
 `[ ] Đạt  [ ] Không đạt`
@@ -839,6 +846,7 @@ Không bỏ sót: để lại cấu hình thử là rủi ro thật.
 - [ ] Mọi đơn T1 đến T12 ở trạng thái cuối (Đã giao, Đã huỷ). Không còn đơn "Chờ thanh toán" nào của Người thử.
 - [ ] Quản trị, Hoàn tiền khách, bộ lọc "Đang mở": không còn khoản nào của các đơn thử.
 - [ ] Quản trị, Việc cần xử lý: không còn dòng nào của đơn thử.
+- [ ] "Cách Thu kèm đơn" (`waste.lane_pickup_enabled`, Quản trị, Khách hàng, Đổi rác, Cấu hình chung) đã tắt lại, trừ khi Gomdon đã trả lời bằng văn bản và đơn thử T3 đã đạt (checklist mục 4). "Bật chương trình với khách" (`waste.enabled`) chỉ để bật trong bản chạy nội bộ, tắt nếu bản này đã mở cho khách thật (checklist mục 1 và mục 5).
 - [ ] Cấu hình: `merchant.settlement_hold_days` về **7** (nếu đã đổi ở 6.4); `shipping.gomdon.recycling_enabled` đúng ý định mở bán; mẫu ZNS giữ nguyên.
 - [ ] Pancake POS: các đơn huỷ đã huỷ hẳn; hàng thử đã giao thật; tồn Pancake và tồn Tubu khớp (chạy "Đồng bộ danh mục Pancake" nếu lệch, KHÔNG dùng "Đồng bộ + ghi đè tồn kho" trừ khi Tech lead đồng ý).
 - [ ] SP-THỬ: "Gỡ liên kết" nếu muốn trả biến thể; sản phẩm đối tác thử tạm nghỉ hoặc xoá; xoá SP-THỬ trên Pancake POS và đồng bộ lại.
