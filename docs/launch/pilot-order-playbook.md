@@ -32,7 +32,7 @@ Mọi thao tác "Quản trị" trên Quản trị cần tài khoản có quyền
 
 ### A.3 Cách xem bằng chứng
 
-1. **Màn Quản trị** (đủ cho 90% việc). Các mục dùng trong tài liệu này, theo đúng tên trên menu: Việc cần xử lý, Đơn hàng, Đơn đối tác & đối soát, Đổi / Trả, Hoàn tiền khách, Duyệt SP đối tác, Đánh giá, Đổi vỏ chai, Mẫu thông báo, Cấu hình, Sức khoẻ hệ thống. Mở một đơn trong tab Đơn hàng để thấy khối "Kho Pancake", "Thu gom vật liệu tái chế" và lịch sử trạng thái.
+1. **Màn Quản trị** (đủ cho 90% việc). Các mục dùng trong tài liệu này, theo đúng tên trên menu: Việc cần xử lý, Đơn hàng, Đơn đối tác & đối soát, Đổi / Trả, Hoàn tiền khách, Duyệt SP đối tác, Đánh giá, Đổi rác, Mẫu thông báo, Cấu hình, Sức khoẻ hệ thống. Mở một đơn trong tab Đơn hàng để thấy khối "Kho Pancake", "Thu gom vật liệu tái chế" và lịch sử trạng thái.
 2. **Câu SQL chỉ-đọc** (Phụ lục P). Chỉ làm khi có người quen dòng lệnh. Mỗi câu chỉ `SELECT`. Cần `psqlq` đã định nghĩa ở mục 0.4 của [deploy-rollback-runbook.md](deploy-rollback-runbook.md).
 3. **Pancake POS**: màn đơn hàng của Pancake. Đơn do Tubu đẩy sang có `custom_id` bằng mã đơn Tubu, ghi chú bắt đầu bằng `Order code: <mã đơn>`, kèm tag nền tảng (`MINIAPP` hoặc `WEB`), `RETAIL`, và một tag tiền: `COD`, `DA_THANH_TOAN` (đã trả trước, KHÔNG thu COD), `CHO_CHUYEN_KHOAN` hoặc `CONG_NO`. Đơn thu gom tái chế có thêm tag `RECYCLING`, và `GOMDON` khi đã có vận đơn.
 
@@ -358,7 +358,7 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 
 - **Ai**: Quản trị. **Ở đâu**: Quản trị, Cấu hình, thẻ "Thu gom vật liệu tái chế (Gomdon)".
 - **Làm**: (1) bấm "Kiểm tra kết nối" (đăng nhập thật, không tạo đơn). (2) Kiểm tra "Kho lấy hàng (người gửi trên vận đơn)": tên, SĐT, địa chỉ, phường, quận, tỉnh là địa chỉ kho THẬT theo địa giới hành chính hiện hành. (3) Bật ô "Hiện lựa chọn thu gom ở checkout".
-- **Đúng là**: (1) báo đăng nhập được; không có chữ "từ chối". (3) hiện "Đã BẬT lựa chọn thu gom ở checkout." Khi mở Mini App ở bước thanh toán thấy ô "Gửi lại vật liệu tái chế (Bảo vệ môi trường)".
+- **Đúng là**: (1) báo đăng nhập được; không có chữ "từ chối". (3) hiện "Đã BẬT lựa chọn thu gom ở checkout." Khi waste.enabled và waste.lane_pickup_enabled cùng bật, bước thanh toán Mini App hiện công tắc "Thu kèm rác" cho khách có yêu cầu Thu kèm đơn chưa gắn đơn.
 - **Bằng chứng**: chụp thẻ; Phụ lục P11 cho khoá `shipping.gomdon.recycling_enabled` phải là `true` (kiểu boolean).
 - **Hoàn tác**: tắt lại ô công tắc.
 
@@ -369,8 +369,8 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 ### 3.2 Tạo vận đơn: đặt T3
 
 - **Ai**: Người thử. **Ở đâu**: Mini App.
-- **Làm**: thêm SP-MIN vào giỏ, vào thanh toán, tick "Gửi lại vật liệu tái chế (Bảo vệ môi trường)", ghi chú vài chữ (ví dụ "1 túi vỏ chai"), chọn COD, đặt hàng. Ghi mã đơn.
-- **Đúng là**: trong khoảng 1 phút, Quản trị, mở đơn: khối "Thu gom vật liệu tái chế (Gomdon)" ghi trạng thái "Tạo đơn thành công" (mã 1) và có dòng "Mã vận đơn BestExpress:" kèm mã. Pancake POS: đơn có tag `RECYCLING` và `GOMDON`; kho KHÔNG đặt thêm hãng khác.
+- **Làm**: tạo một yêu cầu Đổi rác cách Thu kèm đơn (Mini App, Đổi rác, Đổi rác ngay, chọn 3 thùng carton, cách giao Thu kèm đơn), thêm SP-MIN vào giỏ, vào thanh toán, bật công tắc "Thu kèm rác" (thẻ tóm tắt hiện mã TR-), chọn COD, đặt hàng. Ghi mã đơn và mã TR-.
+- **Đúng là**: trong khoảng 1 phút, Quản trị, mở đơn: khối "Thu gom vật liệu tái chế (Gomdon)" ghi trạng thái "Tạo đơn thành công" (mã 1) và có dòng "Mã vận đơn BestExpress:" kèm mã. Pancake POS: đơn có tag `RECYCLING` và `GOMDON`; kho KHÔNG đặt thêm hãng khác. Ghi chú vận đơn do máy chủ dựng: mã TR- và "3 thùng Thùng carton cũ", không có chữ khách gõ.
 - **Bằng chứng**: Phụ lục P1: `gomdonStatus = 1`, `gomdonOrderId` và `gomdonPartnerCode` có giá trị, `shippingPartner = BestExpress`.
 - **Hoàn tác**: bước 3.4 và 3.5 (T3 thì để giao thật, T4 dùng để thử huỷ).
 
@@ -646,55 +646,54 @@ Quy tắc: đơn của gian hàng đối tác TỰ GIAO không bao giờ lên Pa
 
 ---
 
-## Phần 7. Đổi vỏ chai (Refill) với nhiều điểm nhận
+## Phần 7. Đổi rác lấy quà (chạy nội bộ)
 
-Quy tắc: khách khai số vỏ, chọn điểm nhận (khi có từ hai điểm trở lên), mang vỏ tới đúng điểm; nhân viên đối chiếu số vỏ thực nhận rồi duyệt; thưởng 💧 vào Vườn Xanh (mặc định 50 cho mỗi vỏ, `refill.seeds_per_bottle`), tối đa 20 vỏ mỗi tháng (`refill.monthly_cap_bottles`). Các điểm nằm ở bảng `refill_pickup_locations`; bảng trống thì Tubu dùng ba khoá cũ `refill.pickup_address/hours/phone`.
+Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đưa rác tới Tubu; Điểm Xanh chỉ được cộng khi kho hoặc điểm nhận đếm thực nhận và xác nhận. Dữ liệu nằm ở các bảng `waste_points`, `waste_requests`, `waste_events`. Các số mặc định là đề xuất cho giai đoạn thử. Đường Thu kèm đơn chỉ thử sau khi xong các mục ở [recycle-rewards-launch-checklist.md](recycle-rewards-launch-checklist.md) mục 4. Chạy nội bộ: chỉ Tubu staff, build chưa mở cho khách thật (checklist mục 5).
 
-### 7.1 Chuẩn bị hai điểm nhận
+### 7.1 Mang tới kho (xác nhận tại quầy)
 
-- **Ai**: Quản trị. **Ở đâu**: Quản trị, Đổi vỏ chai, phần "Điểm nhận vỏ".
-- **Làm**: trong "Thêm điểm nhận" nhập tên (ví dụ "Cửa hàng Quận 1"), địa chỉ, giờ mở cửa, SĐT. Làm hai lần để có HAI điểm đang bật.
-- **Đúng là**: danh sách có hai điểm, đang bật. Nếu không có điểm nào đang bật, màn báo vàng: "Chưa có điểm nào đang bật: khách sẽ không thấy điểm nhận vỏ nào và được hướng dẫn liên hệ Tubu."
+- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác; Quản trị, Đổi rác.
+- **Làm**: Người thử tạo yêu cầu "Mang tới điểm" cho kho HCMC với 3 thùng carton. Nhân viên kho mở yêu cầu theo mã, đếm thực nhận và xác nhận tại quầy.
+- **Đúng là**: yêu cầu chuyển sang đã nhận; Điểm Xanh được cộng đúng theo số thực nhận (không theo số khai); khách thấy số điểm trong lịch sử.
+- **Bằng chứng**: Phụ lục P12 (`status`, `pointsAwarded`, sự kiện trong `waste_events`).
+- **Hoàn tác**: thu hồi điểm (7.5).
+
+`[ ] Đạt  [ ] Không đạt`
+
+### 7.2 Gửi về kho (mã TR- và vận đơn)
+
+- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác, cách "Gửi về kho".
+- **Làm**: tạo yêu cầu Gửi về kho, ghi mã TR- hiện trên màn, dán mã đó lên kiện, gửi bằng hãng thường, nhập mã vận đơn vào yêu cầu. Kho nhận kiện theo mã TR- (không theo mã vận đơn của hãng), đếm và xác nhận.
+- **Đúng là**: yêu cầu có mã TR- và mã vận đơn; sau khi kho xác nhận, Điểm Xanh được cộng theo số thực nhận.
 - **Bằng chứng**: Phụ lục P12.
-- **Hoàn tác**: tắt điểm (nút bật/tắt) thay vì xoá.
+- **Hoàn tác**: kho từ chối kèm lý do (khách thấy lý do, không cộng điểm).
 
 `[ ] Đạt  [ ] Không đạt`
 
-### 7.2 Khách chọn điểm và gửi yêu cầu
+### 7.3 Thu kèm đơn (chỉ sau checklist mục 4)
 
-- **Ai**: Người thử. **Ở đâu**: Mini App, Vườn Xanh (`/game`), dòng "Đổi vỏ chai lấy nước", mở màn "Đổi vỏ chai — Nhận nước".
-- **Làm**: ở "Bạn đang đổi mấy vỏ chai?" nhập 2. Ở "Mang vỏ đến điểm nào?" chọn một điểm. Bấm "Gửi yêu cầu đổi vỏ". (Nút ghi "Chọn điểm nhận vỏ để gửi yêu cầu" khi chưa chọn điểm.)
-- **Đúng là**: có yêu cầu "chờ duyệt"; khung "Bạn có 2 vỏ chai đang chờ duyệt", "Mang đến: <tên điểm đã chọn>"; Lịch sử đổi vỏ hiện dòng với "Điểm nhận: <tên điểm>".
-- **Bằng chứng**: Phụ lục P12 (`pickupLocationId` khớp điểm đã chọn).
-- **Hoàn tác**: Quản trị bấm "Từ chối" (7.4).
-
-> **Giả định cần xác nhận:** màn chọn điểm kiểm trên WebView Zalo thật (các dòng chọn dạng nút radio).
+- **Làm**: theo Phần 3, bước 3.1 và 3.2 (cần `waste.enabled` và `waste.lane_pickup_enabled` cùng bật, Gomdon đã trả lời bằng văn bản). Khi kho nhận kiện thu kèm, đếm và xác nhận.
+- **Đúng là**: ghi chú vận đơn là `Thu kèm rác TR-…: 3 thùng Thùng carton cũ`; điểm chỉ được cộng khi kho đếm.
+- **Hoàn tác**: huỷ yêu cầu trước khi bưu tá lấy hàng.
 
 `[ ] Đạt  [ ] Không đạt`
 
-### 7.3 Nhân viên duyệt
+### 7.4 Quà (voucher và cây qua Vườn Xanh)
 
-- **Ai**: Quản trị hoặc nhân viên. **Ở đâu**: Quản trị, Đổi vỏ chai, "Đổi vỏ chai chờ duyệt".
-- **Làm**: dòng yêu cầu ghi "Khai 2 vỏ · thưởng 100 giọt nước…" và "Mang tới: <tên điểm> · <địa chỉ>" (đúng điểm khách chọn). Ô "Số vỏ thực nhận" để trống hoặc nhập số thật (1 đến 2). Bấm "Duyệt".
-- **Đúng là**: yêu cầu rời khỏi danh sách; Mini App, Vườn Xanh cộng 💧 đúng 50 mỗi vỏ thực nhận; lịch sử đổi vỏ ghi đã duyệt.
-- **Bằng chứng**: Phụ lục P12: `status` đã duyệt, `seedsAwarded`.
-- **Hoàn tác**: không có cho đơn đã duyệt.
+- **Ai**: Người thử. **Ở đâu**: Mini App, Quà (`/rewards`), Quà của tôi (`/rewards/mine`).
+- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Đổi quà TREE: cây được trồng trong Vườn Xanh.
+- **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần; quà TREE xuất hiện ở Vườn Xanh.
+- **Bằng chứng**: Phụ lục P12 và `points_transactions` của người thử.
+- **Hoàn tác**: huỷ quà vật lý với hoàn điểm (`refundPoints`) theo checklist mục 7.
 
 `[ ] Đạt  [ ] Không đạt`
 
-### 7.4 Từ chối và trần mỗi tháng
+### 7.5 Thu hồi điểm
 
-- **Làm**: gửi thêm một yêu cầu (7.2). Quản trị bấm "Từ chối", nhập lý do "VD: vỏ không đúng loại" (khách thấy lý do), xác nhận "Từ chối". Rồi thử gửi số vỏ lớn hơn số còn lại trong tháng.
-- **Đúng là**: yêu cầu bị từ chối, khách thấy lý do, không có 💧 thưởng. Gửi quá trần bị chặn: "Tháng này bạn chỉ còn đổi được N vỏ chai (trần 20/tháng)." Nút hiện "Đã hết lượt đổi tháng này" khi hết lượt.
+- **Ai**: Quản trị. **Ở đâu**: Quản trị, Đổi rác, Yêu cầu.
+- **Làm**: mở yêu cầu đã cộng điểm ở 7.1, bấm thu hồi và nhập lý do. Làm đúng thứ tự xử lý gian lận ở checklist mục 7.
+- **Đúng là**: yêu cầu đóng với lý do thu hồi; số điểm đã cộng bị trừ lại (phần không đủ số dư được ghi nhận, không âm quá mức cho phép).
 - **Hoàn tác**: không.
-
-`[ ] Đạt  [ ] Không đạt`
-
-### 7.5 Tắt một điểm
-
-- **Làm**: Quản trị tắt điểm thứ nhất ở "Điểm nhận vỏ". Người thử mở lại màn đổi vỏ.
-- **Đúng là**: khách chỉ còn thấy điểm đang bật; yêu cầu CŨ đã gửi cho điểm vừa tắt vẫn đọc được tên điểm ở lịch sử. Tắt hết cả hai: khách không thấy điểm nhận nào và được hướng dẫn liên hệ Tubu.
-- **Hoàn tác**: bật lại điểm.
 
 `[ ] Đạt  [ ] Không đạt`
 
@@ -832,7 +831,6 @@ Không bỏ sót: để lại cấu hình thử là rủi ro thật.
 - [ ] Pancake POS: các đơn huỷ đã huỷ hẳn; hàng thử đã giao thật; tồn Pancake và tồn Tubu khớp (chạy "Đồng bộ danh mục Pancake" nếu lệch, KHÔNG dùng "Đồng bộ + ghi đè tồn kho" trừ khi Tech lead đồng ý).
 - [ ] SP-THỬ: "Gỡ liên kết" nếu muốn trả biến thể; sản phẩm đối tác thử tạm nghỉ hoặc xoá; xoá SP-THỬ trên Pancake POS và đồng bộ lại.
 - [ ] Gian hàng đối tác thử: tạm nghỉ hoặc huỷ xuất bản nếu không phải đối tác thật.
-- [ ] Hai điểm nhận vỏ thử: tắt hoặc sửa thành điểm thật.
 - [ ] Đánh giá thử: giữ hoặc ẩn ở Quản trị, Đánh giá.
 - [ ] Mã đơn thử đã ghi đủ ở B.7 để loại khỏi báo cáo doanh số/chuyển đổi (hệ thống không có cờ "đơn thử").
 - [ ] Số dư Ví Tubu, Điểm Xanh, ngân hàng đối chiếu với bảng B.5 (cột "Sau"). Chênh lệch phải giải thích được bằng chính các đơn thử.
@@ -881,11 +879,11 @@ Ngày làm: ______  Người làm: ______  Phiên bản (SHA): ______
 | 6.5 | Lập phiếu, chi (ngày +7) | [ ] | [ ] | | |
 | 6.6 | Đơn ký gửi (T11) | [ ] | [ ] | | |
 | 6.7 | Đối soát ký gửi | [ ] | [ ] | | |
-| 7.1 | Hai điểm nhận vỏ | [ ] | [ ] | | |
-| 7.2 | Khách chọn điểm | [ ] | [ ] | | |
-| 7.3 | Duyệt đổi vỏ | [ ] | [ ] | | |
-| 7.4 | Từ chối, trần tháng | [ ] | [ ] | | |
-| 7.5 | Tắt một điểm | [ ] | [ ] | | |
+| 7.1 | Mang tới kho | [ ] | [ ] | | |
+| 7.2 | Gửi về kho | [ ] | [ ] | | |
+| 7.3 | Thu kèm đơn | [ ] | [ ] | | |
+| 7.4 | Quà | [ ] | [ ] | | |
+| 7.5 | Thu hồi điểm | [ ] | [ ] | | |
 | 8.1 | Điều kiện hiển thị đánh giá | [ ] | [ ] | | |
 | 8.2 | Đánh giá đầu, có thưởng | [ ] | [ ] | | |
 | 8.3 | Đánh giá lần hai, không thưởng | [ ] | [ ] | | |
@@ -1027,21 +1025,21 @@ psqlq <<SQL
 SELECT key, value FROM system_configs
 WHERE key IN ('shipping.gomdon.recycling_enabled', 'merchant.settlement_hold_days',
               'merchant.commission_pct', 'merchant.default_shipping_fee',
-              'merchant.consignment_settle_from', 'refill.seeds_per_bottle', 'refill.monthly_cap_bottles',
+              'merchant.consignment_settle_from', 'waste.enabled', 'waste.lane_pickup_enabled', 'waste.customer_monthly_cap_points',
               'orders.pending_payment_ttl_hours', 'ops.alert_repeat_hours')
 ORDER BY key;
 SELECT code, channel, "zaloTemplateId" FROM notification_templates WHERE channel = 'ZNS' ORDER BY code;
 SQL
 ```
 
-**P12. Điểm nhận vỏ và các yêu cầu đổi vỏ gần đây**
+**P12. Điểm nhận và yêu cầu Đổi rác gần đây**
 
 ```bash
 psqlq <<SQL
-SELECT name, "isActive", "sortOrder" FROM refill_pickup_locations ORDER BY "sortOrder", "createdAt";
-SELECT b."createdAt", b.quantity, b."seedsAwarded", b.status, l.name AS diem_nhan
-FROM bottle_returns b LEFT JOIN refill_pickup_locations l ON l.id = b."pickupLocationId"
-ORDER BY b."createdAt" DESC LIMIT 6;
+SELECT key, value FROM system_configs WHERE key LIKE 'waste.%' ORDER BY key;
+SELECT kind, name, status, "provinceName", "monthlyQuotaPoints" FROM waste_points ORDER BY kind, "sortOrder";
+SELECT "createdAt", code, method, status, "estimatedPoints", "pointsAwarded", "closeReason" FROM waste_requests ORDER BY "createdAt" DESC LIMIT 20;
+SELECT "createdAt", kind, "requestId", "actorRole" FROM waste_events ORDER BY "createdAt" DESC LIMIT 50;
 SQL
 ```
 

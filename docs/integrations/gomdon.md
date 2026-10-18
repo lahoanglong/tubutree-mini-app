@@ -1,8 +1,11 @@
 # Tích hợp Gomdon: đối chiếu hợp đồng API
 
-Gomdon là đơn vị trung gian ta dùng để tạo **vận đơn đổi hàng BestExpress** cho đơn có chọn "gửi lại vật
-liệu tái chế". Bưu tá lấy hàng ở kho Tubu, giao cho khách và nhận lại vật liệu tái chế trong cùng một
-chuyến.
+Gomdon là đơn vị trung gian ta dùng để tạo **vận đơn đổi hàng BestExpress** cho đơn mang `wasteRequestId`:
+đơn gắn với yêu cầu Đổi rác cách Thu kèm đơn (PICKUP) đang mở của khách. Bưu tá lấy hàng ở kho Tubu, giao
+cho khách và nhận lại rác tái chế trong cùng một chuyến. Checkout không còn ô "gửi lại vật liệu tái chế"
+hay ghi chú tự do: khách bật công tắc "Thu kèm rác" cho yêu cầu Thu kèm đơn của mình. Khách chỉ thấy đường
+này khi `waste.enabled`, `waste.lane_pickup_enabled` và công tắc Gomdon (`shipping.gomdon.recycling_enabled`,
+kèm tài khoản Gomdon) cùng bật. Điểm Xanh chỉ được cộng khi kho đếm hàng thu về.
 
 - **Code:** `apps/api/src/modules/integrations/gomdon/`.
 - **Nguồn đối chiếu:** tài liệu Postman công khai "GOMDON API" do chủ shop gửi
@@ -84,7 +87,7 @@ Ghi chú trạng thái:
 | `collect_amount` | Tiền thu hộ, VND. Ví dụ lỗi ở API cập nhật cho thấy COD chỉ nhận từ 0 đến 5.000.000 | COD chưa trả thì gửi `order.total`, còn lại gửi `0`. Checkout chặn COD khi một đơn (một kiện) trên 5 triệu, xét từng đơn sau khi tách theo nơi giao | đã khớp |
 | `weight` | **Gram**, số nguyên | Tổng `Variation.weight` (kiểu Int) nhân số lượng. Thiếu thì lấy 500 g | đã khớp |
 | `width` / `height` / `length` | **Milimét** | `0`, không khai kích thước, giống mẫu | đã khớp |
-| `note` | Ghi chú trên bưu kiện | "Đơn đổi hàng thu gom tái chế (Tối đa X kg) …" | đã khớp |
+| `note` | Ghi chú trên bưu kiện | Do máy chủ dựng (`buildPickupRecyclingNote`): mã `TR-` + "N <đơn vị> <món>", ví dụ `Thu kèm rác TR-…: 3 thùng Thùng carton cũ`; không có chữ khách gõ | đã khớp |
 | `source_province/district/ward/address/phone/name` | Cả sáu trường bắt buộc, kể cả quận/huyện | Lấy từ kho `shipping.gomdon.config.defaultWarehouse` | đã khớp |
 | `dest_province/district/ward/address/phone/name` | Cả sáu trường bắt buộc. Bảng trường của tài liệu ghi nhầm là `district_*`, còn request và response mẫu đều dùng `dest_*` | `dest_*`. Địa chỉ hai cấp (không còn quận) thì ô quận lấy tạm tên phường | đã khớp tên trường. Việc Gomdon chấp nhận địa chỉ hai cấp thì tài liệu không nói |
 
@@ -153,6 +156,7 @@ Ghi chú trạng thái:
 | 11 | Giao thất bại | Báo CSKH. Cùng bậc với mã 5 vì có thể giao lại |
 | 12 | Hoàn hàng thất bại | Báo CSKH |
 
+- GomdonClient, hàng đợi, webhook, `WAIT_GOMDON` và các báo động giữ nguyên, không đổi theo Đổi rác lấy quà.
 - Cả 12 ý nghĩa **đã khớp** với `GOMDON_STATUS_TEXT` (API), `apps/web/src/lib/recycling.ts` và
   `apps/miniapp/src/utils/format.ts`. Không cần đổi nhãn nào. Test `bảng mã trạng thái đúng tài liệu
   Gomdon` giữ bảng này.
@@ -231,7 +235,7 @@ thường. Chi tiết đơn liệt kê từng báo động với nút "Đã xử
 5. **Mốc cuối và thứ tự chuyển mã.** Bảng bậc chống lùi là suy luận của ta (mục 2.8).
 6. **Tên địa chỉ.** Gomdon nhận tỉnh/quận/phường dạng chữ. Chưa biết có chấp nhận tiền tố "Thành phố" hay
    "Phường", và có chấp nhận địa chỉ hai cấp sau sáp nhập (ta gửi tên phường vào ô quận) không.
-   **Trước khi bật công tắc thu gom**: tạo một đơn thật bằng địa chỉ hai cấp rồi huỷ ngay, và cập nhật địa
+   **Trước khi bật công tắc `waste.lane_pickup_enabled`** (công tắc khách thấy): tạo một đơn thật bằng địa chỉ hai cấp rồi huỷ ngay, và cập nhật địa
    chỉ kho mặc định (đang là "Thành phố Thủ Đức", địa giới cũ) theo địa giới mới (UAT GOMDON-7).
 7. **Khung thời gian của giới hạn 600 request**: mỗi phút hay mỗi giờ.
 8. `expires_at` có luôn là `null` không. Token có bị thu hồi khi đăng nhập lại hoặc đổi mật khẩu không.

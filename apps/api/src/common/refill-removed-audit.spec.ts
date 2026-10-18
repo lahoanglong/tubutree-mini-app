@@ -68,3 +68,36 @@ describe('script audit/uiux không còn dấu vết Refill (spec 13.2)', () => {
     expect(readFileSync(join(UIUX_DIR, 'generated/miniapp-endpoints.json'), 'utf-8')).toContain('waste-api.ts');
   });
 });
+
+describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)', () => {
+  const doc = (p: string) => readFileSync(join(REPO, p), 'utf-8');
+  it('runbook: không còn Refill, có db.waste_point, năm chỉ mục của migration này báo thiếu trước deploy, race chỉ chạy qua verify-full', () => {
+    const r = doc('docs/launch/deploy-rollback-runbook.md');
+    for (const gone of ['refill_pickup_locations', 'db.refill_location', 'Đổi vỏ chai']) expect(r).not.toContain(gone);
+    for (const stale of ['năm cái của đợt', 'năm cái đó', 'tối đa năm cái', 'năm migration của đợt', 'năm tên này']) expect(r).not.toContain(stale);
+    for (const must of ['20261020000000_waste_exchange', 'db.waste_point', 'points_transactions_recycle_ref_key', 'points_transactions_recycle_reverse_key', 'points_transactions_gift_refund_key', 'waste_points_one_warehouse_key', 'waste_point_staff_one_owner_key', 'verify-full.sh', 'khởi động lại API', 'sáu tên này']) expect(r).toContain(must);
+  });
+  it('playbook: Phần 7 là Đổi rác, không còn bảng Refill hay ô tick tái chế cũ', () => {
+    const p = doc('docs/launch/pilot-order-playbook.md');
+    for (const gone of ['refill_pickup_locations', 'bottle_returns', 'refill.seeds_per_bottle', 'Gửi lại vật liệu tái chế', 'Đổi vỏ chai']) expect(p).not.toContain(gone);
+    expect(p).not.toMatch(/hai điểm nhận vỏ/i);
+    for (const must of ['waste_requests', 'Thu kèm rác', '3 thùng Thùng carton cũ']) expect(p).toContain(must);
+  });
+  it('Gomdon và khoá go-live nói đúng công tắc mới', () => {
+    expect(doc('docs/integrations/gomdon.md')).toContain('wasteRequestId');
+    const k = doc('docs/GO-LIVE-KEYS.md');
+    for (const must of ['waste.lane_pickup_enabled', 'ZALO_APP_SECRET', 'scope.userLocation', 'Khách chỉ thấy Thu kèm đơn khi bật thêm waste.enabled']) expect(k).toContain(must);
+  });
+  it('README không còn module refill', () => {
+    expect(doc('README.md')).not.toMatch(/\brefill\b/);
+  });
+  it('checklist ra mắt có đủ tám mục', () => {
+    const c = doc('docs/launch/recycle-rewards-launch-checklist.md');
+    for (const h of ['## 1. Mặc định và tắt khẩn cấp', '## 2. Trước khi bật waste.enabled', '## 3. Việc chặn mở cho khách thật (bảng 14.8)', '## 4. Đường Thu kèm đơn (PICKUP)', '## 5. Chạy nội bộ', '## 6. SOP cửa kho', '## 7. Xử lý gian lận', '## 8. Giới hạn đã biết và số chưa kiểm chứng']) expect(c).toContain(h);
+    for (const must of ['Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API', 'Sở Công Thương', 'Sở Nông nghiệp và Môi trường', 'Gomdon', 'waste.lane_pickup_enabled', 'TR-', 'waste_user_flags.blockedAt', 'refundPoints', 'isActive = false', 'hashtext(id)', 'waste.mailin_fee_table', 'waste.rules_text', 'hạn điểm 12 tháng', '1–2 tháng', 'routes.json và personas.json']) expect(c).toContain(must);
+    for (const s of ['/rewards/mine', '/recycle/r/:id/edit', '/recycle/rules', 'Chương trình đang tạm dừng', 'Cấu hình chung']) expect(c).toContain(s);
+    for (const must of ['Mục 14 của spec không phải tư vấn pháp lý', 'Nghị định 128/2024', 'HAZARDOUS', 'chỉ bằng migration có người duyệt', 'được tính EPR', 'tái chế 100%', 'xử lý đúng chuẩn', '30 tỷ', 'scope.userLocation', 'ZALO_APP_SECRET', 'đại lý là bên xử lý dữ liệu']) expect(c).toContain(must);
+    expect(c).not.toMatch(/R19\./);
+    expect(c.match(/^- \[ \]/gm)?.length ?? 0).toBeGreaterThanOrEqual(25);
+  });
+});

@@ -64,7 +64,7 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 - "Đã xử lý tay" (ghi chú): bạn đã xử lý ngoài hệ thống, ví dụ gọi hãng tạo vận đơn riêng.
 Báo động Gomdon hiện ngay trong chi tiết đơn, bấm "Đã xử lý" sau khi xong.
 
-**Đổi vỏ chai** (mọi nhân viên): **Quản trị › Khách hàng › Đổi vỏ chai**. Mở "Đổi vỏ chai chờ duyệt". Đối chiếu số vỏ khách khai với số vỏ thực nhận, nhập số thực nhận nếu ít hơn (bỏ trống nghĩa là nhận đủ), rồi duyệt. Từ chối thì ghi lý do, khách đọc được.
+**Đổi rác** (mọi nhân viên): **Quản trị › Đổi rác**. Cách nhận hàng ở cửa kho: docs/launch/recycle-rewards-launch-checklist.md, mục 6.
 
 **Khách mua tại quầy.** Pancake POS không tự cộng Điểm Xanh. Bấm link **"Màn thu ngân (tích điểm tại quầy)"** góc trên bên phải trang Quản trị. Quét thẻ hoặc nhập SĐT, "Tra cứu". Nhập "Tổng tiền hoá đơn" và "Mã hoá đơn POS", bấm "Tích điểm". Mỗi hoá đơn tích một lần, không tự tích cho chính mình. Màn báo "đang TẮT": nhờ admin bật.
 
