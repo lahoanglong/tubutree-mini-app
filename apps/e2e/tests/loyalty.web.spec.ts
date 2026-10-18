@@ -90,3 +90,75 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     expect(api.callsTo('GET', '/me/loyalty')).toHaveLength(0);
   });
 });
+
+/**
+ * Web khách: Ví Tubu (/tai-khoan/vi-tubu). Rút tiền phải gửi đúng POST /wallet/withdraw một lần dù bấm đúp,
+ * kèm Idempotency-Key; sao kê tải thêm theo 20 dòng/trang.
+ */
+const WALLET_TXNS = [
+  { id: 't1', delta: 50_000, balanceAfter: 1_250_000, type: 'CASHBACK', reason: null, orderId: null, createdAt: '2026-10-05T07:04:00Z' },
+  { id: 't2', delta: -100_000, balanceAfter: 1_200_000, type: 'WITHDRAW', reason: 'Rút về ngân hàng', orderId: null, createdAt: '2026-10-04T10:00:00Z' },
+  { id: 't3', delta: 10_000, balanceAfter: 1_300_000, type: 'ADJUST', reason: null, orderId: null, createdAt: '2026-10-03T10:00:00Z' },
+];
+
+function mockWallet(api: MockApi) {
+  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
+  api.get('/me', () => USER);
+  api.get('/me/wallet', { walletBalance: 1_250_000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0, withdrawMin: 100_000, withdrawFee: 3_000 });
+  api.get('/me/loyalty', { pointsBalance: 1681, pointsConvertedBalance: 119, tier: { id: 't1', name: 'Mầm Xanh', multiplier: 1, perks: [] }, tiers: TIERS, rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.5 } });
+  api.get('/me/referral', { referralCode: 'AN123', successCount: 2, earnedPoints: 20, milestones: [{ count: 5, bonusPoints: 50 }], nextMilestone: { count: 5, bonusPoints: 50 } });
+  api.get('/me/wallet/transactions', ({ call }) => {
+    const page = Number(call.query.get('page') ?? 1);
+    return { data: page === 1 ? WALLET_TXNS.slice(0, 2) : WALLET_TXNS.slice(2), meta: { page, limit: 2, total: 3 } };
+  });
+  api.post('/wallet/withdraw', () => ({ ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 200_000, fee: 3_000, net: 197_000 }));
+}
+
+test.describe('Web khách: Ví Tubu', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+  });
+
+  test('số dư, Điểm Xanh, mã giới thiệu và sao kê hiện đúng số từ API; Xem thêm nạp trang 2', async ({ page, api }) => {
+    mockWallet(api);
+    await page.goto('/tai-khoan/vi-tubu');
+    await expect(page.getByRole('heading', { name: 'Ví Tubu', level: 1 })).toBeVisible();
+    await expect(page.getByText('1.250.000đ').first()).toBeVisible();
+    await expect(page.getByText('trong đó 119 điểm không hết hạn')).toBeVisible();
+    await expect(page.getByText('AN123')).toBeVisible();
+    await expect(page.getByText('Rút về ngân hàng', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Xem thêm' }).click();
+    await expect(page.getByText('Số dư 1.300.000đ')).toBeVisible();
+  });
+
+  test('rút tiền: nhập đủ thông tin, bấm đúp chỉ gửi một POST kèm Idempotency-Key và đúng body', async ({ page, api }) => {
+    mockWallet(api);
+    await page.goto('/tai-khoan/vi-tubu');
+    await page.getByRole('button', { name: 'Rút tiền về ngân hàng' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Rút tiền về ngân hàng' });
+    await dialog.getByLabel('Số tiền rút').fill('200000');
+    await dialog.getByLabel('Tên ngân hàng').fill('Techcombank');
+    await dialog.getByLabel('Số tài khoản').fill('19031234567');
+    await dialog.getByLabel('Chủ tài khoản').fill('LA HOANG LONG');
+    await expect(dialog.getByText(/Thực nhận: 197\.000đ/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Rút 200.000đ' }).dblclick();
+    await expect(page.getByText('Đã gửi yêu cầu rút. Thực nhận 197.000đ trong 1-3 ngày làm việc.')).toBeVisible();
+    const posts = api.callsTo('POST', '/wallet/withdraw');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.body).toEqual({ amount: 200_000, bankInfo: { bankName: 'Techcombank', accountNumber: '19031234567', accountName: 'LA HOANG LONG' } });
+    expect(posts[0]!.headers['idempotency-key']).toBeTruthy();
+  });
+
+  test('khách chưa đăng nhập được mời đăng nhập, không gọi API ví', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
+    await page.goto('/tai-khoan/vi-tubu');
+    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    expect(api.callsTo('GET', '/me/wallet')).toHaveLength(0);
+  });
+});

@@ -42,6 +42,7 @@ import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
 import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
 import LoyaltyPage from './tai-khoan/diem-xanh/page';
+import WalletPage from './tai-khoan/vi-tubu/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -70,7 +71,10 @@ const CORE: PageCase[] = [
 const SHOP: PageCase[] = [];
 const ORDER: PageCase[] = [];
 const ACCOUNT: PageCase[] = [];
-const LOYALTY: PageCase[] = [['/tai-khoan/diem-xanh', () => <LoyaltyPage />, '/tai-khoan/diem-xanh']];
+const LOYALTY: PageCase[] = [
+  ['/tai-khoan/diem-xanh', () => <LoyaltyPage />, '/tai-khoan/diem-xanh'],
+  ['/tai-khoan/vi-tubu', () => <WalletPage />, '/tai-khoan/vi-tubu'],
+];
 const COMMUNITY: PageCase[] = [];
 const AFFILIATE: PageCase[] = [];
 const GAME: PageCase[] = [];
