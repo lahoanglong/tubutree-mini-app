@@ -299,6 +299,8 @@ describe('WasteConfirmService races (real Postgres)', () => {
     expect(s.errors[0]).toContain('Khách vừa sửa yêu cầu, vui lòng tra lại mã');
     await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'OPEN' });
     await expect(prisma.pointsTransaction.count({ where: { refType: 'RECYCLE', refId: r.id } })).resolves.toBe(0);
+    await expect(prisma.wasteEvent.count({ where: { requestId: r.id, kind: 'REQUEST_CONFIRMED' } })).resolves.toBe(0);
+    await expect(pointUsage(prisma, point.id, vnMonthKey())).resolves.toEqual({ pointsUsed: 0, confirmations: 0 });
   });
 
   it('confirm then customer-lock edit (class 731003 × 731001)', async () => {
