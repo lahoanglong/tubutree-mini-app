@@ -249,6 +249,11 @@ describe('WasteConfirmService.confirm', () => {
       await expect(h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 9, receivedQty: 10 }]))).resolves.toEqual(REPLAY_RESULT);
       expect(writeWasteEvent).not.toHaveBeenCalled();
     });
+    it('a reason on a full line counts as null', async () => {
+      const h = replayHarness();
+      await expect(h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 10, receivedQty: 10, shortfallReason: 'DAMAGED' }]))).resolves.toEqual(REPLAY_RESULT);
+      expect(writeWasteEvent).not.toHaveBeenCalled();
+    });
     it('a different receivedQty is a 409', async () => {
       const h = replayHarness();
       await expect(h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 10, receivedQty: 9, shortfallReason: 'DAMAGED' }]))).rejects.toThrow(
@@ -270,6 +275,10 @@ describe('WasteConfirmService.confirm', () => {
   describe('5. PICKUP at the warehouse', () => {
     const pickup = (o: Record<string, unknown> = {}) => row({ method: 'PICKUP', pointId: 'wh', status: 'IN_TRANSIT', orderId: 'o1', order: { status: 'DELIVERED' }, ...o });
     const match = { parcelCode: 'TR-ABCDE' };
+    const orderNeverLocked = (h: { tx: { $queryRaw: jest.Mock } }) => {
+      const sqls = h.tx.$queryRaw.mock.calls.map((c) => (c[0] as unknown as TemplateStringsArray).join('?'));
+      expect(sqls.some((s2) => s2.includes('"orders"'))).toBe(false);
+    };
     it.each([
       ['order not delivered', { order: { status: 'CONFIRMED' } }],
       ['no attached order', { status: 'OPEN', orderId: null, order: null }],
@@ -277,16 +286,17 @@ describe('WasteConfirmService.confirm', () => {
       const h = warehouseCase({ row: pickup(over) });
       await expect(h.svc.confirm(h.call, body(full, { match }))).rejects.toThrow(new ConflictException('Đơn gắn kèm chưa giao xong, chưa xác nhận được'));
       expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      orderNeverLocked(h);
     });
     it.each(['DELIVERED', 'RETURNED'])('order %s completes', async (s) => {
       const h = warehouseCase({ row: pickup({ order: { status: s } }) });
       await expect(h.svc.confirm(h.call, body(full, { match }))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
-      const sqls = h.tx.$queryRaw.mock.calls.map((c) => (c[0] as unknown as TemplateStringsArray).join('?'));
-      expect(sqls.some((s2) => s2.includes('"orders"'))).toBe(false);
+      orderNeverLocked(h);
     });
     it('status OPEN with a delivered order completes (R15.5.20)', async () => {
       const h = warehouseCase({ row: pickup({ status: 'OPEN' }) });
       await expect(h.svc.confirm(h.call, body(full, { match }))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+      orderNeverLocked(h);
     });
   });
 
@@ -427,7 +437,15 @@ describe('WasteConfirmService.confirm', () => {
     expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ data: unknown }])[0].data).toEqual(expect.objectContaining({ receivedWeightGrams: 1200 }));
 
     const r = warehouseCase({ row: completed({ method: 'MAIL_IN', pointId: 'wh' }), pointRow: { kind: 'WAREHOUSE', monthlyQuotaPoints: null }, staffToday: 10_000 });
-    await expect(r.svc.confirm(r.call, body(full, { receivedWeightGrams: 900 }))).resolves.toEqual(expect.objectContaining({ pointsAwarded: 10_000, quota: null }));
+    await expect(r.svc.confirm(r.call, body(full, { receivedWeightGrams: 900 }))).resolves.toEqual({
+      requestId: 'r1',
+      code: 'TR-ABCDE',
+      status: 'COMPLETED',
+      pointsAwarded: 10_000,
+      dropsAwarded: 0,
+      quota: null,
+      staffDailyCapRemaining: 990_000,
+    });
     expect(writeWasteEvent).toHaveBeenCalledTimes(1);
   });
 
