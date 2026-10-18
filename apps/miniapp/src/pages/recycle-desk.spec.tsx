@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   deskLookup: vi.fn(),
   deskConfirm: vi.fn(),
   deskReject: vi.fn(),
+  deskFulfilGift: vi.fn(),
+  getDeskPointReport: vi.fn(),
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -47,10 +49,12 @@ vi.mock('../services/waste-api', async (orig) => ({
   deskLookup: mocks.deskLookup,
   deskConfirm: mocks.deskConfirm,
   deskReject: mocks.deskReject,
+  deskFulfilGift: mocks.deskFulfilGift,
+  getDeskPointReport: mocks.getDeskPointReport,
 }));
 
 import RecycleDeskPage, { deskPreviewPoints } from './recycle-desk';
-import { makeDeskPoint, makeDeskRequest, WAREHOUSE_DESK } from '../services/waste-test-fixtures';
+import { makeDeskPoint, makeDeskRequest, makeGiftRedemption, WAREHOUSE_DESK } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 
 function renderPage() {
@@ -77,6 +81,7 @@ const plus = (name: string, n: number) => { for (let i = 0; i < n; i++) fireEven
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getDeskPoints.mockResolvedValue([makeDeskPoint()]);
+  mocks.getDeskPointReport.mockResolvedValue({ pointId: 'pt-1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] });
   lookupReq();
 });
 
@@ -295,5 +300,60 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     await screen.findByText('Ng*** A');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
+  });
+});
+
+describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
+  const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2026-12-16T17:30:00.000Z' };
+  beforeEach(() => { mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]); mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: GIFT }); });
+  it('mã QG- ở kho trao quà: tên quà, khách che, hạn nhận theo giờ VN, "Trao quà" gửi code + pointId', async () => {
+    mocks.deskFulfilGift.mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
+    renderPage();
+    await lookUp('qg-8k2m9p4t');
+    expect(await screen.findByText('Gói hạt giống Tubu')).toBeInTheDocument();
+    expect(screen.getByText('Hạn nhận 17/12/2026')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
+    await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'qg-8k2m9p4t', pointId: 'wh-1' }));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' }));
+  });
+  it('Trao quà dùng mã đã tra, không dùng chữ đang gõ dở', async () => {
+    mocks.deskFulfilGift.mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
+    renderPage();
+    await lookUp('QG-AAAAAAAA');
+    await screen.findByText('Gói hạt giống Tubu');
+    fireEvent.change(screen.getByLabelText('Mã yêu cầu hoặc mã nhận quà'), { target: { value: 'QG-BBBBBBBB' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
+    await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'QG-AAAAAAAA', pointId: 'wh-1' }));
+  });
+  it('"Trao quà" khoá khi đang gửi: bấm hai lần chỉ gọi một lần', async () => {
+    mocks.deskFulfilGift.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    fireEvent.click(await screen.findByRole('button', { name: 'Trao quà' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Trao quà' })).toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
+    expect(mocks.deskFulfilGift).toHaveBeenCalledTimes(1);
+  });
+  it('điểm không bật trao quà → không có nút, có câu giải thích', async () => {
+    mocks.getDeskPoints.mockResolvedValue([{ ...WAREHOUSE_DESK, giftHandoverEnabled: false }]);
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Điểm này không trao quà')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('lượt không còn READY → hiện trạng thái, không có nút', async () => {
+    mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: { ...GIFT, status: 'FULFILLED' } });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Quà đã được trao')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('đại lý: thẻ ưu đãi và báo cáo tháng hiện; kho thì không có thẻ ưu đãi', async () => {
+    mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
+    mocks.getDeskPointReport.mockResolvedValue({ pointId: 'pt-1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] });
+    renderPage();
+    expect(await screen.findByText('Ưu đãi riêng của cửa hàng')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Kho Tubu TP.HCM' }));
+    expect(screen.queryByText('Ưu đãi riêng của cửa hàng')).toBeNull();
   });
 });

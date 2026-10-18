@@ -4,13 +4,14 @@ import { Input, Page, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   WasteConfirmLineInput,
+  WasteDeskGiftDTO,
   WasteDeskPointDTO,
   WasteDeskRequestDTO,
   WasteMatchInput,
   WasteRejectionReason,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
-import { WASTE_QUERY_KEYS, deskConfirm, deskLookup, deskReject, getDeskPoints } from '../services/waste-api';
+import { WASTE_QUERY_KEYS, deskConfirm, deskFulfilGift, deskLookup, deskReject, getDeskPoints } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
 import { AuthGate } from '../components/ui/auth-gate';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -19,11 +20,12 @@ import { Card } from '../components/ui/card';
 import { EmptyState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { PageHeader } from '../components/ui/page-header';
+import { WasteDeskPerk, WasteDeskReport } from '../components/waste-desk-perk';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
-import { formatNumber, formatPoints } from '../utils/format';
+import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, SHORTFALL_LABELS } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
@@ -35,6 +37,11 @@ const SELECT_STYLE: CSSProperties = {
   background: 'var(--color-bg-surface)',
   color: 'var(--color-text-primary)',
   font: 'inherit',
+};
+
+const GIFT_STATUS_TEXT: Record<Exclude<WasteDeskGiftDTO['status'], 'READY'>, string> = {
+  FULFILLED: 'Quà đã được trao',
+  CANCELLED: 'Lượt đổi quà đã huỷ',
 };
 
 type DeskLine = WasteDeskRequestDTO['lines'][number];
@@ -142,6 +149,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [pointId, setPointId] = useState(points[0]!.id);
   const [code, setCode] = useState('');
   const [lookup, setLookup] = useState<WasteDeskRequestDTO | null>(null);
+  const [gift, setGift] = useState<WasteDeskGiftDTO | null>(null);
+  const [lookedUpCode, setLookedUpCode] = useState('');
   const [received, setReceived] = useState<Record<string, number>>({});
   const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -152,6 +161,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     mutationFn: () => deskLookup(code),
     onSuccess: (res) => {
       setLookup(res.type === 'REQUEST' ? res.request : null);
+      setGift(res.type === 'GIFT' ? res.redemption : null);
+      setLookedUpCode(code.trim());
       setReceived({});
       setReasons({});
     },
@@ -210,6 +221,15 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const fulfil = useMutation({
+    mutationFn: (v: { code: string; pointId: string; giftName: string }) => deskFulfilGift({ code: v.code, pointId: v.pointId }),
+    onSuccess: (_res, v) => {
+      setGift(null);
+      openSnackbar({ text: `Đã trao ${v.giftName}`, type: 'success' });
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
   const missingReason = !!request && request.lines.some((l) => isShort(l, received) && !reasons[l.itemId]);
   const preview = request
     ? deskPreviewPoints(request.lines, received, request.lines.map((l) => l.itemId))
@@ -221,6 +241,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
         <SegmentedTabs scroll value={pointId} onChange={setPointId} items={points.map((p) => ({ key: p.id, label: p.name }))} />
       )}
       <QuotaCard point={point} />
+      <WasteDeskPerk point={point} />
+      <WasteDeskReport pointId={point.id} />
       <Text variant="body-sm" tone="secondary" as="div">
         Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.
       </Text>
@@ -311,6 +333,35 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   Từ chối cả yêu cầu
                 </Button>
               </>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {gift && (
+        <Card>
+          <div style={{ ...COLUMN, gap: 12 }}>
+            <div style={{ ...COLUMN, gap: 2 }}>
+              <Heading variant="title-md" as="h2">{gift.giftName}</Heading>
+              <Text variant="body-md" as="div">{gift.customerName}</Text>
+              {gift.claimExpiresAt && (
+                <Text variant="body-sm" tone="secondary" as="div">{`Hạn nhận ${formatDate(gift.claimExpiresAt)}`}</Text>
+              )}
+            </div>
+            {!point.giftHandoverEnabled ? (
+              <Text variant="body-md" as="div">Điểm này không trao quà</Text>
+            ) : gift.status !== 'READY' ? (
+              <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{GIFT_STATUS_TEXT[gift.status]}</Text>
+            ) : (
+              <Button
+                size="lg"
+                fullWidth
+                disabled={fulfil.isPending}
+                loading={fulfil.isPending}
+                onPress={() => fulfil.mutate({ code: lookedUpCode, pointId: point.id, giftName: gift.giftName })}
+              >
+                Trao quà
+              </Button>
             )}
           </div>
         </Card>
