@@ -81,6 +81,7 @@ const HN = makeWastePoint({ id: 'pt-hn', name: 'Đại lý Hồ Gươm', provinc
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.location.state = NAV;
+  mocks.auth.status = 'authenticated';
   mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
   mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } }));
   mocks.getWastePoints.mockResolvedValue([HCM, HCM2, HN]);
@@ -92,6 +93,12 @@ describe('/recycle/points (§4.4)', () => {
     mocks.location.state = null;
     renderPage();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/new', { replace: true }));
+  });
+  it('khách (chưa đăng nhập) → về /recycle thay vì skeleton mãi', async () => {
+    mocks.auth.status = 'idle';
+    renderPage();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle', { replace: true }));
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/recycle/new', expect.anything());
   });
   it('tab theo tỉnh có điểm; đổi tab lọc danh sách', async () => {
     renderPage();
@@ -108,6 +115,7 @@ describe('/recycle/points (§4.4)', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Tìm điểm nhận' }), { target: { value: 'tan dinh' } });
     expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual([expect.stringContaining('Đại lý Tân Định')]);
     expect(filterPointsByText([HCM, HCM2], 'hai bà').map((p) => p.id)).toEqual(['pt-hcm2']);
+    expect(filterPointsByText([HCM, HCM2, HN], 'hoan kiem').map((p) => p.id)).toEqual(['pt-hn']);
   });
   it('"Gần tôi": token vị trí trong body, nhóm Gần tôi + nhãn Gần nhất', async () => {
     mocks.requestZaloLocation.mockResolvedValue({ token: 'loc' });
@@ -118,6 +126,19 @@ describe('/recycle/points (§4.4)', () => {
     expect(await screen.findByRole('tab', { name: 'Gần tôi' })).toHaveAttribute('aria-selected', 'true');
     expect(mocks.getNearbyWastePoints).toHaveBeenCalledWith({ locationToken: 'loc', zaloAccessToken: 'acc' });
     expect(within(screen.getByRole('radio', { name: /Đại lý Tân Định/ })).getByText('Gần nhất')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Đại lý Tân Định/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn điểm này' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/new?step=method', {
+      replace: true,
+      state: {
+        draft: {
+          ...DRAFT,
+          nearby: [{ ...HCM2, distanceKm: 0.8 }, { ...HCM, distanceKm: 2.1 }],
+          pointId: 'pt-hcm2',
+          pickedPoint: { ...HCM2, distanceKm: 0.8 },
+        },
+      },
+    });
   });
   it('nháp đã có nearby (bước 2 lấy rồi) → không xin vị trí lại', async () => {
     mocks.location.state = { ...NAV, draft: { ...DRAFT, nearby: [{ ...HCM, distanceKm: 1 }] } };
@@ -175,6 +196,13 @@ describe('/recycle/points (§4.4)', () => {
   });
   it('khoá đường kho và cờ tắt → khối không có nút nào', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }));
+    renderPage();
+    const block = (await screen.findByText('Chưa có điểm gần bạn?')).closest('section') as HTMLElement;
+    expect(within(block).queryAllByRole('button')).toHaveLength(0);
+  });
+  it('chỉ cờ làn của tài khoản tắt (không khoá đường kho) → khối không có nút nào', async () => {
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: false, pickup: true };
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: false } }));
     renderPage();
     const block = (await screen.findByText('Chưa có điểm gần bạn?')).closest('section') as HTMLElement;
     expect(within(block).queryAllByRole('button')).toHaveLength(0);

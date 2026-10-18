@@ -48,8 +48,9 @@ export default function RecyclePointsPage() {
   const nav = location.state as WastePointsNavState | null;
 
   useEffect(() => {
-    if (!nav) navigate('/recycle/new', { replace: true });
-  }, [nav, navigate]);
+    if (phase === 'guest') navigate('/recycle', { replace: true });
+    else if (!nav) navigate('/recycle/new', { replace: true });
+  }, [nav, phase, navigate]);
 
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
   const pointsQ = useQuery({
