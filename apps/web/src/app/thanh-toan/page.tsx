@@ -89,6 +89,8 @@ export default function CheckoutPage() {
   // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, yêu cầu thu rác, điểm dùng
   // được tính lại từ dữ liệu máy chủ (ví tụt, yêu cầu rác gắn mã đơn) ngay khi nạp lại sau đơn đã tạo, không phải khách đổi ý.
   const choiceRev = useRef(0);
+  // Bản sao của cờ đóng băng trong state: giỏ nguyên vẹn nạp lại thành rỗng thì form (và nút Đặt hàng) biến mất, màn giỏ trống phải còn lối gửi lại.
+  const [maybePlaced, setMaybePlaced] = useState(false);
   const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
     choiceRev.current += 1;
     fn(...args);
@@ -244,6 +246,7 @@ export default function CheckoutPage() {
     onSuccess: (order) => {
       orderKeys.current.reset();
       unknownAttempt.current = null;
+      setMaybePlaced(false);
       // Theo đơn máy chủ đã tạo, không theo radio đang chọn lúc phản hồi về.
       const isBank = order.paymentMethod === 'BANK_TRANSFER';
       if (!isBank) setPlaced(order);
@@ -263,6 +266,7 @@ export default function CheckoutPage() {
       const rejectedBeforeService = e instanceof ApiError && [401, 408, 429].includes(e.status);
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
       else if (!rejectedBeforeService) unknownAttempt.current = null;
+      setMaybePlaced(unknownAttempt.current !== null);
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
       // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
@@ -362,7 +366,7 @@ export default function CheckoutPage() {
             <Link href={orderDetailHref(placed.code)} className={ui.btnPrimary}>
               Xem chi tiết đơn
             </Link>
-            <Link href="/tai-khoan" className={ui.btnSecondary}>
+            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
               Đơn của tôi
             </Link>
             <Link href="/" className={ui.btnSecondary}>
@@ -374,6 +378,27 @@ export default function CheckoutPage() {
             nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
         <div className="mx-auto max-w-md">
           <BankTransferPanel order={placed} />
+        </div>
+      </Shell>
+    );
+  }
+
+  if (cartEmpty && maybePlaced) {
+    return (
+      <Shell>
+        <div className="py-16 text-center">
+          <h2 className="font-display text-lg font-semibold text-stone-900">Đơn của bạn có thể đã được tạo</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Lần đặt trước chưa nhận được phản hồi và giỏ đã trống. Bấm Kiểm tra lại để hệ thống trả đúng đơn đó, không tạo thêm đơn.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <button type="button" onClick={() => place.mutate()} disabled={place.isPending} className={ui.btnPrimary}>
+              {place.isPending ? 'Đang kiểm tra…' : 'Kiểm tra lại'}
+            </button>
+            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
+              Đơn của tôi
+            </Link>
+          </div>
         </div>
       </Shell>
     );
@@ -392,7 +417,7 @@ export default function CheckoutPage() {
             <Link href="/" className={ui.btnPrimary}>
               Khám phá sản phẩm
             </Link>
-            <Link href="/tai-khoan" className={ui.btnSecondary}>
+            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
               Đơn của tôi
             </Link>
           </div>
@@ -738,13 +763,22 @@ export default function CheckoutPage() {
           {place.isError && !priceChanged && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
-              {(isOutcomeUnknown(place.error) || place.error?.message === PREVIOUS_MAYBE_PLACED) && (
+              {isOutcomeUnknown(place.error) && (
                 <p className="mt-1 text-stone-700">
                   Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
                   <Link href="/tai-khoan/don-hang" className="font-semibold text-forest-700 underline">
                     Đơn của tôi
                   </Link>
                   .
+                </p>
+              )}
+              {place.error?.message === PREVIOUS_MAYBE_PLACED && (
+                <p className="mt-1 text-stone-700">
+                  Nếu đơn trước chưa có trong{' '}
+                  <Link href="/tai-khoan/don-hang" className="font-semibold text-forest-700 underline">
+                    Đơn của tôi
+                  </Link>
+                  , bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
                 </p>
               )}
             </div>

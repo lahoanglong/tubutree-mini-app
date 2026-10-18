@@ -165,6 +165,8 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
     await flush(6);
     expect(m.placeOrder).toHaveBeenCalledTimes(1);
     expect(r.container.textContent).toContain('Đơn trước có thể đã được tạo');
+    expect(r.container.textContent).not.toContain('không tạo thêm đơn');
+    expect(r.container.textContent).toContain('đặt đơn mới với lựa chọn hiện tại');
     expect(r.container.querySelector('a[href="/tai-khoan/don-hang"]')).not.toBeNull();
     click(placeButton(r));
     await flush(6);
@@ -184,5 +186,42 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
     resolve({ id: 'o1', code: 'TT1', paymentMethod: 'COD', total: 130000 });
     await flush(8);
     expect(m.replace).not.toHaveBeenCalled();
+  });
+
+  it('giỏ nguyên vẹn bị nạp lại thành rỗng sau lỗi mạng: hiện nút Kiểm tra lại gửi đúng body và key cũ, không chỉ màn giỏ trống', async () => {
+    m.getCart.mockResolvedValue(cartOf('A'));
+    m.placeOrder.mockRejectedValueOnce(new NetworkError(false)).mockResolvedValue({ id: 'o1', code: 'TT1', paymentMethod: 'COD', total: 130000 });
+    const r = await mount();
+    click(placeButton(r));
+    await flush(6);
+    m.getCart.mockResolvedValue(cartOf());
+    window.dispatchEvent(new Event('offline'));
+    window.dispatchEvent(new Event('online'));
+    await flush(8);
+    expect(placeButton(r)).toBeFalsy();
+    expect(r.container.textContent).toContain('Đơn của bạn có thể đã được tạo');
+    expect(r.container.querySelector('a[href="/tai-khoan/don-hang"]')).not.toBeNull();
+    click(byText(r.container, 'button', 'Kiểm tra lại') as HTMLButtonElement);
+    await flush(6);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    expect(m.placeOrder.mock.calls[1]![0]).toEqual(m.placeOrder.mock.calls[0]![0]);
+    expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
+    expect(r.container.textContent).toContain('Đặt hàng thành công');
+    expect(r.container.querySelector('a[href="/tai-khoan/don-hang"]')).not.toBeNull();
+  });
+
+  it('Kiểm tra lại gặp 400 vì giỏ trống: hết cờ có thể đã tạo, quay về màn giỏ trống thường', async () => {
+    m.getCart.mockResolvedValue(cartOf('A'));
+    m.placeOrder.mockRejectedValueOnce(new NetworkError(false)).mockRejectedValueOnce(new ApiError('Giỏ hàng trống', 400));
+    const r = await mount();
+    click(placeButton(r));
+    await flush(6);
+    m.getCart.mockResolvedValue(cartOf());
+    await qcRef.invalidateQueries({ queryKey: ['cart'] });
+    await flush(8);
+    click(byText(r.container, 'button', 'Kiểm tra lại') as HTMLButtonElement);
+    await flush(6);
+    expect(r.container.textContent).not.toContain('Đơn của bạn có thể đã được tạo');
+    expect(r.container.textContent).toContain('Giỏ hàng đang trống');
   });
 });
