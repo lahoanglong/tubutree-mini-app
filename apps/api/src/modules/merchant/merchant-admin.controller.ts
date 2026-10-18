@@ -86,8 +86,13 @@ export class MerchantAdminController {
 
   @AllowStaff('KE_TOAN')
   @Post('payouts/:id/paid')
-  markPaid(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: MarkMerchantPayoutPaidDto) {
-    return this.fulfilment.markPayoutPaid(adminId, id, dto.bankRef);
+  markPaid(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: MarkMerchantPayoutPaidDto,
+  ) {
+    return this.fulfilment.markPayoutPaid(adminId, id, dto.bankRef, { byStaff: role === 'STAFF' });
   }
 
   @AllowStaff('KE_TOAN')

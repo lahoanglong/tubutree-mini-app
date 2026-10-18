@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -1701,7 +1702,12 @@ export class AffiliateService {
   }
 
   /** Xác nhận đã chuyển khoản: APPROVED → PAID (ghi mã giao dịch NH / ghi chú). */
-  async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string } = {}) {
+  async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string; byStaff?: boolean } = {}) {
+    if (opts.byStaff) {
+      const own = await this.prisma.payout.findUnique({ where: { id }, select: { userId: true } });
+      if (!own) throw new NotFoundException('Không tìm thấy lệnh rút.');
+      if (own.userId === adminId) throw new ForbiddenException('Không xác nhận chi lệnh rút của chính mình — nhờ quản trị viên.');
+    }
     const paidAt = new Date();
     const res = await this.prisma.$transaction(async (tx) => {
       const flipped = await tx.payout.updateMany({

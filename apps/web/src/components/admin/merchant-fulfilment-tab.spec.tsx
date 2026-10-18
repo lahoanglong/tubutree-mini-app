@@ -323,7 +323,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
       '/admin/merchant-fulfilment/payouts/mp1/paid': { body: { ...NEG, status: 'PAID' } },
       '/admin/merchant-fulfilment/payouts?': { body: { data: [NEG], meta: { page: 1, limit: 20, total: 1 } } },
     });
-    const r = render(<MerchantFulfilmentTab />);
+    const r = render(<MerchantFulfilmentTab isAdmin />);
     mounted.push(r);
     await flush();
     const root = r.container;
@@ -559,6 +559,19 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
 // D1-05: kế toán (không phải ADMIN) đối soát được — lập phiếu, xem khoản, đã chuyển/huỷ — nhưng không sửa phí sàn
 // (PATCH terms chỉ ADMIN) và không có lối sang màn xác nhận hàng ký gửi (tab Duyệt SP đối tác chỉ ADMIN).
 describe('MerchantFulfilmentTab — nhân viên kế toán (isAdmin=false)', () => {
+  it('phiếu âm (đối tác nộp Tubu): không có "Đã thu" — quản trị viên xác nhận sau khi đối chiếu sao kê; vẫn huỷ được phiếu', async () => {
+    const NEG = { ...PAYOUT, amount: -103500, direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt: '2026-10-19T03:00:00.000Z' };
+    setup({ '/admin/merchant-fulfilment/payouts?': { body: { data: [NEG], meta: { page: 1, limit: 20, total: 1 } } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(root.textContent).toContain('TUBU DS ABCD1234');
+    expect(byText(root, 'button', 'Đã thu')).toBeNull();
+    expect(root.textContent).toContain('Quản trị viên xác nhận "Đã thu"');
+    expect(byText(root, 'button', 'Huỷ phiếu')).not.toBeNull();
+  });
+
   it('có "Lập phiếu đối soát", "Xem khoản" và nút xử lý phiếu; không có "Sửa phí" và "Xác nhận hàng ký gửi"', async () => {
     setup({
       '/admin/merchant-fulfilment/statements/': {

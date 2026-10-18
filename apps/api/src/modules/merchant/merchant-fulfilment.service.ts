@@ -1121,9 +1121,10 @@ export class MerchantFulfilmentService {
     return payout;
   }
 
-  async markPayoutPaid(adminId: string, payoutId: string, bankRef: string) {
+  async markPayoutPaid(adminId: string, payoutId: string, bankRef: string, opts: { byStaff?: boolean } = {}) {
     const ref = bankRef.trim();
     if (!ref) throw new BadRequestException('Cần nhập mã giao dịch ngân hàng.');
+    if (opts.byStaff) await this.assertStaffMayMarkPaid(adminId, payoutId);
     const flipped = await this.prisma.merchantPayout.updateMany({
       where: { id: payoutId, status: 'PENDING' },
       data: { status: 'PAID', paidAt: new Date(), paidBy: adminId, bankRef: ref },
@@ -1142,6 +1143,24 @@ export class MerchantFulfilmentService {
       bank_ref: ref,
     });
     return payout;
+  }
+
+  /**
+   * Kế toán xác nhận phiếu Tubu đã chuyển cho gian hàng. Phiếu âm (gian hàng nợ Tubu) "Đã thu" là xoá nợ — chỉ quản trị viên
+   * xác nhận sau khi thấy tiền về, như "Đã nhận tiền" ký gửi. Không xác nhận phiếu của gian hàng mình làm chủ.
+   */
+  private async assertStaffMayMarkPaid(actorId: string, payoutId: string): Promise<void> {
+    const payout = await this.prisma.merchantPayout.findUnique({
+      where: { id: payoutId },
+      include: { storefront: { select: { ownerUserId: true } } },
+    });
+    if (!payout) throw new NotFoundException('Không tìm thấy phiếu đối soát.');
+    if (payout.amount < 0) {
+      throw new ForbiddenException('Phiếu gian hàng nợ Tubu: xác nhận "Đã thu" chỉ quản trị viên làm sau khi thấy tiền về tài khoản.');
+    }
+    if (payout.storefront.ownerUserId === actorId) {
+      throw new ForbiddenException('Không xác nhận phiếu đối soát của gian hàng chính mình — nhờ quản trị viên.');
+    }
   }
 
   /**

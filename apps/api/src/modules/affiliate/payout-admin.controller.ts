@@ -69,7 +69,12 @@ export class PayoutAdminController {
   /** Kế toán chi lệnh ADMIN đã duyệt; duyệt/từ chối vẫn chỉ ADMIN (người duyệt khác người chi). */
   @AllowStaff('KE_TOAN')
   @Post(':id/mark-paid')
-  markPaid(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: MarkPayoutPaidDto) {
-    return this.affiliate.markPayoutPaid(adminId, id, dto);
+  markPaid(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: MarkPayoutPaidDto,
+  ) {
+    return this.affiliate.markPayoutPaid(adminId, id, { ...dto, byStaff: role === 'STAFF' });
   }
 }

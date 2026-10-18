@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { AffiliateService } from './affiliate.service';
 import { FlashQuotaLineError } from '../flash-sale/flash-sale.service';
 import { LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
@@ -1923,6 +1923,28 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
       where: { id: 'p1', status: 'APPROVED' },
       data: expect.objectContaining({ status: 'PAID', paidBy: 'admin1', bankRef: 'FT26270001' }),
     });
+  });
+
+  it('markPayoutPaid: nhân viên Kế toán không chi lệnh rút của chính mình (D1-05)', async () => {
+    const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1' });
+    (prisma.payout as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue({ id: 'p1', userId: 's1' });
+    await expect(
+      new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).markPayoutPaid('s1', 'p1', {
+        bankRef: 'FT1',
+        byStaff: true,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(payoutUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('markPayoutPaid: nhân viên Kế toán chi lệnh rút CTV khác được', async () => {
+    const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1' });
+    (prisma.payout as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue({ id: 'p1', userId: 'u9' });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).markPayoutPaid('s1', 'p1', {
+      bankRef: 'FT1',
+      byStaff: true,
+    });
+    expect(payoutUpdateMany).toHaveBeenCalled();
   });
 
   it('markPayoutPaid: đã bị xử lý bởi người khác (count=0) → BadRequest', async () => {

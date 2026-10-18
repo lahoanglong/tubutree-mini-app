@@ -254,7 +254,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
         )}
         <ul className="space-y-2">
           {slips.items.map((p) => (
-            <PayoutRow key={p.id} payout={p} onDone={refresh} onError={onError} />
+            <PayoutRow key={p.id} payout={p} onDone={refresh} onError={onError} canConfirmToTubu={isAdmin} />
           ))}
         </ul>
         {slips.hasMore && (
@@ -494,7 +494,17 @@ function StoreTermsForm({
   );
 }
 
-function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onDone: () => void; onError: (e: unknown) => void }) {
+function PayoutRow({
+  payout: p,
+  onDone,
+  onError,
+  canConfirmToTubu,
+}: {
+  payout: MerchantPayout;
+  onDone: () => void;
+  onError: (e: unknown) => void;
+  canConfirmToTubu: boolean;
+}) {
   const [bankRef, setBankRef] = useState('');
   const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onSuccess: onDone, onError });
   const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onSuccess: onDone, onError });
@@ -556,7 +566,7 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
               ? bank?.accountNo
                 ? `Chuyển vào ${bank.bankName ?? ''} ${bank.accountNo} (${bank.accountName ?? ''})`
                 : 'Gian hàng chưa khai tài khoản nhận đối soát: nhắc đối tác khai trước khi chuyển.'
-              : `Đối tác nộp ${formatVnd(-p.amount)} cho Tubu${p.transferMemo ? `, nội dung "${p.transferMemo}"` : ''}${p.dueAt ? `, hạn ${formatDate(p.dueAt)}` : ''}. Đối chiếu sao kê rồi bấm Đã thu.`}
+              : `Đối tác nộp ${formatVnd(-p.amount)} cho Tubu${p.transferMemo ? `, nội dung "${p.transferMemo}"` : ''}${p.dueAt ? `, hạn ${formatDate(p.dueAt)}` : ''}. ${canConfirmToTubu ? 'Đối chiếu sao kê rồi bấm Đã thu.' : 'Quản trị viên xác nhận "Đã thu" sau khi đối chiếu sao kê.'}`}
           </p>
           <form
             className="flex flex-wrap items-end gap-2"
@@ -565,13 +575,17 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
               paidMut.mutate();
             }}
           >
-            <label className="text-stone-700">
-              {toTubu ? 'Mã giao dịch đối tác nộp' : 'Mã giao dịch ngân hàng'}
-              <input value={bankRef} onChange={(e) => setBankRef(e.target.value)} required maxLength={100} className={`mt-1 block w-48 ${FIELD_XS}`} />
-            </label>
-            <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
-              {toTubu ? 'Đã thu' : 'Đã chuyển'}
-            </button>
+            {(!toTubu || canConfirmToTubu) && (
+              <>
+                <label className="text-stone-700">
+                  {toTubu ? 'Mã giao dịch đối tác nộp' : 'Mã giao dịch ngân hàng'}
+                  <input value={bankRef} onChange={(e) => setBankRef(e.target.value)} required maxLength={100} className={`mt-1 block w-48 ${FIELD_XS}`} />
+                </label>
+                <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
+                  {toTubu ? 'Đã thu' : 'Đã chuyển'}
+                </button>
+              </>
+            )}
             <button type="button" disabled={busy} onClick={() => void askCancel()} className={BTN_XS_DANGER}>
               Huỷ phiếu
             </button>
