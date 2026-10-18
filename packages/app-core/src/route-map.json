@@ -29,7 +29,7 @@
     { "lane": "loyalty", "items": [
       { "miniapp": "/loyalty", "web": "/tai-khoan/diem-xanh", "private": true },
       { "miniapp": "/wallet", "web": "/tai-khoan/vi-tubu", "private": true },
-      { "miniapp": "/rewards", "web": "/kho-qua", "private": true, "pending": true },
+      { "miniapp": "/rewards", "web": "/kho-qua", "private": true },
       { "miniapp": "/rewards/mine", "web": "/kho-qua/cua-toi", "private": true, "pending": true },
       { "miniapp": "/cashback", "web": "/hoan-tien", "private": false, "pending": true }
     ]},
