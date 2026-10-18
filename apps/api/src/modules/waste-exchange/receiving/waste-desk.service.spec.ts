@@ -42,6 +42,8 @@ interface Setup {
   usage?: number;
   confirmedToday?: number;
   cap?: number;
+  activeOwnerRow?: boolean;
+  lockedPending?: string | null;
 }
 
 function setup(o: Setup = {}) {
@@ -60,11 +62,17 @@ function setup(o: Setup = {}) {
   };
   const config = { snapshot: jest.fn().mockResolvedValue({ enabled: o.enabled ?? true, staffDailyCapPoints: o.cap ?? 1_000_000 }) };
   const tx = {
-    wastePoint: {
-      findUnique: jest.fn(async () => {
+    $queryRaw: jest.fn(async () => {
+      if (!inTx) throw new Error('lock outside $transaction');
+      return [{ id: 'p1', kind: 'PARTNER', name: 'Cửa hàng An', perkText: null, perkPendingText: o.lockedPending ?? null }];
+    }),
+    wastePointStaff: {
+      findFirst: jest.fn(async () => {
         if (!inTx) throw new Error('read outside $transaction');
-        return { perkPendingText: null };
+        return o.activeOwnerRow === false ? null : { id: 'st1' };
       }),
+    },
+    wastePoint: {
       update: jest.fn(async () => {
         if (!inTx) throw new Error('write outside $transaction');
         return {};
@@ -74,7 +82,6 @@ function setup(o: Setup = {}) {
   const prisma = {
     wastePoint: {
       findMany: jest.fn(async () => o.perks ?? list.map((p) => ({ id: p.pointId, perkText: null, perkPendingText: null }))),
-      findUnique: tx.wastePoint.findUnique,
       update: tx.wastePoint.update,
     },
     wasteRequest: { findUnique: jest.fn().mockResolvedValue(o.request === undefined ? null : o.request) },
@@ -289,6 +296,27 @@ describe('WasteDeskService.submitPerk', () => {
       meta: { before: { perkPendingText: null }, after: { perkPendingText: 'Giảm 10% hoá đơn' } },
     });
     expect(dto.id).toBe('p1');
+  });
+
+  it('takes the point lock before the owner re-check and the update, and reports the locked pending text as before', async () => {
+    const { svc, tx } = setup({ accessList: [partner()], lockedPending: 'Chữ cũ' });
+    await svc.submitPerk('s1', 'p1', { perkText: 'Chữ mới' });
+    const sql = (tx.$queryRaw.mock.calls[0] as unknown as [TemplateStringsArray])[0].join('?');
+    expect(sql).toContain('FROM "waste_points"');
+    expect(sql).toContain('FOR NO KEY UPDATE');
+    const lock = tx.$queryRaw.mock.invocationCallOrder[0]!;
+    expect(lock).toBeLessThan(tx.wastePointStaff.findFirst.mock.invocationCallOrder[0]!);
+    expect(tx.wastePointStaff.findFirst.mock.invocationCallOrder[0]!).toBeLessThan(tx.wastePoint.update.mock.invocationCallOrder[0]!);
+    expect(tx.wastePointStaff.findFirst).toHaveBeenCalledWith({ where: { pointId: 'p1', userId: 's1', role: 'OWNER', isActive: true }, select: { id: true } });
+    expect(writeWasteEvent).toHaveBeenCalledWith(tx, expect.objectContaining({ meta: { before: { perkPendingText: 'Chữ cũ' }, after: { perkPendingText: 'Chữ mới' } } }));
+  });
+
+  it('403 and nothing written when the access check passed but the owner row is gone by the time the lock is held', async () => {
+    const { svc, tx } = setup({ accessList: [partner()], activeOwnerRow: false });
+    await expect(svc.submitPerk('s1', 'p1', { perkText: 'x' })).rejects.toThrow(new ForbiddenException('Chỉ chủ điểm nhận mới gửi được ưu đãi riêng'));
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.wastePoint.update).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
   it('403 for a STAFF member of the point', async () => {

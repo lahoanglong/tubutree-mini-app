@@ -78,7 +78,7 @@ const staffViolation = (e: unknown): string | null => {
 type LockedPoint = { id: string; kind: string; name: string; perkText: string | null; perkPendingText: string | null };
 
 // FOR NO KEY UPDATE: a staff write only takes KEY SHARE on the point row, so without this lock two writers never queue (lock order 19).
-async function lockPoint(tx: Prisma.TransactionClient, id: string): Promise<LockedPoint> {
+export async function lockPoint(tx: Prisma.TransactionClient, id: string): Promise<LockedPoint> {
   const [p] = await tx.$queryRaw<LockedPoint[]>`SELECT "id","kind","name","perkText","perkPendingText" FROM "waste_points" WHERE "id" = ${id} FOR NO KEY UPDATE`;
   if (!p) throw new NotFoundException(POINT_NOT_FOUND);
   return p;
