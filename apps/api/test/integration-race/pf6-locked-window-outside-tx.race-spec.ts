@@ -23,7 +23,7 @@ import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/c
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { GameService } from '../../src/modules/game/game.service';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
-import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
+import { createOrder, createUser, randCode, pinConfig, setConfig, warmPool } from './helpers';
 
 const DAY = 864e5;
 
@@ -49,6 +49,8 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   let game: GameService;
   let variationId: string;
   const touched: string[] = [];
+
+  let restoreRedeem: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -95,7 +97,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
     game = moduleRef.get(GameService);
 
     await setConfig(prisma, 'returns.window_days', 7);
-    await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
+    restoreRedeem = await pinConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.5);
     await setConfig(prisma, 'loyalty.point_expire_months', 12);
     await setConfig(prisma, 'game.spin_buy_cost_points', 10);
@@ -120,6 +122,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   });
 
   afterAll(async () => {
+    await restoreRedeem?.();
     await moduleRef?.close();
   });
 

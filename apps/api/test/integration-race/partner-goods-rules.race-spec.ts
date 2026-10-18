@@ -30,7 +30,7 @@ import { GroupBuyService, groupBuyCouponCode } from '../../src/modules/groupbuy/
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
 import { TOTAL_CHANGED } from '../../src/modules/checkout/checkout.service';
-import { createDealer, createUser, randCode, setConfig, warmPool } from './helpers';
+import { createDealer, createUser, randCode, pinConfig, setConfig, warmPool } from './helpers';
 
 const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
@@ -52,6 +52,9 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
   let subs: SubscriptionsService;
   let settlement: MerchantFulfilmentService;
   let returns: OrderReturnsService;
+
+  let restoreRedeem: (() => Promise<void>) | undefined;
+  let restoreApproval: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -103,12 +106,16 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
     await setConfig(prisma, 'storefront.max_combo_pct', 30);
     await setConfig(prisma, 'shipping.free_threshold', 200_000);
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);
-    await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1_000);
+    restoreRedeem = await pinConfig(prisma, 'loyalty.vnd_per_point_redeem', 1_000);
+    // Gian hàng CTV của ca combo chưa được admin duyệt; mặc định bắt duyệt thì combo không áp.
+    restoreApproval = await pinConfig(prisma, 'storefront.require_approval', false);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.2);
     await setConfig(prisma, 'groupbuy.max_open_per_user', 3);
   });
 
   afterAll(async () => {
+    await restoreRedeem?.();
+    await restoreApproval?.();
     await moduleRef?.close();
   });
 

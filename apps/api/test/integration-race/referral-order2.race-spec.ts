@@ -56,7 +56,7 @@ async function movePoints(prisma: PrismaService, userId: string, lot: PointsLot,
 
 /**
  * Dựng lịch sử TRƯỚC gộp: các dòng thưởng xu ở coin_transactions, rồi đúng việc migration B làm với số
- * dư đó (dòng coin −tổng refType XU_MIGRATION, dòng điểm lô CONVERTED +tổng, 1 điểm = 1đ). Gọi tối đa
+ * dư đó (dòng coin −tổng refType XU_MIGRATION, dòng điểm lô CONVERTED +ceil(tổng/1000)×1000). Gọi tối đa
  * một lần mỗi user (khoá *_xu_migration_key theo refId = userId).
  */
 async function legacyXuHistory(
@@ -71,7 +71,8 @@ async function legacyXuHistory(
   }
   const total = rows.reduce((sum, r) => sum + r.delta, 0);
   if (total <= 0) return 0;
-  const points = total;
+  // Như dữ liệu thật: migration PD-3 quy ceil(xu/1000) điểm, rồi points_1d nhân 1.000.
+  const points = Math.ceil(total / 1000) * 1000;
   await prisma.coinTransaction.create({
     data: { userId, delta: -total, reason: `XU_TO_POINTS:${points}`, refType: 'XU_MIGRATION', refId: userId },
   });
@@ -334,15 +335,15 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
     const { referrer, referee } = await pair();
     const o1 = await deliveredOrder(referee.id, 9);
     const o2 = await deliveredOrder(referee.id, 4);
-    // 4.500 xu thưởng + 700 xu khác → 5.200 điểm CONVERTED.
+    // 4.500 xu thưởng + 700 xu khác → ceil(5.200/1000) = 6 điểm theo PD-3, ×1.000 theo points_1d = 6.000 điểm CONVERTED.
     const converted = await legacyXuHistory(prisma, referrer.id, [
       { delta: 4500, reason: `REFERRAL_ORDER2:${referee.id}`, refId: `${o1.id}:${o2.id}` },
       { delta: 700, reason: `GAME_SELL_HARVEST:${referrer.id}`, refType: 'GAME' },
     ]);
-    expect(converted).toBe(5_200);
+    expect(converted).toBe(6_000);
     await movePoints(prisma, referrer.id, 'CONVERTED', -3_000, 'REDEEM_TEST');
 
-    // Thu hồi 4.500 điểm; lô còn 2.200 → trừ 2.200, thiếu 2.300.
+    // Thu hồi 4.500 điểm; lô còn 3.000 → trừ 3.000, thiếu 1.500.
     await orderStatus.setStatus(o2.id, 'RETURNED');
     await orderStatus.setStatus(o1.id, 'RETURNED');
     expect(await lotOf(prisma, referrer.id, 'CONVERTED')).toEqual({ balance: 0, ledger: 0 });
@@ -351,12 +352,12 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
       where: { userId: referrer.id, reason: `REFERRAL_ORDER2_REVOKE:${referee.id}` },
       select: { delta: true, lot: true },
     });
-    expect(revoke).toEqual([{ delta: -2_200, lot: 'CONVERTED' }]);
+    expect(revoke).toEqual([{ delta: -3_000, lot: 'CONVERTED' }]);
     const debt = await prisma.pointsTransaction.findMany({
       where: { userId: referrer.id, refType: 'REFERRAL_DEBT' },
       select: { delta: true, lot: true, reason: true },
     });
-    expect(debt).toEqual([{ delta: 0, lot: 'CONVERTED', reason: `REFERRAL_ORDER2_DEBT:${referee.id}:2300` }]);
+    expect(debt).toEqual([{ delta: 0, lot: 'CONVERTED', reason: `REFERRAL_ORDER2_DEBT:${referee.id}:1500` }]);
     await expectNoNewCoins(prisma, referrer.id, 3);
   });
 

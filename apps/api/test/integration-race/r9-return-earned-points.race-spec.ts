@@ -25,7 +25,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
-import { createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { createUser, randCode, pinConfig, setConfig, summarize, warmPool } from './helpers';
 
 const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
@@ -42,6 +42,8 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
   let cart: CartService;
   let loyalty: LoyaltyService;
   let returns: OrderReturnsService;
+
+  let restoreRedeem: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -85,11 +87,12 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);
     await setConfig(prisma, 'shipping.tier_freeship_overrides', {});
     await setConfig(prisma, 'loyalty.earn_pct', 2);
-    await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1);
+    restoreRedeem = await pinConfig(prisma, 'loyalty.vnd_per_point_redeem', 1);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.2);
   });
 
   afterAll(async () => {
+    await restoreRedeem?.();
     await moduleRef?.close();
   });
 

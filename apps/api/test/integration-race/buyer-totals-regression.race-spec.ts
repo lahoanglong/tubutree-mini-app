@@ -29,7 +29,7 @@ import { computeReturnShares } from '../../src/modules/orders/refund-allocation'
 import { GroupBuyService } from '../../src/modules/groupbuy/groupbuy.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
-import { createDealer, createUser, randCode, setConfig, warmPool } from './helpers';
+import { createDealer, createUser, randCode, pinConfig, setConfig, warmPool } from './helpers';
 
 /**
  * Hồi quy phía người mua cho nhánh Q8: đơn KHÔNG có hàng đối tác phải ra đúng số tiền như code trước nhánh (uat/integration
@@ -95,6 +95,8 @@ describe('Hồi quy người mua: đơn không có hàng đối tác ra đúng s
   const actual: Record<string, Snapshot> = {};
   const baseline: Record<string, Snapshot> = !RECORD && existsSync(FIXTURE) ? JSON.parse(readFileSync(FIXTURE, 'utf8')) : {};
 
+  const restores: (() => Promise<void>)[] = [];
+
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
@@ -151,10 +153,11 @@ describe('Hồi quy người mua: đơn không có hàng đối tác ra đúng s
       ['flashsale.min_discount_pct', 0],
       ['flashsale.default_per_user_limit', 5],
     ];
-    for (const [k, v] of config) await setConfig(prisma, k, v as never);
+    for (const [k, v] of config) restores.push(await pinConfig(prisma, k, v as never));
   });
 
   afterAll(async () => {
+    for (const restore of restores.reverse()) await restore();
     if (RECORD && Object.keys(actual).length > 0) {
       mkdirSync(dirname(FIXTURE), { recursive: true });
       writeFileSync(FIXTURE, `${JSON.stringify(actual, null, 2)}\n`);

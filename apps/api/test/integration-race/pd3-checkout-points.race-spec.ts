@@ -23,7 +23,7 @@ import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/c
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { GameService } from '../../src/modules/game/game.service';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
-import { createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { createUser, randCode, pinConfig, setConfig, summarize, warmPool } from './helpers';
 
 /**
  * PD-3 T6: đặt đơn tiêu Điểm Xanh hai lô chạy chồng nhau và chồng với các luồng tiêu điểm khác (quay
@@ -39,6 +39,8 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
   let loyalty: LoyaltyService;
   let game: GameService;
   const touched: string[] = [];
+
+  let restoreRedeem: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -84,7 +86,7 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
     game = moduleRef.get(GameService);
 
     // Phải có trước lần get() đầu (SystemConfigService cache 60s).
-    await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
+    restoreRedeem = await pinConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.2);
     await setConfig(prisma, 'game.spin_buy_cost_points', 10);
     await setConfig(prisma, 'game.spin_buy_daily_limit', 3);
@@ -97,6 +99,7 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
   });
 
   afterAll(async () => {
+    await restoreRedeem?.();
     await moduleRef?.close();
   });
 
