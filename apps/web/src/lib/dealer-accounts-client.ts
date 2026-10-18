@@ -61,8 +61,9 @@ export interface TierValues {
 }
 export const createDealerTier = (input: TierValues & { id: string }) =>
   apiFetch<TierValues & { id: string }>('/admin/dealer-tiers', { method: 'POST', body: input });
-export const updateDealerTier = (id: string, input: TierValues) =>
-  apiFetch<TierValues & { id: string }>(`/admin/dealer-tiers/${encodeURIComponent(id)}`, { method: 'PUT', body: input });
+/** `expected` = giá trị bậc admin đã thấy lúc mở form; API trả 409 nếu người khác đã sửa trong lúc đó. */
+export const updateDealerTier = (id: string, input: TierValues, expected: TierValues) =>
+  apiFetch<TierValues & { id: string }>(`/admin/dealer-tiers/${encodeURIComponent(id)}`, { method: 'PUT', body: { ...input, expected } });
 
 export interface DealerTierHistoryRow {
   id: string;

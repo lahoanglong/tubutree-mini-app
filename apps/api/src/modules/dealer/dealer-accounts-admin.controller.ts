@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsDefined, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, ValidateNested } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
@@ -19,7 +19,7 @@ export class ListDealerAccountsQuery extends PaginationQuery {
 }
 
 /** Kiểu dữ liệu ở đây; khoảng giá trị và trần chiết khấu kiểm ở `tierProblems` để trả câu tiếng Việt gom đủ lỗi. */
-export class UpdateDealerTierDto {
+export class TierValuesDto {
   @IsString() name!: string;
   @IsInt() minOrderVolume!: number;
   /** Phần trăm: 30 là 30%. */
@@ -28,7 +28,12 @@ export class UpdateDealerTierDto {
   @IsOptional() @IsString() @MaxLength(40) paymentTerms?: string | null;
 }
 
-export class CreateDealerTierDto extends UpdateDealerTierDto {
+/** Giá trị bậc admin đã thấy lúc mở form; đã khác trong DB thì server từ chối ghi đè (409). */
+export class UpdateDealerTierDto extends TierValuesDto {
+  @IsDefined() @ValidateNested() @Type(() => TierValuesDto) expected!: TierValuesDto;
+}
+
+export class CreateDealerTierDto extends TierValuesDto {
   @Matches(TIER_ID_PATTERN, { message: 'Mã bậc gồm chữ in hoa, số, gạch dưới, bắt đầu bằng chữ, dài 2–32 ký tự (vd DEALER_1).' }) id!: string;
 }
 
@@ -72,6 +77,7 @@ export class DealerTierAdminController {
 
   @Put(':id')
   update(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: UpdateDealerTierDto) {
-    return this.service.updateTier(adminId, id, dto);
+    const { expected, ...input } = dto;
+    return this.service.updateTier(adminId, id, input, expected);
   }
 }

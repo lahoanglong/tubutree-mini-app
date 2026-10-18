@@ -54,10 +54,11 @@ describe('DealerAccountsAdminService (real Postgres)', () => {
       const row = await prisma.dealerTier.findUniqueOrThrow({ where: { id } });
       expect(row.discountRules).toEqual({ default: 0.2 });
 
-      const updated = await svc.updateTier(admin.id, id, { ...tierBody, discountPct: 32.5, creditLimit: 8_000_000, paymentTerms: 'NET 30' });
+      const edited = { ...tierBody, discountPct: 32.5, creditLimit: 8_000_000, paymentTerms: 'NET 30' };
+      const updated = await svc.updateTier(admin.id, id, edited, tierBody);
       expect(updated).toMatchObject({ discountPct: 32.5, creditLimit: 8_000_000, paymentTerms: 'NET 30' });
       expect((await prisma.dealerTier.findUniqueOrThrow({ where: { id } })).discountRules).toEqual({ default: 0.325 });
-      await svc.updateTier(admin.id, id, { ...tierBody, discountPct: 32.5, creditLimit: 8_000_000, paymentTerms: 'NET 30' });
+      await svc.updateTier(admin.id, id, edited, edited);
 
       const history = await prisma.dealerTierHistory.findMany({ where: { tierId: id }, orderBy: { changedAt: 'asc' } });
       expect(history.map((h) => h.action)).toEqual(['CREATE', 'UPDATE']);
@@ -74,27 +75,64 @@ describe('DealerAccountsAdminService (real Postgres)', () => {
       const id = newTierId();
       const admin = await createUser(prisma, { role: 'ADMIN' });
       await svc.createTier(admin.id, { id, ...tierBody });
-      await expect(svc.updateTier(admin.id, id, { ...tierBody, discountPct: 46 })).rejects.toThrow(/vượt trần 45%/);
+      await expect(svc.updateTier(admin.id, id, { ...tierBody, discountPct: 46 }, tierBody)).rejects.toThrow(/vượt trần 45%/);
       expect((await prisma.dealerTier.findUniqueOrThrow({ where: { id } })).discountRules).toEqual({ default: 0.2 });
       expect(await prisma.dealerTierHistory.count({ where: { tierId: id } })).toBe(1);
     });
 
-    it('6 admin sửa cùng một bậc đồng thời: chuỗi lịch sử liền mạch (cũ của dòng sau = mới của dòng trước), trạng thái cuối là của dòng cuối', async () => {
+    it('6 admin cùng mở form một phiên bản rồi lưu đồng thời: đúng một người ghi được, 5 người nhận 409, DB là giá trị của người thắng, một dòng lịch sử', async () => {
       const id = newTierId();
       const admin = await createUser(prisma, { role: 'ADMIN' });
       await svc.createTier(admin.id, { id, ...tierBody });
       const limits = [1, 2, 3, 4, 5, 6].map((n) => n * 1_000_000);
-      const results = await Promise.allSettled(limits.map((creditLimit, i) => svc.updateTier(`admin-${i}`, id, { ...tierBody, creditLimit })));
+      const results = await Promise.allSettled(limits.map((creditLimit, i) => svc.updateTier(`admin-${i}`, id, { ...tierBody, creditLimit }, tierBody)));
       const s = summarize(results);
-      expect(s.rejected).toHaveLength(0);
-      const history = await prisma.dealerTierHistory.findMany({ where: { tierId: id, action: 'UPDATE' }, orderBy: [{ changedAt: 'asc' }, { id: 'asc' }] });
-      expect(history).toHaveLength(6);
-      let prev = 5_000_000;
-      for (const h of history) {
-        expect((h.oldValue as { creditLimit: number }).creditLimit).toBe(prev);
-        prev = (h.newValue as { creditLimit: number }).creditLimit;
+      expect(s.fulfilled).toHaveLength(1);
+      expect(s.rejected).toHaveLength(5);
+      s.rejected.forEach((r) => expect(r.reason).toBeInstanceOf(ConflictException));
+      const history = await prisma.dealerTierHistory.findMany({ where: { tierId: id, action: 'UPDATE' } });
+      expect(history).toHaveLength(1);
+      const row = await prisma.dealerTier.findUniqueOrThrow({ where: { id } });
+      expect(row.creditLimit).toBe((history[0]!.newValue as { creditLimit: number }).creditLimit);
+      expect(limits).toContain(row.creditLimit);
+    });
+
+    it('sửa nối tiếp, mỗi lần mang phiên bản vừa thấy: chuỗi lịch sử liền mạch (cũ của dòng sau = mới của dòng trước)', async () => {
+      const id = newTierId();
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      await svc.createTier(admin.id, { id, ...tierBody });
+      let seen = { ...tierBody };
+      for (const creditLimit of [1, 2, 3].map((n) => n * 1_000_000)) {
+        const next = { ...seen, creditLimit };
+        await svc.updateTier(admin.id, id, next, seen);
+        seen = next;
       }
-      expect((await prisma.dealerTier.findUniqueOrThrow({ where: { id } })).creditLimit).toBe(prev);
+      const history = await prisma.dealerTierHistory.findMany({ where: { tierId: id, action: 'UPDATE' }, orderBy: [{ changedAt: 'asc' }, { id: 'asc' }] });
+      expect(history.map((h) => [(h.oldValue as { creditLimit: number }).creditLimit, (h.newValue as { creditLimit: number }).creditLimit])).toEqual([
+        [5_000_000, 1_000_000],
+        [1_000_000, 2_000_000],
+        [2_000_000, 3_000_000],
+      ]);
+    });
+
+    it('A mở form, B hạ hạn mức, A chỉ đổi tên: A nhận 409, hạn mức của B còn nguyên, không có dòng lịch sử của A', async () => {
+      const id = newTierId();
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      await svc.createTier(admin.id, { id, ...tierBody });
+      const seenByA = { ...tierBody };
+      await svc.updateTier(admin.id, id, { ...tierBody, creditLimit: 1_000_000 }, seenByA);
+
+      await expect(svc.updateTier('admin-a', id, { ...tierBody, name: 'Bậc đổi tên' }, seenByA)).rejects.toThrow(/vừa được người khác sửa/);
+      const row = await prisma.dealerTier.findUniqueOrThrow({ where: { id } });
+      expect(row).toMatchObject({ name: tierBody.name, creditLimit: 1_000_000 });
+      const history = await prisma.dealerTierHistory.findMany({ where: { tierId: id, action: 'UPDATE' } });
+      expect(history).toHaveLength(1);
+      expect(history[0]!.changedBy).toBe(admin.id);
+
+      await expect(svc.updateTier('admin-a', id, { ...tierBody, name: 'Bậc đổi tên', creditLimit: 1_000_000 }, { ...tierBody, creditLimit: 1_000_000 })).resolves.toMatchObject({
+        name: 'Bậc đổi tên',
+        creditLimit: 1_000_000,
+      });
     });
 
     it('3 admin tạo cùng mã bậc đồng thời: đúng một người tạo được, hai người còn lại nhận 409; chỉ một dòng lịch sử CREATE', async () => {

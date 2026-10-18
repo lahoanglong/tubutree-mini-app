@@ -17,17 +17,26 @@ import {
   type TierFormInput,
   type TierValues,
 } from '@/lib/dealer-accounts-client';
+import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, Field, INPUT_CLASS, Notice, TOUCH_H } from './ui';
 
-type Mode = { kind: 'create' } | { kind: 'edit'; id: string };
+type Mode = { kind: 'create' } | { kind: 'edit'; id: string; baseline: TierValues };
 interface SaveInput {
   creating: boolean;
   id: string;
   values: TierValues;
+  baseline?: TierValues;
 }
+const baselineOf = (t: DealerTierRow): TierValues => ({
+  name: t.name,
+  minOrderVolume: t.minOrderVolume,
+  discountPct: t.discountPct,
+  creditLimit: t.creditLimit,
+  paymentTerms: t.paymentTerms,
+});
 
 const INPUT = `${INPUT_CLASS} ${TOUCH_H}`;
 
@@ -43,6 +52,7 @@ export function DealerTiersSection() {
   const [form, setForm] = useState<TierFormInput>(emptyTierForm);
   const [errors, setErrors] = useState<string[]>([]);
   const [saved, setSaved] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const [histOpen, setHistOpen] = useState(false);
   const inFlight = useRef(false);
   const { confirm, dialog } = useConfirm();
@@ -58,15 +68,23 @@ export function DealerTiersSection() {
     setForm(f);
     setErrors([]);
     setSaved(null);
+    setStale(false);
   };
   const close = () => {
     setMode(null);
     setErrors([]);
+    setStale(false);
+  };
+  /** Bỏ phần đang gõ, nạp giá trị hiện tại của bậc (sau khi người khác sửa) làm phiên bản mới để sửa tiếp. */
+  const reload = async (id: string) => {
+    const fresh = (await q.refetch()).data?.tiers.find((t) => t.id === id);
+    if (fresh) open({ kind: 'edit', id, baseline: baselineOf(fresh) }, tierToForm(fresh));
   };
   const set = (k: keyof TierFormInput) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const save = useMutation({
-    mutationFn: (v: SaveInput) => (v.creating ? createDealerTier({ id: v.id, ...v.values }) : updateDealerTier(v.id, v.values)),
+    mutationFn: (v: SaveInput) =>
+      v.creating ? createDealerTier({ id: v.id, ...v.values }) : updateDealerTier(v.id, v.values, v.baseline as TierValues),
     onSuccess: (_r, v) => {
       setSaved(`${v.creating ? 'Đã tạo' : 'Đã lưu'} bậc ${v.values.name}.`);
       setMode(null);
@@ -75,7 +93,15 @@ export function DealerTiersSection() {
       void qc.invalidateQueries({ queryKey: ['admin-dealer-tier-history'] });
       void qc.invalidateQueries({ queryKey: ['admin-dealer-accounts'] });
     },
-    onError: (e: unknown) => setErrors([e instanceof Error ? e.message : 'Lưu bậc thất bại.']),
+    onError: (e: unknown) => {
+      if (e instanceof ApiError && e.status === 409 && mode?.kind === 'edit') {
+        setStale(true);
+        setErrors(['Bậc này vừa được người khác sửa — tải lại.']);
+        void qc.invalidateQueries({ queryKey: ['admin-dealer-tiers'] });
+        return;
+      }
+      setErrors([e instanceof Error ? e.message : 'Lưu bậc thất bại.']);
+    },
     onSettled: () => {
       inFlight.current = false;
     },
@@ -92,8 +118,8 @@ export function DealerTiersSection() {
     const { id, ...values } = parsed.value;
     if (mode.kind === 'edit') {
       const before = tiers.find((t) => t.id === mode.id);
-      const lines = diffTier(before ?? null, values);
-      if (before && lines.length === 0) {
+      const lines = diffTier(mode.baseline, values);
+      if (lines.length === 0) {
         setErrors(['Không có thay đổi nào để lưu.']);
         return;
       }
@@ -109,7 +135,7 @@ export function DealerTiersSection() {
     }
     inFlight.current = true;
     setErrors([]);
-    save.mutate({ creating: mode.kind === 'create', id: mode.kind === 'edit' ? mode.id : id, values });
+    save.mutate({ creating: mode.kind === 'create', id: mode.kind === 'edit' ? mode.id : id, values, baseline: mode.kind === 'edit' ? mode.baseline : undefined });
   };
 
   return (
@@ -157,7 +183,7 @@ export function DealerTiersSection() {
 
       <ul className="space-y-2">
         {tiers.map((t) => (
-          <TierItem key={t.id} tier={t} editing={mode?.kind === 'edit' && mode.id === t.id} onEdit={() => open({ kind: 'edit', id: t.id }, tierToForm(t))} />
+          <TierItem key={t.id} tier={t} editing={mode?.kind === 'edit' && mode.id === t.id} onEdit={() => open({ kind: 'edit', id: t.id, baseline: baselineOf(t) }, tierToForm(t))} />
         ))}
       </ul>
 
@@ -194,6 +220,11 @@ export function DealerTiersSection() {
                 </ul>
               </Notice>
             </div>
+          )}
+          {stale && mode.kind === 'edit' && (
+            <button type="button" className={BTN_SMALL} onClick={() => void reload(mode.id)}>
+              Tải lại giá trị mới
+            </button>
           )}
           <div className="flex flex-wrap gap-2">
             <button type="submit" disabled={save.isPending} className={BTN_PRIMARY}>

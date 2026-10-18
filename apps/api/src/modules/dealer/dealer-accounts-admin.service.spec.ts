@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { DealerAccountsAdminService } from './dealer-accounts-admin.service';
 
 const INPUT = { name: 'Đại lý Cấp 2', minOrderVolume: 30_000_000, discountPct: 30, creditLimit: 20_000_000, paymentTerms: 'NET 15' };
+/** Giá trị bậc admin đã thấy lúc mở form (khớp ROW). */
+const CURRENT = { name: 'Đại lý Cấp 2', minOrderVolume: 30_000_000, discountPct: 30, creditLimit: 20_000_000, paymentTerms: 'NET 15' };
 const ROW = {
   id: 'DEALER_2',
   name: 'Đại lý Cấp 2',
@@ -28,7 +30,7 @@ function build(opts: { row?: typeof ROW | null; maxDiscount?: unknown; createErr
 describe('DealerAccountsAdminService.updateTier — sửa bậc đại lý (tham số tiền)', () => {
   it('ghi bậc đã khoá dòng + một dòng lịch sử cũ → mới kèm id admin, giữ khoá lạ trong discountRules', async () => {
     const { svc, tierUpdate, historyCreate, queryRaw } = build();
-    const out = await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 32.5, creditLimit: 25_000_000 });
+    const out = await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 32.5, creditLimit: 25_000_000 }, CURRENT);
     expect(String((queryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?'))).toMatch(/FOR UPDATE/);
     expect(tierUpdate).toHaveBeenCalledWith({
       where: { id: 'DEALER_2' },
@@ -53,7 +55,7 @@ describe('DealerAccountsAdminService.updateTier — sửa bậc đại lý (tham
 
   it('không có gì đổi → không ghi bậc, không ghi lịch sử', async () => {
     const { svc, tierUpdate, historyCreate } = build();
-    const out = await svc.updateTier('admin-1', 'DEALER_2', INPUT);
+    const out = await svc.updateTier('admin-1', 'DEALER_2', INPUT, CURRENT);
     expect(tierUpdate).not.toHaveBeenCalled();
     expect(historyCreate).not.toHaveBeenCalled();
     expect(out).toMatchObject({ id: 'DEALER_2', discountPct: 30 });
@@ -61,20 +63,20 @@ describe('DealerAccountsAdminService.updateTier — sửa bậc đại lý (tham
 
   it('chiết khấu vượt dealer.max_discount_pct → 400, không chạm DB', async () => {
     const { svc, prisma } = build();
-    await expect(svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 50 })).rejects.toThrow(/vượt trần 45%/);
+    await expect(svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 50 }, CURRENT)).rejects.toThrow(/vượt trần 45%/);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('trần theo khoá cấu hình hiện tại (nâng trần thì cho chiết khấu cao hơn); khoá hỏng rơi về 45%', async () => {
     const hi = build({ maxDiscount: 0.5 });
-    await expect(hi.svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 50 })).resolves.toBeDefined();
+    await expect(hi.svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 50 }, CURRENT)).resolves.toBeDefined();
     const bad = build({ maxDiscount: 'x' });
-    await expect(bad.svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 46 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(bad.svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, discountPct: 46 }, CURRENT)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('gom mọi lỗi giá trị vào một câu 400', async () => {
     const { svc } = build();
-    const err = await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, creditLimit: -1, minOrderVolume: -1, name: '' }).catch((e: Error) => e);
+    const err = await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, creditLimit: -1, minOrderVolume: -1, name: '' }, CURRENT).catch((e: Error) => e);
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as Error).message).toMatch(/Tên bậc/);
     expect((err as Error).message).toMatch(/Hạn mức/);
@@ -83,13 +85,35 @@ describe('DealerAccountsAdminService.updateTier — sửa bậc đại lý (tham
 
   it('bậc không tồn tại → 404, không ghi lịch sử', async () => {
     const { svc, historyCreate } = build({ row: null });
-    await expect(svc.updateTier('admin-1', 'NOPE', INPUT)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.updateTier('admin-1', 'NOPE', INPUT, CURRENT)).rejects.toBeInstanceOf(NotFoundException);
     expect(historyCreate).not.toHaveBeenCalled();
+  });
+
+  it('admin mở form lúc hạn mức còn 20tr, người khác đã hạ còn 8tr: chỉ đổi tên mà gửi lên → 409, KHÔNG ghi đè hạn mức, không ghi lịch sử', async () => {
+    const { svc, tierUpdate, historyCreate } = build({ row: { ...ROW, creditLimit: 8_000_000 } });
+    const err = await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, name: 'Đại lý Vàng' }, CURRENT).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toMatch(/vừa được người khác sửa/);
+    expect(tierUpdate).not.toHaveBeenCalled();
+    expect(historyCreate).not.toHaveBeenCalled();
+  });
+
+  it('phiên bản đã thấy khớp bậc hiện tại (kể cả điều kiện thanh toán trống so với null) → ghi bình thường', async () => {
+    const { svc, tierUpdate } = build({ row: { ...ROW, paymentTerms: null as never } });
+    await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, paymentTerms: null, name: 'Đổi tên' }, { ...CURRENT, paymentTerms: '' as never });
+    expect(tierUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('giá trị admin muốn lưu đã đúng như bậc hiện tại (người khác vừa sửa y như vậy) → không có gì để ghi đè, trả bậc hiện tại', async () => {
+    const { svc, tierUpdate } = build({ row: { ...ROW, creditLimit: 8_000_000 } });
+    const out = await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, creditLimit: 8_000_000 }, CURRENT);
+    expect(out).toMatchObject({ creditLimit: 8_000_000 });
+    expect(tierUpdate).not.toHaveBeenCalled();
   });
 
   it('điều kiện thanh toán để trống → lưu null', async () => {
     const { svc, tierUpdate } = build();
-    await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, paymentTerms: '' });
+    await svc.updateTier('admin-1', 'DEALER_2', { ...INPUT, paymentTerms: '' }, CURRENT);
     expect(tierUpdate.mock.calls[0]![0].data.paymentTerms).toBeNull();
   });
 });

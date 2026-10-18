@@ -63,6 +63,13 @@ const snapshot = (v: TierView) => ({
 
 const cleanTerms = (t: string | null | undefined): string | null => (t && t.length > 0 ? t : null);
 
+const sameTier = (a: ReturnType<typeof snapshot>, b: TierInput): boolean =>
+  a.name === b.name.trim() &&
+  a.minOrderVolume === b.minOrderVolume &&
+  a.discountPct === b.discountPct &&
+  a.creditLimit === b.creditLimit &&
+  a.paymentTerms === cleanTerms(b.paymentTerms);
+
 export interface AccountsQuery {
   page: number;
   limit: number;
@@ -141,7 +148,8 @@ export class DealerAccountsAdminService {
     }
   }
 
-  async updateTier(adminId: string, id: string, input: TierInput): Promise<TierView> {
+  /** `expected` = giá trị bậc admin đã thấy lúc mở form: đã đổi trong lúc đó thì 409 thay vì ghi đè mất thay đổi của người khác. */
+  async updateTier(adminId: string, id: string, input: TierInput, expected: TierInput): Promise<TierView> {
     this.assertValid(input, await this.maxDiscount());
     const result = await this.prisma.$transaction(async (tx) => {
       // Khoá dòng để hai admin sửa cùng bậc xếp hàng: mỗi dòng lịch sử có "cũ" đúng bằng "mới" của dòng trước.
@@ -156,6 +164,9 @@ export class DealerAccountsAdminService {
         paymentTerms: cleanTerms(input.paymentTerms),
       };
       if (JSON.stringify(snapshot(before)) === JSON.stringify(next)) return { view: before, changed: false, before };
+      if (!sameTier(snapshot(before), expected)) {
+        throw new ConflictException('Bậc này vừa được người khác sửa. Tải lại để xem giá trị mới rồi sửa lại.');
+      }
       const updated = await tx.dealerTier.update({
         where: { id },
         data: {

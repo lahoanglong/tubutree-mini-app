@@ -156,6 +156,7 @@ describe('DealerTiersSection — quản lý bậc đại lý (D1-06)', () => {
       discountPct: 35,
       creditLimit: 8_000_000,
       paymentTerms: 'NET 15',
+      expected: { name: 'Đại lý Cấp 2', minOrderVolume: 30_000_000, discountPct: 30, creditLimit: 5_000_000, paymentTerms: 'NET 15' },
     });
     expect(container.querySelector('form')).toBeNull();
     expect(container.querySelector('[data-dealer-tier]')!.textContent).toContain('35%');
@@ -185,6 +186,49 @@ describe('DealerTiersSection — quản lý bậc đại lý (D1-06)', () => {
     await flush();
     expect(alertText(container)).toContain('Chiết khấu vượt trần 45% (dealer.max_discount_pct).');
     expect(field(container, 'Chiết khấu (%)')!.value).toBe('40');
+  });
+
+  it('người khác vừa sửa bậc (409): báo "tải lại", không mất form; "Tải lại giá trị mới" nạp giá trị hiện tại và lần lưu sau gửi đúng phiên bản mới', async () => {
+    let current = view();
+    const putBodies: Record<string, unknown>[] = [];
+    const api = mockFetch({
+      '/admin/dealer-tiers/manage': () => ({ body: current }),
+      '/admin/dealer-tiers/history': { body: [] },
+      '/admin/dealer-tiers/DEALER_2': (init) => {
+        putBodies.push(JSON.parse(String(init!.body)) as Record<string, unknown>);
+        if (putBodies.length === 1) {
+          current = view([{ ...TIER, creditLimit: 8_000_000 }]);
+          return { status: 409, body: { message: 'Bậc này vừa được người khác sửa. Tải lại để xem giá trị mới rồi sửa lại.' } };
+        }
+        return { body: { id: 'DEALER_2' } };
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerTiersSection />);
+    await flush();
+    click(byText(container, 'button', 'Sửa'));
+    typeInto(field(container, 'Tên bậc'), 'Đại lý Vàng');
+    click(byText(container, 'button', 'Lưu bậc'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(alertText(container)).toContain('Bậc này vừa được người khác sửa — tải lại.');
+    expect(field(container, 'Tên bậc')!.value).toBe('Đại lý Vàng');
+    expect(putBodies[0]!.expected).toMatchObject({ creditLimit: 5_000_000 });
+
+    click(byText(container, 'button', 'Tải lại giá trị mới'));
+    await flush();
+    expect(field(container, 'Tên bậc')!.value).toBe('Đại lý Cấp 2');
+    expect(field(container, 'Hạn mức công nợ (đ)')!.value).toBe('8000000');
+    expect(alertText(container)).toBe('');
+
+    typeInto(field(container, 'Tên bậc'), 'Đại lý Vàng');
+    click(byText(container, 'button', 'Lưu bậc'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(putBodies[1]).toMatchObject({ name: 'Đại lý Vàng', creditLimit: 8_000_000, expected: { name: 'Đại lý Cấp 2', creditLimit: 8_000_000 } });
+    expect(container.querySelector('form')).toBeNull();
   });
 
   it('"Thêm bậc" khi đã có bậc mở form tạo trống; Huỷ đóng form', async () => {

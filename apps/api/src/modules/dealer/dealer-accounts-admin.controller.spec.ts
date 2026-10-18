@@ -68,10 +68,10 @@ describe('DTO — sửa / tạo bậc đại lý', () => {
   const body = { name: 'Đại lý Cấp 1', minOrderVolume: 10_000_000, discountPct: 20, creditLimit: 0, paymentTerms: 'PREPAID' };
 
   it('nhận bậc hợp lệ; điều kiện thanh toán bỏ trống hoặc null được', () => {
-    expect(validateSync(plainToInstance(UpdateDealerTierDto, body), opts)).toEqual([]);
-    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, paymentTerms: null }), opts)).toEqual([]);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, expected: body }), opts)).toEqual([]);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, paymentTerms: null, expected: body }), opts)).toEqual([]);
     const { paymentTerms: _t, ...noTerms } = body;
-    expect(validateSync(plainToInstance(UpdateDealerTierDto, noTerms), opts)).toEqual([]);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...noTerms, expected: noTerms }), opts)).toEqual([]);
   });
 
   it.each([
@@ -82,7 +82,7 @@ describe('DTO — sửa / tạo bậc đại lý', () => {
     ['tên không phải chuỗi', { name: 5 }],
     ['trường lạ (discountRules)', { discountRules: { default: 0.9 } }],
   ])('từ chối: %s', (_l, patch) => {
-    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, ...patch }), opts).length).toBeGreaterThan(0);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, expected: body, ...patch }), opts).length).toBeGreaterThan(0);
   });
 
   it('tạo bậc cần mã dạng DEALER_1: chữ hoa, số, gạch dưới; không đổi được sau khi tạo (UpdateDealerTierDto không nhận id)', () => {
@@ -90,7 +90,7 @@ describe('DTO — sửa / tạo bậc đại lý', () => {
     for (const id of ['dealer_1', '1DEALER', 'D', 'A B', 'A'.repeat(33), '']) {
       expect(validateSync(plainToInstance(CreateDealerTierDto, { ...body, id }), opts).length).toBeGreaterThan(0);
     }
-    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, id: 'X_Y' }), opts).length).toBeGreaterThan(0);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, expected: body, id: 'X_Y' }), opts).length).toBeGreaterThan(0);
   });
 });
 
@@ -116,7 +116,22 @@ describe('DealerTierAdminController — chuyển tham số xuống service', () 
     const dto = { name: 'A', minOrderVolume: 0, discountPct: 10, creditLimit: 0 };
     await ctl.create('admin-9', Object.assign(new CreateDealerTierDto(), { id: 'D1', ...dto }));
     expect(svc.createTier).toHaveBeenCalledWith('admin-9', expect.objectContaining({ id: 'D1', discountPct: 10 }));
-    await ctl.update('admin-9', 'D1', Object.assign(new UpdateDealerTierDto(), dto));
-    expect(svc.updateTier).toHaveBeenCalledWith('admin-9', 'D1', expect.objectContaining({ discountPct: 10 }));
+    await ctl.update('admin-9', 'D1', Object.assign(new UpdateDealerTierDto(), { ...dto, expected: dto }));
+    expect(svc.updateTier).toHaveBeenCalledWith('admin-9', 'D1', expect.objectContaining({ discountPct: 10 }), expect.objectContaining({ discountPct: 10 }));
+  });
+});
+
+describe('UpdateDealerTierDto — phải kèm phiên bản bậc admin đã thấy (chống ghi đè im lặng)', () => {
+  const opts = { whitelist: true, forbidNonWhitelisted: true } as const;
+  const body = { name: 'A', minOrderVolume: 0, discountPct: 10, creditLimit: 0, paymentTerms: 'NET 30' };
+  it('có expected hợp lệ → qua; thiếu, sai kiểu hoặc trường lạ → lỗi', () => {
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, expected: { ...body } }), opts)).toEqual([]);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, expected: { ...body, paymentTerms: null } }), opts)).toEqual([]);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, body), opts).length).toBeGreaterThan(0);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, expected: { ...body, creditLimit: 'x' } }), opts).length).toBeGreaterThan(0);
+    expect(validateSync(plainToInstance(UpdateDealerTierDto, { ...body, expected: { ...body, id: 'D1' } }), opts).length).toBeGreaterThan(0);
+  });
+  it('tạo bậc không nhận expected', () => {
+    expect(validateSync(plainToInstance(CreateDealerTierDto, { id: 'D1', ...body, expected: body }), opts).length).toBeGreaterThan(0);
   });
 });
