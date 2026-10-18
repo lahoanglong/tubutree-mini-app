@@ -328,6 +328,14 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'dealer.review_hours',
         'community.public_preview',
         'home.new_customer_layout',
+        'loyalty.chat_order_points_enabled',
+        'loyalty.chat_order_monthly_points_cap',
+        'loyalty.chat_order_review_above_vnd',
+        'loyalty.chat_order_require_carrier',
+        'loyalty.chat_unclaimed_hold_days',
+        'loyalty.chat_phone_verified_max_days',
+        'loyalty.chat_order_creator_monthly_points',
+        'pancake.staff_map',
       ];
       expect(createdBy(results).system_configs).toBe(extraKeys.length);
       expect(await pc.systemConfig.count({ where: { key: { in: extraKeys } } })).toBe(extraKeys.length);

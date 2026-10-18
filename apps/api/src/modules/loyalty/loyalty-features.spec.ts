@@ -500,6 +500,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
           membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
           order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), findMany: jest.fn().mockResolvedValue([]) },
           returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+          externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
           pointsTransaction: {
             findMany: jest.fn().mockResolvedValue([]),
             aggregate: jest.fn().mockResolvedValue({ _sum: { delta: null } }),

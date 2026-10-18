@@ -222,6 +222,8 @@ model User {
   /// @deprecated Không nơi nào ghi giá trị; chỉ account-deletion.service gán null (C-108).
   zaloRefreshToken       String? // mã hóa
   phone                  String?         @unique
+  /// Lần gần nhất Zalo trả đúng số này (getPhoneNumber). Điểm đơn chat chỉ tự liên kết khi mốc còn mới (loyalty.chat_phone_verified_max_days).
+  phoneVerifiedAt        DateTime?
   email                  String?
   fullName               String?
   /// Tên đã gấp dấu (vn_search_fold), trigger users_full_name_search_sync giữ đồng bộ với fullName — admin tìm tên không dấu.
@@ -3188,6 +3190,8 @@ model ExternalOrder {
   lastPayload        Json
   firstSeenAt        DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
+  /// Giá trị `updatedAt` lúc cron tạo bù claim chat đã xét đơn này; đơn chưa đổi từ đó thì không xét lại (đặt bằng SQL để không đẩy updatedAt).
+  chatCheckedAt      DateTime?
   claim              ExternalPointsClaim?
 
   // SQL tay (migration 20261019100000_external_orders): "external_orders_phone_idx" ON (phone) WHERE phone IS NOT NULL.
@@ -3219,11 +3223,21 @@ model ExternalPointsClaim {
   voidReason      String?
   reviewReason    String?
   decidedById     String?
+  /// Claim PHONE: SĐT trên đơn LÚC TẠO claim. Liên kết và trần tháng theo SĐT dùng cột này, không dùng `external_orders.phone` (nhân viên sửa được).
+  /// Xoá về null cùng luật retention với `external_orders.phone`.
+  orderPhone      String?
+  /// Claim PHONE: id nhân viên tạo đơn trên Pancake (payload `creator.id`), để áp trần điểm tự cộng theo người tạo.
+  creatorRef      String?
+  /// Claim PHONE: tiền hàng của đơn ở lần kiểm gần nhất (tạo, liên kết, duyệt); releaseClaim chuyển REVIEW khi tiền hàng hiện tại lớn hơn số này.
+  /// Lúc cộng ghi lại đúng tiền hàng đã cộng, nên với claim CREDITED chi tiêu 12 tháng xét hạng dùng số này, sửa đơn về sau không làm hạng nhảy.
+  creditedGoodsValue Int?
   /// Ngày VN 'YYYY-MM-DD' lúc tạo claim, để đếm trần ngày.
   dayKey          String
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
+  @@index([orderPhone])
+  @@index([creatorRef, createdAt])
   @@index([state, releaseAt])
   @@index([state, holdUntil])
   @@index([userId, createdAt])
@@ -3256,7 +3270,7 @@ model ExternalClaimAttempt {
 model ExternalClaimEvent {
   id           String   @id @default(cuid())
   claimId      String
-  /// CLAIM_CREATED | ATTACH | APPROVE | VOID | VOID_REOPEN | REOPEN_CLAIM | REVERSE | KEEP_POINTS | CREDIT | AUTO_VOID | AUTO_REVERSE | TO_REVIEW | FLAG_PARTIAL
+  /// CLAIM_CREATED | ATTACH | APPROVE | VOID | VOID_REOPEN | REOPEN_CLAIM | REVERSE | KEEP_POINTS | CREDIT | AUTO_VOID | AUTO_REVERSE | TO_REVIEW | FLAG_PARTIAL | LINK_PHONE | HOLD_NO_MEMBER | LAPSE | PHONE_CHANGED
   action       String
   /// Người thao tác; null = hệ thống (cron, webhook) hoặc chính khách khi gửi mã (khi đó `actorId` = userIdAfter).
   actorId      String?

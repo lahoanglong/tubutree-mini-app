@@ -199,9 +199,9 @@ export class ExternalClaimService {
   }
 
   /** "Đơn ngoài app của bạn": không trả SĐT hay payload, mã che bớt. */
-  async listMine(userId: string, page: number, limit: number): Promise<MyExternalClaimsResponse> {
+  async listMine(userId: string, page: number, limit: number, kind: 'SCAN' | 'PHONE' = 'SCAN'): Promise<MyExternalClaimsResponse> {
     const cfg = await loadClaimConfig(this.config);
-    const where: Prisma.ExternalPointsClaimWhereInput = { userId, kind: 'SCAN' };
+    const where: Prisma.ExternalPointsClaimWhereInput = { userId, kind };
     const [rows, total, attempts] = await Promise.all([
       this.prisma.externalPointsClaim.findMany({
         where,
@@ -210,7 +210,7 @@ export class ExternalClaimService {
         include: { externalOrder: { select: { channel: true, trackingCode: true, status: true, deliveredAt: true } } },
       }),
       this.prisma.externalPointsClaim.count({ where }),
-      page === 1
+      page === 1 && kind === 'SCAN'
         ? this.prisma.externalClaimAttempt.findMany({
             where: { userId, result: 'UNMATCHED', resolvedAt: null },
             orderBy: { createdAt: 'desc' },
@@ -224,12 +224,14 @@ export class ExternalClaimService {
       const o = r.externalOrder;
       return {
         id: r.id,
+        kind: r.kind,
         channel: o.channel,
         maskedCode: maskClaimCode(o.trackingCode),
         state: r.state,
         points: r.state === 'REVIEW' && r.points === 0 ? null : r.points,
         expectedCreditAt: open && o.status === 'DELIVERED' && o.deliveredAt ? new Date(o.deliveredAt.getTime() + cfg.pendingDays * DAY_MS).toISOString() : null,
         creditedAt: r.creditedAt?.toISOString() ?? null,
+        holdUntil: r.holdUntil?.toISOString() ?? null,
         createdAt: r.createdAt.toISOString(),
       };
     });

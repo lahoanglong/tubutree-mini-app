@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EVENT_ACTION_LABEL, adminClaimErrorText, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
+import { EVENT_ACTION_LABEL, adminClaimErrorText, approveNeedsNote, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
 
 const who = (over: Partial<Parameters<typeof claimActions>[1]> = {}) => ({ isAdmin: false, canAct: false, meId: 'x', ...over });
 const c = (over: Record<string, unknown> = {}) => ({ state: 'REVIEW' as const, userId: 'u1', reviewReason: null as string | null, ...over });
@@ -71,5 +71,14 @@ describe('helpers', () => {
     const staff = attachDialogMessage('SPX***789', false);
     expect(staff).toContain('chỉ ADMIN gắn được');
     expect(staff).not.toContain('không cần người khác duyệt');
+  });
+});
+
+describe('approveNeedsNote', () => {
+  it('claim PHONE mà mốc xác minh vẫn cũ thì cần ghi chú, bất kể lý do REVIEW', () => {
+    expect(approveNeedsNote({ kind: 'PHONE', memberPhoneStale: true })).toBe(true);
+    expect(approveNeedsNote({ kind: 'PHONE', memberPhoneStale: false })).toBe(false);
+    expect(approveNeedsNote({ kind: 'PHONE' })).toBe(false);
+    expect(approveNeedsNote({ kind: 'SCAN', memberPhoneStale: true })).toBe(false);
   });
 });

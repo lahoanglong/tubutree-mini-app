@@ -354,7 +354,7 @@ export class LoyaltyService {
     // Đơn đã giao chỉ trả một phần vẫn DELIVERED với nguyên tổng tiền: trừ phần đã hoàn. Đơn sau đó trả nốt thành RETURNED nên
     // không còn trong spendWhere, và các lần trả trước của nó không bị trừ khỏi đơn khác.
     const partialReturns = await this.partialReturnsByOrder(userId, since);
-    let spent12m = spentAgg._sum.total ?? 0;
+    let spent12m = (spentAgg._sum.total ?? 0) + (await this.chatSpending12m(userId, since));
     if (partialReturns.size > 0) {
       const partiallyReturned: { id: string; total: number }[] = [];
       for (const ids of inChunks([...partialReturns.keys()])) {
@@ -366,6 +366,19 @@ export class LoyaltyService {
       spent12m = Math.max(0, spent12m);
     }
     return { spent12m, partialReturns };
+  }
+
+  /**
+   * Tiền hàng của đơn chat/điện thoại đã cộng điểm (claim PHONE CREDITED, tính vào xét hạng) trong 12 tháng. Claim bị đảo (REVERSED) hay
+   * chưa cộng thì không tính: hạng chỉ lên khi điểm thật đã vào sổ và xuống khi điểm bị thu hồi. Dùng tiền hàng CHỐT LÚC CỘNG
+   * (`creditedGoodsValue`), không phải tiền hàng hiện tại của đơn: nhân viên sửa đơn về sau không được làm hạng nhảy.
+   */
+  private async chatSpending12m(userId: string, since: Date): Promise<number> {
+    const claims = await this.prisma.externalPointsClaim.findMany({
+      where: { userId, kind: 'PHONE', state: 'CREDITED', countsForTier: true, creditedAt: { gte: since } },
+      select: { creditedGoodsValue: true },
+    });
+    return claims.reduce((sum, c) => sum + (c.creditedGoodsValue ?? 0), 0);
   }
 
   /**
@@ -433,12 +446,8 @@ export class LoyaltyService {
       },
       select: { refId: true, delta: true },
     });
-    if (delivered.length === 0) return 0;
-    const earned = delivered.reduce((s, r) => s + r.delta, 0);
-    const orderIds = [...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!id))];
-    if (orderIds.length === 0) return earned;
     const reversed: { refId: string | null }[] = [];
-    for (const ids of inChunks(orderIds)) {
+    for (const ids of inChunks([...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!id))])) {
       reversed.push(
         ...(await this.prisma.pointsTransaction.findMany({
           where: { userId, reason: { startsWith: TIER_REVERSED_PREFIX }, refId: { in: ids } },
@@ -446,6 +455,23 @@ export class LoyaltyService {
         })),
       );
     }
+    // Điểm đơn chat/điện thoại (refId = id claim) vào cùng whitelist, đảo theo dòng PANCAKE_CHAT_ORDER_REVERSED hoặc trạng thái claim.
+    const chatRows = await this.prisma.pointsTransaction.findMany({
+      where: { userId, reason: { startsWith: TIER_CHAT_PREFIX }, delta: { gt: 0 }, createdAt: { gte: since } },
+      select: { refId: true, delta: true },
+    });
+    for (const ids of inChunks([...new Set(chatRows.map((r) => r.refId).filter((id): id is string => !!id))])) {
+      reversed.push(
+        ...(await this.prisma.pointsTransaction.findMany({
+          where: { userId, reason: { startsWith: TIER_CHAT_REVERSED_PREFIX }, refId: { in: ids } },
+          select: { refId: true },
+        })),
+        // Claim chat bị đảo mà không thu hồi được điểm nào (khách đã tiêu hết) không có dòng sổ đảo: lấy trạng thái claim làm căn cứ.
+        ...(await this.prisma.externalPointsClaim.findMany({ where: { id: { in: ids }, userId, kind: 'PHONE', state: 'REVERSED' }, select: { id: true } })).map((c) => ({ refId: c.id })),
+      );
+    }
+    delivered.push(...chatRows);
+    if (delivered.length === 0) return 0;
     // Đơn đã có dòng ORDER_REVERSED thì bỏ NGUYÊN điểm giao của nó, không trừ theo delta của dòng thu hồi: reverseOrderPoints
     // chỉ thu hồi phần còn lại của lô (điểm đã hết hạn hay đã tiêu thì delta nhỏ hơn, có khi 0) nhưng đơn đã trả thì
     // chi tiêu của nó không còn thuộc hạng.
@@ -1436,6 +1462,9 @@ const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm
  */
 const TIER_DELIVERED_PREFIX = 'ORDER_DELIVERED:';
 const TIER_REVERSED_PREFIX = 'ORDER_REVERSED:';
+/** Điểm đơn chat/điện thoại (external-points, claim PHONE) tính vào xét hạng; refId của cả dòng cộng lẫn dòng đảo là id claim. */
+const TIER_CHAT_PREFIX = 'PANCAKE_CHAT_ORDER:';
+const TIER_CHAT_REVERSED_PREFIX = 'PANCAKE_CHAT_ORDER_REVERSED:';
 
 /** Phần của Prisma client mà câu SQL đọc điểm đang khoá cần: this.prisma hoặc tx của caller. */
 type LockedPointsDb = Pick<Prisma.TransactionClient, '$queryRaw'>;

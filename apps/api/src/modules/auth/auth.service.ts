@@ -16,6 +16,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { firstTouchColumns } from '../../common/attribution';
 import { VouchersService } from '../vouchers/vouchers.service';
+import { ExternalChatService } from '../external-points/external-chat.service';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -77,6 +78,8 @@ export class AuthService {
     @Optional() private readonly notifications?: NotificationsService,
     // Optional như notifications: không có thì chỉ cron giờ cấp voucher chào mừng.
     @Optional() private readonly vouchers?: VouchersService,
+    // Optional như hai cái trên: không có thì đơn chat chờ SĐT chỉ được cron 30 phút liên kết.
+    @Optional() private readonly externalChat?: ExternalChatService,
   ) {}
 
   /**
@@ -153,6 +156,8 @@ export class AuthService {
               zaloId: info.zaloId,
               fullName: byPhone.fullName ?? info.name,
               avatarUrl: byPhone.avatarUrl ?? info.avatar,
+              // Zalo vừa trả đúng số của tài khoản web này.
+              phoneVerifiedAt: new Date(),
             },
           }),
         );
@@ -168,6 +173,7 @@ export class AuthService {
             fullName: info.name,
             avatarUrl: info.avatar,
             phone: checkedPhone,
+            ...(checkedPhone ? { phoneVerifiedAt: new Date() } : {}),
             referralCode: await this.generateReferralCode(),
             referredById: await this.resolveReferrerId(referralCode),
             ...firstTouchColumns(firstTouch),
@@ -202,18 +208,24 @@ export class AuthService {
       return this.issueTokens(user);
     }
 
-    // User Zalo đã tồn tại → đồng bộ tên/avatar + lưu SĐT lần đầu (nếu có).
-    const data: { fullName?: string; avatarUrl?: string | null; phone?: string } = {};
+    // User Zalo đã tồn tại → đồng bộ tên/avatar + SĐT Zalo vừa trả (lưu lần đầu, làm mới mốc xác minh, hoặc đổi số).
+    const data: { fullName?: string; avatarUrl?: string | null; phone?: string; phoneVerifiedAt?: Date } = {};
     if (info.name && user.fullName !== info.name) {
       data.fullName = info.name;
       data.avatarUrl = info.avatar ?? user.avatarUrl;
     }
-    if (phone && !user.phone) {
-      const free = await this.phoneIfFree(phone, user.id);
-      if (free) data.phone = free;
-    }
+    Object.assign(data, await this.zaloPhoneFields(user, phone));
     if (Object.keys(data).length > 0) {
-      user = await this.prisma.user.update({ where: { id: user.id }, data });
+      try {
+        user = await this.prisma.user.update({ where: { id: user.id }, data });
+      } catch (err) {
+        // Số mới vừa bị tài khoản khác lấy giữa lúc kiểm và lúc ghi: giữ số cũ, vẫn cho đăng nhập.
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && data.phone)) throw err;
+        const { phone: _drop, phoneVerifiedAt: _dropAt, ...rest } = data;
+        void _drop;
+        void _dropAt;
+        if (Object.keys(rest).length > 0) user = await this.prisma.user.update({ where: { id: user.id }, data: rest });
+      }
     }
 
     return this.issueTokens(user);
@@ -290,7 +302,7 @@ export class AuthService {
           zaloId: info.zaloId,
           fullName: info.name,
           avatarUrl: info.avatar ?? currentUser.avatarUrl,
-          ...(checkedPhone ? { phone: checkedPhone } : {}),
+          ...(checkedPhone ? { phone: checkedPhone, phoneVerifiedAt: new Date() } : {}),
         },
       });
       const fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
@@ -331,12 +343,53 @@ export class AuthService {
     );
   }
 
-  /** Gắn SĐT nếu user chưa có và SĐT còn trống — dùng cho nhánh "đúng danh tính đang có". */
+  /**
+   * Trường SĐT cần ghi khi Zalo vừa trả `zaloPhone` cho `user` (rỗng = không có gì để ghi). `phoneVerifiedAt` đánh dấu lần gần nhất
+   * Zalo xác nhận đúng số này: điểm đơn chat chỉ tự cộng khi mốc còn mới (số có thể bị nhà mạng cấp lại cho người khác).
+   *  - Cùng số đang lưu: chỉ làm mới mốc.
+   *  - Chưa có số: lưu nếu số chưa thuộc ai (hành vi cũ, kể cả việc grant theo số được áp cho tài khoản được gắn số lần đầu).
+   *  - Số khác số đang lưu: đổi sang số mới CHỈ khi an toàn; mọi trường hợp không an toàn chỉ ghi log và không đổi gì (kể cả mốc):
+   *    tài khoản không phải CUSTOMER, bị khoá, số cũ còn grant quyền, số mới đã thuộc người khác hay đang có grant quyền. Chặn số mới
+   *    có grant vì `applyGrants` chạy ở mọi lần đăng nhập/refresh nên không thể "bỏ qua applyGrants cho lần đổi này": nếu cho đổi,
+   *    một tài khoản đang có số sẽ lên STAFF/ADMIN chỉ nhờ Zalo trả số khác (trước đây chỉ tài khoản được gắn số lần đầu mới có đường này).
+   */
+  private async zaloPhoneFields(
+    user: Pick<User, 'id' | 'phone' | 'role' | 'isBlocked'>,
+    zaloPhone: string | null,
+  ): Promise<{ phone?: string; phoneVerifiedAt?: Date }> {
+    if (!zaloPhone) return {};
+    const now = new Date();
+    if (user.phone === zaloPhone) return { phoneVerifiedAt: now };
+    const free = await this.phoneIfFree(zaloPhone, user.id);
+    if (!free) {
+      this.logger.warn(`Zalo trả SĐT (đuôi ${zaloPhone.slice(-3)}) đang thuộc tài khoản khác, giữ nguyên SĐT của user ${user.id}`);
+      return {};
+    }
+    if (!user.phone) return { phone: free, phoneVerifiedAt: now };
+    const tail = `đuôi ${user.phone.slice(-3)} sang ${zaloPhone.slice(-3)}`;
+    if (user.role !== 'CUSTOMER' || user.isBlocked) {
+      this.logger.warn(`Không đổi SĐT theo Zalo cho user ${user.id} (role=${user.role}, khoá=${user.isBlocked}): ${tail}, cần admin xử lý`);
+      return {};
+    }
+    const grants = await this.prisma.roleGrant.findFirst({ where: { phone: { in: [user.phone, zaloPhone] }, revokedAt: null }, select: { phone: true } });
+    if (grants) {
+      this.logger.warn(`Không đổi SĐT theo Zalo cho user ${user.id}: ${tail}, một trong hai số đang có grant quyền, cần admin xử lý`);
+      return {};
+    }
+    this.logger.warn(`user ${user.id} đổi SĐT theo Zalo (${tail})`);
+    return { phone: free, phoneVerifiedAt: now };
+  }
+
+  /** Ghi SĐT/mốc xác minh Zalo vừa trả cho nhánh "đúng danh tính đang có". Số thuộc người khác hay không đổi gì thì trả nguyên user. */
   private async attachPhoneIfMissing(user: User, phone: string | null): Promise<User> {
-    if (!phone || user.phone) return user;
-    const free = await this.phoneIfFree(phone, user.id);
-    if (!free) return user;
-    return this.prisma.user.update({ where: { id: user.id }, data: { phone: free } });
+    const fields = await this.zaloPhoneFields(user, phone);
+    if (Object.keys(fields).length === 0) return user;
+    try {
+      return await this.prisma.user.update({ where: { id: user.id }, data: fields });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return user;
+      throw err;
+    }
   }
 
   /**
@@ -364,7 +417,7 @@ export class AuthService {
     info: { zaloId: string; name?: string; avatar?: string },
     phone: string | null,
   ): Promise<User> {
-    const targetPhone = phone && !target.phone ? await this.phoneIfFree(phone, target.id) : undefined;
+    const targetPhone = await this.zaloPhoneFields(target, phone);
     let referralNotices: ReferralNotice[] = [];
     const result = await this.prisma.$transaction(async (tx) => {
       referralNotices = [];
@@ -614,7 +667,6 @@ export class AuthService {
           cashbackPending: { increment: g.cashbackPending },
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
           ...(info.name && !target.fullName ? { fullName: info.name, avatarUrl: info.avatar ?? target.avatarUrl } : {}),
-          ...(targetPhone ? { phone: targetPhone } : {}),
           // Nguồn chạm đầu của khách sang đích chỉ khi đích còn trống (cả hai dòng đang bị khoá FOR UPDATE nên không ai
           // chen ngang); dòng khách giữ nguyên bản ghi của nó.
           ...(!lockedTarget.firstTouchSource && g.firstTouchSource
@@ -696,6 +748,15 @@ export class AuthService {
       throw err;
     });
     await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, referralNotices);
+    // SĐT ghi sau khi gộp xong: số vừa bị tài khoản khác lấy (P2002) chỉ làm bỏ qua phần số, không làm hỏng cả lần gộp (transaction đã hỏng nếu lỗi nằm trong nó).
+    if (Object.keys(targetPhone).length > 0) {
+      try {
+        return await this.prisma.user.update({ where: { id: result.id }, data: targetPhone });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+        this.logger.warn(`Gộp khách vào ${result.id}: số Zalo vừa bị tài khoản khác lấy, bỏ qua phần SĐT`);
+      }
+    }
     return result;
   }
 
@@ -844,6 +905,8 @@ export class AuthService {
     // Áp quyền theo SĐT (allowlist) — chạy cho cả login lẫn refresh ⇒ đổi role có hiệu lực
     // ở lần refresh kế. Không có phone / không có grant → trả nguyên user.
     user = await this.rbac.applyGrants(user);
+    // Điểm đơn chat/điện thoại chờ SĐT này (B9): liên kết ngay khi khách đăng nhập. Không bao giờ chặn hay làm rớt phiên.
+    await this.linkChatPoints(user);
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -865,6 +928,15 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken, user: this.toAuthUser(user) };
+  }
+
+  private async linkChatPoints(user: User): Promise<void> {
+    if (!this.externalChat || !user.phone) return;
+    try {
+      await this.externalChat.linkByPhone(user);
+    } catch (err) {
+      this.logger.warn(`Liên kết điểm đơn chat cho ${user.id} lỗi, chờ cron: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   toAuthUser(user: User): AuthUser {

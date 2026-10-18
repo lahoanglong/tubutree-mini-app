@@ -16,3 +16,8 @@ export function maskClaimCode(code: string | null | undefined): string {
   if (code.length <= 6) return `${code.slice(0, 1)}${'*'.repeat(code.length - 1)}`;
   return `${code.slice(0, 3)}${'*'.repeat(code.length - 6)}${code.slice(-3)}`;
 }
+
+/** Mã hiện trong thông báo: đơn chat thường chưa có mã đáng hiện, thay bằng cách gọi chung để câu không bị trống. */
+export function claimCodeLabel(trackingCode: string | null | undefined, kind: 'SCAN' | 'PHONE'): string {
+  return maskClaimCode(trackingCode) || (kind === 'PHONE' ? 'đặt qua tư vấn viên' : '');
+}

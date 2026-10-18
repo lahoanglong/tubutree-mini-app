@@ -8,7 +8,7 @@ import { externalLotKey, loadPointExpiryTxns, lotRecoverable } from '../loyalty/
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
-import { maskClaimCode } from './external-points-rate';
+import { claimCodeLabel } from './external-points-rate';
 
 const logger = new Logger('ExternalClaimStatus');
 
@@ -85,11 +85,11 @@ export async function reverseCreditedClaimTx(
   by: { reason: string; actorId: string | null },
 ): Promise<ReverseResult | null> {
   if (!(await lockOrderThenClaim(tx, claimId))) return null;
-  const [claim] = await tx.$queryRaw<{ id: string; userId: string | null; points: number; externalOrderId: string }[]>`
-    SELECT "id", "userId", "points", "externalOrderId" FROM "external_points_claims" WHERE "id" = ${claimId} AND "state" = 'CREDITED' FOR UPDATE`;
+  const [claim] = await tx.$queryRaw<{ id: string; userId: string | null; points: number; externalOrderId: string; kind: string }[]>`
+    SELECT "id", "userId", "points", "externalOrderId", "kind"::text AS "kind" FROM "external_points_claims" WHERE "id" = ${claimId} AND "state" = 'CREDITED' FOR UPDATE`;
   if (!claim || !claim.userId) return null;
   const [user] = await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${claim.userId} FOR UPDATE`;
-  const order = await tx.externalOrder.findUniqueOrThrow({ where: { id: claim.externalOrderId }, select: { pancakeOrderId: true, source: true } });
+  const order = await tx.externalOrder.findUniqueOrThrow({ where: { id: claim.externalOrderId }, select: { pancakeOrderId: true } });
   const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, claim.userId), externalLotKey(claim.id));
   const take = Math.max(0, Math.min(claim.points, recoverable ?? claim.points, user?.pointsBalance ?? 0));
   const done = await tx.externalPointsClaim.updateMany({
@@ -98,7 +98,7 @@ export async function reverseCreditedClaimTx(
   });
   if (done.count !== 1) return null;
   if (take > 0) {
-    const prefix = order.source === 'CHAT' ? 'PANCAKE_CHAT_ORDER_REVERSED' : 'MARKETPLACE_ORDER_REVERSED';
+    const prefix = claim.kind === 'PHONE' ? 'PANCAKE_CHAT_ORDER_REVERSED' : 'MARKETPLACE_ORDER_REVERSED';
     const res = await applyPointsDelta(tx, {
       userId: claim.userId,
       delta: -take,
@@ -143,6 +143,12 @@ interface AppliedNotice {
   code: string;
   detail: string | null;
   dedupeKey: string | null;
+  /** Claim đang tính vào xét hạng (đơn chat): đảo điểm xong thì hạng phải được tính lại. */
+  countsForTier: boolean;
+}
+
+export interface StatusHooks {
+  recalcTier?: (userId: string) => Promise<void>;
 }
 
 /**
@@ -155,6 +161,7 @@ export async function applyStatusToClaim(
   notifier: ClaimNotifier | undefined,
   config: Pick<SystemConfigService, 'get'> | undefined,
   pancakeOrderId: string,
+  hooks: StatusHooks = {},
 ): Promise<StatusAction> {
   try {
     const pendingDays = config ? (await loadClaimConfig(config)).pendingDays : 14;
@@ -177,8 +184,9 @@ export async function applyStatusToClaim(
           flaggedPartial: claim.reviewReason !== null || kept,
           humanDecided: claim.decidedById !== null && (await decidedAtPartialReturn(tx, claim.id)),
         });
-        const code = maskClaimCode(order.trackingCode);
-        const base = { action, userId: claim.userId, claimId: claim.id, code, detail: null as string | null, dedupeKey: null as string | null };
+        // Đơn chat thường không có mã đáng hiện cho khách: thay bằng cách gọi chung để câu thông báo không bị trống.
+        const code = claimCodeLabel(order.trackingCode, claim.kind);
+        const base = { action, userId: claim.userId, claimId: claim.id, code, detail: null as string | null, dedupeKey: null as string | null, countsForTier: claim.countsForTier };
         switch (action) {
           case 'VOID': {
             const res = await tx.externalPointsClaim.updateMany({
@@ -232,6 +240,9 @@ export async function applyStatusToClaim(
       if (!out.retry) break;
     }
     if (!notice) return 'NONE';
+    if (notice.action === 'REVERSE' && notice.countsForTier && notice.userId && hooks.recalcTier) {
+      await hooks.recalcTier(notice.userId).catch((e: unknown) => logger.warn(`recalcTier sau đảo điểm lỗi user=${notice.userId}: ${e instanceof Error ? e.message : e}`));
+    }
     if ((notice.action === 'VOID' || notice.action === 'REVERSE') && notice.dedupeKey) {
       await notifySafe(notifier, notice.userId, 'EXTERNAL_POINTS_VOIDED', { code: notice.code, detail: notice.detail ?? '' }, notice.dedupeKey);
     }
