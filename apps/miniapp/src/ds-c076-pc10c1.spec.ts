@@ -24,6 +24,8 @@ const FILES = [
   'src/pages/refill.tsx',
   'src/pages/ai-advisor.tsx',
   'src/pages/academy.tsx',
+  'src/components/ui/timeline.tsx',
+  'src/components/waste-point-picker.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
