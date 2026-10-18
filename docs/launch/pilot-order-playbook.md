@@ -68,7 +68,7 @@ Chọn một sản phẩm Tubu giao (không phải hàng đối tác) thoả đ�
 
 - [ ] giá rẻ nhất trong danh mục đang bán (đơn dưới 200.000đ còn cộng phí giao 19.000đ theo `shipping.flat_fee_below_threshold`)
 - [ ] có đúng một biến thể, không phải combo, không đang Flash Sale, không áp mã giảm giá tự động
-- [ ] tồn kho Tubu từ 10 trở lên (cần khoảng 8 đơn vị cho T1 đến T12, và thêm số đơn vị của T13 ở bước 7.4: 99.000đ chia giá, làm tròn lên; lúc đó các đơn huỷ đã trả lại tồn)
+- [ ] tồn kho Tubu đủ cho cả hai mức, lấy mức lớn hơn: từ 10 trở lên (khoảng 8 đơn vị cho T1 đến T12 cùng lúc), và từ 2 + (99.000đ chia giá, làm tròn lên) trở lên (lúc làm 7.4, T2 và T3 giao thật đã lấy 2 đơn vị, các đơn huỷ đã trả lại tồn, và đơn T13 cần số đơn vị để giỏ đạt 99.000đ)
 - [ ] có khai báo cân nặng (Gomdon tính theo gram, thiếu thì lấy 500 g)
 
 Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
@@ -671,7 +671,7 @@ Quy tắc: đơn của gian hàng đối tác TỰ GIAO không bao giờ lên Pa
 
 ## Phần 7. Đổi rác lấy quà (chạy nội bộ)
 
-Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đưa rác tới Tubu; Điểm Xanh chỉ được cộng khi kho hoặc điểm nhận đếm thực nhận và xác nhận. Dữ liệu nằm ở các bảng `waste_points`, `waste_requests`, `waste_events`. Các số mặc định là đề xuất cho giai đoạn thử. Đường Thu kèm đơn chỉ thử sau khi xong các mục ở [recycle-rewards-launch-checklist.md](recycle-rewards-launch-checklist.md) mục 4. Chạy nội bộ: chỉ Tubu staff, build chưa mở cho khách thật (checklist mục 5). Cần "Bật chương trình với khách" (`waste.enabled`) đang bật và kho HCMC đã đăng ký (checklist mục 2): bật như ở bước 3.1; riêng "Cách Thu kèm đơn" chỉ bật khi thử 7.3.
+Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đưa rác tới Tubu; Điểm Xanh chỉ được cộng khi kho hoặc điểm nhận đếm thực nhận và xác nhận. Dữ liệu nằm ở các bảng `waste_points`, `waste_requests`, `waste_events`. Các số mặc định là đề xuất cho giai đoạn thử. Đường Thu kèm đơn chỉ thử theo thứ tự ở [recycle-rewards-launch-checklist.md](recycle-rewards-launch-checklist.md) mục 4 (bật để thử trên bản chưa mở cho khách, tắt lại nếu Gomdon chưa trả lời bằng văn bản) và chỉ để bật lâu dài khi đủ các dòng còn lại của mục 4. Chạy nội bộ: chỉ Tubu staff, build chưa mở cho khách thật (checklist mục 5). Cần "Bật chương trình với khách" (`waste.enabled`) đang bật và kho HCMC đã đăng ký (checklist mục 2): bật như ở bước 3.1; riêng "Cách Thu kèm đơn" chỉ bật để chạy T3 ở 3.1 và 3.2 (T3 chính là nguồn của 7.3).
 
 ### 7.1 Mang tới kho (xác nhận tại quầy)
 
@@ -696,7 +696,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 ### 7.3 Thu kèm đơn (theo checklist mục 4)
 
-- **Làm**: theo Phần 3, bước 3.1 và 3.2 (cần `waste.enabled` và `waste.lane_pickup_enabled` cùng bật; các cờ này là cờ toàn cục, nên chỉ bật để thử trên bản chưa mở cho khách thật, và tắt lại nếu Gomdon chưa trả lời bằng văn bản). Khi kho nhận kiện thu kèm, đếm và xác nhận.
+- **Làm**: bước này là chính đơn T3 và yêu cầu Thu kèm đơn của nó (làm theo Phần 3, bước 3.1 và 3.2 từ ngày 1; không tạo thêm đơn hay yêu cầu mới; cần `waste.enabled` và `waste.lane_pickup_enabled` cùng bật; các cờ này là cờ toàn cục, nên chỉ bật để thử trên bản chưa mở cho khách thật, và tắt lại nếu Gomdon chưa trả lời bằng văn bản). Khi kho nhận kiện thu kèm, đếm và xác nhận.
 - **Đúng là**: ghi chú vận đơn là `Thu kèm rác TR-…: Thùng carton cũ: 10 thùng`; điểm chỉ được cộng khi kho đếm.
 - **Hoàn tác**: huỷ đơn mua trước khi bưu tá lấy hàng (bước 3.5); yêu cầu thu kèm tự đóng theo đơn. Yêu cầu đã gắn đơn thì khách không huỷ riêng được.
 
@@ -706,10 +706,10 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 - **Ai**: Người thử. **Ở đâu**: Mini App, Quà (`/rewards`), Quà của tôi (`/rewards/mine`).
 - **Trước khi làm**: kiểm số Điểm Xanh của Người thử (bảng B.5, Mini App, Điểm Xanh). Điểm chỉ có sau khi kho đếm và xác nhận: 7.1 cộng 3.000 ngay trong ngày; 7.2 cộng 20.000 khi kiện về tới kho (vài ngày sau); 7.3 cộng thêm 10.000 khi kiện thu kèm về kho. Voucher rẻ nhất trong danh mục gieo sẵn là "Miễn phí vận chuyển", giá 20.000 điểm: đủ sau khi kho đã đếm 7.1 và 7.2 (23.000 điểm), nên làm 7.4 sau khi kiện của 7.2 đã về kho; chưa đủ điểm thì để 7.4 sang lúc đó, đừng bỏ qua. Quà TREE có giá `game.tree_points_price` (mặc định 50.000 điểm, sửa ở Quản trị, Cấu hình; ở Quản trị, Khách hàng, Đổi rác, Quà chỉ xem được), nên tối đa 33.000 điểm của 7.1 đến 7.3 chưa đủ: chỉ đổi TREE khi số dư đủ giá, nếu không thì ghi "không thử TREE: thiếu điểm" ở bảng kết quả. Giá của các quà khác do admin đặt ở Quản trị, Khách hàng, Đổi rác, Quà: xem lại trước khi làm.
-- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Voucher "Miễn phí vận chuyển" chỉ dùng cho giỏ từ 99.000đ (giỏ dưới mức đó bị từ chối), còn đơn từ 200.000đ vốn đã miễn phí giao: tăng số lượng SP-MIN cho đơn này để giỏ nằm từ 99.000đ đến dưới 200.000đ thì mới thấy mã có tác dụng. Ghi mã đơn vào dòng T13 của B.7 và để đơn tới trạng thái cuối (Đã giao hoặc Đã huỷ). Đổi quà TREE: cây được trồng trong Vườn Xanh.
-- **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần; quà TREE xuất hiện ở Vườn Xanh.
+- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Voucher "Miễn phí vận chuyển" chỉ dùng cho giỏ từ 99.000đ (giỏ dưới mức đó bị từ chối), còn đơn từ 200.000đ vốn đã miễn phí giao: tăng số lượng SP-MIN cho đơn này để giỏ nằm từ 99.000đ đến dưới 200.000đ thì mới thấy mã có tác dụng. Ghi mã đơn vào dòng T13 của B.7. Khi T13 còn mở, thử dùng lại đúng mã voucher đó ở màn thanh toán của một giỏ khác từ 99.000đ (không cần đặt đơn): phải bị từ chối với câu "Bạn đã dùng hết lượt cho mã này." Sau đó mới đưa T13 tới trạng thái cuối (Đã giao hoặc Đã huỷ). Đổi quà TREE: cây được trồng trong Vườn Xanh.
+- **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần (kiểm khi T13 còn mở); quà TREE xuất hiện ở Vườn Xanh.
 - **Bằng chứng**: Phụ lục P7 (`points_transactions` của người thử: dòng điểm trừ cho từng quà).
-- **Hoàn tác**: không hoàn tác được voucher và quà TREE: voucher thành coupon ngay, quà TREE đi qua Vườn Xanh, nên không bao giờ ở trạng thái chờ nhận. Điểm đã trừ là chi phí thử, ghi vào cột "Sau" của bảng B.5. Muốn thử huỷ có hoàn điểm thì đổi thêm một quà loại "Gói hạt giống" hoặc "Quà tặng" (hiện ở trạng thái "Chờ nhận"), rồi huỷ ở Quản trị, Khách hàng, Đổi rác, Quà với `refundPoints` (checklist mục 7).
+- **Hoàn tác**: không hoàn tác được voucher và quà TREE: voucher thành coupon ngay, quà TREE đi qua Vườn Xanh, nên không bao giờ ở trạng thái chờ nhận. Điểm đã trừ là chi phí thử, ghi vào cột "Sau" của bảng B.5. Huỷ T13 thì hệ thống trả lượt dùng, mã quay lại tài khoản Người thử và dùng lại được: tắt mã đó ở Quản trị, Khuyến mãi, Voucher, nút "Tắt mã". Muốn thử huỷ có hoàn điểm thì đổi thêm một quà loại "Gói hạt giống" hoặc "Quà tặng" (hiện ở trạng thái "Chờ nhận"), rồi huỷ ở Quản trị, Khách hàng, Đổi rác, Quà với `refundPoints` (checklist mục 7).
 
 `[ ] Đạt  [ ] Không đạt`
 
@@ -860,8 +860,9 @@ Không bỏ sót: để lại cấu hình thử là rủi ro thật.
 - [ ] Gian hàng đối tác thử: tạm nghỉ hoặc huỷ xuất bản nếu không phải đối tác thật.
 - [ ] Đánh giá thử: giữ hoặc ẩn ở Quản trị, Đánh giá.
 - [ ] Mã đơn thử đã ghi đủ ở B.7 để loại khỏi báo cáo doanh số/chuyển đổi (hệ thống không có cờ "đơn thử").
+- [ ] Nếu T13 đã huỷ: mã voucher "Miễn phí vận chuyển" của Người thử đã tắt (Quản trị, Khuyến mãi, Voucher, nút "Tắt mã"), vì huỷ đơn trả lại lượt dùng của mã.
 - [ ] Người thử không còn bị khoá Đổi rác (bước 7.5 đã khoá): Quản trị, Khách hàng, Người dùng, mở khách, mục "Đổi rác" hiện nút "Khoá đổi rác" và không hiện "Mở khoá đổi rác".
-- [ ] Số dư Ví Tubu, Điểm Xanh, ngân hàng đối chiếu với bảng B.5 (cột "Sau"). Chênh lệch phải giải thích được bằng chính các đơn thử và các quà đã đổi ở 7.4 (voucher và quà TREE không hoàn lại điểm).
+- [ ] Số dư Ví Tubu, Điểm Xanh, ngân hàng đối chiếu với bảng B.5 (cột "Sau"). Chênh lệch phải giải thích được bằng chính các đơn thử, điểm Đổi rác đã cộng ở 7.1 đến 7.3 và đã thu hồi ở 7.5, điểm thưởng đánh giá ở 8.2, và các quà đã đổi ở 7.4 (voucher và quà TREE không hoàn lại điểm).
 
 ## 11. Bảng kết quả (chủ shop điền)
 
