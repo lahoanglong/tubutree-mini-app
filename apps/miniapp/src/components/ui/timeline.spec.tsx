@@ -46,4 +46,11 @@ describe('Timeline (§16.1)', () => {
     const { container } = render(<Timeline steps={STEPS} current={1} />);
     expect(container.querySelector('div[aria-hidden]')).toBeNull();
   });
+  it('hints: dòng phụ dưới đúng bước ở bản đầy đủ, không hiện ở compact', () => {
+    const { rerender } = render(<Timeline steps={STEPS} current={1} hints={{ 1: <span>Ghi chú bước 2</span> }} />);
+    expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Ghi chú bước 2');
+    expect(screen.getAllByRole('listitem')[0]).not.toHaveTextContent('Ghi chú');
+    rerender(<Timeline steps={STEPS} current={1} compact hints={{ 1: <span>Ghi chú bước 2</span> }} />);
+    expect(screen.queryByText('Ghi chú bước 2')).toBeNull();
+  });
 });

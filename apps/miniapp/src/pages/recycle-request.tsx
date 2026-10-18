@@ -19,6 +19,7 @@ import { QrCode } from '../components/qr-code';
 import { SupportContact } from '../components/support-contact';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
@@ -27,8 +28,9 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { Timeline } from '../components/ui/timeline';
 import { copyText } from '../utils/clipboard';
-import { formatDate, formatNumber } from '../utils/format';
-import { METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, timelineFor } from '../utils/waste-labels';
+import { formatDate, formatNumber, formatPoints } from '../utils/format';
+import { formatPhoneDisplay } from '../utils/phone';
+import { METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, requestStatusText, timelineFor } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const BLOCK: CSSProperties = {
@@ -231,7 +233,7 @@ export default function RecycleRequestPage() {
         {recipient && (
           <div data-recipient style={{ ...COLUMN, gap: 2 }}>
             <Text variant="body-md" style={{ fontWeight: 600 }}>{recipient.name}</Text>
-            {recipient.phone && <Text variant="body-sm">{recipient.phone}</Text>}
+            {recipient.phone && <Text variant="body-sm">{formatPhoneDisplay(recipient.phone)}</Text>}
             <Text variant="body-sm">{pointAddress(recipient)}</Text>
             <div style={{ marginTop: 8 }}>
               <Button
@@ -285,13 +287,31 @@ export default function RecycleRequestPage() {
       </section>
     ) : null;
 
+  const stepHints =
+    r.method === 'DROP_OFF' && open && r.point
+      ? {
+          1: (
+            <>
+              <Text variant="caption" tone="secondary" as="span">{`Mang tới ${r.point.name} trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
+              <Text variant="caption" tone="secondary" as="span">{pointAddress(r.point)}</Text>
+            </>
+          ),
+        }
+      : undefined;
+  const codeBlockShown = mailBlock !== null || pickupBlock !== null;
+
   return shell(
     <>
+      {t && (
+        <div>
+          <Badge tone="brand">{requestStatusText(r, { blocked: !!me?.blocked })}</Badge>
+        </div>
+      )}
       {mailBlock}
       {pickupBlock}
       {pointNotice}
       {t ? (
-        <Timeline steps={TIMELINE_STEPS[r.method]} current={t.current} />
+        <Timeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={stepHints} />
       ) : (
         closed && (
           <section style={{ ...COLUMN, gap: 4 }}>
@@ -336,6 +356,9 @@ export default function RecycleRequestPage() {
         </section>
       )}
       <DeclaredCountedTable lines={r.lines} />
+      {r.estimatedPoints > 0 && (
+        <Text variant="body-md" as="div" style={{ fontWeight: 600, textAlign: 'right' }}>{`Ước tính ${formatPoints(r.estimatedPoints)}`}</Text>
+      )}
       {r.status === 'COMPLETED' && (
         <Button fullWidth onPress={() => navigate(`/recycle/done/${id}`)}>Xem kết quả cộng điểm</Button>
       )}
@@ -392,7 +415,7 @@ export default function RecycleRequestPage() {
         {null}
       </BottomSheet>
     </>,
-    r.code,
+    codeBlockShown ? 'Yêu cầu đổi rác' : r.code,
     METHOD_LABELS[r.method],
   );
 }

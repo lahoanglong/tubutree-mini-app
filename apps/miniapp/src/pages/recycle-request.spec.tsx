@@ -330,3 +330,36 @@ describe('/recycle/r/:id — trạng thái đóng và kết quả (§4.6)', () =
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
   });
 });
+
+describe('/recycle/r/:id — trạng thái, ước tính, tiêu đề (F2, F10)', () => {
+  it('Mang tới + OPEN: nhãn trạng thái, bước 2 ghi điểm nhận, địa chỉ và hạn; dòng "Ước tính"', async () => {
+    renderPage();
+    const tl = await screen.findByRole('list', { name: 'Tiến độ yêu cầu' });
+    const step = within(tl).getByText('Mang tới điểm').closest('li') as HTMLElement;
+    expect(step).toHaveTextContent('Mang tới Đại lý Cô Ba trước 25/10');
+    expect(step).toHaveTextContent('12 Lê Lợi');
+    expect(screen.getByText('Chờ bạn mang tới')).toBeInTheDocument();
+    expect(screen.getByText('Ước tính 5.000 điểm')).toBeInTheDocument();
+  });
+  it('Gửi về kho + OPEN: có dòng "Ước tính", số điện thoại người nhận nhóm 4-3-3, tiêu đề trang không lặp mã', async () => {
+    mocks.getWasteRequest.mockResolvedValue(MAIL({ point: makeWarehouseContact({ phone: '0984606774' }) }));
+    renderPage();
+    await screen.findByText('Ghi mã này lên kiện, mỗi kiện một yêu cầu');
+    expect(screen.getByText('Ước tính 5.000 điểm')).toBeInTheDocument();
+    expect(screen.getByText('0984 606 774')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Yêu cầu đổi rác');
+    expect(screen.getAllByText('TR-8K2M9')).toHaveLength(1);
+  });
+  it('Thu kèm đơn + OPEN: tiêu đề trang không lặp mã; Mang tới giữ mã ở tiêu đề', async () => {
+    mocks.getWasteRequest.mockResolvedValue(PICKUP());
+    const first = renderPage();
+    await screen.findByText('Ghi mã này lên túi');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Yêu cầu đổi rác');
+    first.unmount();
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail());
+    renderPage();
+    await screen.findByRole('list', { name: 'Tiến độ yêu cầu' });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('TR-8K2M9');
+  });
+});
+
