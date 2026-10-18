@@ -33,11 +33,13 @@ describe('loyalty.tsx — thẻ thành viên', () => {
 });
 
 describe('loyalty.tsx — trạng thái tải/lỗi', () => {
-  it('danh mục đổi quà và điểm danh có nhánh isError + nút thử lại', () => {
-    expect(src).toMatch(/rewardsQ\.isError/);
+  it('điểm danh có nhánh isError + nút thử lại', () => {
     expect(src).toMatch(/checkInQ\.isError/);
-    expect(src).toMatch(/rewardsQ\.refetch\(\)/);
     expect(src).toMatch(/checkInQ\.refetch\(\)/);
+  });
+
+  it('không còn gọi danh mục quà', () => {
+    expect(src).not.toMatch(/getLoyaltyRewards|redeemLoyaltyReward|rewardsQ/);
   });
 
   it('lịch sử điểm dùng pointsReasonLabel (không hiện mã thô DAILY_CHECKIN:DAY_n)', () => {

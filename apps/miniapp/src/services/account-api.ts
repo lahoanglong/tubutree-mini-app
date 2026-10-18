@@ -1,3 +1,4 @@
+import type { GiftRedemptionDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
@@ -159,35 +160,10 @@ export const requestAccountDeletion = (reason?: string) =>
   api.post<AccountDeletionRequestResult>('/me/deletion-request', { reason }).then((r) => r.data);
 
 // Loyalty
-export interface RewardItem {
-  id: string;
-  title: string;
-  description: string;
-  pointsCost: number;
-  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
-  value: number;
-  minOrder?: number | null;
-  maxDiscount?: number | null;
-  badge?: string;
-  canRedeem: boolean;
-}
-
-export interface RewardCatalogResponse {
-  pointsBalance: number;
-  /** Xem LoyaltyOverview.lockedPoints. Optional: API cũ chưa trả. */
-  lockedPoints?: number;
-  /** Điểm dùng được để đổi quà (canRedeem của từng quà tính theo số này). */
-  redeemablePoints?: number;
-  rewards: RewardItem[];
-}
-
-export interface RedeemRewardResult {
-  success: boolean;
-  message: string;
-  pointsSpent: number;
-  remainingPoints: number;
-  coupon: CouponDTO;
-}
+export type RewardItem = RewardItemDTO;
+export type RewardCatalogResponse = RewardCatalogDTO;
+export type RedeemRewardResult = RedeemRewardResultDTO;
+export type GiftRedemption = GiftRedemptionDTO;
 
 export interface CheckInReward {
   day: number;
@@ -239,11 +215,14 @@ export const getPointsTransactions = () =>
 export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => r.data);
 export const getNewCustomerOffer = async () =>
   (await takeMeBlock('newCustomerOffer')) ?? api.get<NewCustomerOffer>('/me/new-customer-offer').then((r) => r.data);
-export const getLoyaltyRewards = () => api.get<RewardCatalogResponse>('/me/loyalty/rewards').then((r) => r.data);
-export const redeemLoyaltyReward = (rewardId: string) =>
+export const getLoyaltyRewards = () => api.get<RewardCatalogDTO>('/me/loyalty/rewards').then((r) => r.data);
+export const redeemLoyaltyReward = (rewardId: string, idempotencyKey: string) =>
   api
-    .post<RedeemRewardResult>(`/me/loyalty/rewards/${encodeURIComponent(rewardId)}/redeem`)
+    .post<RedeemRewardResultDTO>(`/me/loyalty/rewards/${encodeURIComponent(rewardId)}/redeem`, undefined, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
     .then((r) => r.data);
+export const getMyRedemptions = () => api.get<GiftRedemptionDTO[]>('/me/loyalty/rewards/mine').then((r) => r.data);
 export const getDailyCheckInStatus = () => api.get<CheckInStatusResponse>('/me/loyalty/check-in').then((r) => r.data);
 export const postDailyCheckIn = () => api.post<CheckInResult>('/me/loyalty/check-in').then((r) => r.data);
 export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/member-card').then((r) => r.data);
@@ -260,6 +239,11 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('DAILY_CHECKIN')) return 'Điểm danh hằng ngày';
   if (reason.startsWith('POS_OFFLINE_ORDER')) return 'Tích điểm mua tại cửa hàng';
   if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy mã giảm giá';
+  // RECYCLE_REVERSED phải đứng trước RECYCLE vì cùng khớp startsWith.
+  if (reason.startsWith('RECYCLE_REVERSED:')) return 'Thu hồi điểm đổi rác';
+  if (reason.startsWith('RECYCLE:')) return 'Đổi rác lấy quà';
+  if (reason.startsWith('GIFT_REDEEM:')) return 'Đổi điểm lấy quà';
+  if (reason.startsWith('GIFT_REFUND:')) return 'Hoàn điểm quà';
   if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
   if (reason.startsWith('ORDER_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
@@ -313,14 +297,25 @@ export function lockedPointsNote(
   return `Đổi quà dùng được ${formatNumber(usable)} điểm: ${parts.join('; ')}.`;
 }
 
-/** Nhãn nút đổi quà — không nói "Cần X điểm" khi số dư đủ mà chỉ đang chờ mở khoá điểm. */
-export function rewardButtonLabel(
-  r: Pick<RewardItem, 'pointsCost' | 'canRedeem'>,
-  catalog: Pick<RewardCatalogResponse, 'pointsBalance' | 'redeemablePoints'>,
-): string {
-  if (r.canRedeem) return 'Đổi ngay';
-  if (catalog.redeemablePoints !== undefined && catalog.pointsBalance >= r.pointsCost) return 'Chờ mở khoá điểm';
-  return `Cần ${formatNumber(r.pointsCost)} điểm`;
+export type RewardCardState =
+  | { kind: 'redeem' }
+  | { kind: 'soldOut' }
+  | { kind: 'locked' }
+  | { kind: 'need'; missing: number };
+
+/**
+ * Trạng thái thẻ quà theo số máy chủ trả. Quà TREE đi qua `buyTree` nên tiêu cả hai lô; "Cần thêm" của nó phải tính
+ * cùng tổng với `canRedeem`. Hết hàng đứng trước nên thẻ hết không bao giờ hiện "Cần thêm".
+ */
+export function rewardCardState(
+  r: Pick<RewardItemDTO, 'kind' | 'pointsCost' | 'canRedeem' | 'soldOut'>,
+  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'>,
+): RewardCardState {
+  if (r.soldOut) return { kind: 'soldOut' };
+  if (r.canRedeem) return { kind: 'redeem' };
+  const spendable = r.kind === 'TREE' ? c.redeemablePoints + c.pointsConvertedBalance : c.redeemablePoints;
+  const missing = r.pointsCost - spendable;
+  return missing > 0 ? { kind: 'need', missing } : { kind: 'locked' };
 }
 
 /** Nút điểm danh: ghi đúng số điểm của ô hôm nay (ô backend sẽ trả khi bấm). */
