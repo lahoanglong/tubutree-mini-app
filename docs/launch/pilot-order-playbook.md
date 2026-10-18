@@ -369,7 +369,7 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 ### 3.2 Tạo vận đơn: đặt T3
 
 - **Ai**: Người thử. **Ở đâu**: Mini App.
-- **Làm**: tạo một yêu cầu Đổi rác cách Thu kèm đơn (Mini App, Đổi rác, Đổi rác ngay, chọn 3 thùng carton, cách giao Thu kèm đơn), thêm SP-MIN vào giỏ, vào thanh toán, bật công tắc "Thu kèm rác" (thẻ tóm tắt hiện mã TR-), chọn COD, đặt hàng. Ghi mã đơn và mã TR-.
+- **Làm**: tạo một yêu cầu Đổi rác cách Thu kèm đơn (Mini App, Đổi rác, Đổi rác ngay, chọn 3 thùng carton, cách giao "Thu kèm đơn mua"), thêm SP-MIN vào giỏ, vào thanh toán, bật công tắc "Thu kèm rác" (thẻ tóm tắt hiện mã TR-), chọn COD, đặt hàng. Ghi mã đơn và mã TR-.
 - **Đúng là**: trong khoảng 1 phút, Quản trị, mở đơn: khối "Thu gom vật liệu tái chế (Gomdon)" ghi trạng thái "Tạo đơn thành công" (mã 1) và có dòng "Mã vận đơn BestExpress:" kèm mã. Pancake POS: đơn có tag `RECYCLING` và `GOMDON`; kho KHÔNG đặt thêm hãng khác. Ghi chú vận đơn do máy chủ dựng: mã TR- và "3 thùng Thùng carton cũ", không có chữ khách gõ.
 - **Bằng chứng**: Phụ lục P1: `gomdonStatus = 1`, `gomdonOrderId` và `gomdonPartnerCode` có giá trị, `shippingPartner = BestExpress`.
 - **Hoàn tác**: bước 3.4 và 3.5 (T3 thì để giao thật, T4 dùng để thử huỷ).
@@ -653,8 +653,8 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 ### 7.1 Mang tới kho (xác nhận tại quầy)
 
 - **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác; Quản trị, Đổi rác.
-- **Làm**: Người thử tạo yêu cầu "Mang tới điểm" cho kho HCMC với 3 thùng carton. Nhân viên kho mở yêu cầu theo mã, đếm thực nhận và xác nhận tại quầy.
-- **Đúng là**: yêu cầu chuyển sang đã nhận; Điểm Xanh được cộng đúng theo số thực nhận (không theo số khai); khách thấy số điểm trong lịch sử.
+- **Làm**: Người thử tạo yêu cầu "Mang tới điểm nhận" cho kho HCMC với 3 thùng carton. Nhân viên kho mở yêu cầu theo mã, đếm thực nhận và xác nhận tại quầy.
+- **Đúng là**: yêu cầu chuyển sang hoàn tất (COMPLETED) ngay sau khi nhân viên xác nhận; Điểm Xanh được cộng đúng theo số thực nhận (không theo số khai); khách thấy số điểm trong lịch sử.
 - **Bằng chứng**: Phụ lục P12 (`status`, `pointsAwarded`, sự kiện trong `waste_events`).
 - **Hoàn tác**: thu hồi điểm (7.5).
 
@@ -662,8 +662,8 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 ### 7.2 Gửi về kho (mã TR- và vận đơn)
 
-- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác, cách "Gửi về kho".
-- **Làm**: tạo yêu cầu Gửi về kho, ghi mã TR- hiện trên màn, dán mã đó lên kiện, gửi bằng hãng thường, nhập mã vận đơn vào yêu cầu. Kho nhận kiện theo mã TR- (không theo mã vận đơn của hãng), đếm và xác nhận.
+- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác, cách "Gửi về kho Tubu HCM".
+- **Làm**: tạo yêu cầu "Gửi về kho Tubu HCM", ghi mã TR- hiện trên màn, dán mã đó lên kiện, gửi bằng hãng thường, nhập mã vận đơn vào yêu cầu. Kho nhận kiện theo mã TR- (không theo mã vận đơn của hãng), đếm và xác nhận.
 - **Đúng là**: yêu cầu có mã TR- và mã vận đơn; sau khi kho xác nhận, Điểm Xanh được cộng theo số thực nhận.
 - **Bằng chứng**: Phụ lục P12.
 - **Hoàn tác**: kho từ chối kèm lý do (khách thấy lý do, không cộng điểm).
@@ -692,7 +692,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 - **Ai**: Quản trị. **Ở đâu**: Quản trị, Đổi rác, Yêu cầu.
 - **Làm**: mở yêu cầu đã cộng điểm ở 7.1, bấm thu hồi và nhập lý do. Làm đúng thứ tự xử lý gian lận ở checklist mục 7.
-- **Đúng là**: yêu cầu đóng với lý do thu hồi; số điểm đã cộng bị trừ lại (phần không đủ số dư được ghi nhận, không âm quá mức cho phép).
+- **Đúng là**: yêu cầu đóng với lý do thu hồi; số điểm đã cộng bị trừ lại (chỉ thu tối đa số Điểm Xanh thường khách còn; phần không thu được ghi ở reversalShortfallPoints; số dư không bao giờ âm).
 - **Hoàn tác**: không.
 
 `[ ] Đạt  [ ] Không đạt`
