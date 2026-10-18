@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ShoppingBag } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { CheckCircle2, Recycle, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
+import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { AddressForm } from '@/components/address-form';
@@ -16,6 +18,7 @@ import {
   checkoutQuote,
   placeOrder,
   getMe,
+  getPublicConfig,
   formatVnd,
   type AddressDTO,
   type OrderDTO,
@@ -47,15 +50,26 @@ import { InvoiceSection } from './invoice-section';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
+import { createOrderKeyRing } from '@/lib/order-key-ring';
+import { isWebRouteReady } from '@/lib/route-map';
+import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
+import { coreHttp } from '@/lib/core-http';
+
+// Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
+const PRICE_CHANGED = 'PRICE_CHANGED';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
 
+type PlaceBody = Parameters<typeof placeOrder>[0];
+const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
+
 export default function CheckoutPage() {
   const phase = useAuthPhase();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const router = useRouter();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [note, setNote] = useState('');
@@ -63,8 +77,24 @@ export default function CheckoutPage() {
   const [invoice, setInvoice] = useState(EMPTY_INVOICE);
   // Mã giới thiệu khách tự nhập ở đây (đã được server xác nhận) khác mã đến từ link gian hàng (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
+  const [attachWaste, setAttachWaste] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
-  const [idemKey] = useState(() => (typeof crypto !== 'undefined' ? crypto.randomUUID() : String(Math.random())));
+  // Mã đơn chuyển khoản đã đặt xong, đang chờ router.replace hoàn tất: trang khoá lại, nếu không giỏ nạp lại còn dòng khác thì nút Đặt hàng bật lại và bấm thêm sẽ tạo đơn thứ hai với key mới.
+  const [redirectingCode, setRedirectingCode] = useState<string | null>(null);
+  // Một key cho một nội dung đơn trong phiên thanh toán: bấm lại sau lỗi mạng gửi lại cùng đơn; đổi nội dung thì key mới.
+  const orderKeys = useRef(createOrderKeyRing());
+  // Lần đặt trước chưa rõ kết quả (mạng rớt/5xx): máy chủ có thể đã tạo đơn, mà giỏ/báo giá nạp lại (header cũng quan sát giỏ)
+  // sẽ làm body đổi và sinh key mới, tạo đơn thứ hai. Đóng băng chính yêu cầu: bấm lại gửi nguyên body và key đó cho tới khi có kết quả rõ.
+  const unknownAttempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
+  // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, yêu cầu thu rác, điểm dùng
+  // được tính lại từ dữ liệu máy chủ (ví tụt, yêu cầu rác gắn mã đơn) ngay khi nạp lại sau đơn đã tạo, không phải khách đổi ý.
+  const choiceRev = useRef(0);
+  // Bản sao của cờ đóng băng trong state: giỏ nguyên vẹn nạp lại thành rỗng thì form (và nút Đặt hàng) biến mất, màn giỏ trống phải còn lối gửi lại.
+  const [maybePlaced, setMaybePlaced] = useState(false);
+  const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
+    choiceRev.current += 1;
+    fn(...args);
+  };
 
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
@@ -72,6 +102,17 @@ export default function CheckoutPage() {
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
   const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
+  // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ máy chủ; chưa tải xong thì ẩn, không hứa dịch vụ chưa chắc có.
+  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+  const pickupFlag = configQ.data?.waste?.pickup === true;
+  const wasteMeQ = useQuery({
+    queryKey: WASTE_QUERY_KEYS.me,
+    queryFn: () => getWasteMe(coreHttp),
+    enabled: phase === 'authenticated' && pickupFlag,
+  });
+  const attachable = attachablePickup(wasteMeQ.data, pickupFlag);
+  // Chưa có yêu cầu thu kèm thì dòng dẫn sang màn tạo yêu cầu; màn đó chưa có trên web thì ẩn dòng, không dẫn khách tới 404.
+  const pickupReq = attachable === null && !isWebRouteReady('/doi-rac/tao') ? undefined : attachable;
 
   // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
   // chuyển sang tính tiền cả giỏ). Chỉ đối chiếu với giỏ thật khi đã tải xong để không xoá nhầm lựa chọn.
@@ -144,6 +185,7 @@ export default function CheckoutPage() {
   }, [partnerPoints.disabled, usePoints]);
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền) nên ẩn lựa chọn phương thức và gửi COD cho khớp.
   const zeroNote = quote ? zeroTotalNote(quote) : null;
+  const paymentToSend = zeroNote ? 'COD' : payment;
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
   const splitNote = shipmentsNote(shipments);
@@ -159,46 +201,84 @@ export default function CheckoutPage() {
   // chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
   const overStock = outOfStockLine(checkoutItems);
 
+  const attempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
   const place = useMutation({
-    mutationFn: () =>
-      placeOrder(
-        {
-          addressId: addressId!,
-          paymentMethod: zeroNote ? 'COD' : payment,
-          ...(note.trim() ? { note: note.trim() } : {}),
-          ...(itemIds ? { itemIds } : {}),
-          ...(wantInvoice
-            ? {
-                invoiceRequest: {
-                  taxCode: invoice.taxCode.trim(),
-                  companyName: invoice.companyName.trim(),
-                  address: invoice.address.trim(),
-                  email: invoice.email.trim(),
-                },
-              }
-            : {}),
-          // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
-          // tạo đơn COD có tiền phải trả mà khách không chọn.
-          ...(zeroNote ? { quotedZeroTotal: true } : {}),
-          // Giá/phí đổi giữa lúc báo giá và lúc bấm đặt → BE trả TOTAL_CHANGED thay vì thu số khách chưa thấy.
-          ...(quote ? { expectedTotal: quote.total } : {}),
-          pointsToUse: usePoints ? usablePoints : 0,
-          storefrontSlug: ctvSlug,
-          referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
-        },
-        idemKey,
-      ),
+    mutationFn: () => {
+      const body: PlaceBody = {
+        addressId: addressId!,
+        paymentMethod: paymentToSend,
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(itemIds ? { itemIds } : {}),
+        ...(attachWaste && pickupReq ? { wasteRequestId: pickupReq.id } : {}),
+        ...(wantInvoice
+          ? {
+              invoiceRequest: {
+                taxCode: invoice.taxCode.trim(),
+                companyName: invoice.companyName.trim(),
+                address: invoice.address.trim(),
+                email: invoice.email.trim(),
+              },
+            }
+          : {}),
+        // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
+        // tạo đơn COD có tiền phải trả mà khách không chọn.
+        ...(zeroNote ? { quotedZeroTotal: true } : {}),
+        // Giá/phí đổi giữa lúc báo giá và lúc bấm đặt → BE trả TOTAL_CHANGED thay vì thu số khách chưa thấy.
+        ...(quote ? { expectedTotal: quote.total } : {}),
+        pointsToUse: usePoints ? usablePoints : 0,
+        storefrontSlug: ctvSlug,
+        referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
+      };
+      const frozen = unknownAttempt.current;
+      if (frozen) {
+        // Dữ liệu suy ra từ giỏ/báo giá (dòng đã chọn, tổng) có thể đã đổi vì đơn trước đã tạo: gửi lại nguyên yêu cầu cũ để máy chủ trả đơn cũ.
+        // Lựa chọn của chính khách đổi thì đây là đơn khác: không gửi, mời kiểm tra Đơn hàng; lần bấm sau đặt đơn mới.
+        if (frozen.rev !== choiceRev.current) {
+          void qc.invalidateQueries({ queryKey: ['orders'] });
+          return Promise.reject(new Error(PREVIOUS_MAYBE_PLACED));
+        }
+        return placeOrder(frozen.body, frozen.key);
+      }
+      const key = orderKeys.current.keyFor(body);
+      attempt.current = { body, key, rev: choiceRev.current };
+      return placeOrder(body, key);
+    },
     onSuccess: (order) => {
-      setPlaced(order);
+      orderKeys.current.reset();
+      unknownAttempt.current = null;
+      setMaybePlaced(false);
+      // Theo đơn máy chủ đã tạo, không theo radio đang chọn lúc phản hồi về.
+      const isBank = order.paymentMethod === 'BANK_TRANSFER';
+      if (!isBank) setPlaced(order);
       if (wantInvoice) saveInvoice(userId, invoice);
       clearCheckoutSelection();
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
+      if (attachWaste && pickupReq) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);
+      // Chuyển khoản: sang trang VietQR để khách trả ngay (đối soát xong đơn tự xác nhận), như Mini App.
+      if (isBank) setRedirectingCode(order.code);
+      if (isBank) router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
     onError: (e) => {
-      if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
+      // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
+      const rejectedBeforeService = e instanceof ApiError && [401, 408, 429].includes(e.status);
+      if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
+      else if (!rejectedBeforeService) unknownAttempt.current = null;
+      setMaybePlaced(unknownAttempt.current !== null);
+      // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
+      // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
+      if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
+      if (e instanceof ApiError && e.code === 'CART_CHANGED') {
+        // Giỏ vừa đổi ở nơi khác (hoặc lần bấm trước đã đặt xong): dựng lại giỏ, báo giá và danh sách đơn.
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+        void qc.invalidateQueries({ queryKey: ['orders'] });
+        void qc.invalidateQueries({ queryKey: ['quote'] });
+      } else if (e instanceof Error && e.message === PRICE_CHANGED) {
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+        void qc.invalidateQueries({ queryKey: ['quote'] });
+      } else if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
         void qc.invalidateQueries({ queryKey: ['quote'] });
         void qc.invalidateQueries({ queryKey: ['cart'] });
       } else if (e instanceof ApiError && e.code === 'PAYMENT_METHOD_NOT_ALLOWED') {
@@ -237,6 +317,21 @@ export default function CheckoutPage() {
     );
   }
 
+  if (redirectingCode) {
+    return (
+      <Shell>
+        <div className="py-16 text-center">
+          <p role="status" className="text-stone-700">
+            Đang chuyển tới trang thanh toán…
+          </p>
+          <Link href={`/thanh-toan/chuyen-khoan/${encodeURIComponent(redirectingCode)}`} className={`mt-4 inline-block ${ui.btnPrimary}`}>
+            Mở trang thanh toán
+          </Link>
+        </div>
+      </Shell>
+    );
+  }
+
   if (placed) {
     return (
       <Shell>
@@ -271,7 +366,7 @@ export default function CheckoutPage() {
             <Link href={orderDetailHref(placed.code)} className={ui.btnPrimary}>
               Xem chi tiết đơn
             </Link>
-            <Link href="/tai-khoan" className={ui.btnSecondary}>
+            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
               Đơn của tôi
             </Link>
             <Link href="/" className={ui.btnSecondary}>
@@ -283,6 +378,27 @@ export default function CheckoutPage() {
             nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
         <div className="mx-auto max-w-md">
           <BankTransferPanel order={placed} />
+        </div>
+      </Shell>
+    );
+  }
+
+  if (cartEmpty && maybePlaced) {
+    return (
+      <Shell>
+        <div className="py-16 text-center">
+          <h2 className="font-display text-lg font-semibold text-stone-900">Đơn của bạn có thể đã được tạo</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Lần đặt trước chưa nhận được phản hồi và giỏ đã trống. Bấm Kiểm tra lại để hệ thống trả đúng đơn đó, không tạo thêm đơn.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <button type="button" onClick={() => place.mutate()} disabled={place.isPending} className={ui.btnPrimary}>
+              {place.isPending ? 'Đang kiểm tra…' : 'Kiểm tra lại'}
+            </button>
+            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
+              Đơn của tôi
+            </Link>
+          </div>
         </div>
       </Shell>
     );
@@ -301,7 +417,7 @@ export default function CheckoutPage() {
             <Link href="/" className={ui.btnPrimary}>
               Khám phá sản phẩm
             </Link>
-            <Link href="/tai-khoan" className={ui.btnSecondary}>
+            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
               Đơn của tôi
             </Link>
           </div>
@@ -311,7 +427,8 @@ export default function CheckoutPage() {
   }
 
   const cart = cartQ.data;
-  const placeErrorMessage = place.error instanceof Error ? place.error.message : null;
+  const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
+  const placeErrorMessage = place.error instanceof Error && !priceChanged ? place.error.message : null;
   const cartIssue = overStock
     ? overStockMessage(overStock.productName, overStock.stock)
     : placeErrorMessage && isCartFixableError(placeErrorMessage)
@@ -328,10 +445,25 @@ export default function CheckoutPage() {
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
   const totalText = quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
-  const barHint = cartIssue ?? (place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
+  const barHint = cartIssue ?? (priceChanged ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.' : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
 
   return (
     <Shell>
+      {priceChanged && (
+        <div
+          role="alert"
+          data-testid="checkout-price-changed"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Giá ưu đãi đã thay đổi</p>
+            <p className="mt-0.5">Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.</p>
+          </div>
+          <Link href="/gio-hang" className={ui.btnSecondary}>
+            Xem lại giỏ hàng
+          </Link>
+        </div>
+      )}
       {cartIssue && (
         <div
           role="alert"
@@ -359,12 +491,13 @@ export default function CheckoutPage() {
             <AddressPicker
               addresses={addrQ.data ?? []}
               selectedId={addressId}
-              onSelect={setAddressId}
+              onSelect={chosen(setAddressId)}
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
-                setAddressId(a.id);
+                chosen(setAddressId)(a.id);
               }}
               onUpdated={() => {
+                choiceRev.current += 1;
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
                 void qc.invalidateQueries({ queryKey: ['quote'] });
               }}
@@ -386,8 +519,8 @@ export default function CheckoutPage() {
                           type="radio"
                           name="pay"
                           checked={payment === p.k}
-                          onChange={() => setPayment(p.k)}
-                          disabled={!!reason}
+                          onChange={chosen(() => setPayment(p.k))}
+                          disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
                           className="h-6 w-6 shrink-0 accent-forest-600"
                         />
@@ -416,7 +549,7 @@ export default function CheckoutPage() {
               <span className="text-xs font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
               <textarea
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={chosen((e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value))}
                 maxLength={ORDER_NOTE_MAX}
                 rows={3}
                 placeholder="Ví dụ: giao giờ hành chính, gọi trước khi giao, gửi ở bảo vệ"
@@ -430,18 +563,66 @@ export default function CheckoutPage() {
             </p>
           </section>
 
+          {pickupReq !== undefined && (
+            <section id="checkout-waste-pickup" className={`p-4 ${ui.card}`}>
+              {pickupReq === null ? (
+                <Link href="/doi-rac/tao" className="flex min-h-11 items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-3">
+                    <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                    <span>
+                      <span className="block font-semibold text-stone-900">Thu kèm rác</span>
+                      <span className="block text-xs text-stone-600">Tạo yêu cầu để bưu tá lấy rác khi giao đơn này</span>
+                    </span>
+                  </span>
+                  <span aria-hidden="true" className="text-stone-600">
+                    ›
+                  </span>
+                </Link>
+              ) : (
+                <>
+                  <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-stone-900">
+                    <span className="flex items-center gap-3">
+                      <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                      Thu kèm rác
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={attachWaste}
+                      onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setAttachWaste(e.target.checked))}
+                      disabled={place.isPending}
+                      className="h-6 w-6 shrink-0 accent-forest-600"
+                    />
+                  </label>
+                  <div className="mt-2 rounded-control bg-stone-100 p-3 text-xs text-stone-700">
+                    <p className="text-sm font-semibold text-stone-900">{pickupReq.code}</p>
+                    {pickupReq.lines.map((l) => (
+                      <p key={`${l.itemName}-${l.unitLabel}`} className="mt-0.5">
+                        {l.itemName}: {l.declaredQty} {l.unitLabel}
+                      </p>
+                    ))}
+                    <p className="mt-1 font-semibold text-success-fg">Ước tính {new Intl.NumberFormat('vi-VN').format(pickupReq.estimatedPoints)} điểm</p>
+                    {attachWaste && <p className="mt-1">Ghi mã lên túi, bưu tá lấy khi giao đơn.</p>}
+                    {attachWaste && paymentToSend === 'BANK_TRANSFER' && (
+                      <p className="mt-1">Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
           <ReferralCodeBox
             linkedCode={sfCtx.referralCode}
             appliedCode={referralApplied}
-            onApplied={setReferralApplied}
+            onApplied={chosen(setReferralApplied)}
             disabled={place.isPending}
           />
 
           <InvoiceSection
             want={wantInvoice}
-            onWant={setWantInvoice}
+            onWant={chosen(setWantInvoice)}
             invoice={invoice}
-            onInvoice={setInvoice}
+            onInvoice={chosen(setInvoice)}
             valid={invoiceValid}
             disabled={place.isPending}
           />
@@ -527,7 +708,7 @@ export default function CheckoutPage() {
                 type="checkbox"
                 checked={usePoints && !partnerPoints.disabled}
                 disabled={partnerPoints.disabled}
-                onChange={(e) => setUsePoints(e.target.checked)}
+                onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setUsePoints(e.target.checked))}
                 className="h-6 w-6 shrink-0 accent-forest-600"
               />
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
@@ -579,16 +760,25 @@ export default function CheckoutPage() {
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
-          {place.isError && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
+          {place.isError && !priceChanged && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
-              {place.error instanceof NetworkError && (
+              {isOutcomeUnknown(place.error) && (
                 <p className="mt-1 text-stone-700">
                   Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
-                  <Link href="/tai-khoan" className="font-semibold text-forest-700 underline">
+                  <Link href="/tai-khoan/don-hang" className="font-semibold text-forest-700 underline">
                     Đơn của tôi
                   </Link>
                   .
+                </p>
+              )}
+              {place.error?.message === PREVIOUS_MAYBE_PLACED && (
+                <p className="mt-1 text-stone-700">
+                  Nếu đơn trước chưa có trong{' '}
+                  <Link href="/tai-khoan/don-hang" className="font-semibold text-forest-700 underline">
+                    Đơn của tôi
+                  </Link>
+                  , bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
                 </p>
               )}
             </div>

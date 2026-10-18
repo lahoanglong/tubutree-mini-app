@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -140,6 +141,14 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(c.querySelector('[role="alertdialog"]')).toBeNull();
   });
 
+  it('xoá xong: báo "Đã xóa địa chỉ." như Mini App', async () => {
+    const c = await mount();
+    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    await flush(4);
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã xóa địa chỉ.');
+  });
+
   it('WEB-13: mở hộp xác nhận xóa thì focus vào "Giữ lại"; "Giữ lại" trả focus về nút "Xóa" của đúng dòng đó', async () => {
     const c = await mount();
     click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
@@ -163,6 +172,37 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     await flush(4);
     expect(mocks.remove).toHaveBeenCalledTimes(2);
     expect(document.activeElement).toBe(btn(c, '+ Thêm địa chỉ mới'));
+  });
+
+  it('xoá xong rồi đặt mặc định thất bại: thông báo đã xóa biến mất, chỉ còn lỗi', async () => {
+    const c = await mount();
+    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    await flush(4);
+    expect(c.querySelector('[role="status"]')).not.toBeNull();
+    mocks.update.mockRejectedValue(new Error('Không đặt được mặc định'));
+    mocks.list = [A1, A2];
+    await flush(4);
+    click(btn(c, 'Đặt địa chỉ của Trần Bình làm mặc định')!);
+    await flush(4);
+    expect(c.querySelector('[role="status"]')).toBeNull();
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không đặt được mặc định');
+  });
+
+  it('thông báo đã xóa tự tắt sau vài giây', async () => {
+    const c = await mount();
+    vi.useFakeTimers();
+    const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+    try {
+      click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+      click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+      await advance(100);
+      expect(c.querySelector('[role="status"]')).not.toBeNull();
+      await advance(5000);
+      expect(c.querySelector('[role="status"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('BE không cho xoá (địa chỉ đang gắn gói giao định kỳ): hiện nguyên văn lời BE', async () => {

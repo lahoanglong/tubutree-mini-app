@@ -14,6 +14,8 @@ import { metadata as rewards } from './kho-qua/layout';
 import { metadata as myRewards } from './kho-qua/cua-toi/layout';
 import { metadata as cashback } from './hoan-tien/layout';
 import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
+import { metadata as orders } from './tai-khoan/don-hang/layout';
+import { metadata as bankPayment } from './thanh-toan/chuyen-khoan/[code]/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -26,7 +28,10 @@ const CORE: TitleCase[] = [
   ['/tai-khoan/vi-tubu', wallet, 'Ví Tubu — Tubu Tree'],
 ];
 const SHOP: TitleCase[] = [['/tai-khoan/yeu-thich', wishlist, 'Sản phẩm yêu thích — Tubu Tree']];
-const ORDER: TitleCase[] = [];
+const ORDER: TitleCase[] = [
+  ['/thanh-toan/chuyen-khoan/[code]', bankPayment, 'Thanh toán chuyển khoản — Tubu Tree'],
+  ['/tai-khoan/don-hang', orders, 'Đơn hàng — Tubu Tree'],
+];
 const ACCOUNT: TitleCase[] = [
   ['/tai-khoan/ho-so', editProfile, 'Sửa hồ sơ — Tubu Tree'],
   ['/tai-khoan/cai-dat', settings, 'Cài đặt — Tubu Tree'],

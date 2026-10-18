@@ -86,7 +86,16 @@ const SHOP: string[] = [
   'app/cau-chuyen/brand-story-view.tsx',
   'app/cau-chuyen/brand-map.tsx',
 ];
-const ORDER: string[] = [];
+const ORDER: string[] = [
+  'app/thanh-toan/chuyen-khoan/[code]/page.tsx',
+  'app/tai-khoan/don-hang/page.tsx',
+  'components/orders/order-card.tsx',
+  'components/orders/purchased-rail.tsx',
+  'components/orders/reorder-sheet.tsx',
+  'components/orders/subscription-edit-sheet.tsx',
+  'components/orders/subscription-options.tsx',
+  'components/orders/subscriptions-panel.tsx',
+];
 const ACCOUNT: string[] = [
   'app/tai-khoan/ho-so/page.tsx',
   'app/tai-khoan/cai-dat/page.tsx',

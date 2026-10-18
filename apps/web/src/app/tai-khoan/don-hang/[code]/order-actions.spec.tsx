@@ -317,7 +317,7 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
 });
 
 describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
-  const delivered = { ...BASE, status: 'DELIVERED', deliveredAt: '2026-10-05T00:00:00Z' };
+  const delivered = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString() };
 
   it('chỉ đơn đã kết thúc có "Mua lại đơn này"', async () => {
     const open = await mount();
@@ -377,7 +377,7 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
 });
 
 describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
-  const delivered = { ...BASE, status: 'DELIVERED', deliveredAt: '2026-10-05T00:00:00Z' };
+  const delivered = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString() };
 
   it('đơn chưa giao không có nút đổi/trả', async () => {
     const { container } = await mount();
@@ -669,7 +669,7 @@ describe('chi tiết đơn — hoàn tiền và hạn thanh toán (D2, BUYERMINI
 
 describe('chi tiết đơn — truy cập', () => {
   it('đủ h1/h2/h3 không nhảy cấp, mọi điều khiển có tên, vùng chạm 44px (đơn đã giao, form đổi/trả mở)', async () => {
-    mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: '2026-10-05T00:00:00Z', shippingHistory: [{ at: '2026-10-02T03:00:00Z', status: 'delivered', code: 'X' }] };
+    mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString(), shippingHistory: [{ at: '2026-10-02T03:00:00Z', status: 'delivered', code: 'X' }] };
     const { container } = await mount();
     click(btn(container, 'Yêu cầu đổi/trả')!);
     await flush();

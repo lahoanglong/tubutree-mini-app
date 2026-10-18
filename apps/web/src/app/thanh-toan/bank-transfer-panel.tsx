@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, Clock, Download, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
@@ -8,6 +8,7 @@ import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
 import { saveImage, type SaveImageResult } from '@/lib/download-image';
+import { useRemaining } from '@/lib/use-remaining';
 
 /**
  * A2-02 = A6-01 (docs/audit-2026-09): web cho chọn "Chuyển khoản ngân hàng" nhưng trước đây sau
@@ -20,7 +21,16 @@ import { saveImage, type SaveImageResult } from '@/lib/download-image';
  * export thêm một component thường sẽ FAIL tsc (kiểm tra kiểu sinh ra trong .next/types/app cho
  * từng trang).
  */
-export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?: () => void }) {
+export function BankTransferPanel({
+  order,
+  onPaid,
+  paidFooter,
+}: {
+  order: Pick<OrderDTO, 'code' | 'paymentMethod'>;
+  onPaid?: () => void;
+  /** Lối đi tiếp ở khung "Đã nhận thanh toán" (trang chuyển khoản cho nút tới đơn); trang chi tiết đơn không cần. */
+  paidFooter?: ReactNode;
+}) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['bank-qr', order.code],
@@ -31,11 +41,12 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
   });
   // Cờ riêng cho lần khách bấm tay: `isFetching` còn bật theo nhịp dò nền 4s, gắn vào nút thì nút khoá/nhấp nháy đúng lúc khách chạm.
   const [checking, setChecking] = useState(false);
-  const [checkResult, setCheckResult] = useState<'unpaid' | 'error' | null>(null);
+  const [checkResult, setCheckResult] = useState<'unpaid' | 'failed' | 'error' | null>(null);
   const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
 
   // Trang chứa khung này (chi tiết đơn) cần tải lại trạng thái đơn khi tiền về, nếu không thì
   // khung báo "Đã nhận thanh toán" còn nhãn đơn vẫn là "Chờ thanh toán".
+  const remaining = useRemaining(data?.paymentDeadline);
   const paid = data?.paymentStatus === 'PAID';
   useEffect(() => {
     if (paid) onPaid?.();
@@ -48,7 +59,8 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
     setCheckResult(null);
     try {
       const res = await refetch({ throwOnError: true });
-      setCheckResult(res.data?.paymentStatus === 'PAID' ? null : 'unpaid');
+      const status = res.data?.paymentStatus;
+      setCheckResult(status === 'PAID' ? null : status === 'FAILED' || status === 'REFUNDED' ? 'failed' : 'unpaid');
     } catch {
       setCheckResult('error');
     } finally {
@@ -76,6 +88,7 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
         <CheckCircle2 className="mx-auto h-9 w-9 text-success-fg" aria-hidden="true" />
         <p className="mt-2 font-semibold text-forest-800">Đã nhận thanh toán!</p>
         <p className="text-sm text-forest-700">Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn.</p>
+        {paidFooter}
       </section>
     );
   }
@@ -136,6 +149,13 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
         </div>
         <PanelRow label="Chủ tài khoản" value={data.bank.accountName} />
         <div className="flex items-center justify-between py-1">
+          <span className="text-stone-600">Số tiền</span>
+          <span className="flex items-center gap-2 font-semibold text-stone-900">
+            {formatVnd(data.amount)}
+            <CopyButton text={String(data.amount)} label="Sao chép" />
+          </span>
+        </div>
+        <div className="flex items-center justify-between py-1">
           <span className="text-stone-600">Nội dung CK</span>
           <span className="flex items-center gap-2 font-semibold text-forest-700">
             {data.memo}
@@ -150,6 +170,15 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
       {data.paymentDeadline && (
         <p role="note" className="mt-1 text-center text-xs font-medium text-warning-fg">
           Chuyển khoản trước <b>{formatDateTime(data.paymentDeadline)}</b> — quá hạn đơn sẽ tự huỷ.
+        </p>
+      )}
+      {/* Không phải vùng đọc tự động: đồng hồ đổi mỗi 15 giây, đọc lại liên tục sẽ làm phiền người dùng trình đọc màn hình. */}
+      {data.paymentDeadline && remaining.text && (
+        <p
+          data-testid="payment-countdown"
+          className={`mt-1 text-center text-xs font-semibold ${remaining.expired ? 'text-danger-fg' : 'text-warning-fg'}`}
+        >
+          {remaining.expired ? 'Đã quá hạn chuyển khoản' : `${remaining.text} để chuyển khoản`}
         </p>
       )}
 
@@ -175,11 +204,13 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
         <p
           role="status"
           data-testid="bank-check-result"
-          className={`mt-2 text-center text-xs ${checkResult === 'error' ? 'text-danger-fg' : 'text-stone-700'}`}
+          className={`mt-2 text-center text-xs ${checkResult === 'error' || checkResult === 'failed' ? 'text-danger-fg' : 'text-stone-700'}`}
         >
           {checkResult === 'error'
             ? 'Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.'
-            : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.'}
+            : checkResult === 'failed'
+              ? 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.'
+              : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.'}
         </p>
       )}
     </section>

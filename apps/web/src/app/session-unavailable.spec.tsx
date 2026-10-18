@@ -19,6 +19,7 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ ...mocks.auth, retrySes
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useParams: () => ({ code: 'TB-77' }),
+  usePathname: () => '/tai-khoan/don-hang',
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -40,6 +41,8 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 import CartPage from './gio-hang/page';
 import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
+import BankPaymentPage from './thanh-toan/chuyen-khoan/[code]/page';
+import OrdersPage from './tai-khoan/don-hang/page';
 import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
 import AddressBookPage from './tai-khoan/dia-chi/page';
 import EditProfilePage from './tai-khoan/ho-so/page';
@@ -77,7 +80,10 @@ const CORE: PageCase[] = [
   ['/tai-khoan/dia-chi', () => <AddressBookPage />],
 ];
 const SHOP: PageCase[] = [['/tai-khoan/yeu-thich', () => <WishlistPage />]];
-const ORDER: PageCase[] = [];
+const ORDER: PageCase[] = [
+  ['/thanh-toan/chuyen-khoan/[code]', () => <BankPaymentPage />],
+  ['/tai-khoan/don-hang', () => <OrdersPage />],
+];
 const ACCOUNT: PageCase[] = [
   ['/tai-khoan/ho-so', () => <EditProfilePage />],
   ['/tai-khoan/cai-dat', () => <SettingsPage />],

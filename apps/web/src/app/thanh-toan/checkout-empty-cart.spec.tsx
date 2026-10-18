@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   cartGate: Promise.resolve() as Promise<void>,
 }));
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
