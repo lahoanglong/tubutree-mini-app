@@ -150,14 +150,11 @@ export class WasteHoldService {
 
     const priced: { line: WasteLineInput; snapshot: WasteLineSnapshot }[] = [];
     for (const line of input.lines) {
+      const s = stored?.get(line.itemId);
+      if (stored && !s) throw new Error('REOPEN line without stored snapshot');
       const item = itemById.get(line.itemId);
       if (!item) continue;
-      let rates: WasteRateSnapshot = item;
-      if (stored) {
-        const s = stored.get(line.itemId);
-        if (!s) throw new Error('REOPEN line without stored snapshot');
-        rates = s;
-      }
+      const rates: WasteRateSnapshot = s ?? item;
       priced.push({
         line,
         snapshot: {

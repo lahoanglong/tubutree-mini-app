@@ -137,6 +137,12 @@ describe('WasteHoldService.validateAndHold', () => {
       const { svc, tx } = setup({ storedLines: [] });
       await expect(svc.validateAndHold(tx, input({ path: 'REOPEN', method: 'MAIL_IN', pointId: null, existing: { ...existing, pointId: 'wh' }, lines: [{ itemId: 'carton', declaredQty: 2 }] }), CFG)).rejects.toThrow('REOPEN line without stored snapshot');
     });
+    it('REOPEN line whose item has neither a row nor a stored line throws instead of being skipped', async () => {
+      const { svc, tx } = setup({
+        storedLines: [{ itemId: carton.id, unitsPerPoint: carton.unitsPerPoint, pointsPerGroup: carton.pointsPerGroup, dropsPerUnit: carton.dropsPerUnit, gramsPerUnit: carton.gramsPerUnit }],
+      });
+      await expect(svc.validateAndHold(tx, input({ path: 'REOPEN', method: 'MAIL_IN', pointId: null, existing: { ...existing, pointId: 'wh' }, lines: [{ itemId: 'carton', declaredQty: 2 }, { itemId: 'ghost', declaredQty: 1 }] }), CFG)).rejects.toThrow('REOPEN line without stored snapshot');
+    });
   });
 });
 
