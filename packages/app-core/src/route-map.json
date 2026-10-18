@@ -66,7 +66,7 @@
       { "miniapp": "/recycle/r/:id", "web": "/doi-rac/yeu-cau/:id", "private": true },
       { "miniapp": "/recycle/r/:id/edit", "web": "/doi-rac/yeu-cau/:id/sua", "private": true },
       { "miniapp": "/recycle/requests", "web": "/doi-rac/yeu-cau", "private": true },
-      { "miniapp": "/recycle/done/:id", "web": "/doi-rac/xong/:id", "private": true, "pending": true },
+      { "miniapp": "/recycle/done/:id", "web": "/doi-rac/xong/:id", "private": true },
       { "miniapp": "/recycle/desk", "web": "/doi-rac/quay", "private": true, "pending": true }
     ]},
     { "lane": "skip", "items": [

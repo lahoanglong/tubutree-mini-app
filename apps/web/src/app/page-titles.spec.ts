@@ -20,6 +20,7 @@ import { metadata as recycleNew } from './doi-rac/tao/layout';
 import { metadata as recyclePoints } from './doi-rac/diem-nhan/layout';
 import { metadata as recycleRequest } from './doi-rac/yeu-cau/[id]/layout';
 import { metadata as recycleEdit } from './doi-rac/yeu-cau/[id]/sua/layout';
+import { metadata as recycleDone } from './doi-rac/xong/[id]/layout';
 import { metadata as advisor } from './tu-van/layout';
 import { metadata as cashback } from './hoan-tien/layout';
 import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
@@ -71,6 +72,7 @@ const RECYCLE: TitleCase[] = [
   ['/doi-rac/diem-nhan', recyclePoints, 'Chọn điểm nhận — Tubu Tree'],
   ['/doi-rac/yeu-cau/[id]', recycleRequest, 'Yêu cầu đổi rác — Tubu Tree'],
   ['/doi-rac/yeu-cau/[id]/sua', recycleEdit, 'Sửa yêu cầu đổi rác — Tubu Tree'],
+  ['/doi-rac/xong/[id]', recycleDone, 'Kết quả đổi rác — Tubu Tree'],
 ];
 const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 

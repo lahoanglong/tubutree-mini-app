@@ -63,6 +63,7 @@ import RecycleNewPage from './doi-rac/tao/page';
 import RecyclePointsPage from './doi-rac/diem-nhan/page';
 import RecycleRequestDetailPage from './doi-rac/yeu-cau/[id]/page';
 import RecycleEditPage from './doi-rac/yeu-cau/[id]/sua/page';
+import RecycleDonePage from './doi-rac/xong/[id]/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -122,6 +123,7 @@ const RECYCLE: PageCase[] = [
   ['/doi-rac/diem-nhan', () => <RecyclePointsPage />, '/doi-rac/tao'],
   ['/doi-rac/yeu-cau/[id]', () => <RecycleRequestDetailPage params={{ id: 'req-77' }} />, '/doi-rac/yeu-cau/req-77'],
   ['/doi-rac/yeu-cau/[id]/sua', () => <RecycleEditPage params={{ id: 'req-77' }} />, '/doi-rac/yeu-cau/req-77/sua'],
+  ['/doi-rac/xong/[id]', () => <RecycleDonePage params={{ id: 'req-77' }} />, '/doi-rac/xong/req-77'],
 ];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 

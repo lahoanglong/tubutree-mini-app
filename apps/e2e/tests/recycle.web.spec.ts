@@ -239,4 +239,30 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     expect((await patched).body).toEqual({ lines: [{ itemId: 'item-carton', declaredQty: 4 }], pointId: 'pt-1' });
     await expect(page).toHaveURL(/\/doi-rac\/yeu-cau\/req-1$/);
   });
+
+  test('trang kết quả: điểm vừa cộng, bảng đếm, số dư mới và tiến độ tới quà', async ({ page, api }) => {
+    mockRecycle(api);
+    api.get('/waste/requests/:id', () =>
+      detail({
+        status: 'COMPLETED', editable: false, cancellable: false, pointsAwarded: 4000, dropsAwarded: 3, completedAt: '2026-10-18T03:00:00.000Z',
+        lines: [{ ...detail().lines[0], receivedQty: 4, shortfallReason: 'DIRTY', pointsAwarded: 4000 }],
+      }),
+    );
+    await page.goto('/doi-rac/xong/req-1');
+    await expect(page.getByRole('heading', { name: 'Kết quả đổi rác', level: 1 })).toBeVisible();
+    await expect(page.getByText('Đã cộng 4.000 điểm')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Đã khai và đã đếm' }).getByText('Bẩn')).toBeVisible();
+    await expect(page.getByText('Số dư mới 14.000 điểm')).toBeVisible();
+    await expect(page.getByText('Còn 6.000 điểm tới mã giảm giá Miễn phí vận chuyển')).toBeVisible();
+    await expect(page.getByText('+3 giọt nước vào bình của bạn')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Đổi quà ngay' })).toHaveAttribute('href', '/kho-qua');
+  });
+
+  test('trang kết quả của yêu cầu chưa hoàn tất: chuyển về trang theo dõi', async ({ page, api }) => {
+    mockRecycle(api);
+    api.get('/waste/requests/:id', () => detail());
+    api.get('/waste/points', () => []);
+    await page.goto('/doi-rac/xong/req-1');
+    await expect(page).toHaveURL(/\/doi-rac\/yeu-cau\/req-1$/);
+  });
 });
