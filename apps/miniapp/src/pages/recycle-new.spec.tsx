@@ -196,10 +196,13 @@ describe('bước 1: chọn món (§4.2)', () => {
     await waitFor(() => expect(next).toBeEnabled());
     fireEvent.click(next);
     const draft = { ...DRAFT, lines: { 'item-carton': 1 } };
+    const stamped = { draft: expect.objectContaining({ ...draft, sid: expect.any(String) }) };
     expect(mocks.navigate.mock.calls).toEqual([
-      ['/recycle/new', { replace: true, state: { draft } }],
-      ['/recycle/new?step=method', { state: { draft } }],
+      ['/recycle/new', { replace: true, state: stamped }],
+      ['/recycle/new?step=method', { state: stamped }],
     ]);
+    const sids = mocks.navigate.mock.calls.map((c) => (c[1] as { state: { draft: WasteWizardDraft } }).state.draft.sid);
+    expect(sids[0]).toBe(sids[1]);
   });
   it('chương trình tắt, chưa đủ điều kiện hoặc bị khoá → về /recycle', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }));
@@ -355,8 +358,8 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
   it('tạo xong rồi Back về mục bước 1 giữ nháp đã gửi → không hiện lại số lượng, thay mục bằng /recycle', async () => {
     mocks.createWasteRequest.mockResolvedValue(makeRequestDetail({ id: 'req-9' }));
     const lines = { 'item-carton': 3 };
-    const itemsEntry = { draft: { ...DRAFT, lines } };
-    atStep2({ ...PICKED, lines });
+    const itemsEntry = { draft: { ...DRAFT, lines, sid: 'wizard-1' } };
+    atStep2({ ...PICKED, lines, sid: 'wizard-1' });
     const first = renderPage();
     (await screen.findByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' })).click();
     fireEvent.click(await screen.findByRole('button', { name: 'Tạo yêu cầu' }));
@@ -370,6 +373,22 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     expect(screen.queryByText('Thùng carton')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tiếp tục' })).toBeNull();
     expect(mocks.createWasteRequest).toHaveBeenCalledTimes(1);
+  });
+  it('một lần mở bước 1 mới sau đó với cùng số lượng (phiên khác) không bị coi là đã gửi', async () => {
+    mocks.createWasteRequest.mockResolvedValue(makeRequestDetail({ id: 'req-9' }));
+    const lines = { 'item-carton': 3 };
+    atStep2({ ...PICKED, lines, sid: 'wizard-1' });
+    const first = renderPage();
+    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' })).click();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo yêu cầu' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/r/req-9', { replace: true }));
+    first.unmount();
+    mocks.navigate.mockClear();
+
+    mocks.location.search = ''; mocks.location.state = { draft: { ...DRAFT, lines, sid: 'other' } };
+    renderPage();
+    expect(await screen.findByText('Bước 1/3: Chọn món')).toBeInTheDocument();
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/recycle', expect.anything());
   });
   it('mục bước 1 có nháp chưa từng gửi (về từ chọn điểm hay nạp lại) vẫn hiện nguyên số lượng', async () => {
     mocks.location.search = ''; mocks.location.state = { draft: { ...DRAFT, lines: { 'item-carton': 7 } } };

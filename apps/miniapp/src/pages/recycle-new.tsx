@@ -40,6 +40,7 @@ import { QuantitySelector } from '../components/ui/quantity-selector';
 import { Skeleton } from '../components/ui/skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Text } from '../components/ui/text';
+import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPoints, formatVnd } from '../utils/format';
 import { useDebounced } from '../utils/use-debounced';
 import {
@@ -65,6 +66,7 @@ export type WasteWizardDraft = {
   pickedPoint: WastePointDTO | null;
   provinceCode: string | null;
   nearby: WastePointDTO[] | null;
+  sid?: string;
 };
 export type WastePointsNavState = { returnTo: string; draft: WasteWizardDraft; selectedItemIds: string[] };
 export type WastePointsReturnState = { draft: WasteWizardDraft };
@@ -73,8 +75,8 @@ const EMPTY_DRAFT: WasteWizardDraft = { lines: {}, method: null, pointId: null, 
 
 // Back from the request page lands on the items entry that still carries the submitted draft; a module-level marker (the
 // stack entry's state is cloned, so identity does not survive) lets that entry leave instead of re-creating the request.
-const submittedLines = new Set<string>();
-const linesId = (lines: Record<string, number>) => JSON.stringify(toLineInputs(lines));
+// Keyed per wizard session (sid), not by quantities, so a later fresh entry with the same quantities is not mistaken for it.
+const submittedSids = new Set<string>();
 
 const BASE_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'PICKUP', 'MAIL_IN'];
 const MAIL_FIRST_ORDER: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP', 'DROP_OFF'];
@@ -218,7 +220,7 @@ export default function RecycleNewPage() {
   useEffect(() => {
     if (leave) navigate('/recycle', { replace: true });
   }, [leave, navigate]);
-  const [replayed] = useState(() => step === 'items' && stateDraft !== undefined && submittedLines.has(linesId(stateDraft.lines)));
+  const [replayed] = useState(() => step === 'items' && !!stateDraft?.sid && submittedSids.has(stateDraft.sid));
   useEffect(() => {
     if (replayed) navigate('/recycle', { replace: true });
   }, [replayed, navigate]);
@@ -323,7 +325,7 @@ export default function RecycleNewPage() {
     },
     onSuccess: async (r) => {
       rotate();
-      submittedLines.add(linesId(draft.lines));
+      if (draft.sid) submittedSids.add(draft.sid);
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${r.id}`, { replace: true });
     },
@@ -363,8 +365,9 @@ export default function RecycleNewPage() {
         return { ...d, lines };
       });
     const next = () => {
-      navigate('/recycle/new', { replace: true, state: { draft } });
-      navigate('/recycle/new?step=method', { state: { draft } });
+      const stamped = { ...draft, sid: draft.sid ?? newIdempotencyKey() };
+      navigate('/recycle/new', { replace: true, state: { draft: stamped } });
+      navigate('/recycle/new?step=method', { state: { draft: stamped } });
     };
     const p = debounced.length > 0 ? itemsPreviewQ.data : undefined;
     const capBlock = p?.blocks.find((b) => STEP1_CAP_BLOCKS.includes(b.code));
