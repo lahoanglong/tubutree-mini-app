@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from './loyalty-copy';
+import { earnRuleLine, moneyShort, pointsBoostOf, pointsToSpend, redeemRuleLine, tierThresholdLabel } from './loyalty-copy';
 
 const RATES = { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 };
 
@@ -47,5 +47,24 @@ describe('pointsToSpend / tierThresholdLabel', () => {
 
   it('API cũ chưa trả rates → chỉ nói theo điểm như trước', () => {
     expect(tierThresholdLabel({ minPoints: 500 }, undefined)).toBe('từ 500 điểm tích luỹ');
+  });
+});
+
+describe('pointsBoostOf', () => {
+  const on = { earnPct: 2, vndPerPoint: 50, marketplaceEarnPct: 1, marketplaceClaimEnabled: true };
+  it('so sánh và gọi "gấp đôi" khi đơn app đúng 2 lần đơn sàn', () => {
+    expect(pointsBoostOf(on)).toEqual({ kind: 'compare', double: true, appPct: 2, marketplacePct: 1 });
+  });
+  it('"nhiều hơn" khi không đúng gấp đôi', () => {
+    expect(pointsBoostOf({ ...on, earnPct: 3 })).toEqual({ kind: 'compare', double: false, appPct: 3, marketplacePct: 1 });
+  });
+  it('cờ tắt hoặc đơn app không cao hơn sàn thì chỉ nói mức đơn app', () => {
+    expect(pointsBoostOf({ ...on, marketplaceClaimEnabled: false })).toEqual({ kind: 'plain', appPct: 2 });
+    expect(pointsBoostOf({ ...on, marketplaceEarnPct: 2 })).toEqual({ kind: 'plain', appPct: 2 });
+    expect(pointsBoostOf({ ...on, marketplaceEarnPct: undefined })).toEqual({ kind: 'plain', appPct: 2 });
+  });
+  it('không có mức đơn app dùng được thì null', () => {
+    expect(pointsBoostOf(undefined)).toBeNull();
+    expect(pointsBoostOf({ earnPct: 0, vndPerPoint: 0 })).toBeNull();
   });
 });

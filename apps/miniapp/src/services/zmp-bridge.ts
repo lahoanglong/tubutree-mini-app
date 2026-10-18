@@ -12,6 +12,7 @@ import {
   requestSendNotification as zmpRequestSendNotification,
   getStorage,
   setStorage,
+  scanQRCode,
 } from 'zmp-sdk/apis';
 import { copyText } from '../utils/clipboard';
 import { WEB_BASE_URL } from '../utils/web-base-url';
@@ -123,6 +124,17 @@ export async function callPhone(phone: string) {
     await openPhone({ phoneNumber: number });
   } catch {
     window.location.href = `tel:${number}`;
+  }
+}
+
+/** Quét mã bằng camera Zalo. Trả nội dung mã; null khi khách thoát, không có quyền camera hoặc SDK không đọc được. */
+export async function scanCode(): Promise<string | null> {
+  try {
+    const res = await scanQRCode();
+    const content = typeof res?.content === 'string' ? res.content.trim() : '';
+    return content || null;
+  } catch {
+    return null;
   }
 }
 

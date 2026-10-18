@@ -16,6 +16,7 @@ import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
 import { HomeExtras } from '../components/home/home-extras';
 import { NewCustomerGift } from '../components/home/new-customer-gift';
+import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { HomeBlockError, HomeBlockErrorSuppressed } from '../components/home/home-block-error';
 import { HomePageError } from '../components/home/home-page-error';
 import { HomeHeader } from '../components/home/home-header';
@@ -102,7 +103,12 @@ export default function HomePage() {
       ) : (
         <PurchasedRail source="home_rail" />
       ),
-    orderStrip: <OrderStrip />,
+    orderStrip: (
+      <>
+        <OrderStrip />
+        <PointsBoostStrip placement="home" />
+      </>
+    ),
     flash: (
       <>
         <FlashSale />
