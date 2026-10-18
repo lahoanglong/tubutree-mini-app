@@ -320,7 +320,7 @@ export class ExternalClaimsAdminService {
       }
       const releaseAt =
         o.status === 'DELIVERED' && o.deliveredAt ? new Date(o.deliveredAt.getTime() + cfg.pendingDays * 864e5) : o.status === 'PARTIAL_RETURN' ? new Date(now.getTime() + cfg.pendingDays * 864e5) : null;
-      const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null, ...(c.kind === 'PHONE' ? { multiplier, creditedGoodsValue: o.goodsValue } : {}) } });
+      const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null, creditedGoodsValue: o.goodsValue, ...(c.kind === 'PHONE' ? { multiplier } : {}) } });
       if (res.count !== 1) throw new ConflictException('Claim vừa được xử lý bởi người khác.');
       await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, orderStatus: o.status, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: [points < fullPoints ? `Chốt theo trần tháng: ${points} thay vì ${fullPoints} điểm` : `${points} điểm`, staleNote].filter(Boolean).join(' | ') });
       return { userId: c.userId, points, channel: o.channel, trackingCode: o.trackingCode, releaseAt, kind: c.kind };
