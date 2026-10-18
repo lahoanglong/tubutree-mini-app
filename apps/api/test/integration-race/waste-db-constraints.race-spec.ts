@@ -280,4 +280,19 @@ describe('seeded reference data after migrate deploy', () => {
       expect(typeof r.value).toBe(typeof def.default);
     }
   });
+  it('the ten waste notification templates exist after migrate deploy (prod never runs seed.ts)', async () => {
+    const rows = await prisma.notificationTemplate.findMany({ where: { code: { startsWith: 'WASTE_' } }, orderBy: { code: 'asc' } });
+    expect(rows.map((r) => [r.code, r.id, r.channel])).toEqual([
+      ['WASTE_GIFT_CANCELLED', 'nt-waste-gift-cancelled', 'INAPP'],
+      ['WASTE_PARCEL_RECEIVED', 'nt-waste-parcel-received', 'INAPP'],
+      ['WASTE_PERK_REVIEWED', 'nt-waste-perk-reviewed', 'INAPP'],
+      ['WASTE_PICKUP_CANCELLED', 'nt-waste-pickup-cancelled', 'INAPP'],
+      ['WASTE_PICKUP_STARTED', 'nt-waste-pickup-started', 'INAPP'],
+      ['WASTE_POINTS_CREDITED', 'nt-waste-points-credited', 'INAPP'],
+      ['WASTE_POINTS_REVERSED', 'nt-waste-points-reversed', 'INAPP'],
+      ['WASTE_REQUEST_EXPIRED', 'nt-waste-request-expired', 'INAPP'],
+      ['WASTE_REQUEST_REJECTED', 'nt-waste-request-rejected', 'INAPP'],
+      ['WASTE_SHIP_LOCKED', 'nt-waste-ship-locked', 'INAPP'],
+    ]);
+  });
 });

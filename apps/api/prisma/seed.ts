@@ -873,6 +873,16 @@ export const NOTIFICATION_TEMPLATES = [
   // A1-03 (docs/audit-2026-09/01-ia-navigation.md): báo admin khi khách gửi yêu cầu xoá tài khoản
   // (UsersService.requestAccountDeletion) — mirror nt-dealer-credit-reported (chỉ gửi ADMIN).
   { id: 'nt-account-deletion-requested', code: 'ACCOUNT_DELETION_REQUESTED', channel: 'INAPP', bodyTemplate: '🗑️ Khách {{user}} (SĐT {{phone}}) yêu cầu xoá tài khoản. Vào trang quản trị (Tài khoản → Yêu cầu xoá) để xử lý.', createOnly: true },
+  { id: 'nt-waste-parcel-received', code: 'WASTE_PARCEL_RECEIVED', channel: 'INAPP', bodyTemplate: 'Kho Tubu đã nhận kiện của yêu cầu {{code}}. Tubu sẽ đếm và báo bạn kết quả cộng Điểm Xanh.', createOnly: true },
+  { id: 'nt-waste-points-credited', code: 'WASTE_POINTS_CREDITED', channel: 'INAPP', bodyTemplate: 'Yêu cầu {{code}} đã đếm xong. {{result}}.', createOnly: true },
+  { id: 'nt-waste-request-rejected', code: 'WASTE_REQUEST_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu {{code}} chưa được nhận: {{reason}}. Bạn xem chi tiết trong mục Đổi rác.', createOnly: true },
+  { id: 'nt-waste-request-expired', code: 'WASTE_REQUEST_EXPIRED', channel: 'INAPP', bodyTemplate: 'Yêu cầu {{code}} đã đóng: {{detail}}.', createOnly: true },
+  { id: 'nt-waste-pickup-started', code: 'WASTE_PICKUP_STARTED', channel: 'INAPP', bodyTemplate: 'Đơn mua của bạn đã giao. Phần rác của yêu cầu {{code}} đang về kho Tubu, Tubu chờ tới hết ngày {{until}}.', createOnly: true },
+  { id: 'nt-waste-pickup-cancelled', code: 'WASTE_PICKUP_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn mua bị huỷ nên yêu cầu thu kèm rác {{code}} cũng đã đóng. Bạn tạo yêu cầu mới trong mục Đổi rác khi cần.', createOnly: true },
+  { id: 'nt-waste-points-reversed', code: 'WASTE_POINTS_REVERSED', channel: 'INAPP', bodyTemplate: 'Tubu đã thu hồi {{points}} Điểm Xanh của yêu cầu {{code}}. Lý do: {{reason}}.', createOnly: true },
+  { id: 'nt-waste-ship-locked', code: 'WASTE_SHIP_LOCKED', channel: 'INAPP', bodyTemplate: 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn. Bạn vẫn mang rác tới điểm nhận được. Yêu cầu thu kèm chưa gắn đơn (nếu có) sẽ được huỷ. Cần hỗ trợ, liên hệ Tubu Tree.', createOnly: true },
+  { id: 'nt-waste-gift-cancelled', code: 'WASTE_GIFT_CANCELLED', channel: 'INAPP', bodyTemplate: 'Lượt đổi quà {{gift}} đã bị huỷ.{{points_note}}', createOnly: true },
+  { id: 'nt-waste-perk-reviewed', code: 'WASTE_PERK_REVIEWED', channel: 'INAPP', bodyTemplate: 'Ưu đãi riêng của điểm nhận {{point}}: {{result}}.', createOnly: true },
 ];
 
 const QUIZZES = [
