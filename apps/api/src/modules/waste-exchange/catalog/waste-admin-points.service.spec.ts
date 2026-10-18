@@ -379,6 +379,11 @@ describe('WasteAdminPointsService', () => {
       expect(h.wastePoint.update).not.toHaveBeenCalled();
       expect(h.wastePointItem.deleteMany).not.toHaveBeenCalled();
       expect(writeEvent).not.toHaveBeenCalled();
+
+      h.$queryRaw.mockResolvedValue([point({ openingHours: { FRI: [], MON: [] } })]);
+      await h.svc.update('a1', 'p1', { openingHours: { MON: [], FRI: [] } });
+      expect(h.wastePoint.update).not.toHaveBeenCalled();
+      expect(writeEvent).not.toHaveBeenCalled();
     });
   });
 

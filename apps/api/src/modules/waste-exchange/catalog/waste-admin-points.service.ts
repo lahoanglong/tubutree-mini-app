@@ -48,7 +48,14 @@ type PointRow = Prisma.WastePointGetPayload<{ include: typeof POINT_INCLUDE }>;
 
 const pick = (o: Record<string, unknown>, keys: string[]): Record<string, unknown> => Object.fromEntries(keys.map((k) => [k, o[k]]));
 // Value equality, so a Json, Date or array value is never "changed" by reference.
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+// jsonb comes back from Postgres with its own key order, so objects are compared with keys sorted.
+const canon = (v: unknown): string =>
+  JSON.stringify(v, (_k, x) =>
+    x && typeof x === 'object' && !Array.isArray(x)
+      ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : x,
+  );
+const same = (a: unknown, b: unknown): boolean => canon(a) === canon(b);
 const jsonSafe = (o: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v]));
 // Prisma reports a raw partial index either by its name or by its field list.
