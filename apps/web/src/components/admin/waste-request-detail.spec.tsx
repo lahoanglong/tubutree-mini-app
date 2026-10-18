@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wasteRequestDetail, wasteUnmatched } from '@/test-utils/fixtures/waste-admin';
 import type { WasteRequestAdminDetailDTO } from '@tubutree/shared-types';
+import { formatDateTime } from '@/lib/format-date';
 import { WasteRequestDetail, wastePointsForLines } from './waste-request-detail';
 
 let mounted: Rendered[] = [];
@@ -106,6 +107,58 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
       receivedWeightGrams: 2500,
     });
     expect(c.textContent).toContain('Đã cộng 17.000 điểm cho khách.');
+  });
+
+  it('dòng món nguy hại: khoá ở 0 / Sai loại, gửi WRONG_TYPE, dòng thường vẫn theo số khai', async () => {
+    const base = wasteRequestDetail();
+    const detail = wasteRequestDetail({ lines: [base.lines[0]!, { ...base.lines[1]!, hazardous: true }] });
+    const { c, api } = await mount({ detail });
+    expect(input(c, 'received-i1')!.value).toBe('10');
+    expect(input(c, 'received-i1')!.disabled).toBe(false);
+    expect(input(c, 'received-i3')!.value).toBe('0');
+    expect(input(c, 'received-i3')!.disabled).toBe(true);
+    expect(select(c, 'shortfall-i3')!.value).toBe('WRONG_TYPE');
+    expect(select(c, 'shortfall-i3')!.disabled).toBe(true);
+    expect(c.textContent).toContain('Không nhận món này');
+    expect(c.textContent).toContain('Điểm sẽ cộng: 10.000');
+    expect(btn(c, 'Xác nhận số đếm')!.disabled).toBe(false);
+
+    click(btn(c, 'Xác nhận số đếm'));
+    answerConfirm(true);
+    await flush();
+    expect(bodyOf(post(api, '/admin/waste/requests/r1/confirm')[0])).toEqual({
+      lines: [
+        { itemId: 'i1', declaredQty: 10, receivedQty: 10 },
+        { itemId: 'i3', declaredQty: 50, receivedQty: 0, shortfallReason: 'WRONG_TYPE' },
+      ],
+    });
+  });
+
+  it('món thành nguy hại sau khi màn đếm đã mở: dòng về 0 / Sai loại và gửi WRONG_TYPE', async () => {
+    const base = wasteRequestDetail();
+    let live = base;
+    const { c, api } = await mount({ detailRoute: () => ({ body: live }) });
+    expect(input(c, 'received-i3')!.value).toBe('50');
+    expect(input(c, 'received-i3')!.disabled).toBe(false);
+
+    live = wasteRequestDetail({ lines: [base.lines[0]!, { ...base.lines[1]!, hazardous: true }] });
+    window.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+
+    expect(input(c, 'received-i3')!.disabled).toBe(true);
+    expect(input(c, 'received-i3')!.value).toBe('0');
+    expect(select(c, 'shortfall-i3')!.value).toBe('WRONG_TYPE');
+    expect(c.textContent).toContain('Điểm sẽ cộng: 10.000');
+
+    click(btn(c, 'Xác nhận số đếm'));
+    answerConfirm(true);
+    await flush();
+    expect(bodyOf(post(api, '/admin/waste/requests/r1/confirm')[0])).toEqual({
+      lines: [
+        { itemId: 'i1', declaredQty: 10, receivedQty: 10 },
+        { itemId: 'i3', declaredQty: 50, receivedQty: 0, shortfallReason: 'WRONG_TYPE' },
+      ],
+    });
   });
 
   it('thông báo kết quả vẫn hiện khi refetch đã chuyển yêu cầu sang trạng thái khác', async () => {
@@ -322,19 +375,37 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     expect(btn(dropOff.c, 'Đóng vì thất lạc')).toBeNull();
   });
 
-  it('admin mở lại yêu cầu hết hạn, có thể gắn kiện không rõ chủ liên quan', async () => {
-    const unmatched = { body: [wasteUnmatched({ relatedRequestId: 'r1' }), wasteUnmatched({ id: 'un8', relatedRequestId: 'rX' })] };
+  it('admin mở lại yêu cầu hết hạn, chọn được cả kiện mở không liên quan, kiện liên quan xếp trước', async () => {
+    const unmatched = {
+      body: [
+        wasteUnmatched({ id: 'un7', reason: 'MANUAL_ENTRY', relatedRequestId: null, carrier: null, trackingCode: null, description: 'Thùng không nhãn', receivedAt: '2026-10-17T03:00:00.000Z' }),
+        wasteUnmatched({ id: 'un9', reason: 'NO_MATCH', relatedRequestId: 'rX', trackingCode: 'GHN777', description: 'Kiện của yêu cầu RX', receivedAt: '2026-10-17T05:00:00.000Z' }),
+        wasteUnmatched({ relatedRequestId: 'r1' }),
+        wasteUnmatched({ id: 'un8', status: 'RESOLVED', relatedRequestId: 'r1', description: 'Kiện đã đóng' }),
+      ],
+    };
     const detail = wasteRequestDetail({ status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' });
     const first = await mount({ isAdmin: true, detail, unmatched });
     click(btn(first.c, 'Mở lại yêu cầu'));
     await flush();
-    expect(optionValues(select(first.c, 'reopenUnmatchedId')!)).toEqual(['', 'un1']);
+    expect(first.api.calls.some((x) => x.url.includes('/admin/waste/unmatched') && x.url.includes('status=OPEN'))).toBe(true);
+    const sel = select(first.c, 'reopenUnmatchedId')!;
+    expect(optionValues(sel)).toEqual(['', 'un1', 'un7', 'un9']);
+    expect(optionLabels(sel)[0]).toContain('liên quan tới yêu cầu này');
+    expect(optionLabels(sel)[0]).toContain('GHN999');
+    expect(optionLabels(sel)[0]).toContain('Thùng carton băng keo xanh');
+    expect(optionLabels(sel)[0]).toContain(formatDateTime('2026-10-16T02:00:00.000Z'));
+    expect(optionLabels(sel)[1]).toContain('Thùng không nhãn');
+    expect(optionLabels(sel)[1]).toContain(formatDateTime('2026-10-17T03:00:00.000Z'));
+    expect(optionLabels(sel)[1]).not.toContain('liên quan tới yêu cầu này');
+    expect(optionLabels(sel)[2]).toContain('GHN777');
+    expect(optionLabels(sel)[2]).not.toContain('liên quan tới yêu cầu này');
     expect(btn(first.c, 'Xác nhận mở lại')!.disabled).toBe(true);
     typeInto(area(first.c, 'reopenReason'), 'Kiện về muộn');
-    selectValue(select(first.c, 'reopenUnmatchedId'), 'un1');
+    selectValue(select(first.c, 'reopenUnmatchedId'), 'un7');
     click(btn(first.c, 'Xác nhận mở lại'));
     await flush();
-    expect(bodyOf(post(first.api, '/admin/waste/requests/r1/reopen')[0])).toEqual({ reason: 'Kiện về muộn', unmatchedId: 'un1' });
+    expect(bodyOf(post(first.api, '/admin/waste/requests/r1/reopen')[0])).toEqual({ reason: 'Kiện về muộn', unmatchedId: 'un7' });
 
     const second = await mount({ isAdmin: true, detail, unmatched });
     click(btn(second.c, 'Mở lại yêu cầu'));

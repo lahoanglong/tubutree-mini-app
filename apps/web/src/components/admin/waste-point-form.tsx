@@ -176,6 +176,8 @@ export function WastePointForm({
   const set = (p: Partial<Form>) => setF((cur) => ({ ...cur, ...p }));
   const errors = validate(f);
   const warehouse = f.kind === 'WAREHOUSE';
+  // Điểm mới chưa có nhân sự nên chưa có chủ điểm: API từ chối ACTIVE.
+  const needsOwner = !point && f.kind === 'PARTNER';
 
   const onError = (e: unknown) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
   const create = useMutation({
@@ -281,7 +283,7 @@ export function WastePointForm({
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Trạng thái" hint={warehouse ? 'Kho luôn Đang nhận; muốn dừng nhận mới thì tắt waste.enabled hoặc cờ waste.lane_*' : undefined}>
+        <Field label="Trạng thái" hint={warehouse ? 'Kho luôn Đang nhận; muốn dừng nhận mới thì tắt waste.enabled hoặc cờ waste.lane_*' : needsOwner ? 'Đang nhận: gắn chủ điểm rồi mới kích hoạt' : undefined}>
           <select
             name="status"
             className={INPUT_CLASS}
@@ -289,7 +291,7 @@ export function WastePointForm({
             disabled={warehouse}
             onChange={(e) => set({ status: e.target.value as WastePointStatus })}
           >
-            {STATUSES.map((s) => <option key={s} value={s}>{WASTE_POINT_STATUS_LABELS[s]}</option>)}
+            {STATUSES.map((s) => <option key={s} value={s} disabled={needsOwner && s === 'ACTIVE'}>{WASTE_POINT_STATUS_LABELS[s]}</option>)}
           </select>
         </Field>
         {!warehouse && (

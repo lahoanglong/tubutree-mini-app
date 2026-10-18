@@ -170,10 +170,13 @@ const parseQty = (raw: string, max: number): number | null => {
 function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const refresh = useRefresh(r.id);
   const { confirm, dialog } = useConfirm();
-  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, String(l.declaredQty)])));
+  // The server takes a hazardous item only as 0 with WRONG_TYPE (waste-confirm-lines), so those lines start there and stay locked.
+  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.hazardous ? '0' : String(l.declaredQty)])));
   // Last valid count per line, so the points line never shows NaN while a field is mid-edit.
-  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.declaredQty])));
-  const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
+  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.hazardous ? 0 : l.declaredQty])));
+  const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>(() =>
+    Object.fromEntries(r.lines.filter((l) => l.hazardous).map((l) => [l.itemId, 'WRONG_TYPE' as const])),
+  );
   const [weight, setWeight] = useState('');
   const [result, setResult] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -193,13 +196,14 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
     },
   });
 
-  const parsed = r.lines.map((l) => ({ line: l, qty: parseQty(received[l.itemId] ?? '', l.declaredQty) }));
+  // Hazardous comes from the live request: a refetch can flip it after the state initialisers ran.
+  const parsed = r.lines.map((l) => ({ line: l, qty: l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty) }));
   const anyInvalid = parsed.some((p) => p.qty === null);
   const shortLines = parsed.filter((p) => p.qty !== null && p.qty < p.line.declaredQty);
-  const missingReason = shortLines.some((p) => !reasons[p.line.itemId]);
+  const missingReason = shortLines.some((p) => !p.line.hazardous && !reasons[p.line.itemId]);
   const weightTrim = weight.trim();
   const weightValid = weightTrim === '' || (/^\d+$/.test(weightTrim) && Number(weightTrim) >= 1 && Number(weightTrim) <= 100000);
-  const total = wastePointsForLines(r.lines.map((l) => ({ receivedQty: lastValid[l.itemId] ?? l.declaredQty, unitsPerPoint: l.unitsPerPoint, pointsPerGroup: l.pointsPerGroup })));
+  const total = wastePointsForLines(r.lines.map((l) => ({ receivedQty: l.hazardous ? 0 : (lastValid[l.itemId] ?? l.declaredQty), unitsPerPoint: l.unitsPerPoint, pointsPerGroup: l.pointsPerGroup })));
   const ready = !anyInvalid && !missingReason && weightValid && result === null;
 
   const setQty = (itemId: string, declaredQty: number, raw: string) => {
@@ -219,6 +223,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
     setErr(null);
     onFlash(null);
     const lines: WasteConfirmLineInput[] = parsed.map(({ line, qty }) => {
+      if (line.hazardous) return { itemId: line.itemId, declaredQty: line.declaredQty, receivedQty: 0, shortfallReason: 'WRONG_TYPE' };
       const reason = reasons[line.itemId];
       return qty! < line.declaredQty && reason
         ? { itemId: line.itemId, declaredQty: line.declaredQty, receivedQty: qty!, shortfallReason: reason }
@@ -234,7 +239,8 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
       <h3 className="text-sm font-semibold text-stone-900">Đếm hàng thực nhận</h3>
       <ul className="space-y-2">
         {r.lines.map((l) => {
-          const qty = parseQty(received[l.itemId] ?? '', l.declaredQty);
+          const qty = l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty);
+          const reasonValue = l.hazardous ? 'WRONG_TYPE' : (reasons[l.itemId] ?? '');
           const isShort = qty !== null && qty < l.declaredQty;
           return (
             <li key={l.itemId} className="flex flex-wrap items-center gap-2 text-sm">
@@ -246,7 +252,8 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                 inputMode="numeric"
                 aria-label={`Thực nhận ${l.itemName}`}
                 className={`${FIELD_CLASS} w-24`}
-                value={received[l.itemId] ?? ''}
+                value={l.hazardous ? '0' : (received[l.itemId] ?? '')}
+                disabled={l.hazardous}
                 onChange={(e) => setQty(l.itemId, l.declaredQty, e.target.value)}
               />
               {isShort && (
@@ -254,13 +261,15 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                   name={`shortfall-${l.itemId}`}
                   aria-label={`Lý do thiếu ${l.itemName}`}
                   className={FIELD_CLASS}
-                  value={reasons[l.itemId] ?? ''}
+                  value={reasonValue}
+                  disabled={l.hazardous}
                   onChange={(e) => setReasons((prev) => ({ ...prev, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
                 >
                   <option value="">Chọn lý do</option>
                   {SHORTFALL_KEYS.map((k) => <option key={k} value={k}>{WASTE_SHORTFALL_REASON_LABELS[k]}</option>)}
                 </select>
               )}
+              {l.hazardous && <span className="text-xs text-danger-fg">Không nhận món này</span>}
               {qty === null && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
             </li>
           );
@@ -482,8 +491,10 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
 function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: string; busy: boolean; onSubmit: (b: WasteReopenRequest) => void; onCancel: () => void }) {
   const [reason, setReason] = useState('');
   const [unmatchedId, setUnmatchedId] = useState('');
-  const unmatched = useQuery({ queryKey: ['admin-waste-unmatched', 'OPEN'], queryFn: () => listWasteUnmatched() });
-  const related = (unmatched.data ?? []).filter((u) => u.relatedRequestId === requestId);
+  const unmatched = useQuery({ queryKey: ['admin-waste-unmatched', 'OPEN'], queryFn: () => listWasteUnmatched('OPEN') });
+  // Server mở lại nhận mọi kiện OPEN: kiện ghi tay không có relatedRequestId, kiện quét theo mã của yêu cầu khác mang id yêu cầu đó, nên vẫn phải chọn được.
+  const open = (unmatched.data ?? []).filter((u) => u.status === 'OPEN');
+  const options = [...open.filter((u) => u.relatedRequestId === requestId), ...open.filter((u) => u.relatedRequestId !== requestId)];
   const reasonTrim = reason.trim();
 
   const submit = () => {
@@ -505,12 +516,19 @@ function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: strin
         />
       </label>
       <label className="block text-xs">
-        <span className="font-medium text-stone-700">Kiện không rõ chủ liên quan</span>
+        <span className="font-medium text-stone-700">Gắn kiện không rõ chủ</span>
         <select name="reopenUnmatchedId" className={`${INPUT_CLASS} mt-1`} value={unmatchedId} onChange={(e) => setUnmatchedId(e.target.value)}>
           <option value="">Không gắn kiện</option>
-          {related.map((u) => (
+          {options.map((u) => (
             <option key={u.id} value={u.id}>
-              {[u.carrier, u.trackingCode].filter((x): x is string => x !== null && x !== '').join(' · ') || u.description}
+              {[
+                u.description,
+                [u.carrier, u.trackingCode].filter((x): x is string => x !== null && x !== '').join(' ') || null,
+                formatDateTime(u.receivedAt),
+                u.relatedRequestId === requestId ? 'liên quan tới yêu cầu này' : null,
+              ]
+                .filter((x): x is string => x !== null)
+                .join(' · ')}
             </option>
           ))}
         </select>

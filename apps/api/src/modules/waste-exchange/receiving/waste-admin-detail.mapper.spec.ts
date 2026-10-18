@@ -47,6 +47,19 @@ describe('toAdminRequestDetail', () => {
   });
 });
 
+describe('toAdminRequestDetail lines', () => {
+  const line = (itemId: string, hazardous: boolean) => ({
+    id: `l-${itemId}`, requestId: 'r1', itemId, itemCode: itemId, itemName: itemId, unitLabel: 'cái', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0,
+    gramsPerUnit: null, declaredQty: 3, receivedQty: null, shortfallReason: null, pointsAwarded: null, item: { hazardous },
+  });
+
+  it('carries the live item hazardous flag on every line', () => {
+    const dto = toAdminRequestDetail(row({ lines: [line('i-pin', true), line('i-carton', false)] }), true, true);
+    expect(dto.lines.map((l) => [l.itemId, l.hazardous])).toEqual([['i-pin', true], ['i-carton', false]]);
+    expect(dto.lines[0]).not.toHaveProperty('item');
+  });
+});
+
 describe('loadAdminRequestDetail', () => {
   const dbOf = (r: unknown) => ({
     wasteRequest: { findUnique: jest.fn(async () => r) },
