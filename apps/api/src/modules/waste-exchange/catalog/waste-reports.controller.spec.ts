@@ -58,6 +58,13 @@ describe('WasteReportsController', () => {
     expect(reports.overview).toHaveBeenCalledWith('2026-11');
     expect((assertActiveAdmin as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(reports.overview.mock.invocationCallOrder[0]!);
     expect(result).toEqual({ ok: true });
+
+    (assertActiveAdmin as jest.Mock).mockClear();
+    await controller.adminPointReport('a1', 'P1', { month: '2026-10' });
+    expect(assertActiveAdmin).toHaveBeenCalledWith(prisma, 'a1');
+    expect(reports.adminPointReport).toHaveBeenCalledWith('P1', '2026-10');
+    await controller.deskPointReport('u1', 'P1', { month: '2026-10' });
+    expect(reports.pointReport).toHaveBeenCalledWith('u1', 'P1', '2026-10');
   });
 
   it('monthlyCsv names the file after the month and returns the text', async () => {
@@ -66,6 +73,7 @@ describe('WasteReportsController', () => {
 
     const result = await controller.monthlyCsv('a1', { month: '2026-10' }, res as never);
 
+    expect(assertActiveAdmin).toHaveBeenCalledWith(prisma, 'a1');
     expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="doi-rac-2026-10.csv"');
     expect(result).toBe('csv-text');
   });
