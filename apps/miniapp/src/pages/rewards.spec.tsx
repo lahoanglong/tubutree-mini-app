@@ -91,7 +91,7 @@ describe('/rewards Kho quà (§4.8)', () => {
     mocks.publicConfig.loyalty = { maxRedeemPct: 0.2, pointExpireMonths: 12 };
     try {
       renderPage();
-      expect(await screen.findByText('Dùng tối đa 20% giá trị hàng trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.')).toBeInTheDocument();
+      expect(await screen.findByText('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.')).toBeInTheDocument();
     } finally {
       mocks.publicConfig.loyalty = undefined;
     }
