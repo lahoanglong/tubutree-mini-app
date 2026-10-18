@@ -213,6 +213,22 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     expect(mocks.patch.mock.calls[0]![1]).toMatchObject({ dob: '1991-02-03' });
   });
 
+  it('lần lưu đầu mang ngày sinh nhưng phản hồi mất: /me được tải lại, lần lưu sau không gửi lại ngày sinh', async () => {
+    let meCalls = 0;
+    mocks.get.mockImplementation(async () => (++meCalls === 1 ? { ...ME, dob: null } : { ...ME, dob: '1991-02-03' }));
+    mocks.patch.mockRejectedValueOnce(new NetworkError(false)).mockResolvedValueOnce({ ...ME });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    click(saveBtn(container));
+    await flush(6);
+    expect(mocks.patch.mock.calls[0]![1]).toMatchObject({ dob: '1991-02-03' });
+    typeInto(field(container, 'Họ và tên'), 'Lan C');
+    click(saveBtn(container));
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledTimes(2);
+    expect(mocks.patch.mock.calls[1]![1].dob).toBeUndefined();
+  });
+
   it('tên để trống thì không gửi tên và giữ tên cũ trong phiên', async () => {
     const { container } = await mount();
     typeInto(field(container, 'Họ và tên'), '   ');

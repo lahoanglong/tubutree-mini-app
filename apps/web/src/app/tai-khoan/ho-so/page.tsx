@@ -129,10 +129,13 @@ export default function EditProfilePage() {
         fullName: fullName.trim() || user?.fullName || null,
         avatarUrl: avatarSkipped ? (user?.avatarUrl ?? null) : (avatarUrl ?? res?.avatarUrl ?? user?.avatarUrl ?? null),
       });
+      if (res) qc.setQueryData(['me'], res);
       void qc.invalidateQueries({ queryKey: ['me'] });
       setDone(avatarSkipped && avatarChanged ? AVATAR_NOT_SAVED : 'Đã cập nhật hồ sơ');
     },
     onError: (e) => {
+      // Phản hồi mất không có nghĩa là chưa ghi: tải lại /me để ngày sinh đã đặt chuyển sang chỉ đọc, lần lưu sau không gửi lại.
+      void qc.invalidateQueries({ queryKey: ['me'] });
       setDone(null);
       setSaveError(errorText(e));
     },
