@@ -54,6 +54,8 @@ async function mount(ui: React.ReactElement, overrides: { overview?: Route; conf
     '/admin/waste/points': { body: [] },
     '/admin/waste/unmatched': { body: [] },
     '/admin/waste/requests': { body: { rows: [], nextCursor: null } },
+    '/admin/waste/gift-redemptions': { body: [] },
+    '/admin/waste/gifts': { body: [] },
     '/admin/config': overrides.config ?? { body: CONFIG_OFF },
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
