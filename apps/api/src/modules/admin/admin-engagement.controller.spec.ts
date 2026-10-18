@@ -5,7 +5,6 @@ import { validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { AdminEngagementController, UpdateMissionDto } from './admin-engagement.controller';
 import { AdminEngagementService } from './admin-engagement.service';
-import { DEFAULT_REWARD_CATALOG } from '../loyalty/loyalty.service';
 
 const mission = (over: Record<string, unknown> = {}) => ({
   id: 'm1',
@@ -74,10 +73,16 @@ describe('AdminEngagementService', () => {
       .fn()
       .mockResolvedValueOnce([{ reason: 'LOYALTY_REDEEM_VOUCHER:reward-freeship', _count: { _all: 12 } }])
       .mockResolvedValueOnce([{ reason: 'LOYALTY_REDEEM_VOUCHER:reward-freeship', _count: { _all: 3 } }]);
-    const rows = await make({ pointsTransaction: { groupBy } }).rewardCatalog(new Date('2026-10-14T00:00:00Z'));
-    expect(rows).toHaveLength(DEFAULT_REWARD_CATALOG.length);
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: 'Mô tả', label: 'Phổ biến', pointsCost: 20_000, voucherType: 'FREESHIP', voucherValue: 0, voucherMinOrder: 99000, voucherMaxDiscount: null },
+      { id: 'reward-discount-50k', kind: 'VOUCHER', name: 'Giảm 50.000đ', description: null, label: 'Tiết kiệm', pointsCost: 50_000, voucherType: 'AMOUNT', voucherValue: 50000, voucherMinOrder: 300000, voucherMaxDiscount: null },
+    ]);
+    const rows = await make({ pointsTransaction: { groupBy }, wasteGift: { findMany } }).rewardCatalog(new Date('2026-10-14T00:00:00Z'));
+    expect(rows).toHaveLength(2);
     const ship = rows.find((r) => r.id === 'reward-freeship')!;
     expect(ship).toMatchObject({ pointsCost: 20_000, redeemedCount: 12, redeemed30d: 3 });
+    expect(ship).toMatchObject({ title: 'Miễn phí vận chuyển', type: 'FREESHIP', value: 0, minOrder: 99000, badge: 'Phổ biến' });
+    expect(findMany).toHaveBeenCalledWith({ where: { kind: 'VOUCHER' }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] });
     expect(rows.find((r) => r.id === 'reward-discount-50k')).toMatchObject({ redeemedCount: 0, redeemed30d: 0 });
     expect(groupBy.mock.calls[1][0].where.createdAt).toEqual({ gte: new Date('2026-09-14T00:00:00Z') });
   });

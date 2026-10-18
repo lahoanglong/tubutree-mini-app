@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { requireIdempotencyKey } from '../../common/idempotency-key';
 import { LoyaltyService } from './loyalty.service';
 import { PosCreditDto, PosCreditListQuery, ScanMemberDto } from './dto/loyalty-staff.dto';
 
@@ -42,11 +43,15 @@ export class LoyaltyController {
     return this.loyalty.getMyRedemptions(userId);
   }
 
-  /** Đổi Điểm Xanh lấy Voucher cá nhân (trừ điểm atomic — xem LoyaltyService.redeemReward). */
+  /** Đổi quà trong kho quà (Idempotency-Key bắt buộc). */
   @Post('me/loyalty/rewards/:id/redeem')
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
-  redeemReward(@CurrentUser('sub') userId: string, @Param('id') rewardId: string) {
-    return this.loyalty.redeemReward(userId, rewardId);
+  redeemReward(
+    @CurrentUser('sub') userId: string,
+    @Param('id') rewardId: string,
+    @Headers('idempotency-key') rawKey: string | undefined,
+  ) {
+    return this.loyalty.redeemReward(userId, rewardId, requireIdempotencyKey(rawKey));
   }
 
   /** Trạng thái điểm danh 7 ngày. */

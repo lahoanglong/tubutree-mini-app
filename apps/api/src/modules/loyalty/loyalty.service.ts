@@ -10,8 +10,8 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
-import type { GiftRedemptionDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WasteVoucherSpec } from '@tubutree/shared-types';
-import type { WasteGift, WasteGiftRedemption } from '@prisma/client';
+import type { GiftRedemptionDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WasteVoucherSpec } from '@tubutree/shared-types';
+import type { CouponType, WasteGift, WasteGiftRedemption } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
 import { remainingPointsBack } from '../orders/refund-allocation';
@@ -21,7 +21,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
 import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
-import { isRealUser } from '../../common/real-user';
+import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { voucherCode } from '../vouchers/voucher-code';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
@@ -32,6 +32,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { maskPhoneOrNull } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
 import { assertActiveStaff } from '../../common/staff-access';
+import { generateWasteCode } from '../waste-exchange/waste-codes';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
 /**
@@ -872,74 +873,150 @@ export class LoyaltyService {
   }
 
   /**
-   * Đổi Điểm Xanh lấy Voucher cá nhân (HSD 30 ngày).
+   * Đổi Điểm Xanh lấy quà trong kho quà (waste_gifts): mã giảm giá (VOUCHER) hoặc quà vật lý nhận tại kho (SEED_PACK, GIFT).
+   *
+   * Thứ tự khoá trong tx (registry 4.12 mục 11): users FOR UPDATE → kiểm lặp (userId, Idempotency-Key) → lockedOrderPoints →
+   * UPDATE tồn kho waste_gifts có điều kiện → updateMany điểm có guard → coupon → dòng đổi quà → sổ điểm; kiểm lặp trong tx
+   * ngay sau khoá users (§8).
    *
    * RACE: bản WIP đọc số dư trong tx (READ COMMITTED, không khoá) rồi decrement vô điều kiện →
-   * 5 request song song với 100 điểm cùng đọc 100, cùng trừ → số dư -400 và 5 voucher 100k.
-   * Fix: GIÀNH điểm bằng 1 câu updateMany có guard `pointsBalance >= giá` (atomic, cùng mẫu
-   * checkout.service.ts / game creditPoints) — count=0 là không đủ điểm, không ghi gì thêm.
-   * Coupon + dòng ledger chỉ tạo SAU khi đã giành được điểm, trong cùng transaction.
+   * 5 request song song với 100 điểm cùng đọc 100, cùng trừ → số dư -400. Fix: GIÀNH điểm bằng 1 câu updateMany có guard
+   * `pointsBalance >= giá` (atomic, cùng mẫu checkout.service.ts / game creditPoints) — count=0 là không đủ điểm, không ghi
+   * gì thêm. Dòng đổi quà, coupon và sổ điểm chỉ tạo SAU khi đã giành được tồn kho và điểm, trong cùng transaction.
    *
-   * CHỈ điểm không còn bị đảo được mới đổi được (lockedOrderPoints): đổi voucher bằng điểm đơn vừa
-   * giao rồi trả hàng là giữ voucher miễn phí. Phần khoá tính TRONG tx rồi đưa thẳng vào guard
+   * CHỈ điểm không còn bị đảo được mới đổi được (lockedOrderPoints): đổi quà bằng điểm đơn vừa
+   * giao rồi trả hàng là giữ quà miễn phí. Phần khoá tính TRONG tx rồi đưa thẳng vào guard
    * (`pointsBalance >= giá + khoá`). Khoá dòng user (FOR UPDATE) TRƯỚC khi tính: creditOrderPoints/
    * reverseOrderPoints đều ghi dòng ledger + cập nhật số dư của CHÍNH dòng user này, nên sau khoá,
    * phần khoá và số dư được đọc nhất quán (không lọt điểm của đơn vừa giao commit chen giữa 2 câu).
    */
-  async redeemReward(userId: string, rewardId: string) {
-    const reward = DEFAULT_REWARD_CATALOG.find((r) => r.id === rewardId);
-    if (!reward) {
+  async redeemReward(userId: string, rewardId: string, idempotencyKey: string): Promise<RedeemRewardResultDTO> {
+    const gift = await this.prisma.wasteGift.findUnique({ where: { id: rewardId } });
+    if (!gift) {
       throw new NotFoundException(`Phần thưởng "${rewardId}" không tồn tại.`);
+    }
+    if (gift.kind === 'TREE') {
+      throw new BadRequestException('Quà góp quỹ trồng cây đổi bằng nút Góp cây ở Vườn Xanh.');
+    }
+    const physical = gift.kind === 'SEED_PACK' || gift.kind === 'GIFT';
+    if (physical) {
+      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+      if (!isRealUser(u)) throw new ForbiddenException(REAL_USER_REQUIRED_MSG);
     }
 
     // NGOÀI tx: xem lockedOrderPoints (lần trượt cache cấu hình trong tx xin kết nối pool thứ hai khi đang khoá dòng user).
     const windowDays = await this.returnWindowDays();
+    const claimDays = Number(await this.config.get<number>('waste.gift_claim_days', 60));
+    const claimPoint = physical ? await this.claimPointOf(this.prisma) : null;
+
+    try {
+      return await this.runRedeem(userId, gift, idempotencyKey, windowDays, claimDays, claimPoint);
+    } catch (e) {
+      if (!isUniqueViolation(e)) throw e;
+      const target = String((e as { meta?: { target?: unknown } }).meta?.target ?? '');
+      if (target.includes('idempotencyKey')) {
+        const row = await this.prisma.wasteGiftRedemption.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey } } });
+        if (!row) throw e;
+        return this.replayOrConflict(this.prisma, row, gift.id);
+      }
+      if (target.includes('code')) {
+        return this.runRedeem(userId, gift, idempotencyKey, windowDays, claimDays, claimPoint);
+      }
+      throw e;
+    }
+  }
+
+  private async runRedeem(
+    userId: string,
+    gift: WasteGift,
+    idempotencyKey: string,
+    windowDays: number,
+    claimDays: number,
+    claimPoint: RewardCatalogDTO['claimPoint'],
+  ): Promise<RedeemRewardResultDTO> {
+    const isVoucher = gift.kind === 'VOUCHER';
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
-      const lock = await this.lockedOrderPoints(userId, new Date(), tx, windowDays);
+      const prior = await tx.wasteGiftRedemption.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey } } });
+      if (prior) return this.replayOrConflict(tx, prior, gift.id);
+
+      const now = new Date();
+      const lock = await this.lockedOrderPoints(userId, now, tx, windowDays);
+
+      const stock = await tx.$executeRaw`UPDATE "waste_gifts" SET "stock" = CASE WHEN "stock" IS NULL THEN NULL ELSE "stock" - 1 END WHERE "id" = ${gift.id} AND "status" = 'ACTIVE' AND ("stock" IS NULL OR "stock" >= 1)`;
+      if (stock !== 1) throw new BadRequestException('Quà này đã hết hoặc đã ngừng đổi');
+
       const dec = await tx.user.updateMany({
-        where: { id: userId, pointsBalance: { gte: reward.pointsCost + lock.locked } },
-        data: { pointsBalance: { decrement: reward.pointsCost } },
+        where: { id: userId, pointsBalance: { gte: gift.pointsCost + lock.locked } },
+        data: { pointsBalance: { decrement: gift.pointsCost } },
       });
       if (dec.count === 0) {
         const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true } });
         const balance = cur?.pointsBalance ?? 0;
-        if (lock.locked > 0 && balance >= reward.pointsCost) {
+        if (lock.locked > 0 && balance >= gift.pointsCost) {
           const usable = Math.max(0, balance - lock.locked);
           throw new BadRequestException(
-            `Bạn cần ${formatPoints(reward.pointsCost)} Điểm Xanh dùng được để đổi ưu đãi này — hiện dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.lockedPointsMessage(lock)}.`,
+            `Bạn cần ${formatPoints(gift.pointsCost)} Điểm Xanh dùng được để đổi ưu đãi này — hiện dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.lockedPointsMessage(lock)}.`,
           );
         }
         throw new BadRequestException(
-          `Bạn cần ${formatPoints(reward.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
+          `Bạn cần ${formatPoints(gift.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
         );
       }
 
-      const endAt = new Date();
-      endAt.setDate(endAt.getDate() + 30);
-      const coupon = await tx.coupon.create({
+      let coupon: Awaited<ReturnType<typeof tx.coupon.create>> | null = null;
+      if (isVoucher) {
+        const v = voucherSpecOf(gift);
+        const endAt = new Date(now);
+        endAt.setDate(endAt.getDate() + v.validDays);
+        coupon = await tx.coupon.create({
+          data: {
+            code: rewardCouponCode(gift),
+            type: v.type,
+            value: v.value,
+            minOrder: v.minOrder,
+            maxDiscount: v.maxDiscount,
+            startAt: now,
+            endAt,
+            usageLimit: 1,
+            perUserLimit: 1,
+            scope: 'USER_GROUP',
+            scopeMeta: { userId },
+          },
+        });
+      }
+
+      let code: string | null = null;
+      if (!isVoucher) {
+        code = generateWasteCode('QG');
+        for (let tries = 1; tries < 5 && (await tx.wasteGiftRedemption.findUnique({ where: { code } })); tries++) {
+          code = generateWasteCode('QG');
+        }
+      }
+
+      const redemption = await tx.wasteGiftRedemption.create({
         data: {
-          code: rewardCouponCode(reward),
-          type: reward.type,
-          value: reward.value,
-          minOrder: reward.minOrder ?? null,
-          maxDiscount: reward.maxDiscount ?? null,
-          startAt: new Date(),
-          endAt,
-          usageLimit: 1,
-          perUserLimit: 1,
-          scope: 'USER_GROUP',
-          scopeMeta: { userId },
+          userId,
+          giftId: gift.id,
+          giftKind: gift.kind,
+          giftName: gift.name,
+          pointsCost: gift.pointsCost,
+          status: isVoucher ? 'FULFILLED' : 'READY',
+          code,
+          couponId: coupon?.id ?? null,
+          idempotencyKey,
+          claimExpiresAt: isVoucher ? null : new Date(now.getTime() + claimDays * DAY_MS),
+          fulfilledAt: isVoucher ? now : null,
         },
       });
 
       await tx.pointsTransaction.create({
         data: {
           userId,
-          delta: -reward.pointsCost,
-          reason: `LOYALTY_REDEEM_VOUCHER:${reward.id}`,
-          refType: 'REWARD',
-          refId: coupon.id,
+          delta: -gift.pointsCost,
+          reason: coupon ? `LOYALTY_REDEEM_VOUCHER:${gift.id}` : `GIFT_REDEEM:${gift.id}`,
+          refType: coupon ? 'REWARD' : 'GIFT',
+          refId: coupon ? coupon.id : redemption.id,
         },
       });
 
@@ -948,19 +1025,52 @@ export class LoyaltyService {
 
       return {
         success: true,
-        message: `Đổi thành công ${reward.title}!`,
-        pointsSpent: reward.pointsCost,
+        message: `Đổi thành công ${gift.name}!`,
+        pointsSpent: gift.pointsCost,
         remainingPoints: after.pointsBalance,
-        coupon: {
-          code: coupon.code,
-          type: coupon.type,
-          value: coupon.value,
-          minOrder: coupon.minOrder,
-          maxDiscount: coupon.maxDiscount,
-          endAt: coupon.endAt,
-        },
+        redemption: toGiftRedemptionDTO(redemption, { claimPoint, couponCode: coupon?.code ?? null }),
+        coupon: coupon
+          ? {
+              code: coupon.code,
+              type: coupon.type,
+              value: coupon.value,
+              minOrder: coupon.minOrder,
+              maxDiscount: coupon.maxDiscount,
+              endAt: coupon.endAt.toISOString(),
+            }
+          : null,
       };
     });
+  }
+
+  private replayOrConflict(db: RedeemReplayDb, row: WasteGiftRedemption, giftId: string): Promise<RedeemRewardResultDTO> {
+    if (row.giftId !== giftId) {
+      throw new ConflictException('Idempotency-Key này đã dùng cho một lượt đổi quà khác, hãy tạo khoá khác.');
+    }
+    return this.replayResult(db, row);
+  }
+
+  private async replayResult(db: RedeemReplayDb, row: WasteGiftRedemption): Promise<RedeemRewardResultDTO> {
+    const cur = await db.user.findUniqueOrThrow({ where: { id: row.userId }, select: { pointsBalance: true } });
+    const coupon = row.couponId ? await db.coupon.findUnique({ where: { id: row.couponId } }) : null;
+    const claimPoint = row.status === 'READY' ? await this.claimPointOf(db) : null;
+    return {
+      success: true,
+      message: `Đổi thành công ${row.giftName}!`,
+      pointsSpent: row.pointsCost,
+      remainingPoints: cur.pointsBalance,
+      redemption: toGiftRedemptionDTO(row, { claimPoint, couponCode: coupon?.code ?? null }),
+      coupon: coupon
+        ? {
+            code: coupon.code,
+            type: coupon.type,
+            value: coupon.value,
+            minOrder: coupon.minOrder,
+            maxDiscount: coupon.maxDiscount,
+            endAt: coupon.endAt.toISOString(),
+          }
+        : null,
+    };
   }
 
   // ───────────────────────── Điểm danh hằng ngày ─────────────────────────
@@ -1459,6 +1569,13 @@ interface PartialReturnSum {
 
 const DAY_MS = 864e5;
 
+/** Phần của Prisma client mà kết quả phát lại của redeemReward đọc: this.prisma hoặc tx của caller. */
+type RedeemReplayDb = Pick<Prisma.TransactionClient, 'user' | 'coupon' | 'wastePoint'>;
+
+function isUniqueViolation(e: unknown): boolean {
+  return (e as { code?: unknown })?.code === 'P2002';
+}
+
 /**
  * Postgres nhận tối đa 32.767 tham số bind mỗi câu, và Prisma không tự tách khi `where` có bộ lọc phủ định (vd paymentMethod
  * not XU): khách có hàng chục nghìn đơn thì danh sách id phải đi theo từng phần.
@@ -1600,74 +1717,12 @@ const COUPON_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
  * Math.random + 4 ký tự cuối userId → cùng user đổi nhiều lần dễ trùng (P2002 → 500).
  * 32^8 ≈ 10^12 tổ hợp: trùng gần như không thể; nếu có, unique coupons.code vẫn chặn (tx rollback, không mất điểm).
  */
-function rewardCouponCode(reward: RewardCatalogItem): string {
+function rewardCouponCode(reward: { voucherType: CouponType | null; voucherValue: number | null }): string {
   const bytes = randomBytes(8);
   let rand = '';
   for (const b of bytes) rand += COUPON_ALPHABET[b % COUPON_ALPHABET.length];
-  const tag =
-    reward.type === 'AMOUNT'
-      ? `${Math.floor(reward.value / 1000)}K`
-      : reward.type === 'PERCENT'
-        ? `${reward.value}P`
-        : 'SHIP';
-  return `REWARD-${reward.type.slice(0, 3)}${tag}-${rand}`;
+  const type = reward.voucherType ?? '';
+  const value = reward.voucherValue ?? 0;
+  const tag = type === 'AMOUNT' ? `${Math.floor(value / 1000)}K` : type === 'PERCENT' ? `${value}P` : 'SHIP';
+  return `REWARD-${type.slice(0, 3)}${tag}-${rand}`;
 }
-
-export interface RewardCatalogItem {
-  id: string;
-  title: string;
-  description: string;
-  pointsCost: number;
-  type: 'FREESHIP' | 'AMOUNT' | 'PERCENT';
-  value: number;
-  minOrder?: number;
-  maxDiscount?: number;
-  badge?: string;
-}
-
-export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
-  {
-    // FREESHIP ở checkout miễn TOÀN BỘ phí ship (coupons.service validateAndCompute bỏ qua value),
-    // nên không ghi "tối đa 25k". Đơn ≥ shipping.free_threshold (200k) vốn đã freeship → minOrder
-    // 99k để voucher có ích cho đúng khoảng đơn còn phải trả phí ship (~19k) — giá 20.000 điểm ≈ 20.000đ.
-    id: 'reward-freeship',
-    title: 'Voucher Miễn phí vận chuyển',
-    description: 'Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop.',
-    pointsCost: 20_000,
-    type: 'FREESHIP',
-    value: 0,
-    minOrder: 99000,
-    badge: 'Phổ biến',
-  },
-  {
-    id: 'reward-discount-50k',
-    title: 'Voucher Giảm 50.000đ',
-    description: 'Giảm ngay 50.000đ cho đơn hàng từ 300.000đ',
-    pointsCost: 50_000,
-    type: 'AMOUNT',
-    value: 50000,
-    minOrder: 300000,
-    badge: 'Tiết kiệm',
-  },
-  {
-    id: 'reward-discount-100k',
-    title: 'Voucher Giảm 100.000đ',
-    description: 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ',
-    pointsCost: 100_000,
-    type: 'AMOUNT',
-    value: 100000,
-    minOrder: 600000,
-    badge: 'HOT',
-  },
-  {
-    id: 'reward-percent-15pct',
-    title: 'Voucher Giảm 15%',
-    description: 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ',
-    pointsCost: 75_000,
-    type: 'PERCENT',
-    value: 15,
-    minOrder: 250000,
-    maxDiscount: 80000,
-    badge: 'Đặc quyền',
-  },
-];

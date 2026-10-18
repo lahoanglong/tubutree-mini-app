@@ -3,8 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
-import { LoyaltyService, DEFAULT_REWARD_CATALOG } from '../../src/modules/loyalty/loyalty.service';
-import { barrierOnFirstCalls, createOrder, createUser, setConfig, summarize, warmPool } from './helpers';
+import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
+import { barrierOnFirstCalls, createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 /**
  * LoyaltyService trên Postgres thật: điểm danh, đổi quà, tích điểm POS dưới N request đồng thời.
@@ -72,10 +72,10 @@ describe('LoyaltyService race (real Postgres)', () => {
   });
 
   it('(b) redeemReward: exactly enough points for one reward, 5 concurrent redeems -> 1 coupon, balance 0', async () => {
-    const reward = DEFAULT_REWARD_CATALOG.find((r) => r.id === 'reward-discount-50k')!;
+    const reward = { id: 'reward-discount-50k', pointsCost: 50_000 };
     const user = await createUser(prisma, { pointsBalance: reward.pointsCost });
 
-    const results = await Promise.allSettled(Array.from({ length: 5 }, () => loyalty.redeemReward(user.id, reward.id)));
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => loyalty.redeemReward(user.id, reward.id, `rk-${randCode(12)}`)));
     const s = summarize(results);
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
@@ -97,7 +97,7 @@ describe('LoyaltyService race (real Postgres)', () => {
   });
 
   it('(d) redeemReward: điểm đơn còn có thể bị trả hàng bị khoá (SQL thật) + 5 request song song không đụng phần khoá', async () => {
-    const reward = DEFAULT_REWARD_CATALOG.find((r) => r.id === 'reward-discount-50k')!; // 50.000 điểm
+    const reward = { id: 'reward-discount-50k', pointsCost: 50_000 }; // 50.000 điểm
     const user = await createUser(prisma, { pointsBalance: 150_000 });
     const DAY = 864e5;
     const now = Date.now();
@@ -134,11 +134,11 @@ describe('LoyaltyService race (real Postgres)', () => {
     expect(Math.abs(new Date(ov.lockedUntil!).getTime() - (now + 5 * DAY))).toBeLessThan(5_000);
 
     // Dùng được 45.000 < 50.000 → từ chối rõ ràng, không trừ gì.
-    await expect(loyalty.redeemReward(user.id, reward.id)).rejects.toThrow(/60[.,]?000 điểm từ đơn mới giao sẽ dùng được sau ngày/);
+    await expect(loyalty.redeemReward(user.id, reward.id, `rk-${randCode(12)}`)).rejects.toThrow(/60[.,]?000 điểm từ đơn mới giao sẽ dùng được sau ngày/);
 
     // Cộng thêm 60.000 điểm "cũ" (không khoá) → dùng được 105.000 → 5 request song song đổi quà 50.000: đúng 2 thành công.
     await prisma.user.update({ where: { id: user.id }, data: { pointsBalance: { increment: 60_000 } } });
-    const results = await Promise.allSettled(Array.from({ length: 5 }, () => loyalty.redeemReward(user.id, reward.id)));
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => loyalty.redeemReward(user.id, reward.id, `rk-${randCode(12)}`)));
     const s = summarize(results);
     const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
 
