@@ -12,6 +12,10 @@ const state = vi.hoisted(() => ({
   commissions: [] as unknown[],
   payouts: [] as unknown[],
   tax: { year: 2026, fullName: null, taxId: null, items: [], totals: { grossAmount: 0, taxWithheld: 0, netAmount: 0 } } as Record<string, unknown>,
+  tiers: null as Record<string, unknown> | null,
+  milestones: null as Record<string, unknown> | null,
+  storefronts: [] as unknown[],
+  products: [] as unknown[],
   fail: new Set<string>(),
   calls: [] as Call[],
   share: vi.fn(),
@@ -37,6 +41,10 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/affiliate/links') return state.links;
       if (path === '/affiliate/commissions') return state.commissions;
       if (path === '/affiliate/payouts') return state.payouts;
+      if (path === '/affiliate/tiers') return state.tiers;
+      if (path === '/affiliate/milestones') return state.milestones;
+      if (path === '/affiliate/analytics/storefronts') return { storefronts: state.storefronts };
+      if (path === '/affiliate/analytics/products') return state.products;
       if (path === '/config/public') return { affiliateMinWithdrawBank: 70_000 };
       return state.tax;
     },
@@ -77,6 +85,10 @@ beforeEach(() => {
   state.links = [];
   state.commissions = [];
   state.payouts = [];
+  state.tiers = null;
+  state.milestones = null;
+  state.storefronts = [];
+  state.products = [];
   state.fail = new Set();
   state.calls = [];
   state.share = vi.fn(async () => 'shared');
@@ -375,5 +387,83 @@ describe('/ctv — bảng điều khiển', () => {
     const { container } = mount();
     await flush();
     expect(container.querySelector('a[href="/hoc-vien"]')).not.toBeNull();
+  });
+});
+
+const TIERS = {
+  revenue: 3_000_000,
+  tier: DASH.tier,
+  allTiers: [
+    { name: 'Hạt Giống', emoji: '🌱', min: 0, milestoneRewardPoints: null },
+    { name: 'Nảy Mầm', emoji: '🌿', min: 1_000_000, milestoneRewardPoints: 600 },
+  ],
+};
+const MILESTONES = {
+  monthKey: '2026-10',
+  currentRevenue: 4_000_000,
+  pendingRevenue: 0,
+  holdDays: 20,
+  milestones: [
+    { id: 'A', title: 'Mốc A', threshold: 3_000_000, rewardPoints: 100, description: '', achieved: true, claimed: false, canClaim: true, progressPct: 100 },
+  ],
+  previousMonth: null,
+};
+
+describe('/ctv — bậc, thưởng mốc, phân tích', () => {
+  it('bậc CTV hiện từ dashboard; bảng 5 bậc lấy từ /affiliate/tiers', async () => {
+    state.dash = { ...DASH, monthRevenue: 3_000_000, tier: { name: 'Nảy Mầm', emoji: '🌿', nextName: 'Đơm Hoa', nextThreshold: 10_000_000, toNext: 7_000_000 } };
+    state.tiers = TIERS;
+    const { container } = mount();
+    await flush();
+    expect(container.textContent).toContain('CTV Nảy Mầm');
+    click(container.querySelector('button[aria-expanded]'));
+    expect(container.textContent).toContain('Thưởng mốc +600 điểm');
+  });
+
+  it('thưởng mốc: có mốc nhận được thì nút Nhận thưởng gọi POST claim kèm tháng', async () => {
+    state.milestones = MILESTONES;
+    const { container } = mount();
+    await flush();
+    expect(container.textContent).toContain('Thưởng mốc doanh số tháng');
+    click(byText(container, 'button', 'Nhận thưởng'));
+    await flush();
+    expect(posts().find((c) => c.path === '/affiliate/milestones/A/claim')?.body).toEqual({ month: '2026-10' });
+  });
+
+  it('thưởng mốc lỗi tải: có Thử lại, không làm hỏng phần còn lại của trang', async () => {
+    state.fail.add('/affiliate/milestones');
+    const { container } = mount();
+    await flush();
+    expect(container.textContent).toContain('mất mạng');
+    expect(container.textContent).toContain('Hoa hồng tháng này');
+  });
+
+  it('theo gian hàng: dòng có tên, số đơn, doanh số và hoa hồng; rỗng có lời mời; lỗi có Thử lại', async () => {
+    const empty = mount();
+    await flush();
+    expect(empty.container.textContent).toContain('Chưa có đơn từ gian hàng nào');
+    state.storefronts = [{ slug: 'vuon-xanh', title: 'Vườn Xanh', orders: 3, revenue: 900_000, commission: 90_000 }];
+    const full = mount();
+    await flush();
+    expect(full.container.textContent).toContain('Vườn Xanh');
+    expect(full.container.textContent).toContain('3 đơn · DS 900.000đ');
+    expect(full.container.textContent).toContain('+90.000đ');
+    state.fail.add('/affiliate/analytics/storefronts');
+    const failed = mount();
+    await flush();
+    expect(byText(failed.container, 'button', 'Thử lại')).not.toBeNull();
+  });
+
+  it('theo sản phẩm: tối đa 10 dòng, rỗng có lời mời', async () => {
+    const empty = mount();
+    await flush();
+    expect(empty.container.textContent).toContain('Chưa có hoa hồng theo sản phẩm');
+    state.products = Array.from({ length: 12 }, (_, i) => ({ productName: `SP ${i + 1}`, commission: 1_000 * (i + 1), orders: i + 1 }));
+    const { container } = mount();
+    await flush();
+    const section = container.querySelector('section[aria-label="Theo sản phẩm"]')!;
+    expect(section.querySelectorAll('li')).toHaveLength(10);
+    expect(section.textContent).toContain('SP 1');
+    expect(section.textContent).not.toContain('SP 12');
   });
 });

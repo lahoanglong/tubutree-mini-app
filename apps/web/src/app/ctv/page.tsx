@@ -9,8 +9,12 @@ import {
   affiliateCommissionsQuery,
   affiliateDashboardQuery,
   affiliateLinksQuery,
+  affiliateCtvTiersQuery,
   affiliateMeQuery,
+  affiliateMilestonesQuery,
   affiliatePayoutsQuery,
+  affiliateProductBreakdownQuery,
+  affiliateStorefrontAnalyticsQuery,
   affiliateTaxStatementQuery,
 } from '@tubutree/app-core/queries/affiliate';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
@@ -29,6 +33,8 @@ import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
+import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';
+import { TierCard } from '@/components/affiliate/tier-card';
 import { WithdrawSheet } from '@/components/affiliate/withdraw-sheet';
 import {
   COMMISSION_META,
@@ -305,6 +311,10 @@ function Dashboard() {
   const commQ = useQuery(affiliateCommissionsQuery(coreHttp));
   const payoutsQ = useQuery(affiliatePayoutsQuery(coreHttp));
   const taxQ = useQuery(affiliateTaxStatementQuery(coreHttp));
+  const sfQ = useQuery(affiliateStorefrontAnalyticsQuery(coreHttp));
+  const pbQ = useQuery(affiliateProductBreakdownQuery(coreHttp));
+  const tiersQ = useQuery(affiliateCtvTiersQuery(coreHttp));
+  const milestonesQ = useQuery(affiliateMilestonesQuery(coreHttp));
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -417,6 +427,20 @@ function Dashboard() {
               Đang rút {formatVnd(d!.withdrawingCommission!)} về ngân hàng — chờ Tubu Tree duyệt và chuyển khoản.
             </p>
           )}
+
+          {d?.tier && <TierCard dash={d} tiers={tiersQ.data} />}
+
+          {milestonesQ.isError ? (
+            <div className={`${ui.card} p-4`}>
+              <ErrorState message={errText(milestonesQ.error)} onRetry={() => void milestonesQ.refetch()} />
+            </div>
+          ) : milestonesQ.isLoading ? (
+            <div className={`${ui.card} p-4`}>
+              <SectionSkeleton />
+            </div>
+          ) : milestonesQ.data ? (
+            <MilestoneRewards data={milestonesQ.data} />
+          ) : null}
 
           {isWebRouteReady('/hoc-vien') && (
             <div>
@@ -539,6 +563,58 @@ function Dashboard() {
               <SectionSkeleton />
             ) : (
               <p className="text-sm text-stone-600">Chưa có lệnh rút nào.</p>
+            )}
+          </Section>
+
+          <Section title="Theo gian hàng">
+            {sfQ.isError ? (
+              <ErrorState message={errText(sfQ.error)} onRetry={() => void sfQ.refetch()} />
+            ) : sfQ.data && sfQ.data.storefronts.length > 0 ? (
+              <ul>
+                {sfQ.data.storefronts.map((sf) => (
+                  <li key={sf.slug} className="flex items-center justify-between gap-2 border-b border-stone-200 py-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-stone-900">{sf.title ?? sf.slug}</div>
+                      <div className="text-xs text-stone-600">
+                        {sf.orders} đơn · DS {formatVnd(sf.revenue)}
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-forest-700">+{formatVnd(sf.commission)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : sfQ.isLoading ? (
+              <SectionSkeleton />
+            ) : (
+              <div className="py-4 text-center">
+                <div className="text-sm font-semibold text-stone-900">Chưa có đơn từ gian hàng nào</div>
+                <div className="text-xs text-stone-600">Chia sẻ link gian hàng để nhận hoa hồng.</div>
+              </div>
+            )}
+          </Section>
+
+          <Section title="Theo sản phẩm">
+            {pbQ.isError ? (
+              <ErrorState message={errText(pbQ.error)} onRetry={() => void pbQ.refetch()} />
+            ) : pbQ.data && pbQ.data.length > 0 ? (
+              <ul>
+                {pbQ.data.slice(0, 10).map((p, i) => (
+                  <li key={`${p.productName}:${i}`} className="flex items-center justify-between gap-2 border-b border-stone-200 py-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-stone-900">{p.productName}</div>
+                      <div className="text-xs text-stone-600">{p.orders} đơn</div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-forest-700">+{formatVnd(p.commission)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : pbQ.isLoading ? (
+              <SectionSkeleton />
+            ) : (
+              <div className="py-4 text-center">
+                <div className="text-sm font-semibold text-stone-900">Chưa có hoa hồng theo sản phẩm</div>
+                <div className="text-xs text-stone-600">Chia sẻ link sản phẩm để bắt đầu.</div>
+              </div>
             )}
           </Section>
         </div>
