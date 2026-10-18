@@ -52,7 +52,16 @@ const CORE: string[] = [
   'lib/web-nav.ts',
 ];
 const SHOP: string[] = [];
-const ORDER: string[] = ['app/thanh-toan/chuyen-khoan/[code]/page.tsx'];
+const ORDER: string[] = [
+  'app/thanh-toan/chuyen-khoan/[code]/page.tsx',
+  'app/tai-khoan/don-hang/page.tsx',
+  'components/orders/order-card.tsx',
+  'components/orders/purchased-rail.tsx',
+  'components/orders/reorder-sheet.tsx',
+  'components/orders/subscription-edit-sheet.tsx',
+  'components/orders/subscription-options.tsx',
+  'components/orders/subscriptions-panel.tsx',
+];
 const ACCOUNT: string[] = [];
 const LOYALTY: string[] = [];
 const COMMUNITY: string[] = [];

@@ -154,4 +154,67 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await expect(page.getByText('Đã nhận thanh toán!')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Xem đơn hàng' })).toHaveAttribute('href', `/tai-khoan/don-hang/${CODE}`);
   });
+  const listedOrder = (code: string, over: Record<string, unknown> = {}) => ({
+    id: `id-${code}`, code, status: 'DELIVERED', subtotal: 150000, discount: 0, shippingFee: 0, total: 150000, paymentMethod: 'COD',
+    paymentStatus: 'PAID', createdAt: '2026-10-01T03:00:00Z',
+    items: [{ id: `it-${code}`, variationId: 'v1', productName: 'Dầu gội bồ kết hữu cơ', variationName: '500ml', unitPrice: 150000, quantity: 1, total: 150000, thumbnail: null, stock: 8, available: true }],
+    ...over,
+  });
+
+  test('danh sách đơn: tab trạng thái đổi ?tab= và gửi đúng bộ lọc; đơn chuyển khoản chờ có "Thanh toán ngay" tới trang QR', async ({ page, api }) => {
+    mockBuyer(api);
+    const pendingOrder = listedOrder('TUBU2026101900002', {
+      status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2099-01-01T00:00:00.000Z',
+    });
+    api.get('/orders', ({ call }) => {
+      const status = call.query.get('status');
+      return { data: status === 'SHIPPING' ? [] : [pendingOrder], meta: { page: 1, limit: 20, total: status === 'SHIPPING' ? 0 : 1 } };
+    });
+
+    await page.goto('/tai-khoan/don-hang');
+    await expect(page.getByRole('heading', { name: 'Đơn hàng', level: 1 })).toBeVisible();
+    await expect(page.getByRole('tab')).toHaveCount(7);
+    await expect(page.getByRole('link', { name: 'Thanh toán ngay' })).toHaveAttribute('href', '/thanh-toan/chuyen-khoan/TUBU2026101900002');
+
+    const shipping = api.waitForCall('GET', '/orders');
+    await page.getByRole('tab', { name: 'Đang giao' }).click();
+    expect((await shipping).query.get('status')).toBe('SHIPPING');
+    await expect(page).toHaveURL(/\?tab=shipping$/);
+    await expect(page.getByText('Không có đơn nào ở mục này')).toBeVisible();
+  });
+
+  test('Mua lại từ thẻ đơn: sheet chọn dòng, gửi repurchase đúng body rồi sang giỏ', async ({ page, api }) => {
+    mockBuyer(api);
+    const done = listedOrder('TUBU2026101900003');
+    api.get('/orders', { data: [done], meta: { page: 1, limit: 20, total: 1 } });
+    api.post('/orders/TUBU2026101900003/repurchase', {
+      items: [], couponCode: null, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 1,
+      results: [{ orderItemId: 'it-TUBU2026101900003', status: 'added', addedQuantity: 1 }],
+    });
+
+    await page.goto('/tai-khoan/don-hang');
+    await page.getByRole('button', { name: 'Mua lại' }).first().click();
+    await expect(page.getByRole('dialog')).toContainText('Từ đơn TUBU2026101900003');
+    const sent = api.waitForCall('POST', '/orders/:code/repurchase');
+    await page.getByRole('button', { name: 'Thêm vào giỏ (1)' }).click();
+    expect((await sent).body).toEqual({ items: [{ orderItemId: 'it-TUBU2026101900003', quantity: 1 }], addSource: 'repurchase' });
+    await expect(page).toHaveURL(/\/gio-hang$/);
+  });
+
+  test('tab Định kỳ: tạm dừng gói gọi POST /status PAUSED', async ({ page, api }) => {
+    mockBuyer(api);
+    const sub = {
+      id: 's1', quantity: 2, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: '2026-11-15T00:00:00.000Z', addressId: 'a1',
+      paymentMethod: 'COD', lastOrderId: null, productName: 'Nước xả vải Tubu', variationName: 'Hương sả', thumbnail: null, slug: 'nxv',
+      unitPrice: 80000, effectiveDiscountPct: 0.14,
+    };
+    api.get('/me/subscriptions', [sub]);
+    api.post('/me/subscriptions/:id/status', { ...sub, status: 'PAUSED' });
+
+    await page.goto('/tai-khoan/don-hang?tab=subscriptions');
+    await expect(page.getByText('Nước xả vải Tubu')).toBeVisible();
+    const paused = api.waitForCall('POST', '/me/subscriptions/:id/status');
+    await page.getByRole('button', { name: 'Tạm dừng' }).click();
+    expect((await paused).body).toEqual({ status: 'PAUSED' });
+  });
 });

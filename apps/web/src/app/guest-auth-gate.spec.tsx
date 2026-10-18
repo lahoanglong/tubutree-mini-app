@@ -20,6 +20,7 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useParams: () => ({ code: 'TB-77' }),
+  usePathname: () => '/tai-khoan/don-hang',
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -41,6 +42,7 @@ import CartPage from './gio-hang/page';
 import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
 import BankPaymentPage from './thanh-toan/chuyen-khoan/[code]/page';
+import OrdersPage from './tai-khoan/don-hang/page';
 import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
 
 let mounted: Rendered[] = [];
@@ -70,6 +72,7 @@ const CORE: PageCase[] = [
 const SHOP: PageCase[] = [];
 const ORDER: PageCase[] = [
   ['/thanh-toan/chuyen-khoan/[code]', () => <BankPaymentPage />, '/thanh-toan/chuyen-khoan/TB-77'],
+  ['/tai-khoan/don-hang', () => <OrdersPage />, '/tai-khoan/don-hang'],
 ];
 const ACCOUNT: PageCase[] = [];
 const LOYALTY: PageCase[] = [];

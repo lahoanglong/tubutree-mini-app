@@ -14,8 +14,8 @@
       { "miniapp": "/cart", "web": "/gio-hang", "private": true },
       { "miniapp": "/checkout", "web": "/thanh-toan", "private": true },
       { "miniapp": "/bank-payment/:code", "web": "/thanh-toan/chuyen-khoan/:code", "private": true },
-      { "miniapp": "/orders", "web": "/tai-khoan/don-hang", "private": true, "pending": true },
-      { "miniapp": "/subscriptions", "web": "/tai-khoan/don-hang?tab=subscriptions", "private": true, "pending": true },
+      { "miniapp": "/orders", "web": "/tai-khoan/don-hang", "private": true },
+      { "miniapp": "/subscriptions", "web": "/tai-khoan/don-hang?tab=subscriptions", "private": true },
       { "miniapp": "/order/:code", "web": "/tai-khoan/don-hang/:code", "private": true },
       { "miniapp": "/addresses", "web": "/tai-khoan/dia-chi", "private": true }
     ]},
