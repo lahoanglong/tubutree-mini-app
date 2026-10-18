@@ -66,7 +66,7 @@ const COMMUNITY: string[] = [];
 const AFFILIATE: string[] = [];
 const GAME: string[] = [];
 const PRO: string[] = [];
-const RECYCLE: string[] = [];
+const RECYCLE: string[] = ['app/doi-rac/quay/page.tsx', 'app/doi-rac/quay/layout.tsx', 'components/recycle/recycle-desk.tsx', 'components/recycle/recycle-desk-perk.tsx'];
 const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');

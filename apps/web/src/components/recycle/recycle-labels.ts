@@ -74,6 +74,19 @@ export const SHORTFALL_LABELS: Record<WasteShortfallReason, string> = {
   OTHER: 'Khác',
 };
 
+/** UNPAID_POSTAGE là lý do ở cửa kho, không có trong bộ chọn tại điểm nhận. */
+export const DESK_REJECTION_OPTIONS: { value: WasteRejectionReason; label: string }[] = [
+  { value: 'WET', label: 'Ướt' },
+  { value: 'DIRTY', label: 'Bẩn' },
+  { value: 'FOREIGN_OBJECT', label: 'Lẫn vật lạ' },
+  { value: 'WRONG_TYPE', label: 'Sai loại' },
+  { value: 'DAMAGED', label: 'Hỏng' },
+  { value: 'NOT_ACCEPTED', label: 'Không nhận' },
+  { value: 'OVERSIZE', label: 'Quá khổ' },
+  { value: 'HAZARDOUS', label: 'Có pin hoặc vật nguy hại' },
+  { value: 'OTHER', label: 'Khác' },
+];
+
 /** "25/10" theo giờ Việt Nam, lấy từ dd/MM/yyyy của `formatDate` để cả web chung một cách đổi múi giờ. */
 export const dayMonth = (iso: string): string => formatDate(iso).slice(0, 5);
 

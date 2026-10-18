@@ -19,7 +19,7 @@ describe('isWebRouteReady', () => {
   });
 
   it('route còn pending thì chưa sẵn sàng', () => {
-    expect(isWebRouteReady('/doi-rac/quay')).toBe(false);
+    expect(isWebRouteReady('/cong-dong/xep-hang')).toBe(false);
   });
 
   it('khớp cả dòng có tham số và bỏ qua query của đường vào', () => {

@@ -1,7 +1,7 @@
 import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
- * Web khách: Đổi rác lấy quà (/doi-rac, /doi-rac/yeu-cau, /doi-rac/quy-dinh, /doi-rac/tao, /doi-rac/diem-nhan). Mọi lời gọi /api/** đi qua mock (fixture `api`).
+ * Web khách: Đổi rác lấy quà (/doi-rac, /doi-rac/yeu-cau, /doi-rac/quy-dinh, /doi-rac/tao, /doi-rac/diem-nhan, /doi-rac/quay). Mọi lời gọi /api/** đi qua mock (fixture `api`).
  * Khách chưa đủ điều kiện (thiếu SĐT đã xác minh) chỉ thấy lời chỉ sang Zalo, không có lối đổi rác nào trên web.
  */
 
@@ -264,5 +264,59 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     api.get('/waste/points', () => []);
     await page.goto('/doi-rac/xong/req-1');
     await expect(page).toHaveURL(/\/doi-rac\/yeu-cau\/req-1$/);
+  });
+  const DESK_POINT = { id: 'pt-1', kind: 'PARTNER', name: 'Đại lý Cô Ba', giftHandoverEnabled: false, myRole: 'OWNER',
+    quota: { limit: 500000, used: 120000, remaining: 380000 }, perkText: 'Giảm 10% hoá đơn đầu', perkPendingText: null, staffDailyCapRemaining: 150000 };
+  const DESK_REQUEST = { id: 'req-1', code: 'TR-8K2M9', method: 'DROP_OFF', status: 'OPEN', pointId: 'pt-1', customerName: 'Ng*** A', customerPhone: '090****567',
+    estimatedPoints: 5000, lines: [{ itemId: 'item-carton', itemName: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, declaredQty: 5, receivedQty: null, hazardous: false }] };
+
+  function mockDesk(api: MockApi) {
+    mockRecycle(api);
+    api.get('/waste/desk/points', () => [DESK_POINT]);
+    api.get('/waste/desk/points/:id/report', () => ({ pointId: 'pt-1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] }));
+    api.post('/waste/desk/lookup', () => ({ type: 'REQUEST', request: DESK_REQUEST }));
+  }
+
+  test('quầy nhận: tra mã, đếm đủ, xác nhận gửi đúng body rồi báo điểm Tubu sẽ cộng', async ({ page, api }) => {
+    mockDesk(api);
+    api.post('/waste/desk/requests/:id/confirm', () => ({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 5000, dropsAwarded: 0,
+      quota: { limit: 500000, used: 125000, remaining: 375000 }, staffDailyCapRemaining: 150000 }));
+    await page.goto('/doi-rac/quay');
+    await expect(page.getByRole('heading', { name: 'Nhận hàng tại điểm', level: 1 })).toBeVisible();
+    await expect(page.getByText('Còn 380.000 điểm')).toBeVisible();
+    await page.getByLabel('Mã yêu cầu hoặc mã nhận quà').fill('tr-8k2m9');
+    await page.getByRole('button', { name: 'Tra mã' }).click();
+    await expect(page.getByText('Ng*** A')).toBeVisible();
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(page.getByText('Điểm Tubu sẽ cộng cho khách: 5.000 điểm')).toBeVisible();
+    const confirmed = api.waitForCall('POST', '/waste/desk/requests/:id/confirm');
+    await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
+    expect((await confirmed).body).toEqual({ lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }] });
+    await expect(page.getByText('Tubu sẽ cộng 5.000 điểm cho khách')).toBeVisible();
+  });
+
+  test('quầy nhận: từ chối với lý do Khác bắt buộc ghi chú rồi gửi reject', async ({ page, api }) => {
+    mockDesk(api);
+    api.post('/waste/desk/requests/:id/reject', () => ({ requestId: 'req-1', code: 'TR-8K2M9', status: 'REJECTED' }));
+    await page.goto('/doi-rac/quay');
+    await page.getByLabel('Mã yêu cầu hoặc mã nhận quà').fill('TR-8K2M9');
+    await page.getByRole('button', { name: 'Tra mã' }).click();
+    await page.getByRole('button', { name: 'Từ chối cả yêu cầu' }).click();
+    await page.getByRole('radio', { name: 'Khác' }).check();
+    const send = page.getByRole('button', { name: 'Từ chối yêu cầu' });
+    await expect(send).toBeDisabled();
+    await page.getByLabel('Ghi chú (bắt buộc với lý do Khác)').fill('thùng lẫn đồ khác');
+    const rejected = api.waitForCall('POST', '/waste/desk/requests/:id/reject');
+    await send.click();
+    expect((await rejected).body).toEqual({ rejectionReason: 'OTHER', rejectionNote: 'thùng lẫn đồ khác' });
+    await expect(page.getByText('Đã từ chối yêu cầu TR-8K2M9')).toBeVisible();
+  });
+
+  test('quầy nhận: tài khoản không phải nhân sự điểm (403) thấy lời nói rõ, không có ô nhập mã', async ({ page, api }) => {
+    mockRecycle(api);
+    api.get('/waste/desk/points', () => reply(403, { message: 'Forbidden' }));
+    await page.goto('/doi-rac/quay');
+    await expect(page.getByText('Tài khoản này không có quyền nhận hàng tại điểm')).toBeVisible();
+    await expect(page.getByLabel('Mã yêu cầu hoặc mã nhận quà')).toHaveCount(0);
   });
 });

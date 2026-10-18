@@ -1,4 +1,6 @@
 import type {
+  WasteDeskPointDTO,
+  WasteDeskRequestDTO,
   WasteMeDTO,
   WasteMeItemDTO,
   WastePointContactDTO,
@@ -186,6 +188,49 @@ export function makeRequestSummary(over: Partial<WasteRequestSummaryDTO> = {}): 
     pointName: d.pointName,
     orderCode: d.orderCode,
     lines: d.lines.map((l) => ({ itemName: l.itemName, unitLabel: l.unitLabel, declaredQty: l.declaredQty })),
+    ...over,
+  };
+}
+
+export function makeDeskPoint(over: Partial<WasteDeskPointDTO> = {}): WasteDeskPointDTO {
+  return {
+    id: 'pt-1',
+    kind: 'PARTNER',
+    name: 'Đại lý Cô Ba',
+    giftHandoverEnabled: false,
+    myRole: 'OWNER',
+    quota: { limit: 500_000, used: 120_000, remaining: 380_000 },
+    perkText: 'Giảm 10% hoá đơn đầu',
+    perkPendingText: null,
+    staffDailyCapRemaining: 150_000,
+    ...over,
+  };
+}
+
+export const WAREHOUSE_DESK = makeDeskPoint({
+  id: 'wh-1',
+  kind: 'WAREHOUSE',
+  name: 'Kho Tubu TP.HCM',
+  giftHandoverEnabled: true,
+  myRole: 'STAFF',
+  quota: null,
+  perkText: null,
+});
+
+export function makeDeskRequest(over: Partial<WasteDeskRequestDTO> = {}): WasteDeskRequestDTO {
+  return {
+    id: 'req-1',
+    code: 'TR-8K2M9',
+    method: 'DROP_OFF',
+    status: 'OPEN',
+    pointId: 'pt-1',
+    customerName: 'Ng*** A',
+    customerPhone: '090****567',
+    estimatedPoints: 6000,
+    lines: [
+      { itemId: 'item-carton', itemName: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, declaredQty: 5, receivedQty: null, hazardous: false },
+      { itemId: 'item-milk', itemName: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 5, pointsPerGroup: 1000, declaredQty: 5, receivedQty: null, hazardous: false },
+    ],
     ...over,
   };
 }
