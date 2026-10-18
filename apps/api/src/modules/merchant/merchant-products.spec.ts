@@ -151,9 +151,13 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
 });
 
 describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => {
-  function tx(opts: { moved?: number; left?: number; row?: unknown; originActive?: boolean; store?: unknown } = {}) {
+  function tx(opts: { moved?: number; left?: number; row?: unknown; originActive?: boolean; store?: unknown; rate?: number | null } = {}) {
     return {
-      $queryRaw: jest.fn().mockResolvedValue(opts.store === undefined ? [{ type: 'CTV', isPartner: true, title: 'Gian hàng A' }] : opts.store),
+      // Lần 1: gian hàng (FOR KEY SHARE); các lần sau: % hoa hồng biến thể bị khoá.
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValueOnce(opts.store === undefined ? [{ type: 'CTV', isPartner: true, title: 'Gian hàng A' }] : opts.store)
+        .mockResolvedValue([{ affiliateRate: opts.rate === undefined || opts.rate === null ? null : new Prisma.Decimal(opts.rate) }]),
       variation: {
         findFirst: jest.fn().mockResolvedValue(opts.row === undefined ? PANCAKE_ROW : opts.row),
         updateMany: jest.fn().mockResolvedValue({ count: opts.moved ?? 1 }),
@@ -169,6 +173,16 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
   }
   const OPTS = { adminId: 'admin-1' };
   const product = { id: 'prod-a', storefrontId: 'sf-a', pancakeLinkCode: 'PK-123' };
+
+  it('lưu % hoa hồng của biến thể lúc liên kết (kể cả 0) vào dòng liên kết', async () => {
+    for (const rate of [12, 0]) {
+      const t = tx({ rate });
+      await linkTubuFulfilledVariation(t as never, product, OPTS);
+      const data = t.merchantPancakeLink.create.mock.calls[0][0].data;
+      expect(data.affiliateRateCaptured).toBe(true);
+      expect(Number(data.affiliateRateAtLink)).toBe(rate);
+    }
+  });
 
   it('gian hàng không còn là đối tác (CTV đã tắt cờ) hoặc đã mất → 409 nêu rõ, không đụng biến thể', async () => {
     for (const store of [[{ type: 'CTV', isPartner: false, title: 'Gian hàng A' }], []]) {
@@ -201,6 +215,8 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
         originDeactivated: true,
         takeover: false,
         stockAtLink: 40,
+        affiliateRateAtLink: null,
+        affiliateRateCaptured: true,
         linkedBy: 'admin-1',
       },
     });
@@ -303,7 +319,7 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
       },
     };
   }
-  const LINK = { id: 'l1', variationId: 'var-pk', originProductId: 'tubu-shell', originDeactivated: true };
+  const LINK = { id: 'l1', variationId: 'var-pk', originProductId: 'tubu-shell', originDeactivated: true, affiliateRateCaptured: true, affiliateRateAtLink: null };
 
   it('trả biến thể về sản phẩm gốc, bật lại sản phẩm gốc, sản phẩm đối tác nhận biến thể tạm và tắt bán', async () => {
     const t = tx(LINK);
@@ -329,6 +345,20 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
     expect(t.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(t.merchantPancakeLink.updateMany.mock.invocationCallOrder[0]!);
     expect(t.product.update).toHaveBeenCalledWith({ where: { id: 'prod-a' }, data: { fulfilment: 'MERCHANT', isActive: false } });
     expect(t.product.updateMany).toHaveBeenCalledWith({ where: { id: 'tubu-shell', isActive: false }, data: { isActive: true } });
+  });
+
+  it.each([[12], [0], [null]])('gỡ liên kết trả đúng %% lúc liên kết (%s)', async (rate) => {
+    const t = tx({ ...LINK, affiliateRateCaptured: true, affiliateRateAtLink: rate === null ? null : new Prisma.Decimal(rate) });
+    await unlinkTubuFulfilledVariation(t as never, 'prod-a', { actorId: 'admin-1', reason: 'Nhầm', deactivate: true });
+    const data = t.variation.updateMany.mock.calls[0][0].data;
+    expect(data.productId).toBe('tubu-shell');
+    expect(data.affiliateRate === null ? null : Number(data.affiliateRate)).toBe(rate);
+  });
+
+  it('liên kết có từ trước cột lưu % → gỡ không đụng affiliateRate', async () => {
+    const t = tx({ ...LINK, affiliateRateCaptured: false, affiliateRateAtLink: null });
+    await unlinkTubuFulfilledVariation(t as never, 'prod-a', { actorId: 'admin-1', reason: 'Nhầm', deactivate: true });
+    expect(t.variation.updateMany.mock.calls[0][0].data).toEqual({ productId: 'tubu-shell' });
   });
 
   it('lần liên kết không tắt sản phẩm gốc → gỡ cũng không bật nó (admin có thể đã tắt vì lý do khác)', async () => {

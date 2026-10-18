@@ -1593,7 +1593,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, { pancakeCode: 'PK-1' });
-    expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'shell' }, data: { productId: 'p1' } });
+    expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'shell' }, data: { productId: 'p1', affiliateRate: null } });
     // R4-PARTNER-6: CAS gồm cả mã đang xin liên kết, đối tác đổi mã giữa lúc admin xem và bấm thì duyệt trượt.
     const casWhere = (prisma.product.updateMany as jest.Mock).mock.calls[0][0].where;
     expect(casWhere).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: product.pancakeLinkCode });
@@ -1665,7 +1665,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, { pancakeCode: ' PK-B ' });
       expect(res).toMatchObject({ id: 'p1' });
       expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-B' });
-      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
       expect(unsentWarnings()).toEqual([]);
     });
 
@@ -1676,7 +1676,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       const { prisma, updateMany, variationUpdateMany, linkCreate } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(false));
       await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, seen)).resolves.toMatchObject({ id: 'p1' });
       expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-B' });
-      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
       expect(linkCreate).toHaveBeenCalledTimes(1);
       const msgs = unsentWarnings();
       expect(msgs).toHaveLength(1);
@@ -1714,7 +1714,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       it('xác nhận mà không gửi sản phẩm đã xem → chuyển sản phẩm hiện đang giữ mã, cảnh báo nêu sản phẩm bị chuyển', async () => {
         const { prisma, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(true));
         await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-B' });
-        expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+        expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
         const msgs = unsentWarnings();
         expect(msgs).toHaveLength(1);
         expect(msgs[0]).toContain('admin-1');
@@ -1979,7 +1979,7 @@ describe('AdminService.reviewMerchantProduct — dòng chờ duyệt lần đầ
       await expect(
         mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-B', takeoverProductId: value, updatedAt: loadedAt.toISOString() }),
       ).resolves.toMatchObject({ id: 'p1' });
-      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
       expect(takeoverWarnings()).toHaveLength(1);
     });
 

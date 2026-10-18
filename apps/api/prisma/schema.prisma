@@ -1685,6 +1685,10 @@ model MerchantPancakeLink {
   /// mốc này mới tính. NULL với takeover = chưa đối soát; liên kết thường tính từ linkedAt.
   consignmentConfirmedAt DateTime?
   consignmentConfirmedBy String?
+  /// % hoa hồng CTV (Variation.affiliateRate) lúc liên kết: liên kết xoá % này (hàng đối tác không ăn % của hàng Tubu), gỡ liên
+  /// kết khôi phục đúng giá trị, kể cả NULL và 0. `affiliateRateCaptured` false = liên kết có từ trước cột này, gỡ thì không đụng %.
+  affiliateRateAtLink    Decimal?
+  affiliateRateCaptured  Boolean   @default(false)
 
   @@index([productId])
   @@index([storefrontId])

@@ -285,6 +285,7 @@ function VariationRow({
   tierNames: Map<string, string>;
 }) {
   const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
   const initial = v.affiliateRate === null ? '' : String(v.affiliateRate).replace('.', ',');
   const [text, setText] = useState(initial);
   // Mức trên server đổi (vừa lưu, đặt cả SP, CSV) thì ô nhập theo mức mới; hàng giữ nguyên để "Đã lưu" không mất khi tải lại.
@@ -308,6 +309,16 @@ function VariationRow({
   const onSave = () => {
     if (dirty && !mut.isPending) mut.mutate((parsed as { rate: number }).rate);
   };
+  const onClear = async () => {
+    if (mut.isPending) return;
+    const after = blocked ? 'sản phẩm đang chặn CTV nên hoa hồng vẫn 0đ' : partner ? 'hàng đối tác nên hoa hồng 0đ' : `sẽ trả ${formatRate(defaultRate)} mặc định`;
+    const ok = await confirm({
+      title: 'Về mức mặc định',
+      message: `Xoá ${formatRate(v.affiliateRate)} riêng của ${v.sku}: ${after}.\n\nĐơn đặt từ lúc này tính theo mức mới; hoa hồng đơn cũ giữ nguyên.`,
+      confirmLabel: 'Về mặc định',
+    });
+    if (ok) mut.mutate(null);
+  };
   const dealer = Object.entries(v.dealerPrices ?? {}).filter(([, price]) => typeof price === 'number');
   const price = v.salePrice ?? v.retailPrice;
 
@@ -322,12 +333,14 @@ function VariationRow({
         <div className="mt-0.5 text-stone-500">
           Giá {formatVnd(price)} ·{' '}
           {v.affiliateRate === null ? (
-            partner ? (
+            blocked ? (
+              <span className="font-semibold text-warning-fg">Bị chặn: 0đ</span>
+            ) : partner ? (
               <span className="font-semibold text-warning-fg">Hàng đối tác chưa đặt %: 0đ</span>
             ) : (
               <>
                 <span className="text-stone-700">Mặc định {formatRate(defaultRate)}</span>
-                {!blocked && defaultRate > 0 && <> ≈ {formatVnd(Math.floor((price * defaultRate) / 100))}/sp</>}
+                {defaultRate > 0 && <> ≈ {formatVnd(Math.floor((price * defaultRate) / 100))}/sp</>}
               </>
             )
           ) : (
@@ -378,7 +391,7 @@ function VariationRow({
         {v.affiliateRate !== null && (
           <button
             type="button"
-            onClick={() => !mut.isPending && mut.mutate(null)}
+            onClick={onClear}
             disabled={mut.isPending}
             aria-label={`Về mặc định ${v.sku}`}
             className={BTN_XS_SECONDARY}
@@ -387,6 +400,7 @@ function VariationRow({
           </button>
         )}
       </div>
+      {dialog}
     </li>
   );
 }
