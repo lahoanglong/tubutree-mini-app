@@ -64,7 +64,7 @@ Hệ thống chỉ **hoàn tiền**. Khách muốn đổi sang sản phẩm khá
 
 **Khách hỏi điểm.** Mở **Người dùng**, tìm khách, xem ô "Điểm Xanh". Nói với khách (số mặc định, admin có thể đổi):
 - Điểm cộng khi đơn "Đã giao hàng". Điểm của đơn dùng được sau khi hết hạn đổi/trả (mặc định 7 ngày). Trong lúc chờ, điểm hiện trong số dư nhưng chưa tiêu được.
-- 1 Điểm Xanh = 1.000đ. Dùng tối đa 20% giá trị đơn. Điểm hết hạn sau 12 tháng.
+- 1 Điểm Xanh = 1đ. Đơn đặt trong Mini App tích 2% tiền hàng (sau giảm giá, không tính phí giao), nhân hệ số hạng (×1, ×1,2, ×1,5, ×2). Dùng tối đa 20% giá trị đơn. Điểm hết hạn sau 12 tháng.
 - Khách tự xem: Mini App › **Cá nhân › Hạng thành viên & Điểm Xanh**.
 - Đơn tạo thẳng trên Pancake **không có điểm**. Trả hàng thì điểm của đơn đó bị thu hồi.
 - Cộng điểm tay chưa có (**⏳ đang làm**). Muốn đền bù, nhờ admin tạo voucher dùng một lần.

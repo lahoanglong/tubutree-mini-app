@@ -1,6 +1,7 @@
 import { api } from '../services/api';
 import { getPublicConfig, type PublicConfig } from '../services/shop-api';
 import { formatVnd } from '../utils/format';
+import { earnPctOf, percentLabel } from '../utils/loyalty-copy';
 
 export interface FaqItem {
   q: string;
@@ -30,8 +31,9 @@ const positive = (v: unknown): v is number => typeof v === 'number' && Number.is
  * không điền số mặc định vì sẽ nói sai khi admin đã đổi.
  */
 function pointsAnswer(loyalty: FaqConfig['loyalty']): string {
-  const { vndPerPoint, vndPerPointRedeem, maxRedeemPct, pointExpireMonths } = loyalty ?? {};
-  const earn = positive(vndPerPoint) ? `${formatVnd(vndPerPoint)} chi tiêu trên đơn đã giao = 1 Điểm Xanh.` : 'Mỗi đơn đã giao được tích Điểm Xanh.';
+  const { earnPct, vndPerPoint, vndPerPointRedeem, maxRedeemPct, pointExpireMonths } = loyalty ?? {};
+  const pct = earnPctOf({ earnPct: positive(earnPct) ? earnPct : undefined, vndPerPoint: positive(vndPerPoint) ? vndPerPoint : undefined });
+  const earn = pct != null ? `Mỗi đơn đã giao tích ${percentLabel(pct)} tiền hàng thành Điểm Xanh.` : 'Mỗi đơn đã giao được tích Điểm Xanh.';
   let redeem = 'Điểm Xanh dùng để giảm giá khi thanh toán.';
   if (positive(vndPerPointRedeem)) {
     const value = formatVnd(vndPerPointRedeem);

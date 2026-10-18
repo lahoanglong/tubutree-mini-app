@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/auth';
 import { vi } from '../../i18n/vi';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { earnPctOf, percentLabel } from '../../utils/loyalty-copy';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
@@ -35,8 +36,9 @@ export function directBenefits(cfg: PublicConfig): Benefit[] {
   } else {
     out.push({ icon: Truck, text: vi.home.newGift.freeShipFrom(formatVnd(cfg.freeshipThreshold)) });
   }
-  if (cfg.loyalty) {
-    out.push({ icon: Leaf, text: vi.home.newGift.points(formatVnd(cfg.loyalty.vndPerPoint), formatVnd(cfg.loyalty.vndPerPointRedeem)) });
+  const earnPct = cfg.loyalty ? earnPctOf(cfg.loyalty) : null;
+  if (cfg.loyalty && earnPct != null) {
+    out.push({ icon: Leaf, text: vi.home.newGift.points(percentLabel(earnPct), formatVnd(cfg.loyalty.vndPerPointRedeem)) });
   }
   out.push({ icon: CalendarClock, text: vi.home.newGift.subscribe(Math.round(cfg.subscribeDiscountPct * 100)) });
   return out;

@@ -78,7 +78,7 @@ export interface CreatePostInput {
   eventId?: string;
 }
 
-// Sự kiện cộng đồng (Pha 4 Task 4) — thử thách có hạn + thưởng Điểm Xanh cho người thắng (1 điểm = 1.000đ).
+// Sự kiện cộng đồng (Pha 4 Task 4) — thử thách có hạn + thưởng Điểm Xanh cho người thắng (1 điểm = 1đ).
 export interface CommunityEvent {
   id: string;
   title: string;

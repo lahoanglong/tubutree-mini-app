@@ -55,9 +55,9 @@ const review = (id: string, rating: number, extra: Record<string, unknown> = {})
 // PF-6b: sau PF-3 điểm đánh giá chỉ cấp ở lần đánh giá ĐẦU TIÊN của mỗi (khách, sản phẩm); form không biết khách đã nhận
 // thưởng trước đó hay chưa (xoá rồi tạo lại) nên mọi câu nhắc điểm phải nêu điều kiện "lần đầu" ngay trong câu.
 const FIRST_ONLY = 'Lần đầu đánh giá sản phẩm này';
-const HINT_TEXT_ONLY = `${FIRST_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá được khi đã mua và nhận hàng.`;
-const HINT_IMAGES = `${FIRST_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`;
-const HINT_VIDEO = `Tuyệt! ${FIRST_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`;
+const HINT_TEXT_ONLY = `${FIRST_ONLY}: thêm video +15.000 / ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
+const HINT_IMAGES = `${FIRST_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.000.`;
+const HINT_VIDEO = `Tuyệt! ${FIRST_ONLY}, đánh giá có video nhận +15.000 Điểm Xanh!`;
 const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
 const REWARD_ALREADY_GIVEN =
   'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
