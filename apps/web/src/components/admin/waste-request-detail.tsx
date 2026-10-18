@@ -489,7 +489,7 @@ function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: strin
   const [reason, setReason] = useState('');
   const [unmatchedId, setUnmatchedId] = useState('');
   const unmatched = useQuery({ queryKey: ['admin-waste-unmatched', 'OPEN'], queryFn: () => listWasteUnmatched('OPEN') });
-  // Server mở lại nhận mọi kiện OPEN; kiện ghi tay hoặc ALREADY_RECEIVED không có relatedRequestId nhưng vẫn gắn được vào yêu cầu hết hạn.
+  // Server mở lại nhận mọi kiện OPEN: kiện ghi tay không có relatedRequestId, kiện quét theo mã của yêu cầu khác mang id yêu cầu đó, nên vẫn phải chọn được.
   const open = (unmatched.data ?? []).filter((u) => u.status === 'OPEN');
   const options = [...open.filter((u) => u.relatedRequestId === requestId), ...open.filter((u) => u.relatedRequestId !== requestId)];
   const reasonTrim = reason.trim();
@@ -513,7 +513,7 @@ function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: strin
         />
       </label>
       <label className="block text-xs">
-        <span className="font-medium text-stone-700">Kiện không rõ chủ liên quan</span>
+        <span className="font-medium text-stone-700">Gắn kiện không rõ chủ</span>
         <select name="reopenUnmatchedId" className={`${INPUT_CLASS} mt-1`} value={unmatchedId} onChange={(e) => setUnmatchedId(e.target.value)}>
           <option value="">Không gắn kiện</option>
           {options.map((u) => (

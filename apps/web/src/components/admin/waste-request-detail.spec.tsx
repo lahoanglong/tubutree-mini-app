@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wasteRequestDetail, wasteUnmatched } from '@/test-utils/fixtures/waste-admin';
 import type { WasteRequestAdminDetailDTO } from '@tubutree/shared-types';
+import { formatDateTime } from '@/lib/format-date';
 import { WasteRequestDetail, wastePointsForLines } from './waste-request-detail';
 
 let mounted: Rendered[] = [];
@@ -350,7 +351,7 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
   it('admin mở lại yêu cầu hết hạn, chọn được cả kiện mở không liên quan, kiện liên quan xếp trước', async () => {
     const unmatched = {
       body: [
-        wasteUnmatched({ id: 'un7', reason: 'MANUAL_ENTRY', relatedRequestId: null, carrier: null, trackingCode: null, description: 'Thùng không nhãn' }),
+        wasteUnmatched({ id: 'un7', reason: 'MANUAL_ENTRY', relatedRequestId: null, carrier: null, trackingCode: null, description: 'Thùng không nhãn', receivedAt: '2026-10-17T03:00:00.000Z' }),
         wasteUnmatched({ relatedRequestId: 'r1' }),
         wasteUnmatched({ id: 'un8', status: 'RESOLVED', relatedRequestId: 'r1', description: 'Kiện đã đóng' }),
       ],
@@ -365,7 +366,9 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     expect(optionLabels(sel)[0]).toContain('liên quan tới yêu cầu này');
     expect(optionLabels(sel)[0]).toContain('GHN999');
     expect(optionLabels(sel)[0]).toContain('Thùng carton băng keo xanh');
+    expect(optionLabels(sel)[0]).toContain(formatDateTime('2026-10-16T02:00:00.000Z'));
     expect(optionLabels(sel)[1]).toContain('Thùng không nhãn');
+    expect(optionLabels(sel)[1]).toContain(formatDateTime('2026-10-17T03:00:00.000Z'));
     expect(optionLabels(sel)[1]).not.toContain('liên quan tới yêu cầu này');
     expect(btn(first.c, 'Xác nhận mở lại')!.disabled).toBe(true);
     typeInto(area(first.c, 'reopenReason'), 'Kiện về muộn');
