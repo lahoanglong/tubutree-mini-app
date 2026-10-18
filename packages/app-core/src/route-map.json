@@ -34,7 +34,7 @@
       { "miniapp": "/cashback", "web": "/hoan-tien", "private": false }
     ]},
     { "lane": "game", "items": [
-      { "miniapp": "/game", "web": "/vuon-xanh", "private": true, "pending": true },
+      { "miniapp": "/game", "web": "/vuon-xanh", "private": true },
       { "miniapp": "/ai-advisor", "web": "/tu-van", "private": true, "pending": true }
     ]},
     { "lane": "community", "items": [

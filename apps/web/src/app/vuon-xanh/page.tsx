@@ -2,8 +2,9 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Recycle } from 'lucide-react';
-import type { AnswerResult } from '@tubutree/app-core/api/game';
+import { MessagesSquare, Recycle } from 'lucide-react';
+import { SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
+import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -12,26 +13,35 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { CheckInStreak } from '@/components/game/checkin-streak';
+import { CommunityGoal } from '@/components/game/community-goal';
 import { EcoImpact } from '@/components/game/eco-impact';
+import { FriendGifts } from '@/components/game/friend-gifts';
+import { GardenPlots } from '@/components/game/garden-plots';
 import { GameLinkRow } from '@/components/game/game-link-row';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
 import { GAME_TAB_KEYS, GAME_TABS, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
+import { HarvestCelebration } from '@/components/game/harvest-celebration';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
 import { MissionsCard } from '@/components/game/missions-card';
 import { QuizCard, type QuizReveal } from '@/components/game/quiz-card';
 import { SeasonBanner } from '@/components/game/season-banner';
+import { SeasonLeaderboard } from '@/components/game/season-leaderboard';
+import { SeasonPass } from '@/components/game/season-pass';
+import { SpeciesCodex } from '@/components/game/species-codex';
 import { StreakRepair } from '@/components/game/streak-repair';
 import { TreeActions } from '@/components/game/tree-actions';
 import { TreeHealthAlert } from '@/components/game/tree-health-alert';
-import { useGameActions } from '@/components/game/use-game-actions';
+import { useGameActions, type HarvestReward } from '@/components/game/use-game-actions';
 import { useGameData } from '@/components/game/use-game-data';
 import { useWheelPrize } from '@/components/game/use-wheel-prize';
+import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
 
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
+const FEED_PATH = '/cong-dong';
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -40,7 +50,7 @@ function GameBody() {
   const publicConfig = usePublicConfig();
   const { notice, notify } = useGameNotice();
   const [tab, setTab] = useTabParam(GAME_TAB_KEYS, 'today');
-  const { profileQ, quiz, missions, forest, season } = useGameData(true);
+  const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } = useGameData(true);
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời phía trình duyệt để hiện câu kế tiếp (§6.7.8).
@@ -49,9 +59,11 @@ function GameBody() {
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
 
-  const { checkInM, dewM, freezeM, repairM, handleSpin, waterM, buyTreeM, claimMissionM, answerM } = useGameActions({
+  const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined }>({ open: false, reward: undefined });
+
+  const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } = useGameActions({
     notify,
-    onHarvest: () => notify('Cây đã thu hoạch! 🎉', 'success'),
+    onHarvest: (reward) => setHarvest({ open: true, reward }),
     onAnswered: (r: AnswerResult, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
   });
   const wheelPrize = useWheelPrize();
@@ -66,6 +78,15 @@ function GameBody() {
 
   const eco = profile?.ecoImpact;
   const wasteLink = publicConfig.waste.enabled && isWebRouteReady(WASTE_PATH);
+  const feedLink = isWebRouteReady(FEED_PATH);
+  const harvestSpecies: HarvestSpecies | null = harvest.reward?.species ?? null;
+  const closeHarvest = () => setHarvest((h) => ({ ...h, open: false }));
+  const copyCoupon = (code: string) => {
+    void navigator.clipboard.writeText(code).then(
+      () => notify('Đã sao chép mã giảm giá', 'success'),
+      () => notify(`Không sao chép được — mã của bạn: ${code}`, 'error'),
+    );
+  };
 
   return (
     <>
@@ -130,18 +151,71 @@ function GameBody() {
         </GameTabPanel>
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
+          {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
+          {garden && (
+            <GardenPlots
+              garden={garden}
+              waterPlotPending={waterPlotM.isPending}
+              waterPlotVariables={waterPlotM.variables}
+              onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
+              unlockPending={unlockM.isPending}
+              onUnlock={() => unlockM.mutate()}
+            />
+          )}
+
+          {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
+          {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
+
           {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
           <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
+
+          {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
+          {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
         </GameTabPanel>
 
         <GameTabPanel tab="community" active={tab === 'community'}>
           {/* Banner mùa/sự kiện (Phase 4) */}
           {season && <SeasonBanner season={season} />}
+
+          {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
+          {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
+            <SeasonPass
+              pass={seasonPass}
+              claimPending={claimPassM.isPending}
+              claimVariables={claimPassM.variables}
+              onClaim={(tier, track) => claimPassM.mutate({ tier, track })}
+            />
+          )}
+
+          {/* Tặng nước bạn bè (social) */}
+          {friends && friends.length > 0 && (
+            <FriendGifts friends={friends} giftPending={giftM.isPending} giftVariables={giftM.variables} onGift={(recipientId) => giftM.mutate(recipientId)} />
+          )}
+
+          <WeeklyLeaderboard board={board} />
+
+          {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
+
+          {/* Bảng tin cộng đồng (§6.14.12): chỉ khi trang đã có trên web */}
+          {feedLink && <GameLinkRow icon={MessagesSquare} title="Bảng tin cộng đồng" hint="Khoe thành tích xanh & cổ vũ nhau trồng cây" href={FEED_PATH} />}
         </GameTabPanel>
       </div>
 
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi khách đã đổi tab trong lúc quay. */}
       <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => router.push('/san-pham')} />
+
+      <HarvestCelebration
+        open={harvest.open}
+        coupon={harvest.reward?.coupon ?? null}
+        certificate={harvest.reward?.certificate ?? null}
+        species={harvestSpecies}
+        onClose={closeHarvest}
+        onCopyCoupon={copyCoupon}
+        onUseCoupon={() => {
+          closeHarvest();
+          router.push('/san-pham');
+        }}
+      />
       <GameNoticeBar notice={notice} />
     </>
   );

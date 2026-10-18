@@ -7,9 +7,13 @@ import {
   buyTree,
   checkIn,
   claimMission,
+  claimSeasonPass,
   collectDew,
+  giftWater,
   repairStreak,
   spin,
+  unlockPlot,
+  waterPlot,
   waterTree,
   type AnswerResult,
   type HarvestSpecies,
@@ -95,6 +99,17 @@ export function useGameActions({
     },
     onError,
   });
+  const giftM = useLockedMutation(
+    {
+      mutationFn: (recipientId: string) => giftWater(coreHttp, recipientId),
+      onSuccess: (r) => {
+        notify(`Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, 'success');
+        refresh();
+      },
+      onError,
+    },
+    (recipientId) => recipientId,
+  );
   const handleSpin = async () => {
     try {
       const r = await spin(coreHttp);
@@ -132,6 +147,36 @@ export function useGameActions({
     },
     onError,
   });
+  const unlockM = useLockedMutation({
+    mutationFn: () => unlockPlot(coreHttp),
+    onSuccess: () => {
+      notify('Đã mở lô đất mới 🪴', 'success');
+      refresh();
+    },
+    onError,
+  });
+  const waterPlotM = useLockedMutation(
+    {
+      mutationFn: (plotId: string) => waterPlot(coreHttp, plotId, 20),
+      onSuccess: (r) => afterWatering('Đã tưới lô', r),
+      onError,
+    },
+    (plotId) => plotId,
+  );
+  const claimPassM = useLockedMutation(
+    {
+      mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(coreHttp, tier, track),
+      onSuccess: () => {
+        notify('Đã nhận thưởng chặng mùa! 🎉', 'success');
+        void queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] });
+        void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
+        // Thưởng bậc có thể là Điểm Xanh.
+        void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
+      },
+      onError,
+    },
+    ({ tier, track }) => `${tier}:${track}`,
+  );
   const claimMissionM = useLockedMutation(
     {
       mutationFn: (code: string) => claimMission(coreHttp, code),
@@ -158,5 +203,5 @@ export function useGameActions({
     ({ id }) => id,
   );
 
-  return { checkInM, dewM, freezeM, repairM, handleSpin, waterM, buyTreeM, claimMissionM, answerM };
+  return { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM };
 }

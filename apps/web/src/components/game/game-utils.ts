@@ -1,3 +1,5 @@
+import type { HarvestSpecies } from '@tubutree/app-core/api/game';
+
 // Cùng ngày theo giờ VN (UTC+7) — khớp dayKey backend, để khoá nút đã dùng trong ngày.
 export function isSameVNDay(iso: string | null): boolean {
   if (!iso) return false;
@@ -22,4 +24,19 @@ export function categoryLabel(cat: string): string {
 
 export function difficultyLabel(d: number): string {
   return d >= 3 ? 'Khó' : d === 2 ? 'Vừa' : 'Dễ';
+}
+
+type Rarity = HarvestSpecies['rarity'];
+
+export function rarityLabel(r: Rarity): string {
+  return r === 'LEGENDARY' ? '🌟 Huyền thoại' : r === 'RARE' ? '💎 Hiếm' : '🍃 Thường';
+}
+
+// Class đầy đủ (không ghép chuỗi) để Tailwind quét thấy.
+export function rarityText(r: Rarity): string {
+  return r === 'LEGENDARY' ? 'text-honey-600' : r === 'RARE' ? 'text-sage-600' : 'text-stone-600';
+}
+
+export function rarityBorder(r: Rarity): string {
+  return r === 'LEGENDARY' ? 'border-honey-600' : r === 'RARE' ? 'border-sage-600' : 'border-stone-450';
 }
