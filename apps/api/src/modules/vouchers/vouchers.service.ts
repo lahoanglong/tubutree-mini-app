@@ -148,10 +148,13 @@ export class VouchersService {
     this.logger.error(`${label} lỗi: ${failures.count} lượt cấp thất bại, ${granted} đã cấp (lỗi đầu: ${failures.first instanceof Error ? failures.first.message : failures.first})`);
   }
 
-  /** Khách thật, chưa có đơn nào, tạo trong cửa sổ 24h: một điều kiện cho cả cron lẫn đường cấp ngay lúc đăng ký. */
-  private welcomeWhere(): Prisma.UserWhereInput {
+  /**
+   * Khách thật, chưa có đơn nào, tạo trong cửa sổ 24h: một điều kiện cho cả cron lẫn đường cấp ngay lúc đăng ký.
+   * `anyAge` bỏ riêng cửa sổ 24h cho tài khoản vừa thành khách thật: createdAt của dòng vãng lai nâng cấp là ngày dùng app lần đầu.
+   */
+  private welcomeWhere(anyAge = false): Prisma.UserWhereInput {
     return {
-      createdAt: { gte: new Date(Date.now() - VouchersService.WELCOME_WINDOW_MS) },
+      ...(anyAge ? {} : { createdAt: { gte: new Date(Date.now() - VouchersService.WELCOME_WINDOW_MS) } }),
       role: 'CUSTOMER',
       orders: { none: {} },
       ...REAL_USER_WHERE,
@@ -168,9 +171,15 @@ export class VouchersService {
    * D2-07a: cấp voucher chào mừng NGAY khi tài khoản thật được tạo, để lần mở đầu khách đã thấy mã thay vì chờ cron giờ sau.
    * Cùng điều kiện và cùng grant() (code tất định WELCOME-<userId>) với cron nên gọi trùng, hay chạy song song với cron, vẫn
    * chỉ một mã; cron vẫn là lưới khi bước này lỗi. Trả true khi vừa tạo mã mới.
+   *
+   * `becameRealNow` chỉ cho hai đường vừa thành khách thật (tạo tài khoản Zalo mới, nâng cấp từ khách vãng lai): khách vãng lai
+   * dùng app quá 24h rồi mới đăng nhập Zalo vẫn nhận mã. Cron không truyền nên giữ nguyên cửa sổ 24h.
    */
-  async grantWelcomeNow(userId: string): Promise<boolean> {
-    const eligible = await this.prisma.user.findFirst({ where: { id: userId, ...this.welcomeWhere() }, select: { id: true } });
+  async grantWelcomeNow(userId: string, opts: { becameRealNow?: boolean } = {}): Promise<boolean> {
+    const eligible = await this.prisma.user.findFirst({
+      where: { id: userId, ...this.welcomeWhere(opts.becameRealNow === true) },
+      select: { id: true },
+    });
     if (!eligible) return false;
     return this.grant({ userId, ...(await this.welcomeTerms()) });
   }

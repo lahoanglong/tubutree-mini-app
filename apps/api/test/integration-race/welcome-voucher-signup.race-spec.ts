@@ -156,6 +156,35 @@ describe('Voucher chào mừng lúc đăng ký song song với cron (real Postgr
     expect(notifiedFor(guestId)).toBe(1);
   });
 
+  it('khách vãng lai tạo từ 2 ngày trước mới nâng cấp lên Zalo thật: nhận đúng 1 mã; gọi cấp ngay thêm hai lần song song vẫn 1 mã', async () => {
+    const guest = await createUser(prisma, { zaloId: `guest_d_${randCode(20)}`, createdAt: new Date(Date.now() - 48 * 3600 * 1000) });
+
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', newZaloId());
+    expect(await welcomeOf(guest.id)).toHaveLength(1);
+    expect(notifiedFor(guest.id)).toBe(1);
+
+    const again = await Promise.all([
+      vouchers.grantWelcomeNow(guest.id, { becameRealNow: true }),
+      vouchers.grantWelcomeNow(guest.id, { becameRealNow: true }),
+    ]);
+    expect(again).toEqual([false, false]);
+    expect(await welcomeOf(guest.id)).toHaveLength(1);
+    expect(notifiedFor(guest.id)).toBe(1);
+  });
+
+  it('becameRealNow chỉ bỏ cửa sổ 24h: tài khoản cũ đã có đơn vẫn không được cấp, và cron không đổi cửa sổ', async () => {
+    const old = new Date(Date.now() - 48 * 3600 * 1000);
+    const ordered = await createUser(prisma, { zaloId: newZaloId(), createdAt: old });
+    await createOrder(prisma, { userId: ordered.id });
+    const plain = await createUser(prisma, { zaloId: newZaloId(), createdAt: old });
+
+    expect(await vouchers.grantWelcomeNow(ordered.id, { becameRealNow: true })).toBe(false);
+    await vouchers.welcomeVouchers();
+
+    expect(await welcomeOf(ordered.id)).toHaveLength(0);
+    expect(await welcomeOf(plain.id)).toHaveLength(0);
+  });
+
   it('cấp lỗi ở đường đăng ký không làm rớt đăng nhập, rồi cron cấp bù đúng 1 mã', async () => {
     const zaloId = newZaloId();
     jest.spyOn(vouchers, 'grantWelcomeNow').mockRejectedValueOnce(new Error('db down'));

@@ -786,6 +786,24 @@ describe('VouchersService.grantWelcomeNow', () => {
     expect(before - since).toBeLessThanOrEqual(24 * 3600 * 1000 + 5000);
   });
 
+  // Khách vãng lai dùng app quá 24h rồi mới đăng nhập Zalo: createdAt là của dòng vãng lai nên cửa sổ 24h loại họ sai.
+  it('becameRealNow: bỏ điều kiện createdAt, giữ nguyên mọi điều kiện còn lại', async () => {
+    const { svc, findFirst, create } = setup(true);
+
+    await expect(svc.grantWelcomeNow('u1', { becameRealNow: true })).resolves.toBe(true);
+
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('createdAt');
+    expect(where).toMatchObject({ id: 'u1', role: 'CUSTOMER', orders: { none: {} }, OR: REAL_USER_WHERE.OR });
+    expect(create.mock.calls[0][0].data.code).toBe('WELCOME-U1');
+  });
+
+  it.each([[undefined], [{}], [{ becameRealNow: false }]])('không truyền becameRealNow (%j): vẫn giữ cửa sổ 24h như cron', async (opts) => {
+    const { svc, findFirst } = setup(true);
+    await svc.grantWelcomeNow('u1', opts);
+    expect(findFirst.mock.calls[0][0].where.createdAt.gte).toBeInstanceOf(Date);
+  });
+
   it('khách vãng lai / đã có đơn / quá 24h (findFirst rỗng) → không cấp, không thông báo', async () => {
     const { svc, create, notify } = setup(false);
     await expect(svc.grantWelcomeNow('u1')).resolves.toBe(false);

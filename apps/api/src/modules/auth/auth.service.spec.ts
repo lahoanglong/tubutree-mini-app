@@ -954,7 +954,7 @@ describe('AuthService — voucher chào mừng ngay khi tạo tài khoản thậ
     const res = await svcWith({ findUnique: noUser(), create: echoCreate() }, miniZalo(), vouchers).loginWithZaloMiniApp('c', 'at');
     expect(res.accessToken).toBe('jwt');
     expect(vouchers.grantWelcomeNow).toHaveBeenCalledTimes(1);
-    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser', { becameRealNow: true });
   });
 
   it('Mini App: cấp lỗi (DB, thông báo) không làm rớt đăng nhập; cron giờ sau vẫn cấp', async () => {
@@ -983,7 +983,7 @@ describe('AuthService — voucher chào mừng ngay khi tạo tài khoản thậ
     const vouchers = grantMock();
     const zalo = { exchangeOAuthCode: jest.fn().mockResolvedValue('tok'), getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z9', name: 'W' }) };
     await svcWith({ findUnique: noUser(), create: echoCreate() }, zalo, vouchers).loginWithZaloOAuth('code', 'verifier');
-    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser', { becameRealNow: true });
   });
 
   it('không có VouchersService (test dựng tay) → đăng nhập vẫn chạy', async () => {
@@ -1000,7 +1000,7 @@ describe('AuthService — voucher chào mừng ngay khi tạo tài khoản thậ
       resolvePhoneNumber: jest.fn().mockResolvedValue(null),
     };
     await makeEnsurePhoneSvc(fixture, zalo, vouchers as unknown as VouchersService).ensurePhoneForCurrentUser('guest1', 'code', 'at');
-    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('guest1');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('guest1', { becameRealNow: true });
   });
 
   it('gộp khách vào tài khoản có sẵn (ensurePhone) → không cấp thêm (tài khoản đích đã qua đường đăng ký)', async () => {

@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), fetchOrders: vi.fn(), fetchPurchasedItems: vi.fn(), repurchaseOrder: vi.fn(),
-  getSubscriptions: vi.fn(), search: '',
+  getSubscriptions: vi.fn(), search: '', getNewCustomerOffer: vi.fn(),
   getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -23,6 +23,7 @@ vi.mock('../services/shop-api', () => ({
   getPublicConfig: mocks.getPublicConfig,
   getAddresses: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../services/account-api', () => ({ getNewCustomerOffer: mocks.getNewCustomerOffer }));
 vi.mock('../services/subscriptions-api', () => ({
   getSubscriptions: mocks.getSubscriptions, setSubscriptionStatus: vi.fn(), skipSubscriptionCycle: vi.fn(),
 }));
@@ -167,43 +168,61 @@ describe('OrdersPage (tab gốc)', () => {
   });
 });
 
-// D5-10: dòng gợi ý trên màn đơn hàng trống lấy mệnh giá và ngưỡng voucher chào mừng từ config công khai.
-describe('OrdersPage — đơn hàng trống nói đúng voucher chào mừng theo cấu hình (D5-10)', () => {
+// D5-10: dòng gợi ý trên màn đơn hàng trống chỉ nhắc voucher chào mừng khi khách thật sự có mã, số lấy từ chính mã đó.
+describe('OrdersPage — đơn hàng trống chỉ nhắc voucher chào mừng khi khách thật sự có (D5-10)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.search = '';
     mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 20, total: 0 } });
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
     mocks.getSubscriptions.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({
+      subscribeDiscountPct: 0.12,
+      newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 }, firstOrderFreeShip: { enabled: false, minSubtotal: 0 } },
+    });
   });
-  const cfg = (welcomeVoucher: { amount: number; minOrder: number }) => ({
-    subscribeDiscountPct: 0.12,
-    newCustomer: { welcomeVoucher, firstOrderFreeShip: { enabled: false, minSubtotal: 0 } },
+  const voucher = (value: number, minOrder: number | null, type = 'AMOUNT') => ({
+    code: 'WELCOME-U1', type, value, minOrder, endAt: '2026-11-20T00:00:00.000Z',
   });
 
-  it('số trong chữ theo cấu hình, không theo số cũ', async () => {
-    mocks.getPublicConfig.mockResolvedValue(cfg({ amount: 15000, minOrder: 99000 }));
+  it('có mã chào mừng: số trong chữ theo mã của khách, không theo số cũ hay config', async () => {
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: voucher(15000, 99000) });
     renderPage();
     expect(await screen.findByText('Đơn đầu từ 99.000đ dùng được mã giảm giá chào mừng 15.000đ')).toBeInTheDocument();
   });
 
   it('mã không đòi đơn tối thiểu: bỏ cụm "từ …"', async () => {
-    mocks.getPublicConfig.mockResolvedValue(cfg({ amount: 30000, minOrder: 0 }));
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: voucher(30000, null) });
     renderPage();
     expect(await screen.findByText('Đơn đầu dùng được mã giảm giá chào mừng 30.000đ')).toBeInTheDocument();
   });
 
-  it('admin tắt voucher chào mừng (mệnh giá 0) hoặc API cũ chưa trả số: không nhắc voucher', async () => {
-    mocks.getPublicConfig.mockResolvedValue(cfg({ amount: 0, minOrder: 199000 }));
-    const off = renderPage();
-    expect(await screen.findByText('Bạn chưa có đơn nào')).toBeInTheDocument();
-    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
-    expect(screen.queryByText(/mã giảm giá chào mừng/)).toBeNull();
-    off.unmount();
-
-    mocks.getPublicConfig.mockResolvedValue({ subscribeDiscountPct: 0.12 });
+  it.each([
+    ['khách mới nhưng chưa có mã (cron chưa chạy, đã dùng, hết hạn)', { isNewCustomer: true, welcomeVoucher: null }],
+    ['không phải khách mới', { isNewCustomer: false, welcomeVoucher: null }],
+    ['mã không phải giảm số tiền', { isNewCustomer: true, welcomeVoucher: voucher(10, 0, 'PERCENT') }],
+    ['mã mệnh giá 0', { isNewCustomer: true, welcomeVoucher: voucher(0, 199000) }],
+  ])('%s: không nhắc voucher dù config còn mệnh giá 30.000đ', async (_name, offer) => {
+    mocks.getNewCustomerOffer.mockResolvedValue(offer);
     renderPage();
     expect(await screen.findByText('Bạn chưa có đơn nào')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
     expect(screen.queryByText(/mã giảm giá chào mừng/)).toBeNull();
+  });
+
+  it('không tải được ưu đãi khách mới: màn trống vẫn hiện, không nhắc voucher', async () => {
+    mocks.getNewCustomerOffer.mockRejectedValue(new Error('offline'));
+    renderPage();
+    expect(await screen.findByText('Bạn chưa có đơn nào')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
+    expect(screen.queryByText(/mã giảm giá chào mừng/)).toBeNull();
+  });
+
+  it('khách đã có đơn: không gọi API ưu đãi khách mới', async () => {
+    mocks.fetchOrders.mockResolvedValue(PAGE);
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: voucher(30000, 199000) });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Đơn TUBU-777' })).toBeInTheDocument();
+    expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
   });
 });

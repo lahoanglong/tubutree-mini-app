@@ -80,13 +80,14 @@ export class AuthService {
   ) {}
 
   /**
-   * D2-07a: voucher chào mừng ngay khi tài khoản thật xuất hiện, để lần mở đầu khách đã thấy mã. Lỗi ở đây không được làm
-   * rớt đăng nhập: cron mỗi giờ của VouchersService cùng một mã tất định nên vẫn cấp bù trong 24h đầu.
+   * D2-07a: voucher chào mừng ngay khi tài khoản thật xuất hiện (tạo mới bằng Zalo hoặc nâng cấp từ khách vãng lai), để lần mở
+   * đầu khách đã thấy mã. Lỗi ở đây không được làm rớt đăng nhập: cron mỗi giờ của VouchersService cùng một mã tất định nên vẫn
+   * cấp bù trong 24h đầu (với khách vãng lai nâng cấp muộn hơn 24h thì cron không còn thấy họ, nên đường này là đường duy nhất).
    */
   private async grantWelcomeVoucher(userId: string): Promise<void> {
     if (!this.vouchers) return;
     try {
-      await this.vouchers.grantWelcomeNow(userId);
+      await this.vouchers.grantWelcomeNow(userId, { becameRealNow: true });
     } catch (err) {
       this.logger.warn(`Cấp voucher chào mừng cho ${userId} lỗi, chờ cron: ${err instanceof Error ? err.message : err}`);
     }
