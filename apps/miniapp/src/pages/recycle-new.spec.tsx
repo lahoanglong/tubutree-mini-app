@@ -223,6 +223,16 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     await waitFor(() => expect(screen.getAllByRole('radio').every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true));
     expect(screen.getAllByText('Bạn đang có 3 yêu cầu chưa xong').length).toBeGreaterThan(0);
   });
+  it('MONTH_CAP_FOR_MIN: thẻ Thu kèm đơn nói gói thu kèm đơn, thẻ Gửi về kho nói gói gửi kho', async () => {
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'PICKUP' || b.method === 'MAIL_IN' ? { blocks: [{ code: 'MONTH_CAP_FOR_MIN', pointsRemaining: 5_000 }] } : {}));
+    atStep2();
+    renderPage();
+    const pickup = await screen.findByRole('radio', { name: /Thu kèm đơn/ });
+    const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
+    expect(await within(pickup).findByText('tháng này bạn không còn đủ trần cho một gói thu kèm đơn')).toBeInTheDocument();
+    expect(within(mail).getByText('tháng này bạn không còn đủ trần cho một gói gửi kho')).toBeInTheDocument();
+    expect(within(pickup).queryByText(/gói gửi kho/)).toBeNull();
+  });
   it('NEED_PROVINCE → ô chọn tỉnh trên thẻ Gửi về kho; chọn → preview lại với provinceCode', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' && !b.provinceCode ? { blocks: [{ code: 'NEED_PROVINCE' }] } : {}));
     atStep2();
