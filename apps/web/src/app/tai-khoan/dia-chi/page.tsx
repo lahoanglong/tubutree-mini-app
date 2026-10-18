@@ -92,6 +92,11 @@ export default function AddressBookPage() {
           </button>
         </p>
       )}
+      {remove.isSuccess && (
+        <p role="status" className="mb-3 text-sm font-medium text-success-fg">
+          Đã xóa địa chỉ.
+        </p>
+      )}
       {actionError && (
         <p role="alert" className={`mb-3 ${ui.error}`}>
           {actionError instanceof Error ? actionError.message : 'Không thực hiện được. Vui lòng thử lại.'}

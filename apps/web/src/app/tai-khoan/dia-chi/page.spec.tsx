@@ -140,6 +140,14 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(c.querySelector('[role="alertdialog"]')).toBeNull();
   });
 
+  it('xoá xong: báo "Đã xóa địa chỉ." như Mini App', async () => {
+    const c = await mount();
+    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    await flush(4);
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã xóa địa chỉ.');
+  });
+
   it('WEB-13: mở hộp xác nhận xóa thì focus vào "Giữ lại"; "Giữ lại" trả focus về nút "Xóa" của đúng dòng đó', async () => {
     const c = await mount();
     click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
