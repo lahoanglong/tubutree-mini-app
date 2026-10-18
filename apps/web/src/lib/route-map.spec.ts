@@ -21,7 +21,7 @@ describe('isWebRouteReady', () => {
   it('route còn pending thì chưa sẵn sàng (bản đồ giả, không phụ thuộc lane nào đã xong chưa)', async () => {
     vi.resetModules();
     vi.doMock('@tubutree/app-core/route-map.json', () => ({
-      default: { groups: [{ lane: 't', items: [{ miniapp: '/x', web: '/chua-xong', pending: true }, { miniapp: '/y', web: '/da-xong' }] }] },
+      default: { routes: [{ lane: 't', items: [{ miniapp: '/x', web: '/chua-xong', pending: true }, { miniapp: '/y', web: '/da-xong' }] }] },
     }));
     const fake = await import('./route-map');
     expect(fake.isWebRouteReady('/chua-xong')).toBe(false);
