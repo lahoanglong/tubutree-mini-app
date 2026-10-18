@@ -356,7 +356,7 @@ export default function RecycleRequestPage() {
         </section>
       )}
       <DeclaredCountedTable lines={r.lines} />
-      {r.estimatedPoints > 0 && (
+      {t && r.status !== 'COMPLETED' && r.estimatedPoints > 0 && (
         <Text variant="body-md" as="div" style={{ fontWeight: 600, textAlign: 'right' }}>{`Ước tính ${formatPoints(r.estimatedPoints)}`}</Text>
       )}
       {r.status === 'COMPLETED' && (

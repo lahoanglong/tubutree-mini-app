@@ -341,6 +341,17 @@ describe('/recycle/r/:id — trạng thái, ước tính, tiêu đề (F2, F10)'
     expect(screen.getByText('Chờ bạn mang tới')).toBeInTheDocument();
     expect(screen.getByText('Ước tính 5.000 điểm')).toBeInTheDocument();
   });
+  it('REJECTED và COMPLETED: không còn dòng "Ước tính" (chỉ yêu cầu đang chạy mới ước tính)', async () => {
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'REJECTED', rejectionReason: 'WET', editable: false, cancellable: false }));
+    const first = renderPage();
+    await screen.findByText('Bị từ chối');
+    expect(screen.queryByText(/Ước tính/)).toBeNull();
+    first.unmount();
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 2000, editable: false, cancellable: false }));
+    renderPage();
+    await screen.findByRole('button', { name: 'Xem kết quả cộng điểm' });
+    expect(screen.queryByText(/Ước tính/)).toBeNull();
+  });
   it('Gửi về kho + OPEN: có dòng "Ước tính", số điện thoại người nhận nhóm 4-3-3, tiêu đề trang không lặp mã', async () => {
     mocks.getWasteRequest.mockResolvedValue(MAIL({ point: makeWarehouseContact({ phone: '0984606774' }) }));
     renderPage();
