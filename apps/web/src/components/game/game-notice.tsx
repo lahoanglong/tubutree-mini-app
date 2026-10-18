@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface GameNotice {
   id: number;
@@ -33,12 +34,16 @@ export function useGameNotice() {
   return { notice, notify };
 }
 
-/** Lỗi dùng role="alert" để đọc ngay; thành công dùng role="status". Nằm trên thanh điều hướng đáy của điện thoại. */
+/**
+ * Lỗi dùng role="alert" để đọc ngay; thành công dùng role="status". Đưa ra body với z-index trên Sheet (z-50): hộp xác
+ * nhận được giữ mở khi lỗi (để gửi lại cùng Idempotency-Key) nên thông báo nằm trong trang sẽ bị nó che. Nằm trên thanh
+ * điều hướng đáy của điện thoại kể cả khi có vùng an toàn của iPhone.
+ */
 export function GameNoticeBar({ notice }: { notice: GameNotice | null }) {
-  if (!notice) return null;
+  if (!notice || typeof document === 'undefined') return null;
   const error = notice.tone === 'error';
-  return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 md:bottom-6">
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4 md:bottom-6">
       <div
         key={notice.id}
         role={error ? 'alert' : 'status'}
@@ -48,6 +53,7 @@ export function GameNoticeBar({ notice }: { notice: GameNotice | null }) {
       >
         {notice.text}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

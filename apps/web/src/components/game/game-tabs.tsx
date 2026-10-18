@@ -17,7 +17,7 @@ export const GAME_TAB_KEYS: readonly string[] = GAME_TABS.map((t) => t.key);
 export function GameTabPanel({ tab, active, children }: { tab: GameTabKey; active: boolean; children: ReactNode }) {
   const label = GAME_TABS.find((t) => t.key === tab)?.label;
   return (
-    <div role="tabpanel" aria-label={label} hidden={!active} className={active ? 'flex flex-col gap-3' : 'hidden'}>
+    <div role="tabpanel" aria-label={label} hidden={!active} className={active ? 'flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:items-start' : 'hidden'}>
       {children}
     </div>
   );

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -215,7 +216,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(postsOf('/game/garden/plot/p2/water')).toHaveLength(1);
     expect(postsOf('/game/garden/plot/p2/water')[0]!.body).toEqual({ drops: 20 });
     expect(postsOf('/game/garden/plot/p3/water')).toHaveLength(1);
-    expect(c.textContent).toContain('Đã tưới lô · 6/20💧');
+    expect(document.body.textContent).toContain('Đã tưới lô · 6/20💧');
   });
 
   it('tưới lô lỗi: báo lỗi và nhả khoá, bấm lại gọi lần hai', async () => {
@@ -226,7 +227,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     const w = () => Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Tưới'))!;
     click(w());
     await flush(6);
-    expect(c.querySelector('[role="alert"]')!.textContent).toBe('Cây đã chết');
+    expect(document.querySelector('[role="alert"]')!.textContent).toBe('Cây đã chết');
     click(w());
     await flush(6);
     expect(postsOf('/game/garden/plot/p2/water')).toHaveLength(2);
@@ -264,7 +265,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     await flush(8);
     expect(postsOf('/game/garden/unlock')).toHaveLength(1);
     expect(postsOf('/game/garden/unlock')[0]!.body).toEqual({ currency: 'SEEDS' });
-    expect(c.textContent).toContain('Đã mở lô đất mới 🪴');
+    expect(document.body.textContent).toContain('Đã mở lô đất mới 🪴');
     expect(getsOf('/game/garden').length).toBeGreaterThan(1);
   });
 
@@ -329,7 +330,7 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
     await flush(8);
     expect(postsOf('/game/gift/f1')).toHaveLength(1);
     expect(postsOf('/game/gift/f3')).toHaveLength(1);
-    expect(c.textContent).toContain('Đã tặng 5💧 cho bạn 🎁');
+    expect(document.body.textContent).toContain('Đã tặng 5💧 cho bạn 🎁');
   });
 
   it('không có bạn bè: ẩn khối tặng nước', async () => {
@@ -346,7 +347,7 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
     const b = card(c, 'Tặng nước cho bạn bè')!.querySelector<HTMLButtonElement>('button')!;
     click(b);
     await flush(6);
-    expect(c.querySelector('[role="alert"]')!.textContent).toBe('Đã tặng rồi');
+    expect(document.querySelector('[role="alert"]')!.textContent).toBe('Đã tặng rồi');
     expect(b.disabled).toBe(false);
   });
 
@@ -451,7 +452,7 @@ describe('Vườn Xanh: Chặng Mùa theo SEASON_PASS_ENABLED', () => {
     await flush(8);
     expect(postsOf('/game/season-pass/claim')).toHaveLength(1);
     expect(postsOf('/game/season-pass/claim')[0]!.body).toEqual({ tier: 0, track: 'free' });
-    expect(c.textContent).toContain('Đã nhận thưởng chặng mùa! 🎉');
+    expect(document.body.textContent).toContain('Đã nhận thưởng chặng mùa! 🎉');
     expect(getsOf('/game/season-pass').length).toBeGreaterThan(1);
   });
 
@@ -521,10 +522,10 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     click(code());
     await flush();
     expect(writeText).toHaveBeenCalledWith('XANH-123');
-    expect(c.querySelector('[role="status"]')!.textContent).toBe('Đã sao chép mã giảm giá');
+    expect(document.querySelector('[role="status"]')!.textContent).toBe('Đã sao chép mã giảm giá');
     click(code());
     await flush();
-    expect(c.textContent).toContain('Không sao chép được — mã của bạn: XANH-123');
+    expect(document.body.textContent).toContain('Không sao chép được — mã của bạn: XANH-123');
     click(btn(dlg(), 'Dùng mã giảm giá ngay'));
     await flush();
     expect(state.push).toHaveBeenCalledWith('/san-pham');
@@ -557,5 +558,48 @@ describe('Vườn Xanh: bố cục tab Vườn và Cộng đồng', () => {
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
+  });
+});
+
+describe('Vườn Xanh: hộp thu hoạch khi trình duyệt không có clipboard', () => {
+  it('navigator.clipboard không có: không ném lỗi, báo mã để khách tự chép', async () => {
+    state.data['/game/profile'] = profile();
+    state.posts['/game/tree/water'] = () => ({
+      progress: 50, target: 50, harvested: true, treesPlanted: 4,
+      reward: { coupon: 'XANH-123', certificate: 'TT-77' },
+    });
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const c = await mount();
+    click(btn(c, 'Tưới cây'));
+    await flush(8);
+    click(document.querySelector<HTMLElement>('[role="dialog"] [data-coupon]'));
+    await flush();
+    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Không sao chép được — mã của bạn: XANH-123');
+  });
+});
+
+describe('Vườn Xanh: làm mới Điểm Xanh ở tab Vườn và Cộng đồng', () => {
+  let spy: MockInstance<QueryClient['invalidateQueries']>;
+  const keys = () => spy.mock.calls.map((a) => JSON.stringify(a[0]?.queryKey));
+  afterEach(() => spy?.mockRestore());
+
+  it('mở lô làm mới game, me và loyalty', async () => {
+    state.posts['/game/garden/unlock'] = () => plot(4);
+    const c = await mount('tab=garden');
+    spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    click(btn(panel(c, 'Vườn'), 'Mở lô'));
+    await flush(8);
+    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+  });
+
+  it('nhận thưởng chặng mùa làm mới loyalty', async () => {
+    state.seasonPass = true;
+    state.data['/game/season-pass'] = PASS;
+    state.posts['/game/season-pass/claim'] = () => ({ claimed: true, reward: { type: 'POINTS', amount: 20 } });
+    const c = await mount('tab=community');
+    spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    click(btn(card(c, 'Chặng Mùa (Season Pass)')!, 'Nhận'));
+    await flush(8);
+    expect(keys()).toEqual(expect.arrayContaining(['["game","seasonPass"]', '["loyalty"]']));
   });
 });

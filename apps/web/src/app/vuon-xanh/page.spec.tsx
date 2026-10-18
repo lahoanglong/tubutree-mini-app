@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -276,7 +277,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     });
     await flush(8);
     expect(postsOf('/game/check-in')).toHaveLength(1);
-    expect(c.textContent).toContain('+10💧 · 🧊 đã dùng vé giữ lửa · Thưởng ngày 3');
+    expect(document.body.textContent).toContain('+10💧 · 🧊 đã dùng vé giữ lửa · Thưởng ngày 3');
     expect(getsOf('/game/profile').length).toBeGreaterThanOrEqual(2);
   });
 
@@ -298,7 +299,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     const c = await mount();
     click(btn(c, 'Điểm danh'));
     await flush(6);
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Lỗi máy chủ');
+    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Lỗi máy chủ');
     click(btn(c, 'Điểm danh'));
     await flush(6);
     expect(postsOf('/game/check-in')).toHaveLength(2);
@@ -324,7 +325,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     click(btn(c, 'Hứng giọt sương'));
     await flush(6);
     expect(postsOf('/game/dew/collect')).toHaveLength(1);
-    expect(c.textContent).toContain('Hứng được +5💧 từ giọt sương sáng 💦');
+    expect(document.body.textContent).toContain('Hứng được +5💧 từ giọt sương sáng 💦');
     state.data['/game/profile'] = PROFILE({ lastDewAt: todayIso(), lastCheckInAt: null });
     c = await mount();
     expect(btn(c, 'Đã hứng sương').disabled).toBe(true);
@@ -338,7 +339,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     click(btn(c, 'Mua (80💧)'));
     await flush(6);
     expect(postsOf('/game/streak-freeze/buy')).toHaveLength(1);
-    expect(c.textContent).toContain('Đã mua vé giữ lửa 🧊 (còn 2 vé)');
+    expect(document.body.textContent).toContain('Đã mua vé giữ lửa 🧊 (còn 2 vé)');
     state.data['/game/profile'] = PROFILE({ streakFreezeCost: undefined });
     c = await mount();
     expect(btn(c, 'Mua (80💧)')).not.toBeNull();
@@ -355,7 +356,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     click(btn(c, 'Hồi sinh (150💧)'));
     await flush(6);
     expect(postsOf('/game/streak/repair')).toHaveLength(1);
-    expect(c.textContent).toContain('Đã hồi sinh chuỗi! 🌿');
+    expect(document.body.textContent).toContain('Đã hồi sinh chuỗi! 🌿');
   });
 
   it('cây héo/chết hiện đúng cảnh báo; khoẻ thì không có', async () => {
@@ -382,7 +383,7 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
     await flush(8);
     expect(postsOf('/game/tree/water')).toHaveLength(1);
     expect(postsOf('/game/tree/water')[0]!.body).toEqual({ drops: 20 });
-    expect(c.textContent).toContain('Đã tưới · 620/1.000💧');
+    expect(document.body.textContent).toContain('Đã tưới · 620/1.000💧');
     expect(getsOf('/game/forest').length).toBeGreaterThanOrEqual(2);
   });
 
@@ -393,7 +394,7 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
     const c = await mount();
     click(btn(c, 'Tưới cây (20💧)'));
     await flush(6);
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không đủ giọt nước');
+    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Không đủ giọt nước');
     expect(btn(c, 'Tưới cây (20💧)').disabled).toBe(false);
   });
 
@@ -423,7 +424,7 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
     await flush(8);
     expect(postsOf(BUY)).toHaveLength(1);
     expect(postsOf(BUY)[0]!.headers).toEqual({ 'Idempotency-Key': 'key-1' });
-    expect(c.textContent).toContain('Đã góp 1 cây vào quỹ trồng cây 🌳 (−20.000 điểm) · mã TT-99');
+    expect(document.body.textContent).toContain('Đã góp 1 cây vào quỹ trồng cây 🌳 (−20.000 điểm) · mã TT-99');
     expect(dialog()).toBeNull();
   });
 
@@ -472,7 +473,7 @@ describe('Vườn Xanh: nhiệm vụ', () => {
     });
     await flush(8);
     expect(postsOf('/game/missions/REVIEW_3/claim')).toHaveLength(1);
-    expect(c.textContent).toContain('Đã nhận +30 Điểm Xanh! 🌿');
+    expect(document.body.textContent).toContain('Đã nhận +30 Điểm Xanh! 🌿');
   });
 
   it('không có nhiệm vụ: "Chưa có nhiệm vụ."', async () => {
@@ -543,7 +544,7 @@ describe('Vườn Xanh: quiz Sống Xanh', () => {
     expect(c.textContent).toContain('🌿 Thiên nhiên');
     click(btn(c, 'Sưa'));
     await flush(6);
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Hết lượt');
+    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Hết lượt');
     expect(c.textContent).not.toContain('Bạn có biết');
     expect(btn(c, 'Sưa').disabled).toBe(false);
   });
@@ -594,7 +595,7 @@ describe('Vườn Xanh: vòng quay may mắn', () => {
     };
     const c = await mount();
     await spinNow(c);
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không đủ điểm');
+    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Không đủ điểm');
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });
@@ -617,5 +618,129 @@ describe('Vườn Xanh: tác động xanh', () => {
     state.data['/game/forest'] = { count: 0, plantedCount: 0, trees: [] };
     const c = await mount();
     expect(c.textContent).toContain('Chăm cây ảo đến khi thu hoạch để Tubu góp 1 cây vào quỹ trồng cây.');
+  });
+});
+
+describe('Vườn Xanh: thông báo nổi nằm trên hộp xác nhận', () => {
+  const BUY = '/game/tree/buy';
+  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+
+  it('góp quỹ lỗi khi hộp xác nhận còn mở: thông báo lỗi nằm ngoài trang, sau hộp trong body và z-index cao hơn hộp', async () => {
+    state.posts[BUY] = () => {
+      throw new Error('Không đủ Điểm Xanh');
+    };
+    const c = await mount();
+    click(btn(c, 'Góp quỹ trồng cây'));
+    click(btn(dialog()!, 'Xác nhận'));
+    await flush(6);
+    expect(dialog()).not.toBeNull();
+    const alert = document.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(alert.textContent).toContain('Không đủ Điểm Xanh');
+    expect(c.contains(alert)).toBe(false);
+    const bar = alert.closest('body > *') as HTMLElement;
+    const sheet = dialog()!.parentElement as HTMLElement;
+    expect(sheet.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const z = (el: HTMLElement) => Number(/(?:^|\s)z-\[?(\d+)\]?(?:\s|$)/.exec(el.className)?.[1]);
+    expect(z(bar)).toBeGreaterThan(z(sheet));
+  });
+
+  it('thông báo đặt trên thanh đáy kể cả khi có vùng an toàn của iPhone', async () => {
+    state.posts[BUY] = () => {
+      throw new Error('lỗi');
+    };
+    const c = await mount();
+    click(btn(c, 'Góp quỹ trồng cây'));
+    click(btn(dialog()!, 'Xác nhận'));
+    await flush(6);
+    const bar = document.querySelector('[role="alert"]')!.closest('body > *') as HTMLElement;
+    expect(bar.className).toContain('env(safe-area-inset-bottom)');
+  });
+});
+
+describe('Vườn Xanh: khung rộng và thanh tab', () => {
+  it('thanh tab dính dưới thanh đầu trang (đo chiều cao header), không dính mép 0', async () => {
+    const header = document.createElement('header');
+    header.getBoundingClientRect = () => ({ height: 112 }) as DOMRect;
+    document.body.prepend(header);
+    try {
+      const c = await mount();
+      const bar = c.querySelector<HTMLElement>('[role="tablist"]')!.closest('.sticky') as HTMLElement;
+      expect(bar.style.top).toBe('112px');
+      expect(bar.className).not.toContain('top-0');
+    } finally {
+      header.remove();
+    }
+  });
+
+  it('từ lg khung rộng và tab đang mở chia hai cột; tab ẩn vẫn hidden; điện thoại một cột', async () => {
+    const c = await mount();
+    const frame = panel(c, 'Hôm nay').parentElement as HTMLElement;
+    expect(frame.className).toContain('lg:max-w-5xl');
+    expect(frame.className).toContain('max-w-2xl');
+    expect(panel(c, 'Hôm nay').className).toContain('lg:grid-cols-2');
+    expect(panel(c, 'Hôm nay').className).toContain('flex-col');
+    expect(panel(c, 'Vườn').className).toBe('hidden');
+  });
+});
+
+describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng khoá', () => {
+  let spy: MockInstance<QueryClient['invalidateQueries']>;
+  const keys = () => spy.mock.calls.map((a) => JSON.stringify(a[0]?.queryKey));
+  const arm = () => {
+    spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    spy.mockClear();
+  };
+  afterEach(() => spy?.mockRestore());
+
+  it('điểm danh làm mới game, me và loyalty', async () => {
+    state.posts['/game/check-in'] = () => ({ seedsEarned: 10, pointsEarned: 0, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' });
+    const c = await mount();
+    arm();
+    click(btn(c, 'Điểm danh'));
+    await flush(6);
+    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+  });
+
+  it('tưới cây làm mới game, me và loyalty', async () => {
+    state.posts['/game/tree/water'] = () => ({ progress: 620, target: 1000, harvested: false, treesPlanted: 2 });
+    const c = await mount();
+    arm();
+    click(btn(c, 'Tưới cây (20💧)'));
+    await flush(6);
+    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+  });
+
+  it('góp quỹ trồng cây làm mới game, me và loyalty', async () => {
+    state.posts['/game/tree/buy'] = () => ({ certificateCode: 'TT-99', treeType: 'Sưa', cost: 20_000, pointsUsed: 20_000, pointsUsedConverted: 0 });
+    const c = await mount();
+    click(btn(c, 'Góp quỹ trồng cây'));
+    arm();
+    click(btn(document.querySelector<HTMLElement>('[role="dialog"]')!, 'Xác nhận'));
+    await flush(8);
+    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+  });
+
+  it('quay vòng quay làm mới game, me và loyalty', async () => {
+    state.posts['/game/spin'] = () => ({ prize: { id: 'p', name: '+50 Điểm Xanh', rewardType: 'POINTS', value: 50 } });
+    const c = await mount();
+    arm();
+    vi.useFakeTimers();
+    click(btn(c, 'Quay ngay'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3700);
+    });
+    vi.useRealTimers();
+    await flush(4);
+    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+  });
+
+  it('nhận nhiệm vụ làm mới nhiệm vụ và me, không đụng loyalty', async () => {
+    state.posts['/game/missions/REVIEW_3/claim'] = () => ({ claimed: true, rewardPoints: 30, couponCode: null });
+    const c = await mount();
+    arm();
+    click(btn(c, 'Nhận thưởng'));
+    await flush(6);
+    expect(keys()).toEqual(expect.arrayContaining(['["game","missions"]', '["me"]']));
+    expect(keys()).not.toContain('["loyalty"]');
   });
 });

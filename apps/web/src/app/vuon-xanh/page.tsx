@@ -35,6 +35,7 @@ import { TreeActions } from '@/components/game/tree-actions';
 import { TreeHealthAlert } from '@/components/game/tree-health-alert';
 import { useGameActions, type HarvestReward } from '@/components/game/use-game-actions';
 import { useGameData } from '@/components/game/use-game-data';
+import { useHeaderOffset } from '@/components/game/use-header-offset';
 import { useWheelPrize } from '@/components/game/use-wheel-prize';
 import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
@@ -49,6 +50,7 @@ function GameBody() {
   const router = useRouter();
   const publicConfig = usePublicConfig();
   const { notice, notify } = useGameNotice();
+  const headerOffset = useHeaderOffset();
   const [tab, setTab] = useTabParam(GAME_TAB_KEYS, 'today');
   const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } = useGameData(true);
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
@@ -81,20 +83,23 @@ function GameBody() {
   const feedLink = isWebRouteReady(FEED_PATH);
   const harvestSpecies: HarvestSpecies | null = harvest.reward?.species ?? null;
   const closeHarvest = () => setHarvest((h) => ({ ...h, open: false }));
-  const copyCoupon = (code: string) => {
-    void navigator.clipboard.writeText(code).then(
-      () => notify('Đã sao chép mã giảm giá', 'success'),
-      () => notify(`Không sao chép được — mã của bạn: ${code}`, 'error'),
-    );
+  // navigator.clipboard không có ở ngữ cảnh không bảo mật và vài WebView: ném đồng bộ, nên bọc try/catch chứ không chỉ .catch.
+  const copyCoupon = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      notify('Đã sao chép mã giảm giá', 'success');
+    } catch {
+      notify(`Không sao chép được — mã của bạn: ${code}`, 'error');
+    }
   };
 
   return (
     <>
-      <div className="mx-auto flex max-w-2xl flex-col gap-3">
+      <div className="mx-auto flex max-w-2xl flex-col gap-3 lg:max-w-5xl">
         <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
 
-        {/* Dính đầu trang để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
-        <div className="sticky top-0 z-10 bg-stone-25 py-1">
+        {/* Dính dưới thanh đầu trang của site để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
+        <div className="sticky z-10 bg-stone-25 py-1" style={{ top: headerOffset }}>
           <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} label="Vườn Xanh" />
         </div>
 
@@ -210,7 +215,7 @@ function GameBody() {
         certificate={harvest.reward?.certificate ?? null}
         species={harvestSpecies}
         onClose={closeHarvest}
-        onCopyCoupon={copyCoupon}
+        onCopyCoupon={(code) => void copyCoupon(code)}
         onUseCoupon={() => {
           closeHarvest();
           router.push('/san-pham');
