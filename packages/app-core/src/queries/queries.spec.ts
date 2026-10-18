@@ -49,7 +49,6 @@ const cases: Case[] = [
   ['quoteNoItems', (h) => checkout.quoteQuery(h, 'a1', undefined, undefined, undefined), ['quote', 'a1', undefined, undefined, ''], '/checkout/quote'],
   ['couponPreviews', (h) => checkout.couponPreviewsQuery(h, 'sig', { addressId: 'a1' } as never), ['coupon-previews', 'sig'], '/checkout/coupon-previews'],
   ['order', (h) => orders.orderQuery(h, 'T1'), ['order', 'T1'], '/orders/T1'],
-  ['ordersList', (h) => orders.ordersListQuery(h, 'all', {}, 1, 20), ['orders', 'list', 'all'], '/orders'],
   ['ordersHomeStrip', (h) => orders.ordersHomeStripQuery(h), ['orders', 'home-strip'], '/orders'],
   ['activeOrderCount', (h) => orders.activeOrderCountQuery(h), ['orders', 'active-count'], '/orders/active-count'],
   ['purchasedItems', (h) => orders.purchasedItemsQuery(h, 10), ['purchased-items', 10], '/me/purchased-items'],
@@ -118,5 +117,40 @@ describe('queries — sao kê ví (infinite)', () => {
     expect(q.queryKey).toEqual(['wallet', 'transactions']);
     await q.queryFn({ pageParam: 3 });
     expect(calls).toEqual([{ method: 'get', path: '/me/wallet/transactions', opts: { query: { page: 3, limit: 20 } } }]);
+  });
+});
+
+describe('queries — danh sách đơn và trang Duyệt (infinite)', () => {
+  it('ordersListQuery: khoá theo tab, queryFn nhận pageParam', async () => {
+    const { http, calls } = fakeHttp();
+    const q = orders.ordersListQuery(http, 'shipping', { status: 'SHIPPING' });
+    expect(q.queryKey).toEqual(['orders', 'list', 'shipping']);
+    await q.queryFn({ pageParam: 3 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.path).toBe('/orders');
+    expect(calls[0]!.opts).toEqual({ query: { status: 'SHIPPING', page: 3, limit: 20 } });
+  });
+
+  it('ordersListQuery: không bộ lọc chỉ gửi page và limit', async () => {
+    const { http, calls } = fakeHttp();
+    await orders.ordersListQuery(http, 'all', {}, 10).queryFn({ pageParam: 2 });
+    expect(calls[0]!.opts).toEqual({ query: { page: 2, limit: 10 } });
+  });
+
+  it('browseQuery: khoá theo urlKey, queryFn dựng truy vấn từ pageParam', async () => {
+    const { http, calls } = fakeHttp(() => ({ data: [], meta: {} }));
+    const q = catalog.browseQuery(http, 'k1', (page) => ({ page, limit: 20 }));
+    expect(q.queryKey).toEqual(['products', 'browse', 'k1']);
+    await q.queryFn({ pageParam: 4 });
+    expect(calls[0]!.path).toBe('/products');
+    expect(calls[0]!.opts).toEqual({ query: expect.objectContaining({ page: 4, limit: 20 }) });
+  });
+
+  it('wasteByOrderQuery: khoá con của waste, gọi by-order', async () => {
+    const { http, calls } = fakeHttp();
+    const q = waste.wasteByOrderQuery(http, 'o1');
+    expect(q.queryKey).toEqual(['waste', 'by-order', 'o1']);
+    await q.queryFn();
+    expect(calls[0]!.path).toBe('/waste/requests/by-order/o1');
   });
 });

@@ -38,6 +38,10 @@ export const WASTE_QUERY_KEYS = {
   rewardsMine: ['loyalty-rewards', 'mine'],
 } as const;
 
+/** Khoá cần làm mới sau khi ghi đổi rác; đổi quà làm mới thêm điểm thưởng và mã giảm giá, nếu thiếu thì số dư Điểm Xanh cũ. */
+export const WASTE_WRITE_INVALIDATE_KEYS = [['waste'], ['loyalty'], ['points-txn'], ['game']] as const;
+export const WASTE_REDEEM_INVALIDATE_KEYS = [...WASTE_WRITE_INVALIDATE_KEYS, ['loyalty-rewards'], ['coupons']] as const;
+
 export const getWasteMe = (http: HttpClient) => http.get<WasteMeDTO>('/waste/me');
 export const getWasteItems = (http: HttpClient) => http.get<WasteItemDTO[]>('/waste/items');
 export const getWastePoints = (http: HttpClient, provinceCode?: string) =>

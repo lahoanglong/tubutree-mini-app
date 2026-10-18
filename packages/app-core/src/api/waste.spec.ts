@@ -53,3 +53,14 @@ describe('waste — đúng route, body, header (bảng của spec Mini App)', ()
     expect(calls[0]!.path).not.toMatch(/secret/);
   });
 });
+
+describe('waste — tập khoá phải làm mới sau khi ghi', () => {
+  it('ghi đổi rác làm mới waste, loyalty, points-txn, game', () => {
+    expect(w.WASTE_WRITE_INVALIDATE_KEYS).toEqual([['waste'], ['loyalty'], ['points-txn'], ['game']]);
+  });
+  it('đổi quà làm mới thêm loyalty-rewards và coupons', () => {
+    expect(w.WASTE_REDEEM_INVALIDATE_KEYS).toEqual([
+      ['waste'], ['loyalty'], ['points-txn'], ['game'], ['loyalty-rewards'], ['coupons'],
+    ]);
+  });
+});
