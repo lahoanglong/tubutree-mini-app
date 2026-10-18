@@ -61,6 +61,17 @@ const SHOP: string[] = [
   'components/catalog/result-header.tsx',
   'components/catalog/sort-chips.tsx',
   'components/catalog/suggest-list.tsx',
+  'components/home/flash-sale.tsx',
+  'components/home/home-block-error.tsx',
+  'components/home/home-extras.tsx',
+  'components/home/home-page-error.tsx',
+  'components/home/home-section.tsx',
+  'components/home/home-view.tsx',
+  'components/home/new-customer-gift.tsx',
+  'components/home/order-strip.tsx',
+  'components/home/points-boost-strip.tsx',
+  'components/reorder/purchased-rail.tsx',
+  'components/reorder/reorder-sheet.tsx',
 ];
 const ORDER: string[] = [];
 const ACCOUNT: string[] = [];

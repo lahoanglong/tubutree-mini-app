@@ -1,3 +1,5 @@
+const numberFormat = new Intl.NumberFormat('vi-VN');
+
 /** Chữ của Trang chủ, giữ y như `vi.home`, `vi.flashSale`, `vi.reorder` và dải tăng điểm của Mini App. */
 export const homeText = {
   seoTitle: 'Mỹ Phẩm & Tiêu Dùng Sinh Học Thuần Khiết',
@@ -23,7 +25,7 @@ export const homeText = {
   communitySubtitle: 'Hỏi đáp cách dùng, chia sẻ trải nghiệm, cổ vũ nhau 🌿',
   greeting: (name: string) => `Chào ${name}`,
   greetingFallback: 'bạn',
-  pointsChip: (n: number) => `${n.toLocaleString('vi-VN')} Điểm Xanh`,
+  pointsChip: (n: number) => `${numberFormat.format(n)} Điểm Xanh`,
   seeAll: 'Xem tất cả',
   seeAllLabel: (title: string) => `Xem tất cả ${title}`,
   retry: 'Thử lại',

@@ -1,7 +1,7 @@
-import { expect, test, type MockApi } from './support/mock-api';
+import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
- * Web khách, cửa hàng: danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
+ * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
  * duyệt đi qua mock (fixture `api`); phần Next gọi API phía server (danh sách đầu, chân trang) không mock được nên trang
  * phải tự tải lại phía trình duyệt khi server không có dữ liệu — spec này dựa vào đúng điều đó. Host phải là localhost.
  */
@@ -105,5 +105,105 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await expect(page.getByRole('button', { name: /Nước rửa chén/ })).toBeVisible();
     const withSuggest = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(withSuggest).toBeLessThanOrEqual(0);
+  });
+});
+
+const PURCHASED = {
+  variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+};
+
+function mockHome(api: MockApi) {
+  mockCatalog(api);
+  api.get('/products', ({ call }) => {
+    const sort = call.query.get('sort');
+    if (sort === 'best_seller') return pageOf([product(1, { name: 'Bán chạy nhất' })], 1, 1, 6);
+    if (sort === 'newest') return pageOf([product(2, { name: 'Hàng mới nhất' })], 1, 1, 6);
+    return pageOf([product(3, { name: 'Sản phẩm nổi bật' })], 1, 1, 12);
+  });
+  api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12, loyalty: { vndPerPoint: 50, vndPerPointRedeem: 1000 } });
+  api.get('/flash-sales/active', []);
+}
+
+function mockCustomer(api: MockApi) {
+  const user = {
+    id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
+    pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
+  };
+  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user }));
+  api.get('/me/notifications', [{ id: 'n1', status: 'SENT' }, { id: 'n2', status: 'SENT' }]);
+  api.get('/me/purchased-items', { items: [PURCHASED], nextCursor: null });
+  api.get('/products/for-you', [product(9, { name: 'Gợi ý riêng' })]);
+  api.get('/orders/active-count', { count: 0 });
+  api.get('/me/subscriptions', []);
+  api.get('/me/new-customer-offer', { isNewCustomer: false, welcomeVoucher: null });
+  api.get('/flash-sales/upcoming', []);
+}
+
+test.describe('Web khách: Trang chủ /', () => {
+  test('khách vãng lai: ba lưới công khai, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
+    mockHome(api);
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Bán chạy' }).getByText('Bán chạy nhất')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Mới về vườn' }).getByText('Hàng mới nhất')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Dành cho bạn' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(0);
+    expect(api.callsTo('GET', '/me/purchased-items')).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Dầu gội' }).click();
+    await expect(page).toHaveURL(/\/san-pham\?category=c-goi$/);
+    await page.goBack();
+    await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
+    await expect(page).toHaveURL(/\/san-pham(\?focus=search)?$/);
+  });
+
+  test('khách cũ đã đăng nhập: chuông có số chưa đọc, Mua lại gửi POST /cart/items addSource repurchase rồi sang giỏ', async ({ page, api }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+    mockHome(api);
+    mockCustomer(api);
+    api.post('/cart/items', { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 1 });
+    api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
+
+    await page.goto('/');
+    await expect(page.getByRole('link', { name: 'Thông báo, 2 chưa đọc' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Dành cho bạn' }).getByText('Gợi ý riêng')).toBeVisible();
+    const rail = page.getByRole('region', { name: 'Mua lại' });
+    await expect(rail.getByText('Đã mua 2 lần')).toBeVisible();
+
+    await rail.getByRole('button', { name: 'Mua lại' }).click();
+    await page.getByRole('dialog', { name: 'Mua lại' }).getByRole('button', { name: 'Thêm vào giỏ (1)' }).click();
+    const added = (await api.waitForCall('POST', '/cart/items')).body;
+    expect(added).toEqual({ variationId: 'v1', quantity: 1, addSource: 'repurchase' });
+    await expect(page).toHaveURL(/\/gio-hang/);
+  });
+
+  test('API sản phẩm sập hẳn: một dải lỗi cấp trang, Thử lại tải lại và hiện sản phẩm', async ({ page, api }) => {
+    mockCatalog(api);
+    api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
+    let down = true;
+    api.get('/products', () => (down ? reply(503, { message: 'Máy chủ đang bận' }) : pageOf([product(1, { name: 'Bán chạy nhất' })], 1, 1, 6)));
+    await page.goto('/');
+    const banner = page.getByRole('region', { name: 'Chưa tải được Trang chủ' });
+    await expect(banner).toBeVisible();
+    await expect(page.getByTestId('home-block-error')).toHaveCount(0);
+    down = false;
+    await banner.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('Bán chạy nhất').first()).toBeVisible();
+    await expect(banner).toHaveCount(0);
+  });
+
+  test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {
+    mockHome(api);
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto('/');
+    await expect(page.getByText('Bán chạy nhất')).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 });
