@@ -24,6 +24,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   communityPending: { title: 'Bài cộng đồng chờ duyệt', hint: 'Khách vừa đăng, chưa ai duyệt' },
   communityUnanswered: { title: 'Câu hỏi cộng đồng chưa ai trả lời', hint: 'Đã chờ quá lâu mà chưa có câu trả lời' },
   invoicePending: { title: 'Hoá đơn VAT chờ xuất', hint: 'Khách yêu cầu xuất hoá đơn, chưa phát hành' },
+  externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn' },
 };
 
 /** Trang chủ quản trị: mỗi hàng đợi một thẻ có số việc đang chờ, bấm vào mở đúng tab/bộ lọc. */

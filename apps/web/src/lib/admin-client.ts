@@ -2,6 +2,13 @@
 
 import { apiDownload, apiFetch } from './client-api';
 import type { GomdonAlertView } from './recycling';
+import type {
+  AdminExternalAttemptListResponse,
+  AdminExternalClaimListResponse,
+  AdminExternalClaimRow,
+  AdminReverseClaimResponse,
+  ExternalClaimState,
+} from '@tubutree/shared-types';
 
 export interface DealerApp {
   id: string;
@@ -1646,7 +1653,8 @@ export type InboxKey =
   | 'refillPending'
   | 'communityPending'
   | 'communityUnanswered'
-  | 'invoicePending';
+  | 'invoicePending'
+  | 'externalPoints';
 export interface OpsInbox {
   generatedAt: string;
   items: { key: InboxKey; count: number }[];
@@ -2015,3 +2023,34 @@ export const listExternalOrders = (
 export const getExternalOrder = (id: string) => apiFetch<ExternalOrder>(`/admin/external-orders/${encodeURIComponent(id)}`);
 export const listExternalOrderSources = () =>
   apiFetch<{ sources: ExternalOrderSourceRow[]; truncated: boolean }>('/admin/external-orders/sources');
+
+// ── Tích điểm đơn sàn bằng mã vận đơn (B6 bước 2) ──
+export type {
+  AdminExternalClaimRow,
+  AdminExternalAttemptRow,
+  AdminReverseClaimResponse,
+  ExternalClaimState,
+} from '@tubutree/shared-types';
+
+export const listExternalClaims = (f: { state?: ExternalClaimState; q?: string }, page = 1, limit = 20) => {
+  const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (f.state) qs.set('state', f.state);
+  if (f.q) qs.set('q', f.q);
+  return apiFetch<AdminExternalClaimListResponse>(`/admin/external-claims?${qs.toString()}`);
+};
+export const getExternalClaim = (id: string) => apiFetch<AdminExternalClaimRow>(`/admin/external-claims/${encodeURIComponent(id)}`);
+export const listExternalClaimAttempts = (page = 1, limit = 20) =>
+  apiFetch<AdminExternalAttemptListResponse>(`/admin/external-claims/attempts?page=${page}&limit=${limit}`);
+export const approveExternalClaim = (id: string) =>
+  apiFetch<{ id: string; state: 'PENDING' }>(`/admin/external-claims/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+export const voidExternalClaim = (id: string, reason: string, reopen: boolean) =>
+  apiFetch<{ id: string; state: 'VOIDED' }>(`/admin/external-claims/${encodeURIComponent(id)}/${reopen ? 'void-and-reopen' : 'void'}`, {
+    method: 'POST',
+    body: { reason },
+  });
+export const reverseExternalClaim = (id: string, reason: string) =>
+  apiFetch<AdminReverseClaimResponse>(`/admin/external-claims/${encodeURIComponent(id)}/reverse`, { method: 'POST', body: { reason } });
+export const attachExternalClaimAttempt = (id: string, pancakeOrderId: string) =>
+  apiFetch(`/admin/external-claims/attempts/${encodeURIComponent(id)}/attach`, { method: 'POST', body: { pancakeOrderId } });
+export const rejectExternalClaimAttempt = (id: string, note?: string) =>
+  apiFetch(`/admin/external-claims/attempts/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { note } });
