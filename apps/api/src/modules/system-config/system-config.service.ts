@@ -226,7 +226,8 @@ export class SystemConfigService {
     'retention.analytics_events_days': { min: 90, max: 3650, note: 'số ngày giữ sự kiện phân tích (tối thiểu 90)', integer: true },
     'retention.notification_logs_days': { min: 30, max: 3650, note: 'số ngày giữ nhật ký thông báo (tối thiểu 30)', integer: true },
     'retention.webhook_events_days': { min: 14, max: 3650, note: 'số ngày giữ webhook (tối thiểu 14)', integer: true },
-    'retention.refresh_sessions_days': { min: 7, max: 3650, note: 'số ngày giữ phiên đăng nhập đã hết hạn (tối thiểu 7)', integer: true },    ...WASTE_RANGES,
+    'retention.refresh_sessions_days': { min: 7, max: 3650, note: 'số ngày giữ phiên đăng nhập đã hết hạn (tối thiểu 7)', integer: true },
+    ...WASTE_RANGES,
   };
 
   /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
