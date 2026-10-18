@@ -408,8 +408,10 @@ describe('POST /admin/orders/:id/confirm-payment (C-024)', () => {
   it('route POST, chỉ ADMIN (kế thừa class), chuyển adminId + id + body xuống AdminService', async () => {
     const admin = { confirmOrderPayment: jest.fn().mockResolvedValue({ ok: true }) };
     const ctrl = new AdminController(admin as never, {} as never);
-    await ctrl.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT1' });
-    expect(admin.confirmOrderPayment).toHaveBeenCalledWith('admin-1', 'TB-1', { bankRef: 'FT1' });
+    await ctrl.confirmOrderPayment('admin-1', 'ADMIN', 'TB-1', { bankRef: 'FT1' });
+    expect(admin.confirmOrderPayment).toHaveBeenCalledWith('admin-1', 'TB-1', { bankRef: 'FT1' }, { byStaff: false });
+    await ctrl.confirmOrderPayment('kt-1', 'STAFF', 'TB-1', {});
+    expect(admin.confirmOrderPayment).toHaveBeenLastCalledWith('kt-1', 'TB-1', {}, { byStaff: true });
     expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.confirmOrderPayment)).toBe('orders/:id/confirm-payment');
     expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.confirmOrderPayment)).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(ROLES_KEY, AdminController)).toEqual(['ADMIN']);

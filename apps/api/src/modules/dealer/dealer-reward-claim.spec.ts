@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -599,6 +599,19 @@ describe('Admin xử lý yêu cầu nhận thưởng (PENDING → APPROVED/REJEC
     await expect(svc.markRewardClaimPaid('admin1', 'c2')).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('Kế toán chi thưởng (byStaff): chặn khi chính mình là người duyệt hoặc là chủ yêu cầu; người duyệt khác thì chi được, ghi paidBy', async () => {
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const claims = fakeClaims([
+      { id: 'c1', status: 'APPROVED', reviewedBy: 'kt1' },
+      { id: 'c2', status: 'APPROVED', reviewedBy: 'admin1' },
+    ]);
+    const { prisma } = buildPrisma({ claims });
+    const svc = new DealerService(prisma, makeConfig(), notifications as never);
+    await expect(svc.markRewardClaimPaid('kt1', 'c1', undefined, { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(claims.updateMany).not.toHaveBeenCalled();
+    await expect(svc.markRewardClaimPaid('kt1', 'c2', undefined, { byStaff: true })).resolves.toMatchObject({ status: 'PAID', paidBy: 'kt1' });
+  });
+
   // Q-09: từ chối là trạng thái cuối với đại lý (unique [userId, periodKey, rewardId] chặn gửi lại), nên admin
   // từ chối nhầm phải có đường quay lại thay vì sửa DB.
   it('mở lại: chỉ REJECTED → PENDING bằng updateMany có guard status; xoá lý do từ chối nhưng giữ dấu vết trong adminNote', async () => {
@@ -726,8 +739,10 @@ describe('DTO + phân quyền route', () => {
     expect(svc.approveRewardClaim).toHaveBeenCalledWith('admin1', 'c1', 'ok');
     await adminCtl.reject('admin1', 'c1', { reason: 'Sai doanh số' });
     expect(svc.rejectRewardClaim).toHaveBeenCalledWith('admin1', 'c1', 'Sai doanh số');
-    await adminCtl.markPaid('admin1', 'c1', {});
-    expect(svc.markRewardClaimPaid).toHaveBeenCalledWith('admin1', 'c1', undefined);
+    await adminCtl.markPaid('admin1', 'ADMIN', 'c1', {});
+    expect(svc.markRewardClaimPaid).toHaveBeenCalledWith('admin1', 'c1', undefined, { byStaff: false });
+    await adminCtl.markPaid('kt1', 'STAFF', 'c1', {});
+    expect(svc.markRewardClaimPaid).toHaveBeenLastCalledWith('kt1', 'c1', undefined, { byStaff: true });
     await adminCtl.reopen('admin1', 'c1', { note: 'từ chối nhầm' });
     expect(svc.reopenRewardClaim).toHaveBeenCalledWith('admin1', 'c1', 'từ chối nhầm');
   });

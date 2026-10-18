@@ -5,7 +5,8 @@ import { SetMetadata } from '@nestjs/common';
  *  - CSKH: xem đơn, đổi trạng thái đơn (chỉ huỷ theo yêu cầu khách), duyệt đổi/trả, xem người dùng, mẫu tin nhanh, kiểm duyệt cộng đồng.
  *  - KHO: xem đơn, đổi trạng thái đơn (chỉ đánh dấu đã đóng gói), đẩy lại Pancake, xử lý vận đơn thu gom, nhận hàng trả về.
  *  - MARKETING: voucher, flash sale, FAQ, Content Kit, Academy, mẫu thông báo, kiểm duyệt cộng đồng, báo cáo nguồn khách.
- *  - KE_TOAN: hoàn tiền khách, chi lệnh rút tiền ĐÃ được ADMIN duyệt, đối soát gian hàng đối tác, báo cáo doanh thu, CSV tài chính.
+ *  - KE_TOAN: xem đơn (SĐT che) + "Đã nhận tiền" + hoá đơn VAT, công nợ và thưởng đại lý (chi thưởng ĐÃ được ADMIN duyệt), duyệt hoàn tiền sàn ngoài,
+ *    hoàn tiền khách, chi lệnh rút tiền ĐÃ được ADMIN duyệt, đối soát gian hàng đối tác, báo cáo doanh thu, CSV tài chính. Không đổi trạng thái đơn.
  * Không nhóm nào được đụng cấu hình, phân quyền, khoá tài khoản, % hoa hồng/giá sỉ, lương, duyệt rút tiền hay xuất người dùng.
  * Bảng route → nhóm đầy đủ nằm ở staff-permissions.matrix.spec.ts.
  */

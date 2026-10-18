@@ -12,7 +12,7 @@ import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
-import { actorAllowedTransitions, actorTransitionBlock, type OrderActor } from './order-actor-transitions';
+import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, recordLatePaymentRefund } from '../orders/refund-queue';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
@@ -69,7 +69,8 @@ import {
   MERCHANT_PRODUCT_EDIT_STALE,
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
-import { maskPhone } from '../../common/mask-pii';
+import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
+import { isStaffOwnOrder } from '../../common/staff-own-order';
 import {
   actorLabel,
   actorUserId,
@@ -137,6 +138,29 @@ function pancakeCodeChanged(current: string | null) {
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
  * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
  */
+/** Che SĐT khách/người nhận và số dạng SĐT trong ghi chú/cảnh báo của một dòng danh sách đơn (người xem không phải ADMIN/CSKH/KHO). */
+function maskOrderPhones<
+  T extends {
+    user?: { phone: string | null } | null;
+    shippingAddress?: unknown;
+    note?: string | null;
+    endCustomerKey?: string | null;
+    recyclingNote?: string | null;
+    gomdonAlerts?: { message: string }[];
+  },
+>(o: T): T {
+  const addr = o.shippingAddress && typeof o.shippingAddress === 'object' ? (o.shippingAddress as Record<string, unknown>) : null;
+  return {
+    ...o,
+    ...(o.user ? { user: { ...o.user, phone: o.user.phone ? maskPhoneKeepLast3(o.user.phone) : o.user.phone } } : {}),
+    ...(addr ? { shippingAddress: { ...addr, ...(typeof addr.phone === 'string' ? { phone: maskPhoneKeepLast3(addr.phone) } : {}) } } : {}),
+    ...(o.note ? { note: maskVnPhonesInText(o.note) } : {}),
+    ...(o.endCustomerKey ? { endCustomerKey: maskPhoneKeepLast3(o.endCustomerKey) } : {}),
+    ...(o.recyclingNote ? { recyclingNote: maskVnPhonesInText(o.recyclingNote) } : {}),
+    ...(o.gomdonAlerts ? { gomdonAlerts: o.gomdonAlerts.map((a) => ({ ...a, message: maskVnPhonesInText(a.message) })) } : {}),
+  };
+}
+
 function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
   return (
     o.type !== 'DEALER' &&
@@ -211,7 +235,7 @@ export class AdminService {
    *
    * Có bảng mà không có đường đọc thì vẫn phải vào DB bằng SQL mỗi lần cần tra.
    */
-  async orderStatusHistory(orderCode: string) {
+  async orderStatusHistory(orderCode: string, viewer: OrderActor = { role: 'ADMIN' }) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: orderCode }, { code: orderCode }] },
       select: { id: true, code: true },
@@ -230,9 +254,17 @@ export class AdminService {
         })
       : [];
     const actorMap = new Map(actors.map((a) => [a.id, a]));
+    const full = seesFullOrderPhones(viewer);
     return {
       orderCode: order.code,
-      history: rows.map((r) => ({ ...r, actor: r.actorId ? (actorMap.get(r.actorId) ?? null) : null })),
+      history: rows.map((r) => {
+        const actor = r.actorId ? (actorMap.get(r.actorId) ?? null) : null;
+        return {
+          ...r,
+          note: !full && r.note ? maskVnPhonesInText(r.note) : r.note,
+          actor: !full && actor ? { ...actor, phone: actor.phone ? maskPhoneKeepLast3(actor.phone) : actor.phone } : actor,
+        };
+      }),
     };
   }
 
@@ -929,6 +961,14 @@ export class AdminService {
         canRecordLatePayment: canAdminRecordLatePayment(o) && !lateRecorded.has(o.id),
       };
     });
+    if (!seesFullOrderPhones(viewer)) {
+      return paginated(
+        data.map((o) => maskOrderPhones(o)),
+        page,
+        limit,
+        total,
+      );
+    }
     return paginated(data, page, limit, total);
   }
 
@@ -974,12 +1014,25 @@ export class AdminService {
    * hay hai admin bấm cùng lúc chỉ lật một lần; ai bấm, lúc nào, mã giao dịch nằm ở order_status_history.
    * Đơn đại lý đi đường riêng (DealerService.confirmDealerOrderPayment) vì phải loại đơn ghi công nợ.
    */
-  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string; amount?: number } = {}) {
+  async confirmOrderPayment(
+    adminId: string,
+    idOrCode: string,
+    dto: { bankRef?: string; note?: string; amount?: number } = {},
+    opts: { byStaff?: boolean } = {},
+  ) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, type: true, paymentMethod: true, total: true, status: true },
+      select: { id: true, code: true, userId: true, endCustomerKey: true, shippingAddress: true, type: true, paymentMethod: true, total: true, status: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    // Nhân viên tự đặt hàng rồi tự bấm "Đã nhận tiền" là lấy hàng không trả tiền: đơn của chính mình nhờ quản trị viên.
+    if (opts.byStaff && (await isStaffOwnOrder(this.prisma, adminId, order))) {
+      throw new ForbiddenException('Không xác nhận đã nhận tiền cho đơn của chính mình (kể cả đơn đặt hộ bằng SĐT của bạn) — nhờ quản trị viên.');
+    }
+    // Tiền về muộn của đơn đã huỷ/trả sinh khoản hoàn LATE_PAYMENT (khách chọn Ví là nhận tiền ngay) nên cần ADMIN, không tự ghi tự chi.
+    if (opts.byStaff && (order.status === 'CANCELLED' || order.status === 'RETURNED')) {
+      throw new ForbiddenException(`Đơn ${order.code} đã huỷ/trả — ghi nhận tiền về muộn cần quản trị viên.`);
+    }
     if (order.type === 'DEALER') {
       throw new BadRequestException(
         `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
@@ -1007,9 +1060,11 @@ export class AdminService {
     const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'ADMIN',
       actorId: adminId,
-      note: ['Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+      note: [opts.byStaff ? 'Kế toán xác nhận' : 'Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
     });
     if (outcome === 'CLOSED') {
+      // Đơn bị huỷ/trả giữa chừng: nhân viên không tạo khoản hoàn.
+      if (opts.byStaff) throw new ForbiddenException(`Đơn ${order.code} vừa bị huỷ/trả — ghi nhận tiền về muộn cần quản trị viên.`);
       // D2: tiền về sau khi đơn đã huỷ/trả → không "hồi sinh" đơn, ghi khoản hoàn vào hàng đợi Hoàn tiền khách (cùng
       // đường webhook Pancake/ZaloPay); khách chọn Ví hay ngân hàng. Đơn đã có khoản tiền về muộn (webhook hay admin
       // khác ghi, mã GD gõ khác) thì không tạo khoản thứ hai.
@@ -1020,7 +1075,7 @@ export class AdminService {
           amount: received,
           source: 'ADMIN',
           refKey: ADMIN_LATE_PAYMENT_REF,
-          note: ['Admin ghi nhận tiền về muộn', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+          note: [`${opts.byStaff ? 'Kế toán' : 'Admin'} ghi nhận tiền về muộn`, bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
         },
       );
       this.logger.warn(`Admin ${adminId} ghi nhận tiền về muộn ${received}đ cho đơn đã đóng ${order.code}` + (bankRef ? ` (mã GD ${bankRef})` : ''));
@@ -1050,6 +1105,10 @@ export class AdminService {
       );
     }
     const alreadyPaid = outcome === 'ALREADY_PAID';
+    const fresh = await this.prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
+    });
     return {
       ok: true,
       alreadyPaid,
@@ -1057,10 +1116,8 @@ export class AdminService {
       message: alreadyPaid
         ? `Đơn ${order.code} đã được ghi nhận thanh toán trước đó.`
         : `Đã xác nhận nhận tiền đơn ${order.code}.`,
-      order: await this.prisma.order.findUniqueOrThrow({
-        where: { id: order.id },
-        include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
-      }),
+      // Kế toán không có đường lấy SĐT đầy đủ qua đây (nhánh ALREADY_PAID trả 200 cho mọi đơn đã PAID).
+      order: opts.byStaff ? maskOrderPhones(fresh) : fresh,
     };
   }
 

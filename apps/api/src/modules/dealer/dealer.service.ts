@@ -21,6 +21,7 @@ import { resolveDealerRecipient } from './dealer-recipient';
 import { DEALER_MAX_DISCOUNT_PCT_DEFAULT } from './dealer-config';
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { forBuyer } from '../orders/buyer-order-fields';
+import { isStaffOwnOrder } from '../../common/staff-own-order';
 
 interface BonusTier {
   min: number;
@@ -441,7 +442,7 @@ export class DealerService {
     adminId: string,
     dealerUserId: string,
     amount: number,
-    opts: { note?: string; bankRef?: string; idempotencyKey?: string } = {},
+    opts: { note?: string; bankRef?: string; idempotencyKey?: string; byStaff?: boolean } = {},
   ) {
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
     const dealer = await this.prisma.user.findUnique({
@@ -482,7 +483,7 @@ export class DealerService {
               delta: -amount,
               refType: 'PAYMENT',
               note: [
-                `Admin ${adminId} xác nhận đã nhận chuyển khoản`,
+                `${opts.byStaff ? 'Kế toán' : 'Admin'} ${adminId} xác nhận đã nhận chuyển khoản`,
                 opts.bankRef?.trim() ? `Mã GD ${opts.bankRef.trim()}` : null,
                 opts.note?.trim() || null,
               ]
@@ -1054,7 +1055,14 @@ export class DealerService {
   }
 
   /** Xác nhận đã trao thưởng: chỉ từ APPROVED → PAID. */
-  async markRewardClaimPaid(adminId: string, id: string, note?: string) {
+  async markRewardClaimPaid(adminId: string, id: string, note?: string, opts: { byStaff?: boolean } = {}) {
+    // Kế toán không tự duyệt được yêu cầu (chỉ ADMIN); chặn thêm trường hợp bản ghi do chính người chi duyệt.
+    if (opts.byStaff) {
+      const row = await this.prisma.dealerRewardClaim.findUnique({ where: { id }, select: { reviewedBy: true, userId: true } });
+      if (row && (row.reviewedBy === adminId || row.userId === adminId)) {
+        throw new ForbiddenException('Không chi thưởng do chính mình duyệt hoặc của chính mình — nhờ quản trị viên.');
+      }
+    }
     const res = await this.prisma.dealerRewardClaim.updateMany({
       where: { id, status: 'APPROVED' },
       data: { status: 'PAID', paidBy: adminId, paidAt: new Date(), ...(note?.trim() ? { adminNote: note.trim() } : {}) },
@@ -1081,12 +1089,15 @@ export class DealerService {
    *    mã giao dịch ngân hàng) trong CÙNG transaction + log. Cũng set `paidAt` (cột đã có từ Task 1
    *    analytics-foundation) + ghi event `order_paid` ATOMIC trong cùng transaction (Task 5).
    */
-  async confirmDealerOrderPayment(adminId: string, id: string, dto: { bankRef?: string; note?: string } = {}) {
+  async confirmDealerOrderPayment(adminId: string, id: string, dto: { bankRef?: string; note?: string; byStaff?: boolean } = {}) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id }, { code: id }] },
-      select: { id: true, code: true, userId: true, type: true, status: true, paymentStatus: true, total: true },
+      select: { id: true, code: true, userId: true, endCustomerKey: true, shippingAddress: true, type: true, status: true, paymentStatus: true, total: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (dto.byStaff && (await isStaffOwnOrder(this.prisma, adminId, order))) {
+      throw new ForbiddenException('Không xác nhận đã nhận tiền cho đơn của chính mình (kể cả đặt hộ bằng SĐT của bạn) — nhờ quản trị viên.');
+    }
     if (order.type !== 'DEALER') throw new BadRequestException('Chỉ xác nhận thanh toán thủ công cho đơn đại lý.');
     const summary = () => ({ id: order.id, code: order.code, status: order.status, paymentStatus: order.paymentStatus });
     if (order.paymentStatus === 'PAID') {
@@ -1145,7 +1156,7 @@ export class DealerService {
           actorType: 'ADMIN',
           actorId: adminId,
           note: [
-            'Admin xác nhận đã nhận chuyển khoản (UNPAID → PAID)',
+            `${dto.byStaff ? 'Kế toán' : 'Admin'} xác nhận đã nhận chuyển khoản (UNPAID → PAID)`,
             bankRef ? `Mã GD ${bankRef}` : null,
             adminNote,
           ]
