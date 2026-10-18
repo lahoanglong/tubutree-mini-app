@@ -1,36 +1,16 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ChevronRight } from 'lucide-react';
-import { getProductsPage, getBrands, getCategories, HOME_PAGE_SIZE, type CategoryItem } from '@/lib/api';
-import { firstParam, homeHref, normalizeSearchQuery, pageHref, parsePage } from '@/lib/catalog-filter';
-import { homeCanonicalPath, homeMetadata } from '@/lib/home-seo';
-import { SITE_URL } from '@/lib/site';
+import { getProductsPage, getCategories, type CategoryItem } from '@/lib/api';
+import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
-import ProductPagination from '@/components/product-pagination';
 
 export const revalidate = 300;
 
-type HomeSearchParams = Promise<{
-  brand?: string | string[];
-  category?: string | string[];
-  q?: string | string[];
-  page?: string | string[];
-}>;
+/** Số sản phẩm ở dải nổi bật của trang chủ; muốn xem thêm, lọc hay tìm thì sang /san-pham. */
+const FEATURED_COUNT = 12;
 
 /** Danh mục là phần thêm cho trang chủ: API danh mục lỗi thì bỏ hàng này chứ không làm hỏng cả lưới sản phẩm. */
 const loadCategories = (): Promise<CategoryItem[]> => getCategories().catch(() => []);
-
-// Mỗi từ khoá là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả. Lọc theo danh mục cũng vậy
-// (cùng sản phẩm với trang chủ, chỉ khác lối vào). Nhãn và số trang thì mỗi biến thể có tiêu đề + canonical riêng
-// (xem home-seo) để không bị coi là bản trùng của trang chủ.
-export async function generateMetadata({ searchParams }: { searchParams: HomeSearchParams }): Promise<Metadata> {
-  const sp = await searchParams;
-  if (normalizeSearchQuery(sp.q) || firstParam(sp.category)) return { robots: { index: false, follow: true } };
-  const brand = firstParam(sp.brand);
-  const brandKnown = brand ? (await getBrands()).some((b) => b.brand === brand) : true;
-  return homeMetadata({ brand, page: parsePage(sp.page) }, brandKnown);
-}
 
 const COMMITMENTS = [
   { Icon: ShieldCheck, tone: 'bg-forest-50 text-forest-700', title: 'Thuần Chay & Lành Tính', note: 'Đạt chuẩn kiểm định, an toàn cho làn da' },
@@ -40,39 +20,14 @@ const COMMITMENTS = [
   { Icon: RotateCcw, tone: 'bg-forest-50 text-forest-700', title: 'Đổi Trả 7 Ngày', note: 'Hàng lỗi nhà sản xuất — đổi mới hoặc hoàn tiền' },
 ];
 
-export default async function HomePage({ searchParams }: { searchParams: HomeSearchParams }) {
-  const sp = await searchParams;
-  const brand = firstParam(sp.brand);
-  const q = normalizeSearchQuery(sp.q);
-  const page = parsePage(sp.page);
-  const categoryParam = firstParam(sp.category);
+export default async function HomePage() {
   const categories = await loadCategories();
-  // Chỉ nhận id có thật: chuỗi tuỳ ý trên URL không được chuyển thẳng xuống API.
-  const category = categoryParam && categories.some((c) => c.id === categoryParam) ? categoryParam : undefined;
   const shelf = categories.filter((c) => c.productCount === undefined || c.productCount > 0);
-  const [result, brands] = await Promise.all([
-    getProductsPage({
-      ...(brand ? { brand } : {}),
-      ...(category ? { category } : {}),
-      ...(q ? { q } : {}),
-      ...(page > 1 ? { page: String(page) } : {}),
-    }),
-    getBrands(),
-  ]);
-  // Trang nhãn hàng (/brand/:slug) chỉ có khi nhãn đã công khai; không có liên kết nào khác dẫn tới nó từ trang chủ.
-  const brandSlug = brand ? (brands.find((b) => b.brand === brand)?.slug ?? null) : null;
-  const products = result.data;
-  const total = result.meta?.total ?? products.length;
-  const totalPages = Math.max(1, Math.ceil(total / (result.meta?.limit || HOME_PAGE_SIZE)));
-  // ?page= vượt trang cuối (sản phẩm vừa bị gỡ, hoặc URL cũ): đưa về trang cuối thay vì hiện "chưa có sản phẩm".
-  if (products.length === 0 && total > 0 && page > totalPages) {
-    redirect(pageHref({ brand, category, q }, totalPages));
-  }
+  const result = await getProductsPage({});
+  const products = result.data.slice(0, FEATURED_COUNT);
 
-  const canonicalPath = homeCanonicalPath({ brand, page });
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-      {canonicalPath !== '/' && !q && !categoryParam && <link rel="canonical" href={`${SITE_URL}${canonicalPath}`} />}
       {/* ── Hero ── */}
       <section className="relative mb-8 overflow-hidden rounded-sheet bg-forest-800 px-6 py-10 text-stone-0 shadow-raised sm:px-10 sm:py-14">
         {/* Hai mảng sáng mờ làm điểm nhấn nền, không mang thông tin */}
@@ -97,7 +52,7 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <a
-              href="#san-pham"
+              href="/san-pham"
               className="inline-flex min-h-11 items-center gap-2 rounded-control bg-stone-0 px-5 text-sm font-semibold text-forest-700 shadow-card transition hover:bg-forest-50 active:scale-95"
             >
               <span>Mua sắm ngay</span>
@@ -111,23 +66,15 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
       {shelf.length > 0 && (
         <nav aria-label="Mua theo danh mục" className="mb-6">
           <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            {shelf.map((c) => {
-              const isActive = category === c.id;
-              return (
-                <Link
-                  key={c.id}
-                  href={homeHref({ brand, category: isActive ? undefined : c.id, q })}
-                  aria-current={isActive ? 'true' : undefined}
-                  className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-forest-600 font-semibold text-stone-0 shadow-card ring-2 ring-forest-600/30'
-                      : 'border border-stone-300 bg-stone-0 text-stone-700 hover:border-stone-450 hover:bg-stone-50'
-                  }`}
-                >
-                  {c.name}
-                </Link>
-              );
-            })}
+            {shelf.map((c) => (
+              <Link
+                key={c.id}
+                href={browseHref({ ...EMPTY_SEARCH_STATE, category: c.id })}
+                className="inline-flex min-h-11 items-center whitespace-nowrap rounded-full border border-stone-300 bg-stone-0 px-4 text-sm font-medium text-stone-700 transition-all hover:border-stone-450 hover:bg-stone-50"
+              >
+                {c.name}
+              </Link>
+            ))}
           </div>
         </nav>
       )}
@@ -155,64 +102,14 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
         </div>
       </section>
 
-      {/* ── Lọc theo thương hiệu ── */}
+      {/* ── Sản phẩm nổi bật ── */}
       <section id="san-pham" className="mb-6 scroll-mt-32 sm:scroll-mt-20">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-xl font-semibold text-stone-900 sm:text-2xl">Danh Mục Thương Hiệu</h2>
-          <span className="text-xs text-stone-600">
-            {total} sản phẩm {q ? 'phù hợp' : 'đang bán'}
-          </span>
-        </div>
-
-        {brandSlug && (
-          <p className="mb-3 text-sm">
-            <Link href={`/brand/${encodeURIComponent(brandSlug)}`} className="inline-flex min-h-11 items-center gap-1 font-semibold text-forest-700 underline">
-              Xem trang nhãn hàng {brand}
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </p>
-        )}
-
-        {q && (
-          <p role="status" className="mb-3 flex flex-wrap items-center gap-x-3 text-sm text-stone-700">
-            <span>
-              Kết quả tìm kiếm cho “<strong className="break-all font-semibold text-stone-900">{q}</strong>”
-            </span>
-            <Link href={homeHref({ brand, category })} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
-              Xóa tìm kiếm
-            </Link>
-          </p>
-        )}
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-2">
-          <Link
-            href={homeHref({ category, q })}
-            aria-current={!brand ? 'true' : undefined}
-            className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-semibold transition-all ${
-              !brand
-                ? 'bg-forest-600 text-stone-0 shadow-card ring-2 ring-forest-600/30'
-                : 'border border-stone-300 bg-stone-0 text-stone-700 hover:border-stone-450 hover:bg-stone-50'
-            }`}
-          >
-            Tất cả sản phẩm
+          <h2 className="font-display text-xl font-semibold text-stone-900 sm:text-2xl">Sản Phẩm Nổi Bật</h2>
+          <Link href="/san-pham" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline">
+            Xem tất cả sản phẩm
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Link>
-          {brands.map((b) => {
-            const isActive = brand === b.brand;
-            return (
-              <Link
-                key={b.brand}
-                href={homeHref({ brand: b.brand, category, q })}
-                aria-current={isActive ? 'true' : undefined}
-                className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full px-4 text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-forest-600 font-semibold text-stone-0 shadow-card ring-2 ring-forest-600/30'
-                    : 'border border-stone-300 bg-stone-0 text-stone-700 hover:border-stone-450 hover:bg-stone-50'
-                }`}
-              >
-                {b.brand} <span className="ml-1 text-xs opacity-80">({b.count})</span>
-              </Link>
-            );
-          })}
         </div>
       </section>
 
@@ -228,30 +125,21 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
             </div>
             <h3 className="mt-3 font-display text-lg font-semibold text-stone-900">Chưa có sản phẩm phù hợp</h3>
             <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">
-              {q ? (
-                <>
-                  Không tìm thấy sản phẩm nào cho “<span className="break-all">{q}</span>”. Hãy thử từ khoá ngắn hơn hoặc xem toàn bộ sản phẩm.
-                </>
-              ) : (
-                'Hiện chưa có sản phẩm nào thuộc bộ lọc này hoặc hệ thống đang được cập nhật thêm nguồn hàng mới.'
-              )}
+              Hiện chưa có sản phẩm nào hoặc hệ thống đang được cập nhật thêm nguồn hàng mới.
             </p>
             <Link
-              href="/"
+              href="/san-pham"
               className="mt-4 inline-flex min-h-11 items-center rounded-control bg-forest-600 px-5 text-sm font-semibold text-stone-0 shadow-card transition hover:bg-forest-700"
             >
               Xem toàn bộ sản phẩm
             </Link>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 md:grid-cols-4">
-              {products.map((p, i) => (
-                <ProductCard key={p.id} product={p} priority={i < PRIORITY_CARDS} />
-              ))}
-            </div>
-            <ProductPagination page={page} totalPages={totalPages} filter={{ brand, category, q }} />
-          </>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 md:grid-cols-4">
+            {products.map((p, i) => (
+              <ProductCard key={p.id} product={p} priority={i < PRIORITY_CARDS} />
+            ))}
+          </div>
         )}
       </section>
     </main>
