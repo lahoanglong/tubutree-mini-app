@@ -241,8 +241,25 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     await lookUp('TR-8K2M9');
     await screen.findByText('Ng*** A');
     plus('Thùng carton', 5);
+    // Lần tải lại không bao giờ xong, nên chỉ còn phần ghi thẳng vào cache quyết định thẻ hạn mức hiện ra.
+    mocks.getDeskPoints.mockReturnValue(new Promise(() => {}));
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }], match: { parcelCode: 'TR-8K2M9' } }));
+    await waitFor(() => expect(screen.queryByText('Ng*** A')).toBeNull());
+    expect(screen.getByText('Còn 380.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByText('Không giới hạn hạn mức tháng')).toBeNull();
+  });
+  it('kho + kiện đã RECEIVED: không gửi match', async () => {
+    mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]);
+    lookupReq({ method: 'MAIL_IN', status: 'RECEIVED', pointId: 'wh-1', lines: [LINE0] });
+    mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 5000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 145_000 });
+    renderPage();
+    await lookUp('TR-8K2M9');
+    await screen.findByText('Ng*** A');
+    plus('Thùng carton', 5);
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
+    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalled());
+    expect(mocks.deskConfirm.mock.calls[0]![1]).not.toHaveProperty('match');
   });
   it.each([
     'Không tìm thấy mã',
