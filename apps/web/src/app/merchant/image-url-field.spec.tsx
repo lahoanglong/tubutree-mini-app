@@ -37,12 +37,11 @@ describe('previewableImageUrl', () => {
   it.each([
     ['https://res.cloudinary.com/x/logo.png', 'https://res.cloudinary.com/x/logo.png'],
     ['  https://cdn.tubutree.com/a.jpg  ', 'https://cdn.tubutree.com/a.jpg'],
-    ['http://cdn.tubutree.com/a.jpg', 'http://cdn.tubutree.com/a.jpg'],
   ])('%s xem trước được', (raw, expected) => {
     expect(previewableImageUrl(raw)).toBe(expected);
   });
 
-  it.each(['', '   ', 'logo.png', 'javascript:alert(1)', 'data:text/html,<script>1</script>', 'ftp://x.com/a.png', '//x.com/a.png'])(
+  it.each(['', '   ', 'logo.png', 'http://cdn.tubutree.com/a.jpg', 'javascript:alert(1)', 'data:text/html,<script>1</script>', 'ftp://x.com/a.png', '//x.com/a.png'])(
     '%j không xem trước',
     (raw) => {
       expect(previewableImageUrl(raw)).toBeNull();
@@ -84,7 +83,15 @@ describe('ImageUrlField', () => {
     expect(img(root)!.getAttribute('src')).toBe('https://cdn.tubutree.com/b.png');
   });
 
-  it('chuỗi không phải liên kết http(s): không dựng img, báo cần bắt đầu bằng https://', () => {
+  it('liên kết http:// bị từ chối (web chạy https nên ảnh http bị chặn mixed content): không dựng img, hiện gợi ý cần https://', () => {
+    const root = mount();
+    typeInto(root.querySelector('input'), 'http://cdn.tubutree.com/logo.png');
+    expect(img(root)).toBeNull();
+    expect(hintText(root)).toContain('Liên kết chưa hợp lệ');
+    expect(hintText(root)).toContain('https://');
+  });
+
+  it('chuỗi không phải liên kết https: không dựng img, báo cần bắt đầu bằng https://', () => {
     const root = mount();
     typeInto(root.querySelector('input'), 'javascript:alert(1)');
     expect(img(root)).toBeNull();

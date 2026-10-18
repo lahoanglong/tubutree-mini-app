@@ -5,15 +5,15 @@ import { ImageIcon } from 'lucide-react';
 import { BTN_LINK, INPUT_CLASS, TOUCH_H } from '@/components/admin/ui';
 
 /**
- * Chỉ http/https mới dựng thẻ img: `javascript:` và `data:` không bao giờ vào thuộc tính src từ ô nhập của đối tác.
- * Trả về liên kết đã cắt khoảng trắng, hoặc null khi không xem trước được.
+ * Chỉ https mới dựng thẻ img: web chạy https nên ảnh http bị trình duyệt chặn (mixed content), còn `javascript:` và `data:` không
+ * bao giờ vào thuộc tính src từ ô nhập của đối tác. Trả về liên kết đã cắt khoảng trắng, hoặc null khi không xem trước được.
  */
 export function previewableImageUrl(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   try {
     const url = new URL(trimmed);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? trimmed : null;
+    return url.protocol === 'https:' ? trimmed : null;
   } catch {
     return null;
   }
