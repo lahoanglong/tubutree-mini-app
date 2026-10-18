@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { SITE_URL } from '@/lib/site';
 import { publicStaticRoutes } from '@/lib/route-map';
 import { getProducts, getStorefrontList } from '@/lib/api';
@@ -25,6 +26,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
   for (const route of publicStaticRoutes()) {
     if (route === '/') continue;
+    // Cùng cờ với robots noindex của layout /hoan-tien: không nộp URL mà chính trang đánh dấu noindex.
+    if (route === '/hoan-tien' && !CASHBACK_ENABLED) continue;
     base.push({ url: `${SITE_URL}${route}`, changeFrequency: 'weekly', priority: 0.6 });
   }
   // Không bắt lỗi: nếu nuốt lỗi rồi trả sitemap rút gọn thì ISR sẽ giữ bản thiếu cả giờ; để lỗi nổi lên
