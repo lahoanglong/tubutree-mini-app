@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { formatPoints } from '../../common/format-points';
 import { formatVnDate, vnDateKey } from '../../common/vn-time';
 import {
   MILESTONE_PREFIX,
@@ -503,7 +504,7 @@ export class LoyaltyExpiryService {
 
     await this.notifications
       .notify(userId, 'POINTS_EXPIRING', {
-        points: String(expiringSoon.amount),
+        points: formatPoints(expiringSoon.amount),
         date: formatVnDate(expiringSoon.earliestExpiresAt),
       })
       .catch(() => undefined); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)

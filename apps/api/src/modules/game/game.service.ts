@@ -15,6 +15,7 @@ import { ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
+import { formatPoints } from '../../common/format-points';
 import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
 
 interface SpinPrize {
@@ -118,7 +119,7 @@ export class GameService {
     const rawLimit = Number(await this.config.get<number>('game.spin_buy_daily_limit', 5));
     // Config hỏng rơi về mặc định; 0/âm nghĩa là khoá vòng quay (không hiểu thành "không giới hạn").
     const dailyLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5;
-    const notEnough = `Cần ${cost} Điểm Xanh để quay.`;
+    const notEnough = `Cần ${formatPoints(cost)} Điểm Xanh để quay.`;
     const prizes = this.usableSpinPrizes(await this.config.get<SpinPrize[]>('game.spin_prizes', []));
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
@@ -438,7 +439,7 @@ export class GameService {
     }
     const certificateCode = key ? treeCertificateCodeFor(userId, key) : `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     const reason = `GAME_BUY_TREE:${certificateCode}`;
-    const notEnough = `Cần ${price} Điểm Xanh để góp quỹ trồng cây.`;
+    const notEnough = `Cần ${formatPoints(price)} Điểm Xanh để góp quỹ trồng cây.`;
     // Đọc ngoài tx rồi truyền cho lockedOrderPoints, cùng lý do như spin().
     const windowDays = await loyalty.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {

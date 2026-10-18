@@ -8,6 +8,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { startOfVnDay } from '../../common/vn-time';
+import { formatPoints } from '../../common/format-points';
 import { decodeServedImage } from '../../common/served-image';
 import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
@@ -1478,7 +1479,7 @@ export class CommunityFeedService {
     await this.notifications
       ?.notify(userId, 'COMMUNITY_EVENT_WINNER', {
         title: event.title,
-        reward: event.rewardPoints > 0 ? ` Bạn được thưởng ${event.rewardPoints} Điểm Xanh.` : '',
+        reward: event.rewardPoints > 0 ? ` Bạn được thưởng ${formatPoints(event.rewardPoints)} Điểm Xanh.` : '',
       })
       .catch((e: unknown) => this.logger.warn(`Không báo được người thắng sự kiện ${eventId}/${userId}: ${(e as Error).message}`));
     return { ok: true };

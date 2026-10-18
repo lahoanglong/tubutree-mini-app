@@ -27,6 +27,7 @@ import { pointsForGoods } from '../pricing/points-earn';
 import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from './earn-rates';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { maskPhoneOrNull } from '../../common/mask-pii';
+import { formatPoints } from '../../common/format-points';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
 /**
@@ -568,11 +569,11 @@ export class LoyaltyService {
     const inWindow = lock.locked - lock.lockedReturn;
     if (inWindow > 0 && lock.lockedUntil) {
       parts.push(
-        `${inWindow} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDateLabel(lock.lockedUntil)} (hết hạn đổi/trả hàng)`,
+        `${formatPoints(inWindow)} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDateLabel(lock.lockedUntil)} (hết hạn đổi/trả hàng)`,
       );
     }
     if (lock.lockedReturn > 0) {
-      parts.push(`${lock.lockedReturn} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
+      parts.push(`${formatPoints(lock.lockedReturn)} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
     }
     return parts.join('; ');
   }
@@ -842,11 +843,11 @@ export class LoyaltyService {
         if (lock.locked > 0 && balance >= reward.pointsCost) {
           const usable = Math.max(0, balance - lock.locked);
           throw new BadRequestException(
-            `Bạn cần ${reward.pointsCost} Điểm Xanh dùng được để đổi ưu đãi này — hiện dùng được ${usable}/${balance} điểm: ${this.lockedPointsMessage(lock)}.`,
+            `Bạn cần ${formatPoints(reward.pointsCost)} Điểm Xanh dùng được để đổi ưu đãi này — hiện dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.lockedPointsMessage(lock)}.`,
           );
         }
         throw new BadRequestException(
-          `Bạn cần ${reward.pointsCost} Điểm Xanh để đổi ưu đãi này (hiện có ${balance} điểm).`,
+          `Bạn cần ${formatPoints(reward.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
         );
       }
 
@@ -1072,7 +1073,7 @@ export class LoyaltyService {
           totalPoints,
           message:
             points > 0
-              ? `Điểm danh Ngày ${cycleDay} thành công! Nhận +${points} Điểm Xanh.`
+              ? `Điểm danh Ngày ${cycleDay} thành công! Nhận +${formatPoints(points)} Điểm Xanh.`
               : `Điểm danh Ngày ${cycleDay} thành công!`,
         };
       });
@@ -1265,7 +1266,7 @@ export class LoyaltyService {
         const staffToday = staffAgg._sum.points ?? 0;
         if (staffToday + points > staffCap) {
           throw new BadRequestException(
-            `Vượt trần tích điểm tại quầy trong ngày của nhân viên (đã ${staffToday}/${staffCap} điểm). Liên hệ quản trị viên.`,
+            `Vượt trần tích điểm tại quầy trong ngày của nhân viên (đã ${formatPoints(staffToday)}/${formatPoints(staffCap)} điểm). Liên hệ quản trị viên.`,
           );
         }
         const memberAgg = await tx.posPointCredit.aggregate({
@@ -1275,7 +1276,7 @@ export class LoyaltyService {
         const memberToday = memberAgg._sum.points ?? 0;
         if (memberToday + points > memberCap) {
           throw new BadRequestException(
-            `Thành viên đã được tích ${memberToday}/${memberCap} điểm tại quầy hôm nay — vượt trần ngày. Liên hệ quản trị viên.`,
+            `Thành viên đã được tích ${formatPoints(memberToday)}/${formatPoints(memberCap)} điểm tại quầy hôm nay — vượt trần ngày. Liên hệ quản trị viên.`,
           );
         }
 
