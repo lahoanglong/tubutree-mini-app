@@ -235,15 +235,19 @@ describe('/brand/[slug] — chương trình đại lý', () => {
   const REWARDS = [{ id: 'd1', type: 'TOUR', title: 'Thưởng quý', description: 'Đạt chỉ tiêu', threshold: 50_000_000, period: 'QUARTER' }];
   const block = () => <BrandDealerBlock rewards={REWARDS} />;
 
-  it('khách và khách lẻ không thấy khối đại lý (B2B), không gọi /dealer/me khi chưa đăng nhập', async () => {
+  it('khách chưa đăng nhập vẫn thấy chương trình và nút "Đăng ký đại lý" như Mini App, không gọi /dealer/me', async () => {
     mocks.phase = 'guest';
     const c = await mount(block());
-    expect(c.textContent).toBe('');
+    expect(c.querySelector('h2')?.textContent).toBe('Chương trình đại lý');
+    expect(c.textContent).toContain('Thưởng quý');
+    expect(c.querySelector('a[href="/dai-ly"]')?.textContent).toBe('Đăng ký đại lý');
     expect(mocks.get).not.toHaveBeenCalled();
-    mounted.pop()!.unmount();
-    mocks.phase = 'authenticated';
-    const c2 = await mount(block());
-    expect(c2.textContent).toBe('');
+  });
+
+  it('khách lẻ đã đăng nhập (chưa có hồ sơ): thấy chương trình, nút "Đăng ký đại lý" dẫn /dai-ly', async () => {
+    const c = await mount(block());
+    expect(c.textContent).toContain('Thưởng quý');
+    expect(c.querySelector('a[href="/dai-ly"]')?.textContent).toBe('Đăng ký đại lý');
   });
 
   it('đại lý đã duyệt: thấy thưởng, nút "Vào kênh đại lý" dẫn /dai-ly', async () => {
