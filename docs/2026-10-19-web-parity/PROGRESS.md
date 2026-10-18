@@ -8,6 +8,7 @@ Phiên chạy: `tubutree-mini-app-8c` (Opus 5.5). Nền: `web/base` db9adca0. Nh
 | 2026-10-18 21:50 | 1. Khảo sát | xong phần quét | 5 báo cáo scout ở `khao-sat/`. Viết `00-ma-tran.md` (51 dòng: có 2, thiếu 12, mới 36, skip 1), `01-thiet-ke.md`, `02-ke-hoach.md` (đợt 0 core; đợt 1 shop/order/account/loyalty; đợt 2 community/affiliate/game/pro; đợt 3 recycle) |
 | 2026-10-18 22:20 | 1. Review tài liệu | xong | Opus: 0 BLOCKER, 9 MAJOR, 7 MINOR; đã sửa 00–02 (mục 7 của 01). Thêm đợt 0b (core-api, core-shell, core-ui) |
 | 2026-10-18 22:45 | 2. Đợt 0a `core` | xong, đã gộp | run `wf_3e2cabec-848`; gate xanh (app-core 48, web 3044, miniapp 4259); review 2 lượt: 1 MAJOR + 3 MINOR đã sửa, 1 MINOR mở (next build chưa nạp app-core trong mã thật). Gộp → `web/integration` 1e1d9859. Báo cáo `impl/core.md` |
+| 2026-10-19 00:10 | 3a. `core-ui` | xong, đã gộp | gate xanh (web 3141, miniapp 4272); review 2 lượt: lượt 1 4 MAJOR + 4 MINOR, lượt 2 1 MAJOR + 2 MINOR, đều đã sửa; phiên chính đọc lại commit sửa MAJOR lượt 2 (06a70334, Sheet nhường bàn phím cho modal chồng): đúng. `web-gate.sh` chưa chạy lại e2e sau sửa (lần trước 20 passed). Gộp → d6e43f4f. 5 câu hỏi nhỏ về bridge ở `impl/core-ui.md` |
 | 2026-10-18 23:15 | 3. Đợt 0b | đang chạy | `core-api` wf_af7597be-50c, `core-shell` wf_4ce37db6-335, `core-ui` wf_769c22c1-53a; nhánh từ 1e1d9859; workflow v2 `tools/web-lane.workflow.js`. Gate integration sau core (phiên chính tự chạy): XANH — app-core 48, web 3044 (cả TZ=UTC), miniapp 4259, typecheck/lint/lint:vars/build sạch |
 
 ## Nhánh nguồn cần theo dõi
