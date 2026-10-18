@@ -256,6 +256,23 @@ describe('/hoan-tien — chọn sàn và nhận hoàn tiền', () => {
     expect(a?.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
+  it('khách đã đóng tab trống trước khi POST xong → giữ khung và hiện liên kết, không báo "Đã ghi nhận"', async () => {
+    let resolve!: (v: { deeplink: string }) => void;
+    state.click = () => new Promise((r) => (resolve = r));
+    const c = await mount();
+    click(tile(c, 'Shopee'));
+    await flush(3);
+    click(buyBtn());
+    await flush(2);
+    state.win!.closed = true;
+    resolve({ deeplink: 'https://aff.example/abc' });
+    await flush(5);
+    expect(state.opened).toEqual([]);
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('a[href="https://aff.example/abc"]')?.textContent).toContain('Mở sàn');
+    expect(document.body.textContent).not.toContain('Đã ghi nhận');
+  });
+
   it('tạo click lỗi → báo lỗi trong khung, KHÔNG mở link', async () => {
     state.click = async () => {
       throw new Error('Sàn đang bảo trì');
