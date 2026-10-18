@@ -59,3 +59,14 @@ Mỗi nhóm là commit mới, không amend.
 - Web: đăng ký `engagement-tab.tsx` (`REWARD_POINTS_MAX`) trong `no-raw-date-format.spec.ts`; `npx vitest run src/lib`: 59 file, 810 ca đạt.
 - Runbook `deploy-rollback-runbook.md`: thêm dòng bảng migration, mục 7.0 và thứ tự backup, dừng API, migrate, seed-reference, bật API.
 - Chưa làm: dòng "Mua trong Mini App tích gấp đôi" (để bước 2 marketplace).
+
+## Sửa sau review lượt 2 (nhánh `lr2/pts1dpolish`)
+1. `tools/deploy/deploy.sh`: API đang chạy mà `points_1d` chưa áp không còn thoát mã 2. Luồng: build image, kiểm .env, `dc stop api`, migrate, `prisma:seed:reference`, bật API/web. Build hoặc .env lỗi thì API cũ vẫn chạy; migrate hoặc seed lỗi thì API đã dừng, thoát mã 2, không tự bật lại. Deploy thường (đã áp, hoặc API đang dừng) giữ nguyên luồng cũ. Ca mới trong `deploy-scripts.spec.ts`: luồng dừng-API đúng thứ tự, build lỗi, migrate lỗi, seed lỗi, luồng thường không dừng/seed.
+2. `rollback_hint`: thêm `migration_state` (0 đã áp, 1 chưa áp, 2 không đọc được). Không đọc được DB thì in cảnh báo kiểm `points_1d` và KHÔNG in lệnh quay image cũ. Ca spec dùng `FAKE_PSQL_FAIL`.
+3. Runbook (bảng migration dòng `points_1d`, đoạn thứ tự sau bước 7b) và mục Migration ở trên khớp luồng mới.
+4. Số điểm gửi khách qua `formatPoints`: `order-returns.service.ts` (Đã hoàn N Điểm Xanh), `checkout.service.ts` (3 câu: dùng/khoá, số dư không đủ, lô quy đổi đổi giữa chừng), `account-deletion.service.ts` (CONVERTED_POINTS). Quét thêm `apps/api/src`: các chỗ còn lại là log nội bộ hoặc đã qua `formatPoints`/`toLocaleString('vi-VN')`. Spec: 7.000 Điểm Xanh, 123.456 điểm, 7.000 trong lý do chặn xoá, `200/1.000 điểm`.
+5. `prisma/seed.ts`: gọi `assertPoints1dApplied` ngay sau `assertSeedAllowed` trong `main()`.
+6. `referral-notice-reconcile.cron.ts`: hàm `shownPointsMatch` coi log đã gửi khi `data.points` bằng `delta` hoặc `data.points * 1000` bằng `delta`. Spec mới `referral-notice-reconcile.cron.spec.ts`.
+7. `points-1d-migration.race-spec.ts:185`: đổi tên ca thành dấu dòng lịch sử `sch_pts1d_<md5>`.
+
+Chưa kiểm: `deploy.sh` chỉ chạy với docker giả, chưa chạy compose thật.
