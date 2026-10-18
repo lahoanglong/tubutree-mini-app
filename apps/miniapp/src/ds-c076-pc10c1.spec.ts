@@ -26,6 +26,8 @@ const FILES = [
   'src/pages/academy.tsx',
   'src/components/ui/timeline.tsx',
   'src/components/waste-point-picker.tsx',
+  'src/pages/recycle.tsx',
+  'src/pages/recycle-rules.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
