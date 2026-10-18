@@ -126,7 +126,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
                   </td>
                   <td className={TD}>
                     <div className="whitespace-nowrap">{`${formatCount(p.monthUsage.confirmations)} lượt`}</div>
-                    <div className="whitespace-nowrap text-xs text-stone-600">{`${formatCount(p.staff.length)} nhân viên`}</div>
+                    <div className="whitespace-nowrap text-xs text-stone-600">{`${formatCount(p.staff.filter((s) => s.isActive).length)} nhân viên`}</div>
                   </td>
                   <td className={`${TD} min-w-[112px]`}>
                     <div className="flex flex-wrap gap-1 whitespace-nowrap">

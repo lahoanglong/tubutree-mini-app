@@ -54,6 +54,21 @@ describe('WastePointsSection', () => {
     expect(row(c, 'wh').textContent).toContain('Không hạn mức');
   });
 
+  it('cột nhân viên không đếm người đã gỡ', async () => {
+    const staff = (userId: string, isActive: boolean) => ({ userId, role: 'STAFF' as const, isActive, fullName: userId, phone: null });
+    const api = mockFetch({
+      '/admin/waste/points': { body: [wastePoint({ id: 'p9', staff: [staff('a', true), staff('b', false), staff('c', false)] })] },
+      '/admin/waste/items': { body: [wasteItem()] },
+      '/admin/waste/overview': { body: OVERVIEW },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WastePointsSection seed={null} />);
+    mounted.push(r);
+    await flush();
+    expect(row(r.container, 'p9').textContent).toContain('1 nhân viên');
+    expect(row(r.container, 'p9').textContent).not.toContain('3 nhân viên');
+  });
+
   it('bảng điểm: 7 cột và bề rộng tối thiểu vừa cột nội dung 1280 px, lượt xác nhận và nhân viên chung một ô', async () => {
     const { c } = await mount();
     const heads = Array.from(c.querySelectorAll('thead th')).map((th) => th.textContent);
