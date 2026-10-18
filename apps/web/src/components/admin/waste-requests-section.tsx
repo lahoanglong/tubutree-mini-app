@@ -370,10 +370,10 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
     if (weightTrim !== '') body.receivedWeightGrams = Number(weightTrim);
     receive.mutate(body);
   };
-  // RECEIVED parcels are refused from the request detail; at the door only a parcel still on its way can be refused.
-  const canRejectAtDoor = (row.status === 'OPEN' || row.status === 'IN_TRANSIT') && (isMail || row.method === 'PICKUP');
+  // RECEIVED parcels are refused from the request detail; at the door only a mail-in parcel still on its way, identified by its TR- code, can be refused.
+  const canRejectAtDoor = (row.status === 'OPEN' || row.status === 'IN_TRANSIT') && isMail;
   const submitDoorReject = async () => {
-    if (doorInFlight.current || rejectAtDoor.isPending || (isMail && !hasMatch)) return;
+    if (doorInFlight.current || rejectAtDoor.isPending || code === '') return;
     doorInFlight.current = true;
     const note = await ask({
       title: 'Từ chối tại cửa (chưa trả cước)',
@@ -389,8 +389,8 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
     setErr(null);
     const body: Parameters<typeof rejectWasteRequest>[1] = { rejectionReason: 'UNPAID_POSTAGE' };
     if (note !== '') body.rejectionNote = note;
-    const match = buildMatch();
-    if (match) body.match = match;
+    const tracking = parcelTracking.trim();
+    body.match = tracking !== '' ? { parcelCode: code, parcelTracking: tracking } : { parcelCode: code };
     rejectAtDoor.mutate(body);
   };
   const submitUnmatched = () => {
@@ -458,7 +458,7 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
         <button
           type="button"
           className={BTN_SECONDARY}
-          disabled={(isMail && !hasMatch) || receive.isPending || rejectAtDoor.isPending}
+          disabled={code === '' || receive.isPending || rejectAtDoor.isPending}
           onClick={() => void submitDoorReject()}
         >
           Từ chối tại cửa (chưa trả cước)

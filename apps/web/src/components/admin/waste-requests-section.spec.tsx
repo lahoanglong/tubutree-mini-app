@@ -233,7 +233,7 @@ describe('WasteRequestsSection', () => {
   describe('từ chối tại cửa (chưa trả cước)', () => {
     const PICKUP_OPEN = wasteRequestRow({ id: 'r9', code: 'TR-PICK99', method: 'PICKUP', status: 'OPEN', orderCode: 'TUBU2026101546241', carrier: null, trackingCode: null });
 
-    it('chỉ có cho gửi kho đang gửi và lấy hàng đang mở; không có cho mang tới điểm nhận hay đã nhận', async () => {
+    it('chỉ có cho gửi kho đang gửi; không có cho lấy hàng, mang tới điểm nhận hay đã nhận', async () => {
       const { c } = await mount({
         lookup: {
           body: [
@@ -250,7 +250,8 @@ describe('WasteRequestsSection', () => {
       click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
       expect(doorBtn(c)).not.toBeNull();
       click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
-      expect(doorBtn(c)).not.toBeNull();
+      expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
+      expect(doorBtn(c)).toBeNull();
       click(btn(lookupRow(c, 'r5'), 'Nhận kiện'));
       expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
       expect(doorBtn(c)).toBeNull();
@@ -269,6 +270,19 @@ describe('WasteRequestsSection', () => {
       expect(doorBtn(c)!.disabled).toBe(true);
       typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-7K3M9Q');
       expect(doorBtn(c)!.disabled).toBe(false);
+    });
+
+    it('gửi kho: chỉ tick số điện thoại khớp mà chưa có mã TR- thì vẫn không từ chối được tại cửa', async () => {
+      const { c, api } = await mount({ lookup: { body: [wasteRequestRow()] } });
+      await lookup(c);
+      click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
+      click(c.querySelector('input[name="phoneMatchConfirmed"]'));
+      expect(confirmBtn(c)!.disabled).toBe(false);
+      expect(doorBtn(c)!.disabled).toBe(true);
+      click(doorBtn(c));
+      await flush();
+      expect(confirmDialog()).toBeNull();
+      expect(posts(api, '/reject')).toHaveLength(0);
     });
 
     it('xác nhận gửi lý do UNPAID_POSTAGE cùng căn cứ đối chiếu của nhận kiện, không gửi cân nặng', async () => {
@@ -300,16 +314,18 @@ describe('WasteRequestsSection', () => {
       expect(api.calls.filter((x) => x.url.includes('/admin/waste/requests?')).length).toBeGreaterThan(1);
     });
 
-    it('lấy hàng: không có mã TR- thì không gửi căn cứ, ghi chú để trống thì không gửi ghi chú', async () => {
-      const { c, api } = await mount({ lookup: { body: [PICKUP_OPEN] } });
-      await lookup(c, 'TR-PICK99');
-      click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
+    it('ghi chú để trống thì không gửi ghi chú; căn cứ chỉ có mã TR-, không bao giờ có phoneMatchConfirmed', async () => {
+      const { c, api } = await mount({ lookup: { body: [wasteRequestRow()] } });
+      await lookup(c);
+      click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
+      click(c.querySelector('input[name="phoneMatchConfirmed"]'));
+      typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-7K3M9Q');
       click(doorBtn(c));
       await flush();
       answerConfirm(true);
       await flush();
-      const sent = posts(api, '/admin/waste/requests/r9/reject');
-      expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ rejectionReason: 'UNPAID_POSTAGE' });
+      const sent = posts(api, '/admin/waste/requests/r1/reject');
+      expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ rejectionReason: 'UNPAID_POSTAGE', match: { parcelCode: 'TR-7K3M9Q' } });
     });
 
     it('huỷ hộp thoại thì không gửi gì và panel vẫn mở', async () => {
