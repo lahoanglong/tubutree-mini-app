@@ -21,6 +21,7 @@ import {
   EXTERNAL_SINCE_KEY,
   MARKETPLACE_CLAIM_ENABLED_KEY,
 } from '../external-points/external-claim.config';
+import { CHAT_ORDER_EARN_PCT_KEY, CHAT_ORDER_POINTS_ENABLED_KEY, CHAT_ORDER_REQUIRE_CARRIER_KEY, PANCAKE_STAFF_MAP_KEY, staffMapProblem } from '../external-points/external-chat.config';
 
 const DISPLAY_NAME_MAX = 100;
 
@@ -158,6 +159,11 @@ export class SystemConfigService {
     'loyalty.marketplace_claim_monthly_points_cap': { min: 1, max: 10_000_000, note: 'Điểm Xanh (1 điểm = 1đ) tối đa mỗi khách mỗi tháng từ đơn ngoài app', integer: true },
     'loyalty.marketplace_claim_max_age_days': { min: 1, max: 365, note: 'số ngày tuổi tối đa của đơn được tích', integer: true },
     'loyalty.marketplace_claim_review_above_vnd': { min: 100_000, max: 50_000_000, note: 'đồng, đơn lớn hơn mức này chờ nhân viên duyệt', integer: true },
+    'loyalty.chat_order_monthly_points_cap': { min: 1, max: 10_000_000, note: 'Điểm Xanh (1 điểm = 1đ) tối đa mỗi SĐT mỗi tháng từ đơn chat/điện thoại', integer: true },
+    'loyalty.chat_order_review_above_vnd': { min: 100_000, max: 50_000_000, note: 'đồng, đơn chat lớn hơn mức này chờ nhân viên duyệt', integer: true },
+    'loyalty.chat_unclaimed_hold_days': { min: 1, max: 180, note: 'số ngày giữ điểm đơn chat cho SĐT chưa là thành viên', integer: true },
+    'loyalty.chat_phone_verified_max_days': { min: 1, max: 3650, note: 'số ngày SĐT thành viên còn được coi là đã xác minh để tự liên kết điểm đơn chat', integer: true },
+    'loyalty.chat_order_creator_monthly_points': { min: 1, max: 1_000_000_000, note: 'Điểm Xanh tự cộng tối đa mỗi tháng cho đơn chat của một nhân viên tạo đơn trên Pancake', integer: true },
     'loyalty.external_pending_days': { min: 1, max: 60, note: 'số ngày sau khi đơn giao xong mới cộng điểm', integer: true },
     'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
     'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
@@ -246,7 +252,7 @@ export class SystemConfigService {
   };
 
   /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
-  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days']);
+  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days', CHAT_ORDER_EARN_PCT_KEY]);
 
   /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ. */
   private static readonly SEASONPASS_POINTS_MAX = 100_000;
@@ -285,6 +291,13 @@ export class SystemConfigService {
     [EXTERNAL_CAPTURE_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ tích điểm đơn sàn và hai cờ gọi Pancake: chuỗi "false" là truthy ở chỗ đọc lỏng nên chỉ nhận đúng boolean.
     [MARKETPLACE_CLAIM_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Hai cờ chat: chuỗi "false" là truthy ở chỗ đọc lỏng nên chỉ nhận đúng boolean (tắt yêu cầu vận đơn là mở cửa cho đơn giả).
+    [CHAT_ORDER_POINTS_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    [CHAT_ORDER_REQUIRE_CARRIER_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Tỉ lệ tích đơn chat: null = dùng loyalty.earn_pct (tỉ lệ đơn trong app); có giá trị thì cùng khoảng với loyalty.earn_pct.
+    [CHAT_ORDER_EARN_PCT_KEY]: (value) => (value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0.1 && value <= 20) ? null : 'phải là số phần trăm từ 0.1 đến 20 (2 = 2%) hoặc để trống để dùng tỉ lệ đơn trong app'),
+    // Sai bản đồ nhân viên thì chặn tự duyệt/tự tích điểm lặng lẽ không hoạt động.
+    [PANCAKE_STAFF_MAP_KEY]: staffMapProblem,
     [EXTERNAL_LOOKUP_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [EXTERNAL_POLL_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Mốc bắt đầu tích điểm đơn sàn: để trống (null) = chỉ áp tuổi đơn tối đa; có giá trị thì phải là ngày hợp lệ.

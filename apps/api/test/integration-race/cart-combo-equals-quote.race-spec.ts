@@ -75,7 +75,15 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     await setConfig(prisma, 'merchant.default_shipping_fee', 25_000);
   });
 
+  // Bảng hạng là dữ liệu chung của cả bộ race: recalcTier gán hạng thấp nhất cho mọi khách, nên hạng giảm % để lại sẽ làm
+  // đơn của suite khác bị giảm giá (vd. rớt dưới mức tối thiểu của thưởng giới thiệu).
+  const tierIds: string[] = [];
+
   afterAll(async () => {
+    if (tierIds.length) {
+      await prisma.user.updateMany({ where: { tierId: { in: tierIds } }, data: { tierId: null } });
+      await prisma.membershipTier.deleteMany({ where: { id: { in: tierIds } } });
+    }
     await moduleRef?.close();
   });
 
@@ -164,6 +172,8 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
         title: `Gian hàng ${slug}`,
         ownerUserId: ctv.id,
         isPublished: true,
+        // storefront.require_approval mặc định bật: gian hàng chưa duyệt bị ẩn, combo của gian hàng không áp.
+        approvedAt: new Date(),
         collections: {
           create: {
             title: 'Combo IT',
@@ -392,6 +402,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     const tier = await prisma.membershipTier.create({
       data: { id: `itcp-tier-${randCode(8)}`, name: 'Hạng IT', minPoints: 999_999_999, discountPct, perks: [] },
     });
+    tierIds.push(tier.id);
     await prisma.user.update({ where: { id: userId }, data: { tierId: tier.id } });
   }
 

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { ExternalClaimState, Prisma } from '@prisma/client';
 import type {
   AdminExternalAttemptListResponse,
@@ -8,28 +8,46 @@ import type {
   AdminReverseClaimResponse,
 } from '@tubutree/shared-types';
 import { formatPoints } from '../../common/format-points';
-import { maskPhoneOrNull } from '../../common/mask-pii';
+import { maskPhoneOrNull, maskVnPhonesInText } from '../../common/mask-pii';
 import { paginated, skipTake } from '../../common/pagination';
 import { parseTypedVnPhone } from '../../common/phone';
 import { startOfVnMonth, vnDateKey } from '../../common/vn-time';
 import { PrismaService } from '../../prisma/prisma.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
+import { advisoryPhoneLock, chatMonthPoints, tierMultiplierOf } from './external-chat.claim';
+import { loadChatConfig, loadStaffMap } from './external-chat.config';
+import { isSameAsPancakeCreator, phoneVerifiedFresh, STALE_APPROVE_MARK } from './external-chat.rules';
 import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
 import { evaluateClaimRules, settlePoints } from './external-claim.rules';
 import { advisoryUserLock, type CreatedClaim, ExternalClaimService, rejectionOf, USER_SELECT } from './external-claim.service';
 import { closedCreditedWhere, stalePendingWhere, UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
-import { normalizeTrackingCode } from './external-order.mapper';
-import { claimPoints, maskClaimCode } from './external-points-rate';
+import { normalizeTrackingCode, pancakeCreatorRefs } from './external-order.mapper';
+import { claimCodeLabel, claimPoints, maskClaimCode } from './external-points-rate';
+
+/** Zero-width và ký tự định dạng vô hình: không được tính là nội dung ghi chú. */
+const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF]/g;
+const MIN_NOTE_CHARS = 3;
 
 const UNPAID: ExternalClaimState[] = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER'];
+
+interface MemberInfo {
+  name: string | null;
+  phone: string | null;
+  phoneVerifiedAt: Date | null;
+  createdAt: Date;
+  deliveredAppOrders: number;
+}
 
 export interface AdminClaimListQuery {
   page: number;
   limit: number;
   state?: ExternalClaimState;
+  /** SCAN = đơn sàn khách tự nhập mã; PHONE = đơn chat/điện thoại tự cộng theo SĐT. Bỏ trống = cả hai. */
+  kind?: 'SCAN' | 'PHONE';
   /** Lọc đúng các dòng "Cần xử lý" đang đếm: claim đã cộng mà đơn đã đóng, hoặc PENDING không tới hạn. */
   attention?: 'closed_credited' | 'stale';
   q?: string;
@@ -48,9 +66,11 @@ export class ExternalClaimsAdminService {
     private readonly config: SystemConfigService,
     private readonly notifications: NotificationsService,
     private readonly claims: ExternalClaimService,
+    // Đơn chat tính vào xét hạng: đảo điểm xong thì tính lại hạng. Thiếu thì chỉ cron đêm tính lại.
+    @Optional() private readonly loyalty?: LoyaltyService,
   ) {}
 
-  private rowOf(c: Prisma.ExternalPointsClaimGetPayload<{ include: { externalOrder: true } }>, user: { name: string | null; phone: string | null } | null): AdminExternalClaimRow {
+  private rowOf(c: Prisma.ExternalPointsClaimGetPayload<{ include: { externalOrder: true } }>, user: MemberInfo | null, staleAfterMs: number, now: Date): AdminExternalClaimRow {
     const o = c.externalOrder;
     return {
       id: c.id,
@@ -65,7 +85,9 @@ export class ExternalClaimsAdminService {
       orderPhoneMasked: maskPhoneOrNull(o.phone),
       goodsValue: o.goodsValue,
       points: c.points,
+      kind: c.kind,
       state: c.state,
+      holdUntil: c.holdUntil?.toISOString() ?? null,
       orderStatus: o.status,
       reviewReason: c.reviewReason,
       voidReason: c.voidReason,
@@ -73,21 +95,33 @@ export class ExternalClaimsAdminService {
       deliveredAt: o.deliveredAt?.toISOString() ?? null,
       creditedAt: c.creditedAt?.toISOString() ?? null,
       createdAt: c.createdAt.toISOString(),
+      // Chỉ claim PHONE đã có thành viên: người kiểm đối chiếu người nhận với lý do REVIEW (SĐT cũ, nhân viên...).
+      memberPhoneVerifiedAt: c.kind === 'PHONE' && user ? (user.phoneVerifiedAt?.toISOString() ?? null) : null,
+      memberPhoneStale: c.kind === 'PHONE' && !!user && (!user.phoneVerifiedAt || now.getTime() - user.phoneVerifiedAt.getTime() > staleAfterMs),
+      memberCreatedAt: c.kind === 'PHONE' && user ? user.createdAt.toISOString() : null,
+      memberDeliveredAppOrders: c.kind === 'PHONE' && user ? user.deliveredAppOrders : null,
     };
   }
 
-  private async usersById(ids: (string | null)[]): Promise<Map<string, { name: string | null; phone: string | null }>> {
+  private async usersById(ids: (string | null)[]): Promise<Map<string, MemberInfo>> {
     const unique = [...new Set(ids.filter((i): i is string => !!i))];
     if (unique.length === 0) return new Map();
-    const users = await this.prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, fullName: true, phone: true } });
-    return new Map(users.map((u) => [u.id, { name: u.fullName, phone: u.phone }]));
+    const [users, delivered] = await Promise.all([
+      this.prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, fullName: true, phone: true, phoneVerifiedAt: true, createdAt: true } }),
+      // Đơn mua trong app đã giao: thành viên đã mua thật thì SĐT đáng tin hơn khi người kiểm xét lý do SĐT cũ.
+      this.prisma.order.groupBy({ by: ['userId'], where: { userId: { in: unique }, status: 'DELIVERED' }, _count: { _all: true } }),
+    ]);
+    const counts = new Map(delivered.map((d) => [d.userId, d._count._all]));
+    return new Map(
+      users.map((u) => [u.id, { name: u.fullName, phone: u.phone, phoneVerifiedAt: u.phoneVerifiedAt, createdAt: u.createdAt, deliveredAppOrders: counts.get(u.id) ?? 0 }]),
+    );
   }
 
   async list(q: AdminClaimListQuery): Promise<AdminExternalClaimListResponse> {
     const and: Prisma.ExternalPointsClaimWhereInput[] = [];
     if (q.attention === 'closed_credited') and.push(closedCreditedWhere);
     if (q.attention === 'stale') and.push(stalePendingWhere(new Date()));
-    const where: Prisma.ExternalPointsClaimWhereInput = { ...(q.state ? { state: q.state } : {}), ...(and.length ? { AND: and } : {}) };
+    const where: Prisma.ExternalPointsClaimWhereInput = { ...(q.state ? { state: q.state } : {}), ...(q.kind ? { kind: q.kind } : {}), ...(and.length ? { AND: and } : {}) };
     const text = q.q?.trim();
     if (text) {
       const code = normalizeTrackingCode(text);
@@ -106,7 +140,9 @@ export class ExternalClaimsAdminService {
       this.prisma.externalPointsClaim.count({ where }),
     ]);
     const users = await this.usersById(rows.map((r) => r.userId));
-    return paginated(rows.map((r) => this.rowOf(r, users.get(r.userId ?? '') ?? null)), q.page, q.limit, total);
+    const staleAfterMs = (await loadChatConfig(this.config)).phoneVerifiedMaxDays * 864e5;
+    const now = new Date();
+    return paginated(rows.map((r) => this.rowOf(r, users.get(r.userId ?? '') ?? null, staleAfterMs, now)), q.page, q.limit, total);
   }
 
   async detail(id: string): Promise<AdminExternalClaimDetail> {
@@ -116,8 +152,9 @@ export class ExternalClaimsAdminService {
       this.usersById([c.userId]),
       this.prisma.externalClaimEvent.findMany({ where: { claimId: id }, orderBy: { createdAt: 'asc' } }),
     ]);
+    const staleAfterMs = (await loadChatConfig(this.config)).phoneVerifiedMaxDays * 864e5;
     return {
-      ...this.rowOf(c, users.get(c.userId ?? '') ?? null),
+      ...this.rowOf(c, users.get(c.userId ?? '') ?? null, staleAfterMs, new Date()),
       events: events.map((e) => ({
         id: e.id,
         action: e.action,
@@ -170,16 +207,38 @@ export class ExternalClaimsAdminService {
   }
 
   /**
+   * Người tạo hoặc phụ trách đơn trên Pancake không được duyệt điểm cho đơn đó. Chắc chắn khi chủ shop khai báo `pancake.staff_map`
+   * (id tài khoản Pancake → userId); chưa khai báo thì chỉ so tên đã bỏ dấu với người tạo trong payload. Payload không có người tạo thì
+   * không chặn được (giới hạn, xem tài liệu chatpts).
+   */
+  private async forbidPancakeCreator(tx: Pick<Prisma.TransactionClient, 'user'>, actorId: string, payload: Prisma.JsonValue): Promise<void> {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+    const refs = pancakeCreatorRefs(payload as Record<string, unknown>);
+    if (refs.length === 0) return;
+    const actor = await tx.user.findUnique({ where: { id: actorId }, select: { id: true, fullName: true } });
+    if (actor && isSameAsPancakeCreator(actor, refs, await loadStaffMap(this.config))) {
+      throw new ForbiddenException({ code: 'PANCAKE_CREATOR_SELF', message: 'Người tạo hoặc phụ trách đơn trên Pancake không được tự duyệt điểm của đơn đó.' });
+    }
+  }
+
+  /**
    * REVIEW sang PENDING. Người duyệt không được là chủ claim, người gắn đơn hay người đã đưa claim vào REVIEW. Điểm tính lại theo tiền
    * hàng mới nhất và kiểm lại trần tháng; đơn hoàn một phần được duyệt thì đặt mốc cộng = bây giờ + hạn giữ để cron cộng được.
    */
-  async approve(id: string, actorId: string, now: Date = new Date()): Promise<{ id: string; state: 'PENDING' }> {
+  async approve(id: string, actorId: string, now: Date = new Date(), note?: string): Promise<{ id: string; state: 'PENDING' }> {
     const cfg = await loadClaimConfig(this.config);
-    const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true } });
+    const chatCfg = await loadChatConfig(this.config);
+    const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true, kind: true, orderPhone: true, externalOrder: { select: { phone: true } } } });
     if (!head) throw new NotFoundException('Không tìm thấy claim.');
     await this.forbidSelf(actorId, head.userId);
     const out = await this.prisma.$transaction(async (tx) => {
-      if (head.userId) await advisoryUserLock(tx, head.userId);
+      // Claim chat khoá theo SĐT (trần tháng tính theo SĐT), claim đơn sàn khoá theo khách như cũ.
+      if (head.kind === 'PHONE') {
+        const lockPhone = head.orderPhone ?? head.externalOrder.phone;
+        if (lockPhone) await advisoryPhoneLock(tx, lockPhone);
+      } else if (head.userId) {
+        await advisoryUserLock(tx, head.userId);
+      }
       if (!(await lockOrderThenClaim(tx, id))) throw new NotFoundException('Không tìm thấy claim.');
       await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${id} FOR UPDATE`;
       const c = await tx.externalPointsClaim.findUniqueOrThrow({ where: { id }, include: { externalOrder: true } });
@@ -191,10 +250,36 @@ export class ExternalClaimsAdminService {
       if (introduced) throw new ForbiddenException({ code: 'SAME_INTRODUCER', message: 'Người gắn đơn hoặc đưa claim vào chờ duyệt không được tự duyệt claim đó.' });
       const o = c.externalOrder;
       if (['RETURNED', 'CANCELLED', 'DELETED'].includes(o.status)) throw new BadRequestException('Đơn đã bị huỷ hoặc hoàn trên sàn nên không duyệt được.');
-      const fullPoints = claimPoints(o.goodsValue, Number(c.ratePct));
+      if (c.kind === 'PHONE') await this.forbidPancakeCreator(tx, actorId, o.lastPayload);
+      // Duyệt là một lần kiểm: điểm tính lại theo tiền hàng và hạng HIỆN TẠI, rồi lưu cả hai làm mốc đã kiểm để releaseClaim cộng đúng
+      // số này (không tính lại lên). Claim chưa có chủ giữ hệ số cũ.
+      let multiplier = Number(c.multiplier);
+      let staleNote: string | null = null;
+      if (c.kind === 'PHONE' && c.userId) {
+        const m = await tx.user.findUnique({ where: { id: c.userId }, select: { phoneVerifiedAt: true, tier: { select: { pointMultiplier: true } } } });
+        if (m) {
+          multiplier = tierMultiplierOf(m);
+          // Mốc xác minh vẫn cũ lúc duyệt (bất kể lý do REVIEW): người duyệt phải ghi đã xác nhận người nhận bằng cách nào (Mini App không tự
+          // xin lại số), nếu không claim đã duyệt vẫn bị kiểm lại SĐT lúc cộng. Ký tự vô hình không tính; SĐT đầy đủ trong ghi chú bị che.
+          if (!phoneVerifiedFresh(m.phoneVerifiedAt, { now, maxDays: chatCfg.phoneVerifiedMaxDays })) {
+            const clean = (note ?? '').replace(INVISIBLE, '').trim();
+            if (clean.replace(/\s/g, '').length < MIN_NOTE_CHARS) throw new BadRequestException({ code: 'NOTE_REQUIRED', message: 'SĐT xác minh của thành viên đã cũ: cần ghi chú cách bạn đã xác nhận người nhận.' });
+            staleNote = `${STALE_APPROVE_MARK}: ${maskVnPhonesInText(clean)}`;
+          }
+        }
+      }
+      const fullPoints = claimPoints(o.goodsValue, Number(c.ratePct), multiplier);
       if (fullPoints === null || fullPoints <= 0) throw new BadRequestException('Đơn chưa có tiền hàng hợp lệ để tính điểm.');
       let points = fullPoints;
-      if (c.userId) {
+      if (c.kind === 'PHONE') {
+        // Trần tháng theo SĐT. Không có SĐT (đã xoá khỏi đơn) thì không còn gì để cộng dồn: duyệt nguyên điểm.
+        const capPhone = c.orderPhone ?? o.phone;
+        if (capPhone) {
+          const others = await chatMonthPoints(tx, { phone: capPhone, userId: c.userId, since: startOfVnMonth(c.createdAt), excludeClaimId: id });
+          points = settlePoints({ newPoints: fullPoints, checkedPoints: c.points, others, cap: chatCfg.monthlyPointsCap });
+          if (points <= 0) throw rejectionOf('MONTHLY_CAP');
+        }
+      } else if (c.userId) {
         const month = await tx.externalPointsClaim.aggregate({
           where: { userId: c.userId, kind: 'SCAN', id: { not: id }, createdAt: { gte: startOfVnMonth(c.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
           _sum: { points: true },
@@ -205,12 +290,13 @@ export class ExternalClaimsAdminService {
       }
       const releaseAt =
         o.status === 'DELIVERED' && o.deliveredAt ? new Date(o.deliveredAt.getTime() + cfg.pendingDays * 864e5) : o.status === 'PARTIAL_RETURN' ? new Date(now.getTime() + cfg.pendingDays * 864e5) : null;
-      const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null } });
+      const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null, ...(c.kind === 'PHONE' ? { multiplier, creditedGoodsValue: o.goodsValue } : {}) } });
       if (res.count !== 1) throw new ConflictException('Claim vừa được xử lý bởi người khác.');
-      await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, orderStatus: o.status, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: points < fullPoints ? `Chốt theo trần tháng: ${points} thay vì ${fullPoints} điểm` : `${points} điểm` });
-      return { userId: c.userId, points, channel: o.channel, trackingCode: o.trackingCode, releaseAt };
+      await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, orderStatus: o.status, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: [points < fullPoints ? `Chốt theo trần tháng: ${points} thay vì ${fullPoints} điểm` : `${points} điểm`, staleNote].filter(Boolean).join(' | ') });
+      return { userId: c.userId, points, channel: o.channel, trackingCode: o.trackingCode, releaseAt, kind: c.kind };
     });
-    if (out.userId) {
+    // Đơn chat không có chuyện báo "điểm chờ" ở bước duyệt: khách chỉ được báo khi điểm đã cộng (hoặc lúc liên kết SĐT).
+    if (out.userId && out.kind === 'SCAN') {
       await this.claims.notifyPending(out.userId, { claimId: id, state: 'PENDING', points: out.points, channel: out.channel, maskedCode: maskClaimCode(out.trackingCode), expectedCreditAt: out.releaseAt } satisfies CreatedClaim);
     }
     return { id, state: 'PENDING' };
@@ -238,7 +324,7 @@ export class ExternalClaimsAdminService {
     });
     if (c.userId) {
       await this.notifications
-        .notify(c.userId, 'EXTERNAL_POINTS_VOIDED', { code: maskClaimCode(c.externalOrder.trackingCode), detail: `điểm chờ không được cộng (${reason})` }, { dedupeKey: `ext-void:${id}` })
+        .notify(c.userId, 'EXTERNAL_POINTS_VOIDED', { code: claimCodeLabel(c.externalOrder.trackingCode, c.kind), detail: `điểm chờ không được cộng (${reason})` }, { dedupeKey: `ext-void:${id}` })
         .catch((e: unknown) => this.logger.warn(`Gửi EXTERNAL_POINTS_VOIDED lỗi claim=${id}: ${e instanceof Error ? e.message : e}`));
     }
     return { id, state: 'VOIDED' };
@@ -246,18 +332,21 @@ export class ExternalClaimsAdminService {
 
   /** Chỉ ADMIN (controller): thu hồi điểm đã cộng theo min(điểm, phần lô còn, số dư). */
   async reverse(id: string, actorId: string, reason: string): Promise<AdminReverseClaimResponse> {
-    const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true } });
+    const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true, kind: true } });
     if (!head) throw new NotFoundException('Không tìm thấy claim.');
     await this.forbidSelf(actorId, head.userId);
     const res = await reverseCreditedClaim(this.prisma, id, { reason, actorId });
     if (!res) throw new ConflictException('Claim không còn ở trạng thái đã cộng điểm.');
+    if (head.kind === 'PHONE' && head.userId && this.loyalty) {
+      await this.loyalty.recalcTier(head.userId).catch((e: unknown) => this.logger.warn(`recalcTier sau đảo điểm chat lỗi claim=${id}: ${e instanceof Error ? e.message : e}`));
+    }
     const c = await this.prisma.externalPointsClaim.findUnique({ where: { id }, include: { externalOrder: { select: { trackingCode: true } } } });
     if (c?.userId) {
       await this.notifications
         .notify(
           c.userId,
           'EXTERNAL_POINTS_VOIDED',
-          { code: maskClaimCode(c.externalOrder.trackingCode), detail: res.reversedPoints > 0 ? `${formatPoints(res.reversedPoints)} Điểm Xanh đã cộng được thu hồi` : 'điểm đã cộng không còn gì để thu hồi' },
+          { code: claimCodeLabel(c.externalOrder.trackingCode, c.kind), detail: res.reversedPoints > 0 ? `${formatPoints(res.reversedPoints)} Điểm Xanh đã cộng được thu hồi` : 'điểm đã cộng không còn gì để thu hồi' },
           { dedupeKey: `ext-reverse:${id}` },
         )
         .catch((e: unknown) => this.logger.warn(`Gửi EXTERNAL_POINTS_VOIDED lỗi claim=${id}: ${e instanceof Error ? e.message : e}`));

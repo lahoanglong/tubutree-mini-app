@@ -804,6 +804,8 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-external-points-credited', code: 'EXTERNAL_POINTS_CREDITED', channel: 'INAPP', bodyTemplate: 'Bạn nhận {{points}} Điểm Xanh từ đơn {{code}} mua ngoài app. Cảm ơn bạn đã ủng hộ Tubu Tree 🌿', createOnly: true },
   { id: 'nt-external-points-voided', code: 'EXTERNAL_POINTS_VOIDED', channel: 'INAPP', bodyTemplate: 'Điểm từ đơn {{code}} không được tích: {{detail}}.', createOnly: true },
   { id: 'nt-external-points-claim-not-found', code: 'EXTERNAL_POINTS_CLAIM_NOT_FOUND', channel: 'INAPP', bodyTemplate: 'Tubu Tree chưa tích được điểm cho mã {{code}}: {{detail}}. Bạn có thể kiểm tra lại mã hoặc liên hệ hỗ trợ.', createOnly: true },
+  { id: 'nt-chat-order-points-credited', code: 'CHAT_ORDER_POINTS_CREDITED', channel: 'INAPP', bodyTemplate: 'Bạn nhận {{points}} Điểm Xanh từ đơn đặt qua tư vấn viên Tubu Tree. Cảm ơn bạn đã mua sắm cùng Tubu Tree 🌿', createOnly: true },
+  { id: 'nt-chat-order-points-linked', code: 'CHAT_ORDER_POINTS_LINKED', channel: 'INAPP', bodyTemplate: 'Tubu Tree đang giữ {{points}} Điểm Xanh cho bạn từ {{count}} đơn đặt qua tư vấn viên. Điểm được cộng sau khi đơn giao thành công và hết thời gian giữ điểm 🌿', createOnly: true },
   { id: 'nt-game-checkin', code: 'GAME_CHECKIN_REMINDER', channel: 'INAPP', bodyTemplate: '🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿' },
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },

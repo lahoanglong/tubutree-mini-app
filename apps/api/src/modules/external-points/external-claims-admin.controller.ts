@@ -12,6 +12,8 @@ const STATES = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED', 'VOIDED', 'RE
 
 export class ExternalClaimListQueryDto extends PaginationQuery {
   @IsOptional() @IsIn(STATES) state?: (typeof STATES)[number];
+  /** SCAN = đơn sàn khách nhập mã; PHONE = đơn chat/điện thoại tự cộng theo SĐT. */
+  @IsOptional() @IsIn(['SCAN', 'PHONE']) kind?: 'SCAN' | 'PHONE';
   /** Chỉ các dòng "Cần xử lý": đã cộng mà đơn đã đóng, hoặc PENDING không bao giờ tới hạn. */
   @IsOptional() @IsIn(['closed_credited', 'stale']) attention?: 'closed_credited' | 'stale';
   /** Mã đơn Pancake, mã vận đơn, id claim hoặc SĐT đầy đủ. */
@@ -20,6 +22,11 @@ export class ExternalClaimListQueryDto extends PaginationQuery {
 
 export class ClaimReasonDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(300) reason!: string;
+}
+
+export class ApproveClaimDto {
+  /** Bắt buộc khi claim chờ vì "SĐT xác minh đã cũ" và mốc đó vẫn cũ lúc duyệt. */
+  @IsOptional() @Trim() @IsString() @MaxLength(300) note?: string;
 }
 
 export class ClaimNoteDto {
@@ -76,8 +83,8 @@ export class ExternalClaimsAdminController {
   }
 
   @Post(':id/approve')
-  approve(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.admin.approve(id, user.sub);
+  approve(@Param('id') id: string, @Body() dto: ApproveClaimDto, @CurrentUser() user: JwtPayload) {
+    return this.admin.approve(id, user.sub, new Date(), dto.note);
   }
 
   @Post(':id/void')

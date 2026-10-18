@@ -64,6 +64,17 @@ export function claimActions(
   };
 }
 
+/** Nhãn cảnh báo khi mốc xác minh SĐT của thành viên đã cũ (hoặc chưa có). */
+export const PHONE_STALE_LABEL = 'SĐT xác minh đã cũ, kiểm người nhận';
+
+/**
+ * Claim chat có chủ mà mốc xác minh SĐT vẫn cũ: API bắt ghi chú cách người duyệt đã xác nhận người nhận, bất kể lý do REVIEW (400
+ * NOTE_REQUIRED nếu thiếu). Mốc cũ lấy từ `memberPhoneStale` của chính dòng đó.
+ */
+export const approveNeedsNote = (c: { kind: string; memberPhoneStale?: boolean }): boolean => c.kind === 'PHONE' && c.memberPhoneStale === true;
+
+export const isNoteRequiredError = (e: unknown): boolean => (e as { code?: unknown } | null)?.code === 'NOTE_REQUIRED';
+
 /** Đã cộng điểm mà đơn đã huỷ, hoàn hoặc xoá: lẽ ra phải đảo điểm. */
 export const creditedOnClosedOrder = (c: { state: ExternalClaimState; orderStatus: string }) =>
   c.state === 'CREDITED' && CLOSED_ORDER.includes(c.orderStatus);
@@ -88,6 +99,10 @@ export const EVENT_ACTION_LABEL: Record<string, string> = {
   FLAG_PARTIAL: 'Gắn cờ đơn hoàn một phần',
   KEEP_POINTS: 'Giữ điểm, gỡ cờ',
   REVERSE: 'Đảo điểm',
+  LINK_PHONE: 'Liên kết claim theo SĐT thành viên',
+  HOLD_NO_MEMBER: 'Giữ điểm chờ khách thành viên',
+  LAPSE: 'Hết hạn giữ điểm',
+  PHONE_CHANGED: 'SĐT trên đơn đổi, chuyển chờ duyệt',
   AUTO_REVERSE: 'Hệ thống tự đảo điểm',
 };
 
@@ -96,6 +111,7 @@ const ADMIN_ERROR_TEXT: Record<ExternalClaimAdminErrorCode | ExternalClaimReject
   SAME_INTRODUCER: 'Bạn đã gắn đơn, đưa yêu cầu vào chờ duyệt hoặc mở lại mã này nên không tự duyệt được. Nhờ người khác duyệt.',
   ATTACH_ADMIN_ONLY: 'Mã khách gửi không trùng mã trên đơn, hoặc nguồn đơn chưa xác định. Chỉ ADMIN được gắn trường hợp này.',
   NOTE_REQUIRED: 'Trường hợp này cần ghi chú lý do. Bạn nhập ghi chú rồi thử lại.',
+  PANCAKE_CREATOR_SELF: 'Bạn là người tạo hoặc phụ trách đơn này trên Pancake nên không tự duyệt điểm của đơn đó. Nhờ người khác duyệt.',
   NOT_FLAGGED: 'Yêu cầu này không còn cờ cần xử lý (có thể người khác vừa xử lý). Tải lại danh sách.',
   DISABLED: 'Tính năng tích điểm đơn sàn đang tắt (cờ loyalty.marketplace_claim_enabled).',
   NOT_ELIGIBLE_USER: 'Khách chưa đủ điều kiện tích điểm: cần tài khoản thật, có số điện thoại và không bị khoá.',

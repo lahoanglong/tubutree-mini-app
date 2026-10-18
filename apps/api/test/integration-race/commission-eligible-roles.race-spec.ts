@@ -185,10 +185,11 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
     expect(rewards).toEqual([{ delta: REFERRAL_REWARD }]);
   });
 
+  // storefront.require_approval mặc định bật: gian hàng CTV đang bán trong các ca này là gian hàng đã duyệt.
   async function ctvWithStore() {
     const user = await createUser(prisma, { role: 'AFFILIATE' });
     const store = await prisma.storefront.create({
-      data: { type: 'CTV', slug: user.referralCode!.toLowerCase(), ownerUserId: user.id, title: 'Shop CTV IT', isPublished: true },
+      data: { type: 'CTV', slug: user.referralCode!.toLowerCase(), ownerUserId: user.id, title: 'Shop CTV IT', isPublished: true, approvedAt: new Date() },
     });
     return { user, store };
   }
@@ -238,7 +239,7 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
     const v = await tubuVariation();
     const adminOwner = await createUser(prisma, { role: 'ADMIN' });
     const adminStore = await prisma.storefront.create({
-      data: { type: 'CTV', slug: adminOwner.referralCode!.toLowerCase(), ownerUserId: adminOwner.id, title: 'Shop admin IT', isPublished: true },
+      data: { type: 'CTV', slug: adminOwner.referralCode!.toLowerCase(), ownerUserId: adminOwner.id, title: 'Shop admin IT', isPublished: true, approvedAt: new Date() },
     });
     const ctvB = await createUser(prisma, { role: 'AFFILIATE' });
     const c = await buyer();
