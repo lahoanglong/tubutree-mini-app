@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { BadRequestException } from '@nestjs/common';
 import { WASTE_CONFIG_KEYS, assertWasteConfigSeedRows } from './waste-config.keys';
@@ -219,5 +219,25 @@ describe('write rules (SystemConfigService.set and the admin form rules)', () =>
     expect(await accepts('waste.rules_text', 'a'.repeat(8000))).toBe(true);
     expect(await accepts('waste.rules_text', 'a'.repeat(8001))).toBe(false);
     expect(await accepts('waste.rules_text', 123)).toBe(false);
+  });
+});
+
+describe('every waste key has a runtime reader (registry 8.5)', () => {
+  it('each key of WASTE_CONFIG_KEYS occurs as a quoted literal in a non-spec source file other than the key descriptor files', () => {
+    const SRC = join(__dirname, '../..');
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) walk(p, out);
+        else if (name.endsWith('.ts') && !name.endsWith('.spec.ts') && !name.endsWith('.d.ts')) out.push(p);
+      }
+      return out;
+    };
+    const text = walk(SRC)
+      .filter((f) => !['waste-exchange/waste-config.keys.ts', 'system-config/dead-config-keys.ts', 'system-config/system-config.service.ts', 'admin/admin-config-rules.ts', 'admin/config-redaction.ts'].some((d) => f.endsWith(`/modules/${d}`)))
+      .map((f) => readFileSync(f, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''))
+      .join('\n');
+    const missing = Object.keys(WASTE_CONFIG_KEYS).filter((k) => !["'", '"', '`'].some((q) => text.includes(`${q}${k}${q}`)));
+    expect(missing).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { WasteConfigService } from './waste-config.service';
 
-@Module({})
+@Module({ providers: [WasteConfigService], exports: [WasteConfigService] })
 export class WasteCoreModule {}
