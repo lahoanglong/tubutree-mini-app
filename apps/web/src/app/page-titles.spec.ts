@@ -13,6 +13,9 @@ import { metadata as notifications } from './tai-khoan/thong-bao/layout';
 import { metadata as rewards } from './kho-qua/layout';
 import { metadata as myRewards } from './kho-qua/cua-toi/layout';
 import { metadata as game } from './vuon-xanh/layout';
+import { metadata as recycle } from './doi-rac/page';
+import { metadata as recycleRules } from './doi-rac/quy-dinh/page';
+import { metadata as recycleRequests } from './doi-rac/yeu-cau/layout';
 import { metadata as advisor } from './tu-van/layout';
 import { metadata as cashback } from './hoan-tien/layout';
 import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
@@ -57,7 +60,10 @@ const GAME: TitleCase[] = [
   ['/tu-van', advisor, 'Trợ lý AI Tubu — Tubu Tree'],
 ];
 const PRO: TitleCase[] = [];
-const RECYCLE: TitleCase[] = [];
+const RECYCLE: TitleCase[] = [
+  ['/doi-rac', recycle, 'Đổi rác lấy quà — Tubu Tree'],
+  ['/doi-rac/yeu-cau', recycleRequests, 'Yêu cầu của tôi — Tubu Tree'],
+];
 const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 // R3-UI-7: các trang client không có tiêu đề riêng nên mọi tab đều tên "Tubu Tree — Sống xanh An Lành", khó phân biệt
@@ -68,6 +74,11 @@ describe('tiêu đề trang khách', () => {
   it.each(TITLES)('%s có tiêu đề riêng và không lập chỉ mục', (_path, meta, title) => {
     expect(meta.title).toBe(title);
     expect(meta.robots).toEqual({ index: false, follow: false });
+  });
+
+  it('/doi-rac/quy-dinh là trang công khai: có tiêu đề riêng và cho lập chỉ mục', () => {
+    expect(recycleRules.title).toBe('Thể lệ Đổi rác lấy quà — Tubu Tree');
+    expect(recycleRules.robots).toBeUndefined();
   });
 
   it('/tai-khoan/don-hang/[code] có tiêu đề theo mã đơn, không lập chỉ mục', async () => {

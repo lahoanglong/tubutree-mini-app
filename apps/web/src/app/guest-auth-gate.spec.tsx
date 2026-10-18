@@ -57,6 +57,8 @@ import CashbackPage from './hoan-tien/page';
 import WishlistPage from './tai-khoan/yeu-thich/page';
 import CtvPage from './ctv/page';
 import CtvStorefrontPage from './ctv/gian-hang/page';
+import RecyclePage from './doi-rac/page';
+import RecycleRequestsPage from './doi-rac/yeu-cau/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -109,7 +111,10 @@ const GAME: PageCase[] = [
   ['/tu-van', () => <AdvisorPage />, '/tu-van'],
 ];
 const PRO: PageCase[] = [];
-const RECYCLE: PageCase[] = [];
+const RECYCLE: PageCase[] = [
+  ['/doi-rac', () => <RecyclePage />, '/doi-rac'],
+  ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />, '/doi-rac/yeu-cau'],
+];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 describe.each(PAGES)('khách chưa đăng nhập mở %s', (_name, page, returnTo) => {

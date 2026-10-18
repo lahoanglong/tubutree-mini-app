@@ -59,13 +59,13 @@
       { "miniapp": "/admin/community", "web": "/admin?tab=community", "private": true }
     ]},
     { "lane": "recycle", "items": [
-      { "miniapp": "/recycle", "web": "/doi-rac", "private": true, "pending": true },
-      { "miniapp": "/recycle/rules", "web": "/doi-rac/quy-dinh", "private": false, "pending": true },
+      { "miniapp": "/recycle", "web": "/doi-rac", "private": true },
+      { "miniapp": "/recycle/rules", "web": "/doi-rac/quy-dinh", "private": false },
       { "miniapp": "/recycle/new", "web": "/doi-rac/tao", "private": true, "pending": true },
       { "miniapp": "/recycle/points", "web": "/doi-rac/diem-nhan", "private": true, "pending": true },
       { "miniapp": "/recycle/r/:id", "web": "/doi-rac/yeu-cau/:id", "private": true, "pending": true },
       { "miniapp": "/recycle/r/:id/edit", "web": "/doi-rac/yeu-cau/:id/sua", "private": true, "pending": true },
-      { "miniapp": "/recycle/requests", "web": "/doi-rac/yeu-cau", "private": true, "pending": true },
+      { "miniapp": "/recycle/requests", "web": "/doi-rac/yeu-cau", "private": true },
       { "miniapp": "/recycle/done/:id", "web": "/doi-rac/xong/:id", "private": true, "pending": true },
       { "miniapp": "/recycle/desk", "web": "/doi-rac/quay", "private": true, "pending": true }
     ]},
