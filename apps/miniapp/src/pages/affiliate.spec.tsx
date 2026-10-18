@@ -580,6 +580,31 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(group.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
   });
 
+  it('đại lý chưa có gian hàng CTV (canOpenStorefront=false): không có lối tắt Gian hàng vì builder trả 400, vẫn có Chia sẻ và Rút', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canOrderForCustomer: false, canOpenStorefront: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
+    expect(Array.from(group.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Chia sẻ link và mã giới thiệu',
+      'Rút tiền hoa hồng',
+    ]);
+    expect(group.style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
+  });
+
+  it('đại lý có gian hàng CTV (canOpenStorefront=true) và API cũ thiếu cờ: vẫn có lối tắt Gian hàng', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canOrderForCustomer: false, canOpenStorefront: true, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    const { unmount } = renderPage();
+    expect(await screen.findByRole('button', { name: 'Gian hàng của tôi' })).toBeInTheDocument();
+    unmount();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Gian hàng của tôi' })).toBeInTheDocument();
+  });
+
   it('Chia sẻ mở chia sẻ link kèm mã; Gian hàng đi tới trình dựng gian hàng', async () => {
     mocks.shareLink.mockResolvedValue(undefined);
     renderPage();

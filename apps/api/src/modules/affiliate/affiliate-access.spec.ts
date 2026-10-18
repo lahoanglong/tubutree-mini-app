@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
 import type { UserRole } from '@prisma/client';
 import { AffiliateService } from './affiliate.service';
-import { canPlaceOrderForCustomer, canRegisterAsAffiliate, hasAffiliateAccess } from './affiliate-access';
+import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate, hasAffiliateAccess } from './affiliate-access';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
@@ -53,6 +53,30 @@ describe('hasAffiliateAccess (D3-03: CTV lên đại lý không mất màn hoa h
   });
 });
 
+describe('affiliateAccess (D3-03: lối tắt Gian hàng chỉ khi mở được gian hàng)', () => {
+  it.each<UserRole>(['AFFILIATE', 'ADMIN'])('%s: có công cụ và mở/tạo được gian hàng, không cần tra DB', async (role) => {
+    const d = db();
+    expect(await affiliateAccess(d as never, { id: 'u1', role })).toEqual({ hasAccess: true, canOpenStorefront: true });
+    expect(d.storefront.findFirst).not.toHaveBeenCalled();
+    expect(d.commission.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('đại lý có gian hàng CTV: mở lại được gian hàng đó', async () => {
+    expect(await affiliateAccess(db({ storefront: true }) as never, { id: 'u1', role: 'DEALER' })).toEqual({ hasAccess: true, canOpenStorefront: true });
+  });
+
+  it('đại lý chỉ còn hoa hồng, chưa có gian hàng CTV: xem/rút được nhưng không mở được gian hàng (getOrCreateMine từ chối đại lý tạo mới)', async () => {
+    expect(await affiliateAccess(db({ commission: true }) as never, { id: 'u1', role: 'DEALER' })).toEqual({ hasAccess: true, canOpenStorefront: false });
+  });
+
+  it('đại lý thuần, khách và nhân viên: không có gì', async () => {
+    expect(await affiliateAccess(db() as never, { id: 'u1', role: 'DEALER' })).toEqual({ hasAccess: false, canOpenStorefront: false });
+    for (const role of ['CUSTOMER', 'STAFF'] as UserRole[]) {
+      expect(await affiliateAccess(db({ storefront: true, commission: true }) as never, { id: 'u1', role })).toEqual({ hasAccess: false, canOpenStorefront: false });
+    }
+  });
+});
+
 describe('canRegisterAsAffiliate / canPlaceOrderForCustomer', () => {
   it.each<[UserRole, boolean, boolean]>([
     ['CUSTOMER', true, false],
@@ -87,19 +111,20 @@ describe('AffiliateService.getMe cho đại lý', () => {
       walletBalance: 5000,
       canRegister: false,
       canOrderForCustomer: false,
+      canOpenStorefront: true,
     });
   });
 
-  it('đại lý chỉ có hoa hồng: isAffiliate=true', async () => {
-    expect((await service({ role: 'DEALER' }, { commission: true }).getMe('u1')).isAffiliate).toBe(true);
+  it('đại lý chỉ có hoa hồng: isAffiliate=true nhưng canOpenStorefront=false để miniapp ẩn lối tắt Gian hàng (builder sẽ trả 400)', async () => {
+    expect(await service({ role: 'DEALER' }, { commission: true }).getMe('u1')).toMatchObject({ isAffiliate: true, canOpenStorefront: false });
   });
 
   it('đại lý thuần: isAffiliate=false và canRegister=false để miniapp không đưa màn đăng ký ngõ cụt', async () => {
-    expect(await service({ role: 'DEALER' }).getMe('u1')).toMatchObject({ isAffiliate: false, canRegister: false });
+    expect(await service({ role: 'DEALER' }).getMe('u1')).toMatchObject({ isAffiliate: false, canRegister: false, canOpenStorefront: false });
   });
 
   it('CTV: isAffiliate, canRegister, canOrderForCustomer đều true; khách thường chỉ canRegister', async () => {
-    expect(await service({ role: 'AFFILIATE' }).getMe('u1')).toMatchObject({ isAffiliate: true, canRegister: true, canOrderForCustomer: true });
+    expect(await service({ role: 'AFFILIATE' }).getMe('u1')).toMatchObject({ isAffiliate: true, canRegister: true, canOrderForCustomer: true, canOpenStorefront: true });
     expect(await service({ role: 'CUSTOMER' }).getMe('u1')).toMatchObject({ isAffiliate: false, canRegister: true, canOrderForCustomer: false });
   });
 });

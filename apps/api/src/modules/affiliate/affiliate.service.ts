@@ -59,7 +59,7 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
-import { canPlaceOrderForCustomer, canRegisterAsAffiliate, hasAffiliateAccess } from './affiliate-access';
+import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -142,11 +142,13 @@ export class AffiliateService {
   async getMe(userId: string, now: Date = new Date()) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const monthRevenue = await this.confirmedRevenue(this.prisma, userId, vnMonthBounds(now));
+    const access = await affiliateAccess(this.prisma, user);
 
     return {
-      isAffiliate: await hasAffiliateAccess(this.prisma, user),
+      isAffiliate: access.hasAccess,
       canRegister: canRegisterAsAffiliate(user.role),
       canOrderForCustomer: canPlaceOrderForCustomer(user.role),
+      canOpenStorefront: access.canOpenStorefront,
       referralCode: user.referralCode,
       walletBalance: user.walletBalance,
       personalTaxId: user.personalTaxId,

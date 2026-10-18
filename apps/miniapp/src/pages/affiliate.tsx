@@ -347,15 +347,14 @@ function Dashboard() {
         )}
       </div>
 
-      {/* Lối tắt "Lên đơn hộ" ngay dưới thẻ hoa hồng: việc CTV làm nhiều lần mỗi ngày, trước đây
-          nằm sau thẻ bậc, thưởng mốc và nút rút nên phải cuộn qua ~3 màn mới thấy. */}
-      {/* Việc CTV làm hằng ngày nằm ngay dưới thẻ hoa hồng (trước đây mã giới thiệu, chia sẻ, gian hàng và rút nằm cuối trang dài ~3.000px).
-          Đại lý chưa được lên đơn hộ (API từ chối) nên không có lối tắt đó. */}
+      {/* Đại lý không có lối tắt Lên đơn hộ (API từ chối) và chỉ có Gian hàng khi còn gian hàng CTV (trình dựng trả 400 nếu không). */}
       <div style={BLOCK_GAP}>
         <CtvShortcuts
           items={[
             { key: 'share', label: 'Chia sẻ', ariaLabel: 'Chia sẻ link và mã giới thiệu', icon: Link2, onPress: shareReferral },
-            { key: 'store', label: 'Gian hàng', ariaLabel: 'Gian hàng của tôi', icon: Store, onPress: () => navigate('/storefront') },
+            ...(meQ.data?.canOpenStorefront !== false
+              ? [{ key: 'store', label: 'Gian hàng', ariaLabel: 'Gian hàng của tôi', icon: Store, onPress: () => navigate('/storefront') }]
+              : []),
             ...(meQ.data?.canOrderForCustomer !== false
               ? [
                   {

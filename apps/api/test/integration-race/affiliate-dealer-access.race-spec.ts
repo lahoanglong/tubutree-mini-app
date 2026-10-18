@@ -94,8 +94,8 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công c
     const plain = await dealer();
     const customer = await createUser(prisma, { role: 'CUSTOMER' });
 
-    expect(await affiliate.getMe(withStore.id)).toMatchObject({ isAffiliate: true, canRegister: false, canOrderForCustomer: false });
-    expect((await affiliate.getMe(withCommission.id)).isAffiliate).toBe(true);
+    expect(await affiliate.getMe(withStore.id)).toMatchObject({ isAffiliate: true, canRegister: false, canOrderForCustomer: false, canOpenStorefront: true });
+    expect(await affiliate.getMe(withCommission.id)).toMatchObject({ isAffiliate: true, canOpenStorefront: false });
     expect(await affiliate.getMe(plain.id)).toMatchObject({ isAffiliate: false, canRegister: false });
     expect(await affiliate.getMe(customer.id)).toMatchObject({ isAffiliate: false, canRegister: true });
 
@@ -106,6 +106,7 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công c
 
     const mine = await storefront.getOrCreateMine(withStore.id);
     expect(mine).toMatchObject({ type: 'CTV', ownerUserId: withStore.id });
+    await expect(storefront.getOrCreateMine(withCommission.id)).rejects.toBeInstanceOf(BadRequestException);
     await expect(storefront.getOrCreateMine(plain.id)).rejects.toBeInstanceOf(BadRequestException);
     expect(await prisma.storefront.count({ where: { ownerUserId: plain.id } })).toBe(0);
     await expect(affiliate.quoteOrderForCustomer(withStore.id, { items: [{ variationId: 'x', quantity: 1 }] } as never)).rejects.toThrow(
