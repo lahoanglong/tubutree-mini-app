@@ -23,7 +23,7 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 11 | `/group-buy`, `/group-buy/:id` | group-buy.tsx | — | `/mua-chung`, `/mua-chung/[id]` | xong 4c9017bf | shop | công khai | Tham gia cần đăng nhập |
 | 12 | `/brand/:slug` | brand-view.tsx | `/brand/[slug]` | giữ | xong 4c9017bf | shop | công khai | Thiếu: theo dõi nhãn, chia sẻ kiếm tiền, nút đại lý |
 | 13 | `/brand-story` | brand-story.tsx | — | `/cau-chuyen` | xong 4c9017bf | shop | công khai | Bản đồ SVG tĩnh |
-| 14 | `/s/:slug` | storefront-view.tsx | `/s/[slug]` | giữ | thiếu | affiliate | công khai | Chủ gian hàng thấy nút "thêm sản phẩm" |
+| 14 | `/s/:slug` | storefront-view.tsx | `/s/[slug]` | giữ | xong 2d328824 | affiliate | công khai | Chủ gian hàng thấy nút "thêm sản phẩm" |
 | 15 | `/about` | about.tsx | — (có `/chinh-sach/[loai]`) | `/gioi-thieu` | xong b76526a7 | account | công khai | FAQ, liên hệ (`tel:`, email, OA), chính sách, xoá tài khoản, đăng xuất |
 | 16 | `*` | not-found.tsx | `not-found.tsx` | giữ | có | — | — | |
 | 17 | `/profile` | profile.tsx | `/tai-khoan` | giữ | xong b76526a7 | account | riêng tư | Hub: lối tắt điểm/ví/mã, menu theo vai trò (STAFF/ADMIN, chủ nhãn, đại lý, CTV), cờ `aiAdvisorEnabled`, `CASHBACK_ENABLED`, `marketplaceClaimEnabled` |
@@ -44,8 +44,8 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 32 | `/feed/leaderboard` | community-leaderboard.tsx | — | `/cong-dong/xep-hang` | mới | community | riêng tư | |
 | 33 | `/academy`, `/academy/:courseId` | academy.tsx | — | `/hoc-vien`, `/hoc-vien/[courseId]` | mới | community | công khai | Hoàn thành bài cần đăng nhập |
 | 34 | `/ai-advisor` | ai-advisor.tsx | — | `/tu-van` | mới | ai | riêng tư | Cờ `aiAdvisorEnabled` |
-| 35 | `/affiliate` | affiliate.tsx | — | `/ctv` | mới | affiliate | riêng tư | Đăng ký CTV, link, hoa hồng, rút, thuế, mốc thưởng, lên đơn hộ. **Tiền: 2 lượt review** |
-| 36 | `/storefront` | storefront-builder.tsx | — | `/ctv/gian-hang` | mới | affiliate | riêng tư | Không lẫn với cổng `/merchant` |
+| 35 | `/affiliate` | affiliate.tsx | — | `/ctv` | xong 2d328824 | affiliate | riêng tư | Đăng ký CTV, link, hoa hồng, rút, thuế, mốc thưởng, lên đơn hộ. **Tiền: 2 lượt review** |
+| 36 | `/storefront` | storefront-builder.tsx | — | `/ctv/gian-hang` | xong 2d328824 | affiliate | riêng tư | Không lẫn với cổng `/merchant` |
 | 37 | `/dealer` | dealer.tsx | — | `/dai-ly` | mới | pro | riêng tư | Bảng giá, đơn, công nợ, báo cáo, thưởng. **Tiền: 2 lượt review** |
 | 38 | `/staff` | staff.tsx | — | `/nhan-vien` | mới | pro | riêng tư | Chấm công cần token vị trí Zalo (`attendance-api.ts:51`). Web: quản lý ca, xem trạng thái; vào/ra ca hiện lời dặn dùng Mini App. Không thêm đường chấm công bằng toạ độ trình duyệt (liên quan lương) |
 | 39 | `/my-payroll` | my-payroll.tsx | — | `/nhan-vien/bang-luong` | mới | pro | riêng tư | Sửa tài khoản ngân hàng nhận lương. **Tiền: 2 lượt review** |
