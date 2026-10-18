@@ -87,6 +87,7 @@ const PUBLIC_CONFIG = 'src/modules/system-config/public-config.ts';
 const COMMISSION_RATE = 'src/modules/affiliate/commission-rate-csv.ts';
 const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
 const STOREFRONT_CONFIG = 'src/modules/storefront/storefront-config.ts';
+const PANCAKE_CATEGORY_MAP = 'src/modules/integrations/pancake/pancake-sync.service.ts';
 const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
@@ -103,6 +104,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'storefront.require_approval', value: true, category: 'storefront', description: 'Bật thì gian hàng CTV phải được admin duyệt lần đầu mới hiện trên trang công khai (tắt: hiện ngay khi CTV đăng)', fallbackSource: { file: STOREFRONT_CONFIG, text: 'export const DEFAULT_STOREFRONT_REQUIRE_APPROVAL = true;' } },
   { key: 'storefront.subdomain_enabled', value: false, category: 'storefront', description: 'Bật khi DNS wildcard và chứng chỉ đã xong: gian hàng được hiện và chia sẻ link <tên>.tubutree.com (tắt: chỉ link /s/<mã>)', fallbackSource: { file: STOREFRONT_CONFIG, text: 'export const DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED = false;' } },
   { key: 'pancake.total_mismatch_check', value: true, category: 'pancake', description: 'So tổng tiền Pancake với đơn Tubu mỗi lần webhook; lệch thì đưa đơn vào "Cần xử lý Pancake" (false = tắt khi báo nhầm hàng loạt)', fallbackSource: { file: PANCAKE_PROCESSOR, text: 'get<boolean>(PANCAKE_TOTAL_CHECK_KEY, true)' } },
+  { key: 'pancake.category_map', value: {}, category: 'pancake', description: 'Gán danh mục tự động cho sản phẩm đồng bộ từ Pancake: { "mã hoặc tên nhóm hàng Pancake": "id danh mục Tubu" } (xem Quản trị, Danh mục sản phẩm). Chỉ áp cho sản phẩm chưa có danh mục; rỗng = không tự gán', fallbackSource: { file: PANCAKE_CATEGORY_MAP, text: 'get<PancakeCategoryMap>(PANCAKE_CATEGORY_MAP_KEY, {})' } },
 ];
 
 export type ConfigDecision = 'reference' | 'business' | 'excluded' | 'unclassified';

@@ -9,6 +9,7 @@ import type {
   PancakeOrderListResponse,
   PancakeUpdateOrderBody,
   PancakeProductsResponse,
+  PancakeCategoryNode,
   PancakeProvinceDTO,
   PancakeCommuneDTO,
   PancakeGeoResponse,
@@ -107,6 +108,20 @@ export class PancakeClient {
       throw new ServiceUnavailableException(`Pancake không trả danh sách sản phẩm (trang ${page}).`);
     }
     return data;
+  }
+
+  /** Cây nhóm hàng của shop (`GET /shops/{SHOP_ID}/categories`) — để admin thấy mã/tên nhóm cần ánh xạ. */
+  async fetchCategories(): Promise<PancakeCategoryNode[]> {
+    this.assertConfigured();
+    const data = await this.getCatalog<{ success?: boolean; data?: PancakeCategoryNode[] }>(
+      `/shops/${this.shopId}/categories`,
+      { api_key: this.apiKey },
+      'đọc nhóm hàng',
+    );
+    if (!data || data.success === false || !Array.isArray(data.data)) {
+      throw new ServiceUnavailableException('Pancake không trả danh sách nhóm hàng.');
+    }
+    return data.data;
   }
 
   /** Danh sách tỉnh/thành (geo Pancake). Dùng `new_id` ("84_VN*") cho đơn + query communes. */

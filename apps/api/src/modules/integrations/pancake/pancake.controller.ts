@@ -1,4 +1,4 @@
-import { Controller, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../../common/staff-permissions';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -35,6 +35,18 @@ export class PancakeController {
       );
     }
     return { synced: count, stockOverwritten: overwriteStock };
+  }
+
+  /** Nhóm hàng Pancake + danh mục Tubu đã ánh xạ (`pancake.category_map`), để điền bản đồ ở tab Cấu hình. */
+  @Roles('ADMIN')
+  @Get('categories')
+  async categories() {
+    try {
+      return await this.sync.listPancakeCategories();
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      throw new ServiceUnavailableException(`Không đọc được nhóm hàng Pancake (${pancakeErrorText(err)}).`);
+    }
   }
 
   /**
