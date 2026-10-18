@@ -158,12 +158,42 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(screen.queryByText(/Còn .* tới/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
   });
+  it('"Tiếp tục" khoá cả lúc ước tính cũ chưa kịp thay (chờ debounce, đang tải), mở lại khi ước tính mới không khoá', async () => {
+    let release: (v: WastePreviewDTO) => void = () => undefined;
+    mocks.previewWaste.mockImplementation((b: WastePreviewRequest) => (b.lines[0]?.declaredQty === 2
+      ? new Promise<WastePreviewDTO>((res) => { release = res; })
+      : Promise.resolve(preview())));
+    renderPage();
+    const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
+    const plus = within(carton).getByRole('button', { name: 'Tăng số lượng' });
+    fireEvent.click(plus);
+    expect(await screen.findByText('Ước tính 6.000 điểm')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled();
+    fireEvent.click(plus);
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+    await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith({ lines: [{ itemId: 'item-carton', declaredQty: 2 }] }));
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+    release(preview({ blocks: [{ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }], itemCaps: [{ itemId: 'item-carton', monthRemainingQty: 1, dayRemainingQty: null }] }));
+    expect(await screen.findByText('Tháng này Thùng carton chỉ còn 1 thùng')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+    fireEvent.click(within(carton).getByRole('button', { name: 'Giảm số lượng' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled());
+  });
+  it('ước tính lỗi thì "Tiếp tục" vẫn mở (không đang tải, khoá khớp)', async () => {
+    mocks.previewWaste.mockRejectedValue(new Error('Mất kết nối'));
+    renderPage();
+    const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
+    fireEvent.click(within(carton).getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled());
+  });
   it('"Tiếp tục" khoá khi chưa chọn món; bấm → lưu nháp vào mục hiện tại rồi đẩy ?step=method', async () => {
     renderPage();
     const next = await screen.findByRole('button', { name: 'Tiếp tục' });
     expect(next).toBeDisabled();
     const carton = screen.getByText('Thùng carton').closest('[data-item]') as HTMLElement;
     fireEvent.click(within(carton).getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(next).toBeEnabled());
     fireEvent.click(next);
     const draft = { ...DRAFT, lines: { 'item-carton': 1 } };
     expect(mocks.navigate.mock.calls).toEqual([

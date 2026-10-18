@@ -368,6 +368,8 @@ export default function RecycleNewPage() {
     };
     const p = debounced.length > 0 ? itemsPreviewQ.data : undefined;
     const capBlock = p?.blocks.find((b) => STEP1_CAP_BLOCKS.includes(b.code));
+    // The last finished preview may belong to older quantities: wait for the debounce and the new request before enabling.
+    const previewStale = linesKey !== JSON.stringify(lineInputs) || itemsPreviewQ.isFetching;
     const reward = p && !capBlock ? nextRewardProgress(rewardsQ.data, p.estimatedPoints) : null;
     const summary = p ? (
       capBlock ? (
@@ -396,7 +398,7 @@ export default function RecycleNewPage() {
       <StickyActionBar
         summary={summary}
         primary={
-          <Button fullWidth disabled={lineInputs.length === 0 || !!capBlock} onPress={next}>
+          <Button fullWidth disabled={lineInputs.length === 0 || !!capBlock || previewStale} onPress={next}>
             Tiếp tục
           </Button>
         }
