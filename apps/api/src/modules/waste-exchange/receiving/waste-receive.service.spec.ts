@@ -163,6 +163,11 @@ describe('WasteReceiveService.receive', () => {
     const none = setup();
     await none.svc.receive('s1', 'r1', body());
     expect(eventsOf('PARCEL_RECEIVED')[0].meta).toMatchObject({ parcelTrackingNorm: null, trackingMismatch: null });
+
+    jest.clearAllMocks();
+    const noCustomerCode = setup({ row: row({ status: 'OPEN', trackingNorm: null, trackingCode: null, carrier: null }) });
+    await noCustomerCode.svc.receive('s1', 'r1', body({ parcelCode: 'TR-ABCDE', parcelTracking: 'ghn 999' }));
+    expect(eventsOf('PARCEL_RECEIVED')[0].meta).toMatchObject({ parcelTrackingNorm: 'GHN999', trackingMismatch: null });
   });
 
   it('1c. the weight is written with the status change', async () => {
