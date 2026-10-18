@@ -556,6 +556,27 @@ describe('WasteAdminPointsService', () => {
       expect(h.wastePointStaff.create).not.toHaveBeenCalled();
     });
 
+    it('a new OWNER is accepted after the old OWNER was removed', async () => {
+      const h = staffSetup();
+      h.wastePointStaff.findMany.mockResolvedValue([{ id: 's1', userId: 'x1', role: 'OWNER', isActive: false }]);
+
+      await h.svc.addStaff('a1', 'p1', { userId: 'o1', role: 'OWNER' });
+
+      expect(h.wastePointStaff.create).toHaveBeenCalledWith({ data: { pointId: 'p1', userId: 'o1', role: 'OWNER' } });
+    });
+
+    it('inactive rows do not count toward the 5-person cap', async () => {
+      const h = staffSetup();
+      h.wastePointStaff.findMany.mockResolvedValue([
+        ...Array.from({ length: 4 }, (_, i) => ({ id: `s${i}`, userId: `x${i}`, role: 'STAFF', isActive: true })),
+        { id: 's9', userId: 'y9', role: 'STAFF', isActive: false },
+      ]);
+
+      await h.svc.addStaff('a1', 'p1', { userId: 'o1', role: 'STAFF' });
+
+      expect(h.wastePointStaff.create).toHaveBeenCalled();
+    });
+
     it('a P2002 on the one-owner index is the same 409, caught outside the transaction', async () => {
       const h = staffSetup();
       h.prisma.$transaction.mockRejectedValue(p2002('waste_point_staff_one_owner_key'));
@@ -611,6 +632,7 @@ describe('WasteAdminPointsService', () => {
         }),
       );
       expect(h.notifier.perkReviewed).toHaveBeenCalledWith('o1', { id: 'p1', name: NAME }, true, 'ev-1');
+      expect(h.wastePointStaff.findFirst).toHaveBeenCalledWith({ where: { pointId: 'p1', role: 'OWNER', isActive: true }, select: { userId: true } });
       expect(order.indexOf('tx end')).toBeLessThan(order.indexOf('perkReviewed'));
     });
 
@@ -629,6 +651,7 @@ describe('WasteAdminPointsService', () => {
         }),
       );
       expect(h.notifier.perkReviewed).toHaveBeenCalledWith('o1', { id: 'p1', name: NAME }, false, 'ev-1');
+      expect(h.wastePointStaff.findFirst).toHaveBeenCalledWith({ where: { pointId: 'p1', role: 'OWNER', isActive: true }, select: { userId: true } });
       expect(order.indexOf('tx end')).toBeLessThan(order.indexOf('perkReviewed'));
     });
 
