@@ -181,7 +181,7 @@ function Advisor() {
           Gửi
         </button>
       </div>
-      <GameNoticeBar notice={notice} />
+      <GameNoticeBar notice={notice} raised />
     </div>
   );
 }

@@ -37,13 +37,14 @@ export function useGameNotice() {
 /**
  * Lỗi dùng role="alert" để đọc ngay; thành công dùng role="status". Đưa ra body với z-index trên Sheet (z-50): hộp xác
  * nhận được giữ mở khi lỗi (để gửi lại cùng Idempotency-Key) nên thông báo nằm trong trang sẽ bị nó che. Nằm trên thanh
- * điều hướng đáy của điện thoại kể cả khi có vùng an toàn của iPhone.
+ * điều hướng đáy của điện thoại kể cả khi có vùng an toàn của iPhone. `raised`: trang có thanh nhập dính đáy ở mọi cỡ
+ * màn hình (/tu-van) thì giữ thông báo trên thanh đó, không hạ xuống md:bottom-6 vì sẽ đè vào ô nhập.
  */
-export function GameNoticeBar({ notice }: { notice: GameNotice | null }) {
+export function GameNoticeBar({ notice, raised = false }: { notice: GameNotice | null; raised?: boolean }) {
   if (!notice || typeof document === 'undefined') return null;
   const error = notice.tone === 'error';
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4 md:bottom-6">
+    <div className={`pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4${raised ? '' : ' md:bottom-6'}`}>
       <div
         key={notice.id}
         role={error ? 'alert' : 'status'}

@@ -398,4 +398,15 @@ describe('Trợ lý AI: thanh nhập', () => {
     expect(bar.className).not.toContain('bottom-16');
     expect(bar.className).toContain('env(safe-area-inset-bottom)');
   });
+
+  it('thông báo lỗi nổi trên thanh nhập ở mọi cỡ màn hình, không đè vào ô nhập trên desktop', async () => {
+    state.chat = () => {
+      throw new Error('Hết hạn mức');
+    };
+    const c = await mount();
+    await ask(c, 'Xin chào');
+    const box = document.body.querySelector('[role="alert"]')?.parentElement as HTMLElement;
+    expect(box.className).not.toContain('md:bottom-6');
+    expect(box.className).toContain('bottom-[calc(76px+env(safe-area-inset-bottom))]');
+  });
 });
