@@ -71,6 +71,7 @@ interface ReversalRule {
 export const orderLotKey = (orderId: string): string => `ORDER:${orderId}`;
 export const reviewLotKey = (reviewId: string): string => `REVIEW:${reviewId}`;
 export const externalLotKey = (claimId: string): string => `EXTERNAL:${claimId}`;
+export const recycleLotKey = (requestId: string): string => `RECYCLE:${requestId}`;
 
 const startsWith = (value: string | undefined, prefix: string): value is string => typeof value === 'string' && value.startsWith(prefix);
 
@@ -101,6 +102,12 @@ const ORDER_PARTIAL_RETURN_RULE: ReversalRule = {
 const REVIEW_RULE: ReversalRule = {
   lotKey: (t) => (t.refType === 'REVIEW' && t.refId ? reviewLotKey(t.refId) : null),
   reversedLotKey: (t) => (t.refType === 'REVIEW' && t.refId ? reviewLotKey(t.refId) : null),
+};
+
+/** Đổi rác (WasteReverseService.reverse): dòng cộng refType RECYCLE và dòng thu hồi refType RECYCLE_REVERSED mang cùng refId = id yêu cầu. */
+const RECYCLE_RULE: ReversalRule = {
+  lotKey: (t) => (t.refType === 'RECYCLE' && t.refId ? recycleLotKey(t.refId) : null),
+  reversedLotKey: (t) => (t.refType === 'RECYCLE_REVERSED' && t.refId ? recycleLotKey(t.refId) : null),
 };
 
 /**
@@ -163,6 +170,7 @@ const REVERSAL_RULES: readonly ReversalRule[] = [
   REFERRAL_ORDER2_RULE,
   REFERRAL_MILESTONE_RULE,
   EXTERNAL_RULE,
+  RECYCLE_RULE,
 ];
 
 function firstKey(t: PointExpiryTxn, pick: (rule: ReversalRule) => (t: PointExpiryTxn) => string | null): string | null {
