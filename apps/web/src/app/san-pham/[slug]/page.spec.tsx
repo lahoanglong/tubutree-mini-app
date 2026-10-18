@@ -5,12 +5,29 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 
 // BUYERWEB-17: trang chi tiết chỉ hiện đúng một ảnh. BUYERWEB-16: thiếu JSON-LD Product, canonical, og:image đủ.
 
-const api = vi.hoisted(() => ({ product: null as unknown, flash: [] as unknown[], reviews: null as unknown }));
+const api = vi.hoisted(() => ({
+  product: null as unknown,
+  flash: [] as unknown[],
+  reviews: null as unknown,
+  related: [] as unknown,
+  together: [] as unknown,
+  serverFails: false,
+}));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProduct: async () => api.product,
 }));
 vi.mock('@/components/add-to-cart', () => ({ default: () => null }));
+vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async () => Promise.reject(new Error('offline')), post: vi.fn() } }));
+vi.mock('@/lib/core-http-server', () => ({
+  createServerHttp: () => ({
+    get: async (path: string) => {
+      if (api.serverFails) throw new Error('API tạm lỗi');
+      return path.endsWith('/related') ? api.related : api.together;
+    },
+  }),
+}));
+vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: 'idle', initialized: true, sessionUnavailable: false }) }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
@@ -55,6 +72,9 @@ beforeEach(() => {
   api.product = PRODUCT;
   api.flash = [];
   api.reviews = REVIEWS;
+  api.related = [];
+  api.together = [];
+  api.serverFails = false;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -313,5 +333,67 @@ describe('/san-pham/[slug] — hàng của gian hàng đối tác không dùng �
     const c = await mount();
     expect(c.querySelector('[data-testid="pdp-partner-note"]')).toBeNull();
     expect(c.querySelector('[data-testid="pdp-unavailable"]')).not.toBeNull();
+  });
+});
+
+describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
+  const card = (n: number) => ({ id: `r${n}`, slug: `sp-${n}`, brand: 'Xanh Việt', name: `Gợi ý ${n}`, thumbnail: null, basePrice: 90000, salePrice: null, isFeatured: false, inStock: true });
+  const buttons = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).map((b) => b.textContent);
+
+  it('có tim yêu thích cạnh nút chia sẻ, sao đánh giá và số đã bán', async () => {
+    api.product = { ...PRODUCT, sold: 1250 };
+    const c = await mount();
+    expect(c.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="pdp-rating"]')!.textContent).toContain('4.5 · 8 đánh giá');
+    expect(c.textContent).toContain('Đã bán 1,3k+');
+  });
+
+  it('hàng Tubu: có dòng freeship, dòng Đặt định kỳ và Mở nhóm mua chung', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'TUBU', fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    await flush();
+    expect(buttons(c).some((t) => /Mở nhóm mua chung/.test(t ?? ''))).toBe(true);
+    expect(buttons(c).some((t) => /Đặt định kỳ/.test(t ?? ''))).toBe(true);
+  });
+
+  it('hàng gian hàng tự giao hoặc hàng đối tác: không có freeship, đặt định kỳ, mua chung', async () => {
+    for (const over of [
+      { fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm', shippingFee: 30000, freeShipFrom: null } },
+      { fulfilment: 'TUBU', partnerOwned: true, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } },
+    ]) {
+      api.product = { ...PRODUCT, ...over };
+      const c = await mount();
+      await flush();
+      expect(buttons(c).some((t) => /Mở nhóm mua chung|Đặt định kỳ/.test(t ?? ''))).toBe(false);
+      if (over.fulfilment === 'MERCHANT') expect(c.querySelector('[data-testid="pdp-freeship"]')).toBeNull();
+    }
+  });
+
+  it('có mục Thành phần, Cam kết Tubu và mô tả; không có thành phần thì không có mục Thành phần', async () => {
+    api.product = { ...PRODUCT, ingredients: [{ name: 'Bồ kết', percentage: '30%' }] };
+    const c = await mount();
+    const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
+    expect(h2).toEqual(expect.arrayContaining(['Thành phần', 'Cam kết Tubu', 'Mô tả sản phẩm']));
+    api.product = PRODUCT;
+    const c2 = await mount();
+    expect(Array.from(c2.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thành phần');
+  });
+
+  it('dải Thường mua kèm và Cùng nhà thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
+    api.related = [card(1)];
+    api.together = [card(2)];
+    const c = await mount();
+    await flush();
+    const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
+    expect(h2).toEqual(expect.arrayContaining(['Thường mua kèm', 'Cùng nhà Xanh Việt']));
+    expect(Array.from(c.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(expect.arrayContaining(['/san-pham/sp-1', '/san-pham/sp-2']));
+  });
+
+  it('server lỗi lấy gợi ý: trang vẫn dựng đủ nội dung chính, dải gợi ý ẩn', async () => {
+    api.serverFails = true;
+    const c = await mount();
+    await flush();
+    expect(c.querySelector('h1')!.textContent).toBe('Dầu gội bồ kết');
+    expect(Array.from(c.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thường mua kèm');
   });
 });

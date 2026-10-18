@@ -3,16 +3,23 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, Check, Truck } from 'lucide-react';
-import { getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
+import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
+import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
 import { PdpPrice } from '@/components/flash-price';
 import { PdpSelectionProvider } from '@/components/pdp-selection';
 import ProductGallery from '@/components/product-gallery';
 import ShareButton from '@/components/share-button';
+import { WishlistHeart } from '@/components/catalog/wishlist-heart';
+import { createServerHttp } from '@/lib/core-http-server';
+import { isRetailOnly } from '@/lib/pdp-logic';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
 import { ui } from '@/lib/guest-ui';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpRails } from './pdp-rails';
+import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 
 export const revalidate = 300;
 
@@ -38,10 +45,18 @@ export async function generateMetadata({
   };
 }
 
+/** Dải gợi ý chỉ là phần phụ: lỗi thì bỏ, để trình duyệt tự tải lại; không được làm hỏng cả trang sản phẩm. */
+const orUndefined = <T,>(p: Promise<T>): Promise<T | undefined> => p.catch(() => undefined);
+
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const product = await getProduct(slug);
   if (!product) notFound();
+  const http = createServerHttp();
+  const [related, boughtTogether] = await Promise.all([
+    orUndefined(fetchRelated(http, product.slug)),
+    orUndefined(fetchBoughtTogether(http, product.slug)),
+  ]);
 
   const images = galleryImages(product);
   const description = plainText(product.description);
@@ -50,6 +65,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fulfillerText = pdpFulfillerText(product);
   const unavailableText = pdpUnavailableText(product);
   const partnerNote = unavailableText ? null : pdpPartnerNote(product);
+  const retailOnly = isRetailOnly(product);
+  const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -71,10 +88,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             ) : (
               <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
             )}
-            <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
+            <div className="flex items-center">
+              <WishlistHeart productId={product.id} />
+              <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
+            </div>
           </div>
           <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
-          <PdpPrice product={product} />
+          <PdpRating average={product.ratingAvg} count={product.reviewCount} />
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <PdpPrice product={product} />
+            {formatSold(product.sold) && <span className="mt-2 text-sm text-stone-500">{formatSold(product.sold)}</span>}
+          </div>
+          <PdpFlashMeta />
           {unavailableText ? (
             <p
               data-testid="pdp-unavailable"
@@ -97,6 +122,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {partnerNote}
             </p>
           )}
+          {!fromStore && <PdpFreeship />}
           {shortDesc && <p className="mt-3 whitespace-pre-line break-words text-stone-600">{shortDesc}</p>}
 
           {product.certifications.length > 0 && (
@@ -110,24 +136,31 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           )}
 
+          <PdpCoupons productId={product.id} />
+          {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} />}
+
           {product.variations.length > 0 && (
             <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} />
           )}
+
+          {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
+          <PdpContentKitRow slug={product.slug} />
         </div>
         </PdpSelectionProvider>
       </div>
 
-      {description && (
-        <section className="mt-8">
-          <h2 className={ui.sectionTitle}>Mô tả sản phẩm</h2>
-          <p className="mt-2 whitespace-pre-line break-words text-stone-700">{description}</p>
-        </section>
-      )}
+      <PdpIngredients ingredients={product.ingredients} />
+      <PdpPromises>
+        <PdpChatButton productName={product.name} />
+      </PdpPromises>
+      {description && <PdpDescription text={description} />}
 
       {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
       <Suspense fallback={<ProductReviewsFallback />}>
         <ProductReviews slug={product.slug} />
       </Suspense>
+
+      <PdpRails slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
     </main>

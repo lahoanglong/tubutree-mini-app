@@ -78,12 +78,12 @@ export default function AddToCart({
   // Đổi phân loại → reset số lượng về 1 thay vì giữ số lượng cũ (có thể vượt tồn kho mới).
   useEffect(() => {
     setQty(1);
-  }, [selectedId]);
+  }, [selectedId, setQty]);
 
   // Tồn kho thật vừa về thấp hơn số đang chọn → kéo số lượng xuống cho khớp.
   useEffect(() => {
     setQty((q) => Math.min(q, maxQty));
-  }, [maxQty]);
+  }, [maxQty, setQty]);
 
   // Khách vào từ thẻ ghi giá Giờ vàng thì mở đúng phân loại đang giảm (cùng cách Mini App), trừ khi khách đã tự chọn hoặc
   // phân loại đó hết hàng.
