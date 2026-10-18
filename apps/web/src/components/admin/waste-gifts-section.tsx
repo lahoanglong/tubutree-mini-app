@@ -3,11 +3,18 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import type { AdminWasteGiftDTO, CouponType, WasteGiftKind, WasteGiftStatus, WasteGiftUpsertRequest, WasteVoucherSpec } from '@tubutree/shared-types';
-import { createWasteGift, listWasteGifts, reorderWasteGifts, updateWasteGift } from '@/lib/admin-client';
+import type {
+  AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, CouponType, GiftRedemptionsQuery, WasteGiftKind, WasteGiftStatus, WasteGiftUpsertRequest, WasteVoucherSpec,
+} from '@tubutree/shared-types';
+import {
+  cancelGiftRedemption, createWasteGift, fulfilGiftRedemption, listGiftRedemptions, listWasteGifts, reorderWasteGifts, updateWasteGift,
+} from '@/lib/admin-client';
 import { formatCount } from '@/lib/checkout-points';
-import { WASTE_GIFT_KIND_LABELS, WASTE_GIFT_STATUS_LABELS } from '@/lib/waste-labels';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, Field, INPUT_CLASS, Notice, ScrollRegion } from './ui';
+import { formatDate } from '@/lib/format-date';
+import { WASTE_GIFT_KIND_LABELS, WASTE_GIFT_REDEMPTION_STATUS_LABELS, WASTE_GIFT_STATUS_LABELS } from '@/lib/waste-labels';
+import {
+  BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, FIELD_XS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge,
+} from './ui';
 import type { WasteSeed } from './waste-tab';
 
 const TH = 'px-2 py-2 text-left text-xs font-medium text-stone-600';
@@ -111,9 +118,151 @@ function stockText(stock: number | null): string {
   return stock === 0 ? 'Hết hàng' : `Còn ${formatCount(stock)}`;
 }
 
-export function WasteGiftsSection({ isAdmin }: { isAdmin: boolean; seed?: WasteSeed | null }) {
+type QueueKey = 'ready' | 'overdue' | 'fulfilled' | 'cancelled';
+
+export const WASTE_GIFT_QUEUE_FILTERS: readonly { key: QueueKey; label: string; query: GiftRedemptionsQuery; adminOnly: boolean }[] = [
+  { key: 'ready', label: 'Chờ nhận', query: { status: 'READY' }, adminOnly: false },
+  { key: 'overdue', label: 'Quá hạn nhận', query: { status: 'READY', overdue: true }, adminOnly: true },
+  { key: 'fulfilled', label: 'Đã trao', query: { status: 'FULFILLED' }, adminOnly: true },
+  { key: 'cancelled', label: 'Đã huỷ', query: { status: 'CANCELLED' }, adminOnly: true },
+];
+
+const initialQueueKey = (isAdmin: boolean, seed?: WasteSeed | null): QueueKey =>
+  isAdmin && seed?.section === 'gifts' && seed.preset === 'overdue' ? 'overdue' : 'ready';
+
+const CANCEL_REASON_MAX = 500;
+
+export function WasteGiftsSection({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | null }) {
+  return (
+    <div className="space-y-6">
+      <GiftQueue isAdmin={isAdmin} seed={seed} />
+      {isAdmin && <GiftCatalogue />}
+    </div>
+  );
+}
+
+type RowAction = { id: string; kind: 'fulfil' | 'cancel' };
+
+function GiftQueue({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | null }) {
   const qc = useQueryClient();
-  const gifts = useQuery({ queryKey: ['admin-waste-gifts'], queryFn: listWasteGifts, enabled: isAdmin });
+  const [filterKey, setFilterKey] = useState<QueueKey>(() => initialQueueKey(isAdmin, seed));
+  const [action, setAction] = useState<RowAction | null>(null);
+  const [code, setCode] = useState('');
+  const [reason, setReason] = useState('');
+  const [refund, setRefund] = useState<boolean | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const filter = WASTE_GIFT_QUEUE_FILTERS.find((x) => x.key === filterKey && (isAdmin || !x.adminOnly)) ?? WASTE_GIFT_QUEUE_FILTERS[0]!;
+  const queue = useQuery({ queryKey: ['admin-waste-gift-redemptions', filter.query], queryFn: () => listGiftRedemptions(filter.query) });
+  const rows = queue.data ?? [];
+
+  const close = () => { setAction(null); setCode(''); setReason(''); setRefund(null); };
+  const refresh = () => Promise.all([
+    qc.invalidateQueries({ queryKey: ['admin-waste-gift-redemptions'] }),
+    qc.invalidateQueries({ queryKey: ['admin-waste-gifts'] }),
+    qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] }),
+  ]);
+  const onError = (e: unknown) => { setMsg(null); setErr(e instanceof Error ? e.message : 'Thao tác thất bại.'); };
+
+  const fulfil = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) => fulfilGiftRedemption(id, value),
+    onSuccess: () => { setErr(null); setMsg('Đã trao quà.'); close(); return refresh(); },
+    onError,
+  });
+  const cancel = useMutation({
+    mutationFn: ({ id, why, refundPoints }: { id: string; why: string; refundPoints: boolean }) => cancelGiftRedemption(id, { reason: why, refundPoints }),
+    onSuccess: () => { setErr(null); setMsg('Đã huỷ quà.'); close(); return refresh(); },
+    onError,
+  });
+
+  const open = (id: string, kind: RowAction['kind']) => { close(); setMsg(null); setErr(null); setAction({ id, kind }); };
+  const cancelReady = reason.trim() !== '' && reason.trim().length <= CANCEL_REASON_MAX && refund !== null;
+
+  return (
+    <section className="space-y-3" aria-label="Quà chờ nhận">
+      <h3 className="font-display text-base font-semibold text-stone-900">Quà chờ nhận</h3>
+      {isAdmin && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc quà chờ nhận">
+          {WASTE_GIFT_QUEUE_FILTERS.map((x) => (
+            <button key={x.key} type="button" aria-pressed={filter.key === x.key} className={chipClass(filter.key === x.key)} onClick={() => { setFilterKey(x.key); close(); }}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {queue.isError && <Notice tone="danger" role="alert">Không tải được danh sách quà chờ nhận.</Notice>}
+      {err && <Notice tone="danger" role="alert">{err}</Notice>}
+      {msg && <p role="status" className="text-sm text-success-fg">{msg}</p>}
+      {queue.isSuccess && rows.length === 0 && <p className="text-sm text-stone-600">Không có quà nào trong hàng đợi này.</p>}
+      <ul className="space-y-2">
+        {rows.map((r) => (
+          <li key={r.id} data-redemption={r.id} className="space-y-2 rounded-control border border-stone-200 bg-stone-0 p-3 text-sm text-stone-800">
+            <RedemptionSummary row={r} />
+            {r.status === 'READY' && (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={BTN_XS_SECONDARY} aria-pressed={action?.id === r.id && action.kind === 'fulfil'} onClick={() => open(r.id, 'fulfil')}>Trao</button>
+                {isAdmin && <button type="button" className={BTN_XS_SECONDARY} aria-pressed={action?.id === r.id && action.kind === 'cancel'} onClick={() => open(r.id, 'cancel')}>Huỷ</button>}
+              </div>
+            )}
+            {action?.id === r.id && action.kind === 'fulfil' && (
+              <div className="space-y-2">
+                <Field label="Mã nhận quà QG-"><input name="fulfilCode" className={INPUT_CLASS} autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} /></Field>
+                <div className="flex gap-2">
+                  <button type="button" className={BTN_XS_PRIMARY} disabled={code.trim() === '' || fulfil.isPending} onClick={() => fulfil.mutate({ id: r.id, value: code.trim() })}>Xác nhận trao</button>
+                  <button type="button" className={BTN_XS_SECONDARY} onClick={close}>Đóng</button>
+                </div>
+              </div>
+            )}
+            {isAdmin && action?.id === r.id && action.kind === 'cancel' && (
+              <div className="space-y-2">
+                <Field label="Lý do huỷ">
+                  <textarea name="cancelReason" rows={2} maxLength={CANCEL_REASON_MAX} className={INPUT_CLASS} value={reason} onChange={(e) => setReason(e.target.value)} />
+                </Field>
+                <fieldset className="space-y-1 text-xs text-stone-700">
+                  <legend className="font-medium">Hoàn điểm</legend>
+                  <label className="flex items-center gap-2"><input type="radio" name="refundPoints" value="true" checked={refund === true} onChange={() => setRefund(true)} />Hoàn điểm cho khách</label>
+                  <label className="flex items-center gap-2"><input type="radio" name="refundPoints" value="false" checked={refund === false} onChange={() => setRefund(false)} />Không hoàn điểm</label>
+                </fieldset>
+                <p className="text-xs text-stone-600">
+                  Chọn rõ có hoàn điểm hay không. Với khách bị khoá hoặc đã có yêu cầu bị thu hồi điểm, hoàn điểm trả lại phần lần thu hồi chưa lấy được.
+                </p>
+                <div className="flex gap-2">
+                  <button type="button" className={BTN_XS_PRIMARY} disabled={!cancelReady || cancel.isPending} onClick={() => cancel.mutate({ id: r.id, why: reason.trim(), refundPoints: refund === true })}>Xác nhận huỷ</button>
+                  <button type="button" className={BTN_XS_SECONDARY} onClick={close}>Đóng</button>
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function RedemptionSummary({ row: r }: { row: AdminGiftRedemptionRowDTO }) {
+  const codeText = r.code ? r.code : `QG-…${r.codeLast2 ?? ''}`;
+  return (
+    <div className="space-y-0.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-stone-900">{r.giftName}</span>
+        <span className="text-xs text-stone-600">{WASTE_GIFT_KIND_LABELS[r.giftKind]}</span>
+        <span className="text-xs text-stone-600">{formatCount(r.pointsCost)} điểm</span>
+        <ToneBadge tone="neutral">{WASTE_GIFT_REDEMPTION_STATUS_LABELS[r.status]}</ToneBadge>
+        {r.overdue && <ToneBadge tone="warning">Quá hạn nhận</ToneBadge>}
+      </div>
+      <div className="text-xs text-stone-700">{r.customerName}{r.customerPhone ? ` · ${r.customerPhone}` : ''}</div>
+      <div className="text-xs text-stone-700">
+        <span className="font-mono">{codeText}</span>
+        {r.claimExpiresAt && ` · Hạn nhận ${formatDate(r.claimExpiresAt)}`}
+      </div>
+    </div>
+  );
+}
+
+function GiftCatalogue() {
+  const qc = useQueryClient();
+  const gifts = useQuery({ queryKey: ['admin-waste-gifts'], queryFn: listWasteGifts });
   const [err, setErr] = useState<string | null>(null);
   const [panel, setPanel] = useState<{ id: string | null; form: Form } | null>(null);
 
@@ -136,8 +285,6 @@ export function WasteGiftsSection({ isAdmin }: { isAdmin: boolean; seed?: WasteS
     onSuccess: () => { setErr(null); return done(); },
     onError,
   });
-
-  if (!isAdmin) return null;
 
   const move = (idx: number, delta: -1 | 1) => {
     const ids = sorted.map((g) => g.id);
