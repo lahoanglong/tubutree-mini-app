@@ -1105,6 +1105,10 @@ export class AdminService {
       );
     }
     const alreadyPaid = outcome === 'ALREADY_PAID';
+    const fresh = await this.prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
+    });
     return {
       ok: true,
       alreadyPaid,
@@ -1112,10 +1116,8 @@ export class AdminService {
       message: alreadyPaid
         ? `Đơn ${order.code} đã được ghi nhận thanh toán trước đó.`
         : `Đã xác nhận nhận tiền đơn ${order.code}.`,
-      order: await this.prisma.order.findUniqueOrThrow({
-        where: { id: order.id },
-        include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
-      }),
+      // Kế toán không có đường lấy SĐT đầy đủ qua đây (nhánh ALREADY_PAID trả 200 cho mọi đơn đã PAID).
+      order: opts.byStaff ? maskOrderPhones(fresh) : fresh,
     };
   }
 

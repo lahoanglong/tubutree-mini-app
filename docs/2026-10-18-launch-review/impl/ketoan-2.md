@@ -52,3 +52,7 @@ API: admin.controller.ts, admin.service.ts, order-actor-transitions.ts, dealer-a
 - "Đơn của chính mình" nay gồm cả đơn CTV đặt hộ có endCustomerKey hoặc shippingAddress.phone trùng SĐT nhân viên (`isStaffOwnOrder`, chuẩn hoá bằng toLocalPhone), cho đơn lẻ và đơn đại lý.
 - Sổ công nợ đại lý: ghi chú "Kế toán <id> xác nhận…" khi Kế toán ghi, "Admin <id>" khi ADMIN.
 - Kiểm thêm: race spec admin-confirm-payment, admin-invoice, dealer-claim-reopen, dealer-credit-limit, dealer-accounts-admin, dealer-bonus: 6 suites, 34 tests pass trên Postgres tạm cổng 5564 (đã xoá container). jest API 84 suites, 1591 tests pass.
+
+## Sửa sau review lượt 2
+- confirm-payment của Kế toán trả `order` đã che SĐT (user.phone, shippingAddress.phone, endCustomerKey, note) kể cả nhánh ALREADY_PAID (200); ADMIN thấy đủ.
+- `maskVnPhonesInText`: lookbehind chỉ chặn chữ số nên che cả "sdt0912345678", "SĐT84912345678"; cho tối đa 3 ký tự `. - _ / ( )` hay khoảng trắng giữa các chữ số ("0912 - 345 - 678", "(091) 234 5678", "0912_345_678"). Vẫn không che mã GD, số tiền, mã đơn. Chấp nhận che nhầm mã số thuế 10 số đầu 0 (vd "MST 0101234567").

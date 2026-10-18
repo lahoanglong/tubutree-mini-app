@@ -2196,6 +2196,19 @@ describe('AdminService.confirmOrderPayment', () => {
     }
   });
 
+  it('Kế toán: đơn trả về (cả nhánh ALREADY_PAID 200 và PAID mới) che SĐT; ADMIN thấy đủ', async () => {
+    const pii = { userId: 'u9', user: { id: 'u9', phone: '0912345678', fullName: 'A' }, endCustomerKey: '0933444555', shippingAddress: { recipient: 'B', phone: '0987654321' } };
+    for (const [outcome, paid] of [['ALREADY_PAID', true], ['PAID', false]] as const) {
+      const base = bankOrder(paid ? { paymentStatus: 'PAID', status: 'CONFIRMED', ...pii } : { ...pii });
+      const kt = make(base, outcome);
+      const k = await kt.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true });
+      expect(k.order).toMatchObject({ user: { phone: '*******678' }, endCustomerKey: '*******555', shippingAddress: { phone: '*******321', recipient: 'B' } });
+      const ad = make(base, outcome);
+      const a = await ad.svc.confirmOrderPayment('admin-1', 'TB-1', {});
+      expect(a.order).toMatchObject({ user: { phone: '0912345678' }, endCustomerKey: '0933444555', shippingAddress: { phone: '0987654321' } });
+    }
+  });
+
   it('Kế toán: đơn đã huỷ/trả → 403 trước markPaid; đơn bị huỷ giữa chừng (CLOSED) → 403, không tạo khoản hoàn; ADMIN vẫn ghi được', async () => {
     for (const status of ['CANCELLED', 'RETURNED']) {
       const m = make(bankOrder({ status, userId: 'u9' }), 'CLOSED');
