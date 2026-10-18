@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
-import { IsIn, IsInt, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GameService } from './game.service';
@@ -16,7 +16,11 @@ class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
 class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
 // 'XU' vẫn nhận ở DTO để GameGardenService trả 410 (PD-3: mở lô bằng xu đã ngừng) thay vì 400.
-class UnlockPlotDto { @IsIn(['SEEDS', 'XU']) currency!: 'SEEDS' | 'XU'; }
+class UnlockPlotDto {
+  @IsIn(['SEEDS', 'XU']) currency!: 'SEEDS' | 'XU';
+  // Ô khách định mở: server dựa vào đây để phân biệt bấm đúp với mở ô kế tiếp có chủ đích.
+  @IsOptional() @IsInt() @Min(1) slot?: number;
+}
 class SeasonPassClaimDto {
   @IsInt() @Min(0) tier!: number;
   @IsIn(['free', 'premium']) track!: 'free' | 'premium';
@@ -111,7 +115,7 @@ export class GameController {
 
   @Post('garden/unlock')
   unlockPlot(@CurrentUser('sub') userId: string, @Body() dto: UnlockPlotDto) {
-    return this.garden.unlockPlot(userId, dto.currency);
+    return this.garden.unlockPlot(userId, dto.currency, dto.slot);
   }
 
   @Post('garden/plot/:id/water')
