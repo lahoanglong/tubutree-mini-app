@@ -43,10 +43,34 @@ describe('maskVnPhonesInText: chỉ che SĐT VN, giữ mã đối soát của k�
   });
 
   it('che cả SĐT dính sau chữ, ngăn cách nhiều ký tự, ngoặc, gạch dưới', () => {
-    for (const raw of ['sdt0912345678', 'SĐT84912345678', '0912 - 345 - 678', '(091) 234 5678', '0912_345_678', 'liên hệ:0912/345/678']) {
+    for (const raw of ['sdt:0912345678', 'SĐT: 84912345678', '0912 - 345 - 678', '(091) 234 5678', '0912_345_678', 'liên hệ:0912/345/678']) {
       const out = maskVnPhonesInText(raw);
       expect(out).not.toMatch(/0912|912|091|2345|234 5678/);
       expect(out.replace(/\D/g, '').length).toBe(3);
+    }
+  });
+
+  it('che 0084, dấu phẩy, dấu gạch mềm U+00AD giữa các số', () => {
+    expect(maskVnPhonesInText('0084901234567')).toBe('**********567');
+    expect(maskVnPhonesInText('0901,234,567')).toBe('****,***,567');
+    expect(maskVnPhonesInText('0901\u00AD234\u00AD567')).toBe('****\u00AD***\u00AD567');
+    expect(maskVnPhonesInText('0912\u00AD345678')).not.toMatch(/912|345/);
+  });
+
+  it('GHN 0912345678 (cách một dấu trắng) vẫn che; 901 234 567 không đầu 0 để nguyên', () => {
+    expect(maskVnPhonesInText('GHN 0912345678')).toBe('GHN *******678');
+    expect(maskVnPhonesInText('901 234 567')).toBe('901 234 567');
+  });
+
+  it('không che dãy số dính sau chữ hoặc số trong mã vận đơn', () => {
+    for (const keep of ['SPXVN0123456789', 'GHN0912345678', 'VN0084901234567', '10912345678', 'SPXVN84912345678']) {
+      expect(maskVnPhonesInText(keep)).toBe(keep);
+    }
+  });
+
+  it('không che số tiền dạng 84.000.000đ, 840.000.000, 1.000.000', () => {
+    for (const keep of ['84.000.000đ', '840.000.000', '1.000.000', '1,000,000đ']) {
+      expect(maskVnPhonesInText(keep)).toBe(keep);
     }
   });
 
