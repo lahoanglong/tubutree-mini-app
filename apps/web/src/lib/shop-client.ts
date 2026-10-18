@@ -20,6 +20,8 @@ export interface CartLine {
   fulfiller?: LineFulfiller;
   /** Dòng đang tính giá Giờ vàng (`unitPrice` đã là giá Giờ vàng). API cũ chưa trả. */
   isFlash?: boolean;
+  /** Phần trăm suất Giờ vàng đã bán (chỉ dòng Giờ vàng). */
+  soldPct?: number | null;
   /** Số lượng vượt giới hạn mua Giờ vàng nên dòng tính giá thường: câu giải thích từ server. */
   flashLimitNotice?: string | null;
 }

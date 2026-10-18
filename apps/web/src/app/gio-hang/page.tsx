@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ShoppingBag, Truck, Leaf, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
+import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
 import { CouponBox, couponPreviewKey, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -14,6 +14,11 @@ import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } 
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { cartKey, useCartKey } from '@/lib/cart-key';
+
+// Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
+const UNDO_WINDOW_MS = 3500;
+
+const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math.max(0, Math.round(pct))) : 0);
 
 export default function CartPage() {
   const phase = useAuthPhase();
@@ -57,6 +62,34 @@ export default function CartPage() {
     mutationFn: (id: string) => removeCartItem(id),
     onSuccess: (data) => qc.setQueryData(cartKey(), data),
   });
+  const [removedLine, setRemovedLine] = useState<CartLine | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    },
+    [],
+  );
+  // Thanh hoàn tác chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
+  const removeWithUndo = (line: CartLine) =>
+    remove.mutate(line.id, {
+      onSuccess: () => {
+        setUndoError(null);
+        setRemovedLine(line);
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        undoTimer.current = setTimeout(() => setRemovedLine(null), UNDO_WINDOW_MS);
+      },
+    });
+  const undoRemove = () => {
+    if (!removedLine) return;
+    const line = removedLine;
+    setRemovedLine(null);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    addToCart(line.variationId, line.quantity)
+      .then((c) => qc.setQueryData(cartKey(), c))
+      .catch((e: unknown) => setUndoError(e instanceof Error ? e.message : 'Không thêm lại được sản phẩm.'));
+  };
   // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
   // nút của đúng item đó (item khác vẫn thao tác được bình thường).
   const busyItemId =
@@ -231,16 +264,25 @@ export default function CartPage() {
                             className="h-6 w-6 accent-forest-600"
                           />
                         </label>
-                        <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
+                        <Link
+                          href={`/san-pham/${it.slug}`}
+                          tabIndex={-1}
+                          aria-hidden="true"
+                          className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50"
+                        >
                           {it.thumbnail ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={it.thumbnail} alt={it.productName} className="h-full w-full object-cover" />
+                            <img src={it.thumbnail} alt="" className="h-full w-full object-cover" />
                           ) : (
                             <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
                           )}
-                        </div>
+                        </Link>
                         <div className="min-w-0 flex-1">
-                          <div className="break-words text-sm font-medium text-stone-900">{it.productName}</div>
+                          <div className="break-words text-sm font-medium text-stone-900">
+                            <Link href={`/san-pham/${it.slug}`} className="hover:underline">
+                              {it.productName}
+                            </Link>
+                          </div>
                           <div className="break-words text-xs text-stone-600">{it.variationName}</div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="font-semibold text-stone-900">{formatVnd(it.unitPrice)}</span>
@@ -252,6 +294,9 @@ export default function CartPage() {
                                 <Zap className="h-3 w-3" aria-hidden="true" />
                                 Giá Giờ vàng
                               </span>
+                            )}
+                            {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && (
+                              <span className="text-xs text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
                             )}
                           </div>
                           {it.flashLimitNotice && <p className="mt-1 text-xs font-medium text-warning-fg">{it.flashLimitNotice}</p>}
@@ -291,7 +336,7 @@ export default function CartPage() {
                             )}
                             <button
                               type="button"
-                              onClick={() => remove.mutate(it.id)}
+                              onClick={() => removeWithUndo(it)}
                               disabled={busy}
                               aria-label={`Xóa ${it.productName} khỏi giỏ hàng`}
                               className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 ${
@@ -388,6 +433,24 @@ export default function CartPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {undoError && (
+        <p role="alert" className="mt-3 text-sm text-danger-fg">
+          {undoError}
+        </p>
+      )}
+      {removedLine && (
+        <div
+          role="status"
+          className={`fixed inset-x-3 z-30 mx-auto flex max-w-md items-center justify-between rounded-control bg-stone-900 px-4 py-2 text-sm text-stone-0 ${
+            showBar ? 'bottom-32 md:bottom-6' : 'bottom-6'
+          }`}
+        >
+          <span>Đã bỏ khỏi giỏ</span>
+          <button type="button" onClick={undoRemove} className="min-h-11 px-2 font-bold text-forest-200">
+            Hoàn tác
+          </button>
         </div>
       )}
       {showBar && (
