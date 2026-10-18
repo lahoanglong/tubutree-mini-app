@@ -93,6 +93,16 @@ describe('orderCsvChunks — người xuất không phải quản trị viên (D
     expect(csv).toContain('CTV Hoa');
   });
 
+  it('ghi chú đơn: che dãy giống SĐT / số tài khoản (giữ 3 số cuối), chữ và số ngắn giữ nguyên; quản trị viên thấy nguyên văn', async () => {
+    const note = 'Gọi 0912-345-678 hoặc ０９８７６５４３２１ trước, STK 1903 1234 5678, giao giờ hành chính, mã 12345';
+    const [o] = fakeOrders(1);
+    const staffCsv = await collect(orderCsvChunks(cursorPrisma([{ ...o!, note }], 'order').prisma, {}, { maskPhones: true }));
+    expect(staffCsv).toContain('Gọi ****-***-678 hoặc *******321 trước, STK **** **** *678, giao giờ hành chính, mã 12345');
+    for (const full of ['0912-345-678', '0987654321', '０９８７６５４３２１', '1903 1234 5678']) expect(staffCsv).not.toContain(full);
+    const adminCsv = await collect(orderCsvChunks(cursorPrisma([{ ...o!, note }], 'order').prisma, {}));
+    expect(adminCsv).toContain(note);
+  });
+
   it('quản trị viên (mặc định) vẫn thấy đủ SĐT', async () => {
     const csv = await collect(orderCsvChunks(withReferrer(), {}));
     expect(csv).toContain('0911111111');

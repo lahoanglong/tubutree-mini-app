@@ -30,3 +30,17 @@ export function maskPhoneKeepLast3(phone: string | null | undefined): string {
  * viết tách (`0912-345-678`, `0912,345,678`, `1903 1234 5678`). Kiểm trên chuỗi đã chuẩn hoá NFKC.
  */
 export const PHONE_LIKE_RUN = /\p{Nd}(?:[\s.,\-_/]{0,2}\p{Nd}){7,}/u;
+
+const PHONE_LIKE_RUN_ALL = new RegExp(PHONE_LIKE_RUN.source, 'gu');
+
+/** Chữ tự do (ghi chú đơn): mỗi dãy giống SĐT / số tài khoản chỉ giữ 3 chữ số cuối, ký tự cách giữ nguyên (`0912-345-678` → `****-***-678`). */
+export function maskPhoneLikeRuns(text: string): string {
+  return text.normalize('NFKC').replace(PHONE_LIKE_RUN_ALL, (run) => {
+    let keep = 3;
+    return [...run]
+      .reverse()
+      .map((ch) => (/\p{Nd}/u.test(ch) ? (keep-- > 0 ? ch : '*') : ch))
+      .reverse()
+      .join('');
+  });
+}

@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
-import { maskPhoneKeepLast3 } from '../../common/mask-pii';
+import { maskPhoneKeepLast3, maskPhoneLikeRuns } from '../../common/mask-pii';
 import { OPEN_REFUND_FOR_EXPORT } from '../orders/refund-queue';
 import { orderPlatformLabel, orderSourceLabel } from './order-channel';
 
@@ -181,7 +181,7 @@ function orderRow(o: ExportOrder, referrers: ReadonlyMap<string, Referrer>, mask
     text(o.pancakeOrderId),
     o.deliveredAt ? formatVnDateTime(o.deliveredAt) : '',
     o.hasRecyclingPickup ? ['Có', o.gomdonStatus ?? '', o.gomdonPartnerCode ?? ''].filter(Boolean).join(' · ') : '',
-    o.note ?? '',
+    maskPhones && o.note ? maskPhoneLikeRuns(o.note) : (o.note ?? ''),
     orderPlatformLabel(o.platform),
     orderSourceLabel(o.source),
     referrer?.fullName ?? '',

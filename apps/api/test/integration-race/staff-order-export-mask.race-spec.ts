@@ -61,6 +61,7 @@ describe('CSV đơn có bộ lọc: che SĐT khi người xuất không phải A
       platform: 'miniapp',
       paymentStatus: 'PAID',
       shippingAddress,
+      note: 'Gọi 0912-345-678 trước khi giao',
     });
     const outOfFilter = await createOrder(prisma, { code: `ITX${tok}R`, userId: buyer.id, paymentStatus: 'UNPAID', shippingAddress });
     const q = { search: tok, kind: 'ctv' as const, payment: 'PAID' as const, platform: 'miniapp' as const };
@@ -73,10 +74,12 @@ describe('CSV đơn có bộ lọc: che SĐT khi người xuất không phải A
       expect(staffCsv).not.toContain(p);
       expect(staffCsv).toContain(masked(p));
     }
+    expect(staffCsv).toContain('Gọi ****-***-678 trước khi giao');
 
     const adminCsv = await exportAs('ADMIN', q);
     expect(adminCsv).toContain(inFilter.code);
     expect(adminCsv).not.toContain(outOfFilter.code);
     for (const p of [buyerPhone, recipientPhone, ctvPhone]) expect(adminCsv).toContain(p);
+    expect(adminCsv).toContain('Gọi 0912-345-678 trước khi giao');
   });
 });
