@@ -13,10 +13,12 @@ import { vnDateParts } from '../../src/common/vn-time';
 import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 /**
- * D3-03: CTV được duyệt lên đại lý (role DEALER) giữ gian hàng CTV và hoa hồng đã ghi. Màn hoa hồng, picker và rút tiền phải dùng
- * lại đúng sổ hiện có (commissions, payouts, wallet_transactions) như CTV: rút song song không vượt số dư, thuế TNCN giữ đúng một lần.
+ * D3-03: CTV được duyệt lên đại lý (role DEALER) giữ gian hàng CTV và hoa hồng đã ghi.
+ * Ca đầu là ca duy nhất phụ thuộc mã mới của D3-03 (hasAffiliateAccess, picker, getOrCreateMine): bỏ nhánh đại lý thì ca đó đỏ.
+ * Ba ca còn lại gọi hàm rút tiền không đổi nên xanh cả trước D3-03; chúng khoá hành vi "đường rút không phụ thuộc vai trò"
+ * (thêm kiểm vai trò hoặc nhánh riêng cho đại lý vào requestPayout/dashboard là đỏ), không chứng minh mã mới.
  */
-describe('Đại lý có gian hàng CTV hoặc hoa hồng xem và rút hoa hồng (real Postgres)', () => {
+describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công cụ CTV; đường rút hoa hồng không phụ thuộc vai trò (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let affiliate: AffiliateService;
@@ -111,7 +113,7 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng xem và rút hoa hồn
     );
   });
 
-  it('đại lý rút 3 triệu về Ví 4 lần song song (khoá khác nhau) → đúng 1 lần thắng, khấu trừ TNCN một lần, số dư ví == tổng sổ', async () => {
+  it('khoá hành vi: vai trò DEALER rút 3 triệu về Ví 4 lần song song (khoá khác nhau) → đúng 1 lần thắng, khấu trừ TNCN một lần, số dư ví == tổng sổ', async () => {
     const d = await dealer({ store: true });
     await approvedCommission(d.id, 1_500_000);
     await approvedCommission(d.id, 1_500_000);
@@ -142,7 +144,7 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng xem và rút hoa hồn
     expect(statement.totals).toMatchObject({ grossAmount: 3_000_000, taxWithheld: 300_000, netAmount: 2_700_000 });
   });
 
-  it('đại lý chỉ còn hoa hồng (không gian hàng) rút về ngân hàng 4 lần song song → đúng 1 lệnh REQUESTED, hoa hồng gắn lô một lần', async () => {
+  it('khoá hành vi: vai trò DEALER chỉ còn hoa hồng (không gian hàng) rút về ngân hàng 4 lần song song → đúng 1 lệnh REQUESTED, hoa hồng gắn lô một lần', async () => {
     const d = await dealer();
     await approvedCommission(d.id, 600_000);
     await approvedCommission(d.id, 400_000);
@@ -164,7 +166,7 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng xem và rút hoa hồn
     expect((await ledgerOf(d.id)).balance).toBe(0);
   });
 
-  it('Ví và ngân hàng chạy chồng nhau: tổng gross các lệnh rút đúng bằng hoa hồng đã duyệt, không ai rút trùng', async () => {
+  it('khoá hành vi: vai trò DEALER rút Ví và ngân hàng chạy chồng nhau → tổng gross các lệnh rút đúng bằng hoa hồng đã duyệt, không ai rút trùng', async () => {
     const d = await dealer({ store: true });
     await approvedCommission(d.id, 800_000);
     await approvedCommission(d.id, 700_000);
