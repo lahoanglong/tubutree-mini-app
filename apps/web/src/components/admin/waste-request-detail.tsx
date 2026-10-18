@@ -170,10 +170,13 @@ const parseQty = (raw: string, max: number): number | null => {
 function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const refresh = useRefresh(r.id);
   const { confirm, dialog } = useConfirm();
-  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, String(l.declaredQty)])));
+  // The server takes a hazardous item only as 0 with WRONG_TYPE (waste-confirm-lines), so those lines start there and stay locked.
+  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.hazardous ? '0' : String(l.declaredQty)])));
   // Last valid count per line, so the points line never shows NaN while a field is mid-edit.
-  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.declaredQty])));
-  const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
+  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.hazardous ? 0 : l.declaredQty])));
+  const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>(() =>
+    Object.fromEntries(r.lines.filter((l) => l.hazardous).map((l) => [l.itemId, 'WRONG_TYPE' as const])),
+  );
   const [weight, setWeight] = useState('');
   const [result, setResult] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -247,6 +250,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                 aria-label={`Thực nhận ${l.itemName}`}
                 className={`${FIELD_CLASS} w-24`}
                 value={received[l.itemId] ?? ''}
+                disabled={l.hazardous}
                 onChange={(e) => setQty(l.itemId, l.declaredQty, e.target.value)}
               />
               {isShort && (
@@ -255,12 +259,14 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                   aria-label={`Lý do thiếu ${l.itemName}`}
                   className={FIELD_CLASS}
                   value={reasons[l.itemId] ?? ''}
+                  disabled={l.hazardous}
                   onChange={(e) => setReasons((prev) => ({ ...prev, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
                 >
                   <option value="">Chọn lý do</option>
                   {SHORTFALL_KEYS.map((k) => <option key={k} value={k}>{WASTE_SHORTFALL_REASON_LABELS[k]}</option>)}
                 </select>
               )}
+              {l.hazardous && <span className="text-xs text-danger-fg">Không nhận món này</span>}
               {qty === null && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
             </li>
           );

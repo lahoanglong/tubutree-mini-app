@@ -7,6 +7,7 @@ import { WASTE_REQUEST_FULL_INCLUDE, toRequestDetail } from '../customer/waste-r
 
 export const WASTE_ADMIN_DETAIL_INCLUDE = {
   ...WASTE_REQUEST_FULL_INCLUDE,
+  lines: { orderBy: { id: 'asc' }, include: { item: { select: { hazardous: true } } } },
   user: { select: { id: true, fullName: true, phone: true } },
 } satisfies Prisma.WasteRequestInclude;
 
@@ -21,8 +22,11 @@ export function toAdminRequestDetail(
   events?: AdminWasteEventDTO[],
 ): WasteRequestAdminDetailDTO {
   const v = customerView(row.user, viewerIsAdmin, viewerIsAdmin);
+  const base = toRequestDetail(row, pointAvailable);
   return {
-    ...toRequestDetail(row, pointAvailable),
+    ...base,
+    // The live item flag, like the confirm check: the line snapshot does not freeze it.
+    lines: base.lines.map((l, i) => ({ ...l, hazardous: row.lines[i]!.item.hazardous })),
     customerName: v.name,
     customerPhone: v.phone,
     ...(viewerIsAdmin ? { userId: row.userId } : {}),

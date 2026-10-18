@@ -154,8 +154,8 @@ export const wasteRequestDetail = (over: Partial<WasteRequestAdminDetailDTO> = {
   pointName: 'Kho Tubu HCM',
   orderCode: null,
   lines: [
-    { itemId: 'i1', itemName: 'Thùng carton cũ', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, declaredQty: 10, receivedQty: null, shortfallReason: null, pointsAwarded: null },
-    { itemId: 'i3', itemName: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, declaredQty: 50, receivedQty: null, shortfallReason: null, pointsAwarded: null },
+    { itemId: 'i1', itemName: 'Thùng carton cũ', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, declaredQty: 10, receivedQty: null, shortfallReason: null, pointsAwarded: null, hazardous: false },
+    { itemId: 'i3', itemName: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, declaredQty: 50, receivedQty: null, shortfallReason: null, pointsAwarded: null, hazardous: false },
   ],
   point: null,
   pointAvailable: true,
