@@ -214,7 +214,7 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
       const ctv = await createUser(prisma, { role: 'AFFILIATE' });
       const buyer = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
       const lip = await variation(95_000, 10);
-      const powder = await variation(185_000, null);
+      const powder = await variation(185_000, 0);
       const order = await createOrder(prisma, {
         userId: buyer.id,
         referrerUserId: ctv.id,

@@ -21,6 +21,7 @@ const keysOf = (rows: readonly { key: string }[]) => rows.map((r) => r.key);
 const APPROVED_LOADED_KEYS = [
     'affiliate.attribution_days',
     'affiliate.commission_eligible_roles',
+    'affiliate.default_rate_pct',
     'affiliate.hold_days',
     'affiliate.max_rate_pct',
     'affiliate.min_withdraw_bank',
@@ -281,7 +282,7 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
       systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
-    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const prisma = { systemConfig: tx.systemConfig, $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
     const service = new SystemConfigService(prisma);
     const rows = [...selectBusinessConfigs(SYSTEM_CONFIGS), ...selectReferenceConfigs(SYSTEM_CONFIGS).filter((r) => EXTRA_CONFIGS.some((e) => e.key === r.key))];
     expect(rows.map((r) => r.key).filter((k) => !SystemConfigService.hasWriteRule(k))).toEqual([]);

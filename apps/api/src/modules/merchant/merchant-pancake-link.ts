@@ -208,9 +208,14 @@ export async function linkTubuFulfilledVariation(
     });
   }
 
+  // Khoá biến thể rồi mới đọc % để giá trị lưu khớp giá trị bị xoá ngay dưới (admin đặt % song song xếp hàng chờ).
+  const [locked] = await tx.$queryRaw<{ affiliateRate: Prisma.Decimal | null }[]>`
+    SELECT "affiliateRate" FROM "variations" WHERE "id" = ${target.variationId} AND "productId" = ${target.productId} FOR NO KEY UPDATE`;
+  const rateAtLink = locked?.affiliateRate ?? null;
   const moved = await tx.variation.updateMany({
     where: { id: target.variationId, productId: target.productId },
-    data: { productId: product.id },
+    // Xoá % hoa hồng CTV đã đặt khi còn là hàng Tubu: hàng đối tác chỉ có hoa hồng khi admin đặt lại riêng (gỡ liên kết trả % cũ).
+    data: { productId: product.id, affiliateRate: null },
   });
   if (moved.count === 0) throw new ConflictException(LINK_TAKEN_MESSAGE);
 
@@ -234,6 +239,8 @@ export async function linkTubuFulfilledVariation(
       originDeactivated: deactivate,
       takeover: target.requiresAdminConfirm,
       stockAtLink: target.stock,
+      affiliateRateAtLink: rateAtLink,
+      affiliateRateCaptured: true,
       linkedBy: opts.adminId,
     },
   });
@@ -267,7 +274,7 @@ export async function unlinkTubuFulfilledVariation(
   await tx.$queryRaw`SELECT "id" FROM "products" WHERE "id" = ${productId} FOR NO KEY UPDATE`;
   const link = await tx.merchantPancakeLink.findFirst({
     where: { productId, unlinkedAt: null },
-    select: { id: true, variationId: true, originProductId: true, originDeactivated: true },
+    select: { id: true, variationId: true, originProductId: true, originDeactivated: true, affiliateRateAtLink: true, affiliateRateCaptured: true },
   });
   if (!link) return null;
   if (!link.originProductId) {
@@ -285,7 +292,9 @@ export async function unlinkTubuFulfilledVariation(
 
   await tx.variation.updateMany({
     where: { id: link.variationId, productId },
-    data: { productId: link.originProductId },
+    // Về lại sản phẩm gốc: trả đúng % lúc liên kết (NULL = theo mặc định, 0 = cố ý không hoa hồng), bỏ % đặt khi ở gian hàng đối tác.
+    // Liên kết có từ trước cột lưu % thì không đụng.
+    data: { productId: link.originProductId, ...(link.affiliateRateCaptured ? { affiliateRate: link.affiliateRateAtLink } : {}) },
   });
   const product = await tx.product.findUniqueOrThrow({
     where: { id: productId },

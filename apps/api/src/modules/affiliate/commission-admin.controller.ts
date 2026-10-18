@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
@@ -23,6 +23,13 @@ export class SetCommissionRateDto {
   @IsNumber({ allowNaN: false, allowInfinity: false }) rate!: number;
 }
 
+/** `rate: null` xoá % riêng của biến thể/sản phẩm (về mức mặc định); chỉ hai route PUT nhận. */
+export class SetOrClearCommissionRateDto {
+  @ValidateIf((o: { rate?: unknown }) => o.rate !== null)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  rate!: number | null;
+}
+
 export class ImportCommissionRatesDto {
   @IsString() @IsNotEmpty() @MaxLength(RATE_CSV_MAX_LENGTH) csv!: string;
 }
@@ -40,12 +47,12 @@ export class CommissionAdminController {
   }
 
   @Put('commission-rates/variations/:id')
-  setVariation(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: SetCommissionRateDto) {
+  setVariation(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: SetOrClearCommissionRateDto) {
     return this.commission.setVariationRate(adminId, id, dto.rate);
   }
 
   @Put('commission-rates/products/:id')
-  setProduct(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: SetCommissionRateDto) {
+  setProduct(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: SetOrClearCommissionRateDto) {
     return this.commission.setProductRate(adminId, id, dto.rate);
   }
 

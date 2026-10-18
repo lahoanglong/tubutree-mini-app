@@ -46,6 +46,7 @@ const PAGE: CommissionRatesPage = {
   ],
   nextCursor: null,
   maxRate: 50,
+  defaultRate: 8,
   summary: { missing: 2, missingTubu: 1 },
 };
 
@@ -82,11 +83,14 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(container.textContent).toContain('Đang tải…');
     await flush();
     const t = container.textContent ?? '';
-    expect(t).toContain('2 biến thể đang bán chưa có % (CTV nhận 0đ)');
+    expect(t).toContain('2 biến thể đang bán chưa có % riêng');
+    expect(t).toContain('Mức mặc định khi để trống: 8%');
     expect(t).toContain('10 nghĩa là 10%');
     expect(container.querySelectorAll('[data-commission-product]')).toHaveLength(2);
     const rows = container.querySelectorAll<HTMLElement>('[data-commission-variation]');
-    expect(rows[0]!.textContent).toContain('Chưa có %');
+    // NULL hiện tỉ lệ hiệu lực: hàng Tubu theo mức mặc định 8%, hàng đối tác 0đ.
+    expect(rows[0]!.textContent).toContain('Mặc định 8% ≈ 8.000đ/sp');
+    expect(rows[2]!.textContent).toContain('Bị chặn: 0đ');
     expect(rows[0]!.textContent).toContain('Giá sỉ: Vàng 80.000');
     expect(rows[1]!.textContent).toContain('7,5%');
     expect(t).toContain('Gian hàng đối tác');
@@ -114,6 +118,42 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     await flush();
     const rows = open.container.querySelectorAll<HTMLElement>('[data-commission-variation]');
     expect(rows[1]!.textContent).toContain('≈ 12.000');
+  });
+
+  it('"Về mặc định": chỉ hiện ở biến thể có % riêng, hỏi xác nhận nêu mức mặc định, đồng ý → PUT rate null', async () => {
+    const m = stub({ '/admin/commission-rates/variations/v2': { body: { id: 'v2', sku: 'NRC-1L', affiliateRate: null } } });
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    const rows = container.querySelectorAll<HTMLElement>('[data-commission-variation]');
+    expect(rows[0]!.textContent).not.toContain('Về mặc định');
+    click(byText(rows[1]!, 'button', 'Về mặc định'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('sẽ trả 8% mặc định');
+    answerConfirm(false);
+    await flush();
+    expect(m.calls.some((c) => c.url.includes('/variations/v2'))).toBe(false);
+    click(byText(rows[1]!, 'button', 'Về mặc định'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(bodyOf(m, '/variations/v2')).toEqual({ rate: null });
+    expect(m.calls.find((c) => c.url.includes('/variations/v2'))?.init?.method).toBe('PUT');
+  });
+
+  it('hàng đối tác không bị chặn mà % để trống: "Hàng đối tác chưa đặt %: 0đ"', async () => {
+    stub({}, { ...PAGE, items: [{ ...PAGE.items[1]!, affiliateBlocked: false }] });
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    expect(container.querySelector<HTMLElement>('[data-commission-variation]')!.textContent).toContain('Hàng đối tác chưa đặt %: 0đ');
+  });
+
+  it('sản phẩm bị chặn hoa hồng mà % để trống: ghi "Bị chặn: 0đ", không ghi mặc định', async () => {
+    stub({}, { ...PAGE, items: [{ ...PAGE.items[0]!, affiliateBlocked: true }] });
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    const row = container.querySelector<HTMLElement>('[data-commission-variation]')!;
+    expect(row.textContent).toContain('Bị chặn: 0đ');
+    expect(row.textContent).not.toContain('Mặc định 8%');
   });
 
   it('lưu xong, danh sách tải lại với mức mới: "Đã lưu" vẫn hiện, ô nhập theo mức mới', async () => {
@@ -220,7 +260,7 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(bodyOf(m, '/import/preview')).toEqual({ csv: 'NRC-500,10\nZZZ,5' });
     const rows = container.querySelectorAll<HTMLElement>('[data-import-row]');
     expect([...rows].map((r) => r.dataset.importRow)).toEqual(['NOT_FOUND', 'OK']);
-    expect(rows[1]!.textContent).toContain('Chưa có % → 10%');
+    expect(rows[1]!.textContent).toContain('mặc định → 10%');
 
     typeInto(ta, 'NRC-500,10\nZZZ,6');
     expect(byText(container, 'button', 'Áp dụng 1 dòng')).toBeNull();

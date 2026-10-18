@@ -543,3 +543,20 @@ describe('SystemConfigService.set — freeship đơn đầu và link Mini App ch
     }
   });
 });
+
+describe('SystemConfigService.set — mặc định hoa hồng không vượt trần', () => {
+  const svc = (values: Record<string, unknown>) => {
+    const { prisma } = makePrisma({ findUnique: jest.fn(async ({ where }: { where: { key: string } }) => (where.key in values ? { value: values[where.key] } : null)) });
+    return new SystemConfigService(prisma);
+  };
+
+  it('affiliate.default_rate_pct lớn hơn max_rate_pct hiện hành → 400', async () => {
+    await expect(svc({ 'affiliate.max_rate_pct': 10 }).set('affiliate.default_rate_pct', 12, 'a')).rejects.toThrow('vượt trần 10%');
+    await expect(svc({ 'affiliate.max_rate_pct': 10 }).set('affiliate.default_rate_pct', 10, 'a')).resolves.toBeUndefined();
+  });
+
+  it('hạ max_rate_pct xuống dưới mức mặc định đang áp → 400', async () => {
+    await expect(svc({ 'affiliate.default_rate_pct': 8 }).set('affiliate.max_rate_pct', 5, 'a')).rejects.toThrow('thấp hơn mức mặc định 8%');
+    await expect(svc({}).set('affiliate.max_rate_pct', 8, 'a')).resolves.toBeUndefined();
+  });
+});

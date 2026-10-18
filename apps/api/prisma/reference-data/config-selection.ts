@@ -85,6 +85,7 @@ export interface ExtraConfig extends ConfigSeed {
 const FEED = 'src/modules/feed/community-feed.service.ts';
 const PUBLIC_CONFIG = 'src/modules/system-config/public-config.ts';
 const COMMISSION_RATE = 'src/modules/affiliate/commission-rate-csv.ts';
+const COMMISSION_DEFAULT_RATE = 'src/modules/affiliate/commission-rate.ts';
 const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
 const STOREFRONT_CONFIG = 'src/modules/storefront/storefront-config.ts';
 const PANCAKE_CATEGORY_MAP = 'src/modules/integrations/pancake/pancake-sync.service.ts';
@@ -101,6 +102,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.public_preview', value: true, category: 'community', description: 'true = khách chưa đăng nhập được xem trước vài bài cộng đồng đã đăng (chỉ đọc, thích/bình luận/đăng bài vẫn cần đăng nhập); false = phải đăng nhập mới thấy', fallbackSource: { file: FEED, text: 'get<unknown>(PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_DEFAULT)' } },
   { key: 'home.new_customer_layout', value: true, category: 'home', description: 'Trang chủ Mini App: cờ chỉ đổi thứ tự khối, không bật/tắt khối. true = với khách chưa có đơn, "Quà khách mới" và danh mục lên ngay sau ô tìm và dải đơn, trước giờ vàng; false = giữ thứ tự cũ. Khối "Quà khách mới" luôn hiện với khách mới ở cả hai trường hợp', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('home.new_customer_layout', true)" } },
   { key: 'affiliate.max_rate_pct', value: 50, category: 'affiliate', description: 'Trần % hoa hồng CTV admin được đặt cho một biến thể (phần trăm, 50 = 50%)', fallbackSource: { file: COMMISSION_RATE, text: 'export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;' } },
+  { key: 'affiliate.default_rate_pct', value: 8, category: 'affiliate', description: 'Hoa hồng CTV (phần trăm, 8 = 8%) cho biến thể chưa có % riêng; % đặt riêng cho biến thể (kể cả 0) luôn thắng. Hàng gian hàng đối tác chưa đặt % riêng và sản phẩm bị chặn CTV vẫn 0đ', fallbackSource: { file: COMMISSION_DEFAULT_RATE, text: 'export const DEFAULT_AFFILIATE_DEFAULT_RATE_PCT = 8;' } },
   { key: 'affiliate.commission_eligible_roles', value: ['AFFILIATE', 'DEALER'], category: 'affiliate', description: 'Vai trò được ghi công đơn và hưởng hoa hồng CTV (thêm "CUSTOMER" nếu khách thường chia sẻ cũng được hưởng)', fallbackSource: { file: COMMISSION_ROLES, text: 'DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];' } },
   { key: 'storefront.require_approval', value: true, category: 'storefront', description: 'Bật thì gian hàng CTV phải được admin duyệt lần đầu mới hiện trên trang công khai (tắt: hiện ngay khi CTV đăng)', fallbackSource: { file: STOREFRONT_CONFIG, text: 'export const DEFAULT_STOREFRONT_REQUIRE_APPROVAL = true;' } },
   { key: 'storefront.subdomain_enabled', value: false, category: 'storefront', description: 'Bật khi DNS wildcard và chứng chỉ đã xong: gian hàng được hiện và chia sẻ link <tên>.tubutree.com (tắt: chỉ link /s/<mã>)', fallbackSource: { file: STOREFRONT_CONFIG, text: 'export const DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED = false;' } },

@@ -43,9 +43,14 @@ export type RateCsvRow = {
   /** Ô % đúng như admin gõ. */
   input: string;
   rate: number | null;
+  /** Ô % là từ khoá "mặc định": xoá % riêng của biến thể (rate = null) thay vì đặt số. */
+  clear: boolean;
   /** Lỗi định dạng (thiếu cột, không phải số…), null = đọc được. Trần và SKU kiểm sau, ở service. */
   problem: string | null;
 };
+
+/** Từ khoá ở ô % để đưa biến thể về mức mặc định (xoá % riêng). */
+export const CLEAR_KEYWORDS: ReadonlySet<string> = new Set(['mặc định', 'mac dinh', 'macdinh', 'default']);
 
 /** Ô đầu của dòng tiêu đề Excel hay gặp. So nguyên ô (không so tiền tố) để SKU thật như "MA001" không bị coi là tiêu đề. */
 const HEADER_SKU_CELLS = new Set(['sku', 'mã', 'ma', 'mã sku', 'ma sku', 'mã hàng', 'ma hang', 'mã sp', 'ma sp']);
@@ -70,7 +75,7 @@ export function parseRateCsv(csv: string): RateCsvRow[] {
     seenData = true;
     if (isFirst && HEADER_SKU_CELLS.has(sku.toLowerCase()) && !/^\d/.test(cells[1] ?? '')) return;
 
-    const row: RateCsvRow = { line: idx + 1, sku, input, rate: null, problem: null };
+    const row: RateCsvRow = { line: idx + 1, sku, input, rate: null, clear: false, problem: null };
     if (!sku) row.problem = 'thiếu SKU ở cột đầu';
     else if (cells.length < 2 || cells[1] === '') row.problem = 'thiếu cột % (dạng "sku,10")';
     else if (cells.length > 2) {
@@ -81,7 +86,8 @@ export function parseRateCsv(csv: string): RateCsvRow[] {
     } else {
       const cell = (cells[1] ?? '').replace(/%$/, '').trim();
       const normalized = cell.replace(',', '.');
-      if (!/^\d+(\.\d+)?$/.test(normalized)) row.problem = `cột % không phải số — ${RATE_INPUT_HINT}`;
+      if (CLEAR_KEYWORDS.has(cell.toLowerCase())) row.clear = true;
+      else if (!/^\d+(\.\d+)?$/.test(normalized)) row.problem = `cột % không phải số — ${RATE_INPUT_HINT}`;
       else row.rate = Number(normalized);
     }
     rows.push(row);

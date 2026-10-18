@@ -31,6 +31,8 @@ export interface CommissionRatesPage {
   items: CommissionProduct[];
   nextCursor: string | null;
   maxRate: number;
+  /** % hoa hồng cho biến thể chưa đặt riêng (affiliate.default_rate_pct). */
+  defaultRate: number;
   /** missing: biến thể đang bán chưa có %; missingTubu: phần hàng Tubu (phần "áp cho chưa có %" sẽ đổi). */
   summary: { missing: number; missingTubu: number };
 }
@@ -90,8 +92,9 @@ export const listCommissionRates = (p: { q?: string; missing?: boolean; cursor?:
   if (p.cursor) sp.set('cursor', p.cursor);
   return apiFetch<CommissionRatesPage>(`/admin/commission-rates?${sp.toString()}`);
 };
-export const setVariationRate = (variationId: string, rate: number) =>
-  apiFetch<{ id: string; sku: string; affiliateRate: number }>(`/admin/commission-rates/variations/${encodeURIComponent(variationId)}`, {
+/** `rate = null`: xoá % riêng, biến thể về mức mặc định. */
+export const setVariationRate = (variationId: string, rate: number | null) =>
+  apiFetch<{ id: string; sku: string; affiliateRate: number | null }>(`/admin/commission-rates/variations/${encodeURIComponent(variationId)}`, {
     method: 'PUT',
     body: { rate },
   });

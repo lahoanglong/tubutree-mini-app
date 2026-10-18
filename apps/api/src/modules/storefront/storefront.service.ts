@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/storefront-sales';
 import { hasAffiliateAccess } from '../affiliate/affiliate-access';
+import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
 import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
@@ -232,20 +233,16 @@ export class StorefrontService {
       skip,
       select: {
         id: true, name: true, slug: true, thumbnail: true, brand: true,
-        basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true,
+        basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, storefrontId: true,
         // CHỈ tính maxAffiliateRate trên variation đang bán (isActive) — variation ngừng bán
         // không được tính vào, tránh hiện %HH cao hơn thực tế CTV có thể đạt được.
         variations: { where: { isActive: true }, select: { affiliateRate: true } },
       },
     });
+    const defaultPct = await loadDefaultRate(this.config);
     return products.map((p) => {
-      const { variations, ...rest } = p;
-      return {
-        ...rest,
-        maxAffiliateRate: variations.reduce(
-          (m, v) => Math.max(m, v.affiliateRate ? Number(v.affiliateRate) : 0), 0,
-        ),
-      };
+      const { variations, storefrontId, ...rest } = p;
+      return { ...rest, maxAffiliateRate: maxResolvedRate(variations, { storefrontId }, defaultPct) };
     });
   }
 
