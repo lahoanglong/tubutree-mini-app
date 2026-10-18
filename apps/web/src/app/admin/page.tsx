@@ -141,7 +141,7 @@ import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
-import { RefillTab } from '@/components/admin/refill-tab';
+import { WasteTab } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
@@ -162,7 +162,7 @@ import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 type Tab =
   | 'inbox'
   | 'opsHealth'
-  | 'refill'
+  | 'waste'
   | 'attendance'
   | 'dashboard'
   | 'dealers'
@@ -250,7 +250,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'community', label: 'Cộng đồng' },
       { k: 'subscriptions', label: 'Gói định kỳ' },
       { k: 'posCredits', label: 'Tích điểm tại quầy' },
-      { k: 'refill', label: 'Đổi vỏ chai' },
+      { k: 'waste', label: 'Đổi rác' },
     ],
   },
   {
@@ -285,10 +285,10 @@ const DEFAULT_TAB: Tab = 'inbox';
 
 /**
  * Mục nhân viên (STAFF) mở được theo nhóm việc — khớp các route @AllowStaff ở API (staff-permissions.matrix.spec.ts);
- * mọi nhân viên đều duyệt được đổi vỏ chai (route /refill/admin vốn mở cho STAFF).
+ * mọi nhân viên đều mở được tab Đổi rác (hàng đợi kho, màn đếm và quà chờ nhận; route /admin/waste/requests và /admin/waste/gift-redemptions mở cho STAFF, spec 16.2).
  */
 const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
-  BASE: ['refill'],
+  BASE: ['waste'],
   CSKH: ['inbox', 'orders', 'externalOrders', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
   MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
@@ -433,7 +433,7 @@ export default function AdminPage() {
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
       payouts: 'payouts',
-      refillPending: 'refill',
+      refillPending: 'waste',
     };
     setTab(target[k]);
   };
@@ -525,7 +525,7 @@ export default function AdminPage() {
           {active === 'users' && isAdmin && <AccountDeletionPanel />}
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
-          {active === 'refill' && <RefillTab isAdmin={isAdmin} />}
+          {active === 'waste' && <WasteTab isAdmin={isAdmin} />}
           {active === 'config' && <ConfigTab />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}

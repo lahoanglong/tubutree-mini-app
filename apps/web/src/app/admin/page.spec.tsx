@@ -148,7 +148,14 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       problems: [],
     }),
     listLiveAttendance: async () => [],
-    listPendingRefills: async () => [],
+    getWasteOverview: () => new Promise(() => undefined),
+    listWasteItems: async () => [],
+    listWastePoints: async () => [],
+    listWasteRequests: async () => ({ rows: [], nextCursor: null }),
+    listWasteUnmatched: async () => [],
+    listWasteGifts: async () => [],
+    listGiftRedemptions: async () => [],
+    getWasteUserFlags: async (userId: string) => ({ userId, shipLockedAt: null, shipUnlockedAt: null, blockedAt: null, reason: null, setByUserId: null, updatedAt: null }),
     downloadOrdersCsv: async (...args: unknown[]) => {
       mocks.downloadOrders(...args);
       return { filename: 'don-hang-2026-10-14.csv', bytes: 10 };
@@ -359,10 +366,21 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ & quà đổi điểm']);
     expect(group('Tổng quan')).toContain('Báo cáo');
     expect(group('Khách hàng')).toContain('Cộng đồng');
+    expect(group('Khách hàng')).toContain('Đổi rác');
+    expect(group('Khách hàng')).not.toContain('Đổi vỏ chai');
+    expect(items.map((b) => b.textContent)).not.toContain('Đổi vỏ chai');
     const current = items.find((b) => b.getAttribute('aria-current') === 'page')!;
     expect(current.textContent).toBe('Việc cần xử lý');
     expect(current.className).toContain('bg-forest-100');
     expect(items.filter((b) => b.className.includes('bg-forest-100'))).toHaveLength(1);
+  });
+
+  it('tab Đổi rác luôn hiện với ADMIN dù waste.enabled tắt (spec 11.7, 16.2)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=waste');
+    const { container } = await mount();
+    const btn = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Đổi rác')!;
+    expect(btn.getAttribute('aria-current')).toBe('page');
+    expect([...container.querySelectorAll('h2')].some((h) => h.textContent === 'Đổi rác lấy quà')).toBe(true);
   });
 
   it('trang chủ mặc định là "Việc cần xử lý"; bấm một mục ghi ?tab= lên URL, link cũ ?tab=orders&pancake=attention vẫn mở đúng chỗ', async () => {
@@ -384,10 +402,10 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     await flush();
     const drawer = document.body.querySelector('[role="dialog"]')!;
     expect(drawer.querySelectorAll('[role="group"]')).toHaveLength(9);
-    click([...drawer.querySelectorAll('button')].find((b) => b.textContent === 'Đổi vỏ chai')!);
+    click([...drawer.querySelectorAll('button')].find((b) => b.textContent === 'Đổi rác')!);
     await flush();
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-    expect(window.location.search).toBe('?tab=refill');
+    expect(window.location.search).toBe('?tab=waste');
   });
 
   it('tab Hoàn tiền khách (Q-01) có trong thanh tab, bấm vào mở màn hoàn tiền và ghi tab lên URL', async () => {
@@ -1961,7 +1979,7 @@ describe('admin/page — khung cuộn bảng focus được bằng bàn phím', 
 
 // PG-3 (axe heading-order): tiêu đề form của các tab sau h1 "Quản trị Tubu Tree" phải là h2, không nhảy h1 -> h3.
 describe('admin/page — thứ bậc heading của các tab', () => {
-  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders', 'inbox', 'opsHealth', 'refill', 'attendance'])(
+  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders', 'inbox', 'opsHealth', 'waste', 'attendance'])(
     'tab %s: không nhảy cấp heading',
     async (tab) => {
       window.history.replaceState(null, '', `/admin?tab=${tab}`);
@@ -2001,18 +2019,18 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
     mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
     const { container } = await mount();
-    expect(navItems(container)).toEqual(['Việc cần xử lý', 'Đơn hàng', 'Đổi / Trả', 'Đổi vỏ chai']);
+    expect(navItems(container)).toEqual(['Việc cần xử lý', 'Đơn hàng', 'Đổi / Trả', 'Đổi rác']);
     expect(mocks.refundsCalls).toBe(0);
     expect(mocks.inbox).toHaveBeenCalled();
   });
 
-  it('nhân viên không có nhóm việc: chỉ còn Đổi vỏ chai; link tới mục không được phép rơi về mục đầu tiên', async () => {
+  it('nhân viên không có nhóm việc: chỉ còn Đổi rác; link tới mục không được phép rơi về mục đầu tiên', async () => {
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
     mocks.access = { role: 'STAFF', staffPermissions: [] };
     window.history.replaceState(null, '', '/admin?tab=config');
     const { container } = await mount();
-    expect(navItems(container)).toEqual(['Đổi vỏ chai']);
-    expect(container.textContent).toContain('Đổi vỏ chai chờ duyệt');
+    expect(navItems(container)).toEqual(['Đổi rác']);
+    expect(container.textContent).toContain('Đổi rác lấy quà');
     expect(container.textContent).not.toContain('Tất cả tham số');
   });
 
@@ -2123,7 +2141,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Việc cần xử lý',
       'Báo cáo',
       'Cộng đồng',
-      'Đổi vỏ chai',
+      'Đổi rác',
       'Voucher',
       'Flash Sale',
       'Câu hỏi thường gặp',
@@ -2147,7 +2165,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Thưởng đại lý',
       'Đại lý & công nợ',
       'Duyệt yêu cầu rút tiền',
-      'Đổi vỏ chai',
+      'Đổi rác',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
   });

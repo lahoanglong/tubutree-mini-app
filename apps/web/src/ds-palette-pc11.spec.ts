@@ -47,6 +47,7 @@ const MIGRATED = [
   'components/geo-picker.tsx',
   'components/admin/user-picker.tsx',
   'components/admin/product-picker.tsx',
+  'components/admin/waste-tab.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
