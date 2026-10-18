@@ -127,6 +127,8 @@ Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
 
 Vì sao chọn như vậy: (1) trần ngày của món (carton 10 thùng, nilon 10 túi, vỏ sữa 50 vỏ) chỉ được kiểm khi tạo yêu cầu Mang tới điểm nhận, nhưng số đã dùng trong ngày gồm yêu cầu của mọi cách giao; T3 đã dùng hết 10 thùng carton của ngày, nên bước 7.1 dùng món khác (nilon, T3 và T4 không đụng tới). (2) Tổng điểm ước tính cả đợt thử là 10.000 + 10.000 + 3.000 + 15.000 = 38.000, dưới trần `waste.customer_monthly_cap_points` = 60.000 của một khách trong tháng (T4 bị huỷ ở 3.5 thì phần 10.000 được trả lại). (3) Carton dùng 10 + 15 = 25 thùng trên trần tháng 60 thùng; vỏ sữa 50 trên 300; nilon 3 trên 60. (4) Một khách mở tối đa 3 yêu cầu cùng lúc (`waste.max_open_requests` = 3): T3, T4 và một yêu cầu thử khác chạy cùng nhau vẫn vừa; làm 7.2 sau 7.1 vì yêu cầu 7.1 đã hoàn tất tại quầy.
 
+Nếu chủ shop đã bỏ món "Vỏ hộp sữa sạch" khỏi giai đoạn 1 (checklist mục 3): T4 dùng 10 túi lớn Nilon chống sốc (10 chia 1 = 10 nhóm, nhân 1.000 = 10.000 điểm). Khi đó carton và nilon đều hết trần ngày ở T3 và T4, nên làm bước 7.1 vào ngày hôm sau (trần ngày tính theo ngày tạo yêu cầu, giờ Việt Nam).
+
 ## C. Điều kiện DỪNG và gọi ai
 
 Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đơn, rồi gọi. Không sửa tay trong Cơ sở dữ liệu.
@@ -700,6 +702,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 ### 7.4 Quà (voucher và cây qua Vườn Xanh)
 
 - **Ai**: Người thử. **Ở đâu**: Mini App, Quà (`/rewards`), Quà của tôi (`/rewards/mine`).
+- **Trước khi làm**: kiểm số Điểm Xanh của Người thử. Các bước 7.1 đến 7.3 cộng tối đa 3.000 + 15.000 + 10.000 = 28.000 điểm (khi kho đã đếm và xác nhận cả ba). Voucher rẻ nhất trong danh mục gieo sẵn giá 20.000 điểm, nên đủ cho một voucher; quà TREE có giá `game.tree_points_price` (mặc định 50.000 điểm), nên chưa đủ. Chỉ đổi TREE khi số dư đủ giá; nếu không thì ghi "không thử TREE: thiếu điểm" ở bảng kết quả. Giá thật của từng quà do admin đặt ở Quản trị, Khách hàng, Đổi rác, Quà: xem lại trước khi làm.
 - **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Đổi quà TREE: cây được trồng trong Vườn Xanh.
 - **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần; quà TREE xuất hiện ở Vườn Xanh.
 - **Bằng chứng**: Phụ lục P7 (`points_transactions` của người thử: dòng điểm trừ cho từng quà).
