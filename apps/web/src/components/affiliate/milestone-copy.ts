@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 
 export { progressPct } from '@tubutree/app-core/affiliate-rules';
@@ -8,7 +9,7 @@ export { progressPct } from '@tubutree/app-core/affiliate-rules';
  * doanh số tính mốc là doanh số ĐÃ CHỐT.
  */
 
-export const formatPoints = (n: number): string => `${(Number.isFinite(n) ? n : 0).toLocaleString('vi-VN')} điểm`;
+export const formatPoints = (n: number): string => `${formatCount(Number.isFinite(n) ? n : 0)} điểm`;
 
 /** "2026-09" → "tháng 9/2026" (chuỗi lạ giữ nguyên). */
 export function monthLabel(monthKey: string): string {
