@@ -8,6 +8,9 @@ import { StorefrontService } from '../../src/modules/storefront/storefront.servi
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import { StorefrontAdminService } from '../../src/modules/storefront/storefront-admin.service';
 import { assertIdentifierAvailable } from '../../src/modules/storefront/identifier-validation';
+import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
+import { ComboService } from '../../src/modules/storefront/combo.service';
+import { resolveAttribution } from '../../src/modules/checkout/attribution';
 import { createUser as createUserRow, randCode, setConfig, summarize, warmPool } from './helpers';
 
 /**
@@ -60,6 +63,7 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
     if (prisma) {
       const { userIds, storefrontIds, brandIds, productIds } = created;
       await prisma.$transaction([
+        prisma.referralTouch.deleteMany({ where: { userId: { in: userIds } } }),
         prisma.storefrontItem.deleteMany({ where: { collection: { storefrontId: { in: storefrontIds } } } }),
         prisma.storefrontCollection.deleteMany({ where: { storefrontId: { in: storefrontIds } } }),
         prisma.storefront.deleteMany({ where: { id: { in: storefrontIds } } }),
@@ -167,6 +171,75 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       expect(slugs).toContain(ok.slug);
       expect(slugs).not.toContain(demoted.slug);
       expect(slugs).not.toContain(down.slug);
+    });
+  });
+
+  describe('giỏ và checkout không dùng gian hàng đang ẩn (D3-02)', () => {
+    async function addCombo(storefrontId: string) {
+      const productIds: string[] = [];
+      const col = await prisma.storefrontCollection.create({ data: { storefrontId, title: 'Combo', kind: 'COMBO', comboDiscountPct: 10 } });
+      for (let i = 0; i < 2; i++) {
+        const p = await prisma.product.create({
+          data: {
+            isActive: true, brand: 'IT', slug: `it-sm-c-${randCode(8).toLowerCase()}`, name: 'SP combo IT', description: 'IT', basePrice: 1000,
+            variations: { create: [{ sku: `ITSMC-${randCode(8)}`, pancakeId: `itsmc-${randCode(8)}`, name: 'v', attributes: {}, retailPrice: 1000, stock: 5 }] },
+          },
+        });
+        created.productIds.push(p.id);
+        await prisma.storefrontItem.create({ data: { collectionId: col.id, productId: p.id } });
+        productIds.push(p.id);
+      }
+      return productIds;
+    }
+
+    const realAffiliate = () => Object.assign(Object.create(AffiliateService.prototype), { prisma, config }) as AffiliateService;
+    const comboFor = (slug: string, productIds: string[]) =>
+      new ComboService(prisma, config).computeForStorefront(slug, productIds.map((productId, i) => ({ variationId: `v${i}`, productId, total: 1000 })));
+
+    it('gian hàng hiện: có combo, ghi công gian hàng và chủ gian hàng', async () => {
+      const owner = await user('AFFILIATE');
+      const buyer = await user('CUSTOMER');
+      const sf = await store(owner);
+      const products = await addCombo(sf.id);
+      expect((await comboFor(sf.slug, products)).total).toBe(200);
+      const out = await resolveAttribution(prisma, realAffiliate(), buyer.id, { storefrontSlug: sf.slug });
+      expect(out.storefront?.id).toBe(sf.id);
+      expect(out.referrerUserId).toBe(owner.id);
+    });
+
+    it.each([
+      ['chủ bị khoá', async () => store(await user('AFFILIATE', { isBlocked: true }))],
+      ['chủ bị hạ về khách thường', async () => store(await user('CUSTOMER'))],
+      ['admin đã gỡ', async () => store(await user('AFFILIATE'), { takenDownAt: new Date(), isPublished: false })],
+      [
+        'CTV chưa duyệt khi cờ duyệt bật',
+        async () => {
+          await setConfig(prisma, 'storefront.require_approval', true);
+          rebuild();
+          return store(await user('AFFILIATE'));
+        },
+      ],
+    ])('%s → không combo, không ghi công gian hàng, không ghi công chủ gian hàng', async (_name, make) => {
+      const buyer = await user('CUSTOMER');
+      const sf = await make();
+      const products = await addCombo(sf.id);
+      expect(await comboFor(sf.slug, products)).toEqual({ total: 0, perLine: {} });
+      const bySlug = await resolveAttribution(prisma, realAffiliate(), buyer.id, { storefrontSlug: sf.slug });
+      expect(bySlug).toEqual({ referrerUserId: null, storefront: null });
+      await prisma.referralTouch.create({ data: { userId: buyer.id, referrerUserId: sf.ownerUserId!, storefrontSlug: sf.slug, kind: 'ctv', expiresAt: new Date(Date.now() + 86_400_000) } });
+      const byTouch = await resolveAttribution(prisma, realAffiliate(), buyer.id, {});
+      expect(byTouch.storefront).toBeNull();
+    });
+
+    it('người giới thiệu bị khoá không được ghi công đơn mới, mở khoá thì ghi công lại', async () => {
+      const ctv = await user('AFFILIATE');
+      const buyer = await user('CUSTOMER');
+      const affiliate = realAffiliate();
+      expect((await resolveAttribution(prisma, affiliate, buyer.id, { referralCode: ctv.referralCode })).referrerUserId).toBe(ctv.id);
+      await prisma.user.update({ where: { id: ctv.id }, data: { isBlocked: true } });
+      expect((await resolveAttribution(prisma, affiliate, buyer.id, { referralCode: ctv.referralCode })).referrerUserId).toBeNull();
+      await prisma.user.update({ where: { id: ctv.id }, data: { isBlocked: false } });
+      expect((await resolveAttribution(prisma, affiliate, buyer.id, { referralCode: ctv.referralCode })).referrerUserId).toBe(ctv.id);
     });
   });
 

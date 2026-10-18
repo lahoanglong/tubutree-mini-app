@@ -182,6 +182,7 @@ function build(
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
     findEligibleReferrer: opts.findEligibleReferrer ?? jest.fn().mockResolvedValue(null),
     isCommissionEligible: opts.isCommissionEligible ?? jest.fn().mockResolvedValue(true),
+    storefrontVisibility: jest.fn().mockResolvedValue({ eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false }),
     notifyCommissionCreated: jest.fn().mockResolvedValue(undefined),
   } as unknown as AffiliateService;
   // combo mặc định: không giảm (override qua opts.combo cho test combo).

@@ -11,12 +11,13 @@ import { resolvePublishedStorefront, type ResolvedStorefront } from '../storefro
  */
 export async function resolveAttribution(
   prisma: PrismaService,
-  affiliate: Pick<AffiliateService, 'getActiveTouch' | 'findEligibleReferrer' | 'isCommissionEligible'>,
+  affiliate: Pick<AffiliateService, 'getActiveTouch' | 'findEligibleReferrer' | 'isCommissionEligible' | 'storefrontVisibility'>,
   userId: string,
   input: { referralCode?: string; storefrontSlug?: string | null },
 ): Promise<{ referrerUserId: string | null; storefront: ResolvedStorefront | null }> {
   let referrerUserId = input.referralCode ? await affiliate.findEligibleReferrer(input.referralCode, userId) : null;
-  let storefront = await resolvePublishedStorefront(prisma, input.storefrontSlug);
+  const visibility = await affiliate.storefrontVisibility();
+  let storefront = await resolvePublishedStorefront(prisma, visibility, input.storefrontSlug);
   // Khách đang mua trong gian hàng CTV mà mã giới thiệu phiên không khớp ai (web suy mã từ subdomain, SELLER-4): chủ gian
   // hàng là người giới thiệu — trước khi rơi về "chạm" cũ có thể của CTV khác.
   const owner = storefront?.type === 'CTV' && storefront.ownerUserId !== userId ? storefront.ownerUserId : null;
@@ -29,7 +30,7 @@ export async function resolveAttribution(
     if (touch) {
       if (!referrerUserId && (await affiliate.isCommissionEligible(touch.referrerUserId))) referrerUserId = touch.referrerUserId;
       // chỉ lấy slug từ touch kind=ctv (brand không gắn storefrontSlug — tránh ô nhiễm analytics)
-      if (!storefront && touch.kind === 'ctv') storefront = await resolvePublishedStorefront(prisma, touch.storefrontSlug);
+      if (!storefront && touch.kind === 'ctv') storefront = await resolvePublishedStorefront(prisma, visibility, touch.storefrontSlug);
     }
   }
   return { referrerUserId, storefront };

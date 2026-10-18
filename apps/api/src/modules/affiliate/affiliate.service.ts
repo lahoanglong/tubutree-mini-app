@@ -59,6 +59,8 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
+import { loadPublicVisibility } from '../storefront/public-visibility';
+import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -212,16 +214,22 @@ export class AffiliateService {
   async findEligibleReferrer(referralCode: string, buyerId: string): Promise<string | null> {
     const ref = await this.prisma.user.findUnique({
       where: { referralCode: referralCode.toUpperCase() },
-      select: { id: true, role: true },
+      select: { id: true, role: true, isBlocked: true },
     });
-    if (!ref || ref.id === buyerId) return null;
+    // Tài khoản bị khoá không ghi công đơn mới; hoa hồng đã tạo cho đơn cũ giữ nguyên.
+    if (!ref || ref.id === buyerId || ref.isBlocked) return null;
     return (await this.commissionEligibleRoles()).has(ref.role) ? ref.id : null;
   }
 
   /** Người dùng (chủ gian hàng CTV, người của "chạm") có thuộc vai trò được ghi công đơn không — checkout/attribution.ts. */
   async isCommissionEligible(userId: string): Promise<boolean> {
-    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-    return !!u && (await this.commissionEligibleRoles()).has(u.role);
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true } });
+    return !!u && !u.isBlocked && (await this.commissionEligibleRoles()).has(u.role);
+  }
+
+  /** Điều kiện khách thấy một gian hàng (storefront/storefront-visibility.ts) tính từ cấu hình hiện hành. */
+  storefrontVisibility(): Promise<PublicVisibilityOptions> {
+    return loadPublicVisibility(this.config);
   }
 
   /** Vai trò được ghi công đơn và hưởng hoa hồng (khoá `affiliate.commission_eligible_roles`, mặc định CTV + đại lý). */
