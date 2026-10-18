@@ -50,6 +50,25 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
     await expect(page.getByTestId('claim-result')).toHaveCount(0);
   });
 
+  test('mã đang có người khác chờ: hiện câu CLAIMED_BY_OTHER, không có dòng đang tìm hay đã ghi nhận', async ({ page, api }) => {
+    mockExternalPoints(api, {
+      submit: {
+        status: 'CLAIMED_BY_OTHER', claimId: null, channel: null, maskedCode: 'SPX***789', points: null,
+        expectedCreditAt: null, message: 'Mã này đang được một tài khoản khác dùng để tích điểm.',
+      },
+    });
+    await page.goto('/points/scan');
+
+    await page.getByLabel('Mã vận đơn hoặc mã đơn trên sàn').fill('SPXVN0123456789');
+    await page.getByRole('button', { name: 'Tích điểm' }).click();
+
+    const result = page.getByTestId('claim-result');
+    await expect(result).toContainText('Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.', { timeout: 15_000 });
+    await expect(result).not.toContainText('Chưa thấy đơn này');
+    await expect(result).not.toContainText('Đã ghi nhận đơn');
+    expect(api.callsTo('POST', '/me/external-points/claims').map((c) => c.body)).toEqual([{ code: 'SPXVN0123456789' }]);
+  });
+
   test('cờ tắt: vào thẳng URL thì báo chưa mở', async ({ page, api }) => {
     mockExternalPoints(api, { enabled: false });
     await page.goto('/points/scan');
