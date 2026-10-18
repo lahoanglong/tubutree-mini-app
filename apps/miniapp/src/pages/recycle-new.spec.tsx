@@ -296,6 +296,15 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     expect(await screen.findByText(/Phí ship ước tính từ Đà Nẵng:/)).toBeInTheDocument();
     expect(screen.queryByText(/từ 48:/)).toBeNull();
   });
+  it('danh sách tỉnh không tải được: phí ship ước tính bỏ cụm tên tỉnh thay vì in mã tỉnh', async () => {
+    mocks.getProvinces.mockRejectedValue(new Error('offline'));
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' ? { feeEstimate: { ...FEE, provinceCode: '48', provinceName: '48' } } : {}));
+    atStep2();
+    renderPage();
+    fireEvent.click(await screen.findByRole('radio', { name: /Gửi về kho/ }));
+    expect(await screen.findByText('Phí ship ước tính: 30.000đ – 45.000đ, ước tính theo bảng giá niêm yết')).toBeInTheDocument();
+    expect(screen.queryByText(/từ 48/)).toBeNull();
+  });
   it('NEED_PROVINCE → ô chọn tỉnh trên thẻ Gửi về kho; chọn → preview lại với provinceCode', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' && !b.provinceCode ? { blocks: [{ code: 'NEED_PROVINCE' }] } : {}));
     atStep2();

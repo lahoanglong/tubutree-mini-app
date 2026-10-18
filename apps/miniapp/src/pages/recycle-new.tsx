@@ -464,6 +464,8 @@ export default function RecycleNewPage() {
     const locked = isLocked(pv);
     const checked = selected === m;
     const fee = m === 'MAIL_IN' ? pv?.feeEstimate : null;
+    // Tỉnh chưa có điểm nhận thì API trả chính mã tỉnh làm tên; khi danh sách tỉnh chưa về thì bỏ cụm tên tỉnh, không in mã số.
+    const feeProvince = fee ? (provincesQ.data?.find((pr) => pr.code === fee.provinceCode)?.name ?? (fee.provinceName === fee.provinceCode ? null : fee.provinceName)) : null;
     const showProvince = m === 'MAIL_IN' && checked && provincesQ.data && (draft.provinceCode !== null || pv?.blocks.some((b) => b.code === 'NEED_PROVINCE'));
     return (
       <Card
@@ -511,7 +513,7 @@ export default function RecycleNewPage() {
           )}
           {fee && (
             <Text variant="caption" tone="secondary" as="span">
-              {`Phí ship ước tính từ ${provincesQ.data?.find((pr) => pr.code === fee.provinceCode)?.name ?? fee.provinceName}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}
+              {`Phí ship ước tính${feeProvince ? ` từ ${feeProvince}` : ''}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}
             </Text>
           )}
           {m === 'MAIL_IN' && (
