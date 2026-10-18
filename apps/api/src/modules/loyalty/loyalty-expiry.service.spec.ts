@@ -2,6 +2,7 @@ import {
   computePointExpiry,
   loadPointExpiryTxns,
   LoyaltyExpiryService,
+  externalLotKey,
   lotRecoverable,
   nextPointExpiry,
   orderLotKey,
@@ -830,6 +831,66 @@ describe('computePointExpiry (pure FIFO helper)', () => {
  * phần lô đã bị cron trừ vì HẾT HẠN, hay đã bị dòng thu hồi cùng khoá lấy, mới là "đã mất". Điểm bị FIFO tiêu ăn không phải
  * mất: lockedOrderPoints giữ cho số dư đủ để thu hồi trong cửa sổ đổi trả, nên chi tiêu từ lô KHÁC không được tính vào lô này.
  */
+describe('đơn ngoài app: MARKETPLACE_ORDER ghép MARKETPLACE_ORDER_REVERSED theo refId = id claim', () => {
+  const EXT = { refType: 'EXTERNAL_ORDER' };
+  const credit = (id: string, delta: number, createdAt: string, expiresAt: string | null, claimId: string, pid = 'P1') =>
+    tx(id, delta, createdAt, expiresAt, `MARKETPLACE_ORDER:${pid}`, { ...EXT, refId: claimId });
+  const reverse = (id: string, delta: number, createdAt: string, claimId: string, pid = 'P1') =>
+    tx(id, delta, createdAt, null, `MARKETPLACE_ORDER_REVERSED:${pid}`, { ...EXT, refId: claimId });
+  const FUTURE = '2027-06-01';
+  const WINDOW = 7 * DAY;
+
+  it('khoá lô là EXTERNAL:<refId>', () => {
+    expect(externalLotKey('c1')).toBe('EXTERNAL:c1');
+  });
+
+  it('lotRecoverable trả phần lô chưa mất; null khi không có lô', () => {
+    const txns = [credit('a', 100, '2026-06-01', FUTURE, 'c1')];
+    expect(lotRecoverable(txns, externalLotKey('c1'))).toBe(100);
+    expect(lotRecoverable(txns, externalLotKey('zzz'))).toBeNull();
+  });
+
+  it('dòng đảo ăn đúng lô đơn ngoài, không ăn lô cũ hơn: lô cũ hết hạn vẫn bị trừ đúng phần của nó', () => {
+    const r = computePointExpiry(
+      [
+        tx('old', 30, '2025-01-01', '2026-06-01'),
+        credit('d', 20, '2025-05-01', '2026-06-01', 'c1'),
+        reverse('v', -20, '2025-05-02', 'c1'),
+      ],
+      NOW,
+      WINDOW,
+    );
+    expect(r.expiredNow).toBe(30);
+  });
+
+  it('lô đơn ngoài đã thu hồi thì tới hạn cron không trừ lần hai', () => {
+    const r = computePointExpiry(
+      [tx('x', 50, '2025-01-01', '2027-01-01'), credit('d', 20, '2025-05-01', '2026-06-01', 'c1'), reverse('v', -20, '2025-05-02', 'c1')],
+      NOW,
+      WINDOW,
+    );
+    expect(r.expiredNow).toBe(0);
+  });
+
+  it('cron đã trừ lô hết hạn thì lotRecoverable về 0 và thu hồi không trừ hai lần', () => {
+    const txns = [credit('d', 20, '2025-05-01', '2026-06-01', 'c1'), expired('e', 20, '2026-06-02')];
+    expect(lotRecoverable(txns, externalLotKey('c1'))).toBe(0);
+  });
+
+  it('chat: PANCAKE_CHAT_ORDER ghép PANCAKE_CHAT_ORDER_REVERSED cùng refId', () => {
+    const txns = [
+      tx('a', 40, '2026-06-01', FUTURE, 'PANCAKE_CHAT_ORDER:P2', { ...EXT, refId: 'c9' }),
+      tx('b', -15, '2026-06-02', null, 'PANCAKE_CHAT_ORDER_REVERSED:P2', { ...EXT, refId: 'c9' }),
+    ];
+    expect(lotRecoverable(txns, externalLotKey('c9'))).toBe(25);
+  });
+
+  it('dòng âm cùng refType nhưng không phải *_REVERSED là dòng tiêu (FIFO)', () => {
+    const txns = [credit('a', 40, '2026-06-01', FUTURE, 'c1'), tx('s', -15, '2026-06-02', null, 'SPEND', { ...EXT, refId: 'c1' })];
+    expect(lotRecoverable(txns, externalLotKey('c1'))).toBe(40);
+  });
+});
+
 describe('lotRecoverable (phần lô còn thu hồi được theo sổ)', () => {
   const ORDER = { refType: 'ORDER' };
   const delivered = (id: string, delta: number, createdAt: string, expiresAt: string | null, orderId: string) =>

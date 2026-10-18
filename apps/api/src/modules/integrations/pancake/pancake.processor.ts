@@ -35,7 +35,7 @@ import {
   resolveOrderSourceMap,
   type OrderSourceMap,
 } from '../../external-points/external-order.config';
-import { ingestExternalOrder } from '../../external-points/external-order.ingest';
+import { ingestAndApply } from '../../external-points/external-order.sync';
 import { pancakeStatusSkipsTotalCheck, pancakeTotalMismatch } from './pancake-total';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
@@ -210,7 +210,7 @@ export class PancakeProcessor extends WorkerHost {
         // Đơn không có trong bảng orders: đơn sàn/chat thì lưu và xong. UNKNOWN cũng được lưu nhưng sự kiện vẫn UNMATCHED: đơn app
         // tới trước khi lưu pancakeOrderId hoặc thiếu note/tag cần cron ghép lại, đánh PROCESSED là mất lượt đó.
         if (EXTERNAL_CAPTURE_EVENTS.has(eventType) && (await this.captureEnabled())) {
-          const { result, kind } = await ingestExternalOrder(this.prisma, data, await this.orderSourceMap());
+          const { result, kind } = await ingestAndApply(this.prisma, { notifier: this.notifications, config: this.systemConfig }, data, await this.orderSourceMap());
           if (result !== 'NOT_EXTERNAL' && kind !== 'UNKNOWN') return 'PROCESSED';
         }
         return 'UNMATCHED';

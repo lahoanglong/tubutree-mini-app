@@ -7,7 +7,7 @@ import { buildAdminOrderWhere } from '../admin/admin-order-filter';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; config?: Record<string, unknown> } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; extReview?: number; extAttempts?: number; extPartial?: number; config?: Record<string, unknown> } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn().mockResolvedValue(over.invoices ?? 0);
@@ -19,6 +19,8 @@ const build = (
   const linkCount = jest.fn().mockResolvedValue(over.links ?? 0);
   const payoutCount = jest.fn().mockResolvedValue(over.slips ?? 0);
   const refundCount = jest.fn().mockResolvedValue(over.refunds ?? 0);
+  const extClaimCount = jest.fn((args: { where: { state: string } }) => Promise.resolve(args.where.state === 'REVIEW' ? (over.extReview ?? 0) : (over.extPartial ?? 0)));
+  const extAttemptCount = jest.fn().mockResolvedValue(over.extAttempts ?? 0);
   const prisma = {
     product: { count: productCount },
     order: { count: orderCount },
@@ -31,13 +33,15 @@ const build = (
     bottleReturn: zero,
     merchantPancakeLink: { count: linkCount },
     merchantPayout: { count: payoutCount },
+    externalPointsClaim: { count: extClaimCount },
+    externalClaimAttempt: { count: extAttemptCount },
     $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
     countOverdue: jest.fn().mockResolvedValue(0),
     countStoresToSettle: jest.fn().mockResolvedValue(over.settle ?? 0),
   } as unknown as MerchantFulfilmentService;
-  return { svc: new OpsInboxService(prisma, merchant, config as unknown as SystemConfigService), productCount, linkCount, payoutCount, refundCount, merchant, orderCount, postCount, queryRaw };
+  return { svc: new OpsInboxService(prisma, merchant, config as unknown as SystemConfigService), productCount, linkCount, payoutCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount };
 };
 
 describe('OpsInboxService — merchantProducts', () => {
@@ -176,6 +180,32 @@ describe('OpsInboxService — cộng đồng và hoá đơn VAT (launch review D
   });
 });
 
+describe('OpsInboxService — externalPoints', () => {
+  it('cộng claim chờ duyệt, lần gửi mã quá hạn tự ghép và claim đã cộng mà đơn hoàn một phần', async () => {
+    const { svc, extAttemptCount, extClaimCount } = build({ extReview: 2, extAttempts: 3, extPartial: 1 });
+
+    const res = await svc.counts({ role: 'ADMIN' }, new Date('2026-10-20T00:00:00.000Z'));
+
+    expect(res.items.find((i) => i.key === 'externalPoints')?.count).toBe(6);
+    expect(extClaimCount).toHaveBeenCalledWith({ where: { state: 'REVIEW' } });
+    expect(extClaimCount).toHaveBeenCalledWith({ where: { state: 'CREDITED', reviewReason: { not: null } } });
+    expect(extAttemptCount).toHaveBeenCalledWith({
+      where: {
+        result: 'UNMATCHED',
+        resolvedAt: null,
+        OR: [{ externalOrderId: { not: null } }, { createdAt: { lt: new Date('2026-10-17T00:00:00.000Z') } }],
+      },
+    });
+  });
+
+  it('KE_TOAN và KHO không thấy khoá này (CSKH và ADMIN xử lý)', async () => {
+    for (const perms of [['KE_TOAN'], ['KHO'], []]) {
+      const res = await build().svc.counts({ role: 'STAFF', staffPermissions: perms });
+      expect(res.items.map((i) => i.key)).not.toContain('externalPoints');
+    }
+  });
+});
+
 describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình xử lý được (D1-05)', () => {
   const keysFor = async (perms: string[]) => (await build().svc.counts({ role: 'STAFF', staffPermissions: perms })).items.map((i) => i.key).sort();
 
@@ -188,7 +218,7 @@ describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
-    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'refillPending', 'returnsPending']);
+    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'refillPending', 'returnsPending']);
     expect(await keysFor(['KHO'])).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'refillPending', 'returnsToReceive']);
     expect(await keysFor([])).toEqual(['refillPending']);
   });

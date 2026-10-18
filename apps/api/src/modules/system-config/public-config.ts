@@ -9,7 +9,8 @@ import { FIRST_ORDER_FREESHIP_ENABLED_DEFAULT, FIRST_ORDER_FREESHIP_ENABLED_KEY,
 import { publicCommunityUrl } from './community-links';
 import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
-import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from '../loyalty/earn-rates';
+import { DEFAULT_EARN_PCT, DEFAULT_MARKETPLACE_EARN_PCT, EARN_PCT_KEY, MARKETPLACE_EARN_PCT_KEY } from '../loyalty/earn-rates';
+import { MARKETPLACE_CLAIM_ENABLED_KEY } from '../external-points/external-claim.config';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
 const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
@@ -49,6 +50,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     firstOrderFree,
     firstOrderFreeMin,
     earnPct,
+    marketplaceClaimEnabled,
+    marketplaceEarnPct,
     vndPerPointRedeem,
     maxRedeemPct,
     pointExpireMonths,
@@ -84,6 +87,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>(FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_ENABLED_DEFAULT),
     config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT),
     config.get<number>(EARN_PCT_KEY, DEFAULT_EARN_PCT),
+    config.get<unknown>(MARKETPLACE_CLAIM_ENABLED_KEY, false),
+    config.get<unknown>(MARKETPLACE_EARN_PCT_KEY, DEFAULT_MARKETPLACE_EARN_PCT),
     config.get<number>('loyalty.vnd_per_point_redeem', 1),
     config.get<unknown>('loyalty.max_redeem_pct', LOYALTY_MAX_REDEEM_PCT_DEFAULT),
     config.get<unknown>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS),
@@ -117,6 +122,9 @@ export async function buildPublicConfig(config: SystemConfigService) {
     // Hai giá trị sau giải thích cách dùng/hạn điểm; chuẩn hoá giống getOverview và pointsExpiryFrom để chữ nói đúng điều server làm.
     loyalty: {
       earnPct,
+      // Chỉ boolean true thật mới bật (cờ gõ nhầm không được hứa tích điểm đơn sàn). Tỉ lệ hỏng thì rơi về mặc định như phía cộng điểm.
+      marketplaceClaimEnabled: marketplaceClaimEnabled === true,
+      marketplaceEarnPct: typeof marketplaceEarnPct === 'number' && marketplaceEarnPct > 0 && marketplaceEarnPct <= 20 ? marketplaceEarnPct : DEFAULT_MARKETPLACE_EARN_PCT,
       // Bản app cũ chưa đọc earnPct: giữ số đồng cho 1 điểm.
       vndPerPoint: typeof earnPct === 'number' && earnPct > 0 ? Math.round(100 / earnPct) : Math.round(100 / DEFAULT_EARN_PCT),
       vndPerPointRedeem,

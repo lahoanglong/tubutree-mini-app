@@ -8,6 +8,7 @@ import { buildAdminOrderWhere, pancakeUnsyncedWhere, recyclingAttentionWhere } f
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { externalPointsAttentionCount } from '../external-points/external-points-attention';
 
 export type InboxKey =
   | 'pancakeAttention'
@@ -27,7 +28,8 @@ export type InboxKey =
   | 'refillPending'
   | 'communityPending'
   | 'communityUnanswered'
-  | 'invoicePending';
+  | 'invoicePending'
+  | 'externalPoints';
 
 /** Ai thấy việc này ngoài ADMIN: nhóm việc của nhân viên, hoặc 'STAFF' = mọi nhân viên (route vốn mở cho STAFF). */
 type Audience = readonly StaffPermission[] | 'STAFF' | 'ADMIN';
@@ -92,6 +94,8 @@ export class OpsInboxService {
       },
       // Cùng điều kiện với bộ lọc "VAT chờ xuất" ở tab Đơn hàng; xuất hoá đơn (issue-invoice) chỉ ADMIN nên chỉ ADMIN thấy số này.
       { key: 'invoicePending', audience: 'ADMIN', count: () => p.order.count({ where: buildAdminOrderWhere({ invoice: 'pending' }) }) },
+      // Điểm đơn ngoài app cần người: claim chờ duyệt, lần gửi mã quá 3 ngày chưa thấy đơn (hoặc thấy đơn nguồn lạ), đơn hoàn một phần sau khi đã cộng.
+      { key: 'externalPoints', audience: ['CSKH'], count: () => externalPointsAttentionCount(p, now) },
     ];
   }
 
