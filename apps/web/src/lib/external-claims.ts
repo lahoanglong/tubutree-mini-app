@@ -1,4 +1,4 @@
-import type { ExternalClaimAdminErrorCode, ExternalClaimState } from '@tubutree/shared-types';
+import type { AdminExternalClaimAttentionFilter, ExternalClaimAdminErrorCode, ExternalClaimState } from '@tubutree/shared-types';
 import type { Tone } from './recycling';
 
 export const CLAIM_STATE_ORDER: ExternalClaimState[] = ['REVIEW', 'PENDING', 'HELD_NO_MEMBER', 'CREDITED', 'VOIDED', 'REVERSED', 'LAPSED'];
@@ -107,3 +107,18 @@ export function groupThousands(n: number): string {
   return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+
+export const ATTENTION_FILTER_LABEL: Record<AdminExternalClaimAttentionFilter, string> = {
+  closed_credited: 'Đã cộng mà đơn đã đóng',
+  stale: 'Kẹt chờ quá lâu',
+};
+
+export const ORDER_STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Chưa giao xong',
+  DELIVERED: 'Đã giao',
+  RETURNING: 'Đang hoàn',
+  RETURNED: 'Đã hoàn',
+  CANCELLED: 'Đã huỷ',
+  PARTIAL_RETURN: 'Hoàn một phần',
+  DELETED: 'Đã xoá',
+};

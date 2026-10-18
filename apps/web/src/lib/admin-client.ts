@@ -6,6 +6,7 @@ import type {
   AdminExternalAttemptListResponse,
   AdminExternalClaimListResponse,
   AdminAttachAttemptResponse,
+  AdminExternalClaimAttentionFilter,
   AdminExternalClaimDetail,
   AdminExternalClaimRow,
   AdminReverseClaimResponse,
@@ -2029,6 +2030,7 @@ export const listExternalOrderSources = () =>
 // ── Tích điểm đơn sàn bằng mã vận đơn (B6 bước 2) ──
 export type {
   AdminAttachAttemptResponse,
+  AdminExternalClaimAttentionFilter,
   AdminExternalClaimDetail,
   AdminExternalClaimEvent,
   AdminExternalClaimRow,
@@ -2037,10 +2039,11 @@ export type {
   ExternalClaimState,
 } from '@tubutree/shared-types';
 
-export const listExternalClaims = (f: { state?: ExternalClaimState; q?: string }, page = 1, limit = 20) => {
+export const listExternalClaims = (f: { state?: ExternalClaimState; q?: string; attention?: AdminExternalClaimAttentionFilter }, page = 1, limit = 20) => {
   const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (f.state) qs.set('state', f.state);
   if (f.q) qs.set('q', f.q);
+  if (f.attention) qs.set('attention', f.attention);
   return apiFetch<AdminExternalClaimListResponse>(`/admin/external-claims?${qs.toString()}`);
 };
 export const getExternalClaim = (id: string) => apiFetch<AdminExternalClaimDetail>(`/admin/external-claims/${encodeURIComponent(id)}`);

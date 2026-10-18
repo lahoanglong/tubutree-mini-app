@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ExternalClaimsTab } from './external-claims-tab';
-import { answerConfirm, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -168,7 +168,7 @@ describe('ExternalClaimsTab', () => {
   it('chi tiết hiện lịch sử thao tác; người đã gắn đơn bị vô hiệu nút Duyệt', async () => {
     stub({
       events: [
-        { id: 'ev1', action: 'ATTACH', actorId: 'cs1', fromState: null, toState: 'REVIEW', userIdBefore: 'u1', userIdAfter: 'u1', note: 'Mã lệch một ký tự', createdAt: '2026-10-14T01:00:00.000Z' },
+        { id: 'ev1', action: 'ATTACH', actorId: 'cs1', fromState: null, toState: 'REVIEW', userIdBefore: 'u1', userIdAfter: 'u1', note: 'Mã lệch một ký tự', orderStatus: 'PARTIAL_RETURN', createdAt: '2026-10-14T01:00:00.000Z' },
       ],
     });
     const r = mount(<ExternalClaimsTab isAdmin canAct meId="cs1" />);
@@ -178,6 +178,7 @@ describe('ExternalClaimsTab', () => {
     const events = r.container.querySelector('[data-claim-events]')!;
     expect(events.textContent).toContain('Gắn đơn cho lần gửi mã');
     expect(events.textContent).toContain('Mã lệch một ký tự');
+    expect(events.textContent).toContain('đơn: Hoàn một phần');
     expect(btn(r.container, 'Duyệt')!.disabled).toBe(true);
   });
 
@@ -214,5 +215,18 @@ describe('ExternalClaimsTab', () => {
     const call = m.calls.find((c) => c.url.endsWith('/attempts/a1/attach'))!;
     expect(JSON.parse(String(call.init!.body))).toEqual({ pancakeOrderId: '910001', note: 'Khách đọc nhầm một ký tự' });
     expect(r.container.textContent).toContain('đang chờ người khác duyệt');
+  });
+
+  it('bộ lọc chú ý gửi attention lên API và bỏ lọc trạng thái', async () => {
+    const m = stub({ claims: [] });
+    const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+    await flush();
+    const select = r.container.querySelector<HTMLSelectElement>('select[aria-label="Lọc việc cần chú ý"]')!;
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Mọi yêu cầu', 'Đã cộng mà đơn đã đóng', 'Kẹt chờ quá lâu']);
+    selectValue(select, 'closed_credited');
+    await flush();
+    const last = m.calls.filter((c) => c.url.includes('/admin/external-claims?')).at(-1)!;
+    expect(last.url).toContain('attention=closed_credited');
+    expect(last.url).not.toContain('state=');
   });
 });

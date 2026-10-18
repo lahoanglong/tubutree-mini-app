@@ -15,10 +15,13 @@ import {
   voidExternalClaim,
   type AdminExternalAttemptRow,
   type AdminExternalClaimRow,
+  type AdminExternalClaimAttentionFilter,
   type ExternalClaimState,
 } from '@/lib/admin-client';
 import {
+  ATTENTION_FILTER_LABEL,
   EVENT_ACTION_LABEL,
+  ORDER_STATUS_LABEL,
   adminClaimErrorText,
   creditedOnClosedOrder,
   isIntroducer,
@@ -45,10 +48,11 @@ type Who = ClaimActor;
 export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
   const [state, setState] = useState<ExternalClaimState | ''>('REVIEW');
   const [typed, setTyped] = useState('');
+  const [attention, setAttention] = useState<AdminExternalClaimAttentionFilter | ''>('');
   const q = useDebounced(typed.trim(), 300);
   const claims = useInfiniteQuery({
-    queryKey: ['admin-external-claims', state, q],
-    queryFn: ({ pageParam }) => listExternalClaims({ state: state || undefined, q: q || undefined }, pageParam),
+    queryKey: ['admin-external-claims', state, q, attention],
+    queryFn: ({ pageParam }) => listExternalClaims({ state: state || undefined, q: q || undefined, attention: attention || undefined }, pageParam),
     initialPageParam: 1,
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
@@ -75,6 +79,21 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
             </button>
           ))}
         </div>
+        <select
+          aria-label="Lọc việc cần chú ý"
+          value={attention}
+          onChange={(e) => {
+            const v = e.target.value as AdminExternalClaimAttentionFilter | '';
+            setAttention(v);
+            if (v) setState('');
+          }}
+          className={FIELD_XS}
+        >
+          <option value="">Mọi yêu cầu</option>
+          {(Object.keys(ATTENTION_FILTER_LABEL) as AdminExternalClaimAttentionFilter[]).map((k) => (
+            <option key={k} value={k}>{ATTENTION_FILTER_LABEL[k]}</option>
+          ))}
+        </select>
         <input
           type="search"
           aria-label="Tìm yêu cầu tích điểm"
@@ -215,6 +234,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
                     {formatDateTime(e.createdAt)} · {EVENT_ACTION_LABEL[e.action] ?? e.action}
                     {e.fromState && e.toState && e.fromState !== e.toState ? ` (${CLAIM_STATE_LABEL[e.fromState as ExternalClaimState] ?? e.fromState} sang ${CLAIM_STATE_LABEL[e.toState as ExternalClaimState] ?? e.toState})` : ''}
                     {' · '}{e.actorId ? `người xử lý ${e.actorId}` : 'hệ thống'}
+                    {e.orderStatus ? ` · đơn: ${ORDER_STATUS_LABEL[e.orderStatus] ?? e.orderStatus}` : ''}
                     {e.note ? ` · ${e.note}` : ''}
                   </li>
                 ))}
