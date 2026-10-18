@@ -85,6 +85,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_best', value: 10, category: 'community', description: 'Điểm uy tín cộng cho câu trả lời được chọn hay nhất (lần chọn đầu)', fallbackSource: { file: FEED, text: "get<number>('community.rep_best', 10)" } },
   { key: 'community.daily_rep_cap', value: 30, category: 'community', description: 'Tổng điểm uy tín tối đa một người được cộng mỗi ngày', fallbackSource: { file: FEED, text: "get<number>('community.daily_rep_cap', 30)" } },
   { key: 'community.rep_thresholds', value: [0, 50, 200, 500], category: 'community', description: 'Mốc điểm uy tín để lên cấp 1 đến 4 (Mầm, Cây non, Cây trưởng thành, Cổ thụ)', fallbackSource: { file: FEED, text: 'const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];' } },
+  { key: 'community.public_preview', value: false, category: 'community', description: 'true = khách chưa đăng nhập được xem trước vài bài cộng đồng đã đăng (chỉ đọc, thích/bình luận/đăng bài vẫn cần đăng nhập); false = phải đăng nhập mới thấy', fallbackSource: { file: FEED, text: 'get<unknown>(PUBLIC_PREVIEW_KEY, false)' } },
   { key: 'home.new_customer_layout', value: false, category: 'home', description: 'Trang chủ Mini App: true = khách chưa có đơn thấy khối "Quà khách mới" và danh mục lên ngay sau ô tìm, trước giờ vàng; false = giữ thứ tự cũ', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('home.new_customer_layout', false)" } },
 ];
 

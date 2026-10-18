@@ -2,6 +2,7 @@ import type { SystemConfigService } from './system-config.service';
 import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
 import { toShippingEta } from './shipping-eta';
 import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../affiliate/affiliate.service';
+import { PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
 import { FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
 
 /** Admin để trống (hoặc lưu sai kiểu) thì trả null để miniapp ẩn dòng, không hiện thông tin giả. */
@@ -41,6 +42,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     vndPerPoint,
     vndPerPointRedeem,
     homeNewCustomerLayout,
+    communityPublicPreview,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', 200000),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -68,6 +70,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<number>('loyalty.vnd_per_point', 10000),
     config.get<number>('loyalty.vnd_per_point_redeem', 1000),
     config.get<unknown>('home.new_customer_layout', false),
+    config.get<unknown>(PUBLIC_PREVIEW_KEY, false),
   ]);
   return {
     freeshipThreshold,
@@ -90,6 +93,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     },
     loyalty: { vndPerPoint, vndPerPointRedeem },
     homeNewCustomerLayout: homeNewCustomerLayout === true,
+    // Miniapp chỉ gọi /feed/public-preview khi cờ này true (API vẫn tự kiểm cờ và trả 404 khi tắt).
+    communityPublicPreview: communityPublicPreview === true,
   };
 }
 

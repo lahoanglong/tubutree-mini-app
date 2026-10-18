@@ -245,6 +245,8 @@ export class SystemConfigService {
     'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.
     'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.
+    'community.public_preview': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Link nhận mã in trong QR thẻ hộp hàng và link chia sẻ của CTV dựng từ khoá này: sai là thẻ đã in mở ra trang lỗi.
     'app.miniapp_base_url': (value) =>
       value === '' || (typeof value === 'string' && /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(value))

@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   getFeed: vi.fn(),
   getCategories: vi.fn(),
+  getPreview: vi.fn(),
+  config: { communityPublicPreview: false } as { communityPublicPreview?: boolean },
   haptic: vi.fn(),
   search: '',
   auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
@@ -20,7 +22,8 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/feed', search: mocks.search, state: null }),
 }));
-vi.mock('../services/feed-api', () => ({ getFeed: mocks.getFeed, getCategories: mocks.getCategories }));
+vi.mock('../services/feed-api', () => ({ getFeed: mocks.getFeed, getCategories: mocks.getCategories, getFeedPublicPreview: mocks.getPreview }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, ...mocks.config }) }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
@@ -81,8 +84,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.search = '';
   mocks.auth.status = 'authenticated';
+  mocks.config = { communityPublicPreview: false };
   mocks.getCategories.mockResolvedValue(CATS);
   mocks.getFeed.mockResolvedValue({ posts: [POST('p1', 'Lan Anh'), POST('p2', 'Minh Tâm')], nextCursor: null });
+  mocks.getPreview.mockResolvedValue({ posts: [] });
 });
 
 describe('FeedPage — hành vi giữ nguyên khi chuyển DS v2', () => {
@@ -240,5 +245,112 @@ describe('FeedPage — tiêu đề, vùng chạm, biểu tượng (C-076, C-113,
     expect(screen.getByRole('search')).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('Tìm câu hỏi, mẹo, bài viết…'), { target: { value: 'abc' } });
     expect(screen.getByRole('button', { name: 'Xoá từ khoá' })).toBeInTheDocument();
+  });
+});
+
+describe('FeedPage — bảng tin trống có lối đăng bài đầu tiên (D5-07)', () => {
+  it('chưa có bài nào, không lọc: nút "Đăng bài đầu tiên" mở khung soạn', async () => {
+    mocks.getFeed.mockResolvedValue({ posts: [], nextCursor: null });
+    renderPage();
+    expect(await screen.findByText('Chưa có bài viết nào')).toBeInTheDocument();
+    expect(screen.queryByTestId('composer')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng bài đầu tiên' }));
+    expect(screen.getByTestId('composer')).toBeInTheDocument();
+  });
+
+  it('đang lọc/tìm mà không có kết quả: không mời đăng bài đầu tiên (feed không trống thật)', async () => {
+    mocks.getFeed.mockResolvedValue({ posts: [], nextCursor: null });
+    renderPage();
+    await screen.findByText('Chưa có bài viết nào');
+    fireEvent.click(screen.getByRole('button', { name: 'Chưa trả lời' }));
+    expect(await screen.findByText('Không tìm thấy bài phù hợp')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng bài đầu tiên' })).toBeNull();
+  });
+});
+
+const PREVIEW_POST = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  kind: 'TIP',
+  title: 'Pha nước rửa chén từ vỏ bưởi',
+  snippet: 'Vỏ bưởi ngâm giấm 2 tuần rồi lọc, dùng rất sạch dầu mỡ.',
+  image: null,
+  createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
+  author: 'Lan',
+  badge: null,
+  category: { slug: 'meo-vat', name: 'Mẹo vặt', icon: null },
+  isPinned: false,
+  likeCount: 4,
+  commentCount: 2,
+  ...over,
+});
+
+describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, cờ community.public_preview)', () => {
+  beforeEach(() => {
+    mocks.auth.status = 'anonymous';
+  });
+
+  it('cờ tắt (mặc định): cổng đăng nhập như cũ và không gọi API xem trước', async () => {
+    mocks.config = {};
+    renderPage();
+    expect(screen.getByText('Đăng nhập để xem cộng đồng')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getPreview).not.toHaveBeenCalled());
+    expect(mocks.getFeed).not.toHaveBeenCalled();
+  });
+
+  it('cờ bật: hiện vài bài (tên gọi, đoạn đầu, số tim/bình luận), chỉ đọc; nút đăng nhập gọi login; không tải feed đầy đủ', async () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1'), PREVIEW_POST('p2', { title: null, snippet: 'Cây trầu bà lên lá rất nhanh', author: 'Minh' })] });
+    const view = renderPage();
+    expect(await screen.findByText('Pha nước rửa chén từ vỏ bưởi')).toBeInTheDocument();
+    expect(screen.getByText('Vỏ bưởi ngâm giấm 2 tuần rồi lọc, dùng rất sạch dầu mỡ.')).toBeInTheDocument();
+    expect(screen.getByText('Cây trầu bà lên lá rất nhanh')).toBeInTheDocument();
+    expect(screen.getByText('Lan')).toBeInTheDocument();
+    expect(view.container.querySelectorAll('h1')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Đăng bài' })).toBeNull();
+    expect(screen.queryByPlaceholderText('Tìm câu hỏi, mẹo, bài viết…')).toBeNull();
+    expect(mocks.getFeed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Zalo' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('bài xem trước không có nút thích/bình luận/mở bài: đọc xong chỉ có lối đăng nhập', async () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1')] });
+    renderPage();
+    await screen.findByText('Pha nước rửa chén từ vỏ bưởi');
+    // Nút không chữ (quay lại ở đầu trang) không tính: chỉ xét các nút có nhãn.
+    expect(screen.getAllByRole('button').map((b) => b.textContent).filter(Boolean)).toEqual(['Tiếp tục với Zalo']);
+    expect(screen.queryByRole('link')).toBeNull();
+    mocks.navigate.mockClear();
+    fireEvent.click(screen.getByText('Pha nước rửa chén từ vỏ bưởi'));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('xem trước lỗi hoặc chưa có bài nào: về cổng đăng nhập thay vì báo lỗi cho khách chưa đăng nhập', async () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockRejectedValue(new Error('404'));
+    const failed = renderPage();
+    expect(await screen.findByText('Đăng nhập để xem cộng đồng')).toBeInTheDocument();
+    failed.unmount();
+
+    mocks.getPreview.mockResolvedValue({ posts: [] });
+    renderPage();
+    expect(await screen.findByText('Đăng nhập để xem cộng đồng')).toBeInTheDocument();
+  });
+
+  it('đang tải xem trước: khung chờ, chưa hiện cổng đăng nhập để khỏi nháy', () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    expect(screen.queryByText('Đăng nhập để xem cộng đồng')).toBeNull();
+    expect(screen.getByTestId('feed-preview-loading')).toBeInTheDocument();
+  });
+
+  it('đã đăng nhập thì không bao giờ gọi API xem trước', async () => {
+    mocks.auth.status = 'authenticated';
+    mocks.config = { communityPublicPreview: true };
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(mocks.getPreview).not.toHaveBeenCalled();
   });
 });

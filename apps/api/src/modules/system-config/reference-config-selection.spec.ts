@@ -47,6 +47,7 @@ const APPROVED_LOADED_KEYS = [
     'community.daily_post_reward_cap',
     'community.daily_rep_cap',
     'community.post_reward_points',
+    'community.public_preview',
     'community.rep_answer',
     'community.rep_best',
     'community.rep_post',

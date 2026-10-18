@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Plus, HelpCircle, Hash, Trophy, PartyPopper, X } from 'lucide-react';
-import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
+import { getFeed, getFeedPublicPreview, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -20,6 +21,7 @@ import { ScrollRow } from '../components/ui/scroll-row';
 import { SearchField } from '../components/ui/search-field';
 import PostCard from '../components/community/post-card';
 import PostComposer from '../components/community/post-composer';
+import { PublicPreviewList } from '../components/community/public-preview-list';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 
@@ -73,6 +75,14 @@ export default function FeedPage() {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: authed,
   });
+  // Khách chưa đăng nhập xem trước vài bài khi admin bật cờ community.public_preview (API vẫn tự kiểm cờ).
+  const config = usePublicConfig();
+  const preview = useQuery({
+    queryKey: ['community', 'public-preview'],
+    queryFn: getFeedPublicPreview,
+    enabled: phase === 'guest' && config.communityPublicPreview === true,
+    staleTime: 5 * 60_000,
+  });
   const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
   const filtering = Boolean(dq || unanswered || tag);
 
@@ -103,6 +113,27 @@ export default function FeedPage() {
 
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated).
   if (!authed) {
+    if (preview.isPending && preview.fetchStatus !== 'idle') {
+      return (
+        <Page style={{ background: 'var(--color-bg-canvas)' }}>
+          <PageHeader title={vi.community.title} />
+          <div data-testid="feed-preview-loading" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={i} height={140} radius="var(--radius-card)" />
+            ))}
+          </div>
+        </Page>
+      );
+    }
+    // Xem trước lỗi hoặc chưa có bài nào thì về cổng đăng nhập: khách chưa đăng nhập không cần thấy lỗi của phần phụ này.
+    if (preview.data && preview.data.posts.length > 0) {
+      return (
+        <Page style={{ background: 'var(--color-bg-canvas)' }}>
+          <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
+          <PublicPreviewList posts={preview.data.posts} onLogin={() => void login()} />
+        </Page>
+      );
+    }
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
@@ -236,7 +267,16 @@ export default function FeedPage() {
         filtering ? (
           <EmptyState art="search" heading={vi.community.noResult} />
         ) : (
-          <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.emptyBody} />
+          <EmptyState
+            art="leaf"
+            heading={vi.community.emptyHeading}
+            body={vi.community.emptyBody}
+            ctaLabel={vi.community.emptyCta}
+            onCta={() => {
+              haptic('light');
+              setComposing(true);
+            }}
+          />
         )
       ) : (
         <>

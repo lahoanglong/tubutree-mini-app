@@ -710,6 +710,8 @@ export const vi = {
     viewSolution: 'Xem sản phẩm gợi ý',
     emptyHeading: 'Chưa có bài viết nào',
     emptyBody: 'Hãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!',
+    emptyCta: 'Đăng bài đầu tiên',
+    previewLead: 'Vài bài mới trong cộng đồng. Đăng nhập để đọc tiếp, thích và bình luận.',
     hasBestAnswer: 'Đã có câu trả lời hay',
     loadMore: 'Xem thêm',
     edit: 'Sửa',

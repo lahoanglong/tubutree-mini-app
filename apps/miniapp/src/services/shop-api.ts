@@ -231,6 +231,8 @@ export interface PublicConfig {
   loyalty?: { vndPerPoint: number; vndPerPointRedeem: number };
   /** Cờ bố cục Trang chủ cho khách mới (home.new_customer_layout). Thiếu khi API cũ → bố cục cũ. */
   homeNewCustomerLayout?: boolean;
+  /** Cờ xem trước công khai bảng tin cộng đồng (community.public_preview). Thiếu khi API cũ → phải đăng nhập mới thấy. */
+  communityPublicPreview?: boolean;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

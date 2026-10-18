@@ -6,6 +6,7 @@ import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
@@ -83,6 +84,14 @@ export class CommunityFeedController {
   @Get('categories')
   categories() {
     return this.feed.getCategories();
+  }
+
+  // Xem trước công khai cho khách chưa đăng nhập (cờ community.public_preview, tắt thì 404). Literal path: khai TRƯỚC @Get(':id').
+  @Public()
+  @PublicCache('STATIC')
+  @Get('public-preview')
+  publicPreview() {
+    return this.feed.publicPreview();
   }
 
   // Literal path (leaderboard) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
