@@ -23,9 +23,9 @@ Ba khoá SystemConfig mới, đều có mặc định trong mã, có luật ghi 
 
 ### D2-07b + D7 việc 1: khối "Quà khách mới" ở Trang chủ Mini App và Trang chủ web (`47dfb06e`)
 
-- API `GET /me/loyalty/new-customer-offer` (`loyalty.service.ts#getNewCustomerOffer`) trả `isNewCustomer` theo định nghĩa đơn đầu có sẵn (`common/first-order.ts`, `hasPriorOrder`: chưa có đơn nào ngoài `CANCELLED`) và voucher chào mừng còn dùng được của khách (nếu có). Mã voucher dựng bằng hàm dùng chung `vouchers/voucher-code.ts`, cùng với cron.
+- API `GET /me/new-customer-offer` (`loyalty.service.ts#getNewCustomerOffer`) trả `isNewCustomer` khi là khách thật (`isRealUser`, cùng luật voucher chào mừng và freeship đơn đầu) và theo định nghĩa đơn đầu có sẵn (`common/first-order.ts`, `hasPriorOrder`: chưa có đơn nào ngoài `CANCELLED`) và voucher chào mừng còn dùng được của khách (nếu có). Mã voucher dựng bằng hàm dùng chung `vouchers/voucher-code.ts`, cùng với cron.
 - Config công khai tách thành `system-config/public-config.ts#buildPublicConfig`, dùng chung cho `GET /config/public` và khối `publicConfig` của `GET /home`, nên hai nơi luôn cùng số. `/home` và `/home/me` gộp thêm `publicConfig` và `newCustomerOffer`; Trang chủ vẫn chỉ gọi đúng 2 request (spec `home-requests.spec.tsx` giữ nguyên ngân sách).
-- Miniapp: `components/home/new-customer-gift.tsx`. Hiện voucher của khách (nếu có) và 3 lợi ích mua trực tiếp: freeship (đơn đầu nếu `shipping.first_order_free_enabled` bật, không thì theo ngưỡng `shipping.free_threshold`), Điểm Xanh (mỗi X đồng được 1 điểm, 1 điểm giảm Y đồng), đặt định kỳ giảm P%. Mọi số lấy từ config công khai; thiếu số (API cũ) thì bỏ dòng. Khách chưa đăng nhập chỉ thấy phần lợi ích. Chưa tải xong hiện khung chờ cùng chiều cao; lỗi thì ẩn hẳn khối (đây là khối quảng bá phụ). Vùng chạm nút ≥ 44px, dùng token DS v2.
+- Miniapp: `components/home/new-customer-gift.tsx`. Hiện voucher của khách (nếu có) và 3 lợi ích mua trực tiếp: freeship (đơn đầu nếu `shipping.first_order_free_enabled` bật, không thì theo ngưỡng `shipping.free_threshold`), Điểm Xanh (mỗi X đồng được 1 điểm, 1 điểm giảm Y đồng), đặt định kỳ giảm P%. Mọi số lấy từ config công khai; thiếu số (API cũ) thì bỏ dòng. Khách chưa đăng nhập chỉ thấy phần lợi ích. Chưa biết có phải khách mới (đang tải) hay lỗi thì không vẽ gì, không có khung chờ (xem mục 3c, L1). Vùng chạm nút ≥ 44px, dùng token DS v2.
 - Thứ tự khối (`home-blocks.ts`): cờ `home.new_customer_layout` tắt (mặc định) thì giữ nguyên thứ tự cũ, khối `welcome` đứng sau Danh mục, trước "Dành cho bạn". Cờ bật thì khách mới thấy `search, purchased, orderStrip, welcome, categories, flash, ...`: quà và danh mục lên ngay sau ô tìm và dải đơn, trước giờ vàng. Khách cũ không đổi.
 - Web (`apps/web/src/app/page.tsx`): thêm hàng danh mục dưới hero (`<nav aria-label="Mua theo danh mục">`, chỉ danh mục còn hàng, liên kết `/?category=<id>#san-pham`, cao ≥ 44px; bấm lại danh mục đang chọn thì bỏ lọc). `category` chỉ nhận id có thật trong danh sách (chuỗi tuỳ ý trên URL không đi xuống API), giữ nguyên khi đổi nhãn hàng hoặc phân trang. Trang lọc theo danh mục `noindex` (cùng sản phẩm với trang chủ) và không in canonical riêng. API danh mục lỗi thì bỏ hàng này, lưới sản phẩm vẫn hiện. Ba cam kết gộp thành một hàng ba ô ở mọi cỡ màn hình (điện thoại chỉ giữ tiêu đề). Chữ của ba cam kết giữ nguyên, không đụng tới D5-08.
 - File chính: `loyalty/loyalty.service.ts`, `catalog/home.service.ts`, `system-config/public-config.ts`, `miniapp/components/home/*`, `miniapp/pages/home.tsx`, `web/src/app/page.tsx`, `web/src/lib/api.ts`, `web/src/lib/catalog-filter.ts`.
@@ -34,7 +34,7 @@ Ba khoá SystemConfig mới, đều có mặc định trong mã, có luật ghi 
 
 - Tách công thức tích điểm thành `pricing/points-earn.ts#pointsForGoods`; `PricingService.calcPointsEarned` (hàm server dùng khi chốt đơn) gọi lại hàm này. Miniapp có bản sao `utils/points-earn.ts` (miniapp không import chéo package). Hai bên khớp nhờ hai spec: API so `calcPointsEarned` với `pointsForGoods`, miniapp so bản sao với chính file của API trên lưới giá trị hàng × mốc × hệ số hạng (gồm mốc làm tròn xuống và cấu hình hỏng).
 - Dòng "Nhận tối đa N Điểm Xanh (≈N.000đ) khi đơn giao thành công" (`components/product/points-earn-line.tsx`, đặt dưới giá). Mốc `vndPerPoint` và giá trị 1 điểm `vndPerPointRedeem` đọc từ config công khai, nhân hệ số hạng, tính cho giá × số lượng đang chọn.
-- Chỉ nêu số khi biết đủ tham số. Chưa chắc thì viết "Nhận Điểm Xanh khi đơn giao thành công", không số: API cũ chưa trả mốc, phiên đang kiểm tra, hoặc tài khoản có hạng mà tổng quan Điểm Xanh chưa nằm trong bộ nhớ đệm. Khách chưa đăng nhập và tài khoản chưa có hạng dùng hệ số 1 (đúng `getTierMultiplier`). Hàng rẻ hơn một mốc điểm thì không hiện dòng nào.
+- Chỉ nêu số khi biết đủ tham số. Chưa chắc thì viết "Nhận Điểm Xanh khi đơn giao thành công", không số: API cũ chưa trả mốc, phiên đang kiểm tra, hoặc tài khoản có hạng mà tổng quan Điểm Xanh chưa nằm trong bộ nhớ đệm. Khách chưa đăng nhập và tài khoản chưa có hạng dùng hệ số 1 (đúng `getTierMultiplier`), kể cả khi bộ nhớ đệm có tổng quan hiển thị hạng thấp nhất (xem mục 3c, L2). Hàng rẻ hơn một mốc điểm thì không hiện dòng nào.
 - Chữ "tối đa" vì mã giảm giá, giảm theo hạng và điểm dùng ở thanh toán làm giá trị hàng tính điểm thấp hơn giá niêm yết; PDP không biết trước các khoản đó.
 
 ### D2-06: lời mời theo dõi OA (`b60c468f`)
@@ -45,7 +45,7 @@ Ba khoá SystemConfig mới, đều có mặc định trong mã, có luật ghi 
 ### D5-07: cộng đồng, nút đăng bài đầu tiên và xem trước công khai (`d1025313`)
 
 - Miniapp `feed.tsx`: feed trống thật (không lọc, không tìm) có nút "Đăng bài đầu tiên" mở khung soạn. Đang lọc mà không có kết quả thì không mời đăng bài.
-- API `GET /feed/public-preview` (công khai, `@PublicCache('STATIC')`): tự kiểm cờ `community.public_preview`, chỉ boolean true mới bật, tắt thì 404 và không đọc DB. Chỉ bài `PUBLISHED` do người dùng viết (MANUAL, QUESTION, SHOWCASE, TIP; bỏ bài tự sinh có `meta` về vườn riêng), 5 bài, ghim trước rồi mới nhất. Trường trả về dựng từ danh sách cho phép (`community-public-preview.ts`): id, loại, tiêu đề, đoạn đầu 160 ký tự đã che số điện thoại và email, ảnh bìa, tên gọi (từ cuối của họ tên; tên có số hoặc "@" thì dùng "Bạn Tubu"), huy hiệu chuyên gia, danh mục, số tim, số bình luận. Không avatar, không id người đăng, không `meta`, không cờ của người xem. Truy vấn Prisma cũng chỉ select các cột đó. Đọc chi tiết bài, thích, bình luận, đăng bài vẫn là route cần đăng nhập (spec kiểm metadata `Public` chỉ có trên route xem trước).
+- API `GET /feed/public-preview` (công khai, `@PublicCache('USER_CONTENT')`, `s-maxage=60`): tự kiểm cờ `community.public_preview`, chỉ boolean true mới bật, tắt thì 404 và không đọc DB. Chỉ bài `PUBLISHED` do người dùng viết (MANUAL, QUESTION, SHOWCASE, TIP; bỏ bài tự sinh có `meta` về vườn riêng), 5 bài, ghim trước rồi mới nhất. Trường trả về dựng từ danh sách cho phép (`community-public-preview.ts`): id, loại, tiêu đề, tiêu đề và đoạn đầu 160 ký tự đã che số điện thoại và email, ảnh bìa, tên gọi (từ cuối của họ tên; tên có số hoặc "@" thì dùng "Bạn Tubu"), huy hiệu chuyên gia, danh mục, số tim, số bình luận. Không avatar, không id người đăng, không `meta`, không cờ của người xem. Truy vấn Prisma cũng chỉ select các cột đó. Đọc chi tiết bài, thích, bình luận, đăng bài vẫn là route cần đăng nhập (spec kiểm metadata `Public` chỉ có trên route xem trước).
 - Config công khai thêm `communityPublicPreview` để miniapp chỉ gọi route khi cờ bật. Khách chưa đăng nhập với cờ bật thấy các thẻ chỉ để đọc (không nút thích, bình luận, không mở bài) và một nút "Tiếp tục với Zalo". Xem trước lỗi hoặc chưa có bài nào thì về cổng đăng nhập cũ.
 
 ### D5-10: bỏ số cứng trong chữ (`4139fa7b`)
@@ -54,41 +54,68 @@ Ba khoá SystemConfig mới, đều có mặc định trong mã, có luật ghi 
 - Trang đăng ký đại lý: "Giá sỉ đến X%" theo `dealer.max_discount_pct` (dùng `formatRatePct` sẵn có); "xét duyệt trong vòng N giờ" theo khoá mới `dealer.review_hours`. Chưa có số (API cũ, chưa tải xong, cấu hình hỏng) thì bỏ con số, không hiện số mặc định. Mặc định 45% và 24 giờ nằm một chỗ ở `dealer/dealer-config.ts`, `DealerService` và config công khai cùng dùng.
 - Gợi ý thưởng sự kiện cộng đồng (trang kiểm duyệt, chỉ admin): "1 điểm = Y, tối đa M điểm" với Y từ `loyalty.vnd_per_point_redeem` và M từ hằng số API `EVENT_REWARD_MAX_POINTS` (`feed/community-limits.ts`, DTO `@Max` dùng chung). M là giới hạn của API chứ không phải SystemConfig.
 - Config công khai thêm `dealer { maxDiscountPct, reviewHours }` (giá trị hỏng thành null) và `community { eventRewardMaxPoints }`.
-- Spec mới `i18n/vi-no-hardcoded-amounts.spec.ts` cấm `\d{1,3}(\.\d{3})+đ` trong `vi.ts` (bỏ qua dòng chú thích). Ngoại lệ phải ghi `// hardcoded-amount-ok: <lý do ≥ 15 ký tự>` ngay trên dòng. Hiện chưa có ngoại lệ nào.
+- Spec mới `i18n/vi-no-hardcoded-amounts.spec.ts` cấm số tiền cứng trong `vi.ts` và `pages/about-data.ts` (bỏ qua dòng chú thích; kiểu viết được nhận ra ở mục 3c, L5). Ngoại lệ phải ghi `// hardcoded-amount-ok: <lý do ≥ 15 ký tự>` ngay trên dòng. Hiện chưa có ngoại lệ nào.
 
 ## 2. Lệnh kiểm chứng đã chạy
 
-Chạy ở worktree `lr-newcustomer`, Node 22, DB race `lr-newcustomer-pg` (cổng 5568, `tubutree_it`). Không chạy full suite, build, Playwright; không đụng DB dev hay PROD.
+Chạy ở worktree `lr-newcustomer`, Node 22, DB race `lr-newcustomer-pg` (cổng 5568, `tubutree_it`). Không chạy full suite, build, Playwright; không đụng DB dev hay PROD. Kết quả sau lượt sửa review (tip `9a4da79b` trước commit báo cáo này):
 
 ```
-cd apps/api && npx jest src/modules/auth src/modules/catalog src/modules/dealer src/modules/feed src/modules/loyalty src/modules/pricing src/modules/system-config src/modules/vouchers prisma/reference-data
-  Test Suites: 55 passed, 55 total   Tests: 1532 passed, 1532 total
-cd apps/api && npx jest -c test/integration-race/jest.config.js --runInBand welcome-voucher-signup
-  Test Suites: 1 passed, 1 total     Tests: 7 passed, 7 total
-cd apps/miniapp && TZ=UTC npx vitest run <spec đã sửa> src/pages/product-detail src/components/home src/pages/home src/services src/i18n src/utils
-  Test Files  81 passed (81)         Tests  895 passed (895)
-  (lặp lại với TZ=Asia/Ho_Chi_Minh: cùng kết quả 81 passed, 895 passed)
-cd apps/web && TZ=UTC npx vitest run <spec đã sửa> src/app/page.spec.tsx src/lib
-  Test Files  56 passed (56)         Tests  771 passed (771)
-  (lặp lại với TZ=Asia/Ho_Chi_Minh: cùng kết quả 56 passed, 771 passed)
-npx tsc --noEmit  (apps/api, apps/miniapp, apps/web)   không lỗi
-npx eslint <mọi file .ts/.tsx đã đổi> --max-warnings=0 (3 app)   không cảnh báo
+cd apps/api && npx jest src/modules/vouchers src/modules/auth src/modules/feed src/modules/loyalty src/modules/system-config src/modules/catalog src/modules/pricing src/modules/dealer src/common
+  Test Suites: 87 passed, 87 total   Tests: 2002 passed, 2002 total
+  (`prisma/reference-data` không có spec riêng trong jest; phần đó do reference-config-selection.spec.ts ở system-config và race reference-seed phủ)
+cd apps/api && DATABASE_URL=<.../tubutree_it> npx jest -c test/integration-race/jest.config.js --runInBand reference-seed welcome-voucher-signup vouchers-real-user auth-merge-guest
+  Test Suites: 4 passed, 4 total     Tests: 34 passed, 34 total   (xem ghi chú về độ ổn định bên dưới)
+cd apps/miniapp && TZ=UTC npx vitest run <mọi spec đã đổi từ nhánh gốc> src/pages/product-detail src/components/home src/pages/home src/services src/i18n src/utils
+  Test Files  81 passed (81)         Tests  924 passed (924)
+  (lặp lại với TZ=Asia/Ho_Chi_Minh: cùng kết quả 81 passed, 924 passed)
+npx tsc --noEmit  (apps/api, apps/miniapp, apps/web)   cả ba exit 0
+npx eslint <mọi file .ts/.tsx đã đổi từ nhánh gốc> --max-warnings=0 (api 32 file, miniapp 34 file, web 6 file)   exit 0
 npm run -s lint:vars   OK — every var(--x) reference is defined.
 ```
 
-Mỗi mục đều viết test đỏ trước rồi mới sửa mã (đã thấy đỏ đúng lý do ở từng mục).
+Web không đổi trong lượt sửa review; kết quả vitest web của lượt đầu (56 file, 771 test, cả hai múi giờ) vẫn là bản mới nhất.
+
+Ghi chú độ ổn định: trong lúc kiểm chứng máy có tải rất cao (load average 65 đến 70, nhiều phiên chạy song song). Bộ bốn race spec chạy 5 lần: 3 lần xanh hoàn toàn; 1 lần `auth-merge-guest` đỏ một test (không lưu thông báo lỗi) và 1 lần `reference-seed` đỏ ở DB C vì tiến trình con `npx tsx prisma/seed.ts` thoát mã 1 (test dựng seed.ts gốc bằng `spawnSync`, không in lỗi của nó). Cả hai chạy lại ngay sau đó đều xanh, `auth-merge-guest` xanh cả khi chạy riêng; hai chỗ này không đụng file nào của gói (seed.ts và code gộp tài khoản khách không đổi). Coi là chập chờn do tải, nhưng chưa chứng minh được nguyên nhân; nên chạy lại hai spec này trên máy rảnh trước khi gộp.
+
+Mỗi mục đều viết test đỏ trước rồi mới sửa mã (đã thấy đỏ đúng lý do ở từng mục), kể cả các mục L1 đến L5.
 
 ## 3. Chưa làm hoặc cố ý để lại
 
 - `loyalty.tsx` (phiên đổi-rác giữ) không sửa. Còn hai chỗ viết cứng "30 ngày" ở đó: dòng ~636 "HSD 30 ngày sau đổi" và dòng ~828 "Mã giảm giá sau khi đổi có hạn 30 ngày". Cần số ngày hạn mã đổi quà từ config công khai (chưa có khoá nào; chủ dự án quyết hạn mã). Phiên đổi-rác nên sửa khi đã quyết, và có thể thêm số vào `buildPublicConfig`. Spec cấm số tiền cứng trong `vi.ts` không bắt chỗ này vì nó nằm trong `loyalty.tsx`, và là "30 ngày" chứ không phải số tiền.
 - D2-06 dài hạn (đường gửi tin OA theo người theo dõi, ánh xạ `User.zaloId` sang ID người theo dõi OA, thưởng nhỏ khi theo dõi) chưa làm; chỉ làm phần sửa lời ngắn hạn như yêu cầu.
-- PDP không gọi thêm API `/me/loyalty` để biết hệ số hạng (PDP là trang đông khách nhất). Tài khoản có hạng, chưa mở màn Điểm Xanh/Ví/Hồ sơ/Thanh toán trong phiên sẽ thấy dòng chung không số. Nếu chủ dự án muốn luôn có số, thêm một query dùng chung khoá `['loyalty']` (cần cập nhật mock `account-api` của 10 spec product-detail).
+- PDP không gọi thêm API `/me/loyalty` để biết hệ số hạng (PDP là trang đông khách nhất). Tài khoản có hạng, chưa mở màn Điểm Xanh/Ví/Hồ sơ/Thanh toán trong phiên sẽ thấy dòng chung không số. Chỉ tài khoản chưa có hạng mới luôn có số (hệ số 1). Nếu chủ dự án muốn luôn có số, thêm một query dùng chung khoá `['loyalty']` (cần cập nhật mock `account-api` của 10 spec product-detail).
 - Giảm theo hạng (tier discount), mã giảm giá và điểm dùng ở thanh toán không được tính ở PDP (nên ghi "tối đa").
-- `/feed/public-preview` cache STATIC (60 giây trình duyệt, 300 giây proxy/CDN, chỉ khi thành công). Tắt cờ thì bản đã cache có thể còn hiện tới 5 phút ở CDN.
+- `/feed/public-preview` cache `USER_CONTENT` (30 giây trình duyệt, 60 giây proxy/CDN, chỉ khi thành công). Tắt cờ hoặc gỡ bài vi phạm thì bản đã cache có thể còn hiện tối đa 1 phút ở CDN.
 - Xem trước công khai chỉ cho đọc đoạn đầu bài; chạm vào thẻ không mở bài (chi tiết cần đăng nhập). Không có SEO cho bài cộng đồng.
 - Web home: hàng danh mục không có số đếm sản phẩm trên chip, không có ảnh danh mục. Không đụng D5-08 (câu "100% Thuần Chay/Nguyên bản Việt Nam" chờ chủ dự án).
 - Cron `welcomeVouchers` vẫn quét hết cửa sổ 24 giờ mỗi giờ như cũ; chưa tối ưu (không thuộc phạm vi).
 - Khoá mới chỉ có trong mã và `EXTRA_CONFIGS` của seed-reference; DB đang chạy dùng mặc định trong mã cho tới khi chủ dự án đặt giá trị ở tab Cấu hình, hoặc chạy lại seed-reference.
+
+## 3b. Chồng ưu đãi của khách mới (cần chủ dự án biết trước khi mở bán)
+
+Mỗi giỏ chỉ nhận một mã (`cart.couponCode`), nên "chồng" nghĩa là giữa các đơn và giữa mã với phí giao:
+
+- Voucher chào mừng `WELCOME-<id>` (30.000đ, đơn từ 199.000đ, mỗi khách một mã, cấp ngay khi tạo tài khoản thật) và mã demo `WELCOME30` (PUBLIC, cũng 30.000đ từ 199.000đ, 1 lượt mỗi người, không giới hạn khách mới) là hai mã khác nhau. Khách mới dùng được cả hai, mỗi mã trên một đơn, tức tổng 60.000đ giảm cho hai đơn đầu thay vì 30.000đ như chữ "Quà khách mới" nói.
+- `WELCOME-<id>` cộng được với freeship đơn đầu (`shipping.first_order_free_enabled`) trên cùng đơn: giảm 30.000đ và miễn phí giao, vì phí giao tính riêng khỏi mã.
+- Hai ưu đãi trên đơn đầu cộng với giảm theo hạng (nếu có) và Điểm Xanh dùng ở thanh toán vẫn chịu các trần có sẵn của giá và điểm.
+
+Vì vậy nên khuyên tắt `WELCOME30` trước khi mở bán thật: chạy `prisma:cleanup-demo -- --apply --expect-db=tubutree --coupons=expire` mà không truyền `--keep-coupon=WELCOME30`, để ưu đãi mới chỉ đi qua mã cá nhân có kiểm soát. Nếu chủ dự án vẫn muốn giữ `WELCOME30` làm mã ra mắt thì chữ "Quà khách mới" cần nói đúng tổng ưu đãi.
+
+## 3c. Sửa sau review (APPROVE kèm sửa)
+
+Merge `review/2026-10-18-launch` vào nhánh (`de43d29b`), `config-selection.ts` xung đột được giải bằng cách giữ cả hai phía (EXTRA_CONFIGS của gói hoa hồng và của gói này).
+
+| Mã | Commit | Việc |
+|---|---|---|
+| M1 | `bd431768` | `reference-seed.race-spec.ts` danh sách khoá bổ sung thành 10 (5 cũ, 2 của hoa hồng, 3 của gói này); chạy race trên DB riêng, xanh |
+| L1 | `44d558b1` | Khối Quà khách mới không vẽ khung chờ 236px trước khi biết `isNewCustomer`, chỉ vẽ khi API trả true. Mô tả cờ `home.new_customer_layout` sửa đúng: cờ chỉ đổi thứ tự, khối chào mừng luôn hiện với khách mới (spec chốt nội dung mô tả) |
+| L2 | `13252806` | API `getOverview` trả thêm `earnMultiplier` (1 khi chưa có hạng, dù `tier` hiển thị hạng thấp nhất). PDP: `tierId` null luôn là 1; tài khoản có hạng dùng `earnMultiplier`, API cũ thì dùng hệ số hạng hiển thị. Test hạng thấp nhất hệ số 1.2 với `tierId` null cho ra hệ số 1 (đỏ trước) |
+| L3 | `723dbbb8` | `getNewCustomerOffer` kiểm `isRealUser` trước, khách deviceId (zaloId `guest_...`, chưa SĐT) nhận `isNewCustomer: false`, không chạm bảng đơn và ví voucher; dòng guest đã có SĐT vẫn là khách thật. Khớp `pricing.service.ts` `firstOrderFreeShipFrom` |
+| L4 | `5cba21ef` | Xem trước cộng đồng che số điện thoại và email ở tiêu đề (hàm `publicTitle`) như đoạn đầu bài; route chuyển sang policy mới `USER_CONTENT` (`max-age=30, s-maxage=60`) thay cho STATIC (`s-maxage=300`) |
+| L5 | `9a4da79b` | Regex số tiền cứng nhận thêm `30k`, `199.000 đ`, `199.000 ₫`, `1.000đ` (đã có), `199000đ`, `5 triệu`, `VND`, không bắt nhầm "10.000 điểm" hay "2 ký tự"; quét thêm `pages/about-data.ts`. FAQ dự phòng thành `fallbackFaq(cfg)` đọc từ config công khai: mốc tích, giá trị 1 điểm, trần %, hạn điểm, số ngày đổi trả (API thêm `loyalty.maxRedeemPct`, `loyalty.pointExpireMonths`, chuẩn hoá giống `getOverview` và `pointsExpiryFrom`). Thiếu hay hỏng thì bỏ riêng phần đó |
+
+Số trong `about-data.ts` không nằm trong config: chỉ còn "100%" của lô điểm quy đổi từ xu cũ (luật cố định ở `pricing.service`, không có khoá), có chú thích lý do ngay trên dòng. Danh sách ngoại lệ có `// hardcoded-amount-ok` của spec vẫn trống vì "100%" không phải số tiền.
 
 ## 4. Câu hỏi cho chủ dự án
 
@@ -108,4 +135,11 @@ fdfc8a1a feat(vouchers): cấp voucher chào mừng ngay khi tạo tài khoản 
 b60c468f fix(miniapp): lời mời theo dõi OA chỉ hứa cập nhật đơn và tư vấn, bỏ "ưu đãi mới" (D2-06)
 d1025313 feat(community): nút "Đăng bài đầu tiên" khi bảng tin trống, xem trước công khai sau cờ community.public_preview (D5-07)
 4139fa7b fix(i18n): bỏ số cứng trong chữ, đọc từ config công khai; spec cấm số tiền cứng trong vi.ts (D5-10)
+de43d29b Merge review/2026-10-18-launch vào lr/newcustomer (lấy cả hai phía EXTRA_CONFIGS và hằng đường dẫn)
+bd431768 test(reference-seed): ba khoá bổ sung của gói khách mới nằm trong danh sách khoá seed-reference thêm trên DB (M1)
+44d558b1 fix(home): khối Quà khách mới không vẽ khung chờ trước khi biết khách mới; mô tả cờ home.new_customer_layout nói đúng chỉ đổi thứ tự (L1)
+13252806 fix(pdp): hệ số điểm ở PDP theo đúng hệ số server dùng, khách chưa có hạng là 1 (L2)
+723dbbb8 fix(loyalty): getNewCustomerOffer chỉ coi khách thật là khách mới, khách deviceId không bị hứa quà (L3)
+5cba21ef fix(feed): xem trước cộng đồng che số điện thoại và email cả ở tiêu đề, proxy chỉ giữ 60 giây (L4)
+9a4da79b fix(i18n): FAQ dự phòng đọc số từ config công khai; bộ lọc số tiền cứng bắt thêm 30k, "199.000 đ", "199.000 ₫" (L5)
 ```
