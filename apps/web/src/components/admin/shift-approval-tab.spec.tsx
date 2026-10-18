@@ -165,6 +165,21 @@ describe('ShiftApprovalTab (Duyệt ca)', () => {
     expect(api.to('/admin/shift-templates/t1', 'DELETE')).toHaveLength(1);
   });
 
+  it('ca chuẩn: ca tối 18:00-24:00 gửi endMin 1440 như Mini App', async () => {
+    const api = stub([], []);
+    const { container } = mount(<ShiftApprovalTab />);
+    await flush();
+    click(byText(container, 'button', 'Ca chuẩn'));
+    await flush();
+    typeInto(document.querySelector('[role=dialog] input[placeholder^="Tên ca"]'), 'Ca tối');
+    const times = Array.from(document.querySelectorAll<HTMLInputElement>('[role=dialog] input')).filter((i) => !i.placeholder);
+    typeInto(times[0]!, '18:00');
+    typeInto(times[1]!, '24:00');
+    click(byText(document.body, 'button', 'Thêm ca chuẩn'));
+    await flush();
+    expect(JSON.parse(api.to('/admin/shift-templates')[0]!.init!.body as string)).toEqual({ name: 'Ca tối', startMin: 1080, endMin: 1440 });
+  });
+
   it('tuần không có ca và lỗi tải', async () => {
     stub([]);
     const a = mount(<ShiftApprovalTab />);

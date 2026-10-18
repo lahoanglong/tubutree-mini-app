@@ -20,6 +20,8 @@ import { BTN_LINK, BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLA
 import type { Tone } from '@/lib/recycling';
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+// Ca chuẩn kết thúc cuối ngày (endMin 1440) hợp lệ ở máy chủ và Mini App; chỉ ô giờ ca chuẩn nhận 24:00.
+const TEMPLATE_END_RE = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
 
 const SHIFT_STATUS: Record<AdminShift['status'], { label: string; tone: Tone }> = {
   PENDING: { label: 'Chờ duyệt', tone: 'warning' },
@@ -266,7 +268,7 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
       footer={
         <button
           type="button"
-          disabled={addM.isPending || !name.trim() || !TIME_RE.test(start) || !TIME_RE.test(end)}
+          disabled={addM.isPending || !name.trim() || !TIME_RE.test(start) || !TEMPLATE_END_RE.test(end)}
           onClick={() => addM.mutate()}
           className={`${BTN_PRIMARY} w-full`}
         >
@@ -300,7 +302,7 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
             </div>
             <div className="flex-1">
               <Field label="Kết thúc">
-                <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={INPUT_CLASS} />
+                <input type="text" inputMode="numeric" pattern="([01]\d|2[0-3]):[0-5]\d|24:00" value={end} onChange={(e) => setEnd(e.target.value)} className={INPUT_CLASS} />
               </Field>
             </div>
           </div>
