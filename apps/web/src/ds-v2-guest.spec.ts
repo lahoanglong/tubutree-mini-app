@@ -56,6 +56,8 @@ const ACCOUNT: string[] = [
   'app/tai-khoan/ho-so/page.tsx',
   'app/tai-khoan/cai-dat/page.tsx',
   'components/account/font-scale.ts',
+  'app/tai-khoan/thong-bao/page.tsx',
+  'components/account/notification-view.ts',
   'components/account/account-menu.ts',
   'components/account/avatar-crop-sheet.tsx',
 ];

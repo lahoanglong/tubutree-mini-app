@@ -93,4 +93,69 @@ test.describe('Web khách: tài khoản', () => {
     await expect(login).toBeVisible();
     await expect(login).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/ho-so')}`);
   });
+
+  test('cài đặt: tắt Khuyến mãi gửi PATCH đúng thân, chọn cỡ chữ Lớn áp cho cả trang', async ({ page, api }) => {
+    mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
+    api.get('/me/notifications/prefs', { notifyPromo: true, notifyGarden: true });
+    api.patch('/me/notifications/prefs', ({ call }) => ({ notifyPromo: true, notifyGarden: true, ...(call.body as object) }));
+    await page.goto('/tai-khoan/cai-dat');
+
+    await expect(page.getByRole('heading', { name: 'Cài đặt', level: 1 })).toBeVisible();
+    const promo = page.getByRole('switch', { name: 'Khuyến mãi & mã giảm giá' });
+    await expect(promo).toHaveAttribute('aria-checked', 'true');
+    const saved = api.waitForCall('PATCH', '/me/notifications/prefs');
+    await promo.click();
+    expect((await saved).body).toEqual({ notifyPromo: false });
+    await expect(promo).toHaveAttribute('aria-checked', 'false');
+
+    await page.getByRole('radio', { name: /Lớn/ }).click();
+    await expect(page.getByRole('radio', { name: /Lớn/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('html')).toHaveCSS('font-size', '18px');
+    await page.reload();
+    await expect(page.locator('html')).toHaveCSS('font-size', '18px');
+    await expect(page.getByRole('link', { name: /Sổ địa chỉ/ })).toHaveAttribute('href', '/tai-khoan/dia-chi');
+  });
+
+  test('cài đặt: lưu lỗi thì công tắc trở về như cũ và báo lỗi', async ({ page, api }) => {
+    mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
+    api.get('/me/notifications/prefs', { notifyPromo: true, notifyGarden: true });
+    api.patch('/me/notifications/prefs', () => reply(500, { message: 'lỗi' }));
+    await page.goto('/tai-khoan/cai-dat');
+
+    const promo = page.getByRole('switch', { name: 'Khuyến mãi & mã giảm giá' });
+    await promo.click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Chưa lưu được cài đặt' })).toBeVisible();
+    await expect(promo).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('thông báo: chạm tin chưa đọc đánh dấu đã đọc, mở chi tiết và nút tới đơn; "Đọc tất cả" gọi read-all', async ({ page, api }) => {
+    mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
+    const sentAt = new Date().toISOString();
+    api.get('/me/notifications', [
+      { id: 'n1', templateCode: 'ORDER_CONFIRMED', payload: { body: 'Đơn TT001 đã được xác nhận', data: { order_code: 'TT001' } }, status: 'SENT', sentAt },
+      { id: 'n2', templateCode: 'POINTS_EARNED', payload: { body: 'Bạn nhận thêm 50 điểm Xanh' }, status: 'SENT', sentAt },
+    ]);
+    api.post('/me/notifications/:id/read', { ok: true });
+    api.post('/me/notifications/read-all', { ok: true, count: 2 });
+    await page.goto('/tai-khoan/thong-bao');
+
+    await expect(page.getByRole('heading', { name: 'Thông báo', level: 1 })).toBeVisible();
+    const read = api.waitForCall('POST', '/me/notifications/:id/read');
+    await page.getByRole('button', { name: /Đơn TT001 đã được xác nhận/ }).click();
+    expect((await read).path).toBe('/me/notifications/n1/read');
+    const detail = page.getByRole('dialog', { name: 'Chi tiết thông báo' });
+    await expect(detail).toBeVisible();
+    await expect(detail.getByRole('link', { name: 'Xem chi tiết đơn hàng' })).toHaveAttribute('href', '/tai-khoan/don-hang/TT001');
+    await detail.getByRole('button', { name: 'Đóng' }).click();
+
+    const all = api.waitForCall('POST', '/me/notifications/read-all');
+    await page.getByRole('button', { name: 'Đọc tất cả' }).click();
+    await all;
+  });
+
+  test('thông báo khi chưa đăng nhập: mời đăng nhập và quay lại đúng trang', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
+    await page.goto('/tai-khoan/thong-bao');
+    await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/thong-bao')}`);
+  });
 });

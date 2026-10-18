@@ -9,6 +9,7 @@ import { metadata as points } from './tai-khoan/diem-xanh/layout';
 import { metadata as wallet } from './tai-khoan/vi-tubu/layout';
 import { metadata as editProfile } from './tai-khoan/ho-so/layout';
 import { metadata as settings } from './tai-khoan/cai-dat/layout';
+import { metadata as notifications } from './tai-khoan/thong-bao/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -26,6 +27,7 @@ const ORDER: TitleCase[] = [];
 const ACCOUNT: TitleCase[] = [
   ['/tai-khoan/ho-so', editProfile, 'Sửa hồ sơ — Tubu Tree'],
   ['/tai-khoan/cai-dat', settings, 'Cài đặt — Tubu Tree'],
+  ['/tai-khoan/thong-bao', notifications, 'Thông báo — Tubu Tree'],
 ];
 const LOYALTY: TitleCase[] = [];
 const COMMUNITY: TitleCase[] = [];
