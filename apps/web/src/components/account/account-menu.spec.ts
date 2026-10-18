@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import routeMap from '@tubutree/app-core/route-map.json';
+import { isWebRouteReady } from '@/lib/route-map';
 import { buildAccountMenu, type AccountMenuContext, type AccountMenuGroup } from './account-menu';
 
 // Chép ý profile.spec.ts và profile-hub.spec.tsx (Mini App): nhóm menu, mục theo vai trò/cờ, đại lý/chủ nhãn đổi theo dữ liệu.
@@ -138,5 +139,24 @@ describe('nhóm Công việc theo vai trò', () => {
     expect(labels(m, 'Công việc')).toEqual(['Quản trị nhân sự']);
     expect(m.some((g) => g.group === 'Công việc')).toBe(true);
     expect(buildAccountMenu(ctx({ role: 'STAFF', isReady: () => false })).some((g) => g.group === 'Công việc')).toBe(false);
+  });
+});
+
+describe('với route map thật (sau khi lane pro gộp)', () => {
+  const real = { isReady: isWebRouteReady };
+
+  it('đại lý, chủ nhãn và nhân viên có lối vào; Đổi rác (còn pending) vẫn ẩn', () => {
+    const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A' }));
+    const to = all(m).map((i) => i.to);
+    expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin']));
+    expect(to).not.toContain('/doi-rac');
+  });
+
+  it('khách thường chưa có nhãn: không thấy màn nội bộ', () => {
+    const to = all(buildAccountMenu(ctx(real))).map((i) => i.to);
+    expect(to).toContain('/dai-ly');
+    expect(to).not.toContain('/chu-thuong-hieu');
+    expect(to).not.toContain('/nhan-vien');
+    expect(to).not.toContain('/admin');
   });
 });
