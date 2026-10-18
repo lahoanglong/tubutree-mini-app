@@ -140,7 +140,7 @@ test.describe('Web khách: Ví Tubu', () => {
   test('rút tiền: nhập đủ thông tin, bấm đúp chỉ gửi một POST kèm Idempotency-Key và đúng body', async ({ page, api }) => {
     mockWallet(api);
     await page.goto('/tai-khoan/vi-tubu');
-    await page.getByRole('button', { name: 'Rút tiền về ngân hàng' }).click();
+    await page.getByRole('button', { name: 'Rút ngân hàng' }).click();
     const dialog = page.getByRole('dialog', { name: 'Rút tiền về ngân hàng' });
     await dialog.getByLabel('Số tiền rút').fill('200000');
     await dialog.getByLabel('Tên ngân hàng').fill('Techcombank');

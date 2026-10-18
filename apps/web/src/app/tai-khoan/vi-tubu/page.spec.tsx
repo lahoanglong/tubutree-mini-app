@@ -86,7 +86,7 @@ const input = (c: HTMLElement, label: string) => {
   return document.getElementById(l!.getAttribute('for')!) as HTMLInputElement;
 };
 async function openSheet(c: HTMLElement) {
-  click(byText(c, 'button', 'Rút tiền về ngân hàng'));
+  click(byText(c, 'button', 'Rút ngân hàng'));
   await flush(3);
 }
 async function fillBank(c: HTMLElement, amount = '200000') {
@@ -404,7 +404,8 @@ describe('/tai-khoan/vi-tubu — rút tiền về ngân hàng', () => {
     await fillBank(c, '150000');
     click(submitBtn());
     await flush(6);
-    expect(c.textContent).toContain('Ngân hàng từ chối');
+    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toBe('Ngân hàng từ chối');
+    expect(c.querySelector('[role="status"]')?.textContent).not.toContain('Ngân hàng từ chối');
     click(submitBtn());
     await flush(6);
     const keys = postsOf('/wallet/withdraw').map((p) => p.headers?.['Idempotency-Key']);

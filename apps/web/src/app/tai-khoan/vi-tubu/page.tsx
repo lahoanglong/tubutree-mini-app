@@ -53,6 +53,8 @@ export default function WalletPage() {
   const [amount, setAmount] = useState('');
   const [bank, setBank] = useState<BankInfo>({ bankName: '', accountNumber: '', accountName: '' });
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
+  // Lỗi rút hiện ngay trong sheet: vùng status của trang nằm sau lớp phủ modal nên khách không thấy và đọc màn hình không đọc ra.
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const [shareMsg, setShareMsg] = useState('');
 
   // Key giữ nguyên qua các lần bấm lại của CÙNG một lệnh rút (bấm đúp/timeout) để API không trừ ví hai lần;
@@ -71,7 +73,7 @@ export default function WalletPage() {
     },
     onError: (e) => {
       withdrawKey.current = newIdempotencyKey();
-      setNotice({ text: errText(e), error: true });
+      setWithdrawError(errText(e));
     },
     onSettled: () => {
       withdrawBusy.current = false;
@@ -81,6 +83,7 @@ export default function WalletPage() {
     if (withdrawBusy.current) return;
     withdrawBusy.current = true;
     setNotice(null);
+    setWithdrawError(null);
     withdrawMut.mutate();
   };
 
@@ -168,12 +171,13 @@ export default function WalletPage() {
                 // Mỗi lần MỞ sheet là một lệnh rút mới: mở lại với số khác thì key khác, không bị API trả lại lệnh cũ.
                 withdrawKey.current = newIdempotencyKey();
                 setNotice(null);
+                setWithdrawError(null);
                 setWithdrawOpen(true);
               }}
               className={`${ui.btnSecondary} mt-4 w-full gap-2`}
             >
               <Landmark className="h-4 w-4" aria-hidden="true" />
-              Rút tiền về ngân hàng
+              Rút ngân hàng
             </button>
           </section>
           <p className="-mt-2 px-1 text-xs text-stone-600">
@@ -337,6 +341,11 @@ export default function WalletPage() {
             />
           </Field>
         </div>
+        {withdrawError && (
+          <p role="alert" className={`mb-3 ${ui.error}`}>
+            {withdrawError}
+          </p>
+        )}
         {amountNum >= min && (
           <p className="mt-2 rounded-control bg-stone-100 p-3 text-xs text-stone-700">
             Phí chuyển khoản ngân hàng: {formatVnd(fee)} • Thực nhận: <b>{formatVnd(Math.max(0, amountNum - fee))}</b>
