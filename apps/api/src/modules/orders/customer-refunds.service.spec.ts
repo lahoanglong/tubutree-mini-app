@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CustomerRefundsService } from './customer-refunds.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
@@ -40,7 +40,10 @@ function setup(row: Record<string, unknown> | null = pending()) {
     },
     returnRequest: { findFirst: jest.fn().mockResolvedValue(null) },
     payout: { findFirst: jest.fn().mockResolvedValue(null) },
-    user: { findMany: jest.fn().mockResolvedValue([{ id: 'a1', fullName: 'Admin An', phone: null }]) },
+    user: {
+      findMany: jest.fn().mockResolvedValue([{ id: 'a1', fullName: 'Admin An', phone: null }]),
+      findUnique: jest.fn().mockResolvedValue({ phone: '0900000999' }),
+    },
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
@@ -473,31 +476,59 @@ describe('CustomerRefundsService — khoản của khách cuối đơn CTV lên 
 
 describe('CustomerRefundsService — nhân viên Kế toán xử lý hoàn tiền (D1-05)', () => {
   const typed = { bankName: 'ACB', accountNumber: '999988887777', accountName: 'Tran Van B' };
+  const noBank = { bankAccountNo: null, bankName: null, bankAccountName: null };
+  const endCustomer = (over: Record<string, unknown> = {}) =>
+    pending({ kind: 'END_CUSTOMER', userId: null, phone: '0912345678', recipientName: 'Khách cuối', ...noBank, ...over });
 
-  it('nhân viên không đổi được tài khoản khách đã có lúc "Bắt đầu chuyển khoản" (chuyển tiền về tài khoản khác)', async () => {
-    const { service, prisma } = setup();
-    await expect(service.claim('s1', 'r1', { ...typed, byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+  it.each([
+    ['khoản đã có tài khoản khách', pending()],
+    ['khoản khách chưa chọn tài khoản', pending(noBank)],
+    ['khoản khách cuối đơn CTV', endCustomer()],
+  ])('nhân viên gõ tài khoản nhận lúc "Bắt đầu chuyển khoản" → 403 (%s)', async (_label, row) => {
+    const { service, prisma } = setup(row);
+    await expect(service.claim('s1', 'r1', { ...typed, byStaff: true })).rejects.toThrow(ForbiddenException);
     expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
   });
 
-  it('nhân viên không đổi được tài khoản khách đã có lúc xác nhận đã chuyển', async () => {
+  it('nhân viên gõ dù chỉ một trường tài khoản → 403', async () => {
+    const { service, prisma } = setup(pending(noBank));
+    await expect(service.claim('s1', 'r1', { bankName: 'ACB', byStaff: true })).rejects.toThrow(ForbiddenException);
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên gõ tài khoản lúc xác nhận đã chuyển → 403, không ghi, không báo khách', async () => {
     const { service, tx, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 's1' }));
-    await expect(service.markPaid('s1', 'r1', { bankRef: 'FT1', ...typed, byStaff: true })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(service.markPaid('s1', 'r1', { bankRef: 'FT1', ...typed, byStaff: true })).rejects.toThrow(ForbiddenException);
     expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 
-  it('khoản chưa có tài khoản: nhân viên nhập tài khoản khách gửi qua kênh khác được', async () => {
-    const { service, prisma } = setup(pending({ bankAccountNo: null, bankName: null, bankAccountName: null }));
-    await service.claim('s1', 'r1', { ...typed, byStaff: true });
-    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ bankAccountNo: '999988887777', claimedBy: 's1' }) }),
-    );
+  it.each([
+    ['khoản khách chưa chọn tài khoản', pending(noBank)],
+    ['khoản khách cuối đơn CTV chưa có tài khoản', endCustomer()],
+  ])('khoản chưa có tài khoản → nhân viên không xử lý, nhờ quản trị viên nhập (%s)', async (_label, row) => {
+    const { service, prisma, tx } = setup(row);
+    await expect(service.claim('s1', 'r1', { byStaff: true })).rejects.toThrow('Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập');
+    await expect(service.markPaid('s1', 'r1', { bankRef: 'FT1', byStaff: true })).rejects.toThrow(ForbiddenException);
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
   });
 
-  it('quản trị viên vẫn sửa được tài khoản đã có (khách báo đổi tài khoản)', async () => {
+  it('khoản đã có tài khoản khách → nhân viên "Bắt đầu chuyển khoản" được, không đổi tài khoản', async () => {
+    const { service, prisma } = setup();
+    await service.claim('s1', 'r1', { byStaff: true });
+    const call = prisma.orderCustomerRefund.updateMany.mock.calls[0][0];
+    expect(call.data).toMatchObject({ status: 'PROCESSING', claimedBy: 's1' });
+    expect(call.data).not.toHaveProperty('bankAccountNo');
+  });
+
+  it('khoản đã có tài khoản khách → nhân viên xác nhận đã chuyển được', async () => {
+    const { service, tx } = setup(pending({ status: 'PROCESSING', claimedBy: 's1' }));
+    await service.markPaid('s1', 'r1', { bankRef: 'FT1', byStaff: true });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalled();
+  });
+
+  it('quản trị viên vẫn nhập / sửa tài khoản được', async () => {
     const { service, prisma } = setup();
     await service.claim('a1', 'r1', typed);
     expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
@@ -505,28 +536,56 @@ describe('CustomerRefundsService — nhân viên Kế toán xử lý hoàn tiề
     );
   });
 
+  it('quản trị viên gõ tài khoản: câu ghi khớp đúng tài khoản đã đọc (khách lưu chen giữa thì trượt)', async () => {
+    const { service, prisma } = setup(pending(noBank));
+    await service.claim('a1', 'r1', typed);
+    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PENDING', bankAccountNo: null } }),
+    );
+  });
+
+  it('quản trị viên gõ tài khoản đúng lúc khách vừa lưu tài khoản trong app → 409, không ghi đè', async () => {
+    const { service, prisma } = setup();
+    prisma.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
+    prisma.orderCustomerRefund.findUnique
+      .mockResolvedValueOnce(pending(noBank))
+      .mockResolvedValueOnce(pending({ bankAccountNo: '0123456789' }));
+    await expect(service.claim('a1', 'r1', typed)).rejects.toThrow(ConflictException);
+  });
+
   it('nhân viên không "Bắt đầu chuyển khoản" khoản hoàn của chính mình', async () => {
     const { service, prisma } = setup(pending({ userId: 's1' }));
-    await expect(service.claim('s1', 'r1', { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.claim('s1', 'r1', { byStaff: true })).rejects.toThrow(ForbiddenException);
     expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên không xử lý khoản khách cuối có SĐT trùng SĐT của mình (userId null)', async () => {
+    const { service, prisma, tx } = setup(endCustomer({ phone: '0912345678', bankAccountNo: '190312345678', bankName: 'TCB' }));
+    prisma.user.findUnique.mockResolvedValue({ phone: '+84912345678' });
+    await expect(service.claim('s1', 'r1', { byStaff: true })).rejects.toThrow(ForbiddenException);
+    await expect(service.markPaid('s1', 'r1', { bankRef: 'FT1', byStaff: true })).rejects.toThrow(ForbiddenException);
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
   });
 
   it('nhân viên không xác nhận đã chuyển khoản hoàn của chính mình', async () => {
     const { service, tx } = setup(pending({ userId: 's1', status: 'PROCESSING', claimedBy: 's1' }));
-    await expect(service.markPaid('s1', 'r1', { bankRef: 'FT1', byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.markPaid('s1', 'r1', { bankRef: 'FT1', byStaff: true })).rejects.toThrow(ForbiddenException);
     expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
   });
 
-  it('nhân viên không xác nhận / bỏ qua tiền dư của chính mình', async () => {
-    const { service, tx } = setup(unverified({ userId: 's1' }));
-    await expect(service.verifyOverpayment('s1', 'r1', { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(service.dismissOverpayment('s1', 'r1', { reason: 'Cùng một lần chuyển', byStaff: true })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  it('nhân viên không xác nhận / bỏ qua tiền dư của chính mình (theo tài khoản hoặc SĐT)', async () => {
+    for (const row of [unverified({ userId: 's1' }), unverified({ userId: null, phone: '0900000999' })]) {
+      const { service, tx } = setup(row);
+      await expect(service.verifyOverpayment('s1', 'r1', { byStaff: true })).rejects.toThrow(ForbiddenException);
+      await expect(service.dismissOverpayment('s1', 'r1', { reason: 'Cùng một lần chuyển', byStaff: true })).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    }
   });
 
-  it('nhân viên xử lý khoản của khách khác như thường', async () => {
+  it('nhân viên xác nhận tiền dư của khách khác như thường', async () => {
     const { service, tx } = setup(unverified());
     await service.verifyOverpayment('s1', 'r1', { byStaff: true });
     expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalled();

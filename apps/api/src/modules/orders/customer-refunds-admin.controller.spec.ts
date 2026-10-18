@@ -50,6 +50,7 @@ describe('CustomerRefundsAdminController — báo service người bấm là nh�
 
   it.each([
     ['STAFF', true],
+    ['DEALER', true],
     ['ADMIN', false],
   ])('%s → byStaff=%s ở mọi thao tác ghi tiền', async (role, byStaff) => {
     await ctl.claim('u', role, 'r1', {});

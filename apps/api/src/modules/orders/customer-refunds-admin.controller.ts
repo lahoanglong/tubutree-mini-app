@@ -68,7 +68,7 @@ export class CustomerRefundsAdminController {
     @Param('id') id: string,
     @Body() dto: ClaimCustomerRefundDto,
   ) {
-    return this.refunds.claim(adminId, id, { ...dto, byStaff: role === 'STAFF' });
+    return this.refunds.claim(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 
   /** Trả khoản về hàng chờ khi chưa chuyển được (khách lại đổi được nơi nhận). */
@@ -85,7 +85,7 @@ export class CustomerRefundsAdminController {
     @Param('id') id: string,
     @Body() dto: VerifyOverpaymentDto,
   ) {
-    return this.refunds.verifyOverpayment(adminId, id, { ...dto, byStaff: role === 'STAFF' });
+    return this.refunds.verifyOverpayment(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 
   /** Khoản dư Pancake báo nhưng sao kê không có: đóng khoản, không báo khách. */
@@ -96,7 +96,7 @@ export class CustomerRefundsAdminController {
     @Param('id') id: string,
     @Body() dto: DismissOverpaymentDto,
   ) {
-    return this.refunds.dismissOverpayment(adminId, id, { ...dto, byStaff: role === 'STAFF' });
+    return this.refunds.dismissOverpayment(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 
   @Post(':id/mark-paid')
@@ -106,6 +106,6 @@ export class CustomerRefundsAdminController {
     @Param('id') id: string,
     @Body() dto: MarkCustomerRefundPaidDto,
   ) {
-    return this.refunds.markPaid(adminId, id, { ...dto, byStaff: role === 'STAFF' });
+    return this.refunds.markPaid(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 }

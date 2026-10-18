@@ -478,7 +478,7 @@ export default function AdminPage() {
           {active === 'engagement' && <EngagementTab />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
-          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} />}
+          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}
           {active === 'orders' && (
             <OrdersTab
               key={orderSeed?.n ?? 0}
