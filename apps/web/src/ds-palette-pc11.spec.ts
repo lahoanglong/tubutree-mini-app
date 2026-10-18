@@ -47,6 +47,16 @@ const MIGRATED = [
   'components/geo-picker.tsx',
   'components/admin/user-picker.tsx',
   'components/admin/product-picker.tsx',
+  'components/admin/waste-tab.tsx',
+  'lib/waste-labels.ts',
+  'components/admin/waste-items-section.tsx',
+  'components/admin/waste-point-form.tsx',
+  'components/admin/waste-points-section.tsx',
+  'components/admin/waste-point-detail.tsx',
+  'components/admin/waste-requests-section.tsx',
+  'components/admin/waste-request-detail.tsx',
+  'components/admin/waste-gifts-section.tsx',
+  'components/admin/waste-config-card.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');

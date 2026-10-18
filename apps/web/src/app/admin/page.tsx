@@ -141,7 +141,7 @@ import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
-import { RefillTab } from '@/components/admin/refill-tab';
+import { WasteTab, type WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
@@ -162,7 +162,7 @@ import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 type Tab =
   | 'inbox'
   | 'opsHealth'
-  | 'refill'
+  | 'waste'
   | 'attendance'
   | 'dashboard'
   | 'dealers'
@@ -250,7 +250,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'community', label: 'Cộng đồng' },
       { k: 'subscriptions', label: 'Gói định kỳ' },
       { k: 'posCredits', label: 'Tích điểm tại quầy' },
-      { k: 'refill', label: 'Đổi vỏ chai' },
+      { k: 'waste', label: 'Đổi rác' },
     ],
   },
   {
@@ -285,15 +285,36 @@ const DEFAULT_TAB: Tab = 'inbox';
 
 /**
  * Mục nhân viên (STAFF) mở được theo nhóm việc — khớp các route @AllowStaff ở API (staff-permissions.matrix.spec.ts);
- * mọi nhân viên đều duyệt được đổi vỏ chai (route /refill/admin vốn mở cho STAFF).
+ * mọi nhân viên đều mở được tab Đổi rác (hàng đợi kho, màn đếm và quà chờ nhận; route /admin/waste/requests và /admin/waste/gift-redemptions mở cho STAFF, spec 16.2).
  */
 const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
-  BASE: ['refill'],
+  BASE: ['waste'],
   CSKH: ['inbox', 'orders', 'externalOrders', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
   MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
   KE_TOAN: ['inbox', 'orders', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
+type WasteInboxKey =
+  | 'wasteToCount'
+  | 'wasteUnmatched'
+  | 'wasteBlockedPending'
+  | 'wastePointsPending'
+  | 'wastePerksPending'
+  | 'wasteTransitOverdue'
+  | 'wasteGiftOverdue'
+  | 'wasteOrderMismatch';
+const WASTE_INBOX_SEEDS: Record<WasteInboxKey, Omit<WasteSeed, 'n'>> = {
+  wasteToCount: { section: 'requests', preset: 'toCount' },
+  wasteUnmatched: { section: 'requests', preset: 'unmatched' },
+  wasteBlockedPending: { section: 'requests', preset: 'customerBlocked' },
+  wastePointsPending: { section: 'points', preset: 'pending' },
+  wastePerksPending: { section: 'points', preset: 'perk' },
+  wasteTransitOverdue: { section: 'requests', preset: 'transitOverdue' },
+  wasteGiftOverdue: { section: 'gifts', preset: 'overdue' },
+  wasteOrderMismatch: { section: 'requests', preset: 'orderMismatch' },
+};
+const isWasteInboxKey = (k: InboxKey): k is WasteInboxKey => k in WASTE_INBOX_SEEDS;
+
 function staffTabs(perms: readonly string[]): Set<Tab> {
   const out = new Set<Tab>(STAFF_TABS.BASE);
   for (const p of perms) for (const t of STAFF_TABS[p as StaffPermission] ?? []) out.add(t);
@@ -338,6 +359,7 @@ export default function AdminPage() {
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
   const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter } | null>(null);
   const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
+  const [wasteSeed, setWasteSeed] = useState<WasteSeed | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
   const [consignmentSeed, setConsignmentSeed] = useState(0);
   const role = user?.role;
@@ -403,6 +425,10 @@ export default function AdminPage() {
       setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : 'pending', n: Date.now() });
       return setTab('community');
     }
+    if (isWasteInboxKey(k)) {
+      setWasteSeed({ ...WASTE_INBOX_SEEDS[k], n: Date.now() });
+      return setTab('waste');
+    }
     if (k === 'invoicePending') {
       setOrdersRecycling('');
       setOrdersPancake('');
@@ -422,6 +448,7 @@ export default function AdminPage() {
         | 'communityPending'
         | 'communityUnanswered'
         | 'invoicePending'
+        | WasteInboxKey
       >,
       Tab
     > = {
@@ -433,7 +460,6 @@ export default function AdminPage() {
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
       payouts: 'payouts',
-      refillPending: 'refill',
     };
     setTab(target[k]);
   };
@@ -525,7 +551,7 @@ export default function AdminPage() {
           {active === 'users' && isAdmin && <AccountDeletionPanel />}
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
-          {active === 'refill' && <RefillTab isAdmin={isAdmin} />}
+          {active === 'waste' && <WasteTab key={wasteSeed?.n ?? 0} isAdmin={isAdmin} seed={wasteSeed} />}
           {active === 'config' && <ConfigTab />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}
@@ -730,7 +756,7 @@ function DashboardTab({
         >
           <span>
             <Recycle aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
-            <b>{recyclingQ.data}</b> đơn thu gom tái chế cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
+            <b>{recyclingQ.data}</b> đơn thu kèm Gomdon cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
           </span>
           <span className="shrink-0 font-semibold">Xử lý ngay →</span>
         </button>
@@ -1140,8 +1166,8 @@ function OrdersTab({
         }}
       />
 
-      {/* Bộ lọc thu gom tái chế (Gomdon) */}
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu gom tái chế">
+      {/* Bộ lọc đơn thu kèm Gomdon */}
+      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu kèm Gomdon">
         {RECYCLING_FILTERS.map((f) => {
           const active = recycling === f.k;
           const count = f.k === 'attention' ? attentionQ.data : undefined;

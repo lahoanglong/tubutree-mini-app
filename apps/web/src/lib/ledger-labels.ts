@@ -65,6 +65,10 @@ const POINTS_REASON_RULES: Record<string, ReasonRule> = {
   MISSION: { label: 'Thưởng nhiệm vụ Vườn Xanh' },
   REVIEW: { label: 'Đánh giá sản phẩm' },
   REVIEW_DELETE: { label: 'Thu hồi điểm đánh giá đã xoá' },
+  RECYCLE: { label: 'Đổi rác lấy quà' },
+  RECYCLE_REVERSED: { label: 'Thu hồi điểm đổi rác' },
+  GIFT_REDEEM: { label: 'Đổi điểm lấy quà' },
+  GIFT_REFUND: { label: 'Hoàn điểm quà' },
 };
 
 const FALLBACK_POINTS_LABEL = 'Điều chỉnh Điểm Xanh';
