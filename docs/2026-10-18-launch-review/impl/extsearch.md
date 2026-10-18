@@ -16,3 +16,10 @@ Khách A gửi mã X khi đơn chưa về: A có attempt UNMATCHED (chờ tìm l
 
 ## Kiểm thử
 `test/integration-race/external-claims-extsearch.race-spec.ts` (3 ca): đỏ trước khi sửa 2/2 ca lỗi (nhận `SEARCHING`), ca ALREADY_CLAIMED xanh sẵn. Vitest miniapp: `external-points.spec.tsx` (1 ca mới), `external-points-api.spec.ts` (mới).
+
+## Sửa sau review Opus
+Đỏ trước khi sửa (a4a7e908): race N1, N2, N3a, N3b đỏ; unit M1 hai ca đỏ.
+- N1: `waitingOther` được xét trước `unknown`: đơn nguồn UNKNOWN mà A đang chờ thì B nhận `CLAIMED_BY_OTHER`, không còn REVIEW "không cần làm gì".
+- N2: dòng attempt chờ trong danh sách admin (`listAttempts`) có `otherSubmittersCount` và `otherSubmitters` (tối đa 10 người khác, SĐT che, giờ gửi; lượt UNMATCHED hoặc NOT_FOUND cùng mã trong 30 ngày, kể cả lượt đã đóng). Tab admin hiện "N người khác cùng gửi mã này" kèm danh sách. Dòng của A đã nằm trong "Cần xử lý" nên không thêm hàng đợi. Comment ở `persist` đã sửa.
+- N3: lượt chờ quá 3 ngày (cron không còn quét) bị đóng bằng `resolvedAt` + ghi chú khi có người gửi lại mã (chỉ lượt chưa thấy đơn; lượt đã thấy đơn chờ CSKH thì giữ). A gửi lại hoặc B gửi: mở lượt chờ mới, trả SEARCHING. Lượt cũ còn trong lịch sử và hiện trong `otherSubmitters`. Không thêm cột hay migration.
+- M1: `createMany` đụng unique mà `findFirst` ra null (lượt chờ vừa đóng): thử `createMany` lại một lần; vẫn không được thì ghi NOT_FOUND và trả `CLAIMED_BY_OTHER`.

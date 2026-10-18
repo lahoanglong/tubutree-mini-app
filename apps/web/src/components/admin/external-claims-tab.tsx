@@ -403,6 +403,18 @@ function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who
         Khách: {a.userName ?? '—'} · {a.userPhoneMasked ?? 'không có SĐT'} · gửi lúc {formatDateTime(a.createdAt)}
       </div>
       {a.note && <div className="mt-0.5 text-xs text-stone-600">Ghi chú: {a.note}</div>}
+      {!!a.otherSubmittersCount && a.otherSubmitters && (
+        <div data-other-submitters className="mt-1 text-xs text-warning-fg">
+          <div className="font-medium">{a.otherSubmittersCount} người khác cùng gửi mã này</div>
+          <ul className="mt-0.5 space-y-0.5 text-stone-600">
+            {a.otherSubmitters.map((o) => (
+              <li key={o.userId}>
+                {o.userName ?? '—'} · {o.userPhoneMasked ?? 'không có SĐT'} · gửi lúc {formatDateTime(o.createdAt)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {done && <p role="status" className="mt-1 text-xs text-success-fg">{done}</p>}
       {err && <p role="alert" className="mt-1 text-xs text-danger-fg">{err}</p>}
       {own && <p className="mt-1 text-xs text-stone-500">Đây là lần gửi mã của chính bạn, bạn không tự xử lý được.</p>}

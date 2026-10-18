@@ -162,6 +162,17 @@ export interface AdminExternalAttemptRow {
   externalOrderId: string | null;
   note: string | null;
   createdAt: string;
+  /** Số tài khoản KHÁC đã gửi cùng mã này (30 ngày gần nhất, kể cả lượt đã đóng). CSKH gắn đơn đúng người. */
+  otherSubmittersCount?: number;
+  /** Tối đa 10 người gửi gần nhất; SĐT đã che. */
+  otherSubmitters?: AdminExternalAttemptOtherSubmitter[];
+}
+
+export interface AdminExternalAttemptOtherSubmitter {
+  userId: string;
+  userName: string | null;
+  userPhoneMasked: string | null;
+  createdAt: string;
 }
 
 export interface AdminExternalAttemptListResponse {

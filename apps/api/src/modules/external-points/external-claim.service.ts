@@ -398,20 +398,33 @@ export class ExternalClaimService {
       if (a.attemptId) {
         if (unknown) await tx.externalClaimAttempt.updateMany({ where: { id: a.attemptId, resolvedAt: null }, data: { externalOrderId, note } });
       } else {
+        // Lượt chờ quá hạn tìm lại (cron chỉ quét 3 ngày) không còn ai tìm: đóng để mã được chờ lại, đừng hứa "sẽ tự tìm" bằng lượt chết.
+        // Chỉ lượt chưa thấy đơn; lượt đã thấy đơn (nguồn UNKNOWN) chờ CSKH nên không đóng. Lượt cũ còn trong lịch sử.
+        await tx.externalClaimAttempt.updateMany({
+          where: { code, result: 'UNMATCHED', resolvedAt: null, externalOrderId: null, createdAt: { lt: new Date(now.getTime() - UNMATCHED_RETRY_DAYS * DAY_MS) } },
+          data: { resolvedAt: now, note: 'Quá hạn tìm lại, mở lượt chờ mới theo lần gửi sau' },
+        });
         // createMany skipDuplicates: unique một phần theo mã (một lần chờ mỗi mã). Trùng thì ghi NOT_FOUND mà không làm hỏng transaction (25P02).
-        const res = await tx.externalClaimAttempt.createMany({ data: [{ userId, code, result: 'UNMATCHED', dayKey, externalOrderId, note }], skipDuplicates: true });
+        const row = { userId, code, result: 'UNMATCHED', dayKey, externalOrderId, note };
+        let res = await tx.externalClaimAttempt.createMany({ data: [row], skipDuplicates: true });
+        let waiting: { userId: string } | null = null;
         if (res.count === 0) {
-          // Mã đang chờ chính là của khách này (gửi lại): không ghi NOT_FOUND để không tính vào khoá 24h.
-          const waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
-          // Lần chờ thuộc người khác thì lần của khách này ghi NOT_FOUND (CSKH thấy hai người cùng gửi một mã) và không được tìm tiếp.
-          if (waiting && waiting.userId !== userId) {
-            await addAttempt('NOT_FOUND', { externalOrderId, note });
-            waitingOther = true;
+          waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
+          // Lượt chờ vừa bị đóng (cron ghép được đơn) giữa createMany và findFirst: thử ghi lại đúng một lần.
+          if (!waiting) {
+            res = await tx.externalClaimAttempt.createMany({ data: [row], skipDuplicates: true });
+            if (res.count === 0) waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
           }
         }
+        if (res.count === 0 && waiting?.userId !== userId) {
+          // Mã đang chờ của khách này (gửi lại) thì không ghi NOT_FOUND để không tính vào khoá 24h. Lượt chờ là của người khác (hoặc vẫn
+          // không ghi được): lượt của khách này ghi NOT_FOUND và không được tìm tiếp; CSKH thấy qua `otherSubmitters` ở dòng chờ của người kia.
+          await addAttempt('NOT_FOUND', { externalOrderId, note });
+          waitingOther = true;
+        }
       }
-      if (unknown) return { kind: 'UNKNOWN_SOURCE' };
-      return waitingOther ? { kind: 'WAITING_OTHER' } : { kind: 'SEARCHING' };
+      if (waitingOther) return { kind: 'WAITING_OTHER' };
+      return unknown ? { kind: 'UNKNOWN_SOURCE' } : { kind: 'SEARCHING' };
     }
 
     if (!order) throw new Error('persist: quyết định CLAIM nhưng không có đơn');

@@ -2,6 +2,7 @@ import type { HttpException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { ExternalClaimService } from '../../src/modules/external-points/external-claim.service';
+import { ExternalClaimsAdminService } from '../../src/modules/external-points/external-claims-admin.service';
 import { createUser, deleteItData, pinConfig, randCode, warmPool } from './helpers';
 
 const DAY = 864e5;
@@ -95,5 +96,78 @@ describe('Gửi mã khi người khác đang chờ cùng mã (real Postgres)', (
     expect(await rejectCode(service().submit(b.id, code))).toBe('ALREADY_CLAIMED');
     await prisma.externalPointsClaim.updateMany({ where: { externalOrderId: order.id }, data: { state: 'CREDITED', creditedAt: now } });
     expect(await rejectCode(service().submit(b.id, code))).toBe('ALREADY_CLAIMED');
+  });
+
+  const adminSvc = () => new ExternalClaimsAdminService(prisma, new SystemConfigService(prisma), { notify: jest.fn(async () => undefined) } as never, service());
+  const ageAttempts = (code: string, userId: string, days: number) =>
+    prisma.externalClaimAttempt.updateMany({ where: { code, userId }, data: { createdAt: new Date(Date.now() - days * DAY) } });
+  const openAttempts = (code: string) => prisma.externalClaimAttempt.findMany({ where: { code, result: 'UNMATCHED', resolvedAt: null } });
+
+  describe('review: nguồn UNKNOWN, CSKH thấy người gửi sau, lượt chờ quá hạn, khe đua', () => {
+    async function unknownOrder(code: string) {
+      const now = new Date();
+      const o = await prisma.externalOrder.create({
+        data: {
+          pancakeOrderId: `EXU${randCode(10)}`, source: 'UNKNOWN', channel: null, sourceKey: 'x|y|z', trackingCode: code, trackingCodes: [code],
+          goodsValue: 200_000, pancakeStatus: 3, status: 'DELIVERED', deliveredAt: new Date(now.getTime() - DAY), pancakeInsertedAt: new Date(now.getTime() - 3 * DAY), pancakeUpdatedAt: now, lastPayload: {},
+        } as never,
+      });
+      orderIds.push(o.id);
+    }
+
+    it('N1: đơn nguồn UNKNOWN, A đang chờ, B gửi cùng mã: B nhận CLAIMED_BY_OTHER, không phải REVIEW "không cần làm gì"', async () => {
+      const [a, b] = [await mkUser(), await mkUser()];
+      const code = `EXU${randCode(10)}`;
+      await unknownOrder(code);
+      expect((await service().submit(a.id, code)).status).toBe('REVIEW');
+      const res = await service().submit(b.id, code);
+      expect(res.status).toBe('CLAIMED_BY_OTHER');
+      expect(res.message).not.toContain('không cần làm gì');
+    });
+
+    it('N2: dòng chờ của A trong danh sách admin có otherSubmitters (tên, SĐT che, giờ gửi) và số lượng; B không có dòng riêng', async () => {
+      const a = await mkUser();
+      const b = await createUser(prisma, { phone: phone(), zaloId: `zalo_${randCode(10)}`, fullName: 'Chi Bich' });
+      userIds.push(b.id);
+      const code = `EXU${randCode(10)}`;
+      await unknownOrder(code);
+      await service().submit(a.id, code);
+      await service().submit(b.id, code);
+      const list = await adminSvc().listAttempts(1, 200);
+      const rowA = list.data.find((r) => r.userId === a.id)!;
+      expect(rowA.otherSubmittersCount).toBe(1);
+      expect(rowA.otherSubmitters).toHaveLength(1);
+      expect(rowA.otherSubmitters![0]).toMatchObject({ userId: b.id, userName: 'Chi Bich', userPhoneMasked: `${b.phone!.slice(0, 3)}****${b.phone!.slice(-3)}` });
+      expect(typeof rowA.otherSubmitters![0]!.createdAt).toBe('string');
+      expect(list.data.some((r) => r.userId === b.id)).toBe(false);
+    });
+
+    it('N3a: A gửi lại khi lượt chờ đã quá 3 ngày: lượt cũ đóng, mở lượt mới, trả SEARCHING', async () => {
+      const a = await mkUser();
+      const code = `EXS${randCode(10)}`;
+      await service().submit(a.id, code);
+      await ageAttempts(code, a.id, 4);
+      const old = (await openAttempts(code))[0]!;
+      expect((await service().submit(a.id, code)).status).toBe('SEARCHING');
+      const open = await openAttempts(code);
+      expect(open).toHaveLength(1);
+      expect(open[0]!.id).not.toBe(old.id);
+      const closed = await prisma.externalClaimAttempt.findUniqueOrThrow({ where: { id: old.id } });
+      expect(closed.resolvedAt).not.toBeNull();
+    });
+
+    it('N3b: B gửi khi lượt chờ của A đã quá hạn: đóng lượt A, B chờ (SEARCHING); A gửi lại thì CLAIMED_BY_OTHER; CSKH thấy A trong otherSubmitters của B', async () => {
+      const [a, b] = [await mkUser(), await mkUser()];
+      const code = `EXS${randCode(10)}`;
+      await service().submit(a.id, code);
+      await ageAttempts(code, a.id, 4);
+      expect((await service().submit(b.id, code)).status).toBe('SEARCHING');
+      const open = await openAttempts(code);
+      expect(open.map((x) => x.userId)).toEqual([b.id]);
+      expect((await service().submit(a.id, code)).status).toBe('CLAIMED_BY_OTHER');
+      await ageAttempts(code, b.id, 4);
+      const rowB = (await adminSvc().listAttempts(1, 200)).data.find((r) => r.userId === b.id)!;
+      expect(rowB.otherSubmitters!.map((x) => x.userId)).toContain(a.id);
+    });
   });
 });
