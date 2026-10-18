@@ -55,7 +55,7 @@ export function Button({
   children, variant = 'primary', size = 'md', loading, disabled, icon: IconCmp, fullWidth, onPress, className, style,
   ...aria
 }: ButtonProps) {
-  const toneStyle = variant === 'flash' ? FLASH_STYLE : variant === 'danger' ? DANGER_STYLE : undefined;
+  const toneStyle = variant === 'flash' ? FLASH_STYLE : variant === 'danger' && !disabled ? DANGER_STYLE : undefined;
   const inFlight = useRef(false);
   const handlePress = () => {
     // `loading` chỉ đúng sau khi caller re-render; hai cú chạm sát nhau trước đó vẫn thấy loading=false,
