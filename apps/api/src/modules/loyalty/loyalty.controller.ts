@@ -36,6 +36,12 @@ export class LoyaltyController {
     return this.loyalty.getRewardCatalog(userId);
   }
 
+  /** Các lượt đổi quà của khách (mã QG- của lượt còn chờ nhận). */
+  @Get('me/loyalty/rewards/mine')
+  myRedemptions(@CurrentUser('sub') userId: string) {
+    return this.loyalty.getMyRedemptions(userId);
+  }
+
   /** Đổi Điểm Xanh lấy Voucher cá nhân (trừ điểm atomic — xem LoyaltyService.redeemReward). */
   @Post('me/loyalty/rewards/:id/redeem')
   @Throttle({ default: { ttl: 60_000, limit: 10 } })

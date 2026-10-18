@@ -278,6 +278,33 @@ describe('fake DB (tự kiểm)', () => {
   });
 });
 
+type GiftRow = Record<string, unknown>;
+const giftRow = (over: GiftRow = {}): GiftRow => ({
+  id: 'g1', kind: 'GIFT', name: 'Túi vải Tubu', description: null, label: null, pointsCost: 30_000, status: 'ACTIVE',
+  sortOrder: 60, imageUrl: null, stock: null, claimInstructions: null, voucherType: null, voucherValue: null,
+  voucherMinOrder: null, voucherMaxDiscount: null, voucherValidDays: null, ...over,
+});
+const voucherRow = (id: string, name: string, description: string, label: string, pointsCost: number, sortOrder: number,
+  t: 'FREESHIP' | 'AMOUNT' | 'PERCENT', value: number, minOrder: number, maxDiscount: number | null) =>
+  giftRow({ id, kind: 'VOUCHER', name, description, label, pointsCost, sortOrder, voucherType: t, voucherValue: value,
+    voucherMinOrder: minOrder, voucherMaxDiscount: maxDiscount, voucherValidDays: 30 });
+const FREESHIP = voucherRow('reward-freeship', 'Miễn phí vận chuyển', 'Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop.', 'Phổ biến', 20_000, 10, 'FREESHIP', 0, 99000, null);
+const D50K = voucherRow('reward-discount-50k', 'Giảm 50.000đ', 'Giảm ngay 50.000đ cho đơn hàng từ 300.000đ', 'Tiết kiệm', 50_000, 20, 'AMOUNT', 50000, 300000, null);
+const P15 = voucherRow('reward-percent-15pct', 'Giảm 15%', 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ', 'Đặc quyền', 75_000, 30, 'PERCENT', 15, 250000, 80000);
+const D100K = voucherRow('reward-discount-100k', 'Giảm 100.000đ', 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ', 'HOT', 100_000, 40, 'AMOUNT', 100000, 600000, null);
+const TREE = giftRow({ id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng cây', description: 'Dùng Điểm Xanh góp vào quỹ trồng cây của Tubu Tree.', pointsCost: 0, sortOrder: 50 });
+const SEEDED_GIFTS = [FREESHIP, D50K, P15, D100K, TREE];
+const WAREHOUSE = { name: 'Kho Tubu HCM', addressLine: '1 Đường A', communeName: 'Phường B', provinceName: 'TP.HCM', openingHours: { MON: [{ open: '08:00', close: '17:00' }] } };
+
+function catalogPrisma(o: { balance: number; converted?: number; locked?: LockedRow[]; gifts?: GiftRow[]; warehouse?: unknown }) {
+  return {
+    user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: o.balance, pointsConvertedBalance: o.converted ?? 0 }) },
+    $queryRaw: jest.fn().mockResolvedValue(o.locked ?? []),
+    wasteGift: { findMany: jest.fn().mockResolvedValue(o.gifts ?? SEEDED_GIFTS) },
+    wastePoint: { findFirst: jest.fn().mockResolvedValue(o.warehouse ?? null) },
+  } as unknown as PrismaService & { wasteGift: { findMany: jest.Mock }; wastePoint: { findFirst: jest.Mock } };
+}
+
 describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -285,30 +312,94 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
   // ───────────────────────────── Reward catalog ─────────────────────────────
   describe('Reward Catalog & Redemption', () => {
-    it('getRewardCatalog trả về danh sách phần thưởng kèm cờ canRedeem', async () => {
-      const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 60_000 }) },
-        $queryRaw: jest.fn().mockResolvedValue([]),
-      } as unknown as PrismaService;
-
-      const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
-      expect(res.pointsBalance).toBe(60_000);
-      expect(res.rewards.length).toBe(DEFAULT_REWARD_CATALOG.length);
-      for (const r of res.rewards) expect(r.canRedeem).toBe(60_000 >= r.pointsCost);
+    it('getRewardCatalog đọc waste_gifts ACTIVE theo sortOrder; giá TREE lấy từ game.tree_points_price; voucher có đủ trường', async () => {
+      const prisma = catalogPrisma({ balance: 0 });
+      const res = await new LoyaltyService(prisma, makeConfig({ 'game.tree_points_price': 50_000 })).getRewardCatalog('u1');
+      expect(prisma.wasteGift.findMany).toHaveBeenCalledWith({ where: { status: 'ACTIVE' }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] });
+      expect(res.rewards.map((r) => r.id)).toEqual(['reward-freeship', 'reward-discount-50k', 'reward-percent-15pct', 'reward-discount-100k', 'gift-tree']);
+      expect(res.rewards[0]).toEqual({ id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: FREESHIP.description, label: 'Phổ biến', pointsCost: 20_000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: false, claimInstructions: null, voucher: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, validDays: 30 }, sortOrder: 10 });
+      expect(res.rewards[4]).toMatchObject({ id: 'gift-tree', kind: 'TREE', pointsCost: 50_000, voucher: null });
     });
 
-    it('getRewardCatalog: canRedeem theo điểm DÙNG ĐƯỢC (số dư − điểm đơn mới giao còn trong hạn đổi/trả)', async () => {
-      const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 120_000 }) },
-        $queryRaw: jest.fn().mockResolvedValue([
-          { delta: 80_000, deliveredAt: new Date(Date.now() - 2 * DAY), pendingReturn: false },
-        ]),
-      } as unknown as PrismaService;
+    it('TREE: 28.000 STANDARD + 30.000 CONVERTED so với giá 50.000 → canRedeem true (luật chia lô của buyTree); voucher 50.000 điểm chỉ xét STANDARD → false', async () => {
+      const res = await new LoyaltyService(catalogPrisma({ balance: 28_000, converted: 30_000 }), makeConfig({ 'game.tree_points_price': 50_000 })).getRewardCatalog('u1');
+      const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));
+      expect(byId.get('gift-tree')).toBe(true);
+      expect(byId.get('reward-discount-50k')).toBe(false);
+      expect(byId.get('reward-freeship')).toBe(true);
+      expect(res).toMatchObject({ pointsBalance: 28_000, pointsConvertedBalance: 30_000, lockedPoints: 0, redeemablePoints: 28_000 });
+    });
+
+    it('quà stock 0 → soldOut true, canRedeem false dù đủ điểm; stock 3 → còn 3, đổi được; stock null → không giới hạn', async () => {
+      const gifts = [giftRow({ id: 'g0', stock: 0 }), giftRow({ id: 'g3', stock: 3 }), giftRow({ id: 'gn', stock: null })];
+      const res = await new LoyaltyService(catalogPrisma({ balance: 500_000, gifts }), makeConfig()).getRewardCatalog('u1');
+      expect(res.rewards.map((r) => [r.id, r.stockRemaining, r.soldOut, r.canRedeem])).toEqual([
+        ['g0', 0, true, false], ['g3', 3, false, true], ['gn', null, false, true],
+      ]);
+    });
+
+    it('canRedeem theo điểm DÙNG ĐƯỢC: số dư 120.000, khoá 80.000 → dùng được 40.000', async () => {
+      const prisma = catalogPrisma({ balance: 120_000, locked: [{ delta: 80_000, deliveredAt: new Date(Date.now() - 2 * DAY), pendingReturn: false }] });
       const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
       expect(res).toMatchObject({ pointsBalance: 120_000, lockedPoints: 80_000, redeemablePoints: 40_000 });
       const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));
-      expect(byId.get('reward-freeship')).toBe(true); // 20.000 ≤ 40.000
-      expect(byId.get('reward-discount-50k')).toBe(false); // 50.000 > 40.000 dù số dư 120.000
+      expect(byId.get('reward-freeship')).toBe(true);
+      expect(byId.get('reward-discount-50k')).toBe(false);
+    });
+
+    it('điểm khoá lớn hơn số dư → redeemablePoints 0, không âm, không quà nào đổi được', async () => {
+      const prisma = catalogPrisma({ balance: 20_000, locked: [{ delta: 90_000, deliveredAt: new Date(), pendingReturn: false }] });
+      const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
+      expect(res.redeemablePoints).toBe(0);
+      expect(res.rewards.every((r) => !r.canRedeem)).toBe(true);
+    });
+
+    it('giftClaimDays đọc waste.gift_claim_days; claimPoint là kho WAREHOUSE đang ACTIVE, null khi chưa có', async () => {
+      const withWh = catalogPrisma({ balance: 0, warehouse: WAREHOUSE });
+      const res = await new LoyaltyService(withWh, makeConfig({ 'waste.gift_claim_days': 45 })).getRewardCatalog('u1');
+      expect(res.giftClaimDays).toBe(45);
+      expect(res.claimPoint).toEqual(WAREHOUSE);
+      expect(withWh.wastePoint.findFirst).toHaveBeenCalledWith({ where: { kind: 'WAREHOUSE', status: 'ACTIVE' }, select: { name: true, addressLine: true, communeName: true, provinceName: true, openingHours: true } });
+      const none = await new LoyaltyService(catalogPrisma({ balance: 0 }), makeConfig()).getRewardCatalog('u1');
+      expect(none).toMatchObject({ giftClaimDays: 60, claimPoint: null });
+    });
+
+    it('getRewardCatalog chạy cả khi waste.enabled tắt (§8: route quà không bị cờ đổi rác chặn)', async () => {
+      const res = await new LoyaltyService(catalogPrisma({ balance: 100_000 }), makeConfig({ 'waste.enabled': false })).getRewardCatalog('u1');
+      expect(res.rewards).toHaveLength(5);
+    });
+
+    const redemptionRow = (over: GiftRow = {}) => ({
+      id: 'r1', userId: 'u1', giftId: 'g1', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, status: 'READY',
+      code: 'QG-ABCDEFGH', couponId: null, idempotencyKey: 'key-00000001', claimExpiresAt: new Date('2026-12-16T00:00:00Z'),
+      fulfilledAt: null, fulfilledByUserId: null, fulfilledPointId: null, cancelledAt: null, cancelledByUserId: null,
+      cancelReason: null, refundedPoints: null, createdAt: new Date('2026-10-17T00:00:00Z'), ...over,
+    });
+
+    it('getMyRedemptions: lượt READY kèm mã QG- và nơi nhận; lượt voucher FULFILLED kèm mã coupon, không có nơi nhận; lượt quà đã trao không còn mã QG-', async () => {
+      const voucher = redemptionRow({ id: 'r2', giftId: 'reward-freeship', giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', pointsCost: 20_000, status: 'FULFILLED', code: null, couponId: 'cp1', claimExpiresAt: null, fulfilledAt: new Date('2026-10-16T00:00:00Z'), createdAt: new Date('2026-10-16T00:00:00Z') });
+      const used = redemptionRow({ id: 'r3', status: 'FULFILLED', fulfilledAt: new Date('2026-10-15T00:00:00Z'), createdAt: new Date('2026-10-15T00:00:00Z') });
+      const findMany = jest.fn().mockResolvedValue([redemptionRow(), voucher, used]);
+      const prisma = {
+        wasteGiftRedemption: { findMany },
+        coupon: { findMany: jest.fn().mockResolvedValue([{ id: 'cp1', code: 'REWARD-FRESHIP-ABCDEFGH' }]) },
+        wastePoint: { findFirst: jest.fn().mockResolvedValue(WAREHOUSE) },
+      } as unknown as PrismaService;
+      const rows = await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
+      expect(findMany).toHaveBeenCalledWith({ where: { userId: 'u1' }, orderBy: { createdAt: 'desc' }, take: 100 });
+      expect(rows[0]).toEqual({ id: 'r1', giftId: 'g1', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, status: 'READY', code: 'QG-ABCDEFGH', claimExpiresAt: '2026-12-16T00:00:00.000Z', claimPoint: WAREHOUSE, fulfilledAt: null, cancelledAt: null, cancelReason: null, refundedPoints: null, couponCode: null, createdAt: '2026-10-17T00:00:00.000Z' });
+      expect(rows[1]).toMatchObject({ id: 'r2', status: 'FULFILLED', code: null, claimPoint: null, couponCode: 'REWARD-FRESHIP-ABCDEFGH', fulfilledAt: '2026-10-16T00:00:00.000Z' });
+      expect(rows[2]).toMatchObject({ id: 'r3', status: 'FULFILLED', code: null, claimPoint: null, fulfilledAt: '2026-10-15T00:00:00.000Z' });
+    });
+
+    it('getMyRedemptions: coupon đã bị dọn (cron xoá coupon) → couponCode null, không lỗi', async () => {
+      const prisma = {
+        wasteGiftRedemption: { findMany: jest.fn().mockResolvedValue([redemptionRow({ status: 'FULFILLED', giftKind: 'VOUCHER', code: null, couponId: 'gone', claimExpiresAt: null })]) },
+        coupon: { findMany: jest.fn().mockResolvedValue([]) },
+        wastePoint: { findFirst: jest.fn().mockResolvedValue(null) },
+      } as unknown as PrismaService;
+      const [row] = await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
+      expect(row).toMatchObject({ couponCode: null, claimPoint: null });
     });
 
     it('voucher freeship mô tả ĐÚNG hành vi checkout (miễn toàn bộ phí ship, không ghi "tối đa 25k")', () => {
@@ -512,16 +603,6 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
         expect(ov).toMatchObject({ pointsBalance: 100, lockedPoints: 40, lockedReturnPoints: 10, redeemablePoints: 60 });
         expect(ov.lockedUntil).toBe(new Date(deliveredAt.getTime() + 7 * DAY).toISOString());
-      });
-
-      it('điểm khoá lớn hơn số dư (đã tiêu lúc thanh toán) → redeemablePoints = 0, không âm', async () => {
-        const prisma = {
-          user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 20 }) },
-          $queryRaw: jest.fn().mockResolvedValue([{ delta: 90, deliveredAt: new Date(), pendingReturn: false }]),
-        } as unknown as PrismaService;
-        const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
-        expect(res.redeemablePoints).toBe(0);
-        expect(res.rewards.every((r) => !r.canRedeem)).toBe(true);
       });
     });
   });

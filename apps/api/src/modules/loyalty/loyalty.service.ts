@@ -3,12 +3,15 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
+import type { GiftRedemptionDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WasteVoucherSpec } from '@tubutree/shared-types';
+import type { WasteGift, WasteGiftRedemption } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
 import { remainingPointsBack } from '../orders/refund-allocation';
@@ -789,22 +792,82 @@ export class LoyaltyService {
     return result;
   }
 
-  /** Danh mục phần thưởng đổi bằng Điểm Xanh (Reward Catalog). */
-  async getRewardCatalog(userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  /** Danh mục quà đọc từ waste_gifts; route này không bị waste.enabled chặn (§8). */
+  async getRewardCatalog(userId: string): Promise<RewardCatalogDTO> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { pointsBalance: true, pointsConvertedBalance: true },
+    });
     // canRedeem theo điểm DÙNG ĐƯỢC (cùng quy tắc guard của redeemReward), không theo số dư —
     // không thì nút "Đổi ngay" sáng mà bấm vào bị từ chối.
     const lock = await this.lockedOrderPoints(userId, new Date());
+    const treePrice = Number(await this.config.get<number>('game.tree_points_price', 50_000));
+    const giftClaimDays = Number(await this.config.get<number>('waste.gift_claim_days', 60));
+    const gifts = await this.prisma.wasteGift.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    });
+    const claimPoint = await this.claimPointOf(this.prisma);
     const redeemable = Math.max(0, user.pointsBalance - lock.locked);
+    const rewards: RewardItemDTO[] = gifts.map((row) => {
+      const soldOut = row.stock !== null && row.stock < 1;
+      const isTree = row.kind === 'TREE';
+      const canRedeem =
+        !soldOut &&
+        (isTree
+          ? Number.isSafeInteger(treePrice) && treePrice > 0 && redeemable + user.pointsConvertedBalance >= treePrice
+          : redeemable >= row.pointsCost);
+      return {
+        id: row.id,
+        kind: row.kind,
+        name: row.name,
+        description: row.description,
+        label: row.label,
+        pointsCost: isTree ? treePrice : row.pointsCost,
+        imageUrl: row.imageUrl,
+        stockRemaining: row.stock,
+        soldOut,
+        canRedeem,
+        claimInstructions: row.claimInstructions,
+        voucher: row.kind === 'VOUCHER' ? voucherSpecOf(row) : null,
+        sortOrder: row.sortOrder,
+      };
+    });
     return {
       pointsBalance: user.pointsBalance,
+      pointsConvertedBalance: user.pointsConvertedBalance,
       lockedPoints: lock.locked,
       redeemablePoints: redeemable,
-      rewards: DEFAULT_REWARD_CATALOG.map((r) => ({
-        ...r,
-        canRedeem: redeemable >= r.pointsCost,
-      })),
+      giftClaimDays,
+      claimPoint,
+      rewards,
     };
+  }
+
+  /** Các lượt đổi quà của khách (mã QG- của lượt còn chờ nhận). */
+  async getMyRedemptions(userId: string): Promise<GiftRedemptionDTO[]> {
+    const rows = await this.prisma.wasteGiftRedemption.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    const couponIds = rows.flatMap((r) => (r.couponId ? [r.couponId] : []));
+    const coupons = couponIds.length
+      ? await this.prisma.coupon.findMany({ where: { id: { in: couponIds } }, select: { id: true, code: true } })
+      : [];
+    const codeById = new Map(coupons.map((c) => [c.id, c.code]));
+    const claimPoint = await this.claimPointOf(this.prisma);
+    return rows.map((r) =>
+      toGiftRedemptionDTO(r, { claimPoint, couponCode: r.couponId ? (codeById.get(r.couponId) ?? null) : null }),
+    );
+  }
+
+  private async claimPointOf(db: Pick<PrismaService, 'wastePoint'>): Promise<RewardCatalogDTO['claimPoint']> {
+    const wh = await db.wastePoint.findFirst({
+      where: { kind: 'WAREHOUSE', status: 'ACTIVE' },
+      select: { name: true, addressLine: true, communeName: true, provinceName: true, openingHours: true },
+    });
+    return wh ? { ...wh, openingHours: wh.openingHours as WasteOpeningHours } : null;
   }
 
   /**
@@ -1500,6 +1563,45 @@ export function parseMemberCode(raw: string): { phone: string | null; codes: str
     );
   }
   return { phone, codes: [...codes] };
+}
+
+export function voucherSpecOf(
+  row: Pick<WasteGift, 'id' | 'voucherType' | 'voucherValue' | 'voucherMinOrder' | 'voucherMaxDiscount' | 'voucherValidDays'>,
+): WasteVoucherSpec {
+  if (row.voucherType === null || row.voucherValue === null || row.voucherValidDays === null) {
+    throw new InternalServerErrorException(`Quà ${row.id} thiếu cấu hình mã giảm giá.`);
+  }
+  return {
+    type: row.voucherType,
+    value: row.voucherValue,
+    minOrder: row.voucherMinOrder,
+    maxDiscount: row.voucherMaxDiscount,
+    validDays: row.voucherValidDays,
+  };
+}
+
+export function toGiftRedemptionDTO(
+  r: WasteGiftRedemption,
+  extra: { claimPoint: RewardCatalogDTO['claimPoint']; couponCode: string | null },
+): GiftRedemptionDTO {
+  const ready = r.status === 'READY';
+  return {
+    id: r.id,
+    giftId: r.giftId,
+    giftKind: r.giftKind,
+    giftName: r.giftName,
+    pointsCost: r.pointsCost,
+    status: r.status,
+    code: ready ? r.code : null,
+    claimExpiresAt: r.claimExpiresAt?.toISOString() ?? null,
+    claimPoint: ready ? extra.claimPoint : null,
+    fulfilledAt: r.fulfilledAt?.toISOString() ?? null,
+    cancelledAt: r.cancelledAt?.toISOString() ?? null,
+    cancelReason: r.cancelReason,
+    refundedPoints: r.refundedPoints,
+    couponCode: extra.couponCode,
+    createdAt: r.createdAt.toISOString(),
+  };
 }
 
 const COUPON_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

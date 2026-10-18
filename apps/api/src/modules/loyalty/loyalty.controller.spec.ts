@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
@@ -19,6 +21,13 @@ describe('LoyaltyController — route nhân viên (POS)', () => {
 
   it('sổ audit tích điểm tại quầy chỉ ADMIN xem được (nhân viên không tự soát sổ của mình)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.posCredits)).toEqual(['ADMIN']);
+  });
+
+  it('GET me/loyalty/rewards/mine là route khách, không giới hạn role', () => {
+    const h = LoyaltyController.prototype.myRedemptions;
+    expect(Reflect.getMetadata(PATH_METADATA, h)).toBe('me/loyalty/rewards/mine');
+    expect(Reflect.getMetadata(METHOD_METADATA, h)).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
   });
 
   it('route khách (check-in/đổi quà) KHÔNG giới hạn role', () => {
