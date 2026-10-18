@@ -180,6 +180,17 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(screen.getByText('Mang mã này tới kho Tubu TP.HCM để nhận quà')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/hoặc điểm nhận/);
   });
+  it('làm mới danh mục sau khi đổi lỗi → vẫn hiện mã QG- (điểm đã trừ), không thay cả trang bằng ErrorState', async () => {
+    mocks.redeemLoyaltyReward.mockResolvedValue({ success: true, message: 'ok', pointsSpent: 25_000, remainingPoints: 5000, redemption: makeGiftRedemption(), coupon: null });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Cây và hạt' }));
+    fireEvent.click(within(card('Gói hạt giống Tubu')).getByRole('button', { name: 'Đổi' }));
+    mocks.getLoyaltyRewards.mockRejectedValue(new Error('mất mạng'));
+    mocks.invalidate.mockImplementationOnce((qc: QueryClient) => qc.invalidateQueries({ queryKey: ['loyalty-rewards'] }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    expect(await screen.findByText('QG-8K2M9P4T')).toBeInTheDocument();
+    expect(mocks.getLoyaltyRewards).toHaveBeenCalledTimes(2);
+  });
   it('góp quỹ trồng cây đi qua POST /game/tree/buy, không qua đường đổi quà; không hứa cây cụ thể, không mã chứng nhận', async () => {
     mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ rewards: [makeRewardItem({ id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng cây', pointsCost: 30_000, canRedeem: true, voucher: null })] }));
     mocks.buyTree.mockResolvedValue({ certificateCode: 'CERT-123', treeType: 'Sao đen', cost: 30_000, pointsUsed: 30_000, pointsUsedConverted: 0 });

@@ -194,7 +194,7 @@ function RewardsBody() {
   // Giữ khoá ở thân trang để đóng khung rồi mở lại cùng quà sau lỗi mạng vẫn gửi đúng khoá cũ: máy chủ có thể đã trừ điểm.
   const idem = useIdempotencyKey({ rewardId: confirmReward?.id ?? null });
 
-  if (rewardsQ.isError) return <ErrorState message={getErrorMessage(rewardsQ.error)} onRetry={() => void rewardsQ.refetch()} />;
+  if (rewardsQ.isError && !rewardsQ.data) return <ErrorState message={getErrorMessage(rewardsQ.error)} onRetry={() => void rewardsQ.refetch()} />;
   const c = rewardsQ.data;
   if (!c) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
 
