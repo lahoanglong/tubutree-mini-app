@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   blockMessage,
   capSentence,
+  SHORTFALL_LABELS,
   closedLabel,
+  dayMonth,
   equivalentUnits,
   feeExceedsPoints,
   feeRangeText,
@@ -92,5 +94,14 @@ describe('nhãn Đổi rác', () => {
     const p = makeWastePoint();
     expect(pointAddress(p)).toBe('12 Lê Lợi, Phường Bến Thành, TP.HCM');
     expect(mapsUrl(p)).toBe(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('12 Lê Lợi, Phường Bến Thành, TP.HCM')}`);
+  });
+  it('dayMonth theo giờ Việt Nam: 17:30 UTC đã sang ngày hôm sau', () => {
+    expect(dayMonth('2026-10-24T17:30:00.000Z')).toBe('25/10');
+    expect(dayMonth('2026-01-05T00:00:00.000Z')).toBe('05/01');
+  });
+  it('SHORTFALL_LABELS: lý do kho nhận thiếu, không có lý do chỉ có ở cửa kho', () => {
+    expect(SHORTFALL_LABELS.WET).toBe('Ướt');
+    expect(SHORTFALL_LABELS.NOT_ACCEPTED).toBe('Không nhận');
+    expect(Object.keys(SHORTFALL_LABELS)).not.toContain('UNPAID_POSTAGE');
   });
 });

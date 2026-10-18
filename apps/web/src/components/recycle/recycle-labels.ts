@@ -10,9 +10,11 @@ import type {
   WasteRejectionReason,
   WasteRequestDetailDTO,
   WasteRequestStatus,
+  WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { pointAddress } from '@tubutree/app-core/reward-rules';
 import { formatCount } from '@/lib/checkout-points';
+import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 
 export const PAUSED_TEXT = 'Chương trình đang tạm dừng';
@@ -61,6 +63,19 @@ export const REJECTION_LABELS: Record<WasteRejectionReason, string> = {
   UNPAID_POSTAGE: 'Kiện còn cước phải trả khi nhận',
   OTHER: 'Khác',
 };
+
+export const SHORTFALL_LABELS: Record<WasteShortfallReason, string> = {
+  WET: 'Ướt',
+  DIRTY: 'Bẩn',
+  FOREIGN_OBJECT: 'Lẫn vật lạ',
+  WRONG_TYPE: 'Sai loại',
+  DAMAGED: 'Hỏng',
+  NOT_ACCEPTED: 'Không nhận',
+  OTHER: 'Khác',
+};
+
+/** "25/10" theo giờ Việt Nam, lấy từ dd/MM/yyyy của `formatDate` để cả web chung một cách đổi múi giờ. */
+export const dayMonth = (iso: string): string => formatDate(iso).slice(0, 5);
 
 /** Một chữ số thập phân; dưới 50 g làm tròn về 0 kg thì không có dòng nào (null). */
 export function impactLine(grams: number | null | undefined): string | null {

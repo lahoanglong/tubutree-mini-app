@@ -1,4 +1,4 @@
-import { expect, test, type MockApi } from './support/mock-api';
+import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
  * Web khách: Đổi rác lấy quà (/doi-rac, /doi-rac/yeu-cau, /doi-rac/quy-dinh, /doi-rac/tao, /doi-rac/diem-nhan). Mọi lời gọi /api/** đi qua mock (fixture `api`).
@@ -21,6 +21,18 @@ const summary = (over: Record<string, unknown> = {}) => ({
   createdAt: '2026-10-17T03:00:00.000Z', expiresAt: '2026-10-24T17:30:00.000Z', estimatedPoints: 5000, pointsAwarded: null,
   pointName: 'Đại lý Cô Ba', orderCode: null,
   lines: [{ itemName: 'Thùng carton', unitLabel: 'thùng', declaredQty: 5 }],
+  ...over,
+});
+
+const detail = (over: Record<string, unknown> = {}) => ({
+  ...summary(),
+  lines: [{ itemId: 'item-carton', itemName: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0,
+    gramsPerUnit: null, declaredQty: 5, receivedQty: null, shortfallReason: null, pointsAwarded: null }],
+  point: { id: 'pt-1', kind: 'PARTNER', name: 'Đại lý Cô Ba', addressLine: '12 Lê Lợi', communeName: 'Phường Bến Thành', provinceName: 'TP.HCM',
+    phone: '0901234567', openingHours: { MON: [{ open: '08:00', close: '17:00' }] } },
+  pointAvailable: true, carrier: null, trackingCode: null, inTransitAt: null, receivedAt: null, completedAt: null, closedAt: null,
+  rejectionReason: null, rejectionNote: null, dropsAwarded: null, impactGrams: null, reversedPoints: null, reversalReason: null,
+  editable: true, cancellable: true, orderId: null,
   ...over,
 });
 
@@ -164,5 +176,48 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await expect(page.getByText('Tính năng này cần mở Tubu Tree trên Zalo.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tiếp tục' })).toHaveCount(0);
     await expect(page.getByText(/số điện thoại/i)).toHaveCount(0);
+  });
+
+  test('chi tiết yêu cầu mang tới điểm: timeline, mã QR trong sheet, huỷ có hỏi lại', async ({ page, api }) => {
+    mockRecycle(api);
+    api.get('/waste/requests/:id', () => detail());
+    api.get('/waste/points', () => []);
+    api.post('/waste/requests/:id/cancel', () => detail({ status: 'CANCELLED', cancellable: false, editable: false }));
+    await page.goto('/doi-rac/yeu-cau/req-1');
+    await expect(page.getByRole('heading', { name: 'TR-8K2M9', level: 1 })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Tiến độ yêu cầu' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sửa món' })).toHaveAttribute('href', '/doi-rac/yeu-cau/req-1/sua');
+    await page.getByRole('button', { name: 'Xem mã QR' }).click();
+    const qr = page.getByRole('dialog', { name: 'Mã đổi rác' });
+    await expect(qr.getByText('Giữ chỗ tới 25/10/2026')).toBeVisible();
+    await qr.getByRole('button', { name: 'Theo dõi yêu cầu' }).click();
+    await page.getByRole('button', { name: 'Huỷ yêu cầu' }).click();
+    const cancelled = api.waitForCall('POST', '/waste/requests/:id/cancel');
+    await page.getByRole('dialog', { name: 'Huỷ yêu cầu này?' }).getByRole('button', { name: 'Xác nhận huỷ' }).click();
+    await cancelled;
+    await expect(page.getByText('Đã huỷ yêu cầu')).toBeVisible();
+  });
+
+  test('chi tiết yêu cầu gửi về kho: nhập hãng và mã vận đơn gửi PUT tracking', async ({ page, api }) => {
+    mockRecycle(api);
+    api.get('/waste/requests/:id', () => detail({ method: 'MAIL_IN', pointName: 'Kho Tubu TP.HCM', point: { ...detail().point, name: 'Kho Tubu TP.HCM', kind: 'WAREHOUSE' } }));
+    api.on('PUT', '/waste/requests/:id/tracking', () => detail({ method: 'MAIL_IN', status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' }));
+    await page.goto('/doi-rac/yeu-cau/req-1');
+    await expect(page.getByText('Ghi mã này lên kiện, mỗi kiện một yêu cầu')).toBeVisible();
+    const sent = page.getByRole('button', { name: 'Đã gửi' });
+    await expect(sent).toBeDisabled();
+    await page.getByLabel('Hãng').fill('GHN');
+    await page.getByLabel('Mã vận đơn').fill('GHN123');
+    const put = api.waitForCall('PUT', '/waste/requests/:id/tracking');
+    await sent.click();
+    expect((await put).body).toEqual({ carrier: 'GHN', trackingCode: 'GHN123' });
+  });
+
+  test('chi tiết yêu cầu không có: thấy trạng thái rỗng dẫn về Yêu cầu của tôi', async ({ page, api }) => {
+    mockRecycle(api);
+    api.get('/waste/requests/:id', () => reply(404, { message: 'Not found' }));
+    await page.goto('/doi-rac/yeu-cau/req-x');
+    await expect(page.getByText('Không tìm thấy yêu cầu')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Xem yêu cầu của tôi' })).toHaveAttribute('href', '/doi-rac/yeu-cau');
   });
 });
