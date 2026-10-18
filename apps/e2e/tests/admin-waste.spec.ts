@@ -239,10 +239,20 @@ test.describe('Admin — Đổi rác lấy quà', () => {
       id: 'wp-e2e', kind: 'PARTNER', name: 'Tạp hoá Cô Ba', addressLine: '12 Lê Lợi', provinceCode: '79', provinceName: 'TP. Hồ Chí Minh',
       communeCode: '26734', communeName: 'Phường Bến Thành', lat: null, lng: null, phone: null,
       openingHours: { MON: hours, TUE: hours, WED: hours, THU: hours, FRI: hours, SAT: [{ open: '08:00', close: '12:00' }] },
-      acceptedItemIds: [], perkText: null, quotaFull: false, distanceKm: null, status: 'ACTIVE', monthlyQuotaPoints: 100_000,
+      acceptedItemIds: ['it-1', 'it-2', 'it-3', 'it-4'], perkText: null, quotaFull: false, distanceKm: null, status: 'ACTIVE', monthlyQuotaPoints: 100_000,
       monthUsage: { monthKey: '2026-10', pointsUsed: 82_000, confirmations: 41 }, perkPendingText: 'Tặng một túi vải cho khách đổi trên 5 thùng',
-      giftHandoverEnabled: false, note: null, sortOrder: 10, activatedAt: null, lastConfirmedAt: null, hiddenInactive: true, staff: [],
+      giftHandoverEnabled: false, note: null, sortOrder: 10, activatedAt: null, lastConfirmedAt: null, hiddenInactive: true,
+      staff: [
+        { userId: 'u-s1', role: 'STAFF', isActive: true, fullName: 'Nguyễn Thị Hoa', phone: null },
+        { userId: 'u-s2', role: 'STAFF', isActive: true, fullName: 'Trần Văn Nam', phone: null },
+      ],
     };
+    const item = (id: string, name: string, sortOrder: number) => ({
+      id, code: id.toUpperCase(), name, unitLabel: 'cái', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: null, monthlyCapQty: null,
+      status: 'ACTIVE', prepInstructions: null, imageUrl: null, gramsPerUnit: null, hazardous: false, sortOrder,
+      createdAt: '2026-10-01T01:00:00.000Z', updatedAt: '2026-10-01T01:00:00.000Z',
+    });
+    api.get('/admin/waste/items', [item('it-1', 'Chai nhựa PET sạch', 0), item('it-2', 'Thùng carton cũ gấp phẳng', 1), item('it-3', 'Vỏ lon nhôm đã rửa sạch', 2), item('it-4', 'Chai nhựa PET trong suốt đã rửa sạch và bóc nhãn, ép dẹp, để ráo nước hoàn toàn', 3)]);
     api.get('/admin/waste/points', [point]);
     await page.goto('/admin?tab=waste');
     await expect(page.locator('[data-month-strip]')).toBeVisible({ timeout: 15_000 });
@@ -251,6 +261,19 @@ test.describe('Admin — Đổi rác lấy quà', () => {
     await expect(row).toContainText('Tạp hoá Cô Ba');
     const region = await page.getByRole('region', { name: 'Bảng điểm nhận' }).boundingBox();
     expect(region).not.toBeNull();
+    const overflow = await page.getByRole('region', { name: 'Bảng điểm nhận' }).evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow, 'bảng không cuộn ngang ở 1280 px').toBeLessThanOrEqual(0);
+    const spill = await row.evaluate((tr) => {
+      const out: string[] = [];
+      for (const td of Array.from(tr.querySelectorAll('td'))) {
+        const edge = td.getBoundingClientRect().right;
+        for (const el of Array.from(td.querySelectorAll('*'))) {
+          if (el.getBoundingClientRect().right > edge + 0.5) out.push(`${el.textContent?.slice(0, 30)} ${Math.round(el.getBoundingClientRect().right - edge)}px`);
+        }
+      }
+      return out;
+    });
+    expect(spill, 'nội dung không tràn ra ngoài ô của nó').toEqual([]);
     for (const name of ['Sửa', 'Chi tiết', 'Kích hoạt lại']) {
       const box = await row.getByRole('button', { name, exact: true }).boundingBox();
       expect(box, name).not.toBeNull();

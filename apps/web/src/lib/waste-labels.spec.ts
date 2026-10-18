@@ -84,6 +84,14 @@ describe('waste-labels', () => {
       'Lý do: Nhầm',
     ]);
     expect(wasteEventMetaLines('POINTS_REVERSED', { pointsTaken: 500, shortfallPoints: 0, reason: ' Nhầm ' })).toEqual(['Thu hồi 500 điểm', 'Lý do: Nhầm']);
+    const unmatched = wasteEventMetaLines('PARCEL_UNMATCHED', { reason: 'EXPIRED_REQUEST', unmatchedId: 'x' });
+    expect(unmatched).toEqual(['Lý do: Yêu cầu đã hết hạn']);
+    expect(unmatched.join(' ')).not.toContain('EXPIRED_REQUEST');
+    expect(wasteEventMetaLines('PARCEL_UNMATCHED', { reason: 'SOMETHING_NEW' })).toEqual([]);
+    for (const k of ['POINTS_REVERSED', 'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'USER_FLAGS_UPDATED', 'GIFT_CANCELLED']) {
+      expect(wasteEventMetaLines(k, { reason: 'Khách nhờ' })).toEqual(['Lý do: Khách nhờ']);
+    }
+    expect(wasteEventMetaLines('UNMATCHED_CLOSED', { reason: 'NO_MATCH' })).toEqual([]);
     expectNoBannedCopy([...Object.values(WASTE_EVENT_KIND_LABELS), ...Object.values(WASTE_ACTOR_ROLE_LABELS), ...Object.values(WASTE_MATCH_BASIS_LABELS)].join(' '));
   });
 

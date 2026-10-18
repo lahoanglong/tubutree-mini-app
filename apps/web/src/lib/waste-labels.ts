@@ -200,6 +200,9 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 const lookup = (map: Record<string, string>, v: unknown): string | null =>
   typeof v === 'string' && Object.prototype.hasOwnProperty.call(map, v) ? map[v]! : null;
 
+// Kinds whose meta.reason is text a person typed; every other kind stores a code there (or none).
+const TYPED_REASON_KINDS: ReadonlySet<string> = new Set(['POINTS_REVERSED', 'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'USER_FLAGS_UPDATED', 'GIFT_CANCELLED']);
+
 /** Only fields whose meaning is known are rendered; ids, device data and before/after dumps are dropped. */
 export function wasteEventMetaLines(kind: string, meta: Record<string, unknown> | null): string[] {
   if (meta === null) return [];
@@ -220,7 +223,12 @@ export function wasteEventMetaLines(kind: string, meta: Record<string, unknown> 
   if (rejection !== null) lines.push(`Lý do từ chối: ${rejection}`);
   const closeReason = lookup(WASTE_CLOSE_REASON_LABELS, meta.closeReason ?? after.closeReason);
   if (closeReason !== null) lines.push(`Lý do đóng: ${closeReason}`);
-  if (typeof meta.reason === 'string' && meta.reason.trim() !== '') lines.push(`Lý do: ${meta.reason.trim()}`);
+  if (kind === 'PARCEL_UNMATCHED') {
+    const unmatched = lookup(WASTE_UNMATCHED_REASON_LABELS, meta.reason);
+    if (unmatched !== null) lines.push(`Lý do: ${unmatched}`);
+  } else if (TYPED_REASON_KINDS.has(kind) && typeof meta.reason === 'string' && meta.reason.trim() !== '') {
+    lines.push(`Lý do: ${meta.reason.trim()}`);
+  }
   if (typeof meta.rejectionNote === 'string' && meta.rejectionNote.trim() !== '') lines.push(`Ghi chú: ${meta.rejectionNote.trim()}`);
   return lines;
 }
