@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  WASTE_ACTOR_ROLE_LABELS,
   WASTE_ADMIN_SECTIONS,
+  WASTE_EVENT_KIND_LABELS,
+  WASTE_MATCH_BASIS_LABELS,
+  wasteActorRoleLabel,
+  wasteEventKindLabel,
+  wasteEventMetaLines,
   WASTE_CLOSE_REASON_LABELS,
   WASTE_GIFT_KIND_LABELS,
   WASTE_GIFT_REDEMPTION_STATUS_LABELS,
@@ -60,5 +66,18 @@ describe('waste-labels', () => {
       WASTE_SECTION_LABELS,
     ];
     expectNoBannedCopy(records.flatMap((r) => Object.values(r)).join(' '));
+  });
+
+  it('nhật ký sự kiện: nhãn có chữ, kind lạ là "Sự kiện khác", meta chỉ ra câu đã biết', () => {
+    expect(wasteEventKindLabel('REQUEST_CONFIRMED')).toBe('Xác nhận và cộng điểm');
+    expect(wasteEventKindLabel('NOPE')).toBe('Sự kiện khác');
+    expect(wasteEventKindLabel('toString')).toBe('Sự kiện khác');
+    expect(wasteActorRoleLabel('SYSTEM')).toBe('Hệ thống');
+    expect(wasteEventMetaLines(null)).toEqual([]);
+    expect(wasteEventMetaLines({ subjectUserId: 'u-1', device: { ua: 'x' }, before: { status: 'OPEN' } })).toEqual([]);
+    expect(wasteEventMetaLines({ after: { pointsAwarded: 3000 } })).toEqual(['Cộng 3.000 điểm']);
+    expect(wasteEventMetaLines({ pointsAwarded: 0 })).toEqual(['Cộng 0 điểm']);
+    expect(wasteEventMetaLines({ pointsTaken: 500, shortfallPoints: 0, reason: ' Nhầm ' })).toEqual(['Thu hồi 500 điểm', 'Lý do: Nhầm']);
+    expectNoBannedCopy([...Object.values(WASTE_EVENT_KIND_LABELS), ...Object.values(WASTE_ACTOR_ROLE_LABELS), ...Object.values(WASTE_MATCH_BASIS_LABELS)].join(' '));
   });
 });

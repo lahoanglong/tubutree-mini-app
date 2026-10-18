@@ -1,9 +1,11 @@
 import type {
+  WasteActorRole,
   WasteCloseReason,
   WasteGiftKind,
   WasteGiftRedemptionStatus,
   WasteGiftStatus,
   WasteItemStatus,
+  WasteMatchBasis,
   WasteMethod,
   WastePointKind,
   WastePointStatus,
@@ -12,6 +14,7 @@ import type {
   WasteShortfallReason,
   WasteUnmatchedReason,
 } from '@tubutree/shared-types';
+import { formatCount } from '@/lib/checkout-points';
 
 export type WasteSection = 'items' | 'points' | 'requests' | 'gifts' | 'config';
 
@@ -113,3 +116,108 @@ export const WASTE_SECTION_LABELS: Record<WasteSection, string> = {
 
 export const WASTE_ADMIN_SECTIONS: readonly WasteSection[] = ['items', 'points', 'requests', 'gifts', 'config'];
 export const WASTE_STAFF_SECTIONS: readonly WasteSection[] = ['requests', 'gifts'];
+
+export const WASTE_ACTOR_ROLE_LABELS: Record<WasteActorRole, string> = {
+  CUSTOMER: 'Khách',
+  POINT_STAFF: 'Người ở điểm nhận',
+  STAFF: 'Nhân viên kho',
+  ADMIN: 'Quản trị viên',
+  SYSTEM: 'Hệ thống',
+};
+
+export const WASTE_MATCH_BASIS_LABELS: Record<WasteMatchBasis, string> = {
+  TR_CODE: 'Khớp theo mã TR-',
+  TRACKING_PHONE: 'Khớp theo mã vận đơn và số điện thoại',
+  MANUAL: 'Khớp tay',
+  ORDER: 'Khớp theo đơn kèm',
+};
+
+/** Mirrors the API's WASTE_EVENT_KINDS (the DTO types `kind` as string); an unlisted kind reads as OTHER_EVENT_LABEL. */
+const WASTE_EVENT_KIND_KEYS = [
+  'REQUEST_CREATED', 'REQUEST_EDITED', 'TRACKING_SET', 'TRACKING_EDITED', 'REQUEST_CANCELLED', 'REQUEST_ATTACHED', 'PICKUP_STARTED',
+  'PICKUP_ORDER_CANCELLED', 'REQUEST_EXPIRED', 'HOOK_ANOMALY', 'SHIP_LOCKED', 'REQUEST_CANCELLED_SHIP_LOCK', 'PARCEL_RECEIVED', 'PARCEL_UNMATCHED',
+  'UNMATCHED_RECORDED', 'UNMATCHED_RESOLVED', 'UNMATCHED_CLOSED', 'REQUEST_CONFIRMED', 'REQUEST_REJECTED', 'LOOKUP_MISS', 'POINTS_REVERSED',
+  'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'REQUEST_COST_UPDATED', 'PERK_SUBMITTED', 'PERK_APPROVED', 'PERK_REJECTED', 'ITEM_CREATED',
+  'ITEM_UPDATED', 'ITEMS_REORDERED', 'POINT_CREATED', 'POINT_UPDATED', 'POINTS_REORDERED', 'POINT_STAFF_ADDED', 'POINT_STAFF_REMOVED',
+  'GIFT_CREATED', 'GIFT_UPDATED', 'GIFTS_REORDERED', 'GIFT_FULFILLED', 'GIFT_CANCELLED', 'USER_FLAGS_UPDATED',
+] as const;
+export type WasteEventKindKey = (typeof WASTE_EVENT_KIND_KEYS)[number];
+
+export const WASTE_EVENT_KIND_LABELS: Record<WasteEventKindKey, string> = {
+  REQUEST_CREATED: 'Tạo yêu cầu',
+  REQUEST_EDITED: 'Sửa yêu cầu',
+  TRACKING_SET: 'Nhập mã vận đơn',
+  TRACKING_EDITED: 'Sửa mã vận đơn',
+  REQUEST_CANCELLED: 'Huỷ yêu cầu',
+  REQUEST_ATTACHED: 'Gắn vào đơn mua',
+  PICKUP_STARTED: 'Bắt đầu thu hàng',
+  PICKUP_ORDER_CANCELLED: 'Đơn kèm bị huỷ',
+  REQUEST_EXPIRED: 'Yêu cầu hết hạn',
+  HOOK_ANOMALY: 'Cần kiểm tra đơn kèm',
+  SHIP_LOCKED: 'Khoá gửi kho',
+  REQUEST_CANCELLED_SHIP_LOCK: 'Huỷ vì khoá gửi kho',
+  PARCEL_RECEIVED: 'Kho nhận kiện',
+  PARCEL_UNMATCHED: 'Kiện chưa khớp yêu cầu',
+  UNMATCHED_RECORDED: 'Ghi kiện chưa khớp',
+  UNMATCHED_RESOLVED: 'Khớp kiện với yêu cầu',
+  UNMATCHED_CLOSED: 'Đóng kiện chưa khớp',
+  REQUEST_CONFIRMED: 'Xác nhận và cộng điểm',
+  REQUEST_REJECTED: 'Từ chối yêu cầu',
+  LOOKUP_MISS: 'Tra mã không thấy',
+  POINTS_REVERSED: 'Thu hồi điểm',
+  REQUEST_CLOSED_LOST: 'Đóng vì thất lạc',
+  REQUEST_REOPENED: 'Mở lại yêu cầu',
+  REQUEST_COST_UPDATED: 'Cập nhật phí ship',
+  PERK_SUBMITTED: 'Gửi ưu đãi chờ duyệt',
+  PERK_APPROVED: 'Duyệt ưu đãi',
+  PERK_REJECTED: 'Từ chối ưu đãi',
+  ITEM_CREATED: 'Thêm hàng nhận',
+  ITEM_UPDATED: 'Sửa hàng nhận',
+  ITEMS_REORDERED: 'Sắp xếp lại hàng nhận',
+  POINT_CREATED: 'Thêm điểm nhận',
+  POINT_UPDATED: 'Sửa điểm nhận',
+  POINTS_REORDERED: 'Sắp xếp lại điểm nhận',
+  POINT_STAFF_ADDED: 'Thêm người ở điểm',
+  POINT_STAFF_REMOVED: 'Bỏ người ở điểm',
+  GIFT_CREATED: 'Thêm quà',
+  GIFT_UPDATED: 'Sửa quà',
+  GIFTS_REORDERED: 'Sắp xếp lại quà',
+  GIFT_FULFILLED: 'Trao quà',
+  GIFT_CANCELLED: 'Huỷ quà',
+  USER_FLAGS_UPDATED: 'Đổi cờ của khách',
+};
+
+export const WASTE_EVENT_OTHER_LABEL = 'Sự kiện khác';
+
+const isEventKind = (k: string): k is WasteEventKindKey => Object.prototype.hasOwnProperty.call(WASTE_EVENT_KIND_LABELS, k);
+export const wasteEventKindLabel = (kind: string): string => (isEventKind(kind) ? WASTE_EVENT_KIND_LABELS[kind] : WASTE_EVENT_OTHER_LABEL);
+export const wasteActorRoleLabel = (role: string): string =>
+  Object.prototype.hasOwnProperty.call(WASTE_ACTOR_ROLE_LABELS, role) ? WASTE_ACTOR_ROLE_LABELS[role as WasteActorRole] : WASTE_EVENT_OTHER_LABEL;
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const lookup = (map: Record<string, string>, v: unknown): string | null =>
+  typeof v === 'string' && Object.prototype.hasOwnProperty.call(map, v) ? map[v]! : null;
+
+/** Only fields whose meaning is known are rendered; ids, device data and before/after dumps are dropped. */
+export function wasteEventMetaLines(meta: Record<string, unknown> | null): string[] {
+  if (meta === null) return [];
+  const after = typeof meta.after === 'object' && meta.after !== null ? (meta.after as Record<string, unknown>) : {};
+  const lines: string[] = [];
+  const awarded = num(meta.pointsAwarded) ?? num(after.pointsAwarded);
+  if (awarded !== null) lines.push(`Cộng ${formatCount(awarded)} điểm`);
+  const taken = num(meta.pointsTaken);
+  if (taken !== null) lines.push(`Thu hồi ${formatCount(taken)} điểm`);
+  const shortfall = num(meta.shortfallPoints);
+  if (shortfall !== null && shortfall > 0) lines.push(`Còn thiếu ${formatCount(shortfall)} điểm chưa thu hồi được`);
+  const grams = num(meta.receivedWeightGrams);
+  if (grams !== null) lines.push(`Cân nặng thực nhận ${formatCount(grams)} g`);
+  const basis = lookup(WASTE_MATCH_BASIS_LABELS, meta.matchBasis);
+  if (basis !== null) lines.push(basis);
+  const rejection = lookup(WASTE_REJECTION_REASON_LABELS, meta.rejectionReason);
+  if (rejection !== null) lines.push(`Lý do từ chối: ${rejection}`);
+  const closeReason = lookup(WASTE_CLOSE_REASON_LABELS, meta.closeReason ?? after.closeReason);
+  if (closeReason !== null) lines.push(`Lý do đóng: ${closeReason}`);
+  if (typeof meta.reason === 'string' && meta.reason.trim() !== '') lines.push(`Lý do: ${meta.reason.trim()}`);
+  if (typeof meta.rejectionNote === 'string' && meta.rejectionNote.trim() !== '') lines.push(`Ghi chú: ${meta.rejectionNote.trim()}`);
+  return lines;
+}

@@ -29,6 +29,9 @@ import {
   WASTE_REJECTION_REASON_LABELS,
   WASTE_REQUEST_STATUS_LABELS,
   WASTE_SHORTFALL_REASON_LABELS,
+  wasteActorRoleLabel,
+  wasteEventKindLabel,
+  wasteEventMetaLines,
 } from '@/lib/waste-labels';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, INPUT_CLASS, Notice, ScrollRegion } from './ui';
 import { useConfirm } from './confirm-dialog';
@@ -597,12 +600,16 @@ function EventLog({ events }: { events: AdminWasteEventDTO[] }) {
           <li key={e.id} className="space-y-1 text-xs text-stone-700">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>{formatDateTime(e.createdAt)}</span>
-              <code className="font-mono text-stone-900">{e.kind}</code>
-              <span>{e.actorRole}</span>
-              <span>{e.actorUserId ?? 'Hệ thống'}</span>
-              {typeof e.meta?.matchBasis === 'string' && <span>{e.meta.matchBasis}</span>}
+              <span className="font-medium text-stone-900">{wasteEventKindLabel(e.kind)}</span>
+              <span>{wasteActorRoleLabel(e.actorRole)}</span>
             </div>
-            {e.meta !== null && <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(e.meta, null, 2)}</pre>}
+            {wasteEventMetaLines(e.meta).length > 0 && (
+              <ul className="list-disc pl-5">
+                {wasteEventMetaLines(e.meta).map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            )}
           </li>
         ))}
       </ul>
