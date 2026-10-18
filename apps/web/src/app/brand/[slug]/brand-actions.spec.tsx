@@ -258,10 +258,13 @@ describe('/brand/[slug] — chương trình đại lý', () => {
       throw new Error(`chưa mock ${path}`);
     });
     const c = await mount(block());
+    expect(mocks.get).toHaveBeenCalledWith('/dealer/me');
     expect(c.textContent).toBe('');
     mounted.pop()!.unmount();
+    mocks.get.mockClear();
     mocks.get.mockImplementation(async () => ({ isDealer: false, status: 'REJECTED' }));
     const c2 = await mount(block());
+    expect(mocks.get).toHaveBeenCalledWith('/dealer/me');
     expect(c2.textContent).toBe('');
   });
 

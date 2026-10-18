@@ -3,10 +3,10 @@
 | Mục | Kết quả | Commit |
 |---|---|---|
 | 1. Hub `/tai-khoan` | Đã đủ từ buildAccountMenu (cùng chữ, điều kiện, queryKey `['dealer-me']`, `['owned-brand','profile']` với Mini App); thêm spec khoá bằng route map thật | a9c31cde |
-| 2. shop:3 khối đại lý `/brand/[slug]` | Giữ BUYERWEB-18 (30cfe565, quyết định cố ý trên main: ẩn chương trình đại lý B2B với khách lẻ, không liên quan `/dai-ly`). 94e40f36 làm khối hiện cho mọi người đã bị revert ở cc748264; câu hỏi mở cho chủ: theo Mini App hay giữ BUYERWEB-18. Thêm test `/dealer/me` được gọi, lỗi và REJECTED đều ẩn khối | cc748264 |
+| 2. shop:3 khối đại lý `/brand/[slug]` | Giữ BUYERWEB-18 (30cfe565, quyết định cố ý trên main: ẩn chương trình đại lý B2B với khách lẻ, không liên quan `/dai-ly`). 94e40f36 làm khối hiện cho mọi người đã bị revert ở cc748264; câu hỏi mở cho chủ: theo Mini App hay giữ BUYERWEB-18. Thêm test `/dealer/me` được gọi, lỗi và REJECTED đều ẩn khối | cc748264, 385d3f82 |
 | 3. MiniAppOnlyNotice `compact` | Đệm py-4, dùng ở thẻ chấm công; mặc định py-16 | 018bf051 |
 | 4. mock-api `put` | Thêm, đổi pro.web.spec; tsc e2e sạch, không chạy Playwright | 20520b53 |
-| 6. Docs 98 và pro.md | Ghi "đã xử lý ở" | commit docs |
+| 6. Docs 98 và pro.md | Ghi "đã xử lý ở" | 81a54361 |
 
 Mục 5, nơi dùng `isWebRouteReady(` cho route pro:
 
@@ -16,4 +16,6 @@ Mục 5, nơi dùng `isWebRouteReady(` cho route pro:
 | brand-actions BrandDealerBlock | `/dai-ly` | nút hiện; giữ guard dự phòng |
 | notification-view resolveWebRoute | mọi đích pro | nay tra ra route web |
 
-Câu hỏi: không.
+## Câu hỏi cho chủ dự án
+
+- shop:3 (khối chương trình đại lý ở `/brand/[slug]`): giữ BUYERWEB-18 (30cfe565, ẩn chương trình B2B với khách lẻ), hay theo Mini App brand-view (cherry-pick 94e40f36, chấp nhận trang SSR hiện ngưỡng B2B cho mọi người). Hiện đang giữ BUYERWEB-18.
