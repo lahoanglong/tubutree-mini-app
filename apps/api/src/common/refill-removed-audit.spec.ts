@@ -83,7 +83,8 @@ describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)',
     const p = doc('docs/launch/pilot-order-playbook.md');
     for (const gone of ['refill_pickup_locations', 'bottle_returns', 'refill.seeds_per_bottle', 'Gửi lại vật liệu tái chế', 'Đổi vỏ chai']) expect(p).not.toContain(gone);
     expect(p).not.toMatch(/hai điểm nhận vỏ/i);
-    for (const must of ['waste_requests', 'Thu kèm rác', 'Thùng carton cũ: 3 thùng']) expect(p).toContain(must);
+    for (const must of ['waste_requests', 'Thu kèm rác', 'Thùng carton cũ: 10 thùng']) expect(p).toContain(must);
+    expect(p).not.toContain('Thùng carton cũ: 3 thùng');
   });
   it('Gomdon và khoá go-live nói đúng công tắc mới', () => {
     expect(doc('docs/integrations/gomdon.md')).toContain('wasteRequestId');
