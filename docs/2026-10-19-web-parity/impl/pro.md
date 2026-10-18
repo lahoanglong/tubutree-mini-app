@@ -55,9 +55,9 @@ Không còn phát hiện mở. Chưa có vòng 4 sau 54fb6555 (gate xanh).
 ## 4. Chưa làm, cố ý để lại, chưa kiểm chứng
 - Playwright (`pro.web.spec.ts`, 12 ca) chỉ viết, chưa chạy.
 - Chấm công, heartbeat: chỉ MiniAppOnlyNotice, không POST.
-- Chưa có lối vào `/dai-ly` từ hub `/tai-khoan` (lane account).
-- MiniAppOnlyNotice cao (py-16) trong thẻ chấm công: cần prop compact ở lane core.
-- `apps/e2e/tests/support/mock-api.ts` thiếu `put` (dùng `api.on('PUT')`).
+- Chưa có lối vào `/dai-ly` từ hub `/tai-khoan` (lane account). Đã xử lý ở a9c31cde (integ3).
+- MiniAppOnlyNotice cao (py-16) trong thẻ chấm công: cần prop compact ở lane core. Đã xử lý ở 018bf051 (integ3).
+- `apps/e2e/tests/support/mock-api.ts` thiếu `put` (dùng `api.on('PUT')`). Đã xử lý ở 20520b53 (integ3).
 - Chữ lệch Mini App cố ý: bỏ emoji/ký hiệu (ds-palette-pc11), nhãn trạng thái đơn dùng `orderStatusLabel` web; màu ink B2B thay bằng stone/forest.
 - Dán đơn chặn tổng một dòng ở 9999.
 - `csvField` ở payroll-csv trùng ý `escapeCsvCell` của lib/export-csv.ts (chỉ lặp, không lỗi).

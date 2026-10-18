@@ -5,12 +5,12 @@ import { miniAppLink, miniAppPathLink } from '@/lib/zalo-mini-app';
 /**
  * Chức năng chỉ chạy được trong Zalo (SĐT đã xác minh, chấm công, quét QR): nói rõ thay vì để trang hỏng, kèm nút mở đúng
  * màn Mini App tương ứng với `path` (đường dẫn web đang xem) hoặc `miniappPath` (đường dẫn Mini App đã biết, khi màn đó
- * không có trang web để tra ngược). Chưa cấu hình app id thì chỉ còn dòng giải thích.
+ * không có trang web để tra ngược). `compact` giảm khoảng đệm khi thông báo nằm trong một thẻ. Chưa cấu hình app id thì chỉ còn dòng giải thích.
  */
-export function MiniAppOnlyNotice({ path, miniappPath }: { path?: string; miniappPath?: string }) {
+export function MiniAppOnlyNotice({ path, miniappPath, compact = false }: { path?: string; miniappPath?: string; compact?: boolean }) {
   const href = miniappPath ? miniAppPathLink(miniappPath) : miniAppLink(path);
   return (
-    <div role="status" className="py-16 text-center">
+    <div role="status" className={`${compact ? 'py-4' : 'py-16'} text-center`}>
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
         <Smartphone className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
       </div>

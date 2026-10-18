@@ -31,4 +31,11 @@ describe('MiniAppOnlyNotice', () => {
     expect(html).not.toContain('Mở trên Zalo');
     expect(html).not.toContain('<a ');
   });
+
+  it('mặc định đệm rộng (py-16); compact đệm nhỏ cho chỗ nằm trong thẻ', () => {
+    expect(renderToStaticMarkup(<MiniAppOnlyNotice path="/x" />)).toContain('py-16');
+    const compact = renderToStaticMarkup(<MiniAppOnlyNotice path="/x" compact />);
+    expect(compact).not.toContain('py-16');
+    expect(compact).toContain('py-4');
+  });
 });

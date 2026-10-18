@@ -138,6 +138,9 @@ export class MockApi {
   post(pattern: string, handler: MockHandler): this {
     return this.on('POST', pattern, handler);
   }
+  put(pattern: string, handler: MockHandler): this {
+    return this.on('PUT', pattern, handler);
+  }
   patch(pattern: string, handler: MockHandler): this {
     return this.on('PATCH', pattern, handler);
   }

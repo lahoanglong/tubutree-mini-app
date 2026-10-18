@@ -61,7 +61,7 @@ export function TodayCard() {
       {statusQ.data && (open || todayShifts.length > 0) && (
         <>
           <p className="mt-3 text-xs text-stone-600">Chấm công cần ở đúng mạng WiFi công ty, trong vùng làm việc và chỉ thực hiện được trên Mini App Zalo.</p>
-          <MiniAppOnlyNotice miniappPath="/staff" />
+          <MiniAppOnlyNotice miniappPath="/staff" compact />
         </>
       )}
     </section>
