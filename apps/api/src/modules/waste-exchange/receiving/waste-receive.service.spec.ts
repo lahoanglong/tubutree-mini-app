@@ -1,9 +1,11 @@
 import { ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import type { WasteReceiveRequest } from '@tubutree/shared-types';
+import { assertActiveAdmin, assertActiveStaff } from '../../../common/staff-access';
 import { writeWasteEvent } from '../core/waste-events';
 import * as matchModule from './waste-match';
 import { WasteReceiveService } from './waste-receive.service';
 
+jest.mock('../../../common/staff-access');
 jest.mock('../core/waste-events');
 jest.mock('./waste-match');
 
@@ -27,6 +29,23 @@ const row = (o: Record<string, unknown> = {}) => ({
 });
 const received = (o: Record<string, unknown> = {}) => row({ status: 'RECEIVED', receivedAt: new Date('2026-10-18T01:00:00.000Z'), ...o });
 const body = (match: WasteReceiveRequest['match'] = { parcelCode: 'TR-ABCDE' }, extra: Partial<WasteReceiveRequest> = {}): WasteReceiveRequest => ({ match, ...extra });
+const unmatchedRow = (o: Record<string, unknown> = {}) => ({
+  id: 'um1',
+  receivedAt: new Date('2026-10-18T02:00:00.000Z'),
+  createdByUserId: 's1',
+  carrier: null,
+  trackingCode: 'SPX123',
+  trackingNorm: 'SPX123',
+  description: 'x',
+  reason: 'NO_MATCH',
+  relatedRequestId: null,
+  status: 'OPEN',
+  matchedRequestId: null,
+  resolvedByUserId: null,
+  resolvedAt: null,
+  resolveNote: null,
+  ...o,
+});
 const lastEvent = (o: Record<string, unknown> = {}) => ({
   id: 'ev0',
   actorUserId: 's1',
@@ -43,6 +62,10 @@ interface Setup {
   prevUnmatched?: unknown;
   prevRow?: unknown;
   actorError?: unknown;
+  umRow?: Record<string, unknown> | null;
+  unmatchedCount?: number;
+  listRows?: unknown[];
+  createId?: string;
 }
 
 function setup(o: Setup = {}) {
@@ -71,11 +94,17 @@ function setup(o: Setup = {}) {
     },
     wasteUnmatchedParcel: {
       findUnique: jest.fn(async () => o.prevRow ?? null),
-      create: jest.fn(async () => (order.push(`unmatched create tx${txIndex}`), { id: 'um-new' })),
+      create: jest.fn(async () => (order.push(`unmatched create tx${txIndex}`), unmatchedRow({ id: o.createId ?? 'um-new' }))),
+      updateMany: jest.fn(async () => (order.push('unmatched updateMany'), { count: o.unmatchedCount ?? 1 })),
+      findUniqueOrThrow: jest.fn(async () => unmatchedRow({ status: 'RESOLVED', resolvedByUserId: 's1', resolvedAt: new Date('2026-10-18T03:00:00.000Z'), resolveNote: 'n' })),
     },
     wasteUserFlags: { findUnique: jest.fn(async () => ({ blockedAt: null, shipLockedAt: new Date('2026-10-01T00:00:00Z') })) },
   };
   const prisma = {
+    wasteUnmatchedParcel: {
+      findUnique: jest.fn(async () => (o.umRow === undefined ? unmatchedRow() : o.umRow)),
+      findMany: jest.fn(async () => o.listRows ?? [unmatchedRow()]),
+    },
     $transaction: jest.fn(async (fn: (t: unknown) => Promise<unknown>) => {
       inTx = true;
       txIndex += 1;
@@ -309,5 +338,195 @@ describe('WasteReceiveService.receive', () => {
     await h.svc.receive('s1', 'r1', body());
     expect(h.access.assertWarehouseActor).toHaveBeenNthCalledWith(1, 's1');
     expect(h.access.assertWarehouseActor).toHaveBeenNthCalledWith(2, 's1', h.tx);
+  });
+});
+
+describe('WasteReceiveService unmatched parcels', () => {
+  const STAFF = { id: 's1', role: 'STAFF', phone: '0900000002' };
+  const ADMIN = { id: 's1', role: 'ADMIN', phone: '0900000002' };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    (assertActiveStaff as jest.Mock).mockResolvedValue(STAFF);
+    (assertActiveAdmin as jest.Mock).mockResolvedValue(ADMIN);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const match = { action: 'MATCH', requestId: 'r1', note: 'khớp tay' } as const;
+  const matchable = (o: Record<string, unknown> = {}) => row({ pointId: null, ...o });
+
+  it('1. createUnmatched writes a MANUAL_ENTRY row and one UNMATCHED_RECORDED event', async () => {
+    const h = setup({ createId: 'um1' });
+    const result = await h.svc.createUnmatched('s1', { trackingCode: ' spx 123 ', description: ' x ' });
+    expect(h.access.assertWarehouseActor).toHaveBeenCalledWith('s1');
+    expect(h.tx.wasteUnmatchedParcel.create).toHaveBeenCalledWith({
+      data: { createdByUserId: 's1', carrier: null, trackingCode: ' spx 123 ', trackingNorm: 'SPX123', description: 'x', reason: 'MANUAL_ENTRY' },
+    });
+    expect(eventsOf('UNMATCHED_RECORDED')).toHaveLength(1);
+    expect(eventsOf('UNMATCHED_RECORDED')[0]).toEqual(expect.objectContaining({ actorUserId: 's1', actorRole: 'STAFF' }));
+    expect(eventsOf('UNMATCHED_RECORDED')[0].meta).toEqual({ unmatchedId: 'um1', before: null, after: { status: 'OPEN' } });
+    expect(result).toMatchObject({ id: 'um1', status: 'OPEN', receivedAt: '2026-10-18T02:00:00.000Z' });
+    noCustomerField(result);
+  });
+
+  it('1b. createUnmatched without a tracking code stores null norm', async () => {
+    const h = setup();
+    await h.svc.createUnmatched('s1', { carrier: 'GHN', description: 'kiện nhỏ' });
+    expect((h.tx.wasteUnmatchedParcel.create.mock.calls[0] as unknown as [{ data: unknown }])[0].data).toEqual({
+      createdByUserId: 's1',
+      carrier: 'GHN',
+      trackingCode: null,
+      trackingNorm: null,
+      description: 'kiện nhỏ',
+      reason: 'MANUAL_ENTRY',
+    });
+  });
+
+  it('2. listUnmatched defaults to OPEN, takes a status filter and returns ISO dates', async () => {
+    const h = setup({ listRows: [unmatchedRow(), unmatchedRow({ id: 'um2', status: 'RESOLVED', resolvedAt: new Date('2026-10-18T05:00:00.000Z') })] });
+    const open = await h.svc.listUnmatched('s1', {});
+    expect(assertActiveStaff).toHaveBeenCalledWith(h.prisma, 's1');
+    expect(h.prisma.wasteUnmatchedParcel.findMany).toHaveBeenCalledWith({ where: { status: 'OPEN' }, orderBy: [{ receivedAt: 'asc' }, { id: 'asc' }], take: 200 });
+    for (const r of open) expect(r.receivedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(open[1]!.resolvedAt).toBe('2026-10-18T05:00:00.000Z');
+    expect(open[0]!.resolvedAt).toBeNull();
+
+    await h.svc.listUnmatched('s1', { status: 'RESOLVED' });
+    expect(h.prisma.wasteUnmatchedParcel.findMany).toHaveBeenLastCalledWith({ where: { status: 'RESOLVED' }, orderBy: [{ receivedAt: 'asc' }, { id: 'asc' }], take: 200 });
+    noCustomerField(open);
+  });
+
+  it('2b. listUnmatched refuses a non-staff viewer', async () => {
+    (assertActiveStaff as jest.Mock).mockRejectedValue(new ForbiddenException());
+    const h = setup();
+    await expect(h.svc.listUnmatched('s1', {})).rejects.toThrow(ForbiddenException);
+    expect(h.prisma.wasteUnmatchedParcel.findMany).not.toHaveBeenCalled();
+  });
+
+  it('3. CLOSE resolves the open row once and writes UNMATCHED_CLOSED', async () => {
+    const h = setup();
+    const result = await h.svc.resolveUnmatched('s1', 'um1', { action: 'CLOSE', note: 'n' });
+    expect(h.tx.wasteUnmatchedParcel.updateMany).toHaveBeenCalledWith({
+      where: { id: 'um1', status: 'OPEN' },
+      data: { status: 'RESOLVED', resolvedByUserId: 's1', resolvedAt: expect.any(Date), resolveNote: 'n' },
+    });
+    expect(eventsOf('UNMATCHED_CLOSED')).toHaveLength(1);
+    expect(eventsOf('UNMATCHED_CLOSED')[0]).toEqual(expect.objectContaining({ actorUserId: 's1', actorRole: 'STAFF' }));
+    expect(eventsOf('UNMATCHED_CLOSED')[0].meta).toEqual({ unmatchedId: 'um1', note: 'n', before: { status: 'OPEN' }, after: { status: 'RESOLVED' } });
+    expect(result).toMatchObject({ id: 'um1', status: 'RESOLVED' });
+    noCustomerField(result);
+  });
+
+  it('3b. CLOSE on a row that is no longer open is a 409 with no event', async () => {
+    const h = setup({ unmatchedCount: 0 });
+    await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'CLOSE', note: 'n' })).rejects.toThrow('Dòng hàng không rõ chủ không còn mở');
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+  });
+
+  it('4. MATCH ticks the request, resolves the row, writes one event and notifies after the commit', async () => {
+    const h = setup({ row: matchable() });
+    const result = await h.svc.resolveUnmatched('s1', 'um1', match);
+    expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ data: unknown }])[0].data).toEqual({ status: 'RECEIVED', receivedAt: expect.any(Date) });
+    expect(h.tx.wasteUnmatchedParcel.updateMany).toHaveBeenCalledWith({
+      where: { id: 'um1', status: 'OPEN' },
+      data: expect.objectContaining({ status: 'RESOLVED', matchedRequestId: 'r1', resolvedByUserId: 's1', resolveNote: 'khớp tay' }),
+    });
+    expect(eventsOf('UNMATCHED_RESOLVED')).toHaveLength(1);
+    expect(eventsOf('UNMATCHED_RESOLVED')[0]).toEqual(expect.objectContaining({ actorUserId: 's1', actorRole: 'STAFF', requestId: 'r1' }));
+    expect(eventsOf('UNMATCHED_RESOLVED')[0].meta).toEqual({
+      unmatchedId: 'um1',
+      note: 'khớp tay',
+      matchBasis: 'MANUAL',
+      subjectUserId: 'u1',
+      before: { status: 'IN_TRANSIT' },
+      after: { status: 'RECEIVED' },
+    });
+    expect(h.notifier.parcelReceived).toHaveBeenCalledWith('u1', { id: 'r1', code: 'TR-ABCDE' }, 'ev1');
+    expect(h.order.indexOf('tx end')).toBeLessThan(h.order.indexOf('notify'));
+    expect(h.order.indexOf('request FOR UPDATE')).toBeLessThan(h.order.indexOf('request updateMany'));
+    expect(result).toMatchObject({ id: 'um1', status: 'RESOLVED' });
+    noCustomerField(result);
+  });
+
+  it('4b. a failing notifier never fails the MATCH', async () => {
+    const h = setup({ row: matchable() });
+    h.notifier.parcelReceived.mockRejectedValueOnce(new Error('down'));
+    await expect(h.svc.resolveUnmatched('s1', 'um1', match)).resolves.toMatchObject({ status: 'RESOLVED' });
+  });
+
+  it('5. MATCH onto a PICKUP request pins the update to its order', async () => {
+    const h = setup({ row: matchable({ method: 'PICKUP', orderId: 'o1', order: { status: 'DELIVERED' } }) });
+    await h.svc.resolveUnmatched('s1', 'um1', match);
+    expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ where: unknown }])[0].where).toMatchObject({ orderId: 'o1' });
+  });
+
+  it('6. MATCH refuses DROP_OFF, an undelivered PICKUP, EXPIRED and a closed request without writing', async () => {
+    const cases: [Record<string, unknown>, string][] = [
+      [matchable({ method: 'DROP_OFF' }), 'Yêu cầu mang tới điểm nhận không nhận qua kho'],
+      [matchable({ method: 'PICKUP', orderId: null }), 'Đơn gắn kèm chưa giao xong, chưa nhận kiện được'],
+      [matchable({ method: 'PICKUP', status: 'OPEN', orderId: 'o1', order: { status: 'SHIPPING' } }), 'Đơn gắn kèm chưa giao xong, chưa nhận kiện được'],
+      [matchable({ status: 'EXPIRED' }), 'Yêu cầu đã hết hạn, admin dùng Mở lại kèm dòng này'],
+      [matchable({ status: 'COMPLETED' }), 'Yêu cầu không ở trạng thái nhận được'],
+    ];
+    for (const [r, message] of cases) {
+      jest.clearAllMocks();
+      const h = setup({ row: r, umRow: unmatchedRow({ id: 'um1', reason: 'NO_MATCH', status: 'OPEN' }) });
+      await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow(message);
+      await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toBeInstanceOf(ConflictException);
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      expect(h.tx.wasteUnmatchedParcel.updateMany).not.toHaveBeenCalled();
+      expect(writeWasteEvent).not.toHaveBeenCalled();
+      expect(h.notifier.parcelReceived).not.toHaveBeenCalled();
+    }
+  });
+
+  it('6b. a lost request update race is a retry 409 and the row stays open', async () => {
+    const h = setup({ row: matchable(), updateCount: 0 });
+    await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow('Vui lòng thử lại');
+    expect(h.tx.wasteUnmatchedParcel.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('7. MATCH onto an unknown request is a 404 and resolves nothing', async () => {
+    const h = setup({ row: null });
+    await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'missing', note: 'n' })).rejects.toThrow(new NotFoundException('Không tìm thấy mã'));
+    expect(h.tx.wasteUnmatchedParcel.updateMany).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+  });
+
+  it('7b. MATCH on an unknown unmatched row is a 404 before any transaction', async () => {
+    const h = setup({ umRow: null });
+    await expect(h.svc.resolveUnmatched('s1', 'nope', match)).rejects.toThrow(new NotFoundException('Không tìm thấy dòng hàng không rõ chủ'));
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('8. MATCH where the row was closed meanwhile rolls back the request change and sends nothing', async () => {
+    const h = setup({ row: matchable(), unmatchedCount: 0 });
+    await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow('Dòng hàng không rõ chủ không còn mở');
+    expect(h.order).toContain('request updateMany');
+    expect(h.order).not.toContain('tx end');
+    expect(h.order).not.toContain('notify');
+    expect(h.notifier.parcelReceived).not.toHaveBeenCalled();
+  });
+
+  it('9. MATCH of a TR_TRACKING_CONFLICT row needs an admin', async () => {
+    const conflictRow = unmatchedRow({ reason: 'TR_TRACKING_CONFLICT' });
+    (assertActiveAdmin as jest.Mock).mockRejectedValueOnce(new ForbiddenException());
+    const staff = setup({ umRow: conflictRow, row: matchable() });
+    await expect(staff.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow(ForbiddenException);
+    expect(staff.prisma.$transaction).not.toHaveBeenCalled();
+    expect(staff.access.assertWarehouseActor).not.toHaveBeenCalled();
+
+    const admin = setup({ umRow: conflictRow, row: matchable() });
+    await expect(admin.svc.resolveUnmatched('s1', 'um1', match)).resolves.toMatchObject({ status: 'RESOLVED' });
+    expect(assertActiveAdmin).toHaveBeenLastCalledWith(admin.prisma, 's1');
+    expect(eventsOf('UNMATCHED_RESOLVED')[0]).toEqual(expect.objectContaining({ actorRole: 'ADMIN' }));
+  });
+
+  it('9b. CLOSE of a TR_TRACKING_CONFLICT row stays with the warehouse actor', async () => {
+    const h = setup({ umRow: unmatchedRow({ reason: 'TR_TRACKING_CONFLICT' }) });
+    await h.svc.resolveUnmatched('s1', 'um1', { action: 'CLOSE', note: 'n' });
+    expect(assertActiveAdmin).not.toHaveBeenCalled();
+    expect(h.access.assertWarehouseActor).toHaveBeenCalledWith('s1');
   });
 });
