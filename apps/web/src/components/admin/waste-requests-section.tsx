@@ -30,6 +30,7 @@ import {
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, FIELD_XS, INPUT_CLASS, Notice, ScrollRegion, ToneBadge } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { WasteSeed } from './waste-tab';
+import { WasteRequestDetail } from './waste-request-detail';
 
 export type WasteQueuePreset = 'toCount' | 'inTransit' | 'customerBlocked' | 'orderNotDelivered' | 'expired' | 'transitOverdue' | 'orderMismatch';
 
@@ -70,6 +71,7 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
   const [status, setStatus] = useState('');
   const [code, setCode] = useState('');
   const [receiving, setReceiving] = useState<AdminWasteRequestRowDTO | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const presets = WASTE_QUEUE_PRESETS.filter((p) => isAdmin || !p.adminOnly);
   const staffPresets = presets.filter((p) => !p.adminOnly);
   const adminPresets = presets.filter((p) => p.adminOnly);
@@ -139,13 +141,15 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
       {lookup.isSuccess && (
         <div data-lookup-results className="space-y-2">
           <h4 className="text-sm font-semibold text-stone-900">Kết quả tra mã</h4>
-          <RequestTable label="Kết quả tra mã" rows={lookupRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} />
+          <RequestTable label="Kết quả tra mã" rows={lookupRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} />
         </div>
       )}
 
       {receiving && (
         <ReceivePanel key={receiving.id} row={receiving} onClose={() => setReceiving(null)} />
       )}
+
+      {openId && <WasteRequestDetail key={openId} id={openId} isAdmin={isAdmin} onClose={() => setOpenId(null)} />}
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Hàng đợi yêu cầu">
         {staffPresets.map((p) => <PresetChip key={p.key} label={p.label} pressed={view === 'queue' && preset === p.key} onClick={() => choosePreset(p.key)} />)}
@@ -169,7 +173,7 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
           </div>
 
           {queue.isError && <Notice tone="danger" role="alert">Không tải được danh sách yêu cầu.</Notice>}
-          <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} />
+          <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} />
           {queue.isSuccess && queueRows.length === 0 && <p className="text-sm text-stone-600">Không có yêu cầu nào trong hàng đợi này.</p>}
           {queue.hasNextPage && (
             <button type="button" className={BTN_SECONDARY} disabled={queue.isFetchingNextPage} onClick={() => void queue.fetchNextPage()}>
@@ -195,11 +199,15 @@ function RequestTable({
   rows,
   receivingId,
   onReceive,
+  openId,
+  onOpen,
 }: {
   label: string;
   rows: AdminWasteRequestRowDTO[];
   receivingId: string | null;
   onReceive: (row: AdminWasteRequestRowDTO) => void;
+  openId: string | null;
+  onOpen: (id: string) => void;
 }) {
   return (
     <ScrollRegion label={label}>
@@ -245,11 +253,16 @@ function RequestTable({
                 </td>
                 <td className={TD}>{formatDateTime(r.createdAt)}</td>
                 <td className={TD}>
-                  {canReceive(r) && (
-                    <button type="button" className={BTN_XS_SECONDARY} aria-pressed={receivingId === r.id} onClick={() => onReceive(r)}>
-                      Nhận kiện
+                  <div className="flex flex-wrap gap-1">
+                    <button type="button" className={BTN_XS_SECONDARY} aria-pressed={openId === r.id} onClick={() => onOpen(r.id)}>
+                      Mở
                     </button>
-                  )}
+                    {canReceive(r) && (
+                      <button type="button" className={BTN_XS_SECONDARY} aria-pressed={receivingId === r.id} onClick={() => onReceive(r)}>
+                        Nhận kiện
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             );

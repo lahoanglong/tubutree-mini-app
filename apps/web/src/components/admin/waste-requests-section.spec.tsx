@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { expectNoBannedCopy, wasteRequestRow, wasteUnmatched } from '@/test-utils/fixtures/waste-admin';
+import { expectNoBannedCopy, wasteRequestDetail, wasteRequestRow, wasteUnmatched } from '@/test-utils/fixtures/waste-admin';
 import { formatDateTime } from '@/lib/format-date';
 import type { WasteSeed } from './waste-tab';
 import { WasteRequestsSection } from './waste-requests-section';
@@ -40,6 +40,7 @@ async function mount(
             ? { id: 'un1' }
             : [wasteUnmatched(), wasteUnmatched({ id: 'un3', reason: 'TR_TRACKING_CONFLICT', trackingCode: 'GHN777', relatedRequestId: 'r4' })],
       })),
+    '/admin/waste/requests/r1': { body: wasteRequestDetail() },
     '/admin/waste/requests': opts.queue ?? { body: PAGE_ONE },
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -510,6 +511,13 @@ describe('hàng không rõ chủ', () => {
     await flush();
     expect(unRow(c, 'un1')).toBeNull();
     expect(row(c, 'r1')).not.toBeNull();
+  });
+
+  it('Mở trên dòng r1 hiện chi tiết yêu cầu', async () => {
+    const { c } = await mount();
+    click(btn(row(c, 'r1'), 'Mở'));
+    await flush();
+    expect(c.querySelector('[data-request-detail="r1"]')).not.toBeNull();
   });
 
   it('không có chữ cấm', async () => {
