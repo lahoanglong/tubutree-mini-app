@@ -142,7 +142,7 @@ export function useGameActions({
     onError,
   });
   const unlockM = useLockedMutation({
-    mutationFn: () => unlockPlot(),
+    mutationFn: (slot: number) => unlockPlot(slot),
     onSuccess: () => {
       openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
       refresh();
