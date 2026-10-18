@@ -127,6 +127,7 @@ export const wasteRequestRow = (over: Partial<AdminWasteRequestRowDTO> = {}): Ad
   expiresAt: null,
   inTransitAt: '2026-10-11T02:00:00.000Z',
   receivedAt: null,
+  completedAt: null,
   estimatedPoints: 20_000,
   pointsAwarded: null,
   pointId: 'wh',

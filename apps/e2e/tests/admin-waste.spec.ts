@@ -86,6 +86,7 @@ const REQUEST_ROW: AdminWasteRequestRowDTO = {
   expiresAt: null,
   inTransitAt: null,
   receivedAt: null,
+  completedAt: '2026-10-12T04:00:00.000Z',
   estimatedPoints: 0,
   pointsAwarded: 20_000,
   pointId: '',

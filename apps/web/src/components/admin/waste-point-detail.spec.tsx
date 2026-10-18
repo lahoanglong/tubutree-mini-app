@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wastePoint, wasteRequestRow } from '@/test-utils/fixtures/waste-admin';
 import { listWastePoints } from '@/lib/admin-client';
+import { formatDateTime } from '@/lib/format-date';
 import { WastePointDetail } from './waste-point-detail';
 
 let mounted: Rendered[] = [];
@@ -22,6 +23,7 @@ const REPORT = {
 const CREDIT_ROW = wasteRequestRow({
   id: 'r7', code: 'TR-AAAA11', method: 'DROP_OFF', status: 'COMPLETED', pointId: 'p1', pointName: 'Tạp hoá Cô Ba',
   pointsAwarded: 8000, customerName: 'Lê Văn An', customerPhone: '0912345678',
+  createdAt: '2026-10-10T02:00:00.000Z', completedAt: '2026-10-12T04:30:00.000Z',
 });
 const USERS = {
   data: [{ id: 'u7', fullName: 'Phạm Bảy', phone: '0907000777', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-01-01T00:00:00.000Z' }],
@@ -271,7 +273,11 @@ describe('WastePointDetail', () => {
     expect(c.textContent).toContain('TR-AAAA11');
     expect(c.textContent).toContain('Lê Văn An');
     expect(c.textContent).toContain('8.000 điểm');
-    expect(c.textContent).toContain('Ngày tạo yêu cầu');
+    expect(c.textContent).toContain('Hoàn tất lúc');
+    expect(c.textContent).not.toContain('Ngày tạo yêu cầu');
+    const cells = Array.from(c.querySelectorAll('tbody tr')).find((tr) => tr.textContent!.includes('TR-AAAA11'))!.textContent!;
+    expect(cells).toContain(formatDateTime('2026-10-12T04:30:00.000Z'));
+    expect(cells).not.toContain(formatDateTime('2026-10-10T02:00:00.000Z'));
     click(btn(c, 'Xem thêm'));
     await flush();
     const next = callsTo(api, 'GET', '/admin/waste/requests');
@@ -284,7 +290,7 @@ describe('WastePointDetail', () => {
       '/admin/waste/requests': {
         body: {
           rows: [
-            { ...CREDIT_ROW, id: 'r8', code: 'TR-NULL01', pointsAwarded: null },
+            { ...CREDIT_ROW, id: 'r8', code: 'TR-NULL01', pointsAwarded: null, completedAt: null },
             { ...CREDIT_ROW, id: 'r9', code: 'TR-ZERO01', pointsAwarded: 0 },
           ],
           nextCursor: null,
@@ -299,6 +305,7 @@ describe('WastePointDetail', () => {
     const rows = Array.from(r.container.querySelectorAll('tbody tr')).filter((tr) => tr.textContent!.includes('TR-NULL01') || tr.textContent!.includes('TR-ZERO01'));
     expect(rows.find((tr) => tr.textContent!.includes('TR-NULL01'))!.textContent).toContain('—');
     expect(rows.find((tr) => tr.textContent!.includes('TR-NULL01'))!.textContent).not.toContain('điểm');
+    expect(rows.find((tr) => tr.textContent!.includes('TR-NULL01'))!.querySelectorAll('td')[3]!.textContent).toBe('—');
     expect(rows.find((tr) => tr.textContent!.includes('TR-ZERO01'))!.textContent).toContain('0 điểm');
     expect(r.container.textContent).not.toContain('(15.1)');
   });

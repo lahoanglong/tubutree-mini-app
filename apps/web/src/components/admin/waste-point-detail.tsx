@@ -245,7 +245,7 @@ export function WastePointDetail({
                 <th className={TH}>Mã</th>
                 <th className={TH}>Khách</th>
                 <th className={TH}>Điểm</th>
-                <th className={TH}>Ngày tạo yêu cầu</th>
+                <th className={TH}>Hoàn tất lúc</th>
               </tr>
             </thead>
             <tbody>
@@ -254,7 +254,7 @@ export function WastePointDetail({
                   <td className={TD}>{r.code}</td>
                   <td className={TD}>{r.customerName}</td>
                   <td className={TD}>{r.pointsAwarded === null ? '—' : `${formatCount(r.pointsAwarded)} điểm`}</td>
-                  <td className={TD}>{formatDateTime(r.createdAt)}</td>
+                  <td className={TD}>{r.completedAt ? formatDateTime(r.completedAt) : '—'}</td>
                 </tr>
               ))}
             </tbody>
