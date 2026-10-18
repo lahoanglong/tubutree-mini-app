@@ -209,11 +209,11 @@ function pancakeChecks(env: Env): CheckResult[] {
 function gomdonChecks(env: Env): CheckResult[] {
   const phone = envValue(env, 'GOMDON_PHONE');
   const password = envValue(env, 'GOMDON_PASSWORD');
-  const title = 'Tài khoản Gomdon (thu gom tái chế)';
+  const title = 'Tài khoản Gomdon (Thu kèm đơn)';
   const out: CheckResult[] = [];
   if (!phone && !password) {
     out.push(
-      warn(G_GOMDON, 'env.gomdon.credentials', title, 'GOMDON_PHONE và GOMDON_PASSWORD chưa đặt', 'Chưa đặt thì lựa chọn gửi lại vật liệu tái chế bị ẩn ở thanh toán. Không mở tính năng này lúc đầu thì bỏ qua.'),
+      warn(G_GOMDON, 'env.gomdon.credentials', title, 'GOMDON_PHONE và GOMDON_PASSWORD chưa đặt', 'Chưa đặt thì cách Thu kèm đơn không mở được cho khách. Không mở tính năng này lúc đầu thì bỏ qua.'),
     );
   } else if (!phone || !password) {
     out.push(fail(G_GOMDON, 'env.gomdon.credentials', title, 'chỉ đặt một trong GOMDON_PHONE và GOMDON_PASSWORD', 'Đặt đủ cả hai hoặc xoá cả hai.'));
