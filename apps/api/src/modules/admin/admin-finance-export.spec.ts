@@ -206,4 +206,18 @@ describe('refundExportWhere / refundCsvChunks (danh sách hoàn tiền, D1-14)',
     expect(c[col('Loại khoản')]).toBe('Tiền về muộn');
     expect(c[col('Trạng thái')]).toBe('Chờ đối soát');
   });
+
+  it('maskPhones: SĐT người nhận chỉ còn 3 số cuối, số tài khoản và tên chủ tài khoản vẫn đủ (kế toán cần để chuyển tiền)', async () => {
+    const run = async (opts?: { maskPhones: boolean }) => {
+      const findMany = cursorModel([refund(1)]);
+      const lines = (await collect(refundCsvChunks({ orderCustomerRefund: { findMany } } as unknown as PrismaService, {}, opts))).trimEnd().split('\r\n');
+      return parseLine(lines[1]!);
+    };
+    const col = (n: string) => REFUND_CSV_HEADERS.indexOf(n);
+    const masked = await run({ maskPhones: true });
+    expect(masked[col('SĐT người nhận')]).toBe('*******333');
+    expect(masked[col('Số tài khoản')]).toBe('="0099887766"');
+    expect(masked[col('Chủ tài khoản')]).toBe('KHACH A');
+    expect((await run())[col('SĐT người nhận')]).toBe('="0911222333"');
+  });
 });

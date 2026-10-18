@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { CustomerRefundKind, CustomerRefundStatus, PayoutStatus } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
+import { maskPhoneKeepLast3 } from '../../common/mask-pii';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { EXPORT_BATCH, row, text } from './admin-export';
 
@@ -253,7 +254,12 @@ const REFUND_SELECT = {
   adminNote: true,
 } satisfies Prisma.OrderCustomerRefundSelect;
 
-export async function* refundCsvChunks(prisma: PrismaService, where: Prisma.OrderCustomerRefundWhereInput): AsyncGenerator<string> {
+/** `maskPhones`: người xuất không thấy SĐT khách đầy đủ (seesFullOrderPhones) chỉ nhận 3 số cuối; số tài khoản vẫn đủ để chuyển tiền. */
+export async function* refundCsvChunks(
+  prisma: PrismaService,
+  where: Prisma.OrderCustomerRefundWhereInput,
+  opts: { maskPhones?: boolean } = {},
+): AsyncGenerator<string> {
   yield row(REFUND_CSV_HEADERS);
   let cursor: string | undefined;
   for (;;) {
@@ -276,7 +282,7 @@ export async function* refundCsvChunks(prisma: PrismaService, where: Prisma.Orde
           r.method === 'WALLET' && r.status === 'COMPLETED' ? 'Đã hoàn vào ví' : (REFUND_STATUS_LABEL[r.status] ?? r.status),
           r.amount,
           r.recipientName ?? '',
-          text(r.phone),
+          text(opts.maskPhones ? maskPhoneKeepLast3(r.phone) : r.phone),
           r.bankName ?? '',
           text(r.bankAccountNo),
           r.bankAccountName ?? '',

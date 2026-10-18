@@ -127,8 +127,27 @@ describe('AdminReportsController', () => {
       const ctrl = new AdminReportsController({ payout: { findMany: payoutFind }, orderCustomerRefund: { findMany: refundFind } } as never, {} as never, {} as never);
       await ctrl.exportPayouts({ from: '2026-10-01', to: '2026-10-31', status: 'PAID' }, stream().res);
       expect(payoutFind.mock.calls[0]![0].where).toEqual({ requestedAt: { gte: new Date('2026-09-30T17:00:00Z'), lt: new Date('2026-10-31T17:00:00Z') }, status: 'PAID' });
-      await ctrl.exportRefunds({ from: '2026-10-01', to: '2026-10-31', status: 'OPEN', kind: 'RETURN' }, stream().res);
+      await ctrl.exportRefunds({ from: '2026-10-01', to: '2026-10-31', status: 'OPEN', kind: 'RETURN' }, stream().res, { sub: 'a1', role: 'ADMIN' } as never);
       expect(refundFind.mock.calls[0]![0].where).toMatchObject({ status: { in: ['UNVERIFIED', 'PENDING', 'PROCESSING'] }, kind: 'RETURN' });
+    });
+
+    it('hoàn tiền: ADMIN thấy SĐT đủ, KE_TOAN một mình thấy 3 số cuối, KE_TOAN kiêm CSKH thấy đủ', async () => {
+      const row = {
+        id: 'r1', orderCode: 'TB1', kind: 'RETURN', reason: 'RETURNED', method: 'MANUAL_TRANSFER', status: 'PENDING', amount: 1, recipientName: 'A',
+        phone: '0911222333', bankName: 'MB', bankAccountNo: '0099887766', bankAccountName: 'A', createdAt: new Date(), completedAt: null, bankRef: null, adminNote: null,
+      };
+      const csv = async (viewer: object) => {
+        const ctrl = new AdminReportsController({ orderCustomerRefund: { findMany: jest.fn().mockResolvedValue([row]) } } as never, {} as never, {} as never);
+        const s = stream();
+        await ctrl.exportRefunds({ from: '2026-10-01', to: '2026-10-31' }, s.res, viewer as never);
+        return s.body();
+      };
+      expect(await csv({ sub: 'a1', role: 'ADMIN' })).toContain('0911222333');
+      const ketoan = await csv({ sub: 's1', role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+      expect(ketoan).not.toContain('0911222333');
+      expect(ketoan).toContain('*******333');
+      expect(ketoan).toContain('0099887766');
+      expect(await csv({ sub: 's2', role: 'STAFF', staffPermissions: ['KE_TOAN', 'CSKH'] })).toContain('0911222333');
     });
 
     it('khoảng ngày quá 366 ngày bị từ chối trước khi ghi byte nào', async () => {
