@@ -80,7 +80,7 @@ describe('lời khoá từ /waste/preview (§4.3)', () => {
     [{ code: 'BELOW_MIN', missingPoints: 6000 }, 'cần thêm 6.000 điểm'],
     [{ code: 'MONTH_CAP_FOR_MIN' }, 'tháng này bạn không còn đủ trần cho một gói gửi kho'],
     [{ code: 'NEED_PROVINCE' }, 'Chọn tỉnh để ước tính phí ship'],
-    [{ code: 'ITEM_DAY_CAP', itemId: 'item-carton' }, 'Mang tới điểm nhận hôm nay chỉ còn 2 thùng Thùng carton'],
+    [{ code: 'ITEM_DAY_CAP', itemId: 'item-carton' }, 'Thùng carton: mang tới điểm nhận hôm nay chỉ còn 2 thùng'],
     [{ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }, 'Tháng này Thùng carton chỉ còn 4 thùng'],
     [{ code: 'POINTS_MONTH_CAP', pointsRemaining: 7000 }, 'Tháng này bạn chỉ còn 7.000 điểm trong trần tháng'],
     [{ code: 'POINT_QUOTA_FULL' }, 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác'],
@@ -90,6 +90,21 @@ describe('lời khoá từ /waste/preview (§4.3)', () => {
     [{ code: 'LANE_DISABLED' }, 'Cách giao này đang tạm dừng'],
     [{ code: 'SHIP_LOCKED' }, 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH.'],
   ] as const)('%o', (block, text) => { expect(L.blockMessage(block as never, ctx)).toBe(text); });
+  it('MONTH_CAP_FOR_MIN nêu đúng đường theo cách giao của thẻ', () => {
+    const block = { code: 'MONTH_CAP_FOR_MIN' } as never;
+    expect(L.blockMessage(block, { ...ctx, method: 'PICKUP' })).toBe('tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
+    expect(L.blockMessage(block, { ...ctx, method: 'MAIL_IN' })).toBe('tháng này bạn không còn đủ trần cho một gói gửi kho');
+  });
+});
+
+describe('formatLineQty — một dòng tên món và số lượng, không lặp danh từ đơn vị', () => {
+  it('tên món đã mở đầu bằng danh từ đơn vị', () => {
+    expect(L.formatLineQty('Thùng carton cũ', 3, 'thùng')).toBe('Thùng carton cũ: 3 thùng');
+    expect(L.formatLineQty('Vỏ hộp sữa sạch', 5, 'vỏ')).toBe('Vỏ hộp sữa sạch: 5 vỏ');
+  });
+  it('tên món không mở đầu bằng đơn vị', () => {
+    expect(L.formatLineQty('Nilon chống sốc', 2, 'túi lớn')).toBe('Nilon chống sốc: 2 túi lớn');
+  });
 });
 
 describe('phí ship và giá trị điểm (§4.3, §7.2, §14.5)', () => {

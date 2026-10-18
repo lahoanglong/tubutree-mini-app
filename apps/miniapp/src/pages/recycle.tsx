@@ -24,20 +24,24 @@ import { formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
 import {
   METHOD_LABELS,
+  PAUSED_TEXT,
   POINT_VALUE_VND,
   TIMELINE_STEPS,
   closedLabel,
   equivalentUnits,
+  formatLineQty,
   nextRewardProgress,
   ruleText,
   timelineFor,
 } from '../utils/waste-labels';
 
-export function formatImpactKg(grams: number) {
-  return formatNumber(Math.round(grams / 100) / 10);
+/** Một chữ số thập phân; dưới 50 g làm tròn về 0 kg thì không có dòng nào (null). */
+export function impactLine(grams: number | null | undefined): string | null {
+  if (grams == null) return null;
+  const kg = Math.round(grams / 100) / 10;
+  return kg > 0 ? `Bạn đã gửi khoảng ${formatNumber(kg)} kg bao bì cho Tubu` : null;
 }
 
-const PAUSED_TEXT = 'Chương trình đang tạm dừng';
 const BLOCKED_TEXT = 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree';
 const LOGIN_TEXT = 'Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác';
 
@@ -74,7 +78,7 @@ function RequestsBlock({ me, onOpen }: { me: WasteMeDTO; onOpen: (id: string) =>
         const subtitle =
           me.blocked && r.status === 'RECEIVED'
             ? 'Đang chờ Tubu xem lại'
-            : r.lines.map((l) => `${l.declaredQty} ${l.unitLabel} ${l.itemName}`).join(', ');
+            : r.lines.map((l) => formatLineQty(l.itemName, l.declaredQty, l.unitLabel)).join(', ');
         return (
           <Card key={r.id} variant="outline">
             <ListRow title={`${r.code} · ${METHOD_LABELS[r.method]}`} subtitle={subtitle} trailing="chevron" onPress={() => onOpen(r.id)} />
@@ -171,11 +175,22 @@ export default function RecyclePage() {
   if (meQ.isError || !me) return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
 
   const openRequests = <RequestsBlock me={me} onOpen={(id) => navigate(`/recycle/r/${id}`)} />;
+  // Kho vẫn mở quầy khi chương trình tạm dừng hoặc khách bị khoá (15.1), nên lối vào không phụ thuộc hai nhánh đó.
+  const deskRow =
+    me.deskPoints.length > 0 ? (
+      <ListRow
+        title="Nhận hàng tại điểm"
+        subtitle={me.deskPoints.map((p) => p.name).join(', ')}
+        trailing="chevron"
+        onPress={() => navigate('/recycle/desk')}
+      />
+    ) : null;
   if (!me.programmeEnabled) {
     return shell(
       <>
         <NoticeCard text={PAUSED_TEXT} />
         {openRequests}
+        {deskRow && <div>{deskRow}</div>}
       </>,
     );
   }
@@ -185,6 +200,7 @@ export default function RecyclePage() {
       <>
         <NoticeCard text={BLOCKED_TEXT} />
         {openRequests}
+        {deskRow && <div>{deskRow}</div>}
       </>,
     );
   }
@@ -197,6 +213,7 @@ export default function RecyclePage() {
     const flag = METHOD_FLAG[m];
     return cfg.waste[flag] && me.laneFlags[flag] && (m === 'DROP_OFF' || !me.shipLockedAt);
   });
+  const impact = impactLine(me.impactGrams);
   const giftNames = rewardsQ.data?.rewards.slice(0, 2).map((r) => r.name).join(', ');
 
   return shell(
@@ -212,10 +229,10 @@ export default function RecyclePage() {
           <Text variant="body-sm" tone="secondary" as="div">
             {`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}
           </Text>
-          {me.impactGrams != null && (
+          {impact && (
             <div>
               <Text variant="body-sm" as="div">
-                {`Bạn đã gửi khoảng ${formatImpactKg(me.impactGrams)} kg bao bì cho Tubu`}
+                {impact}
               </Text>
               <Text variant="caption" tone="tertiary" as="div">
                 Ước tính theo khối lượng trung bình
@@ -232,9 +249,11 @@ export default function RecyclePage() {
               )}
             </div>
           )}
-          <Button fullWidth onPress={() => navigate('/recycle/new')}>
-            Đổi rác ngay
-          </Button>
+          {methods.length > 0 && (
+            <Button fullWidth onPress={() => navigate('/recycle/new')}>
+              Đổi rác ngay
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -243,7 +262,7 @@ export default function RecyclePage() {
       {methods.length > 0 && (
         <section style={SECTION_STYLE}>
           <Heading variant="title-md" as="h2">
-            Ba cách đổi
+            Cách đổi
           </Heading>
           {methods.map((m) => (
             <Card key={m} variant="outline">
@@ -289,14 +308,7 @@ export default function RecyclePage() {
 
       <div>
         <ListRow title="Kho quà" subtitle={giftNames || undefined} trailing="chevron" onPress={() => navigate('/rewards')} />
-        {me.deskPoints.length > 0 && (
-          <ListRow
-            title="Nhận hàng tại điểm"
-            subtitle={me.deskPoints.map((p) => p.name).join(', ')}
-            trailing="chevron"
-            onPress={() => navigate('/recycle/desk')}
-          />
-        )}
+        {deskRow}
         <ListRow title="Thể lệ chương trình" trailing="chevron" onPress={() => navigate('/recycle/rules')} />
       </div>
     </>,

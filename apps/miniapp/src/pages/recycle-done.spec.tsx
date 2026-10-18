@@ -110,6 +110,17 @@ describe('/recycle/done/:id (§4.7)', () => {
     expect(screen.getByText('Ước tính theo khối lượng trung bình')).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/CO2|cây/);
   });
+  it('tác động dưới 50 g → không có thẻ; 100 g → "0,1 kg"', async () => {
+    mocks.getWasteRequest.mockResolvedValue(DONE({ impactGrams: 30 }));
+    const { unmount } = renderPage();
+    await screen.findByText('Đã cộng 4.000 điểm');
+    expect(screen.queryByText(/kg bao bì/)).toBeNull();
+    expect(screen.queryByText('Ước tính theo khối lượng trung bình')).toBeNull();
+    unmount();
+    mocks.getWasteRequest.mockResolvedValue(DONE({ impactGrams: 100 }));
+    renderPage();
+    expect(await screen.findByText('Bạn đã gửi khoảng 0,1 kg bao bì cho Tubu')).toBeInTheDocument();
+  });
   it('impactGrams null → không có thẻ tác động', async () => {
     renderPage();
     await screen.findByText('Đã cộng 4.000 điểm');

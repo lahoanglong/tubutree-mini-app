@@ -16,6 +16,8 @@ import { formatNumber, formatPoints, formatVnd } from './format';
 
 export { PREVIEW_DEBOUNCE_MS } from './use-debounced';
 
+export const PAUSED_TEXT = 'Chương trình đang tạm dừng';
+
 /** Dưới ngưỡng này (km) điểm nhận được gắn "Nhanh nhất" (§4.4). */
 export const NEAREST_FAST_KM = 5;
 /** 1 điểm = 1đ (thang Điểm Xanh mới). */
@@ -72,7 +74,12 @@ export const DESK_REJECTION_OPTIONS: { value: WasteRejectionReason; label: strin
 ];
 
 export type WasteTimeline = { steps: readonly string[]; current: number };
-export type BlockContext = { items: readonly WasteItemDTO[]; maxOpenRequests: number; itemCaps: WastePreviewDTO['itemCaps'] };
+export type BlockContext = {
+  items: readonly WasteItemDTO[];
+  maxOpenRequests: number;
+  itemCaps: WastePreviewDTO['itemCaps'];
+  method?: WasteMethod;
+};
 
 export function ruleText(item: WasteItemDTO): string {
   return `${item.unitsPerPoint} ${item.unitLabel} = ${formatPoints(item.pointsPerGroup)}`;
@@ -137,6 +144,11 @@ export function closedLabel(
   }
 }
 
+/** "Thùng carton cũ: 3 thùng": tên món đã mở đầu bằng danh từ đơn vị nên không đặt đơn vị trước tên. */
+export function formatLineQty(itemName: string, qty: number, unitLabel: string): string {
+  return `${itemName}: ${qty} ${unitLabel}`;
+}
+
 export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): string {
   const item = ctx.items.find((i) => i.id === block.itemId);
   const caps = ctx.itemCaps.find((c) => c.itemId === block.itemId);
@@ -150,11 +162,11 @@ export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): st
     case 'BELOW_MIN':
       return `cần thêm ${formatPoints(block.missingPoints ?? 0)}`;
     case 'MONTH_CAP_FOR_MIN':
-      return 'tháng này bạn không còn đủ trần cho một gói gửi kho';
+      return `tháng này bạn không còn đủ trần cho một gói ${ctx.method === 'PICKUP' ? 'thu kèm đơn' : 'gửi kho'}`;
     case 'NEED_PROVINCE':
       return 'Chọn tỉnh để ước tính phí ship';
     case 'ITEM_DAY_CAP':
-      return `Mang tới điểm nhận hôm nay chỉ còn ${formatNumber(caps?.dayRemainingQty ?? 0)} ${unit} ${name}`;
+      return `${name}: mang tới điểm nhận hôm nay chỉ còn ${formatNumber(caps?.dayRemainingQty ?? 0)} ${unit}`;
     case 'ITEM_MONTH_CAP':
       return `Tháng này ${name} chỉ còn ${formatNumber(caps?.monthRemainingQty ?? 0)} ${unit}`;
     case 'POINTS_MONTH_CAP':

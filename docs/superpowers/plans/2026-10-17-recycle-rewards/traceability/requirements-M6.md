@@ -534,7 +534,7 @@
 - R19.20 [UI] [M6] Image 15 `15-dai-ly-xac-nhan-xong.png` is the reference for "Đại lý" screen after confirmation (spec 4.10). (L801)
 - R19.21 [UI] [M6] Image 16 `16-kho-qua-khung-doi.png` is the reference for "Kho quà" redemption confirmation frame (spec 4.8). (L802)
 - R19.22 [COPY] [M6] Trang Đổi rác header card label must read "Điểm Xanh của bạn", not the mockup's "Điểm Xanh từ đổi rác" (spec 4.1). (L805)
-- R19.23 [UI] [M6] Trang Đổi rác block "Ba cách đổi" must show only the methods that are enabled and not locked; it must not always show all three cards as the mockup does (spec 4.1, 12.4). (L805)
+- R19.23 [UI] [M6] Trang Đổi rác block "Cách đổi" must show only the methods that are enabled and not locked; it must not always show all three cards as the mockup does (spec 4.1, 12.4). (L805)
 - R19.24 [COPY] [M6] Step 1 (Chọn món) progress sentence must not contain the word "Voucher" (banned, spec 16.1); it must use "mã giảm giá". (L806)
 - R19.25 [UI] [M6] The item cap sentence must be built by the system from the item's cap column, not written inside the item description as the mockup does with "Tối đa 10 thùng mỗi ngày" (spec 4.2). (L806)
 - R19.26 [UI] [M6] Step 2 (Chọn cách giao) must include the consent checkboxes at the end of the step, which the mockup omits (spec 4.3). (L807)

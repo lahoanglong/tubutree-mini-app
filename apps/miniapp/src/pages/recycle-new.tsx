@@ -40,6 +40,7 @@ import { QuantitySelector } from '../components/ui/quantity-selector';
 import { Skeleton } from '../components/ui/skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Text } from '../components/ui/text';
+import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPoints, formatVnd } from '../utils/format';
 import { useDebounced } from '../utils/use-debounced';
 import {
@@ -65,11 +66,17 @@ export type WasteWizardDraft = {
   pickedPoint: WastePointDTO | null;
   provinceCode: string | null;
   nearby: WastePointDTO[] | null;
+  sid?: string;
 };
 export type WastePointsNavState = { returnTo: string; draft: WasteWizardDraft; selectedItemIds: string[] };
 export type WastePointsReturnState = { draft: WasteWizardDraft };
 
 const EMPTY_DRAFT: WasteWizardDraft = { lines: {}, method: null, pointId: null, pickedPoint: null, provinceCode: null, nearby: null };
+
+// Back from the request page lands on the items entry that still carries the submitted draft; a module-level marker (the
+// stack entry's state is cloned, so identity does not survive) lets that entry leave instead of re-creating the request.
+// Keyed per wizard session (sid), not by quantities, so a later fresh entry with the same quantities is not mistaken for it.
+const submittedSids = new Set<string>();
 
 const BASE_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'PICKUP', 'MAIL_IN'];
 const MAIL_FIRST_ORDER: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP', 'DROP_OFF'];
@@ -176,6 +183,8 @@ function isLocked(preview: WastePreviewDTO | undefined): boolean {
   return preview?.blocks.some((b) => b.code !== 'NEED_PROVINCE') ?? false;
 }
 
+const STEP1_CAP_BLOCKS: readonly string[] = ['ITEM_MONTH_CAP', 'POINTS_MONTH_CAP', 'ITEM_DAY_CAP'];
+
 const SELECT_STYLE = {
   minHeight: 44,
   padding: '0 12px',
@@ -211,6 +220,10 @@ export default function RecycleNewPage() {
   useEffect(() => {
     if (leave) navigate('/recycle', { replace: true });
   }, [leave, navigate]);
+  const [replayed] = useState(() => step === 'items' && !!stateDraft?.sid && submittedSids.has(stateDraft.sid));
+  useEffect(() => {
+    if (replayed) navigate('/recycle', { replace: true });
+  }, [replayed, navigate]);
   const missingDraft = step === 'method' && !stateDraft;
   useEffect(() => {
     if (missingDraft) navigate('/recycle/new', { replace: true });
@@ -312,6 +325,7 @@ export default function RecycleNewPage() {
     },
     onSuccess: async (r) => {
       rotate();
+      if (draft.sid) submittedSids.add(draft.sid);
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${r.id}`, { replace: true });
     },
@@ -331,7 +345,7 @@ export default function RecycleNewPage() {
   if (phase === 'authenticated' && meQ.isError) {
     return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />, subtitle);
   }
-  if (!me || leave || missingDraft) {
+  if (!me || leave || missingDraft || replayed) {
     return shell(
       <>
         <Skeleton height={80} radius="var(--radius-card)" />
@@ -351,25 +365,35 @@ export default function RecycleNewPage() {
         return { ...d, lines };
       });
     const next = () => {
-      navigate('/recycle/new', { replace: true, state: { draft } });
-      navigate('/recycle/new?step=method', { state: { draft } });
+      const stamped = { ...draft, sid: draft.sid ?? newIdempotencyKey() };
+      navigate('/recycle/new', { replace: true, state: { draft: stamped } });
+      navigate('/recycle/new?step=method', { state: { draft: stamped } });
     };
     const p = debounced.length > 0 ? itemsPreviewQ.data : undefined;
-    const reward = p ? nextRewardProgress(rewardsQ.data, p.estimatedPoints) : null;
+    const capBlock = p?.blocks.find((b) => STEP1_CAP_BLOCKS.includes(b.code));
+    // The last finished preview may belong to older quantities: wait for the debounce and the new request before enabling.
+    const previewStale = linesKey !== JSON.stringify(lineInputs) || itemsPreviewQ.isFetching;
+    const reward = p && !capBlock ? nextRewardProgress(rewardsQ.data, p.estimatedPoints) : null;
     const summary = p ? (
-      <div>
-        <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
-          {`Ước tính ${formatPoints(p.estimatedPoints)}`}
+      capBlock ? (
+        <Text variant="body-md" tone="danger" as="div" style={{ fontWeight: 600 }}>
+          {blockMessage(capBlock, { items: me.items, maxOpenRequests: me.thresholds.maxOpenRequests, itemCaps: p.itemCaps })}
         </Text>
-        <Text variant="caption" tone="secondary" as="div">
-          {`Dùng như ${formatVnd(p.pointsValueVnd)} khi mua sắm`}
-        </Text>
-        {reward && (
-          <Text variant="caption" tone="tertiary" as="div">
-            {`Còn ${formatPoints(reward.missing)} tới ${reward.rewardName}`}
+      ) : (
+        <div>
+          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
+            {`Ước tính ${formatPoints(p.estimatedPoints)}`}
           </Text>
-        )}
-      </div>
+          <Text variant="caption" tone="secondary" as="div">
+            {`Dùng như ${formatVnd(p.pointsValueVnd)} khi mua sắm`}
+          </Text>
+          {reward && (
+            <Text variant="caption" tone="tertiary" as="div">
+              {`Còn ${formatPoints(reward.missing)} tới ${reward.rewardName}`}
+            </Text>
+          )}
+        </div>
+      )
     ) : undefined;
     return shell(
       <WasteItemStep items={me.items} lines={draft.lines} onChange={onChange} />,
@@ -377,7 +401,7 @@ export default function RecycleNewPage() {
       <StickyActionBar
         summary={summary}
         primary={
-          <Button fullWidth disabled={lineInputs.length === 0} onPress={next}>
+          <Button fullWidth disabled={lineInputs.length === 0 || !!capBlock || previewStale} onPress={next}>
             Tiếp tục
           </Button>
         }
@@ -394,10 +418,11 @@ export default function RecycleNewPage() {
     null,
   );
   const showShipLocked = !!me.shipLockedAt && ((cfg.waste.mailin && me.laneFlags.mailin) || (cfg.waste.pickup && me.laneFlags.pickup));
-  const ctxFor = (pv: WastePreviewDTO | undefined): BlockContext => ({
+  const ctxFor = (pv: WastePreviewDTO | undefined, method?: WasteMethod): BlockContext => ({
     items: me.items,
     maxOpenRequests: me.thresholds.maxOpenRequests,
     itemCaps: pv?.itemCaps ?? [],
+    method,
   });
 
   const selectMethod = (m: WasteMethod) => {
@@ -494,7 +519,7 @@ export default function RecycleNewPage() {
           )}
           {pv?.blocks.map((b) => (
             <Text key={`${b.code}-${b.itemId ?? ''}`} variant="caption" tone="danger" as="span">
-              {blockMessage(b, ctxFor(pv))}
+              {blockMessage(b, ctxFor(pv, m))}
             </Text>
           ))}
         </button>
@@ -570,9 +595,17 @@ export default function RecycleNewPage() {
           </Text>
         </Card>
       )}
-      <div role="radiogroup" aria-label="Cách giao" style={{ ...COLUMN, gap: 12 }}>
-        {order.map(renderCard)}
-      </div>
+      {order.length === 0 ? (
+        <Card variant="outline">
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+            Hiện chưa có cách giao nào đang mở, bạn quay lại sau nhé.
+          </Text>
+        </Card>
+      ) : (
+        <div role="radiogroup" aria-label="Cách giao" style={{ ...COLUMN, gap: 12 }}>
+          {order.map(renderCard)}
+        </div>
+      )}
       {selected && (
         <div style={{ ...COLUMN, gap: 4 }}>
           <Checkbox checked={consent} onChange={() => setConsent((v) => !v)} label={CONSENT_TEXT} />

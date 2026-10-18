@@ -802,7 +802,7 @@ Mười sáu ảnh nằm ở `docs/superpowers/specs/assets/2026-10-17-recycle-r
 | `16-kho-qua-khung-doi.png` | Kho quà, khung xác nhận đổi | 4.8 |
 
 **Chỗ ảnh khác văn bản (văn bản thắng, builder làm theo văn bản):**
-- Ảnh 01 (Trang Đổi rác): thẻ đầu ghi "Điểm Xanh từ đổi rác", văn bản là "Điểm Xanh của bạn" (4.1); khối "Ba cách đổi" luôn hiện đủ ba thẻ, văn bản chỉ hiện cách đang bật và không bị khoá (4.1, 12.4).
+- Ảnh 01 (Trang Đổi rác): thẻ đầu ghi "Điểm Xanh từ đổi rác", văn bản là "Điểm Xanh của bạn" (4.1); khối ảnh ghi "Ba cách đổi" luôn đủ ba thẻ, văn bản đặt tiêu đề "Cách đổi" (không đếm số thẻ) và chỉ hiện cách đang bật và không bị khoá (4.1, 12.4).
 - Ảnh 02 (Chọn món): câu tiến độ ghi "Voucher", văn bản cấm chữ này và dùng "mã giảm giá" (16.1); câu "Tối đa 10 thùng mỗi ngày" nằm trong mô tả món, văn bản dựng câu trần từ cột trần của món (4.2).
 - Ảnh 03 (Chọn cách giao): thiếu các ô đồng ý ở cuối bước và dòng kho từ chối kiện còn cước phải trả khi nhận (4.3).
 - Ảnh 04 (Điểm nhận): nút "Chọn điểm này" bật cả ở điểm không nhận đủ món đã chọn; văn bản khoá nút kèm dòng "Điểm này không nhận: <tên món>" (4.4).
