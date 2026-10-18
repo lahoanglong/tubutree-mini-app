@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { fetchFaqs, getPublicConfig } from '@tubutree/app-core/api/config';
+import { fetchFaqs, fetchSupportContact, getPublicConfig } from '@tubutree/app-core/api/config';
 import { createServerHttp } from '@/lib/core-http-server';
 import { AboutView } from './about-view';
 
@@ -14,6 +14,10 @@ export const metadata: Metadata = {
 export default async function AboutPage() {
   const http = createServerHttp({ revalidate });
   // Lỗi đọc thì bỏ qua: client tự tải và rơi về bản FAQ dự phòng như trước, trang ISR không bị lưu rỗng vì lỗi tạm.
-  const [faqs, config] = await Promise.all([fetchFaqs(http).catch(() => undefined), getPublicConfig(http).catch(() => undefined)]);
-  return <AboutView initialFaqs={faqs} initialConfig={config} />;
+  const [faqs, config, support] = await Promise.all([
+    fetchFaqs(http).catch(() => undefined),
+    getPublicConfig(http).catch(() => undefined),
+    fetchSupportContact(http).catch(() => undefined),
+  ]);
+  return <AboutView initialFaqs={faqs} initialConfig={config} initialSupport={support} />;
 }

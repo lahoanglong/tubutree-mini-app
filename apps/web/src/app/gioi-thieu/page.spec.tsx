@@ -109,6 +109,15 @@ describe('/gioi-thieu: trang công khai', () => {
     expect(mocks.get.mock.calls.map((c) => c[0])).not.toContain('/faqs');
   });
 
+  it('HTML dựng sẵn đã có hotline và email: server nạp cấu hình, client chưa cần gọi', async () => {
+    mocks.serverGet.mockImplementation(async (path: string) => (path === '/faqs' ? FAQS : { support: SUPPORT }));
+    mocks.get.mockImplementation(() => new Promise(() => {}));
+    const r = render(await AboutPage());
+    mounted.push(r);
+    expect(r.container.textContent).toContain('0984 606 774');
+    expect(r.container.querySelector('a[href^="mailto:"]')).not.toBeNull();
+  });
+
   it('server không đọc được FAQ: vẫn dựng trang, client tự tải như trước', async () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Bao lâu thì nhận hàng?');

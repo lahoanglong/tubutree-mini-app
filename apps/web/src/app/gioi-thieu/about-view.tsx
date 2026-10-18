@@ -36,7 +36,7 @@ const POLICY_LINKS = [
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
 /** Về Tubu Tree (cùng nội dung với `about.tsx` của Mini App): giới thiệu, FAQ, liên hệ, chính sách; khách đã đăng nhập có thêm xoá tài khoản và đăng xuất. */
-export function AboutView({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; initialConfig?: PublicConfig }) {
+export function AboutView({ initialFaqs, initialConfig, initialSupport }: { initialFaqs?: FaqItem[]; initialConfig?: PublicConfig; initialSupport?: SupportContact }) {
   const phase = useAuthPhase();
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -54,7 +54,7 @@ export function AboutView({ initialFaqs, initialConfig }: { initialFaqs?: FaqIte
         <div className="md:col-span-2">
           <FaqSection initialFaqs={initialFaqs} initialConfig={initialConfig} />
         </div>
-        <SupportSection />
+        <SupportSection initialSupport={initialSupport} />
         <Section title="Điều khoản & Chính sách">
           {POLICY_LINKS.map((p, i) => (
             <Link
@@ -153,8 +153,8 @@ function FaqSection({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; i
   );
 }
 
-function SupportSection() {
-  const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: STALE_MS });
+function SupportSection({ initialSupport }: { initialSupport?: SupportContact }) {
+  const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: STALE_MS, initialData: initialSupport });
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   const oa = platformBridge.oa.available;
   // Dòng chưa có giá trị thì ẩn hẳn (Q-17), không hiện nhãn trống.
