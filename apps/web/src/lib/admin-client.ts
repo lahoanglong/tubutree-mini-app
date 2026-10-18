@@ -1964,3 +1964,54 @@ export const listDealerPriceHistory = (sku: string | undefined, page = 1, limit 
   apiFetch<Page<DealerPriceChange>>(
     `/admin/dealer-prices/history?page=${page}&limit=${limit}${sku ? `&sku=${encodeURIComponent(sku)}` : ''}`,
   );
+
+export type ExternalOrderSource = 'MARKETPLACE' | 'CHAT' | 'UNKNOWN';
+export type ExternalOrderStatus = 'OPEN' | 'DELIVERED' | 'RETURNING' | 'RETURNED' | 'CANCELLED' | 'PARTIAL_RETURN' | 'DELETED';
+
+/** Đơn Pancake ngoài app (đơn sàn, chat, điện thoại). SĐT đã che ở API. */
+export interface ExternalOrder {
+  id: string;
+  pancakeOrderId: string;
+  source: ExternalOrderSource;
+  channel: string | null;
+  sourceKey: string;
+  trackingCode: string | null;
+  trackingCodes: string[];
+  marketplaceOrderSn: string | null;
+  phone: string | null;
+  goodsValue: number | null;
+  pancakeStatus: number | null;
+  status: ExternalOrderStatus;
+  pancakeUpdatedAt: string | null;
+  deliveredAt: string | null;
+  firstSeenAt: string;
+  /** Chỉ có ở màn chi tiết và chỉ khi người xem là ADMIN. */
+  lastPayload?: unknown;
+}
+
+export interface ExternalOrderSourceRow {
+  sourceKey: string;
+  orderSources: string;
+  account: string;
+  marketplaceId: string;
+  total: number;
+  bySource: Partial<Record<ExternalOrderSource, number>>;
+  lastSeenAt: string | null;
+  currentKind: ExternalOrderSource | 'APP';
+  currentChannel: string | null;
+}
+
+export const listExternalOrders = (
+  f: { q?: string; source?: ExternalOrderSource; status?: ExternalOrderStatus },
+  page = 1,
+  limit = 20,
+) => {
+  const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (f.q) qs.set('q', f.q);
+  if (f.source) qs.set('source', f.source);
+  if (f.status) qs.set('status', f.status);
+  return apiFetch<Page<ExternalOrder>>(`/admin/external-orders?${qs.toString()}`);
+};
+export const getExternalOrder = (id: string) => apiFetch<ExternalOrder>(`/admin/external-orders/${encodeURIComponent(id)}`);
+export const listExternalOrderSources = () =>
+  apiFetch<{ sources: ExternalOrderSourceRow[]; truncated: boolean }>('/admin/external-orders/sources');

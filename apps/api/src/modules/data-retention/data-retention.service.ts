@@ -26,7 +26,8 @@ export function resolveRetentionDays(target: RetentionTargetKey, raw: unknown): 
   return Math.max(minDays, Math.floor(raw));
 }
 
-type Cleanup = { table: string; where: Prisma.Sql };
+/** `set`: thay vì xoá dòng thì ghi đè cột (xoá thông tin cá nhân nhưng giữ dòng). */
+type Cleanup = { table: string; where: Prisma.Sql; set?: Prisma.Sql; label?: string };
 type RunOpts = { now?: Date; batchSize?: number; pauseMs?: number; maxRunMs?: number };
 export type RetentionResult =
   | { skipped: 'RUNNING' | 'LOCKED' }
@@ -103,7 +104,8 @@ export class DataRetentionService {
         const cutoff = new Date(now.getTime() - days * 86_400_000);
         for (const c of this.cleanups(target, cutoff)) {
           const res = await this.deleteInBatches(c, batchSize, pauseMs, targetDeadline);
-          deleted[c.table] = (deleted[c.table] ?? 0) + res.count;
+          const key = c.label ?? c.table;
+          deleted[key] = (deleted[key] ?? 0) + res.count;
           if (res.truncated) truncated = true;
         }
       } catch (err) {
@@ -141,6 +143,17 @@ export class DataRetentionService {
           { table: 'pancake_webhook_events', where: Prisma.sql`"receivedAt" < ${cutoff}` },
           { table: 'gomdon_webhook_events', where: Prisma.sql`"receivedAt" < ${cutoff}` },
           { table: 'oa_inbound_messages', where: Prisma.sql`"createdAt" < ${cutoff}` },
+          // Cùng hạn với payload thô của webhook: SĐT người mua của đơn ngoài app không giữ lâu hơn bản gốc. Giữ dòng đơn (mã vận đơn,
+          // trạng thái, tiền hàng); claim còn chờ xử lý thì giữ SĐT vì bước ghép theo SĐT cần tới.
+          {
+            table: 'external_orders',
+            label: 'external_orders.phone',
+            set: Prisma.sql`"phone" = NULL`,
+            where: Prisma.sql`"phone" IS NOT NULL AND "updatedAt" < ${cutoff} AND NOT EXISTS (
+              SELECT 1 FROM external_points_claims c
+              WHERE c."externalOrderId" = external_orders.id AND c."state" IN ('PENDING', 'REVIEW', 'HELD_NO_MEMBER')
+            )`,
+          },
         ];
       case 'refresh_tokens':
         return [
@@ -162,8 +175,11 @@ export class DataRetentionService {
     const table = Prisma.raw(`"${c.table}"`);
     let count = 0;
     for (;;) {
-      const n = await this.prisma.$executeRaw`
-        DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`;
+      const n = c.set
+        ? await this.prisma.$executeRaw`
+            UPDATE ${table} SET ${c.set} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`
+        : await this.prisma.$executeRaw`
+            DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`;
       count += n;
       if (n < batchSize) return { count, truncated: false };
       if (Date.now() >= deadline) return { count, truncated: true };

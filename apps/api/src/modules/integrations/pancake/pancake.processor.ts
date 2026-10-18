@@ -27,6 +27,15 @@ import {
   pancakeEventOrderCode,
 } from './pancake-webhook-dedupe';
 import { isMerchantFulfilledOrder, isPancakeFulfilledLine } from './pancake-fulfilment';
+import {
+  DEFAULT_EXTERNAL_CAPTURE_ENABLED,
+  DEFAULT_ORDER_SOURCE_MAP,
+  EXTERNAL_CAPTURE_ENABLED_KEY,
+  ORDER_SOURCE_MAP_KEY,
+  resolveOrderSourceMap,
+  type OrderSourceMap,
+} from '../../external-points/external-order.config';
+import { ingestExternalOrder } from '../../external-points/external-order.ingest';
 import { pancakeStatusSkipsTotalCheck, pancakeTotalMismatch } from './pancake-total';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
@@ -48,6 +57,9 @@ const ORDER_EVENTS: ReadonlySet<string> = new Set([
   'order.cancelled',
   'invoice.issued',
 ]);
+
+/** Chỉ các sự kiện mang nguyên object đơn mới nạp vào đơn ngoài: payload một phần (huỷ, vận chuyển) không đủ để nhận biết nguồn. */
+const EXTERNAL_CAPTURE_EVENTS: ReadonlySet<string> = new Set(['orders', 'order', 'order.updated', 'order.status_updated']);
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
@@ -194,7 +206,18 @@ export class PancakeProcessor extends WorkerHost {
         await this.flagForeignPancakeOrder(match.foreign, match.pancakeId);
         return 'PROCESSED';
       }
-      if (!match.order) return 'UNMATCHED';
+      if (!match.order) {
+        // Đơn không có trong bảng orders: đơn sàn/chat thì lưu và xong. UNKNOWN cũng được lưu nhưng sự kiện vẫn UNMATCHED: đơn app
+        // tới trước khi lưu pancakeOrderId hoặc thiếu note/tag cần cron ghép lại, đánh PROCESSED là mất lượt đó.
+        if (EXTERNAL_CAPTURE_EVENTS.has(eventType) && (await this.captureEnabled())) {
+          const { result, kind } = await ingestExternalOrder(this.prisma, data, await this.orderSourceMap());
+          if (result !== 'NOT_EXTERNAL' && kind !== 'UNKNOWN') return 'PROCESSED';
+        }
+        return 'UNMATCHED';
+      }
+      // Lần ghép lại thành công: dòng UNKNOWN từng lưu cho đơn này là "đơn ngoài app" giả. Chạy bất kể cờ nạp (cờ tắt sau khi đã lưu
+      // vẫn phải dọn). Chỉ dọn dòng chưa có claim (FK RESTRICT), và lỗi dọn không bao giờ được làm hỏng đường xử lý đơn app.
+      if (match.pancakeId) await this.dropUnknownExternal(match.pancakeId);
       // D4: đơn gian hàng đối tác tự giao không bao giờ lên Pancake — đơn Pancake nào mang mã của nó là đơn lạ (nhân viên
       // tạo tay/đơn bù ghi nhầm mã), không được giao/huỷ/hoàn/cộng điểm hộ đối tác.
       if (isMerchantFulfilledOrder(match.order)) {
@@ -296,6 +319,32 @@ export class PancakeProcessor extends WorkerHost {
         'trả đơn Pancake về đúng nội dung đơn Tubu.',
       ATTENTION_TOTAL_MISMATCH,
     );
+  }
+
+  private async dropUnknownExternal(pancakeOrderId: string): Promise<void> {
+    try {
+      await this.prisma.externalOrder.deleteMany({ where: { pancakeOrderId, source: 'UNKNOWN', claim: { is: null } } });
+    } catch (err) {
+      this.logger.warn(`Không dọn được dòng đơn ngoài UNKNOWN của đơn Pancake #${pancakeOrderId}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  private async captureEnabled(): Promise<boolean> {
+    if (!this.systemConfig) return DEFAULT_EXTERNAL_CAPTURE_ENABLED;
+    try {
+      return (await this.systemConfig.get<boolean>(EXTERNAL_CAPTURE_ENABLED_KEY, DEFAULT_EXTERNAL_CAPTURE_ENABLED)) !== false;
+    } catch {
+      return DEFAULT_EXTERNAL_CAPTURE_ENABLED;
+    }
+  }
+
+  private async orderSourceMap(): Promise<OrderSourceMap> {
+    if (!this.systemConfig) return DEFAULT_ORDER_SOURCE_MAP;
+    try {
+      return resolveOrderSourceMap(await this.systemConfig.get<unknown>(ORDER_SOURCE_MAP_KEY, DEFAULT_ORDER_SOURCE_MAP));
+    } catch {
+      return DEFAULT_ORDER_SOURCE_MAP;
+    }
   }
 
   private async totalCheckEnabled(): Promise<boolean> {

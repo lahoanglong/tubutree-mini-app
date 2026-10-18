@@ -10,6 +10,7 @@ import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliate/commission-eligibility';
 import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pancake/pancake-category-map';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
+import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 
 const DISPLAY_NAME_MAX = 100;
 
@@ -259,6 +260,10 @@ export class SystemConfigService {
     // Nhóm hàng Pancake → danh mục Tubu (PancakeSyncService.mappedCategoryIds): sai dạng thì đồng bộ lặng lẽ không gán danh mục nào.
     [PANCAKE_CATEGORY_MAP_KEY]: categoryMapProblem,
     'pancake.total_mismatch_check': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ nạp đơn ngoài app: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
+    [EXTERNAL_CAPTURE_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Sai bản đồ nguồn thì mọi đơn sàn rơi xuống "chưa biết" mà không ai thấy lỗi.
+    [ORDER_SOURCE_MAP_KEY]: orderSourceMapProblem,
     // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.
     'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.

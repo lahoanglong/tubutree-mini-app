@@ -1,0 +1,16 @@
+{
+  "_synthetic": "Dữ liệu tự dựng theo tên field của Pancake POS OpenAPI, KHÔNG phải payload thật.",
+  "id": 910004,
+  "status": 16,
+  "order_sources": -1,
+  "account": "fanpage_mau",
+  "bill_phone_number": "0911000222",
+  "items": [{ "quantity": 3, "discount_each_product": 0, "variation_info": { "retail_price": 100000 } }],
+  "total_price": 300000,
+  "total_discount": 0,
+  "shipping_fee": 20000,
+  "partner": { "extend_code": "GHN0001122" },
+  "status_history": [{ "status": 16, "updated_at": "2026-10-14T10:00:00" }],
+  "inserted_at": "2026-10-12T08:00:00",
+  "updated_at": "2026-10-14T10:00:00"
+}

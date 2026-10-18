@@ -124,6 +124,8 @@ const APPROVED_LOADED_KEYS = [
     'orders.dealer_pending_payment_ttl_hours',
     'orders.pending_payment_ttl_hours',
     'pancake.category_map',
+    'pancake.external_capture_enabled',
+    'pancake.order_source_map',
     'pancake.total_mismatch_check',
     'referral.min_order_amount',
     'referral.referrer_reward_points',

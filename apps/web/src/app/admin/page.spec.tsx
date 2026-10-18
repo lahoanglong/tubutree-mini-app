@@ -2599,6 +2599,42 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn yêu cầu hoá đơn VAT"] [aria-selected="true"]')!.textContent).toContain('VAT chờ xuất');
   });
 
+  it('mục Đơn ngoài app: ADMIN và CSKH mở được từ link ?tab=externalOrders (ADMIN có nút xem payload), KHO thì không', async () => {
+    const api = mockFetch({
+      '/admin/external-orders/sources': { body: { sources: [], truncated: false } },
+      '/admin/external-orders?': {
+        body: {
+          data: [{ id: 'x1', pancakeOrderId: '910001', source: 'MARKETPLACE', channel: 'shopee', sourceKey: '-3|a|-3', trackingCode: 'SPXVN0123456789', trackingCodes: [], marketplaceOrderSn: null, phone: null, goodsValue: 1000, pancakeStatus: 3, status: 'DELIVERED', pancakeUpdatedAt: null, deliveredAt: null, firstSeenAt: '2026-10-13T08:31:00.000Z' }],
+          meta: { page: 1, limit: 20, total: 1 },
+        },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    window.history.replaceState(null, '', '/admin?tab=externalOrders');
+    const admin = await mount();
+    expect(navItems(admin.container)).toContain('Đơn ngoài app');
+    expect(admin.container.querySelector('h2')!.textContent).toBe('Đơn ngoài app');
+    expect([...admin.container.querySelectorAll('button')].some((b) => b.textContent === 'Xem payload Pancake')).toBe(true);
+    admin.unmount();
+    mounted = [];
+
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=externalOrders');
+    const cskh = await mount();
+    expect(navItems(cskh.container)).toContain('Đơn ngoài app');
+    expect(cskh.container.querySelector('h2')!.textContent).toBe('Đơn ngoài app');
+    expect([...cskh.container.querySelectorAll('button')].some((b) => b.textContent === 'Xem payload Pancake')).toBe(false);
+    cskh.unmount();
+    mounted = [];
+
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=externalOrders');
+    const kho = await mount();
+    expect(navItems(kho.container)).not.toContain('Đơn ngoài app');
+    expect(kho.container.textContent).not.toContain('Nguồn đã thấy');
+  });
+
   it('CSKH có mục Cộng đồng và vào được từ link ?tab=community; KHO thì không (link rơi về mục đầu)', async () => {
     stubFeed();
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };

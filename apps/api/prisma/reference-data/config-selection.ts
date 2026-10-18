@@ -89,6 +89,7 @@ const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
 const STOREFRONT_CONFIG = 'src/modules/storefront/storefront-config.ts';
 const PANCAKE_CATEGORY_MAP = 'src/modules/integrations/pancake/pancake-sync.service.ts';
 const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts';
+const EXTERNAL_ORDER_CONFIG = 'src/modules/external-points/external-order.config.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_post', value: 5, category: 'community', description: 'Điểm uy tín cộng cho người có bài cộng đồng được đăng', fallbackSource: { file: FEED, text: "get<number>('community.rep_post', 5)" } },
@@ -105,6 +106,8 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'storefront.subdomain_enabled', value: false, category: 'storefront', description: 'Bật khi DNS wildcard và chứng chỉ đã xong: gian hàng được hiện và chia sẻ link <tên>.tubutree.com (tắt: chỉ link /s/<mã>)', fallbackSource: { file: STOREFRONT_CONFIG, text: 'export const DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED = false;' } },
   { key: 'pancake.total_mismatch_check', value: true, category: 'pancake', description: 'So tổng tiền Pancake với đơn Tubu mỗi lần webhook; lệch thì đưa đơn vào "Cần xử lý Pancake" (false = tắt khi báo nhầm hàng loạt)', fallbackSource: { file: PANCAKE_PROCESSOR, text: 'get<boolean>(PANCAKE_TOTAL_CHECK_KEY, true)' } },
   { key: 'pancake.category_map', value: {}, category: 'pancake', description: 'Gán danh mục tự động cho sản phẩm đồng bộ từ Pancake: { "mã hoặc tên nhóm hàng Pancake": "id danh mục Tubu" } (xem Quản trị, Danh mục sản phẩm). Chỉ áp cho sản phẩm chưa có danh mục; rỗng = không tự gán', fallbackSource: { file: PANCAKE_CATEGORY_MAP, text: 'get<PancakeCategoryMap>(PANCAKE_CATEGORY_MAP_KEY, {})' } },
+  { key: 'pancake.external_capture_enabled', value: true, category: 'pancake', description: 'Lưu lại đơn Pancake không đặt trong app (đơn sàn, chat, điện thoại) để xem ở tab "Đơn ngoài app". Chưa cộng điểm. false = bỏ qua như trước', fallbackSource: { file: EXTERNAL_ORDER_CONFIG, text: 'DEFAULT_EXTERNAL_CAPTURE_ENABLED = true;' } },
+  { key: 'pancake.order_source_map', value: { marketplaceIds: { '-3': 'shopee', '-4': 'lazada', '-9': 'tiktok' }, chatSources: [] }, category: 'pancake', description: 'Nhận biết nguồn đơn Pancake: marketplaceIds = mã marketplace_id → tên sàn; chatSources = khoá nguồn (order_sources|account|marketplace_id, xem bảng "Nguồn đã thấy") của đơn chat/điện thoại', fallbackSource: { file: EXTERNAL_ORDER_CONFIG, text: "marketplaceIds: { '-3': 'shopee', '-4': 'lazada', '-9': 'tiktok' }," } },
 ];
 
 export type ConfigDecision = 'reference' | 'business' | 'excluded' | 'unclassified';
