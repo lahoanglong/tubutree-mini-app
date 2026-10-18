@@ -24,7 +24,7 @@ const PAGE_ONE = {
 };
 
 async function mount(
-  opts: { isAdmin?: boolean; seed?: WasteSeed | null; queue?: Route; lookup?: Route; receive?: Route; receive9?: Route; unmatched?: Route } = {},
+  opts: { isAdmin?: boolean; seed?: WasteSeed | null; initialUserId?: string | null; queue?: Route; lookup?: Route; receive?: Route; receive9?: Route; unmatched?: Route } = {},
 ) {
   const api = mockFetch({
     '/admin/waste/unmatched/un1/resolve': { body: wasteUnmatched({ status: 'RESOLVED' }) },
@@ -44,7 +44,7 @@ async function mount(
     '/admin/waste/requests': opts.queue ?? { body: PAGE_ONE },
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
-  const r = render(<WasteRequestsSection isAdmin={opts.isAdmin ?? false} seed={opts.seed} />);
+  const r = render(<WasteRequestsSection isAdmin={opts.isAdmin ?? false} seed={opts.seed} initialUserId={opts.initialUserId} />);
   mounted.push(r);
   await flush();
   return { api, c: r.container };
@@ -69,6 +69,15 @@ async function lookup(c: HTMLElement, code = 'GHN123456') {
 }
 
 describe('WasteRequestsSection', () => {
+  it('mở từ ngăn người dùng: lọc theo khách, chỉ admin', async () => {
+    const a = await mount({ isAdmin: true, initialUserId: 'u1' });
+    expect(requestUrls(a.api)[0]!.endsWith('/admin/waste/requests?userId=u1')).toBe(true);
+    expect(chip(a.c, 'Yêu cầu của khách đang xem').getAttribute('aria-pressed')).toBe('true');
+    const s = await mount({ isAdmin: false, initialUserId: 'u1' });
+    expect(requestUrls(s.api).some((u) => u.includes('userId='))).toBe(false);
+    expect(chips(s.c).some((b) => b.textContent === 'Yêu cầu của khách đang xem')).toBe(false);
+  });
+
   it('mặc định mở hàng đợi Kho cần đếm', async () => {
     const { c, api } = await mount();
     expect(requestUrls(api)[0]!.endsWith('/admin/waste/requests?filter=TO_COUNT')).toBe(true);

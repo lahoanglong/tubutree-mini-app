@@ -11,6 +11,9 @@ afterEach(() => {
   mounted = [];
   vi.unstubAllGlobals();
 });
+afterEach(() => {
+  window.history.replaceState(null, '', '/');
+});
 beforeEach(() => {
   Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:1'), configurable: true });
   Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
@@ -155,6 +158,22 @@ describe('WasteTab', () => {
     const s = await mount(<WasteTab isAdmin={false} seed={{ section: 'points', preset: 'pending', n: 1 }} />);
     expect(s.c.querySelector('[data-waste-section]')!.getAttribute('data-waste-section')).toBe('requests');
     expect(chips(s.c).map((b) => b.textContent)).toEqual(['Yêu cầu', 'Quà']);
+  });
+
+  it('link ?tab=waste&wasteUser=u1 mở mục Yêu cầu lọc theo khách (ADMIN)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=waste&wasteUser=u1');
+    const a = await mount(<WasteTab isAdmin />);
+    expect(byText(a.c, 'button', 'Yêu cầu')!.getAttribute('aria-pressed')).toBe('true');
+    expect(a.api.calls.some((x) => x.url.includes('?userId=u1'))).toBe(true);
+    const s = await mount(<WasteTab isAdmin={false} />);
+    expect(s.api.calls.some((x) => x.url.includes('userId='))).toBe(false);
+  });
+
+  it('wasteUser sai định dạng bị bỏ qua', async () => {
+    window.history.replaceState(null, '', '/admin?tab=waste&wasteUser=' + encodeURIComponent('u1&x=<b>'));
+    const a = await mount(<WasteTab isAdmin />);
+    expect(a.api.calls.some((x) => x.url.includes('userId='))).toBe(false);
+    expect(byText(a.c, 'button', 'Hàng nhận')!.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('STAFF: chỉ Yêu cầu và Quà, không gọi số liệu tháng (16.2)', async () => {

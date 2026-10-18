@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { UserDetailDrawer } from './user-detail-drawer';
-import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminUserDetail } from '@/lib/admin-client';
+import type { WasteUserFlagsDTO } from '@tubutree/shared-types';
+
+const NO_FLAGS: WasteUserFlagsDTO = { userId: 'u1', shipLockedAt: null, shipUnlockedAt: null, blockedAt: null, reason: null, setByUserId: null, updatedAt: null };
+const calls: { url: string; init?: RequestInit }[] = [];
 
 let mounted: Rendered[] = [];
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+  calls.length = 0;
   vi.unstubAllGlobals();
 });
 
@@ -45,12 +50,15 @@ const DETAIL: AdminUserDetail = {
   grants: [],
 };
 
-async function open(detail: AdminUserDetail = DETAIL) {
+async function open(detail: AdminUserDetail = DETAIL, flags: WasteUserFlagsDTO = NO_FLAGS, isAdmin = true) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response(JSON.stringify(detail), { status: 200, headers: { 'Content-Type': 'application/json' } })),
+    vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify(url.includes('/admin/waste/users/') ? flags : detail), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }),
   );
-  const r = render(<UserDetailDrawer userId="u1" isAdmin onClose={() => undefined} />);
+  const r = render(<UserDetailDrawer userId="u1" isAdmin={isAdmin} onClose={() => undefined} />);
   mounted.push(r);
   await flush();
   return document.body;
@@ -152,5 +160,61 @@ describe('UserDetailDrawer — nhóm việc nhân viên (D1-05)', () => {
     const put = api.calls.find((c) => c.url.includes('/staff-permissions'))!;
     expect(put.init!.method).toBe('PUT');
     expect(JSON.parse(String(put.init!.body)).permissions.sort()).toEqual(['KE_TOAN', 'MARKETING']);
+  });
+});
+
+describe('UserDetailDrawer — Đổi rác (15.4)', () => {
+  const putBody = () => {
+    const put = calls.find((c) => c.url.includes('/admin/waste/users/u1/flags') && c.init?.method === 'PUT')!;
+    return JSON.parse(String(put.init!.body));
+  };
+  const answerWithReason = async (reason: string) => {
+    typeInto(document.querySelector('[role="alertdialog"] textarea'), reason);
+    answerConfirm(true);
+    await flush();
+  };
+
+  it('câu nhóm việc nhân viên không còn nhắc đổi vỏ chai', async () => {
+    const body = await open({ ...DETAIL, user: { ...DETAIL.user, role: 'STAFF' } });
+    const text = body.textContent ?? '';
+    expect(text).toContain('Không chọn nhóm nào: nhân viên chỉ dùng quầy thu ngân, tab Đổi rác (hàng đợi kho, quà chờ nhận) và chấm công.');
+    expect(text).not.toMatch(/đổi vỏ chai/i);
+  });
+
+  it('admin có link xem yêu cầu đổi rác của khách', async () => {
+    const body = await open();
+    const a = body.querySelector<HTMLAnchorElement>('a[href="/admin?tab=waste&wasteUser=u1"]')!;
+    expect(a.textContent).toBe('Xem yêu cầu đổi rác của khách');
+  });
+
+  it('khoá đổi rác hỏi lý do rồi gửi PUT flags', async () => {
+    const body = await open();
+    click(byText(section(body, 'Đổi rác'), 'button', 'Khoá đổi rác'));
+    await answerWithReason('Gian lận số lượng');
+    expect(putBody()).toEqual({ blocked: true, reason: 'Gian lận số lượng' });
+  });
+
+  it('đang khoá gửi kho: hiện thời điểm khoá và nút mở khoá', async () => {
+    const body = await open(DETAIL, { ...NO_FLAGS, shipLockedAt: '2026-10-12T03:00:00.000Z', reason: 'Thiếu 3 lần liền' });
+    const text = section(body, 'Đổi rác').textContent ?? '';
+    expect(text).toContain('Đang khoá gửi kho và thu kèm đơn từ 10:00 12/10/2026');
+    expect(text).toContain('Thiếu 3 lần liền');
+    click(byText(section(body, 'Đổi rác'), 'button', 'Mở khoá gửi kho'));
+    await answerWithReason('Đã xác minh');
+    expect(putBody()).toEqual({ shipLocked: false, reason: 'Đã xác minh' });
+  });
+
+  it('đang khoá đổi rác: nút Mở khoá đổi rác', async () => {
+    const body = await open(DETAIL, { ...NO_FLAGS, blockedAt: '2026-10-12T03:00:00.000Z' });
+    expect(section(body, 'Đổi rác').textContent).toContain('Đang khoá đổi rác từ 10:00 12/10/2026');
+    click(byText(section(body, 'Đổi rác'), 'button', 'Mở khoá đổi rác'));
+    await answerWithReason('Đã làm rõ');
+    expect(putBody()).toEqual({ blocked: false, reason: 'Đã làm rõ' });
+  });
+
+  it('không phải admin: không có mục Đổi rác và không gọi flags', async () => {
+    const body = await open(DETAIL, NO_FLAGS, false);
+    expect(body.textContent).not.toContain('Xem yêu cầu đổi rác của khách');
+    expect(calls.some((c) => c.url.includes('/admin/waste/users/'))).toBe(false);
   });
 });

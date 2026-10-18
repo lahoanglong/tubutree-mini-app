@@ -64,9 +64,13 @@ const startsOnUnmatched = (seed?: WasteSeed | null) => seed?.section === 'reques
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Thao tác thất bại.');
 
-export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | null }) {
-  const [view, setView] = useState<'queue' | 'unmatched'>(() => (startsOnUnmatched(seed) ? 'unmatched' : 'queue'));
-  const [preset, setPreset] = useState<WasteQueuePreset | null>(() => initialPreset(isAdmin, seed));
+const CUSTOMER_CHIP_LABEL = 'Yêu cầu của khách đang xem';
+
+export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin: boolean; seed?: WasteSeed | null; initialUserId?: string | null }) {
+  const customerId = isAdmin && initialUserId ? initialUserId : null;
+  const [customerOn, setCustomerOn] = useState(customerId !== null);
+  const [view, setView] = useState<'queue' | 'unmatched'>(() => (!customerId && startsOnUnmatched(seed) ? 'unmatched' : 'queue'));
+  const [preset, setPreset] = useState<WasteQueuePreset | null>(() => (customerId ? null : initialPreset(isAdmin, seed)));
   const [method, setMethod] = useState('');
   const [status, setStatus] = useState('');
   const [code, setCode] = useState('');
@@ -77,6 +81,7 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
   const adminPresets = presets.filter((p) => p.adminOnly);
 
   const query: AdminWasteRequestQuery = (() => {
+    if (customerOn && customerId) return { userId: customerId };
     const chosen = presets.find((p) => p.key === preset);
     if (chosen) return chosen.query;
     const q: AdminWasteRequestQuery = {};
@@ -98,16 +103,19 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
   const lookupRows = lookup.data ?? [];
 
   const choosePreset = (key: WasteQueuePreset) => {
+    setCustomerOn(false);
     setView('queue');
     setPreset(key);
     setMethod('');
     setStatus('');
   };
   const chooseMethod = (v: string) => {
+    setCustomerOn(false);
     setPreset(null);
     setMethod(v);
   };
   const chooseStatus = (v: string) => {
+    setCustomerOn(false);
     setPreset(null);
     setStatus(v);
   };
@@ -152,9 +160,10 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
       {openId && <WasteRequestDetail key={openId} id={openId} isAdmin={isAdmin} onClose={() => setOpenId(null)} />}
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Hàng đợi yêu cầu">
-        {staffPresets.map((p) => <PresetChip key={p.key} label={p.label} pressed={view === 'queue' && preset === p.key} onClick={() => choosePreset(p.key)} />)}
+        {customerId && <PresetChip label={CUSTOMER_CHIP_LABEL} pressed={view === 'queue' && customerOn} onClick={() => { setView('queue'); setCustomerOn(true); setPreset(null); setMethod(''); setStatus(''); }} />}
+        {staffPresets.map((p) => <PresetChip key={p.key} label={p.label} pressed={view === 'queue' && !customerOn && preset === p.key} onClick={() => choosePreset(p.key)} />)}
         <PresetChip label="Hàng không rõ chủ" pressed={view === 'unmatched'} onClick={() => setView('unmatched')} />
-        {adminPresets.map((p) => <PresetChip key={p.key} label={p.label} pressed={view === 'queue' && preset === p.key} onClick={() => choosePreset(p.key)} />)}
+        {adminPresets.map((p) => <PresetChip key={p.key} label={p.label} pressed={view === 'queue' && !customerOn && preset === p.key} onClick={() => choosePreset(p.key)} />)}
       </div>
 
       {view === 'unmatched' ? (

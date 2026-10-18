@@ -29,10 +29,18 @@ const CARD = 'rounded-control border border-stone-200 bg-stone-0 p-3';
 const LABEL = 'text-xs text-stone-600';
 const VALUE = 'text-base font-semibold text-stone-900';
 
+const WASTE_USER_PARAM = /^[A-Za-z0-9_-]{1,64}$/;
+const readWasteUser = (isAdmin: boolean): string | null => {
+  if (!isAdmin || typeof window === 'undefined') return null;
+  const v = new URLSearchParams(window.location.search).get('wasteUser');
+  return v !== null && WASTE_USER_PARAM.test(v) ? v : null;
+};
+
 export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | null }) {
   const sections = isAdmin ? WASTE_ADMIN_SECTIONS : WASTE_STAFF_SECTIONS;
+  const [wasteUserId] = useState<string | null>(() => readWasteUser(isAdmin));
   const [section, setSection] = useState<WasteSection>(() =>
-    seed && sections.includes(seed.section) ? seed.section : isAdmin ? 'items' : 'requests',
+    wasteUserId ? 'requests' : seed && sections.includes(seed.section) ? seed.section : isAdmin ? 'items' : 'requests',
   );
   const overview = useQuery({ queryKey: ['admin-waste-overview'], queryFn: getWasteOverview, enabled: isAdmin });
   const config = useQuery({ queryKey: ['admin-config', 'waste'], queryFn: () => getConfig('waste'), enabled: isAdmin });
@@ -57,7 +65,7 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
           </button>
         ))}
       </div>
-      <div data-waste-section={section}>{section === 'items' && <WasteItemsSection />}{section === 'points' && <WastePointsSection seed={seed} />}{section === 'requests' && <WasteRequestsSection isAdmin={isAdmin} seed={seed} />}</div>
+      <div data-waste-section={section}>{section === 'items' && <WasteItemsSection />}{section === 'points' && <WastePointsSection seed={seed} />}{section === 'requests' && <WasteRequestsSection isAdmin={isAdmin} seed={seed} initialUserId={wasteUserId} />}</div>
     </div>
   );
 }
