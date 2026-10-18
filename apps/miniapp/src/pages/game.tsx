@@ -177,7 +177,7 @@ export default function GamePage() {
               waterPlotVariables={waterPlotM.variables}
               onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
               unlockPending={unlockM.isPending}
-              onUnlock={() => unlockM.mutate()}
+              onUnlock={(slot) => unlockM.mutate(slot)}
             />
           )}
 

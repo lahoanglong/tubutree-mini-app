@@ -97,7 +97,7 @@ export class GameGardenService {
   }
 
   // ── Mở lô phụ kế tiếp ──────────────────────────────
-  async unlockPlot(userId: string, currency: UnlockCurrency) {
+  async unlockPlot(userId: string, currency: UnlockCurrency, requestedSlot?: number) {
     // PD-3 (spec 6.3, OQ-4): xu đã gộp vào Điểm Xanh; 200 xu/lô quy ra 0,2 điểm không biểu diễn được và
     // giọt nước đã là tiền game. Giữ giá trị 'XU' ở DTO để client cũ nhận 410 đọc được, không phải 400.
     if (currency === 'XU') {
@@ -110,7 +110,16 @@ export class GameGardenService {
       this.config.get<number>('game.plot_target', 600),
     ]);
 
-    const slot = count + 1;
+    // Có slot từ client: đếm ngoài tx không đủ để biết lệnh này là bấm đúp hay mở ô kế tiếp, nên so với ô khách định mở.
+    if (requestedSlot !== undefined) {
+      const already = await this.prisma.gardenPlot.findUnique({ where: { userId_slot: { userId, slot: requestedSlot } } });
+      if (already) return this.toView(already);
+      if (requestedSlot !== count + 1) {
+        throw new BadRequestException('Danh sách lô đất đã thay đổi, hãy tải lại trang.');
+      }
+    }
+
+    const slot = requestedSlot ?? count + 1;
     if (slot > maxPlots - 1) {
       throw new BadRequestException(`Đã mở tối đa ${maxPlots - 1} lô đất.`);
     }

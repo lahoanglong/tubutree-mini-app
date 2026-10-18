@@ -668,7 +668,7 @@ describe('GamePage — lô đất', () => {
     await waitFor(() => expect(seeds).toBeDisabled());
     fireEvent.click(seeds);
     expect(mocks.api.unlockPlot).toHaveBeenCalledTimes(1);
-    expect(mocks.api.unlockPlot).toHaveBeenCalledWith();
+    expect(mocks.api.unlockPlot).toHaveBeenCalledWith(NEXT.slot);
     await act(async () => {
       gate.resolve({});
     });
