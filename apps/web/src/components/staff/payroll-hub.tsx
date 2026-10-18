@@ -74,9 +74,15 @@ export function PayrollHub() {
 
   // Hồ sơ ngân hàng không đổi theo tháng nên giữ lần tải THÀNH CÔNG gần nhất: đổi tháng làm payQ.data tạm về undefined,
   // mở form đúng lúc đó sẽ nạp ô RỖNG và bấm Lưu gửi chuỗi rỗng đè mất tài khoản đã lưu (upsert `update: dto` ở BE).
+  // `profileLoaded` tách "chưa tải được lần nào / tải lỗi" khỏi "nhân viên chưa có hồ sơ" (profile null hợp lệ): trường hợp đầu khoá nút,
+  // không thì form rỗng + Lưu cũng đè mất tài khoản đã lưu.
   const [profileCache, setProfileCache] = useState<StaffProfile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   useEffect(() => {
-    if (payQ.data) setProfileCache(payQ.data.profile);
+    if (payQ.data) {
+      setProfileCache(payQ.data.profile);
+      setProfileLoaded(true);
+    }
   }, [payQ.data]);
 
   const [bankOpen, setBankOpen] = useState(false);
@@ -147,7 +153,7 @@ export function PayrollHub() {
             </section>
           )}
 
-          <button type="button" onClick={openBank} className={ui.btnSecondary}>
+          <button type="button" onClick={openBank} disabled={!profileLoaded} className={ui.btnSecondary}>
             <Landmark className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Thông tin nhận lương
           </button>
