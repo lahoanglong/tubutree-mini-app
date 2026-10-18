@@ -2,8 +2,8 @@ import { NotFoundException } from '@nestjs/common';
 import { CommunityFeedService } from './community-feed.service';
 import { CommunityFeedController } from './community-feed.controller';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
-import { PUBLIC_CACHE_POLICY_KEY } from '../../common/decorators/public-cache.decorator';
-import { PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, publicAuthorName, publicSnippet } from './community-public-preview';
+import { PUBLIC_CACHE, PUBLIC_CACHE_POLICY_KEY } from '../../common/decorators/public-cache.decorator';
+import { PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, publicAuthorName, publicSnippet, publicTitle } from './community-public-preview';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 // D5-07: khách chưa đăng nhập xem trước vài bài đã đăng (đọc, không đăng/thích/bình luận); cờ community.public_preview mặc định tắt.
@@ -74,6 +74,13 @@ describe('CommunityFeedService.publicPreview', () => {
     expect(JSON.stringify(out)).not.toMatch(/u-secret|avatar|garden|Nguyễn/);
   });
 
+  it('tiêu đề cũng che số điện thoại và email người dùng tự gõ, không chỉ đoạn đầu bài', async () => {
+    const { svc } = makeSvc(true, [row({ title: 'Cần mua sỉ, gọi 0901 234 567 hoặc lan@gmail.com' })]);
+    const out = await svc.publicPreview();
+    expect(out.posts[0]!.title).toBe('Cần mua sỉ, gọi … hoặc …');
+    expect(JSON.stringify(out)).not.toMatch(/0901|gmail/);
+  });
+
   it('chưa có bài nào: trả danh sách rỗng chứ không lỗi', async () => {
     const { svc } = makeSvc(true, []);
     expect(await svc.publicPreview()).toEqual({ posts: [] });
@@ -114,12 +121,29 @@ describe('publicSnippet', () => {
   });
 });
 
+describe('publicTitle', () => {
+  it('không có tiêu đề (bài thường không đặt tiêu đề) vẫn là null', () => {
+    expect(publicTitle(null)).toBeNull();
+    expect(publicTitle(undefined)).toBeNull();
+    expect(publicTitle('   ')).toBeNull();
+  });
+  it('che số điện thoại, email, gộp khoảng trắng; tiêu đề thường giữ nguyên', () => {
+    expect(publicTitle('Pha nước rửa chén từ vỏ bưởi')).toBe('Pha nước rửa chén từ vỏ bưởi');
+    expect(publicTitle('  Ai có 0901.234.567   không  ')).toBe('Ai có … không');
+    expect(publicTitle('+84 90 123 4567')).toBe('…');
+    expect(publicTitle('mail lan@gmail.com')).toBe('mail …');
+  });
+});
+
 describe('CommunityFeedController — xem trước công khai', () => {
   const meta = (h: keyof CommunityFeedController, key: string) => Reflect.getMetadata(key, CommunityFeedController.prototype[h]);
 
   it('route xem trước công khai và cache được; mọi thao tác đọc chi tiết/ghi vẫn cần đăng nhập', () => {
     expect(meta('publicPreview', IS_PUBLIC_KEY)).toBe(true);
-    expect(meta('publicPreview', PUBLIC_CACHE_POLICY_KEY)).toBe('STATIC');
+    const policy = meta('publicPreview', PUBLIC_CACHE_POLICY_KEY) as keyof typeof PUBLIC_CACHE;
+    // Nội dung người dùng viết cần gỡ nhanh khi kiểm duyệt hoặc tắt cờ: proxy giữ tối đa 60 giây (STATIC là 300).
+    expect(policy).toBe('USER_CONTENT');
+    expect(PUBLIC_CACHE[policy]).toMatch(/s-maxage=60$/);
     for (const h of ['getFeed', 'getPost', 'comments', 'createPost', 'react', 'addComment', 'report'] as const) {
       expect(meta(h, IS_PUBLIC_KEY)).toBeUndefined();
     }

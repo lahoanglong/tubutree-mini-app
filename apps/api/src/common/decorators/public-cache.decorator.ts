@@ -14,6 +14,8 @@ export const PUBLIC_CACHE = {
   STATIC: 'public, max-age=60, s-maxage=300',
   /** Danh mục sản phẩm / Trang chủ / trang nhãn: đổi theo sync tồn + giá. */
   CATALOG: 'public, max-age=15, s-maxage=30',
+  /** Nội dung người dùng tự viết cho khách chưa đăng nhập xem (xem trước cộng đồng): gỡ bài hay tắt cờ phải có hiệu lực trong 1 phút. */
+  USER_CONTENT: 'public, max-age=30, s-maxage=60',
   /** Flash sale đang chạy: quota giảm theo từng đơn nên TTL rất ngắn. */
   LIVE: 'public, max-age=5, s-maxage=10',
 } as const;

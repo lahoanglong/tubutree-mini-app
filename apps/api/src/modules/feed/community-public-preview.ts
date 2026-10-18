@@ -24,10 +24,19 @@ export function publicAuthorName(fullName: string | null | undefined): string {
   return name.split(/\s+/).at(-1) ?? ANONYMOUS_AUTHOR;
 }
 
+function redactContact(text: string): string {
+  return text.replace(EMAIL, '…').replace(PHONE, '…').replace(/\s+/g, ' ').trim();
+}
+
 /** Đoạn đầu bài: che số điện thoại/email người dùng tự gõ, gộp xuống dòng, cắt gọn. */
 export function publicSnippet(body: string): string {
-  const flat = body.replace(EMAIL, '…').replace(PHONE, '…').replace(/\s+/g, ' ').trim();
+  const flat = redactContact(body);
   return flat.length > SNIPPET_MAX ? `${flat.slice(0, SNIPPET_MAX)}…` : flat;
+}
+
+/** Tiêu đề do người dùng tự gõ nên che số điện thoại/email như đoạn đầu bài; không có tiêu đề thì null. */
+export function publicTitle(title: string | null | undefined): string | null {
+  return redactContact(title ?? '') || null;
 }
 
 interface PreviewRow {
@@ -46,7 +55,7 @@ export function toPublicPreviewItem(row: PreviewRow, counts: { likes: number; co
   return {
     id: row.id,
     kind: row.kind,
-    title: row.title ?? null,
+    title: publicTitle(row.title),
     snippet: publicSnippet(row.body),
     image,
     createdAt: row.createdAt,

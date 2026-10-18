@@ -89,7 +89,7 @@ export class CommunityFeedController {
 
   // Xem trước công khai cho khách chưa đăng nhập (cờ community.public_preview, tắt thì 404). Literal path: khai TRƯỚC @Get(':id').
   @Public()
-  @PublicCache('STATIC')
+  @PublicCache('USER_CONTENT')
   @Get('public-preview')
   publicPreview() {
     return this.feed.publicPreview();
