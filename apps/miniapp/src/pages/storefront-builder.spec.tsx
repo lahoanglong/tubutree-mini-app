@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   getStorefrontStats: vi.fn(),
   getStorefrontCategories: vi.fn(),
   applyStorefrontTemplate: vi.fn(),
+  shareSheet: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -33,6 +34,12 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/storefront-api', () => ({ ...mocks }));
+vi.mock('../components/share-sheet', () => ({
+  ShareSheet: (props: { visible: boolean }) => {
+    mocks.shareSheet(props);
+    return props.visible ? <div data-testid="share-sheet" /> : null;
+  },
+}));
 vi.mock('../components/content-kit-sheet', () => ({
   ContentKitSheet: ({ visible, productSlug }: { visible: boolean; productSlug: string }) =>
     visible ? <div data-testid="content-kit">{productSlug}</div> : null,
@@ -55,7 +62,8 @@ const item = (over: Record<string, unknown> = {}) => ({
 });
 const storefront = (over: Record<string, unknown> = {}) => ({
   id: 'sf1', slug: 'shop-aff-1', type: 'CTV', title: 'Cửa hàng Xanh', headerNote: 'Mua giúp mình nhé',
-  avatarUrl: null, coverUrl: null, theme: 'default', themeColor: null, subdomain: null, isPublished: false,
+  avatarUrl: null, coverUrl: null, theme: 'default', themeColor: null, subdomain: null, isPublished: false, referralCode: 'SHOP-AFF-1',
+  subdomainEnabled: false, publicHiddenReason: null,
   collections: [
     { id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item()] },
   ],
@@ -135,10 +143,10 @@ describe('Trang gian hàng CTV — cấu trúc trang (C-114)', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByText('Nháp — chưa đăng')).toBeInTheDocument();
-    expect(screen.getByText('/shop-aff-1')).toBeInTheDocument();
+    expect(screen.getByText('/s/shop-aff-1')).toBeInTheDocument();
     view.unmount();
 
-    mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true, subdomain: 'xanh' }));
+    mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true, subdomain: 'xanh', subdomainEnabled: true }));
     renderPage();
     expect(await screen.findByText('Đang hiển thị')).toBeInTheDocument();
     expect(screen.getByText('xanh.tubutree.com')).toBeInTheDocument();
@@ -353,6 +361,122 @@ describe('Đăng gian hàng và xem trước', () => {
   });
 });
 
+describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)', () => {
+  const published = (over: Record<string, unknown> = {}) => storefront({ isPublished: true, ...over });
+  const empty = { collections: [{ id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [] }] };
+
+  it('đã đăng: nút chính là "Chia sẻ gian hàng", mở ShareSheet với slug, tên và mã giới thiệu của chủ', async () => {
+    mocks.getMyStorefront.mockResolvedValue(published());
+    renderPage();
+    expect(screen.queryByRole('button', { name: 'Lưu & Đăng' })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ gian hàng' }));
+    expect(await screen.findByTestId('share-sheet')).toBeInTheDocument();
+    expect(mocks.shareSheet).toHaveBeenLastCalledWith(
+      expect.objectContaining({ visible: true, slug: 'shop-aff-1', title: 'Cửa hàng Xanh', referralCode: 'SHOP-AFF-1' }),
+    );
+  });
+
+  it('còn nháp: chưa có nút chia sẻ (link chưa mở được) và không có nút Gỡ đăng', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    expect(screen.queryByRole('button', { name: 'Chia sẻ gian hàng' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Gỡ đăng' })).not.toBeInTheDocument();
+  });
+
+  it('gỡ đăng phải xác nhận; Huỷ thì không gọi API, xác nhận gọi publishStorefront(false) rồi báo đã gỡ', async () => {
+    mocks.getMyStorefront.mockResolvedValue(published());
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Gỡ đăng' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).getByText('Gỡ đăng gian hàng này?')).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Hủy' }));
+    expect(mocks.publishStorefront).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Gỡ đăng' }));
+    const again = await screen.findByTestId('sheet');
+    fireEvent.click(within(again).getByRole('button', { name: 'Gỡ đăng' }));
+    await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gỡ đăng gian hàng', type: 'success' }));
+  });
+
+  it('chưa có sản phẩm nào: "Lưu & Đăng" tắt kèm lời nhắc thêm sản phẩm, không gọi API', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront(empty));
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    expect(btn).toBeDisabled();
+    expect(screen.getByText('Thêm ít nhất 1 sản phẩm để đăng gian hàng.')).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(mocks.publishStorefront).not.toHaveBeenCalled();
+  });
+
+  it('có sản phẩm: không hiện lời nhắc và nút Đăng bấm được', async () => {
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    expect(btn).not.toBeDisabled();
+    expect(screen.queryByText('Thêm ít nhất 1 sản phẩm để đăng gian hàng.')).not.toBeInTheDocument();
+  });
+
+  it('khách không thấy gian hàng (bị admin gỡ, chủ không còn là CTV…): hiện lý do cho chủ', async () => {
+    mocks.getMyStorefront.mockResolvedValue(published({ publicHiddenReason: 'Tubu Tree đã gỡ gian hàng: dùng ảnh người khác.' }));
+    renderPage();
+    expect(await screen.findByText('Tubu Tree đã gỡ gian hàng: dùng ảnh người khác.')).toBeInTheDocument();
+  });
+
+  it('gian hàng bình thường: không có dòng lý do ẩn', async () => {
+    mocks.getMyStorefront.mockResolvedValue(published());
+    renderPage();
+    await screen.findByRole('button', { name: 'Chia sẻ gian hàng' });
+    expect(screen.queryByTestId('hidden-reason')).not.toBeInTheDocument();
+  });
+
+  it('đã đăng: nhắc trang web cập nhật sau vài phút; còn nháp thì không nhắc', async () => {
+    mocks.getMyStorefront.mockResolvedValue(published());
+    const view = renderPage();
+    expect(await screen.findByText('Trang web cập nhật sau vài phút khi bạn đổi nội dung.')).toBeInTheDocument();
+    view.unmount();
+    mocks.getMyStorefront.mockResolvedValue(storefront());
+    renderPage();
+    await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    expect(screen.queryByText('Trang web cập nhật sau vài phút khi bạn đổi nội dung.')).not.toBeInTheDocument();
+  });
+});
+
+describe('Link subdomain theo cờ (D3-11)', () => {
+  it('cờ tắt: chỉ hiện /s/<slug>, trang cấu hình không có ô subdomain và không gửi subdomain', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: null, subdomainEnabled: false }));
+    renderPage();
+    expect(await screen.findByText('/s/shop-aff-1')).toBeInTheDocument();
+    expect(screen.queryByText(/tubutree\.com/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cấu hình' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).queryByPlaceholderText('vd: brand1')).not.toBeInTheDocument();
+    expect(sheet.textContent).not.toMatch(/tubutree\.com/);
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(mocks.updateStorefront.mock.calls[0]![0].subdomain).toBeUndefined();
+  });
+
+  it('cờ bật: hiện link subdomain và ô nhập subdomain riêng', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
+    renderPage();
+    expect(await screen.findByText('lan-xanh.tubutree.com')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cấu hình' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).getByPlaceholderText('vd: brand1')).toBeInTheDocument();
+  });
+});
+
+describe('Ảnh bìa trống (D7)', () => {
+  it('chưa có ảnh bìa: hiện lời mời thêm ảnh bìa trong khung bìa; có ảnh thì không', async () => {
+    const view = renderPage();
+    expect(await screen.findByText('Thêm ảnh bìa')).toBeInTheDocument();
+    view.unmount();
+    mocks.getMyStorefront.mockResolvedValue(storefront({ coverUrl: 'https://cdn/c.jpg' }));
+    renderPage();
+    await screen.findByText('Bộ sưu tập A');
+    expect(screen.queryByText('Thêm ảnh bìa')).not.toBeInTheDocument();
+  });
+});
+
 describe('Hồ sơ và cấu hình gian hàng', () => {
   it('lưu hồ sơ gửi ảnh đại diện, ảnh bìa, lời nhắn đã cắt khoảng trắng', async () => {
     renderPage();
@@ -440,6 +564,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   });
 
   it('cấu hình: chọn màu "Xanh dương" gửi #2563eb; subdomain được viết thường', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ subdomainEnabled: true }));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
     const sheet = await screen.findByTestId('sheet');
@@ -463,7 +588,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   });
 
   it('ô nhập trong cấu hình đều có tên truy cập (nhãn hoặc aria-label)', async () => {
-    mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT' }));
+    mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT', subdomainEnabled: true }));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
     const sheet = await screen.findByTestId('sheet');

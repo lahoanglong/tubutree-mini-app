@@ -29,11 +29,20 @@ export interface Storefront {
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;
   warehouseAddress?: string | null; warehouseCity?: string | null; warehouseDistrict?: string | null; warehouseWard?: string | null; warehousePhone?: string | null;
+  /** Admin đã duyệt gian hàng: chỉ khi đó mới có nhãn "CTV tuyển chọn". */
+  approved?: boolean;
+  /** Cờ link subdomain; tắt thì `subdomain`/`customDomain` luôn null và chỉ dùng /s/<slug>. */
+  subdomainEnabled?: boolean;
   collections: StorefrontCollection[];
 }
 // GET /storefront/me KHÔNG trả ownerTier (chỉ trang công khai getPublicBySlug mới tính bậc) —
 // loại field này khỏi view chỉnh sửa để type khớp đúng response thật.
-export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> { isPublished: boolean; collections: StorefrontCollectionEdit[]; }
+export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> {
+  isPublished: boolean;
+  /** Lý do khách không thấy gian hàng dù đã đăng (bị gỡ, chủ không còn là CTV…); null khi khách thấy bình thường. */
+  publicHiddenReason?: string | null;
+  collections: StorefrontCollectionEdit[];
+}
 export interface PickerProduct {
   id: string; name: string; slug: string; thumbnail: string | null; brand: string;
   basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number; maxAffiliateRate: number;
