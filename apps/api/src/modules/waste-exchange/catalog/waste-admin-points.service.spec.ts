@@ -605,7 +605,12 @@ describe('WasteAdminPointsService', () => {
           actorUserId: 'a1',
           actorRole: 'ADMIN',
           pointId: 'p1',
-          meta: { staffUserId: 'o1', before: { role: 'OWNER', isActive: true }, after: { role: 'OWNER', isActive: false } },
+          meta: {
+            staffUserId: 'o1',
+            before: { role: 'OWNER', isActive: true },
+            after: { role: 'OWNER', isActive: false },
+            perkCleared: { perkText: null, perkPendingText: PERK },
+          },
         }),
       );
 
@@ -613,6 +618,71 @@ describe('WasteAdminPointsService', () => {
       g.wastePointStaff.findFirst.mockResolvedValue(null);
       await expectHttp(g.svc.removeStaff('a1', 'p1', 'o1'), NotFoundException, NOT_IN_POINT);
       expect(g.wastePointStaff.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('removing the OWNER also clears the approved and the pending perk in the same transaction', async () => {
+      const h = staffSetup();
+      h.$queryRaw.mockResolvedValue([{ ...lockRow, perkText: 'Tặng túi vải' }]);
+
+      await h.svc.removeStaff('a1', 'p1', 'o1');
+
+      expect(h.wastePoint.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { perkText: null, perkPendingText: null } });
+      expect(writeEvent).toHaveBeenCalledWith(
+        h.tx,
+        expect.objectContaining({
+          kind: 'POINT_STAFF_REMOVED',
+          meta: expect.objectContaining({ perkCleared: { perkText: 'Tặng túi vải', perkPendingText: PERK } }),
+        }),
+      );
+    });
+
+    it('removing an OWNER of a point without a perk, or a STAFF member, leaves the perk alone and adds no perkCleared', async () => {
+      const a = staffSetup();
+      a.$queryRaw.mockResolvedValue([{ ...lockRow, perkPendingText: null }]);
+      await a.svc.removeStaff('a1', 'p1', 'o1');
+      expect(a.wastePoint.update).not.toHaveBeenCalled();
+      expect(writeEvent.mock.calls[0]![1].meta).not.toHaveProperty('perkCleared');
+
+      writeEvent.mockClear();
+      const b = staffSetup();
+      b.$queryRaw.mockResolvedValue([{ ...lockRow, perkText: 'Tặng túi vải' }]);
+      b.wastePointStaff.findFirst.mockResolvedValue({ role: 'STAFF' });
+      await b.svc.removeStaff('a1', 'p1', 's2');
+      expect(b.wastePoint.update).not.toHaveBeenCalled();
+      expect(writeEvent.mock.calls[0]![1].meta).not.toHaveProperty('perkCleared');
+    });
+
+    it('clearPerk removes the approved and the pending text and writes one POINT_UPDATED event, no notification', async () => {
+      const h = staffSetup();
+      h.$queryRaw.mockResolvedValue([{ ...lockRow, perkText: 'Tặng túi vải' }]);
+
+      await h.svc.clearPerk('a1', 'p1');
+
+      expect(sqlOf(h.$queryRaw.mock.calls[0]!)).toContain('FOR NO KEY UPDATE');
+      expect(h.wastePoint.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { perkText: null, perkPendingText: null } });
+      expect(writeEvent).toHaveBeenCalledTimes(1);
+      expect(writeEvent).toHaveBeenCalledWith(
+        h.tx,
+        expect.objectContaining({
+          kind: 'POINT_UPDATED',
+          actorUserId: 'a1',
+          actorRole: 'ADMIN',
+          pointId: 'p1',
+          meta: { before: { perkText: 'Tặng túi vải', perkPendingText: PERK }, after: { perkText: null, perkPendingText: null } },
+        }),
+      );
+      expect(h.notifier.perkReviewed).not.toHaveBeenCalled();
+    });
+
+    it('clearPerk works with only a pending text, and is 409 when there is nothing to clear', async () => {
+      const h = staffSetup();
+      await h.svc.clearPerk('a1', 'p1');
+      expect(h.wastePoint.update).toHaveBeenCalledTimes(1);
+
+      const g = staffSetup();
+      g.$queryRaw.mockResolvedValue([{ ...lockRow, perkPendingText: null }]);
+      await expectHttp(g.svc.clearPerk('a1', 'p1'), ConflictException, 'Điểm này chưa có ưu đãi để gỡ.');
+      expect(g.wastePoint.update).not.toHaveBeenCalled();
     });
 
     it('approve moves the pending text to the live text and notifies the owner after commit', async () => {
@@ -690,11 +760,11 @@ describe('WasteAdminPointsService', () => {
       expect(h.notifier.perkReviewed).not.toHaveBeenCalled();
     });
 
-    it.each(['removeStaff', 'approvePerk', 'rejectPerk'] as const)('%s: STAFF caller is 403, no transaction, no write', async (m) => {
+    it.each(['removeStaff', 'approvePerk', 'rejectPerk', 'clearPerk'] as const)('%s: STAFF caller is 403, no transaction, no write', async (m) => {
       const h = staffSetup();
       h.prisma.user.findUnique.mockResolvedValue({ id: 's1', role: 'STAFF', isBlocked: false, mergedIntoId: null, phone: null });
 
-      const call = m === 'removeStaff' ? h.svc.removeStaff('s1', 'p1', 'o1') : h.svc[m]('s1', 'p1', PERK);
+      const call = m === 'removeStaff' ? h.svc.removeStaff('s1', 'p1', 'o1') : m === 'clearPerk' ? h.svc.clearPerk('s1', 'p1') : h.svc[m]('s1', 'p1', PERK);
       await expect(call).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(h.prisma.$transaction).not.toHaveBeenCalled();

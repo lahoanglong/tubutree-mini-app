@@ -1904,6 +1904,8 @@ export const rejectWastePerk = (pointId: string, expectedPendingText: string) =>
     method: 'POST',
     body: { expectedPendingText } satisfies WastePerkReviewRequest,
   });
+export const clearWastePerk = (pointId: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/clear`, { method: 'POST' });
 
 export const listWasteRequests = (q: AdminWasteRequestQuery = {}) =>
   apiFetch<{ rows: AdminWasteRequestRowDTO[]; nextCursor: string | null }>(

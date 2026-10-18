@@ -4670,7 +4670,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2036"
+   "apps/web/src/lib/admin-client.ts:2038"
   ]
  },
  {
@@ -6508,7 +6508,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2019"
+   "apps/web/src/lib/admin-client.ts:2021"
   ]
  },
  {
@@ -6571,7 +6571,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2017"
+   "apps/web/src/lib/admin-client.ts:2019"
   ]
  },
  {
@@ -6596,7 +6596,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2119"
+   "apps/web/src/lib/admin-client.ts:2121"
   ]
  },
  {
@@ -6621,7 +6621,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2114"
+   "apps/web/src/lib/admin-client.ts:2116"
   ]
  },
  {
@@ -6639,7 +6639,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2131"
+   "apps/web/src/lib/admin-client.ts:2133"
   ]
  },
  {
@@ -6663,7 +6663,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2124"
+   "apps/web/src/lib/admin-client.ts:2126"
   ]
  },
  {
@@ -6920,7 +6920,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2110"
+   "apps/web/src/lib/admin-client.ts:2112"
   ]
  },
  {
@@ -6948,7 +6948,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2126"
+   "apps/web/src/lib/admin-client.ts:2128"
   ]
  },
  {
@@ -6958,7 +6958,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2133"
+   "apps/web/src/lib/admin-client.ts:2135"
   ]
  },
  {
@@ -7102,7 +7102,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2112"
+   "apps/web/src/lib/admin-client.ts:2114"
   ]
  },
  {
@@ -7325,7 +7325,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2108"
+   "apps/web/src/lib/admin-client.ts:2110"
   ]
  },
  {
@@ -7450,7 +7450,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2087"
+   "apps/web/src/lib/admin-client.ts:2089"
   ]
  },
  {
@@ -7559,7 +7559,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2089"
+   "apps/web/src/lib/admin-client.ts:2091"
   ]
  },
  {
@@ -7721,7 +7721,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2085"
+   "apps/web/src/lib/admin-client.ts:2087"
   ]
  },
  {
@@ -19701,7 +19701,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2000"
+   "apps/web/src/lib/admin-client.ts:2002"
   ]
  },
  {
@@ -19740,7 +19740,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2002"
+   "apps/web/src/lib/admin-client.ts:2004"
   ]
  },
  {
@@ -20089,7 +20089,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1954"
+   "apps/web/src/lib/admin-client.ts:1956"
   ]
  },
  {
@@ -20397,7 +20397,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1958"
+   "apps/web/src/lib/admin-client.ts:1960"
   ]
  },
  {
@@ -20705,7 +20705,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1956"
+   "apps/web/src/lib/admin-client.ts:1958"
   ]
  },
  {
@@ -20854,7 +20854,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1950"
+   "apps/web/src/lib/admin-client.ts:1952"
   ]
  },
  {
@@ -21006,7 +21006,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1952"
+   "apps/web/src/lib/admin-client.ts:1954"
   ]
  },
  {
@@ -21158,7 +21158,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1946"
+   "apps/web/src/lib/admin-client.ts:1948"
   ]
  },
  {
@@ -21307,7 +21307,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1948"
+   "apps/web/src/lib/admin-client.ts:1950"
   ]
  },
  {
@@ -23966,6 +23966,414 @@
  },
  {
   "method": "POST",
+  "path": "/admin/waste/points/:pointId/perk/clear",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "PENDING",
+       "ACTIVE",
+       "PAUSED"
+      ]
+     },
+     "opt": false
+    },
+    "monthlyQuotaPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "monthUsage": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "monthKey": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "pointsUsed": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "confirmations": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "quotaFull": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "perkPendingText": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "giftHandoverEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "note": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "activatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "lastConfirmedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "hiddenInactive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "staff": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "userId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "role": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "OWNER",
+           "STAFF"
+          ]
+         },
+         "opt": false
+        },
+        "isActive": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
+        },
+        "fullName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "phone": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "kind": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "WAREHOUSE",
+       "PARTNER"
+      ]
+     },
+     "opt": false
+    },
+    "name": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "addressLine": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "provinceCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "provinceName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "communeCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "communeName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "lat": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "lng": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "phone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "openingHours": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "MON": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "open": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "close": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       },
+       "TUE": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "open": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "close": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       },
+       "WED": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "open": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "close": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       },
+       "THU": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "open": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "close": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       },
+       "FRI": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "open": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "close": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       },
+       "SAT": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "open": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "close": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       },
+       "SUN": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "open": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "close": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       }
+      }
+     },
+     "opt": false
+    },
+    "acceptedItemIds": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "perkText": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "distanceKm": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:1908"
+  ]
+ },
+ {
+  "method": "POST",
   "path": "/admin/waste/points/:pointId/perk/reject",
   "schema": {
    "k": "obj",
@@ -26187,7 +26595,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1909"
+   "apps/web/src/lib/admin-client.ts:1911"
   ]
  },
  {
@@ -26871,7 +27279,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1930"
+   "apps/web/src/lib/admin-client.ts:1932"
   ]
  },
  {
@@ -26946,7 +27354,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1922"
+   "apps/web/src/lib/admin-client.ts:1924"
   ]
  },
  {
@@ -27630,7 +28038,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1928"
+   "apps/web/src/lib/admin-client.ts:1930"
   ]
  },
  {
@@ -27716,7 +28124,7 @@
    ]
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1920"
+   "apps/web/src/lib/admin-client.ts:1922"
   ]
  },
  {
@@ -27747,7 +28155,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1924"
+   "apps/web/src/lib/admin-client.ts:1926"
   ]
  },
  {
@@ -28431,7 +28839,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1932"
+   "apps/web/src/lib/admin-client.ts:1934"
   ]
  },
  {
@@ -28468,7 +28876,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1926"
+   "apps/web/src/lib/admin-client.ts:1928"
   ]
  },
  {
@@ -29152,7 +29560,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1918"
+   "apps/web/src/lib/admin-client.ts:1920"
   ]
  },
  {
@@ -29321,7 +29729,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1916"
+   "apps/web/src/lib/admin-client.ts:1918"
   ]
  },
  {
@@ -29426,7 +29834,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1935"
+   "apps/web/src/lib/admin-client.ts:1937"
   ]
  },
  {
@@ -29528,7 +29936,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1939"
+   "apps/web/src/lib/admin-client.ts:1941"
   ]
  },
  {
@@ -29630,7 +30038,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1937"
+   "apps/web/src/lib/admin-client.ts:1939"
   ]
  },
  {
@@ -29684,7 +30092,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1942"
+   "apps/web/src/lib/admin-client.ts:1944"
   ]
  },
  {
@@ -29738,7 +30146,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1944"
+   "apps/web/src/lib/admin-client.ts:1946"
   ]
  },
  {

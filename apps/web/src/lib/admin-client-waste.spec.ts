@@ -30,6 +30,7 @@ const ROWS: Row[] = [
   ['removeWastePointStaff', () => A.removeWastePointStaff('p1', 'u9'), 'DELETE', '/admin/waste/points/p1/staff/u9', undefined],
   ['approveWastePerk', () => A.approveWastePerk('p1', 'Giảm 10%'), 'POST', '/admin/waste/points/p1/perk/approve', { expectedPendingText: 'Giảm 10%' }],
   ['rejectWastePerk', () => A.rejectWastePerk('p1', 'Giảm 10%'), 'POST', '/admin/waste/points/p1/perk/reject', { expectedPendingText: 'Giảm 10%' }],
+  ['clearWastePerk', () => A.clearWastePerk('p1'), 'POST', '/admin/waste/points/p1/perk/clear', undefined],
   ['listWasteRequests()', () => A.listWasteRequests(), 'GET', '/admin/waste/requests', undefined],
   ['listWasteRequests(filters)', () => A.listWasteRequests({ method: 'MAIL_IN', filter: 'TO_COUNT', limit: 50 }), 'GET', '/admin/waste/requests?method=MAIL_IN&filter=TO_COUNT&limit=50', undefined],
   ['listWasteRequests(credit log)', () => A.listWasteRequests({ status: 'COMPLETED', pointId: 'p1', cursor: 'c2' }), 'GET', '/admin/waste/requests?status=COMPLETED&pointId=p1&cursor=c2', undefined],

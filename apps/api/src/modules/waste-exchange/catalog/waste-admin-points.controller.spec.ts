@@ -70,6 +70,7 @@ describe('WasteAdminPointsController', () => {
       [proto.removeStaff, ':id/staff/:userId', RequestMethod.DELETE],
       [proto.approvePerk, ':id/perk/approve', RequestMethod.POST],
       [proto.rejectPerk, ':id/perk/reject', RequestMethod.POST],
+      [proto.clearPerk, ':id/perk/clear', RequestMethod.POST],
     ] as const;
     for (const [h, path, method] of routes) {
       expect(Reflect.getMetadata(PATH_METADATA, h)).toBe(path);
@@ -79,7 +80,7 @@ describe('WasteAdminPointsController', () => {
     }
     const p = WasteAdminPointsController.prototype;
     expect(Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).sort()).toEqual([
-      'addStaff', 'approvePerk', 'create', 'list', 'rejectPerk', 'removeStaff', 'reorder', 'update',
+      'addStaff', 'approvePerk', 'clearPerk', 'create', 'list', 'rejectPerk', 'removeStaff', 'reorder', 'update',
     ]);
   });
 

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wastePoint, wasteRequestRow } from '@/test-utils/fixtures/waste-admin';
 import { listWastePoints } from '@/lib/admin-client';
 import { WastePointDetail } from './waste-point-detail';
@@ -34,6 +34,7 @@ async function mount(point = wastePoint()) {
     '/admin/waste/points/p1/staff': { body: POINT_AFTER },
     '/admin/waste/points/p1/perk/approve': { body: POINT_AFTER },
     '/admin/waste/points/p1/perk/reject': { body: POINT_AFTER },
+    '/admin/waste/points/p1/perk/clear': { body: POINT_AFTER },
     '/admin/waste/points/p1/report': { body: REPORT },
     '/admin/waste/requests': { body: { rows: [CREDIT_ROW], nextCursor: 'c2' } },
     '/admin/users': { body: USERS },
@@ -210,6 +211,24 @@ describe('WastePointDetail', () => {
     expect(JSON.parse(String(posts[0]!.init!.body))).toEqual({ expectedPendingText: 'Chữ cũ' });
     expect(r.container.querySelector('[role="alert"]')?.textContent).toBe('Nội dung ưu đãi vừa thay đổi, tải lại để xem');
     expect(listGets()).toBe(2);
+  });
+
+  it('gỡ ưu đãi đang hiện: chỉ có nút khi đã có ưu đãi được duyệt, hỏi xác nhận có chữ ưu đãi rồi mới gửi', async () => {
+    const none = await mount(wastePoint({ perkText: null, perkPendingText: 'Đang chờ' }));
+    expect(btn(none.c, 'Gỡ ưu đãi đang hiện')).toBeNull();
+
+    const { c, api } = await mount(wastePoint({ perkText: 'Tặng túi vải' }));
+    click(btn(c, 'Gỡ ưu đãi đang hiện'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Tặng túi vải');
+    answerConfirm(false);
+    await flush();
+    expect(callsTo(api, 'POST', '/admin/waste/points/p1/perk/clear')).toHaveLength(0);
+    click(btn(c, 'Gỡ ưu đãi đang hiện'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(callsTo(api, 'POST', '/admin/waste/points/p1/perk/clear')).toHaveLength(1);
   });
 
   it('ưu đãi đã duyệt hiện chữ, chưa có thì ghi Chưa có và không có nút duyệt', async () => {

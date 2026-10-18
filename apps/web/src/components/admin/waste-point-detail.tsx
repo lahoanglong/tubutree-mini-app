@@ -6,6 +6,7 @@ import type { AdminWastePointDTO, WastePointStaffRole } from '@tubutree/shared-t
 import {
   addWastePointStaff,
   approveWastePerk,
+  clearWastePerk,
   getWastePointReport,
   listWasteRequests,
   rejectWastePerk,
@@ -84,6 +85,12 @@ export function WastePointDetail({
     onError: onPerkError,
   });
 
+  const clear = useMutation({
+    mutationFn: () => clearWastePerk(point.id),
+    onSuccess: () => { setErr(null); return refresh(); },
+    onError,
+  });
+
   const credits = useInfiniteQuery({
     queryKey: ['admin-waste-requests', { status: 'COMPLETED', pointId: point.id }],
     queryFn: ({ pageParam }) => listWasteRequests({ status: 'COMPLETED', pointId: point.id, cursor: pageParam }),
@@ -115,6 +122,16 @@ export function WastePointDetail({
         : { title: 'Từ chối ưu đãi riêng', message: `Ưu đãi "${text}" sẽ không hiện cho khách ở ${point.name}.`, confirmLabel: 'Từ chối', tone: 'danger' },
     );
     if (ok) (kind === 'approve' ? approve : reject).mutate(text);
+  };
+
+  const askClear = async () => {
+    const ok = await confirm({
+      title: 'Gỡ ưu đãi đang hiện',
+      message: `Ưu đãi "${point.perkText}" sẽ không còn hiện cho khách ở ${point.name}.`,
+      confirmLabel: 'Gỡ ưu đãi',
+      tone: 'danger',
+    });
+    if (ok) clear.mutate();
   };
 
   return (
@@ -194,6 +211,11 @@ export function WastePointDetail({
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Ưu đãi riêng</h3>
         <p className="text-sm text-stone-800">{point.perkText ?? 'Chưa có'}</p>
+        {point.perkText && (
+          <div>
+            <button type="button" className={BTN_XS_DANGER} disabled={clear.isPending} onClick={() => void askClear()}>Gỡ ưu đãi đang hiện</button>
+          </div>
+        )}
         {point.perkPendingText && (
           <div className="space-y-2">
             <Notice tone="warning">

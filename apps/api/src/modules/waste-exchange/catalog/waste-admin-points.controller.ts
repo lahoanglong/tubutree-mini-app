@@ -276,4 +276,12 @@ export class WasteAdminPointsController {
   rejectPerk(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() body: WastePerkReviewDto) {
     return this.points.rejectPerk(adminId, id, body.expectedPendingText);
   }
+
+  @Post(':id/perk/clear')
+  @HttpCode(200)
+  @Roles('ADMIN')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  clearPerk(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.points.clearPerk(adminId, id);
+  }
 }
