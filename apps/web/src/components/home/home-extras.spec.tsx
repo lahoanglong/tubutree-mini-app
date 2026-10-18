@@ -7,6 +7,8 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), user: null as null | { fullName: string | null; pointsBalance: number; pointsConvertedBalance?: number } }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.user }) }));
+const routeState = vi.hoisted(() => ({ pending: new Set<string>() }));
+vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.pending.has(p) }));
 
 import { HomeExtras } from './home-extras';
 
@@ -22,6 +24,7 @@ const link = (c: HTMLElement, name: string | RegExp) =>
   Array.from(c.querySelectorAll<HTMLAnchorElement>('a')).find((a) => (typeof name === 'string' ? a.getAttribute('aria-label') === name || a.textContent === name : name.test(a.textContent ?? '')));
 
 beforeEach(() => {
+  routeState.pending = new Set();
   mocks.user = { fullName: 'Lan', pointsBalance: 60 };
   config = async () => ({ aiAdvisorEnabled: true });
   brands = async () => [{ brand: 'Tubu', count: 3 }];
@@ -64,6 +67,17 @@ describe('HomeExtras', () => {
     expect(link(c, 'Tubu')?.getAttribute('href')).toBe('/san-pham?brand=Tubu');
     expect(link(c, /Hành trình nguyên liệu/)?.getAttribute('href')).toBe('/cau-chuyen');
     expect(link(c, /Cộng đồng Vườn Tubu/)?.getAttribute('href')).toBe('/cong-dong');
+  });
+
+  it('route còn pending → ẩn hàng Cộng đồng và thẻ Tư vấn, không để khách vào trang 404', async () => {
+    routeState.pending = new Set(['/cong-dong', '/tu-van']);
+    const c = await mount();
+    expect(link(c, /Cộng đồng Vườn Tubu/)).toBeUndefined();
+    expect(link(c, 'Hỏi trợ lý AI 24/7')).toBeUndefined();
+    expect(c.querySelector('a[href="/cong-dong"]')).toBeNull();
+    expect(c.querySelector('a[href="/tu-van"]')).toBeNull();
+    expect(link(c, 'Mua chung giá tốt')).toBeDefined();
+    expect(link(c, /Hành trình nguyên liệu/)).toBeDefined();
   });
 
   it.each([

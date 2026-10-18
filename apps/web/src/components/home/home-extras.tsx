@@ -10,6 +10,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { homeText } from '@/lib/home-text';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
+import { isWebRouteReady } from '@/lib/route-map';
 import { useAiAdvisorEnabled } from '@/lib/use-public-config';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -55,7 +56,7 @@ export function HomeExtras({ initialBrands }: { initialBrands?: { brand: string;
   return (
     <div className="flex flex-col gap-3 py-3">
       <div className="flex gap-2.5">
-        {aiEnabled && <ShortcutCard href="/tu-van" icon={Sparkles} label={homeText.aiCard} ariaLabel={homeText.aiCardLabel} />}
+        {aiEnabled && isWebRouteReady('/tu-van') && <ShortcutCard href="/tu-van" icon={Sparkles} label={homeText.aiCard} ariaLabel={homeText.aiCardLabel} />}
         <ShortcutCard href="/mua-chung" icon={Users} label={homeText.groupBuyCard} ariaLabel={homeText.groupBuyCard} />
       </div>
 
@@ -102,7 +103,9 @@ export function HomeExtras({ initialBrands }: { initialBrands?: { brand: string;
 
       <div className="overflow-hidden rounded-card border border-stone-200 bg-stone-0">
         <RowLink href="/cau-chuyen" icon={MapIcon} title={homeText.brandStoryTitle} subtitle={homeText.brandStoryBody} />
-        <RowLink href="/cong-dong" icon={MessagesSquare} title={homeText.communityTitle} subtitle={homeText.communitySubtitle} divider />
+        {isWebRouteReady('/cong-dong') && (
+          <RowLink href="/cong-dong" icon={MessagesSquare} title={homeText.communityTitle} subtitle={homeText.communitySubtitle} divider />
+        )}
       </div>
     </div>
   );

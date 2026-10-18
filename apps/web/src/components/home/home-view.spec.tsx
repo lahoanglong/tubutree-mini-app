@@ -12,6 +12,8 @@ vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.phase === 'authenticated' ? mocks.user : null }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+const routeState = vi.hoisted(() => ({ pending: new Set<string>() }));
+vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.pending.has(p) }));
 
 import HomeView from './home-view';
 import { homeBlockOrder } from './home-blocks';
@@ -42,6 +44,7 @@ const region = (c: HTMLElement, name: string) => c.querySelector(`section[aria-l
 
 beforeEach(() => {
   localStorage.clear();
+  routeState.pending = new Set();
   mocks.phase = 'authenticated';
   mocks.user = { id: 'u1', fullName: 'Lan', pointsBalance: 0 };
   mocks.push.mockReset();
@@ -165,6 +168,12 @@ describe('HomeView — chuông và khách vãng lai', () => {
     const bell = c.querySelector<HTMLAnchorElement>('a[aria-label="Thông báo, 2 chưa đọc"]')!;
     expect(bell.getAttribute('href')).toBe('/tai-khoan/thong-bao');
     expect(bell.querySelector('[aria-label="2 thông báo chưa đọc"]')?.textContent).toBe('2');
+  });
+
+  it('trang Thông báo chưa xong (pending) → ẩn chuông', async () => {
+    routeState.pending = new Set(['/tai-khoan/thong-bao']);
+    const c = await mount();
+    expect(c.querySelector('a[href="/tai-khoan/thong-bao"]')).toBeNull();
   });
 
   it('không có tin chưa đọc → chuông không có huy hiệu', async () => {

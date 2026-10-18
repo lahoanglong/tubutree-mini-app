@@ -6,6 +6,8 @@ import { byText, flush, render, type Rendered } from '@/test-utils/dom';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), phase: 'authenticated' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+const routeState = vi.hoisted(() => ({ pending: new Set<string>() }));
+vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.pending.has(p) }));
 
 import { OrderStrip, formatDayMonth, nextActiveSubscription } from './order-strip';
 
@@ -28,6 +30,7 @@ const mount = async () => {
 };
 
 beforeEach(() => {
+  routeState.pending = new Set();
   mocks.phase = 'authenticated';
   activeCount = 0;
   orders = { data: [], meta: { page: 1, limit: 1, total: 0 } };
@@ -113,6 +116,14 @@ describe('OrderStrip', () => {
     const link = byText(container, 'a', 'Đơn TB123 đang giao')!;
     expect(link.getAttribute('href')).toBe('/tai-khoan/don-hang/TB123');
     expect(link.textContent).toContain('Chạm để theo dõi đơn');
+  });
+
+  it('tab Định kỳ chưa có trang (pending) → dòng kỳ kế tiếp không còn là link', async () => {
+    routeState.pending = new Set(['/tai-khoan/don-hang?tab=subscriptions']);
+    subs = [SUB('a', 'ACTIVE', '2026-10-15T12:00:00.000Z')];
+    const { container } = await mount();
+    expect(container.textContent).toContain('Kỳ định kỳ kế tiếp: 15/10');
+    expect(container.querySelector('a[href*="subscriptions"]')).toBeNull();
   });
 
   it('có kỳ định kỳ → dòng "Kỳ định kỳ kế tiếp: dd/MM" mở tab Định kỳ, kèm tên sản phẩm', async () => {

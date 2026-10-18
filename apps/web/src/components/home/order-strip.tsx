@@ -9,6 +9,7 @@ import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
+import { isWebRouteReady } from '@/lib/route-map';
 import { homeText } from '@/lib/home-text';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -25,14 +26,23 @@ export function formatDayMonth(iso: string): string {
   return formatDate(iso).slice(0, 5);
 }
 
-function StripRow({ href, icon: Icon, title, subtitle }: { href: string; icon: LucideIcon; title: string; subtitle: string }) {
-  return (
-    <Link href={href} className="flex min-h-11 items-center gap-3 rounded-control p-2 transition hover:bg-stone-50">
+const SUBSCRIPTIONS_HREF = '/tai-khoan/don-hang?tab=subscriptions';
+
+/** `href` rỗng (trang đích còn pending) → dòng chữ thường, không mũi tên, để khách không vào 404. */
+function StripRow({ href, icon: Icon, title, subtitle }: { href: string | null; icon: LucideIcon; title: string; subtitle: string }) {
+  const body = (
+    <>
       <Icon className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-stone-900">{title}</span>
         <span className="block truncate text-xs text-stone-600">{subtitle}</span>
       </span>
+    </>
+  );
+  if (!href) return <div className="flex min-h-11 items-center gap-3 rounded-control p-2">{body}</div>;
+  return (
+    <Link href={href} className="flex min-h-11 items-center gap-3 rounded-control p-2 transition hover:bg-stone-50">
+      {body}
       <ChevronRight className="h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
     </Link>
   );
@@ -78,7 +88,7 @@ export function OrderStrip() {
         )}
         {nextSub && (
           <StripRow
-            href="/tai-khoan/don-hang?tab=subscriptions"
+            href={isWebRouteReady(SUBSCRIPTIONS_HREF) ? SUBSCRIPTIONS_HREF : null}
             icon={CalendarClock}
             title={homeText.strip.nextSubscription(formatDayMonth(nextSub.nextRunAt))}
             subtitle={nextSub.productName}

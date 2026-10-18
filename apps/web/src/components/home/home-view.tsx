@@ -14,6 +14,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { homeText, reorderText } from '@/lib/home-text';
+import { isWebRouteReady } from '@/lib/route-map';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { CategoryGrid } from '@/components/catalog/category-grid';
@@ -176,7 +177,7 @@ function SearchRow({ unreadCount, authed }: { unreadCount: number; authed: boole
         <Search className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
         <span className="min-w-0 truncate text-sm text-stone-600">{homeText.searchPlaceholder}</span>
       </Link>
-      {authed && (
+      {authed && isWebRouteReady('/tai-khoan/thong-bao') && (
         <Link
           href="/tai-khoan/thong-bao"
           aria-label={unreadCount > 0 ? homeText.notificationsUnread(unreadCount) : homeText.notifications}
