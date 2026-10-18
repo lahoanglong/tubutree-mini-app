@@ -44,4 +44,32 @@ describe('SiteFooter', () => {
     expect(links.length).toBeGreaterThanOrEqual(2);
     for (const a of links) expect(a).toContain('min-h-11');
   });
+
+  it('có lối tới bốn trang điều khoản/chính sách (D5-01), đủ vùng chạm 44px', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
+    const out = await html();
+    const nav = out.match(/<nav[^>]*aria-label="Chính sách"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? '';
+    expect(nav).not.toBe('');
+    const hrefs = [...nav.matchAll(/<a [^>]*href="([^"]+)"/g)].map((m) => m[1]);
+    expect(hrefs).toEqual(['/chinh-sach/dieu-khoan', '/chinh-sach/bao-mat', '/chinh-sach/doi-tra', '/chinh-sach/van-chuyen']);
+    for (const label of ['Điều khoản', 'Bảo mật', 'Đổi trả', 'Vận chuyển']) expect(nav).toContain(label);
+    for (const a of nav.match(/<a [^>]*>/g) ?? []) expect(a).toContain('min-h-11');
+  });
+
+  it('hiện kênh cộng đồng nào đã có link (mở tab mới, rel an toàn); chưa có thì không vẽ khối', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
+    expect(await html()).not.toContain('Kênh cộng đồng');
+
+    mocks.getPublicSupport.mockResolvedValue({
+      hotline: '0899 149 229',
+      email: 'tubutree@gmail.com',
+      community: { zaloGroupUrl: 'https://zalo.me/g/abc', tiktokUrl: 'https://www.tiktok.com/@tubutree' },
+    });
+    const out = await html();
+    expect(out).toContain('aria-label="Kênh cộng đồng"');
+    expect(out).toMatch(/<a [^>]*href="https:\/\/zalo.me\/g\/abc"[^>]*rel="noopener noreferrer"[^>]*>/);
+    expect(out).toContain('Nhóm Zalo');
+    expect(out).toContain('TikTok');
+    expect(out).not.toContain('Facebook');
+  });
 });

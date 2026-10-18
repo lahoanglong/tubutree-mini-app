@@ -16,8 +16,10 @@ import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
+import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
 import { isRealUser } from '../../common/real-user';
+import { voucherCode } from '../vouchers/voucher-code';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
@@ -627,6 +629,8 @@ export class LoyaltyService {
       lockedUntil: lock.lockedUntil?.toISOString() ?? null,
       redeemablePoints,
       redeemableTotal: redeemablePoints + user.pointsConvertedBalance,
+      /** Hệ số server sẽ nhân khi tích điểm: 1 khi chưa có hạng, dù `tier` bên dưới hiển thị hạng thấp nhất (xem getTierMultiplier). */
+      earnMultiplier: user.tier ? Number(user.tier.pointMultiplier) : 1,
       tier: current
         ? {
             id: current.id,
@@ -664,7 +668,23 @@ export class LoyaltyService {
     });
   }
 
-  /** Coupon khả dụng cho user: PUBLIC + đúng hạng, còn hạn, chưa hết lượt cá nhân. */
+  /**
+   * Khối "Quà khách mới" ở Trang chủ: chỉ cho khách thật (cùng isRealUser với voucher chào mừng và freeship đơn đầu, nếu không
+   * khách deviceId sẽ được hứa quà server không cho) chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts), kèm
+   * voucher chào mừng nếu còn dùng được. Voucher lấy qua getAvailableCoupons nên hiện thì áp được, đúng như ví voucher.
+   */
+  async getNewCustomerOffer(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(user) || (await hasPriorOrder(this.prisma, userId))) return { isNewCustomer: false as const, welcomeVoucher: null };
+    const code = voucherCode('WELCOME', userId);
+    const voucher = (await this.getAvailableCoupons(userId)).find((c) => c.code === code);
+    return {
+      isNewCustomer: true as const,
+      welcomeVoucher: voucher ? { code: voucher.code, type: voucher.type, value: voucher.value, minOrder: voucher.minOrder, endAt: voucher.endAt } : null,
+    };
+  }
+
+  /** Coupon khả dụng cho user: PUBLIC + đúng hạng + mã CLAIM đã nhận, còn hạn, chưa hết lượt cá nhân. */
   async getAvailableCoupons(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const now = new Date();
@@ -682,6 +702,12 @@ export class LoyaltyService {
       WHERE scope = 'USER_GROUP'
         AND "scopeMeta" ->> 'userId' = ${userId}
         AND "startAt" <= ${now} AND "endAt" >= ${now}
+      UNION ALL
+      SELECT c.id FROM coupon_claims cc
+      JOIN coupons c ON c.id = cc."couponId"
+      WHERE cc."userId" = ${userId}
+        AND c.scope = 'CLAIM'
+        AND c."startAt" <= ${now} AND c."endAt" >= ${now}
     `);
     const coupons = idRows.length
       ? await this.prisma.coupon.findMany({
@@ -695,9 +721,22 @@ export class LoyaltyService {
     // Điều kiện scope dùng CHUNG isCouponEligible với CouponsService.assertScopeOwnership
     // (validate/redeem) để list & apply KHÔNG lệch (coupon hiện mà redeem fail).
     // Mã đã tắt và mã công khai giới hạn theo người (với tài khoản khách) cũng bị validateAndCompute từ chối.
+    // Mã chỉ khách mới bị từ chối khi khách đã có đơn chưa huỷ: ẩn luôn khỏi ví.
+    const claimIds = coupons.filter((c) => c.scope === 'CLAIM').map((c) => c.id);
+    const [claims, priorOrder] = await Promise.all([
+      claimIds.length
+        ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
+        : [],
+      coupons.some((c) => c.newCustomerOnly) ? hasPriorOrder(this.prisma, userId) : false,
+    ]);
+    const eligibleUser = { ...user, claimedCouponIds: new Set(claims.map((c) => c.couponId)) };
     const realUser = isRealUser(user);
     const filtered = coupons.filter(
-      (c) => c.isActive !== false && isCouponEligible(c, user) && (realUser || !requiresRealUser(c)),
+      (c) =>
+        c.isActive !== false &&
+        isCouponEligible(c, eligibleUser) &&
+        (realUser || !requiresRealUser(c)) &&
+        !(c.newCustomerOnly && priorOrder),
     );
 
     const ids = filtered.map((c) => c.id);

@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CartService } from './cart.service';
 import { toPublicCart } from '../checkout/checkout-split';
@@ -35,7 +36,10 @@ export class CartController {
     return toPublicCart(await this.cart.removeItem(userId, id, q.storefrontSlug));
   }
 
+  // Gõ mã thẻ hộp hàng ở đây cũng nhận mã (CouponClaimService.claimHiddenForCart): cùng trần với POST /coupons/claim,
+  // không thì giỏ thành đường dò mã thẻ nhanh gấp 30 lần.
   @Post('coupon')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   async applyCoupon(@CurrentUser('sub') userId: string, @Body() dto: ApplyCouponDto, @Query() q: CartQueryDto) {
     return toPublicCart(await this.cart.applyCoupon(userId, dto.code, q.storefrontSlug));
   }

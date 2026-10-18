@@ -24,7 +24,7 @@ vi.mock('../services/account-api', () => ({ getCoupons: mocks.getCoupons }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
-vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn() }));
+vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), hasOA: false, openOAChat: vi.fn() }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'authenticated', login: vi.fn() }) }));
 vi.mock('../hooks/use-public-config', () => ({
   usePublicConfig: () => ({

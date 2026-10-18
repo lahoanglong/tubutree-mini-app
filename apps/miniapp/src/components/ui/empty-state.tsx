@@ -1,5 +1,9 @@
 import { Button as ZmpButton, Text } from 'zmp-ui';
+import { TriangleAlert } from 'lucide-react';
+import { vi } from '../../i18n/vi';
+import { SupportHotline } from '../support-hotline';
 import { Button } from './button';
+import { Heading } from './text';
 
 /**
  * Empty state theo spec §7.7: illustration + heading + body + CTA.
@@ -104,12 +108,18 @@ export function EmptyState({ art, heading, body, ctaLabel, onCta, ctaLoading, va
   );
 }
 
-/** Error state với nút thử lại — dùng khi query fail. */
+/**
+ * Lỗi tải: icon cảnh báo màu vàng riêng (không dùng minh hoạ của trạng thái rỗng, để khách phân biệt "chưa có gì" với
+ * "hỏng"), tiêu đề + mô tả + nút chính. Lỗi cả trang có thêm dòng gọi hotline và nằm thấp hơn đỉnh màn (~1/5 chiều cao).
+ */
 export function ErrorState({
   message,
   onRetry,
   onHome,
   variant = 'page',
+  title,
+  showSupport,
+  retrying,
 }: {
   message: string;
   onRetry: () => void;
@@ -117,7 +127,14 @@ export function ErrorState({
   onHome?: () => void;
   /** 'page' (mặc định, padding rộng) hay 'inline' (padding hẹp khi nhúng trong 1 section). */
   variant?: 'page' | 'inline';
+  /** Mặc định: "Chưa tải được trang này" (lỗi tải) hoặc "Không tìm thấy" (có `onHome`). */
+  title?: string;
+  /** Hiện dòng "Cần hỗ trợ? Gọi …". Mặc định bật ở variant 'page', tắt ở 'inline'. */
+  showSupport?: boolean;
+  /** Đang tải lại sau khi bấm "Thử lại": nút báo đang tải và không nhận thêm lần bấm. */
+  retrying?: boolean;
 }) {
+  const inline = variant === 'inline';
   return (
     <div
       style={{
@@ -125,17 +142,35 @@ export function ErrorState({
         flexDirection: 'column',
         alignItems: 'center',
         textAlign: 'center',
-        padding: variant === 'inline' ? '16px' : '40px 32px',
+        padding: inline ? '16px' : 'max(40px, 20vh) 32px 40px',
         gap: 10,
       }}
     >
-      {ART.leaf}
+      <div
+        data-testid="error-state-icon"
+        aria-hidden
+        style={{
+          width: inline ? 44 : 56,
+          height: inline ? 44 : 56,
+          borderRadius: '50%',
+          display: 'grid',
+          placeItems: 'center',
+          background: 'var(--color-status-warning-bg)',
+        }}
+      >
+        <TriangleAlert size={inline ? 22 : 28} strokeWidth={1.75} color="var(--color-status-warning-fg)" />
+      </div>
+      <Heading variant="title-md" as="p">
+        {title ?? (onHome ? vi.errors.notFoundTitle : vi.errors.title)}
+      </Heading>
       <Text size="small" style={{ color: 'var(--color-text-secondary)', maxWidth: 260 }}>
         {message}
       </Text>
       <ZmpButton
         variant="secondary"
-        onClick={onHome ?? onRetry}
+        loading={retrying}
+        aria-busy={retrying || undefined}
+        onClick={retrying ? undefined : (onHome ?? onRetry)}
         style={{
           minHeight: 44,
           color: 'var(--color-action-secondary-fg)',
@@ -144,6 +179,7 @@ export function ErrorState({
       >
         {onHome ? 'Về trang chủ' : 'Thử lại'}
       </ZmpButton>
+      {(showSupport ?? !inline) && <SupportHotline />}
     </div>
   );
 }

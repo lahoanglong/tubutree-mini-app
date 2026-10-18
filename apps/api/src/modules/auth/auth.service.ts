@@ -14,6 +14,8 @@ import { isAnonymized, renameMergedMilestones, resolveMergedUserId, revokeReferr
 import { roleClaims } from './session-state.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
+import { firstTouchColumns } from '../../common/attribution';
+import { VouchersService } from '../vouchers/vouchers.service';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -73,14 +75,30 @@ export class AuthService {
     private readonly rbac: RbacService,
     // Optional: test dựng tay 5 tham số vẫn chạy, chỉ không báo người mời bị thu thưởng lúc gộp.
     @Optional() private readonly notifications?: NotificationsService,
+    // Optional như notifications: không có thì chỉ cron giờ cấp voucher chào mừng.
+    @Optional() private readonly vouchers?: VouchersService,
   ) {}
+
+  /**
+   * D2-07a: voucher chào mừng ngay khi tài khoản thật xuất hiện (tạo mới bằng Zalo hoặc nâng cấp từ khách vãng lai), để lần mở
+   * đầu khách đã thấy mã. Lỗi ở đây không được làm rớt đăng nhập: cron mỗi giờ của VouchersService cùng một mã tất định nên vẫn
+   * cấp bù trong 24h đầu (với khách vãng lai nâng cấp muộn hơn 24h thì cron không còn thấy họ, nên đường này là đường duy nhất).
+   */
+  private async grantWelcomeVoucher(userId: string): Promise<void> {
+    if (!this.vouchers) return;
+    try {
+      await this.vouchers.grantWelcomeNow(userId, { becameRealNow: true });
+    } catch (err) {
+      this.logger.warn(`Cấp voucher chào mừng cho ${userId} lỗi, chờ cron: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   /**
    * Đăng nhập KHÁCH (guest) theo deviceId — dùng khi Zalo login chưa khả dụng
    * (app chưa kích hoạt -1401). Tạo/lấy user ổn định theo thiết bị để app chạy đầy đủ.
    * Khi Zalo login khả dụng, có thể nâng cấp guest → tài khoản Zalo qua phone-merge.
    */
-  async loginAsGuest(deviceId: string, referralCode?: string): Promise<LoginResponse> {
+  async loginAsGuest(deviceId: string, referralCode?: string, firstTouch?: unknown): Promise<LoginResponse> {
     const guestKey = `guest_${deviceId}`;
     let user = await this.prisma.user.findUnique({ where: { zaloId: guestKey } });
     if (!user) {
@@ -91,6 +109,7 @@ export class AuthService {
             fullName: 'Khách',
             referralCode: await this.generateReferralCode(),
             referredById: await this.resolveReferrerId(referralCode),
+            ...firstTouchColumns(firstTouch),
           },
         });
       } catch (err) {
@@ -108,6 +127,7 @@ export class AuthService {
     accessToken: string,
     phoneToken?: string,
     referralCode?: string,
+    firstTouch?: unknown,
   ): Promise<LoginResponse> {
     // code hiện chưa cần đổi token server-side cho mini app (token đã do SDK cấp);
     // giữ tham số để mở rộng OAuth web sau này.
@@ -150,6 +170,7 @@ export class AuthService {
             phone: checkedPhone,
             referralCode: await this.generateReferralCode(),
             referredById: await this.resolveReferrerId(referralCode),
+            ...firstTouchColumns(firstTouch),
           },
         });
       } catch (err) {
@@ -163,6 +184,7 @@ export class AuthService {
                 avatarUrl: info.avatar,
                 referralCode: await this.generateReferralCode(),
                 referredById: await this.resolveReferrerId(referralCode),
+                ...firstTouchColumns(firstTouch),
               },
             });
           } catch (retryErr) {
@@ -176,6 +198,7 @@ export class AuthService {
           user = await this.recoverFromZaloIdConflict(err, info.zaloId);
         }
       }
+      await this.grantWelcomeVoucher(user.id);
       return this.issueTokens(user);
     }
 
@@ -271,7 +294,10 @@ export class AuthService {
         },
       });
       const fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
-      if (upgraded.count === 1 || fresh.zaloId === info.zaloId) return this.issueTokens(fresh);
+      if (upgraded.count === 1 || fresh.zaloId === info.zaloId) {
+        await this.grantWelcomeVoucher(fresh.id);
+        return this.issueTokens(fresh);
+      }
       if (fresh.mergedIntoId) return this.mergedSessionTokens(fresh, info, phone);
       throw this.zaloMismatch(fresh, info.zaloId);
     } catch (err) {
@@ -389,15 +415,22 @@ export class AuthService {
           pointsConvertedBalance: number;
           walletBalance: number;
           cashbackPending: number;
+          firstTouchSource: string | null;
+          firstTouchCampaign: string | null;
+          firstTouchAt: Date | null;
         }[]
-      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending"
+      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending",
+                "firstTouchSource", "firstTouchCampaign", "firstTouchAt"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
       const g = lockedGuest[0];
       if (!g || g.zaloId !== guest.zaloId || g.zaloId?.includes('_merged_')) {
         return tx.user.findUniqueOrThrow({ where: { id: target.id } });
       }
       // Target bị khoá hoặc vừa bị xoá (ẩn danh hoá) sau lúc tra ở ngoài: không đổ tiền/đơn của khách vào tài khoản chết.
-      const lockedTarget = await tx.user.findUniqueOrThrow({ where: { id: target.id }, select: { isBlocked: true, metadata: true } });
+      const lockedTarget = await tx.user.findUniqueOrThrow({
+        where: { id: target.id },
+        select: { isBlocked: true, metadata: true, firstTouchSource: true },
+      });
       if (lockedTarget.isBlocked || isAnonymized(lockedTarget.metadata)) {
         throw new ConflictException('Tài khoản Zalo này đã bị khoá hoặc đã xoá, không thể gộp phiên khách vào. Vui lòng liên hệ hỗ trợ.');
       }
@@ -437,6 +470,10 @@ export class AuthService {
       await tx.cashbackClick.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.cashbackTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.couponRedemption.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      // Mã thẻ hộp hàng đã nhận (unique couponId + userId): đi theo lượt dùng ở trên; trùng mã thì giữ dòng của target.
+      await tx.$executeRaw`
+        UPDATE "coupon_claims" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "coupon_claims" t WHERE t."userId" = ${tid} AND t."couponId" = g."couponId")`;
       // Gói định kỳ phải theo địa chỉ đã chuyển ở bước 2 (subscriptions.service tạm dừng gói khi
       // address.userId !== sub.userId); lệnh rút bị từ chối hoàn tiền về payout.userId.
       await tx.subscription.updateMany({ where: { userId: gid }, data: { userId: tid } });
@@ -578,6 +615,11 @@ export class AuthService {
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
           ...(info.name && !target.fullName ? { fullName: info.name, avatarUrl: info.avatar ?? target.avatarUrl } : {}),
           ...(targetPhone ? { phone: targetPhone } : {}),
+          // Nguồn chạm đầu của khách sang đích chỉ khi đích còn trống (cả hai dòng đang bị khoá FOR UPDATE nên không ai
+          // chen ngang); dòng khách giữ nguyên bản ghi của nó.
+          ...(!lockedTarget.firstTouchSource && g.firstTouchSource
+            ? { firstTouchSource: g.firstTouchSource, firstTouchCampaign: g.firstTouchCampaign, firstTouchAt: g.firstTouchAt }
+            : {}),
         },
       });
 
@@ -684,6 +726,7 @@ export class AuthService {
     code: string,
     codeVerifier?: string,
     referralCode?: string,
+    firstTouch?: unknown,
   ): Promise<LoginResponse> {
     const accessToken = await this.zalo.exchangeOAuthCode(code, codeVerifier);
     const info = await this.zalo.getUserInfo(accessToken);
@@ -698,6 +741,7 @@ export class AuthService {
             avatarUrl: info.avatar,
             referralCode: await this.generateReferralCode(),
             referredById: await this.resolveReferrerId(referralCode),
+            ...firstTouchColumns(firstTouch),
           },
         });
       } catch (err) {
@@ -705,6 +749,7 @@ export class AuthService {
         // dùng lại user vừa được request kia tạo thay vì làm rớt phiên đăng nhập hợp lệ.
         user = await this.recoverFromZaloIdConflict(err, info.zaloId);
       }
+      await this.grantWelcomeVoucher(user.id);
     } else if (info.name && user.fullName !== info.name) {
       user = await this.prisma.user.update({
         where: { id: user.id },

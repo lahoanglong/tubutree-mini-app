@@ -8,10 +8,11 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   haptic: vi.fn(),
   fetchBrands: vi.fn(),
+  getPublicConfig: vi.fn(),
   user: null as null | { fullName: string; pointsBalance: number; pointsConvertedBalance?: number },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
-vi.mock('../../services/shop-api', () => ({ fetchBrands: mocks.fetchBrands, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn() }));
+vi.mock('../../services/shop-api', () => ({ fetchBrands: mocks.fetchBrands, getPublicConfig: mocks.getPublicConfig, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn() }));
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: typeof mocks.user }) => unknown) => sel({ status: 'idle', user: mocks.user }),
 }));
@@ -20,6 +21,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: mocks.haptic }));
 
 import type { ProductCard } from '../../services/shop-api';
 import { HomeHeader } from './home-header';
+import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeSection } from './home-section';
 import { HomeExtras } from './home-extras';
 
@@ -32,6 +34,7 @@ const P: ProductCard = { id: 'p1', slug: 'p1', brand: 'Tubu', name: 'Xà phòng'
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.user = null;
+  mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: true });
 });
 
 describe('HomeHeader', () => {
@@ -56,6 +59,15 @@ describe('HomeHeader', () => {
 
 describe('HomeSection', () => {
   const q = (over: object) => ({ isLoading: false, isError: false, error: null, refetch: vi.fn(), ...over });
+
+  it('trang đã có dải lỗi cấp trang (HomeBlockErrorSuppressed) → khối lỗi từng kệ ẩn, không xếp chồng', () => {
+    const { container } = wrap(
+      <HomeBlockErrorSuppressed.Provider value>
+        <HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: new Error('x') })} listSource="home" />
+      </HomeBlockErrorSuppressed.Provider>,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
 
   it('đã tải, rỗng → không render (không để lại tiêu đề trống)', () => {
     const { container } = wrap(<HomeSection title="Bán chạy" limit={6} query={q({ data: { data: [] } })} listSource="home" />);
@@ -185,7 +197,7 @@ describe('HomeExtras', () => {
 
   it('thẻ nhỏ AI / Mua chung giữ tên truy cập cũ; thương hiệu mở Browse lọc sẵn', async () => {
     wrap(<HomeExtras />);
-    fireEvent.click(screen.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hỏi trợ lý AI 24/7' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/ai-advisor');
     fireEvent.click(screen.getByRole('button', { name: 'Mua chung giá tốt' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/group-buy');
@@ -195,6 +207,19 @@ describe('HomeExtras', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/brand-story');
     fireEvent.click(screen.getByRole('button', { name: /Cộng đồng Vườn Tubu/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/feed');
+  });
+
+  it.each([
+    ['server báo tắt', () => mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: false })],
+    ['API cũ không có cờ', () => mocks.getPublicConfig.mockResolvedValue({})],
+    ['không tải được cấu hình', () => mocks.getPublicConfig.mockRejectedValue(new Error('mạng'))],
+  ])('AI tắt (%s) → ẩn thẻ AI, thẻ Mua chung vẫn còn', async (_name, arrange) => {
+    arrange();
+    wrap(<HomeExtras />);
+    expect(await screen.findByRole('button', { name: 'Mua chung giá tốt' })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    await act(async () => {});
+    expect(screen.queryByRole('button', { name: 'Hỏi trợ lý AI 24/7' })).not.toBeInTheDocument();
   });
 
   it('tên thương hiệu có ký tự đặc biệt được mã hoá trong URL', async () => {

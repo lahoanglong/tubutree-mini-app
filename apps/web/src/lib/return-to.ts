@@ -65,9 +65,11 @@ export function takeReturnTo(): string | null {
 export interface PendingAdd {
   variationId: string;
   quantity: number;
+  /** Khách bấm "Mua ngay": thêm xong đi tiếp tới thanh toán thay vì dừng ở trang sản phẩm. */
+  buyNow?: boolean;
 }
 
-/** Món khách bấm "Thêm vào giỏ" khi chưa đăng nhập — thêm nốt sau khi đăng nhập xong. */
+/** Món khách bấm "Thêm vào giỏ"/"Mua ngay" khi chưa đăng nhập — thêm nốt (và đi tiếp tới thanh toán) sau khi đăng nhập xong. */
 export function rememberPendingAdd(item: PendingAdd): void {
   const s = store();
   if (!s) return;
@@ -97,7 +99,7 @@ export function takePendingAdd(variationIds: readonly string[]): PendingAdd | nu
     if (typeof v.variationId !== 'string' || !variationIds.includes(v.variationId)) return null;
     s.removeItem(PENDING_ADD_KEY);
     const quantity = Number.isInteger(v.quantity) && (v.quantity as number) > 0 ? (v.quantity as number) : 1;
-    return { variationId: v.variationId, quantity };
+    return { variationId: v.variationId, quantity, ...(v.buyNow === true ? { buyNow: true } : {}) };
   } catch {
     return null;
   }

@@ -39,7 +39,8 @@ export const tailwindPreset: Partial<Config> = {
         clay: { 50: '#FAF1EA', 100: '#F2DFD0', 500: '#C2410C', 600: '#9C532C', 700: '#7E4222' },
         honey: { 500: '#B07A00', 600: '#96650A' },
         terracotta: { 50: '#FFF1E8', 600: '#C2410C' },
-        'tubu-orange': '#E08C1C',
+        'tubu-orange': '#E38E1E',
+        orange: { 50: '#FDF1DE', 500: '#E38E1E', 800: '#7A4300' },
       },
       fontFamily: {
         display: ['Fraunces', 'Georgia', 'serif'],

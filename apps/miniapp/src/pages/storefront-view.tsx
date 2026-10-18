@@ -3,10 +3,14 @@ import { Box, Page, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Share2, Sprout, MessageSquare, MapPin, CheckCircle2 } from 'lucide-react';
 import { getPublicStorefront } from '../services/storefront-api';
-import { getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, isNotFoundError } from '../services/api';
+import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { PageHeader } from '../components/ui/page-header';
+import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { useStorefrontContext } from '../store/storefront-context';
+import { useAuthStore } from '../store/auth';
 import { ShareSheet } from '../components/share-sheet';
 import { TierBadge } from '../components/ui/tier-badge';
 import { StorePageShell } from '../components/store-page-shell';
@@ -15,27 +19,55 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { ProductTile } from '../components/ui/product-tile';
 
+/** Nhãn tin cậy chỉ cho gian hàng admin đã duyệt: tick và "CTV tuyển chọn" là lời cam kết của Tubu Tree, không phải của chủ shop tự gắn. */
+function trustBadgeLabel(sf: { type: 'CTV' | 'BRAND' | 'MERCHANT'; approved?: boolean }): string | null {
+  if (!sf.approved) return null;
+  if (sf.type === 'MERCHANT') return vi.storefront.badgePartner;
+  if (sf.type === 'BRAND') return vi.storefront.badgeBrand;
+  return vi.storefront.badgeSelectedCtv;
+}
+
 export default function StorefrontViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const q = useQuery({ queryKey: ['public-storefront', slug], queryFn: () => getPublicStorefront(slug), staleTime: 60_000 });
   const setSfContext = useStorefrontContext((s) => s.setContext);
   const [shareOpen, setShareOpen] = useState(false);
+  const myReferralCode = useAuthStore((s) => s.user?.referralCode);
 
   const sf = q.data;
   useEffect(() => {
-    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.type === 'CTV' ? sf.slug : null, kind: 'ctv' });
+    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.referralCode ?? null, kind: 'ctv' });
   }, [sf, setSfContext]);
 
   if (q.isLoading) return <Page className="page"><Box p={4}><Skeleton style={{ height: 180, borderRadius: 16 }} /></Box></Page>;
-  if (!sf) return <Page className="page"><Box p={6}><ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} /></Box></Page>;
+  if (!sf) {
+    // Link CTV hỏng/gian hàng đã đóng: thử lại không khác đi, nên chỉ đường về và gợi ý sản phẩm thay vì ngõ cụt.
+    const gone = isNotFoundError(q.error);
+    return (
+      <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={vi.storefront.publicTitle} />
+        {gone ? (
+          <ErrorState message={vi.storefront.notFound} onRetry={() => undefined} onHome={() => navigate('/')} />
+        ) : (
+          <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        )}
+        {gone && <SuggestedRail listSource="storefront_not_found" />}
+      </Page>
+    );
+  }
+
+  // Chỉ gian hàng CTV có mã giới thiệu để nhận ra chủ; chủ gian hàng đối tác chia sẻ từ trình dựng.
+  const isOwner = Boolean(myReferralCode && sf.referralCode && myReferralCode.toUpperCase() === sf.referralCode.toUpperCase());
+  const collections = sf.collections.map((col) => ({ ...col, items: col.items.filter((it) => Boolean(it?.product)) })).filter((col) => col.items.length > 0);
+  const badgeLabel = trustBadgeLabel(sf);
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)' }}>
       <StorePageShell
-        coverUrl={sf.coverUrl}
+        coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : sf.coverUrl}
         coverHeight={84}
-        avatarUrl={sf.avatarUrl}
+        avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : sf.avatarUrl}
         avatarFallback={<Sprout size={28} color="var(--color-text-inverse)" />}
         avatarSize={58}
         title={sf.title}
@@ -44,10 +76,12 @@ export default function StorefrontViewPage() {
             {/* Huy hiệu xác thực — pill đặc (không phải soft-tone chuẩn của Badge) để giữ đúng
              * trọng lượng thị giác "đã xác minh" như bản cũ (leaf-600 đặc/chữ trắng); override
              * background/color sang token ngữ nghĩa DS v2 thay vì hex/--leaf-* cũ. */}
-            <Badge tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--color-action-primary-bg)', color: 'var(--color-text-inverse)' }}>
-              <CheckCircle2 size={12} />
-              {sf.type === 'MERCHANT' ? 'Đối tác chính hãng Tubu' : 'CTV tuyển chọn Tubu'}
-            </Badge>
+            {badgeLabel && (
+              <Badge tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--color-action-primary-bg)', color: 'var(--color-text-inverse)' }}>
+                <CheckCircle2 size={12} />
+                {badgeLabel}
+              </Badge>
+            )}
             {sf.ownerTier && <TierBadge name={sf.ownerTier.name} emoji={sf.ownerTier.emoji} />}
             {sf.warehouseCity && (
               <Badge tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -61,9 +95,15 @@ export default function StorefrontViewPage() {
           </>
         }
         stickyBar={
-          <Button fullWidth icon={Share2} onPress={() => setShareOpen(true)}>
-            Chia sẻ gian hàng
-          </Button>
+          isOwner ? (
+            <Button fullWidth icon={Share2} onPress={() => setShareOpen(true)}>
+              {vi.storefront.shareStore}
+            </Button>
+          ) : (
+            <Button fullWidth onPress={() => navigate('/browse')}>
+              {vi.storefront.viewProducts}
+            </Button>
+          )
         }
       >
         {sf.headerNote && (
@@ -72,11 +112,21 @@ export default function StorefrontViewPage() {
           </Box>
         )}
 
-        {sf.collections.map((col) => (
+        {collections.length === 0 && (
+          <EmptyState
+            art="basket"
+            heading={vi.storefront.emptyHeading}
+            body={isOwner ? vi.storefront.emptyOwnerBody : vi.storefront.emptyBody}
+            ctaLabel={isOwner ? vi.storefront.addProduct : vi.storefront.viewProducts}
+            onCta={() => navigate(isOwner ? '/storefront' : '/browse')}
+          />
+        )}
+
+        {collections.map((col) => (
           <Box key={col.id} mt={4} px={4}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>{col.title}</Heading>
             <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {col.items.filter((it) => Boolean(it?.product)).map((it) => (
+              {col.items.map((it) => (
                 <div key={it.id}>
                   <ProductTile
                     product={it.product}
@@ -102,7 +152,7 @@ export default function StorefrontViewPage() {
         onClose={() => setShareOpen(false)}
         slug={sf.slug}
         title={sf.title}
-        referralCode={sf.type === 'CTV' ? sf.slug : null}
+        referralCode={sf.referralCode ?? null}
         thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
       />
     </Page>

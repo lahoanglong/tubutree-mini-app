@@ -1,0 +1,14 @@
+{
+  "_synthetic": "Dữ liệu tự dựng theo tên field của Pancake POS OpenAPI, KHÔNG phải payload thật.",
+  "id": 910005,
+  "status": 2,
+  "custom_id": "TUBU20261001",
+  "tags": ["MINIAPP", "RETAIL"],
+  "note": "Order code: TUBU20261001",
+  "order_sources": -7,
+  "account": "tubu_miniapp",
+  "items": [{ "quantity": 1, "discount_each_product": 0, "variation_info": { "retail_price": 120000 } }],
+  "total_price": 120000,
+  "total_discount": 0,
+  "updated_at": "2026-10-15T10:00:00"
+}

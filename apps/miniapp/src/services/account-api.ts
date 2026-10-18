@@ -17,6 +17,8 @@ export interface LoyaltyOverview {
   expiringPoints?: { amount: number; expiresAt: string } | null;
   /** Số tháng điểm thường hết hạn kể từ ngày nhận (cấu hình). Optional: API cũ chưa trả. */
   pointExpireMonths?: number;
+  /** Hệ số server nhân khi tích điểm (1 khi chưa có hạng, dù `tier` hiển thị hạng thấp nhất). Optional: API cũ chưa trả. */
+  earnMultiplier?: number;
   /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
   pointsTotal?: number;
   /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */
@@ -65,6 +67,12 @@ export interface CouponDTO {
   endAt: string;
   /** Mã chỉ áp cho các sản phẩm này (mã mua chung); null/thiếu = mọi sản phẩm. */
   products?: { id: string; name: string }[] | null;
+}
+
+/** Khối "Quà khách mới": khách chưa có đơn (đúng định nghĩa đơn đầu của API) kèm voucher chào mừng còn dùng được. */
+export interface NewCustomerOffer {
+  isNewCustomer: boolean;
+  welcomeVoucher: Pick<CouponDTO, 'code' | 'type' | 'value' | 'minOrder' | 'endAt'> | null;
 }
 
 export interface WalletSummary {
@@ -219,6 +227,8 @@ export const getLoyalty = () => api.get<LoyaltyOverview>('/me/loyalty').then((r)
 export const getPointsTransactions = () =>
   api.get<PointsTxn[]>('/me/points/transactions').then((r) => r.data);
 export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => r.data);
+export const getNewCustomerOffer = async () =>
+  (await takeMeBlock('newCustomerOffer')) ?? api.get<NewCustomerOffer>('/me/new-customer-offer').then((r) => r.data);
 export const getLoyaltyRewards = () => api.get<RewardCatalogResponse>('/me/loyalty/rewards').then((r) => r.data);
 export const redeemLoyaltyReward = (rewardId: string) =>
   api

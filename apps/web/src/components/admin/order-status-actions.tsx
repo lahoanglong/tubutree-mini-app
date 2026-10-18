@@ -130,11 +130,14 @@ export function OrderStatusActions({
   order,
   canConfirmPayment = true,
   canResync = false,
+  canRecordLate = true,
 }: {
   order: AdminOrder;
   canConfirmPayment?: boolean;
   /** Chỉ ADMIN: POST resync-delivered-effects không mở cho nhân viên. */
   canResync?: boolean;
+  /** Tiền về muộn của đơn đã huỷ/trả sinh khoản hoàn: chỉ ADMIN (API trả 403 cho nhân viên Kế toán). */
+  canRecordLate?: boolean;
 }) {
   const qc = useQueryClient();
   const [bankRef, setBankRef] = useState('');
@@ -178,7 +181,7 @@ export function OrderStatusActions({
   const resyncText = resyncMut.data ? RESYNC_OUTCOME_TEXT[resyncMut.data.outcome] : null;
 
   // Đơn đã huỷ/trả mà tiền chuyển khoản về sau: cùng API, nhưng ghi khoản hoàn vào hàng đợi thay vì lật "đã thanh toán".
-  const latePayment = !order.canConfirmPayment && order.canRecordLatePayment === true;
+  const latePayment = canRecordLate && !order.canConfirmPayment && order.canRecordLatePayment === true;
 
   const payMut = useMutation({
     mutationFn: (amount: number | undefined) =>

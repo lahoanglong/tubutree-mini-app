@@ -23,9 +23,19 @@ import { BTN_WARNING, FIELD_XS } from './ui';
  * một sổ cái CHUNG của cả đại lý, không gắn với một đơn cụ thể — đây chỉ là chỗ admin tiện xem/xử lý
  * ngay khi đang mở đơn của đại lý đó, không phải "công nợ của đơn này".
  */
-export function DealerCreditPanel({ order }: { order: AdminOrder }) {
+export function DealerCreditPanel({
+  order,
+  defaultOpen = false,
+  onPaid,
+}: {
+  order: Pick<AdminOrder, 'type' | 'user'>;
+  /** Mở sẵn khi chính thao tác mở panel đã nằm ngoài (nút "Ghi nhận thanh toán" ở tab Đại lý). */
+  defaultOpen?: boolean;
+  /** Gọi sau khi ghi giảm nợ thành công, để nơi chứa panel (danh sách đại lý) tải lại số liệu của nó. */
+  onPaid?: () => void;
+}) {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [amount, setAmount] = useState('');
   const [bankRef, setBankRef] = useState('');
   const [note, setNote] = useState('');
@@ -49,11 +59,12 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
       return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note }, key);
     },
     onSuccess: (r) => {
-      setMsg({ ok: true, text: `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(-r.balance)}.` });
+      setMsg({ ok: true, text: `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.` });
       setAmount('');
       setBankRef('');
       setNote('');
       void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
+      onPaid?.();
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thất bại.' }),
     onSettled: () => {
@@ -83,7 +94,8 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
     payMut.mutate();
   };
 
-  const balance = ledgerQ.data?.balance ?? 0; // âm = đang nợ
+  // Quy ước của sổ (DealerService): tổng delta dương = đang nợ; đơn ghi công nợ cộng, khoản đã trả trừ.
+  const balance = ledgerQ.data?.balance ?? 0;
   const busy = payMut.isPending;
 
   return (
@@ -107,13 +119,13 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
           {ledgerQ.data && (
             <>
               <p className="text-xs font-semibold text-stone-800">
-                Dư nợ hiện tại: <span className={balance < 0 ? 'text-danger-fg' : 'text-success-fg'}>{formatVnd(-balance)}</span>
+                Dư nợ hiện tại: <span className={balance > 0 ? 'text-danger-fg' : 'text-success-fg'}>{formatVnd(balance)}</span>
               </p>
               <ul className="max-h-32 overflow-y-auto rounded-control border border-stone-200 bg-stone-50 p-1.5 text-[11px] text-stone-600">
                 {ledgerQ.data.entries.slice(0, 20).map((e) => (
                   <li key={e.id} className="flex justify-between gap-2 py-0.5">
                     <span className="truncate">{e.note || e.refType}</span>
-                    <span className={e.delta < 0 ? 'text-danger-fg' : 'text-success-fg'}>{formatVnd(e.delta)}</span>
+                    <span className={e.delta > 0 ? 'text-danger-fg' : 'text-success-fg'}>{formatVnd(e.delta)}</span>
                   </li>
                 ))}
                 {ledgerQ.data.entries.length === 0 && <li className="py-0.5 text-stone-500">Chưa có phát sinh.</li>}

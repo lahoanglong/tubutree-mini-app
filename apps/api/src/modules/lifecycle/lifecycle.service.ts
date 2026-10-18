@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { isPublicProduct } from '../catalog/public-product';
 
 /** Giảm dưới 5% không đáng báo; admin đổi bằng SystemConfig wishlist.price_drop_min_pct (phân số 0..1). */
 const DEFAULT_PRICE_DROP_MIN_PCT = 0.05;
@@ -99,11 +100,17 @@ export class LifecycleService {
                MAX(o."createdAt") AS "lastOrderAt"
         FROM order_items oi
         JOIN orders o ON o.id = oi."orderId"
+        JOIN variations v ON v.id = oi."variationId"
+        JOIN products p ON p.id = v."productId"
         LEFT JOIN reorder_reminders rr
           ON rr."userId" = o."userId" AND rr."variationId" = oi."variationId"
         WHERE o.status::text = 'DELIVERED'
           AND o.type::text = 'RETAIL'
           AND o."placedForCustomer" = false
+          -- Nhắc mua lại hàng ngừng bán thì khách bấm vào trang 404 (cùng điều kiện với SELLABLE_VARIATION_WHERE).
+          AND v."isActive" = true
+          AND p."isActive" = true
+          AND p."approvalStatus"::text = 'APPROVED'
         GROUP BY o."userId", oi."variationId"
         HAVING MAX(o."createdAt") <= ${threshold}
            AND (MAX(rr."remindedAt") IS NULL OR MAX(rr."remindedAt") < MAX(o."createdAt"))
@@ -223,6 +230,11 @@ export class LifecycleService {
     // Trần số người nhận: hàm này chạy NGAY TRONG cron đồng bộ Pancake (15 phút/lần). Một sản
     // phẩm hot giảm giá với 20 nghìn lượt yêu thích sẽ gửi 20 nghìn thông báo tuần tự, chặn
     // đứng phần còn lại của lượt đồng bộ và có thể để lượt kế chạy chồng lên.
+    const product = await this.prisma.product
+      .findUnique({ where: { id: productId }, select: { slug: true, isActive: true, approvalStatus: true } })
+      .catch(() => null);
+    // Đồng bộ Pancake vẫn cập nhật giá của hàng admin đã tắt: báo "giảm giá" cho hàng không mua được là sai.
+    if (product && !isPublicProduct(product)) return;
     const items = await this.prisma.wishlist.findMany({
       where: { productId },
       orderBy: { id: 'asc' },
@@ -236,9 +248,6 @@ export class LifecycleService {
     );
     const recipients = items.filter((w) => !alerted.has(w.userId));
     if (recipients.length === 0) return;
-    const product = await this.prisma.product
-      .findUnique({ where: { id: productId }, select: { slug: true } })
-      .catch(() => null);
     const data: Record<string, string> = {
       product: productName,
       product_id: productId,

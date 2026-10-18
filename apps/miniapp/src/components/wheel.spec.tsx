@@ -65,6 +65,11 @@ describe('WheelOfFortune — nút quay', () => {
     expect(spinButton()).toHaveTextContent('Quay ngay (35 Điểm Xanh)');
   });
 
+  it('giá lớn có dấu phân cách hàng nghìn: 1.250.000 chứ không phải 1250000', () => {
+    render(<WheelOfFortune cost={1_250_000} onSpin={vi.fn()} />);
+    expect(spinButton()).toHaveTextContent('Quay ngay (1.250.000 Điểm Xanh)');
+  });
+
   it('bấm quay: gọi onSpin đúng 1 lần, nhãn đổi "Đang quay..." và nút khoá', async () => {
     const onSpin = vi.fn().mockResolvedValue(POINTS_PRIZE);
     render(<WheelOfFortune cost={20} onSpin={onSpin} />);
@@ -154,6 +159,14 @@ describe('WheelOfFortune — hộp kết quả', () => {
     expect(screen.getByRole('button', { name: 'Tuyệt vời!' })).toBeInTheDocument();
     expect(spinButton()).toHaveTextContent('Quay ngay (20 Điểm Xanh)');
     expect(spinButton()).toBeEnabled();
+  });
+
+  it('thưởng điểm lớn có dấu phân cách hàng nghìn', async () => {
+    const prize: SpinResult = { prize: { id: 'p3', name: 'Giải đặc biệt', rewardType: 'POINTS', value: 12_500 } };
+    render(<WheelOfFortune cost={20} onSpin={vi.fn().mockResolvedValue(prize)} />);
+    fireEvent.click(spinButton());
+    await advance(SPIN_MS);
+    expect(screen.getByText('+12.500 Điểm Xanh đã vào tài khoản')).toBeInTheDocument();
   });
 
   it('thưởng không phải điểm: có tên quà nhưng không có dòng cộng Điểm Xanh', async () => {

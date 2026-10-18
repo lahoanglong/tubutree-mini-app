@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { AiAdvisorService } from './ai-advisor.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import type { LlmClient } from './llm.client';
+import { LlmUnavailableException, type LlmClient } from './llm.client';
 import type { FaqService } from '../faq/faq.service';
 
 function makePrisma(products: unknown[] = []) {
@@ -111,5 +111,47 @@ describe('AiAdvisorService.chat — nạp FAQ vào ngữ cảnh AI', () => {
     const r = await new AiAdvisorService(makePrisma(), llm, faq).chat('u1', 'hỏi gì đó');
     expect(r.reply.length).toBeGreaterThan(0);
     expect((llm.complete as jest.Mock)).not.toHaveBeenCalled();
+  });
+});
+
+describe('AiAdvisorService.chat — fallback và giới hạn', () => {
+  const svc = (llm: LlmClient) => new AiAdvisorService(makePrisma(PRODUCTS), llm, makeFaq());
+
+  it('LLM timeout → câu xin lỗi "chậm", vẫn kèm sản phẩm, không ném lỗi', async () => {
+    const llm = makeLlm({ complete: jest.fn().mockRejectedValue(new LlmUnavailableException('timeout')) });
+    const r = await svc(llm).chat('u1', 'cần nước rửa chén');
+    expect(r.reply).toContain('phản hồi chậm');
+    expect(r.products).toHaveLength(1);
+  });
+
+  it('LLM bận (trần toàn hệ thống) → câu xin lỗi "nhiều bạn hỏi"', async () => {
+    const llm = makeLlm({ complete: jest.fn().mockRejectedValue(new LlmUnavailableException('busy')) });
+    expect((await svc(llm).chat('u1', 'cần nước rửa chén')).reply).toContain('nhiều bạn hỏi');
+  });
+
+  it('lỗi lạ chứa khoá/URL → khách chỉ thấy câu offline, không lộ nội dung lỗi', async () => {
+    const llm = makeLlm({ complete: jest.fn().mockRejectedValue(new Error('Gateway 500 http://gw:8097 Bearer SECRET')) });
+    const r = await svc(llm).chat('u1', 'cần nước rửa chén');
+    expect(r.reply).toContain('tạm nghỉ');
+    expect(JSON.stringify(r)).not.toMatch(/SECRET|8097|Gateway/);
+  });
+
+  it('cắt câu hỏi ở 500 ký tự trước khi vào prompt', async () => {
+    const llm = makeLlm();
+    await svc(llm).chat('u1', 'y'.repeat(900));
+    const messages = (llm.complete as jest.Mock).mock.calls[0][0];
+    expect(messages[messages.length - 1].content).toHaveLength(500);
+  });
+
+  it('một user hỏi quá 30 lượt/giờ → câu xin nghỉ, không gọi LLM thêm; user khác không bị ảnh hưởng', async () => {
+    const llm = makeLlm();
+    const s = svc(llm);
+    for (let i = 0; i < 30; i++) await s.chat('u1', 'cần nước rửa chén');
+    const over = await s.chat('u1', 'cần nước rửa chén');
+    expect(over.reply).toContain('hỏi khá nhiều');
+    expect(over.products).toHaveLength(1);
+    expect(llm.complete).toHaveBeenCalledTimes(30);
+    await s.chat('u2', 'cần nước rửa chén');
+    expect(llm.complete).toHaveBeenCalledTimes(31);
   });
 });

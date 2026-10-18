@@ -30,3 +30,12 @@ export function usePublicConfig(): PublicConfig & { isLoaded: boolean } {
   });
   return { ...(q.data ?? PUBLIC_CONFIG_FALLBACK), isLoaded: q.data != null };
 }
+
+/**
+ * Đóng khi chưa biết: lối vào AI chỉ hiện sau khi server xác nhận bật. Lỗi mạng hay API cũ → ẩn, vì hiện lối vào
+ * rồi dẫn tới trang không trả lời được tệ hơn việc chậm một nhịp mới thấy nút.
+ */
+export function useAiAdvisorEnabled(): boolean {
+  const cfg = usePublicConfig();
+  return cfg.isLoaded && cfg.aiAdvisorEnabled === true;
+}

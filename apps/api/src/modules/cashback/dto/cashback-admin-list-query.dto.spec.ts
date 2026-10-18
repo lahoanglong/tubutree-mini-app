@@ -38,9 +38,9 @@ describe('GET /admin/cashback/transactions: validate query', () => {
     expect(types).toContain(CashbackAdminListQuery);
     const cashback = { adminListTransactions: jest.fn() };
     const c = new CashbackAdminController(cashback as never);
-    c.list({ status: 'PENDING', take: '30' });
-    expect(cashback.adminListTransactions).toHaveBeenCalledWith('PENDING', 30);
-    c.list({});
-    expect(cashback.adminListTransactions).toHaveBeenLastCalledWith(undefined, undefined);
+    c.list({ status: 'PENDING', take: '30' }, 'ADMIN');
+    expect(cashback.adminListTransactions).toHaveBeenCalledWith('PENDING', 30, { maskPhones: false });
+    c.list({}, 'STAFF');
+    expect(cashback.adminListTransactions).toHaveBeenLastCalledWith(undefined, undefined, { maskPhones: true });
   });
 });

@@ -2,7 +2,11 @@ import Link from 'next/link';
 import { type ProductCard as P, formatSold } from '@/lib/api';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 
-export default function ProductCard({ product }: { product: P }) {
+/** Số thẻ đầu trên màn hình đầu (hai hàng trên mobile, một hàng từ md): ảnh của chúng là ứng viên LCP nên tải ngay. */
+export const PRIORITY_CARDS = 4;
+
+/** `priority`: thẻ nằm trên màn hình đầu, tải ảnh ngay và ưu tiên cao thay vì chờ cuộn tới. */
+export default function ProductCard({ product, priority = false }: { product: P; priority?: boolean }) {
   // `=== false`: API cũ/nguồn không có cờ thì coi như còn hàng, không dán nhãn nhầm.
   const soldOut = product.inStock === false;
 
@@ -19,7 +23,11 @@ export default function ProductCard({ product }: { product: P }) {
             src={product.thumbnail}
             alt={product.name}
             className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-            loading="lazy"
+            // Kích thước nội tại cho trình duyệt giữ chỗ trước khi ảnh về; CSS (h-full w-full trong khung vuông) vẫn quyết định hiển thị.
+            width={400}
+            height={400}
+            loading={priority ? 'eager' : 'lazy'}
+            fetchPriority={priority ? 'high' : undefined}
             decoding="async"
           />
         ) : (
@@ -41,7 +49,7 @@ export default function ProductCard({ product }: { product: P }) {
         {!soldOut && (
           <CardSaleBadge
             product={product}
-            className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card"
+            className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card"
           />
         )}
 

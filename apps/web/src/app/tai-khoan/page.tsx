@@ -10,6 +10,7 @@ import { ui } from '@/lib/guest-ui';
 import { pointsSummary } from '@/lib/checkout-points';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { OrdersSection } from './orders-section';
+import { ProfileSection } from './profile-section';
 
 const TILE = 'block min-h-11 rounded-control p-2 -m-2 transition hover:bg-forest-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0';
 
@@ -57,6 +58,8 @@ export default function AccountPage() {
   const balances = meQ.data ?? user;
   const points = pointsSummary(balances);
   const walletBalance = balances.walletBalance;
+  // Tên/SĐT lấy từ /me khi đã có (khách có thể vừa đổi tên ở Mini App); API cũ chưa trả thì dùng ảnh chụp lúc đăng nhập.
+  const fullName = meQ.data?.fullName !== undefined ? meQ.data.fullName : user.fullName;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
@@ -66,7 +69,7 @@ export default function AccountPage() {
       <h1 className={`mt-1 ${ui.pageTitle}`}>Tài khoản</h1>
 
       <section aria-label="Thông tin tài khoản" className="mt-3 rounded-sheet bg-forest-800 p-5 text-stone-0 shadow-raised">
-        <div className="text-lg font-bold">{user.fullName ?? 'Khách Tubu'}</div>
+        <div className="text-lg font-bold">{fullName ?? 'Khách Tubu'}</div>
         <div className="mt-1 text-sm text-forest-100">Mã giới thiệu: {user.referralCode}</div>
         <div className="mt-4 grid grid-cols-2 gap-6">
           <Link href="/tai-khoan/diem-xanh" className={TILE}>
@@ -88,6 +91,8 @@ export default function AccountPage() {
           </Link>
         </div>
       </section>
+
+      <ProfileSection name={fullName} phone={meQ.data?.phone} />
 
       <nav aria-label="Quản lý tài khoản" className="mt-4">
         <Link href="/tai-khoan/dia-chi" className={`${ui.card} flex min-h-11 items-center justify-between gap-3 p-4 text-sm font-semibold text-stone-900 hover:bg-stone-50`}>

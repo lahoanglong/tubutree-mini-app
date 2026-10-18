@@ -21,8 +21,9 @@ import {
   type FeedPostKind,
   type CreateEventInput,
 } from '../services/feed-api';
-import { getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Button } from '../components/ui/button';
@@ -32,7 +33,7 @@ import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Heading, Text } from '../components/ui/text';
-import { formatDate, formatPoints } from '../utils/format';
+import { formatDate, formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
 import { KIND_LABEL } from '../components/community/post-card';
@@ -184,7 +185,7 @@ function PendingCard({
       </Text>
       {post.images[0] && (
         <img
-          src={post.images[0]}
+          src={apiMediaUrl(post.images[0])}
           alt=""
           loading="lazy"
           style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 200, objectFit: 'cover' }}
@@ -303,6 +304,12 @@ function ReportCard({
 
 function EventsSection() {
   const qc = useQueryClient();
+  const config = usePublicConfig();
+  // 1 điểm = bao nhiêu đồng và trần thưởng đều từ config công khai; chưa có số thì nói chung, không hiện số cũ.
+  const rewardHint =
+    config.isLoaded && config.loyalty && config.community
+      ? vi.community.eventRewardHint(formatVnd(config.loyalty.vndPerPointRedeem), formatNumber(config.community.eventRewardMaxPoints))
+      : vi.community.eventRewardHintGeneric;
   const { openSnackbar } = useSnackbar();
   const [view, setView] = useState<'OPEN' | 'CLOSED'>('OPEN');
   const eventsQ = useQuery({ queryKey: ['admin-community-events', view], queryFn: () => adminEvents(view) });
@@ -389,7 +396,7 @@ function EventsSection() {
             value={rewardPoints}
             onChange={(e) => setRewardPoints(e.target.value)}
           />
-          <Text variant="caption" tone="tertiary" as="div">{vi.community.eventRewardHint}</Text>
+          <Text variant="caption" tone="tertiary" as="div">{rewardHint}</Text>
           <Button fullWidth loading={createM.isPending} disabled={!filled} onPress={submitCreate}>
             {vi.community.createEvent}
           </Button>

@@ -16,6 +16,8 @@ interface DueOrder {
 interface UnreviewedItem {
   productName: string;
   productSlug: string | null;
+  /** Sản phẩm đang bán và đã duyệt: tin mời mở trang sản phẩm, hàng ngừng bán thì trang đó 404. */
+  onSale: boolean;
 }
 
 /**
@@ -109,20 +111,26 @@ export class ReviewInviteService {
   }
 
   private async inviteOne(o: DueOrder): Promise<'SENT' | 'NOTHING_TO_REVIEW' | 'SKIPPED'> {
+    const unreviewed = await this.prisma.$queryRaw<UnreviewedItem[]>`
+      SELECT DISTINCT ON (v."productId") oi."productName", oi."productSlug",
+             (p."isActive" AND p."approvalStatus"::text = 'APPROVED') AS "onSale"
+      FROM order_items oi
+      JOIN variations v ON v.id = oi."variationId"
+      JOIN products p ON p.id = v."productId"
+      WHERE oi."orderId" = ${o.id}
+        AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r."userId" = ${o.userId} AND r."productId" = v."productId")
+      ORDER BY v."productId", oi.id`;
+    const items = unreviewed.filter((i) => i.onSale);
+    // Còn hàng chưa đánh giá nhưng đều đang ngừng bán: bỏ qua, KHÔNG đánh dấu, để hàng bật lại trong cửa sổ mời thì lượt sau
+    // vẫn mời được.
+    if (unreviewed.length > 0 && items.length === 0) return 'SKIPPED';
+
     const claimedAt = new Date();
     const claim = await this.prisma.order.updateMany({
       where: { id: o.id, reviewInvitedAt: null },
       data: { reviewInvitedAt: claimedAt },
     });
     if (claim.count === 0) return 'SKIPPED';
-
-    const items = await this.prisma.$queryRaw<UnreviewedItem[]>`
-      SELECT DISTINCT ON (v."productId") oi."productName", oi."productSlug"
-      FROM order_items oi
-      JOIN variations v ON v.id = oi."variationId"
-      WHERE oi."orderId" = ${o.id}
-        AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r."userId" = ${o.userId} AND r."productId" = v."productId")
-      ORDER BY v."productId", oi.id`;
     if (items.length === 0) return 'NOTHING_TO_REVIEW';
 
     const first = items[0]!;

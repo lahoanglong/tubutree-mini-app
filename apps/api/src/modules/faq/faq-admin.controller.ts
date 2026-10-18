@@ -1,9 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { FaqService } from './faq.service';
 import { CreateFaqDto, UpdateFaqDto } from './dto/faq.dto';
 
 @Roles('ADMIN')
+@AllowStaff('MARKETING')
 @Controller('admin/faqs')
 export class FaqAdminController {
   constructor(private readonly faq: FaqService) {}

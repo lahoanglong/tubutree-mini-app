@@ -1,12 +1,13 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   getBankQr: vi.fn(),
+  copyText: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -18,6 +19,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/payment-api', () => ({ getBankQr: mocks.getBankQr }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 
 import BankPaymentPage from './bank-payment';
 
@@ -205,3 +207,109 @@ describe('Thanh toán chuyển khoản: hạn thanh toán (BUYERMINI-8)', () => 
   });
 });
 
+describe('Thanh toán chuyển khoản: nút sao chép (D5-02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue(QR);
+    mocks.copyText.mockResolvedValue(true);
+  });
+
+  const COPIES = [
+    ['Sao chép số tài khoản', '0123456789', 'Đã sao chép số tài khoản'],
+    ['Sao chép số tiền', '120000', 'Đã sao chép số tiền'],
+    ['Sao chép nội dung chuyển khoản', 'TT001', 'Đã sao chép nội dung chuyển khoản'],
+  ] as const;
+
+  it('mỗi dòng có nút sao chép thật (button) tên rõ ràng, vùng chạm tối thiểu 44px', async () => {
+    renderPage();
+    for (const [name] of COPIES) {
+      const btn = await screen.findByRole('button', { name });
+      expect(btn.tagName).toBe('BUTTON');
+      expect(btn.style.minWidth).toBe('44px');
+      expect(btn.style.minHeight).toBe('44px');
+    }
+  });
+
+  it.each(COPIES)('"%s" chép đúng giá trị, báo "Đã sao chép" bằng thông báo nhỏ và chữ đọc được', async (name, value, done) => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name }));
+    expect(mocks.copyText).toHaveBeenCalledWith(value);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: done, type: 'success', position: 'top' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(done);
+  });
+
+  it('chép không được (webview chặn clipboard): báo lỗi bảo chép tay, không hiện "Đã sao chép"', async () => {
+    mocks.copyText.mockResolvedValue(false);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sao chép số tài khoản' }));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({
+        text: 'Không thể sao chép số tài khoản. Vui lòng sao chép thủ công.',
+        type: 'error',
+        position: 'top',
+      }),
+    );
+    expect(screen.queryByText(/Đã sao chép/)).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('xác nhận "Đã sao chép" tự tắt sau vài giây để lần chép sau lại có phản hồi', async () => {
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Sao chép số tiền' });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireEvent.click(btn);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép số tiền');
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+      expect(screen.queryByRole('status')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('Thanh toán chuyển khoản: đếm ngược hạn thanh toán (D5-02)', () => {
+  const NOW = new Date('2026-10-17T10:00:00Z');
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('còn hạn: khung nhắc có thêm dòng "Còn 2 giờ 30 phút" bên cạnh giờ hạn tuyệt đối', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: '2026-10-17T12:30:00Z' });
+    renderPage();
+    const countdown = await screen.findByTestId('payment-countdown');
+    expect(countdown).toHaveTextContent('Còn 2 giờ 30 phút để chuyển khoản');
+    const note = countdown.closest('[role="note"]') as HTMLElement;
+    expect(note).toHaveTextContent(/Vui lòng chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}\. Quá hạn đơn sẽ tự huỷ/);
+    expect(within(note).getByTestId('payment-countdown')).toBe(countdown);
+  });
+
+  it('đồng hồ không phải vùng đọc tự động (không làm trình đọc màn hình đọc lại mỗi 15 giây)', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: '2026-10-17T12:30:00Z' });
+    renderPage();
+    const el = await screen.findByTestId('payment-countdown');
+    expect(el.closest('[aria-live]')).toBeNull();
+    expect(el.closest('[role="status"], [role="alert"]')).toBeNull();
+  });
+
+  it('quá hạn: nói thẳng "Đã quá hạn chuyển khoản" thay vì đồng hồ về 0', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: '2026-10-17T09:00:00Z' });
+    renderPage();
+    expect(await screen.findByTestId('payment-countdown')).toHaveTextContent('Đã quá hạn chuyển khoản');
+  });
+
+  it('API không trả hạn: giữ nguyên, không có đồng hồ (không bịa hạn)', async () => {
+    mocks.getBankQr.mockResolvedValue(QR);
+    renderPage();
+    await screen.findByText(/Giữ nguyên nội dung/);
+    expect(screen.queryByTestId('payment-countdown')).toBeNull();
+  });
+});

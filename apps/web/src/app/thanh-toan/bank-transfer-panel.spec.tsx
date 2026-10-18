@@ -130,6 +130,117 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(container.textContent).not.toMatch(/không tải được/i);
   });
 
+  // D5-03: thăm dò nền mỗi 4s bật isFetching; trước đây nút "Tôi đã chuyển" khoá/nhấp nháy theo nhịp đó đúng lúc khách bấm.
+  it('thăm dò nền đang chạy: nút "Tôi đã chuyển" vẫn bấm được, trạng thái kiểm tra hiện ở dòng riêng', async () => {
+    let release: () => void = () => {};
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls += 1;
+        if (calls >= 2) await new Promise<void>((r) => (release = r));
+        return new Response(JSON.stringify(QR_BODY), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    const btn = () => byText(container, 'button', 'Tôi đã chuyển khoản') as HTMLButtonElement;
+    expect(btn().disabled).toBe(false);
+
+    window.dispatchEvent(new Event('visibilitychange'));
+    await flush(2);
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(btn().disabled).toBe(false);
+    expect(btn().textContent).toBe('Tôi đã chuyển khoản, kiểm tra lại');
+    expect(container.querySelector('[data-testid="bank-poll-status"]')?.textContent).toContain('Đang kiểm tra');
+
+    release();
+    await flush();
+    expect(container.querySelector('[data-testid="bank-poll-status"]')?.textContent).toContain('Đang chờ thanh toán');
+  });
+
+  it('bấm kiểm tra tay: nút khoá + "Đang kiểm tra…" trong lúc chờ, xong báo "chưa thấy tiền về" và mở lại nút', async () => {
+    let release: () => void = () => {};
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls += 1;
+        if (calls >= 2) await new Promise<void>((r) => (release = r));
+        return new Response(JSON.stringify(QR_BODY), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    const btn = () => byText(container, 'button', /Tôi đã chuyển khoản|Đang kiểm tra/) as HTMLButtonElement;
+    click(btn());
+    await flush(2);
+    expect(btn().disabled).toBe(true);
+    expect(btn().textContent).toBe('Đang kiểm tra…');
+
+    release();
+    await flush();
+    expect(btn().disabled).toBe(false);
+    expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toContain('Chưa thấy tiền về');
+  });
+
+  it('kiểm tra tay gặp lỗi mạng: giữ nguyên khung QR, báo lỗi ngay dưới nút và cho bấm lại', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls += 1;
+        if (calls >= 2) throw new TypeError('Failed to fetch');
+        return new Response(JSON.stringify(QR_BODY), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    click(byText(container, 'button', 'Tôi đã chuyển khoản'));
+    await flush(6);
+    expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toMatch(/không kết nối|kiểm tra mạng/i);
+    expect((byText(container, 'button', 'Tôi đã chuyển khoản') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('có nút "Lưu mã QR": tải ảnh về tên theo mã đơn', async () => {
+    const created = vi.fn(() => 'blob:qr');
+    Object.assign(URL, { createObjectURL: created, revokeObjectURL: vi.fn() });
+    const clicked: { download: string; href: string }[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push({ download: this.download, href: this.href });
+    });
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url === QR_BODY.qrImageUrl) return { ok: true, blob: async () => new Blob(['png'], { type: 'image/png' }) } as unknown as Response;
+      return new Response(JSON.stringify(QR_BODY), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    click(byText(container, 'button', 'Lưu mã QR'));
+    await flush();
+    expect(clicked).toEqual([{ download: 'tubu-qr-TB-777.png', href: 'blob:qr' }]);
+    expect(container.querySelector('[data-testid="bank-qr-saved"]')?.textContent).toContain('Đã lưu');
+  });
+
+  it('"Lưu mã QR" không tải được (chặn CORS): không mở tab, báo chưa lưu và dặn nhấn giữ ảnh hoặc chụp màn hình', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url === QR_BODY.qrImageUrl) throw new TypeError('Failed to fetch');
+      return new Response(JSON.stringify(QR_BODY), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    click(byText(container, 'button', 'Lưu mã QR'));
+    await flush();
+    expect(open).not.toHaveBeenCalled();
+    const msg = container.querySelector('[data-testid="bank-qr-saved"]')?.textContent ?? '';
+    expect(msg).toContain('Chưa lưu được');
+    expect(msg).toMatch(/nhấn giữ/i);
+    expect(msg).not.toContain('tab mới');
+  });
+
   it('lỗi tải API → hiện thông báo lỗi + nút Thử lại (không crash)', async () => {
     const api = mockFetch({ '/payments/bank-qr/': { status: 500, body: { message: 'lỗi' } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));

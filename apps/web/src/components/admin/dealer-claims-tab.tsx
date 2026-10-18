@@ -36,7 +36,7 @@ const STATUS_TONE: Record<DealerRewardClaimStatus, Tone> = {
  * (bắt buộc lý do) → xác nhận đã trao. Từ chối là cuối với đại lý; admin từ chối nhầm thì "Mở lại yêu cầu". Luồng + kiểm doanh số đã chốt nằm ở DealerService; lỗi (vd doanh
  * số tụt dưới mốc vì có đơn huỷ/trả sau khi gửi) hiện NGUYÊN VĂN.
  */
-export function DealerClaimsTab() {
+export function DealerClaimsTab({ canReview = true }: { canReview?: boolean } = {}) {
   const [filter, setFilter] = useState<DealerRewardClaimStatus | ''>('PENDING');
   const [page, setPage] = useState(1);
   const q = useQuery({
@@ -78,7 +78,7 @@ export function DealerClaimsTab() {
         </p>
       )}
       <div className="space-y-2">
-        {q.data?.data.map((c) => <ClaimRow key={c.id} claim={c} />)}
+        {q.data?.data.map((c) => <ClaimRow key={c.id} claim={c} canReview={canReview} />)}
         {q.data?.data.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có yêu cầu nào{filter ? ` ở trạng thái "${CLAIM_STATUS_LABEL[filter]}"` : ''}.
@@ -120,11 +120,13 @@ export function DealerClaimsTab() {
 
 type Action = 'approve' | 'reject' | 'markPaid' | 'reopen';
 
-export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
+/** `canReview=false` (KE_TOAN): chỉ chi thưởng đã được ADMIN duyệt; duyệt/từ chối/mở lại là việc của ADMIN. */
+export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRewardClaim; canReview?: boolean }) {
   const qc = useQueryClient();
   const [text, setText] = useState('');
   const [err, setErr] = useState<string | null>(null);
-  const acts = claimActions(c.status);
+  const base = claimActions(c.status);
+  const acts = { ...base, approve: base.approve && canReview, reject: base.reject && canReview, reopen: base.reopen && canReview };
   const { confirm, dialog } = useConfirm();
 
   const mut = useMutation({

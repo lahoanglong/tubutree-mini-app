@@ -176,3 +176,150 @@ describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)'
     expect(out.support).toEqual({ hotline: '0900 000 000', email: null, zaloOaName: null });
   });
 });
+
+describe('SystemConfigController.publicConfig — link kênh cộng đồng', () => {
+  it('chưa cấu hình → cả ba null để FE ẩn nút', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.community).toMatchObject({ zaloGroupUrl: null, facebookUrl: null, tiktokUrl: null });
+  });
+
+  it('chỉ trả link https đúng tên miền; giá trị lạ lưu sót trong DB bị bỏ', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({
+        'community.zalo_group_url': 'https://zalo.me/g/abc',
+        'community.facebook_url': 'https://evil.com/fb',
+        'community.tiktok_url': 42,
+      }),
+    ).publicConfig();
+    expect(out.community).toMatchObject({ zaloGroupUrl: 'https://zalo.me/g/abc', facebookUrl: null, tiktokUrl: null });
+  });
+});
+
+// D2-07b: khối "Quà khách mới" và các chữ có số (D5-10) đọc từ đây. Mặc định phải bằng mặc định trong mã của nơi dùng số đó.
+describe('SystemConfigController.publicConfig — số cho khách mới và Điểm Xanh', () => {
+  it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu từ 199.000đ, 10.000đ = 1 điểm, 1 điểm = 1.000đ', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.newCustomer).toEqual({
+      welcomeVoucher: { amount: 30000, minOrder: 199000 },
+      firstOrderFreeShip: { enabled: true, minSubtotal: 199000 },
+    });
+    expect(out.loyalty).toEqual({ vndPerPoint: 10000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2, pointExpireMonths: 12 });
+    expect(out.homeNewCustomerLayout).toBe(true);
+    expect(out.communityPublicPreview).toBe(true);
+  });
+
+  it('admin đổi → trả giá trị mới của đúng khoá mà cron voucher, checkout và pricing đang đọc', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({
+        'voucher.welcome_amount': 25000,
+        'voucher.welcome_min_order': 150000,
+        'shipping.first_order_free_enabled': true,
+        'shipping.first_order_free_min_subtotal': 99000,
+        'loyalty.vnd_per_point': 20000,
+        'home.new_customer_layout': true,
+        'community.public_preview': true,
+      }),
+    ).publicConfig();
+    expect(out.newCustomer).toEqual({
+      welcomeVoucher: { amount: 25000, minOrder: 150000 },
+      firstOrderFreeShip: { enabled: true, minSubtotal: 99000 },
+    });
+    expect(out.loyalty.vndPerPoint).toBe(20000);
+    expect(out.homeNewCustomerLayout).toBe(true);
+    expect(out.communityPublicPreview).toBe(true);
+  });
+
+  // Chuỗi "false" là truthy: chỉ boolean true thật mới bật, để cờ gõ nhầm không hứa freeship hay đổi bố cục.
+  it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) → coi là tắt', async (bad) => {
+    const out = await new SystemConfigController(
+      makeConfig({ 'shipping.first_order_free_enabled': bad, 'home.new_customer_layout': bad, 'community.public_preview': bad }),
+    ).publicConfig();
+    expect(out.newCustomer.firstOrderFreeShip.enabled).toBe(false);
+    expect(out.homeNewCustomerLayout).toBe(false);
+    expect(out.communityPublicPreview).toBe(false);
+  });
+});
+
+// D5-10: câu trả lời FAQ dự phòng ("tối đa 20% giá trị đơn", "điểm có hạn 12 tháng") đọc từ đây, cùng khoá và mặc định với getOverview.
+describe('SystemConfigController.publicConfig — trần dùng điểm và hạn điểm (D5-10)', () => {
+  it('admin đổi → trả đúng giá trị của loyalty.max_redeem_pct và loyalty.point_expire_months', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({ 'loyalty.max_redeem_pct': 0.3, 'loyalty.point_expire_months': 6 }),
+    ).publicConfig();
+    expect(out.loyalty).toMatchObject({ maxRedeemPct: 0.3, pointExpireMonths: 6 });
+  });
+
+  it('trần 0 là hợp lệ (tắt dùng điểm ở thanh toán), không bị thay bằng mặc định', async () => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.max_redeem_pct': 0 })).publicConfig();
+    expect(out.loyalty.maxRedeemPct).toBe(0);
+  });
+
+  it.each(['0.3', 1.5, -0.1, null])('trần sai (%p) → mặc định 0.2 như getOverview', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.max_redeem_pct': bad })).publicConfig();
+    expect(out.loyalty.maxRedeemPct).toBe(0.2);
+  });
+
+  it.each(['12', 0, -3, Number.NaN, null])('số tháng hạn điểm sai (%p) → 12 tháng như pointsExpiryFrom', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.point_expire_months': bad })).publicConfig();
+    expect(out.loyalty.pointExpireMonths).toBe(12);
+  });
+});
+
+// D5-10: chữ trong miniapp từng viết cứng 45%, 24 giờ, "tối đa 1.000 điểm"; giờ đọc từ config công khai.
+describe('SystemConfigController.publicConfig — số trong chữ đại lý và sự kiện cộng đồng (D5-10)', () => {
+  it('chưa cấu hình → đúng mặc định hiện hành: chiết khấu đại lý tối đa 45%, duyệt hồ sơ 24 giờ, thưởng sự kiện tối đa 1.000 điểm', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.dealer).toEqual({ maxDiscountPct: 0.45, reviewHours: 24 });
+    expect(out.community).toMatchObject({ eventRewardMaxPoints: 1000 });
+  });
+
+  it('admin đổi → trả giá trị mới của đúng khoá mà dealer.service đang kẹp chiết khấu', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({ 'dealer.max_discount_pct': 0.4, 'dealer.review_hours': 48 }),
+    ).publicConfig();
+    expect(out.dealer).toEqual({ maxDiscountPct: 0.4, reviewHours: 48 });
+  });
+
+  it.each(['0.4', 0, -1, 1.5, null])('chiết khấu sai (%p) → null để miniapp bỏ con số', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'dealer.max_discount_pct': bad })).publicConfig();
+    expect(out.dealer.maxDiscountPct).toBeNull();
+  });
+
+  it.each(['24', 0, -3, 1.5, null])('số giờ duyệt sai (%p) → null để miniapp bỏ cam kết giờ', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'dealer.review_hours': bad })).publicConfig();
+    expect(out.dealer.reviewHours).toBeNull();
+  });
+});
+
+describe('SystemConfigController.publicConfig — aiAdvisorEnabled (công tắc AI)', () => {
+  const KEYS = ['ANTIGRAVITY_GATEWAY_URL', 'ANTIGRAVITY_GATEWAY_KEY', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'AI_ADVISOR_ENABLED', 'AI_ADVISOR_PROVIDER'];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+  const flag = async () => (await new SystemConfigController(makeConfig()).publicConfig()).aiAdvisorEnabled;
+
+  it('chưa cấu hình provider nào → false (miniapp ẩn lối vào)', async () => {
+    expect(await flag()).toBe(false);
+  });
+  it('đủ gateway URL + KEY → true', async () => {
+    process.env.ANTIGRAVITY_GATEWAY_URL = 'http://gw:8097';
+    process.env.ANTIGRAVITY_GATEWAY_KEY = 'k';
+    expect(await flag()).toBe(true);
+  });
+  it('công tắc AI_ADVISOR_ENABLED=false → false dù đủ khoá', async () => {
+    process.env.ANTIGRAVITY_GATEWAY_URL = 'http://gw:8097';
+    process.env.ANTIGRAVITY_GATEWAY_KEY = 'k';
+    process.env.AI_ADVISOR_ENABLED = 'false';
+    expect(await flag()).toBe(false);
+  });
+});

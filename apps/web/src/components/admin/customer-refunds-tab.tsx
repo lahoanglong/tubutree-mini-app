@@ -80,7 +80,7 @@ export function CustomerRefundsPendingBadge() {
  * Khoản của khách có tài khoản: admin bấm "Bắt đầu chuyển khoản" (khoá nơi nhận, khách không rút về Ví được nữa) TRƯỚC khi
  * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
-export function CustomerRefundsTab({ meId }: { meId?: string } = {}) {
+export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; isAdmin?: boolean } = {}) {
   const [filter, setFilter] = useState<AdminCustomerRefundFilter>('OPEN');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
@@ -368,6 +368,7 @@ export function CustomerRefundsTab({ meId }: { meId?: string } = {}) {
           refund={target.refund}
           mode={target.mode}
           takeOverFrom={target.mode === 'paid' ? takeOverFrom(target.refund, meId) : null}
+          canEnterBank={isAdmin}
           onClose={() => setTarget(null)}
           onDone={(outcome) => onDone(target.refund, outcome)}
         />

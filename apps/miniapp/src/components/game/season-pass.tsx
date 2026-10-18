@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react';
+import { Check, Lock, Star, Ticket } from 'lucide-react';
 import type { SeasonPassState, SeasonPassTier } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
@@ -6,6 +6,17 @@ import { Icon } from '../ui/icon';
 import { ProgressBar } from '../ui/progress-bar';
 import { Text } from '../ui/text';
 import { GameCard } from './game-card';
+
+const INLINE_ICON_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 } as const;
+
+function ClaimedMark() {
+  return (
+    <Text variant="caption" tone="tertiary" as="div" style={INLINE_ICON_STYLE}>
+      <Icon icon={Check} size="sm" tone="current" />
+      {vi.game.seasonPass.claimed}
+    </Text>
+  );
+}
 
 // Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh
 export function SeasonPass({
@@ -24,7 +35,7 @@ export function SeasonPass({
   const maxXp = tiers[tiers.length - 1]?.xpRequired ?? 1;
   const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
   return (
-    <GameCard title={vi.game.seasonPass.title}>
+    <GameCard title={vi.game.seasonPass.title} icon={Ticket}>
       <Text variant="caption" tone="secondary" as="div">
         {vi.game.seasonPass.subtitle(pass.seasonTitle ?? '')}
       </Text>
@@ -39,7 +50,8 @@ export function SeasonPass({
       <ProgressBar value={ppct} max={100} />
 
       {!pass.premiumEligible && (
-        <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)', marginTop: 8 }}>
+        <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon icon={Lock} size="sm" tone="current" />
           {vi.game.seasonPass.premiumHint}
         </Text>
       )}
@@ -48,6 +60,7 @@ export function SeasonPass({
         {tiers.map((t: SeasonPassTier) => {
           const busy = (track: 'free' | 'premium') =>
             claimPending && claimVariables?.tier === t.tier && claimVariables?.track === track;
+          const premiumLocked = !t.unlocked || !pass.premiumEligible;
           return (
             <div
               key={t.tier}
@@ -76,14 +89,13 @@ export function SeasonPass({
                     {vi.game.seasonPass.reward(t.free)}
                   </Text>
                   {t.claimedFree ? (
-                    <Text variant="caption" tone="tertiary" as="div">
-                      {vi.game.seasonPass.claimed}
-                    </Text>
+                    <ClaimedMark />
                   ) : (
                     <Button
                       fullWidth
                       disabled={!t.unlocked || busy('free')}
                       loading={busy('free')}
+                      icon={t.unlocked ? undefined : Lock}
                       onPress={() => onClaim(t.tier, 'free')}
                       style={{ marginTop: 4 }}
                     >
@@ -105,23 +117,18 @@ export function SeasonPass({
                     {vi.game.seasonPass.reward(t.premium)}
                   </Text>
                   {t.claimedPremium ? (
-                    <Text variant="caption" tone="tertiary" as="div">
-                      {vi.game.seasonPass.claimed}
-                    </Text>
+                    <ClaimedMark />
                   ) : (
                     <Button
                       fullWidth
                       variant="secondary"
-                      disabled={!t.unlocked || !pass.premiumEligible || busy('premium')}
+                      disabled={premiumLocked || busy('premium')}
                       loading={busy('premium')}
+                      icon={premiumLocked ? Lock : undefined}
                       onPress={() => onClaim(t.tier, 'premium')}
                       style={{ marginTop: 4 }}
                     >
-                      {!t.unlocked
-                        ? vi.game.seasonPass.locked
-                        : !pass.premiumEligible
-                          ? vi.game.seasonPass.locked
-                          : vi.game.seasonPass.claim}
+                      {premiumLocked ? vi.game.seasonPass.locked : vi.game.seasonPass.claim}
                     </Button>
                   )}
                 </div>

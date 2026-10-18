@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingBag, User } from 'lucide-react';
@@ -8,6 +9,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart } from '@/lib/shop-client';
 import SiteSearch from '@/components/site-search';
 import { useCartKey } from '@/lib/cart-key';
+import tubuLogo from '@/assets/tubu-logo.png';
 
 export default function SiteHeader() {
   const { user, status } = useAuth();
@@ -16,36 +18,11 @@ export default function SiteHeader() {
   const count = cartQ.data?.itemCount ?? 0;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-0/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-0/90 backdrop-blur-md" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
-        {/* Logo & Brand */}
-        <Link href="/" className="group flex min-h-11 items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-control bg-forest-600 shadow-card transition-transform duration-200 group-hover:scale-105">
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-stone-0"
-              aria-hidden="true"
-            >
-              <path d="M12 22v-9" />
-              <path d="M9 13a4 4 0 0 1-5-3.87A4 4 0 0 1 7.2 5.5 5 5 0 0 1 16.8 5.5 4 4 0 0 1 20 9.13 4 4 0 0 1 15 13" />
-              <path d="M12 13a3 3 0 0 0 3-3" />
-            </svg>
-          </div>
-          <div>
-            <span className="block font-display text-lg font-semibold leading-tight tracking-tight text-stone-900 transition-colors group-hover:text-forest-700">
-              Tubu Tree
-            </span>
-            <span className="hidden text-xs font-medium tracking-wide text-forest-700 sm:block">
-              SỐNG XANH AN LÀNH
-            </span>
-          </div>
+        {/* Logo thật của thương hiệu (đã có sẵn khẩu hiệu), không dựng lại bằng biểu tượng + chữ. */}
+        <Link href="/" aria-label="Tubu Tree — trang chủ" className="flex min-h-11 items-center">
+          <Image src={tubuLogo} alt="Tubu Tree" width={99} height={36} priority className="h-9 w-auto" />
         </Link>
 
         {/* Tìm kiếm: hàng riêng ở điện thoại để ô nhập đủ rộng, nằm giữa logo và giỏ hàng từ màn sm. */}

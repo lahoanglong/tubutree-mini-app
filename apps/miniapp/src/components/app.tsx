@@ -7,16 +7,17 @@ import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
+import { CouponClaimGate } from './coupon-claim-gate';
 import { MainLandmark } from './ui/main-landmark';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
-import { recordReferralTouch } from '../services/affiliate-api';
+import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { useSessionRecovery } from '../hooks/use-auth-phase';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
-import { trackEvent, flushEventQueueOnHide } from '../services/analytics';
+import { trackEvent, trackAppOpened, flushEventQueueOnHide } from '../services/analytics';
 import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
 import { applyFontScale } from '../utils/font-scale';
@@ -117,7 +118,8 @@ export default function MyApp() {
   // khi re-render). Cùng effect này gắn luôn global error handler (window.onerror +
   // unhandledrejection) — chỉ đăng ký 1 lần cho suốt vòng đời app, KHÔNG tạo effect thứ 2.
   useEffect(() => {
-    void trackEvent('app_opened', 'miniapp', { entrySource: 'organic' });
+    trackAppOpened();
+    reportLaunchLinkClick();
     // addEventListener('error', ...) chứ KHÔNG gán window.onerror = ... — gán trực tiếp GHI ĐÈ
     // bất kỳ handler nào khác đã/sẽ gán vào window.onerror (kể cả của thư viện bên thứ 3),
     // addEventListener cho phép nhiều listener cùng tồn tại (phát hiện ở review Task 19).
@@ -224,6 +226,7 @@ export default function MyApp() {
               <BottomNav />
               <BackButton />
               <OnboardingGate />
+              <CouponClaimGate />
             </ZMPRouter>
           </SnackbarProvider>
         </App>

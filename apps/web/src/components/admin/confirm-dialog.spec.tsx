@@ -44,6 +44,14 @@ const ask = async (container: HTMLElement) => {
 
 // C-122: admin web từng dùng window.confirm gốc của trình duyệt (không đồng bộ giao diện, không đổi được câu chữ/nút).
 describe('useConfirm / ConfirmDialog', () => {
+  it('lớp nền chừa inset trái/phải của tai thỏ, không nhỏ hơn lề 1rem sẵn có', async () => {
+    const { container } = mount(<Harness options="Chắc chưa?" />);
+    await ask(container);
+    const backdrop = document.querySelector<HTMLElement>('[data-confirm-backdrop]')!;
+    expect(backdrop.style.paddingLeft).toBe('max(1rem, env(safe-area-inset-left, 0px))');
+    expect(backdrop.style.paddingRight).toBe('max(1rem, env(safe-area-inset-right, 0px))');
+  });
+
   it('không bao giờ gọi window.confirm; chưa hỏi thì không có hộp thoại', async () => {
     const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<Harness options={{ title: 'Xác nhận', message: 'Chắc chưa?' }} />);

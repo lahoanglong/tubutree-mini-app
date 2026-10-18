@@ -53,3 +53,26 @@ export async function pendingPaymentDeadline(
     order.type === 'DEALER' ? await readDealerPendingPaymentTtlHours(systemConfig) : await readPendingPaymentTtlHours(systemConfig);
   return new Date(new Date(order.createdAt).getTime() + hours * 3_600_000).toISOString();
 }
+
+/**
+ * Hạn thanh toán cho cả một trang đơn (danh sách): đọc mỗi khoá TTL tối đa một lần dù có nhiều đơn chờ tiền, và không đọc
+ * gì nếu trang không có đơn nào cần hạn. Khoá theo `id` đơn.
+ */
+export async function pendingPaymentDeadlines(
+  orders: readonly (PaymentDeadlineFacts & { id: string })[],
+  systemConfig: Pick<SystemConfigService, 'get'>,
+): Promise<Map<string, string | null>> {
+  const reads = new Map<string, Promise<unknown>>();
+  const readOnce: Pick<SystemConfigService, 'get'> = {
+    get: <T>(key: string, fallback?: T) => {
+      let read = reads.get(key);
+      if (!read) {
+        read = systemConfig.get<T>(key, fallback);
+        reads.set(key, read);
+      }
+      return read as Promise<T>;
+    },
+  };
+  const entries = await Promise.all(orders.map(async (o) => [o.id, await pendingPaymentDeadline(o, readOnce)] as const));
+  return new Map(entries);
+}

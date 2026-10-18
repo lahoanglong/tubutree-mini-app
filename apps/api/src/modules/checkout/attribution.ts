@@ -6,33 +6,33 @@ import { resolvePublishedStorefront, type ResolvedStorefront } from '../storefro
  * Ghi công của một lần mua: người giới thiệu và gian hàng đang được ghi công (quyết định combo). Đặt đơn, báo giá, xem trước mã và
  * trang giỏ dùng chung để cùng một khách luôn ra cùng gian hàng, nên cùng combo và cùng số tiền.
  *
- * Mã giới thiệu: slug gian hàng CTV mở trong Zalo là referralCode viết THƯỜNG còn User.referralCode luôn lưu HOA, Postgres so khớp
- * phân biệt hoa/thường — chuẩn hoá HOA trước khi tra (mirror auth.service.ts:resolveReferrerId()).
+ * Mỗi bậc (mã giới thiệu → chủ gian hàng CTV → "chạm" còn hạn) chỉ ghi công người thuộc vai trò hưởng hoa hồng (CTV/đại lý,
+ * AffiliateService.findEligibleReferrer / isCommissionEligible); người không đủ vai trò bị bỏ qua để xét bậc kế tiếp.
  */
 export async function resolveAttribution(
   prisma: PrismaService,
-  affiliate: Pick<AffiliateService, 'getActiveTouch'>,
+  affiliate: Pick<AffiliateService, 'getActiveTouch' | 'findEligibleReferrer' | 'isCommissionEligible' | 'storefrontVisibility'>,
   userId: string,
   input: { referralCode?: string; storefrontSlug?: string | null },
 ): Promise<{ referrerUserId: string | null; storefront: ResolvedStorefront | null }> {
-  let referrerUserId: string | null = null;
-  if (input.referralCode) {
-    const ref = await prisma.user.findUnique({ where: { referralCode: input.referralCode.toUpperCase() } });
-    if (ref && ref.id !== userId) referrerUserId = ref.id;
-  }
-  let storefront = await resolvePublishedStorefront(prisma, input.storefrontSlug);
+  let referrerUserId = input.referralCode ? await affiliate.findEligibleReferrer(input.referralCode, userId) : null;
+  // Điều kiện hiển thị chỉ đọc khi thật sự có slug để tra: khách không đi qua gian hàng nào không tốn lượt đọc cấu hình.
+  const resolveVisible = async (slug: string | null | undefined) =>
+    slug?.trim() ? resolvePublishedStorefront(prisma, await affiliate.storefrontVisibility(), slug) : null;
+  let storefront = await resolveVisible(input.storefrontSlug);
   // Khách đang mua trong gian hàng CTV mà mã giới thiệu phiên không khớp ai (web suy mã từ subdomain, SELLER-4): chủ gian
   // hàng là người giới thiệu — trước khi rơi về "chạm" cũ có thể của CTV khác.
-  if (!referrerUserId && storefront?.type === 'CTV' && storefront.ownerUserId && storefront.ownerUserId !== userId) {
-    referrerUserId = storefront.ownerUserId;
+  const owner = storefront?.type === 'CTV' && storefront.ownerUserId !== userId ? storefront.ownerUserId : null;
+  if (!referrerUserId && owner && (await affiliate.isCommissionEligible(owner))) {
+    referrerUserId = owner;
   }
   // Phiên mất nhưng còn "chạm" giới thiệu trong hạn → fallback.
   if (!referrerUserId || !storefront) {
     const touch = await affiliate.getActiveTouch(userId);
     if (touch) {
-      if (!referrerUserId) referrerUserId = touch.referrerUserId;
+      if (!referrerUserId && (await affiliate.isCommissionEligible(touch.referrerUserId))) referrerUserId = touch.referrerUserId;
       // chỉ lấy slug từ touch kind=ctv (brand không gắn storefrontSlug — tránh ô nhiễm analytics)
-      if (!storefront && touch.kind === 'ctv') storefront = await resolvePublishedStorefront(prisma, touch.storefrontSlug);
+      if (!storefront && touch.kind === 'ctv') storefront = await resolveVisible(touch.storefrontSlug);
     }
   }
   return { referrerUserId, storefront };

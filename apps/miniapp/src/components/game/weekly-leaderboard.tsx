@@ -3,10 +3,11 @@ import type { LeaderRow } from '../../services/game-api';
 import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 
+// API xếp theo chuỗi điểm danh dài nhất mọi thời gian (không reset theo tuần), nên nhãn và số trên bục là chuỗi ngày.
 // Huy chương, 🌳 (cây đã trồng) và 🔥 (chuỗi ngày) là số liệu xếp hạng của game.
 export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined }) {
   return (
-    <GameCard title="Bảng xếp hạng tuần" icon={Trophy}>
+    <GameCard title="Chuỗi điểm danh dài nhất" icon={Trophy}>
       {board && board.length > 0 ? (
         <>
           {/* Podium top 3. Khoá theo vị trí ô: khoá theo hạng va với khoá ô trống (idx) khi chỉ có 2 người (hạng 2 đứng ở ô 0). */}
@@ -40,7 +41,7 @@ export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined })
                       fontWeight: 700,
                     }}
                   >
-                    🌳{r.treesPlanted}
+                    🔥{r.streak}
                   </div>
                 </div>
               );

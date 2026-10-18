@@ -1,7 +1,10 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { LoginResponse } from '@tubutree/shared-types';
-import { AuthController } from './auth.controller';
+import { AuthController, GuestLoginDto } from './auth.controller';
+import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
+import { ZaloOAuthDto } from './dto/zalo-oauth.dto';
+import { createValidationPipe } from '../../common/validation-pipe';
 import { REFRESH_COOKIE } from './refresh-cookie';
 
 const LOGIN: LoginResponse = {
@@ -134,6 +137,49 @@ describe('AuthController — giao refresh token theo client', () => {
       const out = await c.ensurePhone(jwtUser, { code: 'c', accessToken: 'at', phoneToken: 'pt' } as never, makeReq(), res);
       expect(auth.ensurePhoneForCurrentUser).toHaveBeenCalledWith('guest1', 'c', 'at', 'pt');
       expect(out.accessToken).toBe('at');
+    });
+  });
+
+  describe('nguồn chạm đầu (firstTouch) — chuyển nguyên cho service, service mới là nơi lọc giá trị bẩn', () => {
+    const firstTouch = { source: 'shopee', campaign: 'card-2610' };
+
+    it('đăng nhập Mini App', async () => {
+      auth.loginWithZaloMiniApp.mockResolvedValue(LOGIN);
+      const { res } = makeRes();
+      await c.loginZaloMiniApp({ code: 'c', accessToken: 'at', phoneToken: 'pt', referralCode: 'R', firstTouch } as never, makeReq(), res);
+      expect(auth.loginWithZaloMiniApp).toHaveBeenCalledWith('c', 'at', 'pt', 'R', firstTouch);
+    });
+
+    it('đăng nhập khách', async () => {
+      auth.loginAsGuest.mockResolvedValue(LOGIN);
+      const { res } = makeRes();
+      await c.loginGuest({ deviceId: 'd', referralCode: 'R', firstTouch } as never, makeReq(), res);
+      expect(auth.loginAsGuest).toHaveBeenCalledWith('d', 'R', firstTouch);
+    });
+
+    it('đăng nhập web OAuth', async () => {
+      auth.loginWithZaloOAuth.mockResolvedValue(LOGIN);
+      const { res } = makeRes();
+      await c.loginZaloOAuth({ code: 'c', codeVerifier: 'v', referralCode: 'R', firstTouch } as never, makeReq(), res);
+      expect(auth.loginWithZaloOAuth).toHaveBeenCalledWith('c', 'v', 'R', firstTouch);
+    });
+
+    // ValidationPipe toàn cục có forbidNonWhitelisted: thiếu decorator thì trường mới bị 400 và đăng nhập hỏng.
+    describe('qua ValidationPipe toàn cục', () => {
+      const pipe = createValidationPipe();
+      const run = (metatype: new () => object, value: unknown) =>
+        pipe.transform(value, { type: 'body', metatype });
+
+      it.each([
+        ['Mini App', ZaloMiniAppLoginDto, { code: 'c', accessToken: 'a' }],
+        ['web OAuth', ZaloOAuthDto, { code: 'c' }],
+        ['khách', GuestLoginDto, { deviceId: 'd_12345678' }],
+      ])('%s: nhận firstTouch, kể cả giá trị bẩn (không 400)', async (_label, dto, base) => {
+        await expect(run(dto, { ...base, firstTouch })).resolves.toMatchObject({ firstTouch });
+        await expect(run(dto, { ...base, firstTouch: 'bẩn <script>' })).resolves.toBeDefined();
+        await expect(run(dto, { ...base, firstTouch: { source: 123, x: [] } })).resolves.toBeDefined();
+        await expect(run(dto, base)).resolves.toBeDefined();
+      });
     });
   });
 

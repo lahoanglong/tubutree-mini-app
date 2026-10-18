@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { CustomerRefundsService } from './customer-refunds.service';
@@ -49,6 +50,7 @@ export class DismissOverpaymentDto {
 }
 
 @Roles('ADMIN')
+@AllowStaff('KE_TOAN')
 @Controller('admin/customer-refunds')
 export class CustomerRefundsAdminController {
   constructor(private readonly refunds: CustomerRefundsService) {}
@@ -60,8 +62,13 @@ export class CustomerRefundsAdminController {
 
   /** "Bắt đầu chuyển khoản" (khoản sang Đang chuyển khoản): khoá nơi nhận trước khi admin chuyển tiền (khách không đổi sang Ví được nữa). */
   @Post(':id/claim')
-  claim(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ClaimCustomerRefundDto) {
-    return this.refunds.claim(adminId, id, dto);
+  claim(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: ClaimCustomerRefundDto,
+  ) {
+    return this.refunds.claim(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 
   /** Trả khoản về hàng chờ khi chưa chuyển được (khách lại đổi được nơi nhận). */
@@ -72,18 +79,33 @@ export class CustomerRefundsAdminController {
 
   /** Khoản dư Pancake báo đã đối chiếu sao kê: thành khoản chờ chuyển khoản, khách được báo để chọn nơi nhận. */
   @Post(':id/verify')
-  verify(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: VerifyOverpaymentDto) {
-    return this.refunds.verifyOverpayment(adminId, id, dto);
+  verify(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: VerifyOverpaymentDto,
+  ) {
+    return this.refunds.verifyOverpayment(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 
   /** Khoản dư Pancake báo nhưng sao kê không có: đóng khoản, không báo khách. */
   @Post(':id/dismiss')
-  dismiss(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: DismissOverpaymentDto) {
-    return this.refunds.dismissOverpayment(adminId, id, dto);
+  dismiss(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: DismissOverpaymentDto,
+  ) {
+    return this.refunds.dismissOverpayment(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 
   @Post(':id/mark-paid')
-  markPaid(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: MarkCustomerRefundPaidDto) {
-    return this.refunds.markPaid(adminId, id, dto);
+  markPaid(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: MarkCustomerRefundPaidDto,
+  ) {
+    return this.refunds.markPaid(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 }

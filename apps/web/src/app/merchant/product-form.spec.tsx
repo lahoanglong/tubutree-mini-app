@@ -166,6 +166,13 @@ describe('WEB-12: hộp thoại form đối tác', () => {
     expect(document.body.style.overflow).toBe('');
   });
 
+  it('lớp nền chừa inset trái/phải của tai thỏ, không nhỏ hơn lề 1rem sẵn có', () => {
+    mount(<CreateProductModal onClose={() => undefined} onSuccess={() => undefined} />);
+    const backdrop = document.querySelector<HTMLElement>('[role="dialog"]')!.parentElement!;
+    expect(backdrop.style.paddingLeft).toBe('max(1rem, env(safe-area-inset-left, 0px))');
+    expect(backdrop.style.paddingRight).toBe('max(1rem, env(safe-area-inset-right, 0px))');
+  });
+
   it('Esc giống nút Hủy/Đóng: đóng hộp mà không gửi gì (form không có cơ chế giữ bản nháp)', async () => {
     const onClose = vi.fn();
     mount(<CreateProductModal onClose={onClose} onSuccess={() => undefined} />);

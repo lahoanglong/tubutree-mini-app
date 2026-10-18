@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Ticket, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import {
   getCart,
   getCartSelection,
@@ -19,7 +19,9 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { formatVnd } from '../utils/format';
+import { clampPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../utils/use-debounced';
@@ -34,6 +36,7 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { IconButton } from '../components/ui/icon-button';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { PriceTag } from '../components/ui/price-tag';
 import { Heading } from '../components/ui/text';
@@ -213,13 +216,16 @@ export default function CartPage() {
         }
       />
       {empty ? (
-        <EmptyState
-          art="basket"
-          heading={vi.cart.emptyHeading}
-          body={vi.cart.emptyBody}
-          ctaLabel={vi.cart.emptyCta}
-          onCta={() => navigate('/browse')}
-        />
+        <>
+          <EmptyState
+            art="basket"
+            heading={vi.cart.emptyHeading}
+            body={vi.cart.emptyBody}
+            ctaLabel={vi.cart.emptyCta}
+            onCta={() => navigate('/browse')}
+          />
+          <SuggestedRail listSource="cart_empty" />
+        </>
       ) : (
         <>
           {/* Chọn tất cả */}
@@ -470,22 +476,12 @@ function CartLineRow({
         </Box>
         {line.isFlash && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 4 }}>
-            <span
-              style={{
-                display: 'inline-block',
-                background: 'var(--clay-50)',
-                color: 'var(--clay-700)',
-                borderRadius: 'var(--radius-pill)',
-                padding: '2px 8px',
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
+            <Badge tone="promo" size="sm" icon={Zap}>
               {vi.flashSale.badge}
-            </span>
+            </Badge>
             {line.soldPct != null && Number.isFinite(line.soldPct) && (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                {vi.flashSale.soldPct(line.soldPct)}
+                {vi.flashSale.soldPct(clampPercent(line.soldPct))}
               </Text>
             )}
           </Box>

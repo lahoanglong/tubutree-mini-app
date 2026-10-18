@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { UserDetailDrawer } from './user-detail-drawer';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { AdminUserDetail } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -127,5 +127,30 @@ describe('UserDetailDrawer — lịch sử gian hàng đối tác', () => {
   it('không có dòng nào thì không hiện mục', async () => {
     const body = await open();
     expect(body.querySelector('section[aria-label^="Gian hàng đối tác"]')).toBeNull();
+  });
+});
+
+describe('UserDetailDrawer — nhóm việc nhân viên (D1-05)', () => {
+  it('ADMIN chọn được cả 4 nhóm (CSKH, Kho, Marketing, Kế toán); lưu gửi đúng tập nhóm đã tick', async () => {
+    const staff: AdminUserDetail = { ...DETAIL, user: { ...DETAIL.user, role: 'STAFF', staffPermissions: ['KE_TOAN'] } };
+    const api = mockFetch({
+      '/staff-permissions': { body: { id: 'u1', staffPermissions: ['MARKETING', 'KE_TOAN'], changed: true } },
+      '/admin/users/u1/detail': { body: staff },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mounted.push(render(<UserDetailDrawer userId="u1" isAdmin onClose={() => undefined} />));
+    await flush();
+    const form = section(document.body, 'Nhóm việc nhân viên');
+    const boxes = Array.from(form.querySelectorAll<HTMLLabelElement>('label')).filter((l) => l.querySelector('input[type="checkbox"]'));
+    expect(boxes.map((l) => l.textContent?.split(' — ')[0])).toEqual(['CSKH', 'Kho', 'Marketing', 'Kế toán']);
+    const box = (name: string) => boxes.find((l) => l.textContent?.startsWith(name))!.querySelector('input')!;
+    expect(box('Kế toán').checked).toBe(true);
+    expect(box('Marketing').checked).toBe(false);
+    click(box('Marketing'));
+    click(byText(form, 'button', 'Lưu nhóm việc'));
+    await flush();
+    const put = api.calls.find((c) => c.url.includes('/staff-permissions'))!;
+    expect(put.init!.method).toBe('PUT');
+    expect(JSON.parse(String(put.init!.body)).permissions.sort()).toEqual(['KE_TOAN', 'MARKETING']);
   });
 });

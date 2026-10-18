@@ -27,10 +27,13 @@ const MIGRATED = [
   'app/thanh-toan/page.tsx',
   'app/thanh-toan/bank-transfer-panel.tsx',
   'app/tai-khoan/page.tsx',
+  'app/tai-khoan/profile-section.tsx',
   'app/tai-khoan/don-hang/[code]/page.tsx',
   'app/s/[slug]/page.tsx',
   'app/dang-nhap/page.tsx',
   'app/dang-nhap/callback/page.tsx',
+  'app/chinh-sach/[loai]/page.tsx',
+  'components/legal-markdown.tsx',
   'app/error.tsx',
   'app/global-error.tsx',
   'app/not-found.tsx',
@@ -77,10 +80,10 @@ describe('web khách DS v2 — nền tảng', () => {
   });
 
   // Khối legacy ghi đè clay-50/500/700 của preset bằng hex v1, nên `clay-*` trên web không phải màu DS v2.
-  // Giá khuyến mãi phải đi qua tên ngữ nghĩa `promo-*` để luôn ra clay v2 (token --color-promo-*).
-  it('tailwind.config.ts có màu ngữ nghĩa promo-* lấy từ clay DS v2, không bị khối legacy ghi đè', () => {
+  // Giá khuyến mãi phải đi qua tên ngữ nghĩa `promo-*` để luôn ra cam logo (token --color-promo-*).
+  it('tailwind.config.ts có màu ngữ nghĩa promo-* lấy từ cam logo DS v2, không bị khối legacy ghi đè', () => {
     const colors = (config.theme?.extend as { colors: Record<string, Record<string, string>> }).colors;
-    expect(colors.promo).toEqual({ fg: '#7E4222', bg: '#FAF1EA', solid: '#9C532C' });
+    expect(colors.promo).toEqual({ fg: '#7A4300', bg: '#FDF1DE', solid: '#E38E1E' });
   });
 
   it('tailwind.config.ts có bóng đổ theo token elevation của DS v2', () => {

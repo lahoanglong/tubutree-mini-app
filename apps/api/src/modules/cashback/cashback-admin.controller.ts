@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
 import { CashbackAdminListQuery } from './dto/cashback-admin-list-query.dto';
@@ -23,17 +24,20 @@ class ReviewCashbackDto {
 export class CashbackAdminController {
   constructor(private readonly cashback: CashbackService) {}
 
+  @AllowStaff('KE_TOAN')
   @Get('cashback/transactions')
-  list(@Query() query: CashbackAdminListQuery) {
-    return this.cashback.adminListTransactions(query.status, query.take ? Number(query.take) : undefined);
+  list(@Query() query: CashbackAdminListQuery, @CurrentUser('role') role: string) {
+    return this.cashback.adminListTransactions(query.status, query.take ? Number(query.take) : undefined, { maskPhones: role !== 'ADMIN' });
   }
 
+  @AllowStaff('KE_TOAN')
   @Post('cashback/transactions/:id/review')
   review(
     @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
     @Param('id') id: string,
     @Body() dto: ReviewCashbackDto,
   ) {
-    return this.cashback.adminReview(adminId, id, dto.status, dto.note);
+    return this.cashback.adminReview(adminId, id, dto.status, dto.note, { byStaff: role !== 'ADMIN' });
   }
 }

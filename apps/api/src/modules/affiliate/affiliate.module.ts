@@ -5,14 +5,16 @@ import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { AffiliateService } from './affiliate.service';
 import { AffiliateController } from './affiliate.controller';
 import { PayoutAdminController } from './payout-admin.controller';
+import { CommissionAdminController } from './commission-admin.controller';
+import { CommissionAdminService } from './commission-admin.service';
 
 @Global()
 @Module({
   // WalletModule → RewardPointsService: thưởng mốc doanh số CTV và giới thiệu cộng Điểm Xanh.
   // FlashSaleModule → FlashSaleService: đơn CTV lên hộ tính giờ vàng như khách tự đặt.
   imports: [PancakeModule, WalletModule, FlashSaleModule],
-  controllers: [AffiliateController, PayoutAdminController],
-  providers: [AffiliateService],
+  controllers: [AffiliateController, PayoutAdminController, CommissionAdminController],
+  providers: [AffiliateService, CommissionAdminService],
   exports: [AffiliateService],
 })
 export class AffiliateModule {}

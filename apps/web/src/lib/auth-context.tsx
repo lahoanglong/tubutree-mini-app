@@ -11,6 +11,7 @@ import {
   restoreSession,
 } from './client-api';
 import { clearSavedInvoices } from './saved-invoice';
+import { readFirstTouchCookie } from './entry-source';
 
 export interface WebUser {
   id: string;
@@ -58,6 +59,8 @@ interface AuthState {
   startZaloLogin: () => Promise<void>;
   handleCallback: (code: string, state: string | null) => Promise<void>;
   logout: () => Promise<void>;
+  /** Cập nhật phần hồ sơ đã lưu thành công (vd đổi tên) để thanh đầu trang đổi theo ngay, không chờ đăng nhập lại. */
+  updateProfile: (patch: Partial<Pick<WebUser, 'fullName'>>) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -170,7 +173,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const codeVerifier = sessionStorage.getItem(PKCE_KEY) ?? undefined;
       const res = await apiFetch<LoginResponse>('/auth/zalo-oauth', {
         method: 'POST',
-        body: { code, codeVerifier },
+        // Nguồn chạm đầu (cookie 30 ngày): API chỉ ghi khi đây là lần tạo tài khoản, không bao giờ ghi đè.
+        body: { code, codeVerifier, firstTouch: readFirstTouchCookie() },
         auth: false,
       });
       setAccessToken(res.accessToken);
@@ -202,6 +206,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearSavedInvoices();
   }, [qc]);
 
+  const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName'>>) => {
+    setUser((u) => (u ? { ...u, ...patch } : u));
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -214,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         startZaloLogin,
         handleCallback,
         logout,
+        updateProfile,
       }}
     >
       {children}

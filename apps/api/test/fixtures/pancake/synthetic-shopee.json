@@ -1,0 +1,27 @@
+{
+  "_synthetic": "Dữ liệu tự dựng theo tên field của Pancake POS OpenAPI, KHÔNG phải payload thật. Thay bằng payload thật đã xoá PII khi có.",
+  "id": 910001,
+  "status": 3,
+  "marketplace_id": -3,
+  "is_from_ecommerce": true,
+  "order_sources": -3,
+  "account": "shopee_gian_hang",
+  "bill_phone_number": "0912345678",
+  "shipping_address": { "phone_number": "0912345678", "full_name": "Khach Mau" },
+  "items": [
+    { "quantity": 2, "discount_each_product": 10000, "variation_info": { "retail_price": 150000 } },
+    { "quantity": 1, "discount_each_product": 0, "variation_info": { "retail_price": 60000 } }
+  ],
+  "total_price": 340000,
+  "total_discount": 20000,
+  "shipping_fee": 15000,
+  "partner": { "extend_code": "SPXVN0123456789", "extend_update": [{ "tracking_id": "SPXVN0123456789" }] },
+  "invoice_info_list": [{ "order_sn": "2410101ABCDEF" }],
+  "status_history": [
+    { "status": 1, "updated_at": "2026-10-10T09:00:00" },
+    { "status": 2, "updated_at": "2026-10-11T09:00:00" },
+    { "status": 3, "updated_at": "2026-10-13T15:30:00" }
+  ],
+  "inserted_at": "2026-10-10T08:55:00",
+  "updated_at": "2026-10-13T15:30:00"
+}

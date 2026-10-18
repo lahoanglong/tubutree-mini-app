@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { post: vi.fn().mockResolvedValue({ data: { accepted: 1 } }) } }));
 
-import { trackEvent, flushEventQueue, flushEventQueueOnHide, __resetQueueForTest } from './analytics';
+import { trackEvent, trackAppOpened, flushEventQueue, flushEventQueueOnHide, __resetQueueForTest } from './analytics';
+import { __resetEntrySourceForTest } from '../utils/entry-source';
 import { api } from './api';
 
 describe('trackEvent / flushEventQueue', () => {
@@ -38,6 +39,70 @@ describe('trackEvent / flushEventQueue', () => {
     (api.post as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network'));
     trackEvent('client_error', 'miniapp', {});
     await expect(flushEventQueue()).resolves.toBeUndefined();
+  });
+});
+
+describe('nguồn khách của phiên trên phong bì sự kiện', () => {
+  const sent = async () => {
+    await flushEventQueue();
+    return (api.post as ReturnType<typeof vi.fn>).mock.calls[0]?.[1].events as Array<Record<string, unknown>>;
+  };
+  const launchWith = (search: string) => vi.stubGlobal('window', { location: { search, hash: '' } });
+
+  beforeEach(() => {
+    __resetQueueForTest();
+    __resetEntrySourceForTest();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    __resetEntrySourceForTest();
+  });
+
+  it('mọi sự kiện trong phiên mang entrySource và campaign của link mở app', async () => {
+    launchWith('?src=shopee&utm_campaign=card-2610');
+    trackEvent('screen_viewed', 'miniapp', { route: '/' });
+    trackEvent('product_viewed', 'miniapp', { slug: 'x' });
+    const events = await sent();
+    expect(events.map((e) => [e.entrySource, e.campaign])).toEqual([
+      ['shopee', 'card-2610'],
+      ['shopee', 'card-2610'],
+    ]);
+  });
+
+  it('mở app không có nguồn → organic, không có campaign', async () => {
+    launchWith('');
+    trackEvent('screen_viewed', 'miniapp', {});
+    const [e] = await sent();
+    expect(e).toMatchObject({ entrySource: 'organic' });
+    expect(e).not.toHaveProperty('campaign', expect.anything());
+  });
+
+  it('nơi gọi tự truyền entrySource (extra) thì giữ giá trị đó', async () => {
+    launchWith('?src=shopee');
+    trackEvent('notification_opened', 'miniapp', {}, { entrySource: 'push' });
+    const [e] = await sent();
+    expect(e!.entrySource).toBe('push');
+  });
+
+  it('app_opened mang mã giới thiệu và medium của link', async () => {
+    launchWith('?src=fb&utm_medium=social&ref=ABCD1234');
+    trackAppOpened();
+    const [e] = await sent();
+    expect(e).toMatchObject({
+      eventName: 'app_opened',
+      entrySource: 'fb',
+      refCode: 'ABCD1234',
+      props: { medium: 'social' },
+    });
+  });
+
+  it('app_opened không nguồn → props rỗng, không refCode', async () => {
+    launchWith('');
+    trackAppOpened();
+    const [e] = await sent();
+    expect(e).toMatchObject({ eventName: 'app_opened', entrySource: 'organic', props: {} });
+    expect(e).not.toHaveProperty('refCode', expect.anything());
   });
 });
 

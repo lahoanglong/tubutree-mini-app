@@ -11,6 +11,10 @@ describe('Icon', () => {
     expect(svg.getAttribute('width')).toBe('20');
     expect(svg.getAttribute('height')).toBe('20');
   });
+  it('tone="current" ăn màu chữ của phần tử cha (icon trong huy hiệu/tiêu đề có màu riêng)', () => {
+    render(<Icon icon={Heart} tone="current" data-testid="c" />);
+    expect(screen.getByTestId('c').getAttribute('stroke')).toBe('currentColor');
+  });
   it('sm=16, lg=24', () => {
     render(<Icon icon={Heart} size="sm" data-testid="sm" />);
     expect(screen.getByTestId('sm').getAttribute('width')).toBe('16');

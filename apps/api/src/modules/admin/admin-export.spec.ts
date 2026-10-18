@@ -72,6 +72,44 @@ describe('orderCsvChunks', () => {
   });
 });
 
+describe('orderCsvChunks — người xuất không phải quản trị viên (D1-05)', () => {
+  function withReferrer() {
+    const [o] = fakeOrders(1);
+    const { prisma } = cursorPrisma([{ ...o!, referrerUserId: 'ctv1' }], 'order');
+    (prisma as unknown as Record<string, unknown>).user = {
+      findMany: jest.fn().mockResolvedValue([{ id: 'ctv1', fullName: 'CTV Hoa', phone: '0922222333' }]),
+    };
+    return prisma;
+  }
+
+  it('che SĐT khách, người nhận và CTV, chỉ giữ 3 số cuối; họ tên giữ nguyên', async () => {
+    const csv = await collect(orderCsvChunks(withReferrer(), {}, { maskPhones: true }));
+    expect(csv).toContain('*******111');
+    expect(csv).toContain('*******000');
+    expect(csv).toContain('*******333');
+    for (const full of ['0911111111', '0900000000', '0922222333']) expect(csv).not.toContain(full);
+    expect(csv).toContain('"Khách ""Một"""');
+    expect(csv).toContain('"A, B"');
+    expect(csv).toContain('CTV Hoa');
+  });
+
+  it('ghi chú đơn: che dãy giống SĐT / số tài khoản (giữ 3 số cuối), chữ và số ngắn giữ nguyên; quản trị viên thấy nguyên văn', async () => {
+    const note = 'Gọi 0912-345-678 hoặc ０９８７６５４３２１ trước, STK 1903 1234 5678, giao giờ hành chính, mã 12345';
+    const [o] = fakeOrders(1);
+    const staffCsv = await collect(orderCsvChunks(cursorPrisma([{ ...o!, note }], 'order').prisma, {}, { maskPhones: true }));
+    expect(staffCsv).toContain('Gọi ****-***-678 hoặc *******321 trước, STK **** **** *678, giao giờ hành chính, mã 12345');
+    for (const full of ['0912-345-678', '0987654321', '０９８７６５４３２１', '1903 1234 5678']) expect(staffCsv).not.toContain(full);
+    const adminCsv = await collect(orderCsvChunks(cursorPrisma([{ ...o!, note }], 'order').prisma, {}));
+    expect(adminCsv).toContain(note);
+  });
+
+  it('quản trị viên (mặc định) vẫn thấy đủ SĐT', async () => {
+    const csv = await collect(orderCsvChunks(withReferrer(), {}));
+    expect(csv).toContain('0911111111');
+    expect(csv).toContain('0922222333');
+  });
+});
+
 // R3-UI-3: đơn COD đã giao giữ paymentStatus UNPAID (chốt hoàn tiền một lần) nhưng bưu tá đã thu tiền: CSV phải ghi như giao diện
 // ("Đã thu COD"), không ghi "Chưa thanh toán" làm kế toán đòi lại tiền đã thu.
 describe('cột Trạng thái TT trong CSV đơn hàng (R3-UI-3)', () => {
@@ -219,5 +257,89 @@ describe('streamCsv', () => {
     expect(headers['Content-Type']).toBe('text/csv; charset=utf-8');
     expect(headers['Content-Disposition']).toBe('attachment; filename="don-hang.csv"');
     expect(body).toBe('\uFEFFa,b\r\n1,2\r\n3,4\r\n');
+  });
+});
+
+// D1-04a: kế toán/marketing phải thấy đơn đến từ nền tảng nào, kênh nào, CTV nào, gian hàng nào ngay trong file CSV.
+describe('cột nguồn đơn trong CSV đơn hàng (D1-04a)', () => {
+  const cell = (name: string) => ORDER_CSV_HEADERS.indexOf(name);
+
+  /** Tách một dòng CSV (ô trong nháy kép có thể chứa dấu phẩy và nháy lồng `""`). */
+  function parseLine(line: string): string[] {
+    const out: string[] = [];
+    let cur = '';
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]!;
+      if (quoted) {
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else if (ch === '"') quoted = false;
+        else cur += ch;
+      } else if (ch === '"') quoted = true;
+      else if (ch === ',') {
+        out.push(cur);
+        cur = '';
+      } else cur += ch;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  function twoModelPrisma(orders: Record<string, unknown>[], users: Record<string, unknown>[]) {
+    const orderFind = jest.fn(async (args: { take: number; cursor?: { id: string }; skip?: number }) => {
+      const start = args.cursor ? orders.findIndex((r) => r.id === args.cursor!.id) + (args.skip ?? 0) : 0;
+      return orders.slice(start, start + args.take);
+    });
+    const userFind = jest.fn(async (args: { where: { id: { in: string[] } } }) => users.filter((u) => args.where.id.in.includes(u.id as string)));
+    return { prisma: { order: { findMany: orderFind }, user: { findMany: userFind } } as unknown as PrismaService, userFind };
+  }
+
+  it('thêm cột Nền tảng, Nguồn đơn, CTV giới thiệu, SĐT CTV, Gian hàng vào CUỐI file (không dịch cột cũ)', () => {
+    expect(ORDER_CSV_HEADERS.slice(-5)).toEqual(['Nền tảng', 'Nguồn đơn', 'CTV giới thiệu', 'SĐT CTV', 'Gian hàng']);
+    expect(ORDER_CSV_HEADERS.indexOf('Ghi chú')).toBe(ORDER_CSV_HEADERS.length - 6);
+  });
+
+  it('đơn gian hàng do khách tự mua qua link CTV: nền tảng, nguồn, CTV, gian hàng, mỗi lô chỉ tra CTV một lần', async () => {
+    const base = fakeOrders(3).map((o) => ({ ...o, note: null }));
+    const orders = [
+      { ...base[0]!, platform: 'miniapp', source: 'storefront', referrerUserId: 'ctv1', storefront: { title: 'Shop Lan' } },
+      { ...base[1]!, platform: 'web', source: 'ctv_assisted', referrerUserId: 'ctv1', storefront: { title: 'Shop Lan' } },
+      { ...base[2]!, platform: null, source: null, referrerUserId: null, storefront: null },
+    ];
+    const { prisma, userFind } = twoModelPrisma(orders, [{ id: 'ctv1', fullName: 'Lan CTV', phone: '0987654321' }]);
+    const lines = (await collect(orderCsvChunks(prisma, {}))).trimEnd().split('\r\n');
+    const r0 = parseLine(lines[1]!);
+    const r1 = parseLine(lines[2]!);
+    const r2 = parseLine(lines[3]!);
+    expect(r0[cell('Nền tảng')]).toBe('Mini App');
+    expect(r0[cell('Nguồn đơn')]).toBe('Gian hàng (khách tự mua)');
+    expect(r0[cell('CTV giới thiệu')]).toBe('Lan CTV');
+    expect(r0[cell('SĐT CTV')]).toBe('="0987654321"');
+    expect(r0[cell('Gian hàng')]).toBe('Shop Lan');
+    expect(r1[cell('Nền tảng')]).toBe('Web');
+    expect(r1[cell('Nguồn đơn')]).toBe('CTV lên đơn hộ');
+    expect(r2[cell('Nền tảng')]).toBe('Không rõ');
+    expect(r2[cell('Nguồn đơn')]).toBe('Không rõ');
+    expect(r2[cell('CTV giới thiệu')]).toBe('');
+    expect(r2[cell('Gian hàng')]).toBe('');
+    expect(userFind).toHaveBeenCalledTimes(1);
+    expect(userFind.mock.calls[0]![0]).toMatchObject({ where: { id: { in: ['ctv1'] } } });
+  });
+
+  it('không có đơn nào có CTV thì không tra bảng người dùng', async () => {
+    const orders = fakeOrders(2).map((o) => ({ ...o, platform: 'miniapp', source: 'checkout', referrerUserId: null, storefront: null }));
+    const { prisma, userFind } = twoModelPrisma(orders, []);
+    await collect(orderCsvChunks(prisma, {}));
+    expect(userFind).not.toHaveBeenCalled();
+  });
+
+  it('tên CTV bắt đầu bằng = bị vô hiệu hoá công thức; mã nguồn lạ in nguyên văn', async () => {
+    const [o] = fakeOrders(1);
+    const orders = [{ ...o!, platform: 'miniapp', source: 'abc', referrerUserId: 'c', storefront: { title: '=SUM(1)' } }];
+    const { prisma } = twoModelPrisma(orders, [{ id: 'c', fullName: '@evil', phone: null }]);
+    const csv = await collect(orderCsvChunks(prisma, {}));
+    expect(csv).toContain(",abc,'@evil,,'=SUM(1)");
   });
 });

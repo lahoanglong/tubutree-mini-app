@@ -222,9 +222,29 @@ export interface PublicConfig {
   returnWindowDays?: number;
   /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
   support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
+  /** Số cho khách mới (D2-07): voucher chào mừng và freeship đơn đầu (mặc định bật từ 199.000đ). Thiếu khi API cũ → không hứa con số. */
+  newCustomer?: {
+    welcomeVoucher: { amount: number; minOrder: number };
+    firstOrderFreeShip: { enabled: boolean; minSubtotal: number };
+  };
+  /**
+   * Chi tiêu cho 1 Điểm Xanh được tích, số đồng được giảm khi dùng 1 điểm, trần % giá trị đơn trả được bằng điểm thường (0 = tắt)
+   * và số tháng điểm thường có hạn. Thiếu khi API cũ; hai trường sau thiếu khi API chưa phát hành bản có chúng.
+   */
+  loyalty?: { vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct?: number; pointExpireMonths?: number };
+  /** Cờ bố cục Trang chủ cho khách mới (home.new_customer_layout). Thiếu khi API cũ → bố cục cũ. */
+  homeNewCustomerLayout?: boolean;
+  /** AI tư vấn đang bật VÀ có provider dùng được (công tắc tắt khẩn cấp ở API). Thiếu khi API cũ → coi như tắt, ẩn lối vào. */
+  aiAdvisorEnabled?: boolean;
+  /** Cờ xem trước công khai bảng tin cộng đồng (community.public_preview). Thiếu khi API cũ → phải đăng nhập mới thấy. */
+  communityPublicPreview?: boolean;
+  /** Chiết khấu đại lý tối đa (phân số) và số giờ hẹn duyệt hồ sơ; null khi cấu hình hỏng, thiếu khi API cũ → UI bỏ con số. */
+  dealer?: { maxDiscountPct: number | null; reviewHours: number | null };
+  /** Trần Điểm Xanh thưởng một sự kiện cộng đồng (giới hạn của API). Thiếu khi API cũ. */
+  community?: { eventRewardMaxPoints: number; zaloGroupUrl?: string | null; facebookUrl?: string | null; tiktokUrl?: string | null };
 }
-export const getPublicConfig = () =>
-  api.get<PublicConfig>('/config/public').then((r) => r.data);
+export const getPublicConfig = async () =>
+  (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);
 /**
  * Giá và trạng thái HIỆN HÀNH theo slug (dải "Đã xem gần đây" không lưu giá). Sản phẩm đã ẩn hoặc chưa duyệt không có trong kết
  * quả; tối đa 20 slug một lần.

@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
+import { isPublicProduct, PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 
 /** Số nhóm hết hạn xử lý mỗi lần quét (15 phút/lần): chặn một đợt tồn đọng làm cron chạy quá lâu; phần dư để lần quét sau. */
 const EXPIRE_BATCH = 200;
@@ -22,6 +24,12 @@ interface GroupRow {
 
 /** Số ngày mã giảm của nhóm đủ người còn dùng được. */
 const COUPON_VALID_DAYS = 30;
+
+/**
+ * Nhóm khách còn thấy và tham gia được: sản phẩm đang bán, không phải hàng gian hàng đối tác. Trần số nhóm mở của mỗi khách
+ * đếm theo cùng điều kiện, để nhóm trên hàng đã ngừng bán (ẩn, không tham gia được) không giữ chỗ tới khi hết hạn.
+ */
+const LISTED_GROUP_PRODUCT = { storefrontId: null, ...PUBLIC_PRODUCT_WHERE } satisfies Prisma.ProductWhereInput;
 
 /** Mã giảm TẤT ĐỊNH theo (nhóm, thành viên): cấp lại an toàn và hiện lại được cho đúng người mà không cần tra bảng mã. */
 export function groupBuyCouponCode(groupBuyId: string, userId: string): string {
@@ -67,7 +75,7 @@ export class GroupBuyService {
     // Chống spam mở nhóm hàng loạt: rác hoá danh sách mua chung / tốn tài nguyên tạo nhóm vô tội vạ
     // (tài khoản phụ đã bị chặn ở assertRealUser, mã chỉ áp cho đúng sản phẩm — xem grantCoupon()).
     const maxOpenPerUser = await this.config.get<number>('groupbuy.max_open_per_user', 3);
-    const openCount = await this.prisma.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN' } });
+    const openCount = await this.prisma.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN', product: LISTED_GROUP_PRODUCT } });
     if (openCount >= maxOpenPerUser) {
       throw new BadRequestException(`Bạn đang có ${openCount} nhóm mua chung chưa đóng, hãy chờ nhóm cũ hoàn tất.`);
     }
@@ -119,6 +127,9 @@ export class GroupBuyService {
     if (new Date(group.expiresAt).getTime() <= Date.now()) throw new BadRequestException('Nhóm đã hết hạn.');
     const partner = await this.closeIfPartnerGoods(group, 'OPEN');
     if (partner) throw partnerGoodsError('GROUP_BUY', partner.name);
+    // Sản phẩm đã ngừng bán (tắt, hoặc chưa/không được duyệt): nhóm đủ người sẽ cấp mã cho hàng không mua được.
+    const product = await this.prisma.product.findUnique({ where: { id: group.productId }, select: { isActive: true, approvalStatus: true } });
+    if (!product || !isPublicProduct(product)) throw new BadRequestException('Sản phẩm của nhóm đã ngừng bán, không tham gia được nữa.');
 
     const existing = await this.prisma.groupBuyMember.findUnique({
       where: { groupBuyId_userId: { groupBuyId, userId } },
@@ -271,7 +282,7 @@ export class GroupBuyService {
   async listOpen(userId?: string) {
     const groups = await this.prisma.groupBuy.findMany({
       // Nhóm trên hàng của gian hàng đối tác không tham gia được nữa (join đóng nhóm) nên không mời khách vào.
-      where: { status: 'OPEN', expiresAt: { gt: new Date() }, product: { storefrontId: null } },
+      where: { status: 'OPEN', expiresAt: { gt: new Date() }, product: LISTED_GROUP_PRODUCT },
       orderBy: { createdAt: 'desc' },
       take: 30,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },
@@ -289,7 +300,8 @@ export class GroupBuyService {
     // Nhóm của mình đã đủ người, mã giảm còn hạn: khách phải tìm lại được mã và mua tiếp ngay từ đây.
     const since = new Date(Date.now() - COUPON_VALID_DAYS * 864e5);
     const done = await this.prisma.groupBuy.findMany({
-      where: { status: 'SUCCESS', members: { some: { userId } }, expiresAt: { gte: since } },
+      // Mã chỉ dùng được cho đúng sản phẩm: sản phẩm ngừng bán thì không mời "mua tiếp" vào trang 404.
+      where: { status: 'SUCCESS', members: { some: { userId } }, expiresAt: { gte: since }, product: PUBLIC_PRODUCT_WHERE },
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },

@@ -1,5 +1,7 @@
+import { Flame } from 'lucide-react';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
+import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 
 // Hồi sinh chuỗi vừa mất (§streak-repair) — trang chỉ dựng khối này trong cửa sổ hồi sinh
@@ -23,7 +25,12 @@ export function StreakRepair({
         padding: 12,
       }}
     >
-      <Text variant="body-sm" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 600 }}>
+      <Text
+        variant="body-sm"
+        as="div"
+        style={{ color: 'var(--color-promo-fg)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
+      >
+        <Icon icon={Flame} size="sm" tone="current" />
         {vi.game.streakRepair.title(brokenStreakDays ?? 0)}
       </Text>
       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>

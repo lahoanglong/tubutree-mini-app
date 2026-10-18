@@ -6,7 +6,7 @@ import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
-import { readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
+import { isCloudinaryConfigured, readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
 import { AvatarCropModal } from '../components/avatar-crop-modal';
 import { Button } from '../components/ui/button';
 import { ErrorState } from '../components/ui/empty-state';
@@ -18,6 +18,10 @@ import { Text } from '../components/ui/text';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const AVATAR_NO_STORAGE = 'Chưa đổi được ảnh đại diện lúc này vì dịch vụ lưu ảnh chưa được bật. Bạn vẫn sửa được tên, email và ngày sinh.';
+const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
+const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
+
 export default function EditProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
@@ -26,7 +30,12 @@ export default function EditProfilePage() {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  // Chỉ nhận URL đã lưu (từ hồ sơ hoặc vừa tải lên Cloudinary): API không nhận base64 cho ảnh đại diện.
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // Ảnh vừa cắt, chỉ để xem trước trong lúc tải lên; không bao giờ được gửi đi.
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarChanged, setAvatarChanged] = useState(false);
+  const canChangeAvatar = isCloudinaryConfigured();
   const [dob, setDob] = useState('');
   const [touched, setTouched] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -49,6 +58,7 @@ export default function EditProfilePage() {
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
   const handlePickAvatar = () => {
+    if (!canChangeAvatar) return;
     haptic('light');
     fileInputRef.current?.click();
   };
@@ -71,21 +81,26 @@ export default function EditProfilePage() {
   };
 
   const handleConfirmCrop = async (croppedUrl: string) => {
-    // Preview ngay bằng data URL đã cắt (không đợi mạng). Sau đó thử tải lên Cloudinary —
-    // giống mọi ảnh khác trong app (ImageUpload) — để lưu 1 URL gọn nhẹ thay vì base64 thô
-    // trực tiếp vào avatarUrl; lỗi/mạng chậm/chưa cấu hình → tự fallback về data URL đã cắt.
-    setAvatarUrl(croppedUrl);
+    // Xem trước ngay bằng ảnh đã cắt (không đợi mạng), nhưng chỉ URL Cloudinary mới được giữ làm ảnh đại diện: tải lên lỗi
+    // thì nói thẳng và giữ ảnh cũ, không báo "đã chọn" rồi âm thầm bỏ ảnh lúc lưu.
+    setAvatarPreview(croppedUrl);
     setCropModalVisible(false);
     setRawImageForCrop(null);
-    openSnackbar({ text: 'Đã cắt và chọn ảnh đại diện', type: 'success', position: 'top' });
     setUploadingAvatar(true);
     try {
       const blob = await (await fetch(croppedUrl)).blob();
       const secureUrl = await uploadToCloudinary(blob);
-      if (secureUrl) setAvatarUrl(secureUrl);
+      if (secureUrl) {
+        setAvatarUrl(secureUrl);
+        setAvatarChanged(true);
+        openSnackbar({ text: 'Đã chọn ảnh đại diện mới. Bấm "Lưu thay đổi" để lưu.', type: 'success', position: 'top' });
+      } else {
+        openSnackbar({ text: AVATAR_UPLOAD_FAILED, type: 'error', position: 'top' });
+      }
     } catch {
-      /* Cloudinary lỗi → giữ nguyên data URL đã cắt ở trên */
+      openSnackbar({ text: AVATAR_UPLOAD_FAILED, type: 'error', position: 'top' });
     } finally {
+      setAvatarPreview(null);
       setUploadingAvatar(false);
     }
   };
@@ -93,25 +108,28 @@ export default function EditProfilePage() {
   const save = useMutation({
     mutationFn: async () => {
       try {
-        return await updateMe({
+        const res = await updateMe({
           fullName: fullName.trim() || undefined,
           email: email.trim() || undefined,
           avatarUrl: avatarUrl ?? undefined,
           dob: dob || undefined,
         });
+        return { res, avatarSkipped: false };
       } catch (err: unknown) {
         const msg = getErrorMessage(err);
         if (msg.includes('avatarUrl')) {
-          return await updateMe({
+          // Ảnh cũ không hợp lệ không được chặn việc sửa tên/email/ngày sinh; việc bỏ ảnh được báo ở onSuccess.
+          const res = await updateMe({
             fullName: fullName.trim() || undefined,
             email: email.trim() || undefined,
             dob: dob || undefined,
           });
+          return { res, avatarSkipped: true };
         }
         throw err;
       }
     },
-    onSuccess: (res) => {
+    onSuccess: ({ res, avatarSkipped }) => {
       haptic('medium');
       // Đồng bộ tên & avatar hiển thị vào auth store (header/profile).
       const cur = useAuthStore.getState().user;
@@ -120,17 +138,33 @@ export default function EditProfilePage() {
           user: {
             ...cur,
             fullName: fullName.trim() || cur.fullName,
-            avatarUrl: avatarUrl ?? res?.avatarUrl ?? cur.avatarUrl,
+            avatarUrl: avatarSkipped ? cur.avatarUrl : (avatarUrl ?? res?.avatarUrl ?? cur.avatarUrl),
           },
         });
       }
       // Làm mới cache ['me'] để email/dob/avatar mới đồng bộ ở nơi khác.
       void qc.invalidateQueries({ queryKey: ['me'] });
-      openSnackbar({ text: 'Đã cập nhật hồ sơ', type: 'success', position: 'top' });
+      if (avatarSkipped && avatarChanged) {
+        openSnackbar({ text: AVATAR_NOT_SAVED, type: 'warning', position: 'top' });
+      } else {
+        openSnackbar({ text: 'Đã cập nhật hồ sơ', type: 'success', position: 'top' });
+      }
       navigate(-1);
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error', position: 'top' }),
   });
+
+  const avatarFigure = (
+    <Avatar
+      size={88}
+      src={avatarPreview ?? avatarUrl ?? undefined}
+      style={{
+        border: '3px solid var(--color-bg-surface)',
+        boxShadow: 'var(--elevation-2)',
+        background: 'var(--color-bg-subtle)',
+      }}
+    />
+  );
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -148,62 +182,65 @@ export default function EditProfilePage() {
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Avatar Upload Section */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0' }}>
-            <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleAvatarFile} />
-            <button
-              type="button"
-              className="tubu-press"
-              onClick={handlePickAvatar}
-              style={{
-                minHeight: 44,
-                padding: 0,
-                border: 'none',
-                background: 'transparent',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-              }}
-            >
-              <span style={{ position: 'relative', display: 'inline-block' }}>
-                <Avatar
-                  size={88}
-                  src={avatarUrl ?? undefined}
+            {canChangeAvatar ? (
+              <>
+                <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleAvatarFile} />
+                <button
+                  type="button"
+                  className="tubu-press"
+                  onClick={handlePickAvatar}
                   style={{
-                    border: '3px solid var(--color-bg-surface)',
-                    boxShadow: 'var(--elevation-2)',
-                    background: 'var(--color-bg-subtle)',
-                  }}
-                />
-                <span
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    right: 0,
-                    width: 28,
-                    height: 28,
-                    borderRadius: '50%',
-                    background: 'var(--color-action-primary-bg)',
+                    minHeight: 44,
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '2px solid var(--color-bg-surface)',
-                    boxShadow: 'var(--elevation-1)',
                   }}
                 >
-                  <Icon icon={Camera} size="sm" tone="inverse" />
-                </span>
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
-                {uploadingAvatar ? (
-                  <Icon icon={Loader2} size="sm" tone="brand" className="animate-spin" />
-                ) : (
-                  <Icon icon={Camera} size="sm" tone="brand" />
-                )}
-                <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
-                  {uploadingAvatar ? 'Đang xử lý ảnh…' : 'Chạm để chọn & cắt ảnh đại diện'}
+                  <span style={{ position: 'relative', display: 'inline-block' }}>
+                    {avatarFigure}
+                    <span
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        right: 0,
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: 'var(--color-action-primary-bg)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '2px solid var(--color-bg-surface)',
+                        boxShadow: 'var(--elevation-1)',
+                      }}
+                    >
+                      <Icon icon={Camera} size="sm" tone="inverse" />
+                    </span>
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                    {uploadingAvatar ? (
+                      <Icon icon={Loader2} size="sm" tone="brand" className="animate-spin" />
+                    ) : (
+                      <Icon icon={Camera} size="sm" tone="brand" />
+                    )}
+                    <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
+                      {uploadingAvatar ? 'Đang xử lý ảnh…' : 'Chạm để chọn & cắt ảnh đại diện'}
+                    </Text>
+                  </span>
+                </button>
+              </>
+            ) : (
+              <>
+                {avatarFigure}
+                <Text variant="caption" tone="tertiary" style={{ marginTop: 8, textAlign: 'center' }}>
+                  {AVATAR_NO_STORAGE}
                 </Text>
-              </span>
-            </button>
+              </>
+            )}
           </div>
 
           <Field label="Họ và tên">

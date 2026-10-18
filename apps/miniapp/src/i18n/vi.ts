@@ -29,6 +29,14 @@ export const vi = {
     generic: 'Có chút trục trặc, thử lại nhé',
     loadFailed: 'Chưa tải được nội dung',
     sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
+    title: 'Chưa tải được trang này',
+    notFoundTitle: 'Không tìm thấy',
+    needHelp: 'Cần hỗ trợ?',
+    callHotline: (phone: string) => `Gọi ${phone}`,
+  },
+
+  suggested: {
+    title: 'Có thể bạn thích',
   },
 
   reviews: {
@@ -53,7 +61,7 @@ export const vi = {
 
   home: {
     tagline: 'Sống xanh An Lành',
-    greeting: (name: string) => `Chào ${name} 🌿`,
+    greeting: (name: string) => `Chào ${name}`,
     pointsChip: (n: number) => `${formatNumber(n)} Điểm Xanh`,
     searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
     featured: 'Tubu chọn cho bạn',
@@ -79,6 +87,23 @@ export const vi = {
     seeAllLabel: (title: string) => `Xem tất cả ${title}`,
     retry: 'Thử lại',
     retryLabel: (title: string) => `Thử lại ${title}`,
+    loadErrorTitle: 'Chưa tải được Trang chủ',
+    // D2-07b: mọi số tiền/điểm/phần trăm truyền vào từ cấu hình công khai, không viết cứng ở đây.
+    newGift: {
+      title: 'Quà khách mới',
+      voucherAmount: (amount: string) => `Voucher chào mừng ${amount}`,
+      voucherPercent: (pct: number) => `Voucher chào mừng giảm ${pct}%`,
+      voucherFreeship: 'Voucher chào mừng miễn phí giao',
+      voucherMinOrder: (min: string) => `Cho đơn từ ${min}`,
+      voucherExpires: (date: string) => `Dùng đến ${date}`,
+      cta: 'Chọn sản phẩm',
+      benefitsTitle: 'Mua trực tiếp tại Tubu Tree',
+      freeShipFirst: 'Miễn phí giao cho đơn đầu tiên',
+      freeShipFirstFrom: (min: string) => `Miễn phí giao cho đơn đầu tiên từ ${min}`,
+      freeShipFrom: (min: string) => `Miễn phí giao cho đơn từ ${min}`,
+      points: (spend: string, redeem: string) => `Mỗi ${spend} mua hàng được 1 Điểm Xanh, 1 điểm giảm ${redeem}`,
+      subscribe: (pct: number) => `Đặt định kỳ giảm ${pct}% mỗi đơn`,
+    },
     strip: {
       title: 'Đơn của bạn',
       shipping: (code: string) => `Đơn ${code} đang giao`,
@@ -88,18 +113,19 @@ export const vi = {
   },
 
   flashSale: {
-    badge: '⚡ Giờ vàng',
-    sectionTitle: '🌿 Ưu đãi giờ vàng',
+    badge: 'Giờ vàng',
+    sectionTitle: 'Ưu đãi giờ vàng',
     sectionName: 'Ưu đãi giờ vàng',
-    endsIn: (t: string) => `⏳ Còn ${t}`,
+    endsIn: (t: string) => `Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,
     priceChangedTitle: 'Giá ưu đãi đã thay đổi',
     priceChangedBody: 'Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.',
     priceChangedCta: 'Xem lại giỏ hàng',
-    upcomingTitle: '🔔 Sắp diễn ra',
+    upcomingTitle: 'Sắp diễn ra',
     startsIn: (t: string) => `Bắt đầu sau ${t}`,
-    remindMe: '🔔 Nhắc tôi',
-    reminded: '✅ Đã đặt nhắc',
+    live: 'Đang diễn ra',
+    remindMe: 'Nhắc tôi',
+    reminded: 'Đã đặt nhắc',
   },
 
   product: {
@@ -115,6 +141,12 @@ export const vi = {
     share: 'Chia sẻ',
     certified: 'Chứng nhận',
     viewCart: 'Xem giỏ hàng',
+    chatWithShop: 'Chat với Tubu Tree',
+    chatAbout: (name: string) => `Mình muốn hỏi về sản phẩm: ${name}`,
+    // "Tối đa": giảm giá/mã/điểm dùng ở bước thanh toán làm giá trị hàng tính điểm thấp đi, số này là trước các khoản đó.
+    pointsEarn: (points: number, valueVnd: number) =>
+      `Nhận tối đa ${formatNumber(points)} Điểm Xanh (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
+    pointsEarnGeneric: 'Nhận Điểm Xanh khi đơn giao thành công',
   },
 
   subscriptions: {
@@ -283,7 +315,9 @@ export const vi = {
     /** Đơn chưa "Đang giao" nhưng kho đã đặt hãng (có mã vận đơn) — không tự huỷ được nữa. */
     carrierBooked: 'Đã đặt đơn vị vận chuyển',
     emptyHeading: 'Bạn chưa có đơn nào',
-    emptyBody: 'Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ',
+    // Số do admin đặt (voucher.welcome_amount, voucher.welcome_min_order): nhận từ config công khai, không viết cứng ở đây.
+    emptyBody: (minOrder: string, amount: string) => `Đơn đầu từ ${minOrder} dùng được mã giảm giá chào mừng ${amount}`,
+    emptyBodyNoMin: (amount: string) => `Đơn đầu dùng được mã giảm giá chào mừng ${amount}`,
     emptyCta: 'Bắt đầu mua',
     tabAll: 'Tất cả',
     tabTitle: 'Đơn hàng',
@@ -306,6 +340,7 @@ export const vi = {
     timeline: 'Hành trình đơn hàng',
     repurchase: 'Mua lại đơn này',
     payNow: 'Thanh toán ngay',
+    payBy: (when: string) => `Hạn ${when}`,
     /** Đơn chờ tiền mà hàng đã bàn giao vận chuyển (API manualHandling): thay hạn thanh toán, nút trả tiền và nút huỷ. */
     manualHandling: 'Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.',
     viewAllOrders: 'Xem tất cả đơn',
@@ -322,6 +357,7 @@ export const vi = {
 
   nav: {
     main: 'Điều hướng chính',
+    gardenHint: 'Trồng cây mỗi ngày, nhận quà thật',
     activeOrders: (n: number) => `${n} đơn đang xử lý`,
     tabWithActiveOrders: (label: string, n: number) => `${label}, ${n} đơn đang xử lý`,
   },
@@ -503,6 +539,8 @@ export const vi = {
   },
 
   storefront: {
+    publicTitle: 'Gian hàng',
+    notFound: 'Gian hàng này không tồn tại hoặc đã ngừng hoạt động.',
     statsOtherProducts: (n: number) => `${n} sản phẩm khác`,
     statsOrderLevel: 'Phí ship, giảm giá, chênh lệch hoàn tiền',
     renameCollection: 'Đổi tên bộ sưu tập',
@@ -512,6 +550,21 @@ export const vi = {
     statusPublished: 'Đang hiển thị',
     statusDraft: 'Nháp — chưa đăng',
     previewNeedsPublish: 'Gian hàng đang là nháp — bấm "Lưu & Đăng" để khách xem được.',
+    publishNeedsProduct: 'Thêm ít nhất 1 sản phẩm để đăng gian hàng.',
+    shareStore: 'Chia sẻ gian hàng',
+    unpublish: 'Gỡ đăng',
+    unpublishConfirm: 'Gỡ đăng gian hàng này?',
+    unpublishHint: 'Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.',
+    unpublished: 'Đã gỡ đăng gian hàng',
+    webRefreshNote: 'Trang web cập nhật sau vài phút khi bạn đổi nội dung.',
+    addCover: 'Thêm ảnh bìa',
+    viewProducts: 'Xem sản phẩm',
+    emptyHeading: 'Gian hàng chưa có sản phẩm nào để xem',
+    emptyBody: 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.',
+    emptyOwnerBody: 'Gian hàng của bạn chưa có sản phẩm nào khách xem được. Thêm sản phẩm để khách có gì mà mua.',
+    badgePartner: 'Đối tác của Tubu Tree',
+    badgeBrand: 'Nhãn hàng trên Tubu Tree',
+    badgeSelectedCtv: 'CTV tuyển chọn',
     title: 'Gian hàng của tôi',
     empty: 'Tạo gian hàng để chia sẻ sản phẩm bạn tâm đắc.',
     create: 'Tạo gian hàng',
@@ -612,6 +665,13 @@ export const vi = {
     mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
   },
 
+  dealerApply: {
+    pitch: (pct: string) => `Giá sỉ đến ${pct} · công nợ · đặt hàng nhanh số lượng lớn.`,
+    pitchGeneric: 'Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.',
+    pendingBody: (hours: number) => `Đội ngũ Tubu sẽ xét duyệt trong vòng ${hours} giờ và liên hệ lại với bạn qua Zalo.`,
+    pendingBodyGeneric: 'Đội ngũ Tubu sẽ xét duyệt và liên hệ lại với bạn qua Zalo.',
+  },
+
   dealerOrder: {
     outOfStockPreorder: 'Hết hàng — được đặt trước',
     preorderLine: (n: number) => `Đặt trước ${n}, giao khi hàng về`,
@@ -643,6 +703,10 @@ export const vi = {
   community: {
     title: 'Cộng đồng Vườn Tubu',
     subtitle: 'Hỏi đáp cách dùng, chia sẻ trải nghiệm, cổ vũ nhau 🌿',
+    channelsLabel: 'Kênh cộng đồng của Tubu Tree',
+    channelZalo: 'Nhóm Zalo',
+    channelFacebook: 'Facebook',
+    channelTiktok: 'TikTok',
     tabAll: 'Tất cả',
     sortNew: 'Mới nhất',
     sortPopular: 'Nổi bật',
@@ -650,10 +714,10 @@ export const vi = {
     kindQuestion: 'Hỏi đáp',
     kindShowcase: 'Trải nghiệm',
     kindTip: 'Mẹo hay',
-    kindHarvest: '🌳 Thu hoạch',
-    kindSpecies: '📒 Sưu tập loài',
-    kindMilestone: '🌍 Mốc cộng đồng',
-    kindManual: '📝 Chia sẻ',
+    kindHarvest: 'Thu hoạch',
+    kindSpecies: 'Sưu tập loài',
+    kindMilestone: 'Mốc cộng đồng',
+    kindManual: 'Chia sẻ',
     titlePlaceholder: 'Tiêu đề câu hỏi (vd: Nước rửa chén sinh học dùng được cho bình sữa không?)',
     bodyPlaceholder: 'Chia sẻ chi tiết…',
     pickCategory: 'Chọn danh mục',
@@ -675,6 +739,8 @@ export const vi = {
     viewSolution: 'Xem sản phẩm gợi ý',
     emptyHeading: 'Chưa có bài viết nào',
     emptyBody: 'Hãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!',
+    emptyCta: 'Đăng bài đầu tiên',
+    previewLead: 'Vài bài mới trong cộng đồng. Đăng nhập để đọc tiếp, thích và bình luận.',
     hasBestAnswer: 'Đã có câu trả lời hay',
     loadMore: 'Xem thêm',
     edit: 'Sửa',
@@ -687,7 +753,7 @@ export const vi = {
     reportReason: 'Lý do báo cáo…',
     reported: 'Đã gửi báo cáo, cảm ơn bạn 🌿',
     pendingNotice: 'Bài đang chờ duyệt, sẽ hiện sau khi được duyệt 🌱',
-    pendingBadge: '⏳ Chờ duyệt',
+    pendingBadge: 'Chờ duyệt',
     moderation: 'Kiểm duyệt cộng đồng',
     tabPending: 'Chờ duyệt',
     tabReports: 'Báo cáo',
@@ -731,7 +797,8 @@ export const vi = {
     eventDescPlaceholder: 'Mô tả sự kiện (không bắt buộc)',
     eventCoverLabel: 'Ảnh bìa sự kiện',
     eventRewardLabel: 'Thưởng Điểm Xanh',
-    eventRewardHint: '1 điểm = 1.000đ, tối đa 1.000 điểm',
+    eventRewardHint: (redeem: string, maxPoints: string) => `1 điểm = ${redeem}, tối đa ${maxPoints} điểm`,
+    eventRewardHintGeneric: 'Điểm Xanh thưởng cho người thắng sự kiện',
     createEvent: 'Tạo sự kiện',
     eventCreated: 'Đã tạo sự kiện 🎉',
     closeEvent: 'Đóng',
@@ -754,22 +821,22 @@ export const vi = {
 
   game: {
     streakRepair: {
-      title: (n: number) => `🔥 Bạn vừa mất chuỗi ${formatNumber(n)} ngày`,
+      title: (n: number) => `Bạn vừa mất chuỗi ${formatNumber(n)} ngày`,
       body: 'Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.',
       cta: (cost: number) => `Hồi sinh (${formatDrops(cost)})`,
       ok: 'Đã hồi sinh chuỗi! 🌿',
     },
     seasonPass: {
-      title: '🎟️ Chặng Mùa (Season Pass)',
+      title: 'Chặng Mùa (Season Pass)',
       subtitle: (title: string) => `Điểm danh mỗi ngày để lên bậc mùa "${title}"`,
       xp: (n: number) => `${formatNumber(n)} XP`,
       tier: (n: number) => `Bậc ${n}`,
       free: 'Miễn phí',
       premium: 'Premium',
       claim: 'Nhận',
-      claimed: '✓ Đã nhận',
-      locked: '🔒 Chưa mở',
-      premiumHint: '🔒 Cần đăng ký định kỳ để mở phần thưởng Premium.',
+      claimed: 'Đã nhận',
+      locked: 'Chưa mở',
+      premiumHint: 'Cần đăng ký định kỳ để mở phần thưởng Premium.',
       reward: (r: { type: 'SEEDS' | 'POINTS'; amount: number }) =>
         r.type === 'SEEDS' ? formatDrops(r.amount) : formatPoints(r.amount),
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
@@ -788,12 +855,12 @@ export const vi = {
     empty: 'Chưa có khoá học nào',
     emptyBody: 'Tubu sẽ sớm thêm khoá học đào tạo cho CTV.',
     progress: (done: number, total: number) => `${done}/${total} bài đã học`,
-    completed: 'Đã hoàn thành ✓',
+    completed: 'Đã hoàn thành',
     backToList: 'Danh sách khoá học',
     openVideo: 'Mở video bài học',
     markDone: 'Đánh dấu đã học',
     markDoneOk: 'Đã đánh dấu hoàn thành bài học! 🎉',
-    alreadyDone: '✓ Đã học xong',
+    alreadyDone: 'Đã học xong',
   },
 } as const;
 

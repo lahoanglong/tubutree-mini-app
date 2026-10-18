@@ -77,7 +77,7 @@ export function PdpPrice({ product }: { product: PricedProduct & { variations: P
       {pricing.isFlash ? (
         <span
           data-testid="pdp-flash-badge"
-          className="inline-flex items-center gap-0.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0"
+          className="inline-flex items-center gap-0.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900"
         >
           <Zap className="h-3 w-3" aria-hidden="true" />
           Giờ vàng -{pricing.salePct}%

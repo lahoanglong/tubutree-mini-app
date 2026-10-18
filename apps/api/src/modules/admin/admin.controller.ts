@@ -32,15 +32,29 @@ import { streamCsv } from './admin-export';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { vnDateKey } from '../../common/vn-time';
 import { CatalogService } from '../catalog/catalog.service';
-import { ADMIN_ORDER_STATUSES, PANCAKE_FILTERS, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
+import {
+  ADMIN_ORDER_STATUSES,
+  ORDER_KINDS,
+  ORDER_LIST_PLATFORMS,
+  ORDER_PAYMENT_STATUSES,
+  PANCAKE_FILTERS,
+  type InvoiceFilter,
+  type OrderKind,
+  type OrderListPlatform,
+  type OrderPaymentFilter,
+  type PancakeFilter,
+  type RecyclingFilter,
+} from './admin-order-filter';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
+import { DEALER_PRICE_CSV_MAX_LENGTH } from './dealer-price-import';
+import { soldExternalRowsOrThrow } from './sold-external-csv';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
  * Không dùng @ValidateIf ở đây vì nó sẽ tắt LUÔN @IsInt/@Min(0) của cùng field khi
  * type khác PERCENT — đây là constraint riêng, cộng thêm chứ không thay thế.
  */
-function MaxIfPercent(max: number, validationOptions?: ValidationOptions) {
+export function MaxIfPercent(max: number, validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string) => {
     registerDecorator({
       name: 'maxIfPercent',
@@ -176,7 +190,7 @@ const COUPON_CODE_RE = /^[A-Z0-9_-]{3,40}$/;
 const COUPON_CODE_MSG = 'Mã chỉ gồm chữ in hoa không dấu, số, gạch ngang hoặc gạch dưới (3–40 ký tự, không khoảng trắng).';
 
 /** value <= max khi type=AMOUNT (chặn gõ thừa số 0: mã lộ ra là đơn nào cũng 0đ). */
-function MaxIfAmount(max: number, validationOptions?: ValidationOptions) {
+export function MaxIfAmount(max: number, validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string) => {
     registerDecorator({
       name: 'maxIfAmount',
@@ -217,8 +231,9 @@ export class CreateCouponDto {
   // perUserLimit <= 0 = "không giới hạn" (nhất quán với coupons.service.ts / loyalty.service.ts —
   // grep `perUserLimit > 0`). @Min(0) chỉ chặn số âm vô nghĩa, KHÔNG cấm 0.
   @IsOptional() @IsInt() @Min(0) perUserLimit?: number;
-  @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE'])
-  scope!: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+  // CLAIM = mã ẩn của thẻ hộp hàng: chỉ vào ví khách đã nhận qua link `?claim=` (coupon-claim.service.ts).
+  @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE', 'CLAIM'])
+  scope!: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE' | 'CLAIM';
   // Chỉ bắt buộc khi scope=TIER (cần tierId) hoặc USER_GROUP (cần userId) — xem RequiredScopeMeta().
   // Bỏ trống cho PUBLIC/BIRTHDAY/INVITE (BIRTHDAY/INVITE hiện DENY mọi user ở isCouponEligible,
   // chưa có logic chính thức — tạo được nhưng chưa dùng được, không phải lỗi của scopeMeta).
@@ -226,10 +241,12 @@ export class CreateCouponDto {
   @IsObject()
   @RequiredScopeMeta()
   scopeMeta?: { tierId?: string; userId?: string };
+  // Chỉ khách chưa có đơn nào (trừ đơn huỷ) dùng được. Bỏ trống = false.
+  @IsOptional() @IsBoolean() newCustomerOnly?: boolean;
 }
 export class ListCouponsQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(64) q?: string;
-  @IsOptional() @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE']) scope?: string;
+  @IsOptional() @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE', 'CLAIM']) scope?: string;
   @IsOptional() @IsIn(['active', 'inactive', 'expired']) status?: 'active' | 'inactive' | 'expired';
 }
 export class UpdateCouponDto {
@@ -237,10 +254,10 @@ export class UpdateCouponDto {
   @OptionalNotNull() @IsDateString() endAt?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsInt() @Min(1) usageLimit?: number | null;
 }
-class ImportDealerPricesDto {
-  @IsString() tierId!: string;
+export class ImportDealerPricesDto {
+  @IsString() @IsNotEmpty() @MaxLength(100) tierId!: string;
   // Dán trực tiếp 2 cột Excel "sku,giá" (mỗi dòng 1 SKU). Hoặc gửi rows JSON.
-  @IsOptional() @IsString() csv?: string;
+  @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
   @IsOptional() @IsArray() rows?: { sku: string; price: number }[];
 }
 class ImportSoldExternalDto {
@@ -295,6 +312,16 @@ export class ListOrdersQuery extends PaginationQuery {
   /** Khoảng ngày đặt (giờ VN, tính cả hai đầu). */
   @IsOptional() @IsCalendarDate() from?: string;
   @IsOptional() @IsCalendarDate() to?: string;
+  /** Loại đơn: lẻ / CTV / đại lý / CTV lên hộ / gian hàng (xem ORDER_KINDS). */
+  @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
+  @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
+  @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
+  @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
+  /** Slug hoặc subdomain của gian hàng được ghi công. */
+  @IsOptional() @IsString() @MaxLength(100) storefront?: string;
+  /** Thứ tự theo ngày đặt; mặc định mới nhất trước. */
+  @IsOptional() @IsIn([...SORT_ORDERS]) order?: SortOrder;
 }
 
 /** Bộ lọc của file CSV — đúng bộ lọc danh sách đơn, không phân trang. */
@@ -306,6 +333,11 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
   @IsOptional() @IsCalendarDate() from?: string;
   @IsOptional() @IsCalendarDate() to?: string;
+  @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
+  @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
+  @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
+  @IsOptional() @IsString() @MaxLength(100) storefront?: string;
 }
 
 export class ExportUsersQuery {
@@ -376,19 +408,6 @@ export class SetUserRoleDto {
   @IsOptional() @IsString() @MaxLength(100) tierId?: string;
 }
 
-/** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
-function parseDealerPriceCsv(csv: string): { sku: string; price: number }[] {
-  return csv
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [sku, priceRaw] = line.split(/[,;\t]/);
-      return { sku: (sku ?? '').trim(), price: Number((priceRaw ?? '').replace(/[^\d.-]/g, '')) };
-    })
-    .filter((r) => r.sku && Number.isFinite(r.price) && r.price > 0);
-}
-
 @Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
@@ -419,12 +438,14 @@ export class AdminController {
   }
 
   /** Ô chọn sản phẩm/biến thể (Flash Sale, Content Kit) thay cho nhập Variation/Product ID. */
+  @AllowStaff('MARKETING')
   @Get('products/search')
   searchProducts(@Query() q: ProductSearchQuery) {
     return this.admin.searchProducts(q.q ?? '');
   }
 
   /** Nhãn cho các Variation ID đã lưu (danh sách mặt hàng của đợt Flash Sale). */
+  @AllowStaff('MARKETING')
   @Get('variations/lookup')
   lookupVariations(@Query() q: VariationLookupQuery) {
     return this.admin.lookupVariations(q.ids);
@@ -453,19 +474,28 @@ export class AdminController {
     return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
   }
 
-  @AllowStaff('CSKH', 'KHO')
+  @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer);
+    const { kind, payment, platform, referrerUserId, storefront, order } = q;
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
+      kind,
+      payment,
+      platform,
+      referrerUserId,
+      storefront,
+      order,
+    });
   }
 
   /**
    * File CSV cho kế toán: MỌI đơn khớp bộ lọc đang xem (ADMINOPS-12), ghi dần từng lô thay vì dựng cả file trong bộ nhớ.
    * Trước đây nút "Xuất CSV" chỉ xuất 20 đơn của trang hiện tại mà không báo.
    */
+  @AllowStaff('KE_TOAN')
   @Get('orders/export')
-  async exportOrders(@Query() q: ExportOrdersQuery, @Res() res: Response) {
-    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q));
+  async exportOrders(@Query() q: ExportOrdersQuery, @CurrentUser('role') role: string, @Res() res: Response) {
+    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q, { maskPhones: role !== 'ADMIN' }));
   }
 
   @Get('users/export')
@@ -485,6 +515,7 @@ export class AdminController {
   }
 
   /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */
+  @AllowStaff('KE_TOAN')
   @Post('orders/:id/issue-invoice')
   issueInvoice(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: IssueInvoiceDto) {
     return this.admin.issueOrderInvoice(adminId, id, { invoiceUrl: dto.invoiceUrl });
@@ -538,10 +569,10 @@ export class AdminController {
   }
 
   /** Sổ ghi vết: ai đổi trạng thái đơn này, từ đâu sang đâu, lúc nào. */
-  @AllowStaff('CSKH', 'KHO')
+  @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders/:id/status-history')
-  orderStatusHistory(@Param('id') id: string) {
-    return this.admin.orderStatusHistory(id);
+  orderStatusHistory(@Param('id') id: string, @CurrentUser() viewer: JwtPayload) {
+    return this.admin.orderStatusHistory(id, viewer);
   }
 
   /**
@@ -554,13 +585,15 @@ export class AdminController {
   }
 
   /** "Đã nhận tiền" cho đơn chuyển khoản lẻ: UNPAID → PAID (PENDING_PAYMENT → CONFIRMED), idempotent. */
+  @AllowStaff('KE_TOAN')
   @Post('orders/:id/confirm-payment')
   confirmOrderPayment(
     @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
     @Param('id') id: string,
     @Body() dto: ConfirmOrderPaymentDto,
   ) {
-    return this.admin.confirmOrderPayment(adminId, id, dto);
+    return this.admin.confirmOrderPayment(adminId, id, dto, { byStaff: role !== 'ADMIN' });
   }
 
   @AllowStaff('CSKH', 'KHO')
@@ -583,26 +616,39 @@ export class AdminController {
     return this.admin.setConfig(adminId, dto.key, dto.value);
   }
 
+  @AllowStaff('MARKETING')
   @Get('coupons')
   listCoupons(@Query() q: ListCouponsQuery) {
     return this.admin.listCoupons(q);
   }
 
+  @AllowStaff('MARKETING')
   @Post('coupons')
-  createCoupon(@Body() dto: CreateCouponDto) {
-    return this.admin.createCoupon(dto);
+  createCoupon(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Body() dto: CreateCouponDto) {
+    return this.admin.createCoupon(dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
+  @AllowStaff('MARKETING')
   @Patch('coupons/:id')
-  updateCoupon(@Param('id') id: string, @Body() dto: UpdateCouponDto) {
-    return this.admin.updateCoupon(id, dto);
+  updateCoupon(
+    @CurrentUser('sub') actorId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateCouponDto,
+  ) {
+    return this.admin.updateCoupon(id, dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
-  // Import bảng giá đại lý theo bậc (dán CSV "sku,giá" từ Excel hoặc gửi rows JSON).
+  /** Xem trước bảng giá đại lý theo bậc (khớp / không khớp / lỗi / ngoài khoảng giá lẻ) — không ghi gì. */
+  @Post('dealer-prices/import/preview')
+  previewDealerPrices(@Body() dto: ImportDealerPricesDto) {
+    return this.admin.previewDealerPrices(dto.tierId, { csv: dto.csv, rows: dto.rows });
+  }
+
+  // Import bảng giá đại lý theo bậc (dán CSV "sku,giá" từ Excel hoặc gửi rows JSON). Còn dòng lỗi thì không ghi dòng nào.
   @Post('dealer-prices/import')
   importDealerPrices(@CurrentUser('sub') adminId: string, @Body() dto: ImportDealerPricesDto) {
-    const rows = dto.csv ? parseDealerPriceCsv(dto.csv) : (dto.rows ?? []);
-    return this.admin.importDealerPrices(adminId, dto.tierId, rows);
+    return this.admin.importDealerPrices(adminId, dto.tierId, { csv: dto.csv, rows: dto.rows });
   }
 
   @Get('dealer-prices/history')
@@ -613,9 +659,7 @@ export class AdminController {
   // "Đã bán" gom từ sàn ngoài: dán "sku,số-đã-bán" hoặc rows JSON.
   @Post('products/sold-external')
   setSoldExternal(@Body() dto: ImportSoldExternalDto) {
-    const rows = dto.csv
-      ? parseDealerPriceCsv(dto.csv).map((r) => ({ sku: r.sku, count: r.price }))
-      : (dto.rows ?? []);
+    const rows = dto.csv ? soldExternalRowsOrThrow(dto.csv) : (dto.rows ?? []);
     return this.catalog.setSoldExternal(rows);
   }
 

@@ -123,6 +123,33 @@ describe('BrandOwnerPage tab Doanh thu (C-034, Q-18)', () => {
   });
 });
 
+describe('BrandOwnerPage danh sách khuyến mãi không vỡ cột (D7 việc 10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getOwnedBrand.mockResolvedValue({
+      ...BRAND,
+      promotions: [{ ...BRAND.promotions[0]!, subtitle: 'Áp dụng cho mọi sản phẩm nước rửa chén Sachi trong tháng 10' }],
+    });
+  });
+
+  it('Sửa và Xoá là nút icon 44px không co lại, tên đọc nêu rõ khuyến mãi nào; chữ chiếm phần còn lại của dòng', async () => {
+    renderPage();
+    const title = await screen.findByText('MUA 2 TẶNG 1');
+    for (const name of ['Sửa khuyến mãi MUA 2 TẶNG 1', 'Xoá khuyến mãi MUA 2 TẶNG 1']) {
+      const btn = screen.getByRole('button', { name });
+      // Nút ZaUI có min-width 120px nên hai nút chữ ép cột tiêu đề còn vài chục px (D7).
+      expect(btn.className).not.toMatch(/zaui-btn/);
+      expect(btn.style.minWidth).toBe('44px');
+      expect(btn.style.minHeight).toBe('44px');
+      expect(btn.style.flexShrink).toBe('0');
+    }
+    const textColumn = title.parentElement as HTMLElement;
+    expect(textColumn.style.flex).toBe('1 1 0%');
+    expect(textColumn.style.minWidth).toBe('0px');
+    expect(screen.getByText(/Áp dụng cho mọi sản phẩm/)).toBeInTheDocument();
+  });
+});
+
 describe('BrandOwnerPage khuyến mãi gắn mã giảm giá (C-006)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -134,7 +161,7 @@ describe('BrandOwnerPage khuyến mãi gắn mã giảm giá (C-006)', () => {
   it('sửa khuyến mãi rồi xoá ô mã -> gửi couponCode rỗng để gỡ mã', async () => {
     renderPage();
     await screen.findByText('MUA 2 TẶNG 1');
-    fireEvent.click(screen.getByRole('button', { name: 'Sửa' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
     fireEvent.change(screen.getByPlaceholderText(/Mã giảm giá/), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
     await waitFor(() => expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(1));
@@ -255,7 +282,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
   it('xoá khuyến mãi phải xác nhận trong sheet có tiêu đề h2; Huỷ không gọi API', async () => {
     renderPage();
     await screen.findByText('MUA 2 TẶNG 1');
-    fireEvent.click(screen.getByRole('button', { name: 'Xoá' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
     const sheet = within(screen.getByTestId('sheet'));
     expect(sheet.getByRole('heading', { level: 2, name: 'Xoá khuyến mãi này?' })).toBeInTheDocument();
     fireEvent.click(sheet.getByRole('button', { name: 'Huỷ' }));
@@ -266,7 +293,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
   it('xác nhận xoá gọi deleteOwnedPromotion đúng id', async () => {
     renderPage();
     await screen.findByText('MUA 2 TẶNG 1');
-    fireEvent.click(screen.getByRole('button', { name: 'Xoá' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
     fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' }));
     await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledWith('p1'));
   });

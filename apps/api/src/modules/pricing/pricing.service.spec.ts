@@ -1,4 +1,6 @@
-import { freeShipThreshold, PricingService } from './pricing.service';
+import { pointsForGoods } from './points-earn';
+import { firstOrderFreeShipFrom, firstOrderShippingFee, freeShipThreshold, PricingService } from './pricing.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
 /** Stub SystemConfig với map giá trị cố định. */
@@ -48,6 +50,23 @@ describe('PricingService', () => {
     });
     it('áp multiplier 1.5x (Đại Thụ)', async () => {
       expect(await svc.calcPointsEarned(200000, 1.5)).toBe(30);
+    });
+    // Miniapp (PDP "Nhận N Điểm Xanh") dùng chung công thức qua pointsForGoods: đổi một bên phải khớp bên kia.
+    it('calcPointsEarned đúng bằng pointsForGoods với cấu hình đang dùng, kể cả mốc làm tròn xuống và cấu hình hỏng', async () => {
+      for (const vnd of [10000, 7500, 1, 0, -5]) {
+        const s = new PricingService(makeConfig({ ...DEFAULTS, 'loyalty.vnd_per_point': vnd }));
+        for (const goods of [0, 1, 9999, 10000, 19999, 20000, 249999, 1_000_000]) {
+          for (const mult of [undefined, 1, 1.2, 1.5, 2]) {
+            expect(await s.calcPointsEarned(goods, mult)).toBe(pointsForGoods(goods, vnd, mult));
+          }
+        }
+      }
+    });
+    it('pointsForGoods: làm tròn xuống, nhân hệ số hạng, mốc ≤ 0 thì không tích', () => {
+      expect(pointsForGoods(19999, 10000)).toBe(1);
+      expect(pointsForGoods(19999, 10000, 1.5)).toBe(2);
+      expect(pointsForGoods(9999, 10000, 1.2)).toBe(1);
+      expect(pointsForGoods(500000, 0, 2)).toBe(0);
     });
   });
 
@@ -150,5 +169,72 @@ describe('freeShipThreshold (R2-ENGAGE-16: giỏ và checkout cùng một ngư�
   });
   it('override null (admin lỡ lưu) → ngưỡng toàn cục', async () => {
     expect(await freeShipThreshold(makeConfig({ ...DEFAULTS, 'shipping.tier_freeship_overrides': null }), 'LOC_BIEC')).toBe(200000);
+  });
+});
+
+describe('Freeship đơn đầu (D2-08)', () => {
+  const REAL = { phone: '0912345678', zaloId: 'z1' };
+  function db(user: unknown = REAL, priorOrder = false) {
+    const findUser = jest.fn().mockResolvedValue(user);
+    const findOrder = jest.fn().mockResolvedValue(priorOrder ? { id: 'o0' } : null);
+    const prisma = { user: { findUnique: findUser }, order: { findFirst: findOrder } } as unknown as PrismaService;
+    return { prisma, findUser, findOrder };
+  }
+  const ON = { 'shipping.first_order_free_enabled': true };
+
+  it('mặc định BẬT từ 199.000đ (chưa có dòng cấu hình): khách thật chưa có đơn được áp', async () => {
+    await expect(firstOrderFreeShipFrom(makeConfig({}), db().prisma, 'u1')).resolves.toBe(199_000);
+  });
+
+  it('cờ tắt tường minh: không áp, không đọc thêm DB', async () => {
+    const { prisma, findUser, findOrder } = db();
+    await expect(firstOrderFreeShipFrom(makeConfig({ 'shipping.first_order_free_enabled': false }), prisma, 'u1')).resolves.toBeNull();
+    expect(findUser).not.toHaveBeenCalled();
+    expect(findOrder).not.toHaveBeenCalled();
+  });
+
+  it('chỉ nhận đúng true: chuỗi "true" hay số 1 lưu nhầm không bật', async () => {
+    for (const v of ['true', 1, 'false']) {
+      await expect(firstOrderFreeShipFrom(makeConfig({ 'shipping.first_order_free_enabled': v }), db().prisma, 'u1')).resolves.toBeNull();
+    }
+  });
+
+  it('không có SystemConfig (dựng tay trong test cũ) → không áp', async () => {
+    await expect(firstOrderFreeShipFrom(undefined, db().prisma, 'u1')).resolves.toBeNull();
+  });
+
+  it('bật + khách thật chưa có đơn → ngưỡng tiền hàng (mặc định 199.000, 0 = mọi đơn đầu)', async () => {
+    const { prisma, findOrder } = db();
+    await expect(firstOrderFreeShipFrom(makeConfig(ON), prisma, 'u1')).resolves.toBe(199_000);
+    await expect(firstOrderFreeShipFrom(makeConfig({ ...ON, 'shipping.first_order_free_min_subtotal': 0 }), db().prisma, 'u1')).resolves.toBe(0);
+    expect(findOrder.mock.calls[0][0].where).toEqual({ userId: 'u1', status: { not: 'CANCELLED' } });
+    await expect(
+      firstOrderFreeShipFrom(makeConfig({ ...ON, 'shipping.first_order_free_min_subtotal': 99000 }), db().prisma, 'u1'),
+    ).resolves.toBe(99000);
+  });
+
+  it('bật nhưng khách vãng lai (chưa SĐT, zaloId guest_) → không áp, như voucher chào mừng', async () => {
+    await expect(firstOrderFreeShipFrom(makeConfig(ON), db({ phone: null, zaloId: 'guest_abc' }).prisma, 'u1')).resolves.toBeNull();
+    await expect(firstOrderFreeShipFrom(makeConfig(ON), db(null).prisma, 'u1')).resolves.toBeNull();
+  });
+
+  it('bật nhưng khách đã có đơn (khác đơn huỷ) → không áp', async () => {
+    await expect(firstOrderFreeShipFrom(makeConfig(ON), db(REAL, true).prisma, 'u1')).resolves.toBeNull();
+  });
+
+  it('ngưỡng lưu sai kiểu → không áp (không tự hiểu thành 0đ = miễn mọi đơn đầu)', async () => {
+    for (const v of [null, '99000', -1, Number.NaN]) {
+      await expect(
+        firstOrderFreeShipFrom(makeConfig({ ...ON, 'shipping.first_order_free_min_subtotal': v }), db().prisma, 'u1'),
+      ).resolves.toBeNull();
+    }
+  });
+
+  it('firstOrderShippingFee: miễn khi đạt ngưỡng, giữ phí khi chưa đạt hoặc không áp', () => {
+    expect(firstOrderShippingFee(19000, 150000, 0)).toBe(0);
+    expect(firstOrderShippingFee(19000, 99000, 99000)).toBe(0);
+    expect(firstOrderShippingFee(19000, 98999, 99000)).toBe(19000);
+    expect(firstOrderShippingFee(19000, 150000, null)).toBe(19000);
+    expect(firstOrderShippingFee(0, 250000, 0)).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi as vitestVi, afterEach } from 'vitest';
-import { apiMediaUrl, getErrorMessage, isOutcomeUnknown } from './api';
+import { api, apiMediaUrl, getErrorMessage, isOutcomeUnknown, loginGuest, loginZaloMiniApp } from './api';
 import { vi as viCopy } from '../i18n/vi';
 
 function axiosError(overrides: Record<string, unknown>): unknown {
@@ -46,6 +46,31 @@ describe('getErrorMessage', () => {
   it('lỗi không phải AxiosError (vd throw string/Error thường) → copy generic', () => {
     expect(getErrorMessage(new Error('nope'))).toBe(viCopy.errors.generic);
     expect(getErrorMessage('nope')).toBe(viCopy.errors.generic);
+  });
+});
+
+describe('đăng nhập mang nguồn chạm đầu (firstTouch)', () => {
+  afterEach(() => {
+    vitestVi.restoreAllMocks();
+  });
+  const firstTouch = { source: 'shopee', campaign: 'card-2610', at: '2026-10-18T00:00:00.000Z' };
+
+  it('loginGuest gửi firstTouch trong body', async () => {
+    const post = vitestVi.spyOn(api, 'post').mockResolvedValue({ data: { accessToken: 'a' } });
+    await loginGuest('d_12345678', 'REF1', firstTouch);
+    expect(post).toHaveBeenCalledWith('/auth/guest', { deviceId: 'd_12345678', referralCode: 'REF1', firstTouch });
+  });
+
+  it('loginZaloMiniApp gửi firstTouch trong body', async () => {
+    const post = vitestVi.spyOn(api, 'post').mockResolvedValue({ data: { accessToken: 'a' } });
+    await loginZaloMiniApp('code', 'tok', undefined, 'REF1', firstTouch);
+    expect(post).toHaveBeenCalledWith('/auth/zalo-mini-app', {
+      code: 'code',
+      accessToken: 'tok',
+      phoneToken: undefined,
+      referralCode: 'REF1',
+      firstTouch,
+    });
   });
 });
 

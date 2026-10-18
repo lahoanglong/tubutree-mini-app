@@ -44,7 +44,9 @@
   --terracotta-50: #FFF1E8;
   --terracotta-600: #C2410C;
 
-  --tubu-orange: #E08C1C; /* logo/illustration ONLY — never a UI action color */
+  --tubu-orange: #E38E1E; /* lấy từ chữ Tubu Tree của logo thật; không dùng làm màu nút hành động */
+  --orange-50: #FDF1DE;
+  --orange-800: #7A4300; /* chữ nhỏ trên nền cam nhạt/trắng: 7,15:1 và 7,98:1 */
 
   --red-50: #FBEAE8;
   --red-600: #B3362F;
@@ -144,15 +146,16 @@
   --color-status-neutral-fg: var(--stone-600);
   --color-status-neutral-bg: var(--stone-100);
 
-  --color-promo-fg: var(--clay-700);
-  --color-promo-bg: var(--clay-50);
-  --color-promo-solid-bg: var(--clay-600);
-  --color-promo-solid-fg: var(--stone-0);
+  /* Khuyến mãi dùng cam của logo. Chữ trắng trên cam chỉ 2,58:1 nên nền đặc đi kèm chữ đậm stone-900 (6,75:1). */
+  --color-promo-fg: var(--orange-800);
+  --color-promo-bg: var(--orange-50);
+  --color-promo-solid-bg: var(--tubu-orange);
+  --color-promo-solid-fg: var(--stone-900);
 
-  --color-flash-solid-bg: var(--terracotta-600);
-  --color-flash-solid-fg: var(--stone-0);
-  --color-flash-fg: var(--terracotta-600);
-  --color-flash-bg: var(--terracotta-50);
+  --color-flash-solid-bg: var(--tubu-orange);
+  --color-flash-solid-fg: var(--stone-900);
+  --color-flash-fg: var(--orange-800);
+  --color-flash-bg: var(--orange-50);
 
   --color-rating: var(--honey-500);
 

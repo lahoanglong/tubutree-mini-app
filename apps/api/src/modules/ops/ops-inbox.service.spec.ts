@@ -3,16 +3,26 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
+import { buildAdminOrderWhere } from '../admin/admin-order-filter';
+import type { SystemConfigService } from '../system-config/system-config.service';
 
-const build = (over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number } = {}) => {
+const build = (
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; config?: Record<string, unknown> } = {},
+) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
+  const orderCount = jest.fn().mockResolvedValue(over.invoices ?? 0);
+  const postCount = jest.fn().mockResolvedValue(over.communityPending ?? 0);
+  // returnsToReceive dùng template literal (đối số đầu là mảng chuỗi); câu hỏi chưa trả lời dùng Prisma.sql.
+  const queryRaw = jest.fn((q: unknown) => Promise.resolve([{ n: !Array.isArray(q) && String((q as { sql: string }).sql).includes('feed_posts') ? (over.unanswered ?? 0) : 0 }]));
+  const config = { get: jest.fn(async (key: string, fallback?: unknown) => (over.config && key in over.config ? over.config[key] : fallback)) };
   const productCount = jest.fn().mockResolvedValue(over.products ?? 0);
   const linkCount = jest.fn().mockResolvedValue(over.links ?? 0);
   const payoutCount = jest.fn().mockResolvedValue(over.slips ?? 0);
   const refundCount = jest.fn().mockResolvedValue(over.refunds ?? 0);
   const prisma = {
     product: { count: productCount },
-    order: zero,
+    order: { count: orderCount },
+    feedPost: { count: postCount },
     orderCustomerRefund: { count: refundCount },
     returnRequest: zero,
     dealerApplication: zero,
@@ -21,13 +31,13 @@ const build = (over: { products?: number; links?: number; slips?: number; settle
     bottleReturn: zero,
     merchantPancakeLink: { count: linkCount },
     merchantPayout: { count: payoutCount },
-    $queryRaw: jest.fn().mockResolvedValue([{ n: 0 }]),
+    $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
     countOverdue: jest.fn().mockResolvedValue(0),
     countStoresToSettle: jest.fn().mockResolvedValue(over.settle ?? 0),
   } as unknown as MerchantFulfilmentService;
-  return { svc: new OpsInboxService(prisma, merchant), productCount, linkCount, payoutCount, refundCount, merchant };
+  return { svc: new OpsInboxService(prisma, merchant, config as unknown as SystemConfigService), productCount, linkCount, payoutCount, refundCount, merchant, orderCount, postCount, queryRaw };
 };
 
 describe('OpsInboxService — merchantProducts', () => {
@@ -90,5 +100,96 @@ describe('OpsInboxService — việc với đối tác (R4-ADMIN-7)', () => {
     expect(linkCount).not.toHaveBeenCalled();
     expect(payoutCount).not.toHaveBeenCalled();
     expect(merchant.countStoresToSettle).not.toHaveBeenCalled();
+  });
+});
+
+describe('OpsInboxService — cộng đồng và hoá đơn VAT (launch review D1-08, D1-17)', () => {
+  const count = (res: { items: { key: string; count: number }[] }, key: string) => res.items.find((i) => i.key === key)?.count;
+
+  it('communityPending: đếm bài PENDING, đúng điều kiện hàng chờ ở tab Cộng đồng', async () => {
+    const { svc, postCount } = build({ communityPending: 5 });
+
+    const res = await svc.counts({ role: 'ADMIN' });
+
+    expect(count(res, 'communityPending')).toBe(5);
+    expect(postCount).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
+  });
+
+  it('communityUnanswered: đếm câu hỏi chưa ai trả lời quá 24 giờ (mặc định) theo giờ của lần gọi', async () => {
+    const { svc, queryRaw } = build({ unanswered: 3 });
+    const now = new Date('2026-10-17T12:00:00.000Z');
+
+    const res = await svc.counts({ role: 'ADMIN' }, now);
+
+    expect(count(res, 'communityUnanswered')).toBe(3);
+    const call = queryRaw.mock.calls.map((c) => c[0] as { sql?: string; values?: unknown[] }).find((q) => !Array.isArray(q) && q.sql?.includes('feed_posts'))!;
+    expect(call.values).toEqual([new Date('2026-10-16T12:00:00.000Z')]);
+  });
+
+  it('communityUnanswered: khoá community.unanswered_alert_hours đổi ngưỡng', async () => {
+    const { svc, queryRaw } = build({ config: { 'community.unanswered_alert_hours': 12 } });
+
+    await svc.counts({ role: 'ADMIN' }, new Date('2026-10-17T12:00:00.000Z'));
+
+    const call = queryRaw.mock.calls.map((c) => c[0] as { sql?: string; values?: unknown[] }).find((q) => !Array.isArray(q) && q.sql?.includes('feed_posts'))!;
+    expect(call.values).toEqual([new Date('2026-10-17T00:00:00.000Z')]);
+  });
+
+  it('invoicePending: đếm đơn VAT chờ xuất bằng ĐÚNG điều kiện bộ lọc "VAT chờ xuất" của tab Đơn hàng', async () => {
+    const { svc, orderCount } = build({ invoices: 2 });
+
+    const res = await svc.counts({ role: 'ADMIN' });
+
+    expect(count(res, 'invoicePending')).toBe(2);
+    expect(orderCount).toHaveBeenCalledWith({ where: buildAdminOrderWhere({ invoice: 'pending' }) });
+    expect(buildAdminOrderWhere({ invoice: 'pending' })).toEqual({
+      invoiceStatus: { in: ['REQUESTED', 'FAILED'] },
+      status: { notIn: ['CANCELLED', 'RETURNED'] },
+    });
+  });
+
+  it('CSKH thấy 2 khoá cộng đồng nhưng không thấy VAT (xuất hoá đơn chỉ ADMIN); không tốn truy vấn cho khoá không thấy', async () => {
+    const { svc, postCount, queryRaw } = build({ communityPending: 1, unanswered: 1, invoices: 1 });
+
+    const res = await svc.counts({ role: 'STAFF', staffPermissions: ['CSKH'] });
+
+    const keys = res.items.map((i) => i.key);
+    expect(keys).toEqual(expect.arrayContaining(['communityPending', 'communityUnanswered']));
+    expect(keys).not.toContain('invoicePending');
+    expect(postCount).toHaveBeenCalledTimes(1);
+    expect(queryRaw.mock.calls.some((c) => !Array.isArray(c[0]) && (c[0] as { sql: string }).sql.includes('feed_posts'))).toBe(true);
+  });
+
+  it('KHO và nhân viên chưa có nhóm không thấy khoá cộng đồng, và các truy vấn đếm không chạy', async () => {
+    const { svc, postCount, queryRaw } = build({ communityPending: 1, unanswered: 1 });
+
+    const kho = await svc.counts({ role: 'STAFF', staffPermissions: ['KHO'] });
+    const none = await svc.counts({ role: 'STAFF', staffPermissions: [] });
+
+    for (const res of [kho, none]) {
+      const keys = res.items.map((i) => i.key);
+      expect(keys).not.toContain('communityPending');
+      expect(keys).not.toContain('communityUnanswered');
+    }
+    expect(postCount).not.toHaveBeenCalled();
+    expect(queryRaw.mock.calls.some((c) => !Array.isArray(c[0]) && (c[0] as { sql: string }).sql.includes('feed_posts'))).toBe(false);
+  });
+});
+
+describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình xử lý được (D1-05)', () => {
+  const keysFor = async (perms: string[]) => (await build().svc.counts({ role: 'STAFF', staffPermissions: perms })).items.map((i) => i.key).sort();
+
+  it('MARKETING: chỉ hai hàng đợi cộng đồng (cùng CSKH) và đổi vỏ chai (mọi nhân viên)', async () => {
+    expect(await keysFor(['MARKETING'])).toEqual(['communityPending', 'communityUnanswered', 'refillPending']);
+  });
+
+  it('KE_TOAN: hoàn tiền khách, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
+    expect(await keysFor(['KE_TOAN'])).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'refillPending']);
+  });
+
+  it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
+    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'refillPending', 'returnsPending']);
+    expect(await keysFor(['KHO'])).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'refillPending', 'returnsToReceive']);
+    expect(await keysFor([])).toEqual(['refillPending']);
   });
 });

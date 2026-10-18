@@ -283,4 +283,87 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
       expect(await commissionOf(order.id)).toBe(0);
     });
   });
+
+  describe('D1-05: nhân viên Kế toán chỉ chuyển tới tài khoản đã có, không xử lý khoản của chính mình', () => {
+    const typed = { bankName: 'ACB', accountNumber: '999988887777', accountName: 'Tran Van B' };
+    const phone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+    const staffUser = (data: { phone?: string } = {}) => createUser(prisma, { role: 'STAFF', staffPermissions: ['KE_TOAN'], ...data });
+
+    /** Khoản tiền về muộn khách chưa chọn nơi nhận (chưa có tài khoản). */
+    async function unchosenRefund(amount: number) {
+      const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+      const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', total: amount });
+      await recordLatePaymentRefund(ctx(), order, { amount, source: 'PANCAKE', refKey: `q1s-${randCode(6)}` });
+      const row = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
+      return { user, order, row };
+    }
+
+    it('nhân viên gõ tài khoản cho khoản khách chưa chọn → 403, khoản giữ nguyên chờ khách', async () => {
+      const staff = await staffUser();
+      const { row } = await unchosenRefund(150_000);
+      await expect(refunds.claim(staff.id, row.id, { ...typed, byStaff: true })).rejects.toThrow('nhờ quản trị viên nhập');
+      await expect(refunds.claim(staff.id, row.id, { byStaff: true })).rejects.toThrow('Khách chưa chọn tài khoản nhận');
+      const after = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } });
+      expect(after).toMatchObject({ status: 'PENDING', bankAccountNo: null, claimedBy: null });
+    });
+
+    it('khoản khách đã chọn tài khoản → nhân viên khoá rồi xác nhận đã chuyển tới đúng tài khoản khách', async () => {
+      const staff = await staffUser();
+      const { row } = await bankRefund(160_000);
+      await refunds.claim(staff.id, row.id, { byStaff: true });
+      await refunds.markPaid(staff.id, row.id, { bankRef: 'FT-KT-1', byStaff: true });
+      const after = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } });
+      expect(after).toMatchObject({ status: 'COMPLETED', completedBy: staff.id, bankAccountNo: '0123456789', bankName: 'MB' });
+    });
+
+    it('khoản khách cuối đơn CTV (userId null) mang SĐT của nhân viên → 403 kể cả khi đã có tài khoản', async () => {
+      const mine = phone();
+      const staff = await staffUser({ phone: mine });
+      const owner = await createUser(prisma, { role: 'CUSTOMER' });
+      const order = await createOrder(prisma, { userId: owner.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', total: 90_000 });
+      const row = await prisma.orderCustomerRefund.create({
+        data: {
+          orderId: order.id,
+          orderCode: order.code,
+          kind: 'END_CUSTOMER',
+          userId: null,
+          phone: mine,
+          recipientName: 'Khách cuối',
+          amount: 90_000,
+          method: 'MANUAL_TRANSFER',
+          status: 'PENDING',
+          reason: 'CANCELLED',
+          bankName: 'VCB',
+          bankAccountNo: '0071000999888',
+          bankAccountName: 'KHACH CUOI',
+        },
+      });
+      await expect(refunds.claim(staff.id, row.id, { byStaff: true })).rejects.toThrow('của chính mình');
+      await expect(refunds.markPaid(staff.id, row.id, { bankRef: 'FT1', byStaff: true })).rejects.toThrow('của chính mình');
+      expect((await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('PENDING');
+    });
+
+    it('quản trị viên gõ tài khoản đúng lúc khách lưu tài khoản trong app → đúng một bên thắng; tài khoản khách không bị ghi đè (409)', async () => {
+      const outcomes = new Set<string>();
+      for (let round = 0; round < 8; round++) {
+        const admin = await createUser(prisma, { role: 'ADMIN' });
+        const { user, row } = await unchosenRefund(120_000 + round);
+        const [adminRes, customerRes] = await Promise.allSettled([
+          refunds.claim(admin.id, row.id, typed),
+          refunds.chooseDestination(user.id, row.id, { refundMethod: 'BANK', bankName: 'MB', accountNumber: '0123456789', accountName: 'Le Van C' }),
+        ]);
+        const after = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } });
+        expect([adminRes.status, customerRes.status].filter((s) => s === 'fulfilled')).toHaveLength(1);
+        if (customerRes.status === 'fulfilled') {
+          outcomes.add('customer');
+          expect(adminRes.status === 'rejected' && (adminRes.reason as { status?: number }).getStatus?.()).toBe(409);
+          expect(after).toMatchObject({ status: 'PENDING', bankAccountNo: '0123456789', claimedBy: null });
+        } else {
+          outcomes.add('admin');
+          expect(after).toMatchObject({ status: 'PROCESSING', bankAccountNo: '999988887777', claimedBy: admin.id });
+        }
+      }
+      expect(outcomes.size).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

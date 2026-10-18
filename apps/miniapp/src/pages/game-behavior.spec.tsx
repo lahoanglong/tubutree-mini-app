@@ -1118,12 +1118,12 @@ describe('GamePage — bảng xếp hạng', () => {
     expect(screen.queryByText('Top góp nước mùa này')).not.toBeInTheDocument();
   });
 
-  it('bảng xếp hạng tuần trống: hiện "Chưa có dữ liệu xếp hạng."', async () => {
+  it('bảng chuỗi điểm danh dài nhất trống: hiện "Chưa có dữ liệu xếp hạng."', async () => {
     renderPage();
     expect(await screen.findByText('Chưa có dữ liệu xếp hạng.')).toBeInTheDocument();
   });
 
-  it('bảng tuần: bục top 3 xếp thứ 2-1-3, hạng 4+ hiện chuỗi và cây', async () => {
+  it('bảng chuỗi dài nhất: gọi đúng tên, bục top 3 xếp thứ 2-1-3 và hiện số ngày chuỗi (chính là số dùng để xếp hạng), hạng 4+ hiện chuỗi và cây', async () => {
     mocks.api.getLeaderboard.mockResolvedValue([
       { rank: 1, nickname: 'Nhất', streak: 30, treesPlanted: 9 },
       { rank: 2, nickname: 'Nhì', streak: 20, treesPlanted: 7 },
@@ -1136,14 +1136,19 @@ describe('GamePage — bảng xếp hạng', () => {
     const third = screen.getByText('Ba');
     expect(second.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(first.compareDocumentPosition(third) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(container.textContent).toContain('🌳9');
+    expect(screen.getByText('Chuỗi điểm danh dài nhất')).toBeInTheDocument();
+    expect(screen.queryByText('Bảng xếp hạng tuần')).not.toBeInTheDocument();
+    expect(container.textContent).toContain('🔥30');
+    expect(container.textContent).toContain('🔥20');
+    expect(container.textContent).toContain('🔥10');
+    expect(container.textContent).not.toContain('🌳9');
     expect(screen.getByText('#4 Tư')).toBeInTheDocument();
     expect(container.textContent).toContain('🔥5 · 🌳2');
   });
 });
 
 describe('GamePage — cảnh báo React trùng key', () => {
-  it('mọi danh sách dựng từ dữ liệu đúng hình của API (kể cả bảng tuần chỉ có 2 người) không phát cảnh báo key', async () => {
+  it('mọi danh sách dựng từ dữ liệu đúng hình của API (kể cả bảng chuỗi dài nhất chỉ có 2 người) không phát cảnh báo key', async () => {
     mocks.features.seasonPass = true;
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const HOME = { id: null, slot: 1, isHome: true, treeType: 'Sồi', speciesId: null, progress: 10, target: 50, treeStage: 1, treesPlanted: 3, treeHealth: 'HEALTHY' };

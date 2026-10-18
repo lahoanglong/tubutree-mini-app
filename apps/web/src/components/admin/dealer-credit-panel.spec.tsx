@@ -29,10 +29,12 @@ const dealerOrder = (over: Partial<AdminOrder> = {}): AdminOrder => ({
   ...over,
 });
 
+// Quy ước của API (DealerService.creditLedger): tổng delta DƯƠNG = đang nợ; đơn ghi công nợ cộng, khoản đã trả trừ.
 const LEDGER_BODY = {
-  balance: -3_000_000, // đang nợ 3tr
+  balance: 3_000_000, // đang nợ 3tr
   entries: [
-    { id: 'e2', delta: -3_000_000, refType: 'ORDER', refId: 'o2', note: 'Đơn TB-199 ghi công nợ', createdAt: '2026-09-20T00:00:00.000Z' },
+    { id: 'e3', delta: -1_000_000, refType: 'PAYMENT', refId: null, note: 'Admin xác nhận đã nhận chuyển khoản', createdAt: '2026-09-21T00:00:00.000Z' },
+    { id: 'e2', delta: 4_000_000, refType: 'ORDER', refId: 'o2', note: 'Đơn TB-199 ghi công nợ', createdAt: '2026-09-20T00:00:00.000Z' },
   ],
 };
 
@@ -45,7 +47,7 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
   it('bấm mở → tải sổ công nợ, hiện dư nợ + lịch sử; xác nhận trả nợ → POST đúng endpoint, hỏi xác nhận trước', async () => {
     const api = mockFetch({
       '/credit-ledger': { body: LEDGER_BODY },
-      '/credit-payment': { body: { balance: -1_000_000 } },
+      '/credit-payment': { body: { balance: 1_000_000 } },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const native = vi.spyOn(window, 'confirm');
@@ -55,7 +57,8 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
     await flush();
 
     expect(api.calls[0]!.url).toContain('/admin/dealers/u-dealer-1/credit-ledger');
-    expect(container.textContent).toContain('3.000.000');
+    expect(container.textContent).toContain('Dư nợ hiện tại: 3.000.000');
+    expect(container.textContent).not.toContain('-3.000.000');
     expect(container.textContent).toContain('Đơn TB-199 ghi công nợ');
 
     typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '2000000');
@@ -115,6 +118,42 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
 });
 
 // C-097 (Q-29): khối công nợ có thao tác tiền nên nút/ô nhập chạm được ở 390px; dư nợ tô theo token trạng thái.
+describe('DealerCreditPanel — trạng thái dư nợ', () => {
+  it('hết nợ (balance 0) tô xanh, không hiện số âm', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: { balance: 0, entries: [] } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    expect(container.querySelector('p span.text-success-fg')?.textContent).toContain('0');
+    expect(container.textContent).toContain('Chưa có phát sinh.');
+  });
+
+  it('onPaid được gọi sau khi ghi giảm nợ thành công (để màn danh sách đại lý tải lại dư nợ)', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 1_000_000 } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const onPaid = vi.fn();
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} defaultOpen onPaid={onPaid} />);
+    await flush();
+    typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '2000000');
+    click(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    expect(onPaid).not.toHaveBeenCalled();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaultOpen: mở sẵn và tải sổ ngay (dùng trong tab Đại lý, nút "Ghi nhận thanh toán" đã là thao tác mở)', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerCreditPanel order={{ type: 'DEALER', user: { id: 'u-dealer-1', phone: null, fullName: 'Đại lý A' } }} defaultOpen />);
+    await flush();
+    expect(api.calls[0]!.url).toContain('/admin/dealers/u-dealer-1/credit-ledger');
+    expect(container.textContent).toContain('Dư nợ hiện tại: 3.000.000');
+  });
+});
+
 describe('DealerCreditPanel — DS v2', () => {
   it('nút mở/đóng, ô nhập và nút xác nhận cao 44px ở điện thoại; ô nhập chịu xuống dòng (basis-40)', async () => {
     const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY } });
@@ -136,6 +175,10 @@ describe('DealerCreditPanel — DS v2', () => {
     click(byText(container, 'button', 'Công nợ đại lý'));
     await flush();
     expect(container.querySelector('p span.text-danger-fg')?.textContent).toContain('3.000.000');
+    // Dòng nợ thêm (delta dương) tô đỏ, khoản đã trả (delta âm) tô xanh.
+    const rows = Array.from(container.querySelectorAll('ul li'));
+    expect(rows.find((li) => li.textContent?.includes('Đơn TB-199'))?.querySelector('span:last-child')?.className).toContain('text-danger-fg');
+    expect(rows.find((li) => li.textContent?.includes('xác nhận đã nhận'))?.querySelector('span:last-child')?.className).toContain('text-success-fg');
     click(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ'));
     await flush();
     expect(container.querySelector('[role="alert"]')?.className).toContain('text-danger-fg');

@@ -10,6 +10,7 @@ import {
   CreateCouponDto,
   DealerAppsQuery,
   DealerPriceHistoryQuery,
+  ExportOrdersQuery,
   GomdonMarkHandledDto,
   GomdonRetryDto,
   ListOrdersQuery,
@@ -55,6 +56,12 @@ describe('CreateCouponDto validation (Phase 1 findings)', () => {
   it('perUserLimit = 0 → HỢP LỆ (0 = không giới hạn, nhất quán với coupons.service.ts)', async () => {
     const errors = await validate(makeDto({ perUserLimit: 0 }));
     expect(errors.some((e) => e.property === 'perUserLimit')).toBe(false);
+  });
+
+  it('D2-03: scope CLAIM (mã ẩn) + newCustomerOnly → hợp lệ, không cần scopeMeta; newCustomerOnly phải là boolean', async () => {
+    expect(await validate(makeDto({ scope: 'CLAIM', newCustomerOnly: true }))).toHaveLength(0);
+    const errors = await validate(makeDto({ newCustomerOnly: 'yes' }));
+    expect(errors.some((e) => e.property === 'newCustomerOnly')).toBe(true);
   });
 
   it('perUserLimit không truyền → hợp lệ (optional)', async () => {
@@ -288,6 +295,34 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     expect(returns.listForAdmin).toHaveBeenCalledWith(undefined, 2, 10, undefined);
   });
 
+  it('xuất CSV đơn: người xuất không phải quản trị viên thì che SĐT (D1-05)', async () => {
+    async function* empty(): AsyncGenerator<string> {}
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    await ctrl.exportOrders({} as never, 'STAFF', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: true });
+    await ctrl.exportOrders({} as never, 'ADMIN', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: false });
+  });
+
+  it('xuất CSV đơn có bộ lọc mới (loại đơn, thanh toán, ngày, gian hàng): kế toán vẫn bị che SĐT, bộ lọc giữ nguyên (D1-05, D1-17)', async () => {
+    async function* empty(): AsyncGenerator<string> {}
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const q = Object.assign(new ExportOrdersQuery(), {
+      kind: 'ctv' as const,
+      payment: 'PAID' as const,
+      platform: 'miniapp' as const,
+      from: '2026-10-01',
+      to: '2026-10-18',
+      storefront: 'an',
+    });
+    await ctrl.exportOrders(q, 'STAFF', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith(q, { maskPhones: true });
+  });
+
   it('DealerPriceHistoryQuery nhận variationId', async () => {
     const q = (await asQuery(DealerPriceHistoryQuery, { variationId: 'v1' })) as DealerPriceHistoryQuery;
     expect(q.variationId).toBe('v1');
@@ -330,7 +365,7 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     await ctrl.cancelGomdonWaybill('admin-1', 'o1');
     expect(admin.cancelGomdonWaybill).toHaveBeenCalledWith('admin-1', 'o1');
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }), VIEWER);
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined, undefined, undefined, VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined, undefined, undefined, VIEWER, {});
   });
 
   it('POST orders/:id/gomdon/mark-handled chuyển adminId + id + note xuống AdminService', async () => {
@@ -350,7 +385,7 @@ describe('AdminController — hàng đợi "Cần xử lý Pancake"', () => {
     const admin = { listOrders: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
     const ctrl = new AdminController(admin as never, {} as never);
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 1, pancake: 'attention' as const }), VIEWER);
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention', undefined, undefined, VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention', undefined, undefined, VIEWER, {});
   });
 
   it('POST orders/:id/pancake-attention/resolve: chỉ ADMIN, chuyển adminId + id + note; note ≤ 500, chặn field lạ', async () => {
@@ -373,8 +408,10 @@ describe('POST /admin/orders/:id/confirm-payment (C-024)', () => {
   it('route POST, chỉ ADMIN (kế thừa class), chuyển adminId + id + body xuống AdminService', async () => {
     const admin = { confirmOrderPayment: jest.fn().mockResolvedValue({ ok: true }) };
     const ctrl = new AdminController(admin as never, {} as never);
-    await ctrl.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT1' });
-    expect(admin.confirmOrderPayment).toHaveBeenCalledWith('admin-1', 'TB-1', { bankRef: 'FT1' });
+    await ctrl.confirmOrderPayment('admin-1', 'ADMIN', 'TB-1', { bankRef: 'FT1' });
+    expect(admin.confirmOrderPayment).toHaveBeenCalledWith('admin-1', 'TB-1', { bankRef: 'FT1' }, { byStaff: false });
+    await ctrl.confirmOrderPayment('kt-1', 'STAFF', 'TB-1', {});
+    expect(admin.confirmOrderPayment).toHaveBeenLastCalledWith('kt-1', 'TB-1', {}, { byStaff: true });
     expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.confirmOrderPayment)).toBe('orders/:id/confirm-payment');
     expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.confirmOrderPayment)).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(ROLES_KEY, AdminController)).toEqual(['ADMIN']);
@@ -494,5 +531,28 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
       takeoverProductId: undefined,
       updatedAt: undefined,
     });
+  });
+});
+
+describe('POST /admin/products/sold-external — CSV đọc số chặt', () => {
+  const run = (csv: string) => {
+    const catalog = { setSoldExternal: jest.fn().mockResolvedValue({ updated: 1 }) };
+    const ctrl = new AdminController({} as never, catalog as never);
+    return { catalog, call: () => ctrl.setSoldExternal({ csv }) };
+  };
+
+  it('"1.250" là 1250 (trước đây thành 1) và cho đặt về 0', async () => {
+    const { catalog, call } = run('A1,1.250\nA2,0');
+    await call();
+    expect(catalog.setSoldExternal).toHaveBeenCalledWith([
+      { sku: 'A1', count: 1250 },
+      { sku: 'A2', count: 0 },
+    ]);
+  });
+
+  it('có dòng không đọc được → 400, không ghi dòng nào', async () => {
+    const { catalog, call } = run('A1,1250\nA2,12.5');
+    await expect(Promise.resolve().then(call)).rejects.toThrow('dòng 2');
+    expect(catalog.setSoldExternal).not.toHaveBeenCalled();
   });
 });

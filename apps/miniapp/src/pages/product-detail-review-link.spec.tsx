@@ -34,7 +34,7 @@ vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValu
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
-vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn() }));
+vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), hasOA: false, openOAChat: vi.fn() }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'authenticated', login: vi.fn() }) }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ data: undefined }) }));
 // Khối đánh giá thật mở form khi can-review về rồi báo đã dùng đơn (reviews-section.spec.tsx); ở đây chỉ cần đúng hợp đồng đó.

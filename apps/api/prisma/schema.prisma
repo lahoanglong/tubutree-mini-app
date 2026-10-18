@@ -264,6 +264,10 @@ model User {
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   pancakeCustomerId      String?         @unique
   metadata               Json?
+  /// Nguồn chạm đầu (shopee, card-<đợt>, oa, ...): ghi MỘT lần lúc tạo tài khoản, hoặc lúc gộp khách vào tài khoản còn trống; không bao giờ ghi đè (common/attribution.ts). null = chưa biết (tài khoản có trước tính năng).
+  firstTouchSource       String?
+  firstTouchCampaign     String?
+  firstTouchAt           DateTime?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
 
@@ -312,6 +316,8 @@ model User {
   posCreditsGiven        PosPointCredit[]        @relation("PosCreditStaff")
 
   @@index([referredById])
+  /// Báo cáo nguồn khách × tuần (admin): khách tạo trong khoảng ngày.
+  @@index([createdAt])
   // Tìm đơn admin theo SĐT/tên khách (LIKE/ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
   @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_phone_trgm_idx")
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullName_trgm_idx")
@@ -650,6 +656,15 @@ model Storefront {
   ordersPausedAt      DateTime?
   isPublished         Boolean                  @default(false)
   publishedAt         DateTime?
+  /// Admin duyệt gian hàng CTV (tick xanh, nhãn "CTV tuyển chọn"). NULL = chưa duyệt. Gian hàng đối tác và nhãn hàng luôn tính là đã duyệt
+  /// (không đọc cột này): đối tác đã qua bước duyệt đại lý, nhãn hàng do admin tạo.
+  approvedAt          DateTime?
+  approvedById        String?
+  /// Admin gỡ đăng vì vi phạm: chủ không đăng lại được cho tới khi admin đăng lại. NULL = không bị gỡ. Giữ `publishedAt` nguyên để
+  /// "Đăng lại" khôi phục đúng trạng thái trước khi gỡ.
+  takenDownAt         DateTime?
+  takenDownReason     String?
+  takenDownById       String?
   collections         StorefrontCollection[]
   products            Product[]                @relation("StorefrontProducts")
   fulfilledOrders     Order[]                  @relation("OrderFulfiller")
@@ -701,46 +716,46 @@ model StorefrontItem {
 }
 
 model Variation {
-  id            String   @id @default(cuid())
+  id                            String    @id @default(cuid())
   /// NULL = biến thể không có trên Pancake (sản phẩm đối tác tự giao).
-  pancakeId     String?  @unique
-  productId     String
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku           String   @unique
-  name          String
-  attributes    Json
-  retailPrice   Int
-  salePrice     Int?
-  dealerPrices  Json? // {tier_silver: 200000, tier_gold: 190000}
-  affiliateRate Decimal? // % hoa hồng CTV (import Excel) — spec 15.2 affiliate.product_rate_source
+  pancakeId                     String?   @unique
+  productId                     String
+  product                       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                           String    @unique
+  name                          String
+  attributes                    Json
+  retailPrice                   Int
+  salePrice                     Int?
+  dealerPrices                  Json? // {tier_silver: 200000, tier_gold: 190000}
+  affiliateRate                 Decimal? // % hoa hồng CTV (import Excel) — spec 15.2 affiliate.product_rate_source
   /// Tồn kho BÁN ĐƯỢC — mọi nơi kiểm tồn/hiển thị đọc đúng cột này (không đổi).
-  stock         Int      @default(0)
+  stock                         Int       @default(0)
   /// Số `remain_quantity` mà Pancake báo ở lần đồng bộ gần nhất. NULL = chưa từng đồng bộ
   /// (sản phẩm do merchant tự tạo, hoặc variation có trước khi có cơ chế này).
-  pancakeStock  Int?
+  pancakeStock                  Int?
   /// Số đơn vị đã bán bằng đơn CỦA TA mà số liệu Pancake chưa phản ánh.
   /// Sync tính `stock = pancakeStock_mới − reservedStock`, và mỗi khi số Pancake GIẢM thì trừ
   /// bấy nhiêu khỏi `reservedStock`. Nhờ đó công thức đúng cho cả hai trường hợp: Pancake có
   /// tự trừ tồn khi ta tạo đơn (số giảm ⇒ nhả giữ chỗ) lẫn không tự trừ (số đứng yên ⇒ giữ chỗ
   /// còn nguyên). Xem docs/2026-09-11-P0-3-pancake-stock-decision-brief.md.
-  reservedStock Int      @default(0)
+  reservedStock                 Int       @default(0)
   /// `updated_at` (giờ Pancake) của webhook tồn kho gần nhất đã áp. Chỉ so webhook với webhook (Pancake gửi không theo thứ
   /// tự, BullMQ thử lại): webhook cũ hơn mốc này tới sau thì không áp. NULL = chưa áp webhook nào có mốc giờ. Đồng bộ danh mục
   /// không đọc/ghi cột này: `updated_at` không mang múi giờ, Node đọc theo múi giờ của tiến trình, nên không bao giờ so nó với
   /// đồng hồ máy chủ — lượt đồng bộ đi bằng hai cột dưới.
-  pancakeStockEventAt DateTime?
+  pancakeStockEventAt           DateTime?
   /// Lúc (giờ máy chủ Tubu) lượt đồng bộ danh mục bắt đầu đọc trang Pancake mang số tồn đang áp. Webhook tồn kho NHẬN trước
   /// mốc này (hàng đợi chậm, Redis sập rồi xử lý sau) mang số cũ hơn lần đọc nên không áp. NULL = chưa lượt đồng bộ nào áp mốc.
-  pancakeStockSyncReadAt DateTime?
+  pancakeStockSyncReadAt        DateTime?
   /// Lúc (giờ máy chủ Tubu, `PancakeWebhookEvent.receivedAt`) nhận webhook tồn kho muộn nhất đã áp. Lượt đồng bộ bắt đầu đọc
   /// trước mốc này thì không ghi đè (webhook có thể mới hơn số nó đã đọc). NULL = chưa áp webhook nào kể từ khi có cột.
   pancakeStockWebhookReceivedAt DateTime?
-  isActive      Boolean  @default(true)
+  isActive                      Boolean   @default(true)
   /// Lý do đồng bộ Pancake tự tắt biến thể: REMOVED (Pancake xoá / không còn trong danh mục) | NO_PRICE
   /// (tạo mới mà thiếu giá). NULL = đồng bộ không giữ — isActive=false khi đó là do admin/merchant tắt,
   /// đồng bộ không được tự bật lại.
-  pancakeHold   String?
-  weight        Int?
+  pancakeHold                   String?
+  weight                        Int?
 
   cartItems          CartItem[]
   dealerPriceHistory DealerPriceHistory[]
@@ -975,7 +990,7 @@ model Order {
   placedForCustomer      Boolean               @default(false)
   /// @deprecated Không nơi nào ghi hoặc đọc, luôn 0 (C-108); hoa hồng CTV nằm ở bảng commissions.
   commission             Int                   @default(0)
-  source                 String? // checkout | buy_now | ctv_assisted | subscription | dealer
+  source                 String? // checkout | buy_now | storefront | ctv_assisted | subscription | dealer
   platform               String? // miniapp | web — null cho đơn cũ trước migration này
   paidAt                 DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId         String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
@@ -1047,6 +1062,8 @@ model Order {
   updatedAt              DateTime              @updatedAt
 
   @@index([userId, status])
+  /// Báo cáo nguồn khách: đơn đầu/đơn hai của từng khách theo thời gian.
+  @@index([userId, createdAt])
   @@index([referrerUserId])
   @@index([storefrontSlug])
   // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —
@@ -1073,6 +1090,11 @@ model Order {
   @@index([fulfillerStorefrontId, status, createdAt])
   @@index([storefrontId, createdAt])
   @@index([checkoutGroup])
+  // Bộ lọc danh sách đơn admin (loại đơn, thanh toán, nền tảng; admin-order-filter.ts): mỗi lọc kèm sắp xếp createdAt.
+  @@index([paymentStatus, createdAt])
+  @@index([type, createdAt])
+  @@index([platform, createdAt])
+  @@index([placedForCustomer, createdAt])
   @@map("orders")
 }
 
@@ -1301,32 +1323,59 @@ enum CouponScope {
   USER_GROUP
   BIRTHDAY
   INVITE
+  // Mã ẩn (thẻ in bỏ hộp hàng): chỉ vào ví của khách đã nhận qua link `?claim=` hoặc gõ mã ở giỏ (coupon_claims).
+  CLAIM
 }
 
 model Coupon {
-  id           String             @id @default(cuid())
-  code         String             @unique
-  type         CouponType
-  value        Int
-  minOrder     Int?
-  maxDiscount  Int?
-  startAt      DateTime
-  endAt        DateTime
-  usageLimit   Int?
-  usedCount    Int                @default(0) // B4: bộ đếm atomic dùng cho updateMany guard
-  perUserLimit Int                @default(1)
+  id              String             @id @default(cuid())
+  code            String             @unique
+  type            CouponType
+  value           Int
+  minOrder        Int?
+  maxDiscount     Int?
+  startAt         DateTime
+  endAt           DateTime
+  usageLimit      Int?
+  usedCount       Int                @default(0) // B4: bộ đếm atomic dùng cho updateMany guard
+  perUserLimit    Int                @default(1)
   // { productIds: string[] } = chỉ áp khi giỏ có các sản phẩm đó, mức giảm/minOrder tính trên chúng.
-  applyTo      Json?
-  isStackable  Boolean            @default(false)
+  applyTo         Json?
+  isStackable     Boolean            @default(false)
   // Admin tắt mã (lộ mã/đặt nhầm giá trị) mà không xoá lịch sử dùng.
-  isActive     Boolean            @default(true)
-  scope        CouponScope
-  scopeMeta    Json?
-  redemptions  CouponRedemption[]
+  isActive        Boolean            @default(true)
+  scope           CouponScope
+  scopeMeta       Json?
+  redemptions     CouponRedemption[]
   // Remarketing (nhắc voucher cá nhân sắp hết hạn): null = chưa nhắc.
-  remindedAt   DateTime?
+  remindedAt      DateTime?
+  // Chỉ khách chưa có đơn nào (trừ đơn huỷ) dùng được; kiểm lại trong transaction đặt đơn (common/first-order.ts).
+  newCustomerOnly Boolean            @default(false)
+  // Lô mã in thẻ do admin sinh cùng cấu hình: gom số đã nhận/đã dùng và xuất lại CSV theo lô.
+  batch           String?
+  claims          CouponClaim[]
+  /// Người tạo / sửa gần nhất qua trang quản trị (null = mã hệ thống hoặc tạo trước khi có cột). Nhân viên chỉ sửa được
+  /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.
+  createdById     String?
+  updatedById     String?
+  createdAt       DateTime           @default(now())
 
+  @@index([batch])
+  @@index([createdById, createdAt])
   @@map("coupons")
+}
+
+/// Khách đã nhận mã CLAIM vào ví. Mỗi khách nhận một mã một lần; số dòng của một mã không vượt `usageLimit`.
+model CouponClaim {
+  id        String   @id @default(cuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId    String
+  claimedAt DateTime @default(now())
+
+  @@unique([couponId, userId])
+  @@index([userId])
+  @@map("coupon_claims")
 }
 
 model CouponRedemption {
@@ -1364,6 +1413,8 @@ model AffiliateLink {
 }
 
 /// @deprecated Chỉ ghi, không đọc (C-108): AffiliateService.trackClick ghi mỗi lượt bấm, không nơi nào đọc lại.
+/// Route công khai POST /affiliate/click chặn ghi trùng bằng ràng buộc duy nhất (shortCode, ipHash, dedupeDay): lần ghi thứ hai
+/// trong ngày vi phạm khoá và bị bỏ, không có truy vấn đọc nào.
 model AffiliateClick {
   id               String   @id @default(cuid())
   shortCode        String
@@ -1374,7 +1425,10 @@ model AffiliateClick {
   clickedAt        DateTime @default(now())
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108, A7-24).
   convertedOrderId String?
+  /// Ngày giờ VN (YYYY-MM-DD) của lượt bấm từ route công khai; null ở các dòng ghi bằng đường khác (Postgres cho phép nhiều null).
+  dedupeDay        String?
 
+  @@unique([shortCode, ipHash, dedupeDay])
   @@index([shortCode])
   @@map("affiliate_clicks")
 }
@@ -1851,6 +1905,23 @@ model DealerTier {
   paymentTerms   String?
 
   @@map("dealer_tiers")
+}
+
+/// Lịch sử sửa bậc đại lý (chiết khấu, hạn mức, điều kiện): ai đổi gì lúc nào. Không FK để dòng lịch sử sống lâu hơn bậc.
+model DealerTierHistory {
+  id        String   @id @default(cuid())
+  tierId    String
+  /// CREATE | UPDATE
+  action    String
+  /// Ảnh chụp trước khi sửa (null khi tạo): { name, minOrderVolume, discountPct, creditLimit, paymentTerms }.
+  oldValue  Json?
+  newValue  Json
+  changedBy String
+  changedAt DateTime @default(now())
+
+  @@index([tierId, changedAt])
+  @@index([changedAt])
+  @@map("dealer_tier_history")
 }
 
 model DealerCreditLedger {
@@ -2981,6 +3052,8 @@ model AnalyticsEvent {
   platform       String
   appVersion     String?
   entrySource    String?
+  /// Chiến dịch (utm_campaign / thẻ trong hộp) của phiên phát sinh sự kiện, đi kèm entrySource.
+  campaign       String?
   notificationId String?
   refCode        String?
   storefrontSlug String?
@@ -3049,4 +3122,127 @@ model CronLease {
   updatedAt DateTime
 
   @@map("cron_leases")
+}
+
+/// Nguồn đơn Pancake không phải đơn đặt trong app: sàn (Shopee/Lazada/TikTok), chat/điện thoại, hoặc chưa biết.
+enum ExternalOrderSource {
+  MARKETPLACE
+  CHAT
+  UNKNOWN
+}
+
+/// Trạng thái đơn ngoài suy từ mã trạng thái Pancake (pancake-status.map): OPEN = chưa giao xong.
+enum ExternalOrderStatus {
+  OPEN
+  DELIVERED
+  RETURNING
+  RETURNED
+  CANCELLED
+  PARTIAL_RETURN
+  DELETED
+}
+
+enum ExternalClaimKind {
+  SCAN
+  PHONE
+}
+
+enum ExternalClaimState {
+  PENDING
+  REVIEW
+  HELD_NO_MEMBER
+  CREDITED
+  VOIDED
+  REVERSED
+  LAPSED
+}
+
+/// Đơn Pancake không có trong bảng orders (đơn sàn, chat, điện thoại). Khoá theo id đơn Pancake; `lastPayload` là
+/// bản mới nhất vì pancake_webhook_events bị data-retention xoá theo hạn. KHÔNG chứa quan hệ tới users: userId ở
+/// bảng claim là chuỗi thường, đơn ngoài tồn tại độc lập với thành viên.
+model ExternalOrder {
+  id                 String               @id @default(cuid())
+  pancakeOrderId     String               @unique
+  source             ExternalOrderSource
+  /// shopee | lazada | tiktok; null với CHAT/UNKNOWN.
+  channel            String?
+  /// `${order_sources}|${account}|${marketplace_id}` — bảng "nguồn đã thấy" của admin gom theo khoá này.
+  sourceKey          String
+  trackingCode       String?
+  trackingCodes      String[]
+  marketplaceOrderSn String?
+  /// SĐT dạng 0xxxxxxxxx để ghép thành viên; không bao giờ trả thô qua API.
+  phone              String?
+  phoneLast3         String?
+  goodsValue         Int?
+  pancakeStatus      Int?
+  status             ExternalOrderStatus  @default(OPEN)
+  pancakeInsertedAt  DateTime?
+  pancakeUpdatedAt   DateTime?
+  deliveredAt        DateTime?
+  closedAt           DateTime?
+  lastPayload        Json
+  firstSeenAt        DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  claim              ExternalPointsClaim?
+
+  // SQL tay (migration 20261019100000_external_orders): "external_orders_phone_idx" ON (phone) WHERE phone IS NOT NULL.
+  @@index([trackingCode])
+  @@index([trackingCodes], type: Gin)
+  @@index([source, status])
+  @@index([sourceKey])
+  @@map("external_orders")
+}
+
+/// Điểm chờ của một đơn ngoài (bước 2/3, chưa ghi dòng nào ở bước 1). Chỉ khi tới hạn mới ghi ĐÚNG một dòng vào
+/// points_transactions. Partial unique SQL: "external_points_claims_code_key" ON ("claimedCode") WHERE "claimedCode" IS NOT NULL.
+model ExternalPointsClaim {
+  id              String             @id @default(cuid())
+  externalOrderId String             @unique
+  externalOrder   ExternalOrder      @relation(fields: [externalOrderId], references: [id])
+  userId          String?
+  kind            ExternalClaimKind
+  state           ExternalClaimState @default(PENDING)
+  ratePct         Decimal            @db.Decimal(6, 4)
+  multiplier      Decimal            @db.Decimal(6, 3)
+  points          Int                @default(0)
+  countsForTier   Boolean            @default(false)
+  claimedCode     String?
+  releaseAt       DateTime?
+  holdUntil       DateTime?
+  creditedAt      DateTime?
+  pointsTxId      String?
+  voidReason      String?
+  reviewReason    String?
+  decidedById     String?
+  /// Ngày VN 'YYYY-MM-DD' lúc tạo claim, để đếm trần ngày.
+  dayKey          String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([state, releaseAt])
+  @@index([state, holdUntil])
+  @@index([userId, createdAt])
+  @@index([userId, dayKey])
+  @@map("external_points_claims")
+}
+
+/// Mỗi lần khách gửi mã đơn sàn (kể cả không tìm thấy), để giới hạn thử và để cron ghép lại.
+/// Partial unique SQL: "external_claim_attempts_unmatched_key" ON ("code") WHERE "result" = 'UNMATCHED' AND "resolvedAt" IS NULL.
+model ExternalClaimAttempt {
+  id              String    @id @default(cuid())
+  userId          String
+  code            String
+  /// MATCHED | UNMATCHED | REJECTED_*
+  result          String
+  externalOrderId String?
+  dayKey          String
+  resolvedAt      DateTime?
+  resolvedById    String?
+  note            String?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([result, createdAt])
+  @@map("external_claim_attempts")
 }

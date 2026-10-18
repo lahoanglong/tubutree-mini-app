@@ -2,10 +2,15 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PICKUP_PHONE_PATTERN } from '../../common/phone';
+import { COMMUNITY_LINK_KEYS, communityUrlProblem } from './community-links';
 import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
 import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliate/commission-eligibility';
+import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pancake/pancake-category-map';
+import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
+import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 
 const DISPLAY_NAME_MAX = 100;
 
@@ -21,6 +26,14 @@ function displayNameProblem(value: unknown, what: string): string | null {
  * QUY TẮC: mọi rate/ngưỡng/hold-time PHẢI lấy qua service này, KHÔNG hard-code.
  * Cache in-memory ngắn để tránh query lặp; invalidates khi set().
  */
+const LEGAL_DOC_MAX_CHARS = 50_000;
+
+function legalDocProblem(value: unknown): string | null {
+  if (typeof value !== 'string') return 'phải là chuỗi chữ (markdown hoặc chữ thường)';
+  if (value.length > LEGAL_DOC_MAX_CHARS) return `tối đa ${LEGAL_DOC_MAX_CHARS.toLocaleString('vi-VN')} ký tự`;
+  return null;
+}
+
 @Injectable()
 export class SystemConfigService {
   private cache = new Map<string, { value: unknown; at: number }>();
@@ -78,11 +91,14 @@ export class SystemConfigService {
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
     'wishlist.price_drop_min_pct': { min: 0, max: 1, note: 'phân số (0.05 = 5%)' },
     'wishlist.price_drop_cooldown_days': { min: 0, max: 90, note: 'số ngày (0 = tắt cooldown)', integer: true },
+    'community.author_notify_interval_minutes': { min: 0, max: 1440, note: 'số phút gộp tin "bài của bạn có người thích/bình luận" (0 = tắt tin)', integer: true },
+    'community.unanswered_alert_hours': { min: 1, max: 720, note: 'số giờ câu hỏi chưa ai trả lời thì lên "Việc cần xử lý"', integer: true },
     'subscribe.stock_retry_days': { min: 0, max: 7, note: 'số đêm thử lại kỳ định kỳ khi hết hàng (0 = không thử lại)', integer: true },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
     'flashsale.max_discount_pct': { min: 0.01, max: 1, note: 'phân số (0.9 = giá flash ≥ 10% giá đang bán; 1 = không chặn)' },
     'flashsale.max_duration_days': { min: 1, max: 366, note: 'số ngày tối đa của một đợt flash sale', integer: true },
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },
+    'dealer.review_hours': { min: 1, max: 720, note: 'số giờ nguyên Tubu hẹn xét duyệt hồ sơ đại lý (chỉ để hiện chữ cho người đăng ký)', integer: true },
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },
     'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)', integer: true },
     'cashback.hold_days': { min: 0, max: 365, note: 'số ngày', integer: true },
@@ -110,6 +126,12 @@ export class SystemConfigService {
     'community.post_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
     'community.answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
     'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
+    // Điểm UY TÍN cộng đồng (cấp Mầm đến Cổ thụ), không phải Điểm Xanh. Cột reputation/amount là INTEGER: số lẻ làm giao dịch lỗi,
+    // và bumpReputation nuốt lỗi đó nên người đăng bài không được cộng mà không ai biết. Số lớn đưa người đăng bài lên cấp cao nhất ngay.
+    'community.rep_post': { min: 0, max: 100, note: 'điểm uy tín mỗi bài được đăng (0 = không cộng)', integer: true },
+    'community.rep_answer': { min: 0, max: 100, note: 'điểm uy tín mỗi câu trả lời (0 = không cộng)', integer: true },
+    'community.rep_best': { min: 0, max: 100, note: 'điểm uy tín cho câu trả lời được chọn hay nhất (0 = không cộng)', integer: true },
+    'community.daily_rep_cap': { min: 0, max: 1000, note: 'điểm uy tín tối đa mỗi người mỗi ngày (0 = không ai được cộng)', integer: true },
     'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
     'game.spin_voucher_min_order_multiplier': { min: 1, max: 50, note: 'hệ số nguyên (6 = voucher 20.000đ cho đơn từ 120.000đ)', integer: true },
@@ -117,6 +139,7 @@ export class SystemConfigService {
     // 1đ = 1 điểm là tích điểm gấp 10.000 lần. Chặn ngay lúc ghi.
     'shipping.flat_fee_below_threshold': { min: 0, max: 1_000_000, note: 'đồng phí ship cố định', integer: true },
     'shipping.free_threshold': { min: 0, max: 50_000_000, note: 'đồng (đơn từ mức này được freeship)', integer: true },
+    'shipping.first_order_free_min_subtotal': { min: 0, max: 50_000_000, note: 'đồng tiền hàng tối thiểu để đơn đầu được freeship (0 = mọi đơn đầu)', integer: true },
     'loyalty.vnd_per_point': { min: 1000, max: 1_000_000, note: 'đồng chi tiêu cho 1 Điểm Xanh (10000 = 10.000đ/điểm)', integer: true },
     'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
     'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
@@ -156,6 +179,8 @@ export class SystemConfigService {
     'groupbuy.target_size': { min: 2, max: 50, note: 'số người', integer: true },
     'referral.window_days': { min: 1, max: 365, note: 'số ngày', integer: true },
     'affiliate.attribution_days': { min: 1, max: 365, note: 'số ngày', integer: true },
+    // Trần % hoa hồng CTV admin được đặt cho biến thể (commission-admin.service). PHẦN TRĂM, không phải phân số như pit_withhold_pct.
+    'affiliate.max_rate_pct': { min: 0, max: 100, note: 'phần trăm (50 = 50%)' },
     'flashsale.default_per_user_limit': { min: 1, max: 1000, note: 'số sản phẩm mỗi người', integer: true },
     // ADMINOPS-3 (vòng 3, R3-UI-4): các khoá số còn lại nhận số âm, số khổng lồ hay số thực nên "đã lưu" mà tính năng chạy sai
     // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.
@@ -219,11 +244,37 @@ export class SystemConfigService {
       value === '' || (typeof value === 'string' && PICKUP_PHONE_PATTERN.test(value))
         ? null
         : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
+    // Vai trò được ghi công đơn và hưởng hoa hồng CTV (affiliate.service createCommissionForOrder / findEligibleReferrer).
+    [COMMISSION_ELIGIBLE_ROLES_KEY]: eligibleRolesProblem,
+    // Cờ gian hàng: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
+    [STOREFRONT_REQUIRE_APPROVAL_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    [STOREFRONT_SUBDOMAIN_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     'payment.bank_bin': (value) =>
       typeof value === 'string' && /^\d{6}$/.test(value) ? null : 'phải là mã BIN Napas gồm đúng 6 chữ số (vd "970407")',
     // Trang chuyển khoản của khách và phiếu chi trả đối tác in nguyên hai dòng này: để trống là "Ngân hàng: " trống trơn.
     'payment.bank_name': (value) => displayNameProblem(value, 'tên ngân hàng, vd "Techcombank"'),
     'payment.bank_account_name': (value) => displayNameProblem(value, 'tên chủ tài khoản in hoa không dấu, vd "CONG TY TUBU TREE"'),
+    // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để cờ tắt không vô tình bật freeship đơn đầu.
+    'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Công tắc kiểm lệch tổng Pancake (PANCAKE_TOTAL_CHECK_KEY): chỉ `false` mới tắt, nên chuỗi "false" phải bị từ chối chứ không được lưu.
+    // Nhóm hàng Pancake → danh mục Tubu (PancakeSyncService.mappedCategoryIds): sai dạng thì đồng bộ lặng lẽ không gán danh mục nào.
+    [PANCAKE_CATEGORY_MAP_KEY]: categoryMapProblem,
+    'pancake.total_mismatch_check': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ nạp đơn ngoài app: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
+    [EXTERNAL_CAPTURE_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Sai bản đồ nguồn thì mọi đơn sàn rơi xuống "chưa biết" mà không ai thấy lỗi.
+    [ORDER_SOURCE_MAP_KEY]: orderSourceMapProblem,
+    // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.
+    'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.
+    'community.public_preview': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Link kênh cộng đồng mở ra ngoài app qua webview: chỉ https và tên miền mạng xã hội đã duyệt.
+    ...Object.fromEntries(COMMUNITY_LINK_KEYS.map((k) => [k, communityUrlProblem])),
+    // Link nhận mã in trong QR thẻ hộp hàng và link chia sẻ của CTV dựng từ khoá này: sai là thẻ đã in mở ra trang lỗi.
+    'app.miniapp_base_url': (value) =>
+      value === '' || (typeof value === 'string' && /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(value))
+        ? null
+        : 'phải để trống hoặc là link https của Mini App, vd "https://zalo.me/s/1234567890"',
     'shipping.tier_freeship_overrides': (value) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { HẠNG: ngưỡng freeship (đồng) }';
       for (const [tier, threshold] of Object.entries(value as Record<string, unknown>)) {
@@ -267,6 +318,32 @@ export class SystemConfigService {
       }
       return null;
     },
+    // Trang /chinh-sach/:loai của web in nguyên chuỗi này (markdown). Rỗng = dùng bản nháp mặc định của web.
+    'legal.dieu-khoan': legalDocProblem,
+    'legal.bao-mat': legalDocProblem,
+    'legal.doi-tra': legalDocProblem,
+    'legal.van-chuyen': legalDocProblem,
+    // Cấp uy tín chỉ có 4 tên (Mầm, Cây non, Cây trưởng thành, Cổ thụ): thêm mốc thứ 5 thì cấp 5 hiện lại tên "Mầm", bớt mốc thì mất cấp.
+    // Mốc đầu là 0 để bốn mốc ứng đúng cấp 1 đến 4, và các mốc tăng dần, nếu không cấp nhảy ngược khi điểm tăng.
+    'community.rep_thresholds': (value) => {
+      if (!Array.isArray(value) || value.length !== 4) return 'phải là mảng đúng 4 mốc điểm uy tín [0, a, b, c] cho cấp 1 đến 4';
+      if (!value.every((n) => Number.isInteger(n) && n >= 0 && n <= 1_000_000)) return 'mỗi mốc phải là số nguyên 0–1.000.000';
+      if (value[0] !== 0) return 'mốc đầu phải là 0 (ai cũng ít nhất cấp 1)';
+      for (let i = 1; i < value.length; i++) {
+        if ((value[i] as number) <= (value[i - 1] as number)) return 'các mốc phải tăng dần';
+      }
+      return null;
+    },
+    // Chỉ `seeds` được đọc (GameEconomyService.checkIn); `free_spins` có trong seed.ts nhưng không code nào dùng, nhận để bản seed không tự bị từ chối.
+    'game.streak_7_bonus': (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { seeds: 💧 thưởng chuỗi 7 ngày }';
+      const { seeds, free_spins: freeSpins } = value as Record<string, unknown>;
+      if (!Number.isInteger(seeds) || (seeds as number) < 0 || (seeds as number) > 10_000) return 'seeds phải là số 💧 nguyên 0–10.000';
+      if (freeSpins !== undefined && (!Number.isInteger(freeSpins) || (freeSpins as number) < 0 || (freeSpins as number) > 100)) {
+        return 'free_spins (nếu có) phải là số nguyên 0–100';
+      }
+      return null;
+    },
     'community.banned_keywords': bannedKeywordsProblem,
     // Bảng kê đối soát giao hộ lọc đơn theo mốc này: mốc không có thật thì bảng kê tạm bỏ giới hạn, nên chặn ngay lúc ghi.
     'merchant.consignment_settle_from': (value) =>
@@ -292,6 +369,10 @@ export class SystemConfigService {
   /** Khoá có luật ghi riêng (biên số hoặc luật JSON): hệ thống biết khoá này, dù DB chưa có dòng. */
   static hasWriteRule(key: string): boolean {
     return key in SystemConfigService.RANGES || key in SystemConfigService.JSON_RULES;
+  }
+
+  static writeRuleKeys(): string[] {
+    return [...Object.keys(SystemConfigService.RANGES), ...Object.keys(SystemConfigService.JSON_RULES)];
   }
 
   private assertInRange(key: string, value: unknown): void {

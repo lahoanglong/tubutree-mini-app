@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'zmp-ui';
+import { Zap } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchActiveFlashSales, type ProductCard as ProductCardType } from '../services/shop-api';
 import { vi } from '../i18n/vi';
@@ -32,7 +33,7 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
       badge={
         // Hết hàng: lớp phủ của ProductTile trong suốt 72% — không để badge % lộ ra bên dưới.
         pricing.salePct > 0 && product.inStock ? (
-          <Badge tone="promo" size="sm" style={pricing.isFlash ? FLASH_BADGE_STYLE : undefined}>
+          <Badge tone="promo" size="sm" icon={pricing.isFlash ? Zap : undefined} style={pricing.isFlash ? FLASH_BADGE_STYLE : undefined}>
             {pricing.isFlash ? `${vi.flashSale.badge} -${pricing.salePct}%` : `-${pricing.salePct}%`}
           </Badge>
         ) : undefined

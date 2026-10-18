@@ -14,10 +14,11 @@ import {
   communityCategoryUpsertArgs,
   retireCommunityCategoriesArgs,
 } from '../src/modules/feed/community-categories-seed';
+import { COMMUNITY_GOAL_SEED, SEASON_SEED } from './reference-data/garden';
 
 const prisma = new PrismaClient();
 
-const SYSTEM_CONFIGS: ConfigSeed[] = [
+export const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Loyalty
   { key: 'loyalty.vnd_per_point', value: 10000, category: 'loyalty', description: '10.000đ chi tiêu = 1 điểm' },
   { key: 'loyalty.vnd_per_point_redeem', value: 1000, category: 'loyalty', description: '1 điểm = 1.000đ khi áp' },
@@ -39,6 +40,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'voucher.birthday_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá sinh nhật mặc định (đ) cho hạng chưa có mức riêng (mức riêng theo hạng nằm ở bảng hạng thành viên)', createOnly: true },
   { key: 'voucher.winback_days', value: 60, category: 'voucher', description: 'Khách từng mua nhưng quá số ngày này chưa đặt lại thì nhận mã giảm giá quay lại', createOnly: true },
   { key: 'voucher.winback_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá quay lại (đ)', createOnly: true },
+  { key: 'coupon.staff_max_percent', value: 30, category: 'voucher', description: 'Mã giảm % do nhân viên (không phải quản trị viên) tạo hoặc sửa: mức giảm tối đa (%, số nguyên 1–100)', createOnly: true },
+  { key: 'coupon.staff_max_amount_vnd', value: 100000, category: 'voucher', description: 'Mã do nhân viên tạo hoặc sửa: số tiền giảm tối đa (đ) của mã giảm tiền, và Giảm tối đa bắt buộc của mã giảm %', createOnly: true },
+  { key: 'coupon.staff_max_usage', value: 1000, category: 'voucher', description: 'Mã do nhân viên tạo hoặc sửa: tổng lượt dùng tối đa của một mã (số nguyên 1–100.000)', createOnly: true },
+  { key: 'coupon.staff_daily_budget_vnd', value: 10000000, category: 'voucher', description: 'Ngân sách mã của mỗi nhân viên trong một ngày (đ): tổng mức giảm tối đa × tổng lượt của mọi mã, lô người đó tạo trong ngày. 0 = nhân viên không tạo được mã', createOnly: true },
   {
     key: 'voucher.milestones',
     value: [
@@ -52,7 +57,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   },
 
   // Affiliate
-  { key: 'affiliate.hold_days', value: 20, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
+  { key: 'affiliate.hold_days', value: 10, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
   // Q-31: cửa sổ ghi nhận "chạm" giới thiệu CTV (AffiliateService.recordTouch). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'affiliate.attribution_days', value: 7, category: 'affiliate', description: 'Số ngày giữ ghi nhận giới thiệu (chạm link CTV/nhãn) cho đơn đặt sau đó', createOnly: true },
   { key: 'affiliate.min_withdraw_bank', value: 50000, category: 'affiliate', description: 'Min rút STK' },
@@ -92,8 +97,13 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'community.answer_reward_points', value: 0, category: 'community', description: 'Điểm Xanh thưởng người trả lời bài của người khác (0 = tắt)', createOnly: true },
   { key: 'community.daily_answer_reward_cap', value: 10, category: 'community', description: 'Số câu trả lời được thưởng tối đa mỗi ngày/người', createOnly: true },
   { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
+  { key: 'community.zalo_group_url', value: '', category: 'community', description: 'Link nhóm Zalo cộng đồng (https://zalo.me/...), để trống = ẩn nút', createOnly: true },
+  { key: 'community.facebook_url', value: '', category: 'community', description: 'Link fanpage Facebook (facebook.com hoặc fb.com), để trống = ẩn nút', createOnly: true },
+  { key: 'community.tiktok_url', value: '', category: 'community', description: 'Link kênh TikTok (tiktok.com), để trống = ẩn nút', createOnly: true },
   { key: 'community.banned_keywords', value: ['lua dao', 'lua tien', 'casino', 'vay nong', 'vay lai', 'tin dung den', 'da cap', 'rua tien', 'hang nhai', 'khieu dam', 'sex', 'ma tuy', 'vu khi', 'lam bang gia', 'chiem doat tai san', 'ca do bong da', 'ca cuoc bong da', 'cá độ', 'cá cược', 'hàng giả', 'cờ bạc'], category: 'community', description: 'Từ/cụm từ cấm trong bài cộng đồng (khớp → bài chờ duyệt). Cụm không dấu khớp cả có dấu; cụm có dấu chỉ khớp khi gõ đúng dấu', createOnly: true },
   { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
+  { key: 'community.author_notify_interval_minutes', value: 60, category: 'community', description: 'Gộp tin "bài của bạn có người thích/bình luận": tối đa 1 tin mỗi bài trong chừng này phút (0 = tắt tin)', createOnly: true },
+  { key: 'community.unanswered_alert_hours', value: 24, category: 'community', description: 'Câu hỏi cộng đồng chưa ai trả lời quá chừng này giờ thì hiện ở "Việc cần xử lý" của CSKH', createOnly: true },
   // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
   { key: 'game.tree_points_price', value: 50, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
 
@@ -188,9 +198,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'refill.pickup_hours', value: '', category: 'refill', description: 'CŨ (dự phòng): giờ mở cửa điểm nhận vỏ. Quản lý ở Quản trị → Đổi vỏ chai → Điểm nhận vỏ.' },
   { key: 'refill.pickup_phone', value: '', category: 'refill', description: 'CŨ (dự phòng): SĐT điểm nhận vỏ. Quản lý ở Quản trị → Đổi vỏ chai → Điểm nhận vỏ.' },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
-  { key: 'payment.bank_account_no', value: '9984606774', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
-  { key: 'payment.bank_account_name', value: 'CONG TY TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
-  { key: 'payment.bank_name', value: 'Techcombank', category: 'payment', description: 'Tên ngân hàng (hiển thị)' },
+  { key: 'payment.bank_account_no', value: '8386790906', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
+  { key: 'payment.bank_account_name', value: 'CONG TY TNHH TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
+  { key: 'payment.bank_name', value: 'Ngân hàng TMCP Kỹ Thương Việt Nam', category: 'payment', description: 'Tên ngân hàng (hiển thị)' },
   {
     key: 'game.spin_prizes',
     value: [
@@ -223,7 +233,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
     value: {
       defaultWarehouse: {
         name: 'Fuwa3e Tubu HCM',
-        phone: '0965573541',
+        phone: '0899149229',
         address: 'Golf Park, 1 đường số 2',
         ward: 'Phường Long Bình',
         district: 'Thành phố Thủ Đức',
@@ -248,6 +258,13 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // 'return.window_days' = 15 (không ai đọc) → hiệu lực thật luôn là mặc định 7, khớp chính sách đang
   // công bố trên app ("đổi/trả trong 7 ngày"). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'returns.window_days', value: 7, category: 'return', description: 'Số ngày từ khi giao (DELIVERED) được yêu cầu đổi/trả', createOnly: true },
+
+  // Trang /chinh-sach/:loai của web (legal-config.controller). Rỗng = web dùng bản nháp mặc định "chờ duyệt"; admin dán nội
+  // dung đã duyệt (markdown) vào đây là thay thế. createOnly: nội dung đã duyệt không bị seed ghi đè.
+  { key: 'legal.dieu-khoan', value: '', category: 'legal', description: 'Nội dung trang Điều khoản sử dụng (markdown). Để trống = bản nháp mặc định', createOnly: true },
+  { key: 'legal.bao-mat', value: '', category: 'legal', description: 'Nội dung trang Chính sách bảo mật (markdown). Để trống = bản nháp mặc định', createOnly: true },
+  { key: 'legal.doi-tra', value: '', category: 'legal', description: 'Nội dung trang Chính sách đổi trả (markdown). Để trống = bản nháp mặc định', createOnly: true },
+  { key: 'legal.van-chuyen', value: '', category: 'legal', description: 'Nội dung trang Chính sách vận chuyển (markdown). Để trống = bản nháp mặc định', createOnly: true },
 
   // Remarketing — nhắc giỏ bỏ quên + voucher sắp hết hạn (cron RemarketingService).
   { key: 'remarketing.cart_abandon_min_hours', value: 6, category: 'remarketing', description: 'Giỏ bỏ quên ít nhất N giờ mới nhắc' },
@@ -287,7 +304,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'retention.refresh_sessions_days', value: 30, category: 'retention', description: 'Xoá refresh token đã thu hồi/hết hạn quá bao nhiêu ngày (sàn 7)', createOnly: true },
 ];
 
-const TIERS = [
+export const TIERS = [
   {
     id: 'MAM_XANH',
     name: 'Mầm Xanh',
@@ -334,7 +351,7 @@ const TIERS = [
   },
 ];
 
-const DEALER_TIERS = [
+export const DEALER_TIERS = [
   { id: 'DEALER_1', name: 'Đại lý Cấp 1', minOrderVolume: 10000000, discountRules: { default: 0.2 }, creditLimit: 0, paymentTerms: 'PREPAID' },
   { id: 'DEALER_2', name: 'Đại lý Cấp 2', minOrderVolume: 30000000, discountRules: { default: 0.3 }, creditLimit: 20000000, paymentTerms: 'NET 15' },
   { id: 'DEALER_3', name: 'Đại lý Cấp 3', minOrderVolume: 80000000, discountRules: { default: 0.38 }, creditLimit: 50000000, paymentTerms: 'NET 30' },
@@ -454,7 +471,7 @@ const PRODUCTS: SeedProduct[] = [
   {
     id: 'p-polang-lemongrass', brand: 'Pơ Lang', slug: 'tinh-dau-sa-chanh-po-lang', name: 'Tinh dầu sả chanh Pơ Lang',
     shortDesc: 'Đuổi muỗi, khử mùi, thư giãn không gian.', basePrice: 110000, categoryIds: ['cat-personal'],
-    forSegment: ['eco', 'home_clean'], certifications: ['Nguyên chất 100%'],
+    forSegment: ['eco', 'home_clean'], certifications: ['Nguyên chất'],
     variations: [{ sku: 'POLANG-LG-10', name: '10ml', attributes: { size: '10ml' }, retailPrice: 110000, stock: 220, weight: 40 }],
   },
   {
@@ -508,7 +525,7 @@ const PRODUCTS: SeedProduct[] = [
   {
     id: 'p-cobote-tram', brand: 'Cobote', slug: 'dau-tram-be-cobote', name: 'Dầu tràm cho bé Cobote',
     shortDesc: 'Giữ ấm, phòng ho cảm cho bé sơ sinh.', basePrice: 89000, categoryIds: ['cat-baby'],
-    forSegment: ['mom_baby'], certifications: ['Nguyên chất 100%'], isFeatured: true,
+    forSegment: ['mom_baby'], certifications: ['Nguyên chất'], isFeatured: true,
     ingredients: [{ name: 'Tinh dầu tràm Huế', percentage: '100%', benefit: 'Giữ ấm, kháng khuẩn đường hô hấp' }],
     variations: [{ sku: 'COBOTE-TR-50', name: '50ml', attributes: { size: '50ml' }, retailPrice: 89000, stock: 300, weight: 80 }],
   },
@@ -565,7 +582,7 @@ const PRODUCTS: SeedProduct[] = [
   {
     id: 'p-bhnong-honey', brand: 'BH.Nong', slug: 'mat-ong-rung-bhnong', name: 'Mật ong rừng nguyên chất BH.Nong',
     shortDesc: 'Mật ong rừng tự nhiên, không pha đường.', basePrice: 260000, categoryIds: ['cat-food'],
-    forSegment: ['eco'], certifications: ['Nguyên chất 100%'], isFeatured: true,
+    forSegment: ['eco'], certifications: ['Nguyên chất'], isFeatured: true,
     variations: [{ sku: 'BHN-HN-500', name: 'Chai 500ml', attributes: { size: '500ml' }, retailPrice: 260000, stock: 80, weight: 720 }],
   },
   {
@@ -690,7 +707,7 @@ const PRODUCTS: SeedProduct[] = [
   },
 ];
 
-const NOTIFICATION_TEMPLATES = [
+export const NOTIFICATION_TEMPLATES = [
   // ORDER_CONFIRMED/ORDER_SHIPPING mang kênh ZNS nhưng chưa có zaloTemplateId (cần Zalo duyệt mẫu, không tự điền được):
   // NotificationsService chỉ gửi ZNS khi có mã mẫu, nên hiện khách nhận bản INAPP.
   { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
@@ -787,6 +804,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-refill-approved', code: 'REFILL_APPROVED', channel: 'INAPP', bodyTemplate: '🌿 Đổi vỏ chai thành công: ghi nhận {{quantity}} vỏ{{note}}, +{{seeds}} 💧 tưới cây.' },
   { id: 'nt-refill-rejected', code: 'REFILL_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi {{quantity}} vỏ chai chưa được duyệt{{reason}}. Bạn có thể gửi lại yêu cầu mới sau khi mang vỏ đến điểm nhận.' },
   { id: 'nt-comm-rejected', code: 'COMMUNITY_POST_REJECTED', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn chưa được đăng vì {{reason}}. Bạn có thể chỉnh lại nội dung rồi đăng bài mới nhé.' },
+  { id: 'nt-comm-post-liked', code: 'COMMUNITY_POST_LIKED', channel: 'INAPP', bodyTemplate: '💚 Bài viết "{{title}}" của bạn vừa được thả tim.', createOnly: true },
+  { id: 'nt-comm-post-commented', code: 'COMMUNITY_POST_COMMENTED', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa bình luận bài viết "{{title}}" của bạn.', createOnly: true },
+  { id: 'nt-comm-post-hidden', code: 'COMMUNITY_POST_HIDDEN', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn đã được ẩn khỏi cộng đồng vì {{reason}}. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.', createOnly: true },
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
@@ -811,6 +831,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-merchant-payout-created-to-tubu', code: 'MERCHANT_PAYOUT_CREATED_TO_TUBU', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã lập phiếu đối soát cho {{count}} đơn của gian hàng: bạn cần chuyển cho Tubu Tree {{amount}}đ trước {{due_date}}, nội dung chuyển khoản "{{memo}}". Xem tài khoản nhận và các khoản trong phiếu ở Cổng người bán → Đối soát.', createOnly: true },
   { id: 'nt-merchant-payout-cancelled', code: 'MERCHANT_PAYOUT_CANCELLED', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã huỷ phiếu đối soát {{amount}}đ lập ngày {{created}}: {{reason}}. Các đơn trong phiếu quay lại bảng kê và sẽ vào phiếu mới; xem lại các khoản của phiếu đã huỷ ở Cổng người bán → Đối soát.', createOnly: true },
   { id: 'nt-merchant-payout-cancelled-to-tubu', code: 'MERCHANT_PAYOUT_CANCELLED_TO_TUBU', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã huỷ phiếu đối soát lập ngày {{created}} (bạn phải nộp {{amount}}đ): {{reason}}. Bạn chưa cần chuyển khoản cho phiếu này; nếu đã chuyển, liên hệ Tubu Tree để đối chiếu. Các đơn trong phiếu quay lại bảng kê và sẽ vào phiếu mới.', createOnly: true },
+  { id: 'nt-storefront-taken-down', code: 'STOREFRONT_TAKEN_DOWN', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã gỡ gian hàng "{{store}}" khỏi trang công khai: {{reason}}. Bạn vẫn xem và sửa được gian hàng trong ứng dụng; liên hệ CSKH nếu cần được xem xét lại.', createOnly: true },
+  { id: 'nt-storefront-reinstated', code: 'STOREFRONT_REINSTATED', channel: 'INAPP', bodyTemplate: 'Gian hàng "{{store}}" của bạn đã được Tubu Tree xem xét và hiển thị lại với khách.', createOnly: true },
+  { id: 'nt-storefront-approved', code: 'STOREFRONT_APPROVED', channel: 'INAPP', bodyTemplate: 'Gian hàng "{{store}}" của bạn đã được Tubu Tree duyệt: trang công khai có dấu tích xanh và nhãn "CTV tuyển chọn".', createOnly: true },
   { id: 'nt-merchant-return-requested', code: 'MERCHANT_RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Khách gửi yêu cầu trả hàng đơn {{order_code}} ({{items}}): "{{reason}}". Tubu đang xem xét; xem ảnh khách gửi ở Cổng người bán → Hàng trả về.', createOnly: true },
   { id: 'nt-order-merchant-delayed', code: 'ORDER_MERCHANT_DELAYED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} do {{store}} giao đang chậm {{step}}. Tubu đã nhắc gian hàng. Nếu không muốn chờ, bạn huỷ được đơn trong mục Đơn hàng khi hàng chưa gửi đi, tiền đã trả được hoàn đủ.', createOnly: true },
   { id: 'nt-merchant-product-unlinked', code: 'MERCHANT_PRODUCT_UNLINKED', channel: 'INAPP', bodyTemplate: 'Sản phẩm "{{product_name}}" đã gỡ liên kết mã Pancake (Tubu giao hộ) và tạm ngừng bán: {{reason}}. Liên hệ Tubu nếu bạn cần liên kết lại.', createOnly: true },
@@ -837,7 +860,7 @@ const QUIZZES = [
   { id: 'q6', question: 'Khi thu hoạch cây ảo, giọt nước bạn đã tưới được góp vào đâu?', options: ['Hồ nước chung của cộng đồng', 'Ví Tubu của bạn', 'Kho hàng của đại lý', 'Quỹ khuyến mãi'], correct: 0, rewardPts: 3 },
 ];
 
-const MISSIONS = [
+export const MISSIONS = [
   { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Nhận thành công đơn hàng đầu tiên', rewardPoints: 20, goal: 1, isRepeatable: false },
   { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30, goal: 7, isRepeatable: false },
   { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15, goal: 3, isRepeatable: false },
@@ -981,15 +1004,7 @@ async function main() {
   await prisma.communityGoal.upsert({
     where: { id: 'cg-cangio-2026' },
     update: {},
-    create: {
-      id: 'cg-cangio-2026',
-      title: 'Cùng Tubu góp quỹ trồng cây',
-      region: 'Cộng đồng Tubu',
-      targetDrops: 100000,
-      currentDrops: 0,
-      treesToPlant: 200,
-      status: 'ACTIVE',
-    },
+    create: COMMUNITY_GOAL_SEED,
   });
 
   // Vườn Xanh 2.0 Phase 3 — sổ tay loài cây Việt Nam.
@@ -1003,15 +1018,7 @@ async function main() {
   await prisma.season.upsert({
     where: { id: 'se-2026-he-cangio' },
     update: {},
-    create: {
-      id: 'se-2026-he-cangio',
-      name: 'Mùa Hè Xanh — Phủ xanh Cần Giờ',
-      theme: 'Rừng ngập mặn miền Nam',
-      region: 'Cần Giờ, TP.HCM',
-      featuredSpeciesIds: ['sp-duoc', 'sp-tram', 'sp-sao'],
-      startAt: new Date('2026-06-01T00:00:00+07:00'),
-      endAt: new Date('2026-08-31T23:59:59+07:00'),
-    },
+    create: SEASON_SEED,
   });
 
   // Cộng đồng Vườn Tubu — danh mục Q&A theo ngành hàng thật (C-073). Danh mục cây cảnh của bản đầu chỉ bị ẩn,
@@ -1026,7 +1033,7 @@ async function main() {
   console.log('✅ Seed done.');
 }
 
-const PLANT_SPECIES = [
+export const PLANT_SPECIES = [
   { id: 'sp-tram', name: 'Cây Tràm', scientificName: 'Melaleuca cajuputi', region: 'Đồng bằng sông Cửu Long', rarity: 'COMMON', emoji: '🌿',
     story: 'Tràm phủ xanh vùng đất phèn miền Tây, cho mật ong tràm và tinh dầu kháng khuẩn.', ecoFact: 'Rừng tràm U Minh là "lá phổi" lọc nước và giữ đa dạng sinh học bậc nhất Nam Bộ.' },
   { id: 'sp-duoc', name: 'Cây Đước', scientificName: 'Rhizophora apiculata', region: 'Cần Giờ, Cà Mau', rarity: 'COMMON', emoji: '🌱',
@@ -1049,9 +1056,12 @@ const PLANT_SPECIES = [
     story: '"Tháng ba hoa gạo" đỏ rực bến nước, đình làng Bắc Bộ.', ecoFact: 'Hoa gạo nhiều mật, là "nhà hàng" cho chào mào, sáo và nhiều loài chim mùa xuân.' },
 ] as const;
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Chỉ chạy khi gọi thẳng (`tsx prisma/seed.ts`); seed-reference.ts import file này để lấy hằng số mà không chạy main().
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}

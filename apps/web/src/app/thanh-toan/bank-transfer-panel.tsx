@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Clock } from 'lucide-react';
+import { CheckCircle2, Clock, Download, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
+import { saveImage, type SaveImageResult } from '@/lib/download-image';
 
 /**
  * A2-02 = A6-01 (docs/audit-2026-09): web cho chọn "Chuyển khoản ngân hàng" nhưng trước đây sau
@@ -21,14 +22,17 @@ import { formatDateTime } from '@/lib/format-date';
  */
 export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?: () => void }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['bank-qr', order.code],
     queryFn: () => getBankQr(order.code),
     enabled: isBankTransfer,
     // Pancake/ngân hàng đối soát chuyển khoản → webhook lật PAID; FE tự dò mỗi 4s tới khi thấy tiền về.
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' ? false : 4000),
   });
+  // Cờ riêng cho lần khách bấm tay: `isFetching` còn bật theo nhịp dò nền 4s, gắn vào nút thì nút khoá/nhấp nháy đúng lúc khách chạm.
   const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<'unpaid' | 'error' | null>(null);
+  const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
 
   // Trang chứa khung này (chi tiết đơn) cần tải lại trạng thái đơn khi tiền về, nếu không thì
   // khung báo "Đã nhận thanh toán" còn nhãn đơn vẫn là "Chờ thanh toán".
@@ -41,11 +45,19 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
 
   const handleCheck = async () => {
     setChecking(true);
+    setCheckResult(null);
     try {
-      await refetch();
+      const res = await refetch({ throwOnError: true });
+      setCheckResult(res.data?.paymentStatus === 'PAID' ? null : 'unpaid');
+    } catch {
+      setCheckResult('error');
     } finally {
       setChecking(false);
     }
+  };
+
+  const handleSaveQr = async (url: string, orderCode: string) => {
+    setQrSaved(await saveImage(url, `tubu-qr-${orderCode}.png`));
   };
 
   if (isLoading) {
@@ -68,7 +80,9 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
     );
   }
 
-  if (isError || !data) {
+  // Một lần dò nền lỗi (mất mạng chớp nhoáng) không được thay khung QR đang hiện: React Query giữ `data` cũ,
+  // khách vẫn quét/chuyển được. Chỉ báo lỗi cả khung khi chưa từng có dữ liệu.
+  if (!data) {
     return (
       <section className={`mt-4 p-6 text-center ${ui.card}`}>
         <p className={ui.error}>Không tải được thông tin thanh toán.</p>
@@ -94,6 +108,21 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
           className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain"
         />
         <p className="text-xl font-bold text-stone-900">{formatVnd(data.amount)}</p>
+        <button
+          type="button"
+          onClick={() => void handleSaveQr(data.qrImageUrl, data.orderCode)}
+          className={`${ui.btnSecondary} gap-2`}
+        >
+          <Download className="h-4 w-4" aria-hidden="true" />
+          Lưu mã QR
+        </button>
+        {qrSaved && (
+          <p role="status" data-testid="bank-qr-saved" className="text-xs text-stone-700">
+            {qrSaved === 'saved'
+              ? 'Đã lưu ảnh QR vào máy.'
+              : 'Chưa lưu được. Bạn nhấn giữ vào ảnh QR để lưu, hoặc chụp màn hình nhé.'}
+          </p>
+        )}
       </div>
 
       <div className="mt-3 space-y-1 text-sm">
@@ -124,19 +153,35 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
         </p>
       )}
 
-      <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-stone-600">
-        <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>Đang chờ thanh toán… tự cập nhật khi nhận được tiền</span>
+      {/* Dòng trạng thái dò nền: không phải vùng đọc-to (role=status) vì đổi chữ mỗi 4 giây. */}
+      <div data-testid="bank-poll-status" className="mt-3 flex items-center justify-center gap-1.5 text-xs text-stone-600">
+        {isFetching ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        ) : (
+          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+        <span>{isFetching ? 'Đang kiểm tra…' : 'Đang chờ thanh toán… tự cập nhật khi nhận được tiền'}</span>
       </div>
 
       <button
         type="button"
         onClick={() => void handleCheck()}
-        disabled={checking || isFetching}
+        disabled={checking}
         className={`${ui.btnPrimary} mt-4 w-full`}
       >
-        {checking || isFetching ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản, kiểm tra lại'}
+        {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản, kiểm tra lại'}
       </button>
+      {checkResult && (
+        <p
+          role="status"
+          data-testid="bank-check-result"
+          className={`mt-2 text-center text-xs ${checkResult === 'error' ? 'text-danger-fg' : 'text-stone-700'}`}
+        >
+          {checkResult === 'error'
+            ? 'Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.'
+            : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.'}
+        </p>
+      )}
     </section>
   );
 }

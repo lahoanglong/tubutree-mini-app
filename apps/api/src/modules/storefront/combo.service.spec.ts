@@ -1,4 +1,5 @@
 import { ComboService, allocateComboDiscounts } from './combo.service';
+import { publicStorefrontWhere } from './storefront-visibility';
 
 describe('allocateComboDiscounts (thuần)', () => {
   it('không có combo → không giảm', () => {
@@ -92,7 +93,7 @@ describe('ComboService.computeForStorefront', () => {
     } as any;
   }
   // Config mặc định trần 30% (fallback), test riêng override khi cần trần khác.
-  const config = { get: async (_k: string, fb?: unknown) => fb } as any;
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
 
   it('slug rỗng → không giảm (không query)', async () => {
     const prisma = makePrisma([]);
@@ -128,8 +129,28 @@ describe('ComboService.computeForStorefront', () => {
     expect(out.total).toBe(20);
     // query chỉ kind COMBO
     expect(prisma.storefront.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { slug: 'linh-shop', isPublished: true } }),
+      expect.objectContaining({ where: { slug: 'linh-shop', ...publicStorefrontWhere({ eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false }) } }),
     );
+  });
+
+  it('gian hàng bị ẩn với khách (gỡ, chủ khoá, chủ hết vai trò CTV) bị loại ngay ở truy vấn, nên không có combo', async () => {
+    const prisma = makePrisma([
+      { comboDiscountPct: 10, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: false }] },
+    ]);
+    await new ComboService(prisma, config).computeForStorefront('linh-shop', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    const where = prisma.storefront.findFirst.mock.calls[0][0].where;
+    expect(where.takenDownAt).toBeNull();
+    expect(where.AND).toContainEqual({ OR: [{ ownerUserId: null }, { owner: { isBlocked: false } }] });
+    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
+  });
+
+  it('cờ bắt duyệt bật thì gian hàng CTV chưa duyệt cũng không có combo', async () => {
+    const prisma = makePrisma([]);
+    const requireApproval = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? true : fb) } as any;
+    await new ComboService(prisma, requireApproval).computeForStorefront('linh-shop', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    expect(prisma.storefront.findFirst.mock.calls[0][0].where.AND).toContainEqual({
+      OR: [{ approvedAt: { not: null } }, { type: { not: 'CTV' } }, { isPartner: true }],
+    });
   });
 
   // P0 (docs/2026-09-08-review-progress.md), lớp phòng thủ thứ 2: dữ liệu collection có

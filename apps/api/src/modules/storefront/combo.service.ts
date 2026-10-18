@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
+import { loadPublicVisibility } from './public-visibility';
+import { publicStorefrontWhere } from './storefront-visibility';
 
 export interface ComboLine {
   variationId: string;
@@ -85,7 +87,7 @@ export class ComboService {
   async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {
     if (!slug || lines.length === 0) return { total: 0, perLine: {} };
     const sf = await this.prisma.storefront.findFirst({
-      where: { slug, isPublished: true },
+      where: { slug, ...publicStorefrontWhere(await loadPublicVisibility(this.config)) },
       select: {
         ownerUserId: true,
         collections: {

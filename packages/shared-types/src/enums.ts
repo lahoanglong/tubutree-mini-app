@@ -68,6 +68,7 @@ export const CouponScope = {
   USER_GROUP: 'USER_GROUP',
   BIRTHDAY: 'BIRTHDAY',
   INVITE: 'INVITE',
+  CLAIM: 'CLAIM',
 } as const;
 export type CouponScope = (typeof CouponScope)[keyof typeof CouponScope];
 

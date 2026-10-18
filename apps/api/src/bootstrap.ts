@@ -11,6 +11,7 @@ import { json, urlencoded } from 'express';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { createValidationPipe } from './common/validation-pipe';
+import { applyHttpTimeouts } from './config/http-timeouts';
 
 /** Dọn app khởi động hỏng tối đa chừng này rồi vẫn thoát — đóng hàng đợi/Redis treo không được giữ process lại. */
 const FAILED_BOOT_CLOSE_MS = 5_000;
@@ -32,6 +33,7 @@ export async function bootstrap(rootModule: Type<unknown>, opts: BootstrapOption
   let app: NestExpressApplication | undefined;
   try {
     app = await createApp(rootModule, opts);
+    applyHttpTimeouts(app.getHttpServer());
     await app.listen(opts.port, '0.0.0.0');
     // Cron chỉ chạy từ đây, khi instance này giữ được lease (CronLeaderService dừng mọi job lúc ScheduleModule đăng ký).
     app.get(CronLeaderService).start();

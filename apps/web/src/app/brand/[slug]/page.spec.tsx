@@ -110,3 +110,29 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
     expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Chứng nhận', 'Khuyến mãi', 'Sản phẩm', 'Câu chuyện thương hiệu']);
   });
 });
+
+describe('trang nhãn hàng — ảnh sản phẩm (D6-05)', () => {
+  it('ảnh thẻ sản phẩm có width/height và tải lười không chặn render', async () => {
+    mocks.brand = { ...BRAND, products: [{ ...BRAND.products[0], thumbnail: 'https://cdn.example/p.jpg' }] };
+    const img = (await html()).querySelector('a[href="/san-pham/nuoc-rua-chen"] img')!;
+    expect(img.getAttribute('width')).toBe('400');
+    expect(img.getAttribute('height')).toBe('400');
+    expect(img.getAttribute('loading')).toBe('lazy');
+    expect(img.getAttribute('decoding')).toBe('async');
+  });
+});
+
+describe('trang nhãn hàng — trạng thái rỗng (D5-05)', () => {
+  it('nhãn chưa có sản phẩm đang bán: có thông báo rỗng và nút về danh mục thay vì để trang trắng', async () => {
+    mocks.brand = { ...BRAND, products: [] };
+    const box = await html();
+    expect(box.textContent).toContain('Nhãn hàng chưa có sản phẩm đang bán');
+    const cta = box.querySelector<HTMLAnchorElement>('a[href="/"]')!;
+    expect(cta.textContent).toContain('Xem sản phẩm trên Tubu Tree');
+    expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Sản phẩm');
+  });
+
+  it('nhãn có sản phẩm: không hiện thông báo rỗng', async () => {
+    expect((await html()).textContent).not.toContain('Nhãn hàng chưa có sản phẩm đang bán');
+  });
+});
