@@ -1,19 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import type { HttpClient } from '../http';
 import { fakeHttp } from '../api/fake-http';
+import * as account from './account';
 import * as brand from './brand';
 import * as cart from './cart';
+import * as cashback from './cashback';
 import * as catalog from './catalog';
 import * as checkout from './checkout';
 import * as config from './config';
+import * as externalPoints from './external-points';
 import * as flash from './flash-sale';
 import * as geo from './geo';
 import * as groupbuy from './groupbuy';
 import * as home from './home';
+import * as loyalty from './loyalty';
 import * as orders from './orders';
 import * as payment from './payment';
+import * as refill from './refill';
 import * as reviews from './reviews';
 import * as subs from './subscriptions';
+import * as wallet from './wallet';
+import * as waste from './waste';
 import * as wishlist from './wishlist';
 
 type Q = { queryKey: readonly unknown[]; queryFn: () => Promise<unknown> };
@@ -67,6 +74,30 @@ const cases: Case[] = [
   ['wishlist', (h) => wishlist.wishlistQuery(h), ['wishlist'], '/me/wishlist'],
   ['wishlistIds', (h) => wishlist.wishlistIdsQuery(h), ['wishlist-ids'], '/me/wishlist/ids'],
   ['geoCommunes', (h) => geo.communesQuery(h, 'p'), ['geo-communes', 'p'], '/geo/communes'],
+  ['me', (h) => account.meQuery(h), ['me'], '/me'],
+  ['notifications', (h) => account.notificationsQuery(h), ['notifications'], '/me/notifications'],
+  ['loyalty', (h) => loyalty.loyaltyQuery(h), ['loyalty'], '/me/loyalty'],
+  ['coupons', (h) => loyalty.couponsQuery(h), ['coupons'], '/me/coupons'],
+  ['pointsTxn', (h) => loyalty.pointsTxnQuery(h), ['points-txn'], '/me/points/transactions'],
+  ['checkIn', (h) => loyalty.checkInQuery(h), ['loyalty-checkin'], '/me/loyalty/check-in'],
+  ['memberCard', (h) => loyalty.memberCardQuery(h), ['loyalty-member-card'], '/me/loyalty/member-card'],
+  ['referral', (h) => loyalty.referralQuery(h), ['referral'], '/me/referral'],
+  ['newCustomerOffer', (h) => loyalty.newCustomerOfferQuery(h, 'u1'), ['new-customer-offer', 'u1'], '/me/new-customer-offer'],
+  ['rewards', (h) => loyalty.rewardsQuery(h), ['loyalty-rewards'], '/me/loyalty/rewards'],
+  ['wallet', (h) => wallet.walletQuery(h), ['wallet'], '/me/wallet'],
+  ['externalClaims', (h) => externalPoints.externalClaimsQuery(h, 2, 10), ['external-claims', 2], '/me/external-points/claims'],
+  ['cashbackMerchants', (h) => cashback.cashbackMerchantsQuery(h), ['cashback-merchants'], '/cashback/merchants'],
+  ['cashbackTxn', (h) => cashback.cashbackTxnQuery(h), ['cashback-txn'], '/cashback/transactions'],
+  ['refill', (h) => refill.refillQuery(h), ['refill'], '/refill/me'],
+  ['adminRefillPending', (h) => refill.adminRefillPendingQuery(h), ['admin-refill-pending'], '/refill/admin/pending'],
+  ['wasteMe', (h) => waste.wasteMeQuery(h), ['waste', 'me'], '/waste/me'],
+  ['wasteItems', (h) => waste.wasteItemsQuery(h), ['waste', 'items'], '/waste/items'],
+  ['wastePoints', (h) => waste.wastePointsQuery(h, null), ['waste', 'points', null], '/waste/points'],
+  ['wasteRequests', (h) => waste.wasteRequestsQuery(h), ['waste', 'requests'], '/waste/requests'],
+  ['wasteRequest', (h) => waste.wasteRequestQuery(h, 'r1'), ['waste', 'request', 'r1'], '/waste/requests/r1'],
+  ['wasteRules', (h) => waste.wasteRulesQuery(h), ['waste', 'rules'], '/waste/rules'],
+  ['deskPoints', (h) => waste.deskPointsQuery(h), ['waste', 'desk'], '/waste/desk/points'],
+  ['deskPointReport', (h) => waste.deskPointReportQuery(h, 'p1', '2026-10'), ['waste', 'desk', 'report', 'p1', '2026-10'], '/waste/desk/points/p1/report'],
 ];
 
 describe('queries — queryKey giống Mini App, queryFn gọi đúng đường dẫn', () => {
@@ -77,5 +108,15 @@ describe('queries — queryKey giống Mini App, queryFn gọi đúng đường 
     expect(calls).toHaveLength(0);
     await q.queryFn();
     expect(calls[0]!.path).toBe(path);
+  });
+});
+
+describe('queries — sao kê ví (infinite)', () => {
+  it('khoá con của wallet, queryFn nhận pageParam', async () => {
+    const { http, calls } = fakeHttp();
+    const q = wallet.walletTransactionsQuery(http);
+    expect(q.queryKey).toEqual(['wallet', 'transactions']);
+    await q.queryFn({ pageParam: 3 });
+    expect(calls).toEqual([{ method: 'get', path: '/me/wallet/transactions', opts: { query: { page: 3, limit: 20 } } }]);
   });
 });
