@@ -84,7 +84,10 @@ export class AiAdvisorService {
     if (!this.allowUser(userId)) return { reply: USER_LIMIT_REPLY, products };
 
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
-    if (!isRealUser(user) && !this.allowGuest()) return { reply: BUSY_REPLY, products };
+    if (!isRealUser(user) && !this.allowGuest()) {
+      this.refundUser(userId);
+      return { reply: BUSY_REPLY, products };
+    }
 
     const faqs = await this.faq.listActive();
 
@@ -105,6 +108,12 @@ export class AiAdvisorService {
       const reply = reason === 'timeout' ? SLOW_REPLY : reason === 'busy' ? BUSY_REPLY : offlineReply(products);
       return { reply, products };
     }
+  }
+
+  /** Lượt bị từ chối không gọi LLM nên không được tốn hạn mức giờ của người hỏi. */
+  private refundUser(userId: string): void {
+    const hit = this.userHits.get(userId);
+    if (hit && hit.count > 0) hit.count -= 1;
   }
 
   private allowGuest(): boolean {

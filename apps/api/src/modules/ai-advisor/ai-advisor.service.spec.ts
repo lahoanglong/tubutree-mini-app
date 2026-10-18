@@ -196,4 +196,19 @@ describe('AiAdvisorService.chat — trần chung cho tài khoản khách', () =>
       now.mockRestore();
     }
   });
+
+  it('khách bị từ chối vì trần chung không bị trừ vào hạn mức theo giờ của chính mình', async () => {
+    const llm = makeLlm();
+    const s = new AiAdvisorService(makePrisma(PRODUCTS), llm, makeFaq());
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(2_000_000);
+      for (let i = 0; i < 10; i++) await s.chat(`g${i}`, 'cần nước rửa chén');
+      for (let i = 0; i < 35; i++) expect((await s.chat('g99', 'cần nước rửa chén')).reply).toContain('nhiều bạn hỏi');
+      now.mockReturnValue(2_000_000 + 61_000);
+      expect((await s.chat('g99', 'cần nước rửa chén')).reply).toBe('Xin chào! 🌿');
+    } finally {
+      now.mockRestore();
+    }
+  });
 });
