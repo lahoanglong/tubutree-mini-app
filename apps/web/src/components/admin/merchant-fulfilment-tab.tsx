@@ -152,6 +152,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                     onCreate={() => createMut.mutate(s)}
                     onToggle={(kind) => toggle(s.storefrontId, kind)}
                     partner={partnerToggle}
+                    canEditFees={isAdmin}
                   />
                 ))}
               </ul>
@@ -179,6 +180,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                         onCreate={() => createMut.mutate(s)}
                         onToggle={(kind) => toggle(s.storefrontId, kind)}
                         partner={partnerToggle}
+                        canEditFees={isAdmin}
                       />
                     ))}
                   </tbody>
@@ -192,7 +194,11 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                 {panel.kind === 'lines' ? `Khoản chờ lập phiếu · ${panelStore.title}` : `Phí của ${panelStore.title}`}
               </h4>
               {panel.kind === 'lines' ? (
-                <StatementLines storefrontId={panelStore.storefrontId} title={panelStore.title} onOpenConsignmentConfirm={onOpenConsignmentConfirm} />
+                <StatementLines
+                  storefrontId={panelStore.storefrontId}
+                  title={panelStore.title}
+                  onOpenConsignmentConfirm={isAdmin ? onOpenConsignmentConfirm : undefined}
+                />
               ) : (
                 <StoreTermsForm
                   key={panelStore.storefrontId}
@@ -277,9 +283,11 @@ interface StoreRowProps {
   onToggle: (kind: 'lines' | 'fees') => void;
   /** Chỉ ADMIN: nút bật/tắt cờ đối tác (chỉ gian hàng CTV, loại khác API từ chối). */
   partner?: { onToggle: (s: OverviewStore) => void; pending: boolean };
+  /** Chỉ ADMIN: sửa phí sàn/phí giao hộ (PATCH terms). Kế toán đối soát được nhưng không đổi phí. */
+  canEditFees?: boolean;
 }
 
-function StoreActions({ store: s, creating, open, onCreate, onToggle, partner }: StoreRowProps) {
+function StoreActions({ store: s, creating, open, onCreate, onToggle, partner, canEditFees }: StoreRowProps) {
   return (
     <>
       <button type="button" disabled={s.settleableLines === 0 || creating} onClick={onCreate} className={BTN_XS_PRIMARY}>
@@ -288,7 +296,7 @@ function StoreActions({ store: s, creating, open, onCreate, onToggle, partner }:
       <button type="button" disabled={s.settleableLines === 0} aria-expanded={open === 'lines'} onClick={() => onToggle('lines')} className={BTN_XS_SECONDARY}>
         Xem khoản
       </button>
-      {(s.isPartner || s.type === 'MERCHANT') && (
+      {canEditFees && (s.isPartner || s.type === 'MERCHANT') && (
         <button type="button" aria-expanded={open === 'fees'} onClick={() => onToggle('fees')} className={BTN_XS_SECONDARY}>
           Sửa phí
         </button>

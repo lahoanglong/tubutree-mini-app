@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { ReportsTab } from './reports-tab';
+import { ReportsTab, reportSectionsFor } from './reports-tab';
 import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({
@@ -219,5 +219,36 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       expect(btn(container, 'Xuất CSV thuế TNCN').disabled).toBe(true);
       expect(btn(container, 'Xuất CSV hoàn tiền').disabled).toBe(true);
     });
+  });
+});
+
+// D1-05: nhân viên chỉ thấy (và chỉ gọi API của) phần báo cáo thuộc nhóm việc của mình.
+describe('ReportsTab — phần theo nhóm việc', () => {
+  it('marketing (chỉ "sources"): bảng nguồn khách, không gọi báo cáo doanh thu, không có nút xuất file tài chính', async () => {
+    const { container } = mount(<ReportsTab sections={['sources']} />);
+    await flush();
+    expect(mocks.getSourceReport).toHaveBeenCalled();
+    expect(mocks.getRevenueReport).not.toHaveBeenCalled();
+    const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent ?? '');
+    expect(labels.some((l) => l.includes('Xuất CSV'))).toBe(false);
+  });
+
+  it('kế toán ("revenue" + "finance"): doanh thu và file xuất, không gọi báo cáo nguồn', async () => {
+    const { container } = mount(<ReportsTab sections={['revenue', 'finance']} />);
+    await flush();
+    expect(mocks.getRevenueReport).toHaveBeenCalled();
+    expect(mocks.getSourceReport).not.toHaveBeenCalled();
+    const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent ?? '');
+    expect(labels).toEqual(expect.arrayContaining(['Xuất CSV đơn hàng', 'Xuất CSV thuế TNCN']));
+  });
+});
+
+describe('reportSectionsFor — khớp @AllowStaff của AdminReportsController', () => {
+  it('ADMIN thấy hết; KE_TOAN doanh thu + file tài chính; MARKETING nguồn khách; CSKH/KHO không phần nào', () => {
+    expect(reportSectionsFor(true, [])).toEqual(['revenue', 'sources', 'finance']);
+    expect(reportSectionsFor(false, ['KE_TOAN'])).toEqual(['revenue', 'finance']);
+    expect(reportSectionsFor(false, ['MARKETING'])).toEqual(['sources']);
+    expect(reportSectionsFor(false, ['MARKETING', 'KE_TOAN'])).toEqual(['revenue', 'sources', 'finance']);
+    expect(reportSectionsFor(false, ['CSKH', 'KHO'])).toEqual([]);
   });
 });

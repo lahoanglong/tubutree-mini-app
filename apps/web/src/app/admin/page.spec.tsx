@@ -2105,6 +2105,53 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
   });
 });
 
+// D1-05: marketing và kế toán là nhân viên (STAFF) có nhóm việc riêng, không cấp ADMIN. Mục ẩn chỉ là giao diện; API tự chặn.
+describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
+  const navItems = (c: HTMLElement) =>
+    [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+  const asStaff = (perms: string[]) => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: perms };
+  };
+
+  it('MARKETING: voucher, flash sale, nội dung, cộng đồng, báo cáo — không có đơn hàng, tiền, người dùng, cấu hình', async () => {
+    asStaff(['MARKETING']);
+    const { container } = await mount();
+    expect(navItems(container)).toEqual([
+      'Việc cần xử lý',
+      'Báo cáo',
+      'Cộng đồng',
+      'Đổi vỏ chai',
+      'Voucher',
+      'Flash Sale',
+      'Câu hỏi thường gặp',
+      'Content Kit CTV',
+      'Academy',
+      'Mẫu thông báo',
+    ]);
+    expect(mocks.refundsCalls).toBe(0);
+  });
+
+  it('KE_TOAN: báo cáo, đối soát đối tác, hoàn tiền khách (kèm số chờ), rút tiền — không có voucher, người dùng, cấu hình', async () => {
+    asStaff(['KE_TOAN']);
+    const { container } = await mount();
+    expect(navItems(container)).toEqual(['Việc cần xử lý', 'Báo cáo', 'Đơn đối tác & đối soát', 'Hoàn tiền khách', 'Duyệt yêu cầu rút tiền', 'Đổi vỏ chai']);
+    expect(mocks.refundsCalls).toBeGreaterThan(0);
+  });
+
+  it('KE_TOAN mở link ?tab=config hay ?tab=coupons: rơi về mục đầu, không hiện cấu hình', async () => {
+    asStaff(['KE_TOAN']);
+    for (const tab of ['config', 'coupons', 'users', 'commissionRates']) {
+      window.history.replaceState(null, '', `/admin?tab=${tab}`);
+      const r = await mount();
+      expect(r.container.textContent).not.toContain('Tất cả tham số');
+      expect(r.container.querySelector('nav[aria-label="Mục quản trị"] button[aria-current="page"]')!.textContent).toBe('Việc cần xử lý');
+      r.unmount();
+      mounted = [];
+    }
+  });
+});
+
 describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {
   it('thẻ có việc hiện số và mở đúng hàng đợi; mục đang trống gom thành chip', async () => {
     const { container } = await mount();
@@ -2313,7 +2360,8 @@ describe('admin/page — chi tiết người dùng (ADMINOPS-11)', () => {
     expect(text).toContain('Khoá tài khoản');
     expect(text).toContain('bom hàng');
     const boxes = [...dialog.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
-    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+    // CSKH, Kho, Marketing, Kế toán (D1-05).
+    expect(boxes.map((b) => b.checked)).toEqual([true, false, false, false]);
   });
 
   it('Xuất CSV người dùng tải mọi người khớp tìm kiếm qua API', async () => {

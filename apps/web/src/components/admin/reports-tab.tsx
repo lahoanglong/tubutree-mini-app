@@ -15,8 +15,20 @@ const PRESETS = [
   { key: 'lastMonth', label: 'Tháng trước', range: () => vnMonthRange(-1) },
 ] as const;
 
+export type ReportSection = 'revenue' | 'sources' | 'finance';
+const ALL_SECTIONS: readonly ReportSection[] = ['revenue', 'sources', 'finance'];
+
+/**
+ * Phần báo cáo mở cho người đang xem — khớp @AllowStaff của AdminReportsController: doanh thu và file tài chính cho KE_TOAN,
+ * bảng nguồn khách cho MARKETING. Phần không có quyền thì không render, nên cũng không gọi API (khỏi 403).
+ */
+export function reportSectionsFor(isAdmin: boolean, perms: readonly string[]): ReportSection[] {
+  if (isAdmin) return [...ALL_SECTIONS];
+  return ALL_SECTIONS.filter((s) => (s === 'sources' ? perms.includes('MARKETING') : perms.includes('KE_TOAN')));
+}
+
 /** Báo cáo cho kế toán và marketing: một khoảng ngày (giờ Việt Nam) dùng chung cho mọi phần bên dưới. Mặc định 30 ngày gần nhất. */
-export function ReportsTab() {
+export function ReportsTab({ sections = ALL_SECTIONS }: { sections?: readonly ReportSection[] }) {
   const [range, setRange] = useState(() => lastDaysRange(30));
   const [preset, setPreset] = useState<string | null>('30');
   const pick = (p: (typeof PRESETS)[number]) => {
@@ -50,9 +62,9 @@ export function ReportsTab() {
           </label>
         </div>
       </div>
-      <ReportsRevenueSection range={range} />
-      <ReportsSourcesSection range={range} />
-      <ReportsFinanceSection range={range} />
+      {sections.includes('revenue') && <ReportsRevenueSection range={range} />}
+      {sections.includes('sources') && <ReportsSourcesSection range={range} />}
+      {sections.includes('finance') && <ReportsFinanceSection range={range} />}
     </div>
   );
 }
