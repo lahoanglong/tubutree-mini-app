@@ -141,6 +141,25 @@ describe('Voucher chào mừng lúc đăng ký song song với cron (real Postgr
     expect(counts).toEqual([0, 0, 0]);
   });
 
+  it('khách chỉ có một đơn đã huỷ vẫn nhận voucher (đường ngay và cron); đơn chờ thanh toán hay đã giao thì không', async () => {
+    const cancelled = await createUser(prisma, { zaloId: newZaloId() });
+    await createOrder(prisma, { userId: cancelled.id, status: 'CANCELLED' });
+    const cancelledCron = await createUser(prisma, { zaloId: newZaloId() });
+    await createOrder(prisma, { userId: cancelledCron.id, status: 'CANCELLED' });
+    const pending = await createUser(prisma, { zaloId: newZaloId() });
+    await createOrder(prisma, { userId: pending.id, status: 'PENDING_PAYMENT' });
+    const delivered = await createUser(prisma, { zaloId: newZaloId() });
+    await createOrder(prisma, { userId: delivered.id, status: 'DELIVERED' });
+
+    expect(await vouchers.grantWelcomeNow(cancelled.id)).toBe(true);
+    await vouchers.welcomeVouchers();
+
+    expect(await welcomeOf(cancelled.id)).toHaveLength(1);
+    expect(await welcomeOf(cancelledCron.id)).toHaveLength(1);
+    expect(await welcomeOf(pending.id)).toHaveLength(0);
+    expect(await welcomeOf(delivered.id)).toHaveLength(0);
+  });
+
   it('đăng nhập khách vãng lai không cấp; nâng cấp tại chỗ lên tài khoản Zalo thật thì cấp đúng 1 lần, kể cả khi cron chạy cùng lúc', async () => {
     const deviceId = randCode(12);
     const session = await auth.loginAsGuest(deviceId);

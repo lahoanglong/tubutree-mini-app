@@ -3,6 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import { REAL_USER_WHERE } from '../../common/real-user';
+import { priorOrderWhere } from '../../common/first-order';
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -784,6 +785,17 @@ describe('VouchersService.grantWelcomeNow', () => {
     const since = (where.createdAt.gte as Date).getTime();
     expect(before - since).toBeGreaterThanOrEqual(24 * 3600 * 1000 - 1000);
     expect(before - since).toBeLessThanOrEqual(24 * 3600 * 1000 + 5000);
+  });
+
+  // "Chưa có đơn" của voucher chào mừng là cùng định nghĩa với freeship đơn đầu và mã newCustomerOnly: đơn đã huỷ không tính.
+  it('"chưa có đơn" dùng chung định nghĩa với hasPriorOrder: đơn huỷ không chặn voucher', async () => {
+    const { svc, findFirst } = setup(true);
+
+    await svc.grantWelcomeNow('u1');
+
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where.orders).toEqual({ none: { status: { not: 'CANCELLED' } } });
+    expect(priorOrderWhere('u1')).toMatchObject(where.orders.none);
   });
 
   // Khách vãng lai dùng app quá 24h rồi mới đăng nhập Zalo: createdAt là của dòng vãng lai nên cửa sổ 24h loại họ sai.

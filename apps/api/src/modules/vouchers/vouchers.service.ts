@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
 import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
+import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { voucherCode } from './voucher-code';
 
 type GrantFailures = { count: number; first?: unknown };
@@ -149,14 +150,14 @@ export class VouchersService {
   }
 
   /**
-   * Khách thật, chưa có đơn nào, tạo trong cửa sổ 24h: một điều kiện cho cả cron lẫn đường cấp ngay lúc đăng ký.
+   * Khách thật, chưa có đơn nào ngoài đơn huỷ (cùng định nghĩa với hasPriorOrder), tạo trong cửa sổ 24h: một điều kiện cho cả cron lẫn đường cấp ngay lúc đăng ký.
    * `anyAge` bỏ riêng cửa sổ 24h cho tài khoản vừa thành khách thật: createdAt của dòng vãng lai nâng cấp là ngày dùng app lần đầu.
    */
   private welcomeWhere(anyAge = false): Prisma.UserWhereInput {
     return {
       ...(anyAge ? {} : { createdAt: { gte: new Date(Date.now() - VouchersService.WELCOME_WINDOW_MS) } }),
       role: 'CUSTOMER',
-      orders: { none: {} },
+      orders: { none: COUNTED_ORDER_WHERE },
       ...REAL_USER_WHERE,
     };
   }
@@ -210,7 +211,7 @@ export class VouchersService {
       let cursor: string | undefined;
       for (let page = 0; page < VouchersService.WELCOME_MAX_PAGES; page++) {
         const users = await this.prisma.user.findMany({
-          // Thiếu filter `orders: { none: {} }` thì user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
+          // Thiếu filter `orders: { none: ... }` thì user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
           where,
           orderBy: { id: 'asc' }, // khoá cursor ổn định (createdAt có thể trùng nhau hàng loạt)
           take: VouchersService.WELCOME_PAGE,
