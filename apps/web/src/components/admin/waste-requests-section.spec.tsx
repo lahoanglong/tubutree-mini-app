@@ -233,6 +233,8 @@ describe('WasteRequestsSection', () => {
             PICKUP_OPEN,
             wasteRequestRow({ id: 'r5', code: 'TR-RECV55', status: 'RECEIVED', receivedAt: '2026-10-12T02:00:00.000Z' }),
             wasteRequestRow({ id: 'r6', code: 'TR-DROP66', method: 'DROP_OFF', status: 'OPEN', carrier: null, trackingCode: null }),
+            wasteRequestRow({ id: 'r7', code: 'TR-EXPD77', status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' }),
+            wasteRequestRow({ id: 'r8', code: 'TR-DONE88', status: 'COMPLETED', pointsAwarded: 20_000 }),
           ],
         },
       });
@@ -244,6 +246,11 @@ describe('WasteRequestsSection', () => {
       click(btn(lookupRow(c, 'r5'), 'Nhận kiện'));
       expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
       expect(doorBtn(c)).toBeNull();
+      for (const closed of ['r7', 'r8']) {
+        click(btn(lookupRow(c, closed), 'Nhận kiện'));
+        expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
+        expect(doorBtn(c)).toBeNull();
+      }
       expect(btn(lookupRow(c, 'r6'), 'Nhận kiện')).toBeNull();
     });
 
@@ -309,6 +316,12 @@ describe('WasteRequestsSection', () => {
       expect(posts(api, '/reject')).toHaveLength(0);
       expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
       expect(doorBtn(c)).not.toBeNull();
+
+      click(doorBtn(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(posts(api, '/admin/waste/requests/r1/reject')).toHaveLength(1);
     });
 
     it('lỗi máy chủ: hiện đúng thông báo và giữ panel mở', async () => {
