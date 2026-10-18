@@ -709,7 +709,8 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
       created.tierIds.push(tier.id);
       const d = await deletable();
       await prisma.user.update({ where: { id: d.owner.id }, data: { role: 'AFFILIATE', metadata: { segments: ['home'] } } });
-      await prisma.storefront.update({ where: { id: d.sf.id }, data: { isPartner: false } });
+      // storefront.require_approval mặc định bật: gian hàng CTV chưa duyệt bị ẩn, checkout bỏ slug và không khoá gian hàng.
+      await prisma.storefront.update({ where: { id: d.sf.id }, data: { isPartner: false, approvedAt: new Date() } });
       const app = await prisma.dealerApplication.create({
         data: { userId: d.owner.id, businessName: 'IT', ownerName: 'IT', phone: d.owner.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
       });
