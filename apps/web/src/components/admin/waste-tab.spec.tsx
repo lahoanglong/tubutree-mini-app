@@ -87,6 +87,8 @@ describe('WasteTab', () => {
     expect(strip.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(group.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(details.querySelector('summary')!.textContent).toBe('Xem báo cáo tháng');
+    expect(details.querySelector('summary svg[aria-hidden="true"]')).not.toBeNull();
+    expect(details.className).toContain('group');
     expect(details.querySelectorAll('[data-metric]').length).toBe(19);
     expect(byText(c, 'button', 'Tải CSV')).not.toBeNull();
   });
