@@ -513,7 +513,7 @@ describe('admin/page — tab Tổng quan', () => {
     const banners = [...container.querySelectorAll('button')].filter((b) => /Xử lý ngay|Xem →/.test(b.textContent ?? ''));
     expect(banners).toHaveLength(3);
     for (const b of banners) expect(b.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
-    expect(banners[0]!.textContent).toContain('2 đơn thu gom tái chế cần xử lý');
+    expect(banners[0]!.textContent).toContain('2 đơn thu kèm Gomdon cần xử lý');
     expect(banners[1]!.textContent).toContain('3 yêu cầu nhận thưởng đại lý đang chờ duyệt');
     expect(banners[2]!.textContent).toContain('4 lệnh rút tiền');
   });
@@ -527,7 +527,7 @@ describe('admin/page — tab Đơn hàng', () => {
 
   it('bộ lọc thu gom: nhãn "Có thu gom" không còn emoji, chip cao 44px ở điện thoại', async () => {
     const { container } = await openOrders();
-    const group = container.querySelector('[aria-label="Lọc đơn thu gom tái chế"]')!;
+    const group = container.querySelector('[aria-label="Lọc đơn thu kèm Gomdon"]')!;
     const chips = [...group.querySelectorAll('[role="tab"]')];
     expect(chips.map((c) => c.textContent?.trim())).toEqual(['Mọi đơn', 'Có thu gom', expect.stringContaining('Cần xử lý thu gom')]);
     for (const c of chips) expect(c.className).toContain('min-h-[44px]');

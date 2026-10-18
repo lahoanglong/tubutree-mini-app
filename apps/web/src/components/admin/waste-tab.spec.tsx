@@ -78,6 +78,15 @@ describe('WasteTab', () => {
     expect(chips(c).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent)).toEqual(['Quà']);
   });
 
+  it('ADMIN: chip Cấu hình chung mở thẻ cấu hình đổi rác', async () => {
+    const { c } = await mount(<WasteTab isAdmin />);
+    click(byText(c, 'button', 'Cấu hình chung'));
+    await flush();
+    const card = c.querySelector('[data-waste-config]');
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain('Cấu hình chung đổi rác');
+  });
+
   it('ADMIN: dải số liệu tháng này so với tháng trước (17.2)', async () => {
     const { c } = await mount(<WasteTab isAdmin />);
     expect(metric(c, 'pointsIssued')).toContain('480.000');

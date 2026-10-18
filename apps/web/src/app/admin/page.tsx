@@ -730,7 +730,7 @@ function DashboardTab({
         >
           <span>
             <Recycle aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
-            <b>{recyclingQ.data}</b> đơn thu gom tái chế cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
+            <b>{recyclingQ.data}</b> đơn thu kèm Gomdon cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
           </span>
           <span className="shrink-0 font-semibold">Xử lý ngay →</span>
         </button>
@@ -1140,8 +1140,8 @@ function OrdersTab({
         }}
       />
 
-      {/* Bộ lọc thu gom tái chế (Gomdon) */}
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu gom tái chế">
+      {/* Bộ lọc đơn thu kèm Gomdon */}
+      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu kèm Gomdon">
         {RECYCLING_FILTERS.map((f) => {
           const active = recycling === f.k;
           const count = f.k === 'attention' ? attentionQ.data : undefined;

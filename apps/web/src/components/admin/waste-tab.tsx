@@ -17,6 +17,7 @@ import {
   type WasteSection,
 } from '@/lib/waste-labels';
 import { BTN_SECONDARY, chipClass, FIELD_XS, Notice, ToneBadge } from './ui';
+import { WasteConfigCard } from './waste-config-card';
 import { WasteGiftsSection } from './waste-gifts-section';
 import { WasteItemsSection } from './waste-items-section';
 import { WastePointsSection } from './waste-points-section';
@@ -45,6 +46,7 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
   );
   const overview = useQuery({ queryKey: ['admin-waste-overview'], queryFn: getWasteOverview, enabled: isAdmin });
   const config = useQuery({ queryKey: ['admin-config', 'waste'], queryFn: () => getConfig('waste'), enabled: isAdmin });
+  const loyaltyConfig = useQuery({ queryKey: ['admin-config', 'loyalty'], queryFn: () => getConfig('loyalty'), enabled: isAdmin });
   const enabledRow = config.data?.find((r) => r.key === 'waste.enabled');
   const showOff = isAdmin && config.isSuccess && enabledRow?.value !== true;
 
@@ -66,7 +68,7 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
           </button>
         ))}
       </div>
-      <div data-waste-section={section}>{section === 'items' && <WasteItemsSection />}{section === 'points' && <WastePointsSection seed={seed} />}{section === 'requests' && <WasteRequestsSection isAdmin={isAdmin} seed={seed} initialUserId={wasteUserId} />}{section === 'gifts' && <WasteGiftsSection isAdmin={isAdmin} seed={seed} />}</div>
+      <div data-waste-section={section}>{section === 'items' && <WasteItemsSection />}{section === 'points' && <WastePointsSection seed={seed} />}{section === 'requests' && <WasteRequestsSection isAdmin={isAdmin} seed={seed} initialUserId={wasteUserId} />}{section === 'gifts' && <WasteGiftsSection isAdmin={isAdmin} seed={seed} />}{section === 'config' && isAdmin && <WasteConfigCard rows={config.data} loyaltyRows={loyaltyConfig.data} />}</div>
     </div>
   );
 }
