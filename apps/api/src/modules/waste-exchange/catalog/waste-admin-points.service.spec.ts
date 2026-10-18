@@ -618,7 +618,7 @@ describe('WasteAdminPointsService', () => {
     it('approve moves the pending text to the live text and notifies the owner after commit', async () => {
       const h = staffSetup();
 
-      await h.svc.approvePerk('a1', 'p1');
+      await h.svc.approvePerk('a1', 'p1', PERK);
 
       expect(h.wastePoint.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { perkText: PERK, perkPendingText: null } });
       expect(writeEvent).toHaveBeenCalledWith(
@@ -639,7 +639,7 @@ describe('WasteAdminPointsService', () => {
     it('reject clears the pending text, keeps the live text and notifies the owner after commit', async () => {
       const h = staffSetup();
 
-      await h.svc.rejectPerk('a1', 'p1');
+      await h.svc.rejectPerk('a1', 'p1', PERK);
 
       expect(h.wastePoint.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { perkPendingText: null } });
       expect(writeEvent).toHaveBeenCalledWith(
@@ -659,10 +659,24 @@ describe('WasteAdminPointsService', () => {
       const h = staffSetup();
       h.$queryRaw.mockResolvedValue([{ ...lockRow, perkPendingText: null }]);
 
-      await expectHttp(h.svc.approvePerk('a1', 'p1'), ConflictException, NO_PERK);
-      await expectHttp(h.svc.rejectPerk('a1', 'p1'), ConflictException, NO_PERK);
+      await expectHttp(h.svc.approvePerk('a1', 'p1', PERK), ConflictException, NO_PERK);
+      await expectHttp(h.svc.rejectPerk('a1', 'p1', PERK), ConflictException, NO_PERK);
 
       expect(h.wastePoint.update).not.toHaveBeenCalled();
+      expect(h.notifier.perkReviewed).not.toHaveBeenCalled();
+    });
+
+    it('approve and reject refuse a pending text that differs from the one reviewed: 409, nothing written, nobody told', async () => {
+      const CHANGED = 'Nội dung ưu đãi vừa thay đổi, tải lại để xem';
+      const h = staffSetup();
+      h.$queryRaw.mockResolvedValue([{ ...lockRow, perkPendingText: 'Giảm 50% toàn bộ' }]);
+
+      await expectHttp(h.svc.approvePerk('a1', 'p1', PERK), ConflictException, CHANGED);
+      await expectHttp(h.svc.rejectPerk('a1', 'p1', PERK), ConflictException, CHANGED);
+      await expectHttp(h.svc.approvePerk('a1', 'p1', `${PERK} `), ConflictException, CHANGED);
+
+      expect(h.wastePoint.update).not.toHaveBeenCalled();
+      expect(writeEvent).not.toHaveBeenCalled();
       expect(h.notifier.perkReviewed).not.toHaveBeenCalled();
     });
 
@@ -670,7 +684,7 @@ describe('WasteAdminPointsService', () => {
       const h = staffSetup();
       h.wastePointStaff.findFirst.mockResolvedValue(null);
 
-      await h.svc.approvePerk('a1', 'p1');
+      await h.svc.approvePerk('a1', 'p1', PERK);
 
       expect(writeEvent).toHaveBeenCalledWith(h.tx, expect.objectContaining({ kind: 'PERK_APPROVED' }));
       expect(h.notifier.perkReviewed).not.toHaveBeenCalled();
@@ -680,7 +694,7 @@ describe('WasteAdminPointsService', () => {
       const h = staffSetup();
       h.prisma.user.findUnique.mockResolvedValue({ id: 's1', role: 'STAFF', isBlocked: false, mergedIntoId: null, phone: null });
 
-      const call = m === 'removeStaff' ? h.svc.removeStaff('s1', 'p1', 'o1') : h.svc[m]('s1', 'p1');
+      const call = m === 'removeStaff' ? h.svc.removeStaff('s1', 'p1', 'o1') : h.svc[m]('s1', 'p1', PERK);
       await expect(call).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(h.prisma.$transaction).not.toHaveBeenCalled();

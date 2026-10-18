@@ -11,6 +11,7 @@ import {
   rejectWastePerk,
   removeWastePointStaff,
 } from '@/lib/admin-client';
+import { ApiError } from '@/lib/client-api';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
@@ -57,6 +58,10 @@ export function WastePointDetail({
     return qc.invalidateQueries({ queryKey: ['admin-waste-points'] });
   };
   const onError = (e: unknown) => setErr(errText(e));
+  const onPerkError = (e: unknown) => {
+    setErr(errText(e));
+    if (e instanceof ApiError && e.status === 409) void refresh();
+  };
 
   const add = useMutation({
     mutationFn: (v: { userId: string; role: WastePointStaffRole }) => addWastePointStaff(point.id, v),
@@ -69,14 +74,14 @@ export function WastePointDetail({
     onError,
   });
   const approve = useMutation({
-    mutationFn: () => approveWastePerk(point.id),
+    mutationFn: (expectedPendingText: string) => approveWastePerk(point.id, expectedPendingText),
     onSuccess: () => { setErr(null); return refresh(); },
-    onError,
+    onError: onPerkError,
   });
   const reject = useMutation({
-    mutationFn: () => rejectWastePerk(point.id),
+    mutationFn: (expectedPendingText: string) => rejectWastePerk(point.id, expectedPendingText),
     onSuccess: () => { setErr(null); return refresh(); },
-    onError,
+    onError: onPerkError,
   });
 
   const credits = useInfiniteQuery({
@@ -102,12 +107,14 @@ export function WastePointDetail({
     if (ok) remove.mutate(userId);
   };
   const askPerk = async (kind: 'approve' | 'reject') => {
+    const text = point.perkPendingText;
+    if (!text) return;
     const ok = await confirm(
       kind === 'approve'
-        ? { title: 'Duyệt ưu đãi riêng', message: `Ưu đãi "${point.perkPendingText}" sẽ hiện cho khách ở ${point.name}.`, confirmLabel: 'Duyệt' }
-        : { title: 'Từ chối ưu đãi riêng', message: `Ưu đãi "${point.perkPendingText}" sẽ không hiện cho khách ở ${point.name}.`, confirmLabel: 'Từ chối', tone: 'danger' },
+        ? { title: 'Duyệt ưu đãi riêng', message: `Ưu đãi "${text}" sẽ hiện cho khách ở ${point.name}.`, confirmLabel: 'Duyệt' }
+        : { title: 'Từ chối ưu đãi riêng', message: `Ưu đãi "${text}" sẽ không hiện cho khách ở ${point.name}.`, confirmLabel: 'Từ chối', tone: 'danger' },
     );
-    if (ok) (kind === 'approve' ? approve : reject).mutate();
+    if (ok) (kind === 'approve' ? approve : reject).mutate(text);
   };
 
   return (

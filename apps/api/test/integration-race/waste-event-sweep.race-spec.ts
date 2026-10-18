@@ -485,7 +485,7 @@ const SWEEP: ReadonlyArray<SweepRow> = [
       await prisma.wastePoint.update({ where: { id: point.id }, data: { perkPendingText: 'Sweep ưu đãi' } });
       return { admin: await newAdmin(), point };
     },
-    (c) => adminPoints.approvePerk(c.admin.id, c.point.id),
+    (c) => adminPoints.approvePerk(c.admin.id, c.point.id, 'Sweep ưu đãi'),
     (c) => byPoint(c.point),
   ),
   sweepRow(
@@ -495,7 +495,7 @@ const SWEEP: ReadonlyArray<SweepRow> = [
       await prisma.wastePoint.update({ where: { id: point.id }, data: { perkPendingText: 'Sweep ưu đãi' } });
       return { admin: await newAdmin(), point };
     },
-    (c) => adminPoints.rejectPerk(c.admin.id, c.point.id),
+    (c) => adminPoints.rejectPerk(c.admin.id, c.point.id, 'Sweep ưu đãi'),
     (c) => byPoint(c.point),
   ),
   sweepRow(

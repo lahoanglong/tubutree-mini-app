@@ -33,6 +33,7 @@ const OWNER_EXISTS = 'Điểm đã có chủ điểm. Bỏ chủ điểm cũ tr�
 const ALREADY_IN_POINT = 'Người này đã ở điểm nhận.';
 const NOT_IN_POINT = 'Người này không ở điểm nhận.';
 const NO_PENDING_PERK = 'Không có ưu đãi chờ duyệt.';
+const PERK_CHANGED = 'Nội dung ưu đãi vừa thay đổi, tải lại để xem';
 const DAY_MS = 86_400_000;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -371,19 +372,21 @@ export class WasteAdminPointsService {
     return this.getOne(pointId);
   }
 
-  async approvePerk(adminUserId: string, pointId: string): Promise<AdminWastePointDTO> {
-    return this.reviewPerk(adminUserId, pointId, true);
+  async approvePerk(adminUserId: string, pointId: string, expectedPendingText: string): Promise<AdminWastePointDTO> {
+    return this.reviewPerk(adminUserId, pointId, expectedPendingText, true);
   }
 
-  async rejectPerk(adminUserId: string, pointId: string): Promise<AdminWastePointDTO> {
-    return this.reviewPerk(adminUserId, pointId, false);
+  async rejectPerk(adminUserId: string, pointId: string, expectedPendingText: string): Promise<AdminWastePointDTO> {
+    return this.reviewPerk(adminUserId, pointId, expectedPendingText, false);
   }
 
-  private async reviewPerk(adminUserId: string, pointId: string, approved: boolean): Promise<AdminWastePointDTO> {
+  private async reviewPerk(adminUserId: string, pointId: string, expectedPendingText: string, approved: boolean): Promise<AdminWastePointDTO> {
     const admin = await assertActiveAdmin(this.prisma, adminUserId);
     const { p, ev, owner } = await this.prisma.$transaction(async (tx) => {
       const locked = await lockPoint(tx, pointId);
       if (!locked.perkPendingText) throw new ConflictException(NO_PENDING_PERK);
+      // Exact comparison: the admin approves the text on screen, never one an owner submitted since.
+      if (locked.perkPendingText !== expectedPendingText) throw new ConflictException(PERK_CHANGED);
       await tx.wastePoint.update({
         where: { id: pointId },
         data: approved ? { perkText: locked.perkPendingText, perkPendingText: null } : { perkPendingText: null },

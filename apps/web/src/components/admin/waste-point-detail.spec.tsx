@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wastePoint, wasteRequestRow } from '@/test-utils/fixtures/waste-admin';
+import { listWastePoints } from '@/lib/admin-client';
 import { WastePointDetail } from './waste-point-detail';
 
 let mounted: Rendered[] = [];
@@ -165,12 +167,49 @@ describe('WastePointDetail', () => {
     await flush();
     const approve = callsTo(api, 'POST', '/admin/waste/points/p1/perk/approve');
     expect(approve).toHaveLength(1);
-    expect(approve[0]!.init?.body).toBeUndefined();
+    expect(JSON.parse(String(approve[0]!.init!.body))).toEqual({ expectedPendingText: 'Giảm 10% hoá đơn đầu' });
     click(btn(c, 'Từ chối ưu đãi'));
     await flush();
     answerConfirm(true);
     await flush();
-    expect(callsTo(api, 'POST', '/admin/waste/points/p1/perk/reject')).toHaveLength(1);
+    const reject = callsTo(api, 'POST', '/admin/waste/points/p1/perk/reject');
+    expect(reject).toHaveLength(1);
+    expect(JSON.parse(String(reject[0]!.init!.body))).toEqual({ expectedPendingText: 'Giảm 10% hoá đơn đầu' });
+  });
+
+  it('ưu đãi đổi giữa lúc admin xem: gửi đúng chữ trong hộp thoại, bị 409 thì tải lại danh sách và hiện câu của máy chủ', async () => {
+    function Switcher() {
+      const [p, setP] = useState(wastePoint({ perkPendingText: 'Chữ cũ' }));
+      useQuery({ queryKey: ['admin-waste-points', 'x'], queryFn: () => listWastePoints(), staleTime: Infinity });
+      return (
+        <>
+          <button type="button" onClick={() => setP(wastePoint({ perkPendingText: 'Chữ mới' }))}>đổi chữ</button>
+          <WastePointDetail point={p} onClose={() => undefined} searchDebounceMs={0} />
+        </>
+      );
+    }
+    const api = mockFetch({
+      '/admin/waste/points/p1/perk/approve': { status: 409, body: { message: 'Nội dung ưu đãi vừa thay đổi, tải lại để xem' } },
+      '/admin/waste/points/p1/report': { body: REPORT },
+      '/admin/waste/points': { body: [] },
+      '/admin/waste/requests': { body: { rows: [], nextCursor: null } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<Switcher />);
+    mounted.push(r);
+    await flush();
+    const listGets = () => api.calls.filter((x) => /\/admin\/waste\/points$/.test(x.url) && (x.init?.method ?? 'GET') === 'GET').length;
+    expect(listGets()).toBe(1);
+    click(btn(r.container, 'Duyệt ưu đãi'));
+    await flush();
+    click(btn(r.container, 'đổi chữ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const posts = callsTo(api, 'POST', '/admin/waste/points/p1/perk/approve');
+    expect(JSON.parse(String(posts[0]!.init!.body))).toEqual({ expectedPendingText: 'Chữ cũ' });
+    expect(r.container.querySelector('[role="alert"]')?.textContent).toBe('Nội dung ưu đãi vừa thay đổi, tải lại để xem');
+    expect(listGets()).toBe(2);
   });
 
   it('ưu đãi đã duyệt hiện chữ, chưa có thì ghi Chưa có và không có nút duyệt', async () => {
