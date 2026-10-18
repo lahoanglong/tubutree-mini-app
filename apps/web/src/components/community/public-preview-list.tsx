@@ -34,10 +34,12 @@ export function PublicPreviewList({ posts }: { posts: FeedPreviewItem[] }) {
                   </div>
                 </div>
               </div>
-              <div className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-forest-700">
-                <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                {KIND_LABEL[post.kind]}
-              </div>
+              {KIND_LABEL[post.kind] && (
+                <div className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-forest-700">
+                  {KindIcon && <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {KIND_LABEL[post.kind]}
+                </div>
+              )}
               {post.title && <div className="mt-0.5 text-base font-semibold text-stone-900">{post.title}</div>}
               <div className="mt-1 text-sm text-stone-800">{post.snippet}</div>
               {image && (

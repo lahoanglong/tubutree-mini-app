@@ -30,10 +30,12 @@ export function PostCard({ post }: { post: FeedItem }) {
           meta={`${timeAgo(post.createdAt)}${post.category ? ` · ${post.category.icon ?? ''} ${post.category.name}` : ''}`}
         />
       </div>
-      <div className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-forest-700">
-        <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />
-        {label}
-      </div>
+      {label && (
+        <div className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-forest-700">
+          {KindIcon && <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />}
+          {label}
+        </div>
+      )}
       {post.title ? (
         <>
           <Link href={href} className={`${STRETCHED} mt-0.5 text-base font-semibold text-stone-900`}>
