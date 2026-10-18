@@ -158,4 +158,102 @@ test.describe('Web khách: tài khoản', () => {
     await page.goto('/tai-khoan/thong-bao');
     await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/thong-bao')}`);
   });
+
+  test('giới thiệu: khách chưa đăng nhập xem FAQ, lọc nhóm, mở câu hỏi, liên hệ và link chính sách; không có Xóa tài khoản', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
+    api.get('/faqs', [
+      { id: 'f1', category: 'Vận chuyển', question: 'Bao lâu thì nhận hàng?', answer: '2-4 ngày.' },
+      { id: 'f2', category: 'Đổi trả', question: 'Đổi hàng thế nào?', answer: 'Trong 7 ngày.' },
+    ]);
+    api.get('/config/public', { support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null } });
+    await page.goto('/gioi-thieu');
+
+    await expect(page.getByRole('heading', { name: 'Về Tubu Tree', level: 1 })).toBeVisible();
+    const first = page.getByRole('button', { name: /Bao lâu thì nhận hàng/ });
+    await expect(first).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByText('2-4 ngày.')).toBeVisible();
+    await page.getByRole('button', { name: 'Đổi trả' }).click();
+    await expect(page.getByRole('button', { name: /Bao lâu thì nhận hàng/ })).toHaveCount(0);
+    await page.getByRole('button', { name: /Đổi hàng thế nào/ }).click();
+    await expect(page.getByText('Trong 7 ngày.')).toBeVisible();
+
+    await expect(page.getByRole('link', { name: /Hotline/ })).toHaveAttribute('href', 'tel:0984606774');
+    await expect(page.getByRole('link', { name: 'tubutree@gmail.com' })).toHaveAttribute('href', 'mailto:tubutree@gmail.com');
+    await expect(page.getByRole('link', { name: 'Chính sách đổi trả' })).toHaveAttribute('href', '/chinh-sach/doi-tra');
+    await expect(page.getByRole('button', { name: 'Xóa tài khoản' })).toHaveCount(0);
+  });
+
+  test('giới thiệu: đã đăng nhập gửi yêu cầu xóa tài khoản sau khi xác nhận', async ({ page, api }) => {
+    mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
+    api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
+    api.get('/faqs', []);
+    api.get('/config/public', { support: { hotline: null, email: null, zaloOaName: null } });
+    api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xóa tài khoản' });
+    await page.goto('/gioi-thieu');
+
+    await expect(page.getByText('Tubu Tree bán những gì?')).toBeVisible();
+    await page.getByRole('button', { name: 'Xóa tài khoản' }).click();
+    await expect(page.getByText('Xóa tài khoản vĩnh viễn?')).toBeVisible();
+    const sent = api.waitForCall('POST', '/me/deletion-request');
+    await page.getByRole('button', { name: 'Gửi yêu cầu xóa' }).click();
+    await sent;
+    await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xóa tài khoản' })).toBeVisible();
+  });
+
+  test('nhận mã từ thẻ QR: đã đăng nhập thì POST /coupons/claim một lần, hiện ưu đãi và xoá ?claim= khỏi URL', async ({ page, api }) => {
+    mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
+    api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
+    api.post('/coupons/claim', {
+      code: 'SHOPEE-AB12CD34', type: 'AMOUNT', value: 30000, minOrder: 99000, maxDiscount: null,
+      endAt: '2026-12-31T16:59:59.000Z', newCustomerOnly: true, alreadyClaimed: false,
+    });
+    const claimed = api.waitForCall('POST', '/coupons/claim');
+    await page.goto('/tai-khoan?claim=shopee-ab12cd34');
+
+    expect((await claimed).body).toEqual({ code: 'SHOPEE-AB12CD34' });
+    const sheet = page.getByRole('dialog', { name: 'Bạn nhận được ưu đãi' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText('Giảm 30.000đ cho đơn từ 99.000đ')).toBeVisible();
+    await expect(page).not.toHaveURL(/claim=/);
+    await sheet.getByRole('button', { name: 'Để sau' }).click();
+    await expect(sheet).toHaveCount(0);
+  });
+
+  test('nhận mã từ thẻ QR khi chưa đăng nhập: mời đăng nhập, không gọi /coupons/claim', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
+    await page.goto('/tai-khoan?claim=SHOPEE-AB12CD34');
+    const sheet = page.getByRole('dialog', { name: 'Đăng nhập Zalo để nhận ưu đãi' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Đăng nhập với Zalo' })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan')}`);
+  });
+
+  test('onboarding: khách chưa làm quiz ở Trang chủ đi hết các bước và gửi đúng đáp án', async ({ page, api }) => {
+    api.post('/auth/refresh', () => ({
+      accessToken: 'e2e-token',
+      user: { id: 'u1', fullName: 'An', avatarUrl: null, role: 'CUSTOMER', pointsBalance: 0, walletBalance: 0, referralCode: 'AN123' },
+    }));
+    api.get('/me', { id: 'u1', fullName: 'An', email: null, dob: null, avatarUrl: null, phone: '0912345678', onboarded: false, segments: [] });
+    api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
+    api.post('/me/onboarding', ({ call }) => ({ id: 'u1', onboarded: true, segments: (call.body as { segments: string[] }).segments }));
+    // Trang chủ có thể gọi thêm vài API phụ không liên quan tới quiz.
+    api.allowUnmocked('POST /events', 'GET /flash-sales/active', 'GET /me/coupons', 'POST /affiliate/touch');
+    await page.goto('/');
+
+    const quiz = page.getByRole('dialog', { name: 'Chào mừng đến Tubu Tree' });
+    await expect(quiz.getByRole('heading', { name: 'Chào mừng đến Tubu Tree!' })).toBeVisible();
+    await quiz.getByRole('button', { name: 'Bắt đầu' }).click();
+    await quiz.getByRole('checkbox', { name: 'Chăm sóc da' }).click();
+    await quiz.getByRole('button', { name: 'Tiếp tục' }).click();
+    await quiz.getByRole('radio', { name: 'Nhạy cảm' }).click();
+    await quiz.getByRole('button', { name: 'Tiếp tục' }).click();
+    await quiz.getByRole('checkbox', { name: 'Gia đình' }).click();
+    await quiz.getByRole('button', { name: 'Tiếp tục' }).click();
+    await quiz.getByRole('radio', { name: 'Giá tốt' }).click();
+    const sent = api.waitForCall('POST', '/me/onboarding');
+    await quiz.getByRole('button', { name: 'Hoàn tất' }).click();
+    expect((await sent).body).toEqual({ segments: ['skincare', 'sensitive_skin', 'family', 'price'] });
+    await expect(quiz.getByRole('heading', { name: 'Tuyệt vời!' })).toBeVisible();
+    await quiz.getByRole('button', { name: 'Khám phá ngay' }).click();
+    await expect(quiz).toHaveCount(0);
+  });
 });

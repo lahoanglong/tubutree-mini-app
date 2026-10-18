@@ -61,6 +61,10 @@ const ACCOUNT: string[] = [
   'app/gioi-thieu/page.tsx',
   'app/gioi-thieu/about-view.tsx',
   'lib/faq-fallback.ts',
+  'components/coupon-claim-gate.tsx',
+  'components/onboarding-gate.tsx',
+  'components/account/coupon-claim.ts',
+  'components/account/onboarding-rules.ts',
   'components/account/account-menu.ts',
   'components/account/avatar-crop-sheet.tsx',
 ];
