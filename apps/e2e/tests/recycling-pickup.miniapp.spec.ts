@@ -49,7 +49,7 @@ test.describe('Checkout — Thu kèm rác', () => {
     const toggle = page.getByRole('checkbox', { name: 'Thu kèm rác', exact: true });
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await expect(page.getByText('TR-PK9MV')).toBeVisible();
-    await expect(page.getByText(/3 thùng Thùng carton cũ|Thùng carton cũ: 3 thùng/)).toBeVisible();
+    await expect(page.getByText('Thùng carton cũ: 3 thùng')).toBeVisible();
     await expect(page.getByText('Ước tính 3.000 điểm')).toBeVisible();
     await expect(page.getByText(/quần áo cũ|cục pin/)).toHaveCount(0);
 
