@@ -157,6 +157,17 @@ describe('/recycle/r/:id — Mang tới điểm nhận (§4.5, §4.6)', () => {
     expect(await screen.findByRole('button', { name: 'Xem mã QR' })).toBeInTheDocument();
     expect(screen.queryByText('Chương trình đang tạm dừng')).toBeNull();
   });
+  it('cấu hình công khai chưa tải → không coi là tạm dừng: vẫn có "Xem mã QR"', async () => {
+    mocks.publicConfig.isLoaded = false;
+    mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
+    try {
+      renderPage();
+      expect(await screen.findByRole('button', { name: 'Xem mã QR' })).toBeInTheDocument();
+      expect(screen.queryByText('Chương trình đang tạm dừng')).toBeNull();
+    } finally {
+      mocks.publicConfig.isLoaded = true;
+    }
+  });
   it('điểm của yêu cầu đã hết hạn mức tháng → nhắc đổi điểm khác + "Đổi điểm nhận" (§11.4)', async () => {
     const r = makeRequestDetail();
     mocks.getWasteRequest.mockResolvedValue(r);

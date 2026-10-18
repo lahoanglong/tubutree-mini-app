@@ -197,7 +197,7 @@ export default function RecycleRequestPage() {
   const pausedPickup = r.method === 'PICKUP' && open && !r.orderCode && pickupPaused;
 
   const dropOffPaused =
-    r.method === 'DROP_OFF' && open && (!cfg.waste.enabled || me?.programmeEnabled === false || !!me?.blocked);
+    r.method === 'DROP_OFF' && open && ((cfg.isLoaded && !cfg.waste.enabled) || me?.programmeEnabled === false || !!me?.blocked);
 
   const quotaFull =
     r.method === 'DROP_OFF' &&
