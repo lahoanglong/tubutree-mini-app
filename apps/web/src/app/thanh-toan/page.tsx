@@ -516,7 +516,7 @@ export default function CheckoutPage() {
                         {l.itemName}: {l.declaredQty} {l.unitLabel}
                       </p>
                     ))}
-                    <p className="mt-1 font-semibold text-success-fg">Ước tính {pickupReq.estimatedPoints.toLocaleString('vi-VN')} điểm</p>
+                    <p className="mt-1 font-semibold text-success-fg">Ước tính {new Intl.NumberFormat('vi-VN').format(pickupReq.estimatedPoints)} điểm</p>
                     {attachWaste && <p className="mt-1">Ghi mã lên túi, bưu tá lấy khi giao đơn.</p>}
                     {attachWaste && paymentToSend === 'BANK_TRANSFER' && (
                       <p className="mt-1">Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.</p>
