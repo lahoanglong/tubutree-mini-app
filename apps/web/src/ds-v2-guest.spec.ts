@@ -35,6 +35,16 @@ const MIGRATED = [
   'app/error.tsx',
   'app/global-error.tsx',
   'app/not-found.tsx',
+  'components/ui/sheet.tsx',
+  'components/ui/segmented-tabs.tsx',
+  'components/ui/page-header.tsx',
+  'components/ui/error-state.tsx',
+  'components/ui/skeleton.tsx',
+  'components/ui/badge.tsx',
+  'components/ui/progress-bar.tsx',
+  'components/ui/quantity-selector.tsx',
+  'components/ui/qr-code.tsx',
+  'components/ui/field.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
