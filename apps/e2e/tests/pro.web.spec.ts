@@ -1,7 +1,7 @@
 import { expect, test, type MockApi } from './support/mock-api';
 
 /**
- * Web: kênh đại lý /dai-ly, ca làm /nhan-vien. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`); host phải là localhost
+ * Web: kênh đại lý /dai-ly,  ca làm /nhan-vien, bảng lương /nhan-vien/bang-luong. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`); host phải là localhost
  * (baseURL) vì middleware coi nhãn đầu của Host là subdomain gian hàng.
  */
 
@@ -120,5 +120,41 @@ test.describe('Web nhân viên', () => {
     const call = await created;
     expect(call.body).toMatchObject({ items: [{ templateId: 't1' }] });
     await expect(page.getByText('Đã gửi ca chờ duyệt.')).toBeVisible();
+  });
+});
+
+test.describe('Web bảng lương', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+  });
+
+  test('xem lương tháng và lưu tài khoản nhận lương bằng PUT /staff/bank', async ({ page, api }) => {
+    mockStaff(api);
+    const profile = { hourlyRate: 30000, bankBin: '970407', bankAccountNo: '0123456789', bankAccountName: 'NGUYEN VAN A', qrImageUrl: null, active: true };
+    api.get('/staff/payroll', {
+      month: { year: 2026, month: 3, totalMinutes: 270, gross: 135000, totalFines: 0, net: 135000, status: 'FINALIZED', paidAt: null, proofImageUrl: null, note: null },
+      days: [],
+      profile,
+    });
+    api.get('/staff/attendance/history', []);
+    api.on('PUT', '/staff/bank', profile);
+
+    await page.goto('/nhan-vien/bang-luong');
+    await expect(page.getByRole('heading', { name: 'Lương của tôi', level: 1 })).toBeVisible();
+    await expect(page.getByText('Đã chốt')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Thông tin nhận lương' }).click();
+    await page.getByLabel('Số tài khoản').fill(' 9876543210 ');
+    const saved = api.waitForCall('PUT', '/staff/bank');
+    await page.getByRole('button', { name: 'Lưu' }).click();
+    const call = await saved;
+    expect(call.body).toMatchObject({ bankBin: '970407', bankAccountNo: '9876543210', bankAccountName: 'NGUYEN VAN A' });
+    await expect(page.getByText('Đã lưu thông tin nhận lương.')).toBeVisible();
   });
 });

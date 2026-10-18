@@ -81,6 +81,8 @@ const PRO: string[] = [
   'components/staff/staff-hub.tsx',
   'components/staff/today-card.tsx',
   'components/staff/shift-sheets.tsx',
+  'app/nhan-vien/bang-luong/page.tsx',
+  'components/staff/payroll-hub.tsx',
   'lib/week.ts',
 ];
 const RECYCLE: string[] = [];

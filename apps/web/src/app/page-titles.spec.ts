@@ -18,6 +18,7 @@ import { metadata as orders } from './tai-khoan/don-hang/layout';
 import { metadata as bankPayment } from './thanh-toan/chuyen-khoan/[code]/layout';
 import { metadata as dealer } from './dai-ly/layout';
 import { metadata as staff } from './nhan-vien/layout';
+import { metadata as payroll } from './nhan-vien/bang-luong/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -51,6 +52,7 @@ const GAME: TitleCase[] = [];
 const PRO: TitleCase[] = [
   ['/dai-ly', dealer, 'Kênh đại lý — Tubu Tree'],
   ['/nhan-vien', staff, 'Ca làm của tôi — Tubu Tree'],
+  ['/nhan-vien/bang-luong', payroll, 'Lương của tôi — Tubu Tree'],
 ];
 const RECYCLE: TitleCase[] = [];
 const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
