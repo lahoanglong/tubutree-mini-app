@@ -130,3 +130,23 @@ describe('tenantHostBootScript', () => {
     expect(() => vm.runInNewContext(tenantHostBootScript(), {})).not.toThrow();
   });
 });
+
+describe('PRIVATE_PATHS và robots từ route map', () => {
+  it('giữ danh sách cũ và thêm tiền tố riêng tư của route map', async () => {
+    const { PRIVATE_PATHS } = await loadSite();
+    expect(PRIVATE_PATHS).toEqual(
+      expect.arrayContaining(['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap']),
+    );
+    expect(PRIVATE_PATHS).toEqual(expect.arrayContaining(['/doi-rac', '/kho-qua', '/dai-ly']));
+    expect(new Set(PRIVATE_PATHS).size).toBe(PRIVATE_PATHS.length);
+    expect(PRIVATE_PATHS.some((p) => p.includes(':'))).toBe(false);
+  });
+
+  it('robots chặn tiền tố mới cả dạng trần lẫn cây con, và mở lại route công khai bên trong', async () => {
+    const robots = (await import('../app/robots')).default;
+    const rule = [robots().rules].flat()[0]!;
+    expect(rule.disallow).toEqual(expect.arrayContaining(['/doi-rac', '/doi-rac/']));
+    expect(rule.allow).toEqual(expect.arrayContaining(['/', '/doi-rac/quy-dinh']));
+    expect([rule.allow].flat().some((a) => a?.includes(':'))).toBe(false);
+  });
+});
