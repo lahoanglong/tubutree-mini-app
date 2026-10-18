@@ -354,6 +354,15 @@ describe('thêm / sửa ca', () => {
     expect(text()).not.toContain('Chọn ca chuẩn');
   });
 
+  it('chưa có ca chuẩn nào và xoá ô kết thúc: Gửi duyệt bị khoá', async () => {
+    m.data['/staff/shift-templates'] = [];
+    await mount();
+    await press('Thêm ca T4 11/03');
+    expect(btn('Gửi duyệt').disabled).toBe(false);
+    typeInto(timeInputs()[1]!, '');
+    expect(btn('Gửi duyệt').disabled).toBe(true);
+  });
+
   it('chip ca chuẩn báo aria-pressed; ô giờ có nhãn "Bắt đầu"/"Kết thúc"', async () => {
     await mount();
     await press('Thêm ca T4 11/03');

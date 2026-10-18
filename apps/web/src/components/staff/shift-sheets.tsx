@@ -70,7 +70,7 @@ export function ShiftFormSheet({
 }) {
   const { editId, day, tplId, custom, start, end } = state;
   const showTimes = custom || !!editId || templates.length === 0;
-  const invalid = !custom && !editId ? !tplId && templates.length > 0 : !TIME_RE.test(start) || !TIME_RE.test(end);
+  const invalid = !custom && !editId && templates.length > 0 ? !tplId : !TIME_RE.test(start) || !TIME_RE.test(end);
   return (
     <Sheet
       open={open}

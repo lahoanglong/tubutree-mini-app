@@ -134,17 +134,31 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
     return cart.filter(([id, n]) => preorderQty(n, stockOf.get(id) ?? 0) > 0).length;
   }, [cart, priceQ.data]);
 
-  // Idempotency-Key giữ nguyên qua các lần bấm lại của CÙNG một lần đặt (bấm đúp/timeout mạng) để API không tạo đơn công nợ đôi;
-  // đổi sau khi đặt thành công vì đơn sau là đơn mới (như Mini App), và đổi khi giỏ/phương thức khác lần thử trước: cùng key thì
-  // API trả lại đơn cũ (có thể đã được tạo dù mạng báo lỗi) và giỏ mới bị xoá mà chưa hề đặt.
+  // Giữ nguyên khoá qua mọi lần bấm lại tới khi đặt thành công (bấm đúp, timeout, đổi giỏ hay phương thức), như Mini App;
+  // máy chủ trả lại đơn đã tạo cho cùng khoá và không đối chiếu nội dung, nên đổi khoá giữa chừng sẽ tạo đơn công nợ thứ hai.
   const orderKey = useRef(newIdempotencyKey());
-  const lastAttempt = useRef<string | null>(null);
   // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm cùng khung hình vẫn gọi mutate hai lần.
   const placeBusy = useRef(false);
   const place = useMutation({
     mutationFn: (method: 'CREDIT' | 'PREPAID') =>
       placeDealerOrder(coreHttp, cart.map(([variationId, quantity]) => ({ variationId, quantity })), method, undefined, orderKey.current),
     onSuccess: (order, method) => {
+      const lineKey = (rows: Array<[string, number]>) => rows.map(([id, n]) => `${id}:${n}`).sort().join(',');
+      const sent = lineKey(cart);
+      const lines = order.items ?? [];
+      const got = lines.every((it) => it.variationId) ? lineKey(lines.map((it): [string, number] => [it.variationId, it.quantity])) : '';
+      for (const key of ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report']) {
+        void qc.invalidateQueries({ queryKey: [key] });
+      }
+      // Lần đặt trước đã tạo đơn dù mạng báo lỗi: máy chủ trả đơn đó (giỏ cũ), giỏ hiện tại chưa được đặt nên giữ nguyên.
+      if (got !== '' && sent !== got) {
+        orderKey.current = newIdempotencyKey();
+        setNotice({
+          text: `Đơn ${order.code} đã được tạo ở lần đặt trước (mạng lỗi). Giỏ hiện tại chưa đặt — kiểm tra tab Đơn hàng trước khi đặt lại.`,
+          error: true,
+        });
+        return;
+      }
       const hasPreorder = order.items?.some((it) => (it.backorderedQty ?? 0) > 0) ?? false;
       setNotice({
         text: hasPreorder ? 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.' : 'Đã tạo đơn đại lý!',
@@ -152,10 +166,6 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
       });
       orderKey.current = newIdempotencyKey();
       setQty({});
-      for (const key of ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report']) {
-        void qc.invalidateQueries({ queryKey: [key] });
-      }
-      lastAttempt.current = null;
       // Chỉ đơn máy chủ trả về còn chờ chuyển khoản mới có trang để chuyển; đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái.
       if (method === 'PREPAID' && order.paymentMethod === 'BANK_TRANSFER' && order.status === 'PENDING_PAYMENT') router.push(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
@@ -168,10 +178,6 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
     if (placeBusy.current) return;
     placeBusy.current = true;
     setNotice(null);
-    // Chỉ đổi khoá khi giỏ đổi: đổi phương thức cùng giỏ sau lỗi mạng phải trả lại đơn đã tạo, không tạo đơn thứ hai (Mini App giữ khoá tới khi thành công).
-    const attempt = cart.map(([id, n]) => `${id}:${n}`).join(',');
-    if (lastAttempt.current !== null && lastAttempt.current !== attempt) orderKey.current = newIdempotencyKey();
-    lastAttempt.current = attempt;
     place.mutate(method);
   };
 

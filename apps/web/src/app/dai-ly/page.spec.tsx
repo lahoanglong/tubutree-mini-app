@@ -407,12 +407,12 @@ describe('/dai-ly — đặt đơn (tiền: cùng endpoint, body, Idempotency-Ke
     expect(m.push).not.toHaveBeenCalled();
   });
 
-  it('lỗi mạng rồi đổi giỏ: dùng Idempotency-Key mới', async () => {
+  it('lỗi mạng rồi đổi giỏ: vẫn cùng Idempotency-Key, đơn cũ trả về khác giỏ thì không xoá giỏ, báo đơn đã tạo và không chuyển trang', async () => {
     let n = 0;
     m.post['/dealer/orders'] = () => {
       n += 1;
       if (n === 1) throw new Error('Mất kết nối');
-      return { code: `TUBU${n}`, status: 'CONFIRMED', paymentMethod: 'CREDIT', items: [] };
+      return { code: 'TUBU1', status: 'CONFIRMED', paymentMethod: 'CREDIT', items: [{ variationId: 'v1', quantity: 1 }] };
     };
     await mount();
     click(plus());
@@ -423,7 +423,14 @@ describe('/dai-ly — đặt đơn (tiền: cùng endpoint, body, Idempotency-Ke
     await flush();
     const keys = posts('/dealer/orders').map((p) => p.headers?.['Idempotency-Key']);
     expect(keys).toHaveLength(2);
-    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys[0]).toBe(keys[1]);
+    expect(document.body.textContent).toContain('Đơn TUBU1 đã được tạo ở lần đặt trước');
+    expect(m.push).not.toHaveBeenCalled();
+    click(button('Ghi công nợ'));
+    await flush();
+    const keys3 = posts('/dealer/orders').map((p) => p.headers?.['Idempotency-Key']);
+    expect(keys3[2]).not.toBe(keys3[1]);
+    expect(posts('/dealer/orders')[2]?.body).toMatchObject({ items: [{ variationId: 'v1', quantity: 2 }] });
   });
 
   it('Trả trước nhưng máy chủ trả đơn không chờ chuyển khoản (công nợ): không chuyển sang trang chuyển khoản', async () => {
