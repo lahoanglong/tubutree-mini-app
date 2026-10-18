@@ -13,12 +13,13 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { formatCount } from '@/lib/checkout-points';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 
 const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
-const formatPoints = (n: number) => `${n.toLocaleString('vi-VN')} điểm`;
+const formatPoints = (n: number) => `${formatCount(n)} điểm`;
 
 /** Sự kiện đã qua endAt thì không nhận bài dự thi nữa. */
 const isEventEnded = (event: Pick<CommunityEvent, 'endAt'>) => new Date(event.endAt).getTime() < Date.now();
@@ -226,6 +227,7 @@ export default function CommunityEventsPage() {
         <EventsList eventsQ={eventsQ} onSelect={setSelected} />
       )}
       <PostComposer
+        key={selected?.id ?? 'none'}
         open={composing}
         onClose={() => setComposing(false)}
         categories={cats.data ?? []}
