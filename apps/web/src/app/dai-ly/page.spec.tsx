@@ -344,7 +344,7 @@ describe('/dai-ly — đặt đơn (tiền: cùng endpoint, body, Idempotency-Ke
   });
 
   it('Trả trước: PREPAID rồi chuyển tới trang chuyển khoản của đơn', async () => {
-    m.post['/dealer/orders'] = () => ({ code: 'TUBU3', items: [] });
+    m.post['/dealer/orders'] = () => ({ code: 'TUBU3', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', items: [] });
     await mount();
     click(plus());
     click(button('Trả trước'));
@@ -386,6 +386,45 @@ describe('/dai-ly — đặt đơn (tiền: cùng endpoint, body, Idempotency-Ke
     await flush();
     const after = posts('/dealer/orders').map((p) => p.headers?.['Idempotency-Key']);
     expect(after[2]).not.toBe(keys[0]);
+  });
+
+  it('lỗi mạng rồi đổi phương thức hoặc giỏ: dùng Idempotency-Key mới, không lấy lại đơn cũ của lần trước', async () => {
+    let n = 0;
+    m.post['/dealer/orders'] = () => {
+      n += 1;
+      if (n <= 2) throw new Error('Mất kết nối');
+      return { code: `TUBU${n}`, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', items: [] };
+    };
+    await mount();
+    click(plus());
+    click(button('Ghi công nợ'));
+    await flush();
+    click(button('Trả trước'));
+    await flush();
+    click(plus());
+    click(button('Trả trước'));
+    await flush();
+    const keys = posts('/dealer/orders').map((p) => p.headers?.['Idempotency-Key']);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('Trả trước nhưng máy chủ trả đơn không chờ chuyển khoản (công nợ): không chuyển sang trang chuyển khoản', async () => {
+    m.post['/dealer/orders'] = () => ({ code: 'TUBU7', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', items: [] });
+    await mount();
+    click(plus());
+    click(button('Trả trước'));
+    await flush();
+    expect(m.push).not.toHaveBeenCalled();
+  });
+
+  it('thanh đặt hàng dính đáy dùng StickyActionBar: body có has-sticky-bar để chân trang không bị che', async () => {
+    await mount();
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+    click(plus());
+    await flush();
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(true);
+    expect(document.querySelector('[data-testid="sticky-bar"]')?.textContent).toContain('Ghi công nợ');
   });
 
   it('vượt hạn mức: chặn Ghi công nợ, vẫn cho Trả trước, cảnh báo bằng chữ', async () => {

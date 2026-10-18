@@ -17,6 +17,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StickyActionBar } from '@/components/sticky-action-bar';
 import { errText } from './dealer-shell';
 
 const OUT_OF_STOCK_PREORDER = 'Hết hàng — được đặt trước';
@@ -134,8 +135,10 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
   }, [cart, priceQ.data]);
 
   // Idempotency-Key giữ nguyên qua các lần bấm lại của CÙNG một lần đặt (bấm đúp/timeout mạng) để API không tạo đơn công nợ đôi;
-  // chỉ đổi sau khi đặt thành công vì đơn sau là đơn mới (như Mini App).
+  // đổi sau khi đặt thành công vì đơn sau là đơn mới (như Mini App), và đổi khi giỏ/phương thức khác lần thử trước: cùng key thì
+  // API trả lại đơn cũ (có thể đã được tạo dù mạng báo lỗi) và giỏ mới bị xoá mà chưa hề đặt.
   const orderKey = useRef(newIdempotencyKey());
+  const lastAttempt = useRef<string | null>(null);
   // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm cùng khung hình vẫn gọi mutate hai lần.
   const placeBusy = useRef(false);
   const place = useMutation({
@@ -152,8 +155,9 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
       for (const key of ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report']) {
         void qc.invalidateQueries({ queryKey: [key] });
       }
-      // Đơn Trả trước ở PENDING_PAYMENT/BANK_TRANSFER: đưa thẳng tới trang chuyển khoản để đại lý biết chuyển vào đâu.
-      if (method === 'PREPAID') router.push(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
+      lastAttempt.current = null;
+      // Chỉ đơn máy chủ trả về còn chờ chuyển khoản mới có trang để chuyển; đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái.
+      if (method === 'PREPAID' && order.paymentMethod === 'BANK_TRANSFER' && order.status === 'PENDING_PAYMENT') router.push(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
     onError: (e) => setNotice({ text: errText(e), error: true }),
     onSettled: () => {
@@ -164,6 +168,9 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
     if (placeBusy.current) return;
     placeBusy.current = true;
     setNotice(null);
+    const attempt = `${method}|${cart.map(([id, n]) => `${id}:${n}`).join(',')}`;
+    if (lastAttempt.current !== null && lastAttempt.current !== attempt) orderKey.current = newIdempotencyKey();
+    lastAttempt.current = attempt;
     place.mutate(method);
   };
 
@@ -171,8 +178,35 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
   const placing = place.isPending;
   const templates = templatesQ.data ?? [];
 
+  const orderControls = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" className={`${ui.btnText} gap-1 no-underline`} onClick={() => setSaveOpen(true)}>
+          <Save className="h-4 w-4" aria-hidden="true" />
+          Lưu mẫu
+        </button>
+        <span className="text-lg font-bold tabular-nums text-stone-900">{formatVnd(total)}</span>
+      </div>
+      {preorderLines > 0 && <p className="text-xs text-warning-fg">{preorderNote(preorderLines)}</p>}
+      {overLimit && (
+        <p className="flex items-center gap-1 text-xs text-danger-fg">
+          <AlertTriangle className="h-4 w-4 flex-none" aria-hidden="true" />
+          Vượt hạn mức công nợ — chọn Trả trước hoặc giảm số lượng.
+        </p>
+      )}
+      <div className="mt-2 flex gap-2">
+        <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${ui.btnSecondary} flex-1`}>
+          Trả trước
+        </button>
+        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} flex-1`}>
+          {placing ? 'Đang đặt...' : 'Ghi công nợ'}
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className={cart.length > 0 ? 'pb-56 md:pb-4' : 'pb-6'}>
+    <div className="pb-6">
       <div role="status" aria-live="polite">
         {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
       </div>
@@ -251,34 +285,15 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
       </div>
 
       {cart.length > 0 && (
-        <section
-          aria-label="Đặt hàng đại lý"
-          className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-stone-0 px-4 pt-3 shadow-raised md:sticky md:bottom-4 md:mt-4 md:rounded-card md:border md:p-4 md:shadow-card"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <button type="button" className={`${ui.btnText} gap-1 no-underline`} onClick={() => setSaveOpen(true)}>
-              <Save className="h-4 w-4" aria-hidden="true" />
-              Lưu mẫu
-            </button>
-            <span className="text-lg font-bold tabular-nums text-stone-900">{formatVnd(total)}</span>
-          </div>
-          {preorderLines > 0 && <p className="text-xs text-warning-fg">{preorderNote(preorderLines)}</p>}
-          {overLimit && (
-            <p className="flex items-center gap-1 text-xs text-danger-fg">
-              <AlertTriangle className="h-4 w-4 flex-none" aria-hidden="true" />
-              Vượt hạn mức công nợ — chọn Trả trước hoặc giảm số lượng.
-            </p>
-          )}
-          <div className="mt-2 flex gap-2">
-            <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${ui.btnSecondary} flex-1`}>
-              Trả trước
-            </button>
-            <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} flex-1`}>
-              {placing ? 'Đang đặt...' : 'Ghi công nợ'}
-            </button>
-          </div>
-        </section>
+        <>
+          <section
+            aria-label="Đặt hàng đại lý"
+            className="mt-4 hidden rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card md:sticky md:bottom-4 md:block"
+          >
+            {orderControls}
+          </section>
+          <StickyActionBar label="Đặt hàng đại lý">{orderControls}</StickyActionBar>
+        </>
       )}
 
       <Sheet
