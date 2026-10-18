@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Globe,
   MapPin,
+  MessageSquare,
   PackageSearch,
   Phone,
   CreditCard,
@@ -16,7 +17,7 @@ import { getStorefront, formatSold } from '@/lib/api';
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
-import { EmptyState } from '@/components/empty-state';
+import { StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 
@@ -67,7 +68,9 @@ export default async function StorefrontPage({
   const fullWarehouseAddress = selfFulfils && warehouseParts.length > 0 ? warehouseParts.join(', ') : null;
   const contactPhone = selfFulfils ? sf.warehousePhone : null;
   const badgeLabel = storefrontBadgeLabel(sf);
-  const collections = (sf.collections ?? []).filter((c) => (c.items?.length ?? 0) > 0);
+  const collections = (sf.collections ?? [])
+    .map((c) => ({ ...c, items: (c.items ?? []).filter((it) => Boolean(it?.product)) }))
+    .filter((c) => c.items.length > 0);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
@@ -155,6 +158,12 @@ export default async function StorefrontPage({
           </div>
         </div>
 
+        {collections.length > 0 && (
+          <div className="mt-4 flex justify-end">
+            <StorefrontAction referralCode={sf.referralCode} />
+          </div>
+        )}
+
         {/* Bio / Slogan */}
         {sf.headerNote && (
           <p className="mt-4 border-t border-stone-200 pt-3.5 text-sm leading-relaxed text-stone-700">
@@ -226,14 +235,7 @@ export default async function StorefrontPage({
       </section>
 
       {/* ── Product Collections ── */}
-      {collections.length === 0 && (
-        <EmptyState
-          title="Gian hàng chưa có sản phẩm nào để xem"
-          body="Chủ gian hàng đang cập nhật. Bạn có thể xem các sản phẩm khác trên Tubu Tree."
-          actionHref="/"
-          actionLabel="Xem sản phẩm trên Tubu Tree"
-        />
-      )}
+      {collections.length === 0 && <StorefrontEmpty referralCode={sf.referralCode} />}
       {collections.map((c) => (
         <section key={c.id} className="mt-8">
           <div className="mb-4 flex items-center gap-2.5">
@@ -296,6 +298,12 @@ export default async function StorefrontPage({
 
                     {formatSold(it.product.sold) && (
                       <p className="mt-1 text-xs text-stone-600">{formatSold(it.product.sold)}</p>
+                    )}
+                    {it.note && (
+                      <p className="mt-2 flex items-start gap-1 rounded-control bg-success-bg px-2 py-1 text-xs text-success-fg">
+                        <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                        <span>{it.note}</span>
+                      </p>
                     )}
                   </div>
                 </Link>

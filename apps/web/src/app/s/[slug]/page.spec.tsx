@@ -19,6 +19,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('@/components/storefront-tracker', () => ({ StorefrontTracker: () => null }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null, status: 'unauthenticated', initialized: true }) }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getStorefront: async () => mocks.sf,

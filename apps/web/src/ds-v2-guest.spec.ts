@@ -79,6 +79,7 @@ const AFFILIATE: string[] = [
   'components/affiliate/tier-card.tsx',
   'components/affiliate/milestone-rewards.tsx',
   'components/affiliate/ctv-order-sheet.tsx',
+  'components/affiliate/storefront-owner.tsx',
 ];
 const GAME: string[] = [];
 const PRO: string[] = [];
