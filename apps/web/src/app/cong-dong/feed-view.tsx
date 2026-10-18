@@ -72,7 +72,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [sort, setSort] = useState<FeedSort>('new');
   const [composing, setComposing] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(params.get('deleted') === '1' ? 'Đã xoá bài' : null);
   const [q, setQ] = useState('');
   const [unanswered, setUnanswered] = useState(false);
   const [tag, setTag] = useState<string | undefined>(urlTag);
@@ -106,6 +106,15 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
   const filtering = Boolean(dq || unanswered || tag);
 
   if (phase === 'loading') {
+    // Bản xem trước đã có trong HTML: giữ nguyên tới khi phiên khôi phục xong, đổi sang khung chờ thì bố cục nhảy.
+    if (initialPreview && initialPreview.length > 0) {
+      return (
+        <FeedShell subtitle>
+          <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
+          <PublicPreviewList posts={initialPreview} />
+        </FeedShell>
+      );
+    }
     return (
       <FeedShell>
         <ListSkeleton count={3} height={140} />

@@ -17,6 +17,7 @@ export function EditPostSheet({
   onClose,
   onSave,
   saving,
+  error,
 }: {
   open: boolean;
   kind: FeedItem['kind'];
@@ -27,6 +28,7 @@ export function EditPostSheet({
   onClose: () => void;
   onSave: () => void;
   saving: boolean;
+  error?: string | null;
 }) {
   const needsTitle = kind === 'QUESTION' && title.trim().length === 0;
   return (
@@ -57,6 +59,11 @@ export function EditPostSheet({
           className={`${ui.field} min-h-28 py-2`}
         />
       </div>
+      {error && (
+        <p role="alert" className={`mt-3 ${ui.error}`}>
+          {error}
+        </p>
+      )}
     </Sheet>
   );
 }
@@ -90,6 +97,7 @@ export function ReportSheet({
   onClose,
   onSubmit,
   sending,
+  error,
 }: {
   open: boolean;
   reason: string;
@@ -97,6 +105,7 @@ export function ReportSheet({
   onClose: () => void;
   onSubmit: () => void;
   sending: boolean;
+  error?: string | null;
 }) {
   return (
     <Sheet
@@ -115,6 +124,11 @@ export function ReportSheet({
       }
     >
       <textarea aria-label="Lý do báo cáo…" placeholder="Lý do báo cáo…" value={reason} maxLength={500} rows={3} onChange={(e) => onReason(e.target.value)} className={`${ui.field} mt-3 min-h-24 py-2`} />
+      {error && (
+        <p role="alert" className={`mt-3 ${ui.error}`}>
+          {error}
+        </p>
+      )}
     </Sheet>
   );
 }

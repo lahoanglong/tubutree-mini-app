@@ -297,7 +297,7 @@ describe('/cong-dong/[id] — thao tác', () => {
     click(btn(dlg(), 'Xoá'));
     await flush(6);
     expect(mocks.del).toHaveBeenCalledWith('/feed/p1');
-    expect(mocks.push).toHaveBeenCalledWith('/cong-dong');
+    expect(mocks.push).toHaveBeenCalledWith('/cong-dong?deleted=1');
   });
 
   it('xoá lỗi: đóng hộp xác nhận, báo lỗi, ở lại trang', async () => {
@@ -409,5 +409,53 @@ describe('/cong-dong/[id] — tiêu đề, vùng chạm, truy cập', () => {
     const { container } = await mount();
     expect(smallTouchTargets(container)).toEqual([]);
     expect(unnamedControls(container)).toEqual([]);
+  });
+});
+
+describe('/cong-dong/[id] — lỗi hiện tại chỗ thao tác', () => {
+  it('sửa bài lỗi: sheet Sửa vẫn mở và báo lỗi ngay trong hộp thoại', async () => {
+    stub(POST({ isOwner: true }));
+    mocks.patch.mockRejectedValue(new Error('máy chủ bận'));
+    const { container } = await mount();
+    click(btn(container, 'Sửa'));
+    await flush(2);
+    click(btn(dlg(), 'Lưu'));
+    await flush(6);
+    expect(dlg()).not.toBeNull();
+    expect(dlg().querySelector('[role="alert"]')?.textContent).toContain('máy chủ bận');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('báo cáo lỗi: sheet Báo cáo giữ nguyên để thử lại, lỗi hiện trong hộp thoại', async () => {
+    mocks.post.mockRejectedValue(new Error('quá nhanh'));
+    const { container } = await mount();
+    click(container.querySelector('article')!.querySelector('button[aria-label="Báo cáo"]'));
+    await flush(2);
+    typeInto(dlg().querySelector('textarea'), 'Spam');
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(6);
+    expect(dlg()).not.toBeNull();
+    expect(dlg().querySelector('[role="alert"]')?.textContent).toContain('quá nhanh');
+    expect(dlg().querySelector('textarea')!.value).toBe('Spam');
+    mocks.post.mockResolvedValue({ ok: true });
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(6);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('lỗi gửi trả lời hiện ngay trong ô trả lời dính đáy, không ở banner đầu trang', async () => {
+    mocks.post.mockRejectedValue(new Error('quá nhanh'));
+    const { container } = await mount();
+    typeInto(container.querySelector('input[aria-label="Viết trả lời…"]'), 'Xin chào');
+    click(btn(container, 'Gửi'));
+    await flush(6);
+    const form = container.querySelector('form')!;
+    expect(form.querySelector('[role="alert"]')?.textContent).toContain('quá nhanh');
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+  });
+
+  it('ô trả lời giới hạn 500 ký tự như API', async () => {
+    const { container } = await mount();
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Viết trả lời…"]')!.maxLength).toBe(500);
   });
 });

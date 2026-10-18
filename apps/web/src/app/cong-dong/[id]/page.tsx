@@ -84,6 +84,10 @@ export default function PostDetailPage() {
   const [reportReason, setReportReason] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // Lỗi của thao tác trong sheet/ô nhập hiện ngay tại chỗ: banner đầu trang nằm dưới lớp phủ của sheet hoặc ngoài màn hình khi đã cuộn.
+  const [editError, setEditError] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   const post = useQuery({ ...postQuery(coreHttp, id), enabled: authed && !!id });
   const comments = useInfiniteQuery({
@@ -106,14 +110,20 @@ export default function PostDetailPage() {
     void refresh();
   };
 
+  const openReport = (target: ReportTarget) => {
+    setReportError(null);
+    setReportTarget(target);
+  };
+
   const react = useMutation({ mutationFn: () => reactPost(coreHttp, id), onSuccess: () => ok(), onError: onFail });
   const addCommentMut = useMutation({
     mutationFn: (body: string) => addComment(coreHttp, id, body),
     onSuccess: () => {
       setCommentText('');
+      setReplyError(null);
       ok();
     },
-    onError: onFail,
+    onError: (e) => setReplyError(errorText(e)),
   });
   const markBest = useMutation({ mutationFn: (commentId: string) => setBestAnswer(coreHttp, id, commentId), onSuccess: () => ok(), onError: onFail });
   const removeCommentMut = useMutation({ mutationFn: (commentId: string) => removeComment(coreHttp, commentId), onSuccess: () => ok(), onError: onFail });
@@ -121,28 +131,28 @@ export default function PostDetailPage() {
     mutationFn: (patch: { title?: string; body: string }) => editPost(coreHttp, id, patch),
     onSuccess: () => {
       setEditing(false);
+      setEditError(null);
       ok('Lưu');
     },
-    onError: onFail,
+    onError: (e) => setEditError(errorText(e)),
   });
   const reportMut = useMutation({
     mutationFn: (target: ReportTarget) => reportContent(coreHttp, id, { ...target, reason: reportReason.trim() }),
     onSuccess: () => {
       setReportTarget(null);
       setReportReason('');
+      setReportError(null);
       ok('Đã gửi báo cáo, cảm ơn bạn 🌿');
     },
-    onError: (e) => {
-      setReportTarget(null);
-      onFail(e);
-    },
+    onError: (e) => setReportError(errorText(e)),
   });
   const pinMut = useMutation({ mutationFn: () => adminPin(coreHttp, id, !(post.data?.isPinned ?? false)), onSuccess: () => ok(), onError: onFail });
   const deleteMut = useMutation({
     mutationFn: () => deletePost(coreHttp, id),
     onSuccess: () => {
       void refresh();
-      router.push('/cong-dong');
+      // Trang danh sách đọc cờ này để báo "Đã xoá bài" như snackbar của Mini App.
+      router.push('/cong-dong?deleted=1');
     },
     onError: (e) => {
       setConfirmDelete(false);
@@ -245,6 +255,7 @@ export default function PostDetailPage() {
                 onClick={() => {
                   setEditTitle(p.title ?? '');
                   setEditBody(p.body);
+                  setEditError(null);
                   setEditing(true);
                 }}
                 className={ICON_BTN}
@@ -256,7 +267,7 @@ export default function PostDetailPage() {
               </button>
             </div>
           ) : (
-            <button type="button" aria-label="Báo cáo" onClick={() => setReportTarget({ targetType: 'POST' })} className={ICON_BTN}>
+            <button type="button" aria-label="Báo cáo" onClick={() => openReport({ targetType: 'POST' })} className={ICON_BTN}>
               <Flag className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
@@ -357,7 +368,7 @@ export default function PostDetailPage() {
                 canMarkBest={canMarkBest}
                 onMarkBest={() => markBest.mutate(c.id)}
                 marking={markBest.isPending && markBest.variables === c.id}
-                onReport={() => setReportTarget({ targetType: 'COMMENT', targetId: c.id })}
+                onReport={() => openReport({ targetType: 'COMMENT', targetId: c.id })}
                 onRemove={() => removeCommentMut.mutate(c.id)}
                 removing={removeCommentMut.isPending && removeCommentMut.variables === c.id}
               />
@@ -375,22 +386,32 @@ export default function PostDetailPage() {
         onSubmit={(e) => {
           e.preventDefault();
           const body = commentText.trim();
-          if (body && !addCommentMut.isPending) addCommentMut.mutate(body);
+          if (body && !addCommentMut.isPending) {
+            setReplyError(null);
+            addCommentMut.mutate(body);
+          }
         }}
-        className="sticky bottom-0 -mx-4 flex gap-2 border-t border-stone-200 bg-stone-0 px-4 py-2.5 md:mx-0 md:rounded-card md:border"
+        className="sticky bottom-0 -mx-4 flex flex-col gap-1.5 border-t border-stone-200 bg-stone-0 px-4 py-2.5 md:mx-0 md:rounded-card md:border"
         style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom, 0px))' }}
       >
-        <input
-          aria-label="Viết trả lời…"
-          placeholder="Viết trả lời…"
-          value={commentText}
-          maxLength={2000}
-          onChange={(e) => setCommentText(e.target.value)}
-          className={`${ui.field} flex-1`}
-        />
-        <button type="submit" disabled={commentText.trim().length === 0 || addCommentMut.isPending} className={ui.btnPrimary}>
-          Gửi
-        </button>
+        {replyError && (
+          <p role="alert" className={ui.error}>
+            {replyError}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <input
+            aria-label="Viết trả lời…"
+            placeholder="Viết trả lời…"
+            value={commentText}
+            maxLength={500}
+            onChange={(e) => setCommentText(e.target.value)}
+            className={`${ui.field} flex-1`}
+          />
+          <button type="submit" disabled={commentText.trim().length === 0 || addCommentMut.isPending} className={ui.btnPrimary}>
+            Gửi
+          </button>
+        </div>
       </form>
 
       <EditPostSheet
@@ -402,6 +423,7 @@ export default function PostDetailPage() {
         onBody={setEditBody}
         onClose={() => setEditing(false)}
         saving={editMut.isPending}
+        error={editError}
         onSave={() => editMut.mutate({ title: p.kind === 'QUESTION' ? editTitle.trim() : undefined, body: editBody.trim() })}
       />
       <ConfirmDeleteSheet open={confirmDelete} onClose={() => setConfirmDelete(false)} deleting={deleteMut.isPending} onConfirm={() => deleteMut.mutate()} />
@@ -410,6 +432,7 @@ export default function PostDetailPage() {
         reason={reportReason}
         onReason={setReportReason}
         sending={reportMut.isPending}
+        error={reportError}
         onClose={() => {
           setReportTarget(null);
           setReportReason('');

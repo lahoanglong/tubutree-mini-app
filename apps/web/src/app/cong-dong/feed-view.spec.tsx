@@ -285,6 +285,13 @@ describe('FeedView — đã đăng nhập', () => {
     expect(byText(container, 'button', 'Xem thêm')).toBeNull();
   });
 
+  it('về từ trang bài vừa xoá (?deleted=1): báo "Đã xoá bài"', async () => {
+    mocks.search = 'deleted=1';
+    const { container } = await mount();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã xoá bài');
+    mocks.search = '';
+  });
+
   it('đúng một h1 "Cộng đồng Vườn Tubu" ở mọi trạng thái', async () => {
     mocks.auth.status = 'idle';
     mocks.auth.initialized = false;
@@ -341,6 +348,16 @@ describe('FeedView — xem trước công khai khi chưa đăng nhập (cờ com
     expect(searchInput(container)).toBeNull();
     expect(feedCalls()).toHaveLength(0);
     expect(container.querySelector('a[href="/dang-nhap?returnTo=%2Fcong-dong"]')?.textContent).toBe('Đăng nhập với Zalo');
+  });
+
+  it('đang khôi phục phiên mà server đã nạp bài: giữ bản xem trước, không đổi sang khung chờ', async () => {
+    config = { communityPublicPreview: true };
+    mocks.auth.status = 'idle';
+    mocks.auth.initialized = false;
+    const { container } = await mount({ initialPreview: [PREVIEW('p1')] });
+    expect(container.textContent).toContain('Pha nước rửa chén từ vỏ bưởi');
+    expect(container.querySelector('[aria-hidden="true"][data-testid="feed-preview-loading"]')).toBeNull();
+    expect(h1(container)).toBe(1);
   });
 
   it('bài xem trước không có nút thích/bình luận/mở bài: chỉ có lối đăng nhập', async () => {
