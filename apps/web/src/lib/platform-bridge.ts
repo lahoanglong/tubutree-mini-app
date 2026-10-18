@@ -2,7 +2,14 @@ import type { PlatformBridge, ShareResult } from '@tubutree/app-core/bridge';
 
 const OA_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+// URL đến từ API/admin: chỉ http(s), vì javascript:/data: trong tab mới chạy với origin của web.
 function openTab(url: string): void {
+  try {
+    const { protocol } = new URL(url);
+    if (protocol !== 'https:' && protocol !== 'http:') return;
+  } catch {
+    return;
+  }
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 

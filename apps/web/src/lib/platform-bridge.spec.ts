@@ -76,6 +76,15 @@ describe('platform-bridge (web)', () => {
     });
   });
 
+  it.each(['javascript:alert(1)', 'data:text/html,<script>1</script>', 'không phải url', 'ftp://x.vn/a'])(
+    'openExternal không mở URL scheme ngoài http(s): %s',
+    (url) => {
+      const { open } = stubBrowser();
+      createWebPlatformBridge({ oaId: '' }).openExternal(url);
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
+
   it('openExternal mở tab mới, không để trang mới đọc được window.opener', () => {
     const { open } = stubBrowser();
     createWebPlatformBridge({ oaId: '' }).openExternal('https://shopee.vn/x');
