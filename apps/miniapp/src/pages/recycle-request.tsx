@@ -195,7 +195,6 @@ export default function RecycleRequestPage() {
   const t = timelineFor(r);
   const closed = t ? null : closedLabel(r);
 
-  const pickupPaused = !!me?.blocked || !!me?.shipLockedAt || !cfg.waste.pickup;
   const paused = isRequestPaused(r, {
     programmeEnabled: me?.programmeEnabled,
     blocked: me?.blocked,
@@ -267,7 +266,7 @@ export default function RecycleRequestPage() {
         <Text variant="body-sm">Ghi mã này lên túi</Text>
         {r.orderCode ? (
           <Text variant="body-md" style={{ fontWeight: 600 }}>{`Đã gắn vào đơn ${r.orderCode}`}</Text>
-        ) : pickupPaused ? (
+        ) : pausedPickup ? (
           <>
             <Text variant="body-sm">
               {`Thu kèm rác đang tạm dừng, yêu cầu này chưa gắn được vào đơn và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}

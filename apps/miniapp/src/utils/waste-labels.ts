@@ -164,7 +164,7 @@ export interface RequestPauseFacts {
 export function isRequestPaused(r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'orderCode'>, f: RequestPauseFacts): boolean {
   if (r.status !== 'OPEN') return false;
   if (r.method === 'DROP_OFF') return (f.cfg.isLoaded && !f.cfg.enabled) || f.programmeEnabled === false || !!f.blocked;
-  if (r.method === 'PICKUP') return !r.orderCode && (!!f.blocked || !!f.shipLockedAt || !f.cfg.pickup);
+  if (r.method === 'PICKUP') return !r.orderCode && (f.programmeEnabled === false || !!f.blocked || !!f.shipLockedAt || !f.cfg.pickup);
   return false;
 }
 

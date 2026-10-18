@@ -112,6 +112,12 @@ describe('/recycle/requests (§4.6, §16.1)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /TR-AAAAA/ })).toHaveTextContent('Đang tạm dừng'));
     expect(screen.getByRole('button', { name: /TR-BBBBB/ })).toHaveTextContent('Đang vận chuyển');
   });
+  it('chương trình tạm dừng khi cấu hình công khai cũ vẫn bật pickup: Thu kèm đơn chưa gắn đọc "Đang tạm dừng"', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ programmeEnabled: false }));
+    mocks.listWasteRequests.mockResolvedValue([makeRequestSummary({ id: 'r-pick', code: 'TR-PICKA', method: 'PICKUP' })]);
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: /TR-PICKA/ })).toHaveTextContent('Đang tạm dừng'));
+  });
   it('/waste/me lỗi: dòng giữ chữ thường, không có trạng thái lỗi', async () => {
     mocks.getWasteMe.mockRejectedValue(new Error('me hỏng'));
     renderPage();

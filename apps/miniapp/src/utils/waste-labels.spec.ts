@@ -200,7 +200,7 @@ describe('isRequestPaused và nhãn "Đang tạm dừng" (X1)', () => {
     ['cờ pickup tắt', { cfg: { ...cfgOn, pickup: false } }],
   ];
   const dropPauses = [true, true, true, false, false];
-  const pickupPauses = [false, false, true, true, true];
+  const pickupPauses = [true, false, true, true, true];
 
   it.each(causes.map((c, i) => [c[0], c[1], dropPauses[i], pickupPauses[i]] as const))(
     '%s',

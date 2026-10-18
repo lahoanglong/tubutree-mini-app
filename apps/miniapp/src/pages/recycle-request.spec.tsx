@@ -278,6 +278,7 @@ describe('/recycle/r/:id — Thu kèm đơn mua (§4.5b, §15.6)', () => {
     ['khoá đường kho', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }))],
     ['bị khoá chương trình', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }))],
     ['cờ pickup tắt', () => { mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false }; }],
+    ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ programmeEnabled: false }))],
   ])('%s → câu tạm dừng trung tính + "Huỷ yêu cầu", không có nút đi mua hàng', async (_n, arrange) => {
     arrange();
     mocks.getWasteRequest.mockResolvedValue(PICKUP());
