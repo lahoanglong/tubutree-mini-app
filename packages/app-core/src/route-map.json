@@ -77,6 +77,6 @@
   "features": [
     { "id": "coupon-claim", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "CouponClaimGate"], "web": ["apps/web/src/components/app-gates.tsx", "CouponClaimGate"], "pending": true },
     { "id": "onboarding", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "OnboardingGate"], "web": ["apps/web/src/components/app-gates.tsx", "OnboardingGate"], "pending": true },
-    { "id": "storefront-source", "lane": "core", "miniapp": ["apps/miniapp/src/components/app.tsx", "recordReferralTouch"], "web": ["apps/web/src/components/storefront-tracker.tsx", "recordReferralTouch"] }
+    { "id": "storefront-source", "lane": "core", "miniapp": ["apps/miniapp/src/components/app.tsx", "recordReferralTouch"], "web": ["apps/web/src/components/storefront-tracker.tsx", "rememberEntryLink"] }
   ]
 }
