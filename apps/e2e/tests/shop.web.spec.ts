@@ -276,7 +276,7 @@ test.describe('Web khách: trang sản phẩm', () => {
       return (await api.waitForCall('POST', '/group-buy')).body;
     };
     expect(await call()).toEqual({ productId: p!.id });
-    await expect(page).toHaveURL(/\/mua-chung\/g1$/);
+    await expect(page).toHaveURL(/\/mua-chung\/g1(\?moi=1)?$/);
   });
 
   test('đặt định kỳ: sheet gửi đúng body tạo subscription và báo đơn đầu', async ({ page, api, request }) => {
