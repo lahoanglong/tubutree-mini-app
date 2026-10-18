@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Leaf, Plus, ShoppingBag } from 'lucide-react';
+import { Leaf, Plus, Share2, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { ui } from '@/lib/guest-ui';
+import { isWebRouteReady } from '@/lib/route-map';
+import { StorefrontShareSheet } from './storefront-share';
 
 /** Chủ gian hàng CTV nhận ra qua mã giới thiệu (API chỉ trả mã ở gian hàng CTV), không phân biệt hoa thường. */
 export function useIsStorefrontOwner(referralCode: string | null | undefined): boolean {
@@ -12,19 +15,30 @@ export function useIsStorefrontOwner(referralCode: string | null | undefined): b
   return Boolean(mine && referralCode && mine.toUpperCase() === referralCode.toUpperCase());
 }
 
-/** Chủ thấy lối vào trình dựng; khách thấy lối xem sản phẩm. */
-export function StorefrontAction({ referralCode, guestLabel = 'Xem sản phẩm' }: { referralCode?: string | null; guestLabel?: string }) {
-  const owner = useIsStorefrontOwner(referralCode);
-  return owner ? (
-    <Link href="/ctv/gian-hang" className={ui.btnPrimary}>
-      <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-      Thêm sản phẩm
-    </Link>
-  ) : (
-    <Link href="/" className={ui.btnSecondary}>
+const guestHref = () => (isWebRouteReady('/san-pham') ? '/san-pham' : '/');
+
+function GuestLink({ label }: { label: string }) {
+  return (
+    <Link href={guestHref()} className={ui.btnSecondary}>
       <ShoppingBag className="mr-1.5 h-4 w-4" aria-hidden="true" />
-      {guestLabel}
+      {label}
     </Link>
+  );
+}
+
+/** Chủ thấy nút chia sẻ gian hàng (kèm mã giới thiệu) như Mini App; khách thấy lối xem sản phẩm. */
+export function StorefrontAction({ slug, title, referralCode }: { slug: string; title: string; referralCode?: string | null }) {
+  const owner = useIsStorefrontOwner(referralCode);
+  const [shareOpen, setShareOpen] = useState(false);
+  if (!owner) return <GuestLink label="Xem sản phẩm" />;
+  return (
+    <>
+      <button type="button" className={ui.btnPrimary} onClick={() => setShareOpen(true)}>
+        <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+        Chia sẻ gian hàng
+      </button>
+      <StorefrontShareSheet open={shareOpen} onClose={() => setShareOpen(false)} slug={slug} title={title} referralCode={referralCode} />
+    </>
   );
 }
 
@@ -44,7 +58,14 @@ export function StorefrontEmpty({ referralCode }: { referralCode?: string | null
           : 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.'}
       </p>
       <div className="mt-4">
-        <StorefrontAction referralCode={referralCode} guestLabel="Xem sản phẩm trên Tubu Tree" />
+        {owner ? (
+          <Link href="/ctv/gian-hang" className={ui.btnPrimary}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Thêm sản phẩm
+          </Link>
+        ) : (
+          <GuestLink label="Xem sản phẩm trên Tubu Tree" />
+        )}
       </div>
     </section>
   );

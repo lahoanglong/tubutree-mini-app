@@ -160,7 +160,7 @@ export default async function StorefrontPage({
 
         {collections.length > 0 && (
           <div className="mt-4 flex justify-end">
-            <StorefrontAction referralCode={sf.referralCode} />
+            <StorefrontAction slug={sf.slug} title={sf.title} referralCode={sf.referralCode} />
           </div>
         )}
 
