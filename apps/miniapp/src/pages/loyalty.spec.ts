@@ -50,3 +50,15 @@ describe('loyalty.tsx — trạng thái tải/lỗi', () => {
     expect(src).toMatch(/tierProgressPercent\(/);
   });
 });
+
+describe('rewards.tsx — trạng thái tải/lỗi (chuyển từ loyalty.tsx, spec 16.1)', () => {
+  const rewardsSrc = readFileSync(join(process.cwd(), 'src', 'pages', 'rewards.tsx'), 'utf8');
+  it('danh mục quà có nhánh isError + nút thử lại', () => {
+    expect(rewardsSrc).toMatch(/rewardsQ\.isError/);
+    expect(rewardsSrc).toMatch(/rewardsQ\.refetch\(\)/);
+  });
+  it('đổi quà gửi khoá chống lặp và làm mới loyalty-rewards + coupons', () => {
+    expect(rewardsSrc).toMatch(/useIdempotencyKey\(/);
+    expect(rewardsSrc).toMatch(/invalidateAfterRedeem\(qc\)/);
+  });
+});
