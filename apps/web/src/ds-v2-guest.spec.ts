@@ -51,7 +51,17 @@ const CORE: string[] = [
   'components/mini-app-only-notice.tsx',
   'lib/web-nav.ts',
 ];
-const SHOP: string[] = [];
+const SHOP: string[] = [
+  'app/san-pham/page.tsx',
+  'components/catalog/browse-view.tsx',
+  'components/catalog/category-grid.tsx',
+  'components/catalog/chip.tsx',
+  'components/catalog/filter-sheet.tsx',
+  'components/catalog/recently-viewed-rail.tsx',
+  'components/catalog/result-header.tsx',
+  'components/catalog/sort-chips.tsx',
+  'components/catalog/suggest-list.tsx',
+];
 const ORDER: string[] = [];
 const ACCOUNT: string[] = [];
 const LOYALTY: string[] = [];

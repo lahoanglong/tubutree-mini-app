@@ -2,7 +2,7 @@
   "routes": [
     { "lane": "shop", "items": [
       { "miniapp": "/", "web": "/", "private": false },
-      { "miniapp": "/browse", "web": "/san-pham", "private": false, "pending": true },
+      { "miniapp": "/browse", "web": "/san-pham", "private": false },
       { "miniapp": "/product/:slug", "web": "/san-pham/:slug", "private": false },
       { "miniapp": "/wishlist", "web": "/tai-khoan/yeu-thich", "private": true, "pending": true },
       { "miniapp": "/group-buy", "web": "/mua-chung", "private": false, "pending": true },
