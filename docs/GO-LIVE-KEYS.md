@@ -259,6 +259,10 @@ gh workflow run ops.yml -f action=set-env
 
 `ZALO_APP_SECRET` phải là giá trị thật (API dùng nó để đổi mã lấy số điện thoại và thông tin người dùng). Mini App cần quyền `scope.userLocation` được cấp trong quản lý ứng dụng Zalo thì nút "Gần tôi" mới lấy được vị trí. Kiểm trên điện thoại thật; thiếu quyền thì khách vẫn chọn điểm theo tỉnh, việc này không chặn ra mắt.
 
+## 7c) Số điện thoại kho cho cách Gửi về kho
+
+Khi đăng ký kho HCMC ở Quản trị › Khách hàng › Đổi rác › Điểm nhận, gõ số điện thoại thật của kho vào ô "Số điện thoại". Khách ghi số này lên kiện gửi về kho (số người nhận). Số này khác số người gửi của Gomdon ở thẻ "Thu kèm rác qua Gomdon (kỹ thuật)". `go-live:check` báo FAIL ở `db.waste_point` khi `waste.enabled` bật, cách Gửi về kho đang bật mà kho đang hoạt động chưa có số điện thoại.
+
 ## 8) Báo động vận hành (kênh ngoài app)
 
 Cron 5 phút của API so tình trạng Pancake, Gomdon và hàng đợi với ngưỡng ở tab **Cấu hình → ops**

@@ -70,6 +70,7 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
           tableExists: await exists('waste_points'),
           totalPoints: await count('waste_points'),
           activeWarehouses: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`),
+          activeWarehousesWithPhone: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`),
         },
         configs,
         adminCount: await count('users', `"role" = 'ADMIN'`),

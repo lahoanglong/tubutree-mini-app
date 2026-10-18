@@ -14,7 +14,7 @@ Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API
 
 ## 2. Trước khi bật waste.enabled
 
-- [ ] Admin đăng ký kho HCMC (kind WAREHOUSE, ACTIVE) rồi các đại lý trước; kiểm go-live `db.waste_point` (FAIL nếu bật mà chưa có kho). Owner: admin. Bằng chứng: kết quả `go-live:check`.
+- [ ] Admin đăng ký kho HCMC (kind WAREHOUSE, ACTIVE) rồi các đại lý trước. Khi đăng ký kho, gõ số điện thoại thật của kho vào ô "Số điện thoại" (số người nhận trên nhãn kiện; khách ghi số này lên kiện gửi về kho, nên để trống thì khách không có số để ghi). Kiểm go-live `db.waste_point` (FAIL nếu bật mà chưa có kho, hoặc kho đang hoạt động chưa có số điện thoại khi cách Gửi về kho đang bật). Owner: admin. Bằng chứng: kết quả `go-live:check`.
 - [ ] Admin quyết định gian hàng nào đủ điều kiện khi duyệt, vì `isPartnerStore` rộng hơn một gian hàng có nhân viên trực (spec 18.2 câu 7). Owner: admin. Bằng chứng: danh sách đã duyệt.
 - [ ] Chủ dự án xem trước các màn chưa có mockup (spec mục 19): màn 4.5b sau khi tạo yêu cầu Gửi về kho hoặc Thu kèm đơn. Owner: chủ dự án. Bằng chứng: ảnh chụp màn.
 - [ ] Xem trước Quà của tôi (`/rewards/mine`). Owner: chủ dự án. Bằng chứng: ảnh chụp màn.

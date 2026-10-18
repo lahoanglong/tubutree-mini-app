@@ -73,7 +73,7 @@ export interface DbSnapshot {
   expectedMigrations: string[];
   orderCount: number;
   /** `tableExists`: bảng waste_points (migration 20261020000000_waste_exchange) đã có chưa; chưa có thì hai số đếm là 0. */
-  waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number };
+  waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number };
   /** Giá trị các khoá SystemConfig cần xem; khoá không có trong DB thì không xuất hiện. */
   configs: Record<string, unknown>;
   adminCount: number;
@@ -90,6 +90,7 @@ export const CONFIG_KEYS_OF_INTEREST = [
   'shipping.gomdon.config',
   'shipping.gomdon.recycling_enabled',
   'waste.enabled',
+  'waste.lane_mailin_enabled',
   'waste.lane_pickup_enabled',
   'waste.mailin_min_points',
   'waste.pickup_min_points',
@@ -220,6 +221,18 @@ function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
       title,
       'waste.enabled đang bật nhưng chưa có kho (WAREHOUSE) nào đang hoạt động',
       'Thêm một kho đang hoạt động ở Quản trị, Đổi rác, Điểm nhận; nếu chưa kịp thì tắt waste.enabled ở Quản trị, Cấu hình, để khách không gửi được rác khi chưa có nơi nhận.',
+    );
+  }
+
+  // Khoá vắng nghĩa là đường Gửi về kho đang bật (mặc định true, như waste-public-config.ts).
+  const mailinOn = 'waste.lane_mailin_enabled' in s.configs ? s.configs['waste.lane_mailin_enabled'] === true : true;
+  if (enabled && mailinOn && s.waste.activeWarehousesWithPhone === 0) {
+    return fail(
+      G_DB,
+      id,
+      title,
+      'waste.enabled đang bật, đường Gửi về kho đang bật nhưng kho đang hoạt động chưa có số điện thoại (nhà vận chuyển cần số này để giao kiện)',
+      'Vào Quản trị, Khách hàng, Đổi rác, Điểm nhận, mở kho và điền ô Số điện thoại bằng số thật của kho; hoặc tắt waste.lane_mailin_enabled ở Quản trị, Cấu hình.',
     );
   }
 

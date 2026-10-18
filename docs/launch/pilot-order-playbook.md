@@ -663,8 +663,9 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 ### 7.2 Gửi về kho (mã TR- và vận đơn)
 
 - **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác, cách "Gửi về kho Tubu HCM".
+- **Trước khi làm**: kho HCMC phải có số điện thoại thật ở ô "Số điện thoại" (Quản trị, Khách hàng, Đổi rác, Điểm nhận). Đó là số người nhận trên nhãn kiện. Để trống thì màn yêu cầu chỉ hiện tên và địa chỉ kho, và nút "Sao chép" không chép số nào.
 - **Làm**: tạo yêu cầu "Gửi về kho Tubu HCM", ghi mã TR- hiện trên màn, dán mã đó lên kiện, gửi bằng hãng thường, nhập mã vận đơn vào yêu cầu. Kho nhận kiện theo mã TR- (không theo mã vận đơn của hãng), đếm và xác nhận.
-- **Đúng là**: yêu cầu có mã TR- và mã vận đơn; sau khi kho xác nhận, Điểm Xanh được cộng theo số thực nhận.
+- **Đúng là**: khối người nhận trên màn có tên, số điện thoại và địa chỉ kho; yêu cầu có mã TR- và mã vận đơn; sau khi kho xác nhận, Điểm Xanh được cộng theo số thực nhận.
 - **Bằng chứng**: Phụ lục P12.
 - **Hoàn tác**: kho từ chối kèm lý do (khách thấy lý do, không cộng điểm).
 
