@@ -9,6 +9,7 @@ const ROUTES: ReadonlyArray<readonly [path: string, component: string, page: str
   ['/recycle', 'RecyclePage', 'recycle'],
   ['/recycle/rules', 'RecycleRulesPage', 'recycle-rules'],
   ['/recycle/new', 'RecycleNewPage', 'recycle-new'],
+  ['/recycle/points', 'RecyclePointsPage', 'recycle-points'],
 ];
 
 describe('route Đổi rác lấy quà ở app.tsx (§16.1: một dòng lazy và một Route)', () => {
