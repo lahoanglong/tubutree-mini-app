@@ -17,7 +17,8 @@
 Every task's requirements include this section. Quoted Vietnamese is verbatim from the spec; section numbers are the spec's.
 
 Product rules
-- Reward = Điểm Xanh, STANDARD lot, existing rules unchanged: "1 điểm = 1.000đ, hạn 12 tháng, dùng tối đa 20% giá trị đơn, không trả phí ship"; Tubu bottles also earn "2 giọt mỗi vỏ" (§3.1; changing the rules is a non-goal, §2).
+- Reward = Điểm Xanh, STANDARD lot, existing rules unchanged: "1 điểm = 1đ, hạn 12 tháng, dùng tối đa 20% giá trị đơn, không trả phí ship"; Tubu bottles also earn "2 giọt mỗi vỏ" (§3.1; changing the rules is a non-goal, §2).
+- Điểm Xanh scale (owner decision of 2026-10-18, spec appendix "Đổi thang Điểm Xanh"): 1 điểm = 1đ, so every amount of Điểm Xanh in this plan and in the spec is a new-scale number (`waste.mailin_min_points` 15000, `waste.customer_monthly_cap_points` 60000, a carton 1000 điểm, a gift 20000 to 100000 điểm). The branch you work on already contains the points-1d package (`POINTS_GRANT_HARD_MAX` 2_000_000, `loyalty.vnd_per_point_redeem` locked at 1, `game.tree_points_price` 50_000); the plan never edits those constants or their guards. Where a mockup image or a traceability requirement list shows a smaller older number, the number in the spec and the plan wins.
 - "Điểm chỉ do Tubu phát. Đại lý không tự phát điểm và không đặt tỉ giá." "Số điểm cộng luôn theo số lượng thực nhận và không vượt số khách khai." Points are credited only by the confirm transaction of §15.5, never before the receiving place counts (§2).
 - "Pin không nhận ở đợt 1 (hiện "Sắp nhận")." (§3.5, §14.1)
 - Not in this phase: cash for waste, withdrawing or transferring points, cash fees to partners, in-app map, AI recognition, label printing, shipping refunds by points, collection hubs, TubuXu (§2).
@@ -70,6 +71,7 @@ The plan has 113 tasks in eight parts (M1 to M8), ordered in lanes that can run 
 ### Where the work happens (local only)
 
 - Integration branch: `feat/recycle-rewards`, in the worktree `.claude/worktrees/recycle-impl`. Nothing in this plan is pushed, opened as a PR, merged to `main` or deployed; the owner decides that separately.
+- Base: before any lane starts, `feat/recycle-rewards` must contain the points-1d package, the owner's Điểm Xanh x1000 change of the existing code (1 điểm = 1đ). Check once on the integration worktree: `grep -n "POINTS_GRANT_HARD_MAX" apps/api/src/modules/wallet/reward-points.service.ts` shows 2_000_000, `loyalty.vnd_per_point_redeem` is hard-locked at 1 in `system-config.service.ts`, and `cd apps/api && npx jest src/modules/system-config/points-unit-guard.spec.ts` passes. Every point amount in this plan is on that scale; this plan never edits those constants or their guards, it only adds the four `waste.*_points` entries (M1.4) and deletes `DEFAULT_REWARD_CATALOG` (M4.2b).
 - One worktree and branch per lane: `.claude/worktrees/recycle-<lane>` on `feat/recycle-<lane>`, created from the integration branch tip when the lane's stage starts. Lanes L1b and L1c branch from `feat/recycle-L1a` after M1.1 is committed there (M1.6 imports the Prisma enums M1.1 generates, and M1.7 needs the models).
 
 ```

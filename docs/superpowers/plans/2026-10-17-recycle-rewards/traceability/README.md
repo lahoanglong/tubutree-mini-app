@@ -7,3 +7,5 @@ The spec (`docs/superpowers/specs/2026-10-17-recycle-rewards-design.md`) was spl
 - `R<id> -> NOT PLANNED: <reason>`: not built in this release (non-goal, owner decision, or a process item tracked in the launch checklist).
 
 The lists were checked mechanically (every requirement has one line, every cited task and step exists) and by independent reviewers who read each cited step against the spec text. Requirement text paraphrases the spec; the spec wins when they differ.
+
+Scale: the requirement lists were extracted before the owner changed the Điểm Xanh scale on 2026-10-18 (1 điểm = 1đ). Every Điểm Xanh amount written in `requirements-M<n>.md` is on the old scale (1 điểm = 1.000đ): multiply it by 1000. VND amounts, quantities, drops and counts do not change. The spec and the plan are on the new scale and win; the `(L<line>)` references still point at the same spec lines.
