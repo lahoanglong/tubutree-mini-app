@@ -39,6 +39,14 @@ function mockDashboard(api: MockApi, links: unknown[], me: Record<string, unknow
   api.get('/affiliate/tax-statement', { year: 2026, fullName: null, taxId: null, items: [], totals: { grossAmount: 0, taxWithheld: 0, netAmount: 0 } });
 }
 
+const EMPTY_STATS = { orders7d: 0, orders30d: 0, revenue30d: 0, commission30d: 0, byProduct: [] };
+const SF = (over: Record<string, unknown> = {}) => ({
+  id: 'sf1', slug: 'shop-aff-1', type: 'CTV', title: 'Cửa hàng Xanh', headerNote: null, avatarUrl: null, coverUrl: null, theme: 'default', themeColor: null,
+  subdomain: null, isPublished: false, referralCode: 'AN123', subdomainEnabled: false, publicHiddenReason: null,
+  collections: [{ id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [] }],
+  ...over,
+});
+
 test.describe('Web khách: CTV', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -204,6 +212,68 @@ test.describe('Web khách: CTV', () => {
       paymentMethod: 'COD',
       expectedTotal: 84_000,
     });
+  });
+
+  test('gian hàng: chưa có thì chọn mẫu rồi tạo, gửi tạo gian hàng và áp mẫu đúng danh mục', async ({ page, api }) => {
+    mockSession(api);
+    const state = { created: false };
+    api.get('/storefront/me', () => (state.created ? SF() : reply(404, { message: 'Chưa có gian hàng' })));
+    api.get('/categories', [{ id: 'cat1', name: 'Chăm sóc da', slug: 'cham-soc-da', image: null }]);
+    api.get('/storefront/me/products', []);
+    api.get('/storefront/me/stats', EMPTY_STATS);
+    api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
+    api.post('/storefront', () => {
+      state.created = true;
+      return SF();
+    });
+    api.post('/storefront/me/apply-template', { collectionId: 'c1', title: 'Chăm sóc da', itemCount: 8 });
+    await page.goto('/ctv/gian-hang');
+    await page.getByRole('button', { name: 'Tạo gian hàng' }).click();
+    await page.getByRole('button', { name: 'Dùng mẫu Chăm sóc da' }).click();
+    await expect(page.getByRole('heading', { name: 'Cửa hàng Xanh' })).toBeVisible();
+    expect(api.callsTo('POST', '/storefront')).toHaveLength(1);
+    expect(api.callsTo('POST', '/storefront/me/apply-template')[0]!.body).toEqual({ categoryId: 'cat1' });
+  });
+
+  test('gian hàng: tạo bộ sưu tập combo, thêm sản phẩm, đăng — đúng body như Mini App', async ({ page, api }) => {
+    mockSession(api);
+    api.get('/storefront/me', SF());
+    api.get('/storefront/me/products', [{ id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 }]);
+    api.get('/storefront/me/stats', EMPTY_STATS);
+    api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
+    api.post('/storefront/me/collections', { id: 'c2', title: 'Combo Tết', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 15, sortOrder: 1, items: [] });
+    api.post('/storefront/me/collections/:id/items', { id: 'i2', productId: 'p2' });
+    api.post('/storefront/me/publish', SF({ isPublished: true }));
+    await page.goto('/ctv/gian-hang');
+    await page.getByLabel('Tên bộ sưu tập (khách sẽ thấy)').fill('Combo Tết');
+    await page.getByLabel('Loại bộ sưu tập').selectOption('COMBO');
+    await page.getByLabel('Giảm giá combo (%)').fill('15');
+    await page.getByRole('button', { name: 'Tạo bộ sưu tập' }).click();
+    await expect.poll(() => api.callsTo('POST', '/storefront/me/collections')).toHaveLength(1);
+    expect(api.callsTo('POST', '/storefront/me/collections')[0]!.body).toEqual({ title: 'Combo Tết', kind: 'COMBO', comboDiscountPct: 15 });
+    await page.getByRole('button', { name: 'Thêm sản phẩm' }).first().click();
+    await page.getByRole('button', { name: 'Thêm Xà phòng' }).click();
+    await expect.poll(() => api.callsTo('POST', '/storefront/me/collections/:id/items')).toHaveLength(1);
+    expect(api.callsTo('POST', '/storefront/me/collections/:id/items')[0]!.body).toEqual({ productId: 'p2' });
+    await page.getByRole('button', { name: 'Lưu & Đăng' }).click();
+    await expect.poll(() => api.callsTo('POST', '/storefront/me/publish')).toHaveLength(1);
+    expect(api.callsTo('POST', '/storefront/me/publish')[0]!.body).toEqual({ isPublished: true });
+  });
+
+  test('gian hàng: gian hàng tự giao lưu SĐT kho cùng màu chủ đề mặc định', async ({ page, api }) => {
+    mockSession(api);
+    api.get('/storefront/me', SF({ type: 'MERCHANT', warehousePhone: '0912345678', isPublished: true }));
+    api.get('/storefront/me/products', []);
+    api.get('/storefront/me/stats', EMPTY_STATS);
+    api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
+    api.patch('/storefront/me', SF());
+    await page.goto('/ctv/gian-hang');
+    await page.getByRole('button', { name: 'Cấu hình' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Cấu hình gian hàng' });
+    await dialog.getByLabel('Hotline kho liên hệ').fill('0988111222');
+    await dialog.getByRole('button', { name: 'Lưu cấu hình gian hàng' }).click();
+    await expect.poll(() => api.callsTo('PATCH', '/storefront/me')).toHaveLength(1);
+    expect(api.callsTo('PATCH', '/storefront/me')[0]!.body).toMatchObject({ warehousePhone: '0988111222', themeColor: '#16a34a' });
   });
 
   test('khách chưa đăng nhập được mời đăng nhập, không gọi API CTV', async ({ page, api }) => {

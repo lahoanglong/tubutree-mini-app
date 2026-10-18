@@ -80,6 +80,14 @@ const AFFILIATE: string[] = [
   'components/affiliate/milestone-rewards.tsx',
   'components/affiliate/ctv-order-sheet.tsx',
   'components/affiliate/storefront-owner.tsx',
+  'app/ctv/gian-hang/page.tsx',
+  'components/affiliate/storefront-builder.tsx',
+  'components/affiliate/storefront-sheets.tsx',
+  'components/affiliate/storefront-panels.tsx',
+  'components/affiliate/storefront-share.tsx',
+  'components/affiliate/storefront-image-upload.tsx',
+  'components/affiliate/storefront-inline.tsx',
+  'components/affiliate/storefront-rules.ts',
 ];
 const GAME: string[] = [];
 const PRO: string[] = [];
