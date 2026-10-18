@@ -45,17 +45,17 @@ Không có.
 - loyalty:5. Có muốn chèn formatter để chuyển nốt các hàm chữ sang app-core, và hợp nhất `fingerprintOf`/`newIdempotencyKey` với `utils/idempotency.ts` của Mini App? Mặc định: không.
 
 ### shop (11 câu)
-- shop:1. Web có cần gửi `search_performed`, `search_result_clicked`, `filter_applied` không, tới endpoint nào? Mặc định: không gửi. Đã xử lý ở c63e6ea2 (trang chi tiết đơn dùng `canPayNow`).
+- shop:1. Web có cần gửi `search_performed`, `search_result_clicked`, `filter_applied` không, tới endpoint nào? Mặc định: không gửi.
 - shop:2. Hai bản mua lại (`components/reorder/*` của shop, `components/orders/*` của order): giữ bản nào? Mặc định: giữ cả hai, bản shop đã khoá CTA sau thêm một phần; xử lý ở tích hợp.
 - shop:3. Khối đại lý trên `/brand/[slug]`: có hiện "Đăng ký đại lý" cho mọi người đã đăng nhập và sửa test BUYERWEB-18 không? Mặc định: chỉ hiện cho người đã có hồ sơ đại lý, ẩn khi `/dai-ly` còn pending.
-- shop:4. Bài mẫu chia sẻ nhãn cho người không phải CTV: mặc định không hiện, chỉ QR, link, nút chia sẻ. Đã xử lý ở 42134975 (gom về `bankPaymentHref`; còn lại chỉ ctv-order-sheet dò route bằng `/thanh-toan/chuyen-khoan/x`).
+- shop:4. Bài mẫu chia sẻ nhãn cho người không phải CTV: mặc định không hiện, chỉ QR, link, nút chia sẻ.
 - shop:5. Chữ dải tăng điểm Trang chủ đổi từ "Mua trong Mini App tích nhiều hơn" thành "Mua trực tiếp tại Tubu Tree ...": xác nhận chữ? Mặc định: chữ mới.
-- shop:6. Giờ vàng ở Trang chủ chỉ link `/san-pham/{slug}` (không truyền variationId, trang sản phẩm tự chọn phân loại đang giờ vàng). Mặc định: như vậy, chưa kiểm bằng trình duyệt. Đã xử lý ở c63e6ea2.
+- shop:6. Giờ vàng ở Trang chủ chỉ link `/san-pham/{slug}` (không truyền variationId, trang sản phẩm tự chọn phân loại đang giờ vàng). Mặc định: như vậy, chưa kiểm bằng trình duyệt.
 - shop:7. Sau đăng nhập quay về trang sản phẩm: chỉ tự mở lại sheet định kỳ, không tự tạo nhóm mua chung. Mặc định: như Mini App.
 - shop:8. Có muốn bỏ nút "Xem thêm" thay cho `?page=N`, tức giữ cả hai như hiện tại? Mặc định: giữ cả hai (Xem thêm cho người dùng, link trang cho crawler).
 - shop:9. Đặt định kỳ chọn chuyển khoản: sang `/tai-khoan/don-hang/<code>` vì `/thanh-toan/chuyen-khoan/:code` còn pending. Đổi khi lane order xong? Đã xử lý ở 095b105a (sang `/thanh-toan/chuyen-khoan/<code>` như Mini App).
-- shop:10. Emoji trong chữ hiển thị đã bỏ để khớp quy ước; emoji nhận diện nhãn ở `lib/brand-origins.ts` giữ như Mini App. Mặc định: như vậy. Đã xử lý ở c63e6ea2: đơn quá hạn không dựng QR, hiện hạn và "quá hạn đơn sẽ tự huỷ"; trang `/thanh-toan/chuyen-khoan/[code]` giống `bank-payment.tsx` (không chặn theo hạn, khung hiện "Đã quá hạn chuyển khoản", PAID hiện "Đã nhận thanh toán").
-- shop:11. Số sàn test Mini App 4243 trong luật so với 4214 thực tế: sàn đúng là bao nhiêu? Mặc định: coi 4214 là mốc hiện tại. Đã xử lý ở 42134975.
+- shop:10. Emoji trong chữ hiển thị đã bỏ để khớp quy ước; emoji nhận diện nhãn ở `lib/brand-origins.ts` giữ như Mini App. Mặc định: như vậy.
+- shop:11. Số sàn test Mini App 4243 trong luật so với 4214 thực tế: sàn đúng là bao nhiêu? Mặc định: coi 4214 là mốc hiện tại.
 
 ### order (5 câu + 1 câu mới từ mục "Hoàn tất sau gate/review")
 - order:1. Đổi CouponBox thành VoucherSheet như Mini App? Mặc định: giữ inline.
@@ -160,13 +160,17 @@ Không có.
 - Một số spec chép từ Mini App (share-link, brand-origins, search-state...) hoặc viết cùng lúc với code, không có bước đỏ trước.
 - Sửa ngoài chủ file (không đổi hành vi): `apps/e2e/tests/web-customer.web.spec.ts`, `lib/next-config-redirects.spec.ts`, `components/site-header.spec.tsx`, `site-search.tenant.spec.tsx`, `guest-pages.a11y.spec.tsx`, `test-utils/render-hook.tsx` (mới).
 
+### integ2/integ4 (2 mục)
+- QR trên đơn quá hạn: web không dựng QR khi quá hạn như `canPayOrderNow` của Mini App. Đã xử lý ở c63e6ea2.
+- Gom mọi chỗ nối `/thanh-toan/chuyen-khoan/...` về `bankPaymentHref`. Đã xử lý ở 42134975.
+
 ### order (10 mục)
 - VoucherSheet: giữ CouponBox inline.
 - Chưa chuyển các hàm giỏ và đặt đơn sang `@tubutree/app-core/api/*`; vẫn dùng `@/lib/shop-client`.
 - Giỏ chưa có debounce 380ms, optimistic update, StorefrontContextBar, SuggestedRail khi rỗng.
 - Chưa đối chiếu màn thành công với OrderSuccess; điểm dùng được lấy từ báo giá.
 - Chưa có analytics mua lại (web chưa có lớp analytics).
-- Trang chi tiết đơn vẫn dựng panel QR nội tuyến; nút Thanh toán ở hub `/tai-khoan` (lane account) vẫn dẫn tới chi tiết đơn.
+- Trang chi tiết đơn chỉ dựng panel QR nội tuyến khi `canPayNow` (còn hạn), đơn quá hạn hiện hạn và chữ tự huỷ; đã xử lý ở c63e6ea2, chưa kiểm chứng trên trình duyệt. Nút Thanh toán ở hub `/tai-khoan` (lane account) vẫn dẫn tới chi tiết đơn.
 - Link "Thu kèm rác" ẩn tới khi lane recycle mở `/doi-rac/tao`.
 - TDD không trọn ở `checkout-waste`, `use-remaining`, `reorder.ts`, `orders-tabs.ts`, `subscription-price.ts`, `oa-prompt.ts` (spec viết cùng lượt).
 - Đã sửa spec cũ của lane: checkout-idempotency, checkout-waste, order-actions (ngày tương đối), guest-pages.a11y; `checkout-race.spec` nay mount cùng SiteHeader.
