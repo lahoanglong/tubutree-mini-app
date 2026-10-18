@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { CustomerRefundsService } from './customer-refunds.service';
@@ -49,6 +50,7 @@ export class DismissOverpaymentDto {
 }
 
 @Roles('ADMIN')
+@AllowStaff('KE_TOAN')
 @Controller('admin/customer-refunds')
 export class CustomerRefundsAdminController {
   constructor(private readonly refunds: CustomerRefundsService) {}

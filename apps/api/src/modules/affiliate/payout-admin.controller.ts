@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AffiliateService } from './affiliate.service';
@@ -42,12 +43,14 @@ export class MarkPayoutPaidDto {
 export class PayoutAdminController {
   constructor(private readonly affiliate: AffiliateService) {}
 
+  @AllowStaff('KE_TOAN')
   @Get()
   list(@Query() q: ListPayoutsQuery) {
     return this.affiliate.listPayouts(q.status, q.page, q.limit);
   }
 
   /** Báo cáo khấu trừ thuế TNCN theo tháng cho kế toán kê khai (SELLER-11). */
+  @AllowStaff('KE_TOAN')
   @Get('pit-report')
   pitReport(@Query() q: PitReportQuery) {
     return this.affiliate.pitReport(q.month);
@@ -63,6 +66,8 @@ export class PayoutAdminController {
     return this.affiliate.rejectPayout(adminId, id, dto.reason);
   }
 
+  /** Kế toán chi lệnh ADMIN đã duyệt; duyệt/từ chối vẫn chỉ ADMIN (người duyệt khác người chi). */
+  @AllowStaff('KE_TOAN')
   @Post(':id/mark-paid')
   markPaid(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: MarkPayoutPaidDto) {
     return this.affiliate.markPayoutPaid(adminId, id, dto);

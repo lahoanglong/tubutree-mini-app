@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FlashSaleService } from './flash-sale.service';
@@ -25,6 +26,7 @@ class AddItemDto {
 }
 
 @Roles('ADMIN')
+@AllowStaff('MARKETING')
 @Controller('admin/flash-sales')
 export class FlashSaleAdminController {
   constructor(private readonly flashSale: FlashSaleService) {}

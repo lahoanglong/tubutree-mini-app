@@ -14,6 +14,8 @@ export interface OrderActor {
 const STAFF_TRANSITIONS: Record<StaffPermission, readonly OrderStatus[]> = {
   CSKH: ['CANCELLED'],
   KHO: ['PACKED'],
+  MARKETING: [],
+  KE_TOAN: [],
 };
 
 const CARRIER_STATUSES: readonly string[] = ['SHIPPING', 'DELIVERED'];
