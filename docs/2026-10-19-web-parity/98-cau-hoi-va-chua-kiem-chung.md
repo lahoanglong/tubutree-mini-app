@@ -47,7 +47,7 @@ Không có.
 ### shop (11 câu)
 - shop:1. Web có cần gửi `search_performed`, `search_result_clicked`, `filter_applied` không, tới endpoint nào? Mặc định: không gửi.
 - shop:2. Hai bản mua lại (`components/reorder/*` của shop, `components/orders/*` của order): giữ bản nào? Mặc định: giữ cả hai, bản shop đã khoá CTA sau thêm một phần; xử lý ở tích hợp.
-- shop:3. Khối đại lý trên `/brand/[slug]`: có hiện "Đăng ký đại lý" cho mọi người đã đăng nhập và sửa test BUYERWEB-18 không? Mặc định: chỉ hiện cho người đã có hồ sơ đại lý, ẩn khi `/dai-ly` còn pending.
+- shop:3. Khối đại lý trên `/brand/[slug]`: có hiện "Đăng ký đại lý" cho mọi người đã đăng nhập và sửa test BUYERWEB-18 không? Mặc định: chỉ hiện cho người đã có hồ sơ đại lý, ẩn khi `/dai-ly` còn pending. Đã xử lý ở 94e40f36: `/dai-ly` đã mở nên khối hiện cho mọi người như Mini App (nút "Đăng ký đại lý" / "Xem hồ sơ đại lý" / "Vào kênh đại lý"), test BUYERWEB-18 đổi theo.
 - shop:4. Bài mẫu chia sẻ nhãn cho người không phải CTV: mặc định không hiện, chỉ QR, link, nút chia sẻ.
 - shop:5. Chữ dải tăng điểm Trang chủ đổi từ "Mua trong Mini App tích nhiều hơn" thành "Mua trực tiếp tại Tubu Tree ...": xác nhận chữ? Mặc định: chữ mới.
 - shop:6. Giờ vàng ở Trang chủ chỉ link `/san-pham/{slug}` (không truyền variationId, trang sản phẩm tự chọn phân loại đang giờ vàng). Mặc định: như vậy, chưa kiểm bằng trình duyệt.
@@ -177,7 +177,7 @@ Không có.
 - Mini App không có chọn năm cho bảng kê thuế nên web cũng không thêm.
 - Lệch hành vi đã biết: web chờ config cho cả ví (Mini App chỉ chờ cho BANK), theo app-core `withdrawView`.
 - Spec `ctv-order-sheet` chạy khoảng 30 giây; nếu timeout do tải thì chạy lại riêng.
-- Đưa `/ctv` vào menu/hub tài khoản thuộc lane khác, chưa sửa.
+- Đưa `/ctv` vào menu/hub tài khoản thuộc lane khác, chưa sửa. Đã xử lý ở a9c31cde: hub đã có `/ctv`, `/dai-ly`, `/chu-thuong-hieu`, `/nhan-vien` từ buildAccountMenu; thêm spec khoá bằng route map thật.
 
 ### game (8 mục)
 - Chưa kiểm tra giao diện thật (máy tính, 320px): không chạy Playwright, chỉ viết spec.
