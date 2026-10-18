@@ -28,13 +28,12 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/loyalty', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
+const boost = vi.hoisted(() => ({ cfg: { isLoaded: false } as { isLoaded: boolean; loyalty?: Record<string, unknown> } }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ ...mocks.publicConfig, ...boost.cfg }) }));
 vi.mock('../store/auth', () => {
   const state = { status: 'authenticated', user: { id: 'u1' } };
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
 });
-const boost = vi.hoisted(() => ({ cfg: { isLoaded: false } as { isLoaded: boolean; loyalty?: Record<string, unknown> } }));
-vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => boost.cfg }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../components/qr-code', () => ({
