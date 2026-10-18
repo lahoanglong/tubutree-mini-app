@@ -352,6 +352,7 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     const unmatched = {
       body: [
         wasteUnmatched({ id: 'un7', reason: 'MANUAL_ENTRY', relatedRequestId: null, carrier: null, trackingCode: null, description: 'Thùng không nhãn', receivedAt: '2026-10-17T03:00:00.000Z' }),
+        wasteUnmatched({ id: 'un9', reason: 'NO_MATCH', relatedRequestId: 'rX', trackingCode: 'GHN777', description: 'Kiện của yêu cầu RX', receivedAt: '2026-10-17T05:00:00.000Z' }),
         wasteUnmatched({ relatedRequestId: 'r1' }),
         wasteUnmatched({ id: 'un8', status: 'RESOLVED', relatedRequestId: 'r1', description: 'Kiện đã đóng' }),
       ],
@@ -362,7 +363,7 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     await flush();
     expect(first.api.calls.some((x) => x.url.includes('/admin/waste/unmatched') && x.url.includes('status=OPEN'))).toBe(true);
     const sel = select(first.c, 'reopenUnmatchedId')!;
-    expect(optionValues(sel)).toEqual(['', 'un1', 'un7']);
+    expect(optionValues(sel)).toEqual(['', 'un1', 'un7', 'un9']);
     expect(optionLabels(sel)[0]).toContain('liên quan tới yêu cầu này');
     expect(optionLabels(sel)[0]).toContain('GHN999');
     expect(optionLabels(sel)[0]).toContain('Thùng carton băng keo xanh');
@@ -370,6 +371,8 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     expect(optionLabels(sel)[1]).toContain('Thùng không nhãn');
     expect(optionLabels(sel)[1]).toContain(formatDateTime('2026-10-17T03:00:00.000Z'));
     expect(optionLabels(sel)[1]).not.toContain('liên quan tới yêu cầu này');
+    expect(optionLabels(sel)[2]).toContain('GHN777');
+    expect(optionLabels(sel)[2]).not.toContain('liên quan tới yêu cầu này');
     expect(btn(first.c, 'Xác nhận mở lại')!.disabled).toBe(true);
     typeInto(area(first.c, 'reopenReason'), 'Kiện về muộn');
     selectValue(select(first.c, 'reopenUnmatchedId'), 'un7');
