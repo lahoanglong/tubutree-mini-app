@@ -184,6 +184,14 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     renderPage();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/new', { replace: true }));
   });
+  it('không còn cách giao nào đang mở → câu giải thích thay cho nhóm chọn, "Tạo yêu cầu" khoá', async () => {
+    mocks.publicConfig.waste = { enabled: true, dropoff: false, mailin: false, pickup: false };
+    atStep2();
+    renderPage();
+    expect(await screen.findByText('Hiện chưa có cách giao nào đang mở, bạn quay lại sau nhé.')).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeDisabled();
+  });
   it('một preview cho mỗi cách đang bật, đúng thứ tự Mang tới, Thu kèm, Gửi về kho', async () => {
     atStep2();
     renderPage();
@@ -313,6 +321,31 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     await waitFor(() => expect(mocks.createWasteRequest).toHaveBeenCalledWith({ method: 'DROP_OFF', lines: [{ itemId: 'item-carton', declaredQty: 5 }, { itemId: 'item-milk', declaredQty: 5 }], pointId: 'pt-1', consent: true }, 'key-1'));
     await waitFor(() => expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/r/req-9', { replace: true }));
     expect(mocks.invalidate).toHaveBeenCalledTimes(1);
+  });
+  it('tạo xong rồi Back về mục bước 1 giữ nháp đã gửi → không hiện lại số lượng, thay mục bằng /recycle', async () => {
+    mocks.createWasteRequest.mockResolvedValue(makeRequestDetail({ id: 'req-9' }));
+    const lines = { 'item-carton': 3 };
+    const itemsEntry = { draft: { ...DRAFT, lines } };
+    atStep2({ ...PICKED, lines });
+    const first = renderPage();
+    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' })).click();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo yêu cầu' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/r/req-9', { replace: true }));
+    first.unmount();
+    mocks.navigate.mockClear();
+
+    mocks.location.search = ''; mocks.location.state = itemsEntry;
+    renderPage();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle', { replace: true }));
+    expect(screen.queryByText('Thùng carton')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Tiếp tục' })).toBeNull();
+    expect(mocks.createWasteRequest).toHaveBeenCalledTimes(1);
+  });
+  it('mục bước 1 có nháp chưa từng gửi (về từ chọn điểm hay nạp lại) vẫn hiện nguyên số lượng', async () => {
+    mocks.location.search = ''; mocks.location.state = { draft: { ...DRAFT, lines: { 'item-carton': 7 } } };
+    renderPage();
+    expect(await screen.findByText('Bước 1/3: Chọn món')).toBeInTheDocument();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
   it('lỗi mạng → snackbar câu của máy chủ, bấm lại dùng CÙNG khoá', async () => {
     mocks.createWasteRequest.mockRejectedValueOnce(new Error('Điểm nhận đang tạm ngừng, hãy chọn điểm khác')).mockResolvedValue(makeRequestDetail());

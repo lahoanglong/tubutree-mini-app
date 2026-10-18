@@ -248,9 +248,11 @@ export default function RecyclePage() {
               )}
             </div>
           )}
-          <Button fullWidth onPress={() => navigate('/recycle/new')}>
-            Đổi rác ngay
-          </Button>
+          {methods.length > 0 && (
+            <Button fullWidth onPress={() => navigate('/recycle/new')}>
+              Đổi rác ngay
+            </Button>
+          )}
         </div>
       </Card>
 

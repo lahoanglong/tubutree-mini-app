@@ -116,6 +116,12 @@ describe('/recycle trang vào (§4.1)', () => {
     expect(screen.queryByText('Gửi về kho Tubu HCM')).toBeNull();
     expect(screen.queryByText('Thu kèm đơn mua')).toBeNull();
   });
+  it('không cách giao nào mở với khách này → ẩn "Đổi rác ngay" nhưng vẫn hiện số dư', async () => {
+    mocks.publicConfig.waste = { enabled: true, dropoff: false, mailin: false, pickup: false };
+    renderPage();
+    await screen.findByText('Điểm Xanh của bạn');
+    expect(screen.queryByRole('button', { name: 'Đổi rác ngay' })).toBeNull();
+  });
   it('tiêu đề khối cách đổi không đếm số thẻ', async () => {
     renderPage();
     expect(await screen.findByRole('heading', { name: 'Cách đổi' })).toBeInTheDocument();

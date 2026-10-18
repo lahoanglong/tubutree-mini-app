@@ -71,6 +71,11 @@ export type WastePointsReturnState = { draft: WasteWizardDraft };
 
 const EMPTY_DRAFT: WasteWizardDraft = { lines: {}, method: null, pointId: null, pickedPoint: null, provinceCode: null, nearby: null };
 
+// Back from the request page lands on the items entry that still carries the submitted draft; a module-level marker (the
+// stack entry's state is cloned, so identity does not survive) lets that entry leave instead of re-creating the request.
+const submittedLines = new Set<string>();
+const linesId = (lines: Record<string, number>) => JSON.stringify(toLineInputs(lines));
+
 const BASE_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'PICKUP', 'MAIL_IN'];
 const MAIL_FIRST_ORDER: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP', 'DROP_OFF'];
 const METHOD_LINE: Record<WasteMethod, string> = {
@@ -213,6 +218,10 @@ export default function RecycleNewPage() {
   useEffect(() => {
     if (leave) navigate('/recycle', { replace: true });
   }, [leave, navigate]);
+  const [replayed] = useState(() => step === 'items' && stateDraft !== undefined && submittedLines.has(linesId(stateDraft.lines)));
+  useEffect(() => {
+    if (replayed) navigate('/recycle', { replace: true });
+  }, [replayed, navigate]);
   const missingDraft = step === 'method' && !stateDraft;
   useEffect(() => {
     if (missingDraft) navigate('/recycle/new', { replace: true });
@@ -314,6 +323,7 @@ export default function RecycleNewPage() {
     },
     onSuccess: async (r) => {
       rotate();
+      submittedLines.add(linesId(draft.lines));
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${r.id}`, { replace: true });
     },
@@ -333,7 +343,7 @@ export default function RecycleNewPage() {
   if (phase === 'authenticated' && meQ.isError) {
     return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />, subtitle);
   }
-  if (!me || leave || missingDraft) {
+  if (!me || leave || missingDraft || replayed) {
     return shell(
       <>
         <Skeleton height={80} radius="var(--radius-card)" />
@@ -580,9 +590,17 @@ export default function RecycleNewPage() {
           </Text>
         </Card>
       )}
-      <div role="radiogroup" aria-label="Cách giao" style={{ ...COLUMN, gap: 12 }}>
-        {order.map(renderCard)}
-      </div>
+      {order.length === 0 ? (
+        <Card variant="outline">
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+            Hiện chưa có cách giao nào đang mở, bạn quay lại sau nhé.
+          </Text>
+        </Card>
+      ) : (
+        <div role="radiogroup" aria-label="Cách giao" style={{ ...COLUMN, gap: 12 }}>
+          {order.map(renderCard)}
+        </div>
+      )}
       {selected && (
         <div style={{ ...COLUMN, gap: 4 }}>
           <Checkbox checked={consent} onChange={() => setConsent((v) => !v)} label={CONSENT_TEXT} />
