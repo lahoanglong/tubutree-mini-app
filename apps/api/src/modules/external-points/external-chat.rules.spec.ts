@@ -6,6 +6,8 @@ import {
   holdUntilOf,
   creatorStaffUserId,
   isSameAsPancakeCreator,
+  linkableMemberPhone,
+  CHAT_SKIP_TEXT,
   verifiedMemberPhone,
   type ChatClaimFacts,
 } from './external-chat.rules';
@@ -171,6 +173,25 @@ describe('verifiedMemberPhone: chỉ SĐT đã xác minh qua Zalo và còn hạn
     const at = new Date(NOW.getTime() - 180 * DAY);
     expect(verifiedMemberPhone({ ...user, phoneVerifiedAt: at }, verify)).toBe('0912345678');
     expect(verifiedMemberPhone({ ...user, phoneVerifiedAt: at }, { now: NOW, maxDays: 30 })).toBeNull();
+  });
+});
+
+describe('SĐT xác minh cũ: vẫn là người nhận nhưng chờ kiểm', () => {
+  const u = { phone: '0912345678', zaloId: 'z_real', isBlocked: false, mergedIntoId: null as string | null };
+  it('linkableMemberPhone không xét mốc xác minh, vẫn loại khách vãng lai, khoá, đã gộp, số sai dạng', () => {
+    expect(linkableMemberPhone(u)).toBe('0912345678');
+    expect(linkableMemberPhone({ ...u, zaloId: 'guest_a' })).toBeNull();
+    expect(linkableMemberPhone({ ...u, isBlocked: true })).toBeNull();
+    expect(linkableMemberPhone({ ...u, mergedIntoId: 'x' })).toBeNull();
+    expect(linkableMemberPhone({ ...u, phone: '123' })).toBeNull();
+  });
+  it('phoneStale: claim gắn thành viên, REVIEW với lý do xác minh cũ', () => {
+    const d = evaluateChatClaim(facts({ member: { id: 'u1', isStaff: false, tierMultiplier: 1, phoneStale: true } }));
+    expect(d).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', userId: 'u1' });
+    expect((d as { reviewReason: string }).reviewReason).toContain('xác minh đã cũ');
+  });
+  it('mọi lý do SKIP đều có câu giải thích cho người kiểm', () => {
+    for (const r of ['DISABLED', 'NO_PHONE', 'CLOSED', 'NO_CARRIER', 'BEFORE_SINCE', 'TOO_OLD', 'ZERO_POINTS'] as const) expect(CHAT_SKIP_TEXT[r]).toBeTruthy();
   });
 });
 

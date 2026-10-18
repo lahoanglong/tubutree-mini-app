@@ -286,7 +286,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       expect(claims.filter((c) => c?.state === 'REVIEW')).toHaveLength(5);
     });
 
-    it('cộng vượt trần tháng khi tiền hàng tăng: điểm chốt theo phần trần còn lại (không dưới điểm đã kiểm)', async () => {
+    it('tiền hàng tăng giữa lúc kiểm và lúc cộng: REVIEW chứ không chốt tự động theo trần (review lượt 2, B2)', async () => {
       await pin('loyalty.chat_order_monthly_points_cap', 20_000);
       const user = await mkUser();
       const p1 = payload({ phone: user.phone!, goods: 500_000, deliveredDaysAgo: 20 });
@@ -296,12 +296,11 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       await ingest(p2);
       const c2 = (await claimOf(String(p2.id)))!;
       expect([c1.state, c2.state]).toEqual(['PENDING', 'PENDING']);
-      // Hai claim 10.000 + 10.000 = đúng trần 20.000. Đơn 2 tăng tiền hàng lên 700.000 (14.000 điểm): chốt = max(10.000, 20.000 - 10.000) = 10.000.
+      // Hai claim 10.000 + 10.000 = đúng trần 20.000. Đơn 2 tăng tiền hàng lên 700.000 (14.000 điểm > 10.000 đã kiểm): người kiểm quyết.
       await prisma.externalOrder.update({ where: { id: c2.externalOrderId }, data: { goodsValue: 700_000 } });
       const [r1, r2] = [await releaseClaim(prisma, c1.id, await releaseOpts()), await releaseClaim(prisma, c2.id, await releaseOpts())];
-      expect([r1.outcome, r2.outcome]).toEqual(['CREDITED', 'CREDITED']);
-      expect(r2.points).toBe(10_000);
-      expect(await balanceOf(user.id)).toBe(20_000);
+      expect([r1.outcome, r2.outcome]).toEqual(['CREDITED', 'TO_REVIEW']);
+      expect(await balanceOf(user.id)).toBe(10_000);
       await noDrift();
     });
 

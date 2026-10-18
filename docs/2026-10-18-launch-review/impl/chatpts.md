@@ -104,5 +104,44 @@ Migration `20261019170000_chat_review1` (sau `20261019160000`, trước `2026102
 ### Giới hạn đã biết thêm
 
 - Test canh nguồn ghi `users.phone` (`external-chat-phone-source.spec.ts`) quét mã TypeScript và không bắt được SQL tay (`$executeRaw`, migration).
-- `phoneVerifiedAt` chỉ được làm mới khi Mini App gửi `phoneToken` lúc đăng nhập/`ensurePhone`. Nếu app chỉ xin số một lần thì sau 180 ngày thành viên đó không còn tự liên kết cho tới khi xin lại số (điểm vẫn giữ theo HELD_NO_MEMBER). Chưa kiểm hành vi thật của Mini App.
+- `phoneVerifiedAt` chỉ được làm mới khi Mini App gửi `phoneToken`, mà Mini App không xin lại số khi tài khoản đã có số (`apps/miniapp/src/store/auth.ts:210`). Luật đã sửa ở review lượt 2 (B1): mốc quá `loyalty.chat_phone_verified_max_days` KHÔNG còn làm claim mất chủ. Câu cũ "điểm vẫn giữ theo HELD_NO_MEMBER" sai (30 ngày sau là LAPSED, mất điểm). Xem mục "Sửa sau review lượt 2".
 - Trần theo người tạo cần `creator.id` đúng tên trường trong payload thật (chưa kiểm, xem giả định ở trên).
+
+## Sửa sau review lượt 2
+
+Reviewer xác nhận C1, C2, N1, N3 và tiền tố sổ điểm đã đúng; còn 2 lỗi chặn bật cờ và 3 mục nên sửa. Cách làm như lượt 1: viết test, chạy đỏ trên ffb2ce1d, rồi sửa.
+
+### Kết quả đỏ trước khi sửa (mã nguồn ffb2ce1d)
+
+Test mới `test/integration-race/external-chat-review2.race-spec.ts` (7 ca) và `test/integration-race/auth-phone-change.race-spec.ts` (5 ca), cộng ca N4 của `external-chat-review1.race-spec.ts` được viết lại theo luật mới. Chạy cùng lượt: `Tests: 11 failed, 18 passed, 29 total` (log `red2.log`). Các ca đỏ:
+- B1: claim của thành viên có xác minh cũ/chưa có vẫn `userId` null; liên kết và cron không gắn.
+- B2: đơn tăng tiền hàng lúc cộng vẫn `CREDITED` thay vì `TO_REVIEW` (Expected "TO_REVIEW", Received "CREDITED").
+- N-B: hai lần liên kết song song với hai người tạo đơn theo thứ tự ngược nhau không liên kết đủ (deadlock 40P01), ca đỏ.
+- N-C: liên kết gặp SKIP (đơn quá tuổi) vẫn để claim PENDING (cộng thô), không REVIEW.
+- Nhỏ: claim mất cả chủ lẫn SĐT đi HELD (Expected "TO_REVIEW", Received "HELD").
+- Auth: số mới có grant STAFF thì tài khoản CUSTOMER đổi số và lên STAFF (Expected "CUSTOMER", Received "STAFF"); STAFF vẫn bị đổi số; số cũ có grant vẫn đổi.
+Ca xanh sẵn là ca đối chứng (hai tài khoản đua nhận số tự do: đúng một người nhận; CUSTOMER đổi số bình thường).
+
+Sau khi sửa: cả nhóm chat + auth-phone-change xanh (xem số liệu ở báo cáo).
+
+### Luật mới
+
+- **B1**: thành viên có SĐT khớp mà `phoneVerifiedAt` quá `loyalty.chat_phone_verified_max_days` (hay chưa có) vẫn là người nhận: claim gắn `userId` của họ nhưng vào REVIEW, lý do "SĐT xác minh đã cũ, cần kiểm người nhận". Áp như nhau cho tạo claim (`ensureChatClaim`), liên kết lúc đăng nhập (`linkClaimsByPhone`) và cron (`linkWaitingClaims`, không còn lọc theo mốc xác minh). `resolveMemberByPhone` trả `phoneStale`, `linkableMemberPhone` thay `verifiedMemberPhone` ở đường liên kết (`verifiedMemberPhone` còn nguyên, nghiêm ngặt, hiện chỉ test dùng). Không sửa Mini App.
+- **B2**: `releaseClaim` với claim PHONE mà điểm tính lúc cộng lớn hơn `points` đã kiểm vào REVIEW ("Tiền hàng tăng sau khi kiểm ..."), không chốt tự động. Claim đơn sàn (SCAN) giữ hành vi cũ (ngưỡng và chốt theo trần). Hệ quả: hạng thành viên tăng giữa lúc kiểm và lúc cộng cũng đưa claim vào REVIEW; chấp nhận vì ít gặp và người kiểm xử lý được.
+- **N-A (auth)**, `zaloPhoneFields`: không tự đổi `users.phone` của tài khoản đang có số khi tài khoản không phải CUSTOMER, bị khoá, số cũ hoặc số mới đang có grant quyền còn hiệu lực, hay số mới thuộc người khác (chỉ ghi log, không đổi gì kể cả `phoneVerifiedAt`). Lệch so với yêu cầu: không "bỏ qua `applyGrants` cho số mới" mà chặn việc đổi sang số có grant, vì `applyGrants` chạy ở mọi đăng nhập/refresh nên không có cách chỉ bỏ qua cho một lần; kết quả (tài khoản đang có số không lên quyền nhờ đổi số, chỉ tài khoản được gắn số lần đầu mới có đường này như cũ) giống nhau. `mergeGuestInto`: SĐT đích ghi SAU transaction gộp, trùng (P2002) chỉ bỏ qua phần số, không làm hỏng lần gộp.
+- **N-B**: `linkClaimsByPhone` khoá người tạo của MỌI claim ngay sau khoá SĐT, đã sắp xếp và bỏ trùng, trước vòng lặp. Đã rà các chỗ khác: `ensureChatClaim` chỉ lấy một khoá người tạo (sau khoá SĐT đã sắp xếp), `releaseClaim` và `approve` không lấy khoá người tạo, nên không còn chỗ lấy nhiều khoá không sắp xếp. Thứ bậc khoá: SĐT (sắp xếp) rồi người tạo (sắp xếp), nhất quán ở mọi đường.
+- **N-C**: liên kết mà `evaluateChatClaim` trả SKIP thì claim vào REVIEW với lý do "Kiểm lại khi liên kết SĐT: ..." (`CHAT_SKIP_TEXT`), điểm giữ mức đã kiểm, không cộng thô.
+- **Nhỏ**: claim chưa có chủ mà `orderPhone` đã bị xoá (retention) khi tới hạn cộng vào REVIEW ("không còn SĐT để liên kết"), không HELD rồi LAPSED. Thay luật lượt 1 cho trường hợp này.
+
+### Schema
+
+Không thêm cột, không thêm migration (không có `20261019180000_*`).
+
+### Giới hạn ghi thêm
+
+- Điều kiện "có vận đơn" cho status 16 chỉ cần một phần tử `trackingCodes` dài 8 đến 30 ký tự là qua. Việc nhân viên có tự gõ được trường này trên Pancake hay không chưa kiểm, nên đây là rào cản yếu hơn vẻ ngoài.
+- Liên kết đánh giá lại cả claim đã có người duyệt (`decidedById`): người duyệt chỉ miễn kiểm đổi SĐT, không miễn kiểm nhân viên, ngưỡng, người tạo đơn và SKIP, nên claim đã duyệt vẫn có thể quay lại REVIEW lúc liên kết.
+
+### Ghi chú kiểm chứng lượt 2
+
+`r12-merge-four-guests.race-spec.ts` (khớp pattern `merge`) đỏ không ổn định khi máy quá tải (load trung bình 30 đến 39): `ServiceUnavailableException` do thua tranh khoá gộp. Cùng spec, cùng DB, chạy hai lần liên tiếp thì lần đỏ lần xanh; với `auth.service.ts` của 99452048 (trước chatpts) và của bản này đều từng xanh, khi chạy riêng xanh 8 lần. Phần gộp khách không đọc `phone` khi Zalo không trả số (spec này luôn trả null), nên không có đường nào từ thay đổi lượt 2 tới ca đó. Coi là flake do tải, chưa chứng minh được nguyên nhân gốc.

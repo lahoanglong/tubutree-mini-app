@@ -27,6 +27,8 @@ export interface ChatMemberFacts {
   isStaff: boolean;
   /** `MembershipTier.pointMultiplier` của hạng hiện tại, 1 khi chưa có hạng. */
   tierMultiplier: number;
+  /** SĐT khớp nhưng `phoneVerifiedAt` đã cũ hay chưa có: số có thể đã đổi chủ, người nhận phải được kiểm. */
+  phoneStale?: boolean;
 }
 
 export interface ChatClaimFacts {
@@ -48,6 +50,17 @@ export interface ChatClaimFacts {
 export type ChatDecision =
   | { kind: 'SKIP'; reason: ChatSkipReason }
   | { kind: 'CLAIM'; state: 'PENDING' | 'REVIEW'; reviewReason: string | null; points: number; multiplier: number; ratePct: number; userId: string | null };
+
+/** Lý do hiển thị cho nhân viên khi một claim bị kiểm lại lúc liên kết mà không còn đủ điều kiện (SKIP). */
+export const CHAT_SKIP_TEXT: Record<ChatSkipReason, string> = {
+  DISABLED: 'Tính năng tích điểm đơn chat đang tắt',
+  NO_PHONE: 'Đơn không còn SĐT',
+  CLOSED: 'Đơn đã đóng (huỷ, hoàn hay xoá)',
+  NO_CARRIER: 'Đơn không có vận đơn',
+  BEFORE_SINCE: 'Đơn tạo trước mốc bắt đầu tích điểm',
+  TOO_OLD: 'Đơn quá tuổi tối đa để tích điểm',
+  ZERO_POINTS: 'Đơn tính ra 0 điểm',
+};
 
 /** Đơn có `partner.extend_code` (đã có vận đơn) hoặc status 16. Đọc lỏng: payload sai kiểu coi như không có. */
 export function chatCarrierOk(payload: Record<string, unknown> | null | undefined, pancakeStatus: number | null): boolean {
@@ -79,6 +92,7 @@ export function evaluateChatClaim(f: ChatClaimFacts): ChatDecision {
 
   let reviewReason: string | null = null;
   if (points === null) reviewReason = 'Chưa tính được tiền hàng của đơn';
+  else if (f.member?.phoneStale) reviewReason = 'SĐT xác minh đã cũ, cần kiểm người nhận';
   else if (f.member?.isStaff) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
   else if (f.phoneIsStaff) reviewReason = 'SĐT trên đơn trùng SĐT của một nhân viên Tubu Tree, cần người khác duyệt';
   else if (f.creatorIsMember) reviewReason = 'Người tạo đơn trên Pancake chính là thành viên nhận điểm, cần người khác duyệt';
@@ -137,10 +151,18 @@ export function verifiedMemberPhone(
   u: { phone: string | null; phoneVerifiedAt: Date | null; zaloId: string | null; isBlocked: boolean; mergedIntoId: string | null },
   verify: { now: Date; maxDays: number },
 ): string | null {
+  const phone = linkableMemberPhone(u);
+  return phone && phoneVerifiedFresh(u.phoneVerifiedAt, verify) ? phone : null;
+}
+
+/**
+ * SĐT của thành viên mà claim được phép GẮN vào (đủ điều kiện làm người nhận), không xét độ mới của mốc xác minh: số cũ vẫn gắn
+ * claim vào thành viên đó nhưng chờ nhân viên kiểm (`ChatMemberFacts.phoneStale`), thay vì để claim mất chủ rồi hết hạn giữ.
+ */
+export function linkableMemberPhone(u: { phone: string | null; zaloId: string | null; isBlocked: boolean; mergedIntoId: string | null }): string | null {
   if (!u.phone || !LOCAL_MOBILE.test(u.phone)) return null;
   if (!u.zaloId || u.zaloId.startsWith('guest_')) return null;
   if (u.isBlocked || u.mergedIntoId) return null;
-  if (!phoneVerifiedFresh(u.phoneVerifiedAt, verify)) return null;
   return u.phone;
 }
 

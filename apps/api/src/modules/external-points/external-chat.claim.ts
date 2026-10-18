@@ -7,10 +7,9 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import { recordClaimEvent, canonicalUserId } from './external-claim-audit';
 import type { ClaimNotifier } from './external-claim-status';
 import { loadChatConfig, loadStaffMap } from './external-chat.config';
-import { chatCarrierOk, creatorStaffUserId, evaluateChatClaim, holdUntilOf, phoneVerifiedFresh, releaseAtOf, verifiedMemberPhone } from './external-chat.rules';
+import { CHAT_SKIP_TEXT, chatCarrierOk, creatorStaffUserId, evaluateChatClaim, holdUntilOf, linkableMemberPhone, phoneVerifiedFresh, releaseAtOf } from './external-chat.rules';
 import { pancakeCreatorId, pancakeCreatorRefs } from './external-order.mapper';
 import { settlePoints } from './external-claim.rules';
-import { claimPoints } from './external-points-rate';
 
 const logger = new Logger('ExternalChat');
 type Tx = Prisma.TransactionClient;
@@ -43,6 +42,8 @@ export interface ResolvedMember {
   id: string;
   isStaff: boolean;
   tierMultiplier: number;
+  /** Mốc xác minh SĐT đã cũ hay chưa có: vẫn là người nhận nhưng claim chờ kiểm (không tự cộng). */
+  phoneStale: boolean;
 }
 
 const MEMBER_SELECT = { id: true, phone: true, phoneVerifiedAt: true, zaloId: true, isBlocked: true, mergedIntoId: true, role: true, tier: { select: { pointMultiplier: true } } } as const;
@@ -57,7 +58,9 @@ export const tierMultiplierOf = (u: { tier: { pointMultiplier: Prisma.Decimal | 
 
 /**
  * Thành viên có SĐT trùng, đã quy về tài khoản gốc theo `mergedIntoId` (không khoá). null khi chưa có, hoặc tài khoản không đủ điều
- * kiện nhận điểm: số chưa xác minh, khách vãng lai, bị khoá. Tài khoản bị khoá coi như chưa là thành viên: điểm được giữ, không mất.
+ * kiện nhận điểm: số sai dạng, khách vãng lai, bị khoá. Tài khoản bị khoá coi như chưa là thành viên: điểm được giữ, không mất.
+ * Mốc xác minh quá cũ KHÔNG làm mất người nhận (claim sẽ mất chủ rồi hết hạn giữ dù Mini App không bao giờ xin lại số): trả về với
+ * `phoneStale`, claim gắn thành viên đó và chờ nhân viên kiểm.
  */
 export async function resolveMemberByPhone(tx: Pick<Tx, 'user'>, phone: string, verify: PhoneVerify): Promise<ResolvedMember | null> {
   const u = await tx.user.findUnique({ where: { phone }, select: MEMBER_SELECT });
@@ -66,9 +69,14 @@ export async function resolveMemberByPhone(tx: Pick<Tx, 'user'>, phone: string, 
   const root = rootId === u.id ? u : await tx.user.findUnique({ where: { id: rootId }, select: MEMBER_SELECT });
   if (!root) return null;
   // Dòng đã gộp thì số của nó đã chuyển về tài khoản gốc; dòng chưa gộp phải là số đã xác minh.
-  if (rootId === u.id && verifiedMemberPhone(u, verify) !== phone) return null;
-  if (root.isBlocked || !root.zaloId || root.zaloId.startsWith('guest_') || !phoneVerifiedFresh(root.phoneVerifiedAt, verify)) return null;
-  return { id: root.id, isStaff: root.role === 'STAFF' || root.role === 'ADMIN', tierMultiplier: tierMultiplierOf(root) };
+  if (rootId === u.id && linkableMemberPhone(u) !== phone) return null;
+  if (root.isBlocked || !root.zaloId || root.zaloId.startsWith('guest_')) return null;
+  return {
+    id: root.id,
+    isStaff: root.role === 'STAFF' || root.role === 'ADMIN',
+    tierMultiplier: tierMultiplierOf(root),
+    phoneStale: !phoneVerifiedFresh(root.phoneVerifiedAt, verify),
+  };
 }
 
 /** SĐT thuộc một nhân viên: tài khoản STAFF/ADMIN, hoặc grant quyền còn hiệu lực (nhân viên chưa đăng nhập lần nào vẫn có grant theo SĐT). */
@@ -275,7 +283,7 @@ export interface LinkableUser {
 const LINKABLE_USER_SELECT = { id: true, phone: true, phoneVerifiedAt: true, zaloId: true, isBlocked: true, mergedIntoId: true } as const;
 
 /**
- * Gắn mọi claim PHONE chưa có chủ của SĐT này (đã xác minh, còn hạn) vào thành viên. Chạy được song song từ đăng nhập và cron: khoá
+ * Gắn mọi claim PHONE chưa có chủ của SĐT này vào thành viên (đủ điều kiện nhận; mốc xác minh cũ thì claim gắn nhưng vào REVIEW). Chạy được song song từ đăng nhập và cron: khoá
  * advisory theo SĐT xếp hàng, mỗi claim chỉ gắn một lần nhờ điều kiện `userId IS NULL` trong UPDATE, nên hai phiên cùng SĐT không gắn
  * đôi, không báo đôi. Claim tìm theo `orderPhone` (SĐT lúc tạo claim), không theo SĐT hiện trên đơn (nhân viên sửa được).
  *
@@ -291,7 +299,7 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
     const cfg = await loadChatConfig(deps.config);
     if (!cfg.enabled) return none;
     const verify: PhoneVerify = { now, maxDays: cfg.phoneVerifiedMaxDays };
-    const phone = verifiedMemberPhone(user, verify);
+    const phone = linkableMemberPhone(user);
     if (!phone) return none;
     // Đọc nhanh không khoá: phần lớn lượt đăng nhập/refresh không có claim chờ nên không phải mở transaction.
     const waiting = await prisma.externalPointsClaim.findFirst({
@@ -313,10 +321,12 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
           take: 100,
           select: { id: true, externalOrderId: true, creatorRef: true },
         });
+        // Khoá người tạo của MỌI claim ngay sau khoá SĐT, theo thứ tự chữ: lấy dần theo claim thì hai lần liên kết (SĐT khác nhau, cùng
+        // hai người tạo theo thứ tự ngược nhau) khoá ngược chiều và deadlock.
+        for (const ref of [...new Set(claims.map((c) => c.creatorRef).filter((r): r is string => !!r))].sort()) await advisoryCreatorLock(tx, ref);
         const ids: string[] = [];
         let pendingPoints = 0;
         for (const c of claims) {
-          if (c.creatorRef) await advisoryCreatorLock(tx, c.creatorRef);
           await tx.$queryRaw`SELECT "id" FROM "external_orders" WHERE "id" = ${c.externalOrderId} FOR SHARE`;
           await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${c.id} FOR UPDATE`;
           const fresh = await tx.externalPointsClaim.findUnique({ where: { id: c.id }, include: { externalOrder: true } });
@@ -355,9 +365,10 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
             creatorIsMember,
             creatorMonthPoints: fresh.creatorRef ? await creatorMonthPoints(tx, { creatorRef: fresh.creatorRef, since, excludeClaimId: fresh.id }) : null,
           });
-          // SKIP (đơn đã đóng, quá tuổi...): các luồng huỷ/hoàn tự xử lý, liên kết không đổi quyết định cũ.
-          const newReason = decision.kind === 'CLAIM' ? decision.reviewReason : null;
-          const newPoints = decision.kind === 'CLAIM' ? decision.points : (claimPoints(order.goodsValue, Number(fresh.ratePct), member.tierMultiplier) ?? fresh.points);
+          // SKIP (đơn đã đóng, quá tuổi, không vận đơn...): không còn đủ điều kiện như lúc tạo, nên người kiểm quyết thay vì cộng thô
+          // bỏ qua các luật còn lại (người tạo đơn, trần). Điểm giữ nguyên mức đã kiểm.
+          const newReason = decision.kind === 'CLAIM' ? decision.reviewReason : `Kiểm lại khi liên kết SĐT: ${CHAT_SKIP_TEXT[decision.reason]}`;
+          const newPoints = decision.kind === 'CLAIM' ? decision.points : fresh.points;
           const toReview = fresh.state === 'REVIEW' || newReason !== null;
           const state = toReview ? 'REVIEW' : 'PENDING';
           const reviewReason = fresh.state === 'REVIEW' ? fresh.reviewReason : newReason;
@@ -408,14 +419,13 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
 
 /**
  * Cron: gom các SĐT đang có claim chờ mà đã có thành viên đủ điều kiện (thành viên đăng ký trước khi claim tới, hoặc đăng nhập đã lỡ)
- * rồi liên kết. Chỉ lấy thành viên có thể nhận (không bị khoá/gộp/vãng lai, SĐT còn xác minh) và claim còn liên kết được (chưa quá hạn
+ * rồi liên kết. Chỉ lấy thành viên có thể nhận (không bị khoá/gộp/vãng lai; SĐT xác minh cũ vẫn lấy, claim sẽ vào REVIEW) và claim còn liên kết được (chưa quá hạn
  * giữ, SĐT đơn chưa bị đổi), lô xếp theo claim chờ lâu nhất, để claim không thể liên kết không chiếm chỗ mãi. Chạy song song với đăng nhập an toàn nhờ khoá SĐT và điều kiện `userId IS NULL`.
  */
 export async function linkWaitingClaims(prisma: PrismaService, deps: ChatDeps, now: Date = new Date(), limit: number = SWEEP_BATCH): Promise<number> {
   if (!deps.config) return 0;
   const cfg = await loadChatConfig(deps.config);
   if (!cfg.enabled) return 0;
-  const oldest = new Date(now.getTime() - cfg.phoneVerifiedMaxDays * 864e5);
   const rows = await prisma.$queryRaw<{ id: string }[]>`
     SELECT u."id" FROM "external_points_claims" c
       JOIN "users" u ON u."phone" = c."orderPhone"
@@ -424,7 +434,6 @@ export async function linkWaitingClaims(prisma: PrismaService, deps: ChatDeps, n
        AND NOT (c."state" = 'HELD_NO_MEMBER' AND (c."holdUntil" IS NULL OR c."holdUntil" <= ${now}))
        AND (o."phone" IS NULL OR o."phone" = c."orderPhone" OR c."decidedById" IS NOT NULL)
        AND u."isBlocked" = false AND u."mergedIntoId" IS NULL AND u."zaloId" IS NOT NULL AND u."zaloId" NOT LIKE 'guest!_%' ESCAPE '!'
-       AND u."phoneVerifiedAt" IS NOT NULL AND u."phoneVerifiedAt" >= ${oldest}
      GROUP BY u."id" ORDER BY MIN(c."createdAt") ASC, u."id" ASC
      LIMIT ${limit}`;
   let linked = 0;

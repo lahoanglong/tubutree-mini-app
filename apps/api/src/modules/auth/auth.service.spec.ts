@@ -219,15 +219,16 @@ describe('AuthService.loginWithZaloMiniApp (phone)', () => {
 });
 
 describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedAt) cho điểm đơn chat', () => {
-  function mk(existing: Record<string, unknown> | null, owner: Record<string, unknown> | null, zaloPhone: string | null) {
+  function mk(existing: Record<string, unknown> | null, owner: Record<string, unknown> | null, zaloPhone: string | null, grant: Record<string, unknown> | null = null) {
     const update = jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => ({ ...USER, ...(existing ?? {}), ...data }));
     // Thứ tự findUnique: theo zaloId (user), rồi phoneIfFree tra chủ của SĐT.
     const findUnique = jest.fn().mockImplementation(({ where }: { where: Record<string, unknown> }) => (where['zaloId'] ? existing : owner));
-    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique, update, create: jest.fn() } } as unknown as PrismaService;
+    const roleGrant = { findFirst: jest.fn().mockResolvedValue(grant) };
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique, update, create: jest.fn() }, roleGrant } as unknown as PrismaService;
     const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
     const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
     const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue(zaloPhone) } as unknown as ZaloService;
-    return { svc: new AuthService(prisma, jwt, config, zalo, mkRbac()), update };
+    return { svc: new AuthService(prisma, jwt, config, zalo, mkRbac()), update, roleGrant };
   }
 
   it('Zalo trả đúng số đang lưu: chỉ làm mới phoneVerifiedAt', async () => {
@@ -260,6 +261,34 @@ describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedA
     const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, null);
     await svc.loginWithZaloMiniApp('c', 'at');
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['tài khoản STAFF', { role: 'STAFF' }, null],
+    ['tài khoản ADMIN', { role: 'ADMIN' }, null],
+    ['số cũ hoặc số mới đang có grant quyền', {}, { phone: '0901234567' }],
+  ])('đổi số bị chặn: %s chỉ ghi log, không đổi số và không đổi mốc xác minh', async (_name, patch, grant) => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567', phoneVerifiedAt: new Date('2026-01-01'), ...patch }, null, '0987654321', grant);
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản bị khoá: đăng nhập bị từ chối, không đổi số', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567', isBlocked: true }, null, '0987654321');
+    await expect(svc.loginWithZaloMiniApp('c', 'at', 'pt')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('số cũ trùng số Zalo trả (tài khoản STAFF): vẫn làm mới mốc xác minh, không đổi số', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', role: 'STAFF', phone: '0901234567' }, null, '0901234567');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update.mock.calls[0][0].data).toEqual({ phoneVerifiedAt: expect.any(Date) });
+  });
+
+  it('tài khoản CUSTOMER không bị chặn: kiểm grant theo cả số cũ lẫn số mới trong một truy vấn', async () => {
+    const { svc, roleGrant } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(roleGrant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { phone: { in: ['0901234567', '0987654321'] }, revokedAt: null } }));
   });
 
   it('số mới bị người khác lấy giữa lúc kiểm và lúc ghi (P2002): vẫn đăng nhập, giữ số cũ', async () => {
@@ -400,6 +429,7 @@ function makeGuestMergeFixture(opts: {
       }),
     },
     cartItem: {},
+    roleGrant: { findFirst: jest.fn(async () => null) },
     address: {
       count: jest.fn(async ({ where }: { where: { userId: string; isDefault: boolean } }) =>
         addresses.filter((a) => a.userId === where.userId && a.isDefault === where.isDefault).length,
@@ -571,6 +601,22 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
     await expect(svc.ensurePhoneForCurrentUser('real1', 'code', 'at')).rejects.toBeInstanceOf(ConflictException);
     // Không có gộp/đổi nào xảy ra — user vẫn y nguyên.
     expect(fixture.state.users.get('real1')!.zaloId).toBe('z-real-old');
+  });
+
+  it('gộp khách vào user thật: số Zalo vừa bị tài khoản khác lấy (P2002) thì bỏ qua phần số, lần gộp vẫn thành công', async () => {
+    const TARGET = { id: 'target1', zaloId: 'z-real-existing', fullName: 'Người Thật', phone: '0933333333', avatarUrl: null, role: 'CUSTOMER', isBlocked: false, pointsBalance: 0, walletBalance: 0, coinsBalance: 0, cashbackPending: 0, referralCode: 'RT1' };
+    const fixture = makeGuestMergeFixture({ guest: GUEST, target: TARGET });
+    const realUpdate = (fixture.prisma as unknown as { user: { update: jest.Mock } }).user.update;
+    const impl = realUpdate.getMockImplementation()!;
+    realUpdate.mockImplementation(async (args: { data: Record<string, unknown> }) => {
+      if (args.data['phone'] !== undefined) throw new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+      return impl(args);
+    });
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue('0944444444') };
+    const res = await makeEnsurePhoneSvc(fixture, zalo).ensurePhoneForCurrentUser('guest1', 'code', 'at', 'ptoken');
+    expect(res.user.id).toBe('target1');
+    expect(fixture.state.users.get('target1')!.phone).toBe('0933333333');
+    expect(fixture.state.users.get('guest1')!.mergedIntoId).toBe('target1');
   });
 
   describe('khách + zaloId/SĐT đã thuộc một user THẬT khác có từ trước → GỘP (không mất giỏ/địa chỉ/điểm/đơn của khách)', () => {

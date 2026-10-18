@@ -6,7 +6,7 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import type { ClaimNotifier } from './external-claim-status';
-import { advisoryPhoneLock, chatMonthPoints, last3, phoneDiffers, tierMultiplierOf } from './external-chat.claim';
+import { advisoryPhoneLock, last3, phoneDiffers, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, type ChatConfig } from './external-chat.config';
 import { holdUntilOf, releaseAtOf } from './external-chat.rules';
 import { startOfVnMonth } from '../../common/vn-time';
@@ -91,6 +91,14 @@ export async function releaseClaim(
     }
     if (!dueDelivered && !duePartial) return skipped;
 
+    if (chat && !row.userId && !row.orderPhone) {
+      // Chưa có chủ mà SĐT lúc tạo claim cũng đã bị xoá (retention, vd đơn bị huỷ rồi giao lại): không còn cách nào liên kết nên không
+      // giữ chờ rồi để hết hạn mất điểm; người kiểm quyết.
+      const reason = 'Claim chưa có chủ và không còn SĐT để liên kết, cần nhân viên kiểm';
+      await tx.externalPointsClaim.updateMany({ where: { id: row.id, state: 'PENDING', userId: null }, data: { state: 'REVIEW', reviewReason: reason } });
+      await recordClaimEvent(tx, { claimId: row.id, action: 'TO_REVIEW', fromState: 'PENDING', toState: 'REVIEW', note: reason, orderStatus: order.status });
+      return { outcome: 'TO_REVIEW' as const, userId: null, points: 0, code, kind: 'PHONE' as const };
+    }
     if (chat && !row.userId) {
       // Chưa có thành viên: giữ điểm tới holdUntil (mốc cộng + loyalty.chat_unclaimed_hold_days), không ghi sổ.
       const dueAt = dueDelivered && order.deliveredAt ? releaseAtOf(order.deliveredAt, { pendingDays: opts.pendingDays }) : (row.releaseAt ?? now);
@@ -120,22 +128,27 @@ export async function releaseClaim(
     let finalPoints = points ?? 0;
     let settleNote: string | null = null;
     if (!reviewReason && points !== null && points > row.points) {
-      // Tiền hàng tăng sau lúc claim qua kiểm: vượt ngưỡng tự duyệt thì người kiểm lại; chỉ vượt trần tháng thì cộng ở mức chốt, không dưới điểm đã kiểm.
-      const reviewAbove = chat ? opts.chat!.reviewAboveVnd : (opts.reviewAboveVnd ?? 2_000_000);
-      const cap = chat ? opts.chat!.monthlyPointsCap : (opts.monthlyPointsCap ?? 200_000);
-      if ((order.goodsValue ?? 0) > reviewAbove) {
-        reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
+      if (chat) {
+        // Điểm lúc cộng lớn hơn điểm đã qua kiểm (tiền hàng hay hạng tăng): các luật chỉ kiểm lúc tạo/liên kết (trần theo người tạo,
+        // người nhận, ngưỡng) không thể chạy lại đầy đủ ở đây, nên người kiểm quyết thay vì chốt tự động.
+        reviewReason = 'Tiền hàng tăng sau khi kiểm (điểm tính lại lớn hơn điểm đã duyệt), cần nhân viên kiểm';
       } else {
-        const others = chat
-          ? await chatMonthPoints(tx, { phone: row.orderPhone ?? order.phone, userId, since: startOfVnMonth(row.createdAt), excludeClaimId: row.id })
-          : ((
+        // Tiền hàng tăng sau lúc claim qua kiểm: vượt ngưỡng tự duyệt thì người kiểm lại; chỉ vượt trần tháng thì cộng ở mức chốt, không dưới điểm đã kiểm.
+        const reviewAbove = opts.reviewAboveVnd ?? 2_000_000;
+        const cap = opts.monthlyPointsCap ?? 200_000;
+        if ((order.goodsValue ?? 0) > reviewAbove) {
+          reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
+        } else {
+          const others =
+            (
               await tx.externalPointsClaim.aggregate({
                 where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
                 _sum: { points: true },
               })
-            )._sum.points ?? 0);
-        finalPoints = settlePoints({ newPoints: points, checkedPoints: row.points, others, cap });
-        if (finalPoints < points) settleNote = `Chốt theo trần tháng: ${finalPoints} thay vì ${points} điểm`;
+            )._sum.points ?? 0;
+          finalPoints = settlePoints({ newPoints: points, checkedPoints: row.points, others, cap });
+          if (finalPoints < points) settleNote = `Chốt theo trần tháng: ${finalPoints} thay vì ${points} điểm`;
+        }
       }
     }
     if (reviewReason) {
