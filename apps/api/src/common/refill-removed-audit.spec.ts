@@ -76,7 +76,8 @@ describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)',
     for (const gone of ['refill_pickup_locations', 'db.refill_location', 'Đổi vỏ chai']) expect(r).not.toContain(gone);
     for (const stale of ['năm cái của đợt', 'năm cái đó', 'tối đa năm cái', 'năm migration của đợt', 'năm tên này']) expect(r).not.toContain(stale);
     expect(r).not.toContain('không bao giờ chạy trong CI');
-    for (const must of ['20261020000000_waste_exchange', 'db.waste_point', 'points_transactions_recycle_ref_key', 'points_transactions_recycle_reverse_key', 'points_transactions_gift_refund_key', 'waste_points_one_warehouse_key', 'waste_point_staff_one_owner_key', 'verify-full.sh', 'khởi động lại API', 'sáu tên này', 'hashtext(id) IN (731001,731002,731003,731004)', '.github/workflows/race.yml', 'Check "Race suite" đỏ trên PR phát hành là chặn phát hành']) expect(r).toContain(must);
+    for (const must of ['20261020000000_waste_exchange', 'db.waste_point', 'points_transactions_recycle_ref_key', 'points_transactions_recycle_reverse_key', 'points_transactions_gift_refund_key', 'waste_points_one_warehouse_key', 'waste_point_staff_one_owner_key', 'verify-full.sh', 'khởi động lại API', 'sáu tên này', 'hashtext(id) IN (731001,731002,731003,731004)', '.github/workflows/race.yml', 'Check "Race suite" đỏ trên PR phát hành là chặn phát hành', 'kho đang hoạt động chưa có số điện thoại', 'khoá `waste.lane_mailin_enabled` vắng cũng tính là bật', 'Quản trị, Khách hàng, Đổi rác, Điểm nhận']) expect(r).toContain(must);
+    expect(r).not.toMatch(/Quản trị, Đổi rác, Điểm nhận/);
   });
   it('playbook: Phần 7 là Đổi rác, không còn bảng Refill hay ô tick tái chế cũ', () => {
     const p = doc('docs/launch/pilot-order-playbook.md');

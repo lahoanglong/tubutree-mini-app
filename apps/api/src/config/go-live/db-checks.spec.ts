@@ -201,7 +201,7 @@ describe('evaluateDb', () => {
         const r = W({ totalPoints: 3, activeWarehouses: 0 }, { 'waste.enabled': true }, phase);
         expect(r.status).toBe('FAIL');
         expect(r.detail).toContain('chưa có kho');
-        expect(r.hint.length).toBeGreaterThan(10);
+        expect(r.hint).toContain('Quản trị, Khách hàng, Đổi rác, Điểm nhận');
       }
     });
     it('waste.enabled bật và có một kho ACTIVE: PASS, nêu số kho và số điểm', () => {

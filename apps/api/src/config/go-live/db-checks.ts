@@ -220,7 +220,7 @@ function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
       id,
       title,
       'waste.enabled đang bật nhưng chưa có kho (WAREHOUSE) nào đang hoạt động',
-      'Thêm một kho đang hoạt động ở Quản trị, Đổi rác, Điểm nhận; nếu chưa kịp thì tắt waste.enabled ở Quản trị, Cấu hình, để khách không gửi được rác khi chưa có nơi nhận.',
+      'Thêm một kho đang hoạt động ở Quản trị, Khách hàng, Đổi rác, Điểm nhận; nếu chưa kịp thì tắt waste.enabled ở Quản trị, Cấu hình, để khách không gửi được rác khi chưa có nơi nhận.',
     );
   }
 
