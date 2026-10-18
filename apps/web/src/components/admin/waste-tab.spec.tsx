@@ -49,6 +49,8 @@ async function mount(ui: React.ReactElement, overrides: { overview?: Route; conf
     '/admin/waste/reports/monthly': { body: 'a,b' },
     '/admin/waste/items': { body: [] },
     '/admin/waste/points': { body: [] },
+    '/admin/waste/unmatched': { body: [] },
+    '/admin/waste/requests': { body: { rows: [], nextCursor: null } },
     '/admin/config': overrides.config ?? { body: CONFIG_OFF },
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -161,6 +163,7 @@ describe('WasteTab', () => {
     expect(byText(c, 'button', 'Yêu cầu')!.getAttribute('aria-pressed')).toBe('true');
     expect(api.calls.some((x) => x.url.includes('/admin/waste/overview'))).toBe(false);
     expect(api.calls.some((x) => x.url.includes('/admin/config'))).toBe(false);
+    expect(api.calls.filter((x) => x.url.includes('/admin/waste/requests?filter=TO_COUNT'))).toHaveLength(1);
     expect(c.textContent).not.toContain('Hàng nhận');
     expect(c.textContent).not.toContain('Cấu hình chung');
     expect(c.textContent).not.toContain('Tải CSV');
