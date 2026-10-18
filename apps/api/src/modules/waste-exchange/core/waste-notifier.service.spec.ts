@@ -59,7 +59,16 @@ describe('WasteNotifierService (spec 10.2, 11.6; registry 4.4)', () => {
 
   it('pins the rejection and expiry sentences (spec 4.6, 14.1)', () => {
     expect(WASTE_REJECTION_REASON_TEXT).toEqual({ WET: 'hàng bị ướt', DIRTY: 'hàng còn bẩn', FOREIGN_OBJECT: 'có lẫn vật lạ', WRONG_TYPE: 'không đúng loại hàng Tubu nhận', DAMAGED: 'hàng bị hỏng', NOT_ACCEPTED: 'có món Tubu không nhận', OVERSIZE: 'kiện vượt giới hạn cân nặng hoặc kích thước', HAZARDOUS: 'có vật không nhận', UNPAID_POSTAGE: 'kiện còn cước phải trả khi nhận', OTHER: 'lý do khác, Tubu đã ghi chú trong yêu cầu' });
-    expect(WASTE_EXPIRED_DETAIL_TEXT).toEqual({ HOLD_EXPIRED: 'hết hạn giữ chỗ, phần trần của bạn đã được trả lại', PICKUP_NO_SHOW: 'kho chưa nhận được rác thu kèm đơn', PICKUP_NOT_DISPATCHED: 'Tubu chưa sắp xếp được người đến lấy rác thu kèm đơn, xin lỗi bạn. Bạn có thể gửi về kho Tubu ở lần sau', LOST: 'đã đóng vì kiện thất lạc trên đường gửi', LOST_AT_WAREHOUSE: 'kiện bị thất lạc tại kho Tubu, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ', SHIP_LOCKED: 'đường gửi kho và thu kèm đơn đang tạm dừng', ORDER_CANCELLED: 'đơn mua gắn kèm đã bị huỷ' });
+    expect(WASTE_EXPIRED_DETAIL_TEXT).toEqual({ HOLD_EXPIRED: 'hết hạn giữ chỗ, phần trần của bạn đã được trả lại', PICKUP_NO_SHOW: 'kho chưa nhận được rác thu kèm đơn', PICKUP_NOT_DISPATCHED: 'Tubu chưa sắp xếp được người đến lấy rác thu kèm đơn, xin lỗi bạn. Bạn có thể gửi về kho Tubu ở lần sau', LOST: 'kiện thất lạc trên đường gửi, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ', LOST_AT_WAREHOUSE: 'kiện bị thất lạc tại kho Tubu, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ', SHIP_LOCKED: 'đường gửi kho và thu kèm đơn đang tạm dừng', ORDER_CANCELLED: 'đơn mua gắn kèm đã bị huỷ' });
+  });
+
+  it('renders the LOST close inside the seed template as one sentence with one verb and the contact step (finding 11)', () => {
+    const seed = readFileSync(join(__dirname, '../../../../prisma/seed.ts'), 'utf-8');
+    const template = /code: 'WASTE_REQUEST_EXPIRED'[^\n]*bodyTemplate: '([^']+)'/u.exec(seed)?.[1] ?? '';
+    const rendered = template.replace('{{code}}', 'TR-ABCDE').replace('{{detail}}', WASTE_EXPIRED_DETAIL_TEXT.LOST);
+    expect(rendered).toBe('Yêu cầu TR-ABCDE đã đóng: kiện thất lạc trên đường gửi, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ.');
+    expect(rendered.match(/đã đóng/gu)).toHaveLength(1);
+    expect(rendered).not.toContain('..');
   });
 
   it('stripTrailingStop removes trailing dots and spaces only', () => {
