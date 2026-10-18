@@ -23,6 +23,14 @@ describe('resolveAttribution với gian hàng bị ẩn và người giới thi�
     expect(findFirst.mock.calls[0][0].where).toEqual({ ...publicStorefrontWhere(VISIBILITY), OR: [{ slug: 'linh' }, { subdomain: 'linh' }, { customDomain: 'linh' }] });
   });
 
+  it('không có slug nào để tra thì không đọc điều kiện hiển thị và không truy vấn gian hàng', async () => {
+    const { prisma, affiliate, findFirst } = setup();
+    const out = await resolveAttribution(prisma, affiliate, 'buyer', {});
+    expect(out).toEqual({ referrerUserId: null, storefront: null });
+    expect(affiliate.storefrontVisibility).not.toHaveBeenCalled();
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
   it('gian hàng ẩn → không gian hàng, không người giới thiệu từ chủ gian hàng', async () => {
     const { prisma, affiliate } = setup({ storefront: null });
     const out = await resolveAttribution(prisma, affiliate, 'buyer', { storefrontSlug: 'linh' });

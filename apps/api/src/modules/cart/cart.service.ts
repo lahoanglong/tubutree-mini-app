@@ -273,7 +273,7 @@ export class CartService {
     storefrontSlug: string | undefined,
   ) {
     const nonFlash = lines.filter((l) => !l.isFlash);
-    const storefront = await resolvePublishedStorefront(this.prisma, await loadPublicVisibility(this.config), storefrontSlug);
+    const storefront = storefrontSlug ? await resolvePublishedStorefront(this.prisma, await loadPublicVisibility(this.config), storefrontSlug) : null;
     const combo = storefront
       ? await this.combo.computeForStorefront(
           storefront.slug,
