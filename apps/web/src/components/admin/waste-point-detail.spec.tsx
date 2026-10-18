@@ -258,6 +258,21 @@ describe('WastePointDetail', () => {
     expect(callsTo(api, 'POST', '/admin/waste/points/p1/perk/clear')).toHaveLength(1);
   });
 
+  it('gỡ ưu đãi đang hiện: nói rõ ưu đãi đang chờ duyệt cũng bị bỏ, không nhắc khi không có', async () => {
+    const both = await mount(wastePoint({ name: 'Cửa hàng An', perkText: 'Tặng túi vải', perkPendingText: 'Giảm 10%' }));
+    click(btn(both.c, 'Gỡ ưu đãi đang hiện'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Ưu đãi "Tặng túi vải" sẽ không còn hiện cho khách ở Cửa hàng An. Ưu đãi đang chờ duyệt "Giảm 10%" cũng bị bỏ.');
+    answerConfirm(false);
+    await flush();
+    const only = await mount(wastePoint({ name: 'Cửa hàng An', perkText: 'Tặng túi vải', perkPendingText: null }));
+    click(btn(only.c, 'Gỡ ưu đãi đang hiện'));
+    await flush();
+    expect(confirmDialog()!.textContent).not.toContain('chờ duyệt');
+    answerConfirm(false);
+    await flush();
+  });
+
   it('ưu đãi đã duyệt hiện chữ, chưa có thì ghi Chưa có và không có nút duyệt', async () => {
     const a = await mount(wastePoint({ perkText: 'Tặng túi vải' }));
     expect(a.c.textContent).toContain('Tặng túi vải');

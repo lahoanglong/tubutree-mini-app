@@ -197,6 +197,9 @@ export const wasteActorRoleLabel = (role: string): string =>
   Object.prototype.hasOwnProperty.call(WASTE_ACTOR_ROLE_LABELS, role) ? WASTE_ACTOR_ROLE_LABELS[role as WasteActorRole] : WASTE_EVENT_OTHER_LABEL;
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const record = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {});
+const trackingSide = (o: Record<string, unknown>): string =>
+  [o.carrier, o.trackingCode].filter((x): x is string => typeof x === 'string' && x !== '').join(' · ');
 const lookup = (map: Record<string, string>, v: unknown): string | null =>
   typeof v === 'string' && Object.prototype.hasOwnProperty.call(map, v) ? map[v]! : null;
 
@@ -206,7 +209,7 @@ const TYPED_REASON_KINDS: ReadonlySet<string> = new Set(['POINTS_REVERSED', 'REQ
 /** Only fields whose meaning is known are rendered; ids, device data and before/after dumps are dropped. */
 export function wasteEventMetaLines(kind: string, meta: Record<string, unknown> | null): string[] {
   if (meta === null) return [];
-  const after = typeof meta.after === 'object' && meta.after !== null ? (meta.after as Record<string, unknown>) : {};
+  const after = record(meta.after);
   const lines: string[] = [];
   // POINTS_REVERSED also stores the original credit in meta.pointsAwarded; showing it there would read as a new credit.
   const awarded = kind === 'REQUEST_CONFIRMED' ? (num(meta.pointsAwarded) ?? num(after.pointsAwarded)) : null;
@@ -230,6 +233,14 @@ export function wasteEventMetaLines(kind: string, meta: Record<string, unknown> 
     lines.push(`Lý do: ${meta.reason.trim()}`);
   }
   if (typeof meta.rejectionNote === 'string' && meta.rejectionNote.trim() !== '') lines.push(`Ghi chú: ${meta.rejectionNote.trim()}`);
+  if (kind === 'TRACKING_SET' || kind === 'TRACKING_EDITED') {
+    const before = record(meta.before);
+    const from = trackingSide(before);
+    const to = trackingSide(after);
+    const changed = before.trackingCode !== after.trackingCode;
+    if (to !== '' && changed) lines.push(typeof before.trackingCode === 'string' && before.trackingCode !== '' ? `Mã vận đơn: ${from} → ${to}` : `Mã vận đơn: ${to}`);
+  }
+  if (kind === 'PARCEL_RECEIVED' && meta.trackingMismatch === true) lines.push('Mã vận đơn trên kiện khác mã khách nhập');
   return lines;
 }
 

@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
@@ -8,8 +8,9 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { WasteAccessService } from '../../src/modules/waste-exchange/core/waste-access.service';
 import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-config.service';
 import { WasteNotifierService } from '../../src/modules/waste-exchange/core/waste-notifier.service';
+import { WasteDeskService } from '../../src/modules/waste-exchange/receiving/waste-desk.service';
 import { WasteAdminPointsService } from '../../src/modules/waste-exchange/catalog/waste-admin-points.service';
-import { createUser, deleteItData, warmPool } from './helpers';
+import { createUser, deleteItData, pinConfig, warmPool } from './helpers';
 import { cleanupWaste, createWastePoint, raceWithHold } from './fixtures/waste-fixtures';
 
 const phone = () => '09' + String(randomInt(10_000_000, 99_999_999));
@@ -31,6 +32,8 @@ describe('waste-admin-point-staff race (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let svc: WasteAdminPointsService;
+  let desk: WasteDeskService;
+  let restoreConfig: () => Promise<void>;
   let access: WasteAccessService;
   const pointIds: string[] = [];
   const userIds: string[] = [];
@@ -44,6 +47,7 @@ describe('waste-admin-point-staff race (real Postgres)', () => {
         WasteConfigService,
         WasteAccessService,
         WasteAdminPointsService,
+        WasteDeskService,
         { provide: WasteNotifierService, useValue: { perkReviewed: jest.fn() } },
       ],
     }).compile();
@@ -51,10 +55,14 @@ describe('waste-admin-point-staff race (real Postgres)', () => {
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     svc = moduleRef.get(WasteAdminPointsService);
+    desk = moduleRef.get(WasteDeskService);
+    restoreConfig = await pinConfig(prisma, 'waste.enabled', true);
+    (moduleRef.get(SystemConfigService) as unknown as { cache: Map<string, unknown> }).cache.clear();
     access = moduleRef.get(WasteAccessService);
   });
 
   afterAll(async () => {
+    await restoreConfig?.();
     await cleanupWaste(prisma, { pointIds, storefrontIds });
     await deleteItData(prisma, { userIds });
     await moduleRef?.close();
@@ -180,6 +188,45 @@ describe('waste-admin-point-staff race (real Postgres)', () => {
     expect((await prisma.wastePoint.findUniqueOrThrow({ where: { id: point.id } })).status).toBe('ACTIVE');
     expect(await activeOwners(point.id)).toBe(0);
     expect((await access.availablePointIds(prisma, [point.id])).has(point.id)).toBe(false);
+    noDeadlock(results);
+  });
+
+  async function ownerOfPointWithPerk() {
+    const a = await admin();
+    const { o, point } = await pointWithOwner();
+    await prisma.wastePoint.update({ where: { id: point.id }, data: { status: 'ACTIVE', perkText: 'Ưu đãi cũ' } });
+    return { a, o, point };
+  }
+
+  it('remove owner then the owner submits a perk: Forbidden, the perk fields stay null and no PERK_SUBMITTED event', async () => {
+    const { a, o, point } = await ownerOfPointWithPerk();
+    const remove = () => svc.removeStaff(a.id, point.id, o.id);
+    const submit = () => desk.submitPerk(o.id, point.id, { perkText: 'Ưu đãi của chủ cũ' });
+
+    const results = await raceWithHold(prisma, lockOf(point.id), remove, submit);
+
+    expect(results[0].status).toBe('fulfilled');
+    expect(results[1].status).toBe('rejected');
+    expect(reasonOf(results[1])).toBeInstanceOf(ForbiddenException);
+    const row = await prisma.wastePoint.findUniqueOrThrow({ where: { id: point.id } });
+    expect(row.perkText).toBeNull();
+    expect(row.perkPendingText).toBeNull();
+    expect(await prisma.wasteEvent.count({ where: { pointId: point.id, kind: 'PERK_SUBMITTED' } })).toBe(0);
+    noDeadlock(results);
+  });
+
+  it('the owner submits a perk then is removed: the perk is stored and then cleared with the owner', async () => {
+    const { a, o, point } = await ownerOfPointWithPerk();
+    const remove = () => svc.removeStaff(a.id, point.id, o.id);
+    const submit = () => desk.submitPerk(o.id, point.id, { perkText: 'Ưu đãi mới' });
+
+    const results = await raceWithHold(prisma, lockOf(point.id), submit, remove);
+
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+    const row = await prisma.wastePoint.findUniqueOrThrow({ where: { id: point.id } });
+    expect(row.perkText).toBeNull();
+    expect(row.perkPendingText).toBeNull();
+    expect(await prisma.wasteEvent.count({ where: { pointId: point.id, kind: 'PERK_SUBMITTED' } })).toBe(1);
     noDeadlock(results);
   });
 });

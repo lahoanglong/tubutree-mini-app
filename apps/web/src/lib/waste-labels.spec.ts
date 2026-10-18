@@ -95,6 +95,27 @@ describe('waste-labels', () => {
     expectNoBannedCopy([...Object.values(WASTE_EVENT_KIND_LABELS), ...Object.values(WASTE_ACTOR_ROLE_LABELS), ...Object.values(WASTE_MATCH_BASIS_LABELS)].join(' '));
   });
 
+  it('nhật ký sự kiện: mã vận đơn cũ và mới, kiện khác mã khách nhập', () => {
+    const edited = { before: { status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN111' }, after: { status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN777' } };
+    expect(wasteEventMetaLines('TRACKING_EDITED', edited)).toEqual(['Mã vận đơn: GHN · GHN111 → GHN · GHN777']);
+    const first = { before: { status: 'OPEN', carrier: null, trackingCode: null }, after: { status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN111' } };
+    expect(wasteEventMetaLines('TRACKING_SET', first)).toEqual(['Mã vận đơn: GHN · GHN111']);
+    expect(wasteEventMetaLines('TRACKING_SET', { after: first.after })).toEqual(['Mã vận đơn: GHN · GHN111']);
+    const same = { before: { carrier: 'GHN', trackingCode: 'GHN111' }, after: { carrier: 'GHN', trackingCode: 'GHN111' } };
+    expect(wasteEventMetaLines('TRACKING_EDITED', same)).toEqual([]);
+    expect(wasteEventMetaLines('TRACKING_EDITED', { before: edited.before })).toEqual([]);
+    expect(wasteEventMetaLines('REQUEST_EDITED', edited)).toEqual([]);
+    const mismatch = 'Mã vận đơn trên kiện khác mã khách nhập';
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE', parcelTrackingNorm: 'X', trackingMismatch: true })).toEqual([
+      'Khớp theo mã TR-',
+      mismatch,
+    ]);
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE', trackingMismatch: false })).toEqual(['Khớp theo mã TR-']);
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE', trackingMismatch: null })).toEqual(['Khớp theo mã TR-']);
+    expect(wasteEventMetaLines('PARCEL_RECEIVED', { matchBasis: 'TR_CODE' })).toEqual(['Khớp theo mã TR-']);
+    expect(wasteEventMetaLines('TRACKING_EDITED', { ...edited, subjectUserId: 'u-1', device: { ua: 'x' } }).join(' ')).not.toMatch(/u-1|ua/);
+  });
+
   it('giờ mở cửa: gộp ngày liền nhau cùng khung giờ, bỏ ngày nghỉ', () => {
     const wk = [{ open: '08:00', close: '17:00' }];
     expect(summarizeOpeningHours({})).toEqual([]);
