@@ -36,8 +36,8 @@ describe('waste-admin-items race (real Postgres)', () => {
   const itemLock = (id: string) => Prisma.sql`SELECT "id" FROM "waste_items" WHERE "id" = ${id} FOR UPDATE`;
   const rowOf = (id: string) => prisma.wasteItem.findUniqueOrThrow({ where: { id }, select: { hazardous: true, status: true } });
   const noHazardousActive = async () => {
-    const [{ n }] = await prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(*)::int AS "n" FROM "waste_items" WHERE "hazardous" AND "status" = 'ACTIVE'`;
-    expect(n).toBe(0);
+    const [row] = await prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(*)::int AS "n" FROM "waste_items" WHERE "hazardous" AND "status" = 'ACTIVE'`;
+    expect(row?.n).toBe(0);
   };
 
   beforeAll(async () => {
