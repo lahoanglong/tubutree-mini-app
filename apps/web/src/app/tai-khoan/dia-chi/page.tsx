@@ -11,6 +11,8 @@ import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 
+const NOTICE_MS = 4000;
+
 const line = (a: AddressDTO) => [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 
 export default function AddressBookPage() {
@@ -30,11 +32,25 @@ export default function AddressBookPage() {
     void qc.invalidateQueries({ queryKey: ['quote'] });
   };
 
-  const makeDefault = useMutation({ mutationFn: (id: string) => updateAddress(id, { isDefault: true }), onSuccess: refresh });
+  // Báo "Đã xóa" như snackbar của Mini App: tự tắt sau vài giây và tắt ngay khi có thao tác khác bắt đầu.
+  const [removedNotice, setRemovedNotice] = useState(false);
+  useEffect(() => {
+    if (!removedNotice) return;
+    const t = setTimeout(() => setRemovedNotice(false), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [removedNotice]);
+
+  const makeDefault = useMutation({
+    mutationFn: (id: string) => updateAddress(id, { isDefault: true }),
+    onMutate: () => setRemovedNotice(false),
+    onSuccess: refresh,
+  });
   const remove = useMutation({
     mutationFn: (id: string) => deleteAddress(id),
+    onMutate: () => setRemovedNotice(false),
     onSuccess: () => {
       setConfirmId(null);
+      setRemovedNotice(true);
       refresh();
     },
     onError: () => setConfirmId(null),
@@ -92,7 +108,7 @@ export default function AddressBookPage() {
           </button>
         </p>
       )}
-      {remove.isSuccess && (
+      {removedNotice && (
         <p role="status" className="mb-3 text-sm font-medium text-success-fg">
           Đã xóa địa chỉ.
         </p>
