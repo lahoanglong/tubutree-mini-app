@@ -14,6 +14,7 @@ import * as orders from './orders';
 import * as payment from './payment';
 import * as reviews from './reviews';
 import * as subs from './subscriptions';
+import * as wishlist from './wishlist';
 
 type Q = { queryKey: readonly unknown[]; queryFn: () => Promise<unknown> };
 type Case = [name: string, make: (h: HttpClient) => Q, key: readonly unknown[], path: string];
@@ -63,6 +64,8 @@ const cases: Case[] = [
   ['subscriptions', (h) => subs.subscriptionsQuery(h), ['subscriptions'], '/me/subscriptions'],
   ['bankQr', (h) => payment.bankQrQuery(h, 'T1'), ['bank-qr', 'T1'], '/payments/bank-qr/T1'],
   ['geoProvinces', (h) => geo.provincesQuery(h), ['geo-provinces'], '/geo/provinces'],
+  ['wishlist', (h) => wishlist.wishlistQuery(h), ['wishlist'], '/me/wishlist'],
+  ['wishlistIds', (h) => wishlist.wishlistIdsQuery(h), ['wishlist-ids'], '/me/wishlist/ids'],
   ['geoCommunes', (h) => geo.communesQuery(h, 'p'), ['geo-communes', 'p'], '/geo/communes'],
 ];
 
