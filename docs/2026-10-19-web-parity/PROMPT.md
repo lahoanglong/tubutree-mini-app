@@ -140,7 +140,7 @@ Một lane kẹt quá 2 vòng sửa mà gate vẫn đỏ: dừng lane đó, ghi 
 
 Làm trong lane `core` hoặc ngay sau nó:
 
-1. `docs/platform-parity.json`: mỗi file màn ở `apps/miniapp/src/pages/*.tsx` (trừ spec) ánh xạ tới route web, hoặc `{ "skip": "<lý do>" }` cho màn cố ý chỉ có một bên.
+1. `packages/app-core/src/route-map.json` (theo `01-thiet-ke.md` mục 1.3, đã thay `docs/platform-parity.json` sau review lần 1): mỗi `<Route path>` trong `apps/miniapp/src/components/app.tsx` một dòng, ánh xạ tới route web hoặc `skip` kèm lý do; thêm mục `features` cho chức năng mức ứng dụng.
 2. `scripts/check-platform-parity.mjs`: đỏ khi có màn Mini App chưa có trong file ánh xạ, hoặc route web được ánh xạ không tồn tại. Có test riêng. Gắn vào `pnpm lint` ở root và vào `.github/workflows/ci.yml` (sửa file, không push).
 3. `AGENTS.md` ở gốc repo, mục ngắn "Hai nền tảng": logic gọi API và quy tắc nghiệp vụ đặt ở `packages/app-core`; khả năng riêng nền tảng đi qua `PlatformBridge`; chức năng khách hàng mới phải có cả màn Mini App và trang web trong cùng nhánh, hoặc có dòng `skip` kèm lý do; trước khi xong chạy `node scripts/check-platform-parity.mjs`.
 4. Tạo `CLAUDE.md` ở gốc chỉ một dòng trỏ tới `AGENTS.md`.

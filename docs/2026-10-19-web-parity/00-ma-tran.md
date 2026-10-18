@@ -10,8 +10,8 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 
 | # | Mini App | File | Web hiện có | Web đích | TT | Lane | Loại | Ghi chú nền tảng |
 |---|---|---|---|---|---|---|---|---|
-| 1 | `/` | home.tsx | `/` (một phần) | `/` | thiếu | shop | công khai | Thiếu: mua lại, đơn đang giao, flash sắp tới, "Dành cho bạn", đã xem gần đây, quà khách mới, bố cục theo khách mới/cũ (cờ `homeNewCustomerLayout`). Pull-to-refresh không cần trên web |
-| 2 | `/browse` | browse.tsx | — | `/san-pham` | mới | shop | công khai (`noindex` khi có `q`) | Gợi ý tìm kiếm, tìm gần đây, bộ lọc, sắp xếp, tải thêm, theo dõi sự kiện tìm kiếm |
+| 1 | `/` | home.tsx | `/` hiện là **trang danh mục + tìm kiếm** (`app/page.tsx:27-75`: `q`, `category`, `brand`, phân trang, canonical) | `/` | thiếu | shop | công khai | `/` thành trang chủ như Mini App: mua lại, đơn đang giao, flash sale (đang và sắp tới), "Dành cho bạn", bán chạy, danh mục, đã xem gần đây, nổi bật, hàng mới, quà khách mới, bố cục theo khách mới/cũ (cờ `homeNewCustomerLayout`). Pull-to-refresh không cần trên web |
+| 2 | `/browse` | browse.tsx | nằm trong `/` | `/san-pham` | mới | shop | công khai (`noindex` khi có `q`) | Chuyển danh mục từ `/` sang. `/?q=`, `/?category=`, `/?brand=` chuyển hướng 307 sang `/san-pham` cùng query (URL đã được index). Sửa `components/site-search.tsx` (đang đẩy `/?q=`) và `lib/home-seo.ts`. Thêm gợi ý tìm kiếm, tìm gần đây, bộ lọc, sắp xếp, tải thêm, sự kiện tìm kiếm |
 | 3 | `/product/:slug` | product-detail.tsx | `/san-pham/[slug]` | giữ | thiếu | shop | công khai | Thiếu (kiểm lại): mã giảm giá theo sản phẩm, dòng freeship, đơn vị giao, đặt định kỳ, mua chung, content kit, tim yêu thích, mua kèm, liên quan, chat OA (`zalo.me`) |
 | 4 | `/cart` | cart.tsx | `/gio-hang` | giữ | thiếu | order | riêng tư | Kiểm: voucher sheet, hoàn tác xoá, nhóm theo đơn vị giao, thanh ngữ cảnh gian hàng |
 | 5 | `/checkout` | checkout.tsx | `/thanh-toan` | giữ | thiếu | order | riêng tư | Bỏ `ensurePhone` (Q2; Mini App cũng không chặn). Phương thức: COD, chuyển khoản, ví (Q4; ZaloPay đang ẩn ở cả Mini App). Kiểm: hóa đơn VAT, chia kiện, cảnh báo đổi giá, gắn phiếu đổi rác |
@@ -54,7 +54,7 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 42 | `/admin/community` | community-moderation.tsx | tab community trong `/admin` | `/admin?tab=community` | có | — | riêng tư | Chỉ cần ánh xạ |
 | 43 | `/recycle` | recycle.tsx | — | `/doi-rac` | mới | recycle | riêng tư | `eligibility !== 'OK'` (thiếu SĐT) thì hiện lời dặn mở Mini App (Q2) |
 | 44 | `/recycle/rules` | recycle-rules.tsx | — | `/doi-rac/quy-dinh` | mới | recycle | công khai | |
-| 45 | `/recycle/new` | recycle-new.tsx | — | `/doi-rac/tao` | mới | recycle | riêng tư | "Điểm gần tôi" cần token vị trí Zalo (`waste-customer.controller.ts:34`). Web: chọn theo tỉnh; được thêm endpoint nhận toạ độ trình duyệt (cộng thêm, có test, review Opus) |
+| 45 | `/recycle/new` | recycle-new.tsx | — | `/doi-rac/tao` | mới | recycle | riêng tư | "Điểm gần tôi" cần token vị trí Zalo (`waste-customer.controller.ts:34`). Web đợt này: chỉ chọn theo tỉnh. Lý do: `next.config.mjs:80` đặt `Permissions-Policy: geolocation=()` cho mọi trang; mở ra là đổi header bảo mật, để chủ quyết |
 | 46 | `/recycle/points` | recycle-points.tsx | — | `/doi-rac/diem-nhan` | mới | recycle | riêng tư | Như dòng 45 |
 | 47 | `/recycle/r/:id` | recycle-request.tsx | — | `/doi-rac/yeu-cau/[id]` | mới | recycle | riêng tư | |
 | 48 | `/recycle/r/:id/edit` | recycle-edit.tsx | — | `/doi-rac/yeu-cau/[id]/sua` | mới | recycle | riêng tư | |
@@ -62,7 +62,15 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 50 | `/recycle/done/:id` | recycle-done.tsx | — | `/doi-rac/xong/[id]` | mới | recycle | riêng tư | |
 | 51 | `/recycle/desk` | recycle-desk.tsx | — | `/doi-rac/quay` | mới | recycle | riêng tư | Quầy nhận: nhập mã tay (Mini App cũng không quét) |
 
-Tổng: 51 dòng. Có: 2. Thiếu chức năng con: 12. Mới: 36. Skip: 1.
+Chức năng mức ứng dụng (không phải `<Route>`, gắn trong `app.tsx`):
+
+| # | Mini App | Web hiện có | Web đích | TT | Lane | Ghi chú |
+|---|---|---|---|---|---|---|
+| 52 | `CouponClaimGate` (`app.tsx:253`): `?claim=` → `POST /coupons/claim` | — | `components/app-gates.tsx` | mới | account | **Tiền: 2 lượt review** |
+| 53 | `OnboardingGate` (`app.tsx:252`) | — | `components/app-gates.tsx` | mới | account | |
+| 54 | `?s=` ghi nguồn gian hàng (`app.tsx:158-171`, `recordReferralTouch`) | `ReferralCapture` chỉ đọc `?ref=` (`components/storefront-tracker.tsx:45-58`) | `storefront-tracker.tsx` | thiếu | core | Ảnh hưởng hoa hồng CTV. **2 lượt review** |
+
+Tổng: 54 dòng (51 nhóm route + 3 chức năng mức ứng dụng). `app.tsx` có 53 `<Route path>` (không tính `*`); `route-map.json` có đúng 53 dòng route, mỗi `<Route>` một dòng (`/group-buy` và `/group-buy/:id`, `/academy` và `/academy/:courseId`, `/subscriptions` tách riêng). Map theo route, không theo file: `brand-owner-sales.tsx` là tab trong `/brand-owner`.
 
 Web có mà Mini App không có (giữ nguyên, không thuộc đợt này): `/merchant`, `/admin/pos`, `/chinh-sach/[loai]`, `/dang-nhap`.
 
