@@ -12,6 +12,8 @@ const STATES = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED', 'VOIDED', 'RE
 
 export class ExternalClaimListQueryDto extends PaginationQuery {
   @IsOptional() @IsIn(STATES) state?: (typeof STATES)[number];
+  /** SCAN = đơn sàn khách nhập mã; PHONE = đơn chat/điện thoại tự cộng theo SĐT. */
+  @IsOptional() @IsIn(['SCAN', 'PHONE']) kind?: 'SCAN' | 'PHONE';
   /** Chỉ các dòng "Cần xử lý": đã cộng mà đơn đã đóng, hoặc PENDING không bao giờ tới hạn. */
   @IsOptional() @IsIn(['closed_credited', 'stale']) attention?: 'closed_credited' | 'stale';
   /** Mã đơn Pancake, mã vận đơn, id claim hoặc SĐT đầy đủ. */

@@ -54,6 +54,7 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
 /** Khoá cố ý không nạp (nằm trong tiền tố được nạp), kèm lý do. */
 export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'loyalty.external_since': 'mặc định null (chỉ áp tuổi đơn tối đa) mà EXTRA_CONFIGS không nạp được null; migration 20261019130000_external_claims đã tạo dòng với giá trị null (ON CONFLICT DO NOTHING) nên nạp lại ở seed-reference là thừa',
+  'loyalty.chat_order_earn_pct': 'mặc định null (dùng loyalty.earn_pct của đơn app) mà EXTRA_CONFIGS không nạp được null; migration 20261019160000_chat_order_points đã tạo dòng với giá trị null (ON CONFLICT DO NOTHING) nên nạp lại ở seed-reference là thừa',
   'shipping.free_threshold': 'phí ship là quyết định của chủ shop: để trống thì go-live:check WARN (db.shipping_rates) buộc xác nhận, nạp 200k sẽ làm WARN biến mất mà chưa ai xác nhận',
   'shipping.flat_fee_below_threshold': 'như shipping.free_threshold',
   'shipping.first_order_free_enabled': 'migration 20261018150010_claim_freeship_config đã tạo dòng với giá trị bằng mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
@@ -94,6 +95,7 @@ const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts
 const EXTERNAL_ORDER_CONFIG = 'src/modules/external-points/external-order.config.ts';
 const EXTERNAL_CLAIM_CONFIG = 'src/modules/external-points/external-claim.config.ts';
 const EARN_RATES = 'src/modules/loyalty/earn-rates.ts';
+const EXTERNAL_CHAT_CONFIG = 'src/modules/external-points/external-chat.config.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_post', value: 5, category: 'community', description: 'Điểm uy tín cộng cho người có bài cộng đồng được đăng', fallbackSource: { file: FEED, text: "get<number>('community.rep_post', 5)" } },
@@ -121,6 +123,11 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'loyalty.marketplace_claim_max_age_days', value: 60, category: 'loyalty', description: 'Đơn đặt quá số ngày này không được tích. Khi chưa đặt loyalty.external_since thì đây là giới hạn duy nhất về tuổi đơn', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'maxAgeDays: 60,' } },
   { key: 'loyalty.marketplace_claim_review_above_vnd', value: 2000000, category: 'loyalty', description: 'Đơn có tiền hàng lớn hơn mức này (đồng) không tự duyệt mà chờ nhân viên kiểm', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'reviewAboveVnd: 2_000_000,' } },
   { key: 'loyalty.external_pending_days', value: 14, category: 'loyalty', description: 'Số ngày sau khi đơn ngoài app giao xong thì điểm mới được cộng (giữ điểm chờ để phòng hoàn hàng)', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'pendingDays: 14,' } },
+  { key: 'loyalty.chat_order_points_enabled', value: false, category: 'loyalty', description: 'Bật tự cộng Điểm Xanh cho đơn chat/điện thoại do CSKH lên trên Pancake, theo SĐT (khách không cần quét mã). Chỉ bật sau khi đã bắt payload thật và khai báo nguồn đơn chat ở pancake.order_source_map. false = tắt hẳn: không tạo, không liên kết, không cộng claim nào', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'enabled: false,' } },
+  { key: 'loyalty.chat_order_monthly_points_cap', value: 200000, category: 'loyalty', description: 'Trần Điểm Xanh (1 điểm = 1đ) mỗi SĐT được tích mỗi tháng từ đơn chat/điện thoại; vượt thì đơn chờ nhân viên duyệt', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'monthlyPointsCap: 200_000,' } },
+  { key: 'loyalty.chat_order_review_above_vnd', value: 5000000, category: 'loyalty', description: 'Đơn chat/điện thoại có tiền hàng lớn hơn mức này (đồng) không tự duyệt mà chờ nhân viên kiểm', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'reviewAboveVnd: 5_000_000,' } },
+  { key: 'loyalty.chat_order_require_carrier', value: true, category: 'loyalty', description: 'true = chỉ cộng điểm đơn chat khi đơn đã có vận đơn (partner.extend_code) hoặc ở trạng thái 16; chặn nhân viên lên đơn giả để lấy điểm', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'requireCarrier: true,' } },
+  { key: 'loyalty.chat_unclaimed_hold_days', value: 30, category: 'loyalty', description: 'Số ngày giữ điểm đơn chat cho SĐT chưa là thành viên, tính từ lúc điểm đáng lẽ được cộng; quá hạn mà chưa liên kết thì mất', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'holdDays: 30,' } },
   { key: 'pancake.external_lookup_enabled', value: false, category: 'pancake', description: 'Khi khách nhập mã chưa có trong "Đơn ngoài app", tra Pancake theo mã (tối đa 5 giây, ngắt mạch sau 3 lỗi). Chỉ bật khi đã kiểm Pancake tìm được theo mã vận đơn', fallbackSource: { file: 'src/modules/external-points/external-claim-lookup.service.ts', text: 'EXTERNAL_LOOKUP_ENABLED_KEY, false' } },
   { key: 'pancake.external_poll_enabled', value: false, category: 'pancake', description: 'Kéo dự phòng mỗi 10 phút: lấy đơn sàn đã cập nhật trong 2 giờ gần nhất khi webhook sàn rớt. Chỉ bật sau khi đã kiểm tham số startDateTime và order_sources trên Pancake thật', fallbackSource: { file: 'src/modules/external-points/external-claim-poll.service.ts', text: 'EXTERNAL_POLL_ENABLED_KEY, false' } },
 ];

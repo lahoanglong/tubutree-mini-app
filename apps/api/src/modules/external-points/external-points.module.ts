@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PancakeSyncHooksModule } from '../integrations/pancake/pancake-sync-hooks.module';
+import { ExternalChatService } from './external-chat.service';
 import { ExternalClaimCron } from './external-claim.cron';
 import { ExternalClaimLookupService } from './external-claim-lookup.service';
 import { ExternalClaimPollService } from './external-claim-poll.service';
@@ -19,7 +20,9 @@ import { ExternalOrdersAdminService } from './external-orders-admin.service';
     ExternalClaimLookupService,
     ExternalClaimPollService,
     ExternalClaimsAdminService,
+    ExternalChatService,
     ExternalClaimCron,
   ],
+  exports: [ExternalChatService],
 })
 export class ExternalPointsModule {}

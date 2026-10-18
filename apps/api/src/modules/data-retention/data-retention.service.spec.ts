@@ -93,12 +93,13 @@ describe('DataRetentionService (C-046)', () => {
         gomdon_webhook_events: 0,
         oa_inbound_messages: 0,
         'external_orders.phone': 0,
+        'external_orders.phone_after_final': 0,
         refresh_tokens: 0,
       },
       truncated: false,
     });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(7);
-    const cutoffs = [0, 1, 2, 3, 4, 5, 6].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(8);
+    const cutoffs = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
     expect(cutoffs).toEqual([
       NOW.getTime() - 395 * DAY,
       NOW.getTime() - 60 * DAY,
@@ -106,6 +107,7 @@ describe('DataRetentionService (C-046)', () => {
       NOW.getTime() - 90 * DAY,
       NOW.getTime() - 90 * DAY,
       NOW.getTime() - 90 * DAY,
+      NOW.getTime() - 7 * DAY,
       NOW.getTime() - 30 * DAY,
     ]);
   });
@@ -121,12 +123,25 @@ describe('DataRetentionService (C-046)', () => {
     expect(sql).toContain("'PENDING', 'REVIEW', 'HELD_NO_MEMBER'");
   });
 
+  it('SĐT đơn ngoài app xoá 7 ngày sau khi claim về trạng thái cuối (CREDITED, VOIDED, REVERSED, LAPSED), giữ dòng và 3 số cuối', async () => {
+    const { svc, prisma } = make();
+    await svc.runAll({ now: NOW, pauseMs: 0 });
+    const c = call(prisma, 6);
+    const sql = [...c.strings, ...c.values.map((v) => (v as { sql?: string }).sql ?? '')].join(' ');
+    expect(sql).toContain('UPDATE');
+    expect(sql).not.toContain('DELETE');
+    expect(sql).toContain('"phone" = NULL');
+    expect(sql).toContain("'CREDITED', 'VOIDED', 'REVERSED', 'LAPSED'");
+    expect(sql).not.toContain('phoneLast3');
+    expect(datesIn(c.values)[0]!.getTime()).toBe(NOW.getTime() - 7 * DAY);
+  });
+
   it('lặp theo lô tới khi lô nhỏ hơn batchSize, cộng dồn số dòng đã xoá', async () => {
     const { svc, prisma } = make({ batchCounts: [3, 3, 1] });
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0 });
     expect(res).toMatchObject({ truncated: false });
     expect((res as { deleted: Record<string, number> }).deleted.analytics_events).toBe(7);
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 6);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 7);
     expect(call(prisma, 0).values).toContain(3);
   });
 
@@ -134,7 +149,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make({ batchCounts: [3, 3, 3, 3] });
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: -1 });
     expect(res).toMatchObject({ truncated: true });
-    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(8);
+    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(9);
   });
 
   it('bảng tồn đọng vô hạn không nuốt hết ngân sách thời gian của các bảng sau', async () => {
@@ -155,7 +170,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make();
     prisma.$executeRaw.mockRejectedValueOnce(new Error('boom'));
     const res = await svc.runAll({ now: NOW, pauseMs: 0 });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 6);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 7);
     expect((res as { deleted: Record<string, number> }).deleted).not.toHaveProperty('analytics_events');
     expect((res as { deleted: Record<string, number> }).deleted).toHaveProperty('refresh_tokens');
   });

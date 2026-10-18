@@ -95,3 +95,43 @@ describe('khoá cấu hình dạng số có luật khoảng (R3-UI-4)', () => {
     }
   });
 });
+
+describe('khoá cấu hình tích điểm đơn chat (B9)', () => {
+  const service = makeService();
+  const setOk = async (key: string, value: unknown): Promise<boolean> => {
+    try {
+      await service.set(key, value as never, 'admin-it');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it('hai cờ chỉ nhận đúng boolean', async () => {
+    for (const key of ['loyalty.chat_order_points_enabled', 'loyalty.chat_order_require_carrier']) {
+      expect(await setOk(key, true)).toBe(true);
+      expect(await setOk(key, false)).toBe(true);
+      expect(await setOk(key, 'false')).toBe(false);
+      expect(await setOk(key, 0)).toBe(false);
+    }
+  });
+
+  it('tỉ lệ chat nhận null hoặc 0.1 đến 20, từ chối ngoài khoảng', async () => {
+    const key = 'loyalty.chat_order_earn_pct';
+    expect(await setOk(key, null)).toBe(true);
+    expect(await setOk(key, 2)).toBe(true);
+    expect(await setOk(key, 0)).toBe(false);
+    expect(await setOk(key, 21)).toBe(false);
+    expect(await setOk(key, '2')).toBe(false);
+  });
+
+  it('trần tháng, ngưỡng duyệt, số ngày giữ có khoảng và là số nguyên', async () => {
+    expect(await accepts(service, 'loyalty.chat_order_monthly_points_cap', 200_000)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_order_monthly_points_cap', 0)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_order_review_above_vnd', 5_000_000)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_order_review_above_vnd', -1)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 30)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 0)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 1.5)).toBe(false);
+  });
+});

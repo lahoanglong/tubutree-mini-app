@@ -16,6 +16,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { firstTouchColumns } from '../../common/attribution';
 import { VouchersService } from '../vouchers/vouchers.service';
+import { ExternalChatService } from '../external-points/external-chat.service';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -77,6 +78,8 @@ export class AuthService {
     @Optional() private readonly notifications?: NotificationsService,
     // Optional như notifications: không có thì chỉ cron giờ cấp voucher chào mừng.
     @Optional() private readonly vouchers?: VouchersService,
+    // Optional như hai cái trên: không có thì đơn chat chờ SĐT chỉ được cron 30 phút liên kết.
+    @Optional() private readonly externalChat?: ExternalChatService,
   ) {}
 
   /**
@@ -844,6 +847,8 @@ export class AuthService {
     // Áp quyền theo SĐT (allowlist) — chạy cho cả login lẫn refresh ⇒ đổi role có hiệu lực
     // ở lần refresh kế. Không có phone / không có grant → trả nguyên user.
     user = await this.rbac.applyGrants(user);
+    // Điểm đơn chat/điện thoại chờ SĐT này (B9): liên kết ngay khi khách đăng nhập. Không bao giờ chặn hay làm rớt phiên.
+    await this.linkChatPoints(user);
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -865,6 +870,15 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken, user: this.toAuthUser(user) };
+  }
+
+  private async linkChatPoints(user: User): Promise<void> {
+    if (!this.externalChat || !user.phone) return;
+    try {
+      await this.externalChat.linkByPhone(user);
+    } catch (err) {
+      this.logger.warn(`Liên kết điểm đơn chat cho ${user.id} lỗi, chờ cron: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   toAuthUser(user: User): AuthUser {

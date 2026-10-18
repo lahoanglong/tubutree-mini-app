@@ -1,4 +1,10 @@
-/** Hợp đồng API tích điểm đơn mua ngoài app (đơn sàn Shopee/Lazada/TikTok). Dùng chung cho miniapp và web admin. */
+/**
+ * Hợp đồng API tích điểm đơn mua ngoài app: đơn sàn Shopee/Lazada/TikTok (khách nhập mã vận đơn, `kind` SCAN) và đơn chat/điện thoại
+ * do CSKH lên trên Pancake (tự cộng theo SĐT, `kind` PHONE). Dùng chung cho miniapp và web admin.
+ */
+
+/** SCAN = đơn sàn khách tự nhập mã; PHONE = đơn chat/điện thoại, hệ thống tự cộng theo SĐT, khách không cần nhập gì. */
+export type ExternalClaimKind = 'SCAN' | 'PHONE';
 
 export type ExternalClaimState = 'PENDING' | 'REVIEW' | 'HELD_NO_MEMBER' | 'CREDITED' | 'VOIDED' | 'REVERSED' | 'LAPSED';
 
@@ -23,7 +29,14 @@ export type ExternalClaimRejectCode =
   | 'ZERO_POINTS';
 
 /** Mã lỗi của thao tác admin (ngoài ExternalClaimRejectCode, vốn cũng có thể trả khi gắn đơn chạy luật gửi mã). */
-export type ExternalClaimAdminErrorCode = 'SELF_ACTION' | 'SAME_INTRODUCER' | 'ATTACH_ADMIN_ONLY' | 'NOTE_REQUIRED' | 'NOT_FLAGGED';
+export type ExternalClaimAdminErrorCode =
+  | 'SELF_ACTION'
+  | 'SAME_INTRODUCER'
+  | 'ATTACH_ADMIN_ONLY'
+  | 'NOTE_REQUIRED'
+  | 'NOT_FLAGGED'
+  /** Người duyệt trùng người tạo/phụ trách đơn trên Pancake (chỉ claim PHONE). */
+  | 'PANCAKE_CREATOR_SELF';
 
 export interface SubmitExternalClaimRequest {
   /** Mã vận đơn hoặc mã đơn sàn, nhập tay hoặc quét. Server chuẩn hoá (chữ hoa, bỏ khoảng trắng và gạch). */
@@ -45,6 +58,8 @@ export interface SubmitExternalClaimResponse {
 
 export interface MyExternalClaimItem {
   id: string;
+  /** Có từ gói chatpts. Danh sách mặc định chỉ có SCAN; `GET /me/external-points/claims?kind=PHONE` trả đơn chat. */
+  kind: ExternalClaimKind;
   channel: string | null;
   maskedCode: string;
   state: ExternalClaimState;
@@ -53,6 +68,8 @@ export interface MyExternalClaimItem {
   /** Giao xong + loyalty.external_pending_days; null khi đơn chưa giao xong hoặc claim đã ở trạng thái cuối. */
   expectedCreditAt: string | null;
   creditedAt: string | null;
+  /** Chỉ claim PHONE ở HELD_NO_MEMBER: hạn giữ điểm; quá hạn mà chưa là thành viên thì mất (LAPSED). */
+  holdUntil: string | null;
   createdAt: string;
 }
 
@@ -82,7 +99,11 @@ export interface AdminExternalClaimRow {
   orderPhoneMasked: string | null;
   goodsValue: number | null;
   points: number;
+  /** Có từ gói chatpts. Danh sách admin lọc được theo `?kind=SCAN|PHONE`. */
+  kind: ExternalClaimKind;
   state: ExternalClaimState;
+  /** Chỉ HELD_NO_MEMBER: hạn giữ điểm của đơn chat chưa có thành viên. */
+  holdUntil: string | null;
   orderStatus: string;
   reviewReason: string | null;
   voidReason: string | null;

@@ -3256,7 +3256,7 @@ model ExternalClaimAttempt {
 model ExternalClaimEvent {
   id           String   @id @default(cuid())
   claimId      String
-  /// CLAIM_CREATED | ATTACH | APPROVE | VOID | VOID_REOPEN | REOPEN_CLAIM | REVERSE | KEEP_POINTS | CREDIT | AUTO_VOID | AUTO_REVERSE | TO_REVIEW | FLAG_PARTIAL
+  /// CLAIM_CREATED | ATTACH | APPROVE | VOID | VOID_REOPEN | REOPEN_CLAIM | REVERSE | KEEP_POINTS | CREDIT | AUTO_VOID | AUTO_REVERSE | TO_REVIEW | FLAG_PARTIAL | LINK_PHONE | HOLD_NO_MEMBER | LAPSE
   action       String
   /// Người thao tác; null = hệ thống (cron, webhook) hoặc chính khách khi gửi mã (khi đó `actorId` = userIdAfter).
   actorId      String?

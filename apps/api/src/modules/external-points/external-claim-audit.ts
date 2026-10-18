@@ -13,7 +13,10 @@ export type ClaimEventAction =
   | 'AUTO_VOID'
   | 'AUTO_REVERSE'
   | 'TO_REVIEW'
-  | 'FLAG_PARTIAL';
+  | 'FLAG_PARTIAL'
+  | 'LINK_PHONE'
+  | 'HOLD_NO_MEMBER'
+  | 'LAPSE';
 
 export interface ClaimEventInput {
   claimId: string;

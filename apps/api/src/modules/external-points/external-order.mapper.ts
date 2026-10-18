@@ -1,4 +1,5 @@
 import { parseTypedVnPhone } from '../../common/phone';
+import { foldVietnamese } from '../catalog/search-text';
 import { pancakeEventOrderCode } from '../integrations/pancake/pancake-webhook-dedupe';
 import type { OrderSourceMap } from './external-order.config';
 
@@ -180,6 +181,31 @@ export function buyerPhone(data: Data): string | null {
   return null;
 }
 
+export interface PancakeCreatorRef {
+  id: string | null;
+  /** Tên đã bỏ dấu, hạ thường (so khớp với tên nhân viên Tubu). */
+  name: string | null;
+}
+
+const CREATOR_FIELDS = ['creator', 'assigning_seller', 'assigning_care'] as const;
+
+/**
+ * Người tạo đơn và người phụ trách trên Pancake (id và tên nhân viên, không SĐT hay email). Dùng để chặn người đó tự duyệt điểm cho đơn
+ * mình tạo. Tên field theo Open API, chưa kiểm bằng payload thật: thiếu thì trả mảng rỗng (không có gì để so).
+ */
+export function pancakeCreatorRefs(data: Data): PancakeCreatorRef[] {
+  const refs: PancakeCreatorRef[] = [];
+  for (const field of CREATOR_FIELDS) {
+    const rec = asRecord(data[field]);
+    if (!rec) continue;
+    const rawId = rec['id'];
+    const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : null;
+    const name = typeof rec['name'] === 'string' && rec['name'].trim() ? foldVietnamese(rec['name']) : null;
+    if (id || name) refs.push({ id, name });
+  }
+  return refs;
+}
+
 const STATUS_BY_CODE: Record<number, ExternalOrderStatusName> = {
   3: 'DELIVERED',
   16: 'DELIVERED',
@@ -199,7 +225,7 @@ export function externalStatusOf(data: Data): { pancakeStatus: number | null; st
 
 /**
  * Bản payload lưu ở `external_orders.lastPayload`: chỉ các field phục vụ phân loại, tính tiền, trạng thái và mã vận đơn. Không giữ
- * tên, SĐT, địa chỉ, ghi chú tự do — bảng này không nằm dưới hạn xoá của pancake_webhook_events nên không được giữ PII vô hạn.
+ * tên khách, SĐT, địa chỉ, ghi chú tự do — bảng này không nằm dưới hạn xoá của pancake_webhook_events nên không được giữ PII vô hạn.
  */
 export function payloadForStorage(data: Data): Data {
   const pick = (src: Data | null, keys: readonly string[]): Data => {
@@ -225,6 +251,11 @@ export function payloadForStorage(data: Data): Data {
       ...pick(partner, ['extend_code']),
       extend_update: asArray(partner['extend_update']).map((u) => pick(asRecord(u), ['tracking_id'])),
     };
+  }
+  // Chỉ id và tên NHÂN VIÊN tạo đơn (không phải khách) để chặn tự duyệt điểm đơn chat; không giữ SĐT hay email của họ.
+  for (const field of CREATOR_FIELDS) {
+    const rec = asRecord(data[field]);
+    if (rec) out[field] = pick(rec, ['id', 'name']);
   }
   if (data['invoice_info_list'] !== undefined) out['invoice_info_list'] = asArray(data['invoice_info_list']).map((i) => pick(asRecord(i), ['order_sn']));
   if (data['status_history'] !== undefined) out['status_history'] = asArray(data['status_history']).map((h) => pick(asRecord(h), ['status', 'updated_at']));

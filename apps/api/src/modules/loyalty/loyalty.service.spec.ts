@@ -160,6 +160,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
       },
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: { findFirst: jest.fn().mockResolvedValue(existed), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null }),
@@ -233,6 +234,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
       },
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: { findFirst, create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
       user: { findUniqueOrThrow: userFind, update: jest.fn() },
       membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
@@ -745,6 +747,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       membershipTier: { findMany: jest.fn().mockResolvedValue(tiers) },
       order: { aggregate, findMany: orderFindMany },
       returnRequest: { findMany: returnFindMany },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: ledger,
     } as unknown as PrismaService;
     return { prisma, update, aggregate, ledger, orderFindMany, returnFindMany };
@@ -863,6 +866,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       order: NO_SPEND(),
       pointsTransaction: ledger,
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
@@ -882,6 +886,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       },
       order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 600_000 } }), findMany: jest.fn().mockResolvedValue([]) },
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: fakeLedger([]),
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
@@ -908,6 +913,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       },
       order: NO_SPEND(),
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: fakeLedger([]),
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
@@ -929,6 +935,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
         membershipTier: { findMany: jest.fn().mockResolvedValue(MULT_TIERS) },
         order: NO_SPEND(),
         returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
         pointsTransaction: fakeLedger([]),
         $queryRaw: jest.fn().mockResolvedValue([]),
       } as unknown as PrismaService;
@@ -954,6 +961,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       order: NO_SPEND(),
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: fakeLedger([]),
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
@@ -974,6 +982,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       order: NO_SPEND(),
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: ledger,
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
@@ -989,6 +998,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       order: NO_SPEND(),
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: fakeLedger([]),
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
@@ -1005,6 +1015,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       order: NO_SPEND(),
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: fakeLedger([]),
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
@@ -1101,6 +1112,7 @@ describe('LoyaltyService.recalcTier / getOverview sau trả MỘT PHẦN (MONEY-
       membershipTier: { findMany: jest.fn().mockResolvedValue(opts.pointTiers ? TIERS.map((t) => ({ ...t, minSpending: null })) : TIERS) },
       order: { aggregate, findMany: orderFindMany },
       returnRequest: { findMany: returnFindMany },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: fakeLedger(opts.ledger ?? []),
     } as unknown as PrismaService;
     // Đã hết ân hạn: rớt hạng áp ngay.
