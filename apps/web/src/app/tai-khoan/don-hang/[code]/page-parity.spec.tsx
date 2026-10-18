@@ -161,11 +161,18 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
   it('có mã vận đơn: hiện trạng thái hãng và nút Sao chép đưa đúng mã vào clipboard', async () => {
     mocks.order = { ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN123', shippingStatus: 'delivering' };
     const { container } = await mount();
-    expect(text(container)).toContain('Đang giao');
+    expect(text(container)).toContain('Đang giao hàng');
     click(byText(container, 'button', 'Sao chép'));
     await flush();
     expect(mocks.writeText).toHaveBeenCalledWith('GHN123');
     expect(text(container)).toContain('Đã sao chép mã vận đơn');
+  });
+
+  it('trạng thái hãng lạ dùng nhãn như Mini App, không in mã tiếng Anh', async () => {
+    mocks.order = { ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN123', shippingStatus: 'lost' };
+    const t = text((await mount()).container);
+    expect(t).toContain('Thất lạc kiện hàng');
+    expect(t).not.toContain('lost');
   });
 
   it('không chép được thì báo chép tay', async () => {

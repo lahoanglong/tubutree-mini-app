@@ -25,7 +25,6 @@ import {
   orderStatusTone,
   paymentMethodLabel,
   safeHttpUrl,
-  shippingStatusLabel,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { reviewHref } from '@/lib/reviews-client';
@@ -323,7 +322,9 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
             <CopyShippingCode code={o.shippingCode} />
           </div>
         )}
-        {o.shippingStatus && <p className="text-xs font-medium text-success-fg">{shippingStatusLabel(o.shippingStatus)}</p>}
+        {shippingEventLabel(o.shippingStatus) && (
+          <p className="text-xs font-medium text-success-fg">{shippingEventLabel(o.shippingStatus)}</p>
+        )}
         {tracking && (
           <a
             href={tracking}
