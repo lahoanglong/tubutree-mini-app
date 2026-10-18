@@ -488,8 +488,10 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
 function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: string; busy: boolean; onSubmit: (b: WasteReopenRequest) => void; onCancel: () => void }) {
   const [reason, setReason] = useState('');
   const [unmatchedId, setUnmatchedId] = useState('');
-  const unmatched = useQuery({ queryKey: ['admin-waste-unmatched', 'OPEN'], queryFn: () => listWasteUnmatched() });
-  const related = (unmatched.data ?? []).filter((u) => u.relatedRequestId === requestId);
+  const unmatched = useQuery({ queryKey: ['admin-waste-unmatched', 'OPEN'], queryFn: () => listWasteUnmatched('OPEN') });
+  // Server mở lại nhận mọi kiện OPEN; kiện ghi tay hoặc ALREADY_RECEIVED không có relatedRequestId nhưng vẫn gắn được vào yêu cầu hết hạn.
+  const open = (unmatched.data ?? []).filter((u) => u.status === 'OPEN');
+  const options = [...open.filter((u) => u.relatedRequestId === requestId), ...open.filter((u) => u.relatedRequestId !== requestId)];
   const reasonTrim = reason.trim();
 
   const submit = () => {
@@ -514,9 +516,16 @@ function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: strin
         <span className="font-medium text-stone-700">Kiện không rõ chủ liên quan</span>
         <select name="reopenUnmatchedId" className={`${INPUT_CLASS} mt-1`} value={unmatchedId} onChange={(e) => setUnmatchedId(e.target.value)}>
           <option value="">Không gắn kiện</option>
-          {related.map((u) => (
+          {options.map((u) => (
             <option key={u.id} value={u.id}>
-              {[u.carrier, u.trackingCode].filter((x): x is string => x !== null && x !== '').join(' · ') || u.description}
+              {[
+                u.description,
+                [u.carrier, u.trackingCode].filter((x): x is string => x !== null && x !== '').join(' ') || null,
+                formatDateTime(u.receivedAt),
+                u.relatedRequestId === requestId ? 'liên quan tới yêu cầu này' : null,
+              ]
+                .filter((x): x is string => x !== null)
+                .join(' · ')}
             </option>
           ))}
         </select>

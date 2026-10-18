@@ -347,19 +347,32 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     expect(btn(dropOff.c, 'Đóng vì thất lạc')).toBeNull();
   });
 
-  it('admin mở lại yêu cầu hết hạn, có thể gắn kiện không rõ chủ liên quan', async () => {
-    const unmatched = { body: [wasteUnmatched({ relatedRequestId: 'r1' }), wasteUnmatched({ id: 'un8', relatedRequestId: 'rX' })] };
+  it('admin mở lại yêu cầu hết hạn, chọn được cả kiện mở không liên quan, kiện liên quan xếp trước', async () => {
+    const unmatched = {
+      body: [
+        wasteUnmatched({ id: 'un7', reason: 'MANUAL_ENTRY', relatedRequestId: null, carrier: null, trackingCode: null, description: 'Thùng không nhãn' }),
+        wasteUnmatched({ relatedRequestId: 'r1' }),
+        wasteUnmatched({ id: 'un8', status: 'RESOLVED', relatedRequestId: 'r1', description: 'Kiện đã đóng' }),
+      ],
+    };
     const detail = wasteRequestDetail({ status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' });
     const first = await mount({ isAdmin: true, detail, unmatched });
     click(btn(first.c, 'Mở lại yêu cầu'));
     await flush();
-    expect(optionValues(select(first.c, 'reopenUnmatchedId')!)).toEqual(['', 'un1']);
+    expect(first.api.calls.some((x) => x.url.includes('/admin/waste/unmatched') && x.url.includes('status=OPEN'))).toBe(true);
+    const sel = select(first.c, 'reopenUnmatchedId')!;
+    expect(optionValues(sel)).toEqual(['', 'un1', 'un7']);
+    expect(optionLabels(sel)[0]).toContain('liên quan tới yêu cầu này');
+    expect(optionLabels(sel)[0]).toContain('GHN999');
+    expect(optionLabels(sel)[0]).toContain('Thùng carton băng keo xanh');
+    expect(optionLabels(sel)[1]).toContain('Thùng không nhãn');
+    expect(optionLabels(sel)[1]).not.toContain('liên quan tới yêu cầu này');
     expect(btn(first.c, 'Xác nhận mở lại')!.disabled).toBe(true);
     typeInto(area(first.c, 'reopenReason'), 'Kiện về muộn');
-    selectValue(select(first.c, 'reopenUnmatchedId'), 'un1');
+    selectValue(select(first.c, 'reopenUnmatchedId'), 'un7');
     click(btn(first.c, 'Xác nhận mở lại'));
     await flush();
-    expect(bodyOf(post(first.api, '/admin/waste/requests/r1/reopen')[0])).toEqual({ reason: 'Kiện về muộn', unmatchedId: 'un1' });
+    expect(bodyOf(post(first.api, '/admin/waste/requests/r1/reopen')[0])).toEqual({ reason: 'Kiện về muộn', unmatchedId: 'un7' });
 
     const second = await mount({ isAdmin: true, detail, unmatched });
     click(btn(second.c, 'Mở lại yêu cầu'));
