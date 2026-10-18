@@ -130,7 +130,7 @@ describe('trang nhãn hàng — theo dõi và chia sẻ', () => {
   it('server dựng sẵn số người theo dõi, nút Theo dõi và Chia sẻ cho khách; chưa có dải kiếm tiền', async () => {
     const box = await html();
     const buttons = Array.from(box.querySelectorAll('button')).map((b) => b.textContent);
-    expect(buttons).toEqual(['Theo dõi', 'Chia sẻ']);
+    expect(buttons).toEqual(['Theo dõi', 'Chia sẻ', 'XANH10']);
     expect(box.textContent).toContain('12 người theo dõi');
     expect(box.textContent).not.toContain('hoa hồng');
   });
