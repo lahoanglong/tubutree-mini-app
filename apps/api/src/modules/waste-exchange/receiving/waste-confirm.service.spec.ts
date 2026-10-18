@@ -1,0 +1,511 @@
+import { BadRequestException, ConflictException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { WasteConfirmRequest } from '@tubutree/shared-types';
+import { writeWasteEvent } from '../core/waste-events';
+import { lockWasteStaffCap } from '../waste-locks';
+import { WasteConfirmService, type WasteStaffCall } from './waste-confirm.service';
+import * as matchModule from './waste-match';
+import { incrementPointUsage, pointUsage, staffConfirmedToday } from './waste-quota';
+
+jest.mock('../waste-locks');
+jest.mock('./waste-quota');
+jest.mock('../core/waste-events');
+
+const EXPIRES_AT = new Date('2027-10-18T00:00:00.000Z');
+const CFG = { enabled: true, staffDailyCapPoints: 1_000_000, shortfallLockPct: 50, shortfallLockStreak: 3 };
+const noCustomerField = (r: unknown) => expect(JSON.stringify(r)).not.toMatch(/"(userId|customerName|customerPhone|phone|fullName)"/);
+
+const carton = { id: 'l1', itemId: 'wi-carton', declaredQty: 10, receivedQty: null, shortfallReason: null, unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, item: { hazardous: false } };
+const milk = { id: 'l2', itemId: 'wi-milk', declaredQty: 10, receivedQty: null, shortfallReason: null, unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, item: { hazardous: false } };
+const bottle = { id: 'l1', itemId: 'wi-bottle', declaredQty: 3, receivedQty: null, shortfallReason: null, unitsPerPoint: 1, pointsPerGroup: 2000, dropsPerUnit: 2, gramsPerUnit: null, item: { hazardous: false } };
+
+const partnerAccess = { kind: 'PARTNER', actorRole: 'POINT_STAFF', monthlyQuotaPoints: 100_000, caller: { id: 's1', phone: '0900000002', role: 'USER' } };
+const warehouseAccess = { kind: 'WAREHOUSE', actorRole: 'STAFF', monthlyQuotaPoints: null, caller: { id: 's1', phone: '0900000002', role: 'STAFF' } };
+const warehouseStaff = { id: 's1', role: 'STAFF', phone: '0900000002' };
+
+const row = (o: Record<string, unknown> = {}) => ({
+  id: 'r1',
+  code: 'TR-ABCDE',
+  userId: 'u1',
+  method: 'DROP_OFF',
+  status: 'OPEN',
+  pointId: 'p1',
+  orderId: null,
+  trackingNorm: null,
+  estimatedPoints: 10_000,
+  confirmedByUserId: null,
+  pointsAwarded: null,
+  dropsAwarded: null,
+  lines: [carton],
+  user: { id: 'u1', phone: '0900000001', isBlocked: false },
+  order: null,
+  ...o,
+});
+const completed = (o: Record<string, unknown> = {}) =>
+  row({ status: 'COMPLETED', confirmedByUserId: 's1', pointsAwarded: 10_000, dropsAwarded: 0, lines: [{ ...carton, receivedQty: 10 }], ...o });
+const full = [{ itemId: 'wi-carton', declaredQty: 10, receivedQty: 10 }];
+const body = (lines: WasteConfirmRequest['lines'] = full, extra: Partial<WasteConfirmRequest> = {}): WasteConfirmRequest => ({ lines, ...extra });
+const REPLAY_RESULT = {
+  requestId: 'r1',
+  code: 'TR-ABCDE',
+  status: 'COMPLETED',
+  pointsAwarded: 10_000,
+  dropsAwarded: 0,
+  quota: { limit: 100_000, used: 10_000, remaining: 90_000 },
+  staffDailyCapRemaining: 990_000,
+};
+
+interface Setup {
+  row?: Record<string, unknown>;
+  cfg?: Partial<typeof CFG>;
+  route?: 'DESK' | 'ADMIN';
+  access?: unknown;
+  staff?: unknown;
+  seeds?: number;
+  flags?: unknown;
+  colleague?: number;
+  updateCount?: number;
+  incremented?: number | null;
+  usage?: { pointsUsed: number; confirmations: number };
+  staffToday?: number;
+  grant?: boolean;
+  tankCap?: number;
+  pointRow?: unknown;
+  txError?: unknown;
+  again?: unknown;
+  matchOutcome?: matchModule.WasteMatchOutcome;
+}
+
+function setup(o: Setup = {}) {
+  const order: string[] = [];
+  let inTx = false;
+  const data = o.row ?? row();
+  const cfg = { ...CFG, ...o.cfg };
+  (lockWasteStaffCap as jest.Mock).mockImplementation(async () => void order.push('lockWasteStaffCap'));
+  (staffConfirmedToday as jest.Mock).mockImplementation(async () => (order.push('staffConfirmedToday'), o.staffToday ?? 0));
+  (incrementPointUsage as jest.Mock).mockImplementation(async () => (order.push('incrementPointUsage'), o.incremented === undefined ? 10_000 : o.incremented));
+  (pointUsage as jest.Mock).mockImplementation(async () => (order.push('pointUsage'), o.usage ?? { pointsUsed: 10_000, confirmations: 1 }));
+  (writeWasteEvent as jest.Mock).mockImplementation(async () => (order.push('writeWasteEvent'), { id: 'e1' }));
+  const evaluate = jest.spyOn(matchModule, 'evaluateMatch').mockResolvedValue(o.matchOutcome ?? { ok: true, basis: 'TR_CODE' });
+
+  const tx = {
+    $queryRaw: jest.fn(async (...args: unknown[]) => {
+      if (!inTx) throw new Error('raw SQL outside $transaction');
+      const [strings] = args as [TemplateStringsArray, ...unknown[]];
+      const sql = strings.join('?');
+      if (sql.includes('"waste_requests"')) order.push('request FOR UPDATE');
+      if (sql.includes('"game_profiles"')) {
+        order.push('game FOR UPDATE');
+        return [{ totalSeeds: o.seeds ?? 0 }];
+      }
+      return [];
+    }),
+    wasteRequest: {
+      findUnique: jest.fn(async () => data),
+      updateMany: jest.fn(async () => (order.push('request updateMany'), { count: o.updateCount ?? 1 })),
+      update: jest.fn(async () => ({})),
+    },
+    wasteRequestLine: { update: jest.fn(async () => ({})) },
+    wasteUserFlags: { findUnique: jest.fn(async () => o.flags ?? null) },
+    wastePointStaff: { count: jest.fn(async () => o.colleague ?? 0) },
+    gameProfile: { upsert: jest.fn(async () => (order.push('game upsert'), {})), update: jest.fn(async () => ({})) },
+    wastePoint: {
+      update: jest.fn(async () => (order.push('point lastConfirmedAt'), {})),
+      findUnique: jest.fn(async () => o.pointRow ?? { kind: 'PARTNER', monthlyQuotaPoints: 100_000 }),
+    },
+  };
+  const prisma = {
+    $transaction: jest.fn(async (fn: (t: unknown) => Promise<unknown>) => {
+      inTx = true;
+      try {
+        if (o.txError) throw o.txError;
+        const r = await fn(tx);
+        order.push('tx end');
+        return r;
+      } finally {
+        inTx = false;
+      }
+    }),
+    wastePoint: tx.wastePoint,
+    wasteRequest: { findUnique: jest.fn(async (a: { include?: unknown }) => (a.include ? (o.again ?? data) : { pointId: (data as { pointId: string }).pointId })) },
+  };
+  const config = { snapshot: jest.fn().mockResolvedValue(cfg) };
+  const access = {
+    assertPointAccess: jest.fn().mockResolvedValue(o.access ?? partnerAccess),
+    assertWarehouseActor: jest.fn().mockResolvedValue(o.staff ?? warehouseStaff),
+    warehousePoint: jest.fn().mockResolvedValue({ id: 'wh' }),
+  };
+  const rewards = { grant: jest.fn(async () => (order.push('grant'), o.grant ?? true)), expiresAt: jest.fn().mockResolvedValue(EXPIRES_AT) };
+  const systemConfig = { get: jest.fn().mockResolvedValue(o.tankCap ?? 500) };
+  const notifier = { pointsCredited: jest.fn(async () => void order.push('notify')) };
+  const shipLock = { evaluateAndLock: jest.fn(async () => (order.push('shipLock'), { locked: false, shipLockedAt: null, cancelledRequestIds: [] })) };
+  const svc = new WasteConfirmService(prisma as never, config as never, access as never, rewards as never, systemConfig as never, notifier as never, shipLock as never);
+  const call: WasteStaffCall = { callerUserId: 's1', requestId: 'r1', route: o.route ?? 'DESK', device: { ip: '10.0.0.0', userAgent: 'jest' } };
+  return { svc, tx, prisma, config, access, rewards, systemConfig, notifier, shipLock, order, call, evaluate };
+}
+
+const warehouseCase = (o: Setup = {}) => setup({ route: 'ADMIN', ...o });
+const whRow = (o: Record<string, unknown> = {}) => row({ method: 'MAIL_IN', status: 'RECEIVED', pointId: 'wh', ...o });
+
+describe('WasteConfirmService.confirm', () => {
+  let errorSpy: jest.SpyInstance;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('1. happy DROP_OFF at a PARTNER point', async () => {
+    const h = setup();
+    const result = await h.svc.confirm(h.call, body());
+    expect(result).toEqual(REPLAY_RESULT);
+    expect(h.order).toEqual([
+      'request FOR UPDATE', 'lockWasteStaffCap', 'staffConfirmedToday', 'incrementPointUsage', 'request updateMany', 'grant',
+      'point lastConfirmedAt', 'writeWasteEvent', 'tx end', 'notify', 'shipLock',
+    ]);
+    expect(h.rewards.grant).toHaveBeenCalledWith('u1', 10_000, 'RECYCLE:TR-ABCDE', 'RECYCLE', 'r1', h.tx, EXPIRES_AT);
+    expect(writeWasteEvent).toHaveBeenCalledTimes(1);
+    const ev = (writeWasteEvent as jest.Mock).mock.calls[0][1];
+    expect(ev).toEqual(expect.objectContaining({ kind: 'REQUEST_CONFIRMED', actorRole: 'POINT_STAFF' }));
+    expect(ev.meta.matchBasis).toBeNull();
+    expect(Object.keys(ev.meta).filter((k) => /phone/i.test(k))).toEqual([]);
+    expect(h.notifier.pointsCredited).toHaveBeenCalledTimes(1);
+    expect(h.shipLock.evaluateAndLock).toHaveBeenCalledTimes(1);
+    expect(h.shipLock.evaluateAndLock).toHaveBeenCalledWith('u1', { shortfallLockPct: 50, shortfallLockStreak: 3 });
+    expect(pointUsage).not.toHaveBeenCalled();
+    noCustomerField(result);
+
+    const txStart = h.prisma.$transaction.mock.invocationCallOrder[0] as number;
+    for (const f of [h.config.snapshot, h.rewards.expiresAt, h.systemConfig.get]) expect(f.mock.invocationCallOrder[0] as number).toBeLessThan(txStart);
+    expect(h.access.assertPointAccess.mock.invocationCallOrder[0] as number).toBeLessThan(txStart);
+    expect(h.systemConfig.get).toHaveBeenCalledWith('game.tank_capacity', 500);
+    expect(h.access.assertPointAccess).toHaveBeenNthCalledWith(1, 's1', 'p1', { programmeEnabled: true });
+    expect(h.access.assertPointAccess).toHaveBeenNthCalledWith(2, 's1', 'p1', { programmeEnabled: true, db: h.tx });
+
+    const d = (h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ data: { closedAt: Date; completedAt: Date } }])[0].data;
+    expect(d).toEqual({ status: 'COMPLETED', completedAt: expect.any(Date), closedAt: expect.any(Date), confirmedByUserId: 's1', pointsAwarded: 10_000, dropsAwarded: 0 });
+    expect(d.closedAt).toEqual(d.completedAt);
+    expect(h.tx.wasteRequestLine.update).toHaveBeenCalledWith({ where: { id: 'l1' }, data: { receivedQty: 10, shortfallReason: null, pointsAwarded: 10_000 } });
+    expect(writeWasteEvent).toHaveBeenCalledWith(
+      h.tx,
+      expect.objectContaining({
+        actorUserId: 's1',
+        requestId: 'r1',
+        pointId: 'p1',
+        meta: expect.objectContaining({
+          device: h.call.device,
+          lines: [{ itemId: 'wi-carton', declaredQty: 10, receivedQty: 10, shortfallReason: null }],
+          after: { status: 'COMPLETED', pointsAwarded: 10_000, dropsAwarded: 0 },
+        }),
+      }),
+    );
+  });
+
+  describe('2. Tubu bottles with drops', () => {
+    const lines = [{ itemId: 'wi-bottle', declaredQty: 3, receivedQty: 3 }];
+    it('clamps the drops by the room left in the tank', async () => {
+      const h = setup({ row: row({ lines: [bottle] }), seeds: 497, incremented: 6000 });
+      const r = await h.svc.confirm(h.call, body(lines));
+      expect(r).toEqual(expect.objectContaining({ pointsAwarded: 6000, dropsAwarded: 3 }));
+      expect(h.tx.gameProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { totalSeeds: { increment: 3 } } });
+      const i = (k: string) => h.order.indexOf(k);
+      expect(i('grant')).toBeLessThan(i('game upsert'));
+      expect(i('game upsert')).toBeLessThan(i('game FOR UPDATE'));
+      expect(i('game FOR UPDATE')).toBeLessThan(i('point lastConfirmedAt'));
+    });
+    it('a full tank awards 0 drops and still stores the figure', async () => {
+      const h = setup({ row: row({ lines: [bottle] }), seeds: 500, incremented: 6000 });
+      const r = await h.svc.confirm(h.call, body(lines));
+      expect(r.dropsAwarded).toBe(0);
+      expect(h.tx.gameProfile.update).not.toHaveBeenCalled();
+      expect(h.tx.wasteRequest.update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { dropsAwarded: 0 } });
+    });
+  });
+
+  describe('3. replay', () => {
+    const replayHarness = (o: Setup = {}) => setup({ row: completed(), staffToday: 10_000, ...o });
+    it('same figures return the stored result and write nothing', async () => {
+      const h = replayHarness();
+      await expect(h.svc.confirm(h.call, body())).resolves.toEqual(REPLAY_RESULT);
+      for (const f of [writeWasteEvent, incrementPointUsage]) expect(f).not.toHaveBeenCalled();
+      expect(h.rewards.grant).not.toHaveBeenCalled();
+      expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
+      expect(h.shipLock.evaluateAndLock).not.toHaveBeenCalled();
+      expect(h.order).not.toContain('notify');
+    });
+    it('ignores declaredQty (R15.5.40)', async () => {
+      const h = replayHarness();
+      await expect(h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 9, receivedQty: 10 }]))).resolves.toEqual(REPLAY_RESULT);
+      expect(writeWasteEvent).not.toHaveBeenCalled();
+    });
+    it('a different receivedQty is a 409', async () => {
+      const h = replayHarness();
+      await expect(h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 10, receivedQty: 9, shortfallReason: 'DAMAGED' }]))).rejects.toThrow(
+        new ConflictException('Yêu cầu đã được xác nhận với số liệu khác'),
+      );
+    });
+    it('another staff member is a 409', async () => {
+      const h = replayHarness({ row: completed({ confirmedByUserId: 's2' }) });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Yêu cầu đã được xác nhận với số liệu khác'));
+    });
+  });
+
+  it('4. programme off blocks a DROP_OFF at the warehouse on route ADMIN', async () => {
+    const h = warehouseCase({ row: row({ pointId: 'wh' }), cfg: { enabled: false } });
+    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ForbiddenException('Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.'));
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('5. PICKUP at the warehouse', () => {
+    const pickup = (o: Record<string, unknown> = {}) => row({ method: 'PICKUP', pointId: 'wh', status: 'IN_TRANSIT', orderId: 'o1', order: { status: 'DELIVERED' }, ...o });
+    const match = { parcelCode: 'TR-ABCDE' };
+    it.each([
+      ['order not delivered', { order: { status: 'CONFIRMED' } }],
+      ['no attached order', { status: 'OPEN', orderId: null, order: null }],
+    ])('%s is a 409', async (_n, over) => {
+      const h = warehouseCase({ row: pickup(over) });
+      await expect(h.svc.confirm(h.call, body(full, { match }))).rejects.toThrow(new ConflictException('Đơn gắn kèm chưa giao xong, chưa xác nhận được'));
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    });
+    it.each(['DELIVERED', 'RETURNED'])('order %s completes', async (s) => {
+      const h = warehouseCase({ row: pickup({ order: { status: s } }) });
+      await expect(h.svc.confirm(h.call, body(full, { match }))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+      const sqls = h.tx.$queryRaw.mock.calls.map((c) => (c[0] as unknown as TemplateStringsArray).join('?'));
+      expect(sqls.some((s2) => s2.includes('"orders"'))).toBe(false);
+    });
+    it('status OPEN with a delivered order completes (R15.5.20)', async () => {
+      const h = warehouseCase({ row: pickup({ status: 'OPEN' }) });
+      await expect(h.svc.confirm(h.call, body(full, { match }))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+    });
+  });
+
+  it('6. a failed match basis is a 409 and writes nothing', async () => {
+    const h = warehouseCase({ row: whRow({ status: 'IN_TRANSIT' }), matchOutcome: { ok: false, reason: 'NO_MATCH' } });
+    const err = await h.svc.confirm(h.call, body()).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).message).toMatch(/^Căn cứ đối chiếu không hợp lệ:/);
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+  });
+
+  describe('7. bans', () => {
+    it('the customer cannot confirm their own request', async () => {
+      const h = setup({ row: row({ userId: 's1', user: { id: 's1', phone: '0900000001', isBlocked: false } }) });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ForbiddenException('Bạn không thể xác nhận yêu cầu này'));
+    });
+    it('same phone', async () => {
+      const h = setup({ access: { ...partnerAccess, caller: { id: 's1', phone: '0900000001', role: 'USER' } } });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ForbiddenException('Bạn không thể xác nhận yêu cầu này'));
+    });
+    it('colleague at the same point', async () => {
+      const h = setup({ colleague: 1 });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ForbiddenException('Bạn không thể xác nhận yêu cầu này'));
+    });
+    it('the colleague rule is not applied at the warehouse', async () => {
+      const h = warehouseCase({ row: whRow(), colleague: 1 });
+      await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+      expect(h.tx.wastePointStaff.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('8. blocked customer', () => {
+    it('POINT_STAFF gets the wait-for-Tubu text', async () => {
+      const h = setup({ row: row({ user: { id: 'u1', phone: '0900000001', isBlocked: true } }) });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Yêu cầu này đang chờ Tubu xử lý, chưa xác nhận được tại điểm'));
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    });
+    it('a waste flag at the warehouse gets the locked text', async () => {
+      const h = warehouseCase({ row: whRow(), flags: { blockedAt: new Date() } });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Khách đang bị khoá, không cộng điểm được'));
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  it('9. staff daily cap', async () => {
+    const h = setup({ staffToday: 995_000 });
+    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Bạn đã chạm trần điểm xác nhận hôm nay'));
+    expect(incrementPointUsage).not.toHaveBeenCalled();
+  });
+
+  it('10. monthly quota of the point', async () => {
+    const h = setup({ incremented: null, usage: { pointsUsed: 95_000, confirmations: 4 } });
+    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Điểm đã hết hạn mức tháng, còn 5.000 điểm'));
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('11. zero points at a PARTNER point still completes', async () => {
+    const h = setup({ row: row({ lines: [{ ...milk, declaredQty: 4 }] }), usage: { pointsUsed: 7_000, confirmations: 2 } });
+    const r = await h.svc.confirm(h.call, body([{ itemId: 'wi-milk', declaredQty: 4, receivedQty: 4 }]));
+    expect(r.pointsAwarded).toBe(0);
+    expect(r.quota).toEqual({ limit: 100_000, used: 7_000, remaining: 93_000 });
+    expect(incrementPointUsage).not.toHaveBeenCalled();
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+    expect(h.notifier.pointsCredited).toHaveBeenCalledWith('u1', { id: 'r1', code: 'TR-ABCDE' }, 0, 0);
+  });
+
+  it('12. grant returning false is a 500 and sends no message', async () => {
+    const h = setup({ grant: false });
+    await expect(h.svc.confirm(h.call, body())).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(errorSpy).toHaveBeenCalled();
+    expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
+  });
+
+  describe('13. point ceilings', () => {
+    it('above estimatedPoints is a 500 and nothing else runs', async () => {
+      const h = setup({ row: row({ estimatedPoints: 5000 }) });
+      await expect(h.svc.confirm(h.call, body())).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      for (const f of [lockWasteStaffCap, incrementPointUsage]) expect(f).not.toHaveBeenCalled();
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      expect(h.rewards.grant).not.toHaveBeenCalled();
+      expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
+    });
+    it('above 2000000 is a 400', async () => {
+      const big = { ...carton, declaredQty: 3, pointsPerGroup: 666_667 };
+      const h = setup({ row: row({ lines: [big], estimatedPoints: 2_000_001 }) });
+      await expect(h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 3, receivedQty: 3 }]))).rejects.toThrow(
+        new BadRequestException('Số điểm của một yêu cầu không được vượt 2.000.000'),
+      );
+    });
+  });
+
+  it('14. updateMany count 0 is a 409', async () => {
+    const h = setup({ updateCount: 0 });
+    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+  });
+
+  describe('15. P2002', () => {
+    const errors = [new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }), { code: 'P2002' }];
+    it.each(errors)('a stored result is returned without a message (%#)', async (e) => {
+      const h = setup({ txError: e, again: completed(), staffToday: 10_000 });
+      await expect(h.svc.confirm(h.call, body())).resolves.toEqual(REPLAY_RESULT);
+      expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
+    });
+    it.each(errors)('an OPEN row is a 409 (%#)', async (e) => {
+      const h = setup({ txError: e, again: row() });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    });
+  });
+
+  describe('16. MAIL_IN RECEIVED at the warehouse via ADMIN', () => {
+    it('completes without the quota counter and evaluates the ship lock after commit', async () => {
+      const h = warehouseCase({ row: whRow() });
+      const r = await h.svc.confirm(h.call, body());
+      expect(r.quota).toBeNull();
+      expect(incrementPointUsage).not.toHaveBeenCalled();
+      expect((writeWasteEvent as jest.Mock).mock.calls[0][1].meta.matchBasis).toBeNull();
+      noCustomerField(r);
+      expect(h.shipLock.evaluateAndLock).toHaveBeenCalledTimes(1);
+      expect(h.shipLock.evaluateAndLock).toHaveBeenCalledWith('u1', { shortfallLockPct: 50, shortfallLockStreak: 3 });
+      expect(h.order.indexOf('tx end')).toBeLessThan(h.order.indexOf('shipLock'));
+      expect(h.evaluate).not.toHaveBeenCalled();
+      expect(h.access.assertWarehouseActor).toHaveBeenNthCalledWith(1, 's1');
+      expect(h.access.assertWarehouseActor).toHaveBeenNthCalledWith(2, 's1', h.tx);
+    });
+    it('a failed ship-lock evaluation or message does not fail the call', async () => {
+      const h = warehouseCase({ row: whRow() });
+      h.shipLock.evaluateAndLock.mockRejectedValueOnce(new Error('boom'));
+      h.notifier.pointsCredited.mockRejectedValueOnce(new Error('boom'));
+      await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+    });
+  });
+
+  it('17. receivedWeightGrams at the warehouse is stored and ignored by a replay', async () => {
+    const h = warehouseCase({ row: whRow() });
+    await h.svc.confirm(h.call, body(full, { receivedWeightGrams: 1200 }));
+    expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ data: unknown }])[0].data).toEqual(expect.objectContaining({ receivedWeightGrams: 1200 }));
+
+    const r = warehouseCase({ row: completed({ method: 'MAIL_IN', pointId: 'wh' }), pointRow: { kind: 'WAREHOUSE', monthlyQuotaPoints: null }, staffToday: 10_000 });
+    await expect(r.svc.confirm(r.call, body(full, { receivedWeightGrams: 900 }))).resolves.toEqual(expect.objectContaining({ pointsAwarded: 10_000, quota: null }));
+    expect(writeWasteEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('18. route ADMIN on a PARTNER request is a 409', async () => {
+    const h = warehouseCase();
+    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Yêu cầu này không xác nhận ở kho'));
+    for (const f of [incrementPointUsage, writeWasteEvent]) expect(f).not.toHaveBeenCalled();
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+  });
+
+  describe('19. statuses that cannot be confirmed', () => {
+    it.each(['EXPIRED', 'CANCELLED', 'REJECTED', 'REVERSED'])('MAIL_IN %s at the warehouse', async (s) => {
+      const h = warehouseCase({ row: whRow({ status: s }) });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Yêu cầu không ở trạng thái xác nhận được'));
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      expect(h.rewards.grant).not.toHaveBeenCalled();
+      expect(writeWasteEvent).not.toHaveBeenCalled();
+    });
+    it('a DROP_OFF at p1 that is IN_TRANSIT via DESK', async () => {
+      const h = setup({ row: row({ status: 'IN_TRANSIT' }) });
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Yêu cầu không ở trạng thái xác nhận được'));
+    });
+  });
+
+  it('20. programme off blocks a DROP_OFF at the warehouse from the desk route too', async () => {
+    const h = setup({ row: row({ pointId: 'wh' }), cfg: { enabled: false }, access: warehouseAccess });
+    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ForbiddenException('Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.'));
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('21. the warehouse keeps counting while the programme is off', () => {
+    const rowFor = (method: string) => whRow(method === 'PICKUP' ? { method, orderId: 'o1', order: { status: 'DELIVERED' } } : { method });
+    it.each(['MAIL_IN', 'PICKUP'])('%s via ADMIN', async (method) => {
+      const h = warehouseCase({ row: rowFor(method), cfg: { enabled: false } });
+      await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000, quota: null }));
+      expect(h.tx.wasteRequest.updateMany).toHaveBeenCalledTimes(1);
+      expect(h.rewards.grant).toHaveBeenCalledTimes(1);
+      expect(incrementPointUsage).not.toHaveBeenCalled();
+    });
+    it.each(['MAIL_IN', 'PICKUP'])('%s via DESK', async (method) => {
+      const h = setup({ row: rowFor(method), cfg: { enabled: false }, access: warehouseAccess });
+      await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+    });
+  });
+
+  it('22. a PICKUP transition is conditional on orderId (spec 7.4)', async () => {
+    const h = warehouseCase({ row: row({ method: 'PICKUP', pointId: 'wh', status: 'IN_TRANSIT', orderId: 'o1', order: { status: 'DELIVERED' } }) });
+    await h.svc.confirm(h.call, body(full, { match: { parcelCode: 'TR-ABCDE' } }));
+    expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ where: unknown }])[0].where).toEqual({
+      id: 'r1',
+      status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] },
+      orderId: 'o1',
+    });
+    expect((writeWasteEvent as jest.Mock).mock.calls[0][1].meta.matchBasis).toBe('TR_CODE');
+  });
+
+  it('23. only the warehouse may send receivedWeightGrams', async () => {
+    const h = setup();
+    await expect(h.svc.confirm(h.call, body(full, { receivedWeightGrams: 500 }))).rejects.toThrow(new BadRequestException('Chỉ kho Tubu mới ghi khối lượng cân'));
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('24. a HIDDEN item is still counted at the snapshotted rate', async () => {
+    const h = setup({ row: row({ lines: [{ ...carton, item: { hazardous: false, status: 'HIDDEN' } }] }) });
+    await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000 }));
+  });
+
+  it('25. two items produce one credit row', async () => {
+    const h = setup({ row: row({ lines: [carton, milk], estimatedPoints: 12_000 }), incremented: 12_000 });
+    const r = await h.svc.confirm(
+      h.call,
+      body([
+        { itemId: 'wi-carton', declaredQty: 10, receivedQty: 10 },
+        { itemId: 'wi-milk', declaredQty: 10, receivedQty: 10 },
+      ]),
+    );
+    expect(h.rewards.grant).toHaveBeenCalledTimes(1);
+    expect(h.rewards.grant).toHaveBeenCalledWith('u1', 12_000, 'RECYCLE:TR-ABCDE', 'RECYCLE', 'r1', h.tx, EXPIRES_AT);
+    expect(incrementPointUsage).toHaveBeenCalledTimes(1);
+    expect((incrementPointUsage as jest.Mock).mock.calls[0][3]).toBe(12_000);
+    expect(h.tx.wasteRequestLine.update).toHaveBeenCalledTimes(2);
+    expect(r.pointsAwarded).toBe(12_000);
+  });
+
+  it('26. a ship-locked customer is still counted (spec 15.6)', async () => {
+    const h = warehouseCase({ row: whRow(), flags: { blockedAt: null, shipLockedAt: new Date('2026-10-01T00:00:00Z') } });
+    await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+    expect(h.rewards.grant).toHaveBeenCalledTimes(1);
+  });
+});
