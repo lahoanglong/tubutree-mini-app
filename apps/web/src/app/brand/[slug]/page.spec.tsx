@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import BrandPage, { generateMetadata } from './page';
 
 const mocks = vi.hoisted(() => ({ brand: null as unknown }));
@@ -10,7 +11,11 @@ vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND');
   },
+  useRouter: () => ({ push: vi.fn() }),
 }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
+vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn() } }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a data-next-link="" href={href} {...rest}>
@@ -25,6 +30,8 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 
 const BRAND = {
   name: 'Bồ Hòn Xanh',
+  slug: 'bo-hon',
+  followerCount: 12,
   tagline: 'Giặt sạch, nhẹ với đất',
   story: 'Câu chuyện\nnhiều dòng',
   isVerified: true,
@@ -44,7 +51,7 @@ const BRAND = {
 const html = async () => {
   const el = (await BrandPage({ params: Promise.resolve({ slug: 'bo-hon' }) })) as ReactElement;
   const box = document.createElement('div');
-  box.innerHTML = renderToStaticMarkup(el);
+  box.innerHTML = renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{el}</QueryClientProvider>);
   return box;
 };
 
@@ -108,6 +115,23 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
     expect(text).not.toContain('Đạt chỉ tiêu');
     expect(text).not.toContain('Đạt doanh số');
     expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Chứng nhận', 'Khuyến mãi', 'Sản phẩm', 'Câu chuyện thương hiệu']);
+  });
+});
+
+describe('trang nhãn hàng — theo dõi và chia sẻ', () => {
+  it('server dựng sẵn số người theo dõi, nút Theo dõi và Chia sẻ cho khách; chưa có dải kiếm tiền', async () => {
+    const box = await html();
+    const buttons = Array.from(box.querySelectorAll('button')).map((b) => b.textContent);
+    expect(buttons).toEqual(['Theo dõi', 'Chia sẻ']);
+    expect(box.textContent).toContain('12 người theo dõi');
+    expect(box.textContent).not.toContain('hoa hồng');
+  });
+
+  it('nút nằm ngay sau phần tên nhãn, trước chứng nhận', async () => {
+    const box = await html();
+    const follow = Array.from(box.querySelectorAll('button')).find((b) => b.textContent === 'Theo dõi')!;
+    const certs = Array.from(box.querySelectorAll('h2')).find((h) => h.textContent === 'Chứng nhận')!;
+    expect(follow.compareDocumentPosition(certs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

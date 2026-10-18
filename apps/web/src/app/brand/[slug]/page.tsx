@@ -5,6 +5,7 @@ import { Award, BadgeCheck, Sparkles, Leaf } from 'lucide-react';
 import { getBrand, formatSold } from '@/lib/api';
 import { ProductPriceRow } from '@/components/flash-price';
 import { EmptyState } from '@/components/empty-state';
+import { BrandActions, BrandDealerBlock } from './brand-actions';
 
 export const revalidate = 300;
 
@@ -59,6 +60,8 @@ export default async function BrandPage({
           {b.tagline && <p className="text-stone-600">{b.tagline}</p>}
         </div>
       </div>
+
+      <BrandActions slug={b.slug} name={b.name} followerCount={b.followerCount} />
 
       {b.certifications.length > 0 && (
         <section className="mt-5">
@@ -150,6 +153,8 @@ export default async function BrandPage({
           </div>
         </section>
       )}
+
+      <BrandDealerBlock rewards={b.dealerRewards} />
 
       {b.story && (
         <section className="mt-6">
