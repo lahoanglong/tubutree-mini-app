@@ -37,7 +37,7 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 25 | `/refill` | (chuyển sang `/recycle`) | — | — | skip | — | — | Nhánh đổi rác gỡ Refill (0b258d34), Mini App chỉ còn `<Navigate to="/recycle">`; route map để skip |
 | 26 | `/cashback` | cashback.tsx | — | `/hoan-tien` | xong cb5c0d58 | loyalty | công khai một phần | Giữ cờ `CASHBACK_ENABLED` (đang tắt). `openAffiliateLink` thành mở tab mới |
 | 27 | `/points/scan` | external-points.tsx | — | — | skip | — | — | Q2: quét mã đơn sàn chỉ ở Mini App (cần SĐT đã xác minh và máy quét QR). Web không có route; hub tài khoản trên web hiện lời dặn mở Mini App khi cờ bật |
-| 28 | `/game` | game.tsx | — | `/vuon-xanh` | mới | game | riêng tư | Lớn nhất (103 test). Không dùng Zalo SDK |
+| 28 | `/game` | game.tsx | — | `/vuon-xanh` | xong 17398cc5 | game | riêng tư | Lớn nhất (103 test). Không dùng Zalo SDK |
 | 29 | `/feed` | feed.tsx | — | `/cong-dong` | mới | community | công khai một phần | Khách: bản xem trước công khai |
 | 30 | `/feed/:id` | post-detail.tsx | — | `/cong-dong/[id]` | mới | community | riêng tư (Mini App bắt đăng nhập) | |
 | 31 | `/feed/events` | community-events.tsx | — | `/cong-dong/su-kien` | mới | community | riêng tư | |
