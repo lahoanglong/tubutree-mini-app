@@ -209,7 +209,7 @@ describe('refundExportWhere / refundCsvChunks (danh sách hoàn tiền, D1-14)',
 
   it('maskPhones: SĐT người nhận chỉ còn 3 số cuối, số tài khoản và tên chủ tài khoản vẫn đủ (kế toán cần để chuyển tiền)', async () => {
     const run = async (opts?: { maskPhones: boolean }) => {
-      const findMany = cursorModel([refund(1)]);
+      const findMany = cursorModel([refund(1, { adminNote: 'Khách gọi 0988 777 666' })]);
       const lines = (await collect(refundCsvChunks({ orderCustomerRefund: { findMany } } as unknown as PrismaService, {}, opts))).trimEnd().split('\r\n');
       return parseLine(lines[1]!);
     };
@@ -218,6 +218,9 @@ describe('refundExportWhere / refundCsvChunks (danh sách hoàn tiền, D1-14)',
     expect(masked[col('SĐT người nhận')]).toBe('*******333');
     expect(masked[col('Số tài khoản')]).toBe('="0099887766"');
     expect(masked[col('Chủ tài khoản')]).toBe('KHACH A');
+    expect(masked[col('Ghi chú admin')]).not.toContain('0988 777 666');
+    expect(masked[col('Ghi chú admin')]).toContain('666');
     expect((await run())[col('SĐT người nhận')]).toBe('="0911222333"');
+    expect((await run())[col('Ghi chú admin')]).toContain('0988 777 666');
   });
 });
