@@ -57,3 +57,30 @@ describe('Khoá liên hệ CSKH trong seed (Q-17)', () => {
     });
   });
 });
+
+/** Link cộng đồng: seed createOnly tạo dòng trước, nên giá trị seed (không phải mặc định trong mã) là thứ khách thấy sau deploy đầu. */
+describe('Link cộng đồng trong seed', () => {
+  const communityRows = () => seededConfigs().filter((r) => ['community.zalo_group_url', 'community.facebook_url', 'community.tiktok_url'].includes(r.key));
+
+  it('Facebook/TikTok là kênh trên website chủ dự án, chưa có nhóm Zalo thì để trống', () => {
+    expect(Object.fromEntries(communityRows().map((r) => [r.key, r.value]))).toEqual({
+      'community.zalo_group_url': '',
+      'community.facebook_url': 'https://www.facebook.com/tubutree',
+      'community.tiktok_url': 'https://www.tiktok.com/@tubutree.com',
+    });
+    expect(communityRows().every((r) => r.createOnly === true)).toBe(true);
+  });
+
+  it('seed khớp mặc định của GET /config/public', async () => {
+    const config = { get: jest.fn(async (_key: string, fallback?: unknown) => fallback) } as unknown as SystemConfigService;
+    const { community } = (await new SystemConfigController(config).publicConfig()) as unknown as {
+      community: { zaloGroupUrl: string | null; facebookUrl: string | null; tiktokUrl: string | null };
+    };
+    const seeded = Object.fromEntries(communityRows().map((r) => [r.key, r.value]));
+    expect(community).toMatchObject({
+      zaloGroupUrl: null,
+      facebookUrl: seeded['community.facebook_url'],
+      tiktokUrl: seeded['community.tiktok_url'],
+    });
+  });
+});
