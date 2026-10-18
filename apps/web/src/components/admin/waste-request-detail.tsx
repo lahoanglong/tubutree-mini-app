@@ -196,13 +196,14 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
     },
   });
 
-  const parsed = r.lines.map((l) => ({ line: l, qty: parseQty(received[l.itemId] ?? '', l.declaredQty) }));
+  // Hazardous comes from the live request: a refetch can flip it after the state initialisers ran.
+  const parsed = r.lines.map((l) => ({ line: l, qty: l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty) }));
   const anyInvalid = parsed.some((p) => p.qty === null);
   const shortLines = parsed.filter((p) => p.qty !== null && p.qty < p.line.declaredQty);
-  const missingReason = shortLines.some((p) => !reasons[p.line.itemId]);
+  const missingReason = shortLines.some((p) => !p.line.hazardous && !reasons[p.line.itemId]);
   const weightTrim = weight.trim();
   const weightValid = weightTrim === '' || (/^\d+$/.test(weightTrim) && Number(weightTrim) >= 1 && Number(weightTrim) <= 100000);
-  const total = wastePointsForLines(r.lines.map((l) => ({ receivedQty: lastValid[l.itemId] ?? l.declaredQty, unitsPerPoint: l.unitsPerPoint, pointsPerGroup: l.pointsPerGroup })));
+  const total = wastePointsForLines(r.lines.map((l) => ({ receivedQty: l.hazardous ? 0 : (lastValid[l.itemId] ?? l.declaredQty), unitsPerPoint: l.unitsPerPoint, pointsPerGroup: l.pointsPerGroup })));
   const ready = !anyInvalid && !missingReason && weightValid && result === null;
 
   const setQty = (itemId: string, declaredQty: number, raw: string) => {
@@ -222,6 +223,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
     setErr(null);
     onFlash(null);
     const lines: WasteConfirmLineInput[] = parsed.map(({ line, qty }) => {
+      if (line.hazardous) return { itemId: line.itemId, declaredQty: line.declaredQty, receivedQty: 0, shortfallReason: 'WRONG_TYPE' };
       const reason = reasons[line.itemId];
       return qty! < line.declaredQty && reason
         ? { itemId: line.itemId, declaredQty: line.declaredQty, receivedQty: qty!, shortfallReason: reason }
@@ -237,7 +239,8 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
       <h3 className="text-sm font-semibold text-stone-900">Đếm hàng thực nhận</h3>
       <ul className="space-y-2">
         {r.lines.map((l) => {
-          const qty = parseQty(received[l.itemId] ?? '', l.declaredQty);
+          const qty = l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty);
+          const reasonValue = l.hazardous ? 'WRONG_TYPE' : (reasons[l.itemId] ?? '');
           const isShort = qty !== null && qty < l.declaredQty;
           return (
             <li key={l.itemId} className="flex flex-wrap items-center gap-2 text-sm">
@@ -249,7 +252,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                 inputMode="numeric"
                 aria-label={`Thực nhận ${l.itemName}`}
                 className={`${FIELD_CLASS} w-24`}
-                value={received[l.itemId] ?? ''}
+                value={l.hazardous ? '0' : (received[l.itemId] ?? '')}
                 disabled={l.hazardous}
                 onChange={(e) => setQty(l.itemId, l.declaredQty, e.target.value)}
               />
@@ -258,7 +261,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                   name={`shortfall-${l.itemId}`}
                   aria-label={`Lý do thiếu ${l.itemName}`}
                   className={FIELD_CLASS}
-                  value={reasons[l.itemId] ?? ''}
+                  value={reasonValue}
                   disabled={l.hazardous}
                   onChange={(e) => setReasons((prev) => ({ ...prev, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
                 >
