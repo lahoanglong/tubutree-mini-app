@@ -20,6 +20,7 @@ import { useSuggest } from '@/lib/use-suggest';
 import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
+import { BrowsePager } from './browse-pager';
 import { CategoryGrid } from './category-grid';
 import { FilterSheet } from './filter-sheet';
 import { RecentlyViewedRail } from './recently-viewed-rail';
@@ -292,6 +293,12 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                     </button>
                   </div>
                 )}
+                <BrowsePager
+                  state={state}
+                  startPage={seeded?.startPage ?? page}
+                  lastPage={products.data?.pages.at(-1)?.meta.page ?? page}
+                  hasNext={products.hasNextPage}
+                />
               </>
             )}
           </section>

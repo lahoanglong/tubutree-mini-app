@@ -40,7 +40,8 @@ const BRAND = {
   certifications: [{ code: 'ORG', label: 'Hữu cơ' }],
   promotions: [
     { id: 'pr1', title: 'Giảm 10%', subtitle: 'Tuần lễ xanh', themeColor: '#123456' },
-    { id: 'pr2', title: 'Quà tặng', subtitle: null, themeColor: null },
+    { id: 'pr2', title: 'Quà tặng', subtitle: null, themeColor: null, couponCode: null },
+    { id: 'pr3', title: 'Mã xanh', subtitle: null, themeColor: null, couponCode: 'XANH10' },
   ],
   products: [
     { id: 'p1', name: 'Nước rửa chén', slug: 'nuoc-rua-chen', thumbnail: null, basePrice: 90000, salePrice: 80000, sold: 12 },
@@ -93,6 +94,13 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
     expect(cards[0]!.getAttribute('style')).toContain('border-color');
     expect(cards[1]!.getAttribute('style')).toBeNull();
     expect(cards[1]!.className).toContain('bg-promo-bg');
+  });
+
+  it('khuyến mãi có couponCode hiện nút chép mã, khuyến mãi không mã thì không có nút', async () => {
+    const section = Array.from((await html()).querySelectorAll('section')).find((s) => s.textContent?.includes('Khuyến mãi'))!;
+    const buttons = section.querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.getAttribute('aria-label')).toBe('Sao chép mã XANH10');
   });
 
   it('thẻ sản phẩm trỏ đúng liên kết, giá là giá khuyến mãi và dùng token thẻ DS v2', async () => {

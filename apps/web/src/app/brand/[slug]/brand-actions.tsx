@@ -201,6 +201,38 @@ function BrandShareSheet({
   );
 }
 
+/** Mã giảm giá của khuyến mãi nhãn: chạm để chép, khách dán ở bước thanh toán (cùng chữ báo với Mini App). */
+export function BrandPromoCode({ code }: { code: string | null | undefined }) {
+  const [note, setNote] = useState<string | null>(null);
+  if (!code) return null;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setNote(`Đã chép mã ${code} — dán ở bước thanh toán`);
+    } catch {
+      setNote(`Mã giảm giá: ${code}`);
+    }
+  };
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        aria-label={`Sao chép mã ${code}`}
+        onClick={() => void copy()}
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-dashed border-promo-solid bg-stone-0 px-3 text-sm font-bold text-promo-fg"
+      >
+        <Copy className="h-4 w-4" aria-hidden="true" />
+        {code}
+      </button>
+      {note && (
+        <p role="status" className="mt-1 text-sm text-success-fg">
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const PERIOD_LABEL = (p: string) => (p === 'YEAR' ? 'năm' : 'quý');
 
 /**

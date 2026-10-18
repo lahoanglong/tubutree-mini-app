@@ -5,7 +5,7 @@ import { Award, BadgeCheck, Sparkles, Leaf } from 'lucide-react';
 import { getBrand, formatSold } from '@/lib/api';
 import { ProductPriceRow } from '@/components/flash-price';
 import { EmptyState } from '@/components/empty-state';
-import { BrandActions, BrandDealerBlock } from './brand-actions';
+import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
 
 export const revalidate = 300;
 
@@ -98,6 +98,7 @@ export default async function BrandPage({
               >
                 <p className="font-semibold text-promo-fg">{p.title}</p>
                 {p.subtitle && <p className="text-sm text-stone-600">{p.subtitle}</p>}
+                <BrandPromoCode code={p.couponCode} />
               </div>
             ))}
           </div>

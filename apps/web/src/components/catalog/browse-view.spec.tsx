@@ -295,6 +295,36 @@ describe('BrowseView — bộ lọc', () => {
   });
 });
 
+describe('BrowseView — liên kết phân trang cho crawler', () => {
+  const seeded = (startPage: number, total: number) => ({
+    urlKey: '', startPage, page: { ...pageOf([product(7)], total, startPage, 24), filtersIgnored: false },
+  });
+  const hrefs = (root: ParentNode) => [...root.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Phân trang"] a')].map((a) => [a.getAttribute('rel'), a.getAttribute('href')]);
+
+  it('trang 1 còn trang sau: HTML có thẻ a rel=next tới ?page=2, giữ bộ lọc, không có liên kết trang trước', async () => {
+    nav.search = 'brand=Tubu';
+    const { container } = mount({ initial: { ...seeded(1, 100), urlKey: 'brand=Tubu' } });
+    expect(hrefs(container)).toEqual([['next', '/san-pham?brand=Tubu&page=2']]);
+  });
+
+  it('bắt đầu từ trang 3: có liên kết trang trước (?page=2) và trang sau (?page=4)', async () => {
+    nav.search = 'page=3';
+    const { container } = mount({ initial: seeded(3, 100) });
+    expect(hrefs(container)).toEqual([['prev', '/san-pham?page=2'], ['next', '/san-pham?page=4']]);
+  });
+
+  it('bắt đầu từ trang 2: liên kết trang trước về /san-pham không kèm page', async () => {
+    nav.search = 'page=2';
+    const { container } = mount({ initial: seeded(2, 100) });
+    expect(hrefs(container)[0]).toEqual(['prev', '/san-pham']);
+  });
+
+  it('ít sản phẩm, một trang: không vẽ thanh phân trang', async () => {
+    const { container } = mount({ initial: seeded(1, 5) });
+    expect(container.querySelector('nav[aria-label="Phân trang"]')).toBeNull();
+  });
+});
+
 describe('BrowseView — tải thêm, rỗng, lỗi', () => {
   it('còn trang sau: "Xem thêm" tải trang 2 và nối vào cuối, không trùng; hết trang thì ẩn nút', async () => {
     routes['/products'] = (q) => (Number(q?.page) === 2 ? pageOf([product(2), product(3)], 3, 2, 2) : pageOf([product(1), product(2)], 3, 1, 2));

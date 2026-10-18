@@ -27,7 +27,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: mocks.share } }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => (p === '/dai-ly' ? mocks.dealerReady : true) }));
 
-import { BrandActions, BrandDealerBlock } from './brand-actions';
+import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
 
 let mounted: Rendered[] = [];
 const mount = async (ui: Parameters<typeof render>[0]) => {
@@ -273,5 +273,28 @@ describe('/brand/[slug] — chương trình đại lý', () => {
     const c = await mount(<BrandDealerBlock rewards={[]} />);
     expect(c.textContent).toBe('');
     expect(mocks.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('/brand/[slug] — mã giảm giá của khuyến mãi', () => {
+  it('chạm nút chép mã vào clipboard rồi báo dán ở bước thanh toán', async () => {
+    const c = await mount(<BrandPromoCode code="XANH10" />);
+    click(btn(c, 'Sao chép mã XANH10')!);
+    await flush(3);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('XANH10');
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã chép mã XANH10 — dán ở bước thanh toán');
+  });
+
+  it('chép không được thì hiện mã để khách tự nhập', async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+    const c = await mount(<BrandPromoCode code="XANH10" />);
+    click(btn(c, 'Sao chép mã XANH10')!);
+    await flush(3);
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Mã giảm giá: XANH10');
+  });
+
+  it('không có mã thì không vẽ gì', async () => {
+    const c = await mount(<BrandPromoCode code={null} />);
+    expect(c.querySelector('button')).toBeNull();
   });
 });
