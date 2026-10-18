@@ -97,6 +97,27 @@ describe('WastePointForm', () => {
     expect(q(wh.c, 'input[name="monthlyQuotaPoints"]')).toBeNull();
   });
 
+  it('đại lý mới: tuỳ chọn Đang nhận bị khoá và body gửi lên không phải ACTIVE', async () => {
+    const { api, c } = await mount();
+    const active = c.querySelector<HTMLOptionElement>('select[name="status"] option[value="ACTIVE"]')!;
+    expect(active.disabled).toBe(true);
+    expect(c.textContent).toContain('gắn chủ điểm rồi mới kích hoạt');
+    await fillNew(c);
+    click(btn(c, 'Đăng ký điểm'));
+    await flush();
+    expect(body(callsTo(api, '/admin/waste/points', 'POST')[0]!).status).not.toBe('ACTIVE');
+  });
+
+  it('kho mới vẫn chọn được Đang nhận; sửa đại lý đang có vẫn chọn được Đang nhận', async () => {
+    const wh = await mount({ warehouseExists: false });
+    click(q(wh.c, 'input[name="kind"][value="WAREHOUSE"]'));
+    await flush();
+    expect(wh.c.querySelector<HTMLOptionElement>('select[name="status"] option[value="ACTIVE"]')!.disabled).toBe(false);
+    const edit = await mount({ point: wastePoint({ status: 'PAUSED' }) });
+    expect(edit.c.querySelector<HTMLOptionElement>('select[name="status"] option[value="ACTIVE"]')!.disabled).toBe(false);
+    expect(edit.c.textContent).not.toContain('gắn chủ điểm rồi mới kích hoạt');
+  });
+
   it('toạ độ ngoài biên và giờ đóng trước giờ mở bị chặn', async () => {
     const { c } = await mount();
     await fillNew(c);
