@@ -29,6 +29,7 @@ import { MerchantService } from './merchant.service';
 import { MERCHANT_FULFIL_STATUSES, MerchantFulfilmentService } from './merchant-fulfilment.service';
 import { OrderReturnsService } from '../orders/order-returns.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
+import { IsStorefrontImageValue } from '../../common/uploaded-image';
 
 // Cùng trần với /storefront/me (storefront.controller.ts): ảnh có thể là data URL base64 khi chưa cấu hình Cloudinary.
 const IMAGE_MAX = 1_500_000;
@@ -67,8 +68,8 @@ export class UpdateMerchantStoreDto {
   @OptionalNotNull() @IsString() @MaxLength(200) warehouseDistrict?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) warehouseWard?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) warehousePhone?: string;
-  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
-  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) @IsStorefrontImageValue() avatarUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) @IsStorefrontImageValue() coverUrl?: string;
   @OptionalNotNull() @IsBoolean() isPublished?: boolean;
   /** null = dùng phí mặc định của Tubu (`merchant.default_shipping_fee`). */
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsInt() @Min(0) @Max(MAX_SHIPPING_FEE) shippingFee?: number | null;
