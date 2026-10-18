@@ -45,7 +45,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   checkoutQuote: (...args: unknown[]) => m.quote(...args),
   placeOrder: (...args: unknown[]) => m.placeOrder(...args),
   recordReferralTouch: (...args: unknown[]) => m.touch(...args),
-  getPublicConfig: async () => ({ recyclingEnabled: false }),
+  getPublicConfig: async () => ({ recyclingEnabled: true }),
 }));
 
 import CheckoutPage from './page';
@@ -369,5 +369,20 @@ describe('/thanh-toan — COD theo từng đơn, báo giá quyết định phư�
     click(placeButton(r));
     await flush(4);
     expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'WALLET' });
+  });
+});
+
+describe('/thanh-toan — web không còn công tắc thu gom cũ (§12.2, §13.2)', () => {
+  it('API cũ còn trả recyclingEnabled: true vẫn không hiện công tắc, không có lời mời "pin, quần áo cũ", đặt đơn không gửi trường thu gom', async () => {
+    const r = await mount();
+    expect(r.container.querySelector('#checkout-recycling')).toBeNull();
+    expect(r.container.textContent).not.toContain('Gửi lại vật liệu tái chế');
+    expect(r.container.textContent).not.toContain('quần áo cũ');
+    click(placeButton(r));
+    await flush(4);
+    const body = m.placeOrder.mock.calls[0]![0] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('hasRecyclingPickup');
+    expect(body).not.toHaveProperty('recyclingNote');
+    expect(body).not.toHaveProperty('wasteRequestId');
   });
 });
