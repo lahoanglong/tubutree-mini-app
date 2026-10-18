@@ -194,3 +194,13 @@ Gộp không có xung đột; thứ tự migration giữ nguyên (`2026101915000
 - Vitest: 6 ca ở tab (hiện thông tin và nhãn, mốc mới, SCAN và chưa có chủ, duyệt kèm ghi chú, duyệt PHONE thường, 400 NOTE_REQUIRED) và 1 ca `approveNeedsNote`; chạy cả giờ VN lẫn `TZ=UTC`.
 - Không chụp màn hình tab.
 
+
+## Sửa sau review lượt 4
+
+Mã nguồn gốc của kết quả đỏ: 3c04d301. Test mới: `external-claims-admin.controller.spec.ts` (N1) và nhóm "lượt 4" trong `test/integration-race/external-chat-review3.race-spec.ts` (M1, M2, M4). Đỏ trước khi sửa: controller spec 4/5 đỏ; race 4/4 ca lượt 4 đỏ. Các ca vitest web (M2, M3) viết cùng lúc với sửa, chưa chạy đỏ riêng.
+
+- N1: `@Body() dto: ApproveClaimDto | undefined` làm tsc ghi metadata kiểu `Object` nên ValidationPipe bỏ qua; `{note:123}` gây 500 và ghi chú dài không bị chặn. Sửa thành `@Body() dto: ApproveClaimDto`. Test dùng `createValidationPipe()` với metatype đọc từ `design:paramtypes` của `approve`: `{note:123}`, `{note:['a']}`, 301 ký tự đều 400; body rỗng và ghi chú hợp lệ qua.
+- M1: ghi chú được chuẩn hoá trước khi kiểm (bỏ zero-width `U+200B..U+200D`, `U+2060`, `U+FEFF` và khoảng trắng); còn dưới 3 ký tự thì 400 `NOTE_REQUIRED`.
+- M2: bắt ghi chú cho mọi claim PHONE có chủ mà mốc xác minh vẫn quá hạn lúc duyệt, không phụ thuộc lý do REVIEW. Vẫn ghi `STALE_APPROVE_MARK` vào sự kiện APPROVE nên lúc cộng không bắt kiểm lại. Kịch bản R9 (REVIEW vì vượt ngưỡng, SĐT cũ đi trước lúc duyệt): duyệt một lần là cộng 120.000, không có TO_REVIEW thứ hai. Web `approveNeedsNote` bỏ điều kiện lý do.
+- M3: web hỏi ghi chú theo `memberPhoneStale` lúc tải danh sách; khi API trả 400 `NOTE_REQUIRED` cho lần duyệt thường, web xoá thông báo lỗi và mở ngay hộp ghi chú bắt buộc cho đúng claim, rồi gửi lại kèm `{note}`.
+- M4: hộp ghi chú nhắc "Không ghi số điện thoại đầy đủ vào ghi chú."; API che SĐT Việt Nam trong ghi chú bằng `maskVnPhonesInText` (giữ 3 số cuối) trước khi lưu vào sự kiện. Chuỗi số không phải SĐT (ví dụ mã giao dịch) không bị che.

@@ -8,7 +8,7 @@ import type {
   AdminReverseClaimResponse,
 } from '@tubutree/shared-types';
 import { formatPoints } from '../../common/format-points';
-import { maskPhoneOrNull } from '../../common/mask-pii';
+import { maskPhoneOrNull, maskVnPhonesInText } from '../../common/mask-pii';
 import { paginated, skipTake } from '../../common/pagination';
 import { parseTypedVnPhone } from '../../common/phone';
 import { startOfVnMonth, vnDateKey } from '../../common/vn-time';
@@ -19,7 +19,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import { advisoryPhoneLock, chatMonthPoints, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, loadStaffMap } from './external-chat.config';
-import { isSameAsPancakeCreator, PHONE_STALE_REASON, phoneVerifiedFresh, STALE_APPROVE_MARK } from './external-chat.rules';
+import { isSameAsPancakeCreator, phoneVerifiedFresh, STALE_APPROVE_MARK } from './external-chat.rules';
 import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
 import { evaluateClaimRules, settlePoints } from './external-claim.rules';
@@ -27,6 +27,10 @@ import { advisoryUserLock, type CreatedClaim, ExternalClaimService, rejectionOf,
 import { closedCreditedWhere, stalePendingWhere, UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { normalizeTrackingCode, pancakeCreatorRefs } from './external-order.mapper';
 import { claimCodeLabel, claimPoints, maskClaimCode } from './external-points-rate';
+
+/** Zero-width và ký tự định dạng vô hình: không được tính là nội dung ghi chú. */
+const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF]/g;
+const MIN_NOTE_CHARS = 3;
 
 const UNPAID: ExternalClaimState[] = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER'];
 
@@ -255,10 +259,12 @@ export class ExternalClaimsAdminService {
         const m = await tx.user.findUnique({ where: { id: c.userId }, select: { phoneVerifiedAt: true, tier: { select: { pointMultiplier: true } } } });
         if (m) {
           multiplier = tierMultiplierOf(m);
-          // Claim chờ vì SĐT cũ mà mốc vẫn cũ: người duyệt phải ghi đã xác nhận người nhận bằng cách nào (Mini App không tự xin lại số).
-          if (c.reviewReason === PHONE_STALE_REASON && !phoneVerifiedFresh(m.phoneVerifiedAt, { now, maxDays: chatCfg.phoneVerifiedMaxDays })) {
-            if (!note?.trim()) throw new BadRequestException({ code: 'NOTE_REQUIRED', message: 'SĐT xác minh của thành viên đã cũ: cần ghi chú cách bạn đã xác nhận người nhận.' });
-            staleNote = `${STALE_APPROVE_MARK}: ${note.trim()}`;
+          // Mốc xác minh vẫn cũ lúc duyệt (bất kể lý do REVIEW): người duyệt phải ghi đã xác nhận người nhận bằng cách nào (Mini App không tự
+          // xin lại số), nếu không claim đã duyệt vẫn bị kiểm lại SĐT lúc cộng. Ký tự vô hình không tính; SĐT đầy đủ trong ghi chú bị che.
+          if (!phoneVerifiedFresh(m.phoneVerifiedAt, { now, maxDays: chatCfg.phoneVerifiedMaxDays })) {
+            const clean = (note ?? '').replace(INVISIBLE, '').trim();
+            if (clean.replace(/\s/g, '').length < MIN_NOTE_CHARS) throw new BadRequestException({ code: 'NOTE_REQUIRED', message: 'SĐT xác minh của thành viên đã cũ: cần ghi chú cách bạn đã xác nhận người nhận.' });
+            staleNote = `${STALE_APPROVE_MARK}: ${maskVnPhonesInText(clean)}`;
           }
         }
       }

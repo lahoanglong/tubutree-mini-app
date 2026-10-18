@@ -83,8 +83,8 @@ export class ExternalClaimsAdminController {
   }
 
   @Post(':id/approve')
-  approve(@Param('id') id: string, @Body() dto: ApproveClaimDto | undefined, @CurrentUser() user: JwtPayload) {
-    return this.admin.approve(id, user.sub, new Date(), dto?.note);
+  approve(@Param('id') id: string, @Body() dto: ApproveClaimDto, @CurrentUser() user: JwtPayload) {
+    return this.admin.approve(id, user.sub, new Date(), dto.note);
   }
 
   @Post(':id/void')

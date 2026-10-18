@@ -254,4 +254,47 @@ describe('Điểm đơn chat sau review lượt 3 (real Postgres)', () => {
       expect(await balanceOf(m.id)).toBe(10_000);
     });
   });
+
+  describe('lượt 4: ghi chú khi duyệt claim có chủ mà SĐT xác minh vẫn cũ', () => {
+    const staleMember = () => mkUser({ phoneVerifiedAt: new Date(Date.now() - 200 * DAY) });
+    async function staleClaim() {
+      const m = await staleMember();
+      const p = payload({ phone: m.phone!, goods: 500_000, deliveredDaysAgo: 20 });
+      await ingest(p);
+      return { m, c: (await claimOf(String(p.id)))! };
+    }
+
+    it.each([['chỉ ký tự vô hình', '\u200b\u200d\ufeff\u2060  '], ['dưới 3 ký tự', ' ab ']])('M1: ghi chú %s bị NOTE_REQUIRED', async (_n, note) => {
+      const { c } = await staleClaim();
+      const admin = await mkUser({ role: 'ADMIN' });
+      await expect(adminSvc().approve(c.id, admin.id, new Date(), note)).rejects.toMatchObject({ status: 400, response: { code: 'NOTE_REQUIRED' } });
+      expect((await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: c.id } })).state).toBe('REVIEW');
+    });
+
+    it('M2 (R9): REVIEW vì vượt ngưỡng mà SĐT đã cũ lúc duyệt: bắt ghi chú, duyệt một lần là cộng, không quay lại REVIEW', async () => {
+      const m = await mkUser();
+      const id = `CHAT${randCode(10)}`;
+      await ingest(payload({ id, phone: m.phone!, goods: 6_000_000, deliveredDaysAgo: 20 }));
+      const c = (await claimOf(id))!;
+      expect(c).toMatchObject({ state: 'REVIEW' });
+      expect(c.reviewReason).not.toContain('xác minh đã cũ');
+      await prisma.user.update({ where: { id: m.id }, data: { phoneVerifiedAt: new Date(Date.now() - 200 * DAY) } });
+      const admin = await mkUser({ role: 'ADMIN' });
+      await expect(adminSvc().approve(c.id, admin.id)).rejects.toMatchObject({ status: 400 });
+      await adminSvc().approve(c.id, admin.id, new Date(), 'Đã gọi khách xác nhận số');
+      expect(await releaseClaim(prisma, c.id, await releaseOpts())).toMatchObject({ outcome: 'CREDITED', points: 120_000 });
+      expect((await eventsOf(c.id)).filter((e) => e.action === 'TO_REVIEW')).toHaveLength(0);
+      expect(await balanceOf(m.id)).toBe(120_000);
+    });
+
+    it('M4: SĐT đầy đủ trong ghi chú bị che trước khi lưu (giữ 3 số cuối)', async () => {
+      const { c } = await staleClaim();
+      const admin = await mkUser({ role: 'ADMIN' });
+      await adminSvc().approve(c.id, admin.id, new Date(), 'Gọi khách 0912 345 678 xác nhận');
+      const note = (await eventsOf(c.id)).find((e) => e.action === 'APPROVE')!.note!;
+      expect(note).toContain('678');
+      expect(note).not.toContain('0912');
+      expect(note).not.toContain('345');
+    });
+  });
 });

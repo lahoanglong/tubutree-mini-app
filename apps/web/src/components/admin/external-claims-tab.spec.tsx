@@ -351,5 +351,45 @@ describe('ExternalClaimsTab', () => {
       expect(alert.textContent).toContain('cần ghi chú');
       expect(alert.textContent).not.toContain('english');
     });
+
+    it('M2: REVIEW vì lý do khác mà mốc vẫn cũ: vẫn hỏi ghi chú, có nhắc không ghi SĐT đầy đủ', async () => {
+      const m = stub({ claims: [phoneClaim({ reviewReason: 'Tiền hàng vượt ngưỡng tự duyệt' })] });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      click(btn(r.container, 'Duyệt'));
+      await flush();
+      expect(confirmDialog()!.querySelector('textarea')).not.toBeNull();
+      expect(confirmDialog()!.textContent).toContain('Không ghi số điện thoại đầy đủ vào ghi chú.');
+      typeInto(confirmDialog()!.querySelector('textarea'), 'Đã gọi khách');
+      answerConfirm(true);
+      await flush();
+      const call = m.calls.find((c) => c.url.endsWith('/c1/approve'))!;
+      expect(JSON.parse(String(call.init!.body))).toEqual({ note: 'Đã gọi khách' });
+    });
+
+    it('M3: danh sách báo mốc còn mới nhưng API đòi ghi chú (400 NOTE_REQUIRED): mở hộp ghi chú cho claim đó rồi gửi lại kèm note', async () => {
+      let n = 0;
+      const m = stub({
+        claims: [phoneClaim({ memberPhoneStale: false, reviewReason: 'Tiền hàng vượt ngưỡng tự duyệt' })],
+        post: () => (++n === 1 ? { status: 400, body: { statusCode: 400, code: 'NOTE_REQUIRED', message: 'english' } } : { body: { id: 'c1', state: 'PENDING' } }),
+      });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      click(btn(r.container, 'Duyệt'));
+      await flush();
+      expect(confirmDialog()!.querySelector('textarea')).toBeNull();
+      answerConfirm(true);
+      await flush();
+      expect(confirmDialog()!.querySelector('textarea')).not.toBeNull();
+      expect(r.container.querySelector('[role="alert"]')).toBeNull();
+      typeInto(confirmDialog()!.querySelector('textarea'), 'Gọi khách xác nhận');
+      answerConfirm(true);
+      await flush();
+      const approves = m.calls.filter((c) => c.url.endsWith('/c1/approve'));
+      expect(approves).toHaveLength(2);
+      expect(approves[0]!.init?.body).toBeUndefined();
+      expect(JSON.parse(String(approves[1]!.init!.body))).toEqual({ note: 'Gọi khách xác nhận' });
+      expect(r.container.textContent).toContain('Đã duyệt');
+    });
   });
 });

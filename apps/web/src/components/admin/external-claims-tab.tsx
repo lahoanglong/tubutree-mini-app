@@ -26,6 +26,7 @@ import {
   PHONE_STALE_LABEL,
   adminClaimErrorText,
   approveNeedsNote,
+  isNoteRequiredError,
   creditedOnClosedOrder,
   isIntroducer,
   CLAIM_SOURCE_LABEL,
@@ -159,23 +160,29 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
     },
   });
 
+  const approveWithNote = async () => {
+    const note = await ask({
+      title: 'Duyệt yêu cầu: SĐT xác minh đã cũ',
+      message: `Mốc xác minh SĐT của thành viên đã cũ nên chưa chắc số vẫn của người đó. Hãy kiểm người nhận (ví dụ gọi xác nhận) rồi ghi lại cách bạn đã xác nhận cho mã ${c.maskedCode}. Không ghi số điện thoại đầy đủ vào ghi chú. Điểm được tính lại theo tiền hàng mới nhất của đơn.`,
+      confirmLabel: 'Duyệt',
+      input: { label: 'Ghi chú (đã xác nhận người nhận bằng cách nào)', maxLength: 300, required: true },
+    });
+    if (note) mut.mutate(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.'));
+  };
   const approve = async () => {
-    if (approveNeedsNote(row)) {
-      const note = await ask({
-        title: 'Duyệt yêu cầu: SĐT xác minh đã cũ',
-        message: `Mốc xác minh SĐT của thành viên đã cũ nên chưa chắc số vẫn của người đó. Hãy kiểm người nhận (ví dụ gọi xác nhận) rồi ghi lại cách bạn đã xác nhận cho mã ${c.maskedCode}. Điểm được tính lại theo tiền hàng mới nhất của đơn.`,
-        confirmLabel: 'Duyệt',
-        input: { label: 'Ghi chú (đã xác nhận người nhận bằng cách nào)', maxLength: 300, required: true },
-      });
-      if (note) mut.mutate(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.'));
-      return;
-    }
+    if (approveNeedsNote(row)) return approveWithNote();
     const ok = await confirm({
       title: 'Duyệt yêu cầu tích điểm',
       message: `Duyệt mã ${c.maskedCode}? Điểm được tính lại theo tiền hàng mới nhất của đơn và sẽ cộng cho khách sau khi đơn giao đủ thời gian đối soát.`,
       confirmLabel: 'Duyệt',
     });
-    if (ok) mut.mutate(async () => (await approveExternalClaim(c.id), 'Đã duyệt, điểm đang chờ cộng.'));
+    if (!ok) return;
+    // Dữ liệu danh sách có thể cũ (mốc xác minh vừa hết hạn): API đòi ghi chú thì mở ngay hộp ghi chú cho đúng claim này.
+    mut.mutateAsync(async () => (await approveExternalClaim(c.id), 'Đã duyệt, điểm đang chờ cộng.')).catch((e: unknown) => {
+      if (!isNoteRequiredError(e)) return;
+      setErr(null);
+      void approveWithNote();
+    });
   };
   const voidIt = async (reopen: boolean) => {
     const reason = await ask({

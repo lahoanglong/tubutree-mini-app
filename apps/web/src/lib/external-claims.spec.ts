@@ -75,13 +75,10 @@ describe('helpers', () => {
 });
 
 describe('approveNeedsNote', () => {
-  const stale = { kind: 'PHONE', reviewReason: 'SĐT xác minh đã cũ, cần kiểm người nhận', memberPhoneStale: true };
-  it('chỉ khi claim PHONE có lý do SĐT cũ và mốc vẫn cũ', () => {
-    expect(approveNeedsNote(stale)).toBe(true);
-    expect(approveNeedsNote({ ...stale, memberPhoneStale: false })).toBe(false);
-    expect(approveNeedsNote({ ...stale, memberPhoneStale: undefined })).toBe(false);
-    expect(approveNeedsNote({ ...stale, reviewReason: 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt' })).toBe(false);
-    expect(approveNeedsNote({ ...stale, reviewReason: null })).toBe(false);
-    expect(approveNeedsNote({ ...stale, kind: 'SCAN' })).toBe(false);
+  it('claim PHONE mà mốc xác minh vẫn cũ thì cần ghi chú, bất kể lý do REVIEW', () => {
+    expect(approveNeedsNote({ kind: 'PHONE', memberPhoneStale: true })).toBe(true);
+    expect(approveNeedsNote({ kind: 'PHONE', memberPhoneStale: false })).toBe(false);
+    expect(approveNeedsNote({ kind: 'PHONE' })).toBe(false);
+    expect(approveNeedsNote({ kind: 'SCAN', memberPhoneStale: true })).toBe(false);
   });
 });

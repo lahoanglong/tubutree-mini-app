@@ -68,11 +68,12 @@ export function claimActions(
 export const PHONE_STALE_LABEL = 'SĐT xác minh đã cũ, kiểm người nhận';
 
 /**
- * Claim chat chờ duyệt vì SĐT xác minh cũ mà mốc vẫn cũ: API bắt ghi chú cách người duyệt đã xác nhận người nhận (400 NOTE_REQUIRED
- * nếu thiếu). Khớp lý do theo cụm từ API trả, mốc cũ lấy từ `memberPhoneStale` của chính dòng đó.
+ * Claim chat có chủ mà mốc xác minh SĐT vẫn cũ: API bắt ghi chú cách người duyệt đã xác nhận người nhận, bất kể lý do REVIEW (400
+ * NOTE_REQUIRED nếu thiếu). Mốc cũ lấy từ `memberPhoneStale` của chính dòng đó.
  */
-export const approveNeedsNote = (c: { kind: string; reviewReason: string | null; memberPhoneStale?: boolean }): boolean =>
-  c.kind === 'PHONE' && c.memberPhoneStale === true && !!c.reviewReason?.includes('SĐT xác minh đã cũ');
+export const approveNeedsNote = (c: { kind: string; memberPhoneStale?: boolean }): boolean => c.kind === 'PHONE' && c.memberPhoneStale === true;
+
+export const isNoteRequiredError = (e: unknown): boolean => (e as { code?: unknown } | null)?.code === 'NOTE_REQUIRED';
 
 /** Đã cộng điểm mà đơn đã huỷ, hoàn hoặc xoá: lẽ ra phải đảo điểm. */
 export const creditedOnClosedOrder = (c: { state: ExternalClaimState; orderStatus: string }) =>
