@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   role: 'CUSTOMER' as string,
   cashbackEnabled: false,
+  ctvReady: true,
   wallet: null as Record<string, unknown> | null,
   referral: null as Record<string, unknown> | null,
   loyalty: null as Record<string, unknown> | null,
@@ -21,6 +22,7 @@ const state = vi.hoisted(() => ({
   hold: new Set<string>(),
 }));
 
+vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => (p === '/ctv' ? state.ctvReady : true) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { role: state.role } }) }));
 vi.mock('@tubutree/app-core/features', () => ({
@@ -102,6 +104,7 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.role = 'CUSTOMER';
   state.cashbackEnabled = false;
+  state.ctvReady = true;
   state.wallet = { ...WALLET };
   state.referral = { ...REFERRAL };
   state.loyalty = { ...LOYALTY };
@@ -150,6 +153,14 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     state.loyalty = { pointsBalance: 100, tier: { name: 'Bạc' } };
     c = await mount();
     expect(c.textContent).not.toContain('không hết hạn');
+  });
+
+  it('/ctv chưa có trên web: thẻ hoa hồng không thành link 404 và không gợi ý "Nhận về Ví →"', async () => {
+    state.ctvReady = false;
+    const c = await mount();
+    expect(c.querySelector('a[href="/ctv"]')).toBeNull();
+    expect(c.textContent).not.toContain('Nhận về Ví →');
+    expect(c.textContent).toContain('Hoa hồng có thể rút');
   });
 
   it('hoa hồng đã duyệt > 0: thẻ dẫn sang /ctv kèm "Nhận về Ví →"; bằng 0 thì không bấm được, không gợi ý', async () => {

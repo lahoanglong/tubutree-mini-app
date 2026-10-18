@@ -12,6 +12,7 @@ import { canWithdraw as canWithdrawRule, walletTxLabel } from '@tubutree/app-cor
 import { uniqueById } from '@tubutree/app-core/unique-by-id';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { isWebRouteReady } from '@/lib/route-map';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
@@ -152,6 +153,7 @@ export default function WalletPage() {
   // Khách thường không có hoa hồng: hai thẻ 0đ chỉ khiến tiền hoàn bị hiểu thành hoa hồng.
   // Vẫn hiện khi còn khoản hoa hồng thật dù role chưa khớp (tiền của khách không được giấu).
   const showCommission = isCommissionRole || w.commissionPending > 0 || w.commissionApproved > 0;
+  const ctvLinkable = w.commissionApproved > 0 && isWebRouteReady('/ctv');
   const points = loyalty ? pointsSummary(loyalty) : null;
   const tierName = (loyalty?.tier as { name?: string } | null | undefined)?.name;
 
@@ -215,8 +217,8 @@ export default function WalletPage() {
                 label="Hoa hồng có thể rút"
                 value={w.commissionApproved}
                 icon={CheckCircle2}
-                hint={w.commissionApproved > 0 ? 'Nhận về Ví →' : undefined}
-                href={w.commissionApproved > 0 ? '/ctv' : undefined}
+                hint={ctvLinkable ? 'Nhận về Ví →' : undefined}
+                href={ctvLinkable ? '/ctv' : undefined}
               />
             </div>
           )}

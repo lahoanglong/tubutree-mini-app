@@ -222,6 +222,9 @@ describe('/hoan-tien — chọn sàn và nhận hoàn tiền', () => {
     await flush(5);
     expect(state.opened).toEqual([]);
     expect(state.win!.close).toHaveBeenCalled();
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain('Không mở được liên kết sàn');
+    expect(c.querySelector('[role="status"]')?.textContent ?? '').not.toContain('Đã ghi nhận');
   });
 
   it('tab được mở ngay trong cú bấm, trước khi có phản hồi của máy chủ, và không dùng noopener', async () => {

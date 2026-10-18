@@ -78,8 +78,7 @@ export default function CashbackPage() {
       partnerTab.current = null;
       if (!isHttpUrl(r.deeplink)) {
         win?.close();
-        setSelected(null);
-        setNotice('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...');
+        setClickError('Không mở được liên kết sàn — Vui lòng thử lại sau');
         return;
       }
       if (!win) {
