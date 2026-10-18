@@ -87,7 +87,7 @@ function AlertList({ alerts }: { alerts: WasteAlertDTO[] }) {
       <h3 className="text-sm font-semibold text-stone-900">Cảnh báo bất thường</h3>
       <ul className="space-y-2">
         {alerts.map((a, i) => (
-          <li key={`${a.kind}-${a.pointId ?? a.confirmerName ?? i}`} data-waste-alert className="flex flex-wrap items-center gap-2 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
+          <li key={`${a.kind}-${a.pointId ?? ''}-${a.confirmerName ?? ''}-${i}`} data-waste-alert className="flex flex-wrap items-center gap-2 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
             <span className="font-medium">{a.pointName ?? a.confirmerName ?? 'Toàn chương trình'}</span>
             <span className="min-w-0 flex-1 break-words">{a.detail}</span>
             <ToneBadge tone="warning">{a.threshold === null ? `${formatCount(a.value)}` : `${formatCount(a.value)} / ngưỡng ${formatCount(a.threshold)}`}</ToneBadge>

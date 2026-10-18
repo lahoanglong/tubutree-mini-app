@@ -167,6 +167,19 @@ describe('WasteTab', () => {
     expect(text).not.toContain('ngưỡng');
   });
 
+  it('ADMIN: nhiều cảnh báo cùng loại ở cùng một điểm đều hiện, không trùng khoá React', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const alert = (name: string) => ({ kind: 'REPEAT_CUSTOMER' as const, pointId: 'p1', pointName: 'Tạp hoá Cô Ba', confirmerName: name, value: 4, threshold: 3, detail: `Khách ${name} lặp lại` });
+      const { c } = await mount(<WasteTab isAdmin />, { overview: { body: wasteOverview({ alerts: [alert('An'), alert('Bình'), alert('Chi')] }) } });
+
+      expect(c.querySelectorAll('[data-waste-alert]')).toHaveLength(3);
+      expect(err.mock.calls.some((call) => String(call[0]).includes('same key'))).toBe(false);
+    } finally {
+      err.mockRestore();
+    }
+  });
+
   it('ADMIN: waste.enabled tắt vẫn dùng được tab, có ghi chú (11.7)', async () => {
     const { c } = await mount(<WasteTab isAdmin />);
     expect(c.textContent).toContain('Chương trình đang tắt với khách');
