@@ -151,7 +151,7 @@ describe('WastePointDetail', () => {
 
   it('ghi chú điều kiện chủ điểm không nhắc cộng tác viên', async () => {
     const { c } = await mount();
-    expect(c.textContent).toContain('Chủ điểm phải là chủ gian hàng đối tác (15.1).');
+    expect(c.textContent).toContain('Chủ điểm phải là chủ gian hàng đối tác.');
     expectNoBannedCopy(c.textContent);
   });
 
@@ -188,10 +188,36 @@ describe('WastePointDetail', () => {
     expect(c.textContent).toContain('TR-AAAA11');
     expect(c.textContent).toContain('Lê Văn An');
     expect(c.textContent).toContain('8.000 điểm');
+    expect(c.textContent).toContain('Ngày tạo yêu cầu');
     click(btn(c, 'Xem thêm'));
     await flush();
     const next = callsTo(api, 'GET', '/admin/waste/requests');
     expect(next[next.length - 1]!.url.endsWith('&cursor=c2')).toBe(true);
+  });
+
+  it('nhật ký cộng điểm: điểm chưa có thì gạch ngang, điểm 0 thật vẫn hiện, không nhắc số mục của đặc tả', async () => {
+    const api = mockFetch({
+      '/admin/waste/points/p1/report': { body: REPORT },
+      '/admin/waste/requests': {
+        body: {
+          rows: [
+            { ...CREDIT_ROW, id: 'r8', code: 'TR-NULL01', pointsAwarded: null },
+            { ...CREDIT_ROW, id: 'r9', code: 'TR-ZERO01', pointsAwarded: 0 },
+          ],
+          nextCursor: null,
+        },
+      },
+      '/admin/users': { body: USERS },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WastePointDetail point={wastePoint()} onClose={() => undefined} searchDebounceMs={0} />);
+    mounted.push(r);
+    await flush();
+    const rows = Array.from(r.container.querySelectorAll('tbody tr')).filter((tr) => tr.textContent!.includes('TR-NULL01') || tr.textContent!.includes('TR-ZERO01'));
+    expect(rows.find((tr) => tr.textContent!.includes('TR-NULL01'))!.textContent).toContain('—');
+    expect(rows.find((tr) => tr.textContent!.includes('TR-NULL01'))!.textContent).not.toContain('điểm');
+    expect(rows.find((tr) => tr.textContent!.includes('TR-ZERO01'))!.textContent).toContain('0 điểm');
+    expect(r.container.textContent).not.toContain('(15.1)');
   });
 
   it('số lượng đã nhận trong tháng', async () => {
