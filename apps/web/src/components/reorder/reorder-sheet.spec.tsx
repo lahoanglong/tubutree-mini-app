@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { unnamedControls } from '@/test-utils/a11y';
@@ -24,10 +24,11 @@ const ORDER: ReorderTarget = {
   lines: [line('a', 'Nước rửa chén'), line('b', 'Xà phòng', { available: false, maxQuantity: 0 })],
 };
 const ITEM: ReorderTarget = { kind: 'item', line: line('a', 'Nước rửa chén', { defaultQuantity: 1 }) };
+const ITEM_B: ReorderTarget = { kind: 'item', line: line('d', 'Dầu gội', { defaultQuantity: 1 }) };
 
 let mounted: Rendered | null = null;
-const mount = (props: { target: ReorderTarget | null; onClose?: () => void; navigateToCart?: boolean }) => {
-  mounted = render(<ReorderSheet target={props.target} onClose={props.onClose ?? (() => undefined)} navigateToCart={props.navigateToCart} />);
+const mount = (props: { target: ReorderTarget | null; onClose?: () => void; navigateToCart?: boolean; source?: 'notification' }) => {
+  mounted = render(<ReorderSheet target={props.target} source={props.source} onClose={props.onClose ?? (() => undefined)} navigateToCart={props.navigateToCart} />);
   return document.body;
 };
 const cta = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^Thêm vào giỏ \(\d+\)$/.test(b.textContent ?? ''))!;
@@ -152,6 +153,34 @@ describe('ReorderSheet', () => {
     await flush(4);
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(mocks.post).toHaveBeenCalledWith('/cart/items', { variationId: 'v-a', quantity: 1, addSource: 'repurchase' }, undefined);
+  });
+
+  it('đổi target khi đang mở: lựa chọn của target mới có ngay, không lấy của target cũ', async () => {
+    function Host() {
+      const [t, setT] = useState<ReorderTarget | null>(ORDER);
+      return (
+        <>
+          <button type="button" data-testid="swap" onClick={() => setT(ITEM_B)}>swap</button>
+          <ReorderSheet target={t} onClose={() => setT(null)} />
+        </>
+      );
+    }
+    mounted = render(<Host />);
+    await flush();
+    click(mounted.container.querySelector('[data-testid="swap"]'));
+    await flush();
+    expect(cta().textContent).toBe('Thêm vào giỏ (1)');
+    expect(document.body.textContent).toContain('Dầu gội');
+    expect(document.body.textContent).not.toContain('Nước rửa chén');
+  });
+
+  it('mở từ thông báo nhắc (source=notification): thêm một sản phẩm gửi addSource reorder_notification', async () => {
+    mount({ target: ITEM, source: 'notification' });
+    await act(async () => {
+      cta().click();
+    });
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledWith('/cart/items', { variationId: 'v-a', quantity: 1, addSource: 'reorder_notification' }, undefined);
   });
 
   it('mọi điều khiển có tên truy cập', () => {
