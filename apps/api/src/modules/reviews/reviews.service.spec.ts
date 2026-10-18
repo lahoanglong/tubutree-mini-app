@@ -312,7 +312,7 @@ describe('ReviewsService.create', () => {
     });
   });
 
-  it('hợp lệ không ảnh → +5 điểm, recompute rating denormalized, đánh dấu updated=false', async () => {
+  it('hợp lệ không ảnh → +5.000 điểm, recompute rating denormalized, đánh dấu updated=false', async () => {
     const prisma = makePrisma();
     const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
     expect(out).toMatchObject({ id: 'r1', updated: false });
@@ -320,32 +320,32 @@ describe('ReviewsService.create', () => {
       pointsTransaction: { create: jest.Mock };
       product: { update: jest.Mock };
     };
-    expect(p.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(5);
+    expect(p.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(5_000);
     // recomputeRating cập nhật ratingAvg (làm tròn 1 chữ số) + reviewCount
     expect(p.product.update.mock.calls[0][0].data).toEqual({ ratingAvg: 4.5, reviewCount: 2 });
   });
 
-  it('có ảnh → +10 điểm', async () => {
+  it('có ảnh → +10.000 điểm', async () => {
     const prisma = makePrisma();
     await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
       ...dto,
       images: ['https://res.cloudinary.com/x/image/upload/v1/a.jpg'],
     } as never);
     const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
-    expect(ptx.mock.calls[0][0].data.delta).toBe(10);
+    expect(ptx.mock.calls[0][0].data.delta).toBe(10_000);
   });
 
-  it('ảnh raster base64 nén (miniapp chưa có Cloudinary, ENGAGE-6) → +10 điểm như ảnh Cloudinary', async () => {
+  it('ảnh raster base64 nén (miniapp chưa có Cloudinary, ENGAGE-6) → +10.000 điểm như ảnh Cloudinary', async () => {
     const prisma = makePrisma();
     await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
       ...dto,
       images: [`data:image/jpeg;base64,${'A'.repeat(1000)}`],
     } as never);
     const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
-    expect(ptx.mock.calls[0][0].data.delta).toBe(10);
+    expect(ptx.mock.calls[0][0].data.delta).toBe(10_000);
   });
 
-  it('MONEY-10: ảnh/video không phải media đã tải lên (lọt qua DTO) → chỉ thưởng như đánh giá chữ (+5)', async () => {
+  it('MONEY-10: ảnh/video không phải media đã tải lên (lọt qua DTO) → chỉ thưởng như đánh giá chữ (+5.000)', async () => {
     const prisma = makePrisma();
     await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
       ...dto,
@@ -353,10 +353,10 @@ describe('ReviewsService.create', () => {
       videoUrl: 'https://example.com/not-a-video',
     } as never);
     const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
-    expect(ptx.mock.calls[0][0].data.delta).toBe(5);
+    expect(ptx.mock.calls[0][0].data.delta).toBe(5_000);
   });
 
-  it('có video (UGC) → +15 điểm + lưu videoUrl', async () => {
+  it('có video (UGC) → +15.000 điểm + lưu videoUrl', async () => {
     const prisma = makePrisma();
     await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
       ...dto,
@@ -366,7 +366,7 @@ describe('ReviewsService.create', () => {
       pointsTransaction: { create: jest.Mock };
       review: { create: jest.Mock };
     };
-    expect(p.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(15); // video > ảnh > text
+    expect(p.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(15_000); // video > ảnh > text
     expect(p.review.create.mock.calls[0][0].data.videoUrl).toBe('https://res.cloudinary.com/x/video/upload/v1/rv.mp4');
   });
 
@@ -387,17 +387,17 @@ describe('ReviewsService.create', () => {
     it('sổ chưa có dòng REVIEW nào của cặp → thưởng bình thường', async () => {
       const prisma = withLedger([]);
       await create(prisma);
-      expect(prisma.pointsTransaction.create.mock.calls[0]![0].data.delta).toBe(5);
+      expect(prisma.pointsTransaction.create.mock.calls[0]![0].data.delta).toBe(5_000);
     });
 
-    it('thưởng 5 đã thu hồi đủ (+5, -5) → thưởng lại được', async () => {
-      const prisma = withLedger([row(5), row(-5)]);
+    it('thưởng 5.000 đã thu hồi đủ (+5.000, -5.000) → thưởng lại được', async () => {
+      const prisma = withLedger([row(5_000), row(-5_000)]);
       await create(prisma);
-      expect(prisma.pointsTransaction.create.mock.calls[0]![0].data.delta).toBe(5);
+      expect(prisma.pointsTransaction.create.mock.calls[0]![0].data.delta).toBe(5_000);
     });
 
-    it('thưởng 5 chỉ thu hồi được 3 (+5, -3) → còn giữ 2: tạo lại không thưởng, không ghi sổ, không cộng số dư, pointsEarned 0', async () => {
-      const prisma = withLedger([row(5), row(-3)]);
+    it('thưởng 5.000 chỉ thu hồi được 3.000 (+5.000, -3.000) → còn giữ 2.000: tạo lại không thưởng, không ghi sổ, không cộng số dư, pointsEarned 0', async () => {
+      const prisma = withLedger([row(5_000), row(-3_000)]);
       const out = await create(prisma);
       expect(out).toMatchObject({ id: 'r1', updated: false });
       expect(prisma.review.create.mock.calls[0]![0].data.pointsEarned).toBe(0);
@@ -405,8 +405,8 @@ describe('ReviewsService.create', () => {
       expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
-    it('thưởng đã tiêu hết nên không thu hồi được (chỉ có +15) hay đã hết hạn → không thưởng lần hai', async () => {
-      const prisma = withLedger([row(15)]);
+    it('thưởng đã tiêu hết nên không thu hồi được (chỉ có +15.000) hay đã hết hạn → không thưởng lần hai', async () => {
+      const prisma = withLedger([row(15_000)]);
       await create(prisma);
       expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
     });
@@ -427,7 +427,7 @@ describe('ReviewsService.create', () => {
     });
 
     it('analytics review_created ghi pointsEarned thật (0 khi không thưởng)', async () => {
-      const prisma = withLedger([row(5)]);
+      const prisma = withLedger([row(5_000)]);
       const spy = { record: jest.fn().mockResolvedValue(undefined), recordBestEffort: jest.fn() };
       await new ReviewsService(prisma, spy as unknown as AnalyticsEventsService, loyalty).create('u1', 'tinh-dau', dto as never);
       expect(spy.record.mock.calls[0]![1].props).toMatchObject({ action: 'review_created', pointsEarned: 0 });
@@ -439,9 +439,9 @@ describe('ReviewsService.create', () => {
     beforeEach(() => pointsExpiresAt.mockClear());
 
     it.each([
-      ['chỉ chữ', {}, 5],
-      ['có ảnh', { images: ['https://res.cloudinary.com/x/image/upload/v1/a.jpg'] }, 10],
-      ['có video', { videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4' }, 15],
+      ['chỉ chữ', {}, 5_000],
+      ['có ảnh', { images: ['https://res.cloudinary.com/x/image/upload/v1/a.jpg'] }, 10_000],
+      ['có video', { videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4' }, 15_000],
     ])('%s → dòng REVIEW:<slug> mang expiresAt do pointsExpiresAt trả; số điểm, reason, refType, refId không đổi', async (_n, extra, points) => {
       const prisma = makePrisma();
       await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, ...extra } as never);
@@ -554,7 +554,7 @@ describe('ReviewsService.create', () => {
       eventName: 'engagement_action',
       userId: 'u1',
       platform: 'miniapp',
-      props: { action: 'review_created', productSlug: 'tinh-dau', pointsEarned: 5 },
+      props: { action: 'review_created', productSlug: 'tinh-dau', pointsEarned: 5_000 },
     });
     expect(spy.recordBestEffort).not.toHaveBeenCalled();
   });

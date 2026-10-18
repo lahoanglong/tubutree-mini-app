@@ -23,12 +23,12 @@ describe('validateAdminConfigValue', () => {
     ok('voucher.welcome_amount', 50000);
   });
 
-  it('loyalty.checkin_points: đúng 7 số nguyên 0..100', () => {
-    ok('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 2]);
-    ok('loyalty.checkin_points', [0, 0, 0, 0, 0, 0, 100]);
+  it('loyalty.checkin_points: đúng 7 số nguyên 0..100.000', () => {
+    ok('loyalty.checkin_points', [1000, 1000, 1000, 1000, 1000, 1000, 2000]);
+    ok('loyalty.checkin_points', [0, 0, 0, 0, 0, 0, 100_000]);
     bad('loyalty.checkin_points', [1, 1, 1, 1, 1, 1]);
     bad('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 1, 1]);
-    bad('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 101]);
+    bad('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 100_001]);
     bad('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, -1]);
     bad('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 1.5]);
     bad('loyalty.checkin_points', '1,1,1,1,1,1,2');
@@ -46,10 +46,12 @@ describe('validateAdminConfigValue', () => {
     bad('loyalty.pos_max_order_total', 0);
     bad('loyalty.pos_max_order_total', 999);
     bad('loyalty.pos_max_order_total', 2_000_000_000);
-    ok('loyalty.pos_staff_daily_points_cap', 3000);
+    ok('loyalty.pos_staff_daily_points_cap', 3_000_000);
     bad('loyalty.pos_staff_daily_points_cap', 0);
     bad('loyalty.pos_member_daily_points_cap', 10.5);
-    ok('loyalty.pos_member_daily_points_cap', 1000);
+    ok('loyalty.pos_member_daily_points_cap', 1_000_000);
+    ok('loyalty.pos_staff_daily_points_cap', 1_000_000_000);
+    bad('loyalty.pos_staff_daily_points_cap', 1_000_000_001);
   });
 
   // Cron huỷ đơn quá hạn thanh toán kẹp giá trị ngoài biên về 1/720 hoặc 24 — chặn lúc ghi để admin không thấy

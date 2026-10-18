@@ -274,7 +274,7 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
   it.each([
     ['shipping.flat_fee_below_threshold', 19_000, [-19_000, 1_000_001, 1.5]],
     ['shipping.free_threshold', 200_000, [-1, 50_000_001]],
-    ['loyalty.vnd_per_point', 10_000, [1, 999, 0, 1_000_001]],
+    ['loyalty.earn_pct', 2, [0, 0.05, 20.5, 100, -1]],
     ['wallet.withdraw_fee', 3_000, [-100_000, 100_001]],
     ['wallet.withdraw_min', 100_000, [-1, 100_000_001]],
     ['affiliate.min_withdraw_bank', 50_000, [-1]],

@@ -69,7 +69,7 @@ describe('khoá cấu hình dạng số có luật khoảng (R3-UI-4)', () => {
   });
 
   // Khoá phân số 0–1 mà seed là 0 (không yêu cầu mức giảm tối thiểu): số lẻ là giá trị hợp lệ.
-  const FRACTION_KEYS = new Set(['flashsale.min_discount_pct']);
+  const FRACTION_KEYS = new Set(['flashsale.min_discount_pct', 'loyalty.earn_pct']);
 
   it('khoá mặc định là số nguyên không nhận số thực (1,5 ngày, 0,5 giờ…)', async () => {
     const service = makeService();

@@ -604,11 +604,11 @@ describe('Web shop — thu gom ở checkout & đơn của tôi', () => {
 
 describe('LoyaltyConfigCard', () => {
   const rows = [
-    { key: 'loyalty.checkin_points', value: [1, 1, 1, 1, 1, 1, 2], description: null, category: 'loyalty' },
+    { key: 'loyalty.checkin_points', value: [1000, 1000, 1000, 1000, 1000, 1000, 2000], description: null, category: 'loyalty' },
     { key: 'loyalty.pos_credit_enabled', value: false, description: null, category: 'loyalty' },
     { key: 'loyalty.pos_max_order_total', value: 5000000, description: null, category: 'loyalty' },
-    { key: 'loyalty.pos_staff_daily_points_cap', value: 3000, description: null, category: 'loyalty' },
-    { key: 'loyalty.pos_member_daily_points_cap', value: 1000, description: null, category: 'loyalty' },
+    { key: 'loyalty.pos_staff_daily_points_cap', value: 3_000_000, description: null, category: 'loyalty' },
+    { key: 'loyalty.pos_member_daily_points_cap', value: 1_000_000, description: null, category: 'loyalty' },
   ];
 
   function setup() {
@@ -623,11 +623,11 @@ describe('LoyaltyConfigCard', () => {
     return { puts, ...mount(<LoyaltyConfigCard rows={rows} />) };
   }
 
-  it('7 ô điểm danh; ô sai (>100) → báo lỗi, KHÔNG gửi PUT', async () => {
+  it('7 ô điểm danh; ô sai (>100.000) → báo lỗi, KHÔNG gửi PUT', async () => {
     const { container, puts } = setup();
     expect(container.querySelectorAll('input[aria-label^="Điểm ngày"]')).toHaveLength(7);
     expect(container.textContent).toContain('Đang TẮT');
-    typeInto(container.querySelector('input[aria-label="Điểm ngày 7"]'), '150');
+    typeInto(container.querySelector('input[aria-label="Điểm ngày 7"]'), '150000');
     click(byText(container, 'button', 'Lưu tham số tích điểm'));
     await flush();
     expect(puts).toHaveLength(0);
@@ -636,10 +636,10 @@ describe('LoyaltyConfigCard', () => {
 
   it('chỉ gửi khoá có thay đổi', async () => {
     const { container, puts } = setup();
-    typeInto(container.querySelector('input[aria-label="Điểm ngày 7"]'), '5');
+    typeInto(container.querySelector('input[aria-label="Điểm ngày 7"]'), '5000');
     click(byText(container, 'button', 'Lưu tham số tích điểm'));
     await flush();
-    expect(puts).toEqual([{ key: 'loyalty.checkin_points', value: [1, 1, 1, 1, 1, 1, 5] }]);
+    expect(puts).toEqual([{ key: 'loyalty.checkin_points', value: [1000, 1000, 1000, 1000, 1000, 1000, 5000] }]);
   });
 
   it('công tắc POS lưu ngay loyalty.pos_credit_enabled=true', async () => {

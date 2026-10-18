@@ -4,6 +4,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isRealUser } from '../../common/real-user';
 import { hasPriorOrder } from '../../common/first-order';
 import { pointsForGoods } from './points-earn';
+import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from '../loyalty/earn-rates';
 
 export interface ShippingInput {
   subtotal: number; // sau giảm giá hàng (chưa gồm ship)
@@ -75,8 +76,8 @@ export function calcTierDiscount(goodsValue: number, discountPct: number): numbe
  * Quy tắc (Build Spec §0.7, §6.6, §15):
  *  - Đơn ≥ shipping.free_threshold (200k) → freeship; ngược lại flat_fee (19k).
  *  - Hạng có override (Lộc Biếc freeship ≥99k, Đại Thụ/Cổ Thụ freeship toàn shop).
- *  - 10.000đ chi tiêu = 1 điểm × multiplier theo hạng.
- *  - 1 điểm = 1.000đ khi trừ, tối đa 20% giá trị đơn.
+ *  - Tích loyalty.earn_pct (2%) tiền hàng sau giảm giá, không gồm ship, × multiplier theo hạng.
+ *  - 1 điểm = 1đ khi trừ, tối đa 20% giá trị đơn.
  */
 @Injectable()
 export class PricingService {
@@ -92,8 +93,8 @@ export class PricingService {
 
   /** Điểm tích cho giá trị hàng (đã trừ giảm giá), nhân multiplier hạng. */
   async calcPointsEarned(goodsValue: number, tierMultiplier = 1): Promise<number> {
-    const vndPerPoint = await this.config.get<number>('loyalty.vnd_per_point', 10000);
-    return pointsForGoods(goodsValue, vndPerPoint, tierMultiplier);
+    const earnPct = await this.config.get<number>(EARN_PCT_KEY, DEFAULT_EARN_PCT);
+    return pointsForGoods(goodsValue, earnPct, tierMultiplier);
   }
 
   /** Số VND tối đa có thể trừ bằng điểm cho 1 đơn. */
@@ -109,10 +110,10 @@ export class PricingService {
     orderValue: number,
   ): Promise<{ pointsUsed: number; discount: number }> {
     const [vndPerPointRedeem, maxValue] = await Promise.all([
-      this.config.get<number>('loyalty.vnd_per_point_redeem', 1000),
+      this.config.get<number>('loyalty.vnd_per_point_redeem', 1),
       this.calcMaxRedeemableValue(orderValue),
     ]);
-    // Guard chia 0/âm (mirror calcPointsEarned's vndPerPoint guard): misconfig hoặc orderValue=0
+    // Guard chia 0/âm (mirror calcPointsEarned's earnPct guard): misconfig hoặc orderValue=0
     // → tránh NaN lan vào pointsUsed/discount rồi vào tx tạo đơn (Prisma nhận NaN có thể lỗi khó hiểu).
     if (vndPerPointRedeem <= 0) return { pointsUsed: 0, discount: 0 };
     const maxPointsByValue = Math.floor(maxValue / vndPerPointRedeem);
@@ -135,7 +136,7 @@ export class PricingService {
     orderValue: number,
   ): Promise<{ pointsUsed: number; pointsUsedStandard: number; pointsUsedConverted: number; discount: number }> {
     const none = { pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 };
-    const vnd = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1000);
+    const vnd = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1);
     if (!(vnd > 0) || !(orderValue > 0) || !(pointsToUse > 0)) return none;
     const std = await this.resolvePointsRedemption(pointsToUse, Math.max(0, standardUsable), orderValue);
     const s = std.pointsUsed;

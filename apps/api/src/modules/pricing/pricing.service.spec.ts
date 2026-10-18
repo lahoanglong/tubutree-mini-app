@@ -15,8 +15,8 @@ const DEFAULTS = {
   'shipping.free_threshold': 200000,
   'shipping.flat_fee_below_threshold': 19000,
   'shipping.tier_freeship_overrides': { LOC_BIEC: 99000, DAI_THU: 0, CO_THU: 0 },
-  'loyalty.vnd_per_point': 10000,
-  'loyalty.vnd_per_point_redeem': 1000,
+  'loyalty.earn_pct': 2,
+  'loyalty.vnd_per_point_redeem': 1,
   'loyalty.max_redeem_pct': 0.2,
 };
 
@@ -45,81 +45,91 @@ describe('PricingService', () => {
   });
 
   describe('calcPointsEarned', () => {
-    it('10k = 1 điểm, multiplier 1x', async () => {
-      expect(await svc.calcPointsEarned(250000, 1)).toBe(25);
+    it('2% tiền hàng, multiplier 1x', async () => {
+      expect(await svc.calcPointsEarned(250000, 1)).toBe(5000);
+      expect(await svc.calcPointsEarned(199000, 1)).toBe(3980);
     });
-    it('áp multiplier 1.5x (Đại Thụ)', async () => {
-      expect(await svc.calcPointsEarned(200000, 1.5)).toBe(30);
+    it('áp multiplier theo hạng: x1,2 / x1,5 / x2', async () => {
+      expect(await svc.calcPointsEarned(199000, 1.2)).toBe(4776);
+      expect(await svc.calcPointsEarned(199000, 1.5)).toBe(5970);
+      expect(await svc.calcPointsEarned(199000, 2)).toBe(7960);
     });
     // Miniapp (PDP "Nhận N Điểm Xanh") dùng chung công thức qua pointsForGoods: đổi một bên phải khớp bên kia.
     it('calcPointsEarned đúng bằng pointsForGoods với cấu hình đang dùng, kể cả mốc làm tròn xuống và cấu hình hỏng', async () => {
-      for (const vnd of [10000, 7500, 1, 0, -5]) {
-        const s = new PricingService(makeConfig({ ...DEFAULTS, 'loyalty.vnd_per_point': vnd }));
-        for (const goods of [0, 1, 9999, 10000, 19999, 20000, 249999, 1_000_000]) {
+      for (const pct of [2, 1.5, 0.1, 20, 0, -5]) {
+        const s = new PricingService(makeConfig({ ...DEFAULTS, 'loyalty.earn_pct': pct }));
+        for (const goods of [0, 1, 49, 50, 199_999, 249999, 1_000_000]) {
           for (const mult of [undefined, 1, 1.2, 1.5, 2]) {
-            expect(await s.calcPointsEarned(goods, mult)).toBe(pointsForGoods(goods, vnd, mult));
+            expect(await s.calcPointsEarned(goods, mult)).toBe(pointsForGoods(goods, pct, mult));
           }
         }
       }
     });
-    it('pointsForGoods: làm tròn xuống, nhân hệ số hạng, mốc ≤ 0 thì không tích', () => {
-      expect(pointsForGoods(19999, 10000)).toBe(1);
-      expect(pointsForGoods(19999, 10000, 1.5)).toBe(2);
-      expect(pointsForGoods(9999, 10000, 1.2)).toBe(1);
+    it('pointsForGoods: làm tròn xuống, nhân hệ số hạng, phần trăm hoặc hàng ≤ 0 thì không tích', () => {
+      expect(pointsForGoods(199_999, 2)).toBe(3999);
+      expect(pointsForGoods(49, 2)).toBe(0);
+      expect(pointsForGoods(50, 2)).toBe(1);
+      expect(pointsForGoods(199_000, 2, 1.2)).toBe(4776);
       expect(pointsForGoods(500000, 0, 2)).toBe(0);
+      expect(pointsForGoods(-1000, 2)).toBe(0);
+    });
+    it('pointsForGoods: toàn số nguyên nên không trôi số thực (1,2 và 1,1 không gây lệch 1 điểm)', () => {
+      expect(pointsForGoods(1_000_000, 2, 1.1)).toBe(22_000);
+      expect(pointsForGoods(5_000, 1.1, 1.2)).toBe(66);
+      expect(pointsForGoods(2_000_000_000, 2, 2)).toBe(80_000_000);
     });
   });
 
   describe('resolvePointsRedemption', () => {
     it('kẹp theo trần 20% giá trị đơn', async () => {
-      // đơn 100k → max trừ 20k = 20 điểm; user có 50 điểm, muốn dùng 50 → chỉ 20
-      const r = await svc.resolvePointsRedemption(50, 50, 100000);
-      expect(r.pointsUsed).toBe(20);
+      // đơn 100k → max trừ 20k = 20.000 điểm; user có 50.000 điểm, muốn dùng 50.000 → chỉ 20.000
+      const r = await svc.resolvePointsRedemption(50_000, 50_000, 100000);
+      expect(r.pointsUsed).toBe(20_000);
       expect(r.discount).toBe(20000);
     });
     it('kẹp theo số điểm sẵn có', async () => {
-      const r = await svc.resolvePointsRedemption(100, 8, 1000000);
-      expect(r.pointsUsed).toBe(8);
+      const r = await svc.resolvePointsRedemption(100_000, 8_000, 1000000);
+      expect(r.pointsUsed).toBe(8_000);
       expect(r.discount).toBe(8000);
     });
   });
 
   // PD-3 (spec 2.3): lô STANDARD chịu trần max_redeem_pct, lô CONVERTED (xu cũ) trả tới 100% giá trị hàng.
   describe('resolvePointsRedemptionByLot (PD-3, T8/T9)', () => {
-    it('T8: đơn 500.000đ, STANDARD 1.000, CONVERTED 1.000, dùng 1.000 → s = 100, c = 400, giảm đủ 500.000đ', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1000, 1000, 1000, 500000);
-      expect(r).toEqual({ pointsUsed: 500, pointsUsedStandard: 100, pointsUsedConverted: 400, discount: 500000 });
+    it('T8: đơn 500.000đ, STANDARD 1.000.000, CONVERTED 1.000.000, dùng 1.000.000 → s = 100.000, c = 400.000, giảm đủ 500.000đ', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 1_000_000, 1_000_000, 500000);
+      expect(r).toEqual({ pointsUsed: 500_000, pointsUsedStandard: 100_000, pointsUsedConverted: 400_000, discount: 500000 });
     });
 
-    it('T8: phần lẻ dưới 1.000đ không trả bằng điểm (redeemBase 123.456đ → s + c = 123)', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1000, 1000, 1000, 123456);
-      expect(r.pointsUsedStandard).toBe(24); // floor(floor(123.456 × 0,2) / 1.000)
-      expect(r.pointsUsedConverted).toBe(123 - 24);
-      expect(r.discount).toBe(123000);
+    it('T8: giá trị hàng lẻ 123.456đ → điểm cộng tới đúng 123.456 (1 điểm = 1đ), giảm không vượt giá trị hàng', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 1_000_000, 1_000_000, 123456);
+      expect(r.pointsUsedStandard).toBe(24_691); // floor(123.456 × 0,2)
+      expect(r.pointsUsedConverted).toBe(123_456 - 24_691);
+      expect(r.discount).toBe(123456);
       expect(r.discount).toBeLessThanOrEqual(123456);
     });
 
     it('T9: STANDARD tiêu tới trần trước rồi mới tới CONVERTED', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(30, 1000, 1000, 100000);
-      expect(r).toMatchObject({ pointsUsedStandard: 20, pointsUsedConverted: 10, pointsUsed: 30, discount: 30000 });
+      const r = await svc.resolvePointsRedemptionByLot(30_000, 1_000_000, 1_000_000, 100000);
+      expect(r).toMatchObject({ pointsUsedStandard: 20_000, pointsUsedConverted: 10_000, pointsUsed: 30_000, discount: 30000 });
     });
 
     it('T9: dùng ít hơn trần STANDARD → không đụng CONVERTED', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(15, 1000, 1000, 100000);
-      expect(r).toMatchObject({ pointsUsedStandard: 15, pointsUsedConverted: 0 });
+      const r = await svc.resolvePointsRedemptionByLot(15_000, 1_000_000, 1_000_000, 100000);
+      expect(r).toMatchObject({ pointsUsedStandard: 15_000, pointsUsedConverted: 0 });
     });
 
     it('T9: STANDARD dùng được = 0 (đang khoá) → chỉ CONVERTED, vẫn giảm được 100% giá trị hàng', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1000, 0, 1000, 250000);
-      expect(r).toEqual({ pointsUsed: 250, pointsUsedStandard: 0, pointsUsedConverted: 250, discount: 250000 });
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 0, 1_000_000, 250000);
+      expect(r).toEqual({ pointsUsed: 250_000, pointsUsedStandard: 0, pointsUsedConverted: 250_000, discount: 250000 });
     });
 
     it('kẹp theo số dư CONVERTED, không bao giờ âm', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1000, 5, 7, 1000000);
-      expect(r).toMatchObject({ pointsUsedStandard: 5, pointsUsedConverted: 7, pointsUsed: 12 });
-      const z = await svc.resolvePointsRedemptionByLot(0, 5, 7, 1000000);
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 5_000, 7_000, 1000000);
+      expect(r).toMatchObject({ pointsUsedStandard: 5_000, pointsUsedConverted: 7_000, pointsUsed: 12_000 });
+      const z = await svc.resolvePointsRedemptionByLot(0, 5_000, 7_000, 1000000);
       expect(z).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 });
-      const neg = await svc.resolvePointsRedemptionByLot(10, -3, -4, 1000000);
+      const neg = await svc.resolvePointsRedemptionByLot(10_000, -3_000, -4_000, 1000000);
       expect(neg).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 });
     });
 

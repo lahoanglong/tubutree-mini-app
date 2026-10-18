@@ -267,14 +267,14 @@ describe('fake DB (tự kiểm)', () => {
     );
     const svc = new LoyaltyService(
       prisma,
-      makeConfig({ 'loyalty.pos_credit_enabled': true, 'loyalty.pos_staff_daily_points_cap': 100 }),
+      makeConfig({ 'loyalty.pos_credit_enabled': true, 'loyalty.pos_staff_daily_points_cap': 20_000 }),
     );
     await Promise.allSettled(
       ['HD-A', 'HD-B', 'HD-C'].map((receiptId) =>
         svc.creditPosPoints('staff-1', { memberCode: 'TUBUEE00FF11', orderTotal: 500_000, receiptId }),
       ),
     );
-    expect(db.users.get('m2')!.pointsBalance).toBeGreaterThan(100);
+    expect(db.users.get('m2')!.pointsBalance).toBeGreaterThan(20_000);
   });
 });
 
@@ -287,28 +287,28 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
   describe('Reward Catalog & Redemption', () => {
     it('getRewardCatalog trả về danh sách phần thưởng kèm cờ canRedeem', async () => {
       const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 60 }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 60_000 }) },
         $queryRaw: jest.fn().mockResolvedValue([]),
       } as unknown as PrismaService;
 
       const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
-      expect(res.pointsBalance).toBe(60);
+      expect(res.pointsBalance).toBe(60_000);
       expect(res.rewards.length).toBe(DEFAULT_REWARD_CATALOG.length);
-      for (const r of res.rewards) expect(r.canRedeem).toBe(60 >= r.pointsCost);
+      for (const r of res.rewards) expect(r.canRedeem).toBe(60_000 >= r.pointsCost);
     });
 
     it('getRewardCatalog: canRedeem theo điểm DÙNG ĐƯỢC (số dư − điểm đơn mới giao còn trong hạn đổi/trả)', async () => {
       const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 120 }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 120_000 }) },
         $queryRaw: jest.fn().mockResolvedValue([
-          { delta: 80, deliveredAt: new Date(Date.now() - 2 * DAY), pendingReturn: false },
+          { delta: 80_000, deliveredAt: new Date(Date.now() - 2 * DAY), pendingReturn: false },
         ]),
       } as unknown as PrismaService;
       const res = await new LoyaltyService(prisma, makeConfig()).getRewardCatalog('u1');
-      expect(res).toMatchObject({ pointsBalance: 120, lockedPoints: 80, redeemablePoints: 40 });
+      expect(res).toMatchObject({ pointsBalance: 120_000, lockedPoints: 80_000, redeemablePoints: 40_000 });
       const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));
-      expect(byId.get('reward-freeship')).toBe(true); // 20 ≤ 40
-      expect(byId.get('reward-discount-50k')).toBe(false); // 50 > 40 dù số dư 120
+      expect(byId.get('reward-freeship')).toBe(true); // 20.000 ≤ 40.000
+      expect(byId.get('reward-discount-50k')).toBe(false); // 50.000 > 40.000 dù số dư 120.000
     });
 
     it('voucher freeship mô tả ĐÚNG hành vi checkout (miễn toàn bộ phí ship, không ghi "tối đa 25k")', () => {
@@ -325,31 +325,31 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     });
 
     it('không đủ điểm → BadRequest, KHÔNG tạo coupon/ledger, số dư giữ nguyên', async () => {
-      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 20, referralCode: 'AAAA1111' }]);
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 20_000, referralCode: 'AAAA1111' }]);
       const svc = new LoyaltyService(prisma, makeConfig());
       await expect(svc.redeemReward('u1', 'reward-discount-50k')).rejects.toThrow(BadRequestException);
-      expect(db.users.get('u1')!.pointsBalance).toBe(20);
+      expect(db.users.get('u1')!.pointsBalance).toBe(20_000);
       expect(db.coupons).toHaveLength(0);
       expect(db.ledger).toHaveLength(0);
     });
 
     it('trừ điểm bằng updateMany có guard gte (atomic) rồi mới tạo coupon cá nhân + ledger REWARD', async () => {
-      const { db, prisma } = makeFakeDb([{ id: 'user-abc', pointsBalance: 100, referralCode: 'AAAA1111' }]);
+      const { db, prisma } = makeFakeDb([{ id: 'user-abc', pointsBalance: 100_000, referralCode: 'AAAA1111' }]);
       const svc = new LoyaltyService(prisma, makeConfig());
       const res = await svc.redeemReward('user-abc', 'reward-discount-50k');
 
       expect(res.success).toBe(true);
-      expect(res.pointsSpent).toBe(50);
-      expect(res.remainingPoints).toBe(50);
+      expect(res.pointsSpent).toBe(50_000);
+      expect(res.remainingPoints).toBe(50_000);
       expect(res.coupon.code).toMatch(/^REWARD-AMO50K-[A-Z0-9]{8}$/);
       expect(res.coupon.value).toBe(50000);
-      expect(db.users.get('user-abc')!.pointsBalance).toBe(50);
+      expect(db.users.get('user-abc')!.pointsBalance).toBe(50_000);
       expect(db.coupons).toHaveLength(1);
       expect(db.coupons[0]).toMatchObject({ usageLimit: 1, perUserLimit: 1, scope: 'USER_GROUP', scopeMeta: { userId: 'user-abc' } });
       expect(db.ledger).toEqual([
         expect.objectContaining({
           userId: 'user-abc',
-          delta: -50,
+          delta: -50_000,
           reason: 'LOYALTY_REDEEM_VOUCHER:reward-discount-50k',
           refType: 'REWARD',
           refId: db.coupons[0]!.id,
@@ -360,25 +360,25 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     it('trừ điểm dùng updateMany có guard pointsBalance.gte trong transaction (không check-rồi-trừ)', async () => {
       const updateMany = jest.fn().mockResolvedValue({ count: 0 });
       const tx = {
-        user: { updateMany, findUnique: jest.fn().mockResolvedValue({ pointsBalance: 99 }) },
+        user: { updateMany, findUnique: jest.fn().mockResolvedValue({ pointsBalance: 99_999 }) },
         coupon: { create: jest.fn() },
         pointsTransaction: { create: jest.fn() },
         $queryRaw: jest.fn().mockResolvedValue([]),
       };
       const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
       await expect(new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-100k')).rejects.toThrow(
-        /cần 100 Điểm Xanh.*hiện có 99/,
+        /cần 100[.]?000 Điểm Xanh.*hiện có 99[.]?999/,
       );
       expect(updateMany).toHaveBeenCalledWith({
-        where: { id: 'u1', pointsBalance: { gte: 100 } },
-        data: { pointsBalance: { decrement: 100 } },
+        where: { id: 'u1', pointsBalance: { gte: 100_000 } },
+        data: { pointsBalance: { decrement: 100_000 } },
       });
       expect(tx.coupon.create).not.toHaveBeenCalled();
       expect(tx.pointsTransaction.create).not.toHaveBeenCalled();
     });
 
-    it('CONCURRENCY: 5 request đổi song song với 100 điểm / giá 100 → đúng 1 voucher, số dư 0, KHÔNG âm', async () => {
-      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100, referralCode: 'AAAA1111' }]);
+    it('CONCURRENCY: 5 request đổi song song với 100.000 điểm / giá 100.000 → đúng 1 voucher, số dư 0, KHÔNG âm', async () => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }]);
       const svc = new LoyaltyService(prisma, makeConfig());
       const results = await Promise.allSettled(
         Array.from({ length: 5 }, () => svc.redeemReward('u1', 'reward-discount-100k')),
@@ -404,25 +404,25 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
       it('số dư đủ nhưng phần dùng được KHÔNG đủ → BadRequest nêu rõ số điểm + ngày mở khoá, không trừ gì', async () => {
         const deliveredAt = new Date(Date.now() - 2 * DAY);
-        const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100, referralCode: 'AAAA1111' }], {
-          lockedRows: [{ delta: 60, deliveredAt, pendingReturn: false }],
+        const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }], {
+          lockedRows: [{ delta: 60_000, deliveredAt, pendingReturn: false }],
         });
         const err = await new LoyaltyService(prisma, makeConfig())
           .redeemReward('u1', 'reward-discount-50k')
           .catch((e: unknown) => e);
         expect(err).toBeInstanceOf(BadRequestException);
         const unlock = vnDate(new Date(deliveredAt.getTime() + 7 * DAY)); // returns.window_days mặc định 7
-        expect((err as Error).message).toContain(`60 điểm từ đơn mới giao sẽ dùng được sau ngày ${unlock}`);
+        expect((err as Error).message).toMatch(new RegExp(`60[.]?000 điểm từ đơn mới giao sẽ dùng được sau ngày ${unlock}`));
         expect((err as Error).message).toContain('40');
-        expect(db.users.get('u1')!.pointsBalance).toBe(100);
+        expect(db.users.get('u1')!.pointsBalance).toBe(100_000);
         expect(db.coupons).toHaveLength(0);
         expect(db.ledger).toHaveLength(0);
       });
 
       it('cửa sổ đổi/trả đọc từ returns.window_days', async () => {
         const deliveredAt = new Date(Date.now() - DAY);
-        const { prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100, referralCode: 'AAAA1111' }], {
-          lockedRows: [{ delta: 60, deliveredAt, pendingReturn: false }],
+        const { prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }], {
+          lockedRows: [{ delta: 60_000, deliveredAt, pendingReturn: false }],
         });
         const err = await new LoyaltyService(prisma, makeConfig({ 'returns.window_days': 14 }))
           .redeemReward('u1', 'reward-discount-50k')
@@ -431,23 +431,23 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       });
 
       it('đơn đang có yêu cầu đổi/trả chờ duyệt → điểm bị khoá tới khi yêu cầu được xử lý', async () => {
-        const { prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100, referralCode: 'AAAA1111' }], {
-          lockedRows: [{ delta: 70, deliveredAt: new Date(Date.now() - 20 * DAY), pendingReturn: true }],
+        const { prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111' }], {
+          lockedRows: [{ delta: 70_000, deliveredAt: new Date(Date.now() - 20 * DAY), pendingReturn: true }],
         });
         const err = await new LoyaltyService(prisma, makeConfig())
           .redeemReward('u1', 'reward-discount-50k')
           .catch((e: unknown) => e);
         expect(err).toBeInstanceOf(BadRequestException);
-        expect((err as Error).message).toMatch(/70 điểm từ đơn đang chờ xử lý đổi\/trả/);
+        expect((err as Error).message).toMatch(/70[.]?000 điểm từ đơn đang chờ xử lý đổi\/trả/);
       });
 
       it('phần điểm dùng được đủ → đổi bình thường (chỉ khoá đúng phần của đơn mới giao)', async () => {
-        const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 150, referralCode: 'AAAA1111' }], {
-          lockedRows: [{ delta: 60, deliveredAt: new Date(Date.now() - DAY), pendingReturn: false }],
+        const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 150_000, referralCode: 'AAAA1111' }], {
+          lockedRows: [{ delta: 60_000, deliveredAt: new Date(Date.now() - DAY), pendingReturn: false }],
         });
         const res = await new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-discount-50k');
         expect(res.success).toBe(true);
-        expect(db.users.get('u1')!.pointsBalance).toBe(100);
+        expect(db.users.get('u1')!.pointsBalance).toBe(100_000);
       });
 
       it('guard atomic: khoá dòng user (FOR UPDATE) rồi updateMany where pointsBalance ≥ giá + điểm khoá, TRONG tx', async () => {
@@ -455,9 +455,9 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         const $queryRaw = jest
           .fn()
           .mockResolvedValueOnce([{ id: 'u1' }])
-          .mockResolvedValueOnce([{ delta: 60, deliveredAt: new Date(Date.now() - DAY), pendingReturn: false }]);
+          .mockResolvedValueOnce([{ delta: 60_000, deliveredAt: new Date(Date.now() - DAY), pendingReturn: false }]);
         const tx = {
-          user: { updateMany, findUnique: jest.fn().mockResolvedValue({ pointsBalance: 150 }) },
+          user: { updateMany, findUnique: jest.fn().mockResolvedValue({ pointsBalance: 150_000 }) },
           coupon: { create: jest.fn() },
           pointsTransaction: { create: jest.fn() },
           $queryRaw,
@@ -469,15 +469,15 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         const firstSql = ($queryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
         expect(firstSql).toMatch(/FROM "users"[\s\S]*FOR UPDATE/);
         expect(updateMany).toHaveBeenCalledWith({
-          where: { id: 'u1', pointsBalance: { gte: 160 } },
-          data: { pointsBalance: { decrement: 100 } },
+          where: { id: 'u1', pointsBalance: { gte: 160_000 } },
+          data: { pointsBalance: { decrement: 100_000 } },
         });
         expect(tx.coupon.create).not.toHaveBeenCalled();
       });
 
-      it('CONCURRENCY: số dư 150, khoá 60, giá 50 → 5 request song song chỉ 1 voucher, số dư 100', async () => {
-        const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 150, referralCode: 'AAAA1111' }], {
-          lockedRows: [{ delta: 60, deliveredAt: new Date(Date.now() - DAY), pendingReturn: false }],
+      it('CONCURRENCY: số dư 150.000, khoá 60.000, giá 50.000 → 5 request song song chỉ 1 voucher, số dư 100.000', async () => {
+        const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 150_000, referralCode: 'AAAA1111' }], {
+          lockedRows: [{ delta: 60_000, deliveredAt: new Date(Date.now() - DAY), pendingReturn: false }],
         });
         const svc = new LoyaltyService(prisma, makeConfig());
         const results = await Promise.allSettled(
@@ -487,7 +487,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
         const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
         expect(rejected).toHaveLength(4);
         for (const r of rejected) expect(r.reason).toBeInstanceOf(BadRequestException);
-        expect(db.users.get('u1')!.pointsBalance).toBe(100); // không đụng 60 điểm đang khoá
+        expect(db.users.get('u1')!.pointsBalance).toBe(100_000); // không đụng 60.000 điểm đang khoá
         expect(db.coupons).toHaveLength(1);
       });
 
@@ -537,7 +537,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
     it('mặc định điểm danh là bảng BẢO THỦ (≈8 điểm/tuần), không phải 190 điểm/tuần', () => {
       expect(DEFAULT_CHECKIN_POINTS).toHaveLength(7);
-      expect(DEFAULT_CHECKIN_POINTS.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(10);
+      expect(DEFAULT_CHECKIN_POINTS.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(10_000);
     });
 
     it('status: CHƯA điểm danh, hôm qua là N3 → hôm nay là N4; N1–N3 đã nhận; phần thưởng hiển thị = phần thưởng sẽ nhận', async () => {
@@ -594,7 +594,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     });
 
     it('config loyalty.checkin_points sai kiểu/âm/quá lớn → dùng bảng mặc định', async () => {
-      for (const bad of [[1, 2], 'abc', [1, 1, 1, 1, 1, 1, -5], [1, 1, 1, 1, 1, 1, 9999], [1, 1, 1, 1.5, 1, 1, 1]]) {
+      for (const bad of [[1, 2], 'abc', [1, 1, 1, 1, 1, 1, -5], [1, 1, 1, 1, 1, 1, 100_001], [1, 1, 1, 1.5, 1, 1, 1]]) {
         const status = await new LoyaltyService(statusPrisma(null), makeConfig({ 'loyalty.checkin_points': bad }))
           .getDailyCheckInStatus('u1');
         expect(status.rewards.map((r) => r.points)).toEqual(DEFAULT_CHECKIN_POINTS);
@@ -810,7 +810,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
           phone: '0912345678',
           referralCode: 'AB12CD34',
           fullName: 'Khách Vip',
-          pointsBalance: 50,
+          pointsBalance: 50_000,
           tier: { name: 'Lộc Biếc', pointMultiplier: 1.5 },
         },
         { id: 'm2', phone: '0912000000', referralCode: 'EE00FF11', fullName: 'Khách B' },
@@ -846,31 +846,31 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(db.users.get('staff-1')!.pointsBalance).toBe(0);
     });
 
-    it('cộng điểm theo loyalty.vnd_per_point × hệ số hạng; ledger POS có expiresAt; sổ audit ghi nhân viên', async () => {
+    it('cộng điểm theo loyalty.earn_pct × hệ số hạng; ledger POS có expiresAt; sổ audit ghi nhân viên', async () => {
       const { db, prisma } = posDb();
-      const svc = new LoyaltyService(prisma, makeConfig({ ...ENABLED, 'loyalty.vnd_per_point': 10_000 }));
+      const svc = new LoyaltyService(prisma, makeConfig({ ...ENABLED, 'loyalty.earn_pct': 2 }));
       const res = await credit(svc, 'staff-1', { note: 'Quầy 1' });
 
-      // 200.000 / 10.000 = 20 × 1,5 = 30 điểm
+      // 200.000 × 2% = 4.000 × 1,5 = 6.000 điểm
       expect(res.replayed).toBe(false);
-      expect(res.posTransaction).toMatchObject({ receiptId: 'HD-001', orderTotal: 200_000, pointsEarned: 30 });
-      expect(res.member.pointsBalance).toBe(80);
-      expect(db.users.get('m1')!.pointsBalance).toBe(80);
+      expect(res.posTransaction).toMatchObject({ receiptId: 'HD-001', orderTotal: 200_000, pointsEarned: 6_000 });
+      expect(res.member.pointsBalance).toBe(56_000);
+      expect(db.users.get('m1')!.pointsBalance).toBe(56_000);
       expect(db.posCredits).toEqual([
-        expect.objectContaining({ receiptId: 'HD-001', memberId: 'm1', staffUserId: 'staff-1', orderTotal: 200_000, points: 30, note: 'Quầy 1' }),
+        expect.objectContaining({ receiptId: 'HD-001', memberId: 'm1', staffUserId: 'staff-1', orderTotal: 200_000, points: 6_000, note: 'Quầy 1' }),
       ]);
       const row = db.ledger[0]!;
-      expect(row).toMatchObject({ userId: 'm1', delta: 30, reason: 'POS_OFFLINE_ORDER:HD-001', refType: 'POS', refId: db.posCredits[0]!.id });
+      expect(row).toMatchObject({ userId: 'm1', delta: 6_000, reason: 'POS_OFFLINE_ORDER:HD-001', refType: 'POS', refId: db.posCredits[0]!.id });
       expect(row.expiresAt).toBeInstanceOf(Date);
     });
 
     it('PD-3: kết quả tích điểm ghi số dư mới của lô thường và tổng gồm lô quy đổi (lô quy đổi không đổi)', async () => {
       const { db, prisma } = posDb();
-      db.users.get('m1')!.pointsConvertedBalance = 40;
-      const svc = new LoyaltyService(prisma, makeConfig({ ...ENABLED, 'loyalty.vnd_per_point': 10_000 }));
+      db.users.get('m1')!.pointsConvertedBalance = 40_000;
+      const svc = new LoyaltyService(prisma, makeConfig({ ...ENABLED, 'loyalty.earn_pct': 2 }));
       const res = await credit(svc, 'staff-1');
-      expect(res.member).toMatchObject({ pointsBalance: 80, pointsConvertedBalance: 40, pointsTotal: 120 });
-      expect(db.users.get('m1')!.pointsConvertedBalance).toBe(40);
+      expect(res.member).toMatchObject({ pointsBalance: 56_000, pointsConvertedBalance: 40_000, pointsTotal: 96_000 });
+      expect(db.users.get('m1')!.pointsConvertedBalance).toBe(40_000);
     });
 
     it('hoá đơn vượt trần loyalty.pos_max_order_total → BadRequest', async () => {
@@ -880,12 +880,11 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(db.posCredits).toHaveLength(0);
     });
 
-    it('hoá đơn quá nhỏ ra 0 điểm → BadRequest (không ghi dòng rỗng)', async () => {
+    it('hoá đơn nhỏ nhất (1.000đ) vẫn ra điểm theo phần trăm: 1.000đ × 2% = 20 điểm', async () => {
       const { db, prisma } = posDb();
-      await expect(credit(new LoyaltyService(prisma, makeConfig(ENABLED)), 'staff-1', { memberCode: 'TUBUEE00FF11', orderTotal: 5_000 })).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(db.posCredits).toHaveLength(0);
+      const res = await credit(new LoyaltyService(prisma, makeConfig(ENABLED)), 'staff-1', { memberCode: 'TUBUEE00FF11', orderTotal: 1_000 });
+      expect(res.posTransaction.pointsEarned).toBe(20);
+      expect(db.posCredits).toHaveLength(1);
     });
 
     it('IDEMPOTENT: gửi lại cùng receiptId (retry mạng) → trả lại kết quả cũ, KHÔNG cộng lần 2', async () => {
@@ -895,7 +894,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const again = await credit(svc, 'staff-1');
       expect(again.replayed).toBe(true);
       expect(again.posTransaction.pointsEarned).toBe(first.posTransaction.pointsEarned);
-      expect(db.users.get('m1')!.pointsBalance).toBe(80);
+      expect(db.users.get('m1')!.pointsBalance).toBe(56_000);
       expect(db.ledger).toHaveLength(1);
     });
 
@@ -904,7 +903,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const svc = new LoyaltyService(prisma, makeConfig(ENABLED));
       const results = await Promise.all(Array.from({ length: 5 }, () => credit(svc, 'staff-1')));
       expect(results.filter((r) => !r.replayed)).toHaveLength(1);
-      expect(db.users.get('m1')!.pointsBalance).toBe(80);
+      expect(db.users.get('m1')!.pointsBalance).toBe(56_000);
       expect(db.posCredits).toHaveLength(1);
       expect(db.ledger).toHaveLength(1);
     });
@@ -919,10 +918,10 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
     it('CONCURRENCY: trần điểm/ngày của NHÂN VIÊN giữ đúng khi nhiều hoá đơn gửi song song', async () => {
       const { db, prisma } = posDb();
-      // m2 hạng thường ×1: mỗi hoá đơn 500k = 50 điểm; trần 100 điểm/NV/ngày → chỉ 2/3 hoá đơn qua.
+      // m2 hạng thường ×1: mỗi hoá đơn 500k = 10.000 điểm; trần 20.000 điểm/NV/ngày → chỉ 2/3 hoá đơn qua.
       const svc = new LoyaltyService(
         prisma,
-        makeConfig({ ...ENABLED, 'loyalty.pos_staff_daily_points_cap': 100, 'loyalty.pos_member_daily_points_cap': 10_000 }),
+        makeConfig({ ...ENABLED, 'loyalty.pos_staff_daily_points_cap': 20_000, 'loyalty.pos_member_daily_points_cap': 10_000_000 }),
       );
       const results = await Promise.allSettled(
         ['HD-A', 'HD-B', 'HD-C'].map((receiptId) =>
@@ -932,7 +931,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
       const rej = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
       expect(rej.reason).toBeInstanceOf(BadRequestException);
-      expect(db.users.get('m2')!.pointsBalance).toBe(100);
+      expect(db.users.get('m2')!.pointsBalance).toBe(20_000);
     });
 
     it('sổ audit (admin): lọc theo ngày/nhân viên, mới nhất trước, có trần số dòng, SĐT đã che', async () => {
@@ -971,13 +970,13 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const { db, prisma } = posDb();
       const svc = new LoyaltyService(
         prisma,
-        makeConfig({ ...ENABLED, 'loyalty.pos_staff_daily_points_cap': 10_000, 'loyalty.pos_member_daily_points_cap': 60 }),
+        makeConfig({ ...ENABLED, 'loyalty.pos_staff_daily_points_cap': 10_000_000, 'loyalty.pos_member_daily_points_cap': 12_000 }),
       );
       await credit(svc, 'staff-1', { memberCode: 'TUBUEE00FF11', orderTotal: 500_000, receiptId: 'HD-1' });
       await expect(
         credit(svc, 'staff-2', { memberCode: 'TUBUEE00FF11', orderTotal: 200_000, receiptId: 'HD-2' }),
       ).rejects.toThrow(BadRequestException);
-      expect(db.users.get('m2')!.pointsBalance).toBe(50);
+      expect(db.users.get('m2')!.pointsBalance).toBe(10_000);
     });
   });
 });

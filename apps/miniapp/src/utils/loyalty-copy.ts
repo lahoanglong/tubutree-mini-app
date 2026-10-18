@@ -2,6 +2,9 @@ import { formatNumber, formatVnd } from './format';
 
 /** Quy tắc tích/đổi Điểm Xanh do API trả từ SystemConfig (loyalty.vnd_per_point, vnd_per_point_redeem, max_redeem_pct). */
 export interface LoyaltyRates {
+  /** Phần trăm tiền hàng tích thành điểm (2 = 2%); thiếu khi API cũ chưa trả. */
+  earnPct?: number;
+  /** 100 / earnPct, giữ cho bản app cũ. */
   vndPerPoint: number;
   vndPerPointRedeem: number;
   maxRedeemPct: number;

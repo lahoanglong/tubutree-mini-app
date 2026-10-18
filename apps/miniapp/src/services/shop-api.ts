@@ -231,7 +231,7 @@ export interface PublicConfig {
    * Chi tiêu cho 1 Điểm Xanh được tích, số đồng được giảm khi dùng 1 điểm, trần % giá trị đơn trả được bằng điểm thường (0 = tắt)
    * và số tháng điểm thường có hạn. Thiếu khi API cũ; hai trường sau thiếu khi API chưa phát hành bản có chúng.
    */
-  loyalty?: { vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct?: number; pointExpireMonths?: number };
+  loyalty?: { earnPct?: number; vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct?: number; pointExpireMonths?: number };
   /** Cờ bố cục Trang chủ cho khách mới (home.new_customer_layout). Thiếu khi API cũ → bố cục cũ. */
   homeNewCustomerLayout?: boolean;
   /** Cờ xem trước công khai bảng tin cộng đồng (community.public_preview). Thiếu khi API cũ → phải đăng nhập mới thấy. */

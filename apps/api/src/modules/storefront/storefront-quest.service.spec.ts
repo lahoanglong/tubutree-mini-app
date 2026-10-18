@@ -46,7 +46,7 @@ describe('StorefrontQuestService.listQuests', () => {
     expect(byCode['notes_3']?.done).toBe(true); // 4 có note >= 3
     expect(byCode['publish']?.done).toBe(true);
     expect(byCode['first_order']?.done).toBe(true);
-    expect(out.totalEarnedPoints).toBe(2 + 1);
+    expect(out.totalEarnedPoints).toBe(2_000 + 1_000);
     expect(out).not.toHaveProperty('totalEarnedXu');
     expect(out.quests[0]).not.toHaveProperty('rewardXu');
     expect(out.level).toBe(2);
@@ -95,8 +95,8 @@ describe('StorefrontQuestService.claimQuest', () => {
     prisma.user.findUniqueOrThrow.mockResolvedValue({ pointsBalance: 7 });
     const svc = new StorefrontQuestService(prisma, coins);
     const out = await svc.claimQuest('u1', 'publish');
-    expect(coins.grant).toHaveBeenCalledWith('u1', 1, 'STOREFRONT_QUEST:publish', 'QUEST', 'sf1');
-    expect(out).toEqual({ claimed: true, alreadyClaimed: false, code: 'publish', rewardPoints: 1, pointsBalance: 7 });
+    expect(coins.grant).toHaveBeenCalledWith('u1', 1000, 'STOREFRONT_QUEST:publish', 'QUEST', 'sf1');
+    expect(out).toEqual({ claimed: true, alreadyClaimed: false, code: 'publish', rewardPoints: 1000, pointsBalance: 7 });
   });
 
   it('đã nhận trước đó (bằng xu trước gộp hoặc bằng điểm) → báo đã nhận, không cấp thêm', async () => {
@@ -104,16 +104,16 @@ describe('StorefrontQuestService.claimQuest', () => {
     prisma.storefront.findFirst.mockResolvedValue(baseSf);
     coins.grant.mockResolvedValue(false);
     const out = await new StorefrontQuestService(prisma, coins).claimQuest('u1', 'publish');
-    expect(out).toMatchObject({ claimed: true, alreadyClaimed: true, rewardPoints: 1 });
+    expect(out).toMatchObject({ claimed: true, alreadyClaimed: true, rewardPoints: 1000 });
   });
 
-  it('mức thưởng nhiệm vụ theo bảng PD-3 mục 4: 2/2/2/1/5 Điểm Xanh (1.500 xu làm tròn lên 2)', () => {
+  it('mức thưởng nhiệm vụ theo bảng PD-3 mục 4: 2.000/2.000/2.000/1.000/5.000 Điểm Xanh (1 xu = 1 điểm)', () => {
     expect(QUESTS.map((q) => [q.code, q.rewardPoints])).toEqual([
-      ['profile_complete', 2],
-      ['add_5_products', 2],
-      ['notes_3', 2],
-      ['publish', 1],
-      ['first_order', 5],
+      ['profile_complete', 2_000],
+      ['add_5_products', 2_000],
+      ['notes_3', 2_000],
+      ['publish', 1_000],
+      ['first_order', 5_000],
     ]);
   });
 });

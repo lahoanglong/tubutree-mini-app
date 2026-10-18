@@ -28,7 +28,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Hoàn thiện hồ sơ gian hàng',
     hint: 'Thêm ảnh đại diện, ảnh bìa và lời nhắn cá nhân.',
     goal: 1,
-    rewardPoints: 2,
+    rewardPoints: 2_000,
     measure: (s) => (s.profileComplete ? 1 : 0),
   },
   {
@@ -36,7 +36,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Thêm 5 sản phẩm',
     hint: 'Chọn 5 món bạn tâm đắc từ catalog.',
     goal: 5,
-    rewardPoints: 2,
+    rewardPoints: 2_000,
     measure: (s) => Math.min(s.itemsTotal, 5),
   },
   {
@@ -44,7 +44,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Viết lý do cho 3 sản phẩm',
     hint: '“Vì sao mình giới thiệu” giúp khách tin hơn.',
     goal: 3,
-    rewardPoints: 2,
+    rewardPoints: 2_000,
     measure: (s) => Math.min(s.itemsWithNote, 3),
   },
   {
@@ -52,7 +52,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Đăng gian hàng',
     hint: 'Bấm Lưu & Đăng để khách xem được.',
     goal: 1,
-    rewardPoints: 1,
+    rewardPoints: 1_000,
     measure: (s) => (s.isPublished ? 1 : 0),
   },
   {
@@ -60,7 +60,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Đơn hàng đầu tiên',
     hint: 'Chia sẻ link — khi có đơn từ gian hàng bạn nhận thưởng!',
     goal: 1,
-    rewardPoints: 5,
+    rewardPoints: 5_000,
     measure: (s) => (s.firstOrder ? 1 : 0),
   },
 ];

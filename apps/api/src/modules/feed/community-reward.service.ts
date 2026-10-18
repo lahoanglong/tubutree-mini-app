@@ -81,7 +81,7 @@ export class CommunityRewardService {
 
   /** Thưởng khi bài được đăng công khai. Trần số lần/ngày để chống spam (xem rewardWithDailyCap). */
   async rewardPost(userId: string, postId: string): Promise<void> {
-    const points = await this.rewardPoints('community.post_reward_points', 1);
+    const points = await this.rewardPoints('community.post_reward_points', 1000);
     if (points <= 0) return;
     const cap = await this.config.get<number>('community.daily_post_reward_cap', 1);
     await this.rewardWithDailyCap(userId, 'COMMUNITY_POST', postId, points, cap);
@@ -114,7 +114,7 @@ export class CommunityRewardService {
    */
   async rewardBestAnswer(answererId: string, postAuthorId: string, postId: string): Promise<void> {
     if (answererId === postAuthorId) return;
-    const points = await this.rewardPoints('community.best_answer_reward_points', 1);
+    const points = await this.rewardPoints('community.best_answer_reward_points', 1000);
     if (points <= 0) return;
     const cap = await this.config.get<number>('community.daily_best_answer_cap', 3);
     await this.rewardWithDailyCap(answererId, 'COMMUNITY_BEST', postId, points, cap);

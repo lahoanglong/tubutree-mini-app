@@ -20,18 +20,18 @@ const prisma = new PrismaClient();
 
 export const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Loyalty
-  { key: 'loyalty.vnd_per_point', value: 10000, category: 'loyalty', description: '10.000đ chi tiêu = 1 điểm' },
-  { key: 'loyalty.vnd_per_point_redeem', value: 1000, category: 'loyalty', description: '1 điểm = 1.000đ khi áp' },
+  { key: 'loyalty.earn_pct', value: 2, category: 'loyalty', description: 'Đơn đặt trong Mini App: tích 2% tiền hàng (sau giảm giá, không tính ship) thành Điểm Xanh, rồi nhân hệ số hạng. 1 điểm = 1đ' },
+  { key: 'loyalty.vnd_per_point_redeem', value: 1, category: 'loyalty', description: '1 điểm = 1đ khi áp', createOnly: true },
   { key: 'loyalty.max_redeem_pct', value: 0.2, category: 'loyalty', description: 'Tối đa 20% giá trị đơn được trừ điểm' },
   { key: 'loyalty.point_expire_months', value: 12, category: 'loyalty', description: 'Điểm hết hạn sau 12 tháng' },
   { key: 'loyalty.point_expiry_reminder_days', value: 7, category: 'loyalty', description: 'Nhắc trước khi điểm hết hạn (số ngày)' },
   { key: 'loyalty.tier_grace_days', value: 30, category: 'loyalty', description: 'Grace period giữ hạng khi rớt' },
   // Điểm danh hằng ngày + tích điểm tại quầy (POS) — loyalty.service. createOnly: admin chỉnh rồi thì seed không reset.
-  { key: 'loyalty.checkin_points', value: [1, 1, 1, 1, 1, 1, 2], category: 'loyalty', description: 'Điểm Xanh điểm danh theo ngày 1..7 của vòng 7 ngày', createOnly: true },
+  { key: 'loyalty.checkin_points', value: [1000, 1000, 1000, 1000, 1000, 1000, 2000], category: 'loyalty', description: 'Điểm Xanh điểm danh theo ngày 1..7 của vòng 7 ngày', createOnly: true },
   { key: 'loyalty.pos_credit_enabled', value: false, category: 'loyalty', description: 'Bật tích điểm tại quầy (POS) do nhân viên nhập', createOnly: true },
   { key: 'loyalty.pos_max_order_total', value: 5000000, category: 'loyalty', description: 'Giá trị hoá đơn tối đa (đ) mỗi lần tích điểm POS', createOnly: true },
-  { key: 'loyalty.pos_staff_daily_points_cap', value: 3000, category: 'loyalty', description: 'Tổng điểm tối đa một nhân viên được tích POS mỗi ngày', createOnly: true },
-  { key: 'loyalty.pos_member_daily_points_cap', value: 1000, category: 'loyalty', description: 'Tổng điểm POS tối đa một thành viên nhận mỗi ngày', createOnly: true },
+  { key: 'loyalty.pos_staff_daily_points_cap', value: 3_000_000, category: 'loyalty', description: 'Tổng điểm tối đa một nhân viên được tích POS mỗi ngày', createOnly: true },
+  { key: 'loyalty.pos_member_daily_points_cap', value: 1_000_000, category: 'loyalty', description: 'Tổng điểm POS tối đa một thành viên nhận mỗi ngày', createOnly: true },
 
   // Mã giảm giá tự động (VouchersService) — mặc định trùng đúng giá trị code dùng khi khoá chưa có, seed chỉ để
   // admin THẤY và sửa được ở tab Cấu hình. createOnly: deploy lại không reset giá trị admin đã chỉnh.
@@ -73,7 +73,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
   // PD-3: thưởng giới thiệu bằng Điểm Xanh (khoá xu coins.* đã chết). createOnly: migration
   // pd3_points_config_keys chép giá trị DB cũ bằng CEIL(xu/1000); seed không đè.
-  { key: 'referral.referrer_reward_points', value: 5, category: 'referral', description: 'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)', createOnly: true },
+  { key: 'referral.referrer_reward_points', value: 5000, category: 'referral', description: 'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)', createOnly: true },
   { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng Điểm Xanh', createOnly: true },
   { key: 'referral.min_order_amount', value: 200000, category: 'referral', description: 'Chỉ đơn có tổng tiền từ mức này mới được tính là đơn đầu/đơn thứ 2 của chương trình giới thiệu', createOnly: true },
   // Q-17: liên hệ hiển thị ở trang Về Tubu Tree (GET /config/public). Để trống thì miniapp ẩn dòng đó.
@@ -83,20 +83,20 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   {
     key: 'referral.milestones_points',
     value: [
-      { count: 3, bonusPoints: 20 },
-      { count: 5, bonusPoints: 40 },
-      { count: 10, bonusPoints: 100 },
+      { count: 3, bonusPoints: 20_000 },
+      { count: 5, bonusPoints: 40_000 },
+      { count: 10, bonusPoints: 100_000 },
     ],
     category: 'referral',
     description: 'Mốc số bạn giới thiệu thành công → thưởng thêm Điểm Xanh (1 lần/mốc)',
     createOnly: true,
   },
   // Thưởng cộng đồng bằng Điểm Xanh (PD-3, OQ-6): đăng bài 1 điểm ≤ 1/ngày, trả lời tắt (0), hay nhất 1 điểm ≤ 3/ngày.
-  { key: 'community.post_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng khi bài cộng đồng được đăng (0 = tắt)', createOnly: true },
+  { key: 'community.post_reward_points', value: 1000, category: 'community', description: 'Điểm Xanh thưởng khi bài cộng đồng được đăng (0 = tắt)', createOnly: true },
   { key: 'community.daily_post_reward_cap', value: 1, category: 'community', description: 'Số bài được thưởng tối đa mỗi ngày/người', createOnly: true },
   { key: 'community.answer_reward_points', value: 0, category: 'community', description: 'Điểm Xanh thưởng người trả lời bài của người khác (0 = tắt)', createOnly: true },
   { key: 'community.daily_answer_reward_cap', value: 10, category: 'community', description: 'Số câu trả lời được thưởng tối đa mỗi ngày/người', createOnly: true },
-  { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
+  { key: 'community.best_answer_reward_points', value: 1000, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
   { key: 'community.zalo_group_url', value: '', category: 'community', description: 'Link nhóm Zalo cộng đồng (https://zalo.me/...), để trống = ẩn nút', createOnly: true },
   { key: 'community.facebook_url', value: '', category: 'community', description: 'Link fanpage Facebook (facebook.com hoặc fb.com), để trống = ẩn nút', createOnly: true },
   { key: 'community.tiktok_url', value: '', category: 'community', description: 'Link kênh TikTok (tiktok.com), để trống = ẩn nút', createOnly: true },
@@ -105,7 +105,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'community.author_notify_interval_minutes', value: 60, category: 'community', description: 'Gộp tin "bài của bạn có người thích/bình luận": tối đa 1 tin mỗi bài trong chừng này phút (0 = tắt tin)', createOnly: true },
   { key: 'community.unanswered_alert_hours', value: 24, category: 'community', description: 'Câu hỏi cộng đồng chưa ai trả lời quá chừng này giờ thì hiện ở "Việc cần xử lý" của CSKH', createOnly: true },
   // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
-  { key: 'game.tree_points_price', value: 50, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
+  { key: 'game.tree_points_price', value: 50_000, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
 
   // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
   { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
@@ -158,7 +158,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
 
   // Game
   { key: 'game.streak_7_bonus', value: { seeds: 10, free_spins: 1 }, category: 'game', description: 'Bonus chuỗi 7 ngày' },
-  { key: 'game.spin_buy_cost_points', value: 10, category: 'game', description: 'Điểm Xanh đổi 1 lượt quay' },
+  { key: 'game.spin_buy_cost_points', value: 10_000, category: 'game', description: 'Điểm Xanh đổi 1 lượt quay' },
   { key: 'game.spin_buy_daily_limit', value: 5, category: 'game', description: 'Max mua lượt/ngày' },
   { key: 'game.quiz_daily_count', value: 5, category: 'game', description: 'Số quiz/ngày' },
   { key: 'game.daily_login_seeds', value: 10, category: 'game', description: '💧 khi mở app/check-in' },
@@ -179,11 +179,11 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   {
     key: 'seasonpass.tiers',
     value: [
-      { xp: 30, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'POINTS', amount: 5 } },
-      { xp: 70, free: { type: 'SEEDS', amount: 30 }, premium: { type: 'POINTS', amount: 8 } },
-      { xp: 120, free: { type: 'SEEDS', amount: 40 }, premium: { type: 'POINTS', amount: 12 } },
-      { xp: 200, free: { type: 'SEEDS', amount: 60 }, premium: { type: 'POINTS', amount: 20 } },
-      { xp: 300, free: { type: 'SEEDS', amount: 80 }, premium: { type: 'POINTS', amount: 30 } },
+      { xp: 30, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'POINTS', amount: 5000 } },
+      { xp: 70, free: { type: 'SEEDS', amount: 30 }, premium: { type: 'POINTS', amount: 8000 } },
+      { xp: 120, free: { type: 'SEEDS', amount: 40 }, premium: { type: 'POINTS', amount: 12_000 } },
+      { xp: 200, free: { type: 'SEEDS', amount: 60 }, premium: { type: 'POINTS', amount: 20_000 } },
+      { xp: 300, free: { type: 'SEEDS', amount: 80 }, premium: { type: 'POINTS', amount: 30_000 } },
     ],
     category: 'game',
     description: 'Bậc Season Pass',
@@ -204,13 +204,13 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   {
     key: 'game.spin_prizes',
     value: [
-      { id: 'p1', name: '5 điểm Xanh', weight: 30, rewardType: 'POINTS', value: 5 },
-      { id: 'p2', name: '10 điểm Xanh', weight: 22, rewardType: 'POINTS', value: 10 },
-      { id: 'p3', name: '20 điểm Xanh', weight: 12, rewardType: 'POINTS', value: 20 },
+      { id: 'p1', name: '5.000 điểm Xanh', weight: 30, rewardType: 'POINTS', value: 5000 },
+      { id: 'p2', name: '10.000 điểm Xanh', weight: 22, rewardType: 'POINTS', value: 10_000 },
+      { id: 'p3', name: '20.000 điểm Xanh', weight: 12, rewardType: 'POINTS', value: 20_000 },
       { id: 'p4', name: 'Voucher 20k', weight: 10, rewardType: 'COUPON', value: 20000 },
       { id: 'p5', name: '30 💧', weight: 15, rewardType: 'SEEDS', value: 30 },
       { id: 'p6', name: 'Voucher 50k', weight: 4, rewardType: 'COUPON', value: 50000 },
-      { id: 'p7', name: '50 điểm Xanh', weight: 5, rewardType: 'POINTS', value: 50 },
+      { id: 'p7', name: '50.000 điểm Xanh', weight: 5, rewardType: 'POINTS', value: 50_000 },
       { id: 'p8', name: 'Chúc may mắn lần sau', weight: 2, rewardType: 'NONE', value: 0 },
     ],
     category: 'game',
@@ -319,8 +319,8 @@ export const TIERS = [
   {
     id: 'LOC_BIEC',
     name: 'Lộc Biếc',
-    minPoints: 500,
-    minSpending: 5000000,
+    minPoints: 30_000,
+    minSpending: 1_500_000,
     pointMultiplier: new Prisma.Decimal(1.2),
     discountPct: new Prisma.Decimal(0),
     perks: ['Tích Điểm Xanh x1.2', 'Freeship đơn ≥ 99k', 'Mã giảm giá sinh nhật 50k'],
@@ -330,7 +330,7 @@ export const TIERS = [
   {
     id: 'DAI_THU',
     name: 'Đại Thụ',
-    minPoints: 2000,
+    minPoints: 400_000,
     minSpending: 20000000,
     pointMultiplier: new Prisma.Decimal(1.5),
     discountPct: new Prisma.Decimal(0),
@@ -341,7 +341,7 @@ export const TIERS = [
   {
     id: 'CO_THU',
     name: 'Cổ Thụ',
-    minPoints: 5000,
+    minPoints: 1_000_000,
     minSpending: 50000000,
     pointMultiplier: new Prisma.Decimal(2),
     discountPct: new Prisma.Decimal(0.05),
@@ -861,10 +861,10 @@ const QUIZZES = [
 ];
 
 export const MISSIONS = [
-  { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Nhận thành công đơn hàng đầu tiên', rewardPoints: 20, goal: 1, isRepeatable: false },
-  { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30, goal: 7, isRepeatable: false },
-  { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15, goal: 3, isRepeatable: false },
-  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50, goal: 3, isRepeatable: false },
+  { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Nhận thành công đơn hàng đầu tiên', rewardPoints: 20_000, goal: 1, isRepeatable: false },
+  { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30_000, goal: 7, isRepeatable: false },
+  { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15_000, goal: 3, isRepeatable: false },
+  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50_000, goal: 3, isRepeatable: false },
 ];
 
 const CASHBACK_MERCHANTS = [

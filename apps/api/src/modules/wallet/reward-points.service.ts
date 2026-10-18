@@ -29,7 +29,7 @@ import {
  * giá trị tính bằng xu (5.000, 20.000…) đọc dưới tên điểm sẽ vượt trần và bị từ chối thay vì cấp
  * 5–20 triệu đồng (PD-3 R1).
  */
-export const POINTS_GRANT_HARD_MAX = 2000;
+export const POINTS_GRANT_HARD_MAX = 2_000_000;
 
 /** Số đơn ứng viên đọc mỗi lần khi chọn cặp thưởng giới thiệu; dừng ngay khi đủ 2 đơn không bị loại. */
 const REFERRAL_CANDIDATE_PAGE = 10;
@@ -220,7 +220,7 @@ export class RewardPointsService {
     if (!referrer || referrer.role === 'AFFILIATE') return false;
 
     const [reward, { windowDays, minOrderAmount: minOrder }, expiresAt] = await Promise.all([
-      this.config.get<number>('referral.referrer_reward_points', 5),
+      this.config.get<number>('referral.referrer_reward_points', 5000),
       this.referralOrderRules(),
       this.expiresAt(),
     ]);

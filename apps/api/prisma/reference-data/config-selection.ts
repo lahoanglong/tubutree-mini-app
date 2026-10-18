@@ -66,8 +66,8 @@ export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
  * kèm hai giá trị để chủ dự án so. Chỉ nạp với `--with-business-defaults`; không cờ thì DB giữ hành vi như bảng trống.
  */
 export const BUSINESS_CONFIG_KEYS: Readonly<Record<string, string>> = {
-  'game.spin_prizes': 'mã mặc định [] (vòng quay tắt); seed mở 8 giải, có voucher 20k/50k và tới 50 điểm Xanh',
-  'referral.milestones_points': 'mã mặc định [] (không thưởng mốc); seed thưởng 20/40/100 điểm Xanh ở mốc 3/5/10 bạn',
+  'game.spin_prizes': 'mã mặc định [] (vòng quay tắt); seed mở 8 giải, có voucher 20k/50k và tới 50.000 điểm Xanh (1 điểm = 1đ)',
+  'referral.milestones_points': 'mã mặc định [] (không thưởng mốc); seed thưởng 20.000/40.000/100.000 điểm Xanh ở mốc 3/5/10 bạn',
   'subscribe.discount_tiers': 'mã mặc định một bậc bằng subscribe.discount_pct (12%); seed thêm 14% (3 gói) và 15% (5 gói)',
   'shipping.tier_freeship_overrides': 'mã mặc định {} (không hạng nào freeship sớm); seed cho Lộc Biếc freeship từ 99k, Đại Thụ và Cổ Thụ freeship hết',
   'game.streak_7_bonus': 'mã mặc định { seeds: 20 }; seed { seeds: 10, free_spins: 1 } (free_spins không code nào đọc)',

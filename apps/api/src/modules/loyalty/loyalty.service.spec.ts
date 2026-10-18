@@ -848,8 +848,8 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
   // ENGAGE-21: trang Điểm Xanh phải giải thích được cách tích/đổi điểm từ chính SystemConfig, không hardcode ở FE.
   it('getOverview: trả tỷ lệ tích/đổi điểm từ SystemConfig và mốc chi tiêu của từng hạng', async () => {
     const values: Record<string, number> = {
-      'loyalty.vnd_per_point': 12_000,
-      'loyalty.vnd_per_point_redeem': 1000,
+      'loyalty.earn_pct': 1.5,
+      'loyalty.vnd_per_point_redeem': 1,
       'loyalty.max_redeem_pct': 0.3,
     };
     const config = { get: async <T>(k: string, fb?: T): Promise<T> => (values[k] ?? fb) as T } as unknown as SystemConfigService;
@@ -865,7 +865,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     const ov = await new LoyaltyService(prisma, config).getOverview('u1');
-    expect(ov.rates).toEqual({ vndPerPoint: 12_000, vndPerPointRedeem: 1000, maxRedeemPct: 0.3 });
+    expect(ov.rates).toEqual({ earnPct: 1.5, vndPerPoint: 67, vndPerPointRedeem: 1, maxRedeemPct: 0.3 });
     expect(ov.tiers.map((t) => t.minSpending)).toEqual([null, 5_000_000]);
     expect(ov.nextTier).toMatchObject({ id: 'loc', minSpending: 5_000_000 });
   });
@@ -898,7 +898,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     });
   });
 
-  it('getOverview: SystemConfig sai kiểu → tỷ lệ rơi về mặc định (10.000đ/điểm, 1.000đ/điểm, 20%)', async () => {
+  it('getOverview: SystemConfig sai kiểu → tỷ lệ rơi về mặc định (2%, 1đ/điểm, 20%)', async () => {
     const config = { get: async <T>(_k: string, _fb?: T): Promise<T> => 'oops' as unknown as T } as unknown as SystemConfigService;
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
@@ -907,7 +907,7 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     const ov = await new LoyaltyService(prisma, config).getOverview('u1');
-    expect(ov.rates).toEqual({ vndPerPoint: 10_000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2 });
+    expect(ov.rates).toEqual({ earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1, maxRedeemPct: 0.2 });
   });
 
   // R2-ENGAGE-8
@@ -1230,9 +1230,9 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
       eventName: 'engagement_action',
       userId: 'u1',
       platform: 'miniapp',
-      props: { action: 'loyalty_checkin', cycleDay: 1, streakDays: 1, pointsEarned: 1 },
+      props: { action: 'loyalty_checkin', cycleDay: 1, streakDays: 1, pointsEarned: 1000 },
     });
-    expect(r).toMatchObject({ success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1 });
+    expect(r).toMatchObject({ success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000 });
   });
 
   it('đã điểm danh hôm nay → BadRequest TRƯỚC khi vào transaction, KHÔNG gọi analytics', async () => {

@@ -23,6 +23,8 @@ import { voucherCode } from '../vouchers/voucher-code';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
+import { pointsForGoods } from '../pricing/points-earn';
+import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from './earn-rates';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { maskPhoneOrNull } from '../../common/mask-pii';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
@@ -598,9 +600,9 @@ export class LoyaltyService {
     const tierPoints = await this.tierPoints(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
-    const [vndPerPoint, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
-      this.positiveConfig('loyalty.vnd_per_point', 10000),
-      this.positiveConfig('loyalty.vnd_per_point_redeem', 1000),
+    const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
+      this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
+      this.positiveConfig('loyalty.vnd_per_point_redeem', 1),
       this.fractionConfig('loyalty.max_redeem_pct', 0.2),
       this.pointExpireMonths(),
       loadPointExpiryTxns(this.prisma, userId),
@@ -609,7 +611,7 @@ export class LoyaltyService {
 
     return {
       /** Quy tắc tích/đổi để màn Điểm Xanh giải thích đúng theo cấu hình thay vì FE tự ghi con số. */
-      rates: { vndPerPoint, vndPerPointRedeem, maxRedeemPct },
+      rates: { earnPct, vndPerPoint: Math.round(100 / earnPct), vndPerPointRedeem, maxRedeemPct },
       /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
       /** Điểm thường sắp hết hạn gần nhất (cộng các lô cùng ngày hết hạn) để khách dùng trước; null nếu không có. */
@@ -925,7 +927,7 @@ export class LoyaltyService {
 
   /**
    * Bảng điểm 7 ngày (SystemConfig `loyalty.checkin_points`, mặc định DEFAULT_CHECKIN_POINTS).
-   * Chỉ nhận đúng 7 số nguyên 0..CHECKIN_MAX_POINTS_PER_DAY — gõ nhầm "1000" không biến nút
+   * Chỉ nhận đúng 7 số nguyên 0..CHECKIN_MAX_POINTS_PER_DAY — gõ nhầm "1000000" không biến nút
    * điểm danh thành máy in tiền; sai định dạng thì quay về bảng mặc định.
    */
   private async getCheckInPointsTable(): Promise<number[]> {
@@ -1185,7 +1187,7 @@ export class LoyaltyService {
    *  - Trần: mỗi hoá đơn `loyalty.pos_max_order_total`; mỗi ngày theo nhân viên
    *    `loyalty.pos_staff_daily_points_cap` và theo thành viên `loyalty.pos_member_daily_points_cap`.
    *    Cộng dồn + ghi chạy dưới pg_advisory_xact_lock để 2 hoá đơn song song không cùng đọc tổng cũ.
-   *  - Tỷ lệ theo loyalty.vnd_per_point × hệ số hạng (như đơn online); điểm có hạn
+   *  - Tỷ lệ theo loyalty.earn_pct × hệ số hạng (như đơn online); điểm có hạn
    *    loyalty.point_expire_months; KHÔNG tính vào xét hạng (xem tierPointsWhere).
    *  - Sổ audit: pos_point_credits (staffUserId, memberId, receiptId, orderTotal, points, note).
    */
@@ -1214,11 +1216,11 @@ export class LoyaltyService {
       throw new BadRequestException('Tài khoản thành viên đang bị khoá, không thể tích điểm.');
     }
 
-    const [maxOrderTotal, staffCap, memberCap, vndPerPoint] = await Promise.all([
+    const [maxOrderTotal, staffCap, memberCap, earnPct] = await Promise.all([
       this.positiveConfig('loyalty.pos_max_order_total', POS_DEFAULTS.maxOrderTotal),
       this.positiveConfig('loyalty.pos_staff_daily_points_cap', POS_DEFAULTS.staffDailyPoints),
       this.positiveConfig('loyalty.pos_member_daily_points_cap', POS_DEFAULTS.memberDailyPoints),
-      this.positiveConfig('loyalty.vnd_per_point', 10000),
+      this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
     ]);
     if (dto.orderTotal > maxOrderTotal) {
       throw new BadRequestException(
@@ -1227,7 +1229,7 @@ export class LoyaltyService {
     }
 
     const multiplier = member.tier ? Number(member.tier.pointMultiplier) : 1;
-    const points = Math.floor((dto.orderTotal / vndPerPoint) * multiplier);
+    const points = pointsForGoods(dto.orderTotal, earnPct, multiplier);
     if (!(points > 0)) {
       throw new BadRequestException('Hoá đơn chưa đủ giá trị để tích điểm.');
     }
@@ -1409,14 +1411,14 @@ function inChunks<T>(items: readonly T[]): T[][] {
 
 /**
  * Bảng điểm danh 7 ngày MẶC ĐỊNH (ghi đè bằng SystemConfig `loyalty.checkin_points`).
- * Tổng 8 điểm/tuần ≈ 8.000đ/tuần (≈ 34.000đ/tháng) ở loyalty.vnd_per_point_redeem = 1.000đ —
- * tương đương điểm của ~80.000đ mua hàng/tuần. Bản WIP trả 10/15/20/25/30/40/50 = 190 điểm/tuần
+ * Tổng 8.000 điểm/tuần ≈ 8.000đ/tuần (≈ 34.000đ/tháng) ở loyalty.vnd_per_point_redeem = 1đ —
+ * tương đương điểm của 400.000đ mua hàng/tuần ở mức tích 2%. Bản WIP trả 10/15/20/25/30/40/50 nghìn = 190.000 điểm/tuần
  * ≈ 190.000đ/tuần (~9,9 triệu/năm) chỉ để bấm nút, gấp nhiều lần điểm từ mua hàng thật.
  * Điểm chỉ tiêu được khi mua (tối đa loyalty.max_redeem_pct giá trị đơn, voucher có minOrder).
  */
-export const DEFAULT_CHECKIN_POINTS: readonly number[] = Object.freeze([1, 1, 1, 1, 1, 1, 2]);
+export const DEFAULT_CHECKIN_POINTS: readonly number[] = Object.freeze([1000, 1000, 1000, 1000, 1000, 1000, 2000]);
 /** Trần cứng cho 1 ô điểm danh dù admin cấu hình gì. */
-const CHECKIN_MAX_POINTS_PER_DAY = 100;
+const CHECKIN_MAX_POINTS_PER_DAY = 100_000;
 const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm rồi 🌿';
 
 /**
@@ -1448,12 +1450,12 @@ function vnDateLabel(d: Date): string {
 
 /** Trần mặc định cho tích điểm tại quầy (ghi đè bằng SystemConfig, xem creditPosPoints). */
 const POS_DEFAULTS = {
-  /** 5 triệu/hoá đơn → tối đa 500 điểm ×1 (1.000 điểm ở hạng ×2). */
+  /** 5 triệu/hoá đơn → tối đa 100.000 điểm ×1 (200.000 điểm ở hạng ×2) ở mức tích 2%. */
   maxOrderTotal: 5_000_000,
-  /** 3.000 điểm/nhân viên/ngày ≈ 30 triệu doanh thu quầy ở ×1. */
-  staffDailyPoints: 3_000,
-  /** 1.000 điểm/thành viên/ngày ≈ 10 triệu mua tại quầy ở ×1. */
-  memberDailyPoints: 1_000,
+  /** 3.000.000 điểm/nhân viên/ngày ≈ 150 triệu doanh thu quầy ở ×1. */
+  staffDailyPoints: 3_000_000,
+  /** 1.000.000 điểm/thành viên/ngày ≈ 50 triệu mua tại quầy ở ×1. */
+  memberDailyPoints: 1_000_000,
 };
 
 /** Số dòng tối đa mỗi lần admin xem sổ audit POS. */
@@ -1527,11 +1529,11 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
   {
     // FREESHIP ở checkout miễn TOÀN BỘ phí ship (coupons.service validateAndCompute bỏ qua value),
     // nên không ghi "tối đa 25k". Đơn ≥ shipping.free_threshold (200k) vốn đã freeship → minOrder
-    // 99k để voucher có ích cho đúng khoảng đơn còn phải trả phí ship (~19k) — giá 20 điểm ≈ 20.000đ.
+    // 99k để voucher có ích cho đúng khoảng đơn còn phải trả phí ship (~19k) — giá 20.000 điểm ≈ 20.000đ.
     id: 'reward-freeship',
     title: 'Voucher Miễn phí vận chuyển',
     description: 'Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop.',
-    pointsCost: 20,
+    pointsCost: 20_000,
     type: 'FREESHIP',
     value: 0,
     minOrder: 99000,
@@ -1541,7 +1543,7 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
     id: 'reward-discount-50k',
     title: 'Voucher Giảm 50.000đ',
     description: 'Giảm ngay 50.000đ cho đơn hàng từ 300.000đ',
-    pointsCost: 50,
+    pointsCost: 50_000,
     type: 'AMOUNT',
     value: 50000,
     minOrder: 300000,
@@ -1551,7 +1553,7 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
     id: 'reward-discount-100k',
     title: 'Voucher Giảm 100.000đ',
     description: 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ',
-    pointsCost: 100,
+    pointsCost: 100_000,
     type: 'AMOUNT',
     value: 100000,
     minOrder: 600000,
@@ -1561,7 +1563,7 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
     id: 'reward-percent-15pct',
     title: 'Voucher Giảm 15%',
     description: 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ',
-    pointsCost: 75,
+    pointsCost: 75_000,
     type: 'PERCENT',
     value: 15,
     minOrder: 250000,

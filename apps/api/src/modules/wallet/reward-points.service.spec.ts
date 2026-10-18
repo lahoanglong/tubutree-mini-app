@@ -107,7 +107,7 @@ describe('RewardPointsService.grant (PD-3: mọi thưởng mới là Điểm Xan
     expect(raw.coinTransaction.findFirst).not.toHaveBeenCalled();
   });
 
-  it.each([0, -1, 1.5, Number.NaN, POINTS_GRANT_HARD_MAX + 1, 20000])('số điểm %p → lỗi 500, không ghi gì', async (points) => {
+  it.each([0, -1, 1.5, Number.NaN, POINTS_GRANT_HARD_MAX + 1, 20_000_000])('số điểm %p → lỗi 500, không ghi gì', async (points) => {
     const { prisma, raw, createManyAndReturn } = makePrisma();
     await expect(new RewardPointsService(prisma, cfg()).grant('u1', points, 'X', 'COMMUNITY')).rejects.toThrow(InternalServerErrorException);
     expect(createManyAndReturn).not.toHaveBeenCalled();
@@ -185,32 +185,32 @@ describe('RewardPointsService.grantReferralOrderReward (Q-05 + PD-3: thưởng n
     expect(createManyAndReturn).not.toHaveBeenCalled();
   });
 
-  it('đơn thứ 2 trong 30 ngày → người mời +5 Điểm Xanh lô STANDARD (mặc định referral.referrer_reward_points)', async () => {
+  it('đơn thứ 2 trong 30 ngày → người mời +5.000 Điểm Xanh lô STANDARD (mặc định referral.referrer_reward_points)', async () => {
     const { prisma, createManyAndReturn, userUpdate } = makePrisma({ referredById: 'referrer1', orders: twoOrders(10) });
     expect(await new RewardPointsService(prisma, cfg()).grantReferralOrderReward('referee1')).toBe(true);
     expect(createManyAndReturn.mock.calls[0][0].data[0]).toMatchObject({
       userId: 'referrer1',
-      delta: 5,
+      delta: 5000,
       lot: 'STANDARD',
       reason: 'REFERRAL_ORDER2:referee1',
       refType: 'REFERRAL',
       refId: 'o1:o2',
     });
-    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'referrer1' }, data: { pointsBalance: { increment: 5 } } });
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'referrer1' }, data: { pointsBalance: { increment: 5000 } } });
   });
 
   it('không đọc khoá xu cũ coins.referrer_reward (khoá chết) dù DB còn 5000', async () => {
     const config = cfg({ 'coins.referrer_reward': 5000 });
     const { prisma, createManyAndReturn } = makePrisma({ referredById: 'referrer1', orders: twoOrders(10) });
     await new RewardPointsService(prisma, config).grantReferralOrderReward('referee1');
-    expect(createManyAndReturn.mock.calls[0][0].data[0].delta).toBe(5);
+    expect(createManyAndReturn.mock.calls[0][0].data[0].delta).toBe(5000);
     expect((config.get as jest.Mock).mock.calls.map((c) => c[0])).not.toContain('coins.referrer_reward');
   });
 
-  it('khoá thưởng còn giá trị xu (5000) → lỗi 500, không cấp', async () => {
+  it('khoá thưởng lớn gấp 1.000 lần (5.000.000) → lỗi 500, không cấp', async () => {
     const { prisma, createManyAndReturn } = makePrisma({ referredById: 'referrer1', orders: twoOrders(10) });
     await expect(
-      new RewardPointsService(prisma, cfg({ 'referral.referrer_reward_points': 5000 })).grantReferralOrderReward('referee1'),
+      new RewardPointsService(prisma, cfg({ 'referral.referrer_reward_points': 5_000_000 })).grantReferralOrderReward('referee1'),
     ).rejects.toThrow(InternalServerErrorException);
     expect(createManyAndReturn).not.toHaveBeenCalled();
   });
@@ -356,9 +356,9 @@ describe('RewardPointsService.getReferralOverview (GET /me/referral)', () => {
     expect(r.referralCode).toBe('ABC123');
   });
 
-  it('earnedPoints = điểm giới thiệu + ceil(xu giới thiệu cũ / 1000)', async () => {
+  it('earnedPoints = điểm giới thiệu + xu giới thiệu cũ (1 xu = 1 điểm)', async () => {
     const r = await new RewardPointsService(overview(1, { points: 25, coins: 5001 }), cfg()).getReferralOverview('u1');
-    expect(r.earnedPoints).toBe(31);
+    expect(r.earnedPoints).toBe(5026);
   });
 
   it('trả windowDays và minOrderAmount từ config, mặc định 30 / 200000', async () => {

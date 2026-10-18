@@ -55,8 +55,8 @@ export interface PartialReversalResult {
   referralNotices?: ReferralNotice[];
 }
 
-/** Q-03a: 1.000 xu = 1 Điểm Xanh, làm tròn lên (cùng tỉ lệ migration B quy đổi số dư). */
-const XU_PER_POINT = 1000;
+/** Từ points-1d: 1 xu = 1 Điểm Xanh = 1đ (trước đó 1.000 xu = 1 điểm). */
+const XU_PER_POINT = 1;
 
 /**
  * Đơn đã giao có tiền thật để hoàn khi trả hàng: trả trước đã PAID (Ví/chuyển khoản/ZaloPay/VNPAY), hoặc COD (tài xế đã
@@ -632,7 +632,7 @@ export class OrderReversalService {
   }
 
   /**
-   * PD-3 (spec 6.2): hoàn đơn XU cũ bằng ceil(total/1000) Điểm Xanh lô CONVERTED (không hết hạn).
+   * PD-3 (spec 6.2): hoàn đơn XU cũ bằng đúng tổng đơn tính theo Điểm Xanh lô CONVERTED (không hết hạn).
    * Guard một lần là PAID→REFUNDED của caller; khoá `points_transactions_converted_refund_unique`
    * là lớp hai (dòng đã có → không cộng, không làm hỏng tx).
    */

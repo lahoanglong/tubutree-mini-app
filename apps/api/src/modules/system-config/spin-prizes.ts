@@ -7,11 +7,11 @@ const INT4_MAX = 2_147_483_647;
 const isDbInt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= INT4_MAX;
 
 /**
- * Trần một giải POINTS của vòng quay, tính bằng Điểm Xanh (1 điểm = 1.000đ, nên 100 = 100.000đ). Cùng lý do với các trần
+ * Trần một giải POINTS của vòng quay, tính bằng Điểm Xanh (1 điểm = 1đ, nên 100.000 = 100.000đ). Cùng lý do với các trần
  * khác trong RANGES: chặn gõ nhầm đơn vị (xu/đồng thay vì Điểm Xanh) làm một lượt quay cộng cả triệu điểm. Giải đã lưu
  * vượt trần bị lọc lúc đọc (spin() bỏ giải đó), nên hạ trần phải kiểm lại cấu hình đang chạy.
  */
-export const SPIN_POINTS_PRIZE_MAX = 100;
+export const SPIN_POINTS_PRIZE_MAX = 100_000;
 
 /**
  * Lý do một giải của `game.spin_prizes` không dùng được, hoặc null nếu hợp lệ. Dùng chung cho luật ghi cấu hình
