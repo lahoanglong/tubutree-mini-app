@@ -104,6 +104,19 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(within(c50).getByTestId('progress-fill')).toHaveStyle({ width: '60%' });
     expect(within(c50).queryByRole('button', { name: 'Đổi' })).toBeNull();
   });
+  it('thẻ quà: biểu tượng theo loại, giá và nút Đổi cùng một hàng', async () => {
+    renderPage();
+    const voucher = await waitFor(() => card('Miễn phí vận chuyển'));
+    expect(within(voucher).getByTestId('reward-icon').querySelector('svg.lucide-ticket')).not.toBeNull();
+    const price = within(voucher).getByText(/điểm$/, { selector: 'div' });
+    const button = within(voucher).getByRole('button', { name: 'Đổi' });
+    expect(price.parentElement).toBe(button.parentElement);
+    fireEvent.click(screen.getByRole('tab', { name: 'Cây và hạt' }));
+    expect(within(card('Gói hạt giống Tubu')).getByTestId('reward-icon').querySelector('svg.lucide-leaf')).not.toBeNull();
+    expect(within(card('Góp quỹ trồng cây')).getByTestId('reward-icon').querySelector('svg.lucide-sprout')).not.toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Quà nhỏ' }));
+    expect(within(card('Túi vải Tubu')).getByTestId('reward-icon').querySelector('svg.lucide-gift')).not.toBeNull();
+  });
   it('"Đã hết" theo soldOut của máy chủ: không có thanh tiến độ, không "Cần thêm"', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Quà nhỏ' }));

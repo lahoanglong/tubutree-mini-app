@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Gift } from 'lucide-react';
+import { Gift, Leaf, Sprout, Ticket } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours } from '@tubutree/shared-types';
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
@@ -131,30 +132,48 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
   );
 }
 
+const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
+  VOUCHER: Ticket,
+  TREE: Sprout,
+  SEED_PACK: Leaf,
+  GIFT: Gift,
+};
+
 function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void }) {
   const s = rewardCardState(reward, catalog);
   return (
     <Card variant="outline">
-      <div data-reward style={{ ...COLUMN, gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{reward.name}</Text>
-          {reward.label && <Badge tone="brand">{reward.label}</Badge>}
-        </div>
-        {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
-        <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
-        {reward.stockRemaining != null && !reward.soldOut && (
-          <Text variant="caption" tone="tertiary" as="div">{`Còn ${formatNumber(reward.stockRemaining)}`}</Text>
-        )}
-        {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
-        {s.kind === 'redeem' && <Button onPress={onRedeem}>Đổi</Button>}
-        {s.kind === 'soldOut' && <div><Badge>Đã hết</Badge></div>}
-        {s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
-        {s.kind === 'need' && (
-          <div style={{ ...COLUMN, gap: 6 }}>
-            <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>
-            <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />
+      <div data-reward style={{ ...COLUMN, gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <span
+            data-testid="reward-icon"
+            style={{
+              flexShrink: 0, width: 40, height: 40, borderRadius: 'var(--radius-control)',
+              background: 'var(--color-action-secondary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Icon icon={KIND_ICON[reward.kind]} tone="brand" />
+          </span>
+          <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+              <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{reward.name}</Text>
+              {reward.label && <Badge tone="brand">{reward.label}</Badge>}
+            </div>
+            {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
+            {reward.stockRemaining != null && !reward.soldOut && (
+              <Text variant="caption" tone="tertiary" as="div">{`Còn ${formatNumber(reward.stockRemaining)}`}</Text>
+            )}
+            {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
           </div>
-        )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
+          {s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
+          {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
+          {s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
+          {s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
+        </div>
+        {s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
       </div>
     </Card>
   );
