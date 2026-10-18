@@ -246,6 +246,25 @@ describe('/brand/[slug] — chương trình đại lý', () => {
     expect(c2.textContent).toBe('');
   });
 
+  it('khách lẻ đã đăng nhập có gọi /dealer/me rồi vẫn ẩn khối khi chưa có hồ sơ', async () => {
+    const c = await mount(block());
+    expect(mocks.get).toHaveBeenCalledWith('/dealer/me');
+    expect(c.textContent).toBe('');
+  });
+
+  it('/dealer/me lỗi hoặc hồ sơ bị từ chối: ẩn khối, không lộ chương trình B2B', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/dealer/me') throw new Error('500');
+      throw new Error(`chưa mock ${path}`);
+    });
+    const c = await mount(block());
+    expect(c.textContent).toBe('');
+    mounted.pop()!.unmount();
+    mocks.get.mockImplementation(async () => ({ isDealer: false, status: 'REJECTED' }));
+    const c2 = await mount(block());
+    expect(c2.textContent).toBe('');
+  });
+
   it('đại lý đã duyệt: thấy thưởng, nút "Vào kênh đại lý" dẫn /dai-ly', async () => {
     mocks.dealer = { isDealer: true, status: 'APPROVED' };
     const c = await mount(block());
