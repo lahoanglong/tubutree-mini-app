@@ -15,6 +15,12 @@ import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
+import {
+  EXTERNAL_LOOKUP_ENABLED_KEY,
+  EXTERNAL_POLL_ENABLED_KEY,
+  EXTERNAL_SINCE_KEY,
+  MARKETPLACE_CLAIM_ENABLED_KEY,
+} from '../external-points/external-claim.config';
 
 const DISPLAY_NAME_MAX = 100;
 
@@ -145,6 +151,14 @@ export class SystemConfigService {
     'shipping.free_threshold': { min: 0, max: 50_000_000, note: 'đồng (đơn từ mức này được freeship)', integer: true },
     'shipping.first_order_free_min_subtotal': { min: 0, max: 50_000_000, note: 'đồng tiền hàng tối thiểu để đơn đầu được freeship (0 = mọi đơn đầu)', integer: true },
     'loyalty.earn_pct': { min: 0.1, max: 20, note: 'phần trăm tiền hàng (sau giảm giá, không gồm ship) tích thành Điểm Xanh (2 = 2%), trước hệ số hạng' },
+    // Tích điểm đơn sàn (B6): cùng đơn vị phần trăm với loyalty.earn_pct. Trần điểm tính theo Điểm Xanh (1 điểm = 1đ).
+    'loyalty.marketplace_earn_pct': { min: 0.1, max: 20, note: 'phần trăm tiền hàng đơn mua ngoài app tích thành Điểm Xanh (1 = 1%), không nhân hệ số hạng' },
+    'loyalty.marketplace_claim_daily_attempts': { min: 1, max: 100, note: 'số lần nhập mã mỗi khách mỗi ngày (kể cả mã không tìm thấy)', integer: true },
+    'loyalty.marketplace_claim_daily_max': { min: 1, max: 50, note: 'số đơn ngoài app được tích mỗi khách mỗi ngày', integer: true },
+    'loyalty.marketplace_claim_monthly_points_cap': { min: 1, max: 10_000_000, note: 'Điểm Xanh (1 điểm = 1đ) tối đa mỗi khách mỗi tháng từ đơn ngoài app', integer: true },
+    'loyalty.marketplace_claim_max_age_days': { min: 1, max: 365, note: 'số ngày tuổi tối đa của đơn được tích', integer: true },
+    'loyalty.marketplace_claim_review_above_vnd': { min: 100_000, max: 50_000_000, note: 'đồng, đơn lớn hơn mức này chờ nhân viên duyệt', integer: true },
+    'loyalty.external_pending_days': { min: 1, max: 60, note: 'số ngày sau khi đơn giao xong mới cộng điểm', integer: true },
     'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
     'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
     'affiliate.min_withdraw_bank': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
@@ -269,6 +283,13 @@ export class SystemConfigService {
     'pancake.total_mismatch_check': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ nạp đơn ngoài app: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
     [EXTERNAL_CAPTURE_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ tích điểm đơn sàn và hai cờ gọi Pancake: chuỗi "false" là truthy ở chỗ đọc lỏng nên chỉ nhận đúng boolean.
+    [MARKETPLACE_CLAIM_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    [EXTERNAL_LOOKUP_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    [EXTERNAL_POLL_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Mốc bắt đầu tích điểm đơn sàn: để trống (null) = chỉ áp tuổi đơn tối đa; có giá trị thì phải là ngày hợp lệ.
+    [EXTERNAL_SINCE_KEY]: (value) =>
+      value === null || value === '' || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) && !Number.isNaN(Date.parse(value))) ? null : 'phải là ngày dạng YYYY-MM-DD hoặc để trống',
     // Sai bản đồ nguồn thì mọi đơn sàn rơi xuống "chưa biết" mà không ai thấy lỗi.
     [ORDER_SOURCE_MAP_KEY]: orderSourceMapProblem,
     // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.

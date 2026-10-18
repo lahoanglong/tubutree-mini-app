@@ -16,6 +16,7 @@ import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
 import { HomeExtras } from '../components/home/home-extras';
 import { NewCustomerGift } from '../components/home/new-customer-gift';
+import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { HomeBlockError, HomeBlockErrorSuppressed } from '../components/home/home-block-error';
 import { HomePageError } from '../components/home/home-page-error';
 import { HomeHeader } from '../components/home/home-header';
@@ -102,7 +103,13 @@ export default function HomePage() {
       ) : (
         <PurchasedRail source="home_rail" />
       ),
-    orderStrip: <OrderStrip />,
+    // Khách mới: ô này rỗng và "Quà khách mới" phải là khối đầu sau ô tìm, nên dải đi cùng khối welcome; khách cũ thấy dải ngay sau dải đơn.
+    orderStrip: (
+      <>
+        <OrderStrip />
+        {kind === 'returning' && <PointsBoostStrip placement="home" />}
+      </>
+    ),
     flash: (
       <>
         <FlashSale />
@@ -137,7 +144,13 @@ export default function HomePage() {
     ),
     extras: <HomeExtras />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
-    welcome: kind === 'new' ? <NewCustomerGift /> : null,
+    welcome:
+      kind === 'new' ? (
+        <>
+          <NewCustomerGift />
+          <PointsBoostStrip placement="home" omitPlain />
+        </>
+      ) : null,
   };
 
   return (

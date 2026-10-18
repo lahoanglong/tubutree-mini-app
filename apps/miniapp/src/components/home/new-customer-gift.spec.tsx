@@ -61,7 +61,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(region).toHaveTextContent('Cho đơn từ 150.000đ');
     expect(region).toHaveTextContent('Dùng đến 17/11/2026');
     expect(region).toHaveTextContent('Miễn phí giao cho đơn từ 350.000đ');
-    expect(region).toHaveTextContent('Mỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm giảm 1.000đ');
+    expect(region).toHaveTextContent('Mỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm = 1.000đ');
     expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
     expect(region.textContent).not.toMatch(/30\.000|199\.000|10\.000đ|12%/);
   });

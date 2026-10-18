@@ -33,6 +33,8 @@ vi.mock('../store/auth', () => {
   const state = { status: 'authenticated', user: { id: 'u1' } };
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
 });
+const boost = vi.hoisted(() => ({ cfg: { isLoaded: false } as { isLoaded: boolean; loyalty?: Record<string, unknown> } }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => boost.cfg }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../components/qr-code', () => ({
@@ -482,5 +484,23 @@ describe('LoyaltyPage — thẻ mã giảm giá (R6-BUYER-12)', () => {
     renderPage();
     expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
     expect(screen.getByText('Giảm 5%')).toBeInTheDocument();
+  });
+});
+
+describe('LoyaltyPage — dải "Mua trong Mini App tích gấp đôi"', () => {
+  const ON = { isLoaded: true, loyalty: { earnPct: 2, vndPerPoint: 50, marketplaceEarnPct: 1, marketplaceClaimEnabled: true } };
+
+  it('cờ tích đơn sàn bật: dải nằm trên thẻ hạng; tắt: không có', async () => {
+    boost.cfg = ON;
+    const { unmount } = renderPage();
+    const strip = await screen.findByTestId('points-boost');
+    expect(strip).toHaveTextContent('Mua trong Mini App: tích gấp đôi');
+    expect(strip.compareDocumentPosition(await screen.findByText(/Tích điểm ×/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    unmount();
+    boost.cfg = { isLoaded: true, loyalty: { ...ON.loyalty, marketplaceClaimEnabled: false } };
+    renderPage();
+    await screen.findByText(/Tích điểm ×/);
+    expect(screen.queryByTestId('points-boost')).toBeNull();
+    boost.cfg = { isLoaded: false };
   });
 });

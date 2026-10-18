@@ -632,3 +632,49 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Tubu Tree' })).toBeInTheDocument();
   });
 });
+
+describe('HomePage: dải "Mua trong Mini App tích nhiều hơn" không đổi bố cục khối', () => {
+  const loyalty = (claim: boolean) => ({ vndPerPoint: 50, vndPerPointRedeem: 1_000, earnPct: 2, marketplaceEarnPct: 1, marketplaceClaimEnabled: claim });
+  const setup = (opts: { claim: boolean; layout: boolean }) => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.auth.status = 'authenticated';
+    mocks.auth.user = { id: 'u1' };
+    mocks.fetchProducts.mockResolvedValue(PAGE([card('f1', 'Sản phẩm')]));
+    mocks.fetchForYou.mockResolvedValue([]);
+    mocks.fetchBrands.mockResolvedValue([]);
+    mocks.fetchCategories.mockResolvedValue([]);
+    mocks.getNotifications.mockResolvedValue([]);
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null });
+    mocks.getPublicConfig.mockResolvedValue({ ...PUBLIC_CONFIG, loyalty: loyalty(opts.claim), homeNewCustomerLayout: opts.layout });
+  };
+
+  it.each([
+    { claim: true, layout: false },
+    { claim: true, layout: true },
+    { claim: false, layout: false },
+    { claim: false, layout: true },
+  ])('khách mới (claim=$claim, layout=$layout): thứ tự khối giữ nguyên, dải nằm trong khối Quà khách mới, không trong dải đơn', async (opts) => {
+    setup(opts);
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    const { qc } = renderHome();
+    await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
+    await screen.findByRole('region', { name: 'Bán chạy' });
+    await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('new', opts.layout)]));
+    await waitFor(() => expect(block('welcome').querySelector('[data-testid="points-boost"]') !== null).toBe(opts.claim));
+    expect(block('orderStrip').querySelector('[data-testid="points-boost"]')).toBeNull();
+    if (opts.layout) expect(blockOrder().slice(0, 4)).toEqual(['search', 'purchased', 'orderStrip', 'welcome']);
+    if (opts.claim) expect(block('welcome')).toHaveTextContent('tích gấp đôi');
+  });
+
+  it.each([true, false])('khách cũ (claim=%s): thứ tự khối giữ nguyên; dải nằm ngay sau dải đơn, khối welcome không có', async (claim) => {
+    setup({ claim, layout: true });
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+    renderHome();
+    await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('returning', true)]));
+    await waitFor(() => expect(within(block('orderStrip')).queryByTestId('points-boost') !== null).toBe(true));
+    expect(block('orderStrip')).toHaveTextContent(claim ? 'tích gấp đôi' : 'Tích 2% tiền hàng thành Điểm Xanh khi mua trong Mini App');
+    expect(document.querySelector('[data-home-block="welcome"]')).toBeNull();
+  });
+});
+

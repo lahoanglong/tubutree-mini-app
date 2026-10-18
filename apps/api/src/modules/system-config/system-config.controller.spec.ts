@@ -203,7 +203,15 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
       welcomeVoucher: { amount: 30000, minOrder: 199000 },
       firstOrderFreeShip: { enabled: true, minSubtotal: 199000 },
     });
-    expect(out.loyalty).toEqual({ earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1, maxRedeemPct: 0.2, pointExpireMonths: 12 });
+    expect(out.loyalty).toEqual({
+      earnPct: 2,
+      marketplaceClaimEnabled: false,
+      marketplaceEarnPct: 1,
+      vndPerPoint: 50,
+      vndPerPointRedeem: 1,
+      maxRedeemPct: 0.2,
+      pointExpireMonths: 12,
+    });
     expect(out.homeNewCustomerLayout).toBe(true);
     expect(out.communityPublicPreview).toBe(true);
   });
@@ -242,6 +250,35 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
 });
 
 // D5-10: câu trả lời FAQ dự phòng ("tối đa 20% giá trị đơn", "điểm có hạn 12 tháng") đọc từ đây, cùng khoá và mặc định với getOverview.
+describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)', () => {
+  it('cờ tắt và tỉ lệ 1% khi chưa cấu hình; bật thì trả đúng tỉ lệ admin đặt', async () => {
+    const off = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(off.loyalty.marketplaceClaimEnabled).toBe(false);
+    expect(off.loyalty.marketplaceEarnPct).toBe(1);
+    const on = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_enabled': true, 'loyalty.marketplace_earn_pct': 1.5 })).publicConfig();
+    expect(on.loyalty).toMatchObject({ marketplaceClaimEnabled: true, marketplaceEarnPct: 1.5 });
+    const high = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': 25 })).publicConfig();
+    expect(high.loyalty.marketplaceEarnPct).toBe(20);
+    const junk = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': -3 })).publicConfig();
+    expect(junk.loyalty.marketplaceEarnPct).toBe(1);
+  });
+
+  it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) coi là tắt: không hứa tích điểm đơn sàn', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_enabled': bad })).publicConfig();
+    expect(out.loyalty.marketplaceClaimEnabled).toBe(false);
+  });
+
+  it.each(['1', 0, -1, null])('tỉ lệ sai (%p) rơi về 1%', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': bad })).publicConfig();
+    expect(out.loyalty.marketplaceEarnPct).toBe(1);
+  });
+
+  it('tỉ lệ quá trần (99) bị kẹp về 20%, cùng quy tắc với phía cộng điểm', async () => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': 99 })).publicConfig();
+    expect(out.loyalty.marketplaceEarnPct).toBe(20);
+  });
+});
+
 describe('SystemConfigController.publicConfig — trần dùng điểm và hạn điểm (D5-10)', () => {
   it('admin đổi → trả đúng giá trị của loyalty.max_redeem_pct và loyalty.point_expire_months', async () => {
     const out = await new SystemConfigController(

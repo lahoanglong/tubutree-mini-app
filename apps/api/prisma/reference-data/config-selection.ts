@@ -54,6 +54,7 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
 
 /** Khoá cố ý không nạp (nằm trong tiền tố được nạp), kèm lý do. */
 export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
+  'loyalty.external_since': 'mặc định null (chỉ áp tuổi đơn tối đa) mà EXTRA_CONFIGS không nạp được null; migration 20261019130000_external_claims đã tạo dòng với giá trị null (ON CONFLICT DO NOTHING) nên nạp lại ở seed-reference là thừa',
   'shipping.free_threshold': 'phí ship là quyết định của chủ shop: để trống thì go-live:check WARN (db.shipping_rates) buộc xác nhận, nạp 200k sẽ làm WARN biến mất mà chưa ai xác nhận',
   'shipping.flat_fee_below_threshold': 'như shipping.free_threshold',
   'shipping.first_order_free_enabled': 'migration 20261018150010_claim_freeship_config đã tạo dòng với giá trị bằng mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
@@ -92,6 +93,8 @@ const STOREFRONT_CONFIG = 'src/modules/storefront/storefront-config.ts';
 const PANCAKE_CATEGORY_MAP = 'src/modules/integrations/pancake/pancake-sync.service.ts';
 const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts';
 const EXTERNAL_ORDER_CONFIG = 'src/modules/external-points/external-order.config.ts';
+const EXTERNAL_CLAIM_CONFIG = 'src/modules/external-points/external-claim.config.ts';
+const EARN_RATES = 'src/modules/loyalty/earn-rates.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_post', value: 5, category: 'community', description: 'Điểm uy tín cộng cho người có bài cộng đồng được đăng', fallbackSource: { file: FEED, text: "get<number>('community.rep_post', 5)" } },
@@ -111,6 +114,16 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'pancake.category_map', value: {}, category: 'pancake', description: 'Gán danh mục tự động cho sản phẩm đồng bộ từ Pancake: { "mã hoặc tên nhóm hàng Pancake": "id danh mục Tubu" } (xem Quản trị, Danh mục sản phẩm). Chỉ áp cho sản phẩm chưa có danh mục; rỗng = không tự gán', fallbackSource: { file: PANCAKE_CATEGORY_MAP, text: 'get<PancakeCategoryMap>(PANCAKE_CATEGORY_MAP_KEY, {})' } },
   { key: 'pancake.external_capture_enabled', value: true, category: 'pancake', description: 'Lưu lại đơn Pancake không đặt trong app (đơn sàn, chat, điện thoại) để xem ở tab "Đơn ngoài app". Chưa cộng điểm. false = bỏ qua như trước', fallbackSource: { file: EXTERNAL_ORDER_CONFIG, text: 'DEFAULT_EXTERNAL_CAPTURE_ENABLED = true;' } },
   { key: 'pancake.order_source_map', value: { marketplaceIds: { '-3': 'shopee', '-4': 'lazada', '-9': 'tiktok' }, chatSources: [] }, category: 'pancake', description: 'Nhận biết nguồn đơn Pancake: marketplaceIds = mã marketplace_id → tên sàn; chatSources = khoá nguồn (order_sources|account|marketplace_id, xem bảng "Nguồn đã thấy") của đơn chat/điện thoại', fallbackSource: { file: EXTERNAL_ORDER_CONFIG, text: "marketplaceIds: { '-3': 'shopee', '-4': 'lazada', '-9': 'tiktok' }," } },
+  { key: 'loyalty.marketplace_claim_enabled', value: false, category: 'loyalty', description: 'Bật cho khách nhập mã vận đơn đơn mua trên sàn (Shopee/Lazada/TikTok) để tích Điểm Xanh. Chỉ bật sau khi đã bắt payload thật (xem runbook, Bước 15). false = tắt hẳn: API 404, không cron nào cộng điểm', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'enabled: false,' } },
+  { key: 'loyalty.marketplace_earn_pct', value: 1, category: 'loyalty', description: 'Tỉ lệ tích Điểm Xanh cho đơn mua ngoài app, tính theo phần trăm tiền hàng (1 = 1%) như loyalty.earn_pct, không nhân hệ số hạng', fallbackSource: { file: EARN_RATES, text: 'export const DEFAULT_MARKETPLACE_EARN_PCT = 1;' } },
+  { key: 'loyalty.marketplace_claim_daily_attempts', value: 10, category: 'loyalty', description: 'Số lần một khách được nhập mã mỗi ngày (kể cả mã không tìm thấy)', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'dailyAttempts: 10,' } },
+  { key: 'loyalty.marketplace_claim_daily_max', value: 3, category: 'loyalty', description: 'Số đơn ngoài app một khách được tích mỗi ngày', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'dailyMax: 3,' } },
+  { key: 'loyalty.marketplace_claim_monthly_points_cap', value: 200000, category: 'loyalty', description: 'Trần Điểm Xanh (1 điểm = 1đ) một khách được tích mỗi tháng từ đơn ngoài app', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'monthlyPointsCap: 200_000,' } },
+  { key: 'loyalty.marketplace_claim_max_age_days', value: 60, category: 'loyalty', description: 'Đơn đặt quá số ngày này không được tích. Khi chưa đặt loyalty.external_since thì đây là giới hạn duy nhất về tuổi đơn', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'maxAgeDays: 60,' } },
+  { key: 'loyalty.marketplace_claim_review_above_vnd', value: 2000000, category: 'loyalty', description: 'Đơn có tiền hàng lớn hơn mức này (đồng) không tự duyệt mà chờ nhân viên kiểm', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'reviewAboveVnd: 2_000_000,' } },
+  { key: 'loyalty.external_pending_days', value: 14, category: 'loyalty', description: 'Số ngày sau khi đơn ngoài app giao xong thì điểm mới được cộng (giữ điểm chờ để phòng hoàn hàng)', fallbackSource: { file: EXTERNAL_CLAIM_CONFIG, text: 'pendingDays: 14,' } },
+  { key: 'pancake.external_lookup_enabled', value: false, category: 'pancake', description: 'Khi khách nhập mã chưa có trong "Đơn ngoài app", tra Pancake theo mã (tối đa 5 giây, ngắt mạch sau 3 lỗi). Chỉ bật khi đã kiểm Pancake tìm được theo mã vận đơn', fallbackSource: { file: 'src/modules/external-points/external-claim-lookup.service.ts', text: 'EXTERNAL_LOOKUP_ENABLED_KEY, false' } },
+  { key: 'pancake.external_poll_enabled', value: false, category: 'pancake', description: 'Kéo dự phòng mỗi 10 phút: lấy đơn sàn đã cập nhật trong 2 giờ gần nhất khi webhook sàn rớt. Chỉ bật sau khi đã kiểm tham số startDateTime và order_sources trên Pancake thật', fallbackSource: { file: 'src/modules/external-points/external-claim-poll.service.ts', text: 'EXTERNAL_POLL_ENABLED_KEY, false' } },
 ];
 
 export type ConfigDecision = 'reference' | 'business' | 'excluded' | 'unclassified';

@@ -3258,6 +3258,28 @@ model ExternalClaimAttempt {
   @@map("external_claim_attempts")
 }
 
+/// Nhật ký CHỈ THÊM của claim đơn ngoài (không bao giờ sửa, trigger chặn UPDATE): mỗi thao tác tạo, gắn, duyệt, huỷ, mở lại, đảo,
+/// giữ điểm và mọi bước tự động của cron/webhook ghi một dòng. Không có khoá ngoại để dòng còn lại khi claim hay khách bị xoá.
+model ExternalClaimEvent {
+  id           String   @id @default(cuid())
+  claimId      String
+  /// CLAIM_CREATED | ATTACH | APPROVE | VOID | VOID_REOPEN | REOPEN_CLAIM | REVERSE | KEEP_POINTS | CREDIT | AUTO_VOID | AUTO_REVERSE | TO_REVIEW | FLAG_PARTIAL
+  action       String
+  /// Người thao tác; null = hệ thống (cron, webhook) hoặc chính khách khi gửi mã (khi đó `actorId` = userIdAfter).
+  actorId      String?
+  fromState    String?
+  toState      String?
+  userIdBefore String?
+  userIdAfter  String?
+  note         String?
+  /// Trạng thái đơn ngoài lúc ghi sự kiện (APPROVE/ATTACH dùng để biết quyết định có được đưa ra khi đơn đã hoàn một phần chưa).
+  orderStatus  String?
+  createdAt    DateTime @default(now())
+
+  @@index([claimId, createdAt])
+  @@map("external_claim_events")
+}
+
 // ============================================================
 // Đổi rác lấy quà (spec 2026-10-17)
 // ============================================================
