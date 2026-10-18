@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { Map as MapIcon, MessagesSquare, Search, Sparkles, Users, type LucideIcon } from 'lucide-react';
+import { useAiAdvisorEnabled } from '../../hooks/use-public-config';
 import { fetchBrands } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { vi } from '../../i18n/vi';
@@ -29,6 +30,7 @@ const BRAND_RAIL_PADDING = '6px 0';
 export function HomeExtras() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const aiEnabled = useAiAdvisorEnabled();
   // Brand chậm đổi (sync Pancake ~15p/lần) → cache 60s, override default 10s.
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
   const go = (to: string) => {
@@ -40,7 +42,9 @@ export function HomeExtras() {
   return (
     <div style={{ padding: '16px 16px 8px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', gap: 10 }}>
-        <ShortcutCard icon={Sparkles} label={vi.home.aiCard} ariaLabel={vi.home.aiCardLabel} onPress={() => go('/ai-advisor')} />
+        {aiEnabled && (
+          <ShortcutCard icon={Sparkles} label={vi.home.aiCard} ariaLabel={vi.home.aiCardLabel} onPress={() => go('/ai-advisor')} />
+        )}
         <ShortcutCard icon={Users} label={vi.home.groupBuyCard} ariaLabel={vi.home.groupBuyCard} onPress={() => go('/group-buy')} />
       </div>
 

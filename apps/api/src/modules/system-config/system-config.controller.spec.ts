@@ -290,3 +290,36 @@ describe('SystemConfigController.publicConfig — số trong chữ đại lý v�
     expect(out.dealer.reviewHours).toBeNull();
   });
 });
+
+describe('SystemConfigController.publicConfig — aiAdvisorEnabled (công tắc AI)', () => {
+  const KEYS = ['ANTIGRAVITY_GATEWAY_URL', 'ANTIGRAVITY_GATEWAY_KEY', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'AI_ADVISOR_ENABLED', 'AI_ADVISOR_PROVIDER'];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+  const flag = async () => (await new SystemConfigController(makeConfig()).publicConfig()).aiAdvisorEnabled;
+
+  it('chưa cấu hình provider nào → false (miniapp ẩn lối vào)', async () => {
+    expect(await flag()).toBe(false);
+  });
+  it('đủ gateway URL + KEY → true', async () => {
+    process.env.ANTIGRAVITY_GATEWAY_URL = 'http://gw:8097';
+    process.env.ANTIGRAVITY_GATEWAY_KEY = 'k';
+    expect(await flag()).toBe(true);
+  });
+  it('công tắc AI_ADVISOR_ENABLED=false → false dù đủ khoá', async () => {
+    process.env.ANTIGRAVITY_GATEWAY_URL = 'http://gw:8097';
+    process.env.ANTIGRAVITY_GATEWAY_KEY = 'k';
+    process.env.AI_ADVISOR_ENABLED = 'false';
+    expect(await flag()).toBe(false);
+  });
+});

@@ -234,6 +234,8 @@ export interface PublicConfig {
   loyalty?: { vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct?: number; pointExpireMonths?: number };
   /** Cờ bố cục Trang chủ cho khách mới (home.new_customer_layout). Thiếu khi API cũ → bố cục cũ. */
   homeNewCustomerLayout?: boolean;
+  /** AI tư vấn đang bật VÀ có provider dùng được (công tắc tắt khẩn cấp ở API). Thiếu khi API cũ → coi như tắt, ẩn lối vào. */
+  aiAdvisorEnabled?: boolean;
   /** Cờ xem trước công khai bảng tin cộng đồng (community.public_preview). Thiếu khi API cũ → phải đăng nhập mới thấy. */
   communityPublicPreview?: boolean;
   /** Chiết khấu đại lý tối đa (phân số) và số giờ hẹn duyệt hồ sơ; null khi cấu hình hỏng, thiếu khi API cũ → UI bỏ con số. */

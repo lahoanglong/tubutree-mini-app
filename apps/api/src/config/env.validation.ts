@@ -123,6 +123,19 @@ export const envSchema = z.object({
   GEMINI_API_KEY: z.string().default(''),
   GEMINI_BASE_URL: z.string().default(''),
   GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
+  // AI tư vấn qua Antigravity gateway (cùng cách ChoDeli; xem docs/launch/deploy-rollback-runbook.md mục AI).
+  // Để trống URL hoặc KEY thì provider này không được dùng. Các số/cờ dưới đây đọc lỏng trong advisor-config.ts
+  // (rỗng hoặc sai kiểu → mặc định), nên khai báo là chuỗi để .env gõ nhầm không chặn khởi động.
+  ANTIGRAVITY_GATEWAY_URL: z.string().default(''),
+  ANTIGRAVITY_GATEWAY_KEY: z.string().default(''),
+  ANTIGRAVITY_MODEL: z.string().default(''),
+  ANTIGRAVITY_GATEWAY_TIMEOUT_MS: z.string().default(''),
+  // '' = tự chọn antigravity > deepseek > gemini theo provider đã cấu hình; đặt rõ thì CHỈ dùng provider đó.
+  AI_ADVISOR_PROVIDER: z.enum(['', 'antigravity', 'deepseek', 'gemini']).default(''),
+  // Công tắc tắt khẩn cấp: 0/false/off/no tắt AI (Mini App ẩn lối vào nhờ aiAdvisorEnabled ở /config/public).
+  AI_ADVISOR_ENABLED: z.string().default(''),
+  AI_ADVISOR_GLOBAL_PER_MIN: z.string().default(''),
+  AI_ADVISOR_MAX_CONCURRENT: z.string().default(''),
 }).superRefine((env, ctx) => {
   const email = resolveOpsEmailConfig(env);
   if (email.state === 'misconfigured') {

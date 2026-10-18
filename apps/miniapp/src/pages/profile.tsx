@@ -21,6 +21,7 @@ import { Heading, Text } from '../components/ui/text';
 import { getOwnedBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
+import { useAiAdvisorEnabled } from '../hooks/use-public-config';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
@@ -124,7 +125,8 @@ export default function ProfilePage() {
     : dealerQ.data?.status === 'PENDING'
       ? { Icon: Store, label: 'Hồ sơ đại lý', to: '/dealer', hint: 'Đang chờ duyệt' }
       : { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' };
-  const withDealer = MENU.map((s) =>
+  const aiEnabled = useAiAdvisorEnabled();
+  const withDealer = MENU.map((s) => ({ ...s, items: aiEnabled ? s.items : s.items.filter((it) => it.to !== '/ai-advisor') })).map((s) =>
     s.group === 'Hợp tác'
       ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
       : s,
