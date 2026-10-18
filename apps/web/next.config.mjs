@@ -62,7 +62,7 @@ const nextConfig = {
     ...(standalone ? { outputFileTracingRoot: path.join(dirname, '../../') } : {}),
   },
   ...(standalone ? { output: 'standalone' } : {}),
-  transpilePackages: ['@tubutree/shared-types'],
+  transpilePackages: ['@tubutree/shared-types', '@tubutree/app-core'],
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api',
   },

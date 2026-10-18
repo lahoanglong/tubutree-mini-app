@@ -159,6 +159,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.62.7
         version: 5.100.14(react@18.3.1)
+      '@tubutree/app-core':
+        specifier: workspace:*
+        version: link:../../packages/app-core
       '@tubutree/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -256,6 +259,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.62.7
         version: 5.100.14(react@18.3.1)
+      '@tubutree/app-core':
+        specifier: workspace:*
+        version: link:../../packages/app-core
       '@tubutree/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -302,6 +308,25 @@ importers:
       tailwindcss:
         specifier: ^3.4.16
         version: 3.4.19(tsx@4.22.4)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(jsdom@30.0.1)(sass@1.100.0)(terser@5.48.0)
+
+  packages/app-core:
+    dependencies:
+      '@tubutree/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      '@tubutree/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.19
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
