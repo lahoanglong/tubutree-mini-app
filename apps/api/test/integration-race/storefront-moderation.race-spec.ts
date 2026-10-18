@@ -309,6 +309,20 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       expect((await prisma.storefront.findUniqueOrThrow({ where: { id: s.id } })).approvedAt).toBeNull();
     });
 
+    it('đăng lại gian hàng khi chủ đang bị khoá: bỏ dấu gỡ nhưng không báo "hiển thị lại với khách"; mở khoá rồi gỡ và đăng lại thì báo', async () => {
+      const adminUser = await user('ADMIN');
+      const owner = await user('AFFILIATE', { isBlocked: true });
+      const s = await store(owner, { takenDownAt: new Date(), isPublished: false, takenDownReason: 'x' });
+      const out = await admin.reinstate(adminUser.id, s.id);
+      expect(out).toMatchObject({ takenDownAt: null, publicVisible: false });
+      expect(notify).not.toHaveBeenCalled();
+      await prisma.user.update({ where: { id: owner.id }, data: { isBlocked: false } });
+      await admin.takeDown(adminUser.id, s.id, 'lần hai');
+      notify.mockClear();
+      expect(await admin.reinstate(adminUser.id, s.id)).toMatchObject({ publicVisible: true });
+      expect(notify.mock.calls.map((c) => c[1])).toEqual(['STOREFRONT_REINSTATED']);
+    });
+
     it('danh sách lọc theo trạng thái và tìm theo SĐT chủ', async () => {
       const phone = `09${randCode(8).replace(/\D/g, '0').slice(0, 8)}`;
       const owner = await user('AFFILIATE', { phone });

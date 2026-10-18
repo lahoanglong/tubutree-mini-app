@@ -157,7 +157,8 @@ export class StorefrontAdminService {
     const sf = await this.summaryOf(id);
     if (count === 1) {
       this.logger.warn(`Admin ${adminId} đăng lại gian hàng ${id} (chủ ${sf.ownerUserId ?? 'không có'}).`);
-      await this.notifyOwner(sf.ownerUserId, 'STOREFRONT_REINSTATED', { store: sf.title });
+      // Tin nói "hiển thị lại với khách" nên chỉ gửi khi khách thật sự thấy: gian hàng nháp, chủ bị khoá hoặc mất vai trò CTV vẫn ẩn.
+      if (sf.publicVisible) await this.notifyOwner(sf.ownerUserId, 'STOREFRONT_REINSTATED', { store: sf.title });
     }
     return sf;
   }

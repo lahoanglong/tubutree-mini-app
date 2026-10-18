@@ -139,6 +139,17 @@ describe('StorefrontAdminService.reinstate', () => {
     expect(notify).toHaveBeenCalledWith('u1', 'STOREFRONT_REINSTATED', { store: 'Shop Linh' });
   });
 
+  it.each([
+    ['gian hàng còn là nháp', row({ isPublished: false })],
+    ['chủ đang bị khoá', row({ owner: { id: 'u1', fullName: 'Linh', phone: '0900000001', role: 'AFFILIATE', isBlocked: true } })],
+    ['chủ đã bị hạ về khách thường', row({ owner: { id: 'u1', fullName: 'Linh', phone: '0900000001', role: 'CUSTOMER', isBlocked: false } })],
+  ])('%s: bỏ dấu gỡ nhưng khách vẫn chưa thấy, nên không báo "hiển thị lại với khách"', async (_name, after) => {
+    const { svc, notify } = setup({ storefront: { findUnique: jest.fn().mockResolvedValue(after) } });
+    const out = await svc.reinstate('admin1', 's1');
+    expect(out.publicVisible).toBe(false);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it('gian hàng bị gỡ khi còn nháp (chưa từng đăng): chỉ bỏ dấu gỡ, vẫn là nháp', async () => {
     const updateMany = jest.fn().mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
     const { svc, storefront } = setup({ storefront: { updateMany } });
