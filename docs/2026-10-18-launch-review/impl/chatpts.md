@@ -58,3 +58,51 @@ Không thêm model hay cột. `schema.prisma` chỉ sửa dòng chú thích `act
 - tsc api, tsc web, `pnpm lint` (5/5), jest toàn api (369 suite, 8040 test), `system-config` + `prisma/reference-data` (321 test) đều xanh. `migrate deploy` trên DB trống rồi `migrate diff --exit-code`: không lệch.
 - Race `--runInBand` cả nhóm (external|chat|reference-seed|partial-unique|loyalty|tier): lần đầu 15 test đỏ ở 5-6 suite. Một là của mình (`reference-seed` đếm khoá bổ sung 27 thành 32: đã thêm 5 khoá chat vào danh sách, xanh). Còn lại là DB dùng chung bị nhiễm dữ liệu của spec khác (hạng `itcp-tier-*`/`IT-BD-C-*` còn sót làm `external-claims (e)` đỏ; ctv-assisted, coupon-preview). Trên DB mới migrate, các suite đó xanh khi chạy riêng, trừ `ops-health`.
 - `ops-health.race-spec.ts` đỏ trên DB trống, không do chatpts: hộp việc có thêm hàng đợi `externalPoints` từ các commit extclaim đã có trong nhánh (spec chưa cập nhật danh sách). Chưa sửa vì ngoài phạm vi.
+
+## Sửa sau review lượt 1
+
+Reviewer Opus kết luận bản 1d042dc0 gộp được khi cờ tắt nhưng chưa đủ để bật cờ: 2 lỗi chặn về tiền (đã chứng minh trên Postgres thật) và 5 lỗ hổng. Làm theo thứ tự: thêm cột (chỉ cộng thêm), viết test trước, chạy đỏ, rồi sửa.
+
+### Kết quả đỏ trước khi sửa
+
+Test mới ở `test/integration-race/external-chat-review1.race-spec.ts` (17 ca). Chạy trên mã nguồn của 1d042dc0 (chỉ có thêm các cột mới để test biên dịch được, hành vi chưa đổi): `Tests: 15 failed, 2 passed, 17 total`. Hai ca xanh là ca đối chứng (thành viên có sẵn, tiền hàng tăng thì REVIEW lúc cộng; `ensureChatClaim` idempotent). Các lỗi chặn đúng như reviewer:
+- C1 (đơn 1.000.000 đổi thành 100.000.000 trước khi liên kết): `Expected: not "CREDITED"`, claim được cộng thẳng.
+- C2 (hai claim 100.000, trần 200.000, thành viên hạng x2): `Expected: <= 200000, Received: 400000`.
+- N1 `PHONE_CHANGED` không có (`Received array: ["CLAIM_CREATED", "TO_REVIEW"]`), N3 hạng nhảy lên hạng cao, N5 `Expected: "REVIEW", Received: "PENDING"`, claim mất SĐT `Expected: "CREDITED", Received: "SKIPPED"`.
+
+Sau khi sửa: `Tests: 17 passed, 17 total`.
+
+### Thay đổi theo từng mục
+
+- **C1 và C2** (`external-chat.claim.ts`, `linkClaimsByPhone`): liên kết không còn ghi đè `points`. Mỗi claim được chạy lại `evaluateChatClaim` với thành viên mới (nhân viên, SĐT nhân viên, ngưỡng tự duyệt, status 16, trần theo người tạo) và quyết REVIEW nếu có lý do. Điểm tăng vì hệ số hạng thì chốt bằng `settlePoints` theo `chatMonthPoints` của chính thành viên (không dưới điểm đã kiểm, không vượt phần trần còn lại). Claim vào REVIEW giữ nguyên điểm đã kiểm, để `approve` tính lại và chốt trần theo mức đó. Tách "điểm đã kiểm" khỏi "điểm hiện tại": `points` của claim luôn là điểm đã kiểm (mọi đường ghi đều kiểm trước khi ghi), nên `releaseClaim` kiểm lại khi điểm lúc cộng vượt `points`. Không thêm cột `checkedPoints` riêng vì hai số không có đường nào để lệch nhau nữa; ca C1, C2 canh điều này.
+- **N1** (SĐT trên đơn đổi): cột `external_points_claims.orderPhone` lưu SĐT lúc tạo claim. Liên kết, trần tháng, lapse, khoá advisory đều dùng cột này thay cho `external_orders.phone`. Webhook đổi SĐT: `ensureChatClaim` (nhánh claim đã có) chuyển PENDING/HELD_NO_MEMBER sang REVIEW với sự kiện `PHONE_CHANGED` ("đuôi 123 thành 456"), không liên kết. `linkClaimsByPhone` và `releaseClaim` cũng kiểm lúc chạy (cho trường hợp SĐT bị đổi thẳng trong DB). Claim đã có người duyệt thì không đảo. `orderPhone` xoá theo luật retention (xem dưới). Ghi thêm: để hai giao dịch đổi chéo SĐT không khoá ngược chiều, các SĐT được khoá theo thứ tự chữ.
+- **N2** (status 16 không vận đơn): `evaluateChatClaim` đưa vào REVIEW ("giao không qua vận chuyển, cần kiểm") khi status 16 mà không có `extend_code` và không có mã vận đơn nào. Chỉ áp khi `loyalty.chat_order_require_carrier` bật.
+- **N3** (hạng nhảy khi sửa tiền hàng): cột `creditedGoodsValue` ghi tiền hàng lúc cộng; `chatSpending12m` dùng cột này thay cho `goodsValue` hiện tại của đơn.
+- **N4** (SĐT bị cấp lại): cột `users.phoneVerifiedAt`. `AuthService` (mọi nhánh Zalo trả số) làm mới mốc khi Zalo trả đúng số đang lưu; số khác số đang lưu thì đổi sang số mới nếu chưa thuộc ai (ghi log), nếu đã thuộc người khác thì giữ nguyên (ghi log). `verifiedMemberPhone` và `resolveMemberByPhone` chỉ nhận số có `phoneVerifiedAt` trong `loyalty.chat_phone_verified_max_days` (180) ngày; quá hạn thì claim giữ `userId` null như chưa là thành viên. Cron `linkWaitingClaims` chỉ chọn thành viên đủ điều kiện và claim còn liên kết được, xếp theo claim chờ lâu nhất.
+- **N5** (người tạo đơn): khoá `pancake.staff_map` (JSON id Pancake sang userId, có validator) dùng cho (a) chặn người duyệt trùng nhân viên map, (b) REVIEW khi thành viên nhận điểm chính là nhân viên tạo đơn (hay nhân viên đó có SĐT trùng SĐT đơn), và `loyalty.chat_order_creator_monthly_points` (mặc định 1.000.000): tổng điểm tự cộng (không REVIEW, không do người duyệt) của cùng `creator.id` trong tháng; vượt thì đơn kế tiếp REVIEW. Cột `creatorRef` lưu `creator.id`. Giới hạn: payload không có `creator.id` thì không áp trần (và `staff_map` chưa khai báo thì chỉ so tên).
+- **Lỗi nhỏ**: `releaseClaim` không còn bỏ qua claim đã gắn thành viên mà đơn mất SĐT (khoá theo `orderPhone` hay SĐT thành viên; claim chưa có chủ và không còn SĐT đi HELD rồi LAPSED, không kẹt lô); tiền tố sổ điểm và sổ đảo theo `claim.kind`, không theo `order.source`; `linkWaitingClaims` có ORDER BY và lọc; `backfillChatClaims` đánh dấu đơn đã xét bằng cột `external_orders.chatCheckedAt = updatedAt` (SQL tay, không đẩy `updatedAt`), đơn đã bị bỏ qua chỉ xét lại khi đổi, lỗi tạm (`ERROR`) thì xét lại lượt sau.
+
+### Cột và migration mới (vị trí trong schema)
+
+Migration `20261019170000_chat_review1` (sau `20261019160000`, trước `20261020000000`). Không thêm model; mọi cột nằm trong model sẵn có và có thể null:
+- `User.phoneVerifiedAt` (ngay sau `phone`).
+- `ExternalOrder.chatCheckedAt` (sau `updatedAt`, trong khối external).
+- `ExternalPointsClaim.orderPhone`, `creatorRef`, `creditedGoodsValue` (sau `decidedById`), kèm 2 chỉ mục: `(orderPhone)` và `(creatorRef, createdAt)`.
+- Migration điền sẵn `orderPhone`, `creditedGoodsValue` cho claim PHONE đã có và đặt `phoneVerifiedAt = now()` cho mọi user đang có SĐT (số hiện có đều từ Zalo; không biết mốc thật nên đồng hồ 180 ngày bắt đầu từ lúc deploy).
+- Khoá cấu hình mới: `loyalty.chat_phone_verified_max_days` (180), `loyalty.chat_order_creator_monthly_points` (1.000.000), `pancake.staff_map` ({}), nạp qua `EXTRA_CONFIGS`. Sự kiện claim mới: `PHONE_CHANGED`.
+- Retention: `external_points_claims.order_phone` (`UPDATE ... SET "orderPhone" = NULL` khi claim ở trạng thái cuối quá 7 ngày hoặc đơn đã mất SĐT).
+
+### Ai khác đang dùng `users.phone` (kiểm khi cho phép đổi số)
+
+- `rbac.applyGrants` (grant quyền theo SĐT): trước đây chỉ tài khoản MỚI nhận số thì mới được nâng quyền; giờ tài khoản đã có mà Zalo trả số khác cũng sẽ được nâng nếu số mới có grant còn hiệu lực. Mức tin cậy giống tạo tài khoản mới bằng số đó (cũng chỉ cần Zalo trả số), nhưng là một đường mới: chủ shop cần thu hồi grant (`revokedAt`) khi nhân viên nghỉ và đổi số.
+- `notifications.service` gửi ZNS theo `user.phone` hiện tại: sau khi đổi số tin đi số mới (đúng ý muốn).
+- Địa chỉ giao và đơn hàng lưu SĐT riêng (snapshot), không bị đổi theo.
+- `analytics-aggregation` ghép theo số điện thoại: doanh thu từ đây tính theo số mới, không ghép lại đơn cũ.
+- `order-reversal.service` tìm người theo SĐT khi hoàn: chỉ đọc số hiện tại.
+- Gom đơn (gomdon) và export admin không dùng `users.phone` làm khoá. Không tìm thấy chỗ nào khác bị hỏng khi số đổi.
+
+### Giới hạn đã biết thêm
+
+- Test canh nguồn ghi `users.phone` (`external-chat-phone-source.spec.ts`) quét mã TypeScript và không bắt được SQL tay (`$executeRaw`, migration).
+- `phoneVerifiedAt` chỉ được làm mới khi Mini App gửi `phoneToken` lúc đăng nhập/`ensurePhone`. Nếu app chỉ xin số một lần thì sau 180 ngày thành viên đó không còn tự liên kết cho tới khi xin lại số (điểm vẫn giữ theo HELD_NO_MEMBER). Chưa kiểm hành vi thật của Mini App.
+- Trần theo người tạo cần `creator.id` đúng tên trường trong payload thật (chưa kiểm, xem giả định ở trên).

@@ -370,14 +370,15 @@ export class LoyaltyService {
 
   /**
    * Tiền hàng của đơn chat/điện thoại đã cộng điểm (claim PHONE CREDITED, tính vào xét hạng) trong 12 tháng. Claim bị đảo (REVERSED) hay
-   * chưa cộng thì không tính: hạng chỉ lên khi điểm thật đã vào sổ và xuống khi điểm bị thu hồi.
+   * chưa cộng thì không tính: hạng chỉ lên khi điểm thật đã vào sổ và xuống khi điểm bị thu hồi. Dùng tiền hàng CHỐT LÚC CỘNG
+   * (`creditedGoodsValue`), không phải tiền hàng hiện tại của đơn: nhân viên sửa đơn về sau không được làm hạng nhảy.
    */
   private async chatSpending12m(userId: string, since: Date): Promise<number> {
     const claims = await this.prisma.externalPointsClaim.findMany({
       where: { userId, kind: 'PHONE', state: 'CREDITED', countsForTier: true, creditedAt: { gte: since } },
-      select: { externalOrder: { select: { goodsValue: true } } },
+      select: { creditedGoodsValue: true },
     });
-    return claims.reduce((sum, c) => sum + (c.externalOrder.goodsValue ?? 0), 0);
+    return claims.reduce((sum, c) => sum + (c.creditedGoodsValue ?? 0), 0);
   }
 
   /**

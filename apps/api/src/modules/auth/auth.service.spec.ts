@@ -218,6 +218,68 @@ describe('AuthService.loginWithZaloMiniApp (phone)', () => {
   });
 });
 
+describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedAt) cho điểm đơn chat', () => {
+  function mk(existing: Record<string, unknown> | null, owner: Record<string, unknown> | null, zaloPhone: string | null) {
+    const update = jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => ({ ...USER, ...(existing ?? {}), ...data }));
+    // Thứ tự findUnique: theo zaloId (user), rồi phoneIfFree tra chủ của SĐT.
+    const findUnique = jest.fn().mockImplementation(({ where }: { where: Record<string, unknown> }) => (where['zaloId'] ? existing : owner));
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique, update, create: jest.fn() } } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue(zaloPhone) } as unknown as ZaloService;
+    return { svc: new AuthService(prisma, jwt, config, zalo, mkRbac()), update };
+  }
+
+  it('Zalo trả đúng số đang lưu: chỉ làm mới phoneVerifiedAt', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567', phoneVerifiedAt: new Date('2025-01-01') }, null, '0901234567');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    const data = update.mock.calls[0][0].data;
+    expect(data).toEqual({ phoneVerifiedAt: expect.any(Date) });
+    expect(data.phoneVerifiedAt.getTime()).toBeGreaterThan(Date.now() - 5000);
+  });
+
+  it('Zalo trả số khác và số mới chưa thuộc ai: đổi sang số mới kèm mốc xác minh (số cũ bị nhà mạng cấp lại)', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update.mock.calls[0][0].data).toEqual({ phone: '0987654321', phoneVerifiedAt: expect.any(Date) });
+  });
+
+  it('Zalo trả số đã thuộc tài khoản khác: giữ nguyên số và mốc, không đổi gì', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, { id: 'other' }, '0987654321');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('chưa có số, Zalo trả số tự do: lưu số kèm mốc xác minh', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: null }, null, '0901234567');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update.mock.calls[0][0].data).toEqual({ phone: '0901234567', phoneVerifiedAt: expect.any(Date) });
+  });
+
+  it('không gửi phoneToken: không đụng SĐT hay mốc xác minh', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, null);
+    await svc.loginWithZaloMiniApp('c', 'at');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('số mới bị người khác lấy giữa lúc kiểm và lúc ghi (P2002): vẫn đăng nhập, giữ số cũ', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
+    update.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+    const r = await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(r.accessToken).toBe('access-jwt');
+  });
+
+  it('user mới có SĐT: tạo kèm phoneVerifiedAt', async () => {
+    const create = jest.fn().mockResolvedValue({ ...USER, phone: '0901234567' });
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue('0901234567') } as unknown as ZaloService;
+    await new AuthService(prisma, jwt, config, zalo, mkRbac()).loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(create.mock.calls[0][0].data).toMatchObject({ phone: '0901234567', phoneVerifiedAt: expect.any(Date) });
+  });
+});
+
 // ── A7-01: ensurePhoneForCurrentUser (không bao giờ âm thầm đổi user) ─────────────────────────
 /**
  * Fake Prisma đủ đầy để chạy thật mergeGuestInto() (không chỉ mock trả sẵn kết quả) — mô phỏng

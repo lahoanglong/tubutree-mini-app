@@ -6,7 +6,7 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import type { ClaimNotifier } from './external-claim-status';
-import { advisoryPhoneLock, chatMonthPoints, tierMultiplierOf } from './external-chat.claim';
+import { advisoryPhoneLock, chatMonthPoints, last3, phoneDiffers, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, type ChatConfig } from './external-chat.config';
 import { holdUntilOf, releaseAtOf } from './external-chat.rules';
 import { startOfVnMonth } from '../../common/vn-time';
@@ -41,29 +41,38 @@ export async function releaseClaim(
   return prisma.$transaction(async (tx) => {
     // Khoá đơn (FOR SHARE) TRƯỚC khi đọc trạng thái: webhook huỷ/hoàn đang ghi đơn phải xong, hoặc ta xong trước rồi nó thấy claim CREDITED và đảo.
     // Thứ tự khoá: advisory theo khách (cùng đường duyệt, để trần tháng chốt tuần tự), đơn, claim, users.
-    const head = await tx.externalPointsClaim.findUnique({ where: { id: claimId }, select: { userId: true, kind: true, externalOrder: { select: { phone: true } } } });
+    const head = await tx.externalPointsClaim.findUnique({ where: { id: claimId }, select: { userId: true, kind: true, orderPhone: true } });
     if (!head) return skipped;
     const chat = head.kind === 'PHONE';
-    let phone: string | null = null;
     if (chat) {
-      phone = head.externalOrder.phone;
-      if (!opts.chat?.enabled || !phone) return skipped;
-      await advisoryPhoneLock(tx, phone);
+      if (!opts.chat?.enabled) return skipped;
+      // Khoá theo SĐT lúc tạo claim (trần tháng tính theo SĐT, liên kết dùng cùng khoá). Claim đã gắn thành viên mà SĐT đơn đã bị xoá thì
+      // dùng SĐT hiện tại của thành viên; claim chưa có chủ và không còn SĐT không có ai liên kết được nên không cần khoá.
+      let lockPhone = head.orderPhone;
+      if (!lockPhone && head.userId) lockPhone = (await tx.user.findUnique({ where: { id: head.userId }, select: { phone: true } }))?.phone ?? null;
+      if (lockPhone) await advisoryPhoneLock(tx, lockPhone);
+      else if (head.userId) await advisoryUserLock(tx, head.userId);
     } else {
       if (!head.userId) return skipped;
       await advisoryUserLock(tx, head.userId);
     }
     if (!(await lockOrderThenClaim(tx, claimId))) return skipped;
-    const [row] = await tx.$queryRaw<{ id: string; userId: string | null; externalOrderId: string; ratePct: string; points: number; decidedById: string | null; releaseAt: Date | null; createdAt: Date; countsForTier: boolean }[]>`
-      SELECT "id", "userId", "externalOrderId", "ratePct"::text AS "ratePct", "points", "decidedById", "releaseAt", "createdAt", "countsForTier" FROM "external_points_claims"
+    const [row] = await tx.$queryRaw<{ id: string; userId: string | null; externalOrderId: string; ratePct: string; points: number; decidedById: string | null; releaseAt: Date | null; createdAt: Date; countsForTier: boolean; orderPhone: string | null }[]>`
+      SELECT "id", "userId", "externalOrderId", "ratePct"::text AS "ratePct", "points", "decidedById", "releaseAt", "createdAt", "countsForTier", "orderPhone" FROM "external_points_claims"
        WHERE "id" = ${claimId} AND "state" = 'PENDING' FOR UPDATE`;
     if (!row || (!row.userId && !chat)) return skipped;
     const order = await tx.externalOrder.findUniqueOrThrow({
       where: { id: row.externalOrderId },
       select: { pancakeOrderId: true, source: true, status: true, deliveredAt: true, goodsValue: true, trackingCode: true, phone: true },
     });
-    // SĐT trên đơn đổi sau lúc khoá (nhân viên sửa đơn): không cộng theo SĐT cũ, lần quét sau quyết lại.
-    if (chat && order.phone !== phone) return skipped;
+    // SĐT trên đơn khác SĐT lúc tạo claim (nhân viên sửa đơn): không cộng theo số nào, người kiểm quyết. Claim đã có người duyệt thì thôi.
+    if (chat && row.decidedById === null && phoneDiffers(row.orderPhone, order.phone)) {
+      const reason = `SĐT trên đơn đã đổi (đuôi ${last3(row.orderPhone!)} thành ${last3(order.phone!)}), cần nhân viên kiểm`;
+      const moved = await tx.externalPointsClaim.updateMany({ where: { id: row.id, state: 'PENDING' }, data: { state: 'REVIEW', reviewReason: reason, holdUntil: null } });
+      if (moved.count !== 1) return skipped;
+      await recordClaimEvent(tx, { claimId: row.id, action: 'PHONE_CHANGED', fromState: 'PENDING', toState: 'REVIEW', userIdBefore: row.userId, userIdAfter: row.userId, note: reason, orderStatus: order.status });
+      return { outcome: 'TO_REVIEW' as const, userId: row.userId, points: 0, code: maskClaimCode(order.trackingCode), kind: 'PHONE' as const };
+    }
     const code = maskClaimCode(order.trackingCode);
     const nowMs = now.getTime();
     // Đơn đã giao: giao + hạn giữ. Đơn hoàn một phần: chỉ claim đã có người duyệt, theo mốc cộng nhân viên đặt lúc duyệt.
@@ -106,7 +115,7 @@ export async function releaseClaim(
     if (!user) reviewReason = 'Tài khoản không còn';
     else if (user.isBlocked) reviewReason = 'Tài khoản đang bị khoá';
     else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
-    else if (chat && user.phone !== order.phone) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
+    else if (chat && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
     else if (chat && (user.role === 'STAFF' || user.role === 'ADMIN') && row.decidedById === null) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
     let finalPoints = points ?? 0;
     let settleNote: string | null = null;
@@ -118,7 +127,7 @@ export async function releaseClaim(
         reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
       } else {
         const others = chat
-          ? await chatMonthPoints(tx, { phone: phone!, userId, since: startOfVnMonth(row.createdAt), excludeClaimId: row.id })
+          ? await chatMonthPoints(tx, { phone: row.orderPhone ?? order.phone, userId, since: startOfVnMonth(row.createdAt), excludeClaimId: row.id })
           : ((
               await tx.externalPointsClaim.aggregate({
                 where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
@@ -137,10 +146,10 @@ export async function releaseClaim(
 
     const moved = await tx.externalPointsClaim.updateMany({
       where: { id: row.id, state: 'PENDING' },
-      data: { state: 'CREDITED', creditedAt: now, points: finalPoints, ...(chat ? { multiplier } : {}) },
+      data: { state: 'CREDITED', creditedAt: now, points: finalPoints, ...(chat ? { multiplier, creditedGoodsValue: order.goodsValue } : {}) },
     });
     if (moved.count !== 1) return skipped;
-    const prefix = order.source === 'CHAT' ? 'PANCAKE_CHAT_ORDER' : 'MARKETPLACE_ORDER';
+    const prefix = chat ? 'PANCAKE_CHAT_ORDER' : 'MARKETPLACE_ORDER';
     const res = await applyPointsDelta(tx, {
       userId,
       delta: finalPoints,

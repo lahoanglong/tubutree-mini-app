@@ -4,6 +4,7 @@ import {
   chatDueAction,
   evaluateChatClaim,
   holdUntilOf,
+  creatorStaffUserId,
   isSameAsPancakeCreator,
   verifiedMemberPhone,
   type ChatClaimFacts,
@@ -26,7 +27,7 @@ const cfg = (over: Partial<ChatConfig> = {}): ChatConfig => ({
 const facts = (over: Partial<ChatClaimFacts> = {}): ChatClaimFacts => ({
   now: NOW,
   cfg: cfg(),
-  order: { status: 'OPEN', pancakeStatus: 1, hasExtendCode: true, goodsValue: 500_000, insertedAt: new Date(NOW.getTime() - DAY), phone: '0912345678' },
+  order: { status: 'OPEN', pancakeStatus: 1, hasExtendCode: true, hasTrackingCode: true, goodsValue: 500_000, insertedAt: new Date(NOW.getTime() - DAY), phone: '0912345678' },
   member: null,
   phoneIsStaff: false,
   monthPoints: 0,
@@ -147,10 +148,11 @@ describe('chatDueAction và giữ điểm', () => {
   });
 });
 
-describe('verifiedMemberPhone: chỉ SĐT đã xác minh qua Zalo mới được tự liên kết', () => {
-  const user = { phone: '0912345678', zaloId: 'z_real', isBlocked: false, mergedIntoId: null as string | null };
-  it('tài khoản Zalo thật có SĐT hợp lệ: trả SĐT', () => {
-    expect(verifiedMemberPhone(user)).toBe('0912345678');
+describe('verifiedMemberPhone: chỉ SĐT đã xác minh qua Zalo và còn hạn mới được tự liên kết', () => {
+  const verify = { now: NOW, maxDays: 180 };
+  const user = { phone: '0912345678', phoneVerifiedAt: new Date(NOW.getTime() - 10 * DAY) as Date | null, zaloId: 'z_real', isBlocked: false, mergedIntoId: null as string | null };
+  it('tài khoản Zalo thật có SĐT hợp lệ, xác minh còn mới: trả SĐT', () => {
+    expect(verifiedMemberPhone(user, verify)).toBe('0912345678');
   });
   it.each([
     ['không có SĐT', { phone: null }],
@@ -160,8 +162,38 @@ describe('verifiedMemberPhone: chỉ SĐT đã xác minh qua Zalo mới được
     ['đã gộp vào tài khoản khác', { mergedIntoId: 'u2' }],
     ['SĐT sai dạng', { phone: '12345' }],
     ['SĐT có ký tự lạ', { phone: '09123456xx' }],
+    ['chưa từng xác minh', { phoneVerifiedAt: null }],
+    ['xác minh quá 180 ngày', { phoneVerifiedAt: new Date(NOW.getTime() - 181 * DAY) }],
   ] as const)('bỏ qua: %s', (_name, patch) => {
-    expect(verifiedMemberPhone({ ...user, ...patch })).toBeNull();
+    expect(verifiedMemberPhone({ ...user, ...patch }, verify)).toBeNull();
+  });
+  it('đúng 180 ngày vẫn còn hạn; hạn đổi theo cấu hình', () => {
+    const at = new Date(NOW.getTime() - 180 * DAY);
+    expect(verifiedMemberPhone({ ...user, phoneVerifiedAt: at }, verify)).toBe('0912345678');
+    expect(verifiedMemberPhone({ ...user, phoneVerifiedAt: at }, { now: NOW, maxDays: 30 })).toBeNull();
+  });
+});
+
+describe('evaluateChatClaim: status 16 và người tạo đơn', () => {
+  const order = (o: Partial<ChatClaimFacts['order']>) => ({ ...facts().order, ...o });
+  it('status 16 không extend_code, không mã vận đơn: REVIEW; có một trong hai thì PENDING', () => {
+    const base = { status: 'DELIVERED' as const, pancakeStatus: 16, hasExtendCode: false, hasTrackingCode: false };
+    expect(evaluateChatClaim(facts({ order: order(base) }))).toMatchObject({ kind: 'CLAIM', state: 'REVIEW' });
+    expect(evaluateChatClaim(facts({ order: order({ ...base, hasTrackingCode: true }) }))).toMatchObject({ state: 'PENDING' });
+    expect(evaluateChatClaim(facts({ order: order({ ...base, hasExtendCode: true }) }))).toMatchObject({ state: 'PENDING' });
+  });
+  it('tắt require_carrier thì status 16 không vận đơn không bị REVIEW vì lý do này', () => {
+    const o = order({ status: 'DELIVERED', pancakeStatus: 16, hasExtendCode: false, hasTrackingCode: false });
+    expect(evaluateChatClaim(facts({ cfg: cfg({ requireCarrier: false }), order: o }))).toMatchObject({ state: 'PENDING' });
+  });
+  it('người tạo đơn là chính thành viên nhận điểm: REVIEW', () => {
+    expect(evaluateChatClaim(facts({ member: { id: 'u1', isStaff: false, tierMultiplier: 1 }, creatorIsMember: true }))).toMatchObject({ state: 'REVIEW' });
+  });
+  it('trần điểm tự cộng theo người tạo: vượt thì REVIEW, null thì không áp trần', () => {
+    const c = cfg({ creatorMonthlyPoints: 25_000 });
+    expect(evaluateChatClaim(facts({ cfg: c, creatorMonthPoints: 16_000 }))).toMatchObject({ state: 'REVIEW' });
+    expect(evaluateChatClaim(facts({ cfg: c, creatorMonthPoints: 15_000 }))).toMatchObject({ state: 'PENDING' });
+    expect(evaluateChatClaim(facts({ cfg: c, creatorMonthPoints: null }))).toMatchObject({ state: 'PENDING' });
   });
 });
 
@@ -179,5 +211,15 @@ describe('người tạo đơn trên Pancake không tự duyệt', () => {
     expect(isSameAsPancakeCreator({ fullName: 'Lê Văn C' }, refs)).toBe(false);
     expect(isSameAsPancakeCreator({ fullName: null }, refs)).toBe(false);
     expect(isSameAsPancakeCreator({ fullName: 'Lê Văn C' }, [])).toBe(false);
+  });
+
+  it('pancake.staff_map: so theo id tài khoản Pancake, kể cả khi tên khác hẳn', () => {
+    const refs = pancakeCreatorRefs({ creator: { id: 'pc-7', name: 'Ten Khac' } });
+    const map = new Map([['pc-7', 'staff-1']]);
+    expect(isSameAsPancakeCreator({ id: 'staff-1', fullName: 'Le Van C' }, refs, map)).toBe(true);
+    expect(isSameAsPancakeCreator({ id: 'staff-2', fullName: 'Le Van C' }, refs, map)).toBe(false);
+    expect(creatorStaffUserId(refs, map)).toBe('staff-1');
+    expect(creatorStaffUserId(refs, new Map())).toBeNull();
+    expect(creatorStaffUserId([], map)).toBeNull();
   });
 });

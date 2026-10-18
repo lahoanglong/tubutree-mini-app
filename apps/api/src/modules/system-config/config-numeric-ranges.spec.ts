@@ -134,4 +134,14 @@ describe('khoá cấu hình tích điểm đơn chat (B9)', () => {
     expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 0)).toBe(false);
     expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 1.5)).toBe(false);
   });
+
+  it('hai khoá thêm có khoảng; staff_map chỉ nhận object { id: userId }', async () => {
+    expect(await accepts(service, 'loyalty.chat_phone_verified_max_days', 180)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_phone_verified_max_days', 0)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_order_creator_monthly_points', 1_000_000)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_order_creator_monthly_points', -5)).toBe(false);
+    expect(await setOk('pancake.staff_map', { 'pc-1': 'user-1' })).toBe(true);
+    expect(await setOk('pancake.staff_map', [])).toBe(false);
+    expect(await setOk('pancake.staff_map', { 'pc-1': 5 })).toBe(false);
+  });
 });

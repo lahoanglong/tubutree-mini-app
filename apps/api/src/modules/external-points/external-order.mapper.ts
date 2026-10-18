@@ -206,6 +206,13 @@ export function pancakeCreatorRefs(data: Data): PancakeCreatorRef[] {
   return refs;
 }
 
+/** Id nhân viên TẠO đơn (`creator.id`, không lấy người phụ trách): khoá để áp trần điểm tự cộng theo người tạo. null khi payload không có. */
+export function pancakeCreatorId(data: Data): string | null {
+  const raw = asRecord(data['creator'])?.['id'];
+  const id = typeof raw === 'string' || typeof raw === 'number' ? String(raw).trim() : '';
+  return id !== '' && id.length <= 100 ? id : null;
+}
+
 const STATUS_BY_CODE: Record<number, ExternalOrderStatusName> = {
   3: 'DELIVERED',
   16: 'DELIVERED',

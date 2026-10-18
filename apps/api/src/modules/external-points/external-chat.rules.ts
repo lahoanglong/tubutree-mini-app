@@ -14,6 +14,8 @@ export interface ChatOrderFacts {
   status: 'OPEN' | 'DELIVERED' | 'RETURNING' | 'RETURNED' | 'CANCELLED' | 'PARTIAL_RETURN' | 'DELETED';
   pancakeStatus: number | null;
   hasExtendCode: boolean;
+  /** Đơn có mã vận đơn nào (kể cả ngoài extend_code). */
+  hasTrackingCode: boolean;
   goodsValue: number | null;
   insertedAt: Date;
   phone: string | null;
@@ -37,6 +39,10 @@ export interface ChatClaimFacts {
   phoneIsStaff: boolean;
   /** Điểm các claim chat còn hiệu lực của cùng SĐT trong tháng VN này (không gồm claim đang xét). */
   monthPoints: number;
+  /** Người tạo đơn trên Pancake (qua pancake.staff_map) chính là thành viên nhận điểm. */
+  creatorIsMember?: boolean;
+  /** Điểm đã tự cộng (không qua REVIEW) tháng này cho đơn của cùng người tạo; null = payload không có creator.id nên không áp trần. */
+  creatorMonthPoints?: number | null;
 }
 
 export type ChatDecision =
@@ -75,9 +81,16 @@ export function evaluateChatClaim(f: ChatClaimFacts): ChatDecision {
   if (points === null) reviewReason = 'Chưa tính được tiền hàng của đơn';
   else if (f.member?.isStaff) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
   else if (f.phoneIsStaff) reviewReason = 'SĐT trên đơn trùng SĐT của một nhân viên Tubu Tree, cần người khác duyệt';
+  else if (f.creatorIsMember) reviewReason = 'Người tạo đơn trên Pancake chính là thành viên nhận điểm, cần người khác duyệt';
+  else if (cfg.requireCarrier && order.pancakeStatus === CARRIER_PAID_STATUS && !order.hasExtendCode && !order.hasTrackingCode) {
+    reviewReason = 'Đơn ở trạng thái 16 nhưng không có vận đơn (giao không qua vận chuyển), cần kiểm';
+  }
   else if ((order.goodsValue ?? 0) > cfg.reviewAboveVnd) reviewReason = 'Giá trị đơn vượt ngưỡng tự duyệt';
   else if (order.status === 'PARTIAL_RETURN') reviewReason = 'Đơn đã hoàn một phần, cần nhân viên kiểm';
   else if (f.monthPoints + points > cfg.monthlyPointsCap) reviewReason = 'Vượt trần điểm tháng của SĐT này, cần nhân viên kiểm';
+  else if (f.creatorMonthPoints != null && f.creatorMonthPoints + points > cfg.creatorMonthlyPoints) {
+    reviewReason = 'Vượt trần điểm tự cộng tháng của người tạo đơn trên Pancake, cần nhân viên kiểm';
+  }
   return {
     kind: 'CLAIM',
     state: reviewReason ? 'REVIEW' : 'PENDING',
@@ -115,20 +128,46 @@ export function chatDueAction(
 
 /**
  * SĐT của thành viên được phép tự liên kết điểm chat. `users.phone` chỉ được ghi từ số Zalo cấp qua getPhoneNumber (AuthService:
- * resolvePhoneNumber → normalizeZaloPhone; không có API hồ sơ nào cho khách gõ số), nên một tài khoản Zalo thật có `phone` là số đã
- * xác minh. Khách vãng lai (`guest_`), tài khoản bị khoá hay đã gộp, và số sai dạng thì bỏ qua. Mọi đường liên kết đi qua hàm này;
- * nếu sau này có đường cho khách tự gõ số thì PHẢI thêm cờ xác minh ở đây (test external-chat-phone-source.spec.ts canh chỗ ghi `phone`).
+ * resolvePhoneNumber → normalizeZaloPhone; không có API hồ sơ nào cho khách gõ số). Số có thể đổi chủ (nhà mạng cấp lại) nên không đủ
+ * là "từng xác minh": `phoneVerifiedAt` (lần Zalo gần nhất trả đúng số này) phải còn trong `maxDays`. Khách vãng lai (`guest_`), tài
+ * khoản bị khoá hay đã gộp, và số sai dạng thì bỏ qua. Mọi đường liên kết đi qua hàm này (test external-chat-phone-source.spec.ts canh
+ * chỗ ghi `phone`, nhưng không bắt được SQL tay).
  */
-export function verifiedMemberPhone(u: { phone: string | null; zaloId: string | null; isBlocked: boolean; mergedIntoId: string | null }): string | null {
+export function verifiedMemberPhone(
+  u: { phone: string | null; phoneVerifiedAt: Date | null; zaloId: string | null; isBlocked: boolean; mergedIntoId: string | null },
+  verify: { now: Date; maxDays: number },
+): string | null {
   if (!u.phone || !LOCAL_MOBILE.test(u.phone)) return null;
   if (!u.zaloId || u.zaloId.startsWith('guest_')) return null;
   if (u.isBlocked || u.mergedIntoId) return null;
+  if (!phoneVerifiedFresh(u.phoneVerifiedAt, verify)) return null;
   return u.phone;
 }
 
-/** Người duyệt có phải người tạo/phụ trách đơn trên Pancake không (so tên đã bỏ dấu: repo chưa có ánh xạ nhân viên Tubu với tài khoản Pancake). */
-export function isSameAsPancakeCreator(approver: { fullName: string | null }, refs: readonly PancakeCreatorRef[]): boolean {
+/** `phoneVerifiedAt` còn trong hạn (không có mốc = chưa từng xác minh). Mốc ở tương lai (lệch đồng hồ) vẫn tính là mới. */
+export const phoneVerifiedFresh = (at: Date | null, verify: { now: Date; maxDays: number }): boolean =>
+  at !== null && verify.now.getTime() - at.getTime() <= verify.maxDays * DAY_MS;
+
+/**
+ * Người duyệt có phải người tạo/phụ trách đơn trên Pancake không. Hai cách so: id tài khoản Pancake qua `pancake.staff_map` (chắc chắn,
+ * khi chủ shop đã khai báo) và tên đã bỏ dấu (dự phòng, dễ lọt khi tên khác nhau).
+ */
+export function isSameAsPancakeCreator(
+  approver: { id?: string; fullName: string | null },
+  refs: readonly PancakeCreatorRef[],
+  staffMap: ReadonlyMap<string, string> = new Map(),
+): boolean {
+  if (approver.id && refs.some((r) => r.id !== null && staffMap.get(r.id) === approver.id)) return true;
   if (!approver.fullName || refs.length === 0) return false;
   const name = foldVietnamese(approver.fullName);
   return name !== '' && refs.some((r) => r.name !== null && r.name === name);
+}
+
+/** Người tạo đơn trên Pancake (payload) quy ra userId nhân viên Tubu qua `pancake.staff_map`; null khi không có hay chưa khai báo. */
+export function creatorStaffUserId(refs: readonly PancakeCreatorRef[], staffMap: ReadonlyMap<string, string>): string | null {
+  for (const r of refs) {
+    const id = r.id ? staffMap.get(r.id) : undefined;
+    if (id) return id;
+  }
+  return null;
 }

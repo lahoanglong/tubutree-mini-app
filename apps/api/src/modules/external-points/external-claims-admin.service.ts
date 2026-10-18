@@ -18,7 +18,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import { advisoryPhoneLock, chatMonthPoints } from './external-chat.claim';
-import { loadChatConfig } from './external-chat.config';
+import { loadChatConfig, loadStaffMap } from './external-chat.config';
 import { isSameAsPancakeCreator } from './external-chat.rules';
 import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
@@ -180,15 +180,16 @@ export class ExternalClaimsAdminService {
   }
 
   /**
-   * Người tạo hoặc phụ trách đơn trên Pancake không được duyệt điểm cho đơn đó. Repo chưa có ánh xạ nhân viên Tubu với tài khoản Pancake,
-   * nên so tên đã bỏ dấu với người tạo trong payload; payload không có người tạo thì không chặn được (giới hạn, xem tài liệu chatpts).
+   * Người tạo hoặc phụ trách đơn trên Pancake không được duyệt điểm cho đơn đó. Chắc chắn khi chủ shop khai báo `pancake.staff_map`
+   * (id tài khoản Pancake → userId); chưa khai báo thì chỉ so tên đã bỏ dấu với người tạo trong payload. Payload không có người tạo thì
+   * không chặn được (giới hạn, xem tài liệu chatpts).
    */
   private async forbidPancakeCreator(tx: Pick<Prisma.TransactionClient, 'user'>, actorId: string, payload: Prisma.JsonValue): Promise<void> {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
     const refs = pancakeCreatorRefs(payload as Record<string, unknown>);
     if (refs.length === 0) return;
-    const actor = await tx.user.findUnique({ where: { id: actorId }, select: { fullName: true } });
-    if (actor && isSameAsPancakeCreator(actor, refs)) {
+    const actor = await tx.user.findUnique({ where: { id: actorId }, select: { id: true, fullName: true } });
+    if (actor && isSameAsPancakeCreator(actor, refs, await loadStaffMap(this.config))) {
       throw new ForbiddenException({ code: 'PANCAKE_CREATOR_SELF', message: 'Người tạo hoặc phụ trách đơn trên Pancake không được tự duyệt điểm của đơn đó.' });
     }
   }
@@ -200,13 +201,14 @@ export class ExternalClaimsAdminService {
   async approve(id: string, actorId: string, now: Date = new Date()): Promise<{ id: string; state: 'PENDING' }> {
     const cfg = await loadClaimConfig(this.config);
     const chatCfg = await loadChatConfig(this.config);
-    const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true, kind: true, externalOrder: { select: { phone: true } } } });
+    const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true, kind: true, orderPhone: true, externalOrder: { select: { phone: true } } } });
     if (!head) throw new NotFoundException('Không tìm thấy claim.');
     await this.forbidSelf(actorId, head.userId);
     const out = await this.prisma.$transaction(async (tx) => {
       // Claim chat khoá theo SĐT (trần tháng tính theo SĐT), claim đơn sàn khoá theo khách như cũ.
       if (head.kind === 'PHONE') {
-        if (head.externalOrder.phone) await advisoryPhoneLock(tx, head.externalOrder.phone);
+        const lockPhone = head.orderPhone ?? head.externalOrder.phone;
+        if (lockPhone) await advisoryPhoneLock(tx, lockPhone);
       } else if (head.userId) {
         await advisoryUserLock(tx, head.userId);
       }
@@ -227,8 +229,9 @@ export class ExternalClaimsAdminService {
       let points = fullPoints;
       if (c.kind === 'PHONE') {
         // Trần tháng theo SĐT. Không có SĐT (đã xoá khỏi đơn) thì không còn gì để cộng dồn: duyệt nguyên điểm.
-        if (o.phone) {
-          const others = await chatMonthPoints(tx, { phone: o.phone, userId: c.userId, since: startOfVnMonth(c.createdAt), excludeClaimId: id });
+        const capPhone = c.orderPhone ?? o.phone;
+        if (capPhone) {
+          const others = await chatMonthPoints(tx, { phone: capPhone, userId: c.userId, since: startOfVnMonth(c.createdAt), excludeClaimId: id });
           points = settlePoints({ newPoints: fullPoints, checkedPoints: c.points, others, cap: chatCfg.monthlyPointsCap });
           if (points <= 0) throw rejectionOf('MONTHLY_CAP');
         }

@@ -170,6 +170,16 @@ export class DataRetentionService {
                 AND c."state" IN ('CREDITED', 'VOIDED', 'REVERSED', 'LAPSED') AND c."updatedAt" < ${finalClaimCutoff}
             )`,
           },
+          // Bản chép SĐT lúc tạo claim chat (để liên kết) theo cùng luật: bỏ khi claim đã xong 7 ngày, hoặc khi đơn đã mất SĐT.
+          {
+            table: 'external_points_claims',
+            label: 'external_points_claims.order_phone',
+            set: Prisma.sql`"orderPhone" = NULL`,
+            where: Prisma.sql`"orderPhone" IS NOT NULL AND (
+              ("state" IN ('CREDITED', 'VOIDED', 'REVERSED', 'LAPSED') AND "updatedAt" < ${finalClaimCutoff})
+              OR EXISTS (SELECT 1 FROM external_orders o WHERE o.id = external_points_claims."externalOrderId" AND o."phone" IS NULL)
+            )`,
+          },
         ];
       }
       case 'refresh_tokens':

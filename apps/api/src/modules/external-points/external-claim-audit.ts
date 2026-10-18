@@ -15,6 +15,7 @@ export type ClaimEventAction =
   | 'TO_REVIEW'
   | 'FLAG_PARTIAL'
   | 'LINK_PHONE'
+  | 'PHONE_CHANGED'
   | 'HOLD_NO_MEMBER'
   | 'LAPSE';
 

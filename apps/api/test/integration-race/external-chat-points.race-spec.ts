@@ -75,7 +75,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
 
   const phone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
   async function mkUser(over: Partial<Prisma.UserUncheckedCreateInput> = {}) {
-    const u = await createUser(prisma, { phone: phone(), zaloId: `zalo_${randCode(10)}`, ...over });
+    const u = await createUser(prisma, { phone: phone(), phoneVerifiedAt: new Date(), zaloId: `zalo_${randCode(10)}`, ...over });
     userIds.push(u.id);
     return u;
   }
