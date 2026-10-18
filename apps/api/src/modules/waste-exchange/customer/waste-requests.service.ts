@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import type { WasteCreateRequest, WasteMethod, WasteRequestDetailDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
+import type { WasteCreateRequest, WasteEditRequest, WasteMethod, WasteRequestDetailDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { WasteAccessService } from '../core/waste-access.service';
@@ -74,6 +74,82 @@ export class WasteRequestsService {
         throw e;
       }
     }
+  }
+
+  async edit(userId: string, id: string, body: WasteEditRequest): Promise<WasteRequestDetailDTO> {
+    const snap = await this.config.snapshot();
+    const holdCfg: WasteHoldConfig = {
+      laneDropoff: snap.laneDropoff,
+      laneMailin: snap.laneMailin,
+      lanePickup: snap.lanePickup,
+      mailinMinPoints: snap.mailinMinPoints,
+      pickupMinPoints: snap.pickupMinPoints,
+      customerMonthlyCapPoints: snap.customerMonthlyCapPoints,
+      maxOpenRequests: snap.maxOpenRequests,
+      requestHoldDays: snap.requestHoldDays,
+    };
+    await this.prisma.$transaction((tx) => this.editInTx(tx, userId, id, body, holdCfg));
+    return this.loadDetail(this.prisma, userId, id);
+  }
+
+  private async editInTx(tx: Prisma.TransactionClient, userId: string, id: string, body: WasteEditRequest, holdCfg: WasteHoldConfig): Promise<void> {
+    await lockWasteCustomer(tx, userId);
+    const now = new Date();
+    const rows = await tx.$queryRaw<
+      { id: string; method: WasteMethod; status: string; orderId: string | null; trackingCode: string | null; pointId: string; capDayKey: string; capMonthKey: string }[]
+    >`SELECT id, method::text AS method, status::text AS status, "orderId", "trackingCode", "pointId", "capDayKey", "capMonthKey" FROM waste_requests WHERE id = ${id} AND "userId" = ${userId} FOR UPDATE`;
+    const row = rows[0];
+    if (!row) throw new NotFoundException(WASTE_MESSAGES.REQUEST_NOT_FOUND);
+    if (row.status !== 'OPEN' || row.orderId !== null || row.trackingCode !== null) throw new ConflictException(WASTE_MESSAGES.NOT_EDITABLE);
+    const result = await this.hold.validateAndHold(
+      tx,
+      {
+        path: 'EDIT',
+        userId,
+        method: row.method,
+        lines: body.lines,
+        pointId: row.method === 'DROP_OFF' ? body.pointId ?? row.pointId : null,
+        existing: { id, pointId: row.pointId, capDayKey: row.capDayKey, capMonthKey: row.capMonthKey },
+        now,
+      },
+      holdCfg,
+    );
+    const beforeLines = await tx.wasteRequestLine.findMany({ where: { requestId: id }, select: { itemId: true, declaredQty: true }, orderBy: { id: 'asc' } });
+    await tx.wasteRequestLine.deleteMany({ where: { requestId: id } });
+    await tx.wasteRequestLine.createMany({
+      data: result.lines.map((l) => ({
+        requestId: id,
+        itemId: l.itemId,
+        itemCode: l.itemCode,
+        itemName: l.itemName,
+        unitLabel: l.unitLabel,
+        unitsPerPoint: l.unitsPerPoint,
+        pointsPerGroup: l.pointsPerGroup,
+        dropsPerUnit: l.dropsPerUnit,
+        gramsPerUnit: l.gramsPerUnit,
+        declaredQty: l.declaredQty,
+      })),
+    });
+    const updated = await tx.wasteRequest.updateMany({
+      where: { id, userId, status: 'OPEN', orderId: null, trackingCode: null },
+      data: { pointId: result.pointId, estimatedPoints: result.estimatedPoints, estimatedDrops: result.estimatedDrops },
+    });
+    if (updated.count !== 1) throw new ConflictException(WASTE_MESSAGES.NOT_EDITABLE);
+    await writeWasteEvent(tx, {
+      kind: 'REQUEST_EDITED',
+      actorUserId: userId,
+      actorRole: 'CUSTOMER',
+      requestId: id,
+      pointId: result.pointId,
+      meta: {
+        before: { pointId: row.pointId, lines: beforeLines.map((l) => ({ itemId: l.itemId, declaredQty: l.declaredQty })) },
+        after: {
+          pointId: result.pointId,
+          lines: body.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.declaredQty })),
+          estimatedPoints: result.estimatedPoints,
+        },
+      },
+    });
   }
 
   private async createInTx(tx: Prisma.TransactionClient, userId: string, idempotencyKey: string, body: WasteCreateRequest, holdCfg: WasteHoldConfig): Promise<string> {

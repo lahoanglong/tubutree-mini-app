@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
-import { WASTE_METHOD_VALUES, type WasteCreateRequest, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest } from '@tubutree/shared-types';
+import { WASTE_METHOD_VALUES, type WasteCreateRequest, type WasteEditRequest, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest } from '@tubutree/shared-types';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { requireIdempotencyKey } from '../../../common/idempotency-key';
 import { WasteAccessService, type WasteCustomerContext, type WasteGateMode } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
@@ -99,6 +100,20 @@ export class WasteCreateDto implements WasteCreateRequest {
   postagePaidConsent?: boolean;
 }
 
+export class WasteEditDto implements WasteEditRequest {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => WasteLineDto)
+  lines!: WasteLineDto[];
+
+  @OptionalNotNull()
+  @IsString()
+  @MaxLength(64)
+  pointId?: string;
+}
+
 @Controller('waste')
 export class WasteCustomerController {
   constructor(
@@ -175,5 +190,12 @@ export class WasteCustomerController {
   async create(@CurrentUser('sub') userId: string, @Headers('idempotency-key') rawKey: unknown, @Body() body: WasteCreateDto) {
     await this.gate(userId, 'FULL');
     return this.requests.create(userId, requireIdempotencyKey(rawKey), body);
+  }
+
+  @Patch('requests/:id')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  async edit(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() body: WasteEditDto) {
+    await this.gate(userId, 'FULL');
+    return this.requests.edit(userId, id, body);
   }
 }

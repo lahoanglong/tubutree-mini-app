@@ -8,7 +8,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
-import { WasteCreateDto, WasteCustomerController, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto } from './waste-customer.controller';
+import { WasteCreateDto, WasteCustomerController, WasteEditDto, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto } from './waste-customer.controller';
 import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
@@ -24,7 +24,7 @@ const svc = <T extends string>(...m: T[]) => Object.fromEntries(m.map((k) => [k,
 async function build(enabled: boolean) {
   const me = svc('me', 'rules');
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
-  const requests = svc('list', 'detail', 'byOrder', 'create');
+  const requests = svc('list', 'detail', 'byOrder', 'create', 'edit');
   const preview = svc('preview');
   const mod = await Test.createTestingModule({
     controllers: [WasteCustomerController],
@@ -73,7 +73,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
       ['me', 0, 'me'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
-      ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'],
+      ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
     ]);
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.nearby)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.nearby)).toBe(30);
@@ -127,6 +127,25 @@ describe('WasteCustomerController.create (spec 11.2, 15.1)', () => {
   });
 });
 
+describe('WasteCustomerController.edit (spec 15.2 PATCH)', () => {
+  const body = { lines: [{ itemId: 'carton', declaredQty: 2 }] };
+  it('FULL gate: programme off and a waste-blocked customer are 403 and the service is not called (spec 17.3)', async () => {
+    const off = await build(false);
+    await expect(off.c.edit('real', 'r1', body)).rejects.toThrow(new ForbiddenException(OFF));
+    const on = await build(true);
+    await expect(on.c.edit('blocked', 'r1', body)).rejects.toThrow('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree.');
+    expect(off.requests.edit).not.toHaveBeenCalled();
+    expect(on.requests.edit).not.toHaveBeenCalled();
+    await expect(on.c.edit('real', 'r1', body)).resolves.toEqual({ ok: 'edit' });
+    expect(on.requests.edit).toHaveBeenCalledWith('real', 'r1', body);
+  });
+  it('PATCH requests/:id with 10/min', () => {
+    const p = WasteCustomerController.prototype;
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.edit)).toBe(10);
+    expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.edit)).toBe(60_000);
+  });
+});
+
 describe('read DTOs (global ValidationPipe)', () => {
   const pipe = createValidationPipe();
   const run = (metatype: unknown, value: unknown, type: 'body' | 'query' = 'body') => pipe.transform(value, { type, metatype: metatype as never, data: '' });
@@ -165,5 +184,11 @@ describe('read DTOs (global ValidationPipe)', () => {
   });
   it('create DTO accepts a MAIL_IN body with both commitments', async () => {
     await expect(run(WasteCreateDto, { method: 'MAIL_IN', lines: [{ itemId: 'a', declaredQty: 15 }], consent: true, packagingConsent: true, postagePaidConsent: true })).resolves.toBeInstanceOf(WasteCreateDto);
+  });
+  it('edit DTO: pointId null is a 400 (not a 500), a method or empty lines are rejected, lines alone are accepted without consent', async () => {
+    await expect(run(WasteEditDto, { lines: [{ itemId: 'carton', declaredQty: 2 }], pointId: null })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(WasteEditDto, { lines: [{ itemId: 'carton', declaredQty: 2 }], method: 'MAIL_IN' })).rejects.toThrow();
+    await expect(run(WasteEditDto, { lines: [] })).rejects.toThrow();
+    await expect(run(WasteEditDto, { lines: [{ itemId: 'carton', declaredQty: 2 }] })).resolves.toBeInstanceOf(WasteEditDto);
   });
 });

@@ -170,3 +170,76 @@ describe('WasteRequestsService.create (spec 11.2, 15.2)', () => {
     expect(tx.wasteRequest.create).not.toHaveBeenCalled();
   });
 });
+
+function makeEdit(o: { row: unknown; hold: unknown; before: { itemId: string; declaredQty: number }[]; updateCount?: number }) {
+  const order: string[] = [];
+  const tx = {
+    $executeRaw: jest.fn(async (..._sql: unknown[]) => { order.push('lock'); return 1; }),
+    $queryRaw: jest.fn(async (..._sql: unknown[]) => { order.push('forUpdate'); return o.row ? [o.row] : []; }),
+    wasteRequestLine: {
+      findMany: jest.fn(async (_args: unknown) => { order.push('before'); return o.before; }),
+      deleteMany: jest.fn(async (_args: unknown) => { order.push('deleteLines'); return { count: o.before.length }; }),
+      createMany: jest.fn(async (_args: { data: Record<string, unknown>[] }) => { order.push('createLines'); return { count: 1 }; }),
+    },
+    wasteRequest: { updateMany: jest.fn(async (_args: { where: Record<string, unknown>; data: Record<string, unknown> }) => { order.push('update'); return { count: o.updateCount ?? 1 }; }) },
+    wasteEvent: { create: jest.fn(async (_args: { data: Record<string, unknown> }) => { order.push('event'); return { id: 'e1' }; }) },
+  };
+  const prisma = { $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)) };
+  const hold = { validateAndHold: jest.fn(async (_tx: unknown, _input: Record<string, unknown>, _cfg: unknown) => { order.push('hold'); return o.hold; }) };
+  const config = { snapshot: jest.fn().mockResolvedValue(SNAP) };
+  const svc = new WasteRequestsService(prisma as never, {} as never, hold as never, config as never, {} as never);
+  const loadDetail = jest.spyOn(svc, 'loadDetail').mockResolvedValue({ id: 'r1' } as never);
+  return { svc, tx, hold, loadDetail, order };
+}
+
+describe('WasteRequestsService.edit (spec 15.2 PATCH)', () => {
+  const row = { id: 'r1', method: 'DROP_OFF', status: 'OPEN', orderId: null, trackingCode: null, pointId: 'p1', capDayKey: '2026-10-15', capMonthKey: '2026-10' };
+  const HOLD = { pointId: 'p1', capDayKey: '2026-10-15', capMonthKey: '2026-10', expiresAt: null, lines: [{ itemId: 'carton', itemCode: 'CARTON', itemName: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 2, pointsPerGroup: 1_000, dropsPerUnit: 1, gramsPerUnit: null, declaredQty: 8, hazardous: false }], estimatedPoints: 4_000, estimatedDrops: 8 };
+  it('lock, FOR UPDATE on (id, userId), hold EDIT with stored keys, replace lines, conditional updateMany, one event', async () => {
+    const { svc, tx, hold, order } = makeEdit({ row, hold: HOLD, before: [{ itemId: 'carton', declaredQty: 5 }] });
+    await svc.edit('u1', 'r1', { lines: [{ itemId: 'carton', declaredQty: 8 }] });
+    expect(order).toEqual(['lock', 'forUpdate', 'hold', 'before', 'deleteLines', 'createLines', 'update', 'event']);
+    const [strings, ...values] = tx.$queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    expect(strings.join('?')).toMatch(/FOR UPDATE/);
+    expect(values).toEqual(['r1', 'u1']);
+    expect(hold.validateAndHold.mock.calls[0]![1]).toMatchObject({ path: 'EDIT', method: 'DROP_OFF', pointId: 'p1', existing: { id: 'r1', pointId: 'p1', capDayKey: '2026-10-15', capMonthKey: '2026-10' } });
+    expect(tx.wasteRequest.updateMany).toHaveBeenCalledWith({ where: { id: 'r1', userId: 'u1', status: 'OPEN', orderId: null, trackingCode: null }, data: { pointId: 'p1', estimatedPoints: 4_000, estimatedDrops: 8 } });
+    expect(tx.wasteRequestLine.createMany.mock.calls[0]![0].data[0]).toMatchObject({ requestId: 'r1', itemId: 'carton', unitsPerPoint: 2, declaredQty: 8 });
+    expect(tx.wasteRequestLine.createMany.mock.calls[0]![0].data[0]).not.toHaveProperty('hazardous');
+    expect(tx.wasteEvent.create.mock.calls[0]![0].data).toMatchObject({ kind: 'REQUEST_EDITED', actorRole: 'CUSTOMER', actorUserId: 'u1', requestId: 'r1', meta: { before: { pointId: 'p1', lines: [{ itemId: 'carton', declaredQty: 5 }] }, after: { pointId: 'p1', lines: [{ itemId: 'carton', declaredQty: 8 }], estimatedPoints: 4_000 } } });
+  });
+  it('the update data never touches code, expiresAt, consentAt, capDayKey, capMonthKey, method', async () => {
+    const { svc, tx } = makeEdit({ row, hold: HOLD, before: [] });
+    await svc.edit('u1', 'r1', { lines: [{ itemId: 'carton', declaredQty: 8 }] });
+    expect(Object.keys(tx.wasteRequest.updateMany.mock.calls[0]![0].data).sort()).toEqual(['estimatedDrops', 'estimatedPoints', 'pointId']);
+  });
+  it('DROP_OFF body pointId switches the point; MAIL_IN body pointId is ignored', async () => {
+    const a = makeEdit({ row, hold: HOLD, before: [] });
+    await a.svc.edit('u1', 'r1', { lines: [{ itemId: 'carton', declaredQty: 8 }], pointId: 'p2' });
+    expect(a.hold.validateAndHold.mock.calls[0]![1].pointId).toBe('p2');
+    const b = makeEdit({ row: { ...row, method: 'MAIL_IN', pointId: 'wh' }, hold: { ...HOLD, pointId: 'wh' }, before: [] });
+    await b.svc.edit('u1', 'r1', { lines: [{ itemId: 'carton', declaredQty: 16 }], pointId: 'p2' });
+    expect(b.hold.validateAndHold.mock.calls[0]![1].pointId).toBeNull();
+  });
+  it.each<[string, unknown, unknown]>([
+    ['missing or foreign id', null, new NotFoundException('Không tìm thấy yêu cầu')],
+    ['IN_TRANSIT', { ...row, status: 'IN_TRANSIT' }, new ConflictException('Yêu cầu này không còn sửa được')],
+    ['attached PICKUP', { ...row, method: 'PICKUP', orderId: 'o1' }, new ConflictException('Yêu cầu này không còn sửa được')],
+    ['tracking entered', { ...row, method: 'MAIL_IN', trackingCode: 'S1' }, new ConflictException('Yêu cầu này không còn sửa được')],
+    ['CANCELLED', { ...row, status: 'CANCELLED' }, new ConflictException('Yêu cầu này không còn sửa được')],
+    ['COMPLETED', { ...row, status: 'COMPLETED' }, new ConflictException('Yêu cầu này không còn sửa được')],
+  ])('%s -> error, nothing written', async (_n, r, err) => {
+    const { svc, tx, hold } = makeEdit({ row: r, hold: HOLD, before: [] });
+    const call = svc.edit('u1', 'r1', { lines: [{ itemId: 'carton', declaredQty: 1 }] });
+    await expect(call).rejects.toThrow(err as Error);
+    await expect(call).rejects.toBeInstanceOf((err as Error).constructor);
+    expect(hold.validateAndHold).not.toHaveBeenCalled();
+    expect(tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(tx.wasteEvent.create).not.toHaveBeenCalled();
+  });
+  it('updateMany hitting 0 rows is 409 and writes no event', async () => {
+    const { svc, tx } = makeEdit({ row, hold: HOLD, before: [], updateCount: 0 });
+    await expect(svc.edit('u1', 'r1', { lines: [{ itemId: 'carton', declaredQty: 8 }] })).rejects.toThrow('Yêu cầu này không còn sửa được');
+    expect(tx.wasteEvent.create).not.toHaveBeenCalled();
+  });
+});
