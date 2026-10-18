@@ -53,4 +53,10 @@ describe('Timeline (§16.1)', () => {
     rerender(<Timeline steps={STEPS} current={1} compact hints={{ 1: <span>Ghi chú bước 2</span> }} />);
     expect(screen.queryByText('Ghi chú bước 2')).toBeNull();
   });
+  it('hints: bước có dòng phụ canh trên cùng với tên bước, bước không có dòng phụ vẫn canh giữa', () => {
+    render(<Timeline steps={STEPS} current={1} hints={{ 1: <span>Ghi chú bước 2</span> }} />);
+    const items = screen.getAllByRole('listitem');
+    expect(items[1]!.style.alignItems).toBe('flex-start');
+    expect(items[0]!.style.alignItems).toBe('center');
+  });
 });

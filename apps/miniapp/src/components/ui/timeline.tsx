@@ -38,7 +38,7 @@ export function Timeline({ steps, current, label = 'Tiến độ yêu cầu', co
             data-step={s}
             data-state={state}
             aria-current={state === 'current' ? 'step' : undefined}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, flex: compact ? 1 : undefined, minWidth: 0 }}
+            style={{ display: 'flex', alignItems: !compact && hints?.[i] ? 'flex-start' : 'center', gap: 10, flex: compact ? 1 : undefined, minWidth: 0 }}
           >
             <span
               aria-hidden
