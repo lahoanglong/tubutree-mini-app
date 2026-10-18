@@ -8,6 +8,16 @@ import { buildAdminOrderWhere, pancakeUnsyncedWhere, recyclingAttentionWhere } f
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
 import { SystemConfigService } from '../system-config/system-config.service';
+import {
+  WASTE_PERKS_PENDING_WHERE,
+  WASTE_POINTS_PENDING_WHERE,
+  WASTE_TO_COUNT_WHERE,
+  WASTE_UNMATCHED_OPEN_WHERE,
+  wasteCustomerBlockedWhere,
+  wasteGiftOverdueWhere,
+  wasteOrderMismatchWhere,
+  wasteTransitOverdueWhere,
+} from '../waste-exchange/core/waste-queue-filters';
 
 export type InboxKey =
   | 'pancakeAttention'
@@ -24,10 +34,17 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
-  | 'refillPending'
   | 'communityPending'
   | 'communityUnanswered'
-  | 'invoicePending';
+  | 'invoicePending'
+  | 'wasteToCount'
+  | 'wasteUnmatched'
+  | 'wasteBlockedPending'
+  | 'wastePointsPending'
+  | 'wastePerksPending'
+  | 'wasteTransitOverdue'
+  | 'wasteGiftOverdue'
+  | 'wasteOrderMismatch';
 
 /** Ai thấy việc này ngoài ADMIN: nhóm việc của nhân viên, hoặc 'STAFF' = mọi nhân viên (route vốn mở cho STAFF). */
 type Audience = readonly StaffPermission[] | 'STAFF' | 'ADMIN';
@@ -46,7 +63,7 @@ export class OpsInboxService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly merchant: MerchantFulfilmentService,
-    // Optional: chỉ để đọc ngưỡng giờ của khoá `community.unanswered_alert_hours`; thiếu thì dùng mặc định trong mã.
+    // Optional: chỉ để đọc `community.unanswered_alert_hours` và `waste.in_transit_review_days`; thiếu thì dùng mặc định trong mã.
     @Optional() private readonly config?: SystemConfigService,
   ) {}
 
@@ -79,7 +96,6 @@ export class OpsInboxService {
       { key: 'dealerApplications', audience: 'ADMIN', count: () => p.dealerApplication.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerClaims', audience: 'ADMIN', count: () => p.dealerRewardClaim.count({ where: { status: 'PENDING' } }) },
       { key: 'payouts', audience: 'ADMIN', count: () => p.payout.count({ where: { status: 'REQUESTED' } }) },
-      { key: 'refillPending', audience: 'STAFF', count: () => p.bottleReturn.count({ where: { status: 'PENDING' } }) },
       // Cộng đồng: bài khách vừa đăng và câu hỏi chờ lâu là việc của người kiểm duyệt (cùng danh sách @AllowStaff ở CommunityFeedController).
       { key: 'communityPending', audience: COMMUNITY_MODERATORS, count: () => p.feedPost.count({ where: { status: 'PENDING' } }) },
       {
@@ -92,7 +108,21 @@ export class OpsInboxService {
       },
       // Cùng điều kiện với bộ lọc "VAT chờ xuất" ở tab Đơn hàng; xuất hoá đơn (issue-invoice) chỉ ADMIN nên chỉ ADMIN thấy số này.
       { key: 'invoicePending', audience: 'ADMIN', count: () => p.order.count({ where: buildAdminOrderWhere({ invoice: 'pending' }) }) },
+      // Đổi rác: mỗi khoá đếm đúng một hàng đợi bằng cùng `where` với bộ lọc ở màn nhân viên/admin. Cảnh báo bất thường không vào hộp việc.
+      { key: 'wasteToCount', audience: 'STAFF', count: () => p.wasteRequest.count({ where: WASTE_TO_COUNT_WHERE }) },
+      { key: 'wasteUnmatched', audience: 'STAFF', count: () => p.wasteUnmatchedParcel.count({ where: WASTE_UNMATCHED_OPEN_WHERE }) },
+      { key: 'wasteBlockedPending', audience: 'ADMIN', count: () => p.wasteRequest.count({ where: wasteCustomerBlockedWhere() }) },
+      { key: 'wastePointsPending', audience: 'ADMIN', count: () => p.wastePoint.count({ where: WASTE_POINTS_PENDING_WHERE }) },
+      { key: 'wastePerksPending', audience: 'ADMIN', count: () => p.wastePoint.count({ where: WASTE_PERKS_PENDING_WHERE }) },
+      { key: 'wasteTransitOverdue', audience: 'ADMIN', count: async () => p.wasteRequest.count({ where: wasteTransitOverdueWhere(now, await this.transitReviewDays()) }) },
+      { key: 'wasteGiftOverdue', audience: 'ADMIN', count: () => p.wasteGiftRedemption.count({ where: wasteGiftOverdueWhere(now) }) },
+      { key: 'wasteOrderMismatch', audience: 'ADMIN', count: () => p.wasteRequest.count({ where: wasteOrderMismatchWhere() }) },
     ];
+  }
+
+  // SystemConfigService thay vì WasteConfigService: OpsModule không nhập WasteCoreModule, chỉ để đọc một con số.
+  private async transitReviewDays(): Promise<number> {
+    return (await this.config?.get<number>('waste.in_transit_review_days', 30)) ?? 30;
   }
 
   async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number }[] }> {

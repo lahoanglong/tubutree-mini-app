@@ -3,6 +3,7 @@ import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-healt
 import { OpsInboxService } from '../../src/modules/ops/ops-inbox.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { createOrder, createUser, markDeliveredEffectsDone, setConfig } from './helpers';
+import { cleanupWaste, createWarehouse, createWasteItem, createWasteRequest } from './fixtures/waste-fixtures';
 
 /**
  * PLATFORM-5 + "Việc cần xử lý" trên Postgres THẬT: ảnh chụp sức khoẻ thấy đơn kẹt chưa lên Pancake, webhook lỗi,
@@ -45,7 +46,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       fetchMock as never,
     );
     const merchant = new MerchantFulfilmentService(prisma, undefined as never, undefined, sysConfig as never);
-    inbox = new OpsInboxService(prisma, merchant);
+    inbox = new OpsInboxService(prisma, merchant, sysConfig as never);
     await setConfig(prisma, 'ops.alert_unsynced_minutes', 30);
     await setConfig(prisma, 'ops.alert_stuck_orders', 1);
     await setConfig(prisma, 'ops.alert_webhook_failed', 1);
@@ -140,13 +141,19 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', pancakeAttention: 'Pancake báo hoàn', pancakeAttentionAt: new Date() });
     await prisma.returnRequest.create({ data: { orderId: o.id, userId: u.id, reason: 'hỏng' } });
     await prisma.returnRequest.create({ data: { orderId: o.id, userId: u.id, reason: 'thiếu', status: 'APPROVED', items: { create: { orderItemId: `it-${o.id}`, quantity: 1 } } } });
-    await prisma.bottleReturn.create({ data: { userId: u.id, quantity: 2, seedsAwarded: 0 } });
+    const wh = await createWarehouse(prisma);
+    const item = await createWasteItem(prisma);
+    const req = await createWasteRequest(prisma, { userId: u.id, method: 'MAIL_IN', status: 'RECEIVED', pointId: wh.id, lines: [{ itemId: item.id, declaredQty: 3 }] });
+    const noShow = await createWasteRequest(prisma, { userId: u.id, method: 'PICKUP', status: 'EXPIRED', pointId: wh.id, orderId: o.id, expiresAt: null, lines: [{ itemId: item.id, declaredQty: 10 }] });
+    await prisma.wasteRequest.update({ where: { id: noShow.id }, data: { closeReason: 'PICKUP_NO_SHOW', closedAt: new Date() } });
     const after = await inbox.counts(admin);
     const delta = (k: string) => (after.items.find((i) => i.key === k)?.count ?? 0) - (before.items.find((i) => i.key === k)?.count ?? 0);
     expect(delta('pancakeAttention')).toBe(1);
     expect(delta('returnsPending')).toBe(1);
     expect(delta('returnsToReceive')).toBe(1);
-    expect(delta('refillPending')).toBe(1);
+    expect(delta('wasteToCount')).toBe(1);
+    expect(delta('wasteOrderMismatch')).toBe(0);
+    expect(after.items.map((i) => i.key)).not.toContain('refillPending');
     expect(after.items.map((i) => i.key)).toEqual(
       expect.arrayContaining([
         'pancakeUnsynced',
@@ -158,20 +165,31 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
         'merchantPayoutsPending',
         'dealerApplications',
         'payouts',
+        'wasteToCount',
+        'wasteUnmatched',
+        'wasteBlockedPending',
+        'wastePointsPending',
+        'wastePerksPending',
+        'wasteTransitOverdue',
+        'wasteGiftOverdue',
+        'wasteOrderMismatch',
       ]),
     );
 
     const cskh = await inbox.counts({ role: 'STAFF', staffPermissions: ['CSKH'] });
-    expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'refillPending', 'returnsPending']);
+    expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'returnsPending', 'wasteToCount', 'wasteUnmatched']);
     const kho = await inbox.counts({ role: 'STAFF', staffPermissions: ['KHO'] });
-    expect(kho.items.map((i) => i.key).sort()).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'refillPending', 'returnsToReceive']);
+    expect(kho.items.map((i) => i.key).sort()).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'returnsToReceive', 'wasteToCount', 'wasteUnmatched']);
     const marketing = await inbox.counts({ role: 'STAFF', staffPermissions: ['MARKETING'] });
-    expect(marketing.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'refillPending']);
+    expect(marketing.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'wasteToCount', 'wasteUnmatched']);
     const keToan = await inbox.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
-    expect(keToan.items.map((i) => i.key).sort()).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'refillPending']);
+    expect(keToan.items.map((i) => i.key).sort()).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'wasteToCount', 'wasteUnmatched']);
     const adminCount = (k: string) => after.items.find((i) => i.key === k)?.count;
     for (const k of ['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle']) {
       expect(keToan.items.find((i) => i.key === k)?.count).toBe(adminCount(k));
     }
+    await prisma.wasteRequest.delete({ where: { id: noShow.id } });
+    await prisma.wasteRequest.delete({ where: { id: req.id } });
+    await cleanupWaste(prisma, { itemIds: [item.id] });
   });
 });
