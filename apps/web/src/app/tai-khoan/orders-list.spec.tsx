@@ -121,6 +121,7 @@ describe('danh sách đơn — nút Thanh toán', () => {
     const c = await mount();
     const pay = c.querySelector('a[aria-label="Thanh toán đơn TB/1?"]');
     expect(pay?.getAttribute('href')).toBe('/thanh-toan/chuyen-khoan/TB%2F1%3F');
+    expect(c.querySelector('a[aria-label="Xem chi tiết đơn TB/1?"]')?.getAttribute('href')).toBe('/tai-khoan/don-hang/TB%2F1%3F');
     expect(c.querySelector('a[aria-label^="Thanh toán đơn TB-2"]')).toBeNull();
     expect(c.querySelector('a[aria-label^="Thanh toán đơn TB-3"]')).toBeNull();
     expect(c.querySelector('a[aria-label="Xem chi tiết đơn TB-3"]')?.getAttribute('href')).toBe('/tai-khoan/don-hang/TB-3');

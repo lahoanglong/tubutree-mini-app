@@ -62,12 +62,12 @@ Không có.
 - order:2. Điểm dùng được ở thanh toán lấy từ `/me/loyalty` như Mini App? Mặc định: giữ `redeemablePoints` của báo giá.
 - order:3. Sau lỗi mạng khi đặt, nếu khách đổi lựa chọn thì chặn và báo "Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại." (lệch đề xuất gốc). Mặc định: chặn một lần, bấm sau gửi đơn mới.
 - order:4. "Theo dõi ngay" OA trên web chỉ mở trang OA và luôn trả false; chữ báo "Đã mở trang Tubu Tree trên Zalo, bấm Quan tâm...". Mặc định: chữ này, do tôi tự chọn.
-- order:5. Nút Thanh toán ở hub `/tai-khoan` dẫn tới trang chuyển khoản thay vì chi tiết đơn? Mặc định: giữ nguyên (lane account). Đã xử lý ở 095b105a (nút Thanh toán ở hub dẫn `/thanh-toan/chuyen-khoan/<code>`, giống `onPay` của Mini App `orders.tsx:118`).
+- order:5. Nút Thanh toán ở hub `/tai-khoan` dẫn tới trang chuyển khoản thay vì chi tiết đơn? Mặc định: giữ nguyên (lane account). Đã xử lý ở 095b105a + 9b91a9ce (xét hạn/xử lý tay như canPayOrderNow, chữ Thanh toán ngay, in hạn; nút Thanh toán ở hub dẫn `/thanh-toan/chuyen-khoan/<code>`, giống `onPay` của Mini App `orders.tsx:118`).
 - order:6 (mới, mục 6 "Hoàn tất sau gate/review"). Lệch Mini App ở đặt đơn: web đóng băng body và key sau lần chưa rõ kết quả (Mini App đổi key khi fingerprint đổi, có cùng lỗ hổng khi nạp lại lúc có mạng). Giữ lệch cho web, hay sửa cả Mini App? Mặc định: giữ lệch ở web, không đụng Mini App.
 
 ### affiliate (6 câu)
 - affiliate:1. Mini App và web chỉ đặt tên bộ sưu tập; API cho phép COMBO/bố cục/% giảm combo (trần `storefront.max_combo_pct`, mặc định 30). Có mở giao diện này cho cả hai nền tảng không? Mặc định: không, web giống Mini App.
-- affiliate:2. Trang `/thanh-toan/chuyen-khoan/:code` còn pending. Mặc định: dẫn sang `/tai-khoan/don-hang/:code` (có QR); khi route mở sẽ hiện "Mở trang thanh toán (gửi khách)". Đã xử lý ở a1bb2cca (route đã mở nên link "Mở trang thanh toán (gửi khách)" hiện và trỏ `/thanh-toan/chuyen-khoan/<code>`; test ctv-order-sheet.spec.tsx khoá cả hai nhánh).
+- affiliate:2. Trang `/thanh-toan/chuyen-khoan/:code` còn pending. Mặc định: dẫn sang `/tai-khoan/don-hang/:code` (có QR); khi route mở sẽ hiện "Mở trang thanh toán (gửi khách)". Đã đúng từ lane affiliate (ctv-order-sheet.tsx:249-266, test ctv-order-sheet.spec.tsx:267); integ2 khoá route map ở a1bb2cca (route đã mở nên link "Mở trang thanh toán (gửi khách)" hiện và trỏ `/thanh-toan/chuyen-khoan/<code>`; test ctv-order-sheet.spec.tsx khoá cả hai nhánh).
 - affiliate:3. Tạo gian hàng xong mà áp mẫu lỗi: giữ sheet mở, chọn lại gọi lại `POST /storefront` (giống Mini App). Mặc định: không đổi.
 - affiliate:4. Nút "Xem trước" khi còn nháp báo cần đăng trước, không điều hướng (giống Mini App).
 - affiliate:5. `shareLink` tuyệt đối của nơi khác: nút Chia sẻ chép bài mẫu kèm link. Mặc định: dùng cách này.
