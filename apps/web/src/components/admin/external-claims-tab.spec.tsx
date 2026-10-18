@@ -260,4 +260,96 @@ describe('ExternalClaimsTab', () => {
     expect(last.url).not.toContain('attention=');
     expect(select.value).toBe('');
   });
+
+  describe('claim PHONE (đơn chat): thông tin người nhận và ghi chú khi SĐT xác minh cũ', () => {
+    const STALE = 'SĐT xác minh đã cũ, cần kiểm người nhận';
+    const phoneClaim = (over: Record<string, unknown> = {}) =>
+      claim({
+        kind: 'PHONE', source: 'CHAT', channel: null, reviewReason: STALE,
+        memberPhoneVerifiedAt: '2026-03-01T17:30:00.000Z', memberPhoneStale: true, memberCreatedAt: '2025-12-31T18:00:00.000Z', memberDeliveredAppOrders: 3,
+        ...over,
+      });
+    const info = (root: ParentNode) => root.querySelector('[data-member-info]');
+
+    it('hiện mốc xác minh (giờ VN), ngày tạo tài khoản, số đơn app đã giao và nhãn cảnh báo khi mốc cũ', async () => {
+      stub({ claims: [phoneClaim()] });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      const t = info(r.container)!.textContent!;
+      expect(t).toContain('lúc 00:30 02/03/2026');
+      expect(t).toContain('tài khoản tạo 01/01/2026');
+      expect(t).toContain('3 đơn app đã giao');
+      expect(t).toContain('SĐT xác minh đã cũ, kiểm người nhận');
+    });
+
+    it('mốc còn mới: không có nhãn cảnh báo; chưa từng xác minh thì ghi rõ', async () => {
+      stub({ claims: [phoneClaim({ memberPhoneStale: false, reviewReason: 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt' })] });
+      const fresh = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      expect(info(fresh.container)!.textContent).not.toContain('kiểm người nhận');
+      fresh.unmount();
+      mounted = [];
+      stub({ claims: [phoneClaim({ memberPhoneVerifiedAt: null })] });
+      const never = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      expect(info(never.container)!.textContent).toContain('SĐT xác minh chưa từng');
+    });
+
+    it('claim đơn sàn (SCAN) hoặc chưa có chủ: không có dòng người nhận', async () => {
+      stub({ claims: [claim()] });
+      const scan = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      expect(info(scan.container)).toBeNull();
+      scan.unmount();
+      mounted = [];
+      stub({ claims: [phoneClaim({ userId: null, memberPhoneVerifiedAt: null, memberPhoneStale: false, memberCreatedAt: null, memberDeliveredAppOrders: null })] });
+      const noOwner = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      expect(info(noOwner.container)).toBeNull();
+    });
+
+    it('duyệt claim lý do SĐT cũ: bắt buộc ghi chú, rồi gửi {note}', async () => {
+      const m = stub({ claims: [phoneClaim()] });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      click(btn(r.container, 'Duyệt'));
+      await flush();
+      const accept = confirmDialog()!.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!;
+      expect(confirmDialog()!.querySelector('textarea')).not.toBeNull();
+      expect(accept.disabled).toBe(true);
+      typeInto(confirmDialog()!.querySelector('textarea'), 'Đã gọi khách, đúng số');
+      answerConfirm(true);
+      await flush();
+      const call = m.calls.find((c) => c.url.endsWith('/c1/approve'))!;
+      expect(JSON.parse(String(call.init!.body))).toEqual({ note: 'Đã gọi khách, đúng số' });
+      expect(r.container.textContent).toContain('Đã duyệt');
+    });
+
+    it('duyệt claim PHONE mà mốc còn mới: hộp xác nhận thường, không ô ghi chú, không gửi body', async () => {
+      const m = stub({ claims: [phoneClaim({ memberPhoneStale: false, reviewReason: 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt' })] });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      click(btn(r.container, 'Duyệt'));
+      await flush();
+      expect(confirmDialog()!.querySelector('textarea')).toBeNull();
+      answerConfirm(true);
+      await flush();
+      const call = m.calls.find((c) => c.url.endsWith('/c1/approve'))!;
+      expect(call.init?.body).toBeUndefined();
+    });
+
+    it('API trả 400 NOTE_REQUIRED: báo lỗi tiếng Việt rõ ràng', async () => {
+      stub({ claims: [phoneClaim()], post: () => ({ status: 400, body: { statusCode: 400, code: 'NOTE_REQUIRED', message: 'english' } }) });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      click(btn(r.container, 'Duyệt'));
+      await flush();
+      typeInto(confirmDialog()!.querySelector('textarea'), 'x');
+      answerConfirm(true);
+      await flush();
+      const alert = r.container.querySelector('[role="alert"]')!;
+      expect(alert.textContent).toContain('cần ghi chú');
+      expect(alert.textContent).not.toContain('english');
+    });
+  });
 });

@@ -169,7 +169,7 @@ Mã nguồn gốc của kết quả đỏ: 7234d1dc. Race mới `test/integratio
 
 - `GET /admin/external-claims` và `/:id` thêm cho claim PHONE đã có chủ: `memberPhoneVerifiedAt`, `memberPhoneStale`, `memberCreatedAt`, `memberDeliveredAppOrders` (null với claim không phải PHONE hay chưa có chủ); tên thành viên là `userName` có sẵn. Kiểu thêm vào `AdminExternalClaimRow` (shared-types) ở dạng tuỳ chọn để không làm gãy chỗ khác dựng dữ liệu mẫu.
 - `POST /admin/external-claims/:id/approve` nhận body tuỳ chọn `{ note }`. Claim có lý do "SĐT xác minh đã cũ" mà mốc còn cũ lúc duyệt: thiếu `note` thì 400 `NOTE_REQUIRED`; có thì ghi vào sự kiện APPROVE kèm dấu "SĐT xác minh cũ".
-- Tab web `external-claims-tab.tsx` KHÔNG sửa ở nhánh này: tệp đó chỉ có trên nhánh `lr2/extui` / `review/2026-10-18-launch`, không có ở nền của `lr2/chatpts`. Cần một gói nhỏ trên nhánh review để hiện các trường mới cạnh lý do REVIEW, nhãn cảnh báo khi `memberPhoneStale`, và ô ghi chú khi duyệt claim lý do SĐT cũ.
+- Tab web: xem mục "Phần web của L2" bên dưới (làm sau khi gộp tip review).
 
 ### L3
 
@@ -184,4 +184,13 @@ Mã nguồn gốc của kết quả đỏ: 7234d1dc. Race mới `test/integratio
 ### Cần chủ quyết
 
 - Mini App có nên xin lại SĐT định kỳ (để mốc `phoneVerifiedAt` không tự cũ sau 180 ngày) không? Hiện không đổi Mini App: mốc chỉ mới lại khi Zalo trả số, nên thành viên lâu không xin số lại sẽ luôn vào REVIEW chờ ghi chú.
+
+### Phần web của L2 (sau khi gộp `review/2026-10-18-launch` tip 434afbf3)
+
+Gộp không có xung đột; thứ tự migration giữ nguyên (`20261019150000_external_claim_event_order_status`, rồi `20261019160000_chat_order_points`, `20261019170000_chat_review1`, trước `20261020000000`).
+
+- `apps/web/src/components/admin/external-claims-tab.tsx`: claim PHONE có chủ hiện dòng "Người nhận" (mốc xác minh SĐT giờ VN, ngày tạo tài khoản, số đơn app đã giao) cạnh lý do review; `memberPhoneStale` gắn nhãn cảnh báo "SĐT xác minh đã cũ, kiểm người nhận". Duyệt claim có lý do SĐT cũ (mốc vẫn cũ) mở hộp thoại ghi chú bắt buộc và gửi `{note}`; claim PHONE khác duyệt như cũ (không body). 400 `NOTE_REQUIRED` hiện câu tiếng Việt có sẵn.
+- `lib/external-claims.ts`: `approveNeedsNote`, `PHONE_STALE_LABEL`, câu cho `PANCAKE_CREATOR_SELF` (mã lỗi đã có trong shared-types nhưng bảng câu chưa có, tsc đỏ sau khi gộp), nhãn sự kiện LINK_PHONE, HOLD_NO_MEMBER, LAPSE, PHONE_CHANGED. `lib/admin-client.ts`: `approveExternalClaim(id, note?)`.
+- Vitest: 6 ca ở tab (hiện thông tin và nhãn, mốc mới, SCAN và chưa có chủ, duyệt kèm ghi chú, duyệt PHONE thường, 400 NOTE_REQUIRED) và 1 ca `approveNeedsNote`; chạy cả giờ VN lẫn `TZ=UTC`.
+- Không chụp màn hình tab.
 

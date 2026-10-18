@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EVENT_ACTION_LABEL, adminClaimErrorText, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
+import { EVENT_ACTION_LABEL, adminClaimErrorText, approveNeedsNote, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
 
 const who = (over: Partial<Parameters<typeof claimActions>[1]> = {}) => ({ isAdmin: false, canAct: false, meId: 'x', ...over });
 const c = (over: Record<string, unknown> = {}) => ({ state: 'REVIEW' as const, userId: 'u1', reviewReason: null as string | null, ...over });
@@ -71,5 +71,17 @@ describe('helpers', () => {
     const staff = attachDialogMessage('SPX***789', false);
     expect(staff).toContain('chỉ ADMIN gắn được');
     expect(staff).not.toContain('không cần người khác duyệt');
+  });
+});
+
+describe('approveNeedsNote', () => {
+  const stale = { kind: 'PHONE', reviewReason: 'SĐT xác minh đã cũ, cần kiểm người nhận', memberPhoneStale: true };
+  it('chỉ khi claim PHONE có lý do SĐT cũ và mốc vẫn cũ', () => {
+    expect(approveNeedsNote(stale)).toBe(true);
+    expect(approveNeedsNote({ ...stale, memberPhoneStale: false })).toBe(false);
+    expect(approveNeedsNote({ ...stale, memberPhoneStale: undefined })).toBe(false);
+    expect(approveNeedsNote({ ...stale, reviewReason: 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt' })).toBe(false);
+    expect(approveNeedsNote({ ...stale, reviewReason: null })).toBe(false);
+    expect(approveNeedsNote({ ...stale, kind: 'SCAN' })).toBe(false);
   });
 });

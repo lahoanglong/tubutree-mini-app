@@ -23,7 +23,9 @@ import {
   EVENT_ACTION_LABEL,
   attachDialogMessage,
   ORDER_STATUS_LABEL,
+  PHONE_STALE_LABEL,
   adminClaimErrorText,
+  approveNeedsNote,
   creditedOnClosedOrder,
   isIntroducer,
   CLAIM_SOURCE_LABEL,
@@ -34,7 +36,7 @@ import {
   type ClaimActor,
   groupThousands,
 } from '@/lib/external-claims';
-import { formatDateTime } from '@/lib/format-date';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
@@ -158,6 +160,16 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
   });
 
   const approve = async () => {
+    if (approveNeedsNote(row)) {
+      const note = await ask({
+        title: 'Duyệt yêu cầu: SĐT xác minh đã cũ',
+        message: `Mốc xác minh SĐT của thành viên đã cũ nên chưa chắc số vẫn của người đó. Hãy kiểm người nhận (ví dụ gọi xác nhận) rồi ghi lại cách bạn đã xác nhận cho mã ${c.maskedCode}. Điểm được tính lại theo tiền hàng mới nhất của đơn.`,
+        confirmLabel: 'Duyệt',
+        input: { label: 'Ghi chú (đã xác nhận người nhận bằng cách nào)', maxLength: 300, required: true },
+      });
+      if (note) mut.mutate(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.'));
+      return;
+    }
     const ok = await confirm({
       title: 'Duyệt yêu cầu tích điểm',
       message: `Duyệt mã ${c.maskedCode}? Điểm được tính lại theo tiền hàng mới nhất của đơn và sẽ cộng cho khách sau khi đơn giao đủ thời gian đối soát.`,
@@ -217,6 +229,17 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
         <div>Điểm: {c.points > 0 ? `${groupThousands(c.points)} điểm` : 'chưa tính được'}</div>
         <div>Trạng thái đơn: {ORDER_STATUS_LABEL[c.orderStatus] ?? c.orderStatus}</div>
         <div>Gửi lúc: {formatDateTime(c.createdAt)}</div>
+        {c.kind === 'PHONE' && c.userId && (
+          <div className="sm:col-span-2" data-member-info>
+            Người nhận: SĐT xác minh {row.memberPhoneVerifiedAt ? `lúc ${formatDateTime(row.memberPhoneVerifiedAt)}` : 'chưa từng'} · tài khoản tạo{' '}
+            {row.memberCreatedAt ? formatDate(row.memberCreatedAt) : '—'} · {row.memberDeliveredAppOrders ?? 0} đơn app đã giao
+            {row.memberPhoneStale && (
+              <span className="ml-1.5 align-middle">
+                <ToneBadge tone="warning">{PHONE_STALE_LABEL}</ToneBadge>
+              </span>
+            )}
+          </div>
+        )}
         {c.reviewReason && <div className="sm:col-span-2">{c.state === 'CREDITED' ? 'Cờ cần xử lý' : 'Lý do cần duyệt'}: <span className="font-medium text-warning-fg">{c.reviewReason}</span></div>}
         {c.voidReason && <div className="sm:col-span-2">Lý do huỷ: <span className="font-medium text-danger-fg">{c.voidReason}</span></div>}
       </dl>

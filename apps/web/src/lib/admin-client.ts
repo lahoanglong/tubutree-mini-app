@@ -2049,8 +2049,11 @@ export const listExternalClaims = (f: { state?: ExternalClaimState; q?: string; 
 export const getExternalClaim = (id: string) => apiFetch<AdminExternalClaimDetail>(`/admin/external-claims/${encodeURIComponent(id)}`);
 export const listExternalClaimAttempts = (page = 1, limit = 20) =>
   apiFetch<AdminExternalAttemptListResponse>(`/admin/external-claims/attempts?page=${page}&limit=${limit}`);
-export const approveExternalClaim = (id: string) =>
-  apiFetch<{ id: string; state: 'PENDING' }>(`/admin/external-claims/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+export const approveExternalClaim = (id: string, note?: string) =>
+  apiFetch<{ id: string; state: 'PENDING' }>(`/admin/external-claims/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    ...(note ? { body: { note } } : {}),
+  });
 export const voidExternalClaim = (id: string, reason: string, reopen: boolean) =>
   apiFetch<{ id: string; state: 'VOIDED' }>(`/admin/external-claims/${encodeURIComponent(id)}/${reopen ? 'void-and-reopen' : 'void'}`, {
     method: 'POST',
