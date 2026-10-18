@@ -37,6 +37,22 @@ describe('WasteConfigService.snapshot', () => {
     expect(await svc.snapshot()).toEqual({ ...DEFAULTS, enabled: true, lanePickup: true, mailinMinPoints: 20_000, customerMonthlyCapPoints: 80_000, mailinFeeTable: fee, rulesText: 'Thể lệ' });
   });
 
+  it('every key maps to its own field (a distinct valid non-default value per key)', async () => {
+    const { svc } = makeConfig({
+      'waste.enabled': true, 'waste.lane_dropoff_enabled': false, 'waste.lane_mailin_enabled': true, 'waste.lane_pickup_enabled': true,
+      'waste.mailin_min_points': 11, 'waste.pickup_min_points': 12, 'waste.customer_monthly_cap_points': 13, 'waste.max_open_requests': 14,
+      'waste.request_hold_days': 15, 'waste.pickup_wait_days': 16, 'waste.in_transit_review_days': 17, 'waste.mailin_max_weight_kg': 18,
+      'waste.mailin_max_edge_cm': 19, 'waste.shortfall_lock_pct': 20, 'waste.shortfall_lock_streak': 4, 'waste.staff_daily_cap_points': 22,
+      'waste.gift_claim_days': 23, 'waste.point_inactive_days': 24,
+    });
+    expect(await svc.snapshot()).toEqual({
+      ...DEFAULTS, enabled: true, laneDropoff: false, laneMailin: true, lanePickup: true, mailinMinPoints: 11, pickupMinPoints: 12,
+      customerMonthlyCapPoints: 13, maxOpenRequests: 14, requestHoldDays: 15, pickupWaitDays: 16, inTransitReviewDays: 17,
+      mailinMaxWeightKg: 18, mailinMaxEdgeCm: 19, shortfallLockPct: 20, shortfallLockStreak: 4, staffDailyCapPoints: 22,
+      giftClaimDays: 23, pointInactiveDays: 24,
+    });
+  });
+
   it.each([
     ['waste.enabled', 'true', 'enabled', false],
     ['waste.mailin_min_points', 0, 'mailinMinPoints', 15_000],
