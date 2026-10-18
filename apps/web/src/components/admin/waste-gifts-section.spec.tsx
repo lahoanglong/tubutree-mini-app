@@ -14,7 +14,7 @@ afterEach(() => {
 
 const GIFTS = [
   wasteGift(),
-  wasteGift({ id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng cây', pointsCost: 0, stock: null, claimInstructions: null, redemptionCount: 12, fundTreeTotal: 37, sortOrder: 1 }),
+  wasteGift({ id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng cây', pointsCost: 0, stock: null, claimInstructions: null, redemptionCount: 12, fundTreeTotal: 37, treePointsPrice: 50_000, sortOrder: 1 }),
   wasteGift({ id: 'gift-seed', kind: 'SEED_PACK', name: 'Gói hạt rau mầm', pointsCost: 30_000, stock: 0, sortOrder: 2 }),
 ];
 
@@ -47,8 +47,9 @@ describe('WasteGiftsSection', () => {
     const bottle = row(c, 'gift-bottle').textContent!;
     ['Quà tặng', '120.000 điểm', 'Còn 30', '4 lượt đổi'].forEach((t) => expect(bottle).toContain(t));
     const tree = row(c, 'gift-tree').textContent!;
-    ['Góp quỹ trồng cây', 'Giá theo cấu hình game.tree_points_price', 'Không giới hạn', '12 lượt đổi', 'Tổng lượt góp quỹ: 37'].forEach((t) => expect(tree).toContain(t));
-    expect(tree).not.toContain('0 điểm');
+    ['Góp quỹ trồng cây', '50.000 điểm (giá Vườn Xanh)', 'Không giới hạn', '12 lượt đổi', 'Tổng số cây của quỹ (gồm cây thu hoạch trong game): 37'].forEach((t) => expect(tree).toContain(t));
+    expect(tree).not.toContain('game.tree_points_price');
+    expect(tree).not.toMatch(/(^|[^\d.])0 điểm/);
     expect(row(c, 'gift-seed').textContent).toContain('Hết hàng');
   });
 
