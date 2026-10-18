@@ -298,6 +298,46 @@ export class LoyaltyService {
 
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
+    const { spent12m, partialReturns } = await this.spending12m(userId, since);
+
+    // Hạng xét theo TIỀN MUA 12 tháng (minSpending). Điểm tích chỉ còn là thước đo cho hạng không có mốc chi tiêu:
+    // sau khi 1 điểm = 1đ và tích 2%, mốc điểm cũ (minPoints) không còn tương ứng với số tiền mua, nên không được
+    // dùng để lên hạng có mốc chi tiêu. Điểm xét hạng là điểm ĐÃ TÍCH từ đơn giao, không phải số dư (xem tierPoints).
+    const earned12m = await this.tierPoints(userId, since, partialReturns);
+
+    let qualified = tiers[0];
+    for (const t of tiers) {
+      const byPoints = t.minSpending == null && earned12m >= t.minPoints;
+      const bySpending = t.minSpending != null && spent12m >= t.minSpending;
+      if (byPoints || bySpending) qualified = t;
+    }
+    if (!qualified) return;
+
+    // Lên hạng áp ngay; RỚT hạng có ân hạn (config loyalty.tier_grace_days) để không
+    // tụt hạng đột ngột khi điểm/chi tiêu 12 tháng vừa rớt mốc.
+    const graceDays = await this.config.get<number>('loyalty.tier_grace_days', 30);
+    const decision = decideTier({
+      currentTierId: user.tierId,
+      tiers: tiers.map((t) => ({ id: t.id, sortOrder: t.sortOrder })),
+      qualifiedId: qualified.id,
+      graceUntil: user.tierGraceUntil,
+      now: new Date(),
+      graceDays,
+    });
+    const graceChanged = (decision.graceUntil?.getTime() ?? null) !== (user.tierGraceUntil?.getTime() ?? null);
+    if (decision.tierId !== user.tierId || graceChanged) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { tierId: decision.tierId, tierGraceUntil: decision.graceUntil },
+      });
+    }
+  }
+
+  /**
+   * Tiền mua 12 tháng của khách: tổng đơn đã giao trừ phần đã hoàn của đơn trả một phần. Dùng chung cho xét hạng
+   * (recalcTier) và tiến độ lên hạng (getOverview) để hai nơi không lệch nhau.
+   */
+  private async spending12m(userId: string, since: Date): Promise<{ spent12m: number; partialReturns: Map<string, PartialReturnSum> }> {
     // Đơn XU cũ (tạo trước khi xu gộp vào Điểm Xanh, trả bằng tín dụng tự-fund) KHÔNG tính vào chi tiêu lên hạng
     // (mặc định) — nhất quán với việc đơn XU không sinh điểm. Đơn mới không còn đường XU: điểm quy đổi từ xu
     // đã trừ vào orders.total nên phần đó tự không tính hạng (spec PD-3 2.6). Lật config
@@ -324,42 +364,7 @@ export class LoyaltyService {
       for (const o of partiallyReturned) spent12m -= Math.min(o.total, partialReturns.get(o.id)?.refunded ?? 0);
       spent12m = Math.max(0, spent12m);
     }
-
-    // Hạng xét theo điểm ĐÃ TÍCH trong 12 tháng, KHÔNG phải số dư còn lại. Trước đây dùng
-    // `user.pointsBalance`: tiêu điểm lúc thanh toán (hoặc điểm hết hạn) kéo số dư xuống dưới
-    // mốc → hết ân hạn là bị hạ hạng, mất ×1,5 điểm + freeship. Dùng đúng loyalty currency lại
-    // bị phạt, trong khi doc-comment và FE ("từ X điểm") đều mô tả là điểm TÍCH LUỸ
-    // (P2, docs/2026-09-08-review-progress.md). Cùng cửa sổ 12 tháng với tiêu chí chi tiêu nên
-    // hạng vẫn phản ánh mức độ hoạt động gần đây, không thành hạng vĩnh viễn.
-    // CHỈ điểm từ đơn đã giao (trừ phần đơn đó bị trả/huỷ) — xem tierPoints.
-    const earned12m = await this.tierPoints(userId, since, partialReturns);
-
-    let qualified = tiers[0];
-    for (const t of tiers) {
-      const byPoints = earned12m >= t.minPoints;
-      const bySpending = t.minSpending != null && spent12m >= t.minSpending;
-      if (byPoints || bySpending) qualified = t;
-    }
-    if (!qualified) return;
-
-    // Lên hạng áp ngay; RỚT hạng có ân hạn (config loyalty.tier_grace_days) để không
-    // tụt hạng đột ngột khi điểm/chi tiêu 12 tháng vừa rớt mốc.
-    const graceDays = await this.config.get<number>('loyalty.tier_grace_days', 30);
-    const decision = decideTier({
-      currentTierId: user.tierId,
-      tiers: tiers.map((t) => ({ id: t.id, sortOrder: t.sortOrder })),
-      qualifiedId: qualified.id,
-      graceUntil: user.tierGraceUntil,
-      now: new Date(),
-      graceDays,
-    });
-    const graceChanged = (decision.graceUntil?.getTime() ?? null) !== (user.tierGraceUntil?.getTime() ?? null);
-    if (decision.tierId !== user.tierId || graceChanged) {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { tierId: decision.tierId, tierGraceUntil: decision.graceUntil },
-      });
-    }
+    return { spent12m, partialReturns };
   }
 
   /**
@@ -400,9 +405,8 @@ export class LoyaltyService {
    * `ORDER_DELIVERED:<code>`, creditOrderPoints) có trong cửa sổ, LOẠI các đơn đã có dòng `ORDER_REVERSED:<code>`
    * (reverseOrderPoints — cùng refId = order.id) khi đơn bị trả/huỷ.
    *
-   * Hạng là hạng theo CHI TIÊU: seed đặt minPoints đúng bằng minSpending / loyalty.vnd_per_point
-   * (500 điểm ↔ 5 triệu, 2.000 ↔ 20 triệu, 5.000 ↔ 50 triệu), nên điểm chỉ là thước đo thay cho
-   * tiền đã mua. Bản blacklist trước đây (loại DAILY_CHECKIN/POS_OFFLINE_ORDER/ORDER_REFUND_POINTS)
+   * Hạng xét theo CHI TIÊU (spending12m); hàm này chỉ còn quyết định hạng không có mốc chi tiêu và số điểm
+   * hiển thị ở tổng quan (seed đặt minPoints = minSpending / 50 cho màn cũ). Bản blacklist trước đây (loại DAILY_CHECKIN/POS_OFFLINE_ORDER/ORDER_REFUND_POINTS)
    * vẫn đếm mọi nguồn mới thêm sau: GAME_SPIN_WIN (quay vòng quay = đổi số dư thành điểm hạng),
    * REVIEW, SEASONPASS…, và bỏ qua ORDER_REVERSED nên mua → giao → trả hàng vẫn giữ nguyên điểm hạng.
    *
@@ -598,6 +602,7 @@ export class LoyaltyService {
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
     const tierPoints = await this.tierPoints(userId, since);
+    const { spent12m } = await this.spending12m(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
     const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
@@ -623,6 +628,8 @@ export class LoyaltyService {
       /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
       pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
       tierPoints,
+      /** Tiền mua 12 tháng: thước đo thật của hạng, `nextTier.spendingToGo` tính theo số này. */
+      spent12m,
       // Phần Điểm Xanh chưa đổi quà được vì đơn còn có thể bị trả hàng (xem lockedOrderPoints).
       lockedPoints: lock.locked,
       /** Phần khoá thuộc đơn đang có yêu cầu đổi/trả (mở khoá khi yêu cầu được xử lý, không theo ngày). */
@@ -648,6 +655,7 @@ export class LoyaltyService {
             minPoints: next.minPoints,
             minSpending: next.minSpending ?? null,
             pointsToGo: Math.max(0, next.minPoints - tierPoints),
+            spendingToGo: next.minSpending != null ? Math.max(0, next.minSpending - spent12m) : null,
           }
         : null,
       tiers: tiers.map((t) => ({
