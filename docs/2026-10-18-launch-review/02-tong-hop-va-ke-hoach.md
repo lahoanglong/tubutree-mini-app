@@ -19,18 +19,18 @@ Chưa. Giao diện gần xong, nhưng công cụ vận hành và công cụ kên
 
 | ID | Vấn đề | Ai xử lý | Trạng thái |
 |---|---|---|---|
-| D1-01 / D3-01 | Không có chỗ nhập % hoa hồng CTV. Với sản phẩm thật, mọi đơn CTV ra 0đ (đã tự kiểm: DB seed mới có 48 biến thể, 0 cái có %) | Agent (gói `commission`) + chủ dự án chọn mức % | Đang làm |
-| D4-001 | Quiz, nhiệm vụ, chủ đề cộng đồng, loài cây, mẫu thông báo chỉ có trong `seed.ts`; prod không chạy seed nên ngày ra mắt các phần này trống | Agent (gói `refseed`) | Đang làm |
-| D6-01 | Backup DB chưa có bằng chứng chạy trên VPS; sổ ví/điểm/hoa hồng chỉ nằm trong DB này | Agent viết script + runbook (gói `infra`); chủ dự án cài trên VPS và chọn nơi lưu | Đang làm phần repo |
-| D6-02 / D3-11 | Màn đại lý quảng bá link `ten.tubutree.com` nhưng chưa có DNS/chứng chỉ wildcard | Agent (đợt 2, cấu hình mặc định tắt subdomain) + chủ dự án chốt | Chờ đợt 2 |
-| D2-01 (có điều kiện) | Không ghi nguồn khách. Nếu in thẻ QR trong hộp hàng sàn trước khi sửa, số liệu đợt đó mất hẳn | Agent (gói `source`) | Đang làm |
+| D1-01 / D3-01 | Không có chỗ nhập % hoa hồng CTV. Với sản phẩm thật, mọi đơn CTV ra 0đ (đã tự kiểm: DB seed mới có 48 biến thể, 0 cái có %) | Agent (gói `commission`) + chủ dự án chọn mức % | Đã làm (nhập CSV + từng SP). Còn chờ chủ dự án nhập % thật (câu A1) |
+| D4-001 | Quiz, nhiệm vụ, chủ đề cộng đồng, loài cây, mẫu thông báo chỉ có trong `seed.ts`; prod không chạy seed nên ngày ra mắt các phần này trống | Agent (gói `refseed`) | Đã làm: `seed:reference` chỉ tạo khi thiếu, không ghi đè. Chủ dự án chạy một lần sau deploy |
+| D6-01 | Backup DB chưa có bằng chứng chạy trên VPS; sổ ví/điểm/hoa hồng chỉ nằm trong DB này | Agent viết script + runbook (gói `infra`); chủ dự án cài trên VPS và chọn nơi lưu | Phần repo xong (script + runbook). Chờ chủ dự án cài và diễn tập |
+| D6-02 / D3-11 | Màn đại lý quảng bá link `ten.tubutree.com` nhưng chưa có DNS/chứng chỉ wildcard | Agent (gói `storefront`, cờ `storefront.subdomain_enabled` mặc định tắt) + chủ dự án chốt | Đã làm: cờ tắt, link dùng `app.tubutree.com/s/<mã>`. Bật khi có DNS wildcard + SSL (câu B4) |
+| D2-01 (có điều kiện) | Không ghi nguồn khách. Nếu in thẻ QR trong hộp hàng sàn trước khi sửa, số liệu đợt đó mất hẳn | Agent (gói `source`) | Đã làm. Còn kiểm `?src=` trên Zalo thật trước khi in thẻ (việc chủ dự án 8) |
 | Đã biết từ 99 | DNS `api.`/`app.`, quét QR UAT trên Zalo thật, nội dung FAQ/Academy, khoá Zalo/Pancake | Chủ dự án | Chờ |
 
 ## 3. Kế hoạch thực hiện
 
 Mỗi gói một worktree `.claude/worktrees/lr-<gói>`, nhánh `lr/<gói>` từ `review/2026-10-18-launch`. Mỗi gói: code (TDD) → review Opus (gói chạm tiền/quyền: hai lượt) → sửa → merge `--no-ff` vào `review/2026-10-18-launch` → gate đầy đủ ở cuối. Không push, không merge vào main.
 
-### Đợt 1 (đang chạy)
+### Đợt 1 (đã xong)
 
 | Gói | Model | Mục | Mục tiêu |
 |---|---|---|---|
@@ -41,7 +41,7 @@ Mỗi gói một worktree `.claude/worktrees/lr-<gói>`, nhánh `lr/<gói>` từ
 | `infra` | Sonnet | D6-01, 03, 04, 05, 06, 07, 08, 09, 14, 15 | Backup, nén, keep-alive, CI build + race, ảnh web |
 | `handbook` | Sonnet | D1-09 | Sổ tay việc hằng ngày cho 6 vai trò, ranh giới Tubu/Pancake |
 
-### Đợt 2 (sau khi đợt 1 merge, theo thứ tự ưu tiên)
+### Đợt 2 (đã xong, trừ ghi chú ở mục 6)
 
 | Gói | Model | Mục | Ghi chú |
 |---|---|---|---|
@@ -63,6 +63,10 @@ D7 (chấm từ ảnh chụp thật 390px): giao diện "trông hoàn thiện" k
 - D1-02 CSKH lên đơn hộ (chờ câu hỏi 4), D2-04 ghép đơn sàn để tích điểm, D2-05/D4-004 ZNS và tin OA (chờ Zalo duyệt mẫu), D3-04/05 mô hình bán online của đại lý (câu hỏi 3), D1-07 trưng bày danh mục/banner, D4-002 bài khởi tạo và danh tính shop (cần nội dung), D4-008 lịch sự kiện.
 - D5-06 tab Cấu hình dạng form và D1-19 tách `admin/page.tsx` theo tab: làm sau khi nhánh đổi-rác merge, vì cùng file.
 
+### Việc treo sau khi gộp
+
+- Ẩn ô subdomain ở `/merchant` theo trường `subdomainEnabled` của gói storefront, làm sau khi gộp storefront và affiliate-ui.
+
 ## 4. Chiến lược (rút gọn)
 
 **Kéo khách từ sàn (D2 mục 8).** Không đấu giá niêm yết với sàn. Bán lời hứa "mua trực tiếp ở Tubu được nhiều hơn": quà đơn đầu + freeship, hoàn ~10% bằng Điểm Xanh, đặt định kỳ giảm 12–15%, tư vấn Zalo và cộng đồng. Điểm chạm theo chi phí thấp dần: thẻ trong hộp hàng sàn (lời "kích hoạt thành viên", không nhắc giá), Zalo OA, link bio `hello.tubutree.com` (đưa mini-app lên đầu; hiện có 6 link Shopee và 0 link mini-app), CTV. Đo: quét → đơn đầu trong 30 ngày → đơn 2 trong 30 ngày, theo nguồn.
@@ -83,3 +87,57 @@ D7 (chấm từ ảnh chụp thật 390px): giao diện "trông hoàn thiện" k
 8. Sửa `hello.tubutree.com`: đưa mini-app lên đầu kèm `?src=linkbio`.
 9. Nội dung: điều khoản/bảo mật/đổi trả + thông tin pháp nhân; 10 bài cộng đồng khởi tạo; 3 bài Academy cho CTV.
 10. Kiểm điều khoản Shopee/Lazada/TikTok Shop về thẻ trong hộp hàng trước khi in.
+
+## 6. Kết quả đợt chạy đêm 2026-10-17 → 18
+
+Mọi thay đổi nằm trên nhánh `review/2026-10-18-launch`: chỉ có ở máy, chưa push, chưa merge vào `main`, chưa deploy. Mỗi gói có báo cáo riêng ở `impl/<gói>.md`, gồm việc đã làm, kiểm chứng, phần cố ý để lại và câu hỏi.
+
+**Đã gộp (18 gói).** Mỗi gói đã được review Opus. Gói chạm tiền hoặc quyền được review 2–3 lượt. Sau mỗi lần gộp, điều phối viên tự chạy lại kiểm chứng trên cây đã gộp.
+
+| Gói | Mục | Ghi chú |
+|---|---|---|
+| `handbook` | D1-09 | Sổ tay việc hằng ngày cho 6 vai trò |
+| `infra` | D6-01, 03–09, 14, 15 | Backup 6 giờ, nén, keep-alive, CI docker build + race, ảnh web |
+| `refseed` | D4-001, D4-021 | `seed:reference` chỉ tạo khi thiếu |
+| `source` | D2-01, D4-007, D3-06, D3-17 | Ghi nguồn chạm đầu 90 ngày, khử trùng click CTV |
+| `community` | D1-08, D4-003/006/009/010/022 | CSKH duyệt bài trên web, báo người đăng |
+| `uiquick` | D7 việc 2, 3, 6, 7, 8, 12 | |
+| `webconv` | D5-01/02/03/04/12/14 | Trang pháp lý mới là khung, nội dung chờ chủ dự án |
+| `reports` | D1-04, D2-02, D3-18, D1-14 | |
+| `feedimg` | D6-05 | |
+| `democlean` | (thêm) | Script dọn dữ liệu demo, go-live chặn hàng/mã demo |
+| `claim` | D2-03, D2-08 | Freeship đơn đầu đang tắt |
+| `commission` | D1-01, D3-01, D1-06, D3-07, D3-16 | Chỉ CTV và đại lý được ghi công |
+| `affiliate-ui` | D3-03, D7 việc 9, 10 | |
+| `orders` | D1-17, D1-06, D1-03 | Công tắc so tổng Pancake bật sẵn, tắt được ở tab Cấu hình |
+| `configvis` | (thêm) | Spec buộc khoá cấu hình mới phải hiện ở tab Cấu hình |
+| `newcustomer` | D2-07, D2-06, D5-07, D5-10, D7 việc 1 | Bố cục trang chủ và xem trước cộng đồng đang tắt |
+| `roles` | D1-05 | MARKETING, KE_TOAN; trần và ngân sách mã của nhân viên |
+| `storefront` | D3-02, D3-08, D3-10, D3-11, D3-19, D5-05, D5-09, D6-02 | Admin gỡ/đăng lại/duyệt; duyệt và subdomain sau cờ, mặc định tắt; ảnh chia sẻ chống SSRF, không trả 500 |
+
+**Lỗi review bắt được trước khi gộp (đáng kể):**
+- Kế toán tự nhập số tài khoản vào khoản hoàn tiền của khách, chuyển được tiền hoàn về tài khoản mình. Đã chặn: chỉ ADMIN nhập.
+- Marketing tạo được mã giảm 100%, không giới hạn lượt, rồi tự dùng. Đã chặn: trần 50% / 200.000đ, 1.000 lượt, 30 triệu đồng/ngày/người; không tự dùng mã mình tạo.
+- CSV đơn do nhân viên xuất có đủ SĐT khách. Đã che.
+- Cờ cấu hình mới không hiện ở tab Cấu hình nên không bật được. Đã sửa và thêm spec chặn.
+- Ảnh xem trước link gian hàng trả 500 (mất ảnh khi chia sẻ) và máy chủ web tải được URL nội bộ do CTV đặt (SSRF). Đã sửa, kiểm bằng build thật.
+- Gian hàng bị ẩn (chủ bị khoá, hết vai trò) vẫn được áp combo và ghi công ở checkout. Đã chặn.
+
+**Kiểm chứng toàn nhánh:** chạy trên tip `f9f467c9`, Postgres 16 mới.
+
+| Lệnh | Kết quả |
+|---|---|
+| `pnpm typecheck`, `pnpm lint`, `pnpm lint:vars`, `tsc --noEmit` 4 app (api, web, miniapp, e2e) | 6/6, 5/5, OK, sạch |
+| `prisma migrate deploy` trên DB mới + `migrate diff --exit-code` | 197 migration, không lệch |
+| jest API (toàn bộ) | 347 suite, 7622 test xanh |
+| race toàn bộ (`--runInBand`, `pool_timeout=30`) | 223 suite, 1566/1568 test xanh. 2 ca đỏ khi chạy cả bộ lúc máy tải cao: `wallet-ledger` (P2028) và `referral-guest-referrer` ca (7) ("Hệ thống đang bận"). Chạy riêng xanh 2/2 lần. Nhánh không sửa ví; nhánh có thêm 2 lệnh nhỏ vào transaction gộp tài khoản |
+| vitest miniapp (giờ VN và UTC) | 259 file, 3746 test xanh cả hai |
+| vitest web (giờ VN và UTC) | 174 file, 2686 test xanh cả hai |
+| Playwright Mini App (`E2E_SCOPE=miniapp`, API giả lập) | 162/162 xanh, sau khi thêm mock mặc định cho `/cart` và `/me/new-customer-offer` (`f9f467c9`) |
+| `pnpm build` | 4/4 |
+
+Chưa chạy: Playwright phần API và Web admin. Phần này cần DB dev dùng chung (cổng 5434), mà theo luật không ghi vào DB dùng chung. CI sẽ chạy khi mở PR.
+
+**Race chập chờn khi máy tải cao.** Máy dùng chung, load 45–60. Một số race spec trượt với P2028 "Unable to start a transaction in the given time" khi chạy cả bộ. Thêm `&pool_timeout=30` vào `DATABASE_URL` thì xanh. Đây không phải lỗi logic. CI có máy riêng nên không gặp.
+
+**Chưa làm (cần chủ dự án quyết hoặc chờ phiên đổi rác):** D1-02, D2-04, D2-05/D4-004, D3-04/05, D1-07, D4-002, D4-008, D5-06, D1-19 (xem mục 3). Phễu sự kiện theo nguồn để sau (xem `impl/reports.md`).
