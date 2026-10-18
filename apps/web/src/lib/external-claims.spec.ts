@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EVENT_ACTION_LABEL, adminClaimErrorText, approveNeedsNote, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
+import { EVENT_ACTION_LABEL, adminClaimErrorText, approveNeedsNote, approveNoteError, noteContentLength, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
 
 const who = (over: Partial<Parameters<typeof claimActions>[1]> = {}) => ({ isAdmin: false, canAct: false, meId: 'x', ...over });
 const c = (over: Record<string, unknown> = {}) => ({ state: 'REVIEW' as const, userId: 'u1', reviewReason: null as string | null, ...over });
@@ -80,5 +80,25 @@ describe('approveNeedsNote', () => {
     expect(approveNeedsNote({ kind: 'PHONE', memberPhoneStale: false })).toBe(false);
     expect(approveNeedsNote({ kind: 'PHONE' })).toBe(false);
     expect(approveNeedsNote({ kind: 'SCAN', memberPhoneStale: true })).toBe(false);
+  });
+});
+
+describe('độ dài ghi chú duyệt', () => {
+  it.each([
+    ['zero-width', '\u200B\u200C\u200D\u2060\uFEFF'],
+    ['đánh dấu chiều chữ', '\u200E\u202E'],
+    ['soft hyphen, ký hiệu toán ẩn', '\u00AD\u2061'],
+    ['Mông Cổ, Khmer', '\u180E\u17B4\u17B5'],
+    ['Hangul trống', '\u115F\u1160\u3164\uFFA0'],
+    ['Braille trống, combining joiner', '\u2800\u034F'],
+  ])('%s: tính 0 ký tự và bị báo quá ngắn', (_n, chars) => {
+    expect(noteContentLength(` ${chars} `)).toBe(0);
+    expect(approveNoteError(`a${chars}b`)).toBe('Ghi chú cần ít nhất 3 ký tự');
+  });
+  it('ô trống không báo lỗi; đủ 3 ký tự thật thì hợp lệ', () => {
+    expect(approveNoteError('')).toBeNull();
+    expect(approveNoteError('   ')).toBeNull();
+    expect(approveNoteError('ok')).toBe('Ghi chú cần ít nhất 3 ký tự');
+    expect(approveNoteError('Đã gọi')).toBeNull();
   });
 });

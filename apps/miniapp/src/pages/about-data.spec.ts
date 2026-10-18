@@ -11,10 +11,10 @@ describe('fetchSupportContact (Q-17: liên hệ đọc từ /config/public, dòn
 
   it('đọc hotline/email/Zalo OA từ khoá support của /config/public', async () => {
     mocks.getPublicConfig.mockResolvedValue({
-      support: { hotline: '0899 149 229', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree' },
+      support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree' },
     });
     expect(await fetchSupportContact()).toEqual({
-      hotline: '0899 149 229',
+      hotline: '0984 606 774',
       email: 'tubutree@gmail.com',
       zaloOaName: 'Tubu Tree',
     });
@@ -22,9 +22,9 @@ describe('fetchSupportContact (Q-17: liên hệ đọc từ /config/public, dòn
 
   it('chuỗi toàn khoảng trắng hoặc sai kiểu coi như chưa có (null), giá trị thật được cắt khoảng trắng', async () => {
     mocks.getPublicConfig.mockResolvedValue({
-      support: { hotline: '  0899 149 229 ', email: '   ', zaloOaName: 42 },
+      support: { hotline: '  0984 606 774 ', email: '   ', zaloOaName: 42 },
     });
-    expect(await fetchSupportContact()).toEqual({ hotline: '0899 149 229', email: null, zaloOaName: null });
+    expect(await fetchSupportContact()).toEqual({ hotline: '0984 606 774', email: null, zaloOaName: null });
   });
 
   it('API cũ chưa có khoá support → cả ba null, không ném lỗi', async () => {

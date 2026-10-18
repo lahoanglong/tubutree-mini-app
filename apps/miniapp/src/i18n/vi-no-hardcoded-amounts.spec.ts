@@ -78,7 +78,7 @@ describe('chữ hiển thị không viết cứng số tiền', () => {
     'Mua 1 trong 3 đơn',
     'Có 10 trẻ em',
     'Mã SALE1TR',
-    'Gọi 0899 149 229',
+    'Gọi 0984 606 774',
     'Số 12 345 đường Lê Lợi',
     'Điểm danh 7 ngày liên tiếp',
   ])('bộ lọc bỏ qua chữ không phải tiền: %s', (text) => {

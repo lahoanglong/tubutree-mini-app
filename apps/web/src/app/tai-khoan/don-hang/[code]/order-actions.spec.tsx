@@ -37,7 +37,7 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
-  getPublicSupport: async () => ({ hotline: '0899 149 229', email: 'tubutree@gmail.com' }),
+  getPublicSupport: async () => ({ hotline: '0984 606 774', email: 'tubutree@gmail.com' }),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),

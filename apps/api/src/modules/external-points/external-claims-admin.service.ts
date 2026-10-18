@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type { ExternalClaimState, Prisma } from '@prisma/client';
 import type {
   AdminExternalAttemptListResponse,
+  AdminExternalAttemptOtherSubmitter,
   AdminExternalClaimDetail,
   AdminExternalClaimListResponse,
   AdminExternalClaimRow,
@@ -19,6 +20,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import { advisoryPhoneLock, chatMonthPoints, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, loadStaffMap } from './external-chat.config';
+import { MIN_NOTE_CHARS, noteContentLength, stripInvisible } from './external-claim-note';
 import { isSameAsPancakeCreator, phoneVerifiedFresh, STALE_APPROVE_MARK } from './external-chat.rules';
 import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
@@ -28,9 +30,8 @@ import { closedCreditedWhere, stalePendingWhere, UNMATCHED_RETRY_DAYS_FOR_ATTENT
 import { normalizeTrackingCode, pancakeCreatorRefs } from './external-order.mapper';
 import { claimCodeLabel, claimPoints, maskClaimCode } from './external-points-rate';
 
-/** Zero-width và ký tự định dạng vô hình: không được tính là nội dung ghi chú. */
-const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF]/g;
-const MIN_NOTE_CHARS = 3;
+/** Người gửi trùng mã còn được liệt kê cho CSKH trong chừng này ngày, kể cả lượt đã đóng. */
+const OTHER_SUBMITTER_DAYS = 30;
 
 const UNPAID: ExternalClaimState[] = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER'];
 
@@ -181,19 +182,43 @@ export class ExternalClaimsAdminService {
       this.prisma.externalClaimAttempt.findMany({ where, orderBy: { createdAt: 'asc' }, ...skipTake(page, limit) }),
       this.prisma.externalClaimAttempt.count({ where }),
     ]);
-    const users = await this.usersById(rows.map((r) => r.userId));
+    // Người khác cùng gửi mã (lượt NOT_FOUND của họ không nằm trong hàng đợi): hiện ở dòng chờ của người gửi đầu để CSKH biết gắn cho ai.
+    const since = new Date(now.getTime() - OTHER_SUBMITTER_DAYS * 864e5);
+    const others = rows.length
+      ? await this.prisma.externalClaimAttempt.findMany({
+          where: { code: { in: [...new Set(rows.map((r) => r.code))] }, result: { in: ['UNMATCHED', 'NOT_FOUND'] }, createdAt: { gte: since } },
+          orderBy: { createdAt: 'desc' },
+          select: { code: true, userId: true, createdAt: true },
+        })
+      : [];
+    const users = await this.usersById([...rows.map((r) => r.userId), ...others.map((o) => o.userId)]);
+    const otherOf = (r: (typeof rows)[number]) => {
+      const seen = new Set<string>();
+      const list: AdminExternalAttemptOtherSubmitter[] = [];
+      for (const o of others) {
+        if (o.code !== r.code || o.userId === r.userId || seen.has(o.userId)) continue;
+        seen.add(o.userId);
+        list.push({ userId: o.userId, userName: users.get(o.userId)?.name ?? null, userPhoneMasked: maskPhoneOrNull(users.get(o.userId)?.phone), createdAt: o.createdAt.toISOString() });
+      }
+      return list;
+    };
     return paginated(
-      rows.map((r) => ({
-        id: r.id,
-        userId: r.userId,
-        userName: users.get(r.userId)?.name ?? null,
-        userPhoneMasked: maskPhoneOrNull(users.get(r.userId)?.phone),
-        maskedCode: maskClaimCode(r.code),
-        result: r.result,
-        externalOrderId: r.externalOrderId,
-        note: r.note,
-        createdAt: r.createdAt.toISOString(),
-      })),
+      rows.map((r) => {
+        const list = otherOf(r);
+        return {
+          id: r.id,
+          userId: r.userId,
+          userName: users.get(r.userId)?.name ?? null,
+          userPhoneMasked: maskPhoneOrNull(users.get(r.userId)?.phone),
+          maskedCode: maskClaimCode(r.code),
+          result: r.result,
+          externalOrderId: r.externalOrderId,
+          note: r.note,
+          createdAt: r.createdAt.toISOString(),
+          otherSubmittersCount: list.length,
+          otherSubmitters: list.slice(0, 10),
+        };
+      }),
       page,
       limit,
       total,
@@ -262,8 +287,8 @@ export class ExternalClaimsAdminService {
           // Mốc xác minh vẫn cũ lúc duyệt (bất kể lý do REVIEW): người duyệt phải ghi đã xác nhận người nhận bằng cách nào (Mini App không tự
           // xin lại số), nếu không claim đã duyệt vẫn bị kiểm lại SĐT lúc cộng. Ký tự vô hình không tính; SĐT đầy đủ trong ghi chú bị che.
           if (!phoneVerifiedFresh(m.phoneVerifiedAt, { now, maxDays: chatCfg.phoneVerifiedMaxDays })) {
-            const clean = (note ?? '').replace(INVISIBLE, '').trim();
-            if (clean.replace(/\s/g, '').length < MIN_NOTE_CHARS) throw new BadRequestException({ code: 'NOTE_REQUIRED', message: 'SĐT xác minh của thành viên đã cũ: cần ghi chú cách bạn đã xác nhận người nhận.' });
+            const clean = stripInvisible(note ?? '').trim();
+            if (noteContentLength(clean) < MIN_NOTE_CHARS) throw new BadRequestException({ code: 'NOTE_REQUIRED', message: 'SĐT xác minh của thành viên đã cũ: cần ghi chú cách bạn đã xác nhận người nhận.' });
             staleNote = `${STALE_APPROVE_MARK}: ${maskVnPhonesInText(clean)}`;
           }
         }

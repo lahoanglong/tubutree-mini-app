@@ -88,6 +88,8 @@ export interface CreatedClaim {
 export type Persisted =
   | { kind: 'REJECT'; code: ExternalClaimRejectCode }
   | { kind: 'SEARCHING' }
+  /** Mã đang được tài khoản khác chờ tìm đơn: lần gửi này không bao giờ được tìm tiếp. */
+  | { kind: 'WAITING_OTHER' }
   | { kind: 'UNKNOWN_SOURCE' }
   | { kind: 'OWN'; own: OwnClaim }
   | { kind: 'CLAIM'; created: CreatedClaim };
@@ -152,6 +154,17 @@ export class ExternalClaimService {
 
     if (persisted.kind === 'REJECT') throw rejectionOf(persisted.code);
     const masked = maskClaimCode(code);
+    if (persisted.kind === 'WAITING_OTHER') {
+      return {
+        status: 'CLAIMED_BY_OTHER',
+        claimId: null,
+        channel: null,
+        maskedCode: masked,
+        points: null,
+        expectedCreditAt: null,
+        message: 'Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.',
+      };
+    }
     if (persisted.kind === 'SEARCHING') {
       return {
         status: 'SEARCHING',
@@ -381,17 +394,37 @@ export class ExternalClaimService {
       const unknown = decision.kind === 'UNKNOWN_SOURCE';
       const externalOrderId = unknown ? (order?.id ?? null) : null;
       const note = unknown ? 'Nguồn đơn chưa xác định' : null;
+      let waitingOther = false;
       if (a.attemptId) {
         if (unknown) await tx.externalClaimAttempt.updateMany({ where: { id: a.attemptId, resolvedAt: null }, data: { externalOrderId, note } });
       } else {
+        // Lượt chờ của CHÍNH khách này đã quá hạn tìm lại (cron chỉ quét 3 ngày): đóng để mở lượt mới, đừng hứa "sẽ tự tìm" bằng lượt chết.
+        // Lượt của người khác không bao giờ bị đóng ở đây (người gửi sau không được chiếm mã): họ nhận CLAIMED_BY_OTHER, lượt quá hạn
+        // vẫn nằm ở "Cần xử lý" cho CSKH quyết. Chỉ lượt chưa thấy đơn; lượt đã thấy đơn (nguồn UNKNOWN) chờ CSKH nên không đóng.
+        await tx.externalClaimAttempt.updateMany({
+          where: { userId, code, result: 'UNMATCHED', resolvedAt: null, externalOrderId: null, createdAt: { lt: new Date(now.getTime() - UNMATCHED_RETRY_DAYS * DAY_MS) } },
+          data: { resolvedAt: now, note: 'Quá hạn tìm lại, khách gửi lại nên mở lượt chờ mới' },
+        });
         // createMany skipDuplicates: unique một phần theo mã (một lần chờ mỗi mã). Trùng thì ghi NOT_FOUND mà không làm hỏng transaction (25P02).
-        const res = await tx.externalClaimAttempt.createMany({ data: [{ userId, code, result: 'UNMATCHED', dayKey, externalOrderId, note }], skipDuplicates: true });
+        const row = { userId, code, result: 'UNMATCHED', dayKey, externalOrderId, note };
+        let res = await tx.externalClaimAttempt.createMany({ data: [row], skipDuplicates: true });
+        let waiting: { userId: string } | null = null;
         if (res.count === 0) {
-          // Mã đang chờ chính là của khách này (gửi lại): không ghi NOT_FOUND để không tính vào khoá 24h.
-          const waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
-          if (waiting?.userId !== userId) await addAttempt('NOT_FOUND', { externalOrderId, note });
+          waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
+          // Lượt chờ vừa bị đóng (cron ghép được đơn) giữa createMany và findFirst: thử ghi lại đúng một lần.
+          if (!waiting) {
+            res = await tx.externalClaimAttempt.createMany({ data: [row], skipDuplicates: true });
+            if (res.count === 0) waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
+          }
+        }
+        if (res.count === 0 && waiting?.userId !== userId) {
+          // Mã đang chờ của khách này (gửi lại) thì không ghi NOT_FOUND để không tính vào khoá 24h. Lượt chờ là của người khác (hoặc vẫn
+          // không ghi được): lượt của khách này ghi NOT_FOUND và không được tìm tiếp; CSKH thấy qua `otherSubmitters` ở dòng chờ của người kia.
+          await addAttempt('NOT_FOUND', { externalOrderId, note });
+          waitingOther = true;
         }
       }
+      if (waitingOther) return { kind: 'WAITING_OTHER' };
       return unknown ? { kind: 'UNKNOWN_SOURCE' } : { kind: 'SEARCHING' };
     }
 

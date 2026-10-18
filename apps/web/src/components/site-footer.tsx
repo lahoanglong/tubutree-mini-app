@@ -12,7 +12,7 @@ const LINK =
 /** Chân trang web khách: liên hệ hỗ trợ lấy từ cấu hình công khai (admin đổi được). */
 export default async function SiteFooter() {
   const { hotline, email, community } = await getPublicSupport();
-  // `tel:` chỉ nhận chữ số và dấu +, bỏ khoảng trắng/dấu chấm cho số hiển thị "0899 149 229".
+  // `tel:` chỉ nhận chữ số và dấu +, bỏ khoảng trắng/dấu chấm cho số hiển thị "0984 606 774".
   const tel = hotline.replace(/[^\d+]/g, '');
   const channels = [
     { label: 'Nhóm Zalo', href: community?.zaloGroupUrl },

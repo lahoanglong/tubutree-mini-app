@@ -125,7 +125,7 @@ describe('SystemConfigController.publicConfig', () => {
 describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)', () => {
   it('chưa cấu hình → hotline/email thật của Tubu Tree, chưa có Zalo OA', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
-    expect(out.support).toEqual({ hotline: '0899 149 229', email: 'tubutree@gmail.com', zaloOaName: null });
+    expect(out.support).toEqual({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null });
   });
 
   it('admin sửa → trả giá trị mới; để trống hoặc sai kiểu → null để miniapp ẩn dòng', async () => {
@@ -137,9 +137,14 @@ describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)'
 });
 
 describe('SystemConfigController.publicConfig — link kênh cộng đồng', () => {
-  it('chưa cấu hình → cả ba null để FE ẩn nút', async () => {
+  it('chưa cấu hình → Zalo null (ẩn nút), Facebook và TikTok lấy mặc định trong mã', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
-    expect(out.community).toMatchObject({ zaloGroupUrl: null, facebookUrl: null, tiktokUrl: null });
+    expect(out.community).toMatchObject({ zaloGroupUrl: null, facebookUrl: 'https://www.facebook.com/tubutree', tiktokUrl: 'https://www.tiktok.com/@tubutree.com' });
+  });
+
+  it('admin đặt chuỗi rỗng thì thắng mặc định: ẩn nút', async () => {
+    const out = await new SystemConfigController(makeConfig({ 'community.facebook_url': '', 'community.tiktok_url': '' })).publicConfig();
+    expect(out.community).toMatchObject({ facebookUrl: null, tiktokUrl: null });
   });
 
   it('chỉ trả link https đúng tên miền; giá trị lạ lưu sót trong DB bị bỏ', async () => {

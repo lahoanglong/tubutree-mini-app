@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, Page } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, ScanLine } from 'lucide-react';
+import { CheckCircle2, Clock, Info, ScanLine } from 'lucide-react';
 import {
   externalClaimRejectCode,
   getMyExternalClaims,
@@ -63,10 +63,13 @@ function isPastMilestone(r: SubmitExternalClaimResponse): boolean {
 
 function ResultCard({ result }: { result: SubmitExternalClaimResponse }) {
   const past = isPastMilestone(result);
+  const byOther = result.status === 'CLAIMED_BY_OTHER';
   const detail =
     result.status === 'SEARCHING'
       ? t.resultSearching
-      : result.status === 'REVIEW'
+      : byOther
+        ? t.resultClaimedByOther
+        : result.status === 'REVIEW'
         ? t.resultReview
         : past
           ? result.message
@@ -77,9 +80,9 @@ function ResultCard({ result }: { result: SubmitExternalClaimResponse }) {
   return (
     <Card variant="outline" padding={16} style={{ marginTop: 12 }}>
       <div role="status" data-testid="claim-result" style={{ display: 'flex', gap: 10 }}>
-        <Icon icon={waiting ? Clock : CheckCircle2} tone={waiting ? 'muted' : 'brand'} />
+        <Icon icon={byOther ? Info : waiting ? Clock : CheckCircle2} tone={waiting || byOther ? 'muted' : 'brand'} />
         <div style={{ minWidth: 0 }}>
-          {result.status !== 'SEARCHING' && (
+          {result.status !== 'SEARCHING' && !byOther && (
             <Text variant="label" as="div">
               {t.resultClaimed(result.channel, result.maskedCode)}
             </Text>

@@ -141,3 +141,55 @@ Chưa chạy: Playwright phần API và Web admin. Phần này cần DB dev dùn
 **Race chập chờn khi máy tải cao.** Máy dùng chung, load 45–60. Một số race spec trượt với P2028 "Unable to start a transaction in the given time" khi chạy cả bộ. Thêm `&pool_timeout=30` vào `DATABASE_URL` thì xanh. Đây không phải lỗi logic. CI có máy riêng nên không gặp.
 
 **Chưa làm (cần chủ dự án quyết hoặc chờ phiên đổi rác):** D1-02, D2-04, D2-05/D4-004, D3-04/05, D1-07, D4-002, D4-008, D5-06, D1-19 (xem mục 3). Phễu sự kiện theo nguồn để sau (xem `impl/reports.md`).
+
+## 7. Trạng thái cuối đợt 2 (2026-10-18 tối)
+
+Tip `fbf31da9`, đã push `origin/review/2026-10-18-launch`, PR nháp #20 vào `main`. Chưa merge, chưa deploy.
+
+**Gói đợt 2 đã gộp:** docs, ui, config, legal, ai, ketoan, catmap, extorders, commission, fixreg, points1d, pts1dpolish, extclaim, extui, chatpts, extsearch, polish. Báo cáo từng gói ở `impl/<gói>.md`. Các gói đụng tiền đã qua review Opus nhiều lượt:
+
+| Gói | Số lượt review |
+|---|---|
+| points1d | 2 |
+| pts1dpolish | 3 |
+| extclaim | 4 |
+| chatpts | 4 + 1 lượt nhanh |
+| extsearch | 3 |
+
+**Cờ đang TẮT, chưa bật được:**
+- `loyalty.marketplace_claim_enabled` (B6, tích điểm đơn sàn).
+- `loyalty.chat_order_points_enabled` (B9, tự cộng điểm đơn chat/điện thoại).
+
+Hai cờ chờ payload Pancake thật (runbook Bước 15) và ít nhất 2 người duyệt (ADMIN/CSKH).
+
+**Quyết định thêm của chủ dự án trong đợt này:**
+- Hotline cho khách: `0984 606 774`. SĐT kho gom đơn giữ `0899149229`.
+- Link cộng đồng điền sẵn theo website: Facebook `https://www.facebook.com/tubutree`, TikTok `https://www.tiktok.com/@tubutree.com`. Chưa có nhóm Zalo nên nút Zalo ẩn.
+- Mini App KHÔNG định kỳ xin lại SĐT. Hệ quả: 180 ngày sau lần xác minh SĐT, đơn chat của thành viên vào REVIEW (CSKH duyệt, phải ghi chú). Nới thời hạn bằng `loyalty.chat_phone_verified_max_days`.
+
+**Kiểm chứng trên `d2dcbe0b`, Postgres 16 mới:**
+
+| Lệnh | Kết quả |
+|---|---|
+| tsc 4 app, `pnpm lint`, `pnpm lint:vars` | sạch, 5/5, OK |
+| `prisma migrate deploy` + drift + partial index | 206 migration, không lệch, 25/25 |
+| jest API | 371 suite, 8088 test xanh |
+| race toàn bộ | 234 suite, 1745 test xanh |
+| vitest web (VN và UTC) | 179 file, 2752 test xanh |
+| vitest miniapp (VN và UTC) | 3801/3802 mỗi lần. Hai ca khác nhau trượt do quá giờ chờ khi load 46–60; chạy riêng 6/6 xanh. Chạy lại toàn bộ trên `fbf31da9`: 3802/3802 |
+| Playwright Mini App | 165/165 |
+| `pnpm build` | 4/4 |
+| CI GitHub (PR #20, `d2dcbe0b`) | CI, Docker build, Playwright E2E đầy đủ (API, Web, Mini App) xanh |
+
+**Giới hạn đã biết** (chi tiết trong `impl/chatpts.md`, `impl/extsearch.md`):
+- Tên trường Pancake (`creator.id`, status 16, `partner.extend_code`, `trackingCodes`) chưa đối chiếu với payload thật.
+- Che SĐT trong ghi chú tự do còn sót vài dạng (`901 234 567`, số dính sau chữ).
+- Đua rất hẹp khi admin thêm grant cho số cũ đúng lúc nhân viên đổi số Zalo.
+- Đơn chat tạo trước khi khách lên hạng giữ hệ số cũ.
+- Lượt chờ mã vận đơn quá 3 ngày của khách khác: CSKH gắn tay.
+
+**Việc chủ dự án còn phải làm:** mục 5 ở trên, cộng thêm:
+- khoá `PANCAKE_API_KEY` và `PANCAKE_SHOP_ID` (để bắt payload thật);
+- đăng ký Bộ Công Thương (footer tubutree.com đang ghi "Website đang chờ đăng ký bộ công thương");
+- DNS wildcard;
+- rclone Google Drive.

@@ -46,10 +46,10 @@ export function maskPhoneLikeRuns(text: string): string {
 }
 
 /**
- * SĐT Việt Nam viết trong chữ tự do: đầu 0 / 84 / +84 rồi 9–10 chữ số, giữa các chữ số cho tối đa 3 ký tự cách . - _ / ( ), kể cả dính sau chữ ("sdt0912…"). Mã số thuế 10 số đầu 0 bị che nhầm là chấp nhận được. Hẹp hơn
+ * SĐT Việt Nam viết trong chữ tự do: đầu 0 / 84 / +84 / 0084 rồi 8–10 chữ số, giữa các chữ số cho tối đa 3 ký tự cách . , - _ / ( ) và U+00AD (gạch mềm, NFKC không bỏ). Không che khi liền sau chữ hoặc chữ số (mã vận đơn `SPXVN0123456789`); `GHN 0912…` có dấu cách nên vẫn che. Không che số không đầu 0 (`901 234 567`): trùng số tiền. Mã số thuế 10 số đầu 0 bị che nhầm là chấp nhận được. Hẹp hơn
  * `maskPhoneLikeRuns` có chủ ý: màn kế toán phải còn đọc được mã giao dịch ngân hàng (FT26270…), số tiền và mã đơn để đối soát.
  */
-const VN_PHONE_IN_TEXT = /(?<!\p{Nd})(?:\+?84|0)(?:[\s.\-_/()]{0,3}\p{Nd}){8,10}(?!\p{Nd})/gu;
+const VN_PHONE_IN_TEXT = /(?<![\p{L}\p{Nd}])(?:\+?84|0084|0)(?:[\s.,\-_/()­]{0,3}\p{Nd}){8,10}(?!\p{Nd})/gu;
 
 /** Che SĐT VN trong chữ tự do, giữ 3 chữ số cuối và ký tự cách. */
 export function maskVnPhonesInText(text: string): string {

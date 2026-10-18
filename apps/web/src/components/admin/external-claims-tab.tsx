@@ -26,6 +26,7 @@ import {
   PHONE_STALE_LABEL,
   adminClaimErrorText,
   approveNeedsNote,
+  approveNoteError,
   isNoteRequiredError,
   creditedOnClosedOrder,
   isIntroducer,
@@ -160,14 +161,20 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
     },
   });
 
-  const approveWithNote = async () => {
+  const approveWithNote = async (initial = '', error?: string): Promise<void> => {
     const note = await ask({
       title: 'Duyệt yêu cầu: SĐT xác minh đã cũ',
       message: `Mốc xác minh SĐT của thành viên đã cũ nên chưa chắc số vẫn của người đó. Hãy kiểm người nhận (ví dụ gọi xác nhận) rồi ghi lại cách bạn đã xác nhận cho mã ${c.maskedCode}. Không ghi số điện thoại đầy đủ vào ghi chú. Điểm được tính lại theo tiền hàng mới nhất của đơn.`,
       confirmLabel: 'Duyệt',
-      input: { label: 'Ghi chú (đã xác nhận người nhận bằng cách nào)', maxLength: 300, required: true },
+      input: { label: 'Ghi chú (đã xác nhận người nhận bằng cách nào)', maxLength: 300, required: true, validate: approveNoteError, initial, error },
     });
-    if (note) mut.mutate(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.'));
+    if (!note) return;
+    // Máy chủ vẫn đòi ghi chú (luật lệch hoặc mốc vừa đổi): mở lại hộp với lỗi ngay trong hộp, giữ nội dung đã gõ.
+    mut.mutateAsync(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.')).catch((e: unknown) => {
+      if (!isNoteRequiredError(e)) return;
+      setErr(null);
+      void approveWithNote(note, adminClaimErrorText(e));
+    });
   };
   const approve = async () => {
     if (approveNeedsNote(row)) return approveWithNote();
@@ -403,6 +410,18 @@ function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who
         Khách: {a.userName ?? '—'} · {a.userPhoneMasked ?? 'không có SĐT'} · gửi lúc {formatDateTime(a.createdAt)}
       </div>
       {a.note && <div className="mt-0.5 text-xs text-stone-600">Ghi chú: {a.note}</div>}
+      {!!a.otherSubmittersCount && a.otherSubmitters && (
+        <div data-other-submitters className="mt-1 text-xs text-warning-fg">
+          <div className="font-medium">{a.otherSubmittersCount} người khác cùng gửi mã này</div>
+          <ul className="mt-0.5 space-y-0.5 text-stone-600">
+            {a.otherSubmitters.map((o) => (
+              <li key={o.userId}>
+                {o.userName ?? '—'} · {o.userPhoneMasked ?? 'không có SĐT'} · gửi lúc {formatDateTime(o.createdAt)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {done && <p role="status" className="mt-1 text-xs text-success-fg">{done}</p>}
       {err && <p role="alert" className="mt-1 text-xs text-danger-fg">{err}</p>}
       {own && <p className="mt-1 text-xs text-stone-500">Đây là lần gửi mã của chính bạn, bạn không tự xử lý được.</p>}
