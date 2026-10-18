@@ -68,7 +68,8 @@ export function mockBuyFlowSession(
   api.get('/products/for-you', []);
   api.get('/me/notifications', []);
   api.get('/me/wishlist/ids', []);
-  api.get('/config/public', publicConfig());
+  // Các ca bố cục Home lấy nút "Hỏi trợ lý AI 24/7" làm mốc; nút chỉ hiện khi server bật trợ lý.
+  api.get('/config/public', publicConfig({ aiAdvisorEnabled: true }));
   api.post('/cart/items', CART_AFTER_ADD);
   const purchased = opts.purchased ?? PURCHASED_PAGE;
   api.get('/me/purchased-items', purchased === 'not-found' ? reply(404, { statusCode: 404, message: 'Cannot GET' }) : purchased);
