@@ -227,6 +227,7 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
         ],
       }),
     );
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
     renderPage();
     await screen.findByText('Chương trình đang tạm dừng');
     expect(screen.getAllByText('Đang tạm dừng')).toHaveLength(2);
