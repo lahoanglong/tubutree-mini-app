@@ -294,17 +294,17 @@ export class ExternalClaimService {
         };
       }
       // Pancake đôi khi tách một vận đơn thành nhiều dòng: một mã chỉ được tích một lần dù khác externalOrderId.
-      const codes = [...new Set([code, ...order.trackingCodes, ...(order.trackingCode ? [order.trackingCode] : [])])];
+      // Chỉ so mã khách gửi. Hai đơn sàn khác order_sn dùng chung một vận đơn là hai đơn thật, không chặn nhau.
       const sn = order.marketplaceOrderSn;
-      const other = await tx.externalPointsClaim.findFirst({
+      const others = await tx.externalPointsClaim.findMany({
         where: {
           state: { not: 'VOIDED' },
           externalOrderId: { not: order.id },
-          externalOrder: { OR: [{ trackingCodes: { hasSome: codes } }, ...(sn ? [{ marketplaceOrderSn: sn }] : [])] },
+          externalOrder: { OR: [{ trackingCodes: { has: code } }, ...(sn ? [{ marketplaceOrderSn: sn }] : [])] },
         },
-        select: { id: true },
+        select: { externalOrder: { select: { marketplaceOrderSn: true } } },
       });
-      codeTaken = !!other;
+      codeTaken = others.some((o) => !(sn && o.externalOrder.marketplaceOrderSn && o.externalOrder.marketplaceOrderSn !== sn));
     }
 
     const [claimsToday, month] = await Promise.all([

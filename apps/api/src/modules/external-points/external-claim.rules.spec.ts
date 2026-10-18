@@ -1,4 +1,4 @@
-import { evaluateClaimRules, lockedUntil, type ClaimFacts } from './external-claim.rules';
+import { evaluateClaimRules, lockedUntil, settlePoints, type ClaimFacts } from './external-claim.rules';
 
 const NOW = new Date('2026-10-20T05:00:00.000Z');
 const day = (n: number) => new Date(NOW.getTime() - n * 864e5);
@@ -78,6 +78,13 @@ describe('evaluateClaimRules: thứ tự luật', () => {
   it('thành viên là nhân viên: luôn REVIEW với lý do riêng, kể cả đơn nhỏ khớp SĐT', () => {
     expect(evaluateClaimRules(base({ userIsStaff: true }))).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', reviewReason: expect.stringContaining('nhân viên') });
   });
+  it('N1: nhận lại mã đã được nhân viên mở lại luôn vào REVIEW, kể cả đơn không có 3 số cuối', () => {
+    const f = base({ claim: { id: 'c1', reopenable: true, own: false, state: 'VOIDED' }, order: { ...base().order!, phoneLast3: null } });
+    expect(evaluateClaimRules(f)).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', reviewReason: expect.stringContaining('mở lại') });
+  });
+  it('N2: đơn đã hoàn một phần vào REVIEW', () => {
+    expect(evaluateClaimRules(base({ order: { ...base().order!, status: 'PARTIAL_RETURN' } }))).toMatchObject({ state: 'REVIEW', reviewReason: expect.stringContaining('hoàn một phần') });
+  });
   it('trần ngày (3 claim) đứng trước trần tháng', () => {
     expect(evaluateClaimRules(base({ claimsToday: 3, monthPoints: 999_999 }))).toEqual({ kind: 'REJECT', code: 'DAILY_MAX' });
   });
@@ -113,5 +120,14 @@ describe('lockedUntil: 5 lần không tìm thấy trong 24h thì khoá 24h kể 
   });
   it('danh sách rỗng', () => {
     expect(lockedUntil([], NOW)).toBeNull();
+  });
+});
+
+describe('settlePoints', () => {
+  it('chốt = min(mới, max(đã kiểm, trần - các claim khác))', () => {
+    expect(settlePoints({ newPoints: 21_000, checkedPoints: 19_000, others: 0, cap: 20_000 })).toBe(20_000);
+    expect(settlePoints({ newPoints: 21_000, checkedPoints: 19_000, others: 5_000, cap: 20_000 })).toBe(19_000);
+    expect(settlePoints({ newPoints: 21_000, checkedPoints: 0, others: 20_000, cap: 20_000 })).toBe(0);
+    expect(settlePoints({ newPoints: 10_000, checkedPoints: 9_000, others: 0, cap: 200_000 })).toBe(10_000);
   });
 });

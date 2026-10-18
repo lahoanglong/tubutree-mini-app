@@ -3265,6 +3265,8 @@ model ExternalClaimEvent {
   userIdBefore String?
   userIdAfter  String?
   note         String?
+  /// Trạng thái đơn ngoài lúc ghi sự kiện (APPROVE/ATTACH dùng để biết quyết định có được đưa ra khi đơn đã hoàn một phần chưa).
+  orderStatus  String?
   createdAt    DateTime @default(now())
 
   @@index([claimId, createdAt])

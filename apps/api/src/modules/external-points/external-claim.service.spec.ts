@@ -35,7 +35,7 @@ function build(opts: { config?: Record<string, unknown>; order?: Record<string, 
     externalPointsClaim: {
       findUnique: jest.fn(async () => null as unknown),
       findUniqueOrThrow: jest.fn(async () => ({ points: 2_000, releaseAt: null })),
-      findFirst: jest.fn(async () => null as unknown),
+      findMany: jest.fn(async () => [] as unknown[]),
       count: jest.fn(async () => 0),
       aggregate: jest.fn(async () => ({ _sum: { points: 0 } })),
       createManyAndReturn: jest.fn(async () => [{ id: 'c1' }]),
@@ -142,12 +142,20 @@ describe('ExternalClaimService.submit', () => {
   });
   it('C5: đơn khác cùng mã đã có claim còn hiệu lực: 409 ALREADY_CLAIMED, không tạo claim', async () => {
     const { svc, tx } = build({ config: flagOn, order: order() });
-    tx.externalPointsClaim.findFirst.mockResolvedValue({ id: 'other' });
+    tx.externalPointsClaim.findMany.mockResolvedValue([{ externalOrder: { marketplaceOrderSn: null } }]);
     expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('ALREADY_CLAIMED');
     expect(tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
-    expect(tx.externalPointsClaim.findFirst).toHaveBeenCalledWith(
+    expect(tx.externalPointsClaim.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ state: { not: 'VOIDED' }, externalOrderId: { not: 'x1' } }) }),
     );
+  });
+  it('C5: đơn khác có order_sn khác (chung vận đơn) không chặn; cùng order_sn thì chặn', async () => {
+    const a = build({ config: flagOn, order: order({ marketplaceOrderSn: 'SN1' }) });
+    a.tx.externalPointsClaim.findMany.mockResolvedValue([{ externalOrder: { marketplaceOrderSn: 'SN2' } }]);
+    expect((await a.svc.submit('u1', 'SPXVN0123456789')).status).toBe('CLAIMED');
+    const b = build({ config: flagOn, order: order({ marketplaceOrderSn: 'SN1' }) });
+    b.tx.externalPointsClaim.findMany.mockResolvedValue([{ externalOrder: { marketplaceOrderSn: 'SN1' } }]);
+    expect(await codeOf(b.svc.submit('u1', 'SPXVN0123456789'))).toBe('ALREADY_CLAIMED');
   });
   it('C2: gửi lại mã của chính mình trả trạng thái hiện có, không ghi attempt, không tạo claim', async () => {
     const { svc, tx, attemptCreate } = build({ config: flagOn, order: order() });

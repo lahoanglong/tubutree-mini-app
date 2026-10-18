@@ -339,8 +339,11 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     const second = await svc.submit(a.id, o2.code);
     await adm.voidClaim(second.claimId!, 'staff1', 'nghi gian lận', true);
     const again = await svc.submit(c.id, o2.code);
-    expect(again.status).toBe('CLAIMED');
+    // Mã đã được nhân viên mở lại: người nhận lại luôn vào REVIEW, và người mở lại không duyệt được.
+    expect(again.status).toBe('REVIEW');
     expect(again.claimId).toBe(second.claimId);
+    await expect(adm.approve(second.claimId!, 'staff1')).rejects.toMatchObject({ response: { code: 'SAME_INTRODUCER' } });
+    await adm.approve(second.claimId!, 'staff2');
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: second.claimId! } })).toMatchObject({ userId: c.id, state: 'PENDING', voidReason: null });
     await releaseDueClaims(prisma, freshConfig(), { notify });
     const { claim } = await pendingClaim(a.id);

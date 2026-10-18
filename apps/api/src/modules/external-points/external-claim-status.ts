@@ -7,7 +7,7 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import { externalLotKey, loadPointExpiryTxns, lotRecoverable } from '../loyalty/loyalty-expiry.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
-import { recordClaimEvent } from './external-claim-audit';
+import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
 import { maskClaimCode } from './external-points-rate';
 
 const logger = new Logger('ExternalClaimStatus');
@@ -175,7 +175,7 @@ export async function applyStatusToClaim(
           state: claim.state,
           autoVoided: claim.state === 'VOIDED' && claim.decidedById === null,
           flaggedPartial: claim.reviewReason !== null || kept,
-          humanDecided: claim.decidedById !== null,
+          humanDecided: claim.decidedById !== null && (await decidedAtPartialReturn(tx, claim.id)),
         });
         const code = maskClaimCode(order.trackingCode);
         const base = { action, userId: claim.userId, claimId: claim.id, code, detail: null as string | null, dedupeKey: null as string | null };

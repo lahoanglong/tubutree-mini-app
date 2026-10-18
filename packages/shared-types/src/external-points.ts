@@ -102,12 +102,17 @@ export interface AdminExternalClaimEvent {
   userIdBefore: string | null;
   userIdAfter: string | null;
   note: string | null;
+  /** Trạng thái đơn ngoài lúc ghi sự kiện; có ở APPROVE/ATTACH. */
+  orderStatus: string | null;
   createdAt: string;
 }
 
 export interface AdminExternalClaimDetail extends AdminExternalClaimRow {
   events: AdminExternalClaimEvent[];
 }
+
+/** Bộ lọc `attention` của GET /admin/external-claims (thêm sau review lượt 3): đúng các dòng mục "Cần xử lý" đếm. */
+export type AdminExternalClaimAttentionFilter = 'closed_credited' | 'stale';
 
 export interface AdminExternalClaimListResponse {
   data: AdminExternalClaimRow[];

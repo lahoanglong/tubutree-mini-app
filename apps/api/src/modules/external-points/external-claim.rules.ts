@@ -91,8 +91,18 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
 
   let reviewReason: string | null = null;
   if (points === null) reviewReason = 'Chưa tính được tiền hàng của đơn';
+  else if (f.claim?.reopenable) reviewReason = 'Mã được nhân viên mở lại, cần người khác duyệt';
   else if (f.userIsStaff) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
+  else if (order.status === 'PARTIAL_RETURN') reviewReason = 'Đơn đã hoàn một phần trên sàn, cần nhân viên kiểm';
   else if ((order.goodsValue ?? 0) > f.cfg.reviewAboveVnd) reviewReason = 'Giá trị đơn vượt ngưỡng tự duyệt';
   else if (order.phoneLast3 && f.userPhoneLast3 && order.phoneLast3 !== f.userPhoneLast3) reviewReason = '3 số cuối SĐT trên đơn khác SĐT thành viên';
   return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0 };
+}
+
+/**
+ * Điểm chốt khi tiền hàng tăng làm điểm tính lại vượt trần tháng: không bao giờ thấp hơn điểm đã qua kiểm, không vượt điểm mới, và
+ * không vượt phần trần còn lại. `others` là điểm các claim khác trong tháng (không gồm claim này, để không trừ hai lần).
+ */
+export function settlePoints(a: { newPoints: number; checkedPoints: number; others: number; cap: number }): number {
+  return Math.min(a.newPoints, Math.max(a.checkedPoints, a.cap - a.others));
 }
