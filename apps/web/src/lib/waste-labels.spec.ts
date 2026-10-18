@@ -4,6 +4,7 @@ import {
   WASTE_ADMIN_SECTIONS,
   WASTE_EVENT_KIND_LABELS,
   WASTE_MATCH_BASIS_LABELS,
+  summarizeOpeningHours,
   wasteActorRoleLabel,
   wasteEventKindLabel,
   wasteEventMetaLines,
@@ -79,5 +80,13 @@ describe('waste-labels', () => {
     expect(wasteEventMetaLines({ pointsAwarded: 0 })).toEqual(['Cộng 0 điểm']);
     expect(wasteEventMetaLines({ pointsTaken: 500, shortfallPoints: 0, reason: ' Nhầm ' })).toEqual(['Thu hồi 500 điểm', 'Lý do: Nhầm']);
     expectNoBannedCopy([...Object.values(WASTE_EVENT_KIND_LABELS), ...Object.values(WASTE_ACTOR_ROLE_LABELS), ...Object.values(WASTE_MATCH_BASIS_LABELS)].join(' '));
+  });
+
+  it('giờ mở cửa: gộp ngày liền nhau cùng khung giờ, bỏ ngày nghỉ', () => {
+    const wk = [{ open: '08:00', close: '17:00' }];
+    expect(summarizeOpeningHours({})).toEqual([]);
+    expect(summarizeOpeningHours({ MON: wk, TUE: wk, WED: wk, SAT: [{ open: '08:00', close: '12:00' }] })).toEqual(['T2–T4 08:00–17:00', 'T7 08:00–12:00']);
+    expect(summarizeOpeningHours({ MON: wk, WED: wk })).toEqual(['T2 08:00–17:00', 'T4 08:00–17:00']);
+    expect(summarizeOpeningHours({ SUN: [{ open: '08:00', close: '11:00' }, { open: '14:00', close: '17:00' }] })).toEqual(['CN 08:00–11:00, 14:00–17:00']);
   });
 });

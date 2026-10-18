@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminWastePointDTO } from '@tubutree/shared-types';
 import { getWasteOverview, listWasteItems, listWastePoints, updateWastePoint } from '@/lib/admin-client';
 import { formatCount } from '@/lib/checkout-points';
-import { WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
+import { summarizeOpeningHours, WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
 import { BTN_PRIMARY, BTN_XS_SECONDARY, chipClass, Notice, ScrollRegion, ToneBadge } from './ui';
 import type { WasteSeed } from './waste-tab';
 import { WastePointDetail } from './waste-point-detail';
@@ -46,6 +46,10 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
   const alerts = overview.data?.alerts ?? [];
   const detailPoint = detailId ? ((all.data ?? []).find((p) => p.id === detailId) ?? rows.find((p) => p.id === detailId) ?? null) : null;
 
+  const itemName = new Map((items.data ?? []).map((i) => [i.id, i.name]));
+  const acceptedNames = (p: AdminWastePointDTO) => p.acceptedItemIds.map((id) => itemName.get(id)).filter((n): n is string => n !== undefined);
+  const hoursOf = (p: AdminWastePointDTO) => summarizeOpeningHours(p.openingHours);
+
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
     return qc.invalidateQueries({ queryKey: ['admin-waste-points'] });
@@ -72,11 +76,13 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
       {list.isError && <Notice tone="danger" role="alert">Không tải được danh sách điểm nhận.</Notice>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       <ScrollRegion label="Bảng điểm nhận">
-        <table className="w-full min-w-[960px] border-collapse">
+        <table className="w-full min-w-[1200px] border-collapse">
           <thead>
             <tr className="border-b border-stone-200">
               <th className={TH}>Điểm</th>
               <th className={TH}>Địa chỉ</th>
+              <th className={TH}>Giờ mở cửa</th>
+              <th className={TH}>Hàng nhận</th>
               <th className={TH}>Trạng thái</th>
               <th className={TH}>Hạn mức tháng</th>
               <th className={TH}>Lượt xác nhận</th>
@@ -95,6 +101,14 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
                   </td>
                   <td className={TD}>{`${p.addressLine}, ${p.communeName}, ${p.provinceName}`}</td>
                   <td className={TD}>
+                    {hoursOf(p).length === 0 ? '—' : <ul className="space-y-0.5 text-xs">{hoursOf(p).map((h) => <li key={h} className="whitespace-nowrap">{h}</li>)}</ul>}
+                  </td>
+                  <td className={TD}>
+                    <div className="flex flex-wrap gap-1">
+                      {acceptedNames(p).length === 0 ? '—' : acceptedNames(p).map((n) => <ToneBadge key={n} tone="neutral">{n}</ToneBadge>)}
+                    </div>
+                  </td>
+                  <td className={TD}>
                     <div className="flex flex-col items-start gap-1">
                       <span>{WASTE_POINT_STATUS_LABELS[p.status]}</span>
                       {p.status === 'ACTIVE' && p.quotaFull && <ToneBadge tone="warning">Tạm dừng, hết hạn mức</ToneBadge>}
@@ -103,9 +117,14 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
                     </div>
                   </td>
                   <td className={TD}>
-                    {p.monthlyQuotaPoints === null
-                      ? 'Không hạn mức'
-                      : `${formatCount(p.monthUsage.pointsUsed)} / ${formatCount(p.monthlyQuotaPoints)} điểm`}
+                    {p.monthlyQuotaPoints === null ? (
+                      'Không hạn mức'
+                    ) : (
+                      <div className="min-w-[140px] space-y-1">
+                        <div>{`${formatCount(p.monthUsage.pointsUsed)} / ${formatCount(p.monthlyQuotaPoints)} điểm`}</div>
+                        <QuotaBar used={p.monthUsage.pointsUsed} quota={p.monthlyQuotaPoints} full={p.quotaFull} paceAlert={pointAlerts.some((a) => a.kind === 'QUOTA_PACE')} />
+                      </div>
+                    )}
                   </td>
                   <td className={TD}>{`${formatCount(p.monthUsage.confirmations)} lượt`}</td>
                   <td className={TD}>{formatCount(p.staff.length)}</td>
@@ -140,5 +159,15 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
         />
       )}
     </section>
+  );
+}
+
+function QuotaBar({ used, quota, full, paceAlert }: { used: number; quota: number; full: boolean; paceAlert: boolean }) {
+  const pct = quota > 0 ? Math.min(100, Math.round((used * 100) / quota)) : 0;
+  const color = full || used >= quota ? 'bg-danger-fg' : paceAlert ? 'bg-warning-fg' : 'bg-forest-600';
+  return (
+    <div role="progressbar" aria-label="Mức dùng hạn mức tháng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} data-quota-bar={color} className="h-1.5 w-full rounded-full bg-stone-100">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    </div>
   );
 }

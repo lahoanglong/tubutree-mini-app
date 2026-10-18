@@ -54,6 +54,19 @@ describe('WastePointsSection', () => {
     expect(row(c, 'wh').textContent).toContain('Không hạn mức');
   });
 
+  it('bảng điểm: giờ mở cửa, hàng nhận và thanh mức dùng đổi màu theo cảnh báo và khi đầy', async () => {
+    const { c } = await mount();
+    expect(row(c, 'p1').textContent).toContain('T2 08:00–20:00');
+    expect(row(c, 'p1').textContent).toContain('Thùng carton cũ');
+    expect(row(c, 'wh').querySelector('[role="progressbar"]')).toBeNull();
+    const bar = (id: string) => row(c, id).querySelector<HTMLElement>('[role="progressbar"]')!;
+    expect(bar('p1').getAttribute('aria-valuenow')).toBe('40');
+    expect(bar('p1').getAttribute('data-quota-bar')).toBe('bg-warning-fg');
+    expect(bar('p2').getAttribute('aria-valuenow')).toBe('100');
+    expect(bar('p2').getAttribute('data-quota-bar')).toBe('bg-danger-fg');
+    expect(bar('p5').getAttribute('data-quota-bar')).toBe('bg-forest-600');
+  });
+
   it('điểm dùng hết hạn mức tháng hiện "Tạm dừng, hết hạn mức" (6)', async () => {
     const { c } = await mount();
     expect(row(c, 'p2').textContent).toContain('Tạm dừng, hết hạn mức');
