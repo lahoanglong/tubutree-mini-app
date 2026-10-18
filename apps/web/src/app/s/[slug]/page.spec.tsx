@@ -119,3 +119,20 @@ describe('trang gian hàng — mô tả khi chia sẻ (D3-02)', () => {
     expect(meta.description).toBe('Gian hàng sống xanh trên Tubu Tree');
   });
 });
+
+describe('trang gian hàng /s/[slug] — link subdomain theo cờ (D3-11)', () => {
+  it('cờ tắt: không hiện URL subdomain dù dữ liệu có subdomain', async () => {
+    mocks.sf = { ...SF, subdomain: 'linh-xanh', subdomainEnabled: false };
+    expect((await html()).textContent).not.toContain('tubutree.com');
+  });
+
+  it('API cũ chưa trả cờ: coi như tắt', async () => {
+    mocks.sf = { ...SF, subdomain: 'linh-xanh' };
+    expect((await html()).textContent).not.toContain('linh-xanh');
+  });
+
+  it('cờ bật và có subdomain: hiện URL subdomain', async () => {
+    mocks.sf = { ...SF, subdomain: 'linh-xanh', subdomainEnabled: true };
+    expect((await html()).textContent).toContain('https://linh-xanh.tubutree.com');
+  });
+});

@@ -5,6 +5,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
+import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import { StorefrontAdminService } from '../../src/modules/storefront/storefront-admin.service';
 import { assertIdentifierAvailable } from '../../src/modules/storefront/identifier-validation';
 import { createUser as createUserRow, randCode, setConfig, summarize, warmPool } from './helpers';
@@ -20,7 +21,7 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
   let svc: StorefrontService;
   let admin: StorefrontAdminService;
   let notify: jest.Mock;
-  const KEYS = ['storefront.require_approval', 'affiliate.commission_eligible_roles'];
+  const KEYS = ['storefront.require_approval', 'storefront.subdomain_enabled', 'affiliate.commission_eligible_roles'];
   let saved: { key: string; value: unknown }[] = [];
   const created = { userIds: [] as string[], storefrontIds: [] as string[], brandIds: [] as string[], productIds: [] as string[] };
 
@@ -261,6 +262,38 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       await expect(assertIdentifierAvailable(prisma, brand.name.toUpperCase(), other.id)).rejects.toThrow('nhãn hàng');
       const brandStore = await store(null, { type: 'BRAND', brandId: brand.id });
       await expect(assertIdentifierAvailable(prisma, brandSlug, brandStore.id)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('gian hàng đối tác tự tạo và cờ subdomain (D3-08, D3-11)', () => {
+    it('gian hàng tạo từ cổng đối tác là nháp: không hiện với khách, không vào danh sách sitemap; đăng được khi có sản phẩm', async () => {
+      const dealer = await user('DEALER');
+      const portal = new MerchantService(prisma, {} as never, undefined, config);
+      const sf = await portal.getOrCreateStore(dealer.id);
+      created.storefrontIds.push(sf.id);
+      expect(sf).toMatchObject({ isPublished: false, publishedAt: null });
+      expect(await visible(sf.slug)).toBe(false);
+      expect((await svc.getPublicList()).map((r) => r.slug)).not.toContain(sf.slug);
+      await expect(portal.publishStore(dealer.id, true)).rejects.toThrow('ít nhất 1 sản phẩm');
+      await addItem(sf.id);
+      await expect(portal.publishStore(dealer.id, true)).resolves.toMatchObject({ isPublished: true });
+      expect(await visible(sf.slug)).toBe(true);
+      expect((await svc.getPublicList()).map((r) => r.slug)).toContain(sf.slug);
+    });
+
+    it('cờ subdomain tắt: trang công khai, builder và cổng đối tác không lộ subdomain; bật cờ thì lộ', async () => {
+      const owner = await user('AFFILIATE');
+      const sf = await store(owner, { subdomain: `it-sd-${randCode(6).toLowerCase()}`, customDomain: `it-${randCode(6).toLowerCase()}.example.vn` });
+      const portal = new MerchantService(prisma, {} as never, undefined, config);
+      expect(await svc.getPublicBySlug(sf.slug)).toMatchObject({ subdomain: null, customDomain: null, subdomainEnabled: false });
+      expect(await svc.getMine(owner.id)).toMatchObject({ subdomain: null, customDomain: null, subdomainEnabled: false });
+      expect(await portal.presentStore(sf)).toMatchObject({ subdomain: null, subdomainEnabled: false });
+      await setConfig(prisma, 'storefront.subdomain_enabled', true);
+      rebuild();
+      const portalOn = new MerchantService(prisma, {} as never, undefined, config);
+      expect(await svc.getPublicBySlug(sf.slug)).toMatchObject({ subdomain: sf.subdomain, customDomain: sf.customDomain, subdomainEnabled: true });
+      expect(await svc.getMine(owner.id)).toMatchObject({ subdomain: sf.subdomain, subdomainEnabled: true });
+      expect(await portalOn.presentStore(sf)).toMatchObject({ subdomain: sf.subdomain, subdomainEnabled: true });
     });
   });
 });

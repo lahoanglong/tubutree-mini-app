@@ -53,6 +53,26 @@ describe('MerchantService', () => {
       expect((prisma.storefront.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ type: 'MERCHANT', isPartner: true });
     });
 
+    it('gian hàng tự tạo là nháp: chưa có sản phẩm thì chưa hiện với khách, đăng bằng nút Đăng (D3-08)', async () => {
+      const prisma = makePrisma({
+        user: {
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u2', role: 'DEALER', referralCode: 'DEALER01', fullName: 'Đại lý 1' }),
+          findUnique: jest.fn().mockResolvedValue({ role: 'DEALER' }),
+        },
+        storefront: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          findUnique: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({ id: 's-new', collections: [] }),
+        },
+        $executeRaw: jest.fn().mockResolvedValue(0),
+      });
+      (prisma as unknown as { $transaction: unknown }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
+      await new MerchantService(prisma, orderStatus).getOrCreateStore('u2');
+      const data = (prisma.storefront.create as jest.Mock).mock.calls[0][0].data;
+      expect(data.isPublished).toBe(false);
+      expect(data.publishedAt).toBeNull();
+    });
+
     it('vai trò đọc lại dưới khoá chủ đã hết là đại lý → chọn loại theo vai trò mới, hoặc từ chối nếu không được mở gian hàng', async () => {
       const mk = (role: string) => {
         const prisma = makePrisma({
@@ -76,6 +96,23 @@ describe('MerchantService', () => {
       const b = mk('CUSTOMER');
       await expect(b.svc.getOrCreateStore('u2')).rejects.toThrow(ForbiddenException);
       expect(b.prisma.storefront.create as jest.Mock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('presentStore — link subdomain theo cờ (D3-11)', () => {
+    const store = { id: 's1', slug: 'dai-ly', subdomain: 'dai-ly-xanh', customDomain: 'daily.vn', title: 'Đại lý' };
+    const withFlag = (value: unknown) =>
+      new MerchantService(makePrisma(), orderStatus, undefined, { get: async <T>(k: string, fb?: T) => (k === 'storefront.subdomain_enabled' ? value : fb) } as never);
+
+    it('cờ tắt hoặc không có cấu hình: cổng đối tác không nhận subdomain và tên miền riêng', async () => {
+      for (const svc of [new MerchantService(makePrisma(), orderStatus), withFlag(false), withFlag('true')]) {
+        const r = await svc.presentStore(store);
+        expect(r).toMatchObject({ subdomain: null, customDomain: null, subdomainEnabled: false, slug: 'dai-ly' });
+      }
+    });
+
+    it('cờ bật (đúng boolean true): trả nguyên subdomain và tên miền riêng', async () => {
+      expect(await withFlag(true).presentStore(store)).toMatchObject({ subdomain: 'dai-ly-xanh', customDomain: 'daily.vn', subdomainEnabled: true });
     });
   });
 

@@ -8,7 +8,7 @@ import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifier
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
-import { isStorefrontApprovalRequired } from './storefront-config';
+import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
 import { isStorefrontApproved, ownerHiddenReason, publicStorefrontWhere } from './storefront-visibility';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
 
@@ -95,7 +95,7 @@ export class StorefrontService {
     const sf = await this.prisma.storefront.findFirst({
       where: { ownerUserId: userId, type: 'CTV' },
       include: {
-        owner: { select: { role: true, isBlocked: true } },
+        owner: { select: { role: true, isBlocked: true, referralCode: true } },
         collections: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -126,9 +126,12 @@ export class StorefrontService {
     });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
     const { owner, ...rest } = sf;
+    const subdomainEnabled = await isStorefrontSubdomainEnabled(this.config);
     // SELLER-15: builder đánh dấu món khách không thấy (cùng điều kiện lọc của trang công khai) thay vì hiện như bình thường.
     return {
-      ...rest,
+      ...withSubdomainFlag(rest, subdomainEnabled),
+      // Nút Chia sẻ của builder dựng link /s/<slug>?ref=<mã> từ đây, cùng cách trang công khai trả mã (SELLER-4).
+      referralCode: owner?.referralCode ?? null,
       approved: isStorefrontApproved(sf),
       // Chủ vẫn xem và sửa được gian hàng đang ẩn với khách; dòng này nói vì sao.
       publicHiddenReason: ownerHiddenReason(sf, owner, await this.visibilityOptions()),
@@ -287,8 +290,7 @@ export class StorefrontService {
       // SELLER-4: mã giới thiệu lấy từ chủ gian hàng, không suy từ slug/subdomain trên URL (subdomain riêng không phải mã).
       referralCode: sf.type === 'CTV' ? (sf.owner?.referralCode ?? null) : null,
       ownerTier,
-      subdomain: sf.subdomain,
-      customDomain: sf.customDomain,
+      ...withSubdomainFlag({ subdomain: sf.subdomain, customDomain: sf.customDomain }, await isStorefrontSubdomainEnabled(this.config)),
       type: sf.type,
       isPartner: isPartnerStore(sf),
       // Tick xanh và nhãn "CTV tuyển chọn" chỉ dành cho gian hàng admin đã duyệt, dù cờ duyệt lần đầu bật hay tắt.

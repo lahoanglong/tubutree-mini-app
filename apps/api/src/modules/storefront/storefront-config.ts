@@ -24,3 +24,16 @@ export async function isStorefrontApprovalRequired(config: ConfigReader): Promis
 export async function isStorefrontSubdomainEnabled(config: ConfigReader): Promise<boolean> {
   return (await config.get<unknown>(STOREFRONT_SUBDOMAIN_ENABLED_KEY, DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED)) === true;
 }
+
+/**
+ * Cờ tắt thì mọi phản hồi gian hàng (công khai, builder, cổng đối tác) không mang subdomain và tên miền riêng: giao diện nào
+ * cũng chỉ còn `/s/<slug>` để hiện và chia sẻ, kể cả giao diện chưa kịp sửa. Giá trị vẫn nằm trong DB nên bật cờ lại là hiện lại.
+ */
+export function withSubdomainFlag<T extends { subdomain?: string | null; customDomain?: string | null }>(sf: T, enabled: boolean) {
+  return {
+    ...sf,
+    subdomain: enabled ? (sf.subdomain ?? null) : null,
+    customDomain: enabled ? (sf.customDomain ?? null) : null,
+    subdomainEnabled: enabled,
+  };
+}

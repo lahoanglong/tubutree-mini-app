@@ -27,6 +27,7 @@ import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
 import { isPartnerStore, lockStoreOwner, storeHasPayouts } from './partner-store';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
+import { DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED, isStorefrontSubdomainEnabled, withSubdomainFlag } from '../storefront/storefront-config';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from '../storefront/storefront-publish';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
@@ -305,6 +306,12 @@ export class MerchantService {
     return store;
   }
 
+  /** Bản gian hàng gửi ra cổng: cờ subdomain tắt thì không kèm subdomain/tên miền riêng (xem withSubdomainFlag). */
+  async presentStore<T extends { subdomain?: string | null; customDomain?: string | null }>(store: T) {
+    const enabled = this.config ? await isStorefrontSubdomainEnabled(this.config) : DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED;
+    return withSubdomainFlag(store, enabled);
+  }
+
   async getOrCreateStore(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role !== 'AFFILIATE' && user.role !== 'DEALER' && user.role !== 'ADMIN') {
@@ -370,8 +377,8 @@ export class MerchantService {
               ownerUserId: userId,
               title: `Gian hàng của ${user.fullName ?? 'Đối tác'}`,
               themeColor: '#16a34a',
-              isPublished: true,
-              publishedAt: new Date(),
+              isPublished: false,
+              publishedAt: null,
               collections: {
                 create: {
                   title: 'Sản phẩm nổi bật',

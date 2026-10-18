@@ -153,7 +153,7 @@ export default async function StorefrontPage({
                 )}
               </div>
 
-              {sf.subdomain && (
+              {sf.subdomainEnabled && sf.subdomain && (
                 <p className="flex items-center gap-1 text-xs font-medium text-stone-600">
                   <Globe className="h-3.5 w-3.5 text-stone-500" aria-hidden="true" />
                   <span>https://{sf.subdomain}.tubutree.com</span>

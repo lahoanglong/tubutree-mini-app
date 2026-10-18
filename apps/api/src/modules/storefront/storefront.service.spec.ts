@@ -1063,3 +1063,51 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
     });
   });
 });
+
+describe('link subdomain theo cờ storefront.subdomain_enabled (D3-11)', () => {
+  const flagConfig = (on: boolean) => ({ get: async <T>(k: string, fb?: T) => (k === 'storefront.subdomain_enabled' ? on : fb) }) as unknown as SystemConfigService;
+  const row = {
+    id: 's1', slug: 'abcd1234', subdomain: 'lan-xanh', customDomain: 'lanxanh.vn', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9',
+    collections: [], owner: { referralCode: 'ABCD1234', role: 'AFFILIATE', isBlocked: false },
+  };
+
+  it('cờ tắt (mặc định): trang công khai không lộ subdomain và tên miền riêng', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('abcd1234');
+    expect(r.subdomain).toBeNull();
+    expect(r.customDomain).toBeNull();
+    expect(r.subdomainEnabled).toBe(false);
+    expect(JSON.stringify(r)).not.toContain('lan-xanh');
+    expect(JSON.stringify(r)).not.toContain('lanxanh.vn');
+  });
+
+  it('cờ bật: trang công khai trả subdomain và tên miền riêng', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const r = await new StorefrontService(prisma, flagConfig(true), affiliate).getPublicBySlug('abcd1234');
+    expect(r.subdomain).toBe('lan-xanh');
+    expect(r.customDomain).toBe('lanxanh.vn');
+    expect(r.subdomainEnabled).toBe(true);
+  });
+
+  it('cờ tắt: builder của chủ cũng không nhận subdomain, và biết cờ đang tắt', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const sf = await new StorefrontService(prisma, config, affiliate).getMine('u9');
+    expect(sf.subdomain).toBeNull();
+    expect(sf.customDomain).toBeNull();
+    expect(sf.subdomainEnabled).toBe(false);
+  });
+
+  it('cờ bật: builder của chủ nhận subdomain', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const sf = await new StorefrontService(prisma, flagConfig(true), affiliate).getMine('u9');
+    expect(sf.subdomain).toBe('lan-xanh');
+    expect(sf.subdomainEnabled).toBe(true);
+  });
+
+  it('builder của chủ nhận mã giới thiệu để chia sẻ link /s/<slug>?ref=, không lộ thêm gì về chủ', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const sf = await new StorefrontService(prisma, config, affiliate).getMine('u9');
+    expect(sf.referralCode).toBe('ABCD1234');
+    expect(sf).not.toHaveProperty('owner');
+  });
+});
