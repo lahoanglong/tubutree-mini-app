@@ -13,7 +13,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
     if (api.fail) throw new Error('API 503');
     return api.doc;
   },
-  getPublicSupport: async () => ({ hotline: '0899 149 229', email: 'tubutree@gmail.com' }),
+  getPublicSupport: async () => ({ hotline: '0984 606 774', email: 'tubutree@gmail.com' }),
 }));
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -57,7 +57,7 @@ describe('/chinh-sach/[loai] (D5-01)', () => {
     expect(c.querySelector('h1')?.textContent).toBe('Chính sách đổi trả');
     expect(c.textContent).toContain('[Tên công ty]');
     expect(c.textContent).toContain('trong vòng 7 ngày');
-    expect(c.textContent).toContain('0899 149 229');
+    expect(c.textContent).toContain('0984 606 774');
   });
 
   it('admin đã nhập: hiện đúng nội dung đó, không còn biển bản nháp, không còn chỗ trống mẫu', async () => {

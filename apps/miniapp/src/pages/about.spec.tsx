@@ -34,7 +34,7 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><AboutPage /></QueryClientProvider>);
 }
 
-const SUPPORT = { hotline: '0899 149 229', email: 'tubutree@gmail.com', zaloOaName: null };
+const SUPPORT = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null };
 
 describe('Trang Về Tubu Tree (C-019)', () => {
   beforeEach(() => {
@@ -50,7 +50,7 @@ describe('Trang Về Tubu Tree (C-019)', () => {
 
   it('hotline/email lấy từ cấu hình, không còn số mẫu 1900 1234; chưa có Zalo OA thì ẩn dòng', async () => {
     renderPage();
-    expect(await screen.findByText('0899 149 229')).toBeInTheDocument();
+    expect(await screen.findByText('0984 606 774')).toBeInTheDocument();
     expect(screen.getByText('tubutree@gmail.com')).toBeInTheDocument();
     expect(screen.queryByText('Zalo OA')).toBeNull();
     expect(document.body.textContent).not.toMatch(/1900 1234|hotro@tubutree\.com/);
@@ -144,7 +144,7 @@ describe('Liên hệ hỗ trợ khi /config/public lỗi và gọi hotline', () 
     mocks.getPublicConfig.mockRejectedValue(new Error('429'));
     renderPage();
     expect(await screen.findByText('Hỗ trợ khách hàng')).toBeInTheDocument();
-    expect(screen.getByText('0899 149 229')).toBeInTheDocument();
+    expect(screen.getByText('0984 606 774')).toBeInTheDocument();
     expect(screen.getByText('tubutree@gmail.com')).toBeInTheDocument();
     expect(screen.queryByText('Zalo OA')).toBeNull();
   });
@@ -155,7 +155,7 @@ describe('Liên hệ hỗ trợ khi /config/public lỗi và gọi hotline', () 
     const btn = await screen.findByRole('button', { name: /Hotline/ });
     expect(btn.style.minHeight).toBe('44px');
     fireEvent.click(btn);
-    expect(mocks.callPhone).toHaveBeenCalledWith('0899 149 229');
+    expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
   });
 });
 

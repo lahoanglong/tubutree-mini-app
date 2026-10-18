@@ -337,7 +337,7 @@ export interface SupportContact {
 const httpsOnly = (v: unknown): string | undefined => (typeof v === 'string' && /^https:\/\//.test(v.trim()) ? v.trim() : undefined);
 
 /** Khớp giá trị mặc định của API (system-config.controller: support.hotline / support.email). */
-export const DEFAULT_SUPPORT: SupportContact = { hotline: '0899 149 229', email: 'tubutree@gmail.com' };
+export const DEFAULT_SUPPORT: SupportContact = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
 
 /**
  * Hotline/email do admin cấu hình (GET /config/public → support). Chân trang nằm trên MỌI trang
