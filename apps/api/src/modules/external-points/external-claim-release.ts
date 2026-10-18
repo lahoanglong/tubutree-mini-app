@@ -7,7 +7,8 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import { loadClaimConfig } from './external-claim.config';
 import type { ClaimNotifier } from './external-claim-status';
 import { startOfVnMonth } from '../../common/vn-time';
-import { recordClaimEvent } from './external-claim-audit';
+import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
+import { advisoryUserLock } from './external-claim.service';
 import { lockOrderThenClaim } from './external-claim-status';
 import { settlePoints } from './external-claim.rules';
 import { claimPoints, maskClaimCode } from './external-points-rate';
@@ -33,6 +34,10 @@ export async function releaseClaim(
   const skipped = { outcome: 'SKIPPED' as const, userId: null, points: 0, code: '' };
   return prisma.$transaction(async (tx) => {
     // Khoá đơn (FOR SHARE) TRƯỚC khi đọc trạng thái: webhook huỷ/hoàn đang ghi đơn phải xong, hoặc ta xong trước rồi nó thấy claim CREDITED và đảo.
+    // Thứ tự khoá: advisory theo khách (cùng đường duyệt, để trần tháng chốt tuần tự), đơn, claim, users.
+    const head = await tx.externalPointsClaim.findUnique({ where: { id: claimId }, select: { userId: true } });
+    if (!head?.userId) return skipped;
+    await advisoryUserLock(tx, head.userId);
     if (!(await lockOrderThenClaim(tx, claimId))) return skipped;
     const [row] = await tx.$queryRaw<{ id: string; userId: string | null; externalOrderId: string; ratePct: string; points: number; decidedById: string | null; releaseAt: Date | null; createdAt: Date }[]>`
       SELECT "id", "userId", "externalOrderId", "ratePct"::text AS "ratePct", "points", "decidedById", "releaseAt", "createdAt" FROM "external_points_claims"
@@ -46,7 +51,18 @@ export async function releaseClaim(
     const nowMs = now.getTime();
     // Đơn đã giao: giao + hạn giữ. Đơn hoàn một phần: chỉ claim đã có người duyệt, theo mốc cộng nhân viên đặt lúc duyệt.
     const dueDelivered = order.status === 'DELIVERED' && order.deliveredAt !== null && order.deliveredAt.getTime() + opts.pendingDays * 864e5 <= nowMs;
-    const duePartial = order.status === 'PARTIAL_RETURN' && row.decidedById !== null && row.releaseAt !== null && row.releaseAt.getTime() <= nowMs;
+    let duePartial = false;
+    if (order.status === 'PARTIAL_RETURN') {
+      // Chỉ quyết định đưa ra khi đơn đã hoàn một phần mới đủ để cộng; duyệt từ trước đó phải được kiểm lại.
+      if (row.decidedById !== null && (await decidedAtPartialReturn(tx, row.id))) {
+        duePartial = row.releaseAt !== null && row.releaseAt.getTime() <= nowMs;
+      } else {
+        const reason = 'Đơn hoàn một phần trên sàn, cần nhân viên kiểm';
+        await tx.externalPointsClaim.updateMany({ where: { id: row.id, state: 'PENDING' }, data: { state: 'REVIEW', reviewReason: reason } });
+        await recordClaimEvent(tx, { claimId: row.id, action: 'TO_REVIEW', fromState: 'PENDING', toState: 'REVIEW', userIdBefore: row.userId, userIdAfter: row.userId, note: reason, orderStatus: order.status });
+        return { outcome: 'TO_REVIEW' as const, userId: row.userId, points: 0, code };
+      }
+    }
     if (!dueDelivered && !duePartial) return skipped;
 
     const [user] = await tx.$queryRaw<{ isBlocked: boolean }[]>`SELECT "isBlocked" FROM "users" WHERE "id" = ${row.userId} FOR UPDATE`;

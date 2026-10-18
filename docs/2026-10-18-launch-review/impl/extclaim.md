@@ -67,6 +67,7 @@ Bước 1 đã tạo `external_points_claims`, `external_claim_attempts` và uni
 - Xoá SĐT về null 7 ngày sau claim cuối thuộc bước 3.
 - UNKNOWN qua `submit` không tạo claim: ghi attempt UNMATCHED kèm `externalOrderId` để hiện ở "Cần xử lý", nhân viên gắn tay.
 - Chưa có kiểm thử kết nối Pancake thật; unit test mock client.
+- Vận hành: cần ít nhất hai người có quyền duyệt (ADMIN hoặc CSKH). Nếu chỉ có một ADMIN thì claim REVIEW do chính người đó mở lại mã hoặc gắn sẽ treo, vì người đưa claim vào không được tự duyệt.
 - `note` của nhân viên (attach, keep-points, lý do huỷ) có thể chứa SĐT hoặc tên và nhật ký `external_claim_events` không bị xoá khi xoá tài khoản.
 - Hai CSKH thông đồng (một người gắn hoặc mở lại mã, người kia duyệt) thì không chặn được; nhật ký ghi đủ người và thời điểm để truy.
 - Web lint đang đỏ sẵn ở `apps/web/src/components/admin/commission-rates-tab.tsx:452` (file không thuộc gói này, đỏ cả ở `3552c368`).
@@ -103,4 +104,15 @@ Không đổi schema, không đổi hợp đồng kiểu (không thêm giá tr�
 - `forbidSelf` và kiểm người duyệt quy hai phía qua `mergedIntoId` về user gốc (tối đa 5 bước).
 
 Test đỏ trước khi sửa (chạy trên mã của commit `ac4b0a9b`, `external-claims-review.race-spec.ts`, nhóm "review lượt 2"): 7 test đỏ, đủ cho N1, N2 (REVIEW và lưới an toàn), N3 (cộng và duyệt), C5 và mergedIntoId. Sau sửa: 40/40 test của `external-claims*` xanh. Hai test cũ đổi kỳ vọng theo hành vi mới: (h) nhận lại mã mở lại giờ vào REVIEW; B3 vượt trần giờ cộng ở mức chốt 3.000 thay vì REVIEW.
+
+## Sửa sau review lượt 3
+
+Schema đổi nhẹ: cột nullable `orderStatus` trên `external_claim_events`, migration `20261019150000_external_claim_event_order_status`. Hợp đồng kiểu đổi (cho `lr2/extui`): `AdminExternalClaimEvent.orderStatus: string | null`, kiểu mới `AdminExternalClaimAttentionFilter = 'closed_credited' | 'stale'`, và `GET /admin/external-claims?attention=closed_credited|stale`.
+
+- R3: APPROVE và ATTACH ghi `orderStatus` của đơn lúc quyết định. Claim chỉ được coi là "đã quyết cho đơn hoàn một phần" khi lần duyệt/gắn gần nhất xảy ra lúc đơn đã PARTIAL_RETURN (`decidedAtPartialReturn`). Đơn chuyển sang PARTIAL_RETURN sau khi claim đã duyệt thì `applyStatusToClaim` chuyển REVIEW như claim chưa duyệt, và `releaseClaim` kiểm lại đúng điều kiện này trước khi cộng (nếu webhook chưa tới thì cron tự chuyển REVIEW thay vì cộng). Duyệt lại lúc đơn đã hoàn một phần thì cộng được.
+- Nhỏ 1: `releaseClaim` lấy `advisoryUserLock` theo khách trước khi khoá đơn; thứ tự khoá: advisory khách, đơn, claim, users (cùng đường duyệt), nên `settlePoints` của cron và của duyệt chốt tuần tự và không vượt trần tháng.
+- Nhỏ 2: `canonicalUserId` gặp vòng `mergedIntoId` trả id nhỏ nhất trong vòng, ổn định từ mọi điểm vào.
+- Nhỏ 3: danh sách admin lọc `attention`, dùng chung điều kiện với số đếm "Cần xử lý" (`closedCreditedWhere`, `stalePendingWhere`).
+
+Test đỏ trước khi sửa (chạy trên `6b94e6fa`): R3 hai test đỏ (duyệt lúc DELIVERED rồi hoàn một phần: `applyStatusToClaim` không về REVIEW và cron cộng; cron tự kiểm lại), test khoá advisory của `releaseClaim` đỏ (xác định, không phụ thuộc xen kẽ), `canonicalUserId` vòng đỏ, lọc `attention` đỏ. Test stress 40 vòng cron cộng song song với duyệt KHÔNG đỏ trên mã cũ (cửa sổ xen kẽ hẹp), nên bằng chứng cho Nhỏ 1 là test khoá xác định; stress giữ lại làm lưới. Sau sửa: `external-claims*` 45/45 xanh.
 
