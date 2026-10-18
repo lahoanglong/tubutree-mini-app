@@ -80,6 +80,9 @@ describe('withdrawView', () => {
   it('ví: hợp lệ khi có số dư, không cần ngân hàng', () => {
     expect(withdrawView(base)).toMatchObject({ valid: true, tax: 0, net: 80_000, askTaxId: false });
   });
+  it('chờ config thật cho cả ví: chưa biết thuế thì số nhận trên nút có thể sai', () => {
+    expect(withdrawView({ ...base, cfgLoaded: false }).valid).toBe(false);
+  });
   it('không biết số dư thật (dashboard lỗi) hoặc số dư 0: không gửi được', () => {
     expect(withdrawView({ ...base, knownMax: false }).valid).toBe(false);
     expect(withdrawView({ ...base, max: 0 }).valid).toBe(false);

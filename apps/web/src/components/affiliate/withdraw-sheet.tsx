@@ -132,7 +132,7 @@ function WithdrawForm({ max, knownMax, taxIdOnFile, onDone }: Omit<WithdrawSheet
 
       <div role="alert">{error && <p className={`mt-3 ${ui.error}`}>{error}</p>}</div>
       <button type="button" onClick={submit} disabled={!view.valid} className={`${ui.btnPrimary} mt-5 w-full`}>
-        {mut.isPending ? 'Đang gửi…' : method === 'WALLET_BALANCE' ? `Nhận ${formatVnd(view.net)} vào Ví` : `Rút ${formatVnd(view.amount)}`}
+        {mut.isPending ? 'Đang gửi…' : !cfgLoaded ? 'Đang tải…' : method === 'WALLET_BALANCE' ? `Nhận ${formatVnd(view.net)} vào Ví` : `Rút ${formatVnd(view.amount)}`}
       </button>
     </div>
   );

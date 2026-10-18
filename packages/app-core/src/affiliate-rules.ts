@@ -71,11 +71,12 @@ export function withdrawView(i: WithdrawInput): WithdrawView {
   const bankValid =
     i.method !== 'BANK' ||
     (i.bank.bankName.trim().length > 0 && i.bank.accountNumber.trim().length >= 6 && i.bank.accountName.trim().length > 0);
-  // Chờ config thật trước khi cho rút ngân hàng: mức tối thiểu mặc định có thể khác config đang chạy.
+  // Chờ config thật: mức tối thiểu mặc định và thuế TNCN đều lấy từ config, chưa có thì số nhận trên nút có thể lệch số được cộng.
   const valid =
     i.knownMax &&
+    i.cfgLoaded &&
     amount > 0 &&
-    (i.method !== 'BANK' || (i.cfgLoaded && amount >= i.minBank)) &&
+    (i.method !== 'BANK' || amount >= i.minBank) &&
     bankValid &&
     taxIdValid &&
     !i.pending;
