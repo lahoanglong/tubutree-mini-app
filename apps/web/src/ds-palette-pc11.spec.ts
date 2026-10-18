@@ -91,6 +91,10 @@ const PRO: string[] = [
   'components/brand-owner/brand-image-field.tsx',
   'components/brand-owner/view-brand-link.tsx',
   'lib/brand-owner-view.ts',
+  'components/admin/staff-roster-tab.tsx',
+  'components/admin/shift-approval-tab.tsx',
+  'components/admin/payroll-admin-tab.tsx',
+  'components/admin/payroll-csv.ts',
 ];
 const RECYCLE: string[] = [];
 const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];

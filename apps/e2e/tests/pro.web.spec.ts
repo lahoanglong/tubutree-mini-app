@@ -222,3 +222,71 @@ test.describe('Web chủ thương hiệu', () => {
     expect((await next).query.get('period')).toBe('prev_month');
   });
 });
+
+test.describe('Web admin nhân sự và lương', () => {
+  const ADMIN = { ...USER, role: 'ADMIN', fullName: 'Quản trị' };
+
+  test.beforeEach(async ({ page, api }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+    api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: ADMIN }));
+    api.get('/me', ADMIN);
+    api.get('/config/public', {});
+    api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
+  });
+
+  test('cấp quyền ADMIN theo SĐT phải xác nhận rồi gửi POST /admin/staff/grant', async ({ page, api }) => {
+    api.get('/admin/staff', { members: [], pendingInvites: [] });
+    api.post('/admin/staff/grant', { granted: 'ADMIN', applied: false });
+    await page.goto('/admin?tab=staffRoster');
+    await page.getByPlaceholder('Số điện thoại (VD 09xxxxxxxx)').fill('0944444444');
+    await page.getByRole('button', { name: 'Quản trị', exact: true }).click();
+    await page.getByRole('button', { name: 'Lưu quyền' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('cấp quyền ADMIN');
+    const sent = api.waitForCall('POST', '/admin/staff/grant');
+    await page.getByRole('button', { name: 'Cấp quyền ADMIN' }).click();
+    expect((await sent).body).toEqual({ phone: '0944444444', role: 'ADMIN' });
+    await expect(page.getByText('Đã lưu quyền (sẽ áp khi họ mở app).')).toBeVisible();
+  });
+
+  test('duyệt ca: từ chối bắt buộc lý do rồi gửi POST /admin/shifts/:id/reject', async ({ page, api }) => {
+    const monday = new Date();
+    const shift = {
+      id: 'sh1', staffId: 's1', staff: { id: 's1', fullName: 'Lan', phone: '0911111111', avatarUrl: null },
+      workDate: new Date(monday.toISOString().slice(0, 10)).toISOString(), startAt: monday.toISOString(), endAt: monday.toISOString(),
+      templateId: null, status: 'PENDING', approvedStart: null, approvedEnd: null, rejectReason: null, cancelReason: null,
+      isEmergency: false, evidenceUrl: null, cancelPenalty: false,
+    };
+    api.get('/admin/shifts', [shift]);
+    await page.goto('/admin?tab=shiftApproval');
+    await page.getByRole('button', { name: /^Từ chối ca Lan/ }).click();
+    const accept = page.getByRole('alertdialog').getByRole('button', { name: 'Xác nhận từ chối' });
+    await expect(accept).toBeDisabled();
+    await page.getByRole('alertdialog').getByRole('textbox').fill('Trùng lịch');
+    const sent = api.waitForCall('POST', '/admin/shifts/:id/reject');
+    await accept.click();
+    expect((await sent).body).toEqual({ reason: 'Trùng lịch' });
+  });
+
+  test('lương: chốt gửi year/month đang xem; mở lại có xác nhận', async ({ page, api }) => {
+    const now = new Date();
+    const month = {
+      year: now.getUTCFullYear(), month: now.getUTCMonth() + 1, totalMinutes: 125, gross: 500_000, totalFines: 0, net: 500_000,
+      status: 'OPEN', paidAt: null, proofImageUrl: null, note: null,
+    };
+    api.get('/admin/payroll', [
+      { staff: { id: 's1', fullName: 'Lan', phone: '0911111111' }, month, profile: { hourlyRate: 40_000, bankBin: null, bankAccountNo: null, bankAccountName: null, qrImageUrl: null, active: true }, qrImageUrl: null },
+    ]);
+    api.post('/admin/payroll/:id/finalize', { finalized: true });
+    await page.goto('/admin?tab=payroll');
+    await expect(page.getByText('2h05')).toBeVisible();
+    const sent = api.waitForCall('POST', '/admin/payroll/:id/finalize');
+    await page.getByRole('button', { name: 'Chốt · Lan' }).click();
+    expect((await sent).body).toEqual({ year: month.year, month: month.month });
+  });
+});
