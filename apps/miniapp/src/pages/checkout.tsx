@@ -766,10 +766,12 @@ export default function CheckoutPage() {
                 <Text size="xSmall" style={{ color: 'var(--color-text-success)', fontWeight: 600, marginTop: 4 }}>
                   {`Ước tính ${formatPoints(pickupReq.estimatedPoints)}`}
                 </Text>
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px', marginTop: 4 }}>
-                  Ghi mã lên túi, bưu tá lấy khi giao đơn.
-                </Text>
-                {paymentToSend === 'BANK_TRANSFER' && (
+                {attachWaste && (
+                  <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px', marginTop: 4 }}>
+                    Ghi mã lên túi, bưu tá lấy khi giao đơn.
+                  </Text>
+                )}
+                {attachWaste && paymentToSend === 'BANK_TRANSFER' && (
                   <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px', marginTop: 4 }}>
                     Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
                   </Text>

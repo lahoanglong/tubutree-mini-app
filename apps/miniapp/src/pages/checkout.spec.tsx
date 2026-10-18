@@ -1240,8 +1240,16 @@ describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
     expect(screen.getByText('TR-PICK1')).toBeInTheDocument();
     expect(screen.getByText('12 thùng Thùng carton')).toBeInTheDocument();
     expect(screen.getByText('Ước tính 12.000 điểm')).toBeInTheDocument();
+    const PICKUP_NOTE = 'Ghi mã lên túi, bưu tá lấy khi giao đơn.';
+    const PAYMENT_NOTE = 'Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.';
+    fireEvent.click(await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    expect(screen.queryByText(PICKUP_NOTE)).toBeNull();
+    expect(screen.queryByText(PAYMENT_NOTE)).toBeNull();
     const body = await placeOrderClick();
     expect(body).not.toHaveProperty('wasteRequestId');
+    fireEvent.click(toggle);
+    expect(screen.getByText(PICKUP_NOTE)).toBeInTheDocument();
+    expect(screen.getByText(PAYMENT_NOTE)).toBeInTheDocument();
   });
   it('bật công tắc → body mang wasteRequestId, không mang hai trường cũ', async () => {
     renderPage();
