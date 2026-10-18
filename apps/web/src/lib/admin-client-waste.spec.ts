@@ -84,6 +84,13 @@ describe('admin-client — hàm Đổi rác gọi đúng route admin (registry 4
     expect(api.calls[0]!.url.endsWith('/admin/waste/requests/lookup?code=GHN%2012%2F3')).toBe(true);
   });
 
+  it('id có ký tự đặc biệt được mã hoá trong đường dẫn', async () => {
+    const api = mockFetch({ '/admin/waste': { body: {} } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    await A.getWasteRequest('a/b c');
+    expect(api.calls[0]!.url.endsWith('/admin/waste/requests/a%2Fb%20c')).toBe(true);
+  });
+
   it('downloadWasteMonthlyCsv tải CSV tháng với tên mặc định doi-rac-<tháng>.csv', async () => {
     await A.downloadWasteMonthlyCsv('2026-10');
     expect(apiDownload).toHaveBeenCalledWith('/admin/waste/reports/monthly?month=2026-10', 'doi-rac-2026-10.csv');
