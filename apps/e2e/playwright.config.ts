@@ -21,6 +21,7 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
  *     chỉ project "Zalo Mini App" + chỉ webServer Vite. Các spec miniapp mock toàn bộ API
  *     (tests/support/mock-api.ts) nên KHÔNG cần API/DB. Project API / Web Admin bị bỏ hẳn
  *     (trước đây chỉ bỏ server nên api.spec/admin.spec vẫn chạy và fail connection-refused).
+ *   - Chỉ web admin (E2E_SCOPE=web-admin): chỉ project "Web Admin" + chỉ webServer Next. Các spec admin mock mọi lệnh gọi /api/ nên KHÔNG cần API/DB.
  *
  * webServer: Local reuseExistingServer=true → dùng lại `pnpm dev` đang chạy nếu có; CI tự spawn
  * rồi chờ health trước khi chạy test.
@@ -50,6 +51,8 @@ const MINIAPP_COMMAND = process.env.E2E_MINIAPP_PORT ? `pnpm --filter @tubutree/
 // `test:miniapp` (package.json) không cần cross-env: npm/pnpm đặt npm_lifecycle_event = tên script.
 const miniappOnly =
   process.env.E2E_SCOPE === 'miniapp' || process.env.npm_lifecycle_event === 'test:miniapp';
+
+const webAdminOnly = process.env.E2E_SCOPE === 'web-admin';
 
 type WebServer = NonNullable<Exclude<PlaywrightTestConfig['webServer'], unknown[]>>;
 
@@ -92,7 +95,7 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
     // Mảng: "admin.spec.ts" (spec gốc) + "admin-analytics.spec.ts" (Task 21) — regex đơn trước đây
     // chỉ khớp đúng "admin.spec.ts" nên file spec admin mới thứ 2 bị bỏ sót hoàn toàn (không match
     // project nào cả → CI `playwright test` không chạy, không báo lỗi).
-    testMatch: [/.*admin\.spec\.ts/, /.*admin-analytics\.spec\.ts/, /.*admin-customer-refunds\.spec\.ts/],
+    testMatch: [/.*admin\.spec\.ts/, /.*admin-analytics\.spec\.ts/, /.*admin-customer-refunds\.spec\.ts/, /.*admin-waste\.spec\.ts/],
   },
   {
     name: 'Web Customer',
@@ -119,6 +122,6 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   // Tự khởi động server cần thiết rồi CHỜ tới khi sẵn sàng. cwd = repo root (../..).
-  webServer: miniappOnly ? [miniappServer] : [apiServer, webServer, miniappServer],
-  projects: miniappOnly ? allProjects.filter((p) => p.name === 'Zalo Mini App') : allProjects,
+  webServer: miniappOnly ? [miniappServer] : webAdminOnly ? [{ ...webServer, url: `${WEB_URL}/admin` }] : [apiServer, webServer, miniappServer],
+  projects: miniappOnly ? allProjects.filter((p) => p.name === 'Zalo Mini App') : webAdminOnly ? allProjects.filter((p) => p.name === 'Web Admin') : allProjects,
 });
