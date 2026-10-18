@@ -30,7 +30,7 @@ import { Timeline } from '../components/ui/timeline';
 import { copyText } from '../utils/clipboard';
 import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { formatPhoneDisplay } from '../utils/phone';
-import { METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, requestStatusText, timelineFor } from '../utils/waste-labels';
+import { METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const BLOCK: CSSProperties = {
@@ -196,10 +196,14 @@ export default function RecycleRequestPage() {
   const closed = t ? null : closedLabel(r);
 
   const pickupPaused = !!me?.blocked || !!me?.shipLockedAt || !cfg.waste.pickup;
-  const pausedPickup = r.method === 'PICKUP' && open && !r.orderCode && pickupPaused;
-
-  const dropOffPaused =
-    r.method === 'DROP_OFF' && open && ((cfg.isLoaded && !cfg.waste.enabled) || me?.programmeEnabled === false || !!me?.blocked);
+  const paused = isRequestPaused(r, {
+    programmeEnabled: me?.programmeEnabled,
+    blocked: me?.blocked,
+    shipLockedAt: me?.shipLockedAt,
+    cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
+  });
+  const pausedPickup = paused && r.method === 'PICKUP';
+  const dropOffPaused = paused && r.method === 'DROP_OFF';
 
   const quotaFull =
     r.method === 'DROP_OFF' &&
@@ -304,7 +308,7 @@ export default function RecycleRequestPage() {
     <>
       {t && (
         <div>
-          <Badge tone="brand">{requestStatusText(r, { blocked: !!me?.blocked })}</Badge>
+          <Badge tone="brand">{requestStatusText(r, { blocked: !!me?.blocked, paused })}</Badge>
         </div>
       )}
       {mailBlock}

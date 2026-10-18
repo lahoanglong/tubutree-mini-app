@@ -1,8 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeRequestSummary } from '../services/waste-test-fixtures';
+import { makeRequestSummary, makeWasteMe } from '../services/waste-test-fixtures';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   ensurePhone: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
   listWasteRequests: vi.fn(),
+  getWasteMe: vi.fn(),
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -41,6 +42,7 @@ vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publ
 vi.mock('../services/waste-api', async (orig) => ({
   ...(await orig<object>()),
   listWasteRequests: mocks.listWasteRequests,
+  getWasteMe: mocks.getWasteMe,
 }));
 
 import RecycleRequestsPage from './recycle-requests';
@@ -62,7 +64,11 @@ const ROWS = [
   makeRequestSummary({ id: 'r-done', code: 'TR-CCCCC', status: 'COMPLETED', pointsAwarded: 4000 }),
   makeRequestSummary({ id: 'r-exp', code: 'TR-DDDDD', status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' }),
 ];
-beforeEach(() => { vi.clearAllMocks(); mocks.listWasteRequests.mockResolvedValue(ROWS); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.listWasteRequests.mockResolvedValue(ROWS);
+  mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+});
 
 describe('/recycle/requests (§4.6, §16.1)', () => {
   it('hai tab có số đếm; mặc định Đang xử lý', async () => {
@@ -93,6 +99,26 @@ describe('/recycle/requests (§4.6, §16.1)', () => {
     expect(await screen.findByRole('button', { name: /TR-AAAAA/ })).toHaveTextContent('Chờ bạn mang tới');
     expect(screen.getByRole('button', { name: /TR-BBBBB/ })).toHaveTextContent('Đang vận chuyển');
     expect(screen.queryByText(/Đang mở/)).toBeNull();
+  });
+  it('khách bị khoá: dòng RECEIVED đọc "Đang chờ Tubu xem lại"', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }));
+    mocks.listWasteRequests.mockResolvedValue([makeRequestSummary({ id: 'r-rec', code: 'TR-RECVD', method: 'MAIL_IN', status: 'RECEIVED' })]);
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: /TR-RECVD/ })).toHaveTextContent('Đang chờ Tubu xem lại'));
+  });
+  it('chương trình tạm dừng: dòng Mang tới đang mở đọc "Đang tạm dừng"', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ programmeEnabled: false }));
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: /TR-AAAAA/ })).toHaveTextContent('Đang tạm dừng'));
+    expect(screen.getByRole('button', { name: /TR-BBBBB/ })).toHaveTextContent('Đang vận chuyển');
+  });
+  it('/waste/me lỗi: dòng giữ chữ thường, không có trạng thái lỗi', async () => {
+    mocks.getWasteMe.mockRejectedValue(new Error('me hỏng'));
+    renderPage();
+    expect(await screen.findByRole('button', { name: /TR-AAAAA/ })).toHaveTextContent('Chờ bạn mang tới');
+    await waitFor(() => expect(mocks.getWasteMe).toHaveBeenCalled());
+    expect(screen.queryByText('me hỏng')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
   });
   it('COMPLETED 0 điểm: "Chưa đủ để cộng điểm", không "Đã cộng"', async () => {
     mocks.listWasteRequests.mockResolvedValue([makeRequestSummary({ id: 'r-zero', code: 'TR-ZZZZZ', status: 'COMPLETED', pointsAwarded: 0 })]);

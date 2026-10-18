@@ -31,6 +31,7 @@ import {
   equivalentUnits,
   formatLineQty,
   nextRewardProgress,
+  isRequestPaused,
   requestStatusText,
   ruleText,
   timelineFor,
@@ -66,7 +67,8 @@ function NoticeCard({ text }: { text: string }) {
   );
 }
 
-function RequestsBlock({ me, onOpen }: { me: WasteMeDTO; onOpen: (id: string) => void }) {
+function RequestsBlock({ me, onOpen, programmeOff = false }: { me: WasteMeDTO; onOpen: (id: string) => void; programmeOff?: boolean }) {
+  const cfg = usePublicConfig();
   if (me.openRequests.length === 0) return null;
   return (
     <section style={SECTION_STYLE}>
@@ -77,7 +79,11 @@ function RequestsBlock({ me, onOpen }: { me: WasteMeDTO; onOpen: (id: string) =>
         const tl = timelineFor(r);
         const closed = tl ? null : closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null });
         const subtitle = r.lines.map((l) => formatLineQty(l.itemName, l.declaredQty, l.unitLabel)).join(', ');
-        const status = requestStatusText(r, { blocked: me.blocked });
+        const pauseCfg = { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded };
+        const paused = programmeOff
+          ? isRequestPaused(r, { blocked: true, cfg: pauseCfg })
+          : isRequestPaused(r, { programmeEnabled: me.programmeEnabled, blocked: me.blocked, shipLockedAt: me.shipLockedAt, cfg: pauseCfg });
+        const status = requestStatusText(r, { blocked: me.blocked, paused });
         return (
           <Card key={r.id} variant="outline">
             <ListRow title={`${r.code} · ${METHOD_LABELS[r.method]}`} subtitle={subtitle} trailing="chevron" onPress={() => onOpen(r.id)} />
@@ -178,7 +184,9 @@ export default function RecyclePage() {
   if (phase === 'guest') return shell(cfg.waste.enabled ? loginCard(guestLogin) : <NoticeCard text={PAUSED_TEXT} />);
   if (meQ.isError || !me) return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
 
-  const openRequests = <RequestsBlock me={me} onOpen={(id) => navigate(`/recycle/r/${id}`)} />;
+  const requestsBlock = (programmeOff: boolean) => (
+    <RequestsBlock me={me} onOpen={(id) => navigate(`/recycle/r/${id}`)} programmeOff={programmeOff} />
+  );
   // Kho vẫn mở quầy khi chương trình tạm dừng hoặc khách bị khoá (15.1), nên lối vào không phụ thuộc hai nhánh đó.
   const deskRow =
     me.deskPoints.length > 0 ? (
@@ -193,7 +201,7 @@ export default function RecyclePage() {
     return shell(
       <>
         <NoticeCard text={PAUSED_TEXT} />
-        {openRequests}
+        {requestsBlock(true)}
         {deskRow && <div>{deskRow}</div>}
       </>,
     );
@@ -210,7 +218,7 @@ export default function RecyclePage() {
     return shell(
       <>
         <NoticeCard text={BLOCKED_TEXT} />
-        {openRequests}
+        {requestsBlock(false)}
         {deskRow && <div>{deskRow}</div>}
       </>,
     );
@@ -268,7 +276,7 @@ export default function RecyclePage() {
         </div>
       </Card>
 
-      {openRequests}
+      {requestsBlock(false)}
 
       {methods.length > 0 && (
         <section style={SECTION_STYLE}>

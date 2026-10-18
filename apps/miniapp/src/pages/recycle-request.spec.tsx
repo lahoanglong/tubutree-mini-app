@@ -143,6 +143,8 @@ describe('/recycle/r/:id — Mang tới điểm nhận (§4.5, §4.6)', () => {
     expect(await screen.findByText('Chương trình đang tạm dừng')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Xem mã QR' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeEnabled();
+    expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
+    expect(screen.queryByText('Chờ bạn mang tới')).toBeNull();
   });
   it('khách bị khoá: cùng câu trung tính, không lộ việc bị khoá, vẫn huỷ được', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }));
@@ -151,6 +153,7 @@ describe('/recycle/r/:id — Mang tới điểm nhận (§4.5, §4.6)', () => {
     expect(screen.queryByRole('button', { name: 'Xem mã QR' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeEnabled();
     expect(screen.queryByText(/khoá/i)).toBeNull();
+    expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
   });
   it('bình thường: có "Xem mã QR" và không có câu tạm dừng', async () => {
     renderPage();
@@ -267,6 +270,7 @@ describe('/recycle/r/:id — Thu kèm đơn mua (§4.5b, §15.6)', () => {
     renderPage();
     expect(await screen.findByText('Ghi mã này lên túi')).toBeInTheDocument();
     expect(screen.getByText('Gắn yêu cầu này vào đơn mua kế tiếp ở bước thanh toán')).toBeInTheDocument();
+    expect(screen.getByText('Chờ gắn vào đơn')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Đi mua hàng' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/');
   });
@@ -282,6 +286,8 @@ describe('/recycle/r/:id — Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(screen.queryByText('Gắn yêu cầu này vào đơn mua kế tiếp ở bước thanh toán')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Đi mua hàng' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeInTheDocument();
+    expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
+    expect(screen.queryByText('Chờ gắn vào đơn')).toBeNull();
   });
   it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Chờ kho nhận"', async () => {
     mocks.getWasteRequest.mockResolvedValue(PICKUP({ orderCode: 'TUBU123', orderId: 'ord-1', editable: false }));

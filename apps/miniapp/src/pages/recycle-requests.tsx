@@ -2,8 +2,9 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { WASTE_QUERY_KEYS, listWasteRequests } from '../services/waste-api';
+import { WASTE_QUERY_KEYS, getWasteMe, listWasteRequests } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -12,7 +13,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { formatDate } from '../utils/format';
-import { METHOD_LABELS, requestStatusText } from '../utils/waste-labels';
+import { METHOD_LABELS, isRequestPaused, requestStatusText } from '../utils/waste-labels';
 
 const OPEN_STATUSES: readonly string[] = ['OPEN', 'IN_TRANSIT', 'RECEIVED'];
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
@@ -22,6 +23,9 @@ export default function RecycleRequestsPage() {
   const phase = useAuthPhase();
   const [tab, setTab] = useState<'open' | 'closed'>('open');
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.requests, queryFn: listWasteRequests, enabled: phase === 'authenticated' });
+  const cfg = usePublicConfig();
+  const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
+  const me = meQ.data;
 
   const shell = (content: ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -53,15 +57,25 @@ export default function RecycleRequestsPage() {
         ]}
       />
       <div style={{ ...COLUMN, gap: 8 }}>
-        {shown.map((r) => (
-          <ListRow
-            key={r.id}
-            title={`${r.code} · ${METHOD_LABELS[r.method]}`}
-            subtitle={`${requestStatusText(r)} · ${formatDate(r.createdAt)}`}
-            trailing="chevron"
-            onPress={() => navigate(r.status === 'COMPLETED' ? `/recycle/done/${r.id}` : `/recycle/r/${r.id}`)}
-          />
-        ))}
+        {shown.map((r) => {
+          const paused =
+            !!me &&
+            isRequestPaused(r, {
+              programmeEnabled: me.programmeEnabled,
+              blocked: me.blocked,
+              shipLockedAt: me.shipLockedAt,
+              cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
+            });
+          return (
+            <ListRow
+              key={r.id}
+              title={`${r.code} · ${METHOD_LABELS[r.method]}`}
+              subtitle={`${requestStatusText(r, { blocked: me?.blocked, paused })} · ${formatDate(r.createdAt)}`}
+              trailing="chevron"
+              onPress={() => navigate(r.status === 'COMPLETED' ? `/recycle/done/${r.id}` : `/recycle/r/${r.id}`)}
+            />
+          );
+        })}
       </div>
     </>,
   );

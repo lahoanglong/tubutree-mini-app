@@ -186,6 +186,53 @@ describe('requestStatusText (F0, F7, §4.6)', () => {
   });
 });
 
+describe('isRequestPaused và nhãn "Đang tạm dừng" (X1)', () => {
+  const cfgOn = { enabled: true, pickup: true, isLoaded: true };
+  const drop = { method: 'DROP_OFF', status: 'OPEN', orderCode: null } as const;
+  const unattached = { method: 'PICKUP', status: 'OPEN', orderCode: null } as const;
+  const attached = { method: 'PICKUP', status: 'OPEN', orderCode: 'TB123' } as const;
+  const mail = { method: 'MAIL_IN', status: 'OPEN', orderCode: null } as const;
+  const causes: Array<[string, Parameters<typeof L.isRequestPaused>[1]]> = [
+    ['chương trình tắt', { programmeEnabled: false, cfg: cfgOn }],
+    ['cờ công khai tắt', { cfg: { ...cfgOn, enabled: false } }],
+    ['khách bị khoá', { blocked: true, cfg: cfgOn }],
+    ['khoá đường kho', { shipLockedAt: '2026-10-01T00:00:00.000Z', cfg: cfgOn }],
+    ['cờ pickup tắt', { cfg: { ...cfgOn, pickup: false } }],
+  ];
+  const dropPauses = [true, true, true, false, false];
+  const pickupPauses = [false, false, true, true, true];
+
+  it.each(causes.map((c, i) => [c[0], c[1], dropPauses[i], pickupPauses[i]] as const))(
+    '%s',
+    (_n, facts, dropPaused, pickupPaused) => {
+      expect(L.isRequestPaused(drop, facts)).toBe(dropPaused);
+      expect(L.isRequestPaused(unattached, facts)).toBe(pickupPaused);
+      expect(L.isRequestPaused(attached, facts)).toBe(false);
+      expect(L.isRequestPaused(mail, facts)).toBe(false);
+      expect(L.isRequestPaused({ ...drop, status: 'RECEIVED' }, facts)).toBe(false);
+    },
+  );
+  it('không có lý do nào → không tạm dừng; cấu hình chưa tải không tính là tắt', () => {
+    expect(L.isRequestPaused(drop, { cfg: cfgOn })).toBe(false);
+    expect(L.isRequestPaused(unattached, { cfg: cfgOn })).toBe(false);
+    expect(L.isRequestPaused(drop, { cfg: { enabled: false, pickup: false, isLoaded: false } })).toBe(false);
+  });
+  it.each([
+    [{ method: 'DROP_OFF', status: 'OPEN' }, true, 'Đang tạm dừng'],
+    [{ method: 'PICKUP', status: 'OPEN', orderCode: null }, true, 'Đang tạm dừng'],
+    [{ method: 'PICKUP', status: 'OPEN', orderCode: 'TB123' }, true, 'Chờ kho nhận'],
+    [{ method: 'MAIL_IN', status: 'OPEN' }, true, 'Chờ bạn gửi kiện'],
+    [{ method: 'MAIL_IN', status: 'IN_TRANSIT' }, true, 'Đang vận chuyển'],
+    [{ method: 'DROP_OFF', status: 'OPEN' }, false, 'Chờ bạn mang tới'],
+    [{ method: 'PICKUP', status: 'OPEN', orderCode: null }, false, 'Chờ gắn vào đơn'],
+  ])('requestStatusText %o paused=%s', (over, paused, text) => {
+    expect(L.requestStatusText({ ...{ method: 'DROP_OFF', status: 'OPEN', closeReason: null, orderCode: null, pointsAwarded: null }, ...over } as never, { paused })).toBe(text);
+  });
+  it('RECEIVED bị khoá giữ nhãn "Đang chờ Tubu xem lại" dù paused', () => {
+    expect(L.requestStatusText({ method: 'MAIL_IN', status: 'RECEIVED', closeReason: null, orderCode: null, pointsAwarded: null }, { blocked: true, paused: true })).toBe('Đang chờ Tubu xem lại');
+  });
+});
+
 describe('monthRemainingText (F3)', () => {
   const item = { monthlyCapQty: 120, unitLabel: 'chai' };
   it('hết trần → nói rõ', () => { expect(L.monthRemainingText({ ...item, monthRemainingQty: 0 })).toBe('Tháng này bạn đã đủ trần cho món này'); });
