@@ -511,7 +511,7 @@ export default function RecycleNewPage() {
           )}
           {fee && (
             <Text variant="caption" tone="secondary" as="span">
-              {`Phí ship ước tính từ ${fee.provinceName}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}
+              {`Phí ship ước tính từ ${provincesQ.data?.find((pr) => pr.code === fee.provinceCode)?.name ?? fee.provinceName}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}
             </Text>
           )}
           {m === 'MAIL_IN' && (
