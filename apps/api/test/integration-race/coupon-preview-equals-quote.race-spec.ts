@@ -75,6 +75,8 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     await setConfig(prisma, 'shipping.free_threshold', 200_000);
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);
     await setConfig(prisma, 'merchant.default_shipping_fee', 25_000);
+    // Gian hàng CTV fixture chưa duyệt; mặc định mới bật duyệt sẽ ẩn nó nên combo không áp. Ghim tắt vì spec không kiểm duyệt.
+    await setConfig(prisma, 'storefront.require_approval', false);
   });
 
   afterAll(async () => {
