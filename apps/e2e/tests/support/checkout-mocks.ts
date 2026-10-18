@@ -15,7 +15,7 @@ import { PILOT_PRODUCT } from './pilot-mocks';
  *   GET  /me/addresses            users.controller.ts
  *   GET  /me/wallet               wallet.controller.ts
  *   GET  /me/loyalty              loyalty.controller.ts
- *   GET  /config/public           system-config.controller.ts (recyclingEnabled)
+ *   GET  /config/public           system-config.controller.ts (waste.pickup)
  *   POST /checkout/quote          checkout.controller.ts
  *   POST /checkout/place-order    checkout.controller.ts (Idempotency-Key)
  *   GET  /payments/bank-qr/:code  payment.controller.ts
@@ -47,7 +47,7 @@ export const CHECKOUT_CART: CartSummary = {
       unitPrice: 65000,
       quantity: 2,
       stock: 50,
-      // 2 × 600g = 1,2kg → "Thu gom tối đa ~1.2 kg" (recyclingMaxKg, utils/format.ts).
+      // 2 × 600g = 1,2kg.
       weight: 600,
       total: 130000,
     },
@@ -115,8 +115,8 @@ export function placedOrderFor(body: Record<string, unknown>): OrderDTO {
     status: bank ? 'PENDING_PAYMENT' : 'CONFIRMED',
     paymentMethod: bank ? 'BANK_TRANSFER' : 'COD',
     paymentStatus: 'UNPAID',
-    hasRecyclingPickup: body.hasRecyclingPickup === true,
-    recyclingNote: typeof body.recyclingNote === 'string' ? body.recyclingNote : null,
+    hasRecyclingPickup: typeof body.wasteRequestId === 'string',
+    recyclingNote: null,
   });
 }
 
@@ -131,7 +131,7 @@ export const BANK_QR: BankQr = {
   qrImageUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
 };
 
-export function mockCheckout(api: MockApi, opts: { recyclingEnabled?: boolean } = {}): void {
+export function mockCheckout(api: MockApi): void {
   mockSession(
     api,
     makeUser({ id: 'user-checkout', fullName: 'Nguyễn Văn A', pointsBalance: 50, pointsConvertedBalance: 50, walletBalance: 200000 }),
@@ -140,7 +140,7 @@ export function mockCheckout(api: MockApi, opts: { recyclingEnabled?: boolean } 
   api.get('/me/addresses', [CHECKOUT_ADDRESS]);
   api.get('/me/wallet', CHECKOUT_WALLET);
   api.get('/me/loyalty', CHECKOUT_LOYALTY);
-  api.get('/config/public', publicConfig({ recyclingEnabled: opts.recyclingEnabled ?? false }));
+  api.get('/config/public', publicConfig());
   api.post('/checkout/quote', CHECKOUT_QUOTE);
   api.post('/checkout/place-order', ({ call }) => placedOrderFor((call.body ?? {}) as Record<string, unknown>));
   api.get('/payments/bank-qr/:code', BANK_QR);

@@ -211,11 +211,6 @@ export interface PublicConfig {
   cashbackHoldDays: number;
   /** Cờ công khai của Đổi rác lấy quà (§11.5). */
   waste: WastePublicFlags;
-  /**
-   * Hiện lựa chọn "Gửi lại vật liệu tái chế" ở checkout — true chỉ khi Gomdon đã cấu hình VÀ admin
-   * bật. Optional: API bản cũ không trả field này → coi như tắt.
-   */
-  recyclingEnabled?: boolean;
   /** Khoảng ngày giao dự kiến — null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) → ẩn. */
   shippingEta?: ShippingEta | null;
   /** Mức giảm (% nguyên) và quy mô nhóm mua chung — thiếu khi API cũ → UI không hứa con số. */
@@ -498,8 +493,7 @@ export const placeOrder = (
     referralCode?: string;
     storefrontSlug?: string;
     itemIds?: string[];
-    hasRecyclingPickup?: boolean;
-    recyclingNote?: string;
+    wasteRequestId?: string;
   },
   idempotencyKey: string,
 ) =>

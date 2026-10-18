@@ -9,8 +9,8 @@ import { PUBLIC_CONFIG_FALLBACK, resolvePublicConfig } from './use-public-config
  * không để `undefined` cho mỗi màn tự đoán.
  */
 describe('PUBLIC_CONFIG_FALLBACK', () => {
-  it('recyclingEnabled mặc định false (tắt cho tới khi server xác nhận)', () => {
-    expect(PUBLIC_CONFIG_FALLBACK).toHaveProperty('recyclingEnabled', false);
+  it('không còn recyclingEnabled (thay bằng waste.pickup, spec 13.2)', () => {
+    expect(PUBLIC_CONFIG_FALLBACK).not.toHaveProperty('recyclingEnabled');
   });
   it('shippingEta mặc định null — không hứa ngày giao khi server chưa trả', () => {
     expect(PUBLIC_CONFIG_FALLBACK).toHaveProperty('shippingEta', null);
