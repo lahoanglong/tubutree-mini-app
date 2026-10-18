@@ -97,8 +97,9 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
   const rows = [
     { id: 'nt-flash', code: 'FLASH_STARTING', channel: 'INAPP', zaloTemplateId: null, bodyTemplate: 'Flash sale sắp mở' },
     { id: 'nt-paid', code: 'MERCHANT_PAYOUT_CREATED_TO_TUBU', channel: 'INAPP', zaloTemplateId: null, bodyTemplate: 'Chuyển {{amount}}' },
+    { id: 'nt-cart', code: 'CART_ABANDONED', channel: 'ZNS', zaloTemplateId: null, bodyTemplate: 'Giỏ hàng còn chờ bạn' },
   ];
-  function staffSetup() {
+  function staffSetup(env: { oaId?: string; miniapp?: string } = {}) {
     const update = jest.fn(async ({ where, data }: { where: { code: string }; data: object }) => ({
       ...rows.find((t) => t.code === where.code)!,
       ...data,
@@ -111,9 +112,53 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
       },
       notificationLog: { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
-    return { svc: new NotificationTemplatesAdminService(prisma), update };
+    const config = { get: jest.fn((k: string) => (k === 'ZALO_OA_ID' ? env.oaId : undefined)) };
+    const sys = { get: jest.fn(async (k: string, fb: unknown) => (k === 'app.miniapp_base_url' ? (env.miniapp ?? fb) : fb)) };
+    return { svc: new NotificationTemplatesAdminService(prisma, config as never, sys as never), update };
   }
   const staff = { id: 's1', staff: true };
+
+  it.each([
+    'Chuyển khoản vào 0123456789 để nhận quà',
+    'STK 1903 1234 5678 Techcombank',
+    'Gọi 0912.345.678 nhận quà',
+  ])('nhân viên ghi dãy từ 8 chữ số (STK, SĐT) → 400 nói rõ: %s', async (body) => {
+    const { svc, update } = staffSetup();
+    await expect(svc.update('FLASH_STARTING', { bodyTemplate: body }, staff)).rejects.toThrow('8 chữ số');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'Xem tại http://tubu-sale.xyz/qua',
+    'Vào www.tubu-sale.xyz nhận quà',
+    'Nhắn zalo.me/0912345678 để nhận',
+    'Theo dõi https://zalo.me/9999 nha',
+    'Ưu đãi https://tubutree.com.khuyenmai.xyz/km',
+  ])('nhân viên chèn link ngoài tubutree / OA của shop → 400: %s', async (body) => {
+    const { svc, update } = staffSetup({ oaId: '1234567890123', miniapp: 'https://zalo.me/s/555' });
+    await expect(svc.update('FLASH_STARTING', { bodyTemplate: body }, staff)).rejects.toThrow('link');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('link tubutree, OA và Mini App của shop, số tiền thường, biến {{...}} → được', async () => {
+    const { svc, update } = staffSetup({ oaId: '1234567890123', miniapp: 'https://zalo.me/s/555' });
+    const body =
+      'Flash sale giảm 1.500.000đ cho đơn {{order_code}} tại https://tubutree.com/flash, www.tubutree.vn, zalo.me/1234567890123 hoặc https://zalo.me/s/555/?p=1';
+    await svc.update('FLASH_STARTING', { bodyTemplate: body }, staff);
+    expect(update).toHaveBeenCalled();
+  });
+
+  it('quản trị viên không bị lọc nội dung', async () => {
+    const { svc, update } = staffSetup();
+    await svc.update('MERCHANT_PAYOUT_CREATED_TO_TUBU', { bodyTemplate: 'Chuyển {{amount}} vào STK 0071000123456 Vietcombank' }, { id: 'a1', staff: false });
+    expect(update).toHaveBeenCalled();
+  });
+
+  it('mẫu ZNS chưa có mã mẫu: nhân viên chỉ sửa nội dung → lưu được (không bắt nhập mã mẫu họ không được đổi)', async () => {
+    const { svc, update } = staffSetup();
+    await svc.update('CART_ABANDONED', { channel: 'ZNS', zaloTemplateId: null, bodyTemplate: 'Giỏ hàng còn 2 món đang chờ' }, staff);
+    expect(update).toHaveBeenCalledWith({ where: { code: 'CART_ABANDONED' }, data: expect.objectContaining({ bodyTemplate: 'Giỏ hàng còn 2 món đang chờ' }) });
+  });
 
   it('danh sách đánh dấu mẫu nhân viên sửa được: chỉ mẫu khuyến mãi / tương tác', async () => {
     const { svc } = staffSetup();
@@ -121,6 +166,7 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
     expect(Object.fromEntries(list.map((t) => [t.code, t.staffEditable]))).toEqual({
       FLASH_STARTING: true,
       MERCHANT_PAYOUT_CREATED_TO_TUBU: false,
+      CART_ABANDONED: true,
     });
   });
 

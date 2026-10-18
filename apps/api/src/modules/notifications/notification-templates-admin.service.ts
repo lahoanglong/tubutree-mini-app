@@ -1,5 +1,7 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import type { UpdateNotificationTemplateDto } from './dto/update-notification-template.dto';
 
 /**
@@ -69,7 +71,11 @@ const ZNS_TEMPLATE_ID = /^\d{1,20}$/;
 export class NotificationTemplatesAdminService {
   private readonly logger = new Logger(NotificationTemplatesAdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly env?: ConfigService,
+    @Optional() private readonly config?: SystemConfigService,
+  ) {}
 
   async list(now: Date = new Date()): Promise<AdminNotificationTemplate[]> {
     const since = new Date(now.getTime() - 30 * 86_400_000);
@@ -120,7 +126,10 @@ export class NotificationTemplatesAdminService {
   async update(code: string, dto: UpdateNotificationTemplateDto, actor: { id: string; staff: boolean } = { id: 'system', staff: false }) {
     const current = await this.prisma.notificationTemplate.findUnique({ where: { code } });
     if (!current) throw new NotFoundException('Không tìm thấy mẫu thông báo.');
-    if (actor.staff) assertStaffMayEdit(current, dto);
+    if (actor.staff) {
+      assertStaffMayEdit(current, dto);
+      if (dto.bodyTemplate !== undefined) assertStaffBody(dto.bodyTemplate, await this.shopLinks());
+    }
 
     const data: { channel?: string; zaloTemplateId?: string | null; bodyTemplate?: string } = {};
     if (dto.channel !== undefined) data.channel = dto.channel;
@@ -139,12 +148,22 @@ export class NotificationTemplatesAdminService {
 
     const channel = data.channel ?? current.channel;
     const templateId = data.zaloTemplateId !== undefined ? data.zaloTemplateId : current.zaloTemplateId;
-    if (channel === 'ZNS' && !templateId) {
+    // Chỉ kiểm khi lần sửa này đổi kênh / mã mẫu: sửa nội dung một mẫu ZNS đang thiếu mã mẫu không bị kẹt.
+    const deliveryChanged = channel !== current.channel || templateId !== current.zaloTemplateId;
+    if (deliveryChanged && channel === 'ZNS' && !templateId) {
       throw new BadRequestException('Kênh ZNS cần mã mẫu đã được Zalo duyệt. Nhập mã mẫu hoặc để kênh Trong app.');
     }
     const updated = await this.prisma.notificationTemplate.update({ where: { code }, data });
     this.logger.warn(`${actor.staff ? 'Nhân viên' : 'Admin'} ${actor.id} sửa mẫu thông báo ${code}: ${JSON.stringify(data)}`);
     return updated;
+  }
+
+  /** Link của shop được phép trong nội dung nhân viên sửa: Zalo OA (ZALO_OA_ID) và Mini App (app.miniapp_base_url). */
+  private async shopLinks(): Promise<ShopLinks> {
+    const oaId = this.env?.get<string>('ZALO_OA_ID')?.trim() || null;
+    const raw: unknown = await this.config?.get<string>('app.miniapp_base_url', '');
+    const miniApp = typeof raw === 'string' && raw.trim() ? stripScheme(raw.trim()).replace(/\/+$/, '') : null;
+    return { oaId, miniApp };
   }
 }
 
@@ -160,6 +179,48 @@ function assertStaffMayEdit(
   const idChanged = dto.zaloTemplateId !== undefined && (dto.zaloTemplateId?.trim() || null) !== current.zaloTemplateId;
   if (channelChanged || idChanged) {
     throw new ForbiddenException('Đổi kênh gửi hoặc mã mẫu ZNS (tính phí mỗi tin) chỉ quản trị viên làm.');
+  }
+}
+
+
+interface ShopLinks {
+  oaId: string | null;
+  miniApp: string | null;
+}
+
+const LINK_TOKEN = /(?:https?:\/*|www\.)[^\s]*|(?:[a-z0-9-]+\.)*zalo\.me\b[^\s]*/gi;
+const LONG_NUMBER = /\d(?:[\s.]*\d){7,}/;
+const TUBUTREE_HOST = /(^|\.)tubutree\.(com|vn|com\.vn)$/i;
+
+const stripScheme = (url: string) => url.replace(/^https?:\/*/i, '').replace(/^www\./i, '');
+
+function isShopLink(token: string, shop: ShopLinks): boolean {
+  const bare = stripScheme(token);
+  const host = bare.split(/[/?#]/, 1)[0]!.toLowerCase();
+  if (TUBUTREE_HOST.test(host)) return true;
+  if (host !== 'zalo.me') return false;
+  const rest = bare.slice(host.length).replace(/^\//, '');
+  if (shop.oaId && rest.split(/[/?#]/, 1)[0] === shop.oaId) return true;
+  if (!shop.miniApp || !bare.startsWith(shop.miniApp)) return false;
+  const after = bare.slice(shop.miniApp.length);
+  return after === '' || /^[/?#]/.test(after);
+}
+
+/**
+ * Nội dung nhân viên sửa không được mang số tài khoản / SĐT (dãy từ 8 chữ số, kể cả cách bằng dấu cách hay chấm) hay link
+ * ngoài tubutree và OA / Mini App của shop: tin gửi từ kênh chính thức, khách tin là lời Tubu.
+ */
+function assertStaffBody(body: string, shop: ShopLinks): void {
+  const tokens = (body.match(LINK_TOKEN) ?? []).map((t) => t.replace(/[),.;:!?]+$/, ''));
+  const foreign = tokens.find((t) => !isShopLink(t, shop));
+  if (foreign) {
+    throw new BadRequestException(`Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link "${foreign}".`);
+  }
+  const rest = tokens.reduce((acc, t) => acc.split(t).join(' '), body);
+  if (LONG_NUMBER.test(rest)) {
+    throw new BadRequestException(
+      'Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại). Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.',
+    );
   }
 }
 
