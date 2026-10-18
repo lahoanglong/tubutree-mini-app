@@ -4,6 +4,7 @@ import { claimPoints } from './external-points-rate';
 
 const DAY_MS = 864e5;
 export const NOT_FOUND_LOCK_THRESHOLD = 5;
+const OWN_REPORTABLE = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED'];
 
 export interface ClaimOrderFacts {
   source: 'MARKETPLACE' | 'CHAT' | 'UNKNOWN';
@@ -20,12 +21,16 @@ export interface ClaimFacts {
   cfg: ClaimConfig;
   userOk: boolean;
   userPhoneLast3: string | null;
+  /** Thành viên là nhân viên hoặc admin: tự tích điểm cho mình thì luôn phải có người khác duyệt. */
+  userIsStaff: boolean;
   lockedUntil: Date | null;
   attemptsToday: number;
   isAppOrder: boolean;
   order: ClaimOrderFacts | null;
-  /** Claim đã có trên đơn này. `reopenable` = admin đã "Huỷ và mở lại mã" nên nhận lại được. */
-  claim: { reopenable: boolean } | null;
+  /** Claim đã có trên đơn này. `reopenable` = admin đã "Huỷ và mở lại mã" nên nhận lại được. `own` = claim của chính khách đang gửi. */
+  claim: { id: string; reopenable: boolean; own: boolean; state: string } | null;
+  /** Đơn KHÁC (cùng mã vận đơn hoặc mã đơn sàn) đã có claim còn hiệu lực: một mã chỉ tích một lần dù Pancake tách thành nhiều dòng. */
+  codeTaken: boolean;
   claimsToday: number;
   /** Tổng điểm các claim còn hiệu lực tạo trong tháng VN này của khách. */
   monthPoints: number;
@@ -35,6 +40,7 @@ export type ClaimDecision =
   | { kind: 'REJECT'; code: ExternalClaimRejectCode }
   | { kind: 'UNMATCHED' }
   | { kind: 'UNKNOWN_SOURCE' }
+  | { kind: 'OWN_CLAIM'; claimId: string; state: string }
   | { kind: 'CLAIM'; state: 'PENDING' | 'REVIEW'; reviewReason: string | null; points: number };
 
 /**
@@ -71,7 +77,12 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   if (f.cfg.externalSince && order.insertedAt.getTime() < f.cfg.externalSince.getTime()) return reject('BEFORE_SINCE');
   if (f.now.getTime() - order.insertedAt.getTime() > f.cfg.maxAgeDays * DAY_MS) return reject('TOO_OLD');
   if (order.status === 'CANCELLED' || order.status === 'RETURNED' || order.status === 'DELETED') return reject('CLOSED');
-  if (f.claim && !f.claim.reopenable) return reject('ALREADY_CLAIMED');
+  if (f.claim && !f.claim.reopenable) {
+    // Gửi lại mã của chính mình chỉ trả trạng thái hiện có, không tính là lần thử. Claim đã đóng (huỷ, đảo) thì vẫn là "đã tích".
+    if (f.claim.own && OWN_REPORTABLE.includes(f.claim.state)) return { kind: 'OWN_CLAIM', claimId: f.claim.id, state: f.claim.state };
+    return reject('ALREADY_CLAIMED');
+  }
+  if (f.codeTaken) return reject('ALREADY_CLAIMED');
   if (f.claimsToday >= f.cfg.dailyMax) return reject('DAILY_MAX');
 
   const points = claimPoints(order.goodsValue, f.cfg.earnPct);
@@ -80,6 +91,7 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
 
   let reviewReason: string | null = null;
   if (points === null) reviewReason = 'Chưa tính được tiền hàng của đơn';
+  else if (f.userIsStaff) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
   else if ((order.goodsValue ?? 0) > f.cfg.reviewAboveVnd) reviewReason = 'Giá trị đơn vượt ngưỡng tự duyệt';
   else if (order.phoneLast3 && f.userPhoneLast3 && order.phoneLast3 !== f.userPhoneLast3) reviewReason = '3 số cuối SĐT trên đơn khác SĐT thành viên';
   return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0 };

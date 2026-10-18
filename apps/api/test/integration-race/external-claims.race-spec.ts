@@ -55,6 +55,8 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
   });
 
   afterAll(async () => {
+    const claimIds = (await prisma.externalPointsClaim.findMany({ where: { OR: [{ userId: { in: userIds } }, { externalOrderId: { in: orderIds } }] }, select: { id: true } })).map((c) => c.id);
+    await prisma.externalClaimEvent.deleteMany({ where: { claimId: { in: claimIds } } });
     await prisma.externalClaimAttempt.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.externalPointsClaim.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { externalOrderId: { in: orderIds } }] } });
     await prisma.externalOrder.deleteMany({ where: { id: { in: orderIds } } });
@@ -358,7 +360,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     await svc.submit(user.id, code);
     const attempt = await prisma.externalClaimAttempt.findFirstOrThrow({ where: { userId: user.id, code } });
     const order = await mkOrder();
-    const results = await Promise.allSettled([adm.attach(attempt.id, order.pancakeOrderId, 'staff1'), adm.attach(attempt.id, order.pancakeOrderId, 'staff2')]);
+    const results = await Promise.allSettled([adm.attach(attempt.id, order.pancakeOrderId, { id: 'staff1', role: 'ADMIN' }, 'đối chiếu ảnh'), adm.attach(attempt.id, order.pancakeOrderId, { id: 'staff2', role: 'ADMIN' }, 'đối chiếu ảnh')]);
     expect(summarize(results).fulfilled).toHaveLength(1);
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { externalOrderId: order.id } })).toMatchObject({ userId: user.id, state: 'PENDING', claimedCode: code });
     expect(await prisma.externalClaimAttempt.findUniqueOrThrow({ where: { id: attempt.id } })).toMatchObject({ result: 'MATCHED', externalOrderId: order.id });

@@ -22,6 +22,9 @@ export type ExternalClaimRejectCode =
   | 'MONTHLY_CAP'
   | 'ZERO_POINTS';
 
+/** Mã lỗi của thao tác admin (ngoài ExternalClaimRejectCode, vốn cũng có thể trả khi gắn đơn chạy luật gửi mã). */
+export type ExternalClaimAdminErrorCode = 'SELF_ACTION' | 'SAME_INTRODUCER' | 'ATTACH_ADMIN_ONLY' | 'NOTE_REQUIRED' | 'NOT_FLAGGED';
+
 export interface SubmitExternalClaimRequest {
   /** Mã vận đơn hoặc mã đơn sàn, nhập tay hoặc quét. Server chuẩn hoá (chữ hoa, bỏ khoảng trắng và gạch). */
   code: string;
@@ -89,6 +92,23 @@ export interface AdminExternalClaimRow {
   createdAt: string;
 }
 
+/** Một dòng nhật ký chỉ-thêm của claim: mọi thao tác của người, cron và khách. */
+export interface AdminExternalClaimEvent {
+  id: string;
+  action: string;
+  actorId: string | null;
+  fromState: string | null;
+  toState: string | null;
+  userIdBefore: string | null;
+  userIdAfter: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface AdminExternalClaimDetail extends AdminExternalClaimRow {
+  events: AdminExternalClaimEvent[];
+}
+
 export interface AdminExternalClaimListResponse {
   data: AdminExternalClaimRow[];
   meta: { page: number; limit: number; total: number };
@@ -118,6 +138,18 @@ export interface AdminExternalReasonRequest {
 export interface AdminAttachAttemptRequest {
   /** id Pancake của đơn (external_orders.pancakeOrderId) cần gắn vào lần gửi mã. */
   pancakeOrderId: string;
+  /** Bắt buộc (và chỉ ADMIN) khi mã không trùng mã trên đơn hoặc đơn có nguồn UNKNOWN. */
+  note?: string;
+}
+
+/** "Giữ điểm, gỡ cờ" cho claim đã cộng mà đơn hoàn một phần (chỉ ADMIN). Không thu hồi một phần. */
+export interface AdminKeepPointsRequest {
+  note: string;
+}
+
+export interface AdminAttachAttemptResponse {
+  claimId: string;
+  state: 'PENDING' | 'REVIEW';
 }
 
 export interface AdminRejectAttemptRequest {

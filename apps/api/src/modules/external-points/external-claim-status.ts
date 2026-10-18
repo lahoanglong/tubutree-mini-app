@@ -7,7 +7,8 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import { externalLotKey, loadPointExpiryTxns, lotRecoverable } from '../loyalty/loyalty-expiry.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
-import { claimPoints, maskClaimCode } from './external-points-rate';
+import { recordClaimEvent } from './external-claim-audit';
+import { maskClaimCode } from './external-points-rate';
 
 const logger = new Logger('ExternalClaimStatus');
 
@@ -59,44 +60,71 @@ export interface ReverseResult {
   reversedPoints: number;
 }
 
+type Tx = Prisma.TransactionClient;
+
 /**
- * Đảo điểm đã cộng của một claim: thu hồi `min(điểm đã cộng, phần lô còn thu hồi được, số dư)` như reverseOrderPoints (PF-3), không
- * bao giờ làm số dư âm và không đòi lại điểm đã hết hạn. Khoá claim rồi mới tới users (cùng chiều với lúc cộng). Idempotent theo
- * trạng thái claim; unique sổ điểm (reason, refId) là chốt chặn cuối. null = claim không còn ở CREDITED.
+ * Thứ tự khoá MỌI đường: dòng đơn (FOR SHARE) rồi dòng claim (FOR UPDATE) rồi dòng users. FOR SHARE ở đơn chặn webhook đang ghi đơn
+ * (UPDATE cần khoá mạnh hơn) và cho các đường đọc đơn song song đi cùng nhau; claim FOR UPDATE xếp hàng các đường đổi claim. Đảo
+ * thứ tự ở bất kỳ đâu sẽ deadlock với cron cộng điểm.
  */
-export async function reverseCreditedClaim(
-  prisma: PrismaService,
+export async function lockOrderThenClaim(tx: Tx, claimId: string): Promise<{ orderId: string } | null> {
+  const head = await tx.externalPointsClaim.findUnique({ where: { id: claimId }, select: { externalOrderId: true } });
+  if (!head) return null;
+  await tx.$queryRaw`SELECT "id" FROM "external_orders" WHERE "id" = ${head.externalOrderId} FOR SHARE`;
+  return { orderId: head.externalOrderId };
+}
+
+/**
+ * Đảo điểm đã cộng của một claim TRONG transaction của caller: thu hồi `min(điểm đã cộng, phần lô còn thu hồi được, số dư)` như
+ * reverseOrderPoints (PF-3), không bao giờ làm số dư âm và không đòi lại điểm đã hết hạn. Idempotent theo trạng thái claim; unique
+ * sổ điểm (reason, refId) là chốt chặn cuối. null = claim không còn ở CREDITED.
+ */
+export async function reverseCreditedClaimTx(
+  tx: Tx,
   claimId: string,
   by: { reason: string; actorId: string | null },
 ): Promise<ReverseResult | null> {
-  return prisma.$transaction(async (tx) => {
-    const [claim] = await tx.$queryRaw<{ id: string; userId: string | null; points: number; externalOrderId: string }[]>`
-      SELECT "id", "userId", "points", "externalOrderId" FROM "external_points_claims" WHERE "id" = ${claimId} AND "state" = 'CREDITED' FOR UPDATE`;
-    if (!claim || !claim.userId) return null;
-    const [user] = await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${claim.userId} FOR UPDATE`;
-    const order = await tx.externalOrder.findUniqueOrThrow({ where: { id: claim.externalOrderId }, select: { pancakeOrderId: true, source: true } });
-    const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, claim.userId), externalLotKey(claim.id));
-    const take = Math.max(0, Math.min(claim.points, recoverable ?? claim.points, user?.pointsBalance ?? 0));
-    const done = await tx.externalPointsClaim.updateMany({
-      where: { id: claim.id, state: 'CREDITED' },
-      data: { state: 'REVERSED', voidReason: by.reason, decidedById: by.actorId },
-    });
-    if (done.count !== 1) return null;
-    if (take > 0) {
-      const prefix = order.source === 'CHAT' ? 'PANCAKE_CHAT_ORDER_REVERSED' : 'MARKETPLACE_ORDER_REVERSED';
-      const res = await applyPointsDelta(tx, {
-        userId: claim.userId,
-        delta: -take,
-        lot: 'STANDARD',
-        reason: `${prefix}:${order.pancakeOrderId}`,
-        refType: 'EXTERNAL_ORDER',
-        refId: claim.id,
-      });
-      if (!res.applied) throw new Error(`reverseCreditedClaim ${claim.id}: số dư đổi giữa chừng`);
-    }
-    if (take < claim.points) logger.log(`reverseCreditedClaim claim=${claim.id}: thu hồi ${take}/${claim.points} điểm (phần còn lại đã hết hạn, đã mất hoặc vượt số dư)`);
-    return { claimId: claim.id, reversedPoints: take };
+  if (!(await lockOrderThenClaim(tx, claimId))) return null;
+  const [claim] = await tx.$queryRaw<{ id: string; userId: string | null; points: number; externalOrderId: string }[]>`
+    SELECT "id", "userId", "points", "externalOrderId" FROM "external_points_claims" WHERE "id" = ${claimId} AND "state" = 'CREDITED' FOR UPDATE`;
+  if (!claim || !claim.userId) return null;
+  const [user] = await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${claim.userId} FOR UPDATE`;
+  const order = await tx.externalOrder.findUniqueOrThrow({ where: { id: claim.externalOrderId }, select: { pancakeOrderId: true, source: true } });
+  const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, claim.userId), externalLotKey(claim.id));
+  const take = Math.max(0, Math.min(claim.points, recoverable ?? claim.points, user?.pointsBalance ?? 0));
+  const done = await tx.externalPointsClaim.updateMany({
+    where: { id: claim.id, state: 'CREDITED' },
+    data: { state: 'REVERSED', voidReason: by.reason, decidedById: by.actorId },
   });
+  if (done.count !== 1) return null;
+  if (take > 0) {
+    const prefix = order.source === 'CHAT' ? 'PANCAKE_CHAT_ORDER_REVERSED' : 'MARKETPLACE_ORDER_REVERSED';
+    const res = await applyPointsDelta(tx, {
+      userId: claim.userId,
+      delta: -take,
+      lot: 'STANDARD',
+      reason: `${prefix}:${order.pancakeOrderId}`,
+      refType: 'EXTERNAL_ORDER',
+      refId: claim.id,
+    });
+    if (!res.applied) throw new Error(`reverseCreditedClaim ${claim.id}: số dư đổi giữa chừng`);
+  }
+  await recordClaimEvent(tx, {
+    claimId: claim.id,
+    action: by.actorId ? 'REVERSE' : 'AUTO_REVERSE',
+    actorId: by.actorId,
+    fromState: 'CREDITED',
+    toState: 'REVERSED',
+    userIdBefore: claim.userId,
+    userIdAfter: claim.userId,
+    note: `${by.reason} (thu hồi ${take}/${claim.points} điểm)`,
+  });
+  if (take < claim.points) logger.log(`reverseCreditedClaim claim=${claim.id}: thu hồi ${take}/${claim.points} điểm (phần còn lại đã hết hạn, đã mất hoặc vượt số dư)`);
+  return { claimId: claim.id, reversedPoints: take };
+}
+
+export function reverseCreditedClaim(prisma: PrismaService, claimId: string, by: { reason: string; actorId: string | null }): Promise<ReverseResult | null> {
+  return prisma.$transaction((tx) => reverseCreditedClaimTx(tx, claimId, by));
 }
 
 async function notifySafe(notifier: ClaimNotifier | undefined, userId: string | null, code: string, data: Record<string, string>, dedupeKey: string): Promise<void> {
@@ -108,10 +136,19 @@ async function notifySafe(notifier: ClaimNotifier | undefined, userId: string | 
   }
 }
 
+interface AppliedNotice {
+  action: StatusAction;
+  userId: string | null;
+  claimId: string;
+  code: string;
+  detail: string | null;
+  dedupeKey: string | null;
+}
+
 /**
- * Nối trạng thái đơn ngoài (đã ghi bởi ingestExternalOrder) vào claim của nó. Idempotent và chịu chạy lặp: quyết định chỉ dựa trên
- * trạng thái hiện tại của đơn và claim, mọi ghi đều có điều kiện trạng thái. Không ném lỗi ra ngoài đường webhook: lỗi chỉ log để
- * lần nạp kế tiếp (hoặc cron kéo dự phòng) thử lại.
+ * Nối trạng thái đơn ngoài (đã ghi bởi ingestExternalOrder) vào claim của nó. Chạy trong MỘT transaction: khoá đơn rồi claim, ĐỌC LẠI
+ * claim sau khoá rồi mới quyết, nên một lượt cộng điểm chen vào (claim vừa thành CREDITED) được thấy và đi nhánh đảo điểm thay vì
+ * bị bỏ lỡ. Không ném lỗi ra ngoài đường webhook: lỗi chỉ log để lần nạp kế tiếp (hoặc cron kéo dự phòng) thử lại.
  */
 export async function applyStatusToClaim(
   prisma: PrismaService,
@@ -120,63 +157,85 @@ export async function applyStatusToClaim(
   pancakeOrderId: string,
 ): Promise<StatusAction> {
   try {
-    const order = await prisma.externalOrder.findUnique({ where: { pancakeOrderId }, include: { claim: true } });
-    const claim = order?.claim;
-    if (!order || !claim) return 'NONE';
-    const { action, reason } = decideStatusAction(order.status, {
-      state: claim.state,
-      autoVoided: claim.state === 'VOIDED' && claim.decidedById === null,
-      flaggedPartial: claim.reviewReason !== null,
-      humanDecided: claim.decidedById !== null,
-    });
-    const code = maskClaimCode(order.trackingCode);
-    switch (action) {
-      case 'VOID': {
-        const res = await prisma.externalPointsClaim.updateMany({
-          where: { id: claim.id, state: { in: [...UNPAID] } },
-          data: { state: 'VOIDED', voidReason: AUTO_VOID_REASON, decidedById: null },
+    const pendingDays = config ? (await loadClaimConfig(config)).pendingDays : 14;
+    let notice: AppliedNotice | null = null;
+    // Vòng thử lại: sau khoá, điều kiện trạng thái không thể trượt; vẫn đọc lại và quyết lại nếu một ghi có điều kiện không trúng.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const out = await prisma.$transaction(async (tx) => {
+        const [locked] = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "external_orders" WHERE "pancakeOrderId" = ${pancakeOrderId} FOR SHARE`;
+        if (!locked) return { retry: false, notice: null };
+        const head = await tx.externalPointsClaim.findUnique({ where: { externalOrderId: locked.id }, select: { id: true } });
+        if (!head) return { retry: false, notice: null };
+        await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${head.id} FOR UPDATE`;
+        const order = await tx.externalOrder.findUniqueOrThrow({ where: { id: locked.id }, include: { claim: true } });
+        const claim = order.claim;
+        if (!claim) return { retry: false, notice: null };
+        const kept = (await tx.externalClaimEvent.count({ where: { claimId: claim.id, action: 'KEEP_POINTS' } })) > 0;
+        const { action, reason } = decideStatusAction(order.status, {
+          state: claim.state,
+          autoVoided: claim.state === 'VOIDED' && claim.decidedById === null,
+          flaggedPartial: claim.reviewReason !== null || kept,
+          humanDecided: claim.decidedById !== null,
         });
-        if (res.count === 1) await notifySafe(notifier, claim.userId, 'EXTERNAL_POINTS_VOIDED', { code, detail: 'điểm chờ không được cộng' }, `ext-void:${claim.id}`);
-        break;
-      }
-      case 'REVERSE': {
-        const res = await reverseCreditedClaim(prisma, claim.id, { reason: AUTO_REVERSE_REASON, actorId: null });
-        if (res) {
-          await notifySafe(
-            notifier,
-            claim.userId,
-            'EXTERNAL_POINTS_VOIDED',
-            { code, detail: res.reversedPoints > 0 ? `${formatPoints(res.reversedPoints)} Điểm Xanh đã cộng được thu hồi` : 'điểm đã cộng không còn gì để thu hồi' },
-            `ext-reverse:${claim.id}`,
-          );
+        const code = maskClaimCode(order.trackingCode);
+        const base = { action, userId: claim.userId, claimId: claim.id, code, detail: null as string | null, dedupeKey: null as string | null };
+        switch (action) {
+          case 'VOID': {
+            const res = await tx.externalPointsClaim.updateMany({
+              where: { id: claim.id, state: { in: [...UNPAID] } },
+              data: { state: 'VOIDED', voidReason: AUTO_VOID_REASON, decidedById: null },
+            });
+            if (res.count !== 1) return { retry: true, notice: null };
+            await recordClaimEvent(tx, { claimId: claim.id, action: 'AUTO_VOID', fromState: claim.state, toState: 'VOIDED', userIdBefore: claim.userId, userIdAfter: claim.userId, note: AUTO_VOID_REASON });
+            return { retry: false, notice: { ...base, detail: 'điểm chờ không được cộng', dedupeKey: `ext-void:${claim.id}` } };
+          }
+          case 'REVERSE': {
+            const res = await reverseCreditedClaimTx(tx, claim.id, { reason: AUTO_REVERSE_REASON, actorId: null });
+            if (!res) return { retry: true, notice: null };
+            return {
+              retry: false,
+              notice: {
+                ...base,
+                detail: res.reversedPoints > 0 ? `${formatPoints(res.reversedPoints)} Điểm Xanh đã cộng được thu hồi` : 'điểm đã cộng không còn gì để thu hồi',
+                dedupeKey: `ext-reverse:${claim.id}`,
+              },
+            };
+          }
+          case 'TO_REVIEW': {
+            const res = await tx.externalPointsClaim.updateMany({
+              where: { id: claim.id, OR: [{ state: 'PENDING' }, { state: 'VOIDED', decidedById: null }] },
+              data: { state: 'REVIEW', reviewReason: reason ?? null, voidReason: null },
+            });
+            if (res.count !== 1) return { retry: true, notice: null };
+            await recordClaimEvent(tx, { claimId: claim.id, action: 'TO_REVIEW', fromState: claim.state, toState: 'REVIEW', userIdBefore: claim.userId, userIdAfter: claim.userId, note: reason ?? null });
+            return { retry: false, notice: base };
+          }
+          case 'FLAG_PARTIAL': {
+            const res = await tx.externalPointsClaim.updateMany({ where: { id: claim.id, state: 'CREDITED', reviewReason: null }, data: { reviewReason: reason ?? null } });
+            if (res.count === 1) {
+              await recordClaimEvent(tx, { claimId: claim.id, action: 'FLAG_PARTIAL', fromState: 'CREDITED', toState: 'CREDITED', userIdBefore: claim.userId, userIdAfter: claim.userId, note: reason ?? null });
+            }
+            return { retry: false, notice: base };
+          }
+          case 'SYNC_RELEASE': {
+            if (!order.deliveredAt) return { retry: false, notice: base };
+            // Chỉ đồng bộ mốc cộng; điểm chốt lúc cộng (releaseClaim) theo tiền hàng mới nhất.
+            const releaseAt = new Date(order.deliveredAt.getTime() + pendingDays * 864e5);
+            await tx.externalPointsClaim.updateMany({ where: { id: claim.id, state: { in: ['PENDING', 'REVIEW'] } }, data: { releaseAt } });
+            return { retry: false, notice: base };
+          }
+          case 'NONE':
+            return { retry: false, notice: base };
         }
-        break;
-      }
-      case 'TO_REVIEW':
-        await prisma.externalPointsClaim.updateMany({
-          where: { id: claim.id, OR: [{ state: 'PENDING' }, { state: 'VOIDED', decidedById: null }] },
-          data: { state: 'REVIEW', reviewReason: reason ?? null, voidReason: null },
-        });
-        break;
-      case 'FLAG_PARTIAL':
-        await prisma.externalPointsClaim.updateMany({ where: { id: claim.id, state: 'CREDITED', reviewReason: null }, data: { reviewReason: reason ?? null } });
-        break;
-      case 'SYNC_RELEASE': {
-        if (!order.deliveredAt) break;
-        const cfg = config ? await loadClaimConfig(config) : { pendingDays: 14, earnPct: Number(claim.ratePct) };
-        const releaseAt = new Date(order.deliveredAt.getTime() + cfg.pendingDays * 864e5);
-        // Còn PENDING thì tính lại theo tiền hàng mới nhất; tới lúc cộng mới chốt (releaseClaim).
-        const fresh = claim.state === 'PENDING' ? claimPoints(order.goodsValue, Number(claim.ratePct)) : null;
-        await prisma.externalPointsClaim.updateMany({
-          where: { id: claim.id, state: { in: ['PENDING', 'REVIEW'] } },
-          data: { releaseAt, ...(fresh !== null && fresh > 0 ? { points: fresh } : {}) },
-        });
-        break;
-      }
-      case 'NONE':
-        break;
+      });
+      notice = out.notice;
+      if (!out.retry) break;
     }
-    return action;
+    if (!notice) return 'NONE';
+    if ((notice.action === 'VOID' || notice.action === 'REVERSE') && notice.dedupeKey) {
+      await notifySafe(notifier, notice.userId, 'EXTERNAL_POINTS_VOIDED', { code: notice.code, detail: notice.detail ?? '' }, notice.dedupeKey);
+    }
+    return notice.action;
   } catch (err) {
     logger.error(`applyStatusToClaim ${pancakeOrderId} lỗi: ${err instanceof Error ? err.message : err}`);
     return 'NONE';

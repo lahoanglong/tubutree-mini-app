@@ -8,11 +8,13 @@ const base = (over: Partial<ClaimFacts> = {}): ClaimFacts => ({
   cfg: { enabled: true, earnPct: 1, dailyAttempts: 10, dailyMax: 3, monthlyPointsCap: 200_000, maxAgeDays: 60, reviewAboveVnd: 2_000_000, pendingDays: 14, externalSince: null },
   userOk: true,
   userPhoneLast3: '678',
+  userIsStaff: false,
   lockedUntil: null,
   attemptsToday: 0,
   isAppOrder: false,
   order: { source: 'MARKETPLACE', status: 'OPEN', insertedAt: day(3), goodsValue: 200_000, phoneLast3: '678' },
   claim: null,
+  codeTaken: false,
   claimsToday: 0,
   monthPoints: 0,
   ...over,
@@ -59,11 +61,22 @@ describe('evaluateClaimRules: thứ tự luật', () => {
     expect(evaluateClaimRules(base({ order: { ...base().order!, insertedAt: day(60) } })).kind).toBe('CLAIM');
   });
   it('tuổi đơn đứng trước "mã đã được tích"; mã đã tích đứng trước trần ngày', () => {
-    expect(evaluateClaimRules(base({ order: { ...base().order!, insertedAt: day(90) }, claim: { reopenable: false } }))).toEqual({ kind: 'REJECT', code: 'TOO_OLD' });
-    expect(evaluateClaimRules(base({ claim: { reopenable: false }, claimsToday: 3 }))).toEqual({ kind: 'REJECT', code: 'ALREADY_CLAIMED' });
+    expect(evaluateClaimRules(base({ order: { ...base().order!, insertedAt: day(90) }, claim: { id: 'c1', reopenable: false, own: false, state: 'PENDING' } }))).toEqual({ kind: 'REJECT', code: 'TOO_OLD' });
+    expect(evaluateClaimRules(base({ claim: { id: 'c1', reopenable: false, own: false, state: 'PENDING' }, claimsToday: 3 }))).toEqual({ kind: 'REJECT', code: 'ALREADY_CLAIMED' });
   });
   it('claim đã huỷ và mở lại mã thì nhận được lại', () => {
-    expect(evaluateClaimRules(base({ claim: { reopenable: true } })).kind).toBe('CLAIM');
+    expect(evaluateClaimRules(base({ claim: { id: 'c1', reopenable: true, own: false, state: 'VOIDED' } })).kind).toBe('CLAIM');
+  });
+  it('C2: gửi lại mã của chính mình trả claim hiện có (không phải lỗi); claim đóng hoặc của người khác vẫn là ALREADY_CLAIMED', () => {
+    expect(evaluateClaimRules(base({ claim: { id: 'c9', reopenable: false, own: true, state: 'CREDITED' } }))).toEqual({ kind: 'OWN_CLAIM', claimId: 'c9', state: 'CREDITED' });
+    expect(evaluateClaimRules(base({ claim: { id: 'c9', reopenable: false, own: true, state: 'VOIDED' } }))).toEqual({ kind: 'REJECT', code: 'ALREADY_CLAIMED' });
+    expect(evaluateClaimRules(base({ claim: { id: 'c9', reopenable: false, own: false, state: 'PENDING' } }))).toEqual({ kind: 'REJECT', code: 'ALREADY_CLAIMED' });
+  });
+  it('C5: đơn khác cùng mã đã có claim còn hiệu lực thì ALREADY_CLAIMED', () => {
+    expect(evaluateClaimRules(base({ codeTaken: true }))).toEqual({ kind: 'REJECT', code: 'ALREADY_CLAIMED' });
+  });
+  it('thành viên là nhân viên: luôn REVIEW với lý do riêng, kể cả đơn nhỏ khớp SĐT', () => {
+    expect(evaluateClaimRules(base({ userIsStaff: true }))).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', reviewReason: expect.stringContaining('nhân viên') });
   });
   it('trần ngày (3 claim) đứng trước trần tháng', () => {
     expect(evaluateClaimRules(base({ claimsToday: 3, monthPoints: 999_999 }))).toEqual({ kind: 'REJECT', code: 'DAILY_MAX' });

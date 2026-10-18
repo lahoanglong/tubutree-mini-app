@@ -6,6 +6,9 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import type { ClaimNotifier } from './external-claim-status';
+import { startOfVnMonth } from '../../common/vn-time';
+import { recordClaimEvent } from './external-claim-audit';
+import { lockOrderThenClaim } from './external-claim-status';
 import { claimPoints, maskClaimCode } from './external-points-rate';
 
 const logger = new Logger('ExternalClaimRelease');
@@ -23,13 +26,15 @@ export type ReleaseOutcome = 'CREDITED' | 'SKIPPED' | 'TO_REVIEW';
 export async function releaseClaim(
   prisma: PrismaService,
   claimId: string,
-  opts: { pendingDays: number; expiryMonths: unknown; now?: Date },
+  opts: { pendingDays: number; expiryMonths: unknown; now?: Date; reviewAboveVnd?: number; monthlyPointsCap?: number },
 ): Promise<{ outcome: ReleaseOutcome; userId: string | null; points: number; code: string }> {
   const now = opts.now ?? new Date();
   const skipped = { outcome: 'SKIPPED' as const, userId: null, points: 0, code: '' };
   return prisma.$transaction(async (tx) => {
-    const [row] = await tx.$queryRaw<{ id: string; userId: string | null; externalOrderId: string; ratePct: string; points: number }[]>`
-      SELECT "id", "userId", "externalOrderId", "ratePct"::text AS "ratePct", "points" FROM "external_points_claims"
+    // Khoá đơn (FOR SHARE) TRƯỚC khi đọc trạng thái: webhook huỷ/hoàn đang ghi đơn phải xong, hoặc ta xong trước rồi nó thấy claim CREDITED và đảo.
+    if (!(await lockOrderThenClaim(tx, claimId))) return skipped;
+    const [row] = await tx.$queryRaw<{ id: string; userId: string | null; externalOrderId: string; ratePct: string; points: number; decidedById: string | null; releaseAt: Date | null; createdAt: Date }[]>`
+      SELECT "id", "userId", "externalOrderId", "ratePct"::text AS "ratePct", "points", "decidedById", "releaseAt", "createdAt" FROM "external_points_claims"
        WHERE "id" = ${claimId} AND "state" = 'PENDING' FOR UPDATE`;
     if (!row || !row.userId) return skipped;
     const order = await tx.externalOrder.findUniqueOrThrow({
@@ -37,26 +42,45 @@ export async function releaseClaim(
       select: { pancakeOrderId: true, source: true, status: true, deliveredAt: true, goodsValue: true, trackingCode: true },
     });
     const code = maskClaimCode(order.trackingCode);
-    const due = order.status === 'DELIVERED' && order.deliveredAt !== null && order.deliveredAt.getTime() + opts.pendingDays * 864e5 <= now.getTime();
-    if (!due) return skipped;
+    const nowMs = now.getTime();
+    // Đơn đã giao: giao + hạn giữ. Đơn hoàn một phần: chỉ claim đã có người duyệt, theo mốc cộng nhân viên đặt lúc duyệt.
+    const dueDelivered = order.status === 'DELIVERED' && order.deliveredAt !== null && order.deliveredAt.getTime() + opts.pendingDays * 864e5 <= nowMs;
+    const duePartial = order.status === 'PARTIAL_RETURN' && row.decidedById !== null && row.releaseAt !== null && row.releaseAt.getTime() <= nowMs;
+    if (!dueDelivered && !duePartial) return skipped;
 
     const [user] = await tx.$queryRaw<{ isBlocked: boolean }[]>`SELECT "isBlocked" FROM "users" WHERE "id" = ${row.userId} FOR UPDATE`;
     const points = claimPoints(order.goodsValue, Number(row.ratePct));
-    if (!user || user.isBlocked || points === null || points <= 0) {
-      const reason = !user ? 'Tài khoản không còn' : user.isBlocked ? 'Tài khoản đang bị khoá' : 'Chưa tính được tiền hàng của đơn';
-      await tx.externalPointsClaim.updateMany({ where: { id: row.id, state: 'PENDING' }, data: { state: 'REVIEW', reviewReason: reason } });
+    let reviewReason: string | null = null;
+    if (!user) reviewReason = 'Tài khoản không còn';
+    else if (user.isBlocked) reviewReason = 'Tài khoản đang bị khoá';
+    else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
+    else if (points > row.points) {
+      // Tiền hàng tăng sau lúc claim được duyệt: điểm mới vượt mức đã qua kiểm thì phải kiểm lại ngưỡng và trần tháng.
+      const reviewAbove = opts.reviewAboveVnd ?? 2_000_000;
+      const cap = opts.monthlyPointsCap ?? 200_000;
+      const month = await tx.externalPointsClaim.aggregate({
+        where: { userId: row.userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
+        _sum: { points: true },
+      });
+      if ((order.goodsValue ?? 0) > reviewAbove) reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
+      else if ((month._sum.points ?? 0) + points > cap) reviewReason = 'Điểm tính lại vượt trần tháng';
+    }
+    if (reviewReason) {
+      await tx.externalPointsClaim.updateMany({ where: { id: row.id, state: 'PENDING' }, data: { state: 'REVIEW', reviewReason } });
+      await recordClaimEvent(tx, { claimId: row.id, action: 'TO_REVIEW', fromState: 'PENDING', toState: 'REVIEW', userIdBefore: row.userId, userIdAfter: row.userId, note: reviewReason });
       return { outcome: 'TO_REVIEW' as const, userId: row.userId, points: 0, code };
     }
 
+    const finalPoints = points as number;
     const moved = await tx.externalPointsClaim.updateMany({
       where: { id: row.id, state: 'PENDING' },
-      data: { state: 'CREDITED', creditedAt: now, points },
+      data: { state: 'CREDITED', creditedAt: now, points: finalPoints },
     });
     if (moved.count !== 1) return skipped;
     const prefix = order.source === 'CHAT' ? 'PANCAKE_CHAT_ORDER' : 'MARKETPLACE_ORDER';
     const res = await applyPointsDelta(tx, {
       userId: row.userId,
-      delta: points,
+      delta: finalPoints,
       lot: 'STANDARD',
       reason: `${prefix}:${order.pancakeOrderId}`,
       refType: 'EXTERNAL_ORDER',
@@ -67,7 +91,8 @@ export async function releaseClaim(
     // Dòng sổ đã có mà claim vẫn PENDING là sổ và claim lệch nhau: rollback, không đoán.
     if (!res.applied) throw new Error(`releaseClaim ${row.id}: đã có dòng sổ ${prefix}:${order.pancakeOrderId}`);
     await tx.externalPointsClaim.update({ where: { id: row.id }, data: { pointsTxId: res.entryId } });
-    return { outcome: 'CREDITED' as const, userId: row.userId, points, code };
+    await recordClaimEvent(tx, { claimId: row.id, action: 'CREDIT', fromState: 'PENDING', toState: 'CREDITED', userIdBefore: row.userId, userIdAfter: row.userId, note: `${finalPoints} điểm` });
+    return { outcome: 'CREDITED' as const, userId: row.userId, points: finalPoints, code };
   });
 }
 
@@ -97,7 +122,14 @@ export async function releaseDueClaims(
       }
       for (let b = 0; b < MAX_BATCHES; b++) {
         const due = await prisma.externalPointsClaim.findMany({
-          where: { state: 'PENDING', userId: { not: null }, externalOrder: { status: 'DELIVERED', deliveredAt: { lte: cutoff } } },
+          where: {
+            state: 'PENDING',
+            userId: { not: null },
+            OR: [
+              { externalOrder: { status: 'DELIVERED', deliveredAt: { lte: cutoff } } },
+              { decidedById: { not: null }, releaseAt: { lte: now }, externalOrder: { status: 'PARTIAL_RETURN' } },
+            ],
+          },
           orderBy: { createdAt: 'asc' },
           take: BATCH,
           select: { id: true },
@@ -106,7 +138,7 @@ export async function releaseDueClaims(
         let progressed = 0;
         for (const { id } of due) {
           try {
-            const res = await releaseClaim(prisma, id, { pendingDays: cfg.pendingDays, expiryMonths, now });
+            const res = await releaseClaim(prisma, id, { pendingDays: cfg.pendingDays, expiryMonths, now, reviewAboveVnd: cfg.reviewAboveVnd, monthlyPointsCap: cfg.monthlyPointsCap });
             if (res.outcome === 'CREDITED') {
               credited++;
               progressed++;

@@ -48,7 +48,7 @@ Admin (`/admin/external-claims`, ADMIN hoặc nhóm CSKH; KE_TOAN chỉ GET):
 
 Có luật ghi (boolean chặt, khoảng số) ở `system-config.service.ts`. Điểm = `pointsForGoods(goodsValue, marketplaceEarnPct, 1)`, không nhân hệ số hạng. Đơn sàn không vào `tierPoints` (whitelist chỉ `ORDER_DELIVERED:`) nên không đổi hạng; claim ghi `countsForTier = false`.
 
-## Không đổi schema
+## Schema (bước 1) và thay đổi sau review
 
 Bước 1 đã tạo `external_points_claims`, `external_claim_attempts` và unique sổ điểm `("reason","refId") WHERE "refType"='EXTERNAL_ORDER'`. Migration `20261019130000_external_claims` chỉ thêm mẫu thông báo và dòng `loyalty.external_since`.
 
@@ -73,3 +73,20 @@ Bước 1 đã tạo `external_points_claims`, `external_claim_attempts` và uni
 
 - Unit: `external-claim.rules.spec.ts` (thứ tự luật, khoá 24h), `external-points-rate.spec.ts` (biên làm tròn, goodsValue null), `external-claim-status.spec.ts` (4/5/6/7/15, giao sau huỷ), `external-claims-admin.spec.ts` (phân quyền), `external-claim.service.spec.ts`, `external-claim.config.spec.ts`, mở rộng `loyalty-expiry.service.spec.ts`, `ops-inbox.service.spec.ts`, ma trận quyền, public config.
 - Race trên Postgres thật `test/integration-race/external-claims.race-spec.ts`: hai (sáu) khách cùng mã đúng một claim; một khách tám mã song song đúng 3 claim (trần ngày) và trần tháng đúng; cron cộng hai lần song song cộng sáu lượt `releaseClaim` đúng một dòng sổ; cộng rồi hoàn đảo đúng `min(...)` (đủ số dư, đã tiêu bớt, lô đã hết hạn cron đã trừ, đảo trước rồi hết hạn); đơn sàn không đổi `tierPoints`; webhook nối vào claim; ghép lại; admin huỷ, mở lại mã, đảo điểm, gắn attempt.
+
+## Sửa sau review lượt 1
+
+Schema đổi: thêm model `ExternalClaimEvent` (bảng `external_claim_events`) ngay sau `ExternalClaimAttempt`, migration `20261019140000_external_claim_events`. Repo chưa có cơ chế nhật ký chung cho loại việc này (chỉ có `SystemConfigHistory`, `OrderStatusHistory`...), nên tạo bảng chỉ-thêm riêng: có trigger chặn UPDATE. Không có khoá ngoại để nhật ký còn sau khi xoá claim. Mỗi dòng: claimId, action, actorId, fromState/toState, userIdBefore/userIdAfter, note, createdAt. Ghi trong CÙNG transaction với thay đổi claim. Các action: CLAIM_CREATED, REOPEN_CLAIM (khách nhận lại mã đã mở), ATTACH, APPROVE, VOID, VOID_REOPEN, REVERSE, KEEP_POINTS, CREDIT (cron), AUTO_VOID, AUTO_REVERSE, TO_REVIEW, FLAG_PARTIAL. `GET /admin/external-claims/:id` trả thêm `events`.
+
+- A1 gắn đơn: mã của lần gửi (đã chuẩn hoá) phải nằm trong `trackingCodes`/`trackingCode`/`marketplaceOrderSn` của đơn; không trùng thì chỉ ADMIN và bắt buộc `note` (`ATTACH_ADMIN_ONLY`, `NOTE_REQUIRED`). Đơn UNKNOWN cũng chỉ ADMIN + note và KHÔNG đổi `source` của dòng đơn. Chạy đủ luật gửi mã (tuổi, `external_since`, trần claim/ngày, trần tháng từ chối, ngưỡng 2.000.000, 3 số cuối SĐT, thành viên là nhân viên) trừ lần thử/ngày; REVIEW giữ REVIEW và `decidedById` chỉ đặt khi vào thẳng PENDING. Người làm trùng chủ claim bị chặn ở attach, approve, void, void-and-reopen, reverse, keep-points (`SELF_ACTION`). Người duyệt không được là người gắn hoặc người đưa claim vào REVIEW (`SAME_INTRODUCER`, đọc từ nhật ký). STAFF/ADMIN tự gửi mã của mình vào REVIEW với lý do riêng. Duyệt kiểm lại trần tháng.
+- A2 thứ tự khoá: đơn (FOR SHARE hoặc UPDATE) trước, claim sau, user cuối, ở mọi đường. `releaseClaim` khoá đơn rồi mới kiểm tới hạn/trạng thái; `applyStatusToClaim` chạy trong transaction (khoá, đọc lại, quyết định, thử lại tối đa 3 lần), claim CREDITED đi nhánh đảo điểm. "Cần xử lý" thêm mục "đã cộng mà đơn đã đóng". Race `external-claims-close-race.race-spec.ts` (30 vòng x RETURNED/CANCELLED): đỏ ở mã cũ (CREDITED + đơn đóng không ai đảo), xanh sau sửa.
+- B1: duyệt claim của đơn PARTIAL_RETURN đặt `releaseAt = bây giờ + external_pending_days`; cron cộng claim có người duyệt khi đơn DELIVERED hoặc PARTIAL_RETURN, điểm theo tiền hàng mới nhất. Claim PENDING không ai duyệt của đơn hoàn một phần không được cộng.
+- B2: `POST /admin/external-claims/:id/keep-points` (ADMIN, `note` bắt buộc): gỡ cờ, ghi KEEP_POINTS, không thu hồi một phần, không bị gắn cờ lại.
+- B3: lúc cộng, nếu điểm tính lại lớn hơn điểm đã qua kiểm và (tiền hàng vượt ngưỡng REVIEW hoặc cộng thêm vượt trần tháng) thì claim chuyển REVIEW thay vì cộng.
+- C1: `loyalty.external_since` dạng `YYYY-MM-DD` là 00:00 giờ Việt Nam (+07:00).
+- C2: gửi lại mã của chính mình (claim PENDING/REVIEW/CREDITED hoặc mã đang chờ ghép) trả trạng thái hiện có, không ghi NOT_FOUND, không tính vào khoá 24h.
+- C3: cron ghép lại gặp ALREADY_CLAIMED với claim của chính khách thì đóng lần thử, không báo "chưa tìm thấy".
+- C5: chặn trùng theo mã: có claim còn hiệu lực (khác VOIDED) trên đơn khác cùng mã vận đơn/mã đơn sàn thì ALREADY_CLAIMED.
+
+Kiểm thử thêm: `external-claims-review.race-spec.ts` (A1, tự xử lý, nhật ký chỉ-thêm và dấu vết mở lại mã, B1, B2, B3, C5), mở rộng rules/service/config/admin/ma trận quyền/ops-inbox spec. Chỉ A2 được chứng minh đỏ trước khi sửa; các test A1/B/C viết cùng lúc với sửa, chưa chạy lại trên mã cũ.
+
