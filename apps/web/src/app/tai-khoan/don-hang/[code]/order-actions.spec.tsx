@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   order: null as Record<string, unknown> | null,
   push: vi.fn(),
   cancel: vi.fn(),
-  repurchase: vi.fn(),
+  corePost: vi.fn(),
   requestReturn: vi.fn(),
   estimate: vi.fn(),
   returns: [] as unknown[],
@@ -27,6 +27,8 @@ vi.mock('@/lib/image-compress', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/image-compress')>()),
   readAndCompressImage: async (f: File) => `data:image/jpeg;base64,${f.name}`,
 }));
+vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.corePost } }));
+vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
 vi.mock('@/lib/balances', () => ({ invalidateBalances: mocks.invalidateBalances }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ user: mocks.user, status: 'authenticated', initialized: true }),
@@ -43,7 +45,6 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   fetchOrder: async () => mocks.order,
   cancelOrder: mocks.cancel,
-  repurchaseOrder: mocks.repurchase,
   requestReturn: mocks.requestReturn,
   estimateReturn: mocks.estimate,
   fetchMyReturns: async () => {
@@ -91,7 +92,7 @@ beforeEach(() => {
   mocks.order = { ...BASE };
   mocks.push.mockReset();
   mocks.cancel.mockReset().mockResolvedValue({ ...BASE, status: 'CANCELLED' });
-  mocks.repurchase.mockReset();
+  mocks.corePost.mockReset();
   mocks.requestReturn.mockReset().mockResolvedValue({ id: 'r1' });
   mocks.estimate.mockReset().mockResolvedValue({ isFull: false, goods: 90000, shipping: 0, refund: 90000, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
   mocks.returns = [];
@@ -327,13 +328,28 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     expect(btn(done.container, 'Mua lại đơn này')).toBeDefined();
   });
 
-  it('thêm đủ: chuyển sang giỏ hàng', async () => {
+  const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 2 };
+  const sheetCta = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^Thêm vào giỏ \(\d+\)$/.test(b.textContent ?? ''))!;
+
+  it('"Mua lại đơn này" mở sheet chọn dòng (như Mini App), chưa gọi API', async () => {
     mocks.order = delivered;
-    mocks.repurchase.mockResolvedValue({ cart: { items: [], itemCount: 2 }, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 2 }] });
     const { container } = await mount();
     click(btn(container, 'Mua lại đơn này')!);
+    await flush(4);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Từ đơn TB-9');
+    expect(sheetCta().textContent).toBe('Thêm vào giỏ (2)');
+    expect(mocks.corePost).not.toHaveBeenCalled();
+  });
+
+  it('thêm đủ: gửi repurchase đúng dòng đã chọn rồi chuyển sang giỏ hàng', async () => {
+    mocks.order = delivered;
+    mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
+    const { container } = await mount();
+    click(btn(container, 'Mua lại đơn này')!);
+    await flush(4);
+    click(sheetCta());
     await flush(8);
-    expect(mocks.repurchase).toHaveBeenCalledWith('TB-9');
+    expect(mocks.corePost).toHaveBeenCalledWith('/orders/TB-9/repurchase', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
     expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
   });
 
@@ -341,9 +357,11 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     const setData = vi.spyOn(QueryClient.prototype, 'setQueryData');
     mocks.order = delivered;
-    mocks.repurchase.mockResolvedValue({ cart: { items: [], itemCount: 2 }, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 2 }] });
+    mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
     const { container } = await mount();
     click(btn(container, 'Mua lại đơn này')!);
+    await flush(4);
+    click(sheetCta());
     await flush(8);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
     expect(setData.mock.calls.some(([key]) => Array.isArray(key) && key[0] === 'cart')).toBe(false);
@@ -351,28 +369,17 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     setData.mockRestore();
   });
 
-  it('thêm được một phần: ở lại trang, nói rõ bao nhiêu dòng chưa thêm được và có lối vào giỏ', async () => {
+  it('không thêm được dòng nào: sheet ở lại, nêu tên món và lý do, không chuyển trang', async () => {
     mocks.order = delivered;
-    mocks.repurchase.mockResolvedValue({
-      cart: { items: [], itemCount: 1 },
-      results: [{ orderItemId: 'a', status: 'added', addedQuantity: 1 }, { orderItemId: 'b', status: 'skipped', reason: 'OUT_OF_STOCK', addedQuantity: 0 }],
-    });
+    mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'skipped', reason: 'INACTIVE', addedQuantity: 0 }] });
     const { container } = await mount();
     click(btn(container, 'Mua lại đơn này')!);
+    await flush(4);
+    click(sheetCta());
     await flush(8);
     expect(mocks.push).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Đã thêm 1 sản phẩm vào giỏ. 1 sản phẩm đã hết hàng');
-    expect(container.querySelector('a[href="/gio-hang"]')).not.toBeNull();
-  });
-
-  it('không thêm được dòng nào: báo hết hàng/ngừng bán, không chuyển trang', async () => {
-    mocks.order = delivered;
-    mocks.repurchase.mockResolvedValue({ cart: { items: [], itemCount: 0 }, results: [{ orderItemId: 'b', status: 'skipped', reason: 'INACTIVE', addedQuantity: 0 }] });
-    const { container } = await mount();
-    click(btn(container, 'Mua lại đơn này')!);
-    await flush(8);
-    expect(mocks.push).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('đã hết hàng hoặc ngừng bán');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Dầu gội (ngừng bán)');
+    expect(document.querySelector('a[href="/gio-hang"]')).not.toBeNull();
   });
 });
 

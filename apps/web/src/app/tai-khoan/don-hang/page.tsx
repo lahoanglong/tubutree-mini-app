@@ -11,11 +11,10 @@ import { ErrorState } from '@/components/ui/error-state';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { OrderCard } from '@/components/orders/order-card';
-import { PurchasedRail } from '@/components/orders/purchased-rail';
-import { ReorderSheet } from '@/components/orders/reorder-sheet';
+import { PurchasedRail } from '@/components/reorder/purchased-rail';
+import { ReorderSheet } from '@/components/reorder/reorder-sheet';
 import { SubscriptionsPanel } from '@/components/orders/subscriptions-panel';
-import { orderReorderTarget, type ReorderTarget } from '@/components/orders/reorder';
-import type { ReorderNotice } from '@/components/orders/use-reorder';
+import { orderReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
 import { ORDERS_TABS, ORDERS_TAB_KEYS, type OrdersTabKey } from '@/components/orders/orders-tabs';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -37,7 +36,6 @@ function OrdersPageBody() {
   const isSubscriptions = tab === 'subscriptions';
   // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
-  const [notice, setNotice] = useState<ReorderNotice | null>(null);
 
   // Khoá bắt đầu bằng ['orders'] nên invalidateQueries({ queryKey: ['orders'] }) ở trang chuyển khoản/huỷ đơn làm mới danh sách.
   const orders = useInfiniteQuery({
@@ -79,15 +77,6 @@ function OrdersPageBody() {
             scroll
           />
         </div>
-
-        {notice && (
-          <div role="status" className={`mt-3 rounded-control border p-3 text-sm ${notice.tone === 'warning' ? 'border-warning-fg bg-warning-bg text-warning-fg' : 'border-forest-200 bg-forest-50 text-forest-800'}`}>
-            <p>{notice.text}</p>
-            <Link href="/gio-hang" className="mt-1 inline-flex min-h-11 items-center font-semibold underline">
-              Xem giỏ hàng
-            </Link>
-          </div>
-        )}
 
         {isSubscriptions ? (
           <SubscriptionsPanel />
@@ -136,7 +125,7 @@ function OrdersPageBody() {
         )}
 
         {/* Khách vào tab này chủ yếu để xem đơn đang giao: kệ Mua lại đứng sau danh sách, chỉ ở "Tất cả". */}
-        {tab === 'all' && !orders.isLoading && !orders.isError && <PurchasedRail source="orders_tab" onNotice={setNotice} />}
+        {tab === 'all' && !orders.isLoading && !orders.isError && <PurchasedRail />}
       </>
     );
   }
@@ -145,7 +134,7 @@ function OrdersPageBody() {
     <main className="mx-auto max-w-3xl px-4 py-6">
       <PageHeader title="Đơn hàng" backHref="/tai-khoan" backLabel="Tài khoản" />
       {body}
-      <ReorderSheet target={reorderTarget} source="order_card" navigateToCart onNotice={setNotice} onClose={() => setReorderTarget(null)} />
+      <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />
     </main>
   );
 }

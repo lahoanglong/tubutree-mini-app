@@ -1,5 +1,8 @@
 import type { OrderItemView, PurchasedItem } from '@tubutree/app-core/api/orders';
 
+/** Điểm vào cần ghi nguồn riêng: nhắc mua lại ở trang thông báo (cùng giá trị 'notification' với Mini App). */
+export type ReorderSource = 'notification';
+
 /** Trần số lượng khi API không cho biết tồn kho (API cũ) — server vẫn kẹp theo tồn thật. */
 export const MAX_REORDER_QTY = 99;
 

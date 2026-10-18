@@ -11,13 +11,16 @@ import { homeErrorMessage } from '@/components/home/home-block-error';
 import type { ReorderSummary } from './reorder-summary';
 import {
   initialSelection, selectedLines, selectionTotals, targetLines,
-  type LineSelection, type ReorderLine, type ReorderTarget,
+  type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
 import { useReorder } from './use-reorder';
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
+  source?: ReorderSource;
   onClose: () => void;
+  /** Thêm đủ mà không điều hướng sang giỏ: trang gọi dùng kết quả để tự báo, vì sheet đóng ngay. */
+  onDone?: (summary: ReorderSummary) => void;
   navigateToCart?: boolean;
 }
 
@@ -26,7 +29,7 @@ export interface ReorderSheetProps {
  * giữ nguyên lựa chọn; chỉ đóng khi đã thêm đủ. Có dòng không thêm được (hết hàng, thiếu tồn) thì ở lại nêu lý do kèm lối vào giỏ,
  * vì web không có snackbar để báo sau khi đóng.
  */
-export function ReorderSheet({ target, onClose, navigateToCart }: ReorderSheetProps) {
+export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }: ReorderSheetProps) {
   // Nội dung dựng từ `shown` = target KHÁC null gần nhất để dòng không rút cạn ngay lúc đóng.
   const [shown, setShown] = useState<ReorderTarget | null>(target);
   const [sel, setSel] = useState<Record<string, LineSelection>>(() => (target ? initialSelection(target) : {}));
@@ -34,7 +37,7 @@ export function ReorderSheet({ target, onClose, navigateToCart }: ReorderSheetPr
   const [notice, setNotice] = useState<{ kind: 'error' | 'problem'; text: string } | null>(null);
   // Đã có dòng vào giỏ mà còn dòng chưa đủ: gửi lại cùng lựa chọn sẽ cộng thêm lần nữa vào dòng đã thêm.
   const [partiallyAdded, setPartiallyAdded] = useState(false);
-  const reorder = useReorder({ navigateToCart });
+  const reorder = useReorder({ navigateToCart, source });
 
   // Đổi target → khởi tạo lại lựa chọn NGAY trong lúc render ("adjust state on prop change" của React),
   // nên khung hình đầu đã có dòng được chọn + CTA đúng số lượng (effect hậu-paint sẽ nháy "(0)").
@@ -73,7 +76,10 @@ export function ReorderSheet({ target, onClose, navigateToCart }: ReorderSheetPr
       inFlight.current = false;
     }
     if (!summary || !mounted.current) return;
-    if (summary.addedUnits > 0 && !summary.hasProblems) onClose();
+    if (summary.addedUnits > 0 && !summary.hasProblems) {
+      onDone?.(summary);
+      onClose();
+    }
     else {
       setNotice({ kind: 'problem', text: summary.message });
       if (summary.addedUnits > 0) setPartiallyAdded(true);

@@ -40,6 +40,19 @@ describe('useReorder', () => {
     expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
   });
 
+  it('mua lại từ thông báo nhắc: một sản phẩm gửi addSource reorder_notification như Mini App, cả đơn vẫn repurchase', async () => {
+    const { result } = renderHook(() => useReorder({ source: 'notification' }));
+    await act(async () => {
+      await result.current.submit(ITEM, [{ key: 'a', variationId: 'v-a', quantity: 1 }]);
+    });
+    expect(mocks.post).toHaveBeenCalledWith('/cart/items', { variationId: 'v-a', quantity: 1, addSource: 'reorder_notification' }, undefined);
+    mocks.post.mockClear();
+    await act(async () => {
+      await result.current.submit(ORDER, [{ key: 'a', variationId: 'v-a', quantity: 1 }]);
+    });
+    expect(mocks.post).toHaveBeenCalledWith('/orders/TUBU1/repurchase', { items: [{ orderItemId: 'a', quantity: 1 }], addSource: 'repurchase' });
+  });
+
   it('gửi kèm gian hàng CTV đang ghi công như giỏ thường', async () => {
     mocks.slug = 'ctv-an';
     const { result } = renderHook(() => useReorder());
