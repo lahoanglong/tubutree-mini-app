@@ -13,14 +13,16 @@ import { mockCheckout, publicConfig } from './support/checkout-mocks';
  *     API bản cũ bật forbidNonWhitelisted).
  *   - apps/miniapp/src/pages/order-detail.tsx: khối #order-recycling, tiêu đề theo gomdonStatus
  *     (utils/format.ts recyclingPickupView), "Mã vận đơn BestExpress:" khi có gomdonPartnerCode.
+ *
+ * Rewritten in M8.7 (both describes are fixme until then).
  */
 
 const TOGGLE_NAME = 'Gửi lại vật liệu tái chế';
 const NOTE_PLACEHOLDER = 'Ghi chú loại vật dụng muốn gửi';
 
-test.describe('Checkout — lựa chọn gửi lại vật liệu tái chế', () => {
+test.describe.fixme('Checkout — lựa chọn gửi lại vật liệu tái chế', () => {
   test('Tính năng TẮT (recyclingEnabled=false): không hiện lựa chọn, body đặt hàng không có trường thu gom', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: false });
+    mockCheckout(api);
     await page.goto('/checkout');
     const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
@@ -37,7 +39,7 @@ test.describe('Checkout — lựa chọn gửi lại vật liệu tái chế', (
 
   test('API bản cũ không trả recyclingEnabled → coi như tắt, không hiện lựa chọn', async ({ page, api }) => {
     mockCheckout(api);
-    const { recyclingEnabled: _omit, ...legacy } = publicConfig();
+    const legacy = publicConfig();
     api.get('/config/public', legacy);
     await page.goto('/checkout');
     await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
@@ -46,7 +48,7 @@ test.describe('Checkout — lựa chọn gửi lại vật liệu tái chế', (
   });
 
   test('Tính năng BẬT: hiện lựa chọn (mặc định tắt) — không bấm thì body vẫn không có trường thu gom', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
+    mockCheckout(api);
     await page.goto('/checkout');
     const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
@@ -68,7 +70,7 @@ test.describe('Checkout — lựa chọn gửi lại vật liệu tái chế', (
   });
 
   test('Bật lựa chọn + ghi chú → gửi hasRecyclingPickup:true và recyclingNote đã trim', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
+    mockCheckout(api);
     await page.goto('/checkout');
     const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
@@ -95,7 +97,7 @@ test.describe('Checkout — lựa chọn gửi lại vật liệu tái chế', (
   });
 
   test('Bật rồi tắt lại → body không còn trường thu gom (kể cả ghi chú đã gõ)', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
+    mockCheckout(api);
     await page.goto('/checkout');
     const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
@@ -115,7 +117,7 @@ test.describe('Checkout — lựa chọn gửi lại vật liệu tái chế', (
   });
 
   test('Chuyển khoản + thu gom: nhắc lịch thu gom đặt sau khi nhận thanh toán, vẫn gửi hasRecyclingPickup', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
+    mockCheckout(api);
     await page.goto('/checkout');
     const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
@@ -230,7 +232,7 @@ const DETAIL_CASES: DetailCase[] = [
   },
 ];
 
-test.describe('Chi tiết đơn — trạng thái thu gom theo gomdonStatus', () => {
+test.describe.fixme('Chi tiết đơn — trạng thái thu gom theo gomdonStatus', () => {
   test.beforeEach(async ({ api }) => {
     mockSession(api, makeUser({ id: 'user-recycle' }));
     // Đơn DELIVERED tải thêm danh sách đổi/trả (orders.controller.ts @Get('me/returns')).

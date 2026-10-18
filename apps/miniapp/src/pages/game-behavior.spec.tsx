@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   copyText: vi.fn(),
   auth: { status: 'authenticated' as string },
+  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   features: { seasonPass: false },
   wheel: { cost: undefined as number | undefined, onSpin: undefined as (() => Promise<unknown>) | undefined },
   api: {
@@ -53,6 +54,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/game', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
     const state = { status: mocks.auth.status, user: { id: 'u1' }, login: mocks.login };
@@ -124,6 +126,7 @@ async function openTab(name: 'Hôm nay' | 'Vườn' | 'Cộng đồng') {
 }
 
 beforeEach(() => {
+  mocks.publicConfig.waste.enabled = true;
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
   mocks.features.seasonPass = false;
@@ -224,13 +227,24 @@ describe('GamePage — vườn và lối tắt', () => {
     expect(screen.getAllByText('🌳')).toHaveLength(1);
   });
 
-  it('lối tắt: Bảng tin cộng đồng → /feed, Đổi vỏ chai → /refill', async () => {
+  it('lối tắt: Đổi rác lấy quà (nhãn Mới, dòng giọt nước/Điểm Xanh) → /recycle; Bảng tin cộng đồng → /feed', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText('Đổi vỏ chai lấy nước'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/refill');
+    const row = await screen.findByRole('button', { name: /Đổi rác lấy quà/ });
+    expect(within(row).getByText('Mới')).toBeInTheDocument();
+    expect(within(row).getByText('Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm')).toBeInTheDocument();
+    fireEvent.click(row);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
+    expect(screen.queryByText('Đổi vỏ chai lấy nước')).toBeNull();
     await openTab('Cộng đồng');
     fireEvent.click(screen.getByText('Bảng tin cộng đồng'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/feed');
+  });
+
+  it('chương trình tắt → không có thẻ Đổi rác trong Vườn', async () => {
+    mocks.publicConfig.waste.enabled = false;
+    renderPage();
+    await screen.findByText('Sồi');
+    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
   });
 
   it('banner mùa chỉ hiện khi có mùa, kèm chủ đề/vùng và loài nổi bật', async () => {

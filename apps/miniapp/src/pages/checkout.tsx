@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
 import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } from '../services/shop-api';
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
-import { getErrorCode, getErrorMessage } from '../services/api';
+import { getErrorCode, getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -18,7 +20,7 @@ import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
-import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
+import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { createOrderKeyRing } from '../utils/idempotency';
 import {
@@ -50,7 +52,15 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
+import { Icon } from '../components/ui/icon';
+import { ListRow } from '../components/ui/list-row';
 import { useCartKey } from '../services/cart-key';
+
+/** `undefined` ẩn mục, `null` hiện dòng tạo yêu cầu, còn lại là yêu cầu PICKUP mở chưa gắn đơn để bật công tắc. */
+export function attachablePickup(me: WasteMeDTO | undefined, pickupFlag: boolean): WasteRequestSummaryDTO | null | undefined {
+  if (!pickupFlag || !me || me.blocked || me.shipLockedAt) return undefined;
+  return me.openRequests.find((r) => r.method === 'PICKUP' && r.status === 'OPEN' && r.orderCode == null) ?? null;
+}
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -68,12 +78,12 @@ export default function CheckoutPage() {
   const [payment, setPayment] = useState('COD');
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
-  const [hasRecyclingPickup, setHasRecyclingPickup] = useState(false);
-  const [recyclingNote, setRecyclingNote] = useState('');
-  // Chỉ hiện lựa chọn thu gom khi BE xác nhận tính năng đang chạy (Gomdon đã cấu hình + admin bật).
-  // Chưa tải xong / API cũ không có field → coi như tắt: không hứa thu gom khi không ai đi thu.
+  const [attachWaste, setAttachWaste] = useState(false);
+  // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ server; chưa tải xong → ẩn, không hứa dịch vụ chưa chắc có.
   const publicConfig = usePublicConfig();
-  const recyclingEnabled = publicConfig.isLoaded && publicConfig.recyclingEnabled === true;
+  const pickupFlag = publicConfig.isLoaded && publicConfig.waste.pickup === true;
+  const wasteMeQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: pickupFlag });
+  const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
   // Mã giới thiệu CTV khách tự nhập ở màn này (đã được server xác nhận) — khác mã đến từ link (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
@@ -207,8 +217,7 @@ export default function CheckoutPage() {
         // Tổng khách đang thấy: giá/phí đổi giữa lúc báo giá và lúc bấm đặt thì BE trả TOTAL_CHANGED thay vì thu số mới.
         ...(quote.data ? { expectedTotal: quote.data.total } : {}),
         note: note.trim() || undefined,
-        // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
-        ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
+        ...(attachWaste && pickupReq ? { wasteRequestId: pickupReq.id } : {}),
         invoiceRequest: wantInvoice
           ? {
               taxCode: invoice.taxCode.trim(),
@@ -235,6 +244,7 @@ export default function CheckoutPage() {
       }
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      if (attachWaste && pickupReq) void queryClient.invalidateQueries({ queryKey: ['waste'] });
       // Thanh toán WALLET trừ walletBalance và sử dụng điểm cộng/trừ pointsBalance ở BE;
       // staleTime=60s global → wallet/profile sẽ stale 60s nếu không invalidate → user thấy số cũ.
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
@@ -253,6 +263,11 @@ export default function CheckoutPage() {
       setPlaced(o);
     },
     onError: (e: unknown) => {
+      // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi
+      // server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
+      if (attachWaste && !isOutcomeUnknown(e)) {
+        void queryClient.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
+      }
       // Giữ key: lỗi mạng/quá thời gian/5xx có thể xảy ra sau khi server đã tạo đơn — bấm lại cùng nội dung phải là replay,
       // không phải đơn thứ hai. Khách sửa địa chỉ/thanh toán/món thì keyFor tự ra key mới.
       if (getErrorCode(e) === 'CART_CHANGED') {
@@ -387,7 +402,6 @@ export default function CheckoutPage() {
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
   const previewTotal = Math.max(0, previewSubtotal - previewCombo - previewDiscount - previewTier);
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
-  const maxRecycleKg = recyclingMaxKg(shownItems);
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
@@ -699,77 +713,71 @@ export default function CheckoutPage() {
         <Input placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
       </Box>
 
-      {/* ── Thu gom vật liệu tái chế (Eco-Card) — chỉ khi tính năng đang bật ── */}
-      {recyclingEnabled && (
-        <Box id="checkout-recycling" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Box
-            role="checkbox"
-            {...rowKeyboardProps()}
-            aria-label="Gửi lại vật liệu tái chế"
-            aria-checked={hasRecyclingPickup}
-            className="tubu-press"
-            onClick={() => {
-              haptic('light');
-              setHasRecyclingPickup((v) => !v);
-            }}
-            flex
-            alignItems="center"
-            justifyContent="space-between"
-            style={{ minHeight: 44, cursor: 'pointer' }}
-          >
-            <Box flex alignItems="center" style={{ gap: 10 }}>
+      {/* ── Thu kèm rác: gắn yêu cầu PICKUP đang mở vào đơn này (spec §12.2 bước 2) ── */}
+      {pickupReq !== undefined && (
+        <Box id="checkout-waste-pickup" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+          {pickupReq === null ? (
+            <ListRow
+              icon={<Icon icon={Recycle} tone="brand" />}
+              title="Thu kèm rác"
+              subtitle="Tạo yêu cầu để bưu tá lấy rác khi giao đơn này"
+              trailing="chevron"
+              onPress={() => navigate('/recycle/new')}
+            />
+          ) : (
+            <>
               <Box
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 'var(--radius-control)',
-                  background: 'var(--color-bg-subtle)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  flex: '0 0 auto',
+                role="checkbox"
+                {...rowKeyboardProps()}
+                aria-label="Thu kèm rác"
+                aria-checked={attachWaste}
+                className="tubu-press"
+                onClick={() => {
+                  haptic('light');
+                  setAttachWaste((v) => !v);
                 }}
+                flex
+                alignItems="center"
+                justifyContent="space-between"
+                style={{ minHeight: 44, cursor: 'pointer' }}
               >
-                <Recycle size={20} color="var(--color-text-brand)" />
+                <Box flex alignItems="center" style={{ gap: 10 }}>
+                  <Icon icon={Recycle} tone="brand" />
+                  <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
+                    Thu kèm rác
+                  </Text>
+                </Box>
+                {/* Checkbox thị giác thuần tuý — logic bật/tắt vẫn ở onClick của Box cha. */}
+                <Checkbox checked={attachWaste} onChange={() => {}} />
               </Box>
-              <Box>
-                <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
-                  Gửi lại vật liệu tái chế (Bảo vệ môi trường)
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--color-text-success)', fontWeight: 600, marginTop: 2 }}>
-                  Thu gom tối đa ~{maxRecycleKg} kg
-                </Text>
-              </Box>
-            </Box>
-            {/* Checkbox thị giác thuần tuý — logic bật/tắt thu gom vẫn ở onClick của Box cha. */}
-            <Checkbox checked={hasRecyclingPickup} onChange={() => {}} />
-          </Box>
-
-          {hasRecyclingPickup && (
-            <Box flex flexDirection="column" style={{ gap: 10, marginTop: 12 }}>
               <Box
                 p={3}
-                style={{
-                  background: 'var(--color-bg-subtle)',
-                  borderRadius: 'var(--radius-control)',
-                  border: '1px solid var(--forest-200)',
-                }}
+                mt={2}
+                style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}
               >
-                <Text size="xSmall" style={{ color: 'var(--forest-800)', lineHeight: '18px' }}>
-                  Chúng tôi sẽ thu gom lại các vật liệu tái chế được đóng gói gọn gàng như bọc nilong, hoặc quần áo cũ, pin, vỏ sữa làm sạch -&gt; giúp bảo vệ môi trường. Số kg thu gom tối đa bằng số kg của đơn hàng (~{maxRecycleKg} kg).
+                <Text bold size="small">
+                  {pickupReq.code}
                 </Text>
+                {pickupReq.lines.map((l) => (
+                  <Text key={`${l.itemName}-${l.unitLabel}`} size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                    {`${l.declaredQty} ${l.unitLabel} ${l.itemName}`}
+                  </Text>
+                ))}
+                <Text size="xSmall" style={{ color: 'var(--color-text-success)', fontWeight: 600, marginTop: 4 }}>
+                  {`Ước tính ${formatPoints(pickupReq.estimatedPoints)}`}
+                </Text>
+                {attachWaste && (
+                  <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px', marginTop: 4 }}>
+                    Ghi mã lên túi, bưu tá lấy khi giao đơn.
+                  </Text>
+                )}
+                {attachWaste && paymentToSend === 'BANK_TRANSFER' && (
+                  <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px', marginTop: 4 }}>
+                    Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
+                  </Text>
+                )}
               </Box>
-              {paymentToSend === 'BANK_TRANSFER' && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px' }}>
-                  Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
-                </Text>
-              )}
-              <Input
-                placeholder="Ghi chú loại vật dụng muốn gửi (vd: 3 cục pin, vỏ hộp sữa...)"
-                value={recyclingNote}
-                maxLength={200}
-                onChange={(e) => setRecyclingNote(e.target.value)}
-              />
-            </Box>
+            </>
           )}
         </Box>
       )}

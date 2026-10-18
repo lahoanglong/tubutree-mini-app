@@ -183,6 +183,12 @@ describe('canCustomerCancel / isCarrierBooked / buyerStatusLabel', () => {
     expect(canCustomerCancel({ status: 'PENDING_PAYMENT' }, 'u1')).toBe(true);
   });
 
+  it('đơn có thu kèm Gomdon: bưu tá đã cầm đơn (mã số khác 1, 2, 10) thì không tự huỷ được — luật cũ khi API chưa trả canCancel', () => {
+    expect(canCustomerCancel({ status: 'PACKED', hasRecyclingPickup: true, gomdonStatus: '4' }, 'u1')).toBe(false);
+    expect(canCustomerCancel({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '10' }, 'u1')).toBe(true);
+    expect(canCustomerCancel({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: 'FAILED' }, 'u1')).toBe(true);
+  });
+
   it('đơn đang giao/đã huỷ giữ nhãn gốc dù có mã vận đơn', () => {
     expect(buyerStatusLabel({ status: 'SHIPPING', shippingCode: 'GHN1' })).toBe('Đang giao');
     expect(buyerStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1' })).toBe('Đã hủy');

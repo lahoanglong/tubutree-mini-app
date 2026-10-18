@@ -2,30 +2,26 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sprout, Recycle, Check, CalendarCheck, Gift, Copy, Lock, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
+import { Sprout, Recycle, Check, CalendarCheck, Gift, Copy, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
 import {
   getLoyalty,
   getCoupons,
   getPointsTransactions,
-  getLoyaltyRewards,
-  redeemLoyaltyReward,
   getDailyCheckInStatus,
   postDailyCheckIn,
   getMemberCard,
   checkInView,
-  lockedPointsNote,
   memberCardHint,
   pointsReasonLabel,
-  rewardButtonLabel,
   tierProgressPercent,
   type CheckInStatusResponse,
   type CouponDTO,
   type PointsTxn,
-  type RewardItem,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
@@ -37,7 +33,6 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
-import { KeyValueRow } from '../components/ui/key-value-row';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
@@ -76,6 +71,7 @@ function useLastNonNull<T>(value: T | null): T | null {
 
 export default function LoyaltyPage() {
   const navigate = useNavigate();
+  const publicConfig = usePublicConfig();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
@@ -85,23 +81,19 @@ export default function LoyaltyPage() {
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
-  const rewardsQ = useQuery({ queryKey: ['loyalty-rewards'], queryFn: getLoyaltyRewards, enabled: authed });
   const checkInQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed });
   const memberCardQ = useQuery({ queryKey: ['loyalty-member-card'], queryFn: getMemberCard, enabled: authed });
 
   const [showMemberCard, setShowMemberCard] = useState(false);
-  const [confirmReward, setConfirmReward] = useState<RewardItem | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   // Khoá đồng bộ chống chạm đúp: `disabled={mut.isPending}` chỉ có hiệu lực sau lần render kế,
-  // 2 cú chạm trong cùng khung hình vẫn gọi mutate 2 lần. Đổi quà KHÔNG idempotent (mỗi lần đủ
-  // điểm = 1 mã giảm giá mới) nên phải chặn ngay tại chỗ; điểm danh thì backend đã unique theo ngày.
-  const busyRef = useRef({ checkIn: false, redeem: false });
+  // 2 cú chạm trong cùng khung hình vẫn gọi mutate 2 lần; backend đã unique điểm danh theo ngày.
+  const busyRef = useRef({ checkIn: false });
 
   const refreshPoints = () => {
     void qc.invalidateQueries({ queryKey: ['loyalty'] });
     void qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
     void qc.invalidateQueries({ queryKey: ['points-txn'] });
-    void qc.invalidateQueries({ queryKey: ['loyalty-rewards'] });
   };
 
   const checkInMut = useMutation({
@@ -125,35 +117,11 @@ export default function LoyaltyPage() {
     },
   });
 
-  const redeemMut = useMutation({
-    mutationFn: (rewardId: string) => redeemLoyaltyReward(rewardId),
-    onSuccess: (res) => {
-      haptic('heavy');
-      setConfirmReward(null);
-      openSnackbar({ text: `Đổi thành công! Mã ${res.coupon.code} đã vào mục Mã giảm giá của tôi.`, type: 'success' });
-      refreshPoints();
-      void qc.invalidateQueries({ queryKey: ['coupons'] });
-    },
-    onError: (e) => {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      refreshPoints();
-    },
-    onSettled: () => {
-      busyRef.current.redeem = false;
-    },
-  });
-
   const doCheckIn = () => {
     if (busyRef.current.checkIn) return;
     busyRef.current.checkIn = true;
     checkInMut.mutate();
   };
-  const doRedeem = (rewardId: string) => {
-    if (busyRef.current.redeem) return;
-    busyRef.current.redeem = true;
-    redeemMut.mutate(rewardId);
-  };
-
   const copyMemberCode = async () => {
     const code = memberCardQ.data?.memberCode;
     if (!code) return;
@@ -180,14 +148,11 @@ export default function LoyaltyPage() {
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
   const progress = data ? tierProgressPercent(data) : 0;
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
-  // Điểm của đơn mới giao/đang đổi-trả chưa đổi quà được (backend chặn) — nói rõ lý do ngay trên danh mục.
-  const lockedNote = data ? lockedPointsNote(data) : null;
-  // Con số khách thấy là tổng hai lô; đổi mã giảm giá chỉ dùng được lô thường (pointsBalance).
+  // Con số khách thấy là tổng hai lô.
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
   const expiringNote = expiringPointsNote(data?.expiringPoints);
   const expiryPolicy = pointExpiryPolicyNote(data?.pointExpireMonths);
-  const rewardCatalog = rewardsQ.data;
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
   const [celebrate, setCelebrate] = useState<string | null>(null);
@@ -209,8 +174,6 @@ export default function LoyaltyPage() {
     }
   }, [data?.tier, curMin]);
 
-  // sheetReward chỉ để vẽ nội dung lúc sheet trượt xuống; hành động đọc confirmReward (state sống).
-  const sheetReward = useLastNonNull(confirmReward);
   const sheetCelebrate = useLastNonNull(celebrate);
 
   const pageSkeleton = (
@@ -495,16 +458,30 @@ export default function LoyaltyPage() {
               trailing="chevron"
               onPress={() => navigate('/game')}
             />
+            {publicConfig.waste.enabled && (
+              <ListRow
+                icon={
+                  <IconTile>
+                    <Icon icon={Recycle} tone="brand" />
+                  </IconTile>
+                }
+                title="Đổi rác lấy quà"
+                subtitle="Đổi bao bì lấy Điểm Xanh"
+                trailing="chevron"
+                onPress={() => navigate('/recycle')}
+                style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+              />
+            )}
             <ListRow
               icon={
                 <IconTile>
-                  <Icon icon={Recycle} tone="brand" />
+                  <Icon icon={Gift} tone="brand" />
                 </IconTile>
               }
-              title="Trạm Refill"
-              subtitle="Đổi vỏ tích nước"
+              title="Kho quà"
+              subtitle="Đổi Điểm Xanh lấy mã giảm giá và quà"
               trailing="chevron"
-              onPress={() => navigate('/refill')}
+              onPress={() => navigate('/rewards')}
               style={{ borderTop: '1px solid var(--color-border-subtle)' }}
             />
           </Card>
@@ -556,112 +533,6 @@ export default function LoyaltyPage() {
                 );
               })}
             </div>
-          </Section>
-
-          {/* Đổi Điểm Xanh nhận mã giảm giá (Reward Catalog) */}
-          <Section
-            title="Đổi Điểm Xanh nhận mã giảm giá"
-            action={rewardCatalog ? `${rewardCatalog.rewards.length} ưu đãi` : undefined}
-          >
-            {rewardsQ.isLoading ? (
-              <Skeleton height={96} />
-            ) : rewardsQ.isError ? (
-              <ErrorState
-                variant="inline"
-                message={`Chưa tải được danh mục đổi quà: ${getErrorMessage(rewardsQ.error)}`}
-                onRetry={() => void rewardsQ.refetch()}
-              />
-            ) : rewardCatalog && rewardCatalog.rewards.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {lockedNote && (
-                  <div
-                    data-testid="loyalty-locked-points"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 8,
-                      padding: 12,
-                      background: 'var(--color-promo-bg)',
-                      borderRadius: 'var(--radius-control)',
-                      border: '1px solid var(--color-border-subtle)',
-                    }}
-                  >
-                    <Icon icon={Lock} size="sm" tone="muted" style={{ flexShrink: 0, marginTop: 2 }} />
-                    <Text variant="caption" tone="secondary">
-                      {lockedNote}
-                    </Text>
-                  </div>
-                )}
-                {convertedNote && (
-                  <Text variant="caption" tone="secondary" as="div">
-                    Điểm không hết hạn chỉ dùng khi thanh toán, không dùng để đổi mã giảm giá.
-                  </Text>
-                )}
-                {rewardCatalog.rewards.map((r) => (
-                  <div
-                    key={r.id}
-                    style={{
-                      padding: 12,
-                      background: 'var(--color-bg-canvas)',
-                      borderRadius: 'var(--radius-control)',
-                      border: '1px solid var(--color-border-subtle)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <Text variant="body-sm" style={{ fontWeight: 700 }}>
-                            {r.title}
-                          </Text>
-                          {r.badge && (
-                            <Badge tone="brand" size="sm">
-                              {r.badge}
-                            </Badge>
-                          )}
-                        </div>
-                        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                          {r.description}
-                        </Text>
-                      </div>
-                      <Text variant="body-sm" tone="brand" style={{ fontWeight: 700, textAlign: 'right' }}>
-                        {formatPoints(r.pointsCost)}
-                      </Text>
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: 8,
-                        paddingTop: 8,
-                        borderTop: '1px dashed var(--color-border-subtle)',
-                      }}
-                    >
-                      <Text variant="caption" tone="tertiary">
-                        HSD 30 ngày sau đổi
-                      </Text>
-                      <Button
-                        style={{ flexShrink: 0, marginLeft: 'auto' }}
-                        disabled={!r.canRedeem || redeemMut.isPending}
-                        onPress={() => {
-                          haptic('light');
-                          setConfirmReward(r);
-                        }}
-                      >
-                        {rewardButtonLabel(r, rewardCatalog)}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState variant="inline" art="box" heading="Hiện chưa có ưu đãi nào để đổi" />
-            )}
           </Section>
 
           {/* Lịch sử điểm */}
@@ -786,58 +657,6 @@ export default function LoyaltyPage() {
               {memberCardHint(memberCardQ.data)}
             </Text>
           </div>
-        )}
-      </BottomSheet>
-
-      {/* Xác nhận đổi mã giảm giá */}
-      <BottomSheet
-        open={confirmReward !== null}
-        onClose={() => setConfirmReward(null)}
-        title="Xác nhận đổi ưu đãi"
-        footer={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Button
-              fullWidth
-              variant="secondary"
-              disabled={redeemMut.isPending || confirmReward === null}
-              onPress={() => setConfirmReward(null)}
-            >
-              Huỷ
-            </Button>
-            <Button
-              fullWidth
-              disabled={redeemMut.isPending || confirmReward === null}
-              loading={redeemMut.isPending}
-              onPress={() => {
-                if (confirmReward) doRedeem(confirmReward.id);
-              }}
-            >
-              Đổi ngay
-            </Button>
-          </div>
-        }
-      >
-        {sheetReward && (
-          <>
-            <div style={{ padding: 12, background: 'var(--color-bg-canvas)', borderRadius: 'var(--radius-control)' }}>
-              <Text variant="body-sm" as="div" style={{ fontWeight: 700 }}>
-                {sheetReward.title}
-              </Text>
-              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                {sheetReward.description}
-              </Text>
-              <div style={{ marginTop: 8, paddingTop: 4, borderTop: '1px dashed var(--color-border-subtle)' }}>
-                <KeyValueRow label="Điểm cần trừ:" value={`-${formatPoints(sheetReward.pointsCost)} Xanh`} />
-                <KeyValueRow
-                  label="Điểm còn lại:"
-                  value={`${formatPoints((lots?.total ?? 0) - sheetReward.pointsCost)} Xanh`}
-                />
-              </div>
-            </div>
-            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 10 }}>
-              Mã giảm giá sau khi đổi có hạn 30 ngày và xuất hiện ngay trong mục Mã giảm giá của tôi.
-            </Text>
-          </>
         )}
       </BottomSheet>
 

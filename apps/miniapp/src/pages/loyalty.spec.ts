@@ -33,11 +33,13 @@ describe('loyalty.tsx — thẻ thành viên', () => {
 });
 
 describe('loyalty.tsx — trạng thái tải/lỗi', () => {
-  it('danh mục đổi quà và điểm danh có nhánh isError + nút thử lại', () => {
-    expect(src).toMatch(/rewardsQ\.isError/);
+  it('điểm danh có nhánh isError + nút thử lại', () => {
     expect(src).toMatch(/checkInQ\.isError/);
-    expect(src).toMatch(/rewardsQ\.refetch\(\)/);
     expect(src).toMatch(/checkInQ\.refetch\(\)/);
+  });
+
+  it('không còn gọi danh mục quà', () => {
+    expect(src).not.toMatch(/getLoyaltyRewards|redeemLoyaltyReward|rewardsQ/);
   });
 
   it('lịch sử điểm dùng pointsReasonLabel (không hiện mã thô DAILY_CHECKIN:DAY_n)', () => {
@@ -46,5 +48,17 @@ describe('loyalty.tsx — trạng thái tải/lỗi', () => {
 
   it('thanh tiến độ lên hạng dùng tierProgressPercent (điểm xét hạng, không phải số dư)', () => {
     expect(src).toMatch(/tierProgressPercent\(/);
+  });
+});
+
+describe('rewards.tsx — trạng thái tải/lỗi (chuyển từ loyalty.tsx, spec 16.1)', () => {
+  const rewardsSrc = readFileSync(join(process.cwd(), 'src', 'pages', 'rewards.tsx'), 'utf8');
+  it('danh mục quà có nhánh isError + nút thử lại', () => {
+    expect(rewardsSrc).toMatch(/rewardsQ\.isError/);
+    expect(rewardsSrc).toMatch(/rewardsQ\.refetch\(\)/);
+  });
+  it('đổi quà gửi khoá chống lặp và làm mới loyalty-rewards + coupons', () => {
+    expect(rewardsSrc).toMatch(/useIdempotencyKey\(/);
+    expect(rewardsSrc).toMatch(/invalidateAfterRedeem\(qc\)/);
   });
 });
