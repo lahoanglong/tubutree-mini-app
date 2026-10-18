@@ -1,15 +1,21 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   WASTE_METHOD_VALUES,
   WASTE_REJECTION_REASON_VALUES,
   WASTE_REQUEST_STATUS_VALUES,
   type WasteMethod,
   type WasteMonthMetrics,
+  type WasteOverviewDTO,
+  type WastePointMonthlyReportDTO,
   type WasteRejectionReason,
   type WasteRequestStatus,
 } from '@tubutree/shared-types';
-import { VN_OFFSET_MS } from '../../../common/vn-time';
+import { VN_OFFSET_MS, vnMonthKey } from '../../../common/vn-time';
+import { csvCell } from '../../admin/admin-export';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { WasteAccessService } from '../core/waste-access.service';
+import { WasteConfigService } from '../core/waste-config.service';
+import { computeWasteAlerts } from './waste-alerts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -197,9 +203,79 @@ export function buildWasteMonthMetrics(rows: WasteMonthRows): { metrics: WasteMo
   return { metrics, perPoint };
 }
 
+export function flattenWasteMetrics(m: WasteMonthMetrics): [string, string | number][] {
+  const out: [string, string | number | null][] = [];
+  const record = (prefix: string, r: Record<string, number | null>) => {
+    for (const [k, v] of Object.entries(r)) out.push([`${prefix}.${k}`, v]);
+  };
+  record('requestsCreatedByMethod', m.requestsCreatedByMethod);
+  record('requestsByStatus', m.requestsByStatus);
+  out.push(['completeHoursP50', m.completeHoursP50], ['completeHoursP90', m.completeHoursP90]);
+  for (const i of m.unitsByItem) out.push([`unitsByItem.${i.itemName}`, i.qty]);
+  for (const p of m.unitsByPoint) out.push([`unitsByPoint.${p.pointName}`, p.qty]);
+  out.push(['pointsIssued', m.pointsIssued], ['pointsReversed', m.pointsReversed]);
+  record('receivedDeclaredPctByMethod', m.receivedDeclaredPctByMethod);
+  for (const p of m.receivedDeclaredPctByPoint) out.push([`receivedDeclaredPctByPoint.${p.pointId}`, p.pct]);
+  record('rejectionsByReason', m.rejectionsByReason);
+  out.push(['expiredCount', m.expiredCount]);
+  for (const q of m.quotaByPoint) {
+    out.push([`quotaByPoint.${q.pointName}.quota`, q.quota], [`quotaByPoint.${q.pointName}.used`, q.used], [`quotaByPoint.${q.pointName}.confirmations`, q.confirmations]);
+  }
+  out.push(
+    ['pickupCount', m.pickupCount],
+    ['carrierCostVnd', m.carrierCostVnd],
+    ['receivedWeightGrams', m.receivedWeightGrams],
+    ['estimatedWeightGrams', m.estimatedWeightGrams],
+    ['repeatCustomers60d', m.repeatCustomers60d],
+    ['ordersOfExchangers', m.ordersOfExchangers],
+    ['ordersOfNonExchangers', m.ordersOfNonExchangers],
+    ['costVndPer1000PointsIssued', m.costVndPer1000PointsIssued],
+  );
+  return out.map(([label, value]) => [label, value ?? '']);
+}
+
+export function toPointMonthlyReportDTO(r: WasteMonthlyReport): WastePointMonthlyReportDTO {
+  return { pointId: r.pointId!, month: r.month, confirmations: r.confirmations, pointsAwarded: r.metrics.pointsIssued, quotaUsed: r.quotaUsed, units: r.metrics.unitsByItem };
+}
+
 @Injectable()
 export class WasteReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: WasteAccessService,
+    private readonly config: WasteConfigService,
+  ) {}
+
+  async overview(month: string): Promise<WasteOverviewDTO> {
+    const previousMonth = vnMonthKey(new Date(vnMonthRange(month).start.getTime() - 1));
+    const [cur, prev] = await Promise.all([this.monthly(month), this.monthly(previousMonth)]);
+    const alerts = await computeWasteAlerts(this.prisma, new Date(), (await this.config.snapshot()).alertThresholds);
+    return { month, previousMonth, current: cur.metrics, previous: prev.metrics, alerts };
+  }
+
+  async csv(month: string): Promise<string> {
+    const r = await this.monthly(month);
+    let text = '\uFEFFĐiểm nhận,Số lượt,Số đơn vị,Đã cộng,Đã thu hồi,Hạn mức đã dùng\r\n';
+    for (const p of r.perPoint) {
+      text += [p.pointName, p.confirmations, p.units, p.pointsIssued, p.pointsReversed, p.quotaUsed].map(csvCell).join(',') + '\r\n';
+    }
+    text += ['Tổng', r.confirmations, sum(r.perPoint.map((p) => p.units)), r.metrics.pointsIssued, r.metrics.pointsReversed, r.quotaUsed].map(csvCell).join(',') + '\r\n';
+    text += '\r\nChỉ số,Giá trị\r\n';
+    for (const [label, value] of flattenWasteMetrics(r.metrics)) text += [label, value].map(csvCell).join(',') + '\r\n';
+    return text;
+  }
+
+  async pointReport(callerUserId: string, pointId: string, month: string): Promise<WastePointMonthlyReportDTO> {
+    const cfg = await this.config.snapshot();
+    await this.access.assertPointAccess(callerUserId, pointId, { programmeEnabled: cfg.enabled });
+    return toPointMonthlyReportDTO(await this.monthly(month, pointId));
+  }
+
+  async adminPointReport(pointId: string, month: string): Promise<WastePointMonthlyReportDTO> {
+    const point = await this.prisma.wastePoint.findUnique({ where: { id: pointId }, select: { id: true } });
+    if (!point) throw new NotFoundException('Không tìm thấy điểm nhận.');
+    return toPointMonthlyReportDTO(await this.monthly(month, pointId));
+  }
 
   async monthly(month: string, pointId?: string): Promise<WasteMonthlyReport> {
     const { start, end } = vnMonthRange(month);

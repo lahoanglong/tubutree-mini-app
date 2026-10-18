@@ -1,12 +1,21 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { WASTE_REJECTION_REASON_VALUES } from '@tubutree/shared-types';
+import { computeWasteAlerts } from './waste-alerts';
 import {
   buildWasteMonthMetrics,
+  flattenWasteMetrics,
   vnMonthRange,
   WasteReportsService,
   type WasteMonthlyReport,
   type WasteMonthRows,
 } from './waste-reports.service';
+
+jest.mock('./waste-alerts');
+
+const DEFAULT_THRESHOLDS = {
+  quotaPacePct: 60, quotaPaceDays: 10, fullMatchPct: 95, fullMatchMinSample: 10, repeatCustomerCount: 3, repeatCustomerDays: 7,
+  avgUnitsFactor: 2, lookupMissCount: 10, lookupMissDays: 1, staffDirectCount: 5, staffDirectDays: 7,
+};
 
 const iso = (s: string) => new Date(s);
 
@@ -244,7 +253,9 @@ describe('buildWasteMonthMetrics edges and month range', () => {
       pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
       order: { count: jest.fn().mockResolvedValue(0) },
     };
-    const service = new WasteReportsService(prisma as never);
+    const config = { snapshot: jest.fn() };
+    const access = { assertPointAccess: jest.fn() };
+    const service = new WasteReportsService(prisma as never, access as never, config as never);
 
     await service.monthly('2026-10', 'P1');
 
@@ -256,5 +267,130 @@ describe('buildWasteMonthMetrics edges and month range', () => {
     expect(wheres).toContainEqual(expect.objectContaining({ reversedAt: range }));
     expect(wheres).toContainEqual(expect.objectContaining({ status: 'EXPIRED', closedAt: range }));
     expect(prisma.wastePointUsage.findMany).toHaveBeenCalledWith({ where: { monthKey: '2026-10', pointId: 'P1' } });
+  });
+});
+
+describe('WasteReportsService overview, csv and point reports', () => {
+  const config = { snapshot: jest.fn() };
+  const access = { assertPointAccess: jest.fn() };
+  const prisma = { wastePoint: { findUnique: jest.fn() } };
+  const build = () => new WasteReportsService(prisma as never, access as never, config as never);
+  const pointReport: WasteMonthlyReport = {
+    month: '2026-10',
+    pointId: 'P1',
+    metrics: { ...fixtureReport.metrics, pointsIssued: 7000, pointsReversed: 0 },
+    perPoint: [],
+    confirmations: 1,
+    quotaUsed: 7000,
+  };
+  const withPoints = (names: string[]): WasteMonthlyReport => ({
+    ...fixtureReport,
+    perPoint: names.map((pointName) => ({ pointId: pointName, pointName, confirmations: 1, units: 1, pointsIssued: 1, pointsReversed: 0, quotaUsed: 0 })),
+  });
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    config.snapshot.mockResolvedValue({ enabled: true, alertThresholds: DEFAULT_THRESHOLDS });
+    access.assertPointAccess.mockResolvedValue(undefined);
+  });
+
+  it('overview reads this month and the previous one and attaches the computed alerts', async () => {
+    const svc = build();
+    const current = { ...fixtureReport, month: '2026-10' };
+    const previous = { ...fixtureReport, month: '2026-09' };
+    const monthly = jest.spyOn(svc, 'monthly').mockImplementation(async (m: string) => (m === '2026-10' ? current : previous));
+    const alerts = [{ kind: 'STAFF_ACCOUNT_CONFIRMED', value: 1, threshold: null, detail: 'x' }];
+    (computeWasteAlerts as jest.Mock).mockResolvedValue(alerts);
+
+    const result = await svc.overview('2026-10');
+
+    expect(monthly).toHaveBeenCalledWith('2026-10');
+    expect(monthly).toHaveBeenCalledWith('2026-09');
+    expect(result).toEqual({ month: '2026-10', previousMonth: '2026-09', current: current.metrics, previous: previous.metrics, alerts });
+    expect(computeWasteAlerts).toHaveBeenCalledWith(prisma, expect.any(Date), DEFAULT_THRESHOLDS);
+  });
+
+  it('overview rolls January back into December of the previous year', async () => {
+    const svc = build();
+    jest.spyOn(svc, 'monthly').mockResolvedValue(fixtureReport);
+    (computeWasteAlerts as jest.Mock).mockResolvedValue([]);
+
+    expect((await svc.overview('2026-01')).previousMonth).toBe('2025-12');
+  });
+
+  it('csv writes the byte-order mark, one row per point, the total and the metric rows', async () => {
+    const svc = build();
+    jest.spyOn(svc, 'monthly').mockResolvedValue(fixtureReport);
+
+    const text = await svc.csv('2026-10');
+
+    expect(
+      text.startsWith(
+        '\uFEFFĐiểm nhận,Số lượt,Số đơn vị,Đã cộng,Đã thu hồi,Hạn mức đã dùng\r\nKho Tubu HCM,2,12,6000,2000,0\r\nTạp hoá Cô Ba,1,26,7000,0,7000\r\nTổng,3,38,13000,2000,7000\r\n\r\nChỉ số,Giá trị\r\n',
+      ),
+    ).toBe(true);
+  });
+
+  it('csv quotes a point name with a comma and neutralises a leading equals sign', async () => {
+    const svc = build();
+    jest.spyOn(svc, 'monthly').mockResolvedValue(withPoints(['Cô Ba, Q.1', '=HYPERLINK("x")']));
+
+    const text = await svc.csv('2026-10');
+
+    expect(text).toContain('\r\n"Cô Ba, Q.1",1,1,1,0,0\r\n');
+    expect(text).toContain('\r\n"\'=HYPERLINK(""x"")",1,1,1,0,0\r\n');
+  });
+
+  it('csv rejects a month that is not YYYY-MM', async () => {
+    await expect(build().csv('2026-13')).rejects.toThrow(new BadRequestException('Tháng phải có dạng YYYY-MM.'));
+  });
+
+  it('pointReport checks point access before reading and maps to the aggregate-only DTO', async () => {
+    const svc = build();
+    const monthly = jest.spyOn(svc, 'monthly').mockResolvedValue(pointReport);
+
+    const result = await svc.pointReport('o1', 'P1', '2026-10');
+
+    expect(access.assertPointAccess).toHaveBeenCalledWith('o1', 'P1', { programmeEnabled: true });
+    expect(access.assertPointAccess.mock.invocationCallOrder[0]).toBeLessThan(monthly.mock.invocationCallOrder[0]!);
+    expect(monthly).toHaveBeenCalledWith('2026-10', 'P1');
+    expect(result).toEqual({ pointId: 'P1', month: '2026-10', confirmations: 1, pointsAwarded: 7000, quotaUsed: 7000, units: pointReport.metrics.unitsByItem });
+    expect(Object.keys(result)).toEqual(['pointId', 'month', 'confirmations', 'pointsAwarded', 'quotaUsed', 'units']);
+  });
+
+  it('pointReport passes the access refusal through and reads nothing', async () => {
+    const svc = build();
+    const monthly = jest.spyOn(svc, 'monthly');
+    access.assertPointAccess.mockRejectedValue(new ForbiddenException('no'));
+
+    await expect(svc.pointReport('o1', 'P1', '2026-10')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(monthly).not.toHaveBeenCalled();
+  });
+
+  it('adminPointReport answers 404 for a missing point', async () => {
+    const svc = build();
+    prisma.wastePoint.findUnique.mockResolvedValue(null);
+
+    await expect(svc.adminPointReport('NOPE', '2026-10')).rejects.toThrow(new NotFoundException('Không tìm thấy điểm nhận.'));
+  });
+
+  it('adminPointReport maps like pointReport without a point access check', async () => {
+    const svc = build();
+    prisma.wastePoint.findUnique.mockResolvedValue({ id: 'P1' });
+    jest.spyOn(svc, 'monthly').mockResolvedValue(pointReport);
+
+    const result = await svc.adminPointReport('P1', '2026-10');
+
+    expect(prisma.wastePoint.findUnique).toHaveBeenCalledWith({ where: { id: 'P1' }, select: { id: true } });
+    expect(result).toEqual({ pointId: 'P1', month: '2026-10', confirmations: 1, pointsAwarded: 7000, quotaUsed: 7000, units: pointReport.metrics.unitsByItem });
+    expect(access.assertPointAccess).not.toHaveBeenCalled();
+  });
+
+  it('flattenWasteMetrics covers every metric key and writes null as an empty cell', () => {
+    const m = fixtureReport.metrics;
+    const labels = flattenWasteMetrics(m).map(([label]) => label);
+
+    for (const k of Object.keys(m)) expect(labels.some((l) => l === k || l.startsWith(`${k}.`))).toBe(true);
+    expect(flattenWasteMetrics({ ...m, completeHoursP50: null })).toContainEqual(['completeHoursP50', '']);
   });
 });
