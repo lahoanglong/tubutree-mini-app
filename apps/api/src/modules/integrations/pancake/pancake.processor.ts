@@ -281,7 +281,8 @@ export class PancakeProcessor extends WorkerHost {
       if (own) await clearPancakeAttention(this.prisma, order.id, ATTENTION_TOTAL_MISMATCH);
       return;
     }
-    // Hàng đợi chỉ có một ô lý do: đang chờ việc khác (khách chuyển thiếu, huỷ chưa tới Pancake…) thì không ghi đè.
+    // Hàng đợi chỉ có một ô lý do: đang chờ việc khác (khách chuyển thiếu, huỷ chưa tới Pancake…) thì không ghi đè. Dòng này chỉ
+    // bỏ sớm cho đỡ tốn truy vấn; việc chặn thật nằm trong điều kiện updateMany vì job khác có thể ghi chen sau lúc đọc đơn.
     if (order.pancakeAttention && !own) return;
     // Đơn có dòng do đối tác tự giao chỉ gửi phần dòng kho Tubu lên Pancake nên tổng Pancake thấp hơn là đúng thiết kế.
     if (await this.hasNonPancakeLines(order.id)) return;
@@ -293,6 +294,7 @@ export class PancakeProcessor extends WorkerHost {
         `lệch ${sign}${formatVnd(Math.abs(mismatch.diff))}. Có thể đơn đã bị sửa trên Pancake (món, giảm giá hoặc phí ship). ` +
         'Tubu KHÔNG tự sửa đơn, hoàn tiền/hoa hồng/đối soát vẫn tính theo số của Tubu. Cách xử lý: huỷ đơn rồi đặt lại, hoặc ' +
         'trả đơn Pancake về đúng nội dung đơn Tubu.',
+      ATTENTION_TOTAL_MISMATCH,
     );
   }
 
@@ -358,9 +360,19 @@ export class PancakeProcessor extends WorkerHost {
    * lại (Pancake gửi lại webhook mỗi lần đơn đổi). Best-effort về báo động; lỗi ghi DB ném tiếp để retry.
    */
   /** Trả true khi vừa gắn (lời nhắc khác lời đang gắn); cùng lời thì không báo lại. */
-  private async flagAttention(order: Pick<Order, 'id' | 'code'>, reason: string): Promise<boolean> {
+  private async flagAttention(
+    order: Pick<Order, 'id' | 'code'>,
+    reason: string,
+    onlyReplacingPrefix?: string,
+  ): Promise<boolean> {
+    const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
     const r = await this.prisma.order.updateMany({
-      where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
+      where: onlyReplacingPrefix
+        ? {
+            id: order.id,
+            AND: [changed, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }],
+          }
+        : { id: order.id, ...changed },
       data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
     });
     if (r.count === 0) return false;

@@ -123,6 +123,19 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
     expect(alerts.alert).not.toHaveBeenCalled();
   });
 
+  it('ghi lý do bằng MỘT câu updateMany có điều kiện: chỉ ghi khi ô lý do trống hoặc đang là lý do lệch tổng (không đè lý do job khác ghi chen vào)', async () => {
+    const { proc, updateMany } = setup(order());
+    await proc.onOrderEvent(EDITED);
+    const write = calls(updateMany).find((c) => typeof c.data.pancakeAttention === 'string')!;
+    expect(write.where).toEqual({
+      id: 'o1',
+      AND: [
+        { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: write.data.pancakeAttention } }] },
+        { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: ATTENTION_TOTAL_MISMATCH } }] },
+      ],
+    });
+  });
+
   it('lệch thêm lần nữa (số khác) thì cập nhật lời nhắc lệch cũ', async () => {
     const { proc, updateMany } = setup(order({ pancakeAttention: `${ATTENTION_TOTAL_MISMATCH}: Pancake ghi 319.000đ` }));
     await proc.onOrderEvent({ ...EDITED, total_price: 380_000, total_price_after_sub_discount: 350_000 });

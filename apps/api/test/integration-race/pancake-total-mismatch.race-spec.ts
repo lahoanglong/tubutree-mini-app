@@ -132,6 +132,28 @@ describe('Pancake webhook: lệch tổng tiền (real Postgres)', () => {
     expect((await reload(busy.id)).pancakeAttention).toBe('Khách chuyển thiếu: 1/2');
   });
 
+  it('job khác ghi lý do vào đơn SAU khi so tổng đã đọc đơn (đọc thấy chưa có lý do): lý do của job đó còn nguyên, không bị đè', async () => {
+    const order = await seed();
+    const other = 'Khách chuyển thiếu: 1/2';
+    const original = prisma.order.findFirst.bind(prisma.order);
+    let injected = false;
+    const spy = jest.spyOn(prisma.order, 'findFirst').mockImplementation((async (args: Parameters<typeof original>[0]) => {
+      const row = await original(args);
+      if (!injected && new Error().stack?.includes('reconcileTotal')) {
+        injected = true;
+        await prisma.order.update({ where: { id: order.id }, data: { pancakeAttention: other, pancakeAttentionAt: new Date() } });
+      }
+      return row;
+    }) as never);
+    try {
+      await deliver(payload(order, EDITED));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(injected).toBe(true);
+    expect((await reload(order.id)).pancakeAttention).toBe(other);
+  });
+
   it('đơn đã huỷ không báo; công tắc pancake.total_mismatch_check=false tắt việc so, bật lại thì so như thường', async () => {
     const cancelled = await seed();
     await prisma.order.update({ where: { id: cancelled.id }, data: { status: 'CANCELLED', paymentStatus: 'REFUNDED' } });
