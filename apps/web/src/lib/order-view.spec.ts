@@ -14,6 +14,7 @@ import {
   ORDER_TABS,
   timelineIndex,
   orderDetailHref,
+  bankPaymentHref,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
@@ -25,6 +26,11 @@ import {
 } from './order-view';
 
 describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
+  it('bankPaymentHref mã hoá mã đơn vào trang chuyển khoản như /bank-payment/:code của Mini App', () => {
+    expect(bankPaymentHref('TB260927-001')).toBe('/thanh-toan/chuyen-khoan/TB260927-001');
+    expect(bankPaymentHref('A/B?#')).toBe('/thanh-toan/chuyen-khoan/A%2FB%3F%23');
+  });
+
   it('orderDetailHref mã hoá mã đơn vào đường dẫn chi tiết', () => {
     expect(orderDetailHref('TB260927-001')).toBe('/tai-khoan/don-hang/TB260927-001');
     expect(orderDetailHref('a/b c')).toBe('/tai-khoan/don-hang/a%2Fb%20c');

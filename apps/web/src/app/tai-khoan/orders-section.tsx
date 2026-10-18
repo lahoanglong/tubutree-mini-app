@@ -10,6 +10,7 @@ import {
   buyerOrderStatusLabel,
   canPayAgain,
   orderDetailHref,
+  bankPaymentHref,
   orderStatusTone,
   type OrderTabKey,
 } from '@/lib/order-view';
@@ -153,7 +154,7 @@ export function OrdersSection() {
                 <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
                 {/* Đơn chuyển khoản còn chờ tiền: lối riêng "Thanh toán" vì đó là việc khách còn phải làm. */}
                 {canPayAgain(o) ? (
-                  <Link href={orderDetailHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>
+                  <Link href={bankPaymentHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>
                     Thanh toán
                   </Link>
                 ) : (

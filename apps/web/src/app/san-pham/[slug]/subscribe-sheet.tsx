@@ -15,7 +15,7 @@ import { Chip } from '@/components/catalog/chip';
 import { coreHttp } from '@/lib/core-http';
 import { getAddresses, getWallet } from '@/lib/shop-client';
 import { formatVnd } from '@/lib/format-vnd';
-import { orderDetailHref } from '@/lib/order-view';
+import { bankPaymentHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { addressText, formatVnDate, isStartDateAllowed, startDateRange } from '@/lib/subscription-options';
@@ -121,7 +121,7 @@ export function SubscribeSheet({
       onClose();
       if (first?.paymentMethod === 'BANK_TRANSFER' && first.status === 'PENDING_PAYMENT') {
         onNotice(`Đã tạo đơn đầu ${first.code}, bạn chuyển khoản để Tubu giao nhé`);
-        router.push(orderDetailHref(first.code));
+        router.push(bankPaymentHref(first.code));
         return;
       }
       // Giao ngay mà không có đơn đầu nghĩa là API trả lại gói y hệt đã có (bấm đúp/thử lại).

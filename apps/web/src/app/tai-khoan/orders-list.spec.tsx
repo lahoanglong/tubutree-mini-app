@@ -110,3 +110,19 @@ describe('danh sách đơn — ô tìm kiếm', () => {
     expect(smallTouchTargets(c)).toEqual([]);
   });
 });
+
+describe('danh sách đơn — nút Thanh toán', () => {
+  it('đơn chuyển khoản chờ tiền dẫn tới trang chuyển khoản như onPay của Mini App, đơn khác về chi tiết', async () => {
+    state.orders = [
+      { ...order('TB/1?', [item('Dầu gội')]), status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString() },
+      { ...order('TB-2', [item('Xà phòng')]), status: 'PENDING_PAYMENT', paymentMethod: 'COD' },
+      { ...order('TB-3', [item('Bàn chải')]), status: 'PAID', paymentMethod: 'BANK_TRANSFER' },
+    ];
+    const c = await mount();
+    const pay = c.querySelector('a[aria-label="Thanh toán đơn TB/1?"]');
+    expect(pay?.getAttribute('href')).toBe('/thanh-toan/chuyen-khoan/TB%2F1%3F');
+    expect(c.querySelector('a[aria-label^="Thanh toán đơn TB-2"]')).toBeNull();
+    expect(c.querySelector('a[aria-label^="Thanh toán đơn TB-3"]')).toBeNull();
+    expect(c.querySelector('a[aria-label="Xem chi tiết đơn TB-3"]')?.getAttribute('href')).toBe('/tai-khoan/don-hang/TB-3');
+  });
+});
