@@ -54,6 +54,7 @@ import RewardsMinePage from './kho-qua/cua-toi/page';
 import CashbackPage from './hoan-tien/page';
 import WishlistPage from './tai-khoan/yeu-thich/page';
 import DealerPage from './dai-ly/page';
+import StaffPage from './nhan-vien/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -99,7 +100,10 @@ const LOYALTY: PageCase[] = [
 const COMMUNITY: PageCase[] = [];
 const AFFILIATE: PageCase[] = [];
 const GAME: PageCase[] = [];
-const PRO: PageCase[] = [['/dai-ly', () => <DealerPage />, '/dai-ly']];
+const PRO: PageCase[] = [
+  ['/dai-ly', () => <DealerPage />, '/dai-ly'],
+  ['/nhan-vien', () => <StaffPage />, '/nhan-vien'],
+];
 const RECYCLE: PageCase[] = [];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 

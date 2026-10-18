@@ -76,6 +76,12 @@ const PRO: string[] = [
   'components/dealer/report-tab.tsx',
   'components/dealer/rewards-card.tsx',
   'lib/dealer-view.ts',
+  'app/nhan-vien/page.tsx',
+  'components/staff/staff-shell.tsx',
+  'components/staff/staff-hub.tsx',
+  'components/staff/today-card.tsx',
+  'components/staff/shift-sheets.tsx',
+  'lib/week.ts',
 ];
 const RECYCLE: string[] = [];
 const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];

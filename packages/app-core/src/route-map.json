@@ -52,7 +52,7 @@
     ]},
     { "lane": "pro", "items": [
       { "miniapp": "/dealer", "web": "/dai-ly", "private": true },
-      { "miniapp": "/staff", "web": "/nhan-vien", "private": true, "pending": true },
+      { "miniapp": "/staff", "web": "/nhan-vien", "private": true },
       { "miniapp": "/my-payroll", "web": "/nhan-vien/bang-luong", "private": true, "pending": true },
       { "miniapp": "/brand-owner", "web": "/chu-thuong-hieu", "private": true, "pending": true },
       { "miniapp": "/admin", "web": "/admin", "private": true },
