@@ -87,6 +87,9 @@ export const reorderText = {
   nothingAdded: 'Chưa thêm được món nào vào giỏ',
   partial: (n: number) => `chỉ thêm được ${n}`,
   noSelection: 'Chưa chọn sản phẩm',
+  unknownProduct: 'Sản phẩm',
+  addedGeneric: 'Đã thêm vào giỏ',
+  viewCart: 'Xem giỏ',
   reasons: {
     OUT_OF_STOCK: 'hết hàng',
     INACTIVE: 'ngừng bán',
