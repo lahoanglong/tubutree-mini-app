@@ -19,14 +19,17 @@ import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { isWebRouteReady } from '@/lib/route-map';
 import { SITE_URL } from '@/lib/site';
+import { invalidateBalances } from '@/lib/balances';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
+import { formatVndShort } from '@/components/affiliate/vnd-short';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
+import { WithdrawSheet } from '@/components/affiliate/withdraw-sheet';
 import {
   COMMISSION_META,
   COMMISSION_ORDER_STATUS,
@@ -41,14 +44,6 @@ const DEFAULT_MIN_WITHDRAW_BANK = 50_000;
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
-/** "50k" / "1,5tr" cho mức rút tối thiểu trong lời giới thiệu; số lẻ thì in đầy đủ, cùng quy tắc formatVndShort của Mini App. */
-function formatVndShort(v: number): string {
-  if (v <= 0) return '0đ';
-  const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
-  if (v >= 1_000_000 && v % 100_000 === 0) return `${trim(v / 1_000_000)}tr`;
-  if (v >= 1_000 && v % 1_000 === 0) return `${Math.round(v / 1_000)}k`;
-  return formatVnd(v);
-}
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -312,6 +307,7 @@ function Dashboard() {
   const taxQ = useQuery(affiliateTaxStatementQuery(coreHttp));
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const createLink = useMutation({
     mutationFn: () => createAffiliateLink(coreHttp, 'HOMEPAGE'),
@@ -348,7 +344,7 @@ function Dashboard() {
     setNotice({ text: ok ? okText : failText, error: !ok });
   };
 
-  // Rút tiền và Lên đơn hộ chưa mở trên web: không gọi API, chỉ báo cách làm ở Mini App.
+  // Lên đơn hộ chưa mở trên web: không gọi API, chỉ báo cách làm ở Mini App.
   const notYet = (what: string) => setNotice({ text: `${what} chưa mở trên web, bạn dùng Mini App Tubu Tree để làm việc này nhé.`, error: false });
 
   // Đại lý không có lối tắt Lên đơn hộ (API từ chối) và chỉ có Gian hàng khi còn gian hàng CTV (trình dựng trả 400 nếu không);
@@ -368,9 +364,19 @@ function Dashboard() {
       icon: Wallet,
       // Khi dashboard lỗi vẫn cho bấm để máy chủ tự kiểm số dư, CTV không bị kẹt vì lỗi tạm thời.
       disabled: !dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0,
-      onPress: () => notYet('Rút tiền'),
+      onPress: () => setWithdrawing(true),
     },
   ];
+
+  const withdrawDone = (message: string) => {
+    setWithdrawing(false);
+    setNotice({ text: message, error: false });
+    for (const q of [affiliateDashboardQuery, affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery]) {
+      void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
+    }
+    // Rút về Ví Tubu cộng thẳng vào ví: số dư đang cache ở trang Ví đã cũ.
+    invalidateBalances(qc);
+  };
 
   const captions = [
     `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
@@ -537,6 +543,14 @@ function Dashboard() {
           </Section>
         </div>
       </div>
+      <WithdrawSheet
+        open={withdrawing}
+        onClose={() => setWithdrawing(false)}
+        max={d?.withdrawableCommission ?? 0}
+        knownMax={!dashQ.isError}
+        taxIdOnFile={me?.personalTaxId ?? null}
+        onDone={withdrawDone}
+      />
     </Shell>
   );
 }

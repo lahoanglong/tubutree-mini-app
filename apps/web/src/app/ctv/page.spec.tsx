@@ -244,11 +244,37 @@ describe('/ctv — bảng điều khiển', () => {
     expect((byText(container, '[role="group"] button', 'Rút tiền') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('Rút tiền và Lên đơn hộ chưa làm: bấm không gọi API nào', async () => {
+  it('Rút tiền mở sheet "Rút hoa hồng" với số rút được của dashboard', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, '[role="group"] button', 'Rút tiền'));
+    await flush();
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain('Rút hoa hồng');
+    expect(dialog?.textContent).toContain('80.000đ');
+  });
+
+  it('rút xong: đóng sheet, báo đã gửi, tải lại dashboard, lệnh rút và bảng kê thuế', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, '[role="group"] button', 'Rút tiền'));
+    await flush();
+    const before = (path: string) => state.calls.filter((c) => c.method === 'get' && c.path === path).length;
+    const dashBefore = before('/affiliate/dashboard');
+    const payoutsBefore = before('/affiliate/payouts');
+    click(byText(document.body, '[role="dialog"] button', 'vào Ví'));
+    await flush();
+    expect(posts().find((c) => c.path === '/affiliate/payouts')?.body).toMatchObject({ amount: 80_000, method: 'WALLET_BALANCE' });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.textContent).toContain('Đã gửi yêu cầu rút.');
+    expect(before('/affiliate/dashboard')).toBeGreaterThan(dashBefore);
+    expect(before('/affiliate/payouts')).toBeGreaterThan(payoutsBefore);
+  });
+
+  it('Lên đơn hộ chưa làm: bấm không gọi API nào', async () => {
     const { container } = mount();
     await flush();
     const before = state.calls.length;
-    click(byText(container, '[role="group"] button', 'Rút tiền'));
     click(byText(container, '[role="group"] button', 'Lên đơn hộ'));
     await flush();
     expect(state.calls.length).toBe(before);
