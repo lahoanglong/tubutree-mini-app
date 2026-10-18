@@ -71,6 +71,7 @@ function toRow(r: QueueRow, isAdmin: boolean): AdminWasteRequestRowDTO {
     expiresAt: iso(r.expiresAt),
     inTransitAt: iso(r.inTransitAt),
     receivedAt: iso(r.receivedAt),
+    completedAt: iso(r.completedAt),
     estimatedPoints: r.estimatedPoints,
     pointsAwarded: r.pointsAwarded,
     pointId: r.pointId,

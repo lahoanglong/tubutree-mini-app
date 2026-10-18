@@ -6,7 +6,7 @@ import type {
   AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, AdminWasteItemDTO, AdminWastePointDTO, AdminWastePointQuery,
   AdminWasteRequestQuery, AdminWasteRequestRowDTO, GiftRedemptionDTO, GiftRedemptionsQuery,
   WasteCloseLostRequest, WasteConfirmRequest, WasteConfirmResultDTO, WasteCostRequest, WasteGiftCancelRequest,
-  WasteGiftUpsertRequest, WasteItemUpsertRequest, WastePointMonthlyReportDTO, WastePointStaffAddRequest,
+  WasteGiftUpsertRequest, WasteItemUpsertRequest, WastePerkReviewRequest, WastePointMonthlyReportDTO, WastePointStaffAddRequest,
   WastePointUpsertRequest, WasteOverviewDTO, WasteReceiveRequest, WasteReceiveResultDTO, WasteRejectRequest,
   WasteRejectResultDTO, WasteReopenRequest, WasteRequestAdminDetailDTO, WasteReverseRequest, WasteReverseResultDTO,
   WasteUnmatchedCreateRequest, WasteUnmatchedDTO, WasteUnmatchedResolveRequest, WasteUnmatchedStatus,
@@ -1894,10 +1894,18 @@ export const removeWastePointStaff = (pointId: string, userId: string) =>
     `/admin/waste/points/${encodeURIComponent(pointId)}/staff/${encodeURIComponent(userId)}`,
     { method: 'DELETE' },
   );
-export const approveWastePerk = (pointId: string) =>
-  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/approve`, { method: 'POST' });
-export const rejectWastePerk = (pointId: string) =>
-  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/reject`, { method: 'POST' });
+export const approveWastePerk = (pointId: string, expectedPendingText: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/approve`, {
+    method: 'POST',
+    body: { expectedPendingText } satisfies WastePerkReviewRequest,
+  });
+export const rejectWastePerk = (pointId: string, expectedPendingText: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/reject`, {
+    method: 'POST',
+    body: { expectedPendingText } satisfies WastePerkReviewRequest,
+  });
+export const clearWastePerk = (pointId: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/clear`, { method: 'POST' });
 
 export const listWasteRequests = (q: AdminWasteRequestQuery = {}) =>
   apiFetch<{ rows: AdminWasteRequestRowDTO[]; nextCursor: string | null }>(

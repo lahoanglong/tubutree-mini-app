@@ -699,7 +699,8 @@ Decorator legend: R(SA) = `@Roles('STAFF','ADMIN')`, R(A) = `@Roles('ADMIN')`, T
 | GET/POST/PATCH(:id) /admin/waste/items, PUT /admin/waste/items/order | catalog/waste-admin-items.controller.ts | R(A), writes T30 | WasteAdminItemsService.* | M4.5 |
 | GET(?status=&perkPending= → AdminWastePointQuery)/POST/PATCH(:id) /admin/waste/points, PUT /admin/waste/points/order | catalog/waste-admin-points.controller.ts | R(A), writes T30 | WasteAdminPointsService.* | M4.6 |
 | POST /admin/waste/points/:id/staff, DELETE /admin/waste/points/:id/staff/:userId | same | R(A) T30 | addStaff / removeStaff | M4.6 |
-| POST /admin/waste/points/:id/perk/approve, …/perk/reject | same | R(A) T30 | approvePerk / rejectPerk | M4.6 |
+| POST /admin/waste/points/:id/perk/approve, …/perk/reject (body `{ expectedPendingText }`, 409 when the pending text changed) | same | R(A) T30 | approvePerk / rejectPerk | M4.6 |
+| POST /admin/waste/points/:id/perk/clear | same | R(A) T30 | clearPerk (also done by removeStaff when the removed row is the OWNER) | M4.6 |
 | GET /admin/waste/points/:id/report?month= | catalog/waste-reports.controller.ts | R(A) | WasteReportsService.monthly(month, pointId) → WastePointMonthlyReportDTO | M4.7 |
 | GET /admin/waste/requests | receiving/waste-admin-requests.controller.ts | R(SA) | WasteAdminRequestsService.queue | M3.8 |
 | GET /admin/waste/requests/lookup?code= (before :id) | same | R(SA) T30 | lookup | M3.8 |

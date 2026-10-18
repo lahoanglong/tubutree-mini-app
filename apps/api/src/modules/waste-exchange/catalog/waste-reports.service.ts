@@ -215,7 +215,8 @@ export function flattenWasteMetrics(m: WasteMonthMetrics): [string, string | num
   for (const p of m.unitsByPoint) out.push([`unitsByPoint.${p.pointName}`, p.qty]);
   out.push(['pointsIssued', m.pointsIssued], ['pointsReversed', m.pointsReversed]);
   record('receivedDeclaredPctByMethod', m.receivedDeclaredPctByMethod);
-  for (const p of m.receivedDeclaredPctByPoint) out.push([`receivedDeclaredPctByPoint.${p.pointId}`, p.pct]);
+  const pointNames = new Map(m.unitsByPoint.map((p) => [p.pointId, p.pointName]));
+  for (const p of m.receivedDeclaredPctByPoint) out.push([`receivedDeclaredPctByPoint.${pointNames.get(p.pointId) ?? p.pointId}`, p.pct]);
   record('rejectionsByReason', m.rejectionsByReason);
   out.push(['expiredCount', m.expiredCount]);
   for (const q of m.quotaByPoint) {

@@ -54,6 +54,42 @@ describe('WastePointsSection', () => {
     expect(row(c, 'wh').textContent).toContain('Không hạn mức');
   });
 
+  it('cột nhân viên không đếm người đã gỡ', async () => {
+    const staff = (userId: string, isActive: boolean) => ({ userId, role: 'STAFF' as const, isActive, fullName: userId, phone: null });
+    const api = mockFetch({
+      '/admin/waste/points': { body: [wastePoint({ id: 'p9', staff: [staff('a', true), staff('b', false), staff('c', false)] })] },
+      '/admin/waste/items': { body: [wasteItem()] },
+      '/admin/waste/overview': { body: OVERVIEW },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WastePointsSection seed={null} />);
+    mounted.push(r);
+    await flush();
+    expect(row(r.container, 'p9').textContent).toContain('1 nhân viên');
+    expect(row(r.container, 'p9').textContent).not.toContain('3 nhân viên');
+  });
+
+  it('bảng điểm: 7 cột và bề rộng tối thiểu vừa cột nội dung 1280 px, lượt xác nhận và nhân viên chung một ô', async () => {
+    const { c } = await mount();
+    const heads = Array.from(c.querySelectorAll('thead th')).map((th) => th.textContent);
+    expect(heads).toEqual(['Điểm', 'Giờ mở cửa', 'Hàng nhận', 'Trạng thái', 'Hạn mức tháng', 'Lượt và nhân viên', 'Thao tác']);
+    expect(c.querySelector('table')!.className).toContain('min-w-[900px]');
+    expect(row(c, 'p1').textContent).toMatch(/6 lượt\d+ nhân viên/);
+  });
+
+  it('bảng điểm: giờ mở cửa, hàng nhận và thanh mức dùng đổi màu theo cảnh báo và khi đầy', async () => {
+    const { c } = await mount();
+    expect(row(c, 'p1').textContent).toContain('T2 08:00–20:00');
+    expect(row(c, 'p1').textContent).toContain('Thùng carton cũ');
+    expect(row(c, 'wh').querySelector('[role="progressbar"]')).toBeNull();
+    const bar = (id: string) => row(c, id).querySelector<HTMLElement>('[role="progressbar"]')!;
+    expect(bar('p1').getAttribute('aria-valuenow')).toBe('40');
+    expect(bar('p1').getAttribute('data-quota-bar')).toBe('bg-warning-fg');
+    expect(bar('p2').getAttribute('aria-valuenow')).toBe('100');
+    expect(bar('p2').getAttribute('data-quota-bar')).toBe('bg-danger-fg');
+    expect(bar('p5').getAttribute('data-quota-bar')).toBe('bg-forest-600');
+  });
+
   it('điểm dùng hết hạn mức tháng hiện "Tạm dừng, hết hạn mức" (6)', async () => {
     const { c } = await mount();
     expect(row(c, 'p2').textContent).toContain('Tạm dừng, hết hạn mức');

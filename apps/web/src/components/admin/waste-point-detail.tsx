@@ -6,11 +6,13 @@ import type { AdminWastePointDTO, WastePointStaffRole } from '@tubutree/shared-t
 import {
   addWastePointStaff,
   approveWastePerk,
+  clearWastePerk,
   getWastePointReport,
   listWasteRequests,
   rejectWastePerk,
   removeWastePointStaff,
 } from '@/lib/admin-client';
+import { ApiError } from '@/lib/client-api';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
@@ -57,6 +59,10 @@ export function WastePointDetail({
     return qc.invalidateQueries({ queryKey: ['admin-waste-points'] });
   };
   const onError = (e: unknown) => setErr(errText(e));
+  const onPerkError = (e: unknown) => {
+    setErr(errText(e));
+    if (e instanceof ApiError && e.status === 409) void refresh();
+  };
 
   const add = useMutation({
     mutationFn: (v: { userId: string; role: WastePointStaffRole }) => addWastePointStaff(point.id, v),
@@ -69,12 +75,18 @@ export function WastePointDetail({
     onError,
   });
   const approve = useMutation({
-    mutationFn: () => approveWastePerk(point.id),
+    mutationFn: (expectedPendingText: string) => approveWastePerk(point.id, expectedPendingText),
     onSuccess: () => { setErr(null); return refresh(); },
-    onError,
+    onError: onPerkError,
   });
   const reject = useMutation({
-    mutationFn: () => rejectWastePerk(point.id),
+    mutationFn: (expectedPendingText: string) => rejectWastePerk(point.id, expectedPendingText),
+    onSuccess: () => { setErr(null); return refresh(); },
+    onError: onPerkError,
+  });
+
+  const clear = useMutation({
+    mutationFn: () => clearWastePerk(point.id),
     onSuccess: () => { setErr(null); return refresh(); },
     onError,
   });
@@ -92,22 +104,38 @@ export function WastePointDetail({
   });
   const creditRows = (credits.data?.pages ?? []).flatMap((p) => p.rows);
 
-  const askRemove = async (userId: string, name: string) => {
+  const askRemove = async (userId: string, name: string, staffRole: WastePointStaffRole) => {
+    const hasPerk = point.perkText !== null || point.perkPendingText !== null;
     const ok = await confirm({
       title: 'Gỡ người khỏi điểm',
-      message: `${name} không còn xác nhận được ở ${point.name}.`,
+      message:
+        staffRole === 'OWNER'
+          ? `Gỡ chủ điểm sẽ dừng cả điểm: khách không thấy điểm, người ở điểm không xác nhận được cho tới khi thêm chủ mới.${hasPerk ? ' Ưu đãi của điểm cũng được gỡ.' : ''}`
+          : `${name} không còn xác nhận được ở ${point.name}.`,
       confirmLabel: 'Gỡ',
       tone: 'danger',
     });
     if (ok) remove.mutate(userId);
   };
   const askPerk = async (kind: 'approve' | 'reject') => {
+    const text = point.perkPendingText;
+    if (!text) return;
     const ok = await confirm(
       kind === 'approve'
-        ? { title: 'Duyệt ưu đãi riêng', message: `Ưu đãi "${point.perkPendingText}" sẽ hiện cho khách ở ${point.name}.`, confirmLabel: 'Duyệt' }
-        : { title: 'Từ chối ưu đãi riêng', message: `Ưu đãi "${point.perkPendingText}" sẽ không hiện cho khách ở ${point.name}.`, confirmLabel: 'Từ chối', tone: 'danger' },
+        ? { title: 'Duyệt ưu đãi riêng', message: `Ưu đãi "${text}" sẽ hiện cho khách ở ${point.name}.`, confirmLabel: 'Duyệt' }
+        : { title: 'Từ chối ưu đãi riêng', message: `Ưu đãi "${text}" sẽ không hiện cho khách ở ${point.name}.`, confirmLabel: 'Từ chối', tone: 'danger' },
     );
-    if (ok) (kind === 'approve' ? approve : reject).mutate();
+    if (ok) (kind === 'approve' ? approve : reject).mutate(text);
+  };
+
+  const askClear = async () => {
+    const ok = await confirm({
+      title: 'Gỡ ưu đãi đang hiện',
+      message: `Ưu đãi "${point.perkText}" sẽ không còn hiện cho khách ở ${point.name}.`,
+      confirmLabel: 'Gỡ ưu đãi',
+      tone: 'danger',
+    });
+    if (ok) clear.mutate();
   };
 
   return (
@@ -145,7 +173,7 @@ export function WastePointDetail({
                       </td>
                       <td className={TD}>
                         {s.isActive && (
-                          <button type="button" className={BTN_XS_DANGER} disabled={remove.isPending} onClick={() => void askRemove(s.userId, s.fullName ?? 'Người này')}>
+                          <button type="button" className={BTN_XS_DANGER} disabled={remove.isPending} onClick={() => void askRemove(s.userId, s.fullName ?? 'Người này', s.role)}>
                             Gỡ
                           </button>
                         )}
@@ -177,7 +205,7 @@ export function WastePointDetail({
               </button>
             </div>
             {full && <p className="text-xs text-warning-fg">Tối đa 5 người ở một điểm</p>}
-            <p className="text-xs text-stone-600">Chỉ admin gắn người ở điểm. Chủ điểm phải là chủ gian hàng đối tác (15.1).</p>
+            <p className="text-xs text-stone-600">Chỉ admin gắn người ở điểm. Chủ điểm phải là chủ gian hàng đối tác.</p>
           </>
         ) : (
           <p className="text-sm text-stone-700">Kho phân quyền theo vai trò nhân viên, không gắn người ở điểm.</p>
@@ -187,6 +215,11 @@ export function WastePointDetail({
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Ưu đãi riêng</h3>
         <p className="text-sm text-stone-800">{point.perkText ?? 'Chưa có'}</p>
+        {point.perkText && (
+          <div>
+            <button type="button" className={BTN_XS_DANGER} disabled={clear.isPending} onClick={() => void askClear()}>Gỡ ưu đãi đang hiện</button>
+          </div>
+        )}
         {point.perkPendingText && (
           <div className="space-y-2">
             <Notice tone="warning">
@@ -212,7 +245,7 @@ export function WastePointDetail({
                 <th className={TH}>Mã</th>
                 <th className={TH}>Khách</th>
                 <th className={TH}>Điểm</th>
-                <th className={TH}>Ngày</th>
+                <th className={TH}>Hoàn tất lúc</th>
               </tr>
             </thead>
             <tbody>
@@ -220,8 +253,8 @@ export function WastePointDetail({
                 <tr key={r.id} className="border-b border-stone-100">
                   <td className={TD}>{r.code}</td>
                   <td className={TD}>{r.customerName}</td>
-                  <td className={TD}>{`${formatCount(r.pointsAwarded ?? 0)} điểm`}</td>
-                  <td className={TD}>{formatDateTime(r.createdAt)}</td>
+                  <td className={TD}>{r.pointsAwarded === null ? '—' : `${formatCount(r.pointsAwarded)} điểm`}</td>
+                  <td className={TD}>{r.completedAt ? formatDateTime(r.completedAt) : '—'}</td>
                 </tr>
               ))}
             </tbody>

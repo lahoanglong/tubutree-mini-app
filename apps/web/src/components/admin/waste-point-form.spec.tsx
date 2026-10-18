@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wasteItem, wastePoint } from '@/test-utils/fixtures/waste-admin';
@@ -93,7 +94,8 @@ describe('WastePointForm', () => {
     const status = wh.c.querySelector<HTMLSelectElement>('select[name="status"]')!;
     expect(status.disabled).toBe(true);
     expect(status.value).toBe('ACTIVE');
-    expect(wh.c.textContent).toContain('Kho luôn Đang nhận; muốn dừng nhận mới thì tắt waste.enabled hoặc cờ waste.lane_*');
+    expect(wh.c.textContent).toContain('Kho luôn Đang nhận; muốn dừng nhận mới thì tắt ở Cấu hình chung');
+    expect(wh.c.textContent).not.toContain('waste.');
     expect(q(wh.c, 'input[name="monthlyQuotaPoints"]')).toBeNull();
   });
 
@@ -154,6 +156,54 @@ describe('WastePointForm', () => {
     typeInto(q(c, 'input[name="monthlyQuotaPoints"]'), '');
     expect(c.textContent).toContain('Nhập hạn mức điểm mỗi tháng cho đại lý (số nguyên từ 1)');
     expect(btn(c, 'Đăng ký điểm').disabled).toBe(true);
+  });
+
+  it('form trống chưa hiện lỗi hạn mức; chỉ hiện sau khi chạm vào ô', async () => {
+    const { c } = await mount();
+    const quotaError = 'Nhập hạn mức điểm mỗi tháng cho đại lý (số nguyên từ 1)';
+    expect(c.textContent).not.toContain(quotaError);
+    expect(c.textContent).toContain('Đề xuất 100.000 điểm');
+    expect(btn(c, 'Đăng ký điểm').disabled).toBe(true);
+    act(() => {
+      q(c, 'input[name="monthlyQuotaPoints"]')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    expect(c.textContent).toContain(quotaError);
+  });
+
+  it('hai ô địa giới có nhãn nhìn thấy', async () => {
+    const { c } = await mount();
+    const labels = Array.from(c.querySelectorAll('label > span.font-medium')).map((n) => n.textContent);
+    expect(labels).toContain('Tỉnh/thành');
+    expect(labels).toContain('Phường/xã');
+  });
+
+  it('danh sách tỉnh/thành lỗi: có nút "Thử lại" gọi tải lại và danh sách hiện ra', async () => {
+    let provinceCalls = 0;
+    const api = mockFetch({
+      '/geo/communes': { body: [] },
+      '/geo/provinces': () => (++provinceCalls === 1 ? { status: 500, body: { message: 'lỗi' } } : { body: [{ code: '84_VN79', name: 'TP. Hồ Chí Minh' }] }),
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WastePointForm point={null} items={ITEMS} warehouseExists onSaved={vi.fn()} onCancel={() => undefined} />);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    expect(c.textContent).toContain('Không tải được danh sách tỉnh/thành.');
+    const retry = btn(c, 'Thử lại');
+    expect(retry.className).toContain('min-h-');
+    click(retry);
+    await flush();
+    expect(provinceCalls).toBe(2);
+    expect(c.textContent).not.toContain('Không tải được danh sách tỉnh/thành.');
+    expect(q(c, 'select[aria-label="Tỉnh/thành"]')!.textContent).toContain('TP. Hồ Chí Minh');
+  });
+
+  it('sửa điểm: phường/xã đã lưu vẫn hiện khi danh sách chưa có hoặc chưa tải xong', async () => {
+    const { c } = await mount({ point: wastePoint({ communeCode: '84_VN79_99999', communeName: 'Phường Đã Lưu' }) });
+    const select = q(c, 'select[aria-label="Phường/xã"]') as unknown as HTMLSelectElement;
+    expect(select.value).toBe('84_VN79_99999');
+    expect(select.selectedOptions[0]!.textContent).toBe('Phường Đã Lưu');
+    expect(c.textContent).not.toContain('Đang tải…');
   });
 
   it('sửa điểm: nâng hạn mức 100.000 → 300.000 gửi PATCH không kèm kind', async () => {

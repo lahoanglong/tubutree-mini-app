@@ -33,6 +33,8 @@ const OWNER_EXISTS = 'Điểm đã có chủ điểm. Bỏ chủ điểm cũ tr�
 const ALREADY_IN_POINT = 'Người này đã ở điểm nhận.';
 const NOT_IN_POINT = 'Người này không ở điểm nhận.';
 const NO_PENDING_PERK = 'Không có ưu đãi chờ duyệt.';
+const NO_PERK_TO_CLEAR = 'Điểm này chưa có ưu đãi để gỡ.';
+const PERK_CHANGED = 'Nội dung ưu đãi vừa thay đổi, tải lại để xem';
 const DAY_MS = 86_400_000;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -360,30 +362,60 @@ export class WasteAdminPointsService {
       if (!row) throw new NotFoundException(NOT_IN_POINT);
       const res = await tx.wastePointStaff.updateMany({ where: { pointId, userId, isActive: true }, data: { isActive: false } });
       if (res.count === 0) throw new NotFoundException(NOT_IN_POINT);
+      // The perk belongs to the shop of the owner: it must not outlive the owner it was approved for.
+      const clearPerk = row.role === 'OWNER' && (p.perkText !== null || p.perkPendingText !== null);
+      if (clearPerk) await tx.wastePoint.update({ where: { id: pointId }, data: { perkText: null, perkPendingText: null } });
       await writeWasteEvent(tx, {
         kind: 'POINT_STAFF_REMOVED',
         actorUserId: admin.id,
         actorRole: 'ADMIN',
         pointId,
-        meta: { staffUserId: userId, before: { role: row.role, isActive: true }, after: { role: row.role, isActive: false } },
+        meta: {
+          staffUserId: userId,
+          before: { role: row.role, isActive: true },
+          after: { role: row.role, isActive: false },
+          ...(clearPerk ? { perkCleared: { perkText: p.perkText, perkPendingText: p.perkPendingText } } : {}),
+        },
       });
     });
     return this.getOne(pointId);
   }
 
-  async approvePerk(adminUserId: string, pointId: string): Promise<AdminWastePointDTO> {
-    return this.reviewPerk(adminUserId, pointId, true);
+  async approvePerk(adminUserId: string, pointId: string, expectedPendingText: string): Promise<AdminWastePointDTO> {
+    return this.reviewPerk(adminUserId, pointId, expectedPendingText, true);
   }
 
-  async rejectPerk(adminUserId: string, pointId: string): Promise<AdminWastePointDTO> {
-    return this.reviewPerk(adminUserId, pointId, false);
+  async rejectPerk(adminUserId: string, pointId: string, expectedPendingText: string): Promise<AdminWastePointDTO> {
+    return this.reviewPerk(adminUserId, pointId, expectedPendingText, false);
   }
 
-  private async reviewPerk(adminUserId: string, pointId: string, approved: boolean): Promise<AdminWastePointDTO> {
+  async clearPerk(adminUserId: string, pointId: string): Promise<AdminWastePointDTO> {
+    const admin = await assertActiveAdmin(this.prisma, adminUserId);
+    await this.prisma.$transaction(async (tx) => {
+      const p = await lockPoint(tx, pointId);
+      if (p.perkText === null && p.perkPendingText === null) throw new ConflictException(NO_PERK_TO_CLEAR);
+      await tx.wastePoint.update({ where: { id: pointId }, data: { perkText: null, perkPendingText: null } });
+      await writeWasteEvent(tx, {
+        kind: 'POINT_UPDATED',
+        actorUserId: admin.id,
+        actorRole: 'ADMIN',
+        pointId,
+        meta: {
+          before: { perkText: p.perkText, perkPendingText: p.perkPendingText },
+          after: { perkText: null, perkPendingText: null },
+        },
+      });
+    });
+    return this.getOne(pointId);
+  }
+
+  private async reviewPerk(adminUserId: string, pointId: string, expectedPendingText: string, approved: boolean): Promise<AdminWastePointDTO> {
     const admin = await assertActiveAdmin(this.prisma, adminUserId);
     const { p, ev, owner } = await this.prisma.$transaction(async (tx) => {
       const locked = await lockPoint(tx, pointId);
       if (!locked.perkPendingText) throw new ConflictException(NO_PENDING_PERK);
+      // Exact comparison: the admin approves the text on screen, never one an owner submitted since.
+      if (locked.perkPendingText !== expectedPendingText) throw new ConflictException(PERK_CHANGED);
       await tx.wastePoint.update({
         where: { id: pointId },
         data: approved ? { perkText: locked.perkPendingText, perkPendingText: null } : { perkPendingText: null },

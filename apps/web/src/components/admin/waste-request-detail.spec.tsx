@@ -312,6 +312,8 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
   it('admin thu hồi điểm: hỏi lý do, báo số đã thu và số không thu được', async () => {
     const { c, api } = await mount({ isAdmin: true, detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000 }) });
     click(btn(c, 'Thu hồi điểm'));
+    expect(document.body.textContent).toContain('Chỉ thu được phần điểm khách chưa tiêu.');
+    expect(document.body.textContent).not.toContain('(10.3)');
     typeInto(dialogArea(), 'Khai khống');
     answerConfirm(true);
     await flush();
@@ -432,6 +434,17 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     }
   });
 
+  it('màn đếm: bảng có tiêu đề Khách khai, Thực nhận, Lý do thiếu và nhãn cân nặng nằm riêng một dòng', async () => {
+    const { c } = await mount({ isAdmin: true });
+    const table = c.querySelector('[data-counting-lines]')!;
+    expect(Array.from(table.querySelectorAll('th')).map((t) => t.textContent)).toEqual(['Loại hàng', 'Khách khai', 'Thực nhận', 'Lý do thiếu']);
+    for (const tr of Array.from(table.querySelectorAll('tbody tr'))) expect(tr.querySelectorAll('td')).toHaveLength(4);
+    for (const tr of Array.from(table.querySelectorAll('tbody tr'))) expect(tr.querySelectorAll('td')[1]?.textContent).not.toContain('Khách khai');
+    expect(table.querySelector('input[aria-label^="Thực nhận "]')).not.toBeNull();
+    const weightLabel = c.querySelector('input[name="receivedWeightGrams"]')!.closest('label')!.querySelector('span')!;
+    expect(weightLabel.className).toContain('block');
+  });
+
   it('admin xem nhật ký sự kiện', async () => {
     const { c } = await mount({
       isAdmin: true,
@@ -444,11 +457,29 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
       }),
     });
     const events = c.querySelector('[data-request-events]')!;
-    for (const part of ['09:05 17/10/2026', 'PARCEL_RECEIVED', 'STAFF', 's1', 'TR_CODE', '"receivedQty": 8', 'Hệ thống']) expect(events.textContent).toContain(part);
-    const items = events.querySelectorAll('li');
+    for (const part of ['09:05 17/10/2026', 'Kho nhận kiện', 'Nhân viên kho', 'Khớp theo mã TR-', 'Hệ thống']) expect(events.textContent).toContain(part);
+    for (const raw of ['PARCEL_RECEIVED', 'STAFF', 's1', 'TR_CODE', 'receivedQty', '{']) expect(events.textContent).not.toContain(raw);
+    const items = events.querySelectorAll(':scope > li');
     expect(items).toHaveLength(2);
     expect(items[1]!.textContent).toContain('Hệ thống');
-    expect(items[1]!.querySelector('pre')).toBeNull();
+    expect(events.querySelector('pre')).toBeNull();
+  });
+
+  it('nhật ký sự kiện: nhãn tiếng Việt, câu ngắn cho số liệu, không lộ mã người dùng, kind lạ là "Sự kiện khác"', async () => {
+    const { c } = await mount({
+      isAdmin: true,
+      detail: wasteRequestDetail({
+        status: 'COMPLETED',
+        events: [
+          { id: 'e1', createdAt: '2026-10-16T03:00:00.000Z', kind: 'REQUEST_CREATED', actorUserId: 'u-1', actorRole: 'CUSTOMER', requestId: 'r1', pointId: null, giftRedemptionId: null, meta: null },
+          { id: 'e2', createdAt: '2026-10-17T06:00:00.000Z', kind: 'REQUEST_CONFIRMED', actorUserId: 'u-staff-1', actorRole: 'POINT_STAFF', requestId: 'r1', pointId: 'p1', giftRedemptionId: null, meta: { pointsAwarded: 3000, device: { ua: 'x' }, subjectUserId: 'u-1' } },
+          { id: 'e3', createdAt: '2026-10-17T07:00:00.000Z', kind: 'SOMETHING_NEW', actorUserId: null, actorRole: 'ADMIN', requestId: 'r1', pointId: null, giftRedemptionId: null, meta: { before: { status: 'OPEN' } } },
+        ],
+      }),
+    });
+    const text = c.querySelector('[data-request-events]')!.textContent!;
+    for (const part of ['Tạo yêu cầu', 'Khách', 'Người ở điểm nhận', 'Cộng 3.000 điểm', 'Sự kiện khác']) expect(text).toContain(part);
+    for (const raw of ['REQUEST_CREATED', 'REQUEST_CONFIRMED', 'SOMETHING_NEW', 'CUSTOMER', 'POINT_STAFF', 'u-1', 'u-staff-1', 'pointsAwarded', 'device']) expect(text).not.toContain(raw);
   });
 
   it('không hiện thao tác API sẽ từ chối', async () => {
