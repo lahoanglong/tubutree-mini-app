@@ -31,7 +31,6 @@ const M = {
   'post-detail': ['post-detail', 3, 3, 4, 3, '60 alias legacy; 7/15 tap nhỏ'],
   'ai-advisor': ['ai-advisor', 3, 4, 4, 3, 'Ô nhập + nút "Gửi" (disabled) xám trên xám; khi lỗi mạng chưa thấy thông báo trong ảnh error'],
   'group-buy': ['group-buy', 3, 4, 4, 3, 'contrast×9'],
-  refill: ['refill', 3, 3, 4, 3, 'button-name×2 (nút icon không nhãn); 37 alias legacy'],
   profile: ['profile', 3, 3, 4, 3, 'contrast×10; 43 alias legacy; menu 17 mục không nhóm theo mức dùng'],
   wallet: ['wallet', 3, 3, 4, 3, 'contrast×6; 62 alias legacy'],
   addresses: ['addresses', 3, 3, 4, 3, 'ActionLink là Text onClick không role/min-height (addresses.tsx:178-200)'],
