@@ -111,6 +111,33 @@ describe('ReorderSheet', () => {
     expect(status.querySelector('a[href="/gio-hang"]')?.textContent).toBe('Xem giỏ');
   });
 
+  it('đã thêm một phần rồi: CTA khoá, chạm lần hai không gửi lại (khỏi nhân đôi số lượng dòng đã thêm)', async () => {
+    mocks.post.mockResolvedValueOnce({
+      ...CART,
+      cart: CART,
+      results: [{ orderItemId: 'a', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 1 }],
+    });
+    mount({ target: ORDER });
+    click(cta());
+    await flush(6);
+    expect(cta().disabled).toBe(true);
+    click(cta());
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('không thêm được món nào (addedUnits = 0) → vẫn cho thử lại', async () => {
+    mocks.post.mockResolvedValueOnce({
+      ...CART,
+      cart: CART,
+      results: [{ orderItemId: 'a', status: 'out_of_stock', reason: 'OUT_OF_STOCK', addedQuantity: 0 }],
+    });
+    mount({ target: ORDER });
+    click(cta());
+    await flush(6);
+    expect(cta().disabled).toBe(false);
+  });
+
   it('chạm đúp CTA → chỉ MỘT request', async () => {
     let release: (v: unknown) => void = () => undefined;
     mocks.post.mockReturnValue(new Promise((r) => (release = r)));

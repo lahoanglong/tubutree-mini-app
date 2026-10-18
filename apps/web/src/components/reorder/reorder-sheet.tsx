@@ -32,6 +32,8 @@ export function ReorderSheet({ target, onClose, navigateToCart }: ReorderSheetPr
   const [sel, setSel] = useState<Record<string, LineSelection>>(() => (target ? initialSelection(target) : {}));
   const [seenTarget, setSeenTarget] = useState<ReorderTarget | null>(target);
   const [notice, setNotice] = useState<{ kind: 'error' | 'problem'; text: string } | null>(null);
+  // Đã có dòng vào giỏ mà còn dòng chưa đủ: gửi lại cùng lựa chọn sẽ cộng thêm lần nữa vào dòng đã thêm.
+  const [partiallyAdded, setPartiallyAdded] = useState(false);
   const reorder = useReorder({ navigateToCart });
 
   // Đổi target → khởi tạo lại lựa chọn NGAY trong lúc render ("adjust state on prop change" của React),
@@ -42,6 +44,7 @@ export function ReorderSheet({ target, onClose, navigateToCart }: ReorderSheetPr
       setShown(target);
       setSel(initialSelection(target));
       setNotice(null);
+      setPartiallyAdded(false);
     }
   }
   const view = target ?? shown;
@@ -71,7 +74,10 @@ export function ReorderSheet({ target, onClose, navigateToCart }: ReorderSheetPr
     }
     if (!summary || !mounted.current) return;
     if (summary.addedUnits > 0 && !summary.hasProblems) onClose();
-    else setNotice({ kind: 'problem', text: summary.message });
+    else {
+      setNotice({ kind: 'problem', text: summary.message });
+      if (summary.addedUnits > 0) setPartiallyAdded(true);
+    }
   };
 
   return (
@@ -100,7 +106,7 @@ export function ReorderSheet({ target, onClose, navigateToCart }: ReorderSheetPr
               </Link>
             </p>
           )}
-          <button type="button" disabled={units === 0 || reorder.isPending} onClick={() => void submit()} className={`${ui.btnPrimary} w-full`}>
+          <button type="button" disabled={units === 0 || reorder.isPending || partiallyAdded} onClick={() => void submit()} className={`${ui.btnPrimary} w-full`}>
             {reorderText.addCta(units)}
           </button>
         </div>
