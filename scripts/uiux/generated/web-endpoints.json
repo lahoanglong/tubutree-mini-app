@@ -54,7 +54,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1007"
+   "apps/web/src/lib/admin-client.ts:1009"
   ]
  },
  {
@@ -72,7 +72,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1003"
+   "apps/web/src/lib/admin-client.ts:1005"
   ]
  },
  {
@@ -177,7 +177,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1001"
+   "apps/web/src/lib/admin-client.ts:1003"
   ]
  },
  {
@@ -285,7 +285,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:990"
+   "apps/web/src/lib/admin-client.ts:992"
   ]
  },
  {
@@ -390,7 +390,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:997"
+   "apps/web/src/lib/admin-client.ts:999"
   ]
  },
  {
@@ -408,7 +408,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1013"
+   "apps/web/src/lib/admin-client.ts:1015"
   ]
  },
  {
@@ -466,7 +466,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1011"
+   "apps/web/src/lib/admin-client.ts:1013"
   ]
  },
  {
@@ -699,7 +699,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1528"
+   "apps/web/src/lib/admin-client.ts:1530"
   ]
  },
  {
@@ -820,7 +820,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1851"
+   "apps/web/src/lib/admin-client.ts:1853"
   ]
  },
  {
@@ -838,7 +838,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1853"
+   "apps/web/src/lib/admin-client.ts:1855"
   ]
  },
  {
@@ -856,7 +856,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:885"
+   "apps/web/src/lib/admin-client.ts:887"
   ]
  },
  {
@@ -874,7 +874,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:887"
+   "apps/web/src/lib/admin-client.ts:889"
   ]
  },
  {
@@ -925,7 +925,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:883"
+   "apps/web/src/lib/admin-client.ts:885"
   ]
  },
  {
@@ -976,7 +976,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:889"
+   "apps/web/src/lib/admin-client.ts:891"
   ]
  },
  {
@@ -1024,7 +1024,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:891"
+   "apps/web/src/lib/admin-client.ts:893"
   ]
  },
  {
@@ -1137,7 +1137,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:881"
+   "apps/web/src/lib/admin-client.ts:883"
   ]
  },
  {
@@ -1250,7 +1250,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:879"
+   "apps/web/src/lib/admin-client.ts:881"
   ]
  },
  {
@@ -1366,7 +1366,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:863"
+   "apps/web/src/lib/admin-client.ts:865"
   ]
  },
  {
@@ -1479,7 +1479,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:865"
+   "apps/web/src/lib/admin-client.ts:867"
   ]
  },
  {
@@ -1606,7 +1606,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1254"
+   "apps/web/src/lib/admin-client.ts:1256"
   ]
  },
  {
@@ -1730,7 +1730,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1256"
+   "apps/web/src/lib/admin-client.ts:1258"
   ]
  },
  {
@@ -2210,7 +2210,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:715"
+   "apps/web/src/lib/admin-client.ts:717"
   ]
  },
  {
@@ -2228,7 +2228,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:717"
+   "apps/web/src/lib/admin-client.ts:719"
   ]
  },
  {
@@ -2308,7 +2308,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:954"
+   "apps/web/src/lib/admin-client.ts:956"
   ]
  },
  {
@@ -2388,7 +2388,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:958"
+   "apps/web/src/lib/admin-client.ts:960"
   ]
  },
  {
@@ -2453,7 +2453,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:811"
+   "apps/web/src/lib/admin-client.ts:813"
   ]
  },
  {
@@ -2477,7 +2477,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:813"
+   "apps/web/src/lib/admin-client.ts:815"
   ]
  },
  {
@@ -2495,7 +2495,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:809"
+   "apps/web/src/lib/admin-client.ts:811"
   ]
  },
  {
@@ -2587,7 +2587,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:807"
+   "apps/web/src/lib/admin-client.ts:809"
   ]
  },
  {
@@ -2658,7 +2658,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:806"
+   "apps/web/src/lib/admin-client.ts:808"
   ]
  },
  {
@@ -2765,7 +2765,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:763"
+   "apps/web/src/lib/admin-client.ts:765"
   ]
  },
  {
@@ -3017,7 +3017,7 @@
    ]
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:760"
+   "apps/web/src/lib/admin-client.ts:762"
   ]
  },
  {
@@ -3027,7 +3027,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:734"
+   "apps/web/src/lib/admin-client.ts:736"
   ]
  },
  {
@@ -3201,7 +3201,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1433"
+   "apps/web/src/lib/admin-client.ts:1435"
   ]
  },
  {
@@ -3375,7 +3375,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1445"
+   "apps/web/src/lib/admin-client.ts:1447"
   ]
  },
  {
@@ -3549,7 +3549,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1452"
+   "apps/web/src/lib/admin-client.ts:1454"
   ]
  },
  {
@@ -3723,7 +3723,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1436"
+   "apps/web/src/lib/admin-client.ts:1438"
   ]
  },
  {
@@ -3897,7 +3897,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1439"
+   "apps/web/src/lib/admin-client.ts:1441"
   ]
  },
  {
@@ -4108,7 +4108,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1424"
+   "apps/web/src/lib/admin-client.ts:1426"
   ]
  },
  {
@@ -4664,7 +4664,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2026"
+   "apps/web/src/lib/admin-client.ts:2028"
   ]
  },
  {
@@ -5019,7 +5019,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1289"
+   "apps/web/src/lib/admin-client.ts:1291"
   ]
  },
  {
@@ -5182,7 +5182,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1299"
+   "apps/web/src/lib/admin-client.ts:1301"
   ]
  },
  {
@@ -5345,7 +5345,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1294"
+   "apps/web/src/lib/admin-client.ts:1296"
   ]
  },
  {
@@ -5508,7 +5508,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1305"
+   "apps/web/src/lib/admin-client.ts:1307"
   ]
  },
  {
@@ -5708,7 +5708,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1285"
+   "apps/web/src/lib/admin-client.ts:1287"
   ]
  },
  {
@@ -5718,7 +5718,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:898"
+   "apps/web/src/lib/admin-client.ts:900"
   ]
  },
  {
@@ -5786,7 +5786,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:894"
+   "apps/web/src/lib/admin-client.ts:896"
   ]
  },
  {
@@ -5851,7 +5851,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:896"
+   "apps/web/src/lib/admin-client.ts:898"
   ]
  },
  {
@@ -6162,7 +6162,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1574"
+   "apps/web/src/lib/admin-client.ts:1576"
   ]
  },
  {
@@ -6502,7 +6502,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2009"
+   "apps/web/src/lib/admin-client.ts:2011"
   ]
  },
  {
@@ -6565,7 +6565,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2007"
+   "apps/web/src/lib/admin-client.ts:2009"
   ]
  },
  {
@@ -6590,7 +6590,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2106"
+   "apps/web/src/lib/admin-client.ts:2111"
   ]
  },
  {
@@ -6615,7 +6615,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2104"
+   "apps/web/src/lib/admin-client.ts:2106"
   ]
  },
  {
@@ -6633,7 +6633,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2118"
+   "apps/web/src/lib/admin-client.ts:2123"
   ]
  },
  {
@@ -6657,7 +6657,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2111"
+   "apps/web/src/lib/admin-client.ts:2116"
   ]
  },
  {
@@ -6814,6 +6814,16 @@
      },
      "opt": false
     },
+    "kind": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "SCAN",
+       "PHONE"
+      ]
+     },
+     "opt": false
+    },
     "state": {
      "s": {
       "k": "enum",
@@ -6826,6 +6836,12 @@
        "VOIDED",
        "LAPSED"
       ]
+     },
+     "opt": false
+    },
+    "holdUntil": {
+     "s": {
+      "k": "str"
      },
      "opt": false
     },
@@ -6870,11 +6886,35 @@
       "k": "str"
      },
      "opt": false
+    },
+    "memberPhoneVerifiedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "memberPhoneStale": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "memberCreatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "memberDeliveredAppOrders": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
     }
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2100"
+   "apps/web/src/lib/admin-client.ts:2102"
   ]
  },
  {
@@ -6902,7 +6942,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2113"
+   "apps/web/src/lib/admin-client.ts:2118"
   ]
  },
  {
@@ -6912,7 +6952,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2120"
+   "apps/web/src/lib/admin-client.ts:2125"
   ]
  },
  {
@@ -6980,6 +7020,47 @@
           "k": "str"
          },
          "opt": false
+        },
+        "otherSubmittersCount": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "otherSubmitters": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "userId": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "userName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "userPhoneMasked": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "createdAt": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
         }
        }
       }
@@ -7015,7 +7096,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2102"
+   "apps/web/src/lib/admin-client.ts:2104"
   ]
  },
  {
@@ -7107,6 +7188,16 @@
          },
          "opt": false
         },
+        "kind": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "SCAN",
+           "PHONE"
+          ]
+         },
+         "opt": false
+        },
         "state": {
          "s": {
           "k": "enum",
@@ -7119,6 +7210,12 @@
            "VOIDED",
            "LAPSED"
           ]
+         },
+         "opt": false
+        },
+        "holdUntil": {
+         "s": {
+          "k": "str"
          },
          "opt": false
         },
@@ -7163,6 +7260,30 @@
           "k": "str"
          },
          "opt": false
+        },
+        "memberPhoneVerifiedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "memberPhoneStale": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": true
+        },
+        "memberCreatedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "memberDeliveredAppOrders": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
         }
        }
       }
@@ -7198,7 +7319,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2098"
+   "apps/web/src/lib/admin-client.ts:2100"
   ]
  },
  {
@@ -7323,7 +7444,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2077"
+   "apps/web/src/lib/admin-client.ts:2079"
   ]
  },
  {
@@ -7432,7 +7553,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2079"
+   "apps/web/src/lib/admin-client.ts:2081"
   ]
  },
  {
@@ -7594,7 +7715,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:2075"
+   "apps/web/src/lib/admin-client.ts:2077"
   ]
  },
  {
@@ -7612,7 +7733,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:967"
+   "apps/web/src/lib/admin-client.ts:969"
   ]
  },
  {
@@ -7672,7 +7793,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:966"
+   "apps/web/src/lib/admin-client.ts:968"
   ]
  },
  {
@@ -7735,7 +7856,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:960"
+   "apps/web/src/lib/admin-client.ts:962"
   ]
  },
  {
@@ -7795,7 +7916,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:962"
+   "apps/web/src/lib/admin-client.ts:964"
   ]
  },
  {
@@ -7805,7 +7926,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:922"
+   "apps/web/src/lib/admin-client.ts:924"
   ]
  },
  {
@@ -7815,7 +7936,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:921"
+   "apps/web/src/lib/admin-client.ts:923"
   ]
  },
  {
@@ -7825,7 +7946,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:924"
+   "apps/web/src/lib/admin-client.ts:926"
   ]
  },
  {
@@ -7835,7 +7956,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:926"
+   "apps/web/src/lib/admin-client.ts:928"
   ]
  },
  {
@@ -7927,7 +8048,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:917"
+   "apps/web/src/lib/admin-client.ts:919"
   ]
  },
  {
@@ -8016,7 +8137,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:919"
+   "apps/web/src/lib/admin-client.ts:921"
   ]
  },
  {
@@ -8034,7 +8155,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:708"
+   "apps/web/src/lib/admin-client.ts:710"
   ]
  },
  {
@@ -8064,7 +8185,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:705"
+   "apps/web/src/lib/admin-client.ts:707"
   ]
  },
  {
@@ -8104,6 +8225,12 @@
      "opt": false
     },
     "recyclingEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "pickupVisible": {
      "s": {
       "k": "bool"
      },
@@ -8150,7 +8277,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:697"
+   "apps/web/src/lib/admin-client.ts:699"
   ]
  },
  {
@@ -8271,7 +8398,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1511"
+   "apps/web/src/lib/admin-client.ts:1513"
   ]
  },
  {
@@ -8295,7 +8422,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1233"
+   "apps/web/src/lib/admin-client.ts:1235"
   ]
  },
  {
@@ -10190,7 +10317,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1202"
+   "apps/web/src/lib/admin-client.ts:1204"
   ]
  },
  {
@@ -10214,7 +10341,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1226"
+   "apps/web/src/lib/admin-client.ts:1228"
   ]
  },
  {
@@ -10433,7 +10560,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1220"
+   "apps/web/src/lib/admin-client.ts:1222"
   ]
  },
  {
@@ -11255,7 +11382,7 @@
    ]
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1177"
+   "apps/web/src/lib/admin-client.ts:1179"
   ]
  },
  {
@@ -11273,7 +11400,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1076"
+   "apps/web/src/lib/admin-client.ts:1078"
   ]
  },
  {
@@ -11381,7 +11508,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1071"
+   "apps/web/src/lib/admin-client.ts:1073"
   ]
  },
  {
@@ -11414,7 +11541,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1693"
+   "apps/web/src/lib/admin-client.ts:1695"
   ]
  },
  {
@@ -11438,7 +11565,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1821"
+   "apps/web/src/lib/admin-client.ts:1823"
   ]
  },
  {
@@ -12282,7 +12409,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1819"
+   "apps/web/src/lib/admin-client.ts:1821"
   ]
  },
  {
@@ -12351,7 +12478,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1680"
+   "apps/web/src/lib/admin-client.ts:1682"
   ]
  },
  {
@@ -12375,7 +12502,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1831"
+   "apps/web/src/lib/admin-client.ts:1833"
   ]
  },
  {
@@ -12399,7 +12526,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1828"
+   "apps/web/src/lib/admin-client.ts:1830"
   ]
  },
  {
@@ -12947,7 +13074,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:710"
+   "apps/web/src/lib/admin-client.ts:712"
   ]
  },
  {
@@ -14212,7 +14339,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1824"
+   "apps/web/src/lib/admin-client.ts:1826"
   ]
  },
  {
@@ -14390,7 +14517,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1357"
+   "apps/web/src/lib/admin-client.ts:1359"
   ]
  },
  {
@@ -14568,7 +14695,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1367"
+   "apps/web/src/lib/admin-client.ts:1369"
   ]
  },
  {
@@ -14746,7 +14873,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1362"
+   "apps/web/src/lib/admin-client.ts:1364"
   ]
  },
  {
@@ -14861,7 +14988,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1353"
+   "apps/web/src/lib/admin-client.ts:1355"
   ]
  },
  {
@@ -15076,7 +15203,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1355"
+   "apps/web/src/lib/admin-client.ts:1357"
   ]
  },
  {
@@ -15224,7 +15351,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1825"
+   "apps/web/src/lib/admin-client.ts:1827"
   ]
  },
  {
@@ -15322,7 +15449,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1559"
+   "apps/web/src/lib/admin-client.ts:1561"
   ]
  },
  {
@@ -15356,7 +15483,7 @@
    "k": "any"
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:893"
+   "apps/web/src/lib/admin-client.ts:895"
   ]
  },
  {
@@ -15374,7 +15501,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1052"
+   "apps/web/src/lib/admin-client.ts:1054"
   ]
  },
  {
@@ -15449,7 +15576,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1050"
+   "apps/web/src/lib/admin-client.ts:1052"
   ]
  },
  {
@@ -15527,7 +15654,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1029"
+   "apps/web/src/lib/admin-client.ts:1031"
   ]
  },
  {
@@ -15602,7 +15729,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1038"
+   "apps/web/src/lib/admin-client.ts:1040"
   ]
  },
  {
@@ -17843,7 +17970,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1593"
+   "apps/web/src/lib/admin-client.ts:1595"
   ]
  },
  {
@@ -18957,7 +19084,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1614"
+   "apps/web/src/lib/admin-client.ts:1616"
   ]
  },
  {
@@ -19568,7 +19695,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1990"
+   "apps/web/src/lib/admin-client.ts:1992"
   ]
  },
  {
@@ -19607,7 +19734,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1992"
+   "apps/web/src/lib/admin-client.ts:1994"
   ]
  },
  {
@@ -19801,7 +19928,7 @@
   },
   "sources": [
    "apps/web/src/lib/admin-client.ts:435",
-   "apps/web/src/lib/admin-client.ts:1565"
+   "apps/web/src/lib/admin-client.ts:1567"
   ]
  },
  {
@@ -19846,7 +19973,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1563"
+   "apps/web/src/lib/admin-client.ts:1565"
   ]
  },
  {
@@ -19956,7 +20083,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1944"
+   "apps/web/src/lib/admin-client.ts:1946"
   ]
  },
  {
@@ -20264,7 +20391,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1948"
+   "apps/web/src/lib/admin-client.ts:1950"
   ]
  },
  {
@@ -20572,7 +20699,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1946"
+   "apps/web/src/lib/admin-client.ts:1948"
   ]
  },
  {
@@ -20715,7 +20842,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1940"
+   "apps/web/src/lib/admin-client.ts:1942"
   ]
  },
  {
@@ -20861,7 +20988,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1942"
+   "apps/web/src/lib/admin-client.ts:1944"
   ]
  },
  {
@@ -21007,7 +21134,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1936"
+   "apps/web/src/lib/admin-client.ts:1938"
   ]
  },
  {
@@ -21150,7 +21277,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1938"
+   "apps/web/src/lib/admin-client.ts:1940"
   ]
  },
  {
@@ -21269,7 +21396,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1872"
+   "apps/web/src/lib/admin-client.ts:1874"
   ]
  },
  {
@@ -21391,7 +21518,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1874"
+   "apps/web/src/lib/admin-client.ts:1876"
   ]
  },
  {
@@ -21513,7 +21640,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1868"
+   "apps/web/src/lib/admin-client.ts:1870"
   ]
  },
  {
@@ -21632,7 +21759,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1870"
+   "apps/web/src/lib/admin-client.ts:1872"
   ]
  },
  {
@@ -22500,7 +22627,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1864"
+   "apps/web/src/lib/admin-client.ts:1866"
   ]
  },
  {
@@ -22911,7 +23038,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1877"
+   "apps/web/src/lib/admin-client.ts:1879"
   ]
  },
  {
@@ -22988,7 +23115,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1879"
+   "apps/web/src/lib/admin-client.ts:1881"
   ]
  },
  {
@@ -23396,7 +23523,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1883"
+   "apps/web/src/lib/admin-client.ts:1885"
   ]
  },
  {
@@ -23804,7 +23931,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1894"
+   "apps/web/src/lib/admin-client.ts:1896"
   ]
  },
  {
@@ -24212,7 +24339,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1896"
+   "apps/web/src/lib/admin-client.ts:1898"
   ]
  },
  {
@@ -24620,7 +24747,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1889"
+   "apps/web/src/lib/admin-client.ts:1891"
   ]
  },
  {
@@ -25028,7 +25155,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1887"
+   "apps/web/src/lib/admin-client.ts:1889"
   ]
  },
  {
@@ -25439,7 +25566,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1885"
+   "apps/web/src/lib/admin-client.ts:1887"
   ]
  },
  {
@@ -25847,7 +25974,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1881"
+   "apps/web/src/lib/admin-client.ts:1883"
   ]
  },
  {
@@ -26030,7 +26157,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1899"
+   "apps/web/src/lib/admin-client.ts:1901"
   ]
  },
  {
@@ -26039,6 +26166,98 @@
   "schema": {
    "k": "obj",
    "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "OTHER",
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "hazardous": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
     "customerName": {
      "s": {
       "k": "str"
@@ -26197,1640 +26416,6 @@
       }
      },
      "opt": true
-    },
-    "lines": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "itemId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "itemName": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitLabel": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitsPerPoint": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "pointsPerGroup": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "dropsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "gramsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "declaredQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "receivedQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "shortfallReason": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "OTHER",
-           "WET",
-           "DIRTY",
-           "FOREIGN_OBJECT",
-           "WRONG_TYPE",
-           "DAMAGED",
-           "NOT_ACCEPTED"
-          ]
-         },
-         "opt": false
-        },
-        "pointsAwarded": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        }
-       }
-      }
-     },
-     "opt": false
-    },
-    "point": {
-     "s": {
-      "k": "obj",
-      "props": {
-       "id": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "kind": {
-        "s": {
-         "k": "enum",
-         "v": [
-          "WAREHOUSE",
-          "PARTNER"
-         ]
-        },
-        "opt": false
-       },
-       "name": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "addressLine": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "communeName": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "provinceName": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "phone": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "openingHours": {
-        "s": {
-         "k": "obj",
-         "props": {
-          "MON": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "TUE": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "WED": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "THU": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "FRI": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "SAT": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "SUN": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          }
-         }
-        },
-        "opt": false
-       }
-      }
-     },
-     "opt": false
-    },
-    "pointAvailable": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "carrier": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "trackingCode": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "inTransitAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "receivedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "completedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "closedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "rejectionReason": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "OTHER",
-       "WET",
-       "DIRTY",
-       "FOREIGN_OBJECT",
-       "WRONG_TYPE",
-       "DAMAGED",
-       "NOT_ACCEPTED",
-       "OVERSIZE",
-       "HAZARDOUS",
-       "UNPAID_POSTAGE"
-      ]
-     },
-     "opt": false
-    },
-    "rejectionNote": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "dropsAwarded": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "impactGrams": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "reversedPoints": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "reversalReason": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "editable": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "cancellable": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "orderId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "code": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "method": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "DROP_OFF",
-       "MAIL_IN",
-       "PICKUP"
-      ]
-     },
-     "opt": false
-    },
-    "status": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "REJECTED",
-       "COMPLETED",
-       "CANCELLED",
-       "OPEN",
-       "IN_TRANSIT",
-       "RECEIVED",
-       "EXPIRED",
-       "REVERSED"
-      ]
-     },
-     "opt": false
-    },
-    "closeReason": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "HOLD_EXPIRED",
-       "PICKUP_NO_SHOW",
-       "PICKUP_NOT_DISPATCHED",
-       "LOST",
-       "LOST_AT_WAREHOUSE",
-       "SHIP_LOCKED",
-       "ORDER_CANCELLED"
-      ]
-     },
-     "opt": false
-    },
-    "createdAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "expiresAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "estimatedPoints": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "pointsAwarded": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "pointName": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "orderCode": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/web/src/lib/admin-client.ts:1920"
-  ]
- },
- {
-  "method": "POST",
-  "path": "/admin/waste/requests/:id/confirm",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "requestId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "code": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "status": {
-     "s": {
-      "k": "lit",
-      "v": "COMPLETED"
-     },
-     "opt": false
-    },
-    "pointsAwarded": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "dropsAwarded": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "quota": {
-     "s": {
-      "k": "obj",
-      "props": {
-       "limit": {
-        "s": {
-         "k": "num"
-        },
-        "opt": false
-       },
-       "used": {
-        "s": {
-         "k": "num"
-        },
-        "opt": false
-       },
-       "remaining": {
-        "s": {
-         "k": "num"
-        },
-        "opt": false
-       }
-      }
-     },
-     "opt": false
-    },
-    "staffDailyCapRemaining": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/web/src/lib/admin-client.ts:1912"
-  ]
- },
- {
-  "method": "PATCH",
-  "path": "/admin/waste/requests/:id/cost",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "customerName": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "customerPhone": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "userId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": true
-    },
-    "trackingConflict": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "confirmedByUserId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "receivedWeightGrams": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "carrierCostVnd": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "reversedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "reversedByUserId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "reversalShortfallPoints": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "capDayKey": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "capMonthKey": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "consentAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "consentVersion": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "events": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "id": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "createdAt": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "kind": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "actorUserId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "actorRole": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "STAFF",
-           "CUSTOMER",
-           "POINT_STAFF",
-           "ADMIN",
-           "SYSTEM"
-          ]
-         },
-         "opt": false
-        },
-        "requestId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "pointId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "giftRedemptionId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "meta": {
-         "s": {
-          "k": "rec",
-          "of": {
-           "k": "any"
-          }
-         },
-         "opt": false
-        }
-       }
-      }
-     },
-     "opt": true
-    },
-    "lines": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "itemId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "itemName": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitLabel": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitsPerPoint": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "pointsPerGroup": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "dropsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "gramsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "declaredQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "receivedQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "shortfallReason": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "OTHER",
-           "WET",
-           "DIRTY",
-           "FOREIGN_OBJECT",
-           "WRONG_TYPE",
-           "DAMAGED",
-           "NOT_ACCEPTED"
-          ]
-         },
-         "opt": false
-        },
-        "pointsAwarded": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        }
-       }
-      }
-     },
-     "opt": false
-    },
-    "point": {
-     "s": {
-      "k": "obj",
-      "props": {
-       "id": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "kind": {
-        "s": {
-         "k": "enum",
-         "v": [
-          "WAREHOUSE",
-          "PARTNER"
-         ]
-        },
-        "opt": false
-       },
-       "name": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "addressLine": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "communeName": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "provinceName": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "phone": {
-        "s": {
-         "k": "str"
-        },
-        "opt": false
-       },
-       "openingHours": {
-        "s": {
-         "k": "obj",
-         "props": {
-          "MON": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "TUE": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "WED": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "THU": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "FRI": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "SAT": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          },
-          "SUN": {
-           "s": {
-            "k": "arr",
-            "of": {
-             "k": "obj",
-             "props": {
-              "open": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              },
-              "close": {
-               "s": {
-                "k": "str"
-               },
-               "opt": false
-              }
-             }
-            }
-           },
-           "opt": true
-          }
-         }
-        },
-        "opt": false
-       }
-      }
-     },
-     "opt": false
-    },
-    "pointAvailable": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "carrier": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "trackingCode": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "inTransitAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "receivedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "completedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "closedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "rejectionReason": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "OTHER",
-       "WET",
-       "DIRTY",
-       "FOREIGN_OBJECT",
-       "WRONG_TYPE",
-       "DAMAGED",
-       "NOT_ACCEPTED",
-       "OVERSIZE",
-       "HAZARDOUS",
-       "UNPAID_POSTAGE"
-      ]
-     },
-     "opt": false
-    },
-    "rejectionNote": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "dropsAwarded": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "impactGrams": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "reversedPoints": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "reversalReason": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "editable": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "cancellable": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "orderId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "id": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "code": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "method": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "DROP_OFF",
-       "MAIL_IN",
-       "PICKUP"
-      ]
-     },
-     "opt": false
-    },
-    "status": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "REJECTED",
-       "COMPLETED",
-       "CANCELLED",
-       "OPEN",
-       "IN_TRANSIT",
-       "RECEIVED",
-       "EXPIRED",
-       "REVERSED"
-      ]
-     },
-     "opt": false
-    },
-    "closeReason": {
-     "s": {
-      "k": "enum",
-      "v": [
-       "HOLD_EXPIRED",
-       "PICKUP_NO_SHOW",
-       "PICKUP_NOT_DISPATCHED",
-       "LOST",
-       "LOST_AT_WAREHOUSE",
-       "SHIP_LOCKED",
-       "ORDER_CANCELLED"
-      ]
-     },
-     "opt": false
-    },
-    "createdAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "expiresAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "estimatedPoints": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "pointsAwarded": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "pointName": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "orderCode": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/web/src/lib/admin-client.ts:1918"
-  ]
- },
- {
-  "method": "POST",
-  "path": "/admin/waste/requests/:id/receive",
-  "schema": {
-   "k": "union",
-   "of": [
-    {
-     "k": "obj",
-     "props": {
-      "outcome": {
-       "s": {
-        "k": "lit",
-        "v": "RECEIVED"
-       },
-       "opt": false
-      },
-      "requestId": {
-       "s": {
-        "k": "str"
-       },
-       "opt": false
-      },
-      "receivedAt": {
-       "s": {
-        "k": "str"
-       },
-       "opt": false
-      }
-     }
-    },
-    {
-     "k": "obj",
-     "props": {
-      "outcome": {
-       "s": {
-        "k": "lit",
-        "v": "ALREADY_RECEIVED"
-       },
-       "opt": false
-      },
-      "receivedAt": {
-       "s": {
-        "k": "str"
-       },
-       "opt": false
-      }
-     }
-    },
-    {
-     "k": "obj",
-     "props": {
-      "outcome": {
-       "s": {
-        "k": "lit",
-        "v": "UNMATCHED"
-       },
-       "opt": false
-      },
-      "unmatchedId": {
-       "s": {
-        "k": "str"
-       },
-       "opt": false
-      },
-      "reason": {
-       "s": {
-        "k": "enum",
-        "v": [
-         "NO_MATCH",
-         "TRACKING_MULTI",
-         "TR_TRACKING_CONFLICT",
-         "EXPIRED_REQUEST",
-         "NOT_RECEIVABLE",
-         "MANUAL_ENTRY"
-        ]
-       },
-       "opt": false
-      }
-     }
-    }
-   ]
-  },
-  "sources": [
-   "apps/web/src/lib/admin-client.ts:1910"
-  ]
- },
- {
-  "method": "POST",
-  "path": "/admin/waste/requests/:id/reject",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "requestId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "code": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "status": {
-     "s": {
-      "k": "lit",
-      "v": "REJECTED"
-     },
-     "opt": false
-    }
-   }
-  },
-  "sources": [
-   "apps/web/src/lib/admin-client.ts:1914"
-  ]
- },
- {
-  "method": "POST",
-  "path": "/admin/waste/requests/:id/reopen",
-  "schema": {
-   "k": "obj",
-   "props": {
-    "customerName": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "customerPhone": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "userId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": true
-    },
-    "trackingConflict": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": false
-    },
-    "confirmedByUserId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "receivedWeightGrams": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "carrierCostVnd": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "reversedAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "reversedByUserId": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "reversalShortfallPoints": {
-     "s": {
-      "k": "num"
-     },
-     "opt": false
-    },
-    "capDayKey": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "capMonthKey": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "consentAt": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "consentVersion": {
-     "s": {
-      "k": "str"
-     },
-     "opt": false
-    },
-    "events": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "id": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "createdAt": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "kind": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "actorUserId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "actorRole": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "STAFF",
-           "CUSTOMER",
-           "POINT_STAFF",
-           "ADMIN",
-           "SYSTEM"
-          ]
-         },
-         "opt": false
-        },
-        "requestId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "pointId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "giftRedemptionId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "meta": {
-         "s": {
-          "k": "rec",
-          "of": {
-           "k": "any"
-          }
-         },
-         "opt": false
-        }
-       }
-      }
-     },
-     "opt": true
-    },
-    "lines": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "itemId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "itemName": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitLabel": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitsPerPoint": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "pointsPerGroup": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "dropsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "gramsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "declaredQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "receivedQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "shortfallReason": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "OTHER",
-           "WET",
-           "DIRTY",
-           "FOREIGN_OBJECT",
-           "WRONG_TYPE",
-           "DAMAGED",
-           "NOT_ACCEPTED"
-          ]
-         },
-         "opt": false
-        },
-        "pointsAwarded": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        }
-       }
-      }
-     },
-     "opt": false
     },
     "point": {
      "s": {
@@ -28261,7 +26846,7 @@
  },
  {
   "method": "POST",
-  "path": "/admin/waste/requests/:id/reverse",
+  "path": "/admin/waste/requests/:id/confirm",
   "schema": {
    "k": "obj",
    "props": {
@@ -28271,20 +26856,58 @@
      },
      "opt": false
     },
-    "status": {
+    "code": {
      "s": {
-      "k": "lit",
-      "v": "REVERSED"
+      "k": "str"
      },
      "opt": false
     },
-    "pointsTaken": {
+    "status": {
+     "s": {
+      "k": "lit",
+      "v": "COMPLETED"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
      "s": {
       "k": "num"
      },
      "opt": false
     },
-    "shortfallPoints": {
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "quota": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "used": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "remaining": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "staffDailyCapRemaining": {
      "s": {
       "k": "num"
      },
@@ -28293,15 +26916,107 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1916"
+   "apps/web/src/lib/admin-client.ts:1914"
   ]
  },
  {
-  "method": "GET",
-  "path": "/admin/waste/requests/:id",
+  "method": "PATCH",
+  "path": "/admin/waste/requests/:id/cost",
   "schema": {
    "k": "obj",
    "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "OTHER",
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "hazardous": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
     "customerName": {
      "s": {
       "k": "str"
@@ -28460,92 +27175,6 @@
       }
      },
      "opt": true
-    },
-    "lines": {
-     "s": {
-      "k": "arr",
-      "of": {
-       "k": "obj",
-       "props": {
-        "itemId": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "itemName": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitLabel": {
-         "s": {
-          "k": "str"
-         },
-         "opt": false
-        },
-        "unitsPerPoint": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "pointsPerGroup": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "dropsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "gramsPerUnit": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "declaredQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "receivedQty": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        },
-        "shortfallReason": {
-         "s": {
-          "k": "enum",
-          "v": [
-           "OTHER",
-           "WET",
-           "DIRTY",
-           "FOREIGN_OBJECT",
-           "WRONG_TYPE",
-           "DAMAGED",
-           "NOT_ACCEPTED"
-          ]
-         },
-         "opt": false
-        },
-        "pointsAwarded": {
-         "s": {
-          "k": "num"
-         },
-         "opt": false
-        }
-       }
-      }
-     },
-     "opt": false
     },
     "point": {
      "s": {
@@ -28971,7 +27600,1529 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1908"
+   "apps/web/src/lib/admin-client.ts:1920"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/waste/requests/:id/receive",
+  "schema": {
+   "k": "union",
+   "of": [
+    {
+     "k": "obj",
+     "props": {
+      "outcome": {
+       "s": {
+        "k": "lit",
+        "v": "RECEIVED"
+       },
+       "opt": false
+      },
+      "requestId": {
+       "s": {
+        "k": "str"
+       },
+       "opt": false
+      },
+      "receivedAt": {
+       "s": {
+        "k": "str"
+       },
+       "opt": false
+      }
+     }
+    },
+    {
+     "k": "obj",
+     "props": {
+      "outcome": {
+       "s": {
+        "k": "lit",
+        "v": "ALREADY_RECEIVED"
+       },
+       "opt": false
+      },
+      "receivedAt": {
+       "s": {
+        "k": "str"
+       },
+       "opt": false
+      }
+     }
+    },
+    {
+     "k": "obj",
+     "props": {
+      "outcome": {
+       "s": {
+        "k": "lit",
+        "v": "UNMATCHED"
+       },
+       "opt": false
+      },
+      "unmatchedId": {
+       "s": {
+        "k": "str"
+       },
+       "opt": false
+      },
+      "reason": {
+       "s": {
+        "k": "enum",
+        "v": [
+         "NO_MATCH",
+         "TRACKING_MULTI",
+         "TR_TRACKING_CONFLICT",
+         "EXPIRED_REQUEST",
+         "NOT_RECEIVABLE",
+         "MANUAL_ENTRY"
+        ]
+       },
+       "opt": false
+      }
+     }
+    }
+   ]
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:1912"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/waste/requests/:id/reject",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "requestId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "lit",
+      "v": "REJECTED"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:1916"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/waste/requests/:id/reopen",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "OTHER",
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "hazardous": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "customerName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "customerPhone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "trackingConflict": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "confirmedByUserId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedWeightGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "carrierCostVnd": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reversedByUserId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reversalShortfallPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "capDayKey": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "capMonthKey": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "consentAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "consentVersion": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "events": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "kind": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "actorUserId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "actorRole": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "STAFF",
+           "CUSTOMER",
+           "POINT_STAFF",
+           "ADMIN",
+           "SYSTEM"
+          ]
+         },
+         "opt": false
+        },
+        "requestId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "pointId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "giftRedemptionId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "meta": {
+         "s": {
+          "k": "rec",
+          "of": {
+           "k": "any"
+          }
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": true
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "OTHER",
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "REJECTED",
+       "COMPLETED",
+       "CANCELLED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:1924"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/waste/requests/:id/reverse",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "requestId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "lit",
+      "v": "REVERSED"
+     },
+     "opt": false
+    },
+    "pointsTaken": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "shortfallPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:1918"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/waste/requests/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "lines": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "itemId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "itemName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitLabel": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitsPerPoint": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "pointsPerGroup": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "dropsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "gramsPerUnit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "declaredQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "receivedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shortfallReason": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "OTHER",
+           "WET",
+           "DIRTY",
+           "FOREIGN_OBJECT",
+           "WRONG_TYPE",
+           "DAMAGED",
+           "NOT_ACCEPTED"
+          ]
+         },
+         "opt": false
+        },
+        "pointsAwarded": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "hazardous": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "customerName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "customerPhone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "trackingConflict": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "confirmedByUserId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedWeightGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "carrierCostVnd": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reversedByUserId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reversalShortfallPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "capDayKey": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "capMonthKey": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "consentAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "consentVersion": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "events": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "kind": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "actorUserId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "actorRole": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "STAFF",
+           "CUSTOMER",
+           "POINT_STAFF",
+           "ADMIN",
+           "SYSTEM"
+          ]
+         },
+         "opt": false
+        },
+        "requestId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "pointId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "giftRedemptionId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "meta": {
+         "s": {
+          "k": "rec",
+          "of": {
+           "k": "any"
+          }
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": true
+    },
+    "point": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "kind": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "WAREHOUSE",
+          "PARTNER"
+         ]
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "addressLine": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "communeName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "provinceName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "openingHours": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "MON": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "TUE": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "WED": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "THU": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "FRI": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SAT": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          },
+          "SUN": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "open": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "close": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "pointAvailable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "carrier": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "trackingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "inTransitAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "receivedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "completedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "closedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "OTHER",
+       "WET",
+       "DIRTY",
+       "FOREIGN_OBJECT",
+       "WRONG_TYPE",
+       "DAMAGED",
+       "NOT_ACCEPTED",
+       "OVERSIZE",
+       "HAZARDOUS",
+       "UNPAID_POSTAGE"
+      ]
+     },
+     "opt": false
+    },
+    "rejectionNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dropsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "impactGrams": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "reversalReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "editable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "cancellable": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "DROP_OFF",
+       "MAIL_IN",
+       "PICKUP"
+      ]
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "REJECTED",
+       "COMPLETED",
+       "CANCELLED",
+       "OPEN",
+       "IN_TRANSIT",
+       "RECEIVED",
+       "EXPIRED",
+       "REVERSED"
+      ]
+     },
+     "opt": false
+    },
+    "closeReason": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "HOLD_EXPIRED",
+       "PICKUP_NO_SHOW",
+       "PICKUP_NOT_DISPATCHED",
+       "LOST",
+       "LOST_AT_WAREHOUSE",
+       "SHIP_LOCKED",
+       "ORDER_CANCELLED"
+      ]
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "expiresAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "estimatedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsAwarded": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:1910"
   ]
  },
  {
@@ -29140,7 +29291,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1906"
+   "apps/web/src/lib/admin-client.ts:1908"
   ]
  },
  {
@@ -29245,7 +29396,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1925"
+   "apps/web/src/lib/admin-client.ts:1927"
   ]
  },
  {
@@ -29347,7 +29498,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1929"
+   "apps/web/src/lib/admin-client.ts:1931"
   ]
  },
  {
@@ -29449,7 +29600,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1927"
+   "apps/web/src/lib/admin-client.ts:1929"
   ]
  },
  {
@@ -29503,7 +29654,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1932"
+   "apps/web/src/lib/admin-client.ts:1934"
   ]
  },
  {
@@ -29557,7 +29708,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1934"
+   "apps/web/src/lib/admin-client.ts:1936"
   ]
  },
  {
@@ -30795,7 +30946,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1497"
+   "apps/web/src/lib/admin-client.ts:1499"
   ]
  },
  {
@@ -30857,7 +31008,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1495"
+   "apps/web/src/lib/admin-client.ts:1497"
   ]
  },
  {
@@ -31209,7 +31360,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1504"
+   "apps/web/src/lib/admin-client.ts:1506"
   ]
  },
  {
@@ -37584,7 +37735,7 @@
    }
   },
   "sources": [
-   "apps/web/src/lib/admin-client.ts:1597"
+   "apps/web/src/lib/admin-client.ts:1599"
   ]
  },
  {

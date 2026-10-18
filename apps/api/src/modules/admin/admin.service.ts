@@ -22,6 +22,7 @@ import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.servi
 import { losesPartnerStore } from '../merchant/partner-store';
 import { throwIfLockBusy } from '../../common/lock-busy';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
+import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
@@ -1293,6 +1294,7 @@ export class AdminService {
       this.gomdonOrder.isRecyclingEnabled(),
       this.gomdonClient.getHealth(),
     ]);
+    const pickupVisible = await computeWastePublicFlags(this.config, async () => enabled).then((f) => f.pickup, () => false);
     return {
       baseUrlSet: Boolean(cfg.baseUrl),
       credentialsSet: Boolean(cfg.phone && cfg.password),
@@ -1300,6 +1302,8 @@ export class AdminService {
       webhookSecretSet: Boolean(process.env.GOMDON_WEBHOOK_SECRET?.trim()),
       recyclingToggle: toggle === true,
       recyclingEnabled: enabled,
+      // Cổng thật của khách: chương trình, đường Thu kèm đơn và Gomdon cùng bật (recyclingEnabled chỉ là công tắc kỹ thuật).
+      pickupVisible,
       // Lần gọi Gomdon gần nhất (chung mọi replica): đăng nhập bị từ chối thì checkout tự ẩn lựa chọn thu gom.
       connection,
     };

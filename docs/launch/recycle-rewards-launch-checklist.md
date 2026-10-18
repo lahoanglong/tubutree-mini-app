@@ -14,7 +14,7 @@ Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API
 
 ## 2. Trước khi bật waste.enabled
 
-- [ ] Admin đăng ký kho HCMC (kind WAREHOUSE, ACTIVE) rồi các đại lý trước; kiểm go-live `db.waste_point` (FAIL nếu bật mà chưa có kho). Owner: admin. Bằng chứng: kết quả `go-live:check`.
+- [ ] Admin đăng ký kho HCMC (kind WAREHOUSE, ACTIVE) rồi các đại lý trước. Khi đăng ký kho, gõ số điện thoại thật của kho vào ô "Số điện thoại" (số người nhận trên nhãn kiện; khách ghi số này lên kiện gửi về kho, nên để trống thì khách không có số để ghi). Kiểm go-live `db.waste_point` (FAIL nếu bật mà chưa có kho, hoặc kho đang hoạt động chưa có số điện thoại khi cách Gửi về kho đang bật). Owner: admin. Bằng chứng: kết quả `go-live:check`.
 - [ ] Admin quyết định gian hàng nào đủ điều kiện khi duyệt, vì `isPartnerStore` rộng hơn một gian hàng có nhân viên trực (spec 18.2 câu 7). Owner: admin. Bằng chứng: danh sách đã duyệt.
 - [ ] Chủ dự án xem trước các màn chưa có mockup (spec mục 19): màn 4.5b sau khi tạo yêu cầu Gửi về kho hoặc Thu kèm đơn. Owner: chủ dự án. Bằng chứng: ảnh chụp màn.
 - [ ] Xem trước Quà của tôi (`/rewards/mine`). Owner: chủ dự án. Bằng chứng: ảnh chụp màn.
@@ -41,14 +41,15 @@ Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API
 
 ## 4. Đường Thu kèm đơn (PICKUP)
 
-- [ ] `waste.lane_pickup_enabled` giữ `false` cho tới khi Gomdon trả lời bằng văn bản: đơn loại 3 chạy thật, thùng carton và nylon tính theo khối lượng, tỉnh xa, địa chỉ hoàn là kho Tubu, cước mỗi đơn, hàng không nhận, thu hàng cồng kềnh. Owner: chủ dự án. Bằng chứng: văn bản Gomdon.
+- [ ] Thứ tự thử: đơn thử Thu kèm đơn chạy trong lúc chạy nội bộ (mục 5), trên bản chưa mở cho khách thật. Bật `waste.lane_pickup_enabled` chỉ để thử; dùng tài khoản nhân viên tạo yêu cầu Thu kèm đơn rồi đặt đơn thử Gomdon. Cờ này là cờ toàn cục, không có danh sách theo khách: bật trên app đã mở công khai thì mọi khách đều thấy Thu kèm đơn. Thử xong mà Gomdon chưa trả lời bằng văn bản hoặc đơn thử chưa đạt thì tắt lại ngay; yêu cầu đã gắn vào đơn vẫn chạy tiếp vì cờ chỉ được đọc lúc tạo yêu cầu và lúc đặt đơn. Owner: chủ dự án. Bằng chứng: ghi chú ngày bật, ngày tắt.
+- [ ] `waste.lane_pickup_enabled` chỉ được để bật sau khi Gomdon trả lời bằng văn bản: đơn loại 3 chạy thật, thùng carton và nylon tính theo khối lượng, tỉnh xa, địa chỉ hoàn là kho Tubu, cước mỗi đơn, hàng không nhận, thu hàng cồng kềnh. Owner: chủ dự án. Bằng chứng: văn bản Gomdon.
 - [ ] Một đơn thử loại 3 (playbook Phần 3) chạy hết chuỗi trạng thái; ghi chú vận đơn đúng dạng `Thu kèm rác TR-…`. Owner: kho. Bằng chứng: mã đơn và mã TR-.
 - [ ] Có báo giá cước thật; chỉnh bảng phí gửi về kho `waste.mailin_fee_table` trong cùng thay đổi với việc bật đường này. Owner: chủ dự án. Bằng chứng: báo giá và giá trị cấu hình.
 - [ ] Quà vật lý chỉ nhận tại kho khác với quyết định 3.2 của chủ dự án nên cần chủ dự án đồng ý. Owner: chủ dự án. Bằng chứng: xác nhận bằng văn bản.
 
 ## 5. Chạy nội bộ
 
-- [ ] Chạy 2–4 tuần với nhân viên Tubu, kho HCMC và 1–2 đại lý quen; build không mở cho khách thật; chỉ hai cách Mang tới điểm và Gửi về kho; hạn mức đại lý nhỏ. Owner: chủ dự án. Bằng chứng: nhật ký tuần.
+- [ ] Chạy 2–4 tuần với nhân viên Tubu, kho HCMC và 1–2 đại lý quen; build không mở cho khách thật; chỉ hai cách Mang tới điểm và Gửi về kho, ngoại lệ duy nhất là đơn thử Thu kèm đơn ở mục 4; hạn mức đại lý nhỏ. Owner: chủ dự án. Bằng chứng: nhật ký tuần.
 - [ ] Đo: thời gian quầy mỗi lượt, tỷ lệ nhận được trên khai báo, tỷ lệ tái dùng thùng carton và xốp (giả định 40% và 50%), hàng đến có đúng giả định không. Owner: kho. Bằng chứng: bảng tính ngoài hệ thống.
 - [ ] Kho ghi số bó nhận và số bó tái dùng vào bảng tính ngoài hệ thống; chủ dự án đối chiếu hằng tháng. Owner: kho. Bằng chứng: bảng tính.
 - [ ] Thiệt hại chấp nhận ở giai đoạn 1: 100.000–300.000 điểm mỗi điểm nhận mỗi tháng (mệnh giá 100.000–300.000đ, 2–5 tài khoản thật). Owner: chủ dự án. Bằng chứng: xác nhận bằng văn bản.
@@ -67,7 +68,7 @@ Làm đúng thứ tự:
 
 - [ ] Trước khi bấm thu hồi: huỷ các lượt đổi quà vật lý `READY` của khách, có hoàn điểm hoặc không. `refundPoints` không có mặc định với khách bị khoá hoặc đã `REVERSED`, nên admin phải chọn rõ. Thu hồi trước rồi huỷ có hoàn điểm sau sẽ trả lại phần mà việc thu hồi không lấy lại được. Owner: admin. Bằng chứng: nhật ký sự kiện.
 - [ ] Vô hiệu các coupon đã đổi nhưng chưa dùng (`coupon.isActive = false`). Owner: admin. Bằng chứng: danh sách coupon.
-- [ ] Đặt `waste_user_flags.blockedAt` (Quản trị, Đổi rác, khách). Owner: admin. Bằng chứng: dòng cờ.
+- [ ] Đặt `waste_user_flags.blockedAt`: Quản trị, Khách hàng, Người dùng, mở khách, mục "Đổi rác", bấm "Khoá đổi rác" (nút "Khoá gửi kho" khoá riêng đường gửi kho và thu kèm đơn). Owner: admin. Bằng chứng: dòng cờ.
 - [ ] Bấm thu hồi và ghi lý do. Owner: admin. Bằng chứng: yêu cầu ở trạng thái đã thu hồi.
 
 ## 8. Giới hạn đã biết và số chưa kiểm chứng

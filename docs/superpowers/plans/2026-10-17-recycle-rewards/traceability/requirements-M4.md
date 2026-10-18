@@ -264,7 +264,7 @@
 - R13.2.53 [API] [M4] ... `defs()` in the API `OpsInboxService`. (L436)
 - R13.2.54 [API] [M4|M7] (shared with M4,M7) ... `InboxKey` in `admin-client.ts`. (L436)
 - R13.2.56 [TEST] [M4] Gate: `ops-inbox.service.spec.ts` updated to the new keys. (L436)
-- R13.2.57 [TEST] [M4|M8] (shared with M4,M8) Gate: `ops-health.race-spec.ts` compares the exact key list per role; update it (race spec is not in CI, easy to miss). (L436)
+- R13.2.57 [TEST] [M4|M8] (shared with M4,M8) Gate: `ops-health.race-spec.ts` compares the exact key list per role; update it (the race spec runs in `race.yml` and `verify-full.sh`, not in `ci.yml`, easy to miss). (L436)
 - R13.2.109 [REMOVE] [M4] Replace `DEFAULT_REWARD_CATALOG` and the type `RewardCatalogItem` with the table `waste_gifts` (sections 8 and 11). (L441)
 - R13.2.110 [RULE] [M4] `getRewardCatalog` and `redeemReward` read the DB outside the transaction. (L441)
 - R13.2.111 [RULE] [M4] An unknown gift id returns `NotFound` BEFORE reading config and BEFORE opening a transaction (existing spec locks this behavior). (L441)
