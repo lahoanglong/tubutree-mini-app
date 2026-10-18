@@ -160,8 +160,10 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     const { container } = mount(ui);
     await flush();
     expectAccessible(container);
+    // Nút tim yêu thích (chưa thích) đứng trước hai nút phân loại.
     const pressed = Array.from(container.querySelectorAll('button[aria-pressed]')).map((b) => b.getAttribute('aria-pressed'));
-    expect(pressed).toEqual(['true', 'false']);
+    expect(pressed).toEqual(['false', 'true', 'false']);
+    expect(container.querySelector('button[aria-label="Thêm yêu thích"]')!.getAttribute('aria-pressed')).toBe('false');
     const labels = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
     expect(labels).toEqual(expect.arrayContaining(['Giảm số lượng', 'Tăng số lượng']));
   });
