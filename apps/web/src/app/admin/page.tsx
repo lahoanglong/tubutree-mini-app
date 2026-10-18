@@ -110,7 +110,7 @@ import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel'
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
-import { OrderInvoicePanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
+import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
 import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
 import { ReviewsTab } from '@/components/admin/reviews-tab';
@@ -139,6 +139,7 @@ import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import { RefillTab } from '@/components/admin/refill-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
+import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
 import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
@@ -160,6 +161,7 @@ type Tab =
   | 'dealers'
   | 'dealerClaims'
   | 'dealerPrices'
+  | 'commissionRates'
   | 'engagement'
   | 'community'
   | 'payouts'
@@ -219,6 +221,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'dealers', label: 'Đại lý' },
       { k: 'dealerClaims', label: 'Thưởng đại lý' },
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
+      { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
       { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
       { k: 'brands', label: 'Nhãn hàng' },
@@ -469,6 +472,7 @@ export default function AdminPage() {
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
+          {active === 'commissionRates' && <CommissionRatesTab />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
           {active === 'payouts' && <PayoutAdminTab />}
@@ -1442,6 +1446,7 @@ function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin:
       )}
 
       {isAdmin && <OrderInvoicePanel order={o} />}
+      {isAdmin && <OrderReferralPanel order={o} />}
 
       {canWarehouse && <RecyclingPanel order={o} />}
 

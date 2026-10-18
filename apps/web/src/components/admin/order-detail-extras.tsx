@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, FileText, History, MapPin } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, History, MapPin, Users } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyButton } from '@/components/copy-button';
 import { getOrderStatusHistory, INVOICE_URL_MAX, issueOrderInvoice, type AdminOrder } from '@/lib/admin-client';
@@ -11,6 +11,8 @@ import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge } from './ui';
 import { formatDateTime } from '@/lib/format-date';
+import { COMMISSION_STATUS, getOrderReferral } from '@/lib/commission-rates';
+import { formatVnd } from '@/lib/shop-client';
 
 const statusText = (s: string) => ORDER_STATUS_LABELS[s] ?? s;
 
@@ -97,6 +99,92 @@ export function OrderStatusHistory({ order }: { order: AdminOrder }) {
                 </li>
               ))}
             </ol>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Người giới thiệu + hoa hồng CTV của đơn (D3-07): admin trả lời CTV "đơn X có hoa hồng không, bao nhiêu" mà không phải tra
+ * DB. Chỉ ADMIN: API `GET /admin/orders/:id/referral` là @Roles('ADMIN') và trang admin chỉ render panel cho admin (nhân viên
+ * CSKH/kế toán không thấy). Chỉ hiện khi đơn có CTV hoặc gian hàng được ghi công. Có người giới thiệu mà không có dòng hoa hồng
+ * là bình thường khi hàng chưa có %, bị chặn CTV, là hàng ký gửi của chính người giới thiệu, người giới thiệu không phải CTV/đại
+ * lý, hoặc CTV tự mua — giải thích ngay tại chỗ để không ai đi "sửa" nhầm.
+ */
+export function OrderReferralPanel({ order }: { order: AdminOrder }) {
+  const has = !!(order.referrerUserId || order.storefrontId);
+  const q = useQuery({
+    queryKey: ['admin-order-referral', order.id],
+    queryFn: () => getOrderReferral(order.id || order.code),
+    enabled: has,
+  });
+  if (!has) return null;
+  const r = q.data;
+  return (
+    <section aria-label="Giới thiệu và hoa hồng CTV" className="rounded-card border border-stone-200 bg-stone-0 p-3">
+      <div className="flex items-center gap-2">
+        <Users className="h-4 w-4 text-stone-500" aria-hidden />
+        <span className="text-xs font-semibold uppercase text-stone-600">Giới thiệu & hoa hồng</span>
+      </div>
+      {q.isLoading && <p className="mt-2 text-xs text-stone-500">Đang tải…</p>}
+      {q.isError && (
+        <p role="alert" className="mt-2 text-xs text-danger-fg">
+          {q.error instanceof Error ? q.error.message : 'Không tải được thông tin giới thiệu.'}{' '}
+          <button type="button" className={`${BTN_LINK} text-xs`} onClick={() => void q.refetch()}>
+            Thử lại
+          </button>
+        </p>
+      )}
+      {r && (
+        <div className="mt-2 space-y-1.5 text-xs text-stone-700">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <dt className="text-stone-500">Người giới thiệu:</dt>
+              <dd className="font-medium text-stone-900">
+                {r.referrer ? (
+                  <>
+                    {r.referrer.fullName ?? 'Chưa có tên'} · mã <span className="font-mono">{r.referrer.referralCode}</span>
+                    {r.referrer.phone ? ` · ${r.referrer.phone}` : ''}
+                  </>
+                ) : (
+                  'Không có'
+                )}
+              </dd>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <dt className="text-stone-500">Gian hàng:</dt>
+              <dd className="font-medium text-stone-900">
+                {r.storefront ? `${r.storefront.title} (/s/${r.storefront.slug})` : r.storefrontSlug ? `/s/${r.storefrontSlug}` : 'Không có'}
+              </dd>
+            </div>
+          </dl>
+          {r.placedForCustomer && <p className="text-stone-500">Đơn lên hộ khách — người lên đơn được ghi là người giới thiệu.</p>}
+          {r.commissions.length > 0 ? (
+            <ul className="space-y-1">
+              {r.commissions.map((c) => (
+                <li key={c.id} data-order-commission className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-stone-900">{formatVnd(c.amount)}</span>
+                  <ToneBadge tone={COMMISSION_STATUS[c.status]?.tone ?? 'neutral'}>{COMMISSION_STATUS[c.status]?.label ?? c.status}</ToneBadge>
+                  <span className="text-stone-500">
+                    {c.affiliateName ?? 'CTV'} · tính trên {formatVnd(c.commissionableTotal)} tiền hàng có %
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-stone-500">
+              {r.selfReferral
+                ? 'Không có hoa hồng: người giới thiệu cũng là người mua.'
+                : r.referrer && r.referrerEligible === false && r.placedForCustomer
+                  ? 'Không có hoa hồng: người lên đơn hộ không phải CTV/đại lý (admin/nhân viên lên hộ không hưởng hoa hồng).'
+                : r.referrer && r.referrerEligible === false
+                  ? 'Không có hoa hồng: người giới thiệu không phải CTV/đại lý. Khách thường chia sẻ link chỉ nhận điểm giới thiệu bạn bè.'
+                  : r.referrer
+                  ? 'Không có hoa hồng: lúc đặt đơn, các sản phẩm chưa có % hoa hồng, bị chặn CTV, hoặc là hàng ký gửi của chính người giới thiệu. Đặt % bây giờ chỉ áp cho đơn mới.'
+                  : 'Đơn qua gian hàng nhưng không có CTV được ghi công.'}
+            </p>
           )}
         </div>
       )}

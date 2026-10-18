@@ -310,6 +310,8 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
       ['cá độ', 'vay nong'],
       ['casino', [''], ['   '], [1], [{ w: 'x' }], ['x'.repeat(61)], Array.from({ length: 301 }, (_, i) => `t${i}`)],
     ],
+    // Vai trò hưởng hoa hồng CTV: rỗng là không ai hưởng, sai tên vai trò là âm thầm về mặc định — chặn ngay lúc ghi.
+    ['affiliate.commission_eligible_roles', ['AFFILIATE', 'DEALER'], [[], 'AFFILIATE', ['CTV'], ['AFFILIATE', 1], { AFFILIATE: true }]],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
     const ok = mk(fine);
     await ok.svc.set(key, fine as never, 'admin1');

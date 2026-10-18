@@ -324,7 +324,8 @@ describe('StorefrontService.applyTemplate', () => {
     const r = await svc.applyTemplate('u1', 'cat1');
 
     expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0]).toEqual({
-      where: { categoryIds: { has: 'cat1' }, isActive: true, affiliateBlocked: false },
+      // D3-16: như picker — món đối tác chờ duyệt/bị từ chối không lọt vào gian hàng mà khách không thấy.
+      where: { categoryIds: { has: 'cat1' }, isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' },
       orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
       take: 8,
       select: { id: true },

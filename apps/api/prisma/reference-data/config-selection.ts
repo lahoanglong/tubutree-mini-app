@@ -78,6 +78,8 @@ export interface ExtraConfig extends ConfigSeed {
 
 const FEED = 'src/modules/feed/community-feed.service.ts';
 const PUBLIC_CONFIG = 'src/modules/system-config/public-config.ts';
+const COMMISSION_RATE = 'src/modules/affiliate/commission-rate-csv.ts';
+const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_post', value: 5, category: 'community', description: 'Điểm uy tín cộng cho người có bài cộng đồng được đăng', fallbackSource: { file: FEED, text: "get<number>('community.rep_post', 5)" } },
@@ -88,6 +90,8 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'dealer.review_hours', value: 24, category: 'dealer', description: 'Số giờ Tubu hẹn xét duyệt hồ sơ đại lý (chỉ để hiện chữ cho người đăng ký, không tự duyệt theo số này)', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT)" } },
   { key: 'community.public_preview', value: false, category: 'community', description: 'true = khách chưa đăng nhập được xem trước vài bài cộng đồng đã đăng (chỉ đọc, thích/bình luận/đăng bài vẫn cần đăng nhập); false = phải đăng nhập mới thấy', fallbackSource: { file: FEED, text: 'get<unknown>(PUBLIC_PREVIEW_KEY, false)' } },
   { key: 'home.new_customer_layout', value: false, category: 'home', description: 'Trang chủ Mini App: true = khách chưa có đơn thấy khối "Quà khách mới" và danh mục lên ngay sau ô tìm, trước giờ vàng; false = giữ thứ tự cũ', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('home.new_customer_layout', false)" } },
+  { key: 'affiliate.max_rate_pct', value: 50, category: 'affiliate', description: 'Trần % hoa hồng CTV admin được đặt cho một biến thể (phần trăm, 50 = 50%)', fallbackSource: { file: COMMISSION_RATE, text: 'export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;' } },
+  { key: 'affiliate.commission_eligible_roles', value: ['AFFILIATE', 'DEALER'], category: 'affiliate', description: 'Vai trò được ghi công đơn và hưởng hoa hồng CTV (thêm "CUSTOMER" nếu khách thường chia sẻ cũng được hưởng)', fallbackSource: { file: COMMISSION_ROLES, text: 'DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];' } },
 ];
 
 export type ConfigDecision = 'reference' | 'business' | 'excluded' | 'unclassified';

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
-import { CommissionStatus, Prisma, type PayoutStatus } from '@prisma/client';
+import { CommissionStatus, Prisma, type PayoutStatus, type UserRole } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import type { Env } from '../../config/env.validation';
 import { hashIp } from '../../common/ip-hash';
@@ -58,6 +58,7 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -154,7 +155,8 @@ export class AffiliateService {
   /**
    * Ghi "chạm" giới thiệu (attribution last-touch persistent §quyết-định). Khi khách (đã đăng nhập)
    * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 7 — Q-31).
-   * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình.
+   * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình / mã không phải của CTV-đại lý
+   * (findEligibleReferrer): link chia sẻ của khách thường không được đè chạm CTV còn hạn.
    */
   async recordTouch(
     userId: string,
@@ -162,22 +164,12 @@ export class AffiliateService {
     now: Date = new Date(),
   ): Promise<{ ok: boolean }> {
     if (!dto.referralCode) return { ok: false };
-    // P0 FIX (audit A5-01, 2026-09-27): User.referralCode LUÔN lưu chữ HOA (auth.service.ts sinh
-    // bằng toUpperCase — mirror resolveReferrerId ở đó). Gian hàng CTV mở TRONG ZALO dùng slug làm
-    // referralCode (storefront.service.ts sinh slug = referralCode.toLowerCase(); miniapp
-    // storefront-view.tsx/app.tsx forward thẳng slug đó, KHÔNG hoa hoá lại) → so khớp CHÍNH XÁC
-    // trước đây luôn trượt (Postgres phân biệt hoa/thường), referrer luôn null, CTV bán qua gian
-    // hàng trong Zalo không bao giờ được ghi hoa hồng. Chuẩn hoá NGAY TẠI LỚP SO KHỚP này — không
-    // dựa vào việc mọi nơi gọi (kể cả các luồng tương lai) tự nhớ hoa hoá trước khi gửi lên.
-    const ref = await this.prisma.user.findUnique({
-      where: { referralCode: dto.referralCode.toUpperCase() },
-      select: { id: true },
-    });
-    if (!ref || ref.id === userId) return { ok: false };
+    const referrerUserId = await this.findEligibleReferrer(dto.referralCode, userId);
+    if (!referrerUserId) return { ok: false };
     const days = await this.config.get<number>('affiliate.attribution_days', 7);
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const data = {
-      referrerUserId: ref.id,
+      referrerUserId,
       storefrontSlug: dto.storefrontSlug ?? null,
       kind: dto.kind ?? 'ctv',
       expiresAt,
@@ -200,6 +192,36 @@ export class AffiliateService {
       props: { kind: dto.kind ?? 'ctv' },
     });
     return { ok: true };
+  }
+
+  /**
+   * Người được ghi công theo mã giới thiệu (chạm, đơn hàng): có tài khoản mang mã, khác người mua, và thuộc vai trò hưởng hoa
+   * hồng. Mã khách thường (`?ref=` ở nút chia sẻ sản phẩm, mua chung) → null, để không đè chạm CTV còn hạn hay chủ gian hàng
+   * CTV mà khách đang mua (checkout/attribution.ts). Chương trình "giới thiệu bạn bè" không đi qua đây: nó dùng
+   * User.referredById gán lúc tạo tài khoản (auth.service.ts resolveReferrerId).
+   *
+   * P0 A5-01: User.referralCode luôn lưu HOA (auth.service.ts sinh bằng toUpperCase) mà gian hàng CTV mở trong Zalo gửi slug
+   * viết thường làm mã (storefront.service.ts slug = referralCode.toLowerCase()); Postgres so khớp phân biệt hoa/thường nên
+   * phải chuẩn hoá ngay tại lớp so khớp này, không dựa vào nơi gọi.
+   */
+  async findEligibleReferrer(referralCode: string, buyerId: string): Promise<string | null> {
+    const ref = await this.prisma.user.findUnique({
+      where: { referralCode: referralCode.toUpperCase() },
+      select: { id: true, role: true },
+    });
+    if (!ref || ref.id === buyerId) return null;
+    return (await this.commissionEligibleRoles()).has(ref.role) ? ref.id : null;
+  }
+
+  /** Người dùng (chủ gian hàng CTV, người của "chạm") có thuộc vai trò được ghi công đơn không — checkout/attribution.ts. */
+  async isCommissionEligible(userId: string): Promise<boolean> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    return !!u && (await this.commissionEligibleRoles()).has(u.role);
+  }
+
+  /** Vai trò được ghi công đơn và hưởng hoa hồng (khoá `affiliate.commission_eligible_roles`, mặc định CTV + đại lý). */
+  async commissionEligibleRoles(): Promise<ReadonlySet<UserRole>> {
+    return sanitizeEligibleRoles(await this.config.get<unknown>(COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES));
   }
 
   /** Lấy "chạm" còn hạn của khách (fallback attribution khi phiên đã mất). */
@@ -848,6 +870,11 @@ export class AffiliateService {
     // Chặn tự-giới-thiệu (referrer == buyer) TRỪ đơn CTV "lên đơn hộ khách"
     // (placedForCustomer=true) — đó là nghiệp vụ hợp lệ: CTV hưởng hoa hồng cho đơn hộ.
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
+    // Chỉ CTV/đại lý (affiliate.commission_eligible_roles) hưởng hoa hồng: khách thường chia sẻ link chỉ được thưởng điểm giới
+    // thiệu (theo User.referredById, không theo đơn). Xét vai trò lúc đặt đơn — CTV lên đại lý (D3-03) vẫn hưởng. Đơn lên hộ
+    // khách cũng xét: route lên đơn hộ cho cả ADMIN dùng, admin lên hộ không ăn hoa hồng.
+    const referrer = await db.user.findUnique({ where: { id: order.referrerUserId }, select: { role: true } });
+    if (!referrer || !(await this.commissionEligibleRoles()).has(referrer.role)) return;
 
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({
