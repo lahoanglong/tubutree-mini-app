@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { CustomerRefundKind, CustomerRefundStatus, PayoutStatus } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
-import { maskPhoneKeepLast3, maskPhoneLikeRuns } from '../../common/mask-pii';
+import { maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { EXPORT_BATCH, row, text } from './admin-export';
 
@@ -288,7 +288,7 @@ export async function* refundCsvChunks(
           r.bankAccountName ?? '',
           dateTime(r.completedAt),
           r.bankRef ?? '',
-          opts.maskPhones && r.adminNote ? maskPhoneLikeRuns(r.adminNote) : (r.adminNote ?? ''),
+          opts.maskPhones && r.adminNote ? maskVnPhonesInText(r.adminNote) : (r.adminNote ?? ''),
         ]),
       )
       .join('');

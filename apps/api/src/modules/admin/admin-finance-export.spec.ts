@@ -223,4 +223,17 @@ describe('refundExportWhere / refundCsvChunks (danh sách hoàn tiền, D1-14)',
     expect((await run())[col('SĐT người nhận')]).toBe('="0911222333"');
     expect((await run())[col('Ghi chú admin')]).toContain('0988 777 666');
   });
+
+  it('maskPhones: ghi chú giữ số tiền và mã FT…, chỉ che SĐT', async () => {
+    const note = 'xác nhận 10.000.000đ/12.500.000đ mã FT26270123456789, gọi 0988 777 666 hoặc 0912345678';
+    const findMany = cursorModel([refund(1, { adminNote: note })]);
+    const lines = (await collect(refundCsvChunks({ orderCustomerRefund: { findMany } } as unknown as PrismaService, {}, { maskPhones: true }))).trimEnd().split('\r\n');
+    const masked = parseLine(lines[1]!)[REFUND_CSV_HEADERS.indexOf('Ghi chú admin')]!;
+    expect(masked).toContain('10.000.000đ/12.500.000đ');
+    expect(masked).toContain('FT26270123456789');
+    expect(masked).not.toContain('0988 777');
+    expect(masked).not.toContain('0912345');
+    expect(masked).toContain('666');
+    expect(masked).toContain('678');
+  });
 });

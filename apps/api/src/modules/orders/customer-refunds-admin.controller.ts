@@ -5,7 +5,7 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import type { JwtPayload } from '@tubutree/shared-types';
-import { maskPhoneKeepLast3, maskPhoneLikeRuns } from '../../common/mask-pii';
+import { maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { seesFullOrderPhones } from '../admin/order-actor-transitions';
 import { CustomerRefundsService } from './customer-refunds.service';
 
@@ -20,7 +20,7 @@ function forViewer<T>(row: T, viewer: JwtPayload | undefined): T {
   return {
     ...r,
     ...(r.phone ? { phone: maskPhoneKeepLast3(r.phone) } : {}),
-    ...(r.adminNote ? { adminNote: maskPhoneLikeRuns(r.adminNote) } : {}),
+    ...(r.adminNote ? { adminNote: maskVnPhonesInText(r.adminNote) } : {}),
   } as T;
 }
 

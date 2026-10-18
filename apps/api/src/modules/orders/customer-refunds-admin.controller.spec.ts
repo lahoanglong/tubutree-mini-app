@@ -106,4 +106,17 @@ describe('CustomerRefundsAdminController — che SĐT và số trong ghi chú v�
       expect(await call(admin)).toMatchObject({ phone: '0911222333' });
     }
   });
+
+  it('ghi chú: số tiền và mã giao dịch ngân hàng còn nguyên, SĐT viết trong chữ vẫn bị che', async () => {
+    const note = 'xác nhận 10.000.000đ/12.500.000đ mã FT26270123456789, gọi 0988 777 666 hoặc 0912345678';
+    const refunds = { list: jest.fn().mockResolvedValue({ data: [{ id: 'r1', phone: null, adminNote: note }], meta: {} }) };
+    const out = (await new CustomerRefundsAdminController(refunds as never).list({ page: 1, limit: 20 } as never, { sub: 's1', role: 'STAFF', staffPermissions: ['KE_TOAN'] } as never)) as { data: { adminNote: string }[] };
+    const masked = out.data[0]!.adminNote;
+    expect(masked).toContain('10.000.000đ/12.500.000đ');
+    expect(masked).toContain('FT26270123456789');
+    expect(masked).not.toContain('0988 777');
+    expect(masked).not.toContain('0912345');
+    expect(masked).toContain('666');
+    expect(masked).toContain('678');
+  });
 });
