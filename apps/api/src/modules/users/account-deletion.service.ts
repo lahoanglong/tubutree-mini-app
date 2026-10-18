@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { formatPoints } from '../../common/format-points';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
 import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
@@ -267,7 +268,7 @@ export class AccountDeletionService {
       // Q-03a: lô quy đổi là tiền trả trước nhưng không quy ra tiền được, nên không có cách tất toán
       // nào khác ngoài để khách tiêu hết (OQ-14).
       if (user.pointsConvertedBalance > 0) {
-        add('CONVERTED_POINTS', `còn ${user.pointsConvertedBalance} Điểm Xanh không hết hạn chưa dùng`);
+        add('CONVERTED_POINTS', `còn ${formatPoints(user.pointsConvertedBalance)} Điểm Xanh không hết hạn chưa dùng`);
       }
       if (user.cashbackPending > 0 || n(cashbackN) > 0) add('CASHBACK_PENDING', 'còn khoản hoàn tiền mua sắm đang chờ');
       if (n(orderN) > 0) add('ORDER_IN_PROGRESS', `còn ${n(orderN)} đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)`);

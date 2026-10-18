@@ -3,6 +3,7 @@ import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequ
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { notifyAdmins } from '../../common/notify-admins';
+import { formatPoints } from '../../common/format-points';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -155,7 +156,7 @@ export function refundNote(refund: RefundOutcome | null, bank: { bankName?: stri
       parts.push(`Tubu sẽ chuyển khoản ${formatVnd(refund.amount)} về ${bank ? maskedBank(bank) : 'tài khoản của bạn'} trong 1-3 ngày làm việc, miễn phí.`);
     } else parts.push(`Khoản hoàn ${formatVnd(refund.amount)} được trả cho người nhận hàng.`);
   }
-  if (pointsBack > 0) parts.push(`Đã hoàn ${pointsBack} Điểm Xanh.`);
+  if (pointsBack > 0) parts.push(`Đã hoàn ${formatPoints(pointsBack)} Điểm Xanh.`);
   return parts.length ? ` ${parts.join(' ')}` : '';
 }
 
