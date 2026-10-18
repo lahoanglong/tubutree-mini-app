@@ -1,6 +1,6 @@
 # Web parity 2026-10-19: câu hỏi cho chủ dự án và mục chưa kiểm chứng
 
-Nguồn: `/Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-parity/docs/2026-10-19-web-parity/impl/` (10 file báo cáo lane). Chép nguyên văn; phần "Mặc định" là mặc định lane đã dùng.
+Nguồn: `/Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-parity/docs/2026-10-19-web-parity/impl/` (18 file báo cáo lane). Chép nguyên văn; phần "Mặc định" là mặc định lane đã dùng.
 
 ## 1. Câu hỏi cho chủ dự án
 
@@ -80,6 +80,41 @@ Không có.
 - game:4. Nút "Dùng ngay" khi trúng voucher đi tới `/san-pham`. Mặc định: `/san-pham`.
 - game:5. Khách chưa đăng nhập vào /tu-van khi server tắt AI vẫn bị đưa về `/`, không hiện cổng đăng nhập. Mặc định: về `/`.
 - game:6. Có cần chạy lại gate khi máy rảnh để có summary xanh? Mặc định: chưa chạy.
+
+### community (4 câu)
+- community:1. Mở GET /academy/courses và chi tiết cho khách để Học viện công khai/lập chỉ mục? Mặc định: giữ private + noindex (cần đổi API, ngoài lane).
+- community:2. Học viện với tài khoản CUSTOMER (403) cần màn riêng thay vì lỗi + Thử lại? Mặc định: giữ như Mini App.
+- community:3. Đổi "Lưu" thành "Đã lưu" khi sửa bài xong? Mặc định: giữ "Lưu".
+- community:4. Sự kiện có cần URL riêng (vd ?event=id)? Mặc định: không.
+
+### pro (4 câu)
+- pro:1. Giữ công tắc bật/tắt khuyến mãi (PATCH `{isActive}`, Mini App không có)? Mặc định: giữ.
+- pro:2. Bấm "Chốt" lương và "Duyệt tất cả" có cần hộp xác nhận? Mặc định: không, như Mini App.
+- pro:3. Thẻ đơn ở tab Đơn hàng đại lý dẫn tới chi tiết đơn, chỉ PREPAID mới sang chuyển khoản? Mặc định: đúng vậy.
+- pro:4. Cho phép web ghi ảnh chứng cứ dạng data URL khi chưa có Cloudinary? Mặc định: có, như Mini App.
+
+### recycle (4 câu)
+- recycle:1. Khách chưa đăng nhập mà cấu hình công khai chưa tải: web mời đăng nhập, chỉ hiện "tạm dừng" khi cấu hình đã tải và chương trình tắt (Mini App hiện "tạm dừng" ngay). Mặc định: cách của web.
+- recycle:2. Sau khi tạo yêu cầu xong, web xoá nháp nên Back ra trang trống; Mini App giữ cờ đã gửi (`submittedSids`) để thoát hẳn về `/doi-rac`. Mặc định: xoá nháp.
+- recycle:3. Câu 403 ở quầy "Tài khoản này không có quyền nhận hàng tại điểm" là chữ tự đặt, Mini App không có. Mặc định: giữ.
+- recycle:4. Khối hỗ trợ dùng `mailto:` và `tel:` thay cho chép email vào bộ nhớ tạm như Mini App. Mặc định: `mailto:`.
+
+### integ1 (2 câu)
+- integ1:1. Web có cần kênh sự kiện phân tích cho mua lại như Mini App không? Mặc định: không gửi.
+- integ1:2. Xoá `repurchaseOrder` khỏi lib/shop-client.ts khi lane core cho phép? Mặc định: giữ.
+
+### integ2 (2 câu)
+- integ2:1. Trang chi tiết đơn web có nên ẩn khung QR khi đơn quá hạn như `canPayOrderNow` của Mini App? Mặc định: chưa đổi, chỉ ghi nhận. Đã xử lý ở c63e6ea2 (integ4).
+- integ2:2. Gom mọi chỗ nối `/thanh-toan/chuyen-khoan/...` về `bankPaymentHref`? Mặc định: chưa gom (không đổi hành vi). Đã xử lý ở 42134975 (integ4).
+
+### integ3 (1 câu)
+- integ3:1. shop:3 (khối chương trình đại lý ở `/brand/[slug]`): giữ BUYERWEB-18 (30cfe565, ẩn chương trình B2B với khách lẻ), hay theo Mini App brand-view (cherry-pick 94e40f36, chấp nhận trang SSR hiện ngưỡng B2B cho mọi người). Hiện đang giữ BUYERWEB-18.
+
+### integ4 (0 câu)
+Không có câu hỏi mới. Mặc định đã dùng: QR ở chi tiết đơn theo `canPayNow` như Mini App; trang chuyển khoản riêng không chặn theo hạn (giống Mini App).
+
+### integ5 (1 câu)
+- integ5:1. Có dọn các guard `isWebRouteReady('/doi-rac...')` đã thừa không? Mặc định: giữ nguyên.
 
 ## 2. Chưa kiểm chứng / cố ý để lại
 
@@ -192,3 +227,63 @@ Không có.
 - Nút Gửi của /tu-van chỉ báo đang gửi bằng `aria-busy`, không có spinner.
 - Spec /tu-van có 28 test so với 29 của Mini App (gộp vài ca, cùng ý nghĩa).
 - Mini App gọi sớm các truy vấn board, community, friends...; web gọi theo khối dùng chúng.
+
+### community (8 mục)
+- Playwright chưa chạy: 13 ca e2e trong apps/e2e/tests/community.web.spec.ts chỉ qua typecheck.
+- Học viện đặt private + noindex, lệch ma trận dòng 33 (API chỉ cho AFFILIATE/DEALER/STAFF/ADMIN).
+- Thẻ bài có link /cong-dong/:id; không còn 404 vì route đã xong.
+- Không PullToRefresh/haptic/snackbar (thông báo inline role=status/alert). "Gần tôi" không có trên web.
+- Sự kiện đã chọn chỉ là state client, URL không đổi (giống Mini App).
+- Thông báo sửa bài thành công giữ chữ "Lưu" như Mini App.
+- Fallback Suspense ISR của /cong-dong chưa có spec riêng; hiển thị bản ISR cho người đã đăng nhập chưa kiểm bằng trình duyệt.
+- Chưa chạy lại gate lần hai để có miniapp-test rc=0 sạch.
+
+### pro (10 mục)
+- Playwright (`pro.web.spec.ts`, 12 ca) chỉ viết, chưa chạy.
+- Chấm công, heartbeat: chỉ MiniAppOnlyNotice, không POST.
+- Chưa có lối vào `/dai-ly` từ hub `/tai-khoan` (lane account). Đã xử lý ở a9c31cde (integ3).
+- MiniAppOnlyNotice cao (py-16) trong thẻ chấm công: cần prop compact ở lane core. Đã xử lý ở 018bf051 (integ3).
+- `apps/e2e/tests/support/mock-api.ts` thiếu `put` (dùng `api.on('PUT')`). Đã xử lý ở 20520b53 (integ3).
+- Chữ lệch Mini App cố ý: bỏ emoji/ký hiệu (ds-palette-pc11), nhãn trạng thái đơn dùng `orderStatusLabel` web; màu ink B2B thay bằng stone/forest.
+- Dán đơn chặn tổng một dòng ở 9999.
+- `csvField` ở payroll-csv trùng ý `escapeCsvCell` của lib/export-csv.ts (chỉ lặp, không lỗi).
+- TDD không có bước đỏ riêng ở dealer-view, page.spec đại lý, chu-thuong-hieu.
+- Ảnh chứng cứ/QR gửi data URL như đường fallback Mini App; chưa kiểm giới hạn body phía API.
+
+### recycle (6 mục)
+- Playwright chưa chạy, các ca e2e Đổi rác chưa kiểm chứng.
+- Không có "điểm gần tôi" (web không xin vị trí).
+- Chưa kiểm bằng trình duyệt thật: không cuộn ngang ở 320px, lưới hai cột của quầy trên desktop.
+- `NAV_KEY` cũ có thể tồn tại tới khi tạo thành công hoặc đăng xuất.
+- Khi merge vào integration, bốn spec danh sách dùng chung (`guest-auth-gate`, `page-titles`, `session-unavailable`, `ds-palette-pc11`) sẽ xung đột với lane khác; người tích hợp giải quyết.
+- Mini App không bị sửa file nào.
+
+### integ1 (6 mục)
+- Gate toàn phần xanh liền mạch: chưa có, cần chạy lại khi máy rảnh.
+- Không xác nhận được số test Mini App lúc bắt đầu lane; tổng 4214 bằng ngưỡng tối thiểu (không giảm vì không đụng Mini App).
+- Playwright không chạy; ca nào dựa vào luồng mua lại cũ ở chi tiết đơn hoặc thông báo cần chạy lại ở lane tích hợp sau.
+- `repurchaseOrder` ở lib/shop-client.ts không còn nơi dùng (file lane core); header order-actions.spec.tsx còn mô tả cũ (lane order); không sửa.
+- Web chưa gửi sự kiện phân tích mua lại (trackReorderReminderCta, trackReorderCompleted).
+- bottom: calc(5rem + safe-area) cố định cho thông báo chưa kiểm chứng trực quan.
+
+### integ2 (4 mục)
+- `order-card.tsx:78` và `thanh-toan/page.tsx` vẫn tự nối chuỗi `/thanh-toan/chuyen-khoan/...` (giá trị đúng, chưa gom về `bankPaymentHref`). Đã xử lý ở 42134975 (integ4).
+- `guest-pages.a11y.spec.tsx:267` chưa đổi tên cho khớp ("mỗi đơn dẫn tới trang chi tiết").
+- Trang chi tiết đơn web xét hạn QR: chưa sửa (lane order). Đã xử lý ở c63e6ea2 (integ4).
+- Không chạy Playwright; chưa kiểm chứng trên trình duyệt thật.
+
+### integ3 (3 mục)
+- Chưa làm: shop:3 giữ hành vi BUYERWEB-18, chưa theo Mini App, chờ chủ quyết.
+- Playwright không chạy (chỉ viết/typecheck spec e2e).
+- Spec mục 1 và 3 xanh ngay khi viết (hub đã đúng sẵn, compact thêm cùng lúc), không đỏ trước như TDD.
+
+### integ4 (4 mục)
+- Gate cuối chưa xác nhận xanh toàn bộ (web test, Mini App test, build chưa có kết quả).
+- `ctv-order-sheet.tsx:250` còn chuỗi `/thanh-toan/chuyen-khoan/x` để dò `isWebRouteReady`, không phải href, giữ nguyên.
+- Trang `/thanh-toan/chuyen-khoan/[code]` chưa có test riêng cho đơn quá hạn; chỉ có đồng hồ "Đã quá hạn chuyển khoản" trong panel.
+- Review lượt 2 sau 3ae339e3 chưa chạy lại lượt 3.
+
+### integ5 (2 mục)
+- Cố ý để lại: các guard `isWebRouteReady('/doi-rac...')` nay thừa, chưa dọn.
+- Không chạy Playwright (luật lane).
+- Ghi chú trong báo cáo: "Không có mục chưa kiểm chứng."
