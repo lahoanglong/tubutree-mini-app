@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { CheckCircle2, Recycle, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
@@ -64,6 +65,7 @@ export default function CheckoutPage() {
   const phase = useAuthPhase();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const router = useRouter();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [note, setNote] = useState('');
@@ -210,7 +212,7 @@ export default function CheckoutPage() {
     },
     onSuccess: (order) => {
       orderKeys.current.reset();
-      setPlaced(order);
+      if (paymentToSend !== 'BANK_TRANSFER') setPlaced(order);
       if (wantInvoice) saveInvoice(userId, invoice);
       clearCheckoutSelection();
       void qc.invalidateQueries({ queryKey: ['cart'] });
@@ -218,6 +220,8 @@ export default function CheckoutPage() {
       if (attachWaste && pickupReq) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);
+      // Chuyển khoản: sang trang VietQR để khách trả ngay (đối soát xong đơn tự xác nhận), như Mini App.
+      if (paymentToSend === 'BANK_TRANSFER') router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
     onError: (e) => {
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy

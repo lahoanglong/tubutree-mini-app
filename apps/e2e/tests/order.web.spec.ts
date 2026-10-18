@@ -131,4 +131,27 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await expect(page.getByRole('link', { name: 'Xem lại giỏ hàng' })).toHaveAttribute('href', '/gio-hang');
     await expect(page.getByText('PRICE_CHANGED')).toHaveCount(0);
   });
+  test('chuyển khoản: đặt xong sang trang QR riêng, bấm kiểm tra thấy PAID thì báo đã nhận và có lối xem đơn', async ({ page, api }) => {
+    mockBuyer(api);
+    const CODE = 'TUBU2026101900001';
+    api.post('/checkout/place-order', () => placedOrder('BANK_TRANSFER', 330000));
+    let paid = false;
+    api.get(`/payments/bank-qr/${CODE}`, () => ({
+      orderCode: CODE, amount: 330000, paymentStatus: paid ? 'PAID' : 'UNPAID', paymentDeadline: null,
+      bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
+      memo: CODE, qrString: 'x', qrImageUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
+    }));
+
+    await page.goto('/thanh-toan');
+    await page.getByLabel('Chuyển khoản ngân hàng').check();
+    await page.getByRole('button', { name: 'Đặt hàng' }).click();
+    await expect(page).toHaveURL(new RegExp(`/thanh-toan/chuyen-khoan/${CODE}$`));
+    await expect(page.getByRole('heading', { name: 'Quét QR để chuyển khoản' })).toBeVisible();
+    await expect(page.getByText('9984606774').first()).toBeVisible();
+
+    paid = true;
+    await page.getByRole('button', { name: /Tôi đã chuyển khoản/ }).click();
+    await expect(page.getByText('Đã nhận thanh toán!')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Xem đơn hàng' })).toHaveAttribute('href', `/tai-khoan/don-hang/${CODE}`);
+  });
 });

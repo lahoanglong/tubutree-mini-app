@@ -7,6 +7,7 @@ import { metadata as account } from './tai-khoan/layout';
 import { metadata as addresses } from './tai-khoan/dia-chi/layout';
 import { metadata as points } from './tai-khoan/diem-xanh/layout';
 import { metadata as wallet } from './tai-khoan/vi-tubu/layout';
+import { metadata as bankPayment } from './thanh-toan/chuyen-khoan/[code]/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -20,7 +21,7 @@ const CORE: TitleCase[] = [
   ['/tai-khoan/vi-tubu', wallet, 'Ví Tubu — Tubu Tree'],
 ];
 const SHOP: TitleCase[] = [];
-const ORDER: TitleCase[] = [];
+const ORDER: TitleCase[] = [['/thanh-toan/chuyen-khoan/[code]', bankPayment, 'Thanh toán chuyển khoản — Tubu Tree']];
 const ACCOUNT: TitleCase[] = [];
 const LOYALTY: TitleCase[] = [];
 const COMMUNITY: TitleCase[] = [];

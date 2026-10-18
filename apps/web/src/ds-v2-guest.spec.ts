@@ -52,7 +52,7 @@ const CORE: string[] = [
   'lib/web-nav.ts',
 ];
 const SHOP: string[] = [];
-const ORDER: string[] = [];
+const ORDER: string[] = ['app/thanh-toan/chuyen-khoan/[code]/page.tsx'];
 const ACCOUNT: string[] = [];
 const LOYALTY: string[] = [];
 const COMMUNITY: string[] = [];

@@ -40,6 +40,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 import CartPage from './gio-hang/page';
 import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
+import BankPaymentPage from './thanh-toan/chuyen-khoan/[code]/page';
 import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
 
 let mounted: Rendered[] = [];
@@ -67,7 +68,9 @@ const CORE: PageCase[] = [
   ['/tai-khoan/don-hang/[code]', () => <OrderDetailPage />, '/tai-khoan/don-hang/TB-77'],
 ];
 const SHOP: PageCase[] = [];
-const ORDER: PageCase[] = [];
+const ORDER: PageCase[] = [
+  ['/thanh-toan/chuyen-khoan/[code]', () => <BankPaymentPage />, '/thanh-toan/chuyen-khoan/TB-77'],
+];
 const ACCOUNT: PageCase[] = [];
 const LOYALTY: PageCase[] = [];
 const COMMUNITY: PageCase[] = [];

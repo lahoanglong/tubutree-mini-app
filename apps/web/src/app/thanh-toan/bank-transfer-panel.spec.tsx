@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { act } from 'react';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { OrderDTO } from '@/lib/shop-client';
@@ -247,5 +248,100 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     const { container } = mount(<BankTransferPanel order={order()} />);
     await flush();
     expect(container.textContent).toMatch(/không tải được|thử lại/i);
+  });
+  it('mỗi dòng cần chép có nút riêng: số tài khoản, số tiền (chữ số thuần), nội dung chuyển khoản', async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    const labels = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
+    expect(labels).toEqual(expect.arrayContaining(['Sao chép: 9984606774', 'Sao chép: 250000', 'Sao chép: TB-777']));
+    click(container.querySelector('button[aria-label="Sao chép: 250000"]'));
+    await flush();
+    expect(writeText).toHaveBeenCalledWith('250000');
+  });
+
+  describe('đếm ngược hạn chuyển khoản (D5-02)', () => {
+    beforeEach(() => vi.useFakeTimers({ now: new Date('2026-10-17T10:00:00Z'), toFake: ['Date'] }));
+    afterEach(() => vi.useRealTimers());
+
+    const withDeadline = async (paymentDeadline?: string) => {
+      const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, ...(paymentDeadline ? { paymentDeadline } : {}) } } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      return container;
+    };
+
+    it('còn hạn: thêm dòng "Còn 2 giờ 30 phút để chuyển khoản", không nằm trong vùng đọc tự động', async () => {
+      const c = await withDeadline('2026-10-17T12:30:00Z');
+      const el = c.querySelector('[data-testid="payment-countdown"]');
+      expect(el?.textContent).toBe('Còn 2 giờ 30 phút để chuyển khoản');
+      expect(el?.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
+    });
+
+    it('quá hạn: nói thẳng "Đã quá hạn chuyển khoản"', async () => {
+      const c = await withDeadline('2026-10-17T09:00:00Z');
+      expect(c.querySelector('[data-testid="payment-countdown"]')?.textContent).toBe('Đã quá hạn chuyển khoản');
+    });
+
+    it('API không trả hạn: không có đồng hồ', async () => {
+      const c = await withDeadline();
+      expect(c.querySelector('[data-testid="payment-countdown"]')).toBeNull();
+    });
+  });
+
+  it('dò nền dừng hẳn sau khi thấy PAID: 4 giây sau không gọi thêm', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    try {
+      const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, paymentStatus: 'PAID' } } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      mount(<BankTransferPanel order={order()} />);
+      for (let i = 0; i < 6; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      const before = api.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(9000); });
+      expect(api.calls.length).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('chưa PAID: cứ 4 giây dò một lần', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    try {
+      const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      mount(<BankTransferPanel order={order()} />);
+      for (let i = 0; i < 6; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      const before = api.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(4100); });
+      expect(api.calls.length).toBeGreaterThan(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('kiểm tra tay thấy FAILED/REFUNDED: báo giao dịch không thành công, dặn liên hệ hỗ trợ', async () => {
+    let status = 'UNPAID';
+    const api = mockFetch({ '/payments/bank-qr/': () => ({ body: { ...QR_BODY, paymentStatus: status } }) });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    status = 'REFUNDED';
+    click(byText(container, 'button', 'Tôi đã chuyển khoản'));
+    await flush();
+    expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(
+      'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.',
+    );
+  });
+
+  it('PAID có thể kèm lối đi tiếp (paidFooter) do trang chứa cung cấp', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, paymentStatus: 'PAID' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<BankTransferPanel order={order()} paidFooter={<a href="/x">Xem đơn hàng</a>} />);
+    await flush();
+    expect(container.querySelector('a[href="/x"]')?.textContent).toBe('Xem đơn hàng');
   });
 });
