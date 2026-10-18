@@ -40,6 +40,8 @@ function setup(
   /** Tổng LATE_PAYMENT Pancake đã ghi của đơn (khoản hoàn tiền về muộn tính theo phần tăng thêm). */
   const refundAggregate = jest.fn().mockResolvedValue({ _sum: { amount: null } });
   const txQueryRaw = jest.fn().mockResolvedValue([]);
+  /** Số yêu cầu trả đã duyệt còn chờ "Đã nhận hàng về", đọc lại sau khi khoá dòng đơn. */
+  const txReturnRequestCount = jest.fn().mockResolvedValue(0);
   /** findFirst: khoản tiền về muộn admin đã ghi tay của đơn (null = chưa có). */
   const orderCustomerRefund = { createMany: refundCreateMany, aggregate: refundAggregate, findFirst: jest.fn().mockResolvedValue(null) };
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
@@ -48,7 +50,7 @@ function setup(
       orderStatusHistory: { create: historyCreate },
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },
-      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]), count: txReturnRequestCount },
       orderCustomerRefund,
       $executeRaw: txExecuteRaw,
       $queryRaw: txQueryRaw,
@@ -117,6 +119,7 @@ function setup(
     analytics,
     refundAggregate,
     txQueryRaw,
+    txReturnRequestCount,
   };
 }
 
@@ -1191,24 +1194,36 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
 
     it('chưa bấm "Đã nhận hàng về" → ghi "đã hoàn trên Tubu", KHÔNG bảo hoàn tay, giữ nhắc "Đã nhận hàng về", không báo động lại', async () => {
       const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
-      const { proc, prisma, txUpdateMany, txExecuteRaw, txQueryRaw, historyCreate } = setup(delivered, undefined, alerts);
+      const { proc, prisma, orderUpdateMany, txQueryRaw, txReturnRequestCount, historyCreate } = setup(delivered, undefined, alerts);
       (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: null }]);
+      txReturnRequestCount.mockResolvedValue(1);
       await proc.onStatusUpdated({ id: 'p1', status: 15 });
-      expect(prisma.$executeRaw).not.toHaveBeenCalled();
-      // Khoá dòng đơn trước câu ghi (câu ghi sau có snapshot mới, thấy được "Đã nhận hàng về" vừa commit).
+      // Khoá dòng đơn rồi mới đếm lại yêu cầu chờ nhận (câu đếm sau có snapshot mới, thấy được "Đã nhận hàng về" vừa commit).
       expect(txQueryRaw).toHaveBeenCalledTimes(1);
       expect((txQueryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?')).toContain('FOR UPDATE');
-      const raw = txExecuteRaw.mock.calls;
-      expect(raw).toHaveLength(1);
-      const [sql, reason] = raw[0] as [TemplateStringsArray, string];
-      expect(sql.join('?')).toContain('"receivedAt" IS NULL');
-      expect(reason).toMatch(/^Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu/);
-      expect(reason).toContain('Đã nhận hàng về');
-      expect(reason).not.toMatch(/hoàn tiền\/điểm.*bằng tay/);
+      expect(txQueryRaw.mock.invocationCallOrder[0]!).toBeLessThan(txReturnRequestCount.mock.invocationCallOrder[0]!);
+      expect(txReturnRequestCount).toHaveBeenCalledWith({ where: { orderId: 'o1', status: 'APPROVED', receivedAt: null } });
+      const flags = attentionFlags(orderUpdateMany);
+      expect(flags).toHaveLength(1);
+      expect(flags[0]).toMatch(/^Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu/);
+      expect(flags[0]).toContain('Đã nhận hàng về');
+      expect(flags[0]).not.toMatch(/hoàn tiền\/điểm.*bằng tay/);
       expect(alerts.alert).not.toHaveBeenCalled();
-      expect(statusFlips(txUpdateMany)).toHaveLength(0);
+      expect(statusFlips(orderUpdateMany)).toHaveLength(0);
       expect(historyCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({ fromStatus: 'DELIVERED', toStatus: 'DELIVERED', actorType: 'PANCAKE', note: expect.stringContaining('đã hoàn trên Tubu') }),
+      });
+    });
+
+    it('admin bấm "Đã nhận hàng về" ngay trước khi khoá dòng đơn → gỡ nhắc lúc duyệt, không ghi nhắc mới', async () => {
+      const { proc, prisma, orderUpdateMany, txReturnRequestCount } = setup(delivered);
+      (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: null }]);
+      txReturnRequestCount.mockResolvedValue(0);
+      await proc.onStatusUpdated({ id: 'p1', status: 15 });
+      expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
+      expect(orderUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'o1', OR: expect.arrayContaining([{ pancakeAttention: { startsWith: 'Khách trả một phần đơn' } }]) as unknown },
+        data: { pancakeAttention: null, pancakeAttentionAt: null },
       });
     });
 
