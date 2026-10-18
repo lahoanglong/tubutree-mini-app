@@ -129,7 +129,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
           </tbody>
         </table>
       </ScrollRegion>
-      {detailPoint && <WastePointDetail point={detailPoint} onClose={() => setDetailId(null)} />}
+      {detailPoint && <WastePointDetail key={detailPoint.id} point={detailPoint} onClose={() => setDetailId(null)} />}
       {panel && (
         <WastePointForm
           point={panel.point}

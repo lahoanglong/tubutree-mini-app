@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { answerConfirm, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wastePoint, wasteRequestRow } from '@/test-utils/fixtures/waste-admin';
 import { WastePointDetail } from './waste-point-detail';
 
@@ -68,6 +69,42 @@ describe('WastePointDetail', () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]!.url.endsWith('/admin/waste/points/p1/staff')).toBe(true);
     expect(JSON.parse(String(posts[0]!.init!.body))).toEqual({ userId: 'u7', role: 'STAFF' });
+  });
+
+  it('đổi sang điểm đã có chủ khi đang chọn vai Chủ điểm thì không thêm được', async () => {
+    const noOwner = wastePoint({ staff: [] });
+    const withOwner = wastePoint();
+    function Switcher() {
+      const [p, setP] = useState(noOwner);
+      return (
+        <>
+          <button type="button" onClick={() => setP(withOwner)}>đổi điểm</button>
+          <WastePointDetail point={p} onClose={() => undefined} searchDebounceMs={0} />
+        </>
+      );
+    }
+    const api = mockFetch({ '/admin/waste/points/p1/report': { body: REPORT }, '/admin/waste/requests': { body: { rows: [], nextCursor: null } }, '/admin/users': { body: USERS } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<Switcher />);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    selectValue(c.querySelector('select[name="staffRole"]'), 'OWNER');
+    typeInto(c.querySelector('input[type="search"]'), '0907');
+    await flush();
+    click(c.querySelector('[role="option"]'));
+    expect(btn(c, 'Thêm người')!.disabled).toBe(false);
+    click(btn(c, 'đổi điểm'));
+    await flush();
+    expect(c.querySelector<HTMLSelectElement>('select[name="staffRole"]')!.value).toBe('OWNER');
+    expect(btn(c, 'Thêm người')!.disabled).toBe(true);
+  });
+
+  it('chủ cũ đã gỡ thì chọn được vai Chủ điểm mới', async () => {
+    const { c } = await mount(wastePoint({ staff: [{ userId: 'u-owner', role: 'OWNER', isActive: false, fullName: 'Trần Thị Ba', phone: '0901000111' }] }));
+    const owner = Array.from(c.querySelector<HTMLSelectElement>('select[name="staffRole"]')!.options).find((o) => o.value === 'OWNER')!;
+    expect(owner.disabled).toBe(false);
+    expect(owner.textContent).toBe('Chủ điểm');
   });
 
   it('chưa chọn người thì chưa thêm được', async () => {

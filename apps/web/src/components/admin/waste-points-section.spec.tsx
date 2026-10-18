@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wasteItem, wasteOverview, wastePoint } from '@/test-utils/fixtures/waste-admin';
 import type { WasteSeed } from './waste-tab';
 import { WastePointsSection } from './waste-points-section';
@@ -129,6 +129,37 @@ describe('WastePointsSection', () => {
     await flush();
     expect(r.container.querySelector('[data-point-detail="p1"]')).not.toBeNull();
     expectNoBannedCopy(r.container.textContent);
+  });
+
+  it('mở chi tiết điểm khác thì bỏ người đã chọn và vai Chủ điểm của điểm trước', async () => {
+    const api = mockFetch({
+      '/admin/waste/points/pa/report': { body: { pointId: 'pa', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] } },
+      '/admin/waste/points/p1/report': { body: { pointId: 'p1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] } },
+      '/admin/waste/requests': { body: { rows: [], nextCursor: null } },
+      '/admin/users': { body: { data: [{ id: 'u7', fullName: 'Phạm Bảy', phone: '0907000777', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-01-01T00:00:00.000Z' }], meta: { page: 1, limit: 8, total: 1 } } },
+      '/admin/waste/points': { body: [wastePoint({ id: 'pa', name: 'Điểm chưa có chủ', staff: [] }), wastePoint()] },
+      '/admin/waste/items': { body: [wasteItem()] },
+      '/admin/waste/overview': { body: OVERVIEW },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WastePointsSection />);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    click(btn(row(c, 'pa'), 'Chi tiết'));
+    await flush();
+    selectValue(c.querySelector('select[name="staffRole"]'), 'OWNER');
+    typeInto(c.querySelector('input[type="search"]'), '0907');
+    await new Promise((res) => setTimeout(res, 500));
+    await flush();
+    click(c.querySelector('[role="option"]'));
+    expect(btn(c.querySelector('[data-point-detail="pa"]')!, 'Thêm người')!.disabled).toBe(false);
+    click(btn(row(c, 'p1'), 'Chi tiết'));
+    await flush();
+    const detail = c.querySelector('[data-point-detail="p1"]')!;
+    expect(detail.querySelector<HTMLSelectElement>('select[name="staffRole"]')!.value).toBe('STAFF');
+    expect(btn(detail, 'Thêm người')!.disabled).toBe(true);
+    expect(detail.textContent).not.toContain('Phạm Bảy');
   });
 
   it('cảnh báo bất thường hiện ở đúng điểm (5.5)', async () => {

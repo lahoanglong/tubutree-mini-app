@@ -170,7 +170,7 @@ export function WastePointDetail({
               <button
                 type="button"
                 className={BTN_PRIMARY}
-                disabled={!picked || full || add.isPending}
+                disabled={!picked || full || add.isPending || (role === 'OWNER' && hasOwner)}
                 onClick={() => picked && add.mutate({ userId: picked.id, role })}
               >
                 Thêm người
