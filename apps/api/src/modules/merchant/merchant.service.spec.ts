@@ -928,6 +928,44 @@ describe('MerchantService', () => {
   });
 
   describe('publishStore', () => {
+    const publishPrisma = (store: Record<string, unknown>, itemCount: number) => {
+      const update = jest.fn().mockImplementation(({ data }) => ({ ...store, ...data }));
+      return {
+        update,
+        prisma: makePrisma({
+          user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+          storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
+          storefrontItem: { count: jest.fn().mockResolvedValue(itemCount) },
+        }),
+      };
+    };
+
+    it('gian hàng đang bị admin gỡ: đối tác không tự đăng lại được, qua cả publishStore lẫn updateStore', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [], takenDownAt: new Date(), takenDownReason: 'Ảnh bìa vi phạm' };
+      const { prisma, update } = publishPrisma(store, 3);
+      const svc = new MerchantService(prisma, orderStatus);
+      await expect(svc.publishStore('u1', true)).rejects.toThrow(/Ảnh bìa vi phạm/);
+      await expect(svc.updateStore('u1', { isPublished: true })).rejects.toBeInstanceOf(ForbiddenException);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('gian hàng chưa có sản phẩm nào: chưa đăng được; ẩn gian hàng thì luôn được', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [], takenDownAt: null, takenDownReason: null };
+      const { prisma, update } = publishPrisma(store, 0);
+      const svc = new MerchantService(prisma, orderStatus);
+      await expect(svc.publishStore('u1', true)).rejects.toThrow('ít nhất 1 sản phẩm');
+      await expect(svc.updateStore('u1', { isPublished: true })).rejects.toBeInstanceOf(BadRequestException);
+      expect(update).not.toHaveBeenCalled();
+      await expect(svc.publishStore('u1', false)).resolves.toMatchObject({ isPublished: false });
+    });
+
+    it('lệnh đăng chỉ chạy khi gian hàng chưa bị gỡ (admin gỡ chen giữa không bị ghi đè)', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [], takenDownAt: null, takenDownReason: null };
+      const { prisma, update } = publishPrisma(store, 1);
+      await new MerchantService(prisma, orderStatus).publishStore('u1', true);
+      expect(update.mock.calls[0][0].where).toEqual({ id: 's1', takenDownAt: null });
+    });
+
     it('bật tắt xuất bản gian hàng đối tác thành công', async () => {
       const store = { id: 's1', ownerUserId: 'u1', collections: [] };
       const prisma = makePrisma({
@@ -936,6 +974,7 @@ describe('MerchantService', () => {
           findFirst: jest.fn().mockResolvedValue(store),
           update: jest.fn().mockImplementation(({ data }) => ({ ...store, ...data })),
         },
+        storefrontItem: { count: jest.fn().mockResolvedValue(2) },
       });
       const svc = new MerchantService(prisma, orderStatus);
       const published = await svc.publishStore('u1', true);

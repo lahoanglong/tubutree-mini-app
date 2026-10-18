@@ -8,6 +8,9 @@ import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifier
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
+import { isStorefrontApprovalRequired } from './storefront-config';
+import { isStorefrontApproved, ownerHiddenReason, publicStorefrontWhere } from './storefront-visibility';
+import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
@@ -52,6 +55,11 @@ export class StorefrontService {
     return Math.min(pct, max);
   }
 
+  private async visibilityOptions() {
+    const [roles, requireApproval] = await Promise.all([this.affiliate.commissionEligibleRoles(), isStorefrontApprovalRequired(this.config)]);
+    return { eligibleRoles: [...roles], requireApproval };
+  }
+
   async getOrCreateMine(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role !== 'AFFILIATE' && user.role !== 'ADMIN') {
@@ -87,6 +95,7 @@ export class StorefrontService {
     const sf = await this.prisma.storefront.findFirst({
       where: { ownerUserId: userId, type: 'CTV' },
       include: {
+        owner: { select: { role: true, isBlocked: true } },
         collections: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -116,9 +125,13 @@ export class StorefrontService {
       },
     });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
+    const { owner, ...rest } = sf;
     // SELLER-15: builder đánh dấu món khách không thấy (cùng điều kiện lọc của trang công khai) thay vì hiện như bình thường.
     return {
-      ...sf,
+      ...rest,
+      approved: isStorefrontApproved(sf),
+      // Chủ vẫn xem và sửa được gian hàng đang ẩn với khách; dòng này nói vì sao.
+      publicHiddenReason: ownerHiddenReason(sf, owner, await this.visibilityOptions()),
       collections: sf.collections.map((c) => ({
         ...c,
         items: c.items.map((i) => ({ ...i, hiddenReason: buyerHiddenReason(i) })),
@@ -173,10 +186,16 @@ export class StorefrontService {
 
   async publishMine(userId: string, isPublished: boolean) {
     const sf = await this.assertOwnedStorefront(userId);
-    return this.prisma.storefront.update({
-      where: { id: sf.id },
-      data: { isPublished, publishedAt: isPublished ? new Date() : null },
-    });
+    if (isPublished) await assertCanPublish(this.prisma, sf);
+    try {
+      return await this.prisma.storefront.update({
+        where: { id: sf.id, ...(isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) },
+        data: { isPublished, publishedAt: isPublished ? new Date() : null },
+      });
+    } catch (err) {
+      if (isPublished && isLostToTakeDown(err)) throw takenDownError(null);
+      throw err;
+    }
   }
 
   async pickerProducts(userId: string, q: { search?: string; page?: number; limit?: number }) {
@@ -220,6 +239,7 @@ export class StorefrontService {
 
   async getPublicBySlug(identifier: string) {
     const clean = identifier.trim().toLowerCase();
+    const visible = publicStorefrontWhere(await this.visibilityOptions());
     const sf = await this.prisma.storefront.findFirst({
       where: {
         // insensitive để gian hàng tạo TRƯỚC bản vá (slug in hoa) vẫn mở được mà không phải
@@ -229,7 +249,7 @@ export class StorefrontService {
           { subdomain: { equals: clean, mode: 'insensitive' } },
           { customDomain: { equals: clean, mode: 'insensitive' } },
         ],
-        isPublished: true,
+        ...visible,
       },
       include: {
         owner: { select: { referralCode: true } },
@@ -271,6 +291,8 @@ export class StorefrontService {
       customDomain: sf.customDomain,
       type: sf.type,
       isPartner: isPartnerStore(sf),
+      // Tick xanh và nhãn "CTV tuyển chọn" chỉ dành cho gian hàng admin đã duyệt, dù cờ duyệt lần đầu bật hay tắt.
+      approved: isStorefrontApproved(sf),
       title: sf.title,
       headerNote: sf.headerNote,
       avatarUrl: sf.avatarUrl,
@@ -325,7 +347,7 @@ export class StorefrontService {
    */
   async getPublicList() {
     const stores = await this.prisma.storefront.findMany({
-      where: { isPublished: true },
+      where: publicStorefrontWhere(await this.visibilityOptions()),
       select: { slug: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
       take: 500,

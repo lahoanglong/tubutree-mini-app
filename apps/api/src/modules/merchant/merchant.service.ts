@@ -27,6 +27,7 @@ import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
 import { isPartnerStore, lockStoreOwner, storeHasPayouts } from './partner-store';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
+import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from '../storefront/storefront-publish';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
 const MAX_CREATE_STORE_RETRY = 5;
@@ -445,6 +446,7 @@ export class MerchantService {
     }
 
     if (dto.isPublished !== undefined) {
+      if (dto.isPublished) await assertCanPublish(this.prisma, store);
       updateData.isPublished = dto.isPublished;
       updateData.publishedAt = dto.isPublished ? new Date() : null;
     }
@@ -482,23 +484,35 @@ export class MerchantService {
     );
 
     const newTitle = typeof updateData.title === 'string' ? updateData.title : null;
-    if (!newTitle || newTitle === store.title) {
-      return this.prisma.storefront.update({ where: { id: store.id }, data: updateData });
+    const where = { id: store.id, ...(dto.isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) };
+    try {
+      if (!newTitle || newTitle === store.title) {
+        return await this.prisma.storefront.update({ where, data: updateData });
+      }
+      // Tên nhãn của sản phẩm tự đăng chép từ tên gian hàng lúc đăng: đổi tên gian hàng thì đổi theo (R2-MERCHANT-7).
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.storefront.update({ where, data: updateData }),
+        this.prisma.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitle } }),
+      ]);
+      return updated;
+    } catch (err) {
+      if (dto.isPublished && isLostToTakeDown(err)) throw takenDownError(null);
+      throw err;
     }
-    // Tên nhãn của sản phẩm tự đăng chép từ tên gian hàng lúc đăng: đổi tên gian hàng thì đổi theo (R2-MERCHANT-7).
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.storefront.update({ where: { id: store.id }, data: updateData }),
-      this.prisma.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitle } }),
-    ]);
-    return updated;
   }
 
   async publishStore(userId: string, isPublished: boolean) {
     const store = await this.getOrCreateStore(userId);
-    return this.prisma.storefront.update({
-      where: { id: store.id },
-      data: { isPublished, publishedAt: isPublished ? new Date() : null },
-    });
+    if (isPublished) await assertCanPublish(this.prisma, store);
+    try {
+      return await this.prisma.storefront.update({
+        where: { id: store.id, ...(isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) },
+        data: { isPublished, publishedAt: isPublished ? new Date() : null },
+      });
+    } catch (err) {
+      if (isPublished && isLostToTakeDown(err)) throw takenDownError(null);
+      throw err;
+    }
   }
 
   /**

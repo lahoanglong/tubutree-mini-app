@@ -14,6 +14,9 @@ import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from '../merchant/merchant-config';
 export const RESERVED_STOREFRONT_IDENTIFIERS = new Set([
   'admin', 'api', 'www', 'app', 'mail', 'staging', 'dev', 'static', 'cdn',
   'auth', 'shop', 'tubutree', 'tubu', 'root', 'system', 'dashboard', 'demo',
+  // Tên kênh hỗ trợ và nền tảng: link `cskh.tubutree.com` hay `zalo.tubutree.com` của một CTV trông như kênh chính thức của Tubu Tree.
+  'cskh', 'hotro', 'support', 'help', 'hello', 'khuyenmai', 'official', 'chinhhang', 'chodeli',
+  'zalo', 'facebook', 'shopee', 'lazada', 'tiktok', 'login', 'payment', 'checkout',
 ]);
 
 const SUBDOMAIN_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
@@ -59,7 +62,7 @@ export function normalizeCustomDomain(raw: string): string {
  * chặn CHÍNH cho P0-1 (subdomain trùng slug người khác) và P0-2 (đơn hàng lộ qua slug trùng).
  */
 export async function assertIdentifierAvailable(
-  prisma: Pick<PrismaService, 'storefront'> & Partial<Pick<PrismaService, 'releasedStorefrontIdentifier'>>,
+  prisma: Pick<PrismaService, 'storefront'> & Partial<Pick<PrismaService, 'releasedStorefrontIdentifier' | 'brand'>>,
   value: string,
   excludeStorefrontId: string,
   cooldownDays: number = DEFAULT_IDENTIFIER_COOLDOWN_DAYS,
@@ -72,6 +75,17 @@ export async function assertIdentifierAvailable(
   });
   if (existing) {
     throw new BadRequestException(`"${value}" đã được sử dụng bởi gian hàng khác, vui lòng chọn tên khác.`);
+  }
+  // Tên nhãn hàng đang có (slug hoặc tên): gian hàng CTV đặt trùng sẽ mạo danh nhãn. Nhãn gắn với chính gian hàng này thì được dùng.
+  const brand = await prisma.brand?.findFirst({
+    where: {
+      OR: [{ slug: value }, { name: { equals: value, mode: 'insensitive' } }],
+      NOT: { storefront: { id: excludeStorefrontId } },
+    },
+    select: { id: true },
+  });
+  if (brand) {
+    throw new BadRequestException(`"${value}" trùng tên một nhãn hàng của Tubu Tree, vui lòng chọn tên khác.`);
   }
   // SELLER-5: link cũ của gian hàng vừa đổi tên vẫn nằm trong tin nhắn, bài đăng của khách; gian hàng khác nhận ngay tên đó là
   // nhận luôn khách (và ghi công đơn) của người trước. Chủ cũ lấy lại tên của chính mình thì được.
