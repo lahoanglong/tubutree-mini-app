@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { formatPoints } from '../../common/format-points';
-import { startOfVnMonth, vnDateKey } from '../../common/vn-time';
+import { startOfNextVnMonth, startOfVnMonth, vnDateKey } from '../../common/vn-time';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { recordClaimEvent, canonicalUserId } from './external-claim-audit';
@@ -94,13 +94,13 @@ export async function phoneBelongsToStaff(tx: Pick<Tx, 'user' | 'roleGrant'>, ph
  */
 export async function chatMonthPoints(
   tx: Pick<Tx, 'externalPointsClaim'>,
-  a: { phone: string | null; userId: string | null; since: Date; excludeClaimId?: string },
+  a: { phone: string | null; userId: string | null; since: Date; until?: Date; excludeClaimId?: string },
 ): Promise<number> {
   const agg = await tx.externalPointsClaim.aggregate({
     where: {
       kind: 'PHONE',
       state: { in: [...CAP_STATES] },
-      createdAt: { gte: a.since },
+      createdAt: { gte: a.since, ...(a.until ? { lt: a.until } : {}) },
       ...(a.excludeClaimId ? { id: { not: a.excludeClaimId } } : {}),
       OR: [...(a.userId ? [{ userId: a.userId }] : []), ...(a.phone ? [{ userId: null, orderPhone: a.phone }] : [])],
     },
@@ -113,14 +113,14 @@ export async function chatMonthPoints(
  * Điểm đã TỰ cộng (chưa qua tay nhân viên: không REVIEW, không do người duyệt) của các đơn chat cùng một người tạo trên Pancake trong
  * tháng VN. Dùng cho trần `loyalty.chat_order_creator_monthly_points`; claim REVIEW chưa tính vì chưa chắc được cộng.
  */
-export async function creatorMonthPoints(tx: Pick<Tx, 'externalPointsClaim'>, a: { creatorRef: string; since: Date; excludeClaimId?: string }): Promise<number> {
+export async function creatorMonthPoints(tx: Pick<Tx, 'externalPointsClaim'>, a: { creatorRef: string; since: Date; until?: Date; excludeClaimId?: string }): Promise<number> {
   const agg = await tx.externalPointsClaim.aggregate({
     where: {
       kind: 'PHONE',
       creatorRef: a.creatorRef,
       state: { in: ['PENDING', 'HELD_NO_MEMBER', 'CREDITED'] },
       decidedById: null,
-      createdAt: { gte: a.since },
+      createdAt: { gte: a.since, ...(a.until ? { lt: a.until } : {}) },
       ...(a.excludeClaimId ? { id: { not: a.excludeClaimId } } : {}),
     },
     _sum: { points: true },
@@ -347,6 +347,7 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
           const lastPayload = (order.lastPayload ?? {}) as Record<string, unknown>;
           const creatorIsMember = await creatorIsReceiver(tx, creatorStaffUserId(pancakeCreatorRefs(lastPayload), staffMap), member.id, phone);
           const since = startOfVnMonth(fresh.createdAt);
+          const until = startOfNextVnMonth(fresh.createdAt);
           const decision = evaluateChatClaim({
             now,
             cfg,
@@ -364,7 +365,7 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
             // Trần tháng của SĐT được chốt riêng bằng settlePoints bên dưới (chốt xuống thay vì đẩy claim đã qua kiểm sang REVIEW).
             monthPoints: 0,
             creatorIsMember,
-            creatorMonthPoints: fresh.creatorRef ? await creatorMonthPoints(tx, { creatorRef: fresh.creatorRef, since, excludeClaimId: fresh.id }) : null,
+            creatorMonthPoints: fresh.creatorRef ? await creatorMonthPoints(tx, { creatorRef: fresh.creatorRef, since, until, excludeClaimId: fresh.id }) : null,
           });
           // SKIP (đơn đã đóng, quá tuổi, không vận đơn...): không còn đủ điều kiện như lúc tạo, nên người kiểm quyết thay vì cộng thô
           // bỏ qua các luật còn lại (người tạo đơn, trần). Điểm giữ nguyên mức đã kiểm.
@@ -378,7 +379,7 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
           let settleNote: string | null = null;
           if (!toReview) {
             if (newPoints > fresh.points) {
-              const others = await chatMonthPoints(tx, { phone, userId: member.id, since, excludeClaimId: fresh.id });
+              const others = await chatMonthPoints(tx, { phone, userId: member.id, since, until, excludeClaimId: fresh.id });
               points = settlePoints({ newPoints, checkedPoints: fresh.points, others, cap: cfg.monthlyPointsCap });
               if (points < newPoints) settleNote = `Chốt theo trần tháng: ${points} thay vì ${newPoints} điểm`;
             } else {

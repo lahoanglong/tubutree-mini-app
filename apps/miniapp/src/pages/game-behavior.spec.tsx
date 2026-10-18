@@ -914,10 +914,10 @@ describe('GamePage — vòng quay may mắn', () => {
     await waitFor(() => expect(mocks.wheel.cost).toBe(20));
   });
 
-  it('truyền giá 10💧 cho vòng quay; quay gọi spin(), trả kết quả và làm mới cache', async () => {
+  it('truyền giá mặc định 10.000 điểm cho vòng quay; quay gọi spin(), trả kết quả và làm mới cache', async () => {
     const { invalidated } = renderPage();
     await screen.findByTestId('wheel');
-    expect(mocks.wheel.cost).toBe(10);
+    expect(mocks.wheel.cost).toBe(10_000);
     let result: unknown;
     await act(async () => {
       result = await mocks.wheel.onSpin!();

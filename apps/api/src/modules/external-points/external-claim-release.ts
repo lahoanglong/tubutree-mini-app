@@ -10,7 +10,7 @@ import type { ClaimNotifier } from './external-claim-status';
 import { advisoryPhoneLock, last3, phoneDiffers, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, type ChatConfig } from './external-chat.config';
 import { holdUntilOf, PHONE_STALE_REASON, phoneVerifiedFresh, releaseAtOf, STALE_APPROVE_MARK } from './external-chat.rules';
-import { startOfVnMonth } from '../../common/vn-time';
+import { startOfNextVnMonth, startOfVnMonth } from '../../common/vn-time';
 import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
 import { advisoryUserLock } from './external-claim.service';
 import { lockOrderThenClaim } from './external-claim-status';
@@ -157,7 +157,7 @@ export async function releaseClaim(
         const others =
           (
             await tx.externalPointsClaim.aggregate({
-              where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
+              where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt), lt: startOfNextVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
               _sum: { points: true },
             })
           )._sum.points ?? 0;

@@ -151,6 +151,52 @@ describe('AdminCouponBatchService.codes / setActive', () => {
     ]);
   });
 
+  describe('codes: nhân viên chỉ xem mã lô do chính mình tạo (chặn gom mã đem nhận bằng tài khoản khác)', () => {
+    const row = (createdById: string | null) => ({ code: 'SHOPEE-AAAA2222', isActive: true, createdById, _count: { claims: 0, redemptions: 0 } });
+
+    it('lô của chính nhân viên → xem được', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('s1'), row('s1')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).resolves.toMatchObject({ batch: 'SHOPEE' });
+    });
+
+    it('lô do ADMIN / hệ thống tạo → 403', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('a1')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toThrow('chỉ ADMIN xem được mã');
+      findMany.mockResolvedValue([row(null)]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('lô của nhân viên khác, hoặc lẫn một mã của người khác → 403', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('s2')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toBeInstanceOf(ForbiddenException);
+      findMany.mockResolvedValue([row('s1'), row('s2')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('ADMIN xem được mọi lô', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('s2')]);
+      await expect(svc.codes('shopee', { id: 'a1', staff: false })).resolves.toMatchObject({ batch: 'SHOPEE' });
+    });
+  });
+
+  it('list: mỗi lô kèm `mine` (xem được mã không); nhân viên theo createdById, ADMIN luôn true', async () => {
+    const { svc, prisma } = make();
+    const rows = [
+      { batch: 'AAA', mine: true },
+      { batch: 'BBB', mine: false },
+    ];
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue(rows);
+    const staffOut = await svc.list({ id: 's1', staff: true });
+    expect(staffOut.map((b) => b.mine)).toEqual([true, false]);
+    expect((prisma.$queryRaw as jest.Mock).mock.calls[0].slice(1)).toContain('s1');
+    const adminOut = await svc.list({ id: 'a1', staff: false });
+    expect(adminOut.map((b) => b.mine)).toEqual([true, true]);
+  });
+
   it('codes: lô không tồn tại → 404', async () => {
     const { svc, findMany } = make();
     findMany.mockResolvedValue([]);

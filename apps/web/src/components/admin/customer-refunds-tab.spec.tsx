@@ -109,6 +109,15 @@ describe('CustomerRefundsTab — danh sách', () => {
     expect(container.querySelector('button[aria-label*="Chép SĐT"]')).toBeNull();
   });
 
+  it('SĐT đã bị che (Kế toán): vẫn hiện số che, không có nút chép', async () => {
+    const api = mockFetch(LIST([refund({ phone: '*******678' })]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    expect(container.textContent ?? '').toContain('*******678');
+    expect(container.querySelector('button[aria-label*="Chép SĐT"]')).toBeNull();
+  });
+
   it('dòng WALLET: "Đã hoàn vào ví", không có thao tác chuyển khoản', async () => {
     const api = mockFetch(
       LIST([refund({ method: 'WALLET', status: 'COMPLETED', customerUserId: 'u9', completedAt: '2026-10-01T03:00:05.000Z' })]),
