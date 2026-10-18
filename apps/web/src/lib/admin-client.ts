@@ -683,6 +683,8 @@ export interface GomdonIntegrationStatus {
   webhookSecretSet: boolean;
   recyclingToggle: boolean;
   recyclingEnabled: boolean;
+  /** Cổng thật của khách: chương trình, đường Thu kèm đơn và Gomdon cùng bật. */
+  pickupVisible: boolean;
   /** Lần gọi Gomdon gần nhất của API (từ lúc khởi động). Bản API cũ không có. */
   connection?: GomdonConnectionHealth;
 }

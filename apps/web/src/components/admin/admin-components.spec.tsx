@@ -479,6 +479,7 @@ describe('GomdonConfigCard', () => {
           webhookSecretSet: true,
           recyclingToggle: true,
           recyclingEnabled: false,
+          pickupVisible: false,
           connection: {
             lastOkAt: null,
             lastErrorAt: '2026-10-13T03:00:00.000Z',
@@ -517,7 +518,7 @@ describe('GomdonConfigCard', () => {
     const puts: unknown[] = [];
     const api = mockFetch({
       '/admin/gomdon/status': {
-        body: { baseUrlSet: true, credentialsSet: false, configured: false, webhookSecretSet: false, recyclingToggle: true, recyclingEnabled: false },
+        body: { baseUrlSet: true, credentialsSet: false, configured: false, webhookSecretSet: false, recyclingToggle: true, recyclingEnabled: false, pickupVisible: false },
       },
       '/admin/config': (init) => {
         if (init?.method === 'PUT') puts.push(JSON.parse(String(init.body)));
@@ -558,6 +559,52 @@ describe('GomdonConfigCard', () => {
         },
       },
     ]);
+  });
+});
+
+describe('GomdonConfigCard — cổng thật của khách', () => {
+  const statusBody = (over: Record<string, unknown>) => ({
+    baseUrlSet: true,
+    credentialsSet: true,
+    configured: true,
+    webhookSecretSet: true,
+    recyclingToggle: true,
+    recyclingEnabled: true,
+    pickupVisible: false,
+    ...over,
+  });
+
+  it('công tắc Gomdon bật nhưng chương trình hoặc đường Thu kèm đơn tắt: KHÔNG thấy, nêu hai điều kiện còn thiếu, công tắc gọi là kỹ thuật', async () => {
+    const puts: unknown[] = [];
+    const api = mockFetch({
+      '/admin/gomdon/status': { body: statusBody({}) },
+      '/admin/config': (init) => {
+        if (init?.method === 'PUT') puts.push(JSON.parse(String(init.body)));
+        return { body: { ok: true } };
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const rows = [{ key: 'shipping.gomdon.recycling_enabled', value: false, description: null, category: 'shipping' }];
+    const { container } = mount(<GomdonConfigCard rows={rows} />);
+    await flush();
+    expect(container.textContent).toContain('Công tắc kỹ thuật Gomdon');
+    expect(container.textContent).not.toContain('Hiện lựa chọn thu gom ở checkout');
+    expect(container.textContent).toContain('KHÔNG thấy');
+    expect(container.textContent).not.toContain('ĐANG thấy');
+    expect(container.textContent).toContain('Bật chương trình với khách');
+    expect(container.textContent).toContain('Cách Thu kèm đơn');
+    click(container.querySelector('input[role="switch"]'));
+    await flush();
+    expect(puts).toEqual([{ key: 'shipping.gomdon.recycling_enabled', value: true }]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã BẬT công tắc kỹ thuật Gomdon.');
+    expect(container.textContent).not.toContain('lựa chọn thu gom ở checkout');
+  });
+
+  it('pickupVisible true: ĐANG thấy', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/gomdon/status': { body: statusBody({ pickupVisible: true }) } }).fn));
+    const { container } = mount(<GomdonConfigCard rows={[]} />);
+    await flush();
+    expect(container.textContent).toContain('ĐANG thấy');
   });
 });
 

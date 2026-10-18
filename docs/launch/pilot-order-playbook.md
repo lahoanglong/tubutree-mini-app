@@ -357,8 +357,8 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 ### 3.1 Kết nối và công tắc
 
 - **Ai**: Quản trị. **Ở đâu**: Quản trị, Cấu hình, thẻ "Thu kèm rác qua Gomdon (kỹ thuật)".
-- **Làm**: (1) bấm "Kiểm tra kết nối" (đăng nhập thật, không tạo đơn). (2) Kiểm tra "Kho lấy hàng (người gửi trên vận đơn)": tên, SĐT, địa chỉ, phường, quận, tỉnh là địa chỉ kho THẬT theo địa giới hành chính hiện hành. (3) Bật ô "Hiện lựa chọn thu gom ở checkout".
-- **Đúng là**: (1) báo đăng nhập được; không có chữ "từ chối". (3) hiện "Đã BẬT lựa chọn thu gom ở checkout." Khi waste.enabled và waste.lane_pickup_enabled cùng bật, bước thanh toán Mini App hiện công tắc "Thu kèm rác" cho khách có yêu cầu Thu kèm đơn chưa gắn đơn.
+- **Làm**: (1) bấm "Kiểm tra kết nối" (đăng nhập thật, không tạo đơn). (2) Kiểm tra "Kho lấy hàng (người gửi trên vận đơn)": tên, SĐT, địa chỉ, phường, quận, tỉnh là địa chỉ kho THẬT theo địa giới hành chính hiện hành. (3) Bật ô "Công tắc kỹ thuật Gomdon".
+- **Đúng là**: (1) báo đăng nhập được; không có chữ "từ chối". (3) hiện "Đã BẬT công tắc kỹ thuật Gomdon." Công tắc này một mình chưa làm khách thấy gì. Khi waste.enabled và waste.lane_pickup_enabled cũng bật, dòng "Khách ĐANG thấy lựa chọn thu gom" hiện và bước thanh toán Mini App hiện công tắc "Thu kèm rác" cho khách có yêu cầu Thu kèm đơn chưa gắn đơn.
 - **Bằng chứng**: chụp thẻ; Phụ lục P11 cho khoá `shipping.gomdon.recycling_enabled` phải là `true` (kiểu boolean).
 - **Hoàn tác**: tắt lại ô công tắc.
 
