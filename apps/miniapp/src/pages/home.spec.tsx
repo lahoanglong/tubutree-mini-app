@@ -462,14 +462,12 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
       await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('returning')]));
       await screen.findByRole('region', { name: 'Dành cho bạn' });
       expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
-      expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull();
     });
 
     it('khách cũ đã được nhớ từ lần trước: ngay từ khung hình đầu không mount khối, không gọi API ưu đãi khách mới', async () => {
       localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
       renderHome();
-      expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull();
       await screen.findByRole('region', { name: 'Dành cho bạn' });
       expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
     });
@@ -480,7 +478,6 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
       renderHome();
       await screen.findByRole('region', { name: 'Bán chạy' });
       await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
-      await waitFor(() => expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull());
       expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
     });
   });

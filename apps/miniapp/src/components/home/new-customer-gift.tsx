@@ -11,11 +11,8 @@ import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
-import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 
-// Khung chờ ≈ thẻ thật (tiêu đề + dòng voucher + 3 lợi ích + nút) để khối hiện ra không đẩy phần dưới.
-const PLACEHOLDER_HEIGHT = 236;
 const SECTION_PAD = '8px 16px 12px';
 
 interface Benefit {
@@ -54,7 +51,7 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
 /**
  * Khối "Quà khách mới" ở Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và 3 lợi ích mua trực tiếp. Chỉ khách chưa có
  * đơn theo định nghĩa đơn đầu của API (GET /me/new-customer-offer); khách chưa đăng nhập thì chỉ thấy phần lợi ích.
- * Lỗi tải hay thiếu cấu hình → ẩn hẳn: đây là khối quảng bá phụ, không đáng một thẻ lỗi và không được hiện số suy đoán.
+ * Đang tải, lỗi tải hay thiếu cấu hình → không vẽ gì: đây là khối quảng bá phụ, không đáng một khung chờ hay thẻ lỗi và không được hiện số suy đoán.
  */
 export function NewCustomerGift() {
   const navigate = useNavigate();
@@ -69,14 +66,8 @@ export function NewCustomerGift() {
     retry: false,
   });
 
-  if (cfgQ.isError || (authed && offerQ.isError)) return null;
-  if (cfgQ.isPending || (authed && offerQ.isPending)) {
-    return (
-      <div data-testid="new-customer-gift-loading" aria-hidden="true" style={{ padding: SECTION_PAD }}>
-        <Skeleton height={PLACEHOLDER_HEIGHT} radius="var(--radius-card)" />
-      </div>
-    );
-  }
+  // Chưa biết có phải khách mới thì không chiếm chỗ: khung chờ cố định sẽ làm trang nhảy với mọi khách đã có đơn rồi mới biến mất.
+  if (cfgQ.isError || cfgQ.isPending || (authed && (offerQ.isError || offerQ.isPending))) return null;
   if (authed && offerQ.data?.isNewCustomer !== true) return null;
 
   const voucher = authed ? (offerQ.data?.welcomeVoucher ?? null) : null;

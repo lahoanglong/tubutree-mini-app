@@ -236,6 +236,13 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
     expect(source).toContain(extra.fallbackSource.text);
   });
 
+  // Admin đọc mô tả này để quyết bật cờ: phải nói cờ chỉ đổi thứ tự, không phải công tắc của khối chào mừng.
+  it('home.new_customer_layout: mô tả nói cờ chỉ đổi thứ tự, khối "Quà khách mới" luôn hiện với khách mới', () => {
+    const desc = EXTRA_CONFIGS.find((c) => c.key === 'home.new_customer_layout')!.description;
+    expect(desc).toMatch(/chỉ đổi thứ tự/);
+    expect(desc).toMatch(/luôn hiện/);
+  });
+
   it('dòng nạp không còn cờ createOnly lẫn chú thích nguồn (cột SystemConfig không có hai trường này)', () => {
     for (const row of selectReferenceConfigs(SYSTEM_CONFIGS).filter((r) => EXTRA_CONFIGS.some((e) => e.key === r.key))) {
       expect(row).not.toHaveProperty('fallbackSource');

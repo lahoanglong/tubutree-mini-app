@@ -98,22 +98,28 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false, welcomeVoucher: null });
     const { container } = renderGift();
     await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull());
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('đang tải: khung chờ giữ chỗ (không nhảy bố cục), không có số nào', async () => {
+  it('đang tải ưu đãi: không vẽ gì, kể cả khung chờ (chưa biết có phải khách mới thì chưa chiếm chỗ, để trang không nhảy với khách đã có đơn)', async () => {
     mocks.getNewCustomerOffer.mockReturnValue(new Promise(() => {}));
-    renderGift();
-    expect(await screen.findByTestId('new-customer-gift-loading')).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+    const { container } = renderGift();
+    await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull();
+  });
+
+  it('cấu hình công khai đang tải: cũng không vẽ khung chờ', async () => {
+    mocks.getPublicConfig.mockReturnValue(new Promise(() => {}));
+    const { container } = renderGift();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('lỗi tải ưu đãi của khách → ẩn khối (khối quảng bá phụ, không đáng một thẻ lỗi), không bịa số', async () => {
     mocks.getNewCustomerOffer.mockRejectedValue(new Error('boom'));
     const { container } = renderGift();
     await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull());
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -121,7 +127,6 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     mocks.getPublicConfig.mockRejectedValue(new Error('boom'));
     const { container } = renderGift();
     await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull());
     expect(container).toBeEmptyDOMElement();
   });
 
