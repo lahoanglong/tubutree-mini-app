@@ -314,6 +314,9 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'dealer.review_hours',
         'community.public_preview',
         'home.new_customer_layout',
+        'community.zalo_group_url',
+        'community.facebook_url',
+        'community.tiktok_url',
       ];
       expect(createdBy(results).system_configs).toBe(extraKeys.length);
       expect(await pc.systemConfig.count({ where: { key: { in: extraKeys } } })).toBe(extraKeys.length);

@@ -330,7 +330,11 @@ export interface SupportContact {
   email: string;
   /** Chỉ có khi admin đã cấu hình tên Zalo OA; chưa có OA thì không có trường (Q-17: ẩn). */
   zaloOaName?: string;
+  /** Kênh cộng đồng của chủ shop; chỉ có khoá nào admin đã nhập link https. */
+  community?: { zaloGroupUrl?: string; facebookUrl?: string; tiktokUrl?: string };
 }
+
+const httpsOnly = (v: unknown): string | undefined => (typeof v === 'string' && /^https:\/\//.test(v.trim()) ? v.trim() : undefined);
 
 /** Khớp giá trị mặc định của API (system-config.controller: support.hotline / support.email). */
 export const DEFAULT_SUPPORT: SupportContact = { hotline: '0899 149 229', email: 'tubutree@gmail.com' };
@@ -344,12 +348,19 @@ export async function getPublicSupport(): Promise<SupportContact> {
   try {
     const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
     if (!res.ok) return DEFAULT_SUPPORT;
-    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null } };
+    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown } };
+    const community = Object.fromEntries(
+      (['zaloGroupUrl', 'facebookUrl', 'tiktokUrl'] as const).flatMap((k) => {
+        const u = httpsOnly(json.community?.[k]);
+        return u ? [[k, u]] : [];
+      }),
+    );
     const zaloOaName = json.support?.zaloOaName?.trim();
     return {
       hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,
       email: json.support?.email?.trim() || DEFAULT_SUPPORT.email,
       ...(zaloOaName ? { zaloOaName } : {}),
+      ...(Object.keys(community).length ? { community } : {}),
     };
   } catch {
     return DEFAULT_SUPPORT;

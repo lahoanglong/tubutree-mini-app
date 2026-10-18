@@ -33,7 +33,7 @@ export async function generateMetadata({ searchParams }: { searchParams: HomeSea
 }
 
 const COMMITMENTS = [
-  { Icon: ShieldCheck, tone: 'bg-forest-50 text-forest-700', title: '100% Thuần Chay & Lành Tính', note: 'Đạt chuẩn kiểm định, an toàn cho làn da' },
+  { Icon: ShieldCheck, tone: 'bg-forest-50 text-forest-700', title: 'Thuần Chay & Lành Tính', note: 'Đạt chuẩn kiểm định, an toàn cho làn da' },
   { Icon: Truck, tone: 'bg-sage-50 text-sage-700', title: 'Giao Hàng Nhanh Toàn Quốc', note: 'Đóng gói vật liệu phân hủy sinh học' },
   // Chính sách thật (miniapp /about, và chính tab Đổi/Trả của admin): chỉ đổi/trả khi sản phẩm LỖI NHÀ SẢN XUẤT, trong
   // 7 ngày. Hứa "hoàn tiền nếu không hài lòng" là rộng hơn hẳn — khách đổi ý sẽ bị từ chối và có cơ sở khiếu nại.
@@ -82,7 +82,7 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
         <div className="relative z-10 max-w-2xl">
           <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-forest-300/30 bg-forest-500/20 px-3.5 py-1 text-xs font-semibold tracking-wide text-forest-100 backdrop-blur-md">
             <Sparkles className="h-3.5 w-3.5 text-forest-200" aria-hidden="true" />
-            <span>SỐNG XANH AN LÀNH · 100% NGUYÊN BẢN VIỆT NAM</span>
+            <span>SỐNG XANH AN LÀNH · NGUỒN GỐC VIỆT NAM</span>
           </p>
 
           <h1 className="font-display text-3xl font-semibold leading-tight tracking-tight sm:text-4xl lg:text-5xl">

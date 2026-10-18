@@ -48,7 +48,7 @@ describe('design-tokens/tokens.css', () => {
 
   it('does not define the old --primary-* (orange) scale as a UI color — only as tubu-orange for logo use', () => {
     expect(css).not.toMatch(/--primary-600/);
-    expect(css).toMatch(/--tubu-orange:\s*#E08C1C/i);
+    expect(css).toMatch(/--tubu-orange:\s*#E38E1E/i);
   });
 
   it('compare-at (strikethrough) price is informative text: stone-500 (AA), not the disabled stone-400', () => {

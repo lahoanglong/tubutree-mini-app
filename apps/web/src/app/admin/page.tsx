@@ -2915,7 +2915,7 @@ function ContentKitEditor({
         value={usps}
         onChange={(e) => setUsps(e.target.value)}
         rows={3}
-        placeholder={'Nguyên liệu tự nhiên 100%'}
+        placeholder={'Nguyên liệu tự nhiên'}
         className={`mb-3 ${INPUT_CLASS}`}
       />
 

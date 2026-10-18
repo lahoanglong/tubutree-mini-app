@@ -277,7 +277,7 @@ export default async function StorefrontPage({
 
                     <CardSaleBadge
                       product={it.product}
-                      className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card"
+                      className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card"
                     />
                   </div>
 

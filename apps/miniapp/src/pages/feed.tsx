@@ -17,6 +17,7 @@ import { Chip } from '../components/ui/chip';
 import { Icon } from '../components/ui/icon';
 import { IconButton } from '../components/ui/icon-button';
 import { PageHeader } from '../components/ui/page-header';
+import { CommunityChannels } from '../components/community/community-channels';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { SearchField } from '../components/ui/search-field';
 import PostCard from '../components/community/post-card';
@@ -131,6 +132,7 @@ export default function FeedPage() {
       return (
         <Page style={{ background: 'var(--color-bg-canvas)' }}>
           <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
+          <CommunityChannels />
           <PublicPreviewList posts={preview.data.posts} onLogin={() => void login()} />
         </Page>
       );
@@ -138,6 +140,7 @@ export default function FeedPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
+        <CommunityChannels />
         <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
@@ -148,6 +151,7 @@ export default function FeedPage() {
       <PullToRefresh onRefresh={() => feed.refetch()} />
 
       <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
+      <CommunityChannels />
 
       <div
         style={{

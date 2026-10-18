@@ -177,6 +177,24 @@ describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)'
   });
 });
 
+describe('SystemConfigController.publicConfig — link kênh cộng đồng', () => {
+  it('chưa cấu hình → cả ba null để FE ẩn nút', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.community).toMatchObject({ zaloGroupUrl: null, facebookUrl: null, tiktokUrl: null });
+  });
+
+  it('chỉ trả link https đúng tên miền; giá trị lạ lưu sót trong DB bị bỏ', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({
+        'community.zalo_group_url': 'https://zalo.me/g/abc',
+        'community.facebook_url': 'https://evil.com/fb',
+        'community.tiktok_url': 42,
+      }),
+    ).publicConfig();
+    expect(out.community).toMatchObject({ zaloGroupUrl: 'https://zalo.me/g/abc', facebookUrl: null, tiktokUrl: null });
+  });
+});
+
 // D2-07b: khối "Quà khách mới" và các chữ có số (D5-10) đọc từ đây. Mặc định phải bằng mặc định trong mã của nơi dùng số đó.
 describe('SystemConfigController.publicConfig — số cho khách mới và Điểm Xanh', () => {
   it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu tắt, 10.000đ = 1 điểm, 1 điểm = 1.000đ', async () => {
@@ -252,7 +270,7 @@ describe('SystemConfigController.publicConfig — số trong chữ đại lý v�
   it('chưa cấu hình → đúng mặc định hiện hành: chiết khấu đại lý tối đa 45%, duyệt hồ sơ 24 giờ, thưởng sự kiện tối đa 1.000 điểm', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.dealer).toEqual({ maxDiscountPct: 0.45, reviewHours: 24 });
-    expect(out.community).toEqual({ eventRewardMaxPoints: 1000 });
+    expect(out.community).toMatchObject({ eventRewardMaxPoints: 1000 });
   });
 
   it('admin đổi → trả giá trị mới của đúng khoá mà dealer.service đang kẹp chiết khấu', async () => {

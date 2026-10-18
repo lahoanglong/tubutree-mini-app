@@ -49,7 +49,7 @@ export default function ProductCard({ product, priority = false }: { product: P;
         {!soldOut && (
           <CardSaleBadge
             product={product}
-            className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card"
+            className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card"
           />
         )}
 

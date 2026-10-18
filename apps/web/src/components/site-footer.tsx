@@ -1,7 +1,9 @@
+import Image from 'next/image';
 import Link from 'next/link';
-import { Mail, Phone } from 'lucide-react';
+import { ExternalLink, Mail, Phone } from 'lucide-react';
 import { getPublicSupport } from '@/lib/api';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import tubuLogo from '@/assets/tubu-logo.png';
 import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
 
 const LINK =
@@ -9,15 +11,20 @@ const LINK =
 
 /** Chân trang web khách: liên hệ hỗ trợ lấy từ cấu hình công khai (admin đổi được). */
 export default async function SiteFooter() {
-  const { hotline, email } = await getPublicSupport();
+  const { hotline, email, community } = await getPublicSupport();
   // `tel:` chỉ nhận chữ số và dấu +, bỏ khoảng trắng/dấu chấm cho số hiển thị "0899 149 229".
   const tel = hotline.replace(/[^\d+]/g, '');
+  const channels = [
+    { label: 'Nhóm Zalo', href: community?.zaloGroupUrl },
+    { label: 'Facebook', href: community?.facebookUrl },
+    { label: 'TikTok', href: community?.tiktokUrl },
+  ].filter((c): c is { label: string; href: string } => Boolean(c.href));
 
   return (
     <footer className="mt-12 border-t border-stone-200 bg-stone-0">
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:grid-cols-2">
         <div>
-          <p className="font-display text-lg font-semibold text-stone-900">Tubu Tree</p>
+          <Image src={tubuLogo} alt="Tubu Tree" width={110} height={40} className="h-10 w-auto" />
           <p className="mt-1 max-w-sm text-sm text-stone-600">
             Sống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.
           </p>
@@ -41,6 +48,21 @@ export default async function SiteFooter() {
           </ul>
         </div>
       </div>
+
+      {channels.length > 0 && (
+        <nav aria-label="Kênh cộng đồng" className="mx-auto max-w-6xl px-4 pb-2">
+          <ul className="flex flex-wrap gap-x-6">
+            {channels.map((c) => (
+              <li key={c.label}>
+                <a href={c.href} target="_blank" rel="noopener noreferrer" className={LINK}>
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  <span>{c.label}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
 
       <nav aria-label="Chính sách" className="mx-auto max-w-6xl px-4 pb-6">
         <ul className="flex flex-wrap gap-x-6 border-t border-stone-200 pt-2">
