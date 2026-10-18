@@ -233,6 +233,16 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(card(c, 'Thùng carton').textContent).not.toContain('7');
     expect(toLineInputsOf(loadDraft())).toEqual([]);
   });
+  it('nháp còn món đã ẩn hoặc sắp ra mắt: bỏ khỏi nháp và khỏi body ước tính', async () => {
+    saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 3, 'item-battery': 2 } });
+    markResume();
+    const c = await mount();
+    await flush(10);
+    expect(card(c, 'Thùng carton').textContent).toContain('3');
+    expect(toLineInputsOf(loadDraft())).toEqual([['item-carton', 3]]);
+    expect(previewCalls().every((b) => b.lines.every((l) => l.itemId !== 'item-battery'))).toBe(true);
+    expect(previewCalls().length).toBeGreaterThan(0);
+  });
   it('rời wizard ở bước 2 rồi vào mới bước 1 → nháp rỗng (cờ nạp lại không sống sót sau khi rời)', async () => {
     const first = render(<RecycleNew />);
     await flush(10);

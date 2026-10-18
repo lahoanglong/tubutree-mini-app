@@ -156,7 +156,16 @@ export function RecycleNew() {
   useEffect(() => {
     if (leave) router.replace('/doi-rac');
   }, [leave, router]);
-  const lineInputs = toLineInputs(draft.lines);
+  const activeIds = useMemo(() => (me ? new Set(me.items.filter((i) => i.status === 'ACTIVE').map((i) => i.id)) : null), [me]);
+  // Món bị ẩn hoặc sắp ra mắt sau khi nháp được lưu (nạp lại trang, quay từ trang chọn điểm) thì người dùng không thấy để bỏ, nên cắt khỏi nháp.
+  useEffect(() => {
+    if (!activeIds) return;
+    setDraft((d) => {
+      const kept = Object.fromEntries(Object.entries(d.lines).filter(([id]) => activeIds.has(id)));
+      return Object.keys(kept).length === Object.keys(d.lines).length ? d : { ...d, lines: kept };
+    });
+  }, [activeIds]);
+  const lineInputs = toLineInputs(draft.lines).filter((l) => !activeIds || activeIds.has(l.itemId));
   const missingDraft = ready && step === 'method' && lineInputs.length === 0;
   useEffect(() => {
     if (missingDraft) router.replace(WIZARD_PATH);
@@ -164,11 +173,11 @@ export function RecycleNew() {
 
   // Ước tính bước 1. Chuỗi JSON mới là thứ được debounce: toLineInputs trả mảng mới ở mỗi lần render.
   const linesKey = useDebounced(JSON.stringify(lineInputs), PREVIEW_DEBOUNCE_MS);
-  const debounced = useMemo(() => JSON.parse(linesKey) as WasteLineInput[], [linesKey]);
+  const debounced = useMemo(() => (JSON.parse(linesKey) as WasteLineInput[]).filter((l) => !activeIds || activeIds.has(l.itemId)), [linesKey, activeIds]);
   const itemsPreviewQ = useQuery({
     queryKey: [...WASTE_QUERY_KEYS.all, 'preview', debounced],
     queryFn: () => previewWaste(coreHttp, { lines: debounced }),
-    enabled: step === 'items' && debounced.length > 0 && authed,
+    enabled: step === 'items' && debounced.length > 0 && authed && !!me,
   });
   const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: step === 'items' && authed });
 
