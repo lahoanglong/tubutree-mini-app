@@ -674,7 +674,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 - **Làm**: theo Phần 3, bước 3.1 và 3.2 (cần `waste.enabled` và `waste.lane_pickup_enabled` cùng bật, Gomdon đã trả lời bằng văn bản). Khi kho nhận kiện thu kèm, đếm và xác nhận.
 - **Đúng là**: ghi chú vận đơn là `Thu kèm rác TR-…: Thùng carton cũ: 3 thùng`; điểm chỉ được cộng khi kho đếm.
-- **Hoàn tác**: huỷ yêu cầu trước khi bưu tá lấy hàng.
+- **Hoàn tác**: huỷ đơn mua trước khi bưu tá lấy hàng (bước 3.5); yêu cầu thu kèm tự đóng theo đơn. Yêu cầu đã gắn đơn thì khách không huỷ riêng được.
 
 `[ ] Đạt  [ ] Không đạt`
 
