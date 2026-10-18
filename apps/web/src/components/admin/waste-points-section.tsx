@@ -102,7 +102,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
                     {hoursOf(p).length === 0 ? '—' : <ul className="space-y-0.5 text-xs">{hoursOf(p).map((h) => <li key={h} className="whitespace-nowrap">{h}</li>)}</ul>}
                   </td>
                   <td className={TD}>
-                    <div className="flex max-w-[200px] flex-wrap gap-1">
+                    <div className="flex max-w-[200px] flex-wrap gap-1 [&_span]:min-w-0 [&_span]:whitespace-normal [&_span]:break-words">
                       {acceptedNames(p).length === 0 ? '—' : acceptedNames(p).map((n) => <ToneBadge key={n} tone="neutral">{n}</ToneBadge>)}
                     </div>
                   </td>
