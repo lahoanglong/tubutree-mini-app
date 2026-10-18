@@ -2,7 +2,7 @@ import type { Page, TestInfo } from '@playwright/test';
 import { test, expect, makeUser, makeOrder, mockSession } from './support/mock-api';
 
 /**
- * R5-BUYER-1: mất mạng/API không tới được thì Đơn hàng, Giỏ, Thông báo, Yêu thích, Đổi vỏ từng vẽ màn "trống" (như thể khách chưa
+ * R5-BUYER-1: mất mạng/API không tới được thì Đơn hàng, Giỏ, Thông báo, Yêu thích, Đổi rác từng vẽ màn "trống" (như thể khách chưa
  * có gì) và Cá nhân hiện "Network Error" tiếng Anh. Mọi màn phải nói đúng bằng tiếng Việt + nút Thử lại, và tự về nội dung thật
  * khi có mạng lại. Chạy ở khung 390px của project "Zalo Mini App" (iPhone 12).
  */
