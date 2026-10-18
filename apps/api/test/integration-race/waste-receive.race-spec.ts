@@ -11,22 +11,31 @@ import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-
 import { WasteHoldService } from '../../src/modules/waste-exchange/core/waste-hold.service';
 import { WasteNotifierService } from '../../src/modules/waste-exchange/core/waste-notifier.service';
 import { WasteShipLockService } from '../../src/modules/waste-exchange/core/waste-ship-lock.service';
+import { WasteAdminRequestsService } from '../../src/modules/waste-exchange/receiving/waste-admin-requests.service';
 import { WasteConfirmService, type WasteStaffCall } from '../../src/modules/waste-exchange/receiving/waste-confirm.service';
 import { WasteReceiveService } from '../../src/modules/waste-exchange/receiving/waste-receive.service';
 import { createUser, setConfig, summarize, warmPool, deleteItData } from './helpers';
 import { cleanupWaste, createWarehouse, createWasteItem, createWasteRequest, raceWithHold } from './fixtures/waste-fixtures';
 
-const CONFIG_KEYS = ['waste.enabled', 'loyalty.point_expire_months'];
+const CONFIG_KEYS = [
+  'waste.enabled',
+  'loyalty.point_expire_months',
+  'waste.lane_mailin_enabled',
+  'waste.mailin_min_points',
+  'waste.customer_monthly_cap_points',
+];
 
 let moduleRef: TestingModule;
 let prisma: PrismaService;
 let receive: WasteReceiveService;
 let confirm: WasteConfirmService;
+let adminRequests: WasteAdminRequestsService;
 let savedConfig: SystemConfig[];
 let item: Awaited<ReturnType<typeof createWasteItem>>;
 let wh: Awaited<ReturnType<typeof createWarehouse>>;
 let staffA: { id: string };
 let staffB: { id: string };
+let admin: { id: string };
 let cust: { id: string };
 const userIds: string[] = [];
 const reg = { pointIds: [] as string[], itemIds: [] as string[], storefrontIds: [] as string[] };
@@ -56,7 +65,36 @@ function inTransit(userId: string) {
   });
 }
 
-const eventCount = (requestId: string, kind: 'PARCEL_RECEIVED' | 'PARCEL_UNMATCHED' | 'UNMATCHED_RESOLVED') =>
+async function expiredMailIn(userId: string) {
+  const r = await createWasteRequest(prisma, {
+    userId,
+    method: 'MAIL_IN',
+    status: 'EXPIRED',
+    expiresAt: null,
+    pointId: wh.id,
+    lines: [{ itemId: item.id, declaredQty: 10 }],
+  });
+  await prisma.wasteRequest.update({ where: { id: r.id }, data: { closedAt: new Date(), closeReason: 'HOLD_EXPIRED' } });
+  return r;
+}
+
+async function withConfig(entries: [string, Prisma.InputJsonValue][], run: () => Promise<void>) {
+  const previous = await prisma.systemConfig.findMany({ where: { key: { in: entries.map(([k]) => k) } } });
+  try {
+    for (const [k, v] of entries) await setConfig(prisma, k, v);
+    clearConfigCache();
+    await run();
+  } finally {
+    for (const [k] of entries) {
+      const before = previous.find((c) => c.key === k);
+      if (before) await setConfig(prisma, k, before.value as never);
+      else await prisma.systemConfig.deleteMany({ where: { key: k } });
+    }
+    clearConfigCache();
+  }
+}
+
+const eventCount = (requestId: string, kind: 'PARCEL_RECEIVED' | 'PARCEL_UNMATCHED' | 'UNMATCHED_RESOLVED' | 'REQUEST_REOPENED') =>
   prisma.wasteEvent.count({ where: { requestId, kind } });
 const unmatchedCount = (requestId: string) => prisma.wasteUnmatchedParcel.count({ where: { relatedRequestId: requestId } });
 
@@ -71,6 +109,7 @@ beforeAll(async () => {
       WasteHoldService,
       WasteConfirmService,
       WasteReceiveService,
+      WasteAdminRequestsService,
       {
         provide: WasteNotifierService,
         useValue: {
@@ -97,6 +136,7 @@ beforeAll(async () => {
   prisma = moduleRef.get(PrismaService);
   receive = moduleRef.get(WasteReceiveService);
   confirm = moduleRef.get(WasteConfirmService);
+  adminRequests = moduleRef.get(WasteAdminRequestsService);
   await warmPool(prisma);
   savedConfig = await prisma.systemConfig.findMany({ where: { key: { in: CONFIG_KEYS } } });
   await setConfig(prisma, 'waste.enabled', true);
@@ -108,6 +148,7 @@ beforeAll(async () => {
   reg.itemIds.push(item.id);
   staffA = await newUser({ role: 'STAFF' });
   staffB = await newUser({ role: 'STAFF' });
+  admin = await newUser({ role: 'ADMIN' });
   cust = await newUser();
 });
 
@@ -259,6 +300,85 @@ describe('WasteReceiveService races (real Postgres)', () => {
     } finally {
       await setConfig(prisma, 'waste.enabled', true);
       clearConfigCache();
+    }
+  });
+
+  it('late parcel reopen ignores lane flag off, raised minimum and ship lock', async () => {
+    const c = await newUser();
+    const r = await expiredMailIn(c.id);
+    await prisma.wasteUserFlags.create({ data: { userId: c.id, shipLockedAt: new Date() } });
+    await withConfig(
+      [
+        ['waste.lane_mailin_enabled', false],
+        ['waste.mailin_min_points', 1_000_000],
+      ],
+      async () => {
+        await adminRequests.reopen(admin.id, r.id, { reason: 'kiện đến muộn' });
+      },
+    );
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({
+      status: 'RECEIVED',
+      closedAt: null,
+      closeReason: null,
+    });
+    await expect(eventCount(r.id, 'REQUEST_REOPENED')).resolves.toBe(1);
+  });
+
+  it('reopen is rejected when the monthly cap has no room', async () => {
+    const c = await newUser();
+    const r = await expiredMailIn(c.id);
+    const done = await createWasteRequest(prisma, {
+      userId: c.id,
+      method: 'MAIL_IN',
+      status: 'COMPLETED',
+      pointId: wh.id,
+      lines: [{ itemId: item.id, declaredQty: 55, receivedQty: 55 }],
+    });
+    await prisma.wasteRequest.update({ where: { id: done.id }, data: { pointsAwarded: 55_000 } });
+    await withConfig([['waste.customer_monthly_cap_points', 60_000]], async () => {
+      await expect(adminRequests.reopen(admin.id, r.id, { reason: 'kiện đến muộn' })).rejects.toMatchObject({ status: 409 });
+    });
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'EXPIRED' });
+    await expect(eventCount(r.id, 'REQUEST_REOPENED')).resolves.toBe(0);
+  });
+
+  it('reopen × reopen Promise.all', async () => {
+    const c = await newUser();
+    const r = await expiredMailIn(c.id);
+    const results = await Promise.allSettled([
+      adminRequests.reopen(admin.id, r.id, { reason: 'kiện đến muộn' }),
+      adminRequests.reopen(admin.id, r.id, { reason: 'kiện đến muộn' }),
+    ]);
+    const s = summarize(results);
+    expect(s.errors.join()).not.toMatch(/40P01|P2034/);
+    expect(s.fulfilled).toHaveLength(1);
+    expect(s.rejected).toHaveLength(1);
+    expect((s.rejected[0]!.reason as { getStatus: () => number }).getStatus()).toBe(409);
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'RECEIVED' });
+    await expect(eventCount(r.id, 'REQUEST_REOPENED')).resolves.toBe(1);
+  });
+
+  it.each(['reopen with unmatchedId then close of that row', 'close of that row then reopen with unmatchedId'])('%s', async (name) => {
+    const c = await newUser();
+    const r = await expiredMailIn(c.id);
+    const um = await receive.createUnmatched(staffA.id, { description: 'kiện đến muộn' });
+    const doReopen = () => adminRequests.reopen(admin.id, r.id, { reason: 'kiện đến muộn', unmatchedId: um.id });
+    const doClose = () => receive.resolveUnmatched(staffA.id, um.id, { action: 'CLOSE', note: 'đóng dòng' });
+    const lock = Prisma.sql`SELECT "id" FROM "waste_unmatched_parcels" WHERE "id" = ${um.id} FOR UPDATE`;
+    const reopenFirst = name.startsWith('reopen');
+    const results = reopenFirst ? await raceWithHold(prisma, lock, doReopen, doClose) : await raceWithHold(prisma, lock, doClose, doReopen);
+    expect(summarize(results).errors.join()).not.toMatch(/40P01|P2034/);
+    const [winner, loser] = results as [PromiseSettledResult<unknown>, PromiseSettledResult<unknown>];
+    expect(winner.status).toBe('fulfilled');
+    expect(loser).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ message: 'Dòng hàng không rõ chủ không còn mở' }) });
+    expect((loser as PromiseRejectedResult).reason).toMatchObject({ status: 409 });
+    await expect(prisma.wasteUnmatchedParcel.findUniqueOrThrow({ where: { id: um.id } })).resolves.toMatchObject({ status: 'RESOLVED' });
+    if (reopenFirst) {
+      await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'RECEIVED' });
+      await expect(eventCount(r.id, 'REQUEST_REOPENED')).resolves.toBe(1);
+    } else {
+      await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'EXPIRED' });
+      await expect(eventCount(r.id, 'REQUEST_REOPENED')).resolves.toBe(0);
     }
   });
 });
