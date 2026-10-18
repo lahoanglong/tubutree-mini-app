@@ -312,6 +312,8 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
   it('admin thu hồi điểm: hỏi lý do, báo số đã thu và số không thu được', async () => {
     const { c, api } = await mount({ isAdmin: true, detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000 }) });
     click(btn(c, 'Thu hồi điểm'));
+    expect(document.body.textContent).toContain('Chỉ thu được phần điểm khách chưa tiêu.');
+    expect(document.body.textContent).not.toContain('(10.3)');
     typeInto(dialogArea(), 'Khai khống');
     answerConfirm(true);
     await flush();

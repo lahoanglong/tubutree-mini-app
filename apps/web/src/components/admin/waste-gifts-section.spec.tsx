@@ -236,7 +236,7 @@ describe('hàng đợi quà chờ nhận', () => {
     ['QG-AB12CD', 'Lê Văn An', 'Quá hạn nhận'].forEach((t) => expect(r.textContent).toContain(t));
   });
 
-  it('Huỷ (chỉ admin): không chọn sẵn hoàn điểm, phải chọn rõ (10.3)', async () => {
+  it('Huỷ (chỉ admin): không chọn sẵn hoàn điểm, phải chọn rõ', async () => {
     for (const refund of [false, true]) {
       const { c, api } = await mountQueue({ rows: [adminRow()] });
       click(btn(c, 'Huỷ'));

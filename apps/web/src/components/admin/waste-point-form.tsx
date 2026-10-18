@@ -338,7 +338,7 @@ export function WastePointForm({
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Trạng thái" hint={warehouse ? 'Kho luôn Đang nhận; muốn dừng nhận mới thì tắt waste.enabled hoặc cờ waste.lane_*' : needsOwner ? 'Đang nhận: gắn chủ điểm rồi mới kích hoạt' : undefined}>
+        <Field label="Trạng thái" hint={warehouse ? 'Kho luôn Đang nhận; muốn dừng nhận mới thì tắt ở Cấu hình chung' : needsOwner ? 'Đang nhận: gắn chủ điểm rồi mới kích hoạt' : undefined}>
           <select
             name="status"
             className={INPUT_CLASS}

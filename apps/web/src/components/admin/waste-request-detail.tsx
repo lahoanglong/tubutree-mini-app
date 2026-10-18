@@ -480,7 +480,7 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
             type="button"
             className={BTN_SECONDARY}
             disabled={reverse.isPending}
-            onClick={() => void askReason('Thu hồi điểm', 'Chỉ thu được phần điểm khách chưa tiêu (10.3).', 'Thu hồi', reverse.mutate)}
+            onClick={() => void askReason('Thu hồi điểm', 'Chỉ thu được phần điểm khách chưa tiêu.', 'Thu hồi', reverse.mutate)}
           >
             Thu hồi điểm
           </button>

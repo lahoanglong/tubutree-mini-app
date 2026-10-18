@@ -94,7 +94,8 @@ describe('WastePointForm', () => {
     const status = wh.c.querySelector<HTMLSelectElement>('select[name="status"]')!;
     expect(status.disabled).toBe(true);
     expect(status.value).toBe('ACTIVE');
-    expect(wh.c.textContent).toContain('Kho luôn Đang nhận; muốn dừng nhận mới thì tắt waste.enabled hoặc cờ waste.lane_*');
+    expect(wh.c.textContent).toContain('Kho luôn Đang nhận; muốn dừng nhận mới thì tắt ở Cấu hình chung');
+    expect(wh.c.textContent).not.toContain('waste.');
     expect(q(wh.c, 'input[name="monthlyQuotaPoints"]')).toBeNull();
   });
 
