@@ -73,9 +73,10 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   }),
   getProductStock: async () => ({}),
   addToCart: vi.fn(),
-  placeOrder: async () => ({
+  // Máy chủ thật trả lại đúng cách thanh toán khách đã gửi; web rẽ nhánh theo đơn trả về nên mock phải làm giống.
+  placeOrder: async (body: { paymentMethod: string }) => ({
     code: 'TB-9', status: 'PENDING_PAYMENT', subtotal: 300000, discount: 0, shippingFee: 30000, total: 330000,
-    paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: '2026-10-01T00:00:00Z', items: [],
+    paymentMethod: body.paymentMethod, paymentStatus: 'UNPAID', createdAt: '2026-10-01T00:00:00Z', items: [],
   }),
   getBankQr: async () => ({
     orderCode: 'TB-9', amount: 330000, paymentStatus: 'UNPAID',
