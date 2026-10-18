@@ -46,11 +46,11 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 34 | `/ai-advisor` | ai-advisor.tsx | — | `/tu-van` | xong 17398cc5 | game | riêng tư | Cờ `aiAdvisorEnabled` |
 | 35 | `/affiliate` | affiliate.tsx | — | `/ctv` | xong 2d328824 | affiliate | riêng tư | Đăng ký CTV, link, hoa hồng, rút, thuế, mốc thưởng, lên đơn hộ. **Tiền: 2 lượt review** |
 | 36 | `/storefront` | storefront-builder.tsx | — | `/ctv/gian-hang` | xong 2d328824 | affiliate | riêng tư | Không lẫn với cổng `/merchant` |
-| 37 | `/dealer` | dealer.tsx | — | `/dai-ly` | mới | pro | riêng tư | Bảng giá, đơn, công nợ, báo cáo, thưởng. **Tiền: 2 lượt review** |
-| 38 | `/staff` | staff.tsx | — | `/nhan-vien` | mới | pro | riêng tư | Chấm công cần token vị trí Zalo (`attendance-api.ts:51`). Web: quản lý ca, xem trạng thái; vào/ra ca hiện lời dặn dùng Mini App. Không thêm đường chấm công bằng toạ độ trình duyệt (liên quan lương) |
-| 39 | `/my-payroll` | my-payroll.tsx | — | `/nhan-vien/bang-luong` | mới | pro | riêng tư | Sửa tài khoản ngân hàng nhận lương. **Tiền: 2 lượt review** |
-| 40 | `/brand-owner` | brand-owner.tsx (+ brand-owner-sales.tsx) | — | `/chu-thuong-hieu` | mới | pro | riêng tư | |
-| 41 | `/admin` | admin.tsx | `/admin` (nhiều tab, có "Chấm công") | `/admin?tab=...` | thiếu | pro | riêng tư | Thiếu: nhân sự (cấp/thu quyền), duyệt ca, mẫu ca, lương, sửa phiên công, duyệt đổi vỏ. Kiểm tab đã có trước khi làm |
+| 37 | `/dealer` | dealer.tsx | — | `/dai-ly` | xong cff53ab7 | pro | riêng tư | Bảng giá, đơn, công nợ, báo cáo, thưởng. **Tiền: 2 lượt review** |
+| 38 | `/staff` | staff.tsx | — | `/nhan-vien` | xong cff53ab7 | pro | riêng tư | Chấm công cần token vị trí Zalo (`attendance-api.ts:51`). Web: quản lý ca, xem trạng thái; vào/ra ca hiện lời dặn dùng Mini App. Không thêm đường chấm công bằng toạ độ trình duyệt (liên quan lương) |
+| 39 | `/my-payroll` | my-payroll.tsx | — | `/nhan-vien/bang-luong` | xong cff53ab7 | pro | riêng tư | Sửa tài khoản ngân hàng nhận lương. **Tiền: 2 lượt review** |
+| 40 | `/brand-owner` | brand-owner.tsx (+ brand-owner-sales.tsx) | — | `/chu-thuong-hieu` | xong cff53ab7 | pro | riêng tư | |
+| 41 | `/admin` | admin.tsx | `/admin` (nhiều tab, có "Chấm công") | `/admin?tab=...` | xong cff53ab7 | pro | riêng tư | Thiếu: nhân sự (cấp/thu quyền), duyệt ca, mẫu ca, lương, sửa phiên công, duyệt đổi vỏ. Kiểm tab đã có trước khi làm |
 | 42 | `/admin/community` | community-moderation.tsx | tab community trong `/admin` | `/admin?tab=community` | có | — | riêng tư | Chỉ cần ánh xạ |
 | 43 | `/recycle` | recycle.tsx | — | `/doi-rac` | mới | recycle | riêng tư | `eligibility !== 'OK'` (thiếu SĐT) thì hiện lời dặn mở Mini App (Q2) |
 | 44 | `/recycle/rules` | recycle-rules.tsx | — | `/doi-rac/quy-dinh` | mới | recycle | công khai | |
