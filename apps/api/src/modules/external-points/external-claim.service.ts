@@ -88,6 +88,8 @@ export interface CreatedClaim {
 export type Persisted =
   | { kind: 'REJECT'; code: ExternalClaimRejectCode }
   | { kind: 'SEARCHING' }
+  /** Mã đang được tài khoản khác chờ tìm đơn: lần gửi này không bao giờ được tìm tiếp. */
+  | { kind: 'WAITING_OTHER' }
   | { kind: 'UNKNOWN_SOURCE' }
   | { kind: 'OWN'; own: OwnClaim }
   | { kind: 'CLAIM'; created: CreatedClaim };
@@ -152,6 +154,17 @@ export class ExternalClaimService {
 
     if (persisted.kind === 'REJECT') throw rejectionOf(persisted.code);
     const masked = maskClaimCode(code);
+    if (persisted.kind === 'WAITING_OTHER') {
+      return {
+        status: 'CLAIMED_BY_OTHER',
+        claimId: null,
+        channel: null,
+        maskedCode: masked,
+        points: null,
+        expectedCreditAt: null,
+        message: 'Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.',
+      };
+    }
     if (persisted.kind === 'SEARCHING') {
       return {
         status: 'SEARCHING',
@@ -381,6 +394,7 @@ export class ExternalClaimService {
       const unknown = decision.kind === 'UNKNOWN_SOURCE';
       const externalOrderId = unknown ? (order?.id ?? null) : null;
       const note = unknown ? 'Nguồn đơn chưa xác định' : null;
+      let waitingOther = false;
       if (a.attemptId) {
         if (unknown) await tx.externalClaimAttempt.updateMany({ where: { id: a.attemptId, resolvedAt: null }, data: { externalOrderId, note } });
       } else {
@@ -389,10 +403,15 @@ export class ExternalClaimService {
         if (res.count === 0) {
           // Mã đang chờ chính là của khách này (gửi lại): không ghi NOT_FOUND để không tính vào khoá 24h.
           const waiting = await tx.externalClaimAttempt.findFirst({ where: { code, result: 'UNMATCHED', resolvedAt: null }, select: { userId: true } });
-          if (waiting?.userId !== userId) await addAttempt('NOT_FOUND', { externalOrderId, note });
+          // Lần chờ thuộc người khác thì lần của khách này ghi NOT_FOUND (CSKH thấy hai người cùng gửi một mã) và không được tìm tiếp.
+          if (waiting && waiting.userId !== userId) {
+            await addAttempt('NOT_FOUND', { externalOrderId, note });
+            waitingOther = true;
+          }
         }
       }
-      return unknown ? { kind: 'UNKNOWN_SOURCE' } : { kind: 'SEARCHING' };
+      if (unknown) return { kind: 'UNKNOWN_SOURCE' };
+      return waitingOther ? { kind: 'WAITING_OTHER' } : { kind: 'SEARCHING' };
     }
 
     if (!order) throw new Error('persist: quyết định CLAIM nhưng không có đơn');

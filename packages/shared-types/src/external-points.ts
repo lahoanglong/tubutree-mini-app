@@ -8,8 +8,11 @@ export type ExternalClaimKind = 'SCAN' | 'PHONE';
 
 export type ExternalClaimState = 'PENDING' | 'REVIEW' | 'HELD_NO_MEMBER' | 'CREDITED' | 'VOIDED' | 'REVERSED' | 'LAPSED';
 
-/** Kết quả gửi mã: CLAIMED = đã ghi nhận, điểm chờ; REVIEW = chờ nhân viên kiểm; SEARCHING = chưa thấy đơn, hệ thống tìm lại tối đa 3 ngày. */
-export type SubmitExternalClaimStatus = 'CLAIMED' | 'REVIEW' | 'SEARCHING';
+/**
+ * Kết quả gửi mã: CLAIMED = đã ghi nhận, điểm chờ; REVIEW = chờ nhân viên kiểm; SEARCHING = chưa thấy đơn, hệ thống tìm lại tối đa 3 ngày;
+ * CLAIMED_BY_OTHER = mã đang được tài khoản khác chờ tìm đơn (lần gửi này không được tìm tiếp, khách liên hệ CSKH).
+ */
+export type SubmitExternalClaimStatus = 'CLAIMED' | 'REVIEW' | 'SEARCHING' | 'CLAIMED_BY_OTHER';
 
 /** Lý do từ chối ổn định để miniapp chọn chữ; `message` là câu tiếng Việt sẵn dùng. */
 export type ExternalClaimRejectCode =

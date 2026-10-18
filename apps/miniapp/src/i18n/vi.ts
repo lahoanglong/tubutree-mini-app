@@ -555,6 +555,7 @@ export const vi = {
     resultAfterDelivery: 'Điểm được cộng sau khi đơn giao thành công và qua thời gian đối soát.',
     resultReview: 'Tubu đang kiểm tra đơn này, có kết quả bạn sẽ nhận thông báo.',
     resultSearching: 'Chưa thấy đơn này. Tubu sẽ tìm lại trong vài ngày tới và báo cho bạn khi có.',
+    resultClaimedByOther: 'Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.',
     searchingTitle: 'Đang tìm đơn',
     listTitle: 'Đơn ngoài app của bạn',
     listEmpty: 'Bạn chưa tích điểm đơn ngoài app nào.',
