@@ -55,7 +55,9 @@ export default function AddToCart({
   const [localId, setLocalId] = useState<string>((inStock[0] ?? isrVariations[0])?.id ?? '');
   const selectedId = shared?.selectedId ?? localId;
   const setSelectedId = shared?.setSelectedId ?? setLocalId;
-  const [qty, setQty] = useState(1);
+  const [localQty, setLocalQty] = useState(1);
+  const qty = shared?.quantity ?? localQty;
+  const setQty = shared?.setQuantity ?? setLocalQty;
   const [busy, setBusy] = useState(false);
   // Đang làm "Mua ngay" (thêm giỏ rồi đi tiếp) hay chỉ "Thêm vào giỏ": quyết định chữ trên nút nào đang quay.
   const [buying, setBuying] = useState(false);
