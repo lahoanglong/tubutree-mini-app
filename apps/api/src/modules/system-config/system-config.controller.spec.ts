@@ -185,7 +185,7 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
       welcomeVoucher: { amount: 30000, minOrder: 199000 },
       firstOrderFreeShip: { enabled: false, minSubtotal: 0 },
     });
-    expect(out.loyalty).toEqual({ vndPerPoint: 10000, vndPerPointRedeem: 1000 });
+    expect(out.loyalty).toEqual({ vndPerPoint: 10000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2, pointExpireMonths: 12 });
     expect(out.homeNewCustomerLayout).toBe(false);
     expect(out.communityPublicPreview).toBe(false);
   });
@@ -219,6 +219,31 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
     expect(out.newCustomer.firstOrderFreeShip.enabled).toBe(false);
     expect(out.homeNewCustomerLayout).toBe(false);
     expect(out.communityPublicPreview).toBe(false);
+  });
+});
+
+// D5-10: câu trả lời FAQ dự phòng ("tối đa 20% giá trị đơn", "điểm có hạn 12 tháng") đọc từ đây, cùng khoá và mặc định với getOverview.
+describe('SystemConfigController.publicConfig — trần dùng điểm và hạn điểm (D5-10)', () => {
+  it('admin đổi → trả đúng giá trị của loyalty.max_redeem_pct và loyalty.point_expire_months', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({ 'loyalty.max_redeem_pct': 0.3, 'loyalty.point_expire_months': 6 }),
+    ).publicConfig();
+    expect(out.loyalty).toMatchObject({ maxRedeemPct: 0.3, pointExpireMonths: 6 });
+  });
+
+  it('trần 0 là hợp lệ (tắt dùng điểm ở thanh toán), không bị thay bằng mặc định', async () => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.max_redeem_pct': 0 })).publicConfig();
+    expect(out.loyalty.maxRedeemPct).toBe(0);
+  });
+
+  it.each(['0.3', 1.5, -0.1, null])('trần sai (%p) → mặc định 0.2 như getOverview', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.max_redeem_pct': bad })).publicConfig();
+    expect(out.loyalty.maxRedeemPct).toBe(0.2);
+  });
+
+  it.each(['12', 0, -3, Number.NaN, null])('số tháng hạn điểm sai (%p) → 12 tháng như pointsExpiryFrom', async (bad) => {
+    const out = await new SystemConfigController(makeConfig({ 'loyalty.point_expire_months': bad })).publicConfig();
+    expect(out.loyalty.pointExpireMonths).toBe(12);
   });
 });
 

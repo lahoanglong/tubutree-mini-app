@@ -6,6 +6,10 @@ import { PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
 import { EVENT_REWARD_MAX_POINTS } from '../feed/community-limits';
 import { DEALER_MAX_DISCOUNT_PCT_DEFAULT, DEALER_REVIEW_HOURS_DEFAULT } from '../dealer/dealer-config';
 import { FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
+import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
+
+/** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
+const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
 
 /** Admin để trống (hoặc lưu sai kiểu) thì trả null để miniapp ẩn dòng, không hiện thông tin giả. */
 function displayText(v: unknown): string | null {
@@ -43,6 +47,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     firstOrderFreeMin,
     vndPerPoint,
     vndPerPointRedeem,
+    maxRedeemPct,
+    pointExpireMonths,
     homeNewCustomerLayout,
     communityPublicPreview,
     dealerMaxDiscountPct,
@@ -73,6 +79,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, 0),
     config.get<number>('loyalty.vnd_per_point', 10000),
     config.get<number>('loyalty.vnd_per_point_redeem', 1000),
+    config.get<unknown>('loyalty.max_redeem_pct', LOYALTY_MAX_REDEEM_PCT_DEFAULT),
+    config.get<unknown>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS),
     config.get<unknown>('home.new_customer_layout', false),
     config.get<unknown>(PUBLIC_PREVIEW_KEY, false),
     config.get<unknown>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT),
@@ -97,7 +105,13 @@ export async function buildPublicConfig(config: SystemConfigService) {
       // Chỉ boolean true thật mới bật: chuỗi "false" là truthy, cờ gõ nhầm không được hứa freeship.
       firstOrderFreeShip: { enabled: firstOrderFree === true, minSubtotal: firstOrderFreeMin },
     },
-    loyalty: { vndPerPoint, vndPerPointRedeem },
+    // Hai giá trị sau giải thích cách dùng/hạn điểm; chuẩn hoá giống getOverview và pointsExpiryFrom để chữ nói đúng điều server làm.
+    loyalty: {
+      vndPerPoint,
+      vndPerPointRedeem,
+      maxRedeemPct: typeof maxRedeemPct === 'number' && maxRedeemPct >= 0 && maxRedeemPct <= 1 ? maxRedeemPct : LOYALTY_MAX_REDEEM_PCT_DEFAULT,
+      pointExpireMonths: normalizePointExpireMonths(pointExpireMonths),
+    },
     homeNewCustomerLayout: homeNewCustomerLayout === true,
     // Miniapp chỉ gọi /feed/public-preview khi cờ này true (API vẫn tự kiểm cờ và trả 404 khi tắt).
     communityPublicPreview: communityPublicPreview === true,

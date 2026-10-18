@@ -71,6 +71,31 @@ describe('Trang Về Tubu Tree (C-019)', () => {
     expect(document.body.textContent).not.toContain('ZaloPay');
   });
 
+  // D5-10: bản dự phòng đọc số từ cấu hình công khai, không còn "10.000đ", "20%", "12 tháng", "7 ngày" viết cứng.
+  it('FAQ dự phòng: câu Điểm Xanh và đổi/trả nói đúng số trong cấu hình admin đặt', async () => {
+    mocks.apiGet.mockResolvedValue({ data: [] });
+    mocks.getPublicConfig.mockResolvedValue({
+      support: SUPPORT,
+      loyalty: { vndPerPoint: 12_000, vndPerPointRedeem: 1_000, maxRedeemPct: 0.3, pointExpireMonths: 6 },
+      returnWindowDays: 14,
+    });
+    renderPage();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole('button', { name: /Điểm Xanh là gì/ }));
+    expect(await screen.findByText(/12\.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh\. 1 Điểm Xanh đổi 1\.000đ khi thanh toán, tối đa 30% giá trị đơn\. Điểm có hạn 6 tháng\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Chính sách đổi\/trả/ }));
+    expect(await screen.findByText(/trong vòng 14 ngày từ khi nhận/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/10\.000đ|tối đa 20%|12 tháng|7 ngày/);
+  });
+
+  it('FAQ dự phòng khi cấu hình không có số: không hiện con số mặc định thay cho số thật', async () => {
+    mocks.apiGet.mockResolvedValue({ data: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Điểm Xanh là gì/ }));
+    expect(await screen.findByText(/Mỗi đơn đã giao được tích Điểm Xanh\./)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/10\.000đ|tối đa 20%|12 tháng/);
+  });
+
   it('admin để trống hết liên hệ → ẩn cả khối Hỗ trợ', async () => {
     mocks.getPublicConfig.mockResolvedValue({ support: { hotline: null, email: null, zaloOaName: null } });
     renderPage();
