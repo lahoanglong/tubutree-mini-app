@@ -58,7 +58,7 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 4. Lời nhắc tự mất khi hàng đã nhận. Không tự mất thì mở đơn, ghi chú, bấm "Đã xử lý".
 5. Không hoàn tiền tay. Tiền và điểm do hệ thống tính lúc CSKH duyệt.
 
-**Thu gom vật liệu tái chế (Gomdon).** Đơn có thẻ GOMDON giao bằng vận đơn Gomdon (BestExpress). Mã vận đơn nằm ở chi tiết đơn Tubu, mục "Thu gom vật liệu tái chế (Gomdon)". Trạng thái giao theo Gomdon: bấm "Đã thu tiền" trên Pancake không chốt được đơn. Thẻ "Cần xử lý thu gom" là đơn có vận đơn lỗi. Mở đơn, đọc dòng giải thích trong mục này, rồi chọn:
+**Thu kèm rác (Gomdon).** Đơn có thẻ GOMDON giao bằng vận đơn Gomdon (BestExpress). Mã vận đơn nằm ở chi tiết đơn Tubu, khối "Thu kèm rác (Gomdon)". Trạng thái giao theo Gomdon: bấm "Đã thu tiền" trên Pancake không chốt được đơn. Thẻ "Cần xử lý thu gom" là đơn có vận đơn lỗi. Mở đơn, đọc dòng giải thích trong mục này, rồi chọn:
 - "Tạo lại vận đơn Gomdon": vận đơn lỗi hoặc chưa tạo.
 - "Huỷ vận đơn Gomdon": đơn đã huỷ mà vận đơn còn sống.
 - "Đã xử lý tay" (ghi chú): bạn đã xử lý ngoài hệ thống, ví dụ gọi hãng tạo vận đơn riêng.
