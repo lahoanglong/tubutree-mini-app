@@ -44,3 +44,21 @@ export function maskPhoneLikeRuns(text: string): string {
       .join('');
   });
 }
+
+/**
+ * SĐT Việt Nam viết trong chữ tự do: đầu 0 / 84 / +84 rồi 9–10 chữ số, giữa các chữ số cho một dấu cách . -. Hẹp hơn
+ * `maskPhoneLikeRuns` có chủ ý: màn kế toán phải còn đọc được mã giao dịch ngân hàng (FT26270…), số tiền và mã đơn để đối soát.
+ */
+const VN_PHONE_IN_TEXT = /(?<![\p{Nd}\p{L}])(?:\+?84|0)(?:[\s.\-]?\p{Nd}){8,10}(?!\p{Nd})/gu;
+
+/** Che SĐT VN trong chữ tự do, giữ 3 chữ số cuối và ký tự cách. */
+export function maskVnPhonesInText(text: string): string {
+  return text.normalize('NFKC').replace(VN_PHONE_IN_TEXT, (run) => {
+    let keep = 3;
+    return [...run]
+      .reverse()
+      .map((ch) => (/\p{Nd}/u.test(ch) ? (keep-- > 0 ? ch : '*') : ch))
+      .reverse()
+      .join('');
+  });
+}

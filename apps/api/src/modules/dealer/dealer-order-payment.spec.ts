@@ -195,6 +195,13 @@ describe('DealerOrderAdminController (POST /api/admin/dealer-orders/:id/confirm-
     expect(own.updateMany).not.toHaveBeenCalled();
   });
 
+  it('Kế toán: đơn đặt hộ có SĐT người nhận trùng SĐT của mình → 403', async () => {
+    const o = build({ ...DEALER_ORDER, shippingAddress: { phone: '0911 222 333' } } as O);
+    (o.prisma as { user: unknown }).user = { findUnique: jest.fn().mockResolvedValue({ phone: '+84911222333' }) };
+    await expect(o.svc.confirmDealerOrderPayment('kt1', 'DLR1', { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(o.updateMany).not.toHaveBeenCalled();
+  });
+
   it('ConfirmDealerPaymentDto: bankRef/note tuỳ chọn, giới hạn độ dài', async () => {
     expect(await validate(plainToInstance(ConfirmDealerPaymentDto, {}))).toHaveLength(0);
     expect(await validate(plainToInstance(ConfirmDealerPaymentDto, { bankRef: 'FT1', note: 'ok' }))).toHaveLength(0);

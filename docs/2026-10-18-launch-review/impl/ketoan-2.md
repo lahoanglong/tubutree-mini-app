@@ -29,7 +29,7 @@ Vẫn chỉ ADMIN (KE_TOAN nhận 403): PUT /admin/orders/:id/status (CSKH/KHO, 
 - Hoá đơn VAT: chỉ ghi log máy chủ kèm actor id như ADMIN (không có bảng lịch sử).
 
 ## Kế toán thấy gì
-- Danh sách đơn và lịch sử trạng thái: đầy đủ thông tin tiền, sản phẩm, hoá đơn, mã giao dịch. SĐT khách, SĐT người nhận (shippingAddress.phone), SĐT trong ghi chú đơn, cảnh báo Gomdon, ghi chú lịch sử và SĐT người thao tác bị che còn 3 số cuối (`seesFullOrderPhones`: chỉ ADMIN, CSKH, KHO thấy đủ; người có KE_TOAN và KHO/CSKH thấy đủ vì công việc kia cần). Cùng quy ước CSV đơn.
+- Danh sách đơn và lịch sử trạng thái: đầy đủ thông tin tiền, sản phẩm, hoá đơn; mã giao dịch ngân hàng, số tiền, mã đơn trong ghi chú KHÔNG bị che. SĐT khách, SĐT người nhận (shippingAddress.phone), SĐT khách cuối đơn CTV (endCustomerKey), SĐT dạng chữ trong ghi chú đơn, recyclingNote, cảnh báo Gomdon, ghi chú lịch sử và SĐT người thao tác bị che còn 3 số cuối (chữ tự do chỉ che dãy dạng SĐT VN: đầu 0/84/+84, 9-10 số, cho dấu cách . -; `maskVnPhonesInText`) (`seesFullOrderPhones`: chỉ ADMIN, CSKH, KHO thấy đủ; người có KE_TOAN và KHO/CSKH thấy đủ vì công việc kia cần). Cùng quy ước CSV đơn.
 - Danh sách cashback: SĐT khách che 3 số cuối.
 - Đại lý và công nợ, thưởng đại lý: SĐT đại lý hiện đủ (cần nhận diện người nhận tiền/thưởng; không phải khách lẻ).
 - Danh sách đơn còn nút "Đã nhận tiền" (canConfirmPayment), Xuất CSV, hoá đơn VAT, khối công nợ/xác nhận chuyển khoản trên đơn đại lý; không còn nút đổi trạng thái, thao tác kho, đồng bộ lại sau giao, thông tin giới thiệu CTV.
@@ -46,3 +46,9 @@ API: admin.controller.ts, admin.service.ts, order-actor-transitions.ts, dealer-a
 - `cd apps/api && npx jest src/common src/modules/admin src/modules/ops src/modules/dealer src/modules/cashback src/modules/affiliate/payout`: 84 suites, 1585 tests pass.
 - `cd apps/web && npx vitest run src/app/admin/page.spec.tsx src/components/admin/dealer-accounts-tab.spec.tsx src/components/admin/dealer-claims-tab.spec.tsx src/components/admin/order-status-actions.spec.tsx`: pass.
 - tsc api và web sạch. Race spec DB chưa chạy.
+
+## Sửa sau review Opus
+- Tiền về muộn: Kế toán gọi confirm-payment trên đơn CANCELLED/RETURNED bị 403 trước markPaid; nếu markPaid trả CLOSED (đơn bị huỷ giữa chừng) cũng 403 và không tạo khoản hoàn LATE_PAYMENT. Chỉ ADMIN ghi nhận tiền về muộn. Web ẩn nút "Ghi nhận tiền về muộn" với non-ADMIN (`canRecordLate`).
+- "Đơn của chính mình" nay gồm cả đơn CTV đặt hộ có endCustomerKey hoặc shippingAddress.phone trùng SĐT nhân viên (`isStaffOwnOrder`, chuẩn hoá bằng toLocalPhone), cho đơn lẻ và đơn đại lý.
+- Sổ công nợ đại lý: ghi chú "Kế toán <id> xác nhận…" khi Kế toán ghi, "Admin <id>" khi ADMIN.
+- Kiểm thêm: race spec admin-confirm-payment, admin-invoice, dealer-claim-reopen, dealer-credit-limit, dealer-accounts-admin, dealer-bonus: 6 suites, 34 tests pass trên Postgres tạm cổng 5564 (đã xoá container). jest API 84 suites, 1591 tests pass.

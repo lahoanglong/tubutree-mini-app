@@ -1350,7 +1350,9 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
         status: 'PENDING_PAYMENT',
         user: { id: 'u1', phone: '0912345678', fullName: 'Khách A' },
         shippingAddress: { recipient: 'B', phone: '0987654321', address: 'Hà Nội' },
-        note: 'gọi 0912 345 678 trước',
+        note: 'gọi 0912 345 678 trước, CK FT26270123456789 số tiền 12.500.000đ',
+        endCustomerKey: '0933444555',
+        recyclingNote: 'liên hệ 0944 555 666',
       },
     ];
     const kt = await list(orders, [], { role: 'STAFF', staffPermissions: ['KE_TOAN'] });
@@ -1360,10 +1362,15 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
       user: { phone: '*******678', fullName: 'Khách A' },
       shippingAddress: { phone: '*******321', recipient: 'B', address: 'Hà Nội' },
     });
-    expect((kt.K as unknown as { note: string }).note).not.toContain('0912');
+    const ktRow = kt.K as unknown as { note: string; endCustomerKey: string; recyclingNote: string };
+    expect(ktRow.note).not.toContain('0912');
+    expect(ktRow.note).toContain('FT26270123456789');
+    expect(ktRow.note).toContain('12.500.000đ');
+    expect(ktRow.endCustomerKey).toBe('*******555');
+    expect(ktRow.recyclingNote).not.toContain('0944');
     for (const viewer of [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: ['CSKH'] }]) {
       const full = await list(orders, [], viewer);
-      expect(full.K).toMatchObject({ user: { phone: '0912345678' }, shippingAddress: { phone: '0987654321' } });
+      expect(full.K).toMatchObject({ user: { phone: '0912345678' }, shippingAddress: { phone: '0987654321' }, endCustomerKey: '0933444555' });
     }
   });
 
@@ -2099,7 +2106,7 @@ describe('AdminService.orderStatusHistory — che SĐT theo người xem (B18)',
       makePrisma({
         order: { findFirst: jest.fn().mockResolvedValue({ id: 'o1', code: 'TB-1' }) },
         orderStatusHistory: {
-          findMany: jest.fn().mockResolvedValue([{ id: 'h1', actorId: 's1', note: 'gọi 0912 345 678', toStatus: 'CONFIRMED' }]),
+          findMany: jest.fn().mockResolvedValue([{ id: 'h1', actorId: 's1', note: 'gọi 0912 345 678 · Mã GD FT26270123456789', toStatus: 'CONFIRMED' }]),
         },
         user: { findMany: jest.fn().mockResolvedValue([{ id: 's1', fullName: 'NV', phone: '0901234567' }]) },
       }),
@@ -2108,10 +2115,11 @@ describe('AdminService.orderStatusHistory — che SĐT theo người xem (B18)',
   it('Kế toán: SĐT trong ghi chú và của người thao tác bị che; ADMIN/CSKH thấy nguyên', async () => {
     const kt = await svcFor().orderStatusHistory('TB-1', { role: 'STAFF', staffPermissions: ['KE_TOAN'] });
     expect(kt.history[0]!.note).not.toContain('0912');
+    expect(kt.history[0]!.note).toContain('FT26270123456789');
     expect(kt.history[0]!.actor).toMatchObject({ phone: '*******567' });
     for (const viewer of [undefined, { role: 'STAFF', staffPermissions: ['CSKH'] }]) {
       const full = await svcFor().orderStatusHistory('TB-1', viewer);
-      expect(full.history[0]!.note).toBe('gọi 0912 345 678');
+      expect(full.history[0]!.note).toBe('gọi 0912 345 678 · Mã GD FT26270123456789');
       expect(full.history[0]!.actor).toMatchObject({ phone: '0901234567' });
     }
   });
@@ -2177,6 +2185,29 @@ describe('AdminService.confirmOrderPayment', () => {
     expect(own.orderStatus.markPaid).not.toHaveBeenCalled();
     const admin = make(bankOrder({ userId: 'admin-1' }));
     await expect(admin.svc.confirmOrderPayment('admin-1', 'TB-1', {})).resolves.toMatchObject({ ok: true });
+  });
+
+  it('Kế toán: đơn CTV đặt hộ có SĐT khách cuối hoặc người nhận trùng SĐT của mình → 403, không lật PAID', async () => {
+    for (const over of [{ endCustomerKey: '0911222333' }, { shippingAddress: { recipient: 'A', phone: '+84 911 222 333' } }]) {
+      const m = make(bankOrder({ userId: 'ctv-1', ...over }));
+      (m.prisma as unknown as { user: { findUnique: jest.Mock } }).user = { findUnique: jest.fn().mockResolvedValue({ phone: '0911222333' }) };
+      await expect(m.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/của chính mình/);
+      expect(m.orderStatus.markPaid).not.toHaveBeenCalled();
+    }
+  });
+
+  it('Kế toán: đơn đã huỷ/trả → 403 trước markPaid; đơn bị huỷ giữa chừng (CLOSED) → 403, không tạo khoản hoàn; ADMIN vẫn ghi được', async () => {
+    for (const status of ['CANCELLED', 'RETURNED']) {
+      const m = make(bankOrder({ status, userId: 'u9' }), 'CLOSED');
+      await expect(m.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/quản trị viên/);
+      expect(m.orderStatus.markPaid).not.toHaveBeenCalled();
+    }
+    const race = make(bankOrder({ userId: 'u9' }), 'CLOSED');
+    await expect(race.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/vừa bị huỷ/);
+    const createMany = (race.prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock } }).orderCustomerRefund.createMany;
+    expect(createMany).not.toHaveBeenCalled();
+    const admin = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    await expect(admin.svc.confirmOrderPayment('admin-1', 'TB-1', {})).resolves.toMatchObject({ latePayment: true });
   });
 
   it('bấm lại / admin khác đã bấm → 200 alreadyPaid, không lỗi', async () => {

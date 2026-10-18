@@ -69,7 +69,8 @@ import {
   MERCHANT_PRODUCT_EDIT_STALE,
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
-import { maskPhone, maskPhoneKeepLast3, maskPhoneLikeRuns } from '../../common/mask-pii';
+import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
+import { isStaffOwnOrder } from '../../common/staff-own-order';
 import {
   actorLabel,
   actorUserId,
@@ -138,14 +139,25 @@ function pancakeCodeChanged(current: string | null) {
  * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
  */
 /** Che SĐT khách/người nhận và số dạng SĐT trong ghi chú/cảnh báo của một dòng danh sách đơn (người xem không phải ADMIN/CSKH/KHO). */
-function maskOrderPhones<T extends { user?: { phone: string | null } | null; shippingAddress?: unknown; note?: string | null; gomdonAlerts?: { message: string }[] }>(o: T): T {
+function maskOrderPhones<
+  T extends {
+    user?: { phone: string | null } | null;
+    shippingAddress?: unknown;
+    note?: string | null;
+    endCustomerKey?: string | null;
+    recyclingNote?: string | null;
+    gomdonAlerts?: { message: string }[];
+  },
+>(o: T): T {
   const addr = o.shippingAddress && typeof o.shippingAddress === 'object' ? (o.shippingAddress as Record<string, unknown>) : null;
   return {
     ...o,
     ...(o.user ? { user: { ...o.user, phone: o.user.phone ? maskPhoneKeepLast3(o.user.phone) : o.user.phone } } : {}),
     ...(addr ? { shippingAddress: { ...addr, ...(typeof addr.phone === 'string' ? { phone: maskPhoneKeepLast3(addr.phone) } : {}) } } : {}),
-    ...(o.note ? { note: maskPhoneLikeRuns(o.note) } : {}),
-    ...(o.gomdonAlerts ? { gomdonAlerts: o.gomdonAlerts.map((a) => ({ ...a, message: maskPhoneLikeRuns(a.message) })) } : {}),
+    ...(o.note ? { note: maskVnPhonesInText(o.note) } : {}),
+    ...(o.endCustomerKey ? { endCustomerKey: maskPhoneKeepLast3(o.endCustomerKey) } : {}),
+    ...(o.recyclingNote ? { recyclingNote: maskVnPhonesInText(o.recyclingNote) } : {}),
+    ...(o.gomdonAlerts ? { gomdonAlerts: o.gomdonAlerts.map((a) => ({ ...a, message: maskVnPhonesInText(a.message) })) } : {}),
   };
 }
 
@@ -249,7 +261,7 @@ export class AdminService {
         const actor = r.actorId ? (actorMap.get(r.actorId) ?? null) : null;
         return {
           ...r,
-          note: !full && r.note ? maskPhoneLikeRuns(r.note) : r.note,
+          note: !full && r.note ? maskVnPhonesInText(r.note) : r.note,
           actor: !full && actor ? { ...actor, phone: actor.phone ? maskPhoneKeepLast3(actor.phone) : actor.phone } : actor,
         };
       }),
@@ -1010,11 +1022,17 @@ export class AdminService {
   ) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, userId: true, type: true, paymentMethod: true, total: true, status: true },
+      select: { id: true, code: true, userId: true, endCustomerKey: true, shippingAddress: true, type: true, paymentMethod: true, total: true, status: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     // Nhân viên tự đặt hàng rồi tự bấm "Đã nhận tiền" là lấy hàng không trả tiền: đơn của chính mình nhờ quản trị viên.
-    if (opts.byStaff && order.userId === adminId) throw new ForbiddenException('Không xác nhận đã nhận tiền cho đơn của chính mình — nhờ quản trị viên.');
+    if (opts.byStaff && (await isStaffOwnOrder(this.prisma, adminId, order))) {
+      throw new ForbiddenException('Không xác nhận đã nhận tiền cho đơn của chính mình (kể cả đơn đặt hộ bằng SĐT của bạn) — nhờ quản trị viên.');
+    }
+    // Tiền về muộn của đơn đã huỷ/trả sinh khoản hoàn LATE_PAYMENT (khách chọn Ví là nhận tiền ngay) nên cần ADMIN, không tự ghi tự chi.
+    if (opts.byStaff && (order.status === 'CANCELLED' || order.status === 'RETURNED')) {
+      throw new ForbiddenException(`Đơn ${order.code} đã huỷ/trả — ghi nhận tiền về muộn cần quản trị viên.`);
+    }
     if (order.type === 'DEALER') {
       throw new BadRequestException(
         `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
@@ -1045,6 +1063,8 @@ export class AdminService {
       note: [opts.byStaff ? 'Kế toán xác nhận' : 'Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
     });
     if (outcome === 'CLOSED') {
+      // Đơn bị huỷ/trả giữa chừng: nhân viên không tạo khoản hoàn.
+      if (opts.byStaff) throw new ForbiddenException(`Đơn ${order.code} vừa bị huỷ/trả — ghi nhận tiền về muộn cần quản trị viên.`);
       // D2: tiền về sau khi đơn đã huỷ/trả → không "hồi sinh" đơn, ghi khoản hoàn vào hàng đợi Hoàn tiền khách (cùng
       // đường webhook Pancake/ZaloPay); khách chọn Ví hay ngân hàng. Đơn đã có khoản tiền về muộn (webhook hay admin
       // khác ghi, mã GD gõ khác) thì không tạo khoản thứ hai.

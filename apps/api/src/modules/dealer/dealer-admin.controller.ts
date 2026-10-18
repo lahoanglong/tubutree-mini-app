@@ -117,6 +117,7 @@ export class DealerCreditAdminController {
   @Post(':userId/credit-payment')
   recordPayment(
     @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
     @Param('userId') userId: string,
     @Body() dto: RecordDealerCreditPaymentDto,
     @Headers('idempotency-key') idempotencyKey?: string,
@@ -125,6 +126,7 @@ export class DealerCreditAdminController {
       note: dto.note,
       bankRef: dto.bankRef,
       idempotencyKey,
+      byStaff: role !== 'ADMIN',
     });
   }
 }

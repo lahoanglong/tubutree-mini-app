@@ -299,6 +299,21 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(buttonLabels(container)).not.toContain('Ghi nhận tiền về muộn');
   });
 
+  it('Kế toán (canConfirmPayment=true, canRecordLate=false): đơn đã huỷ không có nút ghi nhận tiền về muộn; đơn đang chờ vẫn có "Đã nhận tiền"', () => {
+    const late = mount(
+      <OrderStatusActions
+        order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })}
+        canConfirmPayment
+        canRecordLate={false}
+      />,
+    );
+    expect(buttonLabels(late.container)).not.toContain('Ghi nhận tiền về muộn');
+    const live = mount(
+      <OrderStatusActions order={order({ status: 'PENDING_PAYMENT', allowedTransitions: [], canConfirmPayment: true })} canConfirmPayment canRecordLate={false} />,
+    );
+    expect(buttonLabels(live.container)).toContain('Đã nhận tiền');
+  });
+
   it('"Hủy đơn" đơn đã trả trước: hộp thoại nêu số tiền hoàn và nơi nhận (Ví Tubu của khách), điểm đã dùng được trả lại', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
     const { container } = mount(

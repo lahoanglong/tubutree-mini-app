@@ -131,6 +131,15 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     return { svc, prisma, ledgerCreate, aggregate, findFirst, notify };
   }
 
+  it('Kế toán ghi nhận (byStaff): ghi chú sổ công nợ ghi nhãn "Kế toán" + id; ADMIN vẫn là "Admin"', async () => {
+    const kt = build({ debt: 500_000 });
+    await kt.svc.adminRecordCreditPayment('kt1', 'd1', 100_000, { byStaff: true });
+    expect((kt.ledgerCreate.mock.calls[0]![0] as { data: { note: string } }).data.note).toMatch(/^Kế toán kt1 xác nhận/);
+    const ad = build({ debt: 500_000 });
+    await ad.svc.adminRecordCreditPayment('admin1', 'd1', 100_000);
+    expect((ad.ledgerCreate.mock.calls[0]![0] as { data: { note: string } }).data.note).toMatch(/^Admin admin1 xác nhận/);
+  });
+
   it('số tiền <= dư nợ → tạo dòng PAYMENT delta ÂM đúng bằng amount, ghi rõ admin + bankRef + note, báo đại lý', async () => {
     const { svc, ledgerCreate, notify } = build({ debt: 500_000 });
     await svc.adminRecordCreditPayment('admin1', 'd1', 300_000, { bankRef: 'FT123', note: 'VCB' });
@@ -223,6 +232,7 @@ describe('DealerCreditAdminController (POST /api/admin/dealers/:userId/credit-pa
     const svc = { adminRecordCreditPayment: jest.fn().mockResolvedValue({ balance: 0, entries: [] }) };
     await new DealerCreditAdminController(svc as never).recordPayment(
       'admin1',
+      'ADMIN',
       'd1',
       { amount: 100_000, bankRef: 'FT1', note: 'x' },
       'idem-1',
@@ -231,6 +241,7 @@ describe('DealerCreditAdminController (POST /api/admin/dealers/:userId/credit-pa
       note: 'x',
       bankRef: 'FT1',
       idempotencyKey: 'idem-1',
+      byStaff: false,
     });
   });
 
