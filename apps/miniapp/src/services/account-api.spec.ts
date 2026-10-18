@@ -55,6 +55,11 @@ describe('pointsReasonLabel', () => {
     ['REFERRAL_ORDER2_DEBT:u1', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['REFERRAL_MILESTONE_DEBT:u1:3', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['MERGED:guest-1:ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],
+    ['PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên'],
+    ['PANCAKE_CHAT_ORDER_REVERSED:1234567', 'Thu hồi điểm đơn đặt qua tư vấn viên'],
+    ['MARKETPLACE_ORDER:2610A1B2C3', 'Tích điểm đơn mua trên sàn'],
+    ['MARKETPLACE_ORDER_REVERSED:2610A1B2C3', 'Thu hồi điểm đơn mua trên sàn'],
+    ['MERGED:guest-1:PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên'],
   ])('%s → %s', (reason, label) => {
     expect(pointsReasonLabel(reason)).toBe(label);
   });

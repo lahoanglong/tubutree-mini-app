@@ -27,7 +27,7 @@ describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng t
  * checkout.service (ORDER_REDEEM, ORDER_REDEEM_CONVERTED), order-reversal.service (ORDER_REFUND_*, RETURN_*),
  * wallet/referral-reward + reward-points.service (REFERRAL_*), feed/community-reward.service (COMMUNITY_*),
  * storefront-quest.service, affiliate.service (CTV_MILESTONE), game.service (GAME_*, MISSION), season-pass.service,
- * reviews.service (REVIEW, REVIEW_DELETE), migration pd3_xu_to_points (XU_TO_POINTS), auth.service gộp phiên (tiền tố MERGED:<id>:).
+ * reviews.service (REVIEW, REVIEW_DELETE), external-points (PANCAKE_CHAT_ORDER, MARKETPLACE_ORDER và hai mã _REVERSED), migration pd3_xu_to_points (XU_TO_POINTS), auth.service gộp phiên (tiền tố MERGED:<id>:).
  * Thêm mã mới ở API thì thêm một dòng ở đây và ở ledger-labels.ts (và account-api.ts của miniapp).
  */
 const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail: string]> = [
@@ -69,6 +69,10 @@ const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail
   ['MISSION:WATER_5:2026-10-15', 'Thưởng nhiệm vụ Vườn Xanh', 'Thưởng nhiệm vụ Vườn Xanh'],
   ['REVIEW:ca-phe', 'Đánh giá sản phẩm', 'Đánh giá sản phẩm'],
   ['REVIEW_DELETE:prod1', 'Thu hồi điểm đánh giá đã xoá', 'Thu hồi điểm đánh giá đã xoá'],
+  ['PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên', 'Tích điểm đơn đặt qua tư vấn viên'],
+  ['PANCAKE_CHAT_ORDER_REVERSED:1234567', 'Thu hồi điểm đơn đặt qua tư vấn viên', 'Thu hồi điểm đơn đặt qua tư vấn viên'],
+  ['MARKETPLACE_ORDER:2610A1B2C3', 'Tích điểm đơn mua trên sàn', 'Tích điểm đơn mua trên sàn'],
+  ['MARKETPLACE_ORDER_REVERSED:2610A1B2C3', 'Thu hồi điểm đơn mua trên sàn', 'Thu hồi điểm đơn mua trên sàn'],
 ];
 const FALLBACK = 'Điều chỉnh Điểm Xanh';
 
