@@ -108,14 +108,20 @@ describe('WasteConfigCard', () => {
 
   it('gói gửi kho tối thiểu lớn hơn trần điểm tháng thì cảnh báo (11.5)', () => {
     const { c } = mount();
+    expect(c.textContent).not.toContain('Gói gửi kho tối thiểu lớn hơn trần điểm tháng');
     typeInto(field(c, 'waste.mailin_min_points').querySelector('input'), '70000');
     expect(c.textContent).toContain('Gói gửi kho tối thiểu lớn hơn trần điểm tháng: đường gửi kho sẽ đóng với mọi khách.');
+    typeInto(field(c, 'waste.mailin_min_points').querySelector('input'), '60000');
+    expect(c.textContent).not.toContain('Gói gửi kho tối thiểu lớn hơn trần điểm tháng');
   });
 
   it('gói thu kèm đơn tối thiểu lớn hơn trần điểm tháng thì cảnh báo (11.5)', () => {
     const { c } = mount();
+    expect(c.textContent).not.toContain('Gói thu kèm đơn tối thiểu lớn hơn trần điểm tháng');
     typeInto(field(c, 'waste.pickup_min_points').querySelector('input'), '70000');
     expect(c.textContent).toContain('Gói thu kèm đơn tối thiểu lớn hơn trần điểm tháng: đường thu kèm đơn sẽ đóng với mọi khách.');
+    typeInto(field(c, 'waste.pickup_min_points').querySelector('input'), '60000');
+    expect(c.textContent).not.toContain('Gói thu kèm đơn tối thiểu lớn hơn trần điểm tháng');
   });
 
   it('bật tắt cách giao cũng hỏi xác nhận', async () => {
