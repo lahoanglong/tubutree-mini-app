@@ -1,7 +1,7 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
 import type { AuthUser, LoginResponse, OrderDTO } from '@tubutree/shared-types';
-import type { MeProfile } from '../../../miniapp/src/services/account-api';
-import type { PublicConfig } from '../../../miniapp/src/services/shop-api';
+import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
+import type { CartSummary, PublicConfig } from '../../../miniapp/src/services/shop-api';
 
 /**
  * Mock API cho các spec Zalo Mini App (`*.miniapp.spec.ts`) — KHÔNG cần API/DB thật.
@@ -124,6 +124,16 @@ export class MockApi {
   }
   get(pattern: string, handler: MockHandler): this {
     return this.on('GET', pattern, handler);
+  }
+
+  /**
+   * Mock mặc định yếu nhất: chỉ trả lời khi không có route nào khác cùng độ cụ thể, dù route kia đăng ký trước hay sau.
+   * Dùng cho mặc định của mockSession mà spec có thể đã đăng ký từ beforeEach rồi mới gọi lại mockSession.
+   */
+  fallback(method: string, pattern: string, handler: MockHandler): this {
+    const { regex, keys } = compile(pattern);
+    this.routes.unshift({ method: method.toUpperCase(), pattern, regex, keys, literals: literalCount(pattern), handler });
+    return this;
   }
   post(pattern: string, handler: MockHandler): this {
     return this.on('POST', pattern, handler);
@@ -403,6 +413,21 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   // chạy ở MỌI đơn. Mặc định: config công khai chuẩn, đơn không có khoản hoàn nào.
   api.get('/config/public', publicConfig());
   api.get('/orders/me/refunds', []);
+  // Cổng nhận mã thẻ (?claim=) đọc số món trong giỏ ở MỌI trang; khối "Quà khách mới" gọi ở Trang chủ/Đơn hàng.
+  // Mặc định: giỏ rỗng, khách không còn là khách mới (giữ bố cục Trang chủ cũ). Dùng fallback vì nhiều spec mock giỏ
+  // trong beforeEach rồi mới gọi mockSession: mặc định không được đè giỏ của spec.
+  const emptyCart: CartSummary = {
+    items: [],
+    couponCode: null,
+    subtotal: 0,
+    discount: 0,
+    freeship: false,
+    freeshipThreshold: 200000,
+    itemCount: 0,
+  };
+  api.fallback('GET', '/cart', emptyCart);
+  const offer: NewCustomerOffer = { isNewCustomer: false, welcomeVoucher: null };
+  api.fallback('GET', '/me/new-customer-offer', offer);
   return user;
 }
 
