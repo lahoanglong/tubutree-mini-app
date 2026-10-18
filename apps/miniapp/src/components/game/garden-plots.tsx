@@ -21,7 +21,7 @@ export function GardenPlots({
   waterPlotVariables: string | undefined;
   onWaterPlot: (plotId: string) => void;
   unlockPending: boolean;
-  onUnlock: () => void;
+  onUnlock: (slot: number) => void;
 }) {
   const extraPlots = garden.plots.filter((p) => !p.isHome);
   return (
@@ -64,7 +64,7 @@ export function GardenPlots({
       </div>
       {garden.nextUnlock ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          <Button fullWidth icon={LockOpen} disabled={unlockPending} loading={unlockPending} onPress={() => onUnlock()}>
+          <Button fullWidth icon={LockOpen} disabled={unlockPending} loading={unlockPending} onPress={() => onUnlock(garden.nextUnlock!.slot)}>
             Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
           </Button>
         </div>

@@ -180,6 +180,44 @@ describe('GameGardenService.unlockPlot', () => {
     await expect(svc.unlockPlot('u1', 'SEEDS')).rejects.toBe(dup);
   });
 
+  it('có slot, ô đó đã tồn tại → trả ô cũ (idempotent), không trừ 💧, không mở transaction', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.count as jest.Mock).mockResolvedValue(1);
+    (prisma.gardenPlot as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(plotRow({ slot: 1 }));
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.max_plots': 5 }));
+    const r = await svc.unlockPlot('u1', 'SEEDS', 1);
+    expect(r.slot).toBe(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
+    expect(prisma.gardenPlot.create).not.toHaveBeenCalled();
+  });
+
+  it('có slot khác count+1 và ô chưa có → 400 bảo tải lại, không trừ 💧', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.count as jest.Mock).mockResolvedValue(1);
+    (prisma.gardenPlot as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(null);
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.max_plots': 5 }));
+    await expect(svc.unlockPlot('u1', 'SEEDS', 3)).rejects.toThrow('hãy tải lại trang');
+    expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
+    expect(prisma.gardenPlot.create).not.toHaveBeenCalled();
+  });
+
+  it('có slot = count+1 → mở đúng slot đó với giá seedBase × slot', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.count as jest.Mock).mockResolvedValue(1);
+    (prisma.gardenPlot as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(null);
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.plot_unlock_seed_base': 100, 'game.max_plots': 5 }));
+    const r = await svc.unlockPlot('u1', 'SEEDS', 2);
+    expect(r.slot).toBe(2);
+    expect((prisma.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data).toEqual({ totalSeeds: { decrement: 200 } });
+  });
+
+  it('XU vẫn 410 trước cả khi có slot', async () => {
+    const prisma = makePrisma();
+    const svc = new GameGardenService(prisma, makeConfig());
+    await expect(svc.unlockPlot('u1', 'XU', 1)).rejects.toBeInstanceOf(GoneException);
+  });
+
   it('đã đạt max lô → throw, không trừ gì', async () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.count as jest.Mock).mockResolvedValue(1); // 1 lô phụ, max 2 (1 nhà + 1 phụ)
