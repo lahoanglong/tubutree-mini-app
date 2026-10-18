@@ -17,7 +17,20 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vietnix.yml}"
 DEPLOY_HEALTH_TIMEOUT="${DEPLOY_HEALTH_TIMEOUT:-180}"
 
 cd "$REPO_ROOT"
-env_value() { grep -E "^$1=" .env 2>/dev/null | cut -d= -f2- || true; }
+# Giá trị một khoá trong .env theo cách đọc của compose: bỏ \r, bỏ dấu nháy bao quanh, bỏ chú thích ` #...` cuối dòng không nháy.
+# CHỈ truyền cho tiến trình backup, không export: compose đọc cùng các biến này để thay vào DATABASE_URL.
+env_value() {
+  local line v
+  line="$(grep -E "^$1=" .env 2>/dev/null | tail -n1 || true)"
+  v="${line#*=}"
+  v="${v%$'\r'}"
+  case "$v" in
+    \"*) v="${v#\"}"; v="${v%%\"*}" ;;
+    \'*) v="${v#\'}"; v="${v%%\'*}" ;;
+    *) v="${v%%[[:space:]]#*}"; v="${v%"${v##*[![:space:]]}"}" ;;
+  esac
+  printf '%s' "$v"
+}
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 dc() { docker compose -f "$COMPOSE_FILE" "$@"; }
 
@@ -130,10 +143,12 @@ POINTS_1D_PENDING_AT_START=0
 if migration_pending "$POINTS_1D_MIGRATION"; then
   POINTS_1D_PENDING_AT_START=1
 fi
-export COMPOSE_FILE
-export POSTGRES_USER="${POSTGRES_USER:-$(env_value POSTGRES_USER)}"
-export POSTGRES_DB="${POSTGRES_DB:-$(env_value POSTGRES_DB)}"
-POSTGRES_USER="${POSTGRES_USER:-tubu}"; POSTGRES_DB="${POSTGRES_DB:-tubutree}"
+# seed-reference chạy khi points_1d còn chờ, hoặc API đang tắt (chạy lại sau lần seed lỗi, lúc migration đã áp): chỉ tạo dòng
+# thiếu nên chạy lại an toàn, và nó tự từ chối nếu points_1d chưa xong. Tính trước khi script dừng API.
+RUN_SEED_REFERENCE=0
+if [ "$POINTS_1D_PENDING_AT_START" = 1 ] || ! api_running; then
+  RUN_SEED_REFERENCE=1
+fi
 STOP_API_FOR_POINTS_1D=0
 if [ "$POINTS_1D_PENDING_AT_START" = 1 ] && api_running; then
   STOP_API_FOR_POINTS_1D=1
@@ -164,11 +179,25 @@ if [ "$STOP_API_FOR_POINTS_1D" = 1 ]; then
     log "ERROR: không dừng được API cũ — DỪNG, chưa backup, chưa migrate. Kiểm tra: docker compose -f $COMPOSE_FILE ps api"
     exit 2
   fi
-  # Backup sau khi API đã dừng: không còn ghi nào lọt giữa bản backup và migration một chiều, nên khôi phục backup không mất dữ liệu.
-  log "Backup DB sau khi dừng API (ops/backup-predeploy.sh)"
-  if ! bash "$REPO_ROOT/ops/backup-predeploy.sh"; then
-    log "ERROR: backup lỗi — DỪNG, chưa migrate gì. Bật lại API cũ."
-    dc start api || log "ERROR: không bật lại được API cũ — chạy tay: docker compose -f $COMPOSE_FILE start api"
+fi
+
+# Migration một chiều: luôn backup NGAY trước khi áp, kể cả khi API đã tắt từ trước (chạy lại sau lần lỗi: bản backup lần trước
+# có thể đã cũ vì API từng được bật phục vụ khách). API đã dừng nên không còn ghi nào lọt giữa bản backup và migration.
+if [ "$POINTS_1D_PENDING_AT_START" = 1 ]; then
+  log "Backup DB ngay trước migrate $POINTS_1D_MIGRATION (ops/backup-predeploy.sh)"
+  backup_rc=0
+  POSTGRES_USER="$(env_value POSTGRES_USER)" POSTGRES_DB="$(env_value POSTGRES_DB)" COMPOSE_FILE="$COMPOSE_FILE" \
+    bash "$REPO_ROOT/ops/backup-predeploy.sh" || backup_rc=$?
+  if [ "$backup_rc" -ne 0 ]; then
+    if [ "$backup_rc" -eq 3 ]; then
+      log "ERROR: bản backup local đã tạo nhưng đẩy ra ngoài máy (RCLONE_REMOTE) lỗi — vẫn DỪNG cho chắc, chưa migrate gì. Sửa rclone rồi chạy lại, hoặc tự quyết dùng bản local."
+    else
+      log "ERROR: backup local lỗi (exit $backup_rc) — DỪNG, chưa migrate gì."
+    fi
+    if [ "$STOP_API_FOR_POINTS_1D" = 1 ]; then
+      log "Bật lại API cũ (chính script này đã dừng nó)."
+      dc start api || log "ERROR: không bật lại được API cũ — chạy tay: docker compose -f $COMPOSE_FILE start api"
+    fi
     exit 2
   fi
 fi
@@ -183,7 +212,7 @@ if ! dc run --rm --no-deps api pnpm exec prisma migrate deploy; then
   exit 2
 fi
 
-if [ "$POINTS_1D_PENDING_AT_START" = 1 ]; then
+if [ "$RUN_SEED_REFERENCE" = 1 ]; then
   log "3b/5 Nạp dữ liệu tham chiếu (seed-reference, chỉ tạo dòng thiếu) khi API còn dừng"
   if ! dc run --rm --no-deps api pnpm run prisma:seed:reference; then
     log "ERROR: seed-reference lỗi — DỪNG. $(api_state_note) Migration đã áp nên KHÔNG quay lại image cũ. Đọc lỗi rồi chạy lại deploy.sh (đi lại đủ luồng, seed-reference an toàn chạy lại)."

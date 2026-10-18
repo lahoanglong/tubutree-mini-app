@@ -77,3 +77,10 @@ Mỗi nhóm là commit mới, không amend.
 - `formatPoints` cho thêm: `system-config.service.ts` (trần POINTS của seasonpass), `order-reversal.service.ts` (hai log thu hồi thưởng giới thiệu). Spec: `points-unit-guard.spec.ts`.
 - Giới hạn đã biết: tin ZNS đã xếp hàng trước migrate mang chữ dựng sẵn theo đơn vị cũ (`notifications.service.ts:165`, `templateData` lưu trong job). Chỉ là hiển thị, không sửa.
 - Chưa kiểm: `deploy.sh` chỉ chạy với docker giả, chưa chạy compose thật.
+
+### Lượt 3
+- `deploy.sh`: backup `ops/backup-predeploy.sh` chạy MỖI lần `points_1d` còn chờ (kể cả API đã tắt sẵn), ngay trước migrate; backup lỗi thì không migrate, chỉ `dc start api` khi chính script đã dừng API; exit 3 của backup (rclone lỗi, bản local tốt) có câu báo riêng nhưng vẫn dừng.
+- seed-reference chạy khi `points_1d` còn chờ hoặc API đang tắt (chọn cách này thay vì sửa câu báo: chạy lại deploy.sh sau lần seed lỗi sẽ không bỏ seed; seed chỉ tạo dòng thiếu và tự từ chối khi migration chưa xong).
+- Bỏ `export POSTGRES_USER/POSTGRES_DB/COMPOSE_FILE` (compose đọc cùng biến để thay vào `DATABASE_URL`); chỉ truyền cho tiến trình backup, `env_value` bỏ dấu nháy, chú thích cuối dòng và `\r`. Bỏ phần export trong `deploy.yml`.
+- Race `pd3-xu-migration`: schema nháp thêm `system_config_history` (khối hoàn tác đọc dấu `sch_pts1d_<md5>`), thêm ca dấu đó khiến hoàn tác RAISE. Các race spec khác chạy SQL trong schema nháp không đọc bảng này.
+
