@@ -3,8 +3,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AcademyService } from './academy.service';
 
-/** CTV Academy: khoá học/bài học đào tạo CTV — xem danh sách, chi tiết, đánh dấu đã học. */
-@Roles('AFFILIATE', 'STAFF', 'ADMIN')
+/** CTV Academy: khoá học/bài học đào tạo CTV — xem danh sách, chi tiết, đánh dấu đã học. Mọi đại lý vào được (D3-13), không route nào chạm tiền. */
+@Roles('AFFILIATE', 'DEALER', 'STAFF', 'ADMIN')
 @Controller('academy')
 export class AcademyController {
   constructor(private readonly academy: AcademyService) {}

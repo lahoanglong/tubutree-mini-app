@@ -2,7 +2,14 @@ import { api } from './api';
 import { getSessionAttribution } from '../utils/entry-source';
 
 export interface AffiliateMe {
+  /** CTV, admin, hoặc đại lý còn gian hàng CTV/hoa hồng (D3-03). */
   isAffiliate: boolean;
+  /** false với đại lý/nhân viên: đăng ký CTV một chạm bị từ chối. Thiếu khi API cũ (coi như đăng ký được). */
+  canRegister?: boolean;
+  /** false với đại lý: chưa được lên đơn hộ khách. Thiếu khi API cũ (coi như được). */
+  canOrderForCustomer?: boolean;
+  /** false với đại lý chưa có gian hàng CTV: trình dựng gian hàng trả 400 cho họ. Thiếu khi API cũ (coi như mở được). */
+  canOpenStorefront?: boolean;
   referralCode: string;
   walletBalance: number;
   /** MST cá nhân/CCCD đã khai để kê khai khấu trừ thuế TNCN (null: chưa khai). */

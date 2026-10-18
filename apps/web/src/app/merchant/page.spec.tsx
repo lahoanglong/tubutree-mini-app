@@ -131,6 +131,18 @@ const openTab = async (label: string) => {
   click(byText(ui!.container, '[role="tab"]', label));
   await flush();
 };
+const tableRow = (root: ParentNode, productName: string) =>
+  Array.from(root.querySelectorAll('tbody tr')).find((r) => r.textContent?.includes(productName))!;
+// Thao tác phụ của hàng sản phẩm nằm trong menu "⋯" dựng ra body (không nằm trong hàng): mở menu của đúng hàng rồi tìm mục theo aria-controls.
+const openRowMenu = (row: Element) => {
+  const trigger = row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
+  if (trigger.getAttribute('aria-expanded') !== 'true') click(trigger);
+  const menu = document.getElementById(trigger.getAttribute('aria-controls')!)!;
+  return Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+};
+const rowAction = (root: ParentNode, productName: string, item: string) => {
+  click(openRowMenu(tableRow(root, productName)).find((b) => b.textContent === item)!);
+};
 const FIELD = 'input,textarea,select';
 const inputByLabel = (root: ParentNode, label: string) => {
   const l = byText(root, 'label', label)!;
@@ -294,6 +306,33 @@ describe('cổng đối tác — tab Gian hàng & Subdomain', () => {
       avatarUrl: '',
       isPublished: true,
     });
+  });
+
+  it('D7-10: ô URL logo và ảnh bìa có ảnh xem trước; đổi liên kết thì ảnh đổi theo và Lưu vẫn gửi đúng liên kết', async () => {
+    mocks.store = { ...STORE, avatarUrl: 'https://cdn.example/logo.png', coverUrl: '' };
+    const root = await mount();
+    const previews = () => Array.from(root.querySelectorAll<HTMLImageElement>('[data-preview] img'));
+    expect(previews().map((i) => i.getAttribute('alt'))).toEqual(['Xem trước: URL Logo thương hiệu']);
+    expect(previews()[0]!.getAttribute('src')).toBe('https://cdn.example/logo.png');
+
+    typeInto(inputByLabel(root, 'URL Ảnh bìa'), 'https://cdn.example/cover.png');
+    expect(previews().map((i) => i.getAttribute('src'))).toEqual(['https://cdn.example/logo.png', 'https://cdn.example/cover.png']);
+
+    click(byText(root, 'button', 'Lưu cấu hình gian hàng'));
+    await flush();
+    expect(mocks.updateStore).toHaveBeenLastCalledWith(
+      expect.objectContaining({ avatarUrl: 'https://cdn.example/logo.png', coverUrl: 'https://cdn.example/cover.png' }),
+    );
+  });
+
+  it('D7-10: "Xoá ảnh" của ô logo làm Lưu gửi chuỗi rỗng (xoá ảnh đã lưu)', async () => {
+    mocks.store = { ...STORE, avatarUrl: 'https://cdn.example/logo.png', coverUrl: '' };
+    const root = await mount();
+    click(byText(root, 'button', 'Xoá ảnh'));
+    expect(root.querySelector('[data-preview] img')).toBeNull();
+    click(byText(root, 'button', 'Lưu cấu hình gian hàng'));
+    await flush();
+    expect(mocks.updateStore).toHaveBeenLastCalledWith(expect.objectContaining({ avatarUrl: '', coverUrl: '' }));
   });
 
   it('xoá slogan, URL logo và URL ảnh bìa rồi lưu → gửi chuỗi rỗng để API xoá giá trị cũ (không bỏ trường)', async () => {
@@ -958,6 +997,36 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(root.querySelector('td.text-forest-700')!.textContent).toContain('120.000');
   });
 
+  it('D7-10: mỗi hàng sản phẩm có ảnh 40px (thumbnail trước ảnh đầu, thiếu thì khung trống) và menu "⋯" thay cho dãy nút chữ', async () => {
+    mocks.getProducts = vi.fn(async () => ({
+      ownProducts: [
+        PRODUCT('a', 'APPROVED', { isActive: true, thumbnail: 'https://cdn.example/a-thumb.jpg', images: ['https://cdn.example/a-1.jpg'] }),
+        PRODUCT('b', 'APPROVED', { isActive: true, images: ['https://cdn.example/b-1.jpg'] }),
+        PRODUCT('c', 'PENDING_REVIEW', { images: [] }),
+      ],
+      resellProducts: [PRODUCT('r', 'APPROVED', { images: ['https://cdn.example/r-1.jpg'] })],
+      meta: { page: 1, limit: 20, ownTotal: 3, resellTotal: 1 },
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    const thumbSrc = (name: string) => tableRow(root, name).querySelector('[data-thumb] img')?.getAttribute('src') ?? null;
+    expect(thumbSrc('SP a')).toBe('https://cdn.example/a-thumb.jpg');
+    expect(thumbSrc('SP b')).toBe('https://cdn.example/b-1.jpg');
+    expect(thumbSrc('SP c')).toBeNull();
+    expect(tableRow(root, 'SP c').querySelector('[data-thumb]')!.className).toContain('h-10');
+
+    const trigger = tableRow(root, 'SP a').querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
+    expect(trigger.getAttribute('aria-label')).toBe('Thao tác với SP a');
+    expect(trigger.className).toContain('min-h-[44px]');
+    expect(byText(tableRow(root, 'SP a'), 'button', 'Sửa')).toBeNull();
+    expect(openRowMenu(tableRow(root, 'SP a')).map((b) => b.textContent)).toEqual(['Sửa', 'Ngừng bán']);
+    // Khung bảng cuộn ngang (overflow-x) sẽ cắt menu ở hàng cuối nếu menu nằm trong nó.
+    expect(document.getElementById(trigger.getAttribute('aria-controls')!)!.closest('[role="region"]')).toBeNull();
+
+    click(byText(root, 'button', 'Sản phẩm Tubu Tree bán lại'));
+    expect(thumbSrc('SP r')).toBe('https://cdn.example/r-1.jpg');
+  });
+
   it('WEB-1: cột giá của danh sách hiện giá khách thực trả (khuyến mãi nếu có) kèm giá gốc gạch ngang', async () => {
     mocks.getProducts = vi.fn(async () => ({
       ownProducts: [PRODUCT('s', 'APPROVED', { isActive: true, salePrice: 90000 }), PRODUCT('n', 'APPROVED', { isActive: true, salePrice: null })],
@@ -977,7 +1046,8 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     const root = await mount();
     await openTab('Sản phẩm');
     click(byText(root, 'button', 'Sản phẩm Tubu Tree bán lại'));
-    const remove = byText(root, 'button', 'Gỡ khỏi shop')!;
+    expect(byText(root, 'button', 'Gỡ khỏi shop')).toBeNull();
+    const remove = openRowMenu(tableRow(root, 'SP r1')).find((b) => b.textContent === 'Gỡ khỏi shop')!;
     expect(remove.className).toContain('min-h-[44px]');
     expect(remove.className).toContain('text-danger-fg');
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
@@ -988,7 +1058,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     mocks.removeResell = vi.fn(async () => {
       throw new Error('Không có quyền');
     });
-    click(remove);
+    rowAction(root, 'SP r1', 'Gỡ khỏi shop');
     await flush();
     expect(mocks.removeResell).toHaveBeenCalledWith('r1');
     const alert = root.querySelector('[role="alert"]')!;
@@ -1135,7 +1205,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     }));
     const root = await mount();
     await openTab('Sản phẩm');
-    click(byText(root.querySelector('tbody')!, 'button', 'Sửa'));
+    rowAction(root, 'SP a', 'Sửa');
     const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
     expect(overlay.textContent).toContain('vẫn bán với nội dung cũ');
     expect(overlay.textContent).not.toContain('chờ Tubu Tree duyệt lại');
@@ -1146,12 +1216,12 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(mocks.updateProduct).toHaveBeenCalledWith('a', { stock: 12 });
 
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    click(byText(root, 'button', 'Ngừng bán'));
+    rowAction(root, 'SP a', 'Ngừng bán');
     await flush();
     expect(confirm).toHaveBeenCalled();
     expect(mocks.stopSelling).toHaveBeenCalledWith('a');
     expect(root.textContent).toContain('Đã ngừng bán');
-    click(byText(root, 'button', 'Mở bán lại'));
+    rowAction(root, 'SP z', 'Mở bán lại');
     await flush();
     expect(mocks.updateProduct).toHaveBeenLastCalledWith('z', { isActive: true });
   });
@@ -1165,7 +1235,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       const root = await mount();
       await openTab('Sản phẩm');
       const open = () => {
-        click(byText(root.querySelector('tbody')!, 'button', 'Sửa'));
+        rowAction(root, product.name as string, 'Sửa');
         return root.querySelector<HTMLElement>('.fixed.inset-0')!;
       };
       return { root, row: root.querySelector('tbody')!, open };
@@ -1311,7 +1381,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(hidden.textContent).toContain('Đã duyệt (Đang ẩn)');
     expect(hidden.textContent).not.toContain('Đang hiển thị');
     expect(hidden.textContent).toContain('Đã ngừng bán');
-    expect(byText(hidden, 'button', 'Mở bán lại')).not.toBeNull();
+    expect(openRowMenu(hidden).map((b) => b.textContent)).toEqual(['Sửa', 'Mở bán lại']);
   });
 
   it('R3-MERCHANT-4: sản phẩm đang bán có bản sửa chờ duyệt vẫn hiện nội dung đang bán kèm huy hiệu "Bản sửa chờ duyệt"; mở Sửa tiếp tục từ bản chờ', async () => {
@@ -1327,7 +1397,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(row.textContent).toContain('SP a');
     expect(row.textContent).toContain('Đã duyệt (Đang hiển thị)');
     expect(byText(row, 'span', 'Bản sửa chờ duyệt')!.className).toContain('bg-warning-bg');
-    click(byText(row, 'button', 'Sửa'));
+    rowAction(root, 'SP a', 'Sửa');
     const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
     expect(overlay.textContent).toContain('Bản sửa đang chờ Tubu Tree duyệt');
     expect(inputByLabel(overlay, 'Tên sản phẩm').value).toBe('SP a (tên mới)');

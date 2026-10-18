@@ -166,14 +166,14 @@ describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)
     mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
   });
 
-  it('nút Lên đơn hộ khách nằm trước nút Rút hoa hồng và trước lịch sử hoa hồng, đủ cao 44px', async () => {
+  it('nút Lên đơn hộ khách nằm trước nút Rút tiền và trước lịch sử hoa hồng, đủ cao 44px', async () => {
     renderPage();
     const entry = await screen.findByRole('button', { name: /Lên đơn hộ khách/ });
-    const withdraw = screen.getByRole('button', { name: 'Rút hoa hồng' });
+    const withdraw = screen.getByRole('button', { name: 'Rút tiền hoa hồng' });
     const history = screen.getByText('Lịch sử hoa hồng');
     expect(entry.compareDocumentPosition(withdraw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(entry.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(entry.style.minHeight).toBe('44px');
+    expect(parseInt(entry.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
   });
 
   it('chạm lối tắt mở form lên đơn hộ', async () => {
@@ -329,7 +329,7 @@ describe('Dashboard CTV — rút hoa hồng', () => {
 
   /** Nút Rút khoá tới khi số dư về, nên chờ nó mở rồi mới bấm. */
   const openWithdraw = async () => {
-    const btn = await screen.findByRole('button', { name: 'Rút hoa hồng' });
+    const btn = await screen.findByRole('button', { name: 'Rút tiền hoa hồng' });
     await waitFor(() => expect(btn).toBeEnabled());
     fireEvent.click(btn);
   };
@@ -495,5 +495,156 @@ describe('Dashboard CTV — thưởng mốc là Điểm Xanh (PD-3)', () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['loyalty'] }));
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['coins'] });
     invalidate.mockRestore();
+  });
+});
+
+describe('Trang CTV — đại lý (D3-03)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('đại lý đã có gian hàng CTV hoặc hoa hồng: API trả isAffiliate nên vào thẳng dashboard, không hiện form đăng ký', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Rút tiền hoa hồng' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng ký miễn phí ngay' })).toBeNull();
+  });
+
+  it('đại lý chưa được lên đơn hộ: dashboard không có lối tắt Lên đơn hộ khách (API sẽ từ chối)', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    await screen.findByRole('button', { name: 'Rút tiền hoa hồng' });
+    expect(screen.queryByRole('button', { name: /Lên đơn hộ khách/ })).toBeNull();
+  });
+
+  it('đại lý thuần (không đăng ký CTV được): không đưa form đăng ký ngõ cụt, có đường về Hồ sơ', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: false, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    expect(await screen.findByText('Tài khoản này không đăng ký CTV được')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng ký miễn phí ngay' })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Về Hồ sơ' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/profile');
+  });
+
+  it('khách thường (canRegister=true) vẫn thấy form đăng ký', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: false, canRegister: true, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' })).toBeInTheDocument();
+  });
+});
+
+describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (D7 việc 9)', () => {
+  const before = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, canOrderForCustomer: true, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.copyText.mockResolvedValue(true);
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 125_000, pendingCommission: 30_000, withdrawableCommission: 200_000,
+      totalClicks: 4, totalConversions: 1, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+  });
+
+  it('bốn lối tắt ngay dưới thẻ hoa hồng, trước hai ô số liệu, bậc, thưởng mốc và mã giới thiệu', async () => {
+    vi.mocked(getCtvMilestones).mockResolvedValue({
+      monthKey: '2026-10', currentRevenue: 0, pendingRevenue: 0, holdDays: 20, previousMonth: null,
+      milestones: [{ id: 'M1', title: 'Mốc 3 triệu', threshold: 3_000_000, rewardPoints: 50, description: '', achieved: false, claimed: false, canClaim: false, progressPct: 0 }],
+    });
+    renderPage();
+    const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
+    const names = Array.from(group.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
+    expect(names).toEqual(['Chia sẻ link và mã giới thiệu', 'Gian hàng của tôi', 'Lên đơn hộ khách', 'Rút tiền hoa hồng']);
+    expect(before(screen.getByText('Hoa hồng tháng này'), group)).toBe(true);
+    expect(before(group, await screen.findByText('200.000đ'))).toBe(true);
+    expect(before(group, await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ }))).toBe(true);
+    expect(before(group, await screen.findByText('Thưởng mốc doanh số tháng'))).toBe(true);
+    expect(before(group, screen.getByRole('heading', { level: 2, name: 'Mã giới thiệu của bạn' }))).toBe(true);
+  });
+
+  it('đại lý (chưa lên đơn hộ được) chỉ có ba lối tắt', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0 });
+    renderPage();
+    const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
+    expect(group.querySelectorAll('button')).toHaveLength(3);
+    expect(group.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
+  });
+
+  it('đại lý chưa có gian hàng CTV (canOpenStorefront=false): không có lối tắt Gian hàng vì builder trả 400, vẫn có Chia sẻ và Rút', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canOrderForCustomer: false, canOpenStorefront: false, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    renderPage();
+    const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
+    expect(Array.from(group.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Chia sẻ link và mã giới thiệu',
+      'Rút tiền hoa hồng',
+    ]);
+    expect(group.style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
+  });
+
+  it('đại lý có gian hàng CTV (canOpenStorefront=true) và API cũ thiếu cờ: vẫn có lối tắt Gian hàng', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({
+      isAffiliate: true, canOrderForCustomer: false, canOpenStorefront: true, referralCode: 'TUBU88', walletBalance: 0,
+    });
+    const { unmount } = renderPage();
+    expect(await screen.findByRole('button', { name: 'Gian hàng của tôi' })).toBeInTheDocument();
+    unmount();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Gian hàng của tôi' })).toBeInTheDocument();
+  });
+
+  it('Chia sẻ mở chia sẻ link kèm mã; Gian hàng đi tới trình dựng gian hàng', async () => {
+    mocks.shareLink.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ link và mã giới thiệu' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    expect(mocks.shareLink.mock.calls[0]![0].path).toBe('/?ref=TUBU88');
+    fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/storefront');
+  });
+
+  it('Rút tiền khoá khi chưa có hoa hồng rút được, mở form khi có', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Rút tiền hoa hồng' })).toBeDisabled();
+  });
+
+  it('hai ô Đang chờ và Có thể rút cùng một kiểu thẻ (cùng nền và bóng), chỉ khác màu số', async () => {
+    renderPage();
+    await screen.findByText('200.000đ');
+    const cardOf = (value: string) => screen.getByText(value).closest<HTMLElement>('[style*="--elevation-1"]')!;
+    const pending = cardOf('30.000đ');
+    const withdrawable = cardOf('200.000đ');
+    expect(pending).not.toBe(withdrawable);
+    expect(pending.style.background).toBe(withdrawable.style.background);
+    expect(pending.style.boxShadow).toBe(withdrawable.style.boxShadow);
+  });
+
+  it('thưởng mốc: đang tải có khung chờ, lỗi tải có nút Thử lại gọi lại API', async () => {
+    vi.mocked(getCtvMilestones).mockRejectedValueOnce(new Error('mạng lỗi')).mockResolvedValue({
+      monthKey: '2026-10', currentRevenue: 0, pendingRevenue: 0, holdDays: 20, previousMonth: null,
+      milestones: [{ id: 'M1', title: 'Mốc 3 triệu', threshold: 3_000_000, rewardPoints: 50, description: '', achieved: false, claimed: false, canClaim: false, progressPct: 0 }],
+    });
+    renderPage();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    fireEvent.click(retry);
+    expect(await screen.findByText('Mốc 3 triệu')).toBeInTheDocument();
+    expect(getCtvMilestones).toHaveBeenCalledTimes(2);
   });
 });
