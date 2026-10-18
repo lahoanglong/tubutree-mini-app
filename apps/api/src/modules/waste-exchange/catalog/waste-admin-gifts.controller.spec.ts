@@ -116,5 +116,8 @@ describe('WasteAdminGiftsController', () => {
     expect(await errorKeys(WasteGiftUpdateDto, { stock: null })).toEqual([]);
     const badVoucher = { type: 'AMOUNT', value: 1000, minOrder: null, maxDiscount: null, validDays: 0 };
     expect((await errorKeys(WasteGiftCreateDto, { kind: 'VOUCHER', name: 'Giảm', pointsCost: 10_000, voucher: badVoucher })).length).toBeGreaterThanOrEqual(1);
+    const okVoucher = { type: 'AMOUNT', value: 1000, minOrder: null, maxDiscount: null, validDays: 30 };
+    expect(await errorKeys(WasteGiftCreateDto, { kind: 'VOUCHER', name: 'Giảm', pointsCost: 10_000, voucher: [okVoucher] })).toContain('isObject');
+    expect(await errorKeys(WasteGiftUpdateDto, { voucher: [okVoucher] })).toContain('isObject');
   });
 });

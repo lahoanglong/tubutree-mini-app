@@ -8,6 +8,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Length,
@@ -139,6 +140,7 @@ export class WasteGiftCreateDto implements WasteGiftUpsertRequest {
   claimInstructions?: string;
 
   @IsOptional()
+  @IsObject()
   @ValidateNested()
   @Type(() => WasteVoucherSpecDto)
   voucher?: WasteVoucherSpecDto;
@@ -202,6 +204,7 @@ export class WasteGiftUpdateDto implements Partial<WasteGiftUpsertRequest> {
   claimInstructions?: string | null;
 
   @OptionalNotNull()
+  @IsObject()
   @ValidateNested()
   @Type(() => WasteVoucherSpecDto)
   voucher?: WasteVoucherSpecDto;
