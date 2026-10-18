@@ -5,9 +5,9 @@ import config from '../tailwind.config';
 
 // C-097 (Q-25): web khách đồng bộ sang Design System v2 (packages/design-tokens). Danh sách dưới đây
 // là "bánh cóc": file nào đã chuyển thì không được quay lại palette v1 (cam/lá/neutral), chữ <12px
-// hay màu hex cứng. Chuyển thêm trang nào thì THÊM vào danh sách. Không thêm /admin, /merchant,
+// hay màu hex cứng. Chuyển thêm trang nào thì THÊM vào khối của lane mình (CORE, SHOP, ORDER...). Không thêm /admin, /merchant,
 // /brand (thuộc gói PC-11/PD-1, vẫn dùng khối legacy trong tailwind.config.ts).
-const MIGRATED = [
+const CORE: string[] = [
   'app/page.tsx',
   'app/layout.tsx',
   'app/globals.css',
@@ -35,7 +35,21 @@ const MIGRATED = [
   'app/error.tsx',
   'app/global-error.tsx',
   'app/not-found.tsx',
+  'components/bottom-nav.tsx',
+  'components/storefront-tracker.tsx',
+  'components/app-gates.tsx',
+  'lib/web-nav.ts',
 ];
+const SHOP: string[] = [];
+const ORDER: string[] = [];
+const ACCOUNT: string[] = [];
+const LOYALTY: string[] = [];
+const COMMUNITY: string[] = [];
+const AFFILIATE: string[] = [];
+const GAME: string[] = [];
+const PRO: string[] = [];
+const RECYCLE: string[] = [];
+const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
 

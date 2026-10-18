@@ -59,12 +59,23 @@ afterEach(() => {
   mounted = [];
 });
 
-const PAGES: [string, () => JSX.Element, string][] = [
+type PageCase = [string, () => JSX.Element, string];
+const CORE: PageCase[] = [
   ['/gio-hang', () => <CartPage />, '/gio-hang'],
   ['/thanh-toan', () => <CheckoutPage />, '/thanh-toan'],
   ['/tai-khoan', () => <AccountPage />, '/tai-khoan'],
   ['/tai-khoan/don-hang/[code]', () => <OrderDetailPage />, '/tai-khoan/don-hang/TB-77'],
 ];
+const SHOP: PageCase[] = [];
+const ORDER: PageCase[] = [];
+const ACCOUNT: PageCase[] = [];
+const LOYALTY: PageCase[] = [];
+const COMMUNITY: PageCase[] = [];
+const AFFILIATE: PageCase[] = [];
+const GAME: PageCase[] = [];
+const PRO: PageCase[] = [];
+const RECYCLE: PageCase[] = [];
+const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 describe.each(PAGES)('khách chưa đăng nhập mở %s', (_name, page, returnTo) => {
   it('thấy nút đăng nhập Zalo mang theo returnTo, không kẹt ở "Đang tải…"', async () => {
