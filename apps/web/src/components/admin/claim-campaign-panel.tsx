@@ -269,9 +269,13 @@ export function ClaimCampaignPanel() {
                 {formatDate(b.startAt)} – {formatDate(b.endAt)} · {b.total} thẻ · Đã nhận {b.claimed} · Đã dùng {b.used}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button type="button" className={BTN_XS_SECONDARY} disabled={exportBatch.isPending} onClick={() => exportBatch.mutate(b.batch)}>
-                  Tải lại CSV
-                </button>
+                {b.mine ? (
+                  <button type="button" className={BTN_XS_SECONDARY} disabled={exportBatch.isPending} onClick={() => exportBatch.mutate(b.batch)}>
+                    Tải lại CSV
+                  </button>
+                ) : (
+                  <span className="self-center text-xs text-stone-500">Lô do người khác tạo</span>
+                )}
                 <button type="button" className={BTN_XS_SECONDARY} disabled={toggleBatch.isPending} onClick={() => void askToggle(b)}>
                   {b.active > 0 ? 'Tắt lô' : 'Bật lại lô'}
                 </button>

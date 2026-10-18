@@ -42,8 +42,8 @@ export class AdminCouponBatchController {
   }
 
   @Get()
-  list() {
-    return this.batches.list();
+  list(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string) {
+    return this.batches.list({ id: actorId, staff: role !== 'ADMIN' });
   }
 
   /** Link gốc Mini App để in QR mã chung; nhân viên Marketing không đọc được tab Cấu hình. */

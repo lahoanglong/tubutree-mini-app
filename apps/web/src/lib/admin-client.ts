@@ -782,6 +782,8 @@ export interface CouponBatchCodes {
 }
 export interface CouponBatchSummary {
   batch: string;
+  /** false = lô do người khác tạo: nhân viên không xem/tải được mã (API trả 403). */
+  mine: boolean;
   total: number;
   claimed: number;
   used: number;

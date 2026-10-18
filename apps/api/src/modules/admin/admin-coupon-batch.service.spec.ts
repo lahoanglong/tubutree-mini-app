@@ -183,6 +183,20 @@ describe('AdminCouponBatchService.codes / setActive', () => {
     });
   });
 
+  it('list: mỗi lô kèm `mine` (xem được mã không); nhân viên theo createdById, ADMIN luôn true', async () => {
+    const { svc, prisma } = make();
+    const rows = [
+      { batch: 'AAA', mine: true },
+      { batch: 'BBB', mine: false },
+    ];
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue(rows);
+    const staffOut = await svc.list({ id: 's1', staff: true });
+    expect(staffOut.map((b) => b.mine)).toEqual([true, false]);
+    expect((prisma.$queryRaw as jest.Mock).mock.calls[0].slice(1)).toContain('s1');
+    const adminOut = await svc.list({ id: 'a1', staff: false });
+    expect(adminOut.map((b) => b.mine)).toEqual([true, true]);
+  });
+
   it('codes: lô không tồn tại → 404', async () => {
     const { svc, findMany } = make();
     findMany.mockResolvedValue([]);

@@ -60,6 +60,8 @@ export interface BatchCode {
 
 export interface BatchSummary {
   batch: string;
+  /** Xem/tải được mã của lô này: ADMIN luôn; nhân viên chỉ lô do chính mình tạo (xem `codes`). */
+  mine: boolean;
   total: number;
   claimed: number;
   used: number;
@@ -145,9 +147,10 @@ export class AdminCouponBatchService {
   }
 
   /** Các lô gần nhất kèm số mã, số thẻ đã có khách nhận, số đã dùng cho đơn. */
-  async list(): Promise<BatchSummary[]> {
-    return this.prisma.$queryRaw<BatchSummary[]>`
+  async list(actor: CouponActor = SYSTEM_ACTOR): Promise<BatchSummary[]> {
+    const rows = await this.prisma.$queryRaw<BatchSummary[]>`
       SELECT c.batch,
+             COALESCE(bool_and(c."createdById" = ${actor.id}), false) AS "mine",
              COUNT(*)::int AS "total",
              COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM coupon_claims cc WHERE cc."couponId" = c.id))::int AS "claimed",
              COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM coupon_redemptions r WHERE r."couponId" = c.id))::int AS "used",
@@ -164,6 +167,7 @@ export class AdminCouponBatchService {
        GROUP BY c.batch
        ORDER BY MIN(c."startAt") DESC, c.batch
        LIMIT 200`;
+    return actor.staff ? rows : rows.map((r) => ({ ...r, mine: true }));
   }
 
   /** Nhân viên chỉ xem mã lô do chính mình tạo: lộ mã lô khác là đem đi nhận bằng tài khoản khác, lách trần B19. */
