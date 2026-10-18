@@ -14,7 +14,6 @@ import {
   addressLine,
   buyerOrderStatusLabel,
   canCancelOrder,
-  canPayAgain,
   discountRows,
   orderPaymentStatusLabel,
   isHandedToCarrier,
@@ -28,6 +27,7 @@ import {
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { reviewHref } from '@/lib/reviews-client';
+import { canPayNow } from '@/components/orders/order-rules';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
@@ -65,7 +65,7 @@ export default function OrderDetailPage() {
   // Lỗi/đang tải thì rơi về hotline mặc định: kênh liên hệ không được biến mất vì API cấu hình chậm.
   const supportQ = useQuery({ queryKey: ['public-support'], queryFn: getPublicSupport, staleTime: 5 * 60_000 });
   const support = supportQ.data ?? DEFAULT_SUPPORT;
-  // Tiền về thì đơn hết "chờ thanh toán" và `canPayAgain` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
+  // Tiền về thì đơn hết "chờ thanh toán" và `canPayNow` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
   // "Đã nhận thanh toán" bị gỡ ngay sau khi vừa hiện. Ghi nhớ trong trang tới khi khách rời trang.
   const [paidNotice, setPaidNotice] = useState(false);
   const refreshOrder = useCallback(() => {
@@ -148,7 +148,7 @@ export default function OrderDetailPage() {
       {o.manualHandling ? (
         <p className="mt-2 text-sm text-stone-700">Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.</p>
       ) : (
-        !canPayAgain(o) &&
+        !canPayNow(o) &&
         showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
           <p className="mt-2 text-sm font-medium text-warning-fg">
             Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
@@ -185,9 +185,9 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      {(canPayAgain(o) || paidNotice) && (
+      {(canPayNow(o) || paidNotice) && (
         <div className="mt-2">
-          {canPayAgain(o) && (
+          {canPayNow(o) && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
               Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
             </p>

@@ -254,6 +254,23 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(buttons(container).map((b) => b.textContent)).not.toContain('Hủy đơn');
   });
 
+  it('chờ chuyển khoản mà đã quá hạn thanh toán: không dựng QR, không mời trả, vẫn ghi hạn và "quá hạn đơn sẽ tự huỷ" như Mini App', async () => {
+    mocks.order = { ...ORDER, paymentDeadline: '2000-01-01T00:00:00Z' };
+    const { container } = await mount();
+    expect(mocks.qr.calls).toBe(0);
+    expect(container.querySelector('img[alt="VietQR"]')).toBeNull();
+    expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
+    expect(container.textContent).toContain('Thanh toán trước');
+    expect(container.textContent).toContain('quá hạn đơn sẽ tự huỷ');
+  });
+
+  it('chờ chuyển khoản còn hạn: dựng QR như cũ', async () => {
+    mocks.order = { ...ORDER, paymentDeadline: '2999-01-01T00:00:00Z' };
+    const { container } = await mount();
+    expect(mocks.qr.calls).toBeGreaterThan(0);
+    expect(container.textContent).toContain('Đơn đang chờ bạn chuyển khoản');
+  });
+
   it('đơn đã hủy: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã hủy)', async () => {
     mocks.order = { ...ORDER, status: 'CANCELLED' };
     const { container } = await mount();
