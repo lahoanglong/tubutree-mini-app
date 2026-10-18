@@ -205,6 +205,11 @@ describe('computeWasteAlerts', () => {
         detail: 'Yêu cầu TR-ABCDE của tài khoản nhân viên do người khác xác nhận.',
       },
     ]);
+
+    const admin = setup([visit({ id: 'd', code: 'TR-ADMIN', userId: 'S3', role: 'ADMIN', confirmedByUserId: 'S1' })]);
+    expect(ofKind(await admin.run(), 'STAFF_ACCOUNT_CONFIRMED')).toEqual([
+      expect.objectContaining({ value: 1, threshold: null, detail: 'Yêu cầu TR-ADMIN của tài khoản nhân viên do người khác xác nhận.' }),
+    ]);
   });
 
   it('STAFF_DIRECT: five direct confirms of mail-in or pickup requests without a waybill', async () => {
@@ -226,6 +231,11 @@ describe('computeWasteAlerts', () => {
 
     const four = setup(rows.slice(1));
     expect(ofKind(await four.run(), 'STAFF_DIRECT')).toEqual([]);
+
+    const early = setup([0, 1, 2, 3, 4].map((i) => direct(i, { completedAt: new Date('2026-09-28T03:00:00Z') })));
+    expect(ofKind(await early.run(new Date('2026-10-03T03:00:00Z')), 'STAFF_DIRECT')).toHaveLength(1);
+    const stale = setup([0, 1, 2, 3, 4].map((i) => direct(i, { completedAt: new Date('2026-09-30T03:00:00Z') })));
+    expect(ofKind(await stale.run(new Date('2026-10-08T03:00:00Z')), 'STAFF_DIRECT')).toEqual([]);
   });
 
   it('passes the earlier of the month start and the longest window as since', async () => {
