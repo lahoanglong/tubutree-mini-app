@@ -4,7 +4,7 @@ Nguồn: `apps/miniapp/src/components/app.tsx:189-245` trên `web/base` db9adca0
 
 Quy ước route web: theo đường dẫn tiếng Việt đang dùng (`/san-pham`, `/gio-hang`, `/thanh-toan`, `/tai-khoan/...`). Đường dẫn kiểu Mini App (ví dụ `/browse`, `/feed/:id`) được chuyển hướng 307 sang route web, để link chia sẻ từ Mini App mở được trên web (như `/product/[slug]/route.ts` đang làm).
 
-Trạng thái: **có** = web đã đủ; **thiếu** = web có route nhưng thiếu chức năng con; **mới** = web chưa có; **skip** = cố ý không làm trên web (kèm lý do).
+Trạng thái: **có** = web đã đủ; **thiếu** = web có route nhưng thiếu chức năng con; **mới** = web chưa có; **skip** = cố ý không làm trên web (kèm lý do). **xong** = lane đã làm và đã gộp vào `web/integration` (kèm commit gộp).
 
 Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/site.ts:16`), `noindex`. Công khai = SSR/ISR + metadata, vào sitemap khi nội dung công khai.
 
@@ -24,12 +24,12 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 12 | `/brand/:slug` | brand-view.tsx | `/brand/[slug]` | giữ | thiếu | shop | công khai | Thiếu: theo dõi nhãn, chia sẻ kiếm tiền, nút đại lý |
 | 13 | `/brand-story` | brand-story.tsx | — | `/cau-chuyen` | mới | shop | công khai | Bản đồ SVG tĩnh |
 | 14 | `/s/:slug` | storefront-view.tsx | `/s/[slug]` | giữ | thiếu | affiliate | công khai | Chủ gian hàng thấy nút "thêm sản phẩm" |
-| 15 | `/about` | about.tsx | — (có `/chinh-sach/[loai]`) | `/gioi-thieu` | mới | account | công khai | FAQ, liên hệ (`tel:`, email, OA), chính sách, xoá tài khoản, đăng xuất |
+| 15 | `/about` | about.tsx | — (có `/chinh-sach/[loai]`) | `/gioi-thieu` | xong b76526a7 | account | công khai | FAQ, liên hệ (`tel:`, email, OA), chính sách, xoá tài khoản, đăng xuất |
 | 16 | `*` | not-found.tsx | `not-found.tsx` | giữ | có | — | — | |
-| 17 | `/profile` | profile.tsx | `/tai-khoan` | giữ | thiếu | account | riêng tư | Hub: lối tắt điểm/ví/mã, menu theo vai trò (STAFF/ADMIN, chủ nhãn, đại lý, CTV), cờ `aiAdvisorEnabled`, `CASHBACK_ENABLED`, `marketplaceClaimEnabled` |
-| 18 | `/edit-profile` | edit-profile.tsx | khối sửa tên trong `/tai-khoan` | `/tai-khoan/ho-so` | mới | account | riêng tư | Thêm email, ngày sinh, ảnh đại diện (Cloudinary + crop). SĐT chỉ đọc |
-| 19 | `/settings` | settings.tsx | — | `/tai-khoan/cai-dat` | mới | account | riêng tư | Thông báo (server), cỡ chữ (localStorage). Theo dõi OA = link `zalo.me`; xin quyền gửi thông báo Zalo không có trên web. Không chép đồng bộ `tubu_prefs` cũ |
-| 20 | `/notifications` | notifications.tsx | — | `/tai-khoan/thong-bao` | mới | account | riêng tư | Link hành động trỏ sang route web tương ứng |
+| 17 | `/profile` | profile.tsx | `/tai-khoan` | giữ | xong b76526a7 | account | riêng tư | Hub: lối tắt điểm/ví/mã, menu theo vai trò (STAFF/ADMIN, chủ nhãn, đại lý, CTV), cờ `aiAdvisorEnabled`, `CASHBACK_ENABLED`, `marketplaceClaimEnabled` |
+| 18 | `/edit-profile` | edit-profile.tsx | khối sửa tên trong `/tai-khoan` | `/tai-khoan/ho-so` | xong b76526a7 | account | riêng tư | Thêm email, ngày sinh, ảnh đại diện (Cloudinary + crop). SĐT chỉ đọc |
+| 19 | `/settings` | settings.tsx | — | `/tai-khoan/cai-dat` | xong b76526a7 | account | riêng tư | Thông báo (server), cỡ chữ (localStorage). Theo dõi OA = link `zalo.me`; xin quyền gửi thông báo Zalo không có trên web. Không chép đồng bộ `tubu_prefs` cũ |
+| 20 | `/notifications` | notifications.tsx | — | `/tai-khoan/thong-bao` | xong b76526a7 | account | riêng tư | Link hành động trỏ sang route web tương ứng |
 | 21 | `/loyalty` | loyalty.tsx | `/tai-khoan/diem-xanh` (một phần) | giữ | thiếu | loyalty | riêng tư | Điểm danh, thẻ thành viên QR, mã giảm giá, hạng, lịch sử. **Điểm: 2 lượt review** |
 | 22 | `/wallet` | wallet.tsx | `/tai-khoan/vi-tubu` (một phần) | giữ | thiếu | loyalty | riêng tư | Rút tiền (idempotency, phí/mức tối thiểu), giới thiệu bạn, lịch sử. **Tiền: 2 lượt review** |
 | 23 | `/rewards` | rewards.tsx | — | `/kho-qua` | mới | loyalty | riêng tư | Đổi điểm lấy quà. **Điểm: 2 lượt review** |
@@ -66,8 +66,8 @@ Chức năng mức ứng dụng (không phải `<Route>`, gắn trong `app.tsx`)
 
 | # | Mini App | Web hiện có | Web đích | TT | Lane | Ghi chú |
 |---|---|---|---|---|---|---|
-| 52 | `CouponClaimGate` (`app.tsx:253`): `?claim=` → `POST /coupons/claim` | — | `components/app-gates.tsx` | mới | account | **Tiền: 2 lượt review** |
-| 53 | `OnboardingGate` (`app.tsx:252`) | — | `components/app-gates.tsx` | mới | account | |
+| 52 | `CouponClaimGate` (`app.tsx:253`): `?claim=` → `POST /coupons/claim` | — | `components/app-gates.tsx` | xong b76526a7 | account | **Tiền: 2 lượt review** |
+| 53 | `OnboardingGate` (`app.tsx:252`) | — | `components/app-gates.tsx` | xong b76526a7 | account | |
 | 54 | `?s=` ghi nguồn gian hàng (`app.tsx:158-171`, `recordReferralTouch`) | `ReferralCapture` chỉ đọc `?ref=` (`components/storefront-tracker.tsx:45-58`) | `storefront-tracker.tsx` | thiếu | core | Ảnh hưởng hoa hồng CTV. **2 lượt review** |
 
 Tổng: 54 dòng (51 nhóm route + 3 chức năng mức ứng dụng). `app.tsx` có 53 `<Route path>` (không tính `*`); `route-map.json` có đúng 53 dòng route, mỗi `<Route>` một dòng (`/group-buy` và `/group-buy/:id`, `/academy` và `/academy/:courseId`, `/subscriptions` tách riêng). Map theo route, không theo file: `brand-owner-sales.tsx` là tab trong `/brand-owner`.
