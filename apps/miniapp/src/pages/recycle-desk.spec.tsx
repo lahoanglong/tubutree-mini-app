@@ -332,6 +332,7 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
     await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'qg-8k2m9p4t', pointId: 'wh-1' }));
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' }));
+    expect(screen.queryByText('Gói hạt giống Tubu')).toBeNull();
   });
   it('Trao quà dùng mã đã tra, không dùng chữ đang gõ dở', async () => {
     mocks.deskFulfilGift.mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
@@ -369,11 +370,14 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     expect(await screen.findByText('Điểm này không trao quà')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
   });
-  it('lượt không còn READY → hiện trạng thái, không có nút', async () => {
-    mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: { ...GIFT, status: 'FULFILLED' } });
+  it.each([
+    ['FULFILLED', 'Quà đã được trao'],
+    ['CANCELLED', 'Lượt đổi quà đã huỷ'],
+  ] as const)('lượt không còn READY (%s) → hiện trạng thái, không có nút', async (status, text) => {
+    mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: { ...GIFT, status } });
     renderPage();
     await lookUp('QG-8K2M9P4T');
-    expect(await screen.findByText('Quà đã được trao')).toBeInTheDocument();
+    expect(await screen.findByText(text)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
   });
   it('đại lý: thẻ ưu đãi và báo cáo tháng hiện; kho thì không có thẻ ưu đãi', async () => {
