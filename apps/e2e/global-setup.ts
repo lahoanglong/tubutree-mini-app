@@ -107,7 +107,7 @@ export default async function globalSetup() {
   const apiDir = path.resolve(__dirname, '../api');
   const apiEnv = parseEnvFile(path.join(apiDir, '.env'));
 
-  const secret = apiEnv['JWT_ACCESS_SECRET'] ?? process.env.JWT_ACCESS_SECRET ?? '';
+  const secret = process.env.JWT_ACCESS_SECRET ?? apiEnv['JWT_ACCESS_SECRET'] ?? '';
 
   if (!secret || secret.length < 16) {
     console.warn(

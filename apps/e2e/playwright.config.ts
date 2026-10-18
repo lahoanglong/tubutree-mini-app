@@ -15,6 +15,9 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
  * Phạm vi chạy:
  *   - Mặc định: cả 4 project (API, Web Admin, Web Customer, Zalo Mini App) + 3 webServer.
  *     Cần Docker DB (pnpm dev:infra: Postgres :5434, Redis :6381).
+ *   - Chỉ web (E2E_SCOPE=web): project "Web Admin", "Web Customer", "Web Customer Mobile" + webServer API
+ *     và web, không Vite. Cổng đổi bằng E2E_WEB_PORT / E2E_MINIAPP_PORT / E2E_API_PORT. Chạy qua
+ *     scripts/web-gate.sh (DB + Redis tạm).
  *   - Chỉ miniapp (E2E_SCOPE=miniapp, hoặc `pnpm --filter @tubutree/e2e test:miniapp`):
  *     chỉ project "Zalo Mini App" + chỉ webServer Vite. Các spec miniapp mock toàn bộ API
  *     (tests/support/mock-api.ts) nên KHÔNG cần API/DB. Project API / Web Admin bị bỏ hẳn
@@ -37,12 +40,17 @@ function apiPortFromEnvFile(): string | undefined {
 
 const API_PORT = process.env.E2E_API_PORT ?? apiPortFromEnvFile() ?? '3001';
 const API_URL = `http://localhost:${API_PORT}`;
-const WEB_URL = 'http://localhost:3112';
-const MINIAPP_URL = 'http://localhost:3113';
+const WEB_PORT = process.env.E2E_WEB_PORT ?? '3112';
+const MINIAPP_PORT = process.env.E2E_MINIAPP_PORT ?? '3113';
+const WEB_URL = `http://localhost:${WEB_PORT}`;
+const MINIAPP_URL = `http://localhost:${MINIAPP_PORT}`;
 
 // `test:miniapp` (package.json) không cần cross-env: npm/pnpm đặt npm_lifecycle_event = tên script.
 const miniappOnly =
   process.env.E2E_SCOPE === 'miniapp' || process.env.npm_lifecycle_event === 'test:miniapp';
+
+// E2E_SCOPE=web: chỉ API + web (khách, admin), không dựng Vite Mini App. Dùng trong web-gate.sh.
+const webOnly = process.env.E2E_SCOPE === 'web';
 
 type WebServer = NonNullable<Exclude<PlaywrightTestConfig['webServer'], unknown[]>>;
 
@@ -56,16 +64,17 @@ const apiServer: WebServer = {
   reuseExistingServer: !process.env.CI,
 };
 const webServer: WebServer = {
-  command: 'pnpm --filter @tubutree/web dev',
+  // exec next dev để -p theo E2E_WEB_PORT (script `dev` của web cố định 3112).
+  command: `pnpm --filter @tubutree/web exec next dev -H 0.0.0.0 -p ${WEB_PORT}`,
   url: WEB_URL,
   cwd: '../..',
   // Web admin gọi đúng API vừa start (mặc định next.config.mjs là :3001).
-  env: { NEXT_PUBLIC_API_BASE_URL: `${API_URL}/api` },
+  env: { NEXT_PUBLIC_API_BASE_URL: `${API_URL}/api`, API_BASE_URL: `${API_URL}/api` },
   timeout: 180_000,
   reuseExistingServer: !process.env.CI,
 };
 const miniappServer: WebServer = {
-  command: 'pnpm --filter @tubutree/miniapp dev',
+  command: `pnpm --filter @tubutree/miniapp exec vite --host 0.0.0.0 --port ${MINIAPP_PORT}`,
   url: MINIAPP_URL,
   cwd: '../..',
   timeout: 180_000,
@@ -93,6 +102,11 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
     testMatch: /.*\.web\.spec\.ts/,
   },
   {
+    name: 'Web Customer Mobile',
+    use: { ...devices['Pixel 7'], baseURL: WEB_URL },
+    testMatch: /.*\.web\.spec\.ts/,
+  },
+  {
     name: 'Zalo Mini App',
     use: { ...devices['iPhone 12'], baseURL: MINIAPP_URL },
     testMatch: /.*miniapp\.spec\.ts/,
@@ -112,6 +126,14 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   // Tự khởi động server cần thiết rồi CHỜ tới khi sẵn sàng. cwd = repo root (../..).
-  webServer: miniappOnly ? [miniappServer] : [apiServer, webServer, miniappServer],
-  projects: miniappOnly ? allProjects.filter((p) => p.name === 'Zalo Mini App') : allProjects,
+  webServer: miniappOnly
+    ? [miniappServer]
+    : webOnly
+      ? [apiServer, webServer]
+      : [apiServer, webServer, miniappServer],
+  projects: miniappOnly
+    ? allProjects.filter((p) => p.name === 'Zalo Mini App')
+    : webOnly
+      ? allProjects.filter((p) => p.name?.startsWith('Web '))
+      : allProjects,
 });
