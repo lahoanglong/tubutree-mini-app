@@ -284,12 +284,12 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
     setErr(null);
     setResult(null);
     const body: Parameters<typeof receiveWasteRequest>[1] = {};
-    if (isMail) {
-      const match: WasteMatchInput = code !== '' ? { parcelCode: code } : { phoneMatchConfirmed: true };
-      const tracking = parcelTracking.trim();
-      if (tracking !== '') match.parcelTracking = tracking;
-      body.match = match;
-    }
+    const match: WasteMatchInput = {};
+    if (code !== '') match.parcelCode = code;
+    else if (isMail) match.phoneMatchConfirmed = true;
+    const tracking = parcelTracking.trim();
+    if (isMail && tracking !== '') match.parcelTracking = tracking;
+    if (Object.keys(match).length > 0) body.match = match;
     if (weightTrim !== '') body.receivedWeightGrams = Number(weightTrim);
     receive.mutate(body);
   };
@@ -306,12 +306,12 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
         <h4 className="text-sm font-semibold text-stone-900">{`Nhận kiện ${row.code}`}</h4>
         <button type="button" className={BTN_XS_SECONDARY} onClick={onClose}>Đóng</button>
       </div>
+      <label className="block text-xs">
+        <span className="font-medium text-stone-700">Mã TR- trên kiện</span>
+        <input name="parcelCode" type="text" className={`${INPUT_CLASS} mt-1`} value={parcelCode} onChange={(e) => setParcelCode(e.target.value)} />
+      </label>
       {isMail && (
         <>
-          <label className="block text-xs">
-            <span className="font-medium text-stone-700">Mã TR- trên kiện</span>
-            <input name="parcelCode" type="text" className={`${INPUT_CLASS} mt-1`} value={parcelCode} onChange={(e) => setParcelCode(e.target.value)} />
-          </label>
           <label className="flex items-start gap-2 text-sm text-stone-800">
             <input
               name="phoneMatchConfirmed"

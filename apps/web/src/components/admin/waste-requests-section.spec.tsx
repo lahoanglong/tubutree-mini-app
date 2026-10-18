@@ -290,6 +290,23 @@ describe('WasteRequestsSection', () => {
     expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({});
   });
 
+  it('thu kèm đơn: gõ mã TR- trên kiện thì gửi parcelCode để máy chủ đối chiếu', async () => {
+    const { c, api } = await mount({
+      lookup: {
+        body: [wasteRequestRow({ id: 'r9', code: 'TR-PICK99', method: 'PICKUP', orderCode: 'TUBU2026101546241', carrier: null, trackingCode: null })],
+      },
+    });
+    await lookup(c, 'TUBU2026101546241');
+    click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
+    expect(c.querySelector('input[name="parcelTracking"]')).toBeNull();
+    typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-PICK99');
+    click(confirmBtn(c));
+    await flush();
+    const sent = posts(api, '/admin/waste/requests/r9/receive');
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ match: { parcelCode: 'TR-PICK99' } });
+  });
+
   it('nhận kiện từ hàng đợi: kết quả vẫn hiện sau khi danh sách tải lại', async () => {
     let received = false;
     const { c } = await mount({
