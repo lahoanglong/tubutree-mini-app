@@ -329,7 +329,9 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     expect(within(sheet).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['Ướt', 'Bẩn', 'Lẫn vật lạ', 'Sai loại', 'Hỏng', 'Không nhận', 'Quá khổ', 'Có pin hoặc vật nguy hại', 'Khác']);
     const send = within(sheet).getByRole('button', { name: 'Từ chối yêu cầu' });
     expect(send).toBeDisabled();
+    expect(within(sheet).getByText('Chọn một lý do')).toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole('radio', { name: 'Ướt' }));
+    expect(within(sheet).queryByText('Chọn một lý do')).toBeNull();
     fireEvent.change(within(sheet).getByLabelText('Ghi chú (không bắt buộc)'), { target: { value: 'thùng ướt hết' } });
     fireEvent.click(send);
     await waitFor(() => expect(mocks.deskReject).toHaveBeenCalledWith('req-1', { rejectionReason: 'WET', rejectionNote: 'thùng ướt hết' }));

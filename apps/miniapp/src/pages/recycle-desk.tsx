@@ -136,6 +136,7 @@ function RejectSheet({
             </label>
           ))}
         </div>
+        {reason === null && <Text variant="body-sm" tone="secondary" as="div">Chọn một lý do</Text>}
         <Field label={noteRequired ? 'Ghi chú (bắt buộc với lý do Khác)' : 'Ghi chú (không bắt buộc)'}>
           <Input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
