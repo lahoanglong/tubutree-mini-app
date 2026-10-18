@@ -68,7 +68,7 @@ Chức năng mức ứng dụng (không phải `<Route>`, gắn trong `app.tsx`)
 |---|---|---|---|---|---|---|
 | 52 | `CouponClaimGate` (`app.tsx:253`): `?claim=` → `POST /coupons/claim` | — | `components/app-gates.tsx` | xong b76526a7 | account | **Tiền: 2 lượt review** |
 | 53 | `OnboardingGate` (`app.tsx:252`) | — | `components/app-gates.tsx` | xong b76526a7 | account | |
-| 54 | `?s=` ghi nguồn gian hàng (`app.tsx:158-171`, `recordReferralTouch`) | `ReferralCapture` chỉ đọc `?ref=` (`components/storefront-tracker.tsx:45-58`) | `storefront-tracker.tsx` | thiếu | core | Ảnh hưởng hoa hồng CTV. **2 lượt review** |
+| 54 | `?s=` ghi nguồn gian hàng (`app.tsx:158-171`, `recordReferralTouch`) | `ReferralCapture` chỉ đọc `?ref=` (`components/storefront-tracker.tsx:45-58`) | `storefront-tracker.tsx` | xong bf270b19 | core | Ảnh hưởng hoa hồng CTV. **2 lượt review**. Lệch chủ đích (core-shell:3): trang nhãn không có `?ref=` thì web không gửi chạm, Mini App gửi slug nhãn làm mã; API chỉ ghi công khi mã là của CTV/đại lý (`affiliate.service.ts` `findEligibleReferrer`), nên bản Mini App gần như luôn `ok:false` và chỉ ghi nhầm khi slug nhãn trùng mã một CTV |
 
 Tổng: 54 dòng (51 nhóm route + 3 chức năng mức ứng dụng). `app.tsx` có 53 `<Route path>` (không tính `*`); `route-map.json` có đúng 53 dòng route, mỗi `<Route>` một dòng (`/group-buy` và `/group-buy/:id`, `/academy` và `/academy/:courseId`, `/subscriptions` tách riêng). Map theo route, không theo file: `brand-owner-sales.tsx` là tab trong `/brand-owner`.
 
