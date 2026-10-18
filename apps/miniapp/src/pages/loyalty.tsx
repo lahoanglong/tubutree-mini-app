@@ -193,7 +193,7 @@ export default function LoyaltyPage() {
   const [celebrate, setCelebrate] = useState<string | null>(null);
   useEffect(() => {
     if (!data?.tier) return;
-    const KEY = 'tubu_last_tier_min';
+    const KEY = 'tubu_last_tier_min_v2';
     let raw: string | null = null;
     try {
       raw = localStorage.getItem(KEY);
