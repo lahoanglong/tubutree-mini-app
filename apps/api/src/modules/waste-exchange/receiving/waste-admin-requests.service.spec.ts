@@ -63,7 +63,7 @@ function setup(o: Setup = {}) {
       return [];
     }),
     wasteRequest: {
-      findUnique: jest.fn(async () => (data === null ? null : { ...data, userId: o.lockedUserId ?? (data as { userId: string }).userId })),
+      findUnique: jest.fn(async () => (order.push('request findUnique'), data === null ? null : { ...data, userId: o.lockedUserId ?? (data as { userId: string }).userId })),
       updateMany: jest.fn(async () => (order.push('request updateMany'), { count: o.requestCount ?? 1 })),
     },
     wasteUnmatchedParcel: {
@@ -105,6 +105,10 @@ describe('WasteAdminRequestsService.reopen', () => {
     await expect(service.reopen('a1', 'r1', { reason: 'kiện đến muộn' })).resolves.toEqual({ id: 'r1' });
 
     expect(order.indexOf('lockWasteCustomer')).toBeLessThan(order.indexOf('request FOR UPDATE'));
+    const [strings, ...values] = tx.$queryRaw.mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
+    expect(strings.join('?')).toBe('SELECT "id" FROM "waste_requests" WHERE "id" = ? FOR UPDATE');
+    expect(values).toEqual(['r1']);
+    expect(order.indexOf('request FOR UPDATE')).toBeLessThan(order.indexOf('request findUnique'));
     expect(lockWasteCustomer).toHaveBeenCalledWith(tx, 'u1');
     expect(hold.validateAndHold).toHaveBeenCalledWith(
       tx,
