@@ -132,7 +132,7 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
     renderPage();
     expect(await screen.findByText('Hạn mức điểm tháng này')).toBeInTheDocument();
     expect(screen.getByText('Đã dùng 120.000 / 500.000 điểm')).toBeInTheDocument();
-    expect(screen.getByText('Còn 380.000 điểm')).toBeInTheDocument();
+    expect(screen.getByText('Còn lại 380.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.')).toBeInTheDocument();
   });
   it('một điểm: tên điểm hiện dưới tiêu đề; hạn mức có thanh tiến độ theo đã dùng trên giới hạn', async () => {
@@ -260,7 +260,7 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }, { itemId: 'item-milk', declaredQty: 5, receivedQty: 5 }] }));
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Tubu sẽ cộng 6.000 điểm cho khách', type: 'success' }));
-    expect(await screen.findByText('Còn 374.000 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Còn lại 374.000 điểm')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Xác nhận đã nhận' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Từ chối cả yêu cầu' })).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('Đã ghi nhận. Tubu sẽ cộng 6.000 điểm cho khách');
@@ -327,7 +327,7 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }], match: { parcelCode: 'TR-8K2M9' } }));
     await waitFor(() => expect(screen.queryByText('Ng*** A')).toBeNull());
-    expect(screen.getByText('Còn 380.000 điểm')).toBeInTheDocument();
+    expect(screen.getByText('Còn lại 380.000 điểm')).toBeInTheDocument();
     expect(screen.queryByText('Không giới hạn hạn mức tháng')).toBeNull();
   });
   it('kho + kiện đã RECEIVED: không gửi match', async () => {
@@ -340,6 +340,17 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalled());
     expect(mocks.deskConfirm.mock.calls[0]![1]).not.toHaveProperty('match');
+  });
+  it('kho: thẻ kết quả nêu số điểm còn được xác nhận hôm nay lấy từ phản hồi', async () => {
+    mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]);
+    lookupReq({ method: 'MAIL_IN', status: 'RECEIVED', pointId: 'wh-1', lines: [LINE0] });
+    mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 5000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 150_000 });
+    renderPage();
+    await lookUp('TR-8K2M9');
+    await screen.findByText('Ng*** A');
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
+    expect(await screen.findByText('Còn được xác nhận hôm nay: 150.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByText(/Hạn mức còn lại:/)).toBeNull();
   });
   it.each([
     'Không tìm thấy mã',
