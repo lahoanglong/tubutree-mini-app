@@ -34,6 +34,18 @@ export type ReferralNoticeReconcileResult =
  * dọn sau retention.notification_logs_days (tối thiểu 30 ngày, lâu hơn cửa sổ 3 ngày) nên tin đã gửi không bao giờ "mất" để bị
  * gửi lại.
  */
+/**
+ * Số điểm trong log thông báo mốc cũ nằm ở đơn vị trước migration points_1d (1 điểm = 1.000đ), nên so thêm bản ×1.000 để tin đã gửi
+ * trong cửa sổ quanh lúc migrate không bị gửi bù lần nữa.
+ */
+export function shownPointsMatch(delta: number, shown: string | undefined): boolean {
+  if (shown === undefined) return false;
+  const digits = shown.replace(/\D/g, '');
+  if (!digits) return false;
+  const n = Number(digits);
+  return n === delta || n * 1000 === delta;
+}
+
 @Injectable()
 export class ReferralNoticeReconcileCron {
   private readonly logger = new Logger(ReferralNoticeReconcileCron.name);
@@ -262,7 +274,7 @@ export class ReferralNoticeReconcileCron {
     const covered: string[] = [];
     for (const log of told) {
       const data = (log.payload as { data?: { count?: string; points?: string } } | null)?.data;
-      const hit = open.findIndex((r) => String(Number(r.reason.slice(r.reason.lastIndexOf(':') + 1).split('#')[0])) === data?.count && r.delta.toLocaleString('vi-VN') === data?.points);
+      const hit = open.findIndex((r) => String(Number(r.reason.slice(r.reason.lastIndexOf(':') + 1).split('#')[0])) === data?.count && shownPointsMatch(r.delta, data?.points));
       if (hit >= 0) covered.push(...open.splice(hit, 1).map((r) => r.id));
     }
     return covered;
