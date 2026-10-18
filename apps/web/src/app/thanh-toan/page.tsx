@@ -63,7 +63,6 @@ const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
 
 type PlaceBody = Parameters<typeof placeOrder>[0];
-const CHOICE_FIELDS = ['addressId', 'paymentMethod', 'note', 'wasteRequestId', 'invoiceRequest', 'pointsToUse', 'referralCode'] as const;
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
 export default function CheckoutPage() {
@@ -86,7 +85,14 @@ export default function CheckoutPage() {
   const orderKeys = useRef(createOrderKeyRing());
   // Lần đặt trước chưa rõ kết quả (mạng rớt/5xx): máy chủ có thể đã tạo đơn, mà giỏ/báo giá nạp lại (header cũng quan sát giỏ)
   // sẽ làm body đổi và sinh key mới, tạo đơn thứ hai. Đóng băng chính yêu cầu: bấm lại gửi nguyên body và key đó cho tới khi có kết quả rõ.
-  const unknownAttempt = useRef<{ body: PlaceBody; key: string } | null>(null);
+  const unknownAttempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
+  // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, yêu cầu thu rác, điểm dùng
+  // được tính lại từ dữ liệu máy chủ (ví tụt, yêu cầu rác gắn mã đơn) ngay khi nạp lại sau đơn đã tạo, không phải khách đổi ý.
+  const choiceRev = useRef(0);
+  const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
+    choiceRev.current += 1;
+    fn(...args);
+  };
 
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
@@ -193,7 +199,7 @@ export default function CheckoutPage() {
   // chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
   const overStock = outOfStockLine(checkoutItems);
 
-  const attempt = useRef<{ body: PlaceBody; key: string } | null>(null);
+  const attempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
   const place = useMutation({
     mutationFn: () => {
       const body: PlaceBody = {
@@ -225,14 +231,14 @@ export default function CheckoutPage() {
       if (frozen) {
         // Dữ liệu suy ra từ giỏ/báo giá (dòng đã chọn, tổng) có thể đã đổi vì đơn trước đã tạo: gửi lại nguyên yêu cầu cũ để máy chủ trả đơn cũ.
         // Lựa chọn của chính khách đổi thì đây là đơn khác: không gửi, mời kiểm tra Đơn hàng; lần bấm sau đặt đơn mới.
-        if (CHOICE_FIELDS.some((f) => JSON.stringify(body[f]) !== JSON.stringify(frozen.body[f]))) {
+        if (frozen.rev !== choiceRev.current) {
           void qc.invalidateQueries({ queryKey: ['orders'] });
           return Promise.reject(new Error(PREVIOUS_MAYBE_PLACED));
         }
         return placeOrder(frozen.body, frozen.key);
       }
       const key = orderKeys.current.keyFor(body);
-      attempt.current = { body, key };
+      attempt.current = { body, key, rev: choiceRev.current };
       return placeOrder(body, key);
     },
     onSuccess: (order) => {
@@ -253,7 +259,10 @@ export default function CheckoutPage() {
       if (isBank) router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
     onError: (e) => {
-      unknownAttempt.current = isOutcomeUnknown(e) ? attempt.current : null;
+      // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
+      const rejectedBeforeService = e instanceof ApiError && [401, 408, 429].includes(e.status);
+      if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
+      else if (!rejectedBeforeService) unknownAttempt.current = null;
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
       // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
@@ -457,12 +466,13 @@ export default function CheckoutPage() {
             <AddressPicker
               addresses={addrQ.data ?? []}
               selectedId={addressId}
-              onSelect={setAddressId}
+              onSelect={chosen(setAddressId)}
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
-                setAddressId(a.id);
+                chosen(setAddressId)(a.id);
               }}
               onUpdated={() => {
+                choiceRev.current += 1;
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
                 void qc.invalidateQueries({ queryKey: ['quote'] });
               }}
@@ -484,7 +494,7 @@ export default function CheckoutPage() {
                           type="radio"
                           name="pay"
                           checked={payment === p.k}
-                          onChange={() => setPayment(p.k)}
+                          onChange={chosen(() => setPayment(p.k))}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
                           className="h-6 w-6 shrink-0 accent-forest-600"
@@ -514,7 +524,7 @@ export default function CheckoutPage() {
               <span className="text-xs font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
               <textarea
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={chosen((e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value))}
                 maxLength={ORDER_NOTE_MAX}
                 rows={3}
                 placeholder="Ví dụ: giao giờ hành chính, gọi trước khi giao, gửi ở bảo vệ"
@@ -553,7 +563,7 @@ export default function CheckoutPage() {
                     <input
                       type="checkbox"
                       checked={attachWaste}
-                      onChange={(e) => setAttachWaste(e.target.checked)}
+                      onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setAttachWaste(e.target.checked))}
                       disabled={place.isPending}
                       className="h-6 w-6 shrink-0 accent-forest-600"
                     />
@@ -579,15 +589,15 @@ export default function CheckoutPage() {
           <ReferralCodeBox
             linkedCode={sfCtx.referralCode}
             appliedCode={referralApplied}
-            onApplied={setReferralApplied}
+            onApplied={chosen(setReferralApplied)}
             disabled={place.isPending}
           />
 
           <InvoiceSection
             want={wantInvoice}
-            onWant={setWantInvoice}
+            onWant={chosen(setWantInvoice)}
             invoice={invoice}
-            onInvoice={setInvoice}
+            onInvoice={chosen(setInvoice)}
             valid={invoiceValid}
             disabled={place.isPending}
           />
@@ -673,7 +683,7 @@ export default function CheckoutPage() {
                 type="checkbox"
                 checked={usePoints && !partnerPoints.disabled}
                 disabled={partnerPoints.disabled}
-                onChange={(e) => setUsePoints(e.target.checked)}
+                onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setUsePoints(e.target.checked))}
                 className="h-6 w-6 shrink-0 accent-forest-600"
               />
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
@@ -728,10 +738,10 @@ export default function CheckoutPage() {
           {place.isError && !priceChanged && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
-              {place.error instanceof NetworkError && (
+              {(isOutcomeUnknown(place.error) || place.error?.message === PREVIOUS_MAYBE_PLACED) && (
                 <p className="mt-1 text-stone-700">
                   Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
-                  <Link href="/tai-khoan" className="font-semibold text-forest-700 underline">
+                  <Link href="/tai-khoan/don-hang" className="font-semibold text-forest-700 underline">
                     Đơn của tôi
                   </Link>
                   .
