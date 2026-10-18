@@ -8,6 +8,7 @@ import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, r
 import { buyTree } from '../services/game-api';
 import { getErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
 import { AuthGate } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
@@ -24,6 +25,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
+import { pointsRulesNote } from '../utils/points-rules-note';
 import { pointAddress } from '../utils/waste-labels';
 
 export const REWARD_TABS = [
@@ -210,6 +212,7 @@ function RewardsBody() {
   const navigate = useNavigate();
   const rewardsQ = useQuery({ queryKey: WASTE_QUERY_KEYS.rewards, queryFn: getLoyaltyRewards });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty });
+  const cfg = usePublicConfig();
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
   const [confirmReward, setConfirmReward] = useState<RewardItemDTO | null>(null);
   const [result, setResult] = useState<RedeemOutcome | null>(null);
@@ -222,13 +225,18 @@ function RewardsBody() {
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
   const shown = c.rewards.filter((r) => kinds.includes(r.kind)).sort((a, b) => a.sortOrder - b.sortOrder);
+  const total = pointsSummary(c).total;
+  const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;
 
   return (
     <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
       <div style={{ ...COLUMN, gap: 4 }}>
-        <Heading variant="display-md" as="div">{formatPoints(pointsSummary(c).total)}</Heading>
-        <Text variant="body-sm" tone="secondary" as="div">{`Đổi quà dùng được ${formatPoints(c.redeemablePoints)}`}</Text>
+        <Heading variant="display-md" as="div">{formatPoints(total)}</Heading>
+        {c.redeemablePoints !== total && (
+          <Text variant="body-sm" tone="secondary" as="div">{`Đổi quà dùng được ${formatPoints(c.redeemablePoints)}`}</Text>
+        )}
+        {rulesNote && <Text variant="caption" tone="secondary" as="div">{rulesNote}</Text>}
         {lockedNote && <Text variant="caption" tone="tertiary" as="div">{lockedNote}</Text>}
         {c.pointsConvertedBalance > 0 && (
           <Text variant="caption" tone="tertiary" as="div">

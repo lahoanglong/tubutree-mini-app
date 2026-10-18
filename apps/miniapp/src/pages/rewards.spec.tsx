@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
   login: vi.fn(),
   ensurePhone: vi.fn(),
-  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
+  publicConfig: { isLoaded: true, loyalty: undefined as undefined | { maxRedeemPct?: number; pointExpireMonths?: number }, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
   getLoyaltyRewards: vi.fn(),
   redeemLoyaltyReward: vi.fn(),
   getLoyalty: vi.fn(),
@@ -86,6 +86,21 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(screen.getByText('Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Quà của tôi/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/rewards/mine');
+  });
+  it('ghi chú luật dùng điểm từ cấu hình công khai; không hiện khi cấu hình chưa tải', async () => {
+    mocks.publicConfig.loyalty = { maxRedeemPct: 0.2, pointExpireMonths: 12 };
+    try {
+      renderPage();
+      expect(await screen.findByText('Dùng tối đa 20% giá trị hàng trong đơn, không trừ vào phí ship. Điểm thường hết hạn sau 12 tháng.')).toBeInTheDocument();
+    } finally {
+      mocks.publicConfig.loyalty = undefined;
+    }
+  });
+  it('không lặp số dư: dòng "Đổi quà dùng được" chỉ hiện khi khác tổng', async () => {
+    mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ pointsBalance: 42_000, pointsConvertedBalance: 0, lockedPoints: 0, redeemablePoints: 42_000 }));
+    renderPage();
+    expect(await screen.findByText('42.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByText(/Đổi quà dùng được/)).toBeNull();
   });
   it('ba tab theo loại quà', async () => {
     renderPage();
