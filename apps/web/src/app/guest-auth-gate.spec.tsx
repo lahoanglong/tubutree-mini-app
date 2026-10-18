@@ -62,6 +62,10 @@ import EventsPage from './cong-dong/su-kien/page';
 import PostDetailPage from './cong-dong/[id]/page';
 import { CourseList } from './hoc-vien/course-list';
 import { CourseDetailView } from './hoc-vien/[courseId]/course-detail';
+import DealerPage from './dai-ly/page';
+import StaffPage from './nhan-vien/page';
+import MyPayrollPage from './nhan-vien/bang-luong/page';
+import BrandOwnerPage from './chu-thuong-hieu/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -119,7 +123,12 @@ const GAME: PageCase[] = [
   ['/vuon-xanh', () => <GamePage />, '/vuon-xanh'],
   ['/tu-van', () => <AdvisorPage />, '/tu-van'],
 ];
-const PRO: PageCase[] = [];
+const PRO: PageCase[] = [
+  ['/dai-ly', () => <DealerPage />, '/dai-ly'],
+  ['/nhan-vien', () => <StaffPage />, '/nhan-vien'],
+  ['/nhan-vien/bang-luong', () => <MyPayrollPage />, '/nhan-vien/bang-luong'],
+  ['/chu-thuong-hieu', () => <BrandOwnerPage />, '/chu-thuong-hieu'],
+];
 const RECYCLE: PageCase[] = [];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 

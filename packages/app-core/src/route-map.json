@@ -51,10 +51,10 @@
       { "miniapp": "/storefront", "web": "/ctv/gian-hang", "private": true }
     ]},
     { "lane": "pro", "items": [
-      { "miniapp": "/dealer", "web": "/dai-ly", "private": true, "pending": true },
-      { "miniapp": "/staff", "web": "/nhan-vien", "private": true, "pending": true },
-      { "miniapp": "/my-payroll", "web": "/nhan-vien/bang-luong", "private": true, "pending": true },
-      { "miniapp": "/brand-owner", "web": "/chu-thuong-hieu", "private": true, "pending": true },
+      { "miniapp": "/dealer", "web": "/dai-ly", "private": true },
+      { "miniapp": "/staff", "web": "/nhan-vien", "private": true },
+      { "miniapp": "/my-payroll", "web": "/nhan-vien/bang-luong", "private": true },
+      { "miniapp": "/brand-owner", "web": "/chu-thuong-hieu", "private": true },
       { "miniapp": "/admin", "web": "/admin", "private": true },
       { "miniapp": "/admin/community", "web": "/admin?tab=community", "private": true }
     ]},

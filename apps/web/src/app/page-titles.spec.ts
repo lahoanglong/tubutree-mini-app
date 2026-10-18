@@ -23,6 +23,10 @@ import { metadata as ctvStorefront } from './ctv/gian-hang/layout';
 import { metadata as leaderboard } from './cong-dong/xep-hang/layout';
 import { metadata as events } from './cong-dong/su-kien/layout';
 import { metadata as postDetail } from './cong-dong/[id]/layout';
+import { metadata as dealer } from './dai-ly/layout';
+import { metadata as staff } from './nhan-vien/layout';
+import { metadata as payroll } from './nhan-vien/bang-luong/layout';
+import { metadata as brandOwner } from './chu-thuong-hieu/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -63,7 +67,12 @@ const GAME: TitleCase[] = [
   ['/vuon-xanh', game, 'Vườn Xanh — Tubu Tree'],
   ['/tu-van', advisor, 'Trợ lý AI Tubu — Tubu Tree'],
 ];
-const PRO: TitleCase[] = [];
+const PRO: TitleCase[] = [
+  ['/dai-ly', dealer, 'Kênh đại lý — Tubu Tree'],
+  ['/nhan-vien', staff, 'Ca làm của tôi — Tubu Tree'],
+  ['/nhan-vien/bang-luong', payroll, 'Lương của tôi — Tubu Tree'],
+  ['/chu-thuong-hieu', brandOwner, 'Quản lý nhãn hàng — Tubu Tree'],
+];
 const RECYCLE: TitleCase[] = [];
 const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
