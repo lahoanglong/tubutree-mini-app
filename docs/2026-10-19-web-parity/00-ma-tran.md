@@ -10,19 +10,19 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 
 | # | Mini App | File | Web hiện có | Web đích | TT | Lane | Loại | Ghi chú nền tảng |
 |---|---|---|---|---|---|---|---|---|
-| 1 | `/` | home.tsx | `/` hiện là **trang danh mục + tìm kiếm** (`app/page.tsx:27-75`: `q`, `category`, `brand`, phân trang, canonical) | `/` | thiếu | shop | công khai | `/` thành trang chủ như Mini App: mua lại, đơn đang giao, flash sale (đang và sắp tới), "Dành cho bạn", bán chạy, danh mục, đã xem gần đây, nổi bật, hàng mới, quà khách mới, bố cục theo khách mới/cũ (cờ `homeNewCustomerLayout`). Pull-to-refresh không cần trên web |
-| 2 | `/browse` | browse.tsx | nằm trong `/` | `/san-pham` | mới | shop | công khai (`noindex` khi có `q`) | Chuyển danh mục từ `/` sang. `/?q=`, `/?category=`, `/?brand=` chuyển hướng 307 sang `/san-pham` cùng query (URL đã được index). Sửa `components/site-search.tsx` (đang đẩy `/?q=`) và `lib/home-seo.ts`. Thêm gợi ý tìm kiếm, tìm gần đây, bộ lọc, sắp xếp, tải thêm, sự kiện tìm kiếm |
-| 3 | `/product/:slug` | product-detail.tsx | `/san-pham/[slug]` | giữ | thiếu | shop | công khai | Thiếu (kiểm lại): mã giảm giá theo sản phẩm, dòng freeship, đơn vị giao, đặt định kỳ, mua chung, content kit, tim yêu thích, mua kèm, liên quan, chat OA (`zalo.me`) |
+| 1 | `/` | home.tsx | `/` hiện là **trang danh mục + tìm kiếm** (`app/page.tsx:27-75`: `q`, `category`, `brand`, phân trang, canonical) | `/` | xong 4c9017bf | shop | công khai | `/` thành trang chủ như Mini App: mua lại, đơn đang giao, flash sale (đang và sắp tới), "Dành cho bạn", bán chạy, danh mục, đã xem gần đây, nổi bật, hàng mới, quà khách mới, bố cục theo khách mới/cũ (cờ `homeNewCustomerLayout`). Pull-to-refresh không cần trên web |
+| 2 | `/browse` | browse.tsx | nằm trong `/` | `/san-pham` | xong 4c9017bf | shop | công khai (`noindex` khi có `q`) | Chuyển danh mục từ `/` sang. `/?q=`, `/?category=`, `/?brand=` chuyển hướng 307 sang `/san-pham` cùng query (URL đã được index). Sửa `components/site-search.tsx` (đang đẩy `/?q=`) và `lib/home-seo.ts`. Thêm gợi ý tìm kiếm, tìm gần đây, bộ lọc, sắp xếp, tải thêm, sự kiện tìm kiếm |
+| 3 | `/product/:slug` | product-detail.tsx | `/san-pham/[slug]` | giữ | xong 4c9017bf | shop | công khai | Thiếu (kiểm lại): mã giảm giá theo sản phẩm, dòng freeship, đơn vị giao, đặt định kỳ, mua chung, content kit, tim yêu thích, mua kèm, liên quan, chat OA (`zalo.me`) |
 | 4 | `/cart` | cart.tsx | `/gio-hang` | giữ | thiếu | order | riêng tư | Kiểm: voucher sheet, hoàn tác xoá, nhóm theo đơn vị giao, thanh ngữ cảnh gian hàng |
 | 5 | `/checkout` | checkout.tsx | `/thanh-toan` | giữ | thiếu | order | riêng tư | Bỏ `ensurePhone` (Q2; Mini App cũng không chặn). Phương thức: COD, chuyển khoản, ví (Q4; ZaloPay đang ẩn ở cả Mini App). Kiểm: hóa đơn VAT, chia kiện, cảnh báo đổi giá, gắn phiếu đổi rác |
 | 6 | `/bank-payment/:code` | bank-payment.tsx | panel trong `/thanh-toan` | `/thanh-toan/chuyen-khoan/[code]` | mới | order | riêng tư | Dùng lại `bank-transfer-panel.tsx`; dò 4 giây tới khi PAID |
 | 7 | `/orders` (+`/subscriptions`) | orders.tsx | `OrdersSection` trong `/tai-khoan` | `/tai-khoan/don-hang` | mới | order | riêng tư | 7 tab gồm "Định kỳ" (`?tab=subscriptions`), mua lại, gợi ý khách mới |
 | 8 | `/order/:code` | order-detail.tsx | `/tai-khoan/don-hang/[code]` | giữ | thiếu | order | riêng tư | Kiểm: đánh giá từng món, phiếu đổi rác, mua lại, nơi nhận hoàn tiền. Lời mời theo dõi OA dùng link `zalo.me` |
 | 9 | `/addresses` | addresses.tsx | `/tai-khoan/dia-chi` | giữ | thiếu | order | riêng tư | Kiểm: đặt mặc định, sửa, xoá có xác nhận |
-| 10 | `/wishlist` | wishlist.tsx | — | `/tai-khoan/yeu-thich` | mới | shop | riêng tư | |
-| 11 | `/group-buy`, `/group-buy/:id` | group-buy.tsx | — | `/mua-chung`, `/mua-chung/[id]` | mới | shop | công khai | Tham gia cần đăng nhập |
-| 12 | `/brand/:slug` | brand-view.tsx | `/brand/[slug]` | giữ | thiếu | shop | công khai | Thiếu: theo dõi nhãn, chia sẻ kiếm tiền, nút đại lý |
-| 13 | `/brand-story` | brand-story.tsx | — | `/cau-chuyen` | mới | shop | công khai | Bản đồ SVG tĩnh |
+| 10 | `/wishlist` | wishlist.tsx | — | `/tai-khoan/yeu-thich` | xong 4c9017bf | shop | riêng tư | |
+| 11 | `/group-buy`, `/group-buy/:id` | group-buy.tsx | — | `/mua-chung`, `/mua-chung/[id]` | xong 4c9017bf | shop | công khai | Tham gia cần đăng nhập |
+| 12 | `/brand/:slug` | brand-view.tsx | `/brand/[slug]` | giữ | xong 4c9017bf | shop | công khai | Thiếu: theo dõi nhãn, chia sẻ kiếm tiền, nút đại lý |
+| 13 | `/brand-story` | brand-story.tsx | — | `/cau-chuyen` | xong 4c9017bf | shop | công khai | Bản đồ SVG tĩnh |
 | 14 | `/s/:slug` | storefront-view.tsx | `/s/[slug]` | giữ | thiếu | affiliate | công khai | Chủ gian hàng thấy nút "thêm sản phẩm" |
 | 15 | `/about` | about.tsx | — (có `/chinh-sach/[loai]`) | `/gioi-thieu` | xong b76526a7 | account | công khai | FAQ, liên hệ (`tel:`, email, OA), chính sách, xoá tài khoản, đăng xuất |
 | 16 | `*` | not-found.tsx | `not-found.tsx` | giữ | có | — | — | |
