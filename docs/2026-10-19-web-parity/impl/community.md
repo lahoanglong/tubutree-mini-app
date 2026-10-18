@@ -21,7 +21,7 @@ miniapp-build rc=0 - Adjust chunk size limit for this warning via build.chunkSiz
 DONE
 ```
 
-Playwright chưa chạy (luật lane); spec e2e đã sửa khớp URL `/cong-dong?deleted=1` và kiểm "Đã xoá bài".
+Playwright chưa chạy (luật lane); spec e2e đã sửa khớp trạng thái cuối (URL về `/cong-dong` sau khi cờ `?deleted=1` bị gỡ) và kiểm "Đã xoá bài".
 
 ## 2. Lệch so với ma trận
 
