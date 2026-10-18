@@ -31,6 +31,7 @@ import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from './earn-rates';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { maskPhoneOrNull } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
+import { assertActiveStaff } from '../../common/staff-access';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
 /**
@@ -1180,18 +1181,6 @@ export class LoyaltyService {
     };
   }
 
-  /** Người gọi phải là STAFF/ADMIN theo DB (JWT có thể còn role cũ sau khi bị hạ quyền) và không bị khoá. */
-  private async assertPosStaff(staffUserId: string) {
-    const staff = await this.prisma.user.findUniqueOrThrow({
-      where: { id: staffUserId },
-      select: { id: true, role: true, isBlocked: true },
-    });
-    if ((staff.role !== 'STAFF' && staff.role !== 'ADMIN') || staff.isBlocked) {
-      throw new ForbiddenException('Chỉ nhân viên hoặc quản trị viên mới có quyền quét thẻ thành viên.');
-    }
-    return staff;
-  }
-
   /**
    * Tra CHÍNH XÁC thành viên từ chuỗi quét/gõ tại quầy: "TUBU"+mã, mã giới thiệu trần, hoặc SĐT
    * đầy đủ (84…/+84… chuẩn hoá về 0…). KHÔNG endsWith, KHÔNG theo id. Chuỗi rỗng/quá ngắn bị từ
@@ -1242,7 +1231,7 @@ export class LoyaltyService {
 
   /** Nhân viên / Quầy tra cứu thành viên (CHỈ tra cứu — cộng điểm đi creditPosPoints). */
   async lookupMemberByStaff(staffUserId: string, memberCode: string) {
-    await this.assertPosStaff(staffUserId);
+    await assertActiveStaff(this.prisma, staffUserId, 'Chỉ nhân viên hoặc quản trị viên mới có quyền quét thẻ thành viên.');
     const member = await this.resolveMember(memberCode);
     return { member: this.memberSummary(member) };
   }
@@ -1267,7 +1256,7 @@ export class LoyaltyService {
     staffUserId: string,
     dto: { memberCode: string; orderTotal: number; receiptId: string; note?: string },
   ) {
-    const staff = await this.assertPosStaff(staffUserId);
+    const staff = await assertActiveStaff(this.prisma, staffUserId, 'Chỉ nhân viên hoặc quản trị viên mới có quyền quét thẻ thành viên.');
     const enabled = (await this.config.get<boolean>('loyalty.pos_credit_enabled', false)) === true;
     if (!enabled) {
       throw new ForbiddenException('Tính năng tích điểm tại quầy (POS) đang tắt. Liên hệ quản trị viên.');

@@ -73,7 +73,7 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
     users: new Map<string, Row>(
       users.map((u) => [
         u.id,
-        { pointsBalance: 0, role: 'CUSTOMER', isBlocked: false, tier: null, phone: null, fullName: null, ...u },
+        { pointsBalance: 0, role: 'CUSTOMER', isBlocked: false, mergedIntoId: null, tier: null, phone: null, fullName: null, ...u },
       ]),
     ),
     checkIns: [] as Row[],
@@ -800,21 +800,30 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
   // ───────────────────────────── Staff lookup ─────────────────────────────
   describe('Tra cứu thành viên (nhân viên)', () => {
-    const staff = { id: 'staff-1', role: 'STAFF', isBlocked: false };
+    const staff = { id: 'staff-1', role: 'STAFF', isBlocked: false, mergedIntoId: null };
     function lookupPrisma(found: Row[] = []) {
       const findMany = jest.fn().mockResolvedValue(found);
       const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue(staff), findMany },
+        user: { findUnique: jest.fn().mockResolvedValue(staff), findMany },
       } as unknown as PrismaService;
       return { prisma, findMany };
     }
 
     it('người gọi không phải STAFF/ADMIN (role trong DB) → Forbidden', async () => {
       const prisma = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u-cust', role: 'CUSTOMER' }) },
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u-cust', role: 'CUSTOMER', isBlocked: false, mergedIntoId: null }) },
       } as unknown as PrismaService;
       await expect(new LoyaltyService(prisma, makeConfig()).lookupMemberByStaff('u-cust', 'TUBUAB12CD34')).rejects.toThrow(
         ForbiddenException,
+      );
+    });
+
+    it('nhân viên đã gộp vào tài khoản khác (mergedIntoId) → Forbidden với đúng câu cũ', async () => {
+      const merged = { id: 'staff-1', role: 'STAFF', isBlocked: false, mergedIntoId: 'u-real' };
+      const m = jest.fn().mockResolvedValue(merged);
+      const prisma = { user: { findUnique: m, findMany: jest.fn() } } as unknown as PrismaService;
+      await expect(new LoyaltyService(prisma, makeConfig()).lookupMemberByStaff('staff-1', 'TUBUAB12CD34')).rejects.toThrow(
+        new ForbiddenException('Chỉ nhân viên hoặc quản trị viên mới có quyền quét thẻ thành viên.'),
       );
     });
 
