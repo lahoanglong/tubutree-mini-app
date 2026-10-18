@@ -223,3 +223,51 @@ describe('waste DB constraints (real Postgres)', () => {
     for (let pass = 0; pass < 2; pass++) for (const s of statements) await prisma.$executeRawUnsafe(s);
   });
 });
+
+describe('seeded reference data after migrate deploy', () => {
+  let moduleRef: TestingModule;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
+    await moduleRef.init();
+    prisma = moduleRef.get(PrismaService);
+  });
+  afterAll(async () => {
+    await moduleRef?.close();
+  });
+
+  const exec = (sql: string, ...params: unknown[]) => prisma.$executeRawUnsafe(sql, ...params);
+  const violates = (p: Promise<unknown>, constraint: string) =>
+    expect(p).rejects.toThrow(new RegExp(`violates check constraint "${constraint}"`));
+
+  it('the five items and five gifts exist after migrate deploy (prod never runs seed.ts)', async () => {
+    const itemIds = ['wi-carton', 'wi-bubble-wrap', 'wi-milk-carton', 'wi-tubu-bottle', 'wi-battery'];
+    const items = await prisma.wasteItem.findMany({ where: { id: { in: itemIds } }, orderBy: { id: 'asc' } });
+    expect(items.map((i) => i.id)).toEqual([...itemIds].sort());
+    for (const i of items) {
+      expect([typeof i.code, typeof i.unitsPerPoint, typeof i.pointsPerGroup, typeof i.dropsPerUnit, typeof i.hazardous]).toEqual(['string', 'number', 'number', 'number', 'boolean']);
+    }
+    const giftKinds: Record<string, string> = {
+      'reward-freeship': 'VOUCHER', 'reward-discount-50k': 'VOUCHER', 'reward-percent-15pct': 'VOUCHER', 'reward-discount-100k': 'VOUCHER', 'gift-tree': 'TREE',
+    };
+    const gifts = await prisma.wasteGift.findMany({ where: { id: { in: Object.keys(giftKinds) } } });
+    expect(Object.fromEntries(gifts.map((g) => [g.id, g.kind]))).toEqual(giftKinds);
+    for (const g of gifts.filter((x) => x.kind === 'VOUCHER')) {
+      expect([typeof g.voucherType, typeof g.voucherValue, typeof g.voucherValidDays, typeof g.pointsCost]).toEqual(['string', 'number', 'number', 'number']);
+    }
+  });
+  it('the seeded rows are protected by the CHECKs (a hazardous battery cannot go ACTIVE, vouchers keep their fields and cost range)', async () => {
+    await violates(exec(`UPDATE "waste_items" SET "status" = 'ACTIVE', "hazardous" = true WHERE "id" = 'wi-battery'`), 'waste_items_hazardous_not_active_chk');
+    await violates(exec(`UPDATE "waste_gifts" SET "voucherType" = NULL WHERE "id" = 'reward-freeship'`), 'waste_gifts_voucher_fields_chk');
+    await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 2000001 WHERE "id" = 'reward-percent-15pct'`), 'waste_gifts_points_cost_chk');
+    await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 0 WHERE "id" = 'reward-discount-50k'`), 'waste_gifts_points_cost_chk');
+  });
+  it('re-applying the seed data section changes nothing (ON CONFLICT DO NOTHING)', async () => {
+    const sql = readApiSql(MIGRATION);
+    const section = sql.slice(sql.indexOf('-- BEGIN WASTE SEED DATA'), sql.indexOf('-- END WASTE SEED DATA'));
+    const before = await prisma.wasteGift.findMany({ where: { id: { startsWith: 'reward-' } }, orderBy: { id: 'asc' } });
+    for (const s of splitSqlStatements(section)) await prisma.$executeRawUnsafe(s);
+    expect(await prisma.wasteGift.findMany({ where: { id: { startsWith: 'reward-' } }, orderBy: { id: 'asc' } })).toEqual(before);
+  });
+});

@@ -14,6 +14,7 @@ import {
   communityCategoryUpsertArgs,
   retireCommunityCategoriesArgs,
 } from '../src/modules/feed/community-categories-seed';
+import { WASTE_SEED_GIFTS, WASTE_SEED_ITEMS, wasteGiftUpsertArgs, wasteItemUpsertArgs } from '../src/modules/waste-exchange/waste-seed-data';
 import { COMMUNITY_GOAL_SEED, SEASON_SEED } from './reference-data/garden';
 
 const prisma = new PrismaClient();
@@ -873,6 +874,11 @@ const CASHBACK_MERCHANTS = [
   { id: 'cb-tiktok', slug: 'tiktokshop', provider: 'accesstrade', name: 'TikTok Shop', logoUrl: '', category: 'ecommerce', baseRate: new Prisma.Decimal(0.049), fullRate: new Prisma.Decimal(0.07), deeplinkTemplate: 'https://gostore.accesstrade.vn/deep_link/tiktok?utm_content={{clickId}}' },
 ];
 
+async function seedWasteReferenceData() {
+  for (const item of WASTE_SEED_ITEMS) await prisma.wasteItem.upsert(wasteItemUpsertArgs(item));
+  for (const gift of WASTE_SEED_GIFTS) await prisma.wasteGift.upsert(wasteGiftUpsertArgs(gift));
+}
+
 async function main() {
   assertSeedAllowed(process.env);
   console.log('🌱 Seeding SystemConfig...');
@@ -969,6 +975,9 @@ async function main() {
     await prisma.notificationTemplate.upsert({ where: { id: t.id }, update: createOnly ? {} : t, create: t });
   }
   console.log(`   → ${NOTIFICATION_TEMPLATES.length} templates.`);
+
+  console.log('🌱 Seeding waste reference data (items, gifts)...');
+  await seedWasteReferenceData();
 
   console.log('🌱 Seeding sample Coupons...');
   const COUPONS: Prisma.CouponCreateInput[] = [

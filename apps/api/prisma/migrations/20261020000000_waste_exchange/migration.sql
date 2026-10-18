@@ -533,3 +533,21 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- END WASTE HAND-WRITTEN CONSTRAINTS
+
+-- BEGIN WASTE SEED DATA
+-- Reference rows (spec 11.7): prod runs migrate deploy, never seed.ts, so the migration carries them. Idempotent.
+INSERT INTO "waste_items" ("id", "code", "name", "unitLabel", "unitsPerPoint", "pointsPerGroup", "dropsPerUnit", "dailyCapQty", "monthlyCapQty", "status", "prepInstructions", "sortOrder", "hazardous", "updatedAt") VALUES
+  ('wi-carton', 'CARTON', 'Thùng carton cũ', 'thùng', 1, 1000, 0, 10, 60, 'ACTIVE', 'Gấp phẳng, giữ khô và sạch.', 10, false, NOW()),
+  ('wi-bubble-wrap', 'BUBBLE_WRAP', 'Nilon chống sốc', 'túi lớn', 1, 1000, 0, 10, 60, 'ACTIVE', 'Túi còn nguyên, khô, không dính băng keo hay nhãn.', 20, false, NOW()),
+  ('wi-milk-carton', 'MILK_CARTON', 'Vỏ hộp sữa sạch', 'vỏ', 5, 1000, 0, 50, 300, 'ACTIVE', 'Rửa sạch, để ráo, ép dẹt.', 30, false, NOW()),
+  ('wi-tubu-bottle', 'TUBU_BOTTLE', 'Vỏ chai, hộp Tubu Tree', 'vỏ', 1, 2000, 2, NULL, 20, 'ACTIVE', 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', 40, false, NOW()),
+  ('wi-battery', 'BATTERY', 'Pin đã dùng', 'viên', 1, 1000, 0, NULL, NULL, 'COMING_SOON', NULL, 50, true, NOW())
+ON CONFLICT DO NOTHING;
+INSERT INTO "waste_gifts" ("id", "kind", "name", "description", "label", "pointsCost", "status", "sortOrder", "voucherType", "voucherValue", "voucherMinOrder", "voucherMaxDiscount", "voucherValidDays", "updatedAt") VALUES
+  ('reward-freeship', 'VOUCHER', 'Miễn phí vận chuyển', 'Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop.', 'Phổ biến', 20000, 'ACTIVE', 10, 'FREESHIP', 0, 99000, NULL, 30, NOW()),
+  ('reward-discount-50k', 'VOUCHER', 'Giảm 50.000đ', 'Giảm ngay 50.000đ cho đơn hàng từ 300.000đ', 'Tiết kiệm', 50000, 'ACTIVE', 20, 'AMOUNT', 50000, 300000, NULL, 30, NOW()),
+  ('reward-percent-15pct', 'VOUCHER', 'Giảm 15%', 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ', 'Đặc quyền', 75000, 'ACTIVE', 30, 'PERCENT', 15, 250000, 80000, 30, NOW()),
+  ('reward-discount-100k', 'VOUCHER', 'Giảm 100.000đ', 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ', 'HOT', 100000, 'ACTIVE', 40, 'AMOUNT', 100000, 600000, NULL, 30, NOW()),
+  ('gift-tree', 'TREE', 'Góp quỹ trồng cây', 'Dùng Điểm Xanh góp vào quỹ trồng cây của Tubu Tree.', NULL, 0, 'ACTIVE', 50, NULL, NULL, NULL, NULL, NULL, NOW())
+ON CONFLICT DO NOTHING;
+-- END WASTE SEED DATA
