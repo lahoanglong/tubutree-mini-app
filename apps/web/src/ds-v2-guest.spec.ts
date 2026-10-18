@@ -114,7 +114,25 @@ const ACCOUNT: string[] = [
 ];
 const LOYALTY: string[] = ['app/tai-khoan/diem-xanh/page.tsx', 'app/tai-khoan/vi-tubu/page.tsx', 'app/tai-khoan/ledger-shell.tsx', 'app/kho-qua/page.tsx', 'app/kho-qua/cua-toi/page.tsx', 'app/hoan-tien/page.tsx', 'components/loyalty/claim-point.tsx'];
 const COMMUNITY: string[] = [];
-const AFFILIATE: string[] = [];
+const AFFILIATE: string[] = [
+  'app/ctv/page.tsx',
+  'components/affiliate/ctv-shortcuts.tsx',
+  'components/affiliate/ctv-copy.ts',
+  'components/affiliate/choice-card.tsx',
+  'components/affiliate/withdraw-sheet.tsx',
+  'components/affiliate/tier-card.tsx',
+  'components/affiliate/milestone-rewards.tsx',
+  'components/affiliate/ctv-order-sheet.tsx',
+  'components/affiliate/storefront-owner.tsx',
+  'app/ctv/gian-hang/page.tsx',
+  'components/affiliate/storefront-builder.tsx',
+  'components/affiliate/storefront-sheets.tsx',
+  'components/affiliate/storefront-panels.tsx',
+  'components/affiliate/storefront-share.tsx',
+  'components/affiliate/storefront-image-upload.tsx',
+  'components/affiliate/storefront-inline.tsx',
+  'components/affiliate/storefront-rules.ts',
+];
 const GAME: string[] = [];
 const PRO: string[] = [];
 const RECYCLE: string[] = [];

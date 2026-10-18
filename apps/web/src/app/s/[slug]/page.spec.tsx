@@ -19,6 +19,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('@/components/storefront-tracker', () => ({ StorefrontTracker: () => null }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null, status: 'unauthenticated', initialized: true }) }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getStorefront: async () => mocks.sf,
@@ -91,7 +92,7 @@ describe('trang gian hàng — trạng thái rỗng (D5-05)', () => {
     mocks.sf = { ...SF, collections: [{ id: 'c1', title: 'Nổi bật', items: [] }] };
     const box = await html();
     expect(box.textContent).toContain('Gian hàng chưa có sản phẩm nào để xem');
-    const cta = box.querySelector<HTMLAnchorElement>('a[href="/"]')!;
+    const cta = box.querySelector<HTMLAnchorElement>('a[href="/san-pham"]')!;
     expect(cta.textContent).toContain('Xem sản phẩm trên Tubu Tree');
     expect(cta.className).toContain('min-h-11');
     expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Nổi bật');
