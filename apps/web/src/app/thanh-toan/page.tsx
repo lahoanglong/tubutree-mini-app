@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
@@ -47,6 +47,7 @@ import { InvoiceSection } from './invoice-section';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
+import { createOrderKeyRing } from '@/lib/order-key-ring';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
@@ -64,7 +65,8 @@ export default function CheckoutPage() {
   // Mã giới thiệu khách tự nhập ở đây (đã được server xác nhận) khác mã đến từ link gian hàng (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
-  const [idemKey] = useState(() => (typeof crypto !== 'undefined' ? crypto.randomUUID() : String(Math.random())));
+  // Một key cho một nội dung đơn trong phiên thanh toán: bấm lại sau lỗi mạng gửi lại cùng đơn; đổi nội dung thì key mới.
+  const orderKeys = useRef(createOrderKeyRing());
 
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
@@ -160,35 +162,35 @@ export default function CheckoutPage() {
   const overStock = outOfStockLine(checkoutItems);
 
   const place = useMutation({
-    mutationFn: () =>
-      placeOrder(
-        {
-          addressId: addressId!,
-          paymentMethod: zeroNote ? 'COD' : payment,
-          ...(note.trim() ? { note: note.trim() } : {}),
-          ...(itemIds ? { itemIds } : {}),
-          ...(wantInvoice
-            ? {
-                invoiceRequest: {
-                  taxCode: invoice.taxCode.trim(),
-                  companyName: invoice.companyName.trim(),
-                  address: invoice.address.trim(),
-                  email: invoice.email.trim(),
-                },
-              }
-            : {}),
-          // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
-          // tạo đơn COD có tiền phải trả mà khách không chọn.
-          ...(zeroNote ? { quotedZeroTotal: true } : {}),
-          // Giá/phí đổi giữa lúc báo giá và lúc bấm đặt → BE trả TOTAL_CHANGED thay vì thu số khách chưa thấy.
-          ...(quote ? { expectedTotal: quote.total } : {}),
-          pointsToUse: usePoints ? usablePoints : 0,
-          storefrontSlug: ctvSlug,
-          referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
-        },
-        idemKey,
-      ),
+    mutationFn: () => {
+      const body = {
+        addressId: addressId!,
+        paymentMethod: zeroNote ? 'COD' : payment,
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(itemIds ? { itemIds } : {}),
+        ...(wantInvoice
+          ? {
+              invoiceRequest: {
+                taxCode: invoice.taxCode.trim(),
+                companyName: invoice.companyName.trim(),
+                address: invoice.address.trim(),
+                email: invoice.email.trim(),
+              },
+            }
+          : {}),
+        // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
+        // tạo đơn COD có tiền phải trả mà khách không chọn.
+        ...(zeroNote ? { quotedZeroTotal: true } : {}),
+        // Giá/phí đổi giữa lúc báo giá và lúc bấm đặt → BE trả TOTAL_CHANGED thay vì thu số khách chưa thấy.
+        ...(quote ? { expectedTotal: quote.total } : {}),
+        pointsToUse: usePoints ? usablePoints : 0,
+        storefrontSlug: ctvSlug,
+        referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
+      };
+      return placeOrder(body, orderKeys.current.keyFor(body));
+    },
     onSuccess: (order) => {
+      orderKeys.current.reset();
       setPlaced(order);
       if (wantInvoice) saveInvoice(userId, invoice);
       clearCheckoutSelection();
