@@ -120,7 +120,7 @@ describe('/thanh-toan — mất mạng lúc đặt đơn (BUYERWEB-12)', () => {
     const alert = c.querySelector('[role="alert"]')!;
     expect(alert.textContent).toContain('Mất kết nối');
     expect(alert.textContent).toContain('không tạo thêm đơn');
-    expect(alert.querySelector('a[href="/tai-khoan"]')).not.toBeNull();
+    expect(alert.querySelector('a[href="/tai-khoan/don-hang"]')).not.toBeNull();
     expect(btn(c, 'Đặt hàng')!.disabled).toBe(false);
     click(btn(c, 'Đặt hàng')!);
     await flush(8);
