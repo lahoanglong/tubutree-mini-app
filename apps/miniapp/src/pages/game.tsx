@@ -157,7 +157,7 @@ export default function GamePage() {
             onNext={nextQuiz}
           />
 
-          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10} onSpin={handleSpin} onResult={wheelPrize.onResult} />
+          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10_000} onSpin={handleSpin} onResult={wheelPrize.onResult} />
 
           {/* Đổi vỏ chai lấy nước (§6.14.6) */}
           <GameLinkRow
