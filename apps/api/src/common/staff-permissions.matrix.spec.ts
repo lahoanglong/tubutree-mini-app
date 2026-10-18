@@ -97,7 +97,12 @@ const EXPECTED: Record<string, Access> = {
   'DELETE /admin/dealer-rewards/:id': ADMIN_ONLY,
   'PATCH /admin/dealer-rewards/:id': ADMIN_ONLY,
   'GET /admin/dealer-tiers': ADMIN_ONLY,
+  'POST /admin/dealer-tiers': ADMIN_ONLY,
+  'PUT /admin/dealer-tiers/:id': ADMIN_ONLY,
+  'GET /admin/dealer-tiers/history': ADMIN_ONLY,
+  'GET /admin/dealer-tiers/manage': ADMIN_ONLY,
   'GET /admin/dealers/:userId/credit-ledger': ADMIN_ONLY,
+  'GET /admin/dealers/accounts': ADMIN_ONLY,
   'POST /admin/dealers/:userId/credit-payment': ADMIN_ONLY,
   'GET /admin/engagement/missions': ADMIN_ONLY,
   'PATCH /admin/engagement/missions/:id': ADMIN_ONLY,
@@ -398,6 +403,8 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
     'POST /admin/commission-rates/fill-missing': ADMIN_ONLY,
     'POST /admin/commission-rates/import/apply': ADMIN_ONLY,
     'POST /admin/dealer-prices/import': ADMIN_ONLY,
+    'POST /admin/dealer-tiers': ADMIN_ONLY,
+    'PUT /admin/dealer-tiers/:id': ADMIN_ONLY,
   };
 
   it.each(Object.entries(MONEY_WRITES))('route ghi tiền %s: chỉ ADMIN và nhóm %j vào được, mọi nhóm khác 403', (key, allowed) => {
