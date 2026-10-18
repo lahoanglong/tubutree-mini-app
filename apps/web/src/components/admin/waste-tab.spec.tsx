@@ -78,6 +78,25 @@ describe('WasteTab', () => {
     expect(chips(c).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent)).toEqual(['Quà']);
   });
 
+  it('ADMIN: dải số liệu gọn và các chip đứng trước báo cáo chi tiết trong "Xem báo cáo tháng"', async () => {
+    const { c } = await mount(<WasteTab isAdmin />);
+    const strip = c.querySelector('[data-month-strip]')!;
+    const group = c.querySelector('[role="group"][aria-label="Mục đổi rác"]')!;
+    const details = c.querySelector('details[data-month-details]')!;
+    expect(strip.children.length).toBeLessThanOrEqual(6);
+    expect(strip.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(group.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(details.querySelector('summary')!.textContent).toBe('Xem báo cáo tháng');
+    expect(details.querySelectorAll('[data-metric]').length).toBe(19);
+    expect(byText(c, 'button', 'Tải CSV')).not.toBeNull();
+  });
+
+  it('ADMIN: thông báo tắt chương trình không nhắc khoá cấu hình', async () => {
+    const { c } = await mount(<WasteTab isAdmin />);
+    expect(c.textContent).toContain('Chương trình đang tắt với khách. Bật lại ở Cấu hình chung.');
+    expect(c.textContent).not.toContain('waste.enabled');
+  });
+
   it('ADMIN: chip Cấu hình chung mở thẻ cấu hình đổi rác', async () => {
     const { c } = await mount(<WasteTab isAdmin />);
     click(byText(c, 'button', 'Cấu hình chung'));

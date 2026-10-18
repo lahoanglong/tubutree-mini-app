@@ -165,7 +165,11 @@ test.describe('Admin — Đổi rác lấy quà', () => {
     await page.goto('/admin?tab=waste');
 
     await expect(page.getByRole('heading', { name: 'Đổi rác lấy quà', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-month-strip]')).toContainText('120.000');
+    await page.getByText('Xem báo cáo tháng', { exact: true }).click();
     await expect(page.locator('[data-metric="pointsIssued"]')).toContainText('120.000');
+    const chipTop = (await page.getByRole('group', { name: 'Mục đổi rác' }).boundingBox())!.y;
+    expect(chipTop).toBeLessThan(700);
   });
 
   test('thu hồi điểm: nút Thu hồi chỉ bật khi đã nhập lý do, gửi đúng body', async ({ page, api }) => {
@@ -221,7 +225,9 @@ test.describe('Admin — Đổi rác lấy quà', () => {
 
   test('không tràn ngang ở 1280 px', async ({ page }) => {
     await page.goto('/admin?tab=waste');
-    await expect(page.locator('[data-metric="pointsIssued"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-month-strip]')).toBeVisible({ timeout: 15_000 });
+    await page.getByText('Xem báo cáo tháng', { exact: true }).click();
+    await expect(page.locator('[data-metric="pointsIssued"]')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 });
