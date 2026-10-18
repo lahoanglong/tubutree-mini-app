@@ -1205,6 +1205,8 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       expect(txReturnRequestCount).toHaveBeenCalledWith({ where: { orderId: 'o1', status: 'APPROVED', receivedAt: null } });
       const flags = attentionFlags(orderUpdateMany);
       expect(flags).toHaveLength(1);
+      const writeAt = orderUpdateMany.mock.invocationCallOrder[orderUpdateMany.mock.calls.findIndex(([a]) => (a as UpdateManyArgs).data.pancakeAttention === flags[0])]!;
+      expect(writeAt).toBeGreaterThan(txReturnRequestCount.mock.invocationCallOrder[0]!);
       expect(flags[0]).toMatch(/^Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu/);
       expect(flags[0]).toContain('Đã nhận hàng về');
       expect(flags[0]).not.toMatch(/hoàn tiền\/điểm.*bằng tay/);
@@ -1216,15 +1218,19 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     });
 
     it('admin bấm "Đã nhận hàng về" ngay trước khi khoá dòng đơn → gỡ nhắc lúc duyệt, không ghi nhắc mới', async () => {
-      const { proc, prisma, orderUpdateMany, txReturnRequestCount } = setup(delivered);
+      const { proc, prisma, orderUpdateMany, txQueryRaw, txReturnRequestCount } = setup(delivered);
       (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: null }]);
       txReturnRequestCount.mockResolvedValue(0);
       await proc.onStatusUpdated({ id: 'p1', status: 15 });
       expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
-      expect(orderUpdateMany).toHaveBeenCalledWith({
+      const clear = {
         where: { id: 'o1', OR: expect.arrayContaining([{ pancakeAttention: { startsWith: 'Khách trả một phần đơn' } }]) as unknown },
         data: { pancakeAttention: null, pancakeAttentionAt: null },
-      });
+      };
+      expect(orderUpdateMany).toHaveBeenCalledWith(clear);
+      expect(txQueryRaw.mock.invocationCallOrder[0]!).toBeLessThan(txReturnRequestCount.mock.invocationCallOrder[0]!);
+      const clearAt = orderUpdateMany.mock.invocationCallOrder[orderUpdateMany.mock.calls.findIndex(([a]) => (a as UpdateManyArgs).data.pancakeAttention === null)]!;
+      expect(clearAt).toBeGreaterThan(txReturnRequestCount.mock.invocationCallOrder[0]!);
     });
 
     it('đã bấm "Đã nhận hàng về" hết → gỡ việc trả hàng khỏi hàng đợi, chỉ ghi lịch sử', async () => {
