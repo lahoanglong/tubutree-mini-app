@@ -30,6 +30,15 @@ describe('evaluateMatch', () => {
     await expect(evaluateMatch(tx(null), R, { parcelCode: 'TR-ZZZZZ' })).resolves.toEqual({ ok: false, reason: 'NO_MATCH' });
   });
 
+  it('treats a blank parcelCode as no parcelCode', async () => {
+    const t = tx(null);
+    await expect(evaluateMatch(t, { ...R, method: 'PICKUP', trackingNorm: null, orderId: 'o1' }, { parcelCode: '   ' })).resolves.toEqual({
+      ok: true,
+      basis: 'ORDER',
+    });
+    expect(t.wasteRequest.findUnique).not.toHaveBeenCalled();
+  });
+
   it('matches a PICKUP request by its order, and refuses one without an order', async () => {
     const pickup = { ...R, method: 'PICKUP' as const, trackingNorm: null };
     await expect(evaluateMatch(tx(null), { ...pickup, orderId: 'o1' }, undefined)).resolves.toEqual({ ok: true, basis: 'ORDER' });

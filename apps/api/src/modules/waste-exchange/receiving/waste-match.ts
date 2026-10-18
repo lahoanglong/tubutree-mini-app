@@ -28,8 +28,8 @@ export async function evaluateMatch(
   req: { id: string; code: string; method: WasteMethod; trackingNorm: string | null; orderId: string | null },
   match: WasteMatchInput | undefined,
 ): Promise<WasteMatchOutcome> {
-  if (match?.parcelCode) {
-    const n = normalizeWasteCode(match.parcelCode);
+  const n = match?.parcelCode !== undefined ? normalizeWasteCode(match.parcelCode) : '';
+  if (n !== '') {
     if (n === req.code) return { ok: true, basis: 'TR_CODE' };
     const other = await tx.wasteRequest.findUnique({ where: { code: n }, select: { id: true } });
     return other ? { ok: false, reason: 'TR_TRACKING_CONFLICT', relatedRequestId: other.id } : { ok: false, reason: 'NO_MATCH' };
