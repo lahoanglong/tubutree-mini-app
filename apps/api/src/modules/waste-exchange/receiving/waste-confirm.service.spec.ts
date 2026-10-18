@@ -569,6 +569,7 @@ describe('WasteConfirmService.reject', () => {
         pointId: 'p1',
         meta: expect.objectContaining({
           route: 'DESK',
+          device: { ip: '10.0.0.0', userAgent: 'jest' },
           matchBasis: null,
           rejectionReason: 'WET',
           rejectionNote: null,
