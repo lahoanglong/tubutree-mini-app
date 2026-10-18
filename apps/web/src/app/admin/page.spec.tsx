@@ -592,14 +592,14 @@ describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
     act(() => banner.click());
     await flush();
     expect(window.location.search).toBe('?tab=orders&pancake=attention');
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'attention', undefined, undefined);
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'attention', undefined, undefined, {});
     const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Cần xử lý Pancake'))!;
     expect(chip.getAttribute('aria-pressed')).toBe('true');
     expect(chip.textContent).toBe('Cần xử lý Pancake (3)');
     act(() => chip.click());
     await flush();
     expect(window.location.search).toBe('?tab=orders');
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined);
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined, {});
   });
 
   it('đơn bị gắn cờ: huy hiệu ở dòng, chi tiết hiện lý do; "Đã xử lý" qua hộp xác nhận rồi gửi ghi chú', async () => {
@@ -2190,7 +2190,7 @@ describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian
     typeInto(dates[0]!, '2026-10-01');
     typeInto(dates[1]!, '2026-10-14');
     await flush();
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'unsynced', '2026-10-01', '2026-10-14');
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'unsynced', '2026-10-01', '2026-10-14', {});
     click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV'))!);
     await flush();
     expect(mocks.downloadOrders).toHaveBeenCalledWith({
@@ -2205,6 +2205,36 @@ describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian
     expect(container.textContent).toContain('mọi đơn khớp bộ lọc, không chỉ trang đang xem');
   });
 
+  it('bộ lọc loại đơn / thanh toán / thứ tự gửi xuống danh sách và file CSV (CSV không nhận thứ tự)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const sel = (label: string) => container.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+    selectValue(sel('Lọc đơn theo loại đơn'), 'dealer');
+    selectValue(sel('Lọc đơn theo tình trạng thanh toán'), 'UNPAID');
+    selectValue(sel('Thứ tự sắp xếp theo ngày đặt'), 'asc');
+    await flush();
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined, {
+      kind: 'dealer',
+      payment: 'UNPAID',
+      order: 'asc',
+    });
+    click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV'))!);
+    await flush();
+    const sent = mocks.downloadOrders.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(sent).toMatchObject({ kind: 'dealer', payment: 'UNPAID' });
+    expect(sent).not.toHaveProperty('order');
+  });
+
+  it('đổi bộ lọc mới đưa danh sách về trang 1', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    mocks.orders = Array.from({ length: 3 }, (_, i) => ({ ...merchantOrder, id: `o${i}`, code: `TF${i}` }));
+    const { container } = await mount();
+    selectValue(container.querySelector<HTMLSelectElement>('select[aria-label="Lọc đơn theo nền tảng đặt"]'), 'web');
+    await flush();
+    expect(mocks.listOrders.mock.calls.at(-1)![0]).toBe(1);
+    expect(mocks.listOrders.mock.calls.at(-1)![9]).toEqual({ platform: 'web' });
+  });
+
   it('khoảng ngày ngược: báo lỗi, không gọi API với khoảng đó, khoá nút xuất', async () => {
     window.history.replaceState(null, '', '/admin?tab=orders');
     const { container } = await mount();
@@ -2213,7 +2243,7 @@ describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian
     typeInto(dates[1]!, '2026-10-01');
     await flush();
     expect(container.textContent).toContain('Ngày bắt đầu phải trước ngày kết thúc.');
-    expect(mocks.listOrders).not.toHaveBeenCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, '2026-10-14', '2026-10-01');
+    expect(mocks.listOrders).not.toHaveBeenCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, '2026-10-14', '2026-10-01', {});
     const exp = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV')) as HTMLButtonElement;
     expect(exp.disabled).toBe(true);
   });

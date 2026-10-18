@@ -76,6 +76,8 @@ import {
   type RecyclingFilter,
   type PancakeFilter,
   type InvoiceFilter,
+  type OrderListExtra,
+  orderExtraFilters,
   downloadOrdersCsv,
   downloadUsersCsv,
   getOpsAccess,
@@ -110,6 +112,7 @@ import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel'
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
+import { OrderExtraFilters } from '@/components/admin/order-extra-filters';
 import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
 import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
@@ -930,6 +933,7 @@ function OrdersTab({
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [extra, setExtra] = useState<OrderListExtra>({});
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
@@ -937,7 +941,7 @@ function OrdersTab({
   const badRange = !!from && !!to && from > to;
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to],
+    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to, extra],
     queryFn: () =>
       listOrders(
         page,
@@ -949,6 +953,7 @@ function OrdersTab({
         pancake || undefined,
         from || undefined,
         to || undefined,
+        extra,
       ),
     enabled: !badRange,
   });
@@ -964,6 +969,7 @@ function OrdersTab({
         pancake: pancake || undefined,
         from: from || undefined,
         to: to || undefined,
+        ...orderExtraFilters(extra),
       });
       setExportMsg({ ok: true, text: `Đã tải ${r.filename} — mọi đơn khớp bộ lọc, không chỉ trang đang xem.` });
     } catch (e) {
@@ -1102,6 +1108,15 @@ function OrdersTab({
           </p>
         )}
       </div>
+
+      <OrderExtraFilters
+        value={extra}
+        onChange={(v) => {
+          setPage(1);
+          setExpandedId(null);
+          setExtra(v);
+        }}
+      />
 
       {/* Bộ lọc thu gom tái chế (Gomdon) */}
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu gom tái chế">

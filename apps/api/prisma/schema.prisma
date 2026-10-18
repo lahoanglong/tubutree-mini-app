@@ -1081,6 +1081,11 @@ model Order {
   @@index([fulfillerStorefrontId, status, createdAt])
   @@index([storefrontId, createdAt])
   @@index([checkoutGroup])
+  // Bộ lọc danh sách đơn admin (loại đơn, thanh toán, nền tảng; admin-order-filter.ts): mỗi lọc kèm sắp xếp createdAt.
+  @@index([paymentStatus, createdAt])
+  @@index([type, createdAt])
+  @@index([platform, createdAt])
+  @@index([placedForCustomer, createdAt])
   @@map("orders")
 }
 

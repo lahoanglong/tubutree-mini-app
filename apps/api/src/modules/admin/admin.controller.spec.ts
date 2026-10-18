@@ -336,7 +336,7 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     await ctrl.cancelGomdonWaybill('admin-1', 'o1');
     expect(admin.cancelGomdonWaybill).toHaveBeenCalledWith('admin-1', 'o1');
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }), VIEWER);
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined, undefined, undefined, VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined, undefined, undefined, VIEWER, {});
   });
 
   it('POST orders/:id/gomdon/mark-handled chuyển adminId + id + note xuống AdminService', async () => {
@@ -356,7 +356,7 @@ describe('AdminController — hàng đợi "Cần xử lý Pancake"', () => {
     const admin = { listOrders: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
     const ctrl = new AdminController(admin as never, {} as never);
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 1, pancake: 'attention' as const }), VIEWER);
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention', undefined, undefined, VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention', undefined, undefined, VIEWER, {});
   });
 
   it('POST orders/:id/pancake-attention/resolve: chỉ ADMIN, chuyển adminId + id + note; note ≤ 500, chặn field lạ', async () => {
