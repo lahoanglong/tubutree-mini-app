@@ -10,12 +10,13 @@ import {
   fetchMyRefunds,
   fetchMyReturns,
   formatVnd,
+  getPublicConfig,
   repurchaseOrder,
   type OrderDetailDTO,
   type RepurchaseResult,
   type ReturnRequestDTO,
 } from '@/lib/shop-client';
-import { canCancelOrder, isReorderable } from '@/lib/order-view';
+import { canCancelOrder, isReorderable, returnWindowState } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import {
@@ -83,6 +84,9 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
   );
+  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000, enabled: delivered, retry: 0 });
+  const returnDays = configQ.data?.returnWindowDays ?? 7;
+  const returnWindow = returnWindowState(o, returnDays);
   const canRequestMore =
     delivered && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
 
@@ -214,7 +218,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
               {repurchase.isPending ? 'Đang thêm vào giỏ…' : 'Mua lại đơn này'}
             </button>
           )}
-          {canRequestMore && !returnOpen && !returnSent && (
+          {canRequestMore && returnWindow.open && !returnOpen && !returnSent && (
             <button
               type="button"
               onClick={() => {
@@ -228,6 +232,12 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
             </button>
           )}
         </div>
+      )}
+
+      {canRequestMore && !returnWindow.open && (
+        <p className="mt-3 rounded-control bg-stone-50 p-3 text-xs text-stone-700">
+          {`Đã quá hạn đổi/trả (${returnDays} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.`}
+        </p>
       )}
 
       {repurchase.isError && (
