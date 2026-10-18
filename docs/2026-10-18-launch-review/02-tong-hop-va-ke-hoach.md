@@ -254,6 +254,12 @@ k. **Từ review của phiên đổi rác trên module external-points:**
    - Sổ điểm có nhãn cho 4 mã của đơn chat và đơn sàn, thay cho "Điều chỉnh Điểm Xanh".
    - Claim SCAN đã duyệt (tiền hàng trên ngưỡng tự duyệt, hoặc bị trần tháng cắt) trước đây bị cron đưa về REVIEW ở mỗi lần cộng. Nay cộng đúng số điểm đã chốt khi tiền hàng không tăng; tiền hàng tăng thì vẫn kiểm lại.
 
+l. **Pancake báo "Hoàn một phần" (15) cùng lúc admin bấm "Đã nhận hàng về":**
+   - Lỗi cũ: webhook đọc danh sách yêu cầu trả trước khi lần bấm nhận hàng commit, nên tưởng còn chờ. Câu ghi không ghi gì, và lời nhắc lúc duyệt ("Khách trả một phần đơn …") nằm lại mãi trong "Cần xử lý Pancake".
+   - Nay webhook khoá dòng đơn, đếm lại yêu cầu chờ nhận trong cùng giao dịch, rồi mới ghi nhắc hoặc gỡ cả hai lời nhắc.
+   - Race CI trên `963d10cf` bắt được lỗi này. Ca race (d) mới chèn đúng khe đó: đỏ trên code cũ (cùng câu CI báo), xanh trên code mới.
+   - Ghi nhận, không sửa (có từ trước): nếu yêu cầu R2 được duyệt và nhận hàng trước khi có phiếu Pancake, một webhook 15 gửi lại sẽ gỡ luôn nhắc "tạo phiếu" của R2.
+
 CI GitHub trên `1b98b388`: CI, Docker build, Playwright E2E đầy đủ và Race suite (3 phần) đều xanh. Đây là lần đầu race xanh trên GitHub.
 
 **Ghi nhận, không sửa:**
