@@ -127,6 +127,16 @@ export async function callPhone(phone: string) {
   }
 }
 
+const CANCEL_WORDS = new Set(['cancel', 'canceled', 'cancelled', 'huy', 'huỷ', 'hủy']);
+
+/** So từng từ trọn vẹn (không so chuỗi con: "chuyen", "khuyen" chứa "huy" nhưng không phải huỷ). */
+export function isCancelMessage(text: string): boolean {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{M}\p{N}]+/u)
+    .some((w) => CANCEL_WORDS.has(w.normalize('NFC')));
+}
+
 export type ScanCodeResult = { kind: 'ok'; content: string } | { kind: 'cancelled' } | { kind: 'failed' };
 
 /**
@@ -141,7 +151,7 @@ export async function scanCode(): Promise<ScanCodeResult> {
   } catch (e) {
     const raw = (e as { message?: unknown } | null)?.message;
     const text = Array.isArray(raw) ? raw.join(' ') : String(raw ?? '');
-    return /cancel|hu[yỷ]|hủy/i.test(text) ? { kind: 'cancelled' } : { kind: 'failed' };
+    return isCancelMessage(text) ? { kind: 'cancelled' } : { kind: 'failed' };
   }
 }
 

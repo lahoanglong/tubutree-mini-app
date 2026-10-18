@@ -21,7 +21,7 @@ export function mockExternalPoints(
         marketplaceEarnPct: 1,
         marketplaceClaimEnabled: opts.enabled ?? true,
         vndPerPoint: 50,
-        vndPerPointRedeem: 1000,
+        vndPerPointRedeem: 1,
         maxRedeemPct: 0.2,
       },
     }),

@@ -32,6 +32,10 @@ vi.mock('../components/back-button', () => ({ default: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import ExternalPointsPage, { claimStateView } from './external-points';
+import { formatDate } from '../utils/format';
+
+// Mốc tương lai tính từ giờ chạy test, để ca "mốc chưa qua" không tự hỏng khi đồng hồ đi qua một ngày cố định.
+const futureIso = () => new Date(Date.now() + 7 * 864e5).toISOString();
 
 const LOYALTY = { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, marketplaceEarnPct: 1, marketplaceClaimEnabled: true };
 const EMPTY_LIST = { data: [], meta: { page: 1, limit: 10, total: 0 }, searching: [] };
@@ -69,9 +73,10 @@ describe('Trang Tích điểm đơn ngoài app', () => {
   });
 
   it('gửi mã thành công: hiện sàn, điểm chờ và mốc dự kiến, tải lại danh sách', async () => {
+    const future = futureIso();
     mocks.submitExternalClaim.mockResolvedValue({
       status: 'CLAIMED', claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250,
-      expectedCreditAt: '2026-11-05T05:00:00.000Z', message: 'ok',
+      expectedCreditAt: future, message: 'ok',
     });
     renderPage();
     fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value: ' spxvn123456789 ' } });
@@ -80,7 +85,7 @@ describe('Trang Tích điểm đơn ngoài app', () => {
     expect(mocks.submitExternalClaim).toHaveBeenCalledWith('spxvn123456789');
     expect(result).toHaveTextContent('Đã ghi nhận đơn Shopee SPX***789');
     expect(result).toHaveTextContent('1.250 Điểm Xanh đang chờ cộng');
-    expect(result).toHaveTextContent('Dự kiến cộng từ 05/11/2026');
+    expect(result).toHaveTextContent(`Dự kiến cộng từ ${formatDate(future)}`);
     await waitFor(() => expect(mocks.getMyExternalClaims.mock.calls.length).toBeGreaterThan(1));
   });
 
@@ -120,6 +125,7 @@ describe('Trang Tích điểm đơn ngoài app', () => {
   });
 
   it('danh sách: trạng thái, điểm, mốc cộng và phân trang', async () => {
+    const future = futureIso();
     const item = (id: string, state: string, extra: Record<string, unknown> = {}) => ({
       id, channel: 'Lazada', maskedCode: `LZ***${id}`, state, points: 500, expectedCreditAt: null, creditedAt: null, createdAt: '2026-10-01T00:00:00.000Z', ...extra,
     });
@@ -128,7 +134,7 @@ describe('Trang Tích điểm đơn ngoài app', () => {
         ? {
             data: [
               item('1', 'PENDING'),
-              item('2', 'PENDING', { expectedCreditAt: '2026-11-05T05:00:00.000Z' }),
+              item('2', 'PENDING', { expectedCreditAt: future }),
               item('3', 'CREDITED', { creditedAt: '2026-10-20T05:00:00.000Z' }),
               item('4', 'VOIDED'),
               item('5', 'REVIEW', { points: null }),
@@ -141,7 +147,7 @@ describe('Trang Tích điểm đơn ngoài app', () => {
     renderPage();
     expect(await screen.findByText('Chờ giao hàng')).toBeInTheDocument();
     expect(screen.getByText('Chờ cộng điểm')).toBeInTheDocument();
-    expect(screen.getByText('Dự kiến 05/11/2026')).toBeInTheDocument();
+    expect(screen.getByText(`Dự kiến ${formatDate(future)}`)).toBeInTheDocument();
     expect(screen.getByText('Đã cộng 20/10/2026')).toBeInTheDocument();
     expect(screen.getByText('Đã huỷ')).toBeInTheDocument();
     expect(screen.getByText('Đang kiểm tra')).toBeInTheDocument();
@@ -193,5 +199,24 @@ describe('Trang Tích điểm đơn ngoài app', () => {
   it('claimStateView: REVERSED và LAPSED có nhãn riêng', () => {
     expect(claimStateView({ state: 'REVERSED', expectedCreditAt: null }).label).toBe('Đã thu hồi');
     expect(claimStateView({ state: 'LAPSED', expectedCreditAt: null }).label).toBe('Hết hạn');
+  });
+
+  it('giờ giả sau 05/11/2026: mốc tương lai tính theo giờ giả vẫn hiện "Dự kiến cộng", không tự hỏng theo lịch', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-03-01T03:00:00.000Z'));
+    try {
+      const future = futureIso();
+      mocks.submitExternalClaim.mockResolvedValue({
+        status: 'CLAIMED', claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250, expectedCreditAt: future, message: 'ok',
+      });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value: 'SPXVN123456789' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      const result = await screen.findByTestId('claim-result');
+      expect(result).toHaveTextContent('1.250 Điểm Xanh đang chờ cộng');
+      expect(result).toHaveTextContent(`Dự kiến cộng từ ${formatDate(future)}`);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

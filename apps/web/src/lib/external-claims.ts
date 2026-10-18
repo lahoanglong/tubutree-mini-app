@@ -127,7 +127,7 @@ export function adminClaimErrorText(e: unknown): string {
 export function attachDialogMessage(maskedCode: string, isAdmin: boolean): string {
   const base =
     `Gắn mã ${maskedCode} của khách vào một đơn Pancake. Vẫn áp tuổi đơn, mốc bắt đầu chương trình, trần số đơn mỗi ngày và trần điểm mỗi tháng. ` +
-    'Yêu cầu vẫn có thể vào chờ duyệt (đơn vượt ngưỡng, 3 số cuối SĐT khác, đơn hoàn một phần, mã vừa được mở lại).';
+    'Yêu cầu vẫn có thể vào chờ duyệt (đơn vượt ngưỡng, chưa tính được tiền hàng, 3 số cuối SĐT khác, khách là nhân viên, đơn hoàn một phần, mã vừa được mở lại).';
   return isAdmin
     ? `${base} Mã không khớp đơn hoặc nguồn chưa xác định: cần ghi chú, không cần người khác duyệt, thao tác được ghi vào lịch sử.`
     : `${base} Mã không khớp đơn hoặc nguồn chưa xác định: chỉ ADMIN gắn được.`;

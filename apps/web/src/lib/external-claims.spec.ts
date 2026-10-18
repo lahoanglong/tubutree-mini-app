@@ -64,6 +64,8 @@ describe('helpers', () => {
     const admin = attachDialogMessage('SPX***789', true);
     expect(admin).toContain('Vẫn áp tuổi đơn, mốc bắt đầu chương trình, trần số đơn mỗi ngày và trần điểm mỗi tháng');
     expect(admin).toContain('vẫn có thể vào chờ duyệt');
+    expect(admin).toContain('chưa tính được tiền hàng');
+    expect(admin).toContain('khách là nhân viên');
     expect(admin).toContain('không cần người khác duyệt, thao tác được ghi vào lịch sử');
     expect(admin).not.toContain('bỏ qua');
     const staff = attachDialogMessage('SPX***789', false);

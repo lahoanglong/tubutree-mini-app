@@ -6,6 +6,12 @@ import { mockExternalPoints } from './support/external-points-mocks';
  * Kiểm: dải "gấp đôi" lấy số từ config, gửi mã thành công hiện sàn/điểm chờ/mốc cộng, lỗi theo `code` hiện câu của app,
  * cờ tắt thì báo chưa mở.
  */
+// Mốc tương lai tính từ giờ chạy, đúng 12:00 UTC để ngày hiển thị giống nhau ở mọi múi giờ phổ biến.
+const FUTURE = new Date(Date.now() + 7 * 864e5);
+FUTURE.setUTCHours(12, 0, 0, 0);
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const FUTURE_LABEL = `${pad2(FUTURE.getUTCDate())}/${pad2(FUTURE.getUTCMonth() + 1)}/${FUTURE.getUTCFullYear()}`;
+
 test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
   test.beforeEach(({ api }) => {
     mockSession(api, makeUser({ id: 'user-ext', fullName: 'Nguyễn Văn A' }));
@@ -15,7 +21,7 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
     mockExternalPoints(api, {
       submit: {
         status: 'CLAIMED', claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250,
-        expectedCreditAt: '2026-11-05T05:00:00.000Z', message: 'ok',
+        expectedCreditAt: FUTURE.toISOString(), message: 'ok',
       },
     });
     await page.goto('/points/scan');
@@ -29,7 +35,7 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
     const result = page.getByTestId('claim-result');
     await expect(result).toContainText('Đã ghi nhận đơn Shopee SPX***789');
     await expect(result).toContainText('1.250 Điểm Xanh đang chờ cộng');
-    await expect(result).toContainText('Dự kiến cộng từ 05/11/2026');
+    await expect(result).toContainText(`Dự kiến cộng từ ${FUTURE_LABEL}`);
     expect(api.callsTo('POST', '/me/external-points/claims').map((c) => c.body)).toEqual([{ code: 'SPXVN0123456789' }]);
   });
 
