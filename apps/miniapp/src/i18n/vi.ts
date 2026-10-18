@@ -47,11 +47,6 @@ export const vi = {
     savedHidden: 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.',
   },
 
-  refill: {
-    locationPaused: 'Điểm này đã tạm ngưng nhận vỏ. Vui lòng gọi điểm hoặc liên hệ Tubu trước khi mang vỏ đến.',
-    pausedSuffix: ' (đã tạm ngưng)',
-  },
-
   auth: {
     guestHeading: 'Bạn chưa đăng nhập',
     loginCta: 'Tiếp tục với Zalo',

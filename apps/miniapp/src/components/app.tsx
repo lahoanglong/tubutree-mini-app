@@ -53,7 +53,6 @@ const CommunityEventsPage = lazy(() => import('../pages/community-events'));
 const PostDetailPage = lazy(() => import('../pages/post-detail'));
 const AiAdvisorPage = lazy(() => import('../pages/ai-advisor'));
 const GroupBuyPage = lazy(() => import('../pages/group-buy'));
-const RefillPage = lazy(() => import('../pages/refill'));
 const RecyclePage = lazy(() => import('../pages/recycle'));
 const RecycleRulesPage = lazy(() => import('../pages/recycle-rules'));
 const RecycleNewPage = lazy(() => import('../pages/recycle-new'));
@@ -202,7 +201,7 @@ export default function MyApp() {
                     <Route path="/ai-advisor" element={<AiAdvisorPage />} />
                     <Route path="/group-buy" element={<GroupBuyPage />} />
                     <Route path="/group-buy/:id" element={<GroupBuyPage />} />
-                    <Route path="/refill" element={<RefillPage />} />
+                    <Route path="/refill" element={<Navigate to="/recycle" replace />} />
                     <Route path="/recycle" element={<RecyclePage />} />
                     <Route path="/recycle/rules" element={<RecycleRulesPage />} />
                     <Route path="/recycle/new" element={<RecycleNewPage />} />

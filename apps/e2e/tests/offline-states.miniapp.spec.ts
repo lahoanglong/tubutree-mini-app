@@ -14,7 +14,7 @@ const PAGES: { name: string; path: string; forbidden: RegExp }[] = [
   { name: 'Giỏ hàng', path: '/cart', forbidden: /Giỏ còn trống đấy/ },
   { name: 'Thông báo', path: '/notifications', forbidden: /Chưa có thông báo nào/ },
   { name: 'Yêu thích', path: '/wishlist', forbidden: /Chưa có sản phẩm yêu thích/ },
-  { name: 'Đổi vỏ', path: '/refill', forbidden: /Đã hết lượt đổi tháng này|Đăng nhập để đổi vỏ/ },
+  { name: 'Đổi rác', path: '/recycle', forbidden: /Chương trình đang tạm dừng|Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác/ },
   { name: 'Cá nhân', path: '/profile', forbidden: /Đã đăng xuất|network error/i },
 ];
 
