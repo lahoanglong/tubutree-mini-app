@@ -19,7 +19,7 @@ Nhánh `lr2/extorders`, kế hoạch gốc `extpoints-plan.md`. Bước 2 (claim
 1. APP (không bao giờ lưu): mã Tubu từ `pancakeEventOrderCode` (extension.external_order_id hoặc "Order code:" trong note), `custom_id` khớp `^(TUBU|TUBUSUB|DLR)\d+$`, hoặc tag `MINIAPP`/`WEB` (tags là mảng chuỗi, mảng `{name}` hoặc một chuỗi phân tách bằng phẩy, không phân biệt hoa thường).
 2. MARKETPLACE: `marketplace_id` có trong `marketplaceIds` (mặc định -3 shopee, -4 lazada, -9 tiktok), hoặc `is_from_ecommerce === true` (channel null nếu id lạ).
 3. CHAT: `sourceKey` (`order_sources|account|marketplace_id`) nằm trong `chatSources` (mặc định rỗng).
-4. UNKNOWN: còn lại. Vẫn lưu để bảng "Nguồn đã thấy" lộ ra khoá cần xếp.
+4. UNKNOWN: còn lại. Vẫn lưu để bảng "Nguồn đã thấy" lộ ra khoá cần xếp, nhưng sự kiện giữ UNMATCHED (cron ghép lại như cũ, nạp lại idempotent). Khi lần sau ghép được đơn Tubu thì dòng UNKNOWN cùng pancakeOrderId bị xoá. Chỉ MARKETPLACE và CHAT là PROCESSED.
 
 Chỉ sự kiện mang nguyên object đơn (`orders`, `order`, `order.updated`, `order.status_updated`) được nạp; `order.cancelled`, `order.shipping_updated`, `invoice.issued` giữ hành vi cũ (UNMATCHED) vì payload có thể một phần và sẽ làm sai nguồn đã lưu.
 
@@ -36,6 +36,6 @@ Chỉ sự kiện mang nguyên object đơn (`orders`, `order`, `order.updated`,
 ## Giới hạn đã biết
 
 - Đơn lưu trước khi sửa `order_source_map` giữ loại cũ cho tới khi Pancake gửi cập nhật mới của chính đơn đó (chưa có nút phân loại lại; `lastPayload` đủ để bước sau làm).
-- Webhook một đơn app mà không mang mã Tubu, tag MINIAPP/WEB hay custom_id Tubu (nếu Pancake không trả lại các field đó) sẽ bị lưu là UNKNOWN thay vì UNMATCHED chờ đối chiếu. Test cũ `pancake.processor.spec.ts` ("webhook tới trước khi lưu pancakeOrderId") được thêm `tags: ['MINIAPP']` vào payload cho đúng với đơn Tubu thật (body đẩy đơn luôn gắn tag đó). Cần xác nhận bằng payload thật (runbook bước 15, mục 5d).
+- Đơn app thiếu dấu và tới trước khi lưu pancakeOrderId: lưu UNKNOWN, giữ UNMATCHED, cron ghép lại rồi dọn dòng UNKNOWN. Đơn app không bao giờ ghép được sẽ ở lại là UNKNOWN (thấy ở tab, không cộng điểm).
 - `goodsValue` theo công thức plan; `total_price` được giả định là tổng sau giảm theo dòng (để `total_price − total_discount` đối chiếu được). Chưa kiểm bằng payload thật; sai thì đơn ra "chưa tính được" chứ không cộng sai.
 - Dữ liệu kiểm thử là tự dựng: `apps/api/test/fixtures/pancake/synthetic-*.json`.

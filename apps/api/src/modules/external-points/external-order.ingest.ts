@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderSourceMap } from './external-order.config';
+import type { ExternalOrderKind } from './external-order.mapper';
 import {
   buyerPhone,
   classifyPancakeOrder,
@@ -19,6 +20,12 @@ import {
  */
 export type IngestResult = 'NOT_EXTERNAL' | 'STORED' | 'STALE';
 
+/** `kind` là loại đã phân (null khi NOT_EXTERNAL): processor giữ UNMATCHED cho UNKNOWN để cron còn ghép lại với đơn Tubu. */
+export interface IngestOutcome {
+  result: IngestResult;
+  kind: ExternalOrderKind | null;
+}
+
 type Db = Pick<PrismaService, 'externalOrder'>;
 
 const CLOSED = ['RETURNED', 'CANCELLED', 'DELETED'];
@@ -33,13 +40,13 @@ export async function ingestExternalOrder(
   data: Record<string, unknown>,
   map: OrderSourceMap,
   now: Date = new Date(),
-): Promise<IngestResult> {
+): Promise<IngestOutcome> {
   const rawId = data['id'] ?? data['order_id'];
-  if (rawId === null || rawId === undefined || rawId === '') return 'NOT_EXTERNAL';
+  if (rawId === null || rawId === undefined || rawId === '') return { result: 'NOT_EXTERNAL', kind: null };
   const pancakeOrderId = String(rawId);
 
   const klass = classifyPancakeOrder(data, map);
-  if (klass.kind === 'APP') return 'NOT_EXTERNAL';
+  if (klass.kind === 'APP') return { result: 'NOT_EXTERNAL', kind: null };
 
   const { pancakeStatus, status } = externalStatusOf(data);
   const codes = extractTrackingCodes(data);
@@ -78,7 +85,7 @@ export async function ingestExternalOrder(
     ],
     skipDuplicates: true,
   });
-  if (created.count > 0) return 'STORED';
+  if (created.count > 0) return { result: 'STORED', kind: klass.kind };
 
   // Payload thiếu field (webhook một phần) không được xoá thứ đã biết: chỉ ghi đè khi có giá trị mới.
   const updated = await prisma.externalOrder.updateMany({
@@ -98,12 +105,12 @@ export async function ingestExternalOrder(
       ...(pancakeStatus !== null && !closed ? { closedAt: null } : {}),
     },
   });
-  if (updated.count === 0) return 'STALE';
+  if (updated.count === 0) return { result: 'STALE', kind: klass.kind };
 
   // Mốc "lần đầu thấy" chỉ đặt một lần: điều kiện IS NULL giữ đúng mốc đầu khi hai webhook chạy song song.
   if (status === 'DELIVERED' && !payloadDeliveredAt) {
     await prisma.externalOrder.updateMany({ where: { pancakeOrderId, deliveredAt: null }, data: { deliveredAt: now } });
   }
   if (closed) await prisma.externalOrder.updateMany({ where: { pancakeOrderId, closedAt: null }, data: { closedAt: now } });
-  return 'STORED';
+  return { result: 'STORED', kind: klass.kind };
 }

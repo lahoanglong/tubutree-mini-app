@@ -207,12 +207,17 @@ export class PancakeProcessor extends WorkerHost {
         return 'PROCESSED';
       }
       if (!match.order) {
-        // Đơn không có trong bảng orders: đơn sàn/chat/điện thoại thì lưu lại, đơn app (chưa lưu pancakeOrderId) vẫn chờ đối chiếu.
+        // Đơn không có trong bảng orders: đơn sàn/chat thì lưu và xong. UNKNOWN cũng được lưu nhưng sự kiện vẫn UNMATCHED: đơn app
+        // tới trước khi lưu pancakeOrderId hoặc thiếu note/tag cần cron ghép lại, đánh PROCESSED là mất lượt đó.
         if (EXTERNAL_CAPTURE_EVENTS.has(eventType) && (await this.captureEnabled())) {
-          const stored = await ingestExternalOrder(this.prisma, data, await this.orderSourceMap());
-          if (stored !== 'NOT_EXTERNAL') return 'PROCESSED';
+          const { result, kind } = await ingestExternalOrder(this.prisma, data, await this.orderSourceMap());
+          if (result !== 'NOT_EXTERNAL' && kind !== 'UNKNOWN') return 'PROCESSED';
         }
         return 'UNMATCHED';
+      }
+      // Lần ghép lại thành công: dòng UNKNOWN từng lưu cho đơn này là "đơn ngoài app" giả.
+      if (match.pancakeId && (await this.captureEnabled())) {
+        await this.prisma.externalOrder.deleteMany({ where: { pancakeOrderId: match.pancakeId, source: 'UNKNOWN' } });
       }
       // D4: đơn gian hàng đối tác tự giao không bao giờ lên Pancake — đơn Pancake nào mang mã của nó là đơn lạ (nhân viên
       // tạo tay/đơn bù ghi nhầm mã), không được giao/huỷ/hoàn/cộng điểm hộ đối tác.

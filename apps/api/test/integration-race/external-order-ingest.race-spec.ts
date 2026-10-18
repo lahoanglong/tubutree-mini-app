@@ -5,7 +5,7 @@ import type { NotificationsService } from '../../src/modules/notifications/notif
 import type { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { ExternalOrdersAdminService } from '../../src/modules/external-points/external-orders-admin.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
-import { randCode, summarize, warmPool } from './helpers';
+import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
  * Nhận đơn Pancake ngoài app trên Postgres THẬT: nhiều webhook song song của cùng một đơn sàn chỉ tạo MỘT dòng và bản có
@@ -136,5 +136,22 @@ describe('Nạp đơn ngoài app: song song cùng đơn Pancake (real Postgres)'
     const id = (await admin.list({ page: 1, limit: 1, q: pid })).data[0]!.id;
     expect(await admin.detail(id, true)).toHaveProperty('lastPayload');
     expect(await admin.detail(id, false)).not.toHaveProperty('lastPayload');
+  });
+
+  it('(f) payload app thiếu dấu: UNMATCHED + dòng UNKNOWN; lần thử sau khớp được đơn Tubu thì dòng UNKNOWN bị dọn', async () => {
+    const pid = `EXT${randCode(10)}`;
+    pids.push(pid);
+    const bare = { id: pid, status: 1, updated_at: '2026-10-15T10:00:00', partner: { extend_code: `GHN${randCode(8)}` } };
+    const first = await send(bare);
+    expect(first.status).toBe('UNMATCHED');
+    expect(await prisma.externalOrder.findUnique({ where: { pancakeOrderId: pid } })).toMatchObject({ source: 'UNKNOWN' });
+
+    const user = await createUser(prisma);
+    const order = await createOrder(prisma, { userId: user.id, pancakeOrderId: pid });
+    const retry = await send({ ...bare, updated_at: '2026-10-15T10:05:00' });
+    expect(retry.status).toBe('PROCESSED');
+    expect(await prisma.externalOrder.count({ where: { pancakeOrderId: pid } })).toBe(0);
+    await prisma.order.delete({ where: { id: order.id } });
+    await prisma.user.delete({ where: { id: user.id } });
   });
 });

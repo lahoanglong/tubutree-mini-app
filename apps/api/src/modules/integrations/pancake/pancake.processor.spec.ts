@@ -68,6 +68,7 @@ function setup(
       update: jest.fn().mockResolvedValue({}),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
+    externalOrder: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     orderCustomerRefund,
     returnRequest: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(null), create: historyCreate },

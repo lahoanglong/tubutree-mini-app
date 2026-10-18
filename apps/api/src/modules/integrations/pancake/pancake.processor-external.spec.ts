@@ -19,6 +19,7 @@ function setup(rawPayload: Record<string, unknown>, o: Opts = {}, eventType = 'o
   const externalOrder = {
     createMany: jest.fn().mockResolvedValue({ count: o.createCount ?? 1 }),
     updateMany: jest.fn().mockResolvedValue({ count: o.updateCount ?? 1 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
   };
   const prisma = {
     order: {
@@ -95,6 +96,39 @@ describe('PancakeProcessor — nạp đơn ngoài app', () => {
     await t.run();
     expect(t.externalOrder.createMany).not.toHaveBeenCalled();
     expect(t.externalOrder.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('đơn app thiếu dấu (không mã, tag, custom_id, nguồn): lưu dòng UNKNOWN nhưng sự kiện giữ UNMATCHED để cron ghép lại', async () => {
+    const t = setup({ id: 910009, status: 1, updated_at: '2026-10-15T10:00:00', partner: { extend_code: 'GHN123456' } });
+    await t.run();
+    expect(t.finalStatus()).toMatchObject({ status: 'UNMATCHED' });
+    expect((t.externalOrder.createMany.mock.calls[0]![0] as { data: { source: string }[] }).data[0]!.source).toBe('UNKNOWN');
+  });
+
+  it('đơn chat chưa biết nguồn (UNKNOWN) cũng UNMATCHED; sàn và chat đã xếp thì PROCESSED', async () => {
+    const unknown = setup(fixture('synthetic-chat.json'));
+    await unknown.run();
+    expect(unknown.finalStatus()).toMatchObject({ status: 'UNMATCHED' });
+    const chat = setup(fixture('synthetic-chat.json'), { config: { [ORDER_SOURCE_MAP_KEY]: { marketplaceIds: {}, chatSources: ['-1|fanpage_mau|'] } } });
+    await chat.run();
+    expect(chat.finalStatus()).toMatchObject({ status: 'PROCESSED' });
+  });
+
+  it('lần thử lại ghép được đơn Tubu: dọn dòng UNKNOWN cùng pancakeOrderId, không đụng dòng sàn/chat', async () => {
+    const matched = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', fulfiller: 'TUBU', pancakeOrderId: '910001', total: 340_000, shippingFee: 0 };
+    const t = setup(fixture('synthetic-shopee.json'), { matched });
+    t.proc['onOrderEvent' as never] = jest.fn().mockResolvedValue(undefined) as never;
+    await t.run();
+    expect(t.externalOrder.deleteMany).toHaveBeenCalledWith({ where: { pancakeOrderId: '910001', source: 'UNKNOWN' } });
+    expect(t.finalStatus()).toMatchObject({ status: 'PROCESSED' });
+  });
+
+  it('công tắc nạp tắt thì không dọn gì khi đã khớp đơn Tubu', async () => {
+    const matched = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', fulfiller: 'TUBU', pancakeOrderId: '910001' };
+    const t = setup(fixture('synthetic-shopee.json'), { matched, config: { [EXTERNAL_CAPTURE_ENABLED_KEY]: false } });
+    t.proc['onOrderEvent' as never] = jest.fn().mockResolvedValue(undefined) as never;
+    await t.run();
+    expect(t.externalOrder.deleteMany).not.toHaveBeenCalled();
   });
 
   it('đơn lạ mang mã Tubu đã gắn đơn Pancake khác (foreign): không lưu', async () => {
