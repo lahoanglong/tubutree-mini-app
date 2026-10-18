@@ -35,6 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';
 import { TierCard } from '@/components/affiliate/tier-card';
+import { CtvOrderSheet } from '@/components/affiliate/ctv-order-sheet';
 import { WithdrawSheet } from '@/components/affiliate/withdraw-sheet';
 import {
   COMMISSION_META,
@@ -318,6 +319,7 @@ function Dashboard() {
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [ctvOrdering, setCtvOrdering] = useState(false);
 
   const createLink = useMutation({
     mutationFn: () => createAffiliateLink(coreHttp, 'HOMEPAGE'),
@@ -354,9 +356,6 @@ function Dashboard() {
     setNotice({ text: ok ? okText : failText, error: !ok });
   };
 
-  // Lên đơn hộ chưa mở trên web: không gọi API, chỉ báo cách làm ở Mini App.
-  const notYet = (what: string) => setNotice({ text: `${what} chưa mở trên web, bạn dùng Mini App Tubu Tree để làm việc này nhé.`, error: false });
-
   // Đại lý không có lối tắt Lên đơn hộ (API từ chối) và chỉ có Gian hàng khi còn gian hàng CTV (trình dựng trả 400 nếu không);
   // link Gian hàng chỉ hiện khi trang web của nó đã làm xong.
   const shortcuts: CtvShortcut[] = [
@@ -365,7 +364,7 @@ function Dashboard() {
       ? [{ key: 'store', label: 'Gian hàng', ariaLabel: 'Gian hàng của tôi', icon: Store, href: '/ctv/gian-hang' }]
       : []),
     ...(me?.canOrderForCustomer !== false
-      ? [{ key: 'order', label: 'Lên đơn hộ', ariaLabel: 'Lên đơn hộ khách', icon: Receipt, onPress: () => notYet('Lên đơn hộ') }]
+      ? [{ key: 'order', label: 'Lên đơn hộ', ariaLabel: 'Lên đơn hộ khách', icon: Receipt, onPress: () => setCtvOrdering(true) }]
       : []),
     {
       key: 'withdraw',
@@ -619,6 +618,7 @@ function Dashboard() {
           </Section>
         </div>
       </div>
+      <CtvOrderSheet open={ctvOrdering} onClose={() => setCtvOrdering(false)} />
       <WithdrawSheet
         open={withdrawing}
         onClose={() => setWithdrawing(false)}

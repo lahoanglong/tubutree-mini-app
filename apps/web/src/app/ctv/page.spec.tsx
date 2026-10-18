@@ -25,7 +25,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { id: 'ctv1' } }) }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: (...a: unknown[]) => state.share(...a) } }));
 vi.mock('@/lib/route-map', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/route-map')>()),
@@ -283,12 +283,13 @@ describe('/ctv — bảng điều khiển', () => {
     expect(before('/affiliate/payouts')).toBeGreaterThan(payoutsBefore);
   });
 
-  it('Lên đơn hộ chưa làm: bấm không gọi API nào', async () => {
+  it('Lên đơn hộ mở sheet "Lên đơn hộ khách", chưa gọi API nào khi chưa điền gì', async () => {
     const { container } = mount();
     await flush();
     const before = state.calls.length;
     click(byText(container, '[role="group"] button', 'Lên đơn hộ'));
     await flush();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Lên đơn hộ khách');
     expect(state.calls.length).toBe(before);
     expect(posts()).toEqual([]);
   });
