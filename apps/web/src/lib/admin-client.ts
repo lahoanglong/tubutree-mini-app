@@ -1852,52 +1852,6 @@ export const listLiveAttendance = () => apiFetch<LiveAttendance[]>('/admin/atten
 export const manualCheckout = (sessionId: string) =>
   apiFetch<{ checkedOut: boolean }>('/admin/attendance/manual-checkout', { method: 'POST', body: { sessionId } });
 
-// ── Đổi vỏ chai chờ duyệt (route chung với nhân viên quầy) ──
-export interface PendingRefill {
-  id: string;
-  quantity: number;
-  seedsAwarded: number;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  createdAt: string;
-  user: { id: string; fullName: string | null; phone?: string | null };
-  /** Điểm khách chọn lúc gửi; null ở yêu cầu cũ hoặc khi chưa có điểm nào được cấu hình. */
-  pickupLocation?: { id: string; name: string; address: string } | null;
-}
-export const listPendingRefills = () => apiFetch<PendingRefill[]>('/refill/admin/pending');
-
-// ── Điểm nhận vỏ chai (chỉ ADMIN; không xoá, tắt isActive để giữ lịch sử) ──
-export interface RefillLocation {
-  id: string;
-  name: string;
-  address: string;
-  hours: string | null;
-  phone: string | null;
-  isActive: boolean;
-  sortOrder: number;
-}
-export interface RefillLocationInput {
-  name: string;
-  address: string;
-  hours: string;
-  phone: string;
-  isActive: boolean;
-}
-export const listRefillLocations = () => apiFetch<RefillLocation[]>('/admin/refill-locations');
-export const createRefillLocation = (body: RefillLocationInput) =>
-  apiFetch<RefillLocation>('/admin/refill-locations', { method: 'POST', body });
-export const updateRefillLocation = (id: string, body: Partial<RefillLocationInput>) =>
-  apiFetch<RefillLocation>(`/admin/refill-locations/${encodeURIComponent(id)}`, { method: 'PATCH', body });
-/** `ids`: TOÀN BỘ điểm (cả đang tắt) theo thứ tự mới; API trả 409 khi danh sách đã cũ. */
-export const reorderRefillLocations = (ids: string[]) =>
-  apiFetch<RefillLocation[]>('/admin/refill-locations/order', { method: 'PUT', body: { ids } });
-export const approveRefill = (id: string, receivedQuantity?: number) =>
-  apiFetch<{ ok: boolean }>(`/refill/admin/${encodeURIComponent(id)}/approve`, {
-    method: 'POST',
-    body: receivedQuantity === undefined ? {} : { receivedQuantity },
-  });
-export const rejectRefill = (id: string, reason?: string) =>
-  apiFetch<{ ok: boolean }>(`/refill/admin/${encodeURIComponent(id)}/reject`, { method: 'POST', body: reason ? { reason } : {} });
-
 // ── Đổi rác lấy quà (admin) ──
 const wasteQuery = (params: Record<string, string | number | boolean | undefined>): string => {
   const parts: string[] = [];
