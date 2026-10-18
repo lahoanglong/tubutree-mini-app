@@ -115,11 +115,14 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
     expect(link.hasAttribute('data-next-link')).toBe(true);
   });
 
-  it('khách lẻ thấy chương trình đại lý và nút "Đăng ký đại lý" như Mini App (BUYERWEB-18 cũ ẩn khối này vì /dai-ly chưa có)', async () => {
+  it('không lộ chương trình đại lý (thưởng/chiết khấu B2B) cho khách lẻ — BUYERWEB-18', async () => {
     const box = await html();
-    expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Chứng nhận', 'Khuyến mãi', 'Sản phẩm', 'Chương trình đại lý', 'Câu chuyện thương hiệu']);
-    expect(box.textContent).toContain('Đạt doanh số 5.000.000');
-    expect(box.querySelector('a[href="/dai-ly"]')?.textContent).toBe('Đăng ký đại lý');
+    const text = box.textContent ?? '';
+    expect(text).not.toContain('Chương trình đại lý');
+    expect(text).not.toContain('Thưởng quý');
+    expect(text).not.toContain('Đạt chỉ tiêu');
+    expect(text).not.toContain('Đạt doanh số');
+    expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Chứng nhận', 'Khuyến mãi', 'Sản phẩm', 'Câu chuyện thương hiệu']);
   });
 });
 

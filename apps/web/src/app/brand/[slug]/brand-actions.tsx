@@ -236,9 +236,8 @@ export function BrandPromoCode({ code }: { code: string | null | undefined }) {
 const PERIOD_LABEL = (p: string) => (p === 'YEAR' ? 'năm' : 'quý');
 
 /**
- * Chương trình thưởng đại lý của nhãn, hiện cho mọi người như Mini App (khối này là lời mời vào kênh đại lý); chữ nút theo
- * trạng thái hồ sơ: đã duyệt "Vào kênh đại lý", đang chờ "Xem hồ sơ đại lý", còn lại "Đăng ký đại lý". Nút chỉ hiện khi trang
- * /dai-ly đã có trên web.
+ * Chương trình thưởng đại lý của nhãn. Đây là quyền lợi B2B nên khách lẻ không thấy (BUYERWEB-18): chỉ người đã có hồ sơ đại lý
+ * (đã duyệt hoặc đang chờ) mới thấy khối này và nút theo trạng thái hồ sơ. Nút chỉ hiện khi trang /dai-ly đã có trên web.
  */
 export function BrandDealerBlock({ rewards }: { rewards: { id: string; title: string; description?: string | null; threshold: number; period: string }[] }) {
   const phase = useAuthPhase();
@@ -246,7 +245,7 @@ export function BrandDealerBlock({ rewards }: { rewards: { id: string; title: st
   const me = meQ.data;
   const approved = me?.isDealer === true || me?.status === 'APPROVED';
   const pending = me?.status === 'PENDING';
-  if (rewards.length === 0) return null;
+  if (rewards.length === 0 || (!approved && !pending)) return null;
 
   return (
     <section className="mt-6">
@@ -267,7 +266,7 @@ export function BrandDealerBlock({ rewards }: { rewards: { id: string; title: st
       </div>
       {isWebRouteReady('/dai-ly') && (
         <Link href="/dai-ly" className={`${ui.btnSecondary} mt-3`}>
-          {approved ? 'Vào kênh đại lý' : pending ? 'Xem hồ sơ đại lý' : 'Đăng ký đại lý'}
+          {approved ? 'Vào kênh đại lý' : 'Xem hồ sơ đại lý'}
         </Link>
       )}
     </section>
