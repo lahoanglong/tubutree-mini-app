@@ -1,12 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import type { WasteRequestDetailDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
+import type { WasteCreateRequest, WasteMethod, WasteRequestDetailDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { SystemConfigService } from '../../system-config/system-config.service';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
-import { WasteHoldService } from '../core/waste-hold.service';
+import { writeWasteEvent } from '../core/waste-events';
+import { WasteHoldService, type WasteHoldConfig } from '../core/waste-hold.service';
 import { WASTE_MESSAGES } from '../core/waste-messages';
+import { computeWastePublicFlags } from '../core/waste-public-config';
+import { generateWasteCode } from '../waste-codes';
+import { lockWasteCustomer } from '../waste-locks';
+import { WASTE_CONSENT_VERSION } from '../waste.constants';
 import { toRequestDetail, toRequestSummary, WASTE_REQUEST_FULL_INCLUDE, WASTE_REQUEST_SUMMARY_INCLUDE, type WasteRequestFull } from './waste-request.mapper';
+
+const CREATE_PRIOR_SELECT = { id: true, method: true, pointId: true, lines: { select: { itemId: true, declaredQty: true } } } as const;
 
 @Injectable()
 export class WasteRequestsService {
@@ -15,6 +23,7 @@ export class WasteRequestsService {
     private readonly access: WasteAccessService,
     private readonly hold: WasteHoldService,
     private readonly config: WasteConfigService,
+    private readonly systemConfig: SystemConfigService,
   ) {}
 
   async list(userId: string): Promise<WasteRequestSummaryDTO[]> {
@@ -33,6 +42,122 @@ export class WasteRequestsService {
 
   byOrder(userId: string, orderId: string): Promise<WasteRequestDetailDTO> {
     return this.loadOwned(this.prisma, { orderId, userId });
+  }
+
+  async create(userId: string, idempotencyKey: string, body: WasteCreateRequest): Promise<WasteRequestDetailDTO> {
+    const snap = await this.config.snapshot();
+    const holdCfg: WasteHoldConfig = {
+      laneDropoff: snap.laneDropoff,
+      laneMailin: snap.laneMailin,
+      lanePickup: snap.lanePickup,
+      mailinMinPoints: snap.mailinMinPoints,
+      pickupMinPoints: snap.pickupMinPoints,
+      customerMonthlyCapPoints: snap.customerMonthlyCapPoints,
+      maxOpenRequests: snap.maxOpenRequests,
+      requestHoldDays: snap.requestHoldDays,
+    };
+    if (body.method === 'PICKUP') holdCfg.lanePickup = (await computeWastePublicFlags(this.systemConfig)).pickup;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const id = await this.prisma.$transaction((tx) => this.createInTx(tx, userId, idempotencyKey, body, holdCfg));
+        return await this.loadDetail(this.prisma, userId, id);
+      } catch (e) {
+        const code = (e as { code?: unknown })?.code;
+        const target = String((e as { meta?: { target?: unknown } })?.meta?.target ?? '');
+        if (code === 'P2002' && target.includes('idempotencyKey')) {
+          const prior = await this.prisma.wasteRequest.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey } }, select: CREATE_PRIOR_SELECT });
+          if (!prior) throw e;
+          if (!this.sameCreateContent(prior, body)) throw new ConflictException(WASTE_MESSAGES.IDEMPOTENCY_CONFLICT);
+          return this.loadDetail(this.prisma, userId, prior.id);
+        }
+        if (code === 'P2002' && target.includes('code') && attempt === 0) continue;
+        throw e;
+      }
+    }
+  }
+
+  private async createInTx(tx: Prisma.TransactionClient, userId: string, idempotencyKey: string, body: WasteCreateRequest, holdCfg: WasteHoldConfig): Promise<string> {
+    await lockWasteCustomer(tx, userId);
+    const now = new Date();
+    const prior = await tx.wasteRequest.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey } }, select: CREATE_PRIOR_SELECT });
+    if (prior) {
+      if (!this.sameCreateContent(prior, body)) throw new ConflictException(WASTE_MESSAGES.IDEMPOTENCY_CONFLICT);
+      return prior.id;
+    }
+    if (body.method === 'MAIL_IN' && !(body.packagingConsent === true && body.postagePaidConsent === true)) {
+      throw new BadRequestException(WASTE_MESSAGES.MAILIN_CONSENT);
+    }
+    const result = await this.hold.validateAndHold(
+      tx,
+      { path: 'CREATE', userId, method: body.method, lines: body.lines, pointId: body.method === 'DROP_OFF' ? body.pointId ?? null : null, now },
+      holdCfg,
+    );
+    let code: string | null = null;
+    for (let i = 0; i < 5 && code === null; i++) {
+      const candidate = generateWasteCode('TR');
+      if (!(await tx.wasteRequest.findUnique({ where: { code: candidate }, select: { id: true } }))) code = candidate;
+    }
+    if (code === null) throw new ConflictException(WASTE_MESSAGES.RETRY);
+    const created = await tx.wasteRequest.create({
+      data: {
+        code,
+        userId,
+        method: body.method,
+        status: 'OPEN',
+        pointId: result.pointId,
+        estimatedPoints: result.estimatedPoints,
+        estimatedDrops: result.estimatedDrops,
+        capDayKey: result.capDayKey,
+        capMonthKey: result.capMonthKey,
+        expiresAt: result.expiresAt,
+        idempotencyKey,
+        consentAt: now,
+        consentVersion: WASTE_CONSENT_VERSION,
+        lines: {
+          create: result.lines.map((l) => ({
+            itemId: l.itemId,
+            itemCode: l.itemCode,
+            itemName: l.itemName,
+            unitLabel: l.unitLabel,
+            unitsPerPoint: l.unitsPerPoint,
+            pointsPerGroup: l.pointsPerGroup,
+            dropsPerUnit: l.dropsPerUnit,
+            gramsPerUnit: l.gramsPerUnit,
+            declaredQty: l.declaredQty,
+          })),
+        },
+      },
+      select: { id: true },
+    });
+    await writeWasteEvent(tx, {
+      kind: 'REQUEST_CREATED',
+      actorUserId: userId,
+      actorRole: 'CUSTOMER',
+      requestId: created.id,
+      pointId: result.pointId,
+      meta: {
+        before: null,
+        after: {
+          method: body.method,
+          pointId: result.pointId,
+          estimatedPoints: result.estimatedPoints,
+          lines: body.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.declaredQty })),
+        },
+      },
+    });
+    return created.id;
+  }
+
+  private sameCreateContent(
+    prior: { method: WasteMethod; pointId: string; lines: { itemId: string; declaredQty: number }[] },
+    body: WasteCreateRequest,
+  ): boolean {
+    if (prior.method !== body.method) return false;
+    if (body.method === 'DROP_OFF' && prior.pointId !== body.pointId) return false;
+    const key = (l: { itemId: string; declaredQty: number }) => `${l.itemId}:${l.declaredQty}`;
+    const a = prior.lines.map(key).sort();
+    const b = body.lines.map(key).sort();
+    return a.length === b.length && a.every((k, i) => k === b[i]);
   }
 
   loadDetail(db: Prisma.TransactionClient, userId: string, id: string): Promise<WasteRequestDetailDTO> {

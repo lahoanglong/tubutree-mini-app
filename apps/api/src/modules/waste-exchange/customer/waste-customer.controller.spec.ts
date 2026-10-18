@@ -1,13 +1,14 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { HTTP_CODE_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { createValidationPipe } from '../../../common/validation-pipe';
+import { parseTreeBuyKey } from '../../game/tree-purchase-key';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
-import { WasteCustomerController, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto } from './waste-customer.controller';
+import { WasteCreateDto, WasteCustomerController, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto } from './waste-customer.controller';
 import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
@@ -16,13 +17,14 @@ const OFF = 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản t
 const users: Record<string, unknown> = {
   real: { id: 'real', phone: '0901234567', zaloId: 'z1', isBlocked: false, mergedIntoId: null, wasteFlags: null },
   guest: { id: 'guest', phone: null, zaloId: 'guest_d', isBlocked: false, mergedIntoId: null, wasteFlags: null },
+  nophone: { id: 'nophone', phone: null, zaloId: 'z3', isBlocked: false, mergedIntoId: null, wasteFlags: null },
   blocked: { id: 'blocked', phone: '0901234568', zaloId: 'z2', isBlocked: false, mergedIntoId: null, wasteFlags: { blockedAt: new Date(), shipLockedAt: null } },
 };
 const svc = <T extends string>(...m: T[]) => Object.fromEntries(m.map((k) => [k, jest.fn().mockResolvedValue({ ok: k })])) as Record<T, jest.Mock>;
 async function build(enabled: boolean) {
   const me = svc('me', 'rules');
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
-  const requests = svc('list', 'detail', 'byOrder');
+  const requests = svc('list', 'detail', 'byOrder', 'create');
   const preview = svc('preview');
   const mod = await Test.createTestingModule({
     controllers: [WasteCustomerController],
@@ -71,7 +73,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
       ['me', 0, 'me'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
-      ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'],
+      ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'],
     ]);
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.nearby)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.nearby)).toBe(30);
@@ -94,6 +96,34 @@ describe('WasteCustomerController.preview (spec 15.2)', () => {
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.preview)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.preview)).toBe(60);
     expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.preview)).toBe(60_000);
+  });
+});
+
+describe('WasteCustomerController.create (spec 11.2, 15.1)', () => {
+  const body = { method: 'DROP_OFF' as const, pointId: 'p1', lines: [{ itemId: 'carton', declaredQty: 5 }], consent: true as const };
+  const invalidKey = (() => { try { parseTreeBuyKey('bad'); } catch (e) { return (e as Error).message; } return ''; })();
+  it('FULL gate runs before the key: guest, no phone, waste-blocked and programme off are 403; the service is not called', async () => {
+    const on = await build(true);
+    await expect(on.c.create('guest', undefined, body)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(on.c.create('nophone', 'key-00000001', body)).rejects.toThrow(new ForbiddenException('Bạn cần chia sẻ số điện thoại để dùng Đổi rác lấy quà.'));
+    await expect(on.c.create('blocked', 'key-00000001', body)).rejects.toThrow(new ForbiddenException('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree.'));
+    const off = await build(false);
+    await expect(off.c.create('real', 'key-00000001', body)).rejects.toThrow(new ForbiddenException(OFF));
+    expect(on.requests.create).not.toHaveBeenCalled();
+    expect(off.requests.create).not.toHaveBeenCalled();
+  });
+  it('Idempotency-Key: missing or malformed is 400; a valid key reaches the service with the body', async () => {
+    const { c, requests } = await build(true);
+    await expect(c.create('real', undefined, body)).rejects.toThrow(new BadRequestException('Thiếu Idempotency-Key: cần 8 đến 128 ký tự gồm chữ cái, chữ số, dấu gạch dưới (_) hoặc gạch nối (-).'));
+    await expect(c.create('real', 'short', body)).rejects.toThrow(new BadRequestException(invalidKey));
+    expect(requests.create).not.toHaveBeenCalled();
+    await expect(c.create('real', 'key-00000001', body)).resolves.toEqual({ ok: 'create' });
+    expect(requests.create).toHaveBeenCalledWith('real', 'key-00000001', body);
+  });
+  it('POST requests with 10/min', () => {
+    const p = WasteCustomerController.prototype;
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.create)).toBe(10);
+    expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.create)).toBe(60_000);
   });
 });
 
@@ -124,5 +154,16 @@ describe('read DTOs (global ValidationPipe)', () => {
   });
   it('preview DTO accepts a MAIL_IN body with a province', async () => {
     await expect(run(WastePreviewDto, { lines: [{ itemId: 'a', declaredQty: 1 }], method: 'MAIL_IN', provinceCode: '79' })).resolves.toBeInstanceOf(WastePreviewDto);
+  });
+  it.each([
+    [{ method: 'DROP_OFF', pointId: 'p1', lines: [{ itemId: 'a', declaredQty: 1 }] }],
+    [{ method: 'DROP_OFF', pointId: 'p1', lines: [{ itemId: 'a', declaredQty: 1 }], consent: false }],
+    [{ method: 'BIKE', lines: [{ itemId: 'a', declaredQty: 1 }], consent: true }],
+    [{ method: 'MAIL_IN', lines: [{ itemId: 'a', declaredQty: 15 }], consent: true, packagingConsent: 'yes', postagePaidConsent: true }],
+  ])('create DTO rejects %j', async (b) => {
+    await expect(run(WasteCreateDto, b)).rejects.toThrow();
+  });
+  it('create DTO accepts a MAIL_IN body with both commitments', async () => {
+    await expect(run(WasteCreateDto, { method: 'MAIL_IN', lines: [{ itemId: 'a', declaredQty: 15 }], consent: true, packagingConsent: true, postagePaidConsent: true })).resolves.toBeInstanceOf(WasteCreateDto);
   });
 });

@@ -1,9 +1,10 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
-import { WASTE_METHOD_VALUES, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest } from '@tubutree/shared-types';
+import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { WASTE_METHOD_VALUES, type WasteCreateRequest, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest } from '@tubutree/shared-types';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { requireIdempotencyKey } from '../../../common/idempotency-key';
 import { WasteAccessService, type WasteCustomerContext, type WasteGateMode } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
@@ -68,6 +69,34 @@ export class WastePreviewDto implements WastePreviewRequest {
   @IsString()
   @MaxLength(20)
   provinceCode?: string;
+}
+
+export class WasteCreateDto implements WasteCreateRequest {
+  @IsIn(WASTE_METHOD_VALUES)
+  method!: WasteMethod;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => WasteLineDto)
+  lines!: WasteLineDto[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  pointId?: string;
+
+  @Equals(true)
+  consent!: true;
+
+  @IsOptional()
+  @IsBoolean()
+  packagingConsent?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  postagePaidConsent?: boolean;
 }
 
 @Controller('waste')
@@ -139,5 +168,12 @@ export class WasteCustomerController {
   async detail(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     await this.gate(userId, 'OWN');
     return this.requests.detail(userId, id);
+  }
+
+  @Post('requests')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  async create(@CurrentUser('sub') userId: string, @Headers('idempotency-key') rawKey: unknown, @Body() body: WasteCreateDto) {
+    await this.gate(userId, 'FULL');
+    return this.requests.create(userId, requireIdempotencyKey(rawKey), body);
   }
 }
