@@ -19,7 +19,7 @@ import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice, ToneBadge } from './ui';
 import type { Tone } from '@/lib/recycling';
 
-const TIME_RE = /^\d{1,2}:\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const SHIFT_STATUS: Record<AdminShift['status'], { label: string; tone: Tone }> = {
   PENDING: { label: 'Chờ duyệt', tone: 'warning' },
@@ -212,12 +212,12 @@ export function ShiftApprovalTab() {
         <div className="flex gap-2">
           <div className="flex-1">
             <Field label="Bắt đầu">
-              <input type="text" value={adjStart} onChange={(e) => setAdjStart(e.target.value)} className={INPUT_CLASS} />
+              <input type="time" value={adjStart} onChange={(e) => setAdjStart(e.target.value)} className={INPUT_CLASS} />
             </Field>
           </div>
           <div className="flex-1">
             <Field label="Kết thúc">
-              <input type="text" value={adjEnd} onChange={(e) => setAdjEnd(e.target.value)} className={INPUT_CLASS} />
+              <input type="time" value={adjEnd} onChange={(e) => setAdjEnd(e.target.value)} className={INPUT_CLASS} />
             </Field>
           </div>
         </div>
@@ -295,12 +295,12 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
           <div className="flex gap-2">
             <div className="flex-1">
               <Field label="Bắt đầu">
-                <input type="text" value={start} onChange={(e) => setStart(e.target.value)} className={INPUT_CLASS} />
+                <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={INPUT_CLASS} />
               </Field>
             </div>
             <div className="flex-1">
               <Field label="Kết thúc">
-                <input type="text" value={end} onChange={(e) => setEnd(e.target.value)} className={INPUT_CLASS} />
+                <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={INPUT_CLASS} />
               </Field>
             </div>
           </div>

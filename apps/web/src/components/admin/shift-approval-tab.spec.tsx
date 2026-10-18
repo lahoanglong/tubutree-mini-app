@@ -124,6 +124,31 @@ describe('ShiftApprovalTab (Duyệt ca)', () => {
     });
   });
 
+  it('giờ sai định dạng (8:00, 25:99) khoá nút duyệt và nút thêm ca chuẩn, không gửi gì', async () => {
+    const api = stub([shift('a', 'PENDING')]);
+    const { container } = mount(<ShiftApprovalTab />);
+    await flush();
+    click(container.querySelector('[aria-label^="Chỉnh giờ"]'));
+    await flush();
+    const inputs = document.querySelectorAll<HTMLInputElement>('[role=dialog] input');
+    typeInto(inputs[0]!, '8:00');
+    typeInto(inputs[1]!, '13:30');
+    const approve = byText(document.body, 'button', 'Duyệt với giờ đã chỉnh') as HTMLButtonElement;
+    expect(approve.disabled).toBe(true);
+    click(approve);
+    await flush();
+    expect(api.to('/admin/shifts/a/approve')).toHaveLength(0);
+    click(byText(document.body, 'button', 'Đóng') ?? document.querySelector('[role=dialog] [aria-label*="Đóng"]'));
+    await flush();
+    click(byText(container, 'button', 'Ca chuẩn'));
+    await flush();
+    typeInto(document.querySelector('[role=dialog] input[placeholder^="Tên ca"]'), 'Ca lạ');
+    const times = Array.from(document.querySelectorAll<HTMLInputElement>('[role=dialog] input')).filter((i) => !i.placeholder);
+    typeInto(times[0]!, '25:99');
+    typeInto(times[1]!, '12:00');
+    expect((byText(document.body, 'button', 'Thêm ca chuẩn') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('ca chuẩn: liệt kê, thêm và xoá', async () => {
     const api = stub([], [{ id: 't1', name: 'Ca sáng', startMin: 480, endMin: 720, active: true, sortOrder: 0 }]);
     const { container } = mount(<ShiftApprovalTab />);
