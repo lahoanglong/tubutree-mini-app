@@ -12,6 +12,7 @@ import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pa
 import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from '../affiliate/commission-rate';
 import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate } from '../affiliate/commission-rate-csv';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
+import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 
 const DISPLAY_NAME_MAX = 100;
@@ -226,6 +227,7 @@ export class SystemConfigService {
     'retention.notification_logs_days': { min: 30, max: 3650, note: 'số ngày giữ nhật ký thông báo (tối thiểu 30)', integer: true },
     'retention.webhook_events_days': { min: 14, max: 3650, note: 'số ngày giữ webhook (tối thiểu 14)', integer: true },
     'retention.refresh_sessions_days': { min: 7, max: 3650, note: 'số ngày giữ phiên đăng nhập đã hết hạn (tối thiểu 7)', integer: true },
+    ...WASTE_RANGES,
   };
 
   /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
@@ -368,6 +370,7 @@ export class SystemConfigService {
       }
       return null;
     },
+    ...WASTE_JSON_RULES,
   };
 
   /** Khoá có luật ghi riêng (biên số hoặc luật JSON): hệ thống biết khoá này, dù DB chưa có dòng. */
