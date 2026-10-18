@@ -248,10 +248,12 @@ test.describe('Admin — Đổi rác lấy quà', () => {
     await page.getByRole('button', { name: 'Điểm nhận', exact: true }).click();
     const row = page.locator('[data-point="wp-e2e"]');
     await expect(row).toContainText('Tạp hoá Cô Ba');
+    const region = await page.getByRole('region', { name: 'Bảng điểm nhận' }).boundingBox();
+    expect(region).not.toBeNull();
     for (const name of ['Sửa', 'Chi tiết', 'Kích hoạt lại']) {
       const box = await row.getByRole('button', { name, exact: true }).boundingBox();
       expect(box, name).not.toBeNull();
-      expect(box!.x + box!.width, name).toBeLessThanOrEqual(1280);
+      expect(box!.x + box!.width, name).toBeLessThanOrEqual(region!.x + region!.width);
     }
   });
 });
