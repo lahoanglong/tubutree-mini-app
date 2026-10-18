@@ -10,6 +10,7 @@ import sys
 
 HUNK = re.compile(r"<<<<<<< [^\n]*\n(.*?)=======\n(.*?)>>>>>>> [^\n]*\n", re.S)
 DECL = re.compile(r"^const ([A-Z_]+)(:[^=]*)?=", re.M)
+KEY = re.compile(r"^(\s+[A-Za-z_$][\w$]*)\s*:")
 
 
 def blocks(text):
@@ -49,6 +50,11 @@ def resolve(ours, theirs):
     for l in theirs.splitlines(keepends=True):
         if l not in lines:
             lines.append(l)
+    # Hai bên cùng sửa một khoá trong object (ví dụ mock useParams) thì gộp dòng sẽ ra khoá trùng, tsc mới báo (TS1117).
+    keys = [m.group(1) for m in (KEY.match(l) for l in lines) if m]
+    dup = sorted({k for k in keys if keys.count(k) > 1})
+    if dup:
+        raise SystemExit(f"khoá trùng {dup} sau khi gộp dòng, giải tay")
     return "".join(lines)
 
 

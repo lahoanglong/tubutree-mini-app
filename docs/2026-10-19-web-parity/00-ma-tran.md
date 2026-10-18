@@ -38,11 +38,11 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 26 | `/cashback` | cashback.tsx | — | `/hoan-tien` | xong cb5c0d58 | loyalty | công khai một phần | Giữ cờ `CASHBACK_ENABLED` (đang tắt). `openAffiliateLink` thành mở tab mới |
 | 27 | `/points/scan` | external-points.tsx | — | — | skip | — | — | Q2: quét mã đơn sàn chỉ ở Mini App (cần SĐT đã xác minh và máy quét QR). Web không có route; hub tài khoản trên web hiện lời dặn mở Mini App khi cờ bật |
 | 28 | `/game` | game.tsx | — | `/vuon-xanh` | xong 17398cc5 | game | riêng tư | Lớn nhất (103 test). Không dùng Zalo SDK |
-| 29 | `/feed` | feed.tsx | — | `/cong-dong` | mới | community | công khai một phần | Khách: bản xem trước công khai |
-| 30 | `/feed/:id` | post-detail.tsx | — | `/cong-dong/[id]` | mới | community | riêng tư (Mini App bắt đăng nhập) | |
-| 31 | `/feed/events` | community-events.tsx | — | `/cong-dong/su-kien` | mới | community | riêng tư | |
-| 32 | `/feed/leaderboard` | community-leaderboard.tsx | — | `/cong-dong/xep-hang` | mới | community | riêng tư | |
-| 33 | `/academy`, `/academy/:courseId` | academy.tsx | — | `/hoc-vien`, `/hoc-vien/[courseId]` | mới | community | công khai | Hoàn thành bài cần đăng nhập |
+| 29 | `/feed` | feed.tsx | — | `/cong-dong` | xong 085a676c | community | công khai một phần | Khách: bản xem trước công khai |
+| 30 | `/feed/:id` | post-detail.tsx | — | `/cong-dong/[id]` | xong 085a676c | community | riêng tư (Mini App bắt đăng nhập) | |
+| 31 | `/feed/events` | community-events.tsx | — | `/cong-dong/su-kien` | xong 085a676c | community | riêng tư | |
+| 32 | `/feed/leaderboard` | community-leaderboard.tsx | — | `/cong-dong/xep-hang` | xong 085a676c | community | riêng tư | |
+| 33 | `/academy`, `/academy/:courseId` | academy.tsx | — | `/hoc-vien`, `/hoc-vien/[courseId]` | xong 085a676c | community | riêng tư (API `/academy` chỉ cho AFFILIATE/DEALER/STAFF/ADMIN; Mini App gọi cùng API, không chặn ở giao diện) | Hoàn thành bài cần đăng nhập |
 | 34 | `/ai-advisor` | ai-advisor.tsx | — | `/tu-van` | xong 17398cc5 | game | riêng tư | Cờ `aiAdvisorEnabled` |
 | 35 | `/affiliate` | affiliate.tsx | — | `/ctv` | xong 2d328824 | affiliate | riêng tư | Đăng ký CTV, link, hoa hồng, rút, thuế, mốc thưởng, lên đơn hộ. **Tiền: 2 lượt review** |
 | 36 | `/storefront` | storefront-builder.tsx | — | `/ctv/gian-hang` | xong 2d328824 | affiliate | riêng tư | Không lẫn với cổng `/merchant` |
