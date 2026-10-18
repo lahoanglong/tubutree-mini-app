@@ -388,3 +388,14 @@ describe('Trợ lý AI: tiêu đề và trợ năng', () => {
     expect(smallTouchTargets(c)).toEqual([]);
   });
 });
+
+describe('Trợ lý AI: thanh nhập', () => {
+  it('thanh nhập dính đáy trang (trang này không có thanh đáy), chừa vùng an toàn, không lơ lửng cách đáy 64px', async () => {
+    const c = await mount();
+    const bar = input(c).parentElement as HTMLElement;
+    expect(bar.className).toContain('sticky');
+    expect(bar.className).toContain('bottom-0');
+    expect(bar.className).not.toContain('bottom-16');
+    expect(bar.className).toContain('env(safe-area-inset-bottom)');
+  });
+});

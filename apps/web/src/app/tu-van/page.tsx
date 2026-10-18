@@ -165,7 +165,7 @@ function Advisor() {
 
       <p className="py-1 text-center text-xs text-stone-600">Gợi ý chỉ để tham khảo.</p>
 
-      <div className="sticky bottom-16 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 md:bottom-0">
+      <div className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
         <textarea
           className={`${ui.field} min-w-0 flex-1 resize-none py-2`}
           placeholder="Nhập câu hỏi…"
