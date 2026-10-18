@@ -13,17 +13,20 @@ function amount(v: unknown): number | null {
  * Hợp đồng field chưa đối chiếu được với một payload webhook thật (như prepaid/bank_payment, xem pancake-payment.util),
  * nên cách đọc thứ ba — total_price_after_sub_discount đã gộp sẵn phí ship — chỉ dùng để KHÔNG báo nhầm: một đơn lệch
  * thật mà trùng một trong ba cách đọc là hiếm, còn báo nhầm từng đơn thì nhân viên sẽ quen bỏ qua cả hàng đợi.
+ * Cách đọc thứ ba không cộng ship nên sẽ che ca chỉ sửa phí ship (đơn freeship 269.000, Pancake thêm ship 30.000 vẫn ra
+ * 269.000): chỉ nhận nó khi Pancake không gửi `shipping_fee` hoặc phí đó bằng phí ship của đơn Tubu (`orderShippingFee`).
  * Số đầu tiên là cách đọc chính (dùng để tính chênh lệch hiện cho người xử lý). Không ô tổng nào đọc được → mảng rỗng.
  */
-export function pancakeTotalReadings(data: Record<string, unknown>): number[] {
+export function pancakeTotalReadings(data: Record<string, unknown>, orderShippingFee: number): number[] {
   const afterSub = amount(data['total_price_after_sub_discount']);
   const price = amount(data['total_price']);
   const discount = amount(data['total_discount']);
-  const ship = amount(data['shipping_fee']) ?? 0;
+  const rawShip = amount(data['shipping_fee']);
+  const ship = rawShip ?? 0;
   const readings: number[] = [];
   if (afterSub !== null) readings.push(afterSub + ship);
   if (price !== null && discount !== null && price >= discount) readings.push(price - discount + ship);
-  if (afterSub !== null) readings.push(afterSub);
+  if (afterSub !== null && (rawShip === null || rawShip === orderShippingFee)) readings.push(afterSub);
   return [...new Set(readings)];
 }
 
@@ -33,12 +36,12 @@ export function pancakeTotalReadings(data: Record<string, unknown>): number[] {
  */
 export function pancakeTotalMismatch(
   data: Record<string, unknown>,
-  orderTotal: number,
+  order: { total: number; shippingFee: number },
 ): { pancakeTotal: number; diff: number } | null {
-  const readings = pancakeTotalReadings(data);
-  if (readings.length === 0 || readings.includes(orderTotal)) return null;
+  const readings = pancakeTotalReadings(data, order.shippingFee);
+  if (readings.length === 0 || readings.includes(order.total)) return null;
   const pancakeTotal = readings[0]!;
-  return { pancakeTotal, diff: pancakeTotal - orderTotal };
+  return { pancakeTotal, diff: pancakeTotal - order.total };
 }
 
 /**

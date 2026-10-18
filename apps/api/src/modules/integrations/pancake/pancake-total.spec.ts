@@ -19,53 +19,72 @@ const SAMPLE = {
   prepaid: 0,
 };
 
+/** Đơn Tubu TUBU20260001: tổng 269.000 gồm ship 19.000. */
+const TUBU = { total: 269_000, shippingFee: 19_000 };
+
 describe('pancakeTotalReadings', () => {
   it('payload mẫu cho ra đúng số khách phải trả (cách đọc chính đứng đầu)', () => {
-    expect(pancakeTotalReadings(SAMPLE)).toEqual([269_000, 250_000]);
+    expect(pancakeTotalReadings(SAMPLE, 19_000)).toEqual([269_000, 250_000]);
   });
 
   it('số dạng chuỗi vẫn đọc được; ô thiếu/không phải số thì bỏ qua; không có ô tổng nào → rỗng', () => {
-    expect(pancakeTotalReadings({ total_price_after_sub_discount: '250000', shipping_fee: '19000' })).toEqual([269_000, 250_000]);
-    expect(pancakeTotalReadings({ total_price: 'abc', total_price_after_sub_discount: null })).toEqual([]);
-    expect(pancakeTotalReadings({ status: 1, cod: 269_000 })).toEqual([]);
-    expect(pancakeTotalReadings({})).toEqual([]);
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: '250000', shipping_fee: '19000' }, 19_000)).toEqual([269_000, 250_000]);
+    expect(pancakeTotalReadings({ total_price: 'abc', total_price_after_sub_discount: null }, 0)).toEqual([]);
+    expect(pancakeTotalReadings({ status: 1, cod: 269_000 }, 0)).toEqual([]);
+    expect(pancakeTotalReadings({}, 0)).toEqual([]);
   });
 
   it('chỉ có total_price và total_discount: tính total_price − total_discount + ship', () => {
-    expect(pancakeTotalReadings({ total_price: 280_000, total_discount: 30_000, shipping_fee: 19_000 })).toEqual([269_000]);
+    expect(pancakeTotalReadings({ total_price: 280_000, total_discount: 30_000, shipping_fee: 19_000 }, 19_000)).toEqual([269_000]);
   });
 
   it('không có phí ship thì hai cách đọc trùng nhau, chỉ trả một số', () => {
-    expect(pancakeTotalReadings({ total_price_after_sub_discount: 250_000 })).toEqual([250_000]);
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: 250_000 }, 19_000)).toEqual([250_000]);
   });
 
   it('số âm hoặc không hữu hạn không được coi là tổng tiền', () => {
-    expect(pancakeTotalReadings({ total_price_after_sub_discount: -5, shipping_fee: 0 })).toEqual([]);
-    expect(pancakeTotalReadings({ total_price_after_sub_discount: Infinity })).toEqual([]);
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: -5, shipping_fee: 0 }, 0)).toEqual([]);
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: Infinity }, 0)).toEqual([]);
   });
 });
 
 describe('pancakeTotalMismatch', () => {
   it('đơn đúng như Tubu đã đẩy → không lệch', () => {
-    expect(pancakeTotalMismatch(SAMPLE, 269_000)).toBeNull();
+    expect(pancakeTotalMismatch(SAMPLE, TUBU)).toBeNull();
   });
 
   it('nhân viên thêm một món 50.000 trên Pancake → lệch +50.000 so với đơn Tubu', () => {
     const edited = { ...SAMPLE, total_price: 330_000, total_price_after_sub_discount: 300_000, cod: 319_000 };
-    expect(pancakeTotalMismatch(edited, 269_000)).toEqual({ pancakeTotal: 319_000, diff: 50_000 });
+    expect(pancakeTotalMismatch(edited, TUBU)).toEqual({ pancakeTotal: 319_000, diff: 50_000 });
   });
 
   it('bớt món → lệch âm', () => {
     const edited = { ...SAMPLE, total_price: 130_000, total_price_after_sub_discount: 100_000, cod: 119_000 };
-    expect(pancakeTotalMismatch(edited, 269_000)).toEqual({ pancakeTotal: 119_000, diff: -150_000 });
+    expect(pancakeTotalMismatch(edited, TUBU)).toEqual({ pancakeTotal: 119_000, diff: -150_000 });
   });
 
   it('Pancake đã gộp ship vào total_price_after_sub_discount thì vẫn khớp, không báo nhầm', () => {
-    expect(pancakeTotalMismatch({ total_price_after_sub_discount: 269_000, shipping_fee: 19_000 }, 269_000)).toBeNull();
+    expect(pancakeTotalMismatch({ total_price_after_sub_discount: 269_000, shipping_fee: 19_000 }, TUBU)).toBeNull();
+  });
+
+  it('đơn Tubu freeship 269.000, nhân viên thêm ship 30.000 trên Pancake: vẫn phải báo lệch +30.000 (cách đọc không cộng ship không được che)', () => {
+    const freeship = { total: 269_000, shippingFee: 0 };
+    const edited = { total_price: 299_000, total_price_after_sub_discount: 269_000, total_discount: 30_000, shipping_fee: 30_000 };
+    expect(pancakeTotalReadings(edited, 0)).toEqual([299_000]);
+    expect(pancakeTotalMismatch(edited, freeship)).toEqual({ pancakeTotal: 299_000, diff: 30_000 });
+  });
+
+  it('Pancake đổi phí ship khác phí ship của đơn Tubu (cả hai khác 0) cũng báo lệch', () => {
+    const edited = { total_price_after_sub_discount: 250_000, shipping_fee: 40_000 };
+    expect(pancakeTotalMismatch(edited, TUBU)).toEqual({ pancakeTotal: 290_000, diff: 21_000 });
+  });
+
+  it('payload không có ô phí ship: chấp nhận cách đọc không cộng ship (Pancake có thể đã gộp ship vào tổng)', () => {
+    expect(pancakeTotalMismatch({ total_price_after_sub_discount: 269_000 }, TUBU)).toBeNull();
   });
 
   it('payload không mang số tổng nào → không kết luận lệch', () => {
-    expect(pancakeTotalMismatch({ id: 1, status: 2, partner: { partner_name: 'GHN' } }, 269_000)).toBeNull();
+    expect(pancakeTotalMismatch({ id: 1, status: 2, partner: { partner_name: 'GHN' } }, TUBU)).toBeNull();
   });
 });
 
@@ -117,12 +136,12 @@ describe('khớp với body Tubu đẩy lên Pancake (buildPancakeOrderBody)', (
   it('đơn nguyên vẹn: tổng Pancake dựng lại từ body luôn khớp order.total (không báo lệch ngay sau khi đẩy)', () => {
     const o = order();
     const { body } = buildPancakeOrderBody(o, { recipient, variations, onDealerCredit: false });
-    expect(pancakeTotalMismatch(echo(body), o.total)).toBeNull();
+    expect(pancakeTotalMismatch(echo(body), o)).toBeNull();
   });
 
   it('đơn đã trả trước (prepaid = tổng) cũng khớp', () => {
     const o = order({ paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' });
     const { body } = buildPancakeOrderBody(o, { recipient, variations, onDealerCredit: false });
-    expect(pancakeTotalMismatch(echo(body), o.total)).toBeNull();
+    expect(pancakeTotalMismatch(echo(body), o)).toBeNull();
   });
 });

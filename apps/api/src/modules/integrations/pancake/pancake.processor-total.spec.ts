@@ -23,6 +23,7 @@ const order = (over: Record<string, unknown> = {}) => ({
   status: 'CONFIRMED',
   fulfiller: 'TUBU',
   total: 269_000,
+  shippingFee: 19_000,
   pancakeOrderId: '7001',
   pancakeAttention: null,
   ...over,
@@ -134,6 +135,14 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
         { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: ATTENTION_TOTAL_MISMATCH } }] },
       ],
     });
+  });
+
+  it('đơn freeship (ship Tubu 0) mà Pancake thêm ship 30.000: báo lệch +30.000', async () => {
+    const { proc, updateMany } = setup(order({ shippingFee: 0 }));
+    await proc.onOrderEvent({ ...EDITED, total_price: 299_000, total_price_after_sub_discount: 269_000, shipping_fee: 30_000 });
+    const [reason] = flagged(updateMany);
+    expect(reason).toContain('Pancake ghi 299.000đ');
+    expect(reason).toContain('+30.000đ');
   });
 
   it('lệch thêm lần nữa (số khác) thì cập nhật lời nhắc lệch cũ', async () => {

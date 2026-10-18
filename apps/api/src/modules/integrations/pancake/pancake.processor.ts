@@ -275,7 +275,7 @@ export class PancakeProcessor extends WorkerHost {
     if (!order || isClosedOrder(order.status) || isMerchantFulfilledOrder(order)) return;
     if (!(await this.totalCheckEnabled())) return;
 
-    const mismatch = pancakeTotalMismatch(data, order.total);
+    const mismatch = pancakeTotalMismatch(data, order);
     const own = order.pancakeAttention?.startsWith(ATTENTION_TOTAL_MISMATCH) ?? false;
     if (!mismatch) {
       if (own) await clearPancakeAttention(this.prisma, order.id, ATTENTION_TOTAL_MISMATCH);
