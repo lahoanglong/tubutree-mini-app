@@ -432,6 +432,16 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     }
   });
 
+  it('màn đếm: bảng có tiêu đề Khách khai, Thực nhận, Lý do thiếu và nhãn cân nặng nằm riêng một dòng', async () => {
+    const { c } = await mount({ isAdmin: true });
+    const table = c.querySelector('[data-counting-lines]')!;
+    expect(Array.from(table.querySelectorAll('th')).map((t) => t.textContent)).toEqual(['Loại hàng', 'Khách khai', 'Thực nhận', 'Lý do thiếu']);
+    for (const tr of Array.from(table.querySelectorAll('tbody tr'))) expect(tr.querySelectorAll('td')).toHaveLength(4);
+    expect(table.querySelector('input[aria-label^="Thực nhận "]')).not.toBeNull();
+    const weightLabel = c.querySelector('input[name="receivedWeightGrams"]')!.closest('label')!.querySelector('span')!;
+    expect(weightLabel.className).toContain('block');
+  });
+
   it('admin xem nhật ký sự kiện', async () => {
     const { c } = await mount({
       isAdmin: true,

@@ -240,46 +240,64 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
   return (
     <div data-counting className={PANEL}>
       <h3 className="text-sm font-semibold text-stone-900">Đếm hàng thực nhận</h3>
-      <ul className="space-y-2">
-        {r.lines.map((l) => {
-          const qty = l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty);
-          const reasonValue = l.hazardous ? 'WRONG_TYPE' : (reasons[l.itemId] ?? '');
-          const isShort = qty !== null && qty < l.declaredQty;
-          return (
-            <li key={l.itemId} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="w-48 font-medium text-stone-900">{l.itemName}</span>
-              <span className="text-xs text-stone-600">{`Khách khai ${formatCount(l.declaredQty)} ${l.unitLabel}`}</span>
-              <input
-                name={`received-${l.itemId}`}
-                type="text"
-                inputMode="numeric"
-                aria-label={`Thực nhận ${l.itemName}`}
-                className={`${FIELD_CLASS} w-24`}
-                value={l.hazardous ? '0' : (received[l.itemId] ?? '')}
-                disabled={l.hazardous}
-                onChange={(e) => setQty(l.itemId, l.declaredQty, e.target.value)}
-              />
-              {isShort && (
-                <select
-                  name={`shortfall-${l.itemId}`}
-                  aria-label={`Lý do thiếu ${l.itemName}`}
-                  className={FIELD_CLASS}
-                  value={reasonValue}
-                  disabled={l.hazardous}
-                  onChange={(e) => setReasons((prev) => ({ ...prev, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
-                >
-                  <option value="">Chọn lý do</option>
-                  {SHORTFALL_KEYS.map((k) => <option key={k} value={k}>{WASTE_SHORTFALL_REASON_LABELS[k]}</option>)}
-                </select>
-              )}
-              {l.hazardous && <span className="text-xs text-danger-fg">Không nhận món này</span>}
-              {qty === null && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="overflow-x-auto">
+        <table data-counting-lines className="w-full min-w-[560px] table-fixed border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-stone-200">
+              <th className={`${TH} w-48`}>Loại hàng</th>
+              <th className={`${TH} w-36`}>Khách khai</th>
+              <th className={`${TH} w-28`}>Thực nhận</th>
+              <th className={TH}>Lý do thiếu</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.lines.map((l) => {
+              const qty = l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty);
+              const reasonValue = l.hazardous ? 'WRONG_TYPE' : (reasons[l.itemId] ?? '');
+              const isShort = qty !== null && qty < l.declaredQty;
+              return (
+                <tr key={l.itemId} className="border-b border-stone-100">
+                  <td className={`${TD} font-medium text-stone-900`}>{l.itemName}</td>
+                  <td className={`${TD} text-xs text-stone-600`}>{`Khách khai ${formatCount(l.declaredQty)} ${l.unitLabel}`}</td>
+                  <td className={TD}>
+                    <input
+                      name={`received-${l.itemId}`}
+                      type="text"
+                      inputMode="numeric"
+                      aria-label={`Thực nhận ${l.itemName}`}
+                      className={`${FIELD_CLASS} w-24`}
+                      value={l.hazardous ? '0' : (received[l.itemId] ?? '')}
+                      disabled={l.hazardous}
+                      onChange={(e) => setQty(l.itemId, l.declaredQty, e.target.value)}
+                    />
+                  </td>
+                  <td className={TD}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isShort && (
+                        <select
+                          name={`shortfall-${l.itemId}`}
+                          aria-label={`Lý do thiếu ${l.itemName}`}
+                          className={FIELD_CLASS}
+                          value={reasonValue}
+                          disabled={l.hazardous}
+                          onChange={(e) => setReasons((prev) => ({ ...prev, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
+                        >
+                          <option value="">Chọn lý do</option>
+                          {SHORTFALL_KEYS.map((k) => <option key={k} value={k}>{WASTE_SHORTFALL_REASON_LABELS[k]}</option>)}
+                        </select>
+                      )}
+                      {l.hazardous && <span className="text-xs text-danger-fg">Không nhận món này</span>}
+                      {qty === null && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       <label className="block text-xs">
-        <span className="font-medium text-stone-700">Cân nặng thực nhận (gram, tuỳ chọn)</span>
+        <span className="block font-medium text-stone-700">Cân nặng thực nhận (gram, tuỳ chọn)</span>
         <input
           name="receivedWeightGrams"
           type="text"
