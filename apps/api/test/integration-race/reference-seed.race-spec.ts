@@ -311,6 +311,8 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'storefront.require_approval',
         'storefront.subdomain_enabled',
         'pancake.total_mismatch_check',
+        'pancake.external_capture_enabled',
+        'pancake.order_source_map',
         'dealer.review_hours',
         'community.public_preview',
         'home.new_customer_layout',

@@ -1314,7 +1314,7 @@ describe('PancakeProcessor — khớp đơn: đơn Pancake trùng/đơn bù mang
     routeFindFirst(orderFindFirst, []);
     (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
       id: 'e1', status: 'RECEIVED', eventType: 'orders',
-      rawPayload: { id: 9008, status: 1, partner: { extend_code: 'GHN123' } },
+      rawPayload: { id: 9008, status: 1, tags: ['MINIAPP'], partner: { extend_code: 'GHN123' } },
     });
     await proc.process({ data: { eventId: 'e1' } });
     expect(orderUpdate).not.toHaveBeenCalled();

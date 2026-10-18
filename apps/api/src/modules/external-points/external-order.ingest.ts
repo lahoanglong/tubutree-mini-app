@@ -1,0 +1,109 @@
+import type { Prisma } from '@prisma/client';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { OrderSourceMap } from './external-order.config';
+import {
+  buyerPhone,
+  classifyPancakeOrder,
+  deliveredAt,
+  externalStatusOf,
+  extractTrackingCodes,
+  goodsValue,
+  marketplaceOrderSn,
+  pancakeTime,
+  sourceKeyOf,
+} from './external-order.mapper';
+
+/**
+ * NOT_EXTERNAL: đơn app hoặc payload không có id — để processor xử lý như cũ.
+ * STORED: đã ghi (mới hoặc cập nhật). STALE: Pancake gửi bản cũ hơn bản đã lưu nên bỏ qua.
+ */
+export type IngestResult = 'NOT_EXTERNAL' | 'STORED' | 'STALE';
+
+type Db = Pick<PrismaService, 'externalOrder'>;
+
+const CLOSED = ['RETURNED', 'CANCELLED', 'DELETED'];
+
+/**
+ * Ghi đơn Pancake không thuộc app vào `external_orders` (khoá `pancakeOrderId`). Hai webhook song song của cùng một đơn:
+ * createMany bỏ qua dòng trùng, rồi UPDATE có điều kiện `updated_at` không cũ hơn — Postgres khoá dòng và đọc lại điều kiện
+ * sau khi chờ nên bản mới nhất thắng, không bao giờ tạo hai dòng. So `updated_at` của Pancake với của Pancake (R5-SYNC-3).
+ */
+export async function ingestExternalOrder(
+  prisma: Db,
+  data: Record<string, unknown>,
+  map: OrderSourceMap,
+  now: Date = new Date(),
+): Promise<IngestResult> {
+  const rawId = data['id'] ?? data['order_id'];
+  if (rawId === null || rawId === undefined || rawId === '') return 'NOT_EXTERNAL';
+  const pancakeOrderId = String(rawId);
+
+  const klass = classifyPancakeOrder(data, map);
+  if (klass.kind === 'APP') return 'NOT_EXTERNAL';
+
+  const { pancakeStatus, status } = externalStatusOf(data);
+  const codes = extractTrackingCodes(data);
+  const phone = buyerPhone(data);
+  const payloadDeliveredAt = deliveredAt(data);
+  const closed = CLOSED.includes(status);
+  const updatedAt = pancakeTime(data['updated_at']);
+  const insertedAt = pancakeTime(data['inserted_at']);
+  const sn = marketplaceOrderSn(data);
+
+  const identity = {
+    source: klass.kind,
+    channel: klass.channel,
+    sourceKey: sourceKeyOf(data),
+    goodsValue: goodsValue(data),
+    lastPayload: data as Prisma.InputJsonValue,
+  };
+
+  const created = await prisma.externalOrder.createMany({
+    data: [
+      {
+        ...identity,
+        pancakeOrderId,
+        trackingCode: codes[0] ?? null,
+        trackingCodes: codes,
+        marketplaceOrderSn: sn,
+        phone,
+        phoneLast3: phone ? phone.slice(-3) : null,
+        pancakeStatus,
+        status,
+        pancakeInsertedAt: insertedAt,
+        pancakeUpdatedAt: updatedAt,
+        deliveredAt: payloadDeliveredAt ?? (status === 'DELIVERED' ? now : null),
+        closedAt: closed ? now : null,
+      },
+    ],
+    skipDuplicates: true,
+  });
+  if (created.count > 0) return 'STORED';
+
+  // Payload thiếu field (webhook một phần) không được xoá thứ đã biết: chỉ ghi đè khi có giá trị mới.
+  const updated = await prisma.externalOrder.updateMany({
+    where: {
+      pancakeOrderId,
+      ...(updatedAt ? { OR: [{ pancakeUpdatedAt: null }, { pancakeUpdatedAt: { lte: updatedAt } }] } : {}),
+    },
+    data: {
+      ...identity,
+      ...(codes.length > 0 ? { trackingCode: codes[0]!, trackingCodes: codes } : {}),
+      ...(sn ? { marketplaceOrderSn: sn } : {}),
+      ...(phone ? { phone, phoneLast3: phone.slice(-3) } : {}),
+      ...(pancakeStatus !== null ? { pancakeStatus, status } : {}),
+      ...(insertedAt ? { pancakeInsertedAt: insertedAt } : {}),
+      ...(updatedAt ? { pancakeUpdatedAt: updatedAt } : {}),
+      ...(payloadDeliveredAt ? { deliveredAt: payloadDeliveredAt } : {}),
+      ...(pancakeStatus !== null && !closed ? { closedAt: null } : {}),
+    },
+  });
+  if (updated.count === 0) return 'STALE';
+
+  // Mốc "lần đầu thấy" chỉ đặt một lần: điều kiện IS NULL giữ đúng mốc đầu khi hai webhook chạy song song.
+  if (status === 'DELIVERED' && !payloadDeliveredAt) {
+    await prisma.externalOrder.updateMany({ where: { pancakeOrderId, deliveredAt: null }, data: { deliveredAt: now } });
+  }
+  if (closed) await prisma.externalOrder.updateMany({ where: { pancakeOrderId, closedAt: null }, data: { closedAt: now } });
+  return 'STORED';
+}

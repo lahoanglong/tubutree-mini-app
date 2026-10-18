@@ -3123,3 +3123,126 @@ model CronLease {
 
   @@map("cron_leases")
 }
+
+/// Nguồn đơn Pancake không phải đơn đặt trong app: sàn (Shopee/Lazada/TikTok), chat/điện thoại, hoặc chưa biết.
+enum ExternalOrderSource {
+  MARKETPLACE
+  CHAT
+  UNKNOWN
+}
+
+/// Trạng thái đơn ngoài suy từ mã trạng thái Pancake (pancake-status.map): OPEN = chưa giao xong.
+enum ExternalOrderStatus {
+  OPEN
+  DELIVERED
+  RETURNING
+  RETURNED
+  CANCELLED
+  PARTIAL_RETURN
+  DELETED
+}
+
+enum ExternalClaimKind {
+  SCAN
+  PHONE
+}
+
+enum ExternalClaimState {
+  PENDING
+  REVIEW
+  HELD_NO_MEMBER
+  CREDITED
+  VOIDED
+  REVERSED
+  LAPSED
+}
+
+/// Đơn Pancake không có trong bảng orders (đơn sàn, chat, điện thoại). Khoá theo id đơn Pancake; `lastPayload` là
+/// bản mới nhất vì pancake_webhook_events bị data-retention xoá theo hạn. KHÔNG chứa quan hệ tới users: userId ở
+/// bảng claim là chuỗi thường, đơn ngoài tồn tại độc lập với thành viên.
+model ExternalOrder {
+  id                 String               @id @default(cuid())
+  pancakeOrderId     String               @unique
+  source             ExternalOrderSource
+  /// shopee | lazada | tiktok; null với CHAT/UNKNOWN.
+  channel            String?
+  /// `${order_sources}|${account}|${marketplace_id}` — bảng "nguồn đã thấy" của admin gom theo khoá này.
+  sourceKey          String
+  trackingCode       String?
+  trackingCodes      String[]
+  marketplaceOrderSn String?
+  /// SĐT dạng 0xxxxxxxxx để ghép thành viên; không bao giờ trả thô qua API.
+  phone              String?
+  phoneLast3         String?
+  goodsValue         Int?
+  pancakeStatus      Int?
+  status             ExternalOrderStatus  @default(OPEN)
+  pancakeInsertedAt  DateTime?
+  pancakeUpdatedAt   DateTime?
+  deliveredAt        DateTime?
+  closedAt           DateTime?
+  lastPayload        Json
+  firstSeenAt        DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  claim              ExternalPointsClaim?
+
+  // SQL tay (migration 20261019100000_external_orders): "external_orders_phone_idx" ON (phone) WHERE phone IS NOT NULL.
+  @@index([trackingCode])
+  @@index([trackingCodes], type: Gin)
+  @@index([source, status])
+  @@index([sourceKey])
+  @@map("external_orders")
+}
+
+/// Điểm chờ của một đơn ngoài (bước 2/3, chưa ghi dòng nào ở bước 1). Chỉ khi tới hạn mới ghi ĐÚNG một dòng vào
+/// points_transactions. Partial unique SQL: "external_points_claims_code_key" ON ("claimedCode") WHERE "claimedCode" IS NOT NULL.
+model ExternalPointsClaim {
+  id              String             @id @default(cuid())
+  externalOrderId String             @unique
+  externalOrder   ExternalOrder      @relation(fields: [externalOrderId], references: [id])
+  userId          String?
+  kind            ExternalClaimKind
+  state           ExternalClaimState @default(PENDING)
+  ratePct         Decimal            @db.Decimal(6, 4)
+  multiplier      Decimal            @db.Decimal(6, 3)
+  points          Int                @default(0)
+  countsForTier   Boolean            @default(false)
+  claimedCode     String?
+  releaseAt       DateTime?
+  holdUntil       DateTime?
+  creditedAt      DateTime?
+  pointsTxId      String?
+  voidReason      String?
+  reviewReason    String?
+  decidedById     String?
+  /// Ngày VN 'YYYY-MM-DD' lúc tạo claim, để đếm trần ngày.
+  dayKey          String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([state, releaseAt])
+  @@index([state, holdUntil])
+  @@index([userId, createdAt])
+  @@index([userId, dayKey])
+  @@map("external_points_claims")
+}
+
+/// Mỗi lần khách gửi mã đơn sàn (kể cả không tìm thấy), để giới hạn thử và để cron ghép lại.
+/// Partial unique SQL: "external_claim_attempts_unmatched_key" ON ("code") WHERE "result" = 'UNMATCHED' AND "resolvedAt" IS NULL.
+model ExternalClaimAttempt {
+  id              String    @id @default(cuid())
+  userId          String
+  code            String
+  /// MATCHED | UNMATCHED | REJECTED_*
+  result          String
+  externalOrderId String?
+  dayKey          String
+  resolvedAt      DateTime?
+  resolvedById    String?
+  note            String?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([result, createdAt])
+  @@map("external_claim_attempts")
+}
