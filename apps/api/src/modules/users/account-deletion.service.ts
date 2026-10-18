@@ -22,7 +22,9 @@ export type DeletionBlockerCode =
   | 'SUBSCRIPTION_ACTIVE'
   | 'COMMISSION_UNPAID'
   | 'DEALER_CREDIT'
-  | 'PARTNER_STORE_OPEN';
+  | 'PARTNER_STORE_OPEN'
+  | 'WASTE_REQUEST_OPEN'
+  | 'WASTE_UNDER_REVIEW';
 
 export interface DeletionBlocker {
   code: DeletionBlockerCode;
@@ -187,7 +189,7 @@ export class AccountDeletionService {
     });
   }
 
-  /** Gom bằng groupBy (cố định 8 truy vấn) thay vì 8 truy vấn × mỗi dòng: danh sách admin tới 100 dòng. */
+  /** Gom bằng groupBy (cố định 10 truy vấn) thay vì 10 truy vấn × mỗi dòng: danh sách admin tới 100 dòng. */
   private async collectBlockers(db: Db, users: BlockerUser[], partnerCfg?: SettlementConfig): Promise<Map<string, DeletionBlocker[]>> {
     const ids = users.map((u) => u.id);
     // Chủ gian hàng đối tác (MERCHANT, hoặc CTV có cờ) còn việc dở thì ẩn danh để lại đơn không ai xử lý và đối soát không có tài khoản nhận tiền.
@@ -198,7 +200,7 @@ export class AccountDeletionService {
         if (open.length) partnerOpen.set(id, open);
       }
     }
-    const [orders, payouts, returns, refunds, subs, commissions, cashbackTxns, dealerCredit] = await Promise.all([
+    const [orders, payouts, returns, refunds, subs, commissions, cashbackTxns, dealerCredit, wasteOpen, wasteFlags] = await Promise.all([
       db.order.groupBy({
         by: ['userId'],
         where: { userId: { in: ids }, status: { in: [...OPEN_ORDER_STATUSES] } },
@@ -237,6 +239,15 @@ export class AccountDeletionService {
         _count: { _all: true },
       }),
       db.dealerCreditLedger.groupBy({ by: ['userId'], where: { userId: { in: ids } }, _sum: { delta: true } }),
+      db.wasteRequest.groupBy({
+        by: ['userId'],
+        where: { userId: { in: ids }, status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } },
+        _count: { _all: true },
+      }),
+      db.wasteUserFlags.findMany({
+        where: { userId: { in: ids }, OR: [{ blockedAt: { not: null } }, { shipLockedAt: { not: null } }] },
+        select: { userId: true },
+      }),
     ]);
 
     const countBy = <K extends string>(rows: ({ _count: { _all: number } } & Record<K, string>)[], key: K) =>
@@ -247,6 +258,8 @@ export class AccountDeletionService {
     const subN = countBy(subs, 'userId');
     const commissionN = countBy(commissions, 'affiliateUserId');
     const cashbackN = countBy(cashbackTxns, 'userId');
+    const wasteOpenN = countBy(wasteOpen, 'userId');
+    const wasteReview = new Set(wasteFlags.map((f) => f.userId));
     const creditSum = new Map(dealerCredit.map((r) => [r.userId, r._sum.delta ?? 0]));
     const refundN = new Map<string, number>();
     for (const r of refunds) {
@@ -277,6 +290,8 @@ export class AccountDeletionService {
       if (n(refundN) > 0) add('CUSTOMER_REFUND_PENDING', `còn ${n(refundN)} khoản hoàn tiền đơn chưa chuyển`);
       if (n(subN) > 0) add('SUBSCRIPTION_ACTIVE', `còn ${n(subN)} gói giao định kỳ đang chạy hoặc tạm dừng`);
       if (n(commissionN) > 0) add('COMMISSION_UNPAID', `còn ${n(commissionN)} khoản hoa hồng chưa trả`);
+      if (n(wasteOpenN) > 0) add('WASTE_REQUEST_OPEN', `còn ${n(wasteOpenN)} yêu cầu Đổi rác chưa xong (đang chờ mang tới, đang gửi hoặc đang chờ đếm)`);
+      if (wasteReview.has(user.id)) add('WASTE_UNDER_REVIEW', 'Tài khoản đang được Tubu xem xét, liên hệ CSKH');
       const credit = creditSum.get(user.id) ?? 0;
       const partnerN = partnerOpen.get(user.id);
       if (partnerN) add('PARTNER_STORE_OPEN', `gian hàng đối tác còn vướng: ${partnerN.join('; ')}`);

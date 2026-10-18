@@ -554,6 +554,47 @@ export class AuthService {
            AND NOT EXISTS (SELECT 1 FROM "reorder_reminders" t
                             WHERE t."userId" = ${tid} AND t."variationId" = g."variationId")`;
 
+      // 6b) Đổi rác lấy quà. Khoá users của cả hai bên đã giữ từ trên nên không cần khoá thêm. Khoá duy nhất (userId, idempotencyKey):
+      //     đổi tên khoá của dòng khách trùng khoá với target TRƯỚC khi chuyển, một updateMany đụng khoá duy nhất sẽ huỷ cả tx và
+      //     chặn mọi lần đăng nhập sau của khách.
+      await tx.$executeRaw`
+        UPDATE "waste_requests" g SET "idempotencyKey" = ${mergedPrefix}::text || g."idempotencyKey", "updatedAt" = now()
+         WHERE g."userId" = ${gid}
+           AND EXISTS (SELECT 1 FROM "waste_requests" t WHERE t."userId" = ${tid} AND t."idempotencyKey" = g."idempotencyKey")`;
+      await tx.$executeRaw`
+        UPDATE "waste_gift_redemptions" g SET "idempotencyKey" = ${mergedPrefix}::text || g."idempotencyKey"
+         WHERE g."userId" = ${gid}
+           AND EXISTS (SELECT 1 FROM "waste_gift_redemptions" t WHERE t."userId" = ${tid} AND t."idempotencyKey" = g."idempotencyKey")`;
+      await tx.wasteRequest.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.wasteGiftRedemption.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      // Cờ: khoá/chặn sớm nhất thắng, mở khoá muộn nhất thắng (LEAST/GREATEST bỏ qua NULL).
+      await tx.$executeRaw`
+        INSERT INTO "waste_user_flags" ("userId", "shipLockedAt", "shipUnlockedAt", "blockedAt", "reason", "setByUserId", "updatedAt")
+        SELECT ${tid}, g."shipLockedAt", g."shipUnlockedAt", g."blockedAt", g."reason", g."setByUserId", now()
+          FROM "waste_user_flags" g WHERE g."userId" = ${gid}
+        ON CONFLICT ("userId") DO UPDATE SET
+          "shipLockedAt" = LEAST("waste_user_flags"."shipLockedAt", EXCLUDED."shipLockedAt"),
+          "blockedAt" = LEAST("waste_user_flags"."blockedAt", EXCLUDED."blockedAt"),
+          "shipUnlockedAt" = GREATEST("waste_user_flags"."shipUnlockedAt", EXCLUDED."shipUnlockedAt"),
+          "reason" = COALESCE("waste_user_flags"."reason", EXCLUDED."reason"),
+          "setByUserId" = COALESCE("waste_user_flags"."setByUserId", EXCLUDED."setByUserId"),
+          "updatedAt" = now()`;
+      await tx.$executeRaw`DELETE FROM "waste_user_flags" WHERE "userId" = ${gid}`;
+      // Nhân viên điểm nhận: chuyển dòng ở điểm target chưa có dòng; dòng trùng điểm thì xoá, và nếu dòng xoá là OWNER đang hoạt động
+      // thì nâng dòng của target lên OWNER SAU khi xoá để chỉ mục "một chủ mỗi điểm" (waste_point_staff_one_owner_key) luôn đúng.
+      await tx.$executeRaw`
+        UPDATE "waste_point_staff" g SET "userId" = ${tid}, "updatedAt" = now()
+         WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "waste_point_staff" t WHERE t."userId" = ${tid} AND t."pointId" = g."pointId")`;
+      const droppedStaff = await tx.$queryRaw<{ pointId: string; role: string; isActive: boolean }[]>`
+        DELETE FROM "waste_point_staff" WHERE "userId" = ${gid} RETURNING "pointId", "role"::text AS "role", "isActive"`;
+      for (const row of droppedStaff) {
+        if (row.role !== 'OWNER' || !row.isActive) continue;
+        await tx.$executeRaw`
+          UPDATE "waste_point_staff" SET "role" = 'OWNER', "isActive" = true, "updatedAt" = now()
+           WHERE "userId" = ${tid} AND "pointId" = ${row.pointId}`;
+      }
+
       // 7) Game: chỉ chuyển nguyên cụm khi target chưa có GameProfile (chưa từng chơi). Cả hai
       //    cùng chơi thì giữ game của target, cụm của khách ở lại — ghép hai khu vườn (ô đất,
       //    cấp cây, chuỗi tưới) cần quyết định riêng.

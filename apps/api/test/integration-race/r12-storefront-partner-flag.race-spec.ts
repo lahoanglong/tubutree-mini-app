@@ -8,6 +8,7 @@ import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-f
 import { linkTubuFulfilledVariation } from '../../src/modules/merchant/merchant-pancake-link';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import type { OrderStatusService } from '../../src/modules/orders/order-status.service';
+import { cleanupWaste, createWastePoint } from './fixtures/waste-fixtures';
 import { createOrder as createOrderRow, createUser as createUserRow, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const DAY = 86_400_000;
@@ -23,7 +24,7 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
   let svc: MerchantFulfilmentService;
   const CONFIG_KEYS = ['merchant.settlement_hold_days', 'merchant.consignment_settle_from'];
   let savedConfig: { key: string; value: unknown }[] = [];
-  const created = { userIds: [] as string[], storefrontIds: [] as string[], productIds: [] as string[] };
+  const created = { userIds: [] as string[], storefrontIds: [] as string[], productIds: [] as string[], wastePointIds: [] as string[] };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [SystemConfigService] }).compile();
@@ -38,7 +39,8 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
 
   afterAll(async () => {
     if (prisma) {
-      const { userIds, storefrontIds, productIds } = created;
+      const { userIds, storefrontIds, productIds, wastePointIds } = created;
+      await cleanupWaste(prisma, { pointIds: wastePointIds });
       const orderIds = (await prisma.order.findMany({ where: { userId: { in: userIds } }, select: { id: true } })).map((o) => o.id);
       await prisma.$transaction([
         prisma.returnRequest.deleteMany({ where: { orderId: { in: orderIds } } }),
@@ -121,6 +123,17 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
     const ev = await events();
     expect(ev).toHaveLength(1);
     expect(ev[0]).toMatchObject({ userId: owner.id, fromValue: 'true', toValue: 'false', actorId: admin.id, reason: sf.id });
+  });
+
+  it('chủ một điểm nhận Đổi rác đang hoạt động: tắt cờ gian hàng đối tác bị chặn; tạm dừng điểm thì tắt được', async () => {
+    const { admin, owner, sf, flag } = await store();
+    const point = await createWastePoint(prisma, { kind: 'PARTNER', ownerUserId: owner.id });
+    created.wastePointIds.push(point.id);
+    expect(await conflictMessage(svc.setStorePartner(admin.id, sf.id, false))).toMatch(/điểm nhận Đổi rác đang hoạt động/);
+    expect(await flag()).toBe(true);
+    await prisma.wastePoint.update({ where: { id: point.id }, data: { status: 'PAUSED' } });
+    await expect(svc.setStorePartner(admin.id, sf.id, false)).resolves.toEqual({ id: sf.id, isPartner: false });
+    expect(await flag()).toBe(false);
   });
 
   it('bật lại cờ cho gian hàng CTV: bật, ghi sổ; bấm lại idempotent', async () => {
