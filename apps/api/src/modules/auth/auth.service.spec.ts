@@ -278,6 +278,8 @@ function makeGuestMergeFixture(opts: {
     'gameProfile',
     'plantedTree',
     'gameSpin',
+    'wasteRequest',
+    'wasteGiftRedemption',
   ] as const;
   const createdRefreshTokens: unknown[] = [];
 
@@ -411,6 +413,7 @@ function makeGuestMergeFixture(opts: {
     if (sql.includes('"referredById" =')) return [];
     // Người mời của target/khách (bước 10): mô phỏng không ai có người mời.
     if (sql.includes('JOIN "users" p')) return [];
+    if (sql.includes('waste_point_staff')) return [];
     const row = users.get(values[0] as string);
     return row ? [{ ...row }] : [];
   });

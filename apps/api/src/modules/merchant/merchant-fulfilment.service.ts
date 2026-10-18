@@ -1540,7 +1540,7 @@ export class MerchantFulfilmentService {
     });
     const out: string[] = [];
     for (const store of stores) out.push(...(await this.partnerBlockers(db, store.id, ownerUserId, cfg, true)));
-    return out;
+    return out.filter((b, i) => !b.startsWith('chủ gian hàng đang là chủ ') || out.indexOf(b) === i);
   }
 
   private async isAdminToggled(tx: Db, ownerUserId: string, storefrontId: string): Promise<boolean> {
@@ -1550,6 +1550,25 @@ export class MerchantFulfilmentService {
       select: { reason: true },
     });
     return latest?.reason === `${storefrontId}${ADMIN_TOGGLE_MARK}`;
+  }
+
+  /**
+   * Điểm nhận Đổi rác ACTIVE mà chủ gian hàng là OWNER: mất vai trò/ẩn danh chủ thì điểm mất người đứng tên. Khi chỉ tắt cờ của
+   * một gian hàng (chủ chưa mất vai trò đại lý) thì chỉ chặn nếu đó là gian hàng đối tác cuối cùng của chủ.
+   */
+  private async wastePointBlocker(tx: Db, storefrontId: string, ownerUserId: string | null, ownerLosingDealer: boolean): Promise<string | null> {
+    if (!ownerUserId) return null;
+    const n = await tx.wastePointStaff.count({
+      where: { userId: ownerUserId, role: 'OWNER', isActive: true, point: { kind: 'PARTNER', status: 'ACTIVE' } },
+    });
+    if (n === 0) return null;
+    if (!ownerLosingDealer) {
+      const store = await tx.storefront.findUnique({ where: { id: storefrontId }, select: { type: true } });
+      if (store?.type === 'MERCHANT') return null;
+      const other = await tx.storefront.count({ where: { ownerUserId, id: { not: storefrontId }, ...PARTNER_STORE_WHERE } });
+      if (other > 0) return null;
+    }
+    return `chủ gian hàng đang là chủ ${n} điểm nhận Đổi rác đang hoạt động (tạm dừng điểm hoặc đổi chủ điểm trước)`;
   }
 
   private async partnerBlockers(
@@ -1594,7 +1613,9 @@ export class MerchantFulfilmentService {
         tx.product.count({ where: { storefrontId, fulfilment: 'MERCHANT', isActive: true } }),
       ]);
     const settleLines = statement.lines.length + statement.upcoming.length;
+    const wastePoint = await this.wastePointBlocker(tx, storefrontId, ownerUserId, ownerLosingDealer);
     return [
+      wastePoint,
       owner?.role === 'DEALER' ? 'chủ gian hàng vẫn là đại lý (đổi vai trò trước, nếu không cờ tự bật lại)' : null,
       openOrders ? `${openOrders} đơn tự giao chưa xong` : null,
       consignmentOpen.length
