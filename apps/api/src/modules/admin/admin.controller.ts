@@ -474,7 +474,7 @@ export class AdminController {
     return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
   }
 
-  @AllowStaff('CSKH', 'KHO')
+  @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
     const { kind, payment, platform, referrerUserId, storefront, order } = q;
@@ -515,6 +515,7 @@ export class AdminController {
   }
 
   /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */
+  @AllowStaff('KE_TOAN')
   @Post('orders/:id/issue-invoice')
   issueInvoice(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: IssueInvoiceDto) {
     return this.admin.issueOrderInvoice(adminId, id, { invoiceUrl: dto.invoiceUrl });
@@ -568,10 +569,10 @@ export class AdminController {
   }
 
   /** Sổ ghi vết: ai đổi trạng thái đơn này, từ đâu sang đâu, lúc nào. */
-  @AllowStaff('CSKH', 'KHO')
+  @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders/:id/status-history')
-  orderStatusHistory(@Param('id') id: string) {
-    return this.admin.orderStatusHistory(id);
+  orderStatusHistory(@Param('id') id: string, @CurrentUser() viewer: JwtPayload) {
+    return this.admin.orderStatusHistory(id, viewer);
   }
 
   /**
@@ -584,13 +585,15 @@ export class AdminController {
   }
 
   /** "Đã nhận tiền" cho đơn chuyển khoản lẻ: UNPAID → PAID (PENDING_PAYMENT → CONFIRMED), idempotent. */
+  @AllowStaff('KE_TOAN')
   @Post('orders/:id/confirm-payment')
   confirmOrderPayment(
     @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
     @Param('id') id: string,
     @Body() dto: ConfirmOrderPaymentDto,
   ) {
-    return this.admin.confirmOrderPayment(adminId, id, dto);
+    return this.admin.confirmOrderPayment(adminId, id, dto, { byStaff: role !== 'ADMIN' });
   }
 
   @AllowStaff('CSKH', 'KHO')

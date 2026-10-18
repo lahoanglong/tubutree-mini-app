@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, NotFoundException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -181,8 +181,18 @@ describe('DealerOrderAdminController (POST /api/admin/dealer-orders/:id/confirm-
 
   it('chuyển adminId (JWT sub) + id + dto xuống service', async () => {
     const svc = { confirmDealerOrderPayment: jest.fn().mockResolvedValue({ ok: true }) };
-    await new DealerOrderAdminController(svc as never).confirmPayment('admin1', 'o1', { bankRef: 'FT1', note: 'x' });
-    expect(svc.confirmDealerOrderPayment).toHaveBeenCalledWith('admin1', 'o1', { bankRef: 'FT1', note: 'x' });
+    await new DealerOrderAdminController(svc as never).confirmPayment('admin1', 'ADMIN', 'o1', { bankRef: 'FT1', note: 'x' });
+    expect(svc.confirmDealerOrderPayment).toHaveBeenCalledWith('admin1', 'o1', { bankRef: 'FT1', note: 'x', byStaff: false });
+  });
+
+  it('Kế toán (byStaff): ghi nhãn "Kế toán" + actorId vào lịch sử; đơn của chính mình bị chặn trước mọi ghi', async () => {
+    const { svc, historyCreate } = build(DEALER_ORDER);
+    await svc.confirmDealerOrderPayment('kt1', 'DLR1', { byStaff: true });
+    expect(historyCreate.mock.calls[0]![0].data).toMatchObject({ actorType: 'ADMIN', actorId: 'kt1' });
+    expect(historyCreate.mock.calls[0]![0].data.note).toContain('Kế toán xác nhận');
+    const own = build(DEALER_ORDER);
+    await expect(own.svc.confirmDealerOrderPayment('d1', 'DLR1', { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(own.updateMany).not.toHaveBeenCalled();
   });
 
   it('ConfirmDealerPaymentDto: bankRef/note tuỳ chọn, giới hạn độ dài', async () => {

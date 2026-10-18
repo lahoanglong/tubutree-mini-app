@@ -20,13 +20,13 @@ const methodsOf = (c: (typeof CONTROLLERS)[number]) =>
   Object.getOwnPropertyNames(c.prototype).filter((m) => m !== 'constructor' && Reflect.getMetadata(METHOD_METADATA, (c.prototype as unknown as Record<string, object>)[m]!) !== undefined);
 
 describe('Phân quyền: đại lý & bậc đại lý chỉ ADMIN (tham số tiền)', () => {
-  it('cả hai controller chỉ @Roles(ADMIN), không route nào mở @AllowStaff', () => {
+  it('cả hai controller chỉ @Roles(ADMIN); chỉ danh sách công nợ đại lý mở thêm cho KE_TOAN (B18), mọi route bậc đại lý vẫn đóng', () => {
     for (const c of CONTROLLERS) {
       expect(Reflect.getMetadata(ROLES_KEY, c)).toEqual(['ADMIN']);
       for (const m of methodsOf(c)) {
         const h = (c.prototype as unknown as Record<string, object>)[m]!;
         expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
-        expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, h)).toBeUndefined();
+        expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, h)).toEqual(c === DealerAccountsAdminController ? ['KE_TOAN'] : undefined);
       }
     }
   });
@@ -44,9 +44,12 @@ describe('Phân quyền: đại lý & bậc đại lý chỉ ADMIN (tham số ti
     for (const c of CONTROLLERS) {
       for (const m of methodsOf(c)) {
         expect(guard.canActivate(ctx(c, m, { role: 'ADMIN' }))).toBe(true);
-        for (const user of [{ role: 'CUSTOMER' }, { role: 'AFFILIATE' }, { role: 'DEALER' }, { role: 'STAFF', staffPermissions: ['CSKH', 'KHO'] }, undefined]) {
+        for (const user of [{ role: 'CUSTOMER' }, { role: 'AFFILIATE' }, { role: 'DEALER' }, { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING'] }, undefined]) {
           expect(() => guard.canActivate(ctx(c, m, user as object))).toThrow(ForbiddenException);
         }
+        const kt = { role: 'STAFF', staffPermissions: ['KE_TOAN'] };
+        if (c === DealerAccountsAdminController) expect(guard.canActivate(ctx(c, m, kt))).toBe(true);
+        else expect(() => guard.canActivate(ctx(c, m, kt))).toThrow(ForbiddenException);
       }
     }
   });

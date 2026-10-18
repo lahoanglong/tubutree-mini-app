@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsDefined, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, ValidateNested } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { DealerAccountsAdminService } from './dealer-accounts-admin.service';
@@ -44,6 +45,7 @@ export class CreateDealerTierDto extends TierValuesDto {
 export class DealerAccountsAdminController {
   constructor(private readonly service: DealerAccountsAdminService) {}
 
+  @AllowStaff('KE_TOAN')
   @Get('accounts')
   accounts(@Query() q: ListDealerAccountsQuery) {
     return this.service.listAccounts({ page: q.page, limit: q.limit, search: q.search, tierId: q.tierId, debtOnly: q.debtOnly });

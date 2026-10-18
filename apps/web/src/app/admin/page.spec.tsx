@@ -2132,11 +2132,49 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
     expect(mocks.refundsCalls).toBe(0);
   });
 
-  it('KE_TOAN: báo cáo, đối soát đối tác, hoàn tiền khách (kèm số chờ), rút tiền — không có voucher, người dùng, cấu hình', async () => {
+  it('KE_TOAN (B18): đơn hàng, báo cáo, đối soát, hoàn tiền khách và sàn ngoài, thưởng và công nợ đại lý, rút tiền — không có voucher, người dùng, cấu hình, hoa hồng', async () => {
     asStaff(['KE_TOAN']);
     const { container } = await mount();
-    expect(navItems(container)).toEqual(['Việc cần xử lý', 'Báo cáo', 'Đơn đối tác & đối soát', 'Hoàn tiền khách', 'Duyệt yêu cầu rút tiền', 'Đổi vỏ chai']);
+    expect(navItems(container)).toEqual([
+      'Việc cần xử lý',
+      'Báo cáo',
+      'Đơn hàng',
+      'Đơn đối tác & đối soát',
+      'Hoàn tiền khách',
+      'Hoàn tiền sàn ngoài',
+      'Thưởng đại lý',
+      'Đại lý & công nợ',
+      'Duyệt yêu cầu rút tiền',
+      'Đổi vỏ chai',
+    ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
+  });
+
+  it('KE_TOAN ở tab Đơn hàng: có Xuất CSV và nút "Đã nhận tiền", KHÔNG có nút trạng thái nào (huỷ, đóng gói…) hay thao tác kho', async () => {
+    const unpaid = {
+      id: 'o11',
+      code: 'TB11',
+      status: 'PENDING_PAYMENT',
+      total: 250000,
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      fulfiller: 'TUBU',
+      createdAt: '2026-10-14T01:00:00.000Z',
+      items: [],
+      allowedTransitions: [],
+      canConfirmPayment: true,
+    };
+    asStaff(['KE_TOAN']);
+    mocks.orders = [unpaid];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!.click());
+    await flush();
+    const labels = [...container.querySelectorAll('button')].map((b) => b.textContent ?? '');
+    expect(labels.some((l) => l.includes('Xuất CSV'))).toBe(true);
+    expect(labels).toContain('Đã nhận tiền');
+    for (const bad of ['Hủy đơn', 'Đã đóng gói', 'Giao vận', 'Đã giao hàng', 'Xác nhận']) expect(labels).not.toContain(bad);
+    expect(labels.some((l) => l.includes('Đẩy lại Pancake'))).toBe(false);
   });
 
   it('KE_TOAN mở link ?tab=config hay ?tab=coupons: rơi về mục đầu, không hiện cấu hình', async () => {

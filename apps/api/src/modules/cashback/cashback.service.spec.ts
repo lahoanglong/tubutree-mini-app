@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CashbackService } from './cashback.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -357,6 +357,26 @@ describe('CashbackService.reconcile', () => {
  * reconcile tự tắt khi chưa có API key. Một postback rớt mạng là giao dịch nằm PENDING vĩnh
  * viễn — khách thấy "Chờ duyệt" vô thời hạn và không ai xử lý được ngoài chạy SQL.
  */
+describe('CashbackService.adminListTransactions — che SĐT cho người không phải ADMIN', () => {
+  const row = { id: 'c1', userId: 'u1', provider: 'p', merchantOrderId: 'M1', orderAmount: 1, commission: 1, userReward: 1, status: 'PENDING', confirmedAt: null, paidAt: null, clickId: null };
+  const svcWith = () =>
+    new CashbackService(
+      {
+        cashbackTransaction: { findMany: jest.fn().mockResolvedValue([row]) },
+        user: { findMany: jest.fn().mockResolvedValue([{ id: 'u1', fullName: 'A', phone: '0912345678' }]) },
+        cashbackClick: { findMany: jest.fn().mockResolvedValue([]) },
+      } as unknown as PrismaService,
+      config,
+      notifications,
+      registry,
+    );
+
+  it('Kế toán thấy 3 số cuối, ADMIN thấy đủ', async () => {
+    expect((await svcWith().adminListTransactions(undefined, 100, { maskPhones: true }))[0]!.user).toEqual({ id: 'u1', fullName: 'A', phone: '*******678' });
+    expect((await svcWith().adminListTransactions())[0]!.user).toEqual({ id: 'u1', fullName: 'A', phone: '0912345678' });
+  });
+});
+
 describe('CashbackService.adminReview', () => {
   function mk(existing: Record<string, unknown> | null) {
     const userUpdate = jest.fn().mockResolvedValue({});
@@ -402,6 +422,17 @@ describe('CashbackService.adminReview', () => {
       where: { id: 'u1' },
       data: { cashbackPending: { increment: 35000 } },
     });
+  });
+
+  it('Kế toán duyệt (byStaff): duyệt được giao dịch của khách; giao dịch của chính mình bị chặn, không ghi gì', async () => {
+    const ok = mk(pending);
+    await ok.svc.adminReview('kt1', 'c1', 'CONFIRMED', undefined, { byStaff: true });
+    expect(ok.txUpdateMany).toHaveBeenCalled();
+    const own = mk({ ...pending, userId: 'kt1' });
+    await expect(own.svc.adminReview('kt1', 'c1', 'CONFIRMED', undefined, { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(own.txUpdateMany).not.toHaveBeenCalled();
+    const admin = mk({ ...pending, userId: 'admin1' });
+    await expect(admin.svc.adminReview('admin1', 'c1', 'CONFIRMED')).resolves.toBeDefined();
   });
 
   it('KHÔNG định giá lại: giữ nguyên số tiền đã ghi khi duyệt', async () => {

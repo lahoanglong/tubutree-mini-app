@@ -24,7 +24,7 @@ const monthLabel = (ym: string) => {
  * Ghi nhận tiền dùng đúng API và khối `DealerCreditPanel` đã có ở chi tiết đơn đại lý (không có đường ghi tiền thứ hai).
  * Bên dưới là phần quản lý bậc đại lý (chỉ ADMIN sửa được; API là chốt chặn quyền).
  */
-export function DealerAccountsTab() {
+export function DealerAccountsTab({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   const [typed, setTyped] = useState('');
   const search = useDebounced(typed.trim(), 300);
   const [tierId, setTierId] = useState('');
@@ -41,7 +41,7 @@ export function DealerAccountsTab() {
     queryFn: () => listDealerAccounts({ page, search, tierId, debtOnly }),
     placeholderData: keepPreviousData,
   });
-  const tiersQ = useQuery({ queryKey: ['admin-dealer-tiers'], queryFn: listDealerTiersForEdit });
+  const tiersQ = useQuery({ queryKey: ['admin-dealer-tiers'], queryFn: listDealerTiersForEdit, enabled: isAdmin });
   const refetchList = () => void qc.invalidateQueries({ queryKey: ['admin-dealer-accounts'] });
 
   const total = q.data?.meta.total ?? 0;
@@ -71,19 +71,21 @@ export function DealerAccountsTab() {
             onChange={(e) => setTyped(e.target.value)}
             className={`${FIELD_XS} w-full sm:w-64`}
           />
-          <select
-            aria-label="Lọc đại lý theo bậc"
-            value={tierId}
-            onChange={(e) => setTierId(e.target.value)}
-            className={`${FIELD_XS} w-full sm:w-auto`}
-          >
-            <option value="">Tất cả bậc</option>
-            {tiersQ.data?.tiers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          {isAdmin && (
+            <select
+              aria-label="Lọc đại lý theo bậc"
+              value={tierId}
+              onChange={(e) => setTierId(e.target.value)}
+              className={`${FIELD_XS} w-full sm:w-auto`}
+            >
+              <option value="">Tất cả bậc</option>
+              {tiersQ.data?.tiers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="button" aria-pressed={debtOnly} onClick={() => setDebtOnly((v) => !v)} className={chipClass(debtOnly)}>
             Chỉ đại lý còn nợ
           </button>
@@ -163,7 +165,7 @@ export function DealerAccountsTab() {
         )}
       </section>
 
-      <DealerTiersSection />
+      {isAdmin && <DealerTiersSection />}
     </div>
   );
 }

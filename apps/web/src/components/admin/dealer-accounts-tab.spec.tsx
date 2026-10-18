@@ -97,6 +97,16 @@ describe('DealerAccountsTab — danh sách đại lý đã duyệt (D1-06)', () 
     expect(t).toContain('10/2026');
   });
 
+  it('KE_TOAN (isAdmin=false): vẫn ghi nhận được tiền trả nợ nhưng không gọi API bậc đại lý, không có lọc bậc và phần sửa bậc (chỉ ADMIN)', async () => {
+    const api = stub();
+    const { container } = mount(<DealerAccountsTab isAdmin={false} />);
+    await flush();
+    expect(container.querySelectorAll('[data-dealer-account]')).toHaveLength(3);
+    expect(api.calls.some((c) => c.url.includes('/admin/dealer-tiers'))).toBe(false);
+    expect(container.querySelector('select[aria-label="Lọc đại lý theo bậc"]')).toBeNull();
+    expect(byText(container, 'button', 'Ghi nhận thanh toán')).not.toBeNull();
+  });
+
   it('nút "Ghi nhận thanh toán" mở sổ công nợ của đúng đại lý và dùng API ghi nhận tiền sẵn có; ghi xong thì tải lại danh sách', async () => {
     const api = stub();
     const { container } = mount(<DealerAccountsTab />);

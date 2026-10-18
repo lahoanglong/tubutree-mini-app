@@ -20,6 +20,16 @@ const STAFF_TRANSITIONS: Record<StaffPermission, readonly OrderStatus[]> = {
 
 const CARRIER_STATUSES: readonly string[] = ['SHIPPING', 'DELIVERED'];
 
+/**
+ * Người xem danh sách/lịch sử đơn thấy SĐT đầy đủ: ADMIN, hoặc nhân viên CSKH/KHO (cần gọi khách, giao hàng). Nhân viên
+ * chỉ có Kế toán/Marketing đối soát tiền theo mã đơn nên chỉ thấy 3 số cuối (cùng quy ước CSV xuất đơn).
+ */
+export function seesFullOrderPhones(actor: OrderActor): boolean {
+  if (actor.role === 'ADMIN') return true;
+  if (actor.role !== 'STAFF') return false;
+  return (actor.staffPermissions ?? []).some((p) => p === 'CSKH' || p === 'KHO');
+}
+
 export type ActorTransitionBlock = { kind: 'FORBIDDEN' | 'BAD_REQUEST'; message: string };
 
 export function actorTransitionBlock(

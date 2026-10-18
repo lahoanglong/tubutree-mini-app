@@ -286,7 +286,7 @@ const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   CSKH: ['inbox', 'orders', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
   MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
-  KE_TOAN: ['inbox', 'reports', 'merchantFulfilment', 'customerRefunds', 'payouts'],
+  KE_TOAN: ['inbox', 'orders', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
 function staffTabs(perms: readonly string[]): Set<Tab> {
   const out = new Set<Tab>(STAFF_TABS.BASE);
@@ -481,8 +481,8 @@ export default function AdminPage() {
           {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
-          {active === 'dealerClaims' && <DealerClaimsTab />}
-          {active === 'dealerAccounts' && <DealerAccountsTab />}
+          {active === 'dealerClaims' && <DealerClaimsTab canReview={isAdmin} />}
+          {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
           {active === 'engagement' && <EngagementTab />}
@@ -495,6 +495,7 @@ export default function AdminPage() {
               initialSearch={orderSeed?.search}
               initialInvoice={orderSeed?.invoice}
               isAdmin={isAdmin}
+              canFinance={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KE_TOAN')}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
               recycling={ordersRecycling}
               onRecyclingChange={onRecyclingFilterChange}
@@ -921,6 +922,7 @@ function OrdersTab({
   pancake,
   onPancakeChange,
   isAdmin = true,
+  canFinance = true,
   canWarehouse = true,
   initialSearch,
   initialInvoice,
@@ -930,6 +932,8 @@ function OrdersTab({
   pancake: PancakeFilter | '';
   onPancakeChange: (p: PancakeFilter | '') => void;
   isAdmin?: boolean;
+  /** Tiền đơn (Đã nhận tiền, hoá đơn VAT, công nợ đại lý, CSV) — API mở cho ADMIN và nhân viên KE_TOAN. */
+  canFinance?: boolean;
   /** Thao tác kho (đẩy lại Pancake, xử lý Pancake/thu gom) — API chỉ mở cho ADMIN và nhân viên KHO. */
   canWarehouse?: boolean;
   initialSearch?: string;
@@ -1057,7 +1061,7 @@ function OrdersTab({
             <option value="RETURNED">Đã trả hàng</option>
           </select>
 
-          {isAdmin && (
+          {canFinance && (
             <button
               type="button"
               onClick={() => void exportAll()}
@@ -1339,7 +1343,7 @@ function OrdersTab({
                       {isExpanded && !narrow && (
                         <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
-                            <OrderDetailBody o={o} isAdmin={isAdmin} canWarehouse={canWarehouse} />
+                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} />
                           </td>
                         </tr>
                       )}
@@ -1361,7 +1365,7 @@ function OrdersTab({
               {PAYMENT_METHOD_LABELS[expandedOrder.paymentMethod] ?? expandedOrder.paymentMethod} · {formatDateTime(expandedOrder.createdAt)}
             </span>
           </div>
-          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canWarehouse={canWarehouse} />
+          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} />
         </SideDrawer>
       )}
 
@@ -1420,7 +1424,7 @@ function OrderRecipientLine({ order: o }: { order: AdminOrder }) {
 }
 
 /** Chi tiết + thao tác một đơn — mở rộng trong bảng trên máy tính, trong ngăn kéo trên điện thoại. */
-function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin: boolean; canWarehouse: boolean }) {
+function OrderDetailBody({ o, isAdmin, canFinance, canWarehouse }: { o: AdminOrder; isAdmin: boolean; canFinance: boolean; canWarehouse: boolean }) {
   return (
     <div className="space-y-3">
       <OrderPaymentSummary order={o} isAdmin={isAdmin} />
@@ -1470,19 +1474,19 @@ function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin:
         </div>
       )}
 
-      {isAdmin && <OrderInvoicePanel order={o} />}
+      {canFinance && <OrderInvoicePanel order={o} />}
       {isAdmin && <OrderReferralPanel order={o} />}
 
       {canWarehouse && <RecyclingPanel order={o} />}
 
       {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
-      {isAdmin && <DealerPaymentPanel order={o} />}
+      {canFinance && <DealerPaymentPanel order={o} />}
 
       {/* Sổ công nợ đại lý (mọi đơn ĐẠI LÝ, không riêng đơn ghi công nợ) — A5-09. */}
-      {isAdmin && <DealerCreditPanel order={o} />}
+      {canFinance && <DealerCreditPanel order={o} />}
 
       {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
-      <OrderStatusActions order={o} canConfirmPayment={isAdmin} canResync={isAdmin} />
+      <OrderStatusActions order={o} canConfirmPayment={canFinance} canResync={isAdmin} />
 
       <OrderStatusHistory order={o} />
     </div>

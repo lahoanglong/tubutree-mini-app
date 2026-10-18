@@ -12,7 +12,7 @@ import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
-import { actorAllowedTransitions, actorTransitionBlock, type OrderActor } from './order-actor-transitions';
+import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, recordLatePaymentRefund } from '../orders/refund-queue';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
@@ -69,7 +69,7 @@ import {
   MERCHANT_PRODUCT_EDIT_STALE,
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
-import { maskPhone } from '../../common/mask-pii';
+import { maskPhone, maskPhoneKeepLast3, maskPhoneLikeRuns } from '../../common/mask-pii';
 import {
   actorLabel,
   actorUserId,
@@ -137,6 +137,18 @@ function pancakeCodeChanged(current: string | null) {
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
  * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
  */
+/** Che SĐT khách/người nhận và số dạng SĐT trong ghi chú/cảnh báo của một dòng danh sách đơn (người xem không phải ADMIN/CSKH/KHO). */
+function maskOrderPhones<T extends { user?: { phone: string | null } | null; shippingAddress?: unknown; note?: string | null; gomdonAlerts?: { message: string }[] }>(o: T): T {
+  const addr = o.shippingAddress && typeof o.shippingAddress === 'object' ? (o.shippingAddress as Record<string, unknown>) : null;
+  return {
+    ...o,
+    ...(o.user ? { user: { ...o.user, phone: o.user.phone ? maskPhoneKeepLast3(o.user.phone) : o.user.phone } } : {}),
+    ...(addr ? { shippingAddress: { ...addr, ...(typeof addr.phone === 'string' ? { phone: maskPhoneKeepLast3(addr.phone) } : {}) } } : {}),
+    ...(o.note ? { note: maskPhoneLikeRuns(o.note) } : {}),
+    ...(o.gomdonAlerts ? { gomdonAlerts: o.gomdonAlerts.map((a) => ({ ...a, message: maskPhoneLikeRuns(a.message) })) } : {}),
+  };
+}
+
 function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
   return (
     o.type !== 'DEALER' &&
@@ -211,7 +223,7 @@ export class AdminService {
    *
    * Có bảng mà không có đường đọc thì vẫn phải vào DB bằng SQL mỗi lần cần tra.
    */
-  async orderStatusHistory(orderCode: string) {
+  async orderStatusHistory(orderCode: string, viewer: OrderActor = { role: 'ADMIN' }) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: orderCode }, { code: orderCode }] },
       select: { id: true, code: true },
@@ -230,9 +242,17 @@ export class AdminService {
         })
       : [];
     const actorMap = new Map(actors.map((a) => [a.id, a]));
+    const full = seesFullOrderPhones(viewer);
     return {
       orderCode: order.code,
-      history: rows.map((r) => ({ ...r, actor: r.actorId ? (actorMap.get(r.actorId) ?? null) : null })),
+      history: rows.map((r) => {
+        const actor = r.actorId ? (actorMap.get(r.actorId) ?? null) : null;
+        return {
+          ...r,
+          note: !full && r.note ? maskPhoneLikeRuns(r.note) : r.note,
+          actor: !full && actor ? { ...actor, phone: actor.phone ? maskPhoneKeepLast3(actor.phone) : actor.phone } : actor,
+        };
+      }),
     };
   }
 
@@ -929,6 +949,14 @@ export class AdminService {
         canRecordLatePayment: canAdminRecordLatePayment(o) && !lateRecorded.has(o.id),
       };
     });
+    if (!seesFullOrderPhones(viewer)) {
+      return paginated(
+        data.map((o) => maskOrderPhones(o)),
+        page,
+        limit,
+        total,
+      );
+    }
     return paginated(data, page, limit, total);
   }
 
@@ -974,12 +1002,19 @@ export class AdminService {
    * hay hai admin bấm cùng lúc chỉ lật một lần; ai bấm, lúc nào, mã giao dịch nằm ở order_status_history.
    * Đơn đại lý đi đường riêng (DealerService.confirmDealerOrderPayment) vì phải loại đơn ghi công nợ.
    */
-  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string; amount?: number } = {}) {
+  async confirmOrderPayment(
+    adminId: string,
+    idOrCode: string,
+    dto: { bankRef?: string; note?: string; amount?: number } = {},
+    opts: { byStaff?: boolean } = {},
+  ) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, type: true, paymentMethod: true, total: true, status: true },
+      select: { id: true, code: true, userId: true, type: true, paymentMethod: true, total: true, status: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    // Nhân viên tự đặt hàng rồi tự bấm "Đã nhận tiền" là lấy hàng không trả tiền: đơn của chính mình nhờ quản trị viên.
+    if (opts.byStaff && order.userId === adminId) throw new ForbiddenException('Không xác nhận đã nhận tiền cho đơn của chính mình — nhờ quản trị viên.');
     if (order.type === 'DEALER') {
       throw new BadRequestException(
         `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
@@ -1007,7 +1042,7 @@ export class AdminService {
     const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'ADMIN',
       actorId: adminId,
-      note: ['Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+      note: [opts.byStaff ? 'Kế toán xác nhận' : 'Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
     });
     if (outcome === 'CLOSED') {
       // D2: tiền về sau khi đơn đã huỷ/trả → không "hồi sinh" đơn, ghi khoản hoàn vào hàng đợi Hoàn tiền khách (cùng
@@ -1020,7 +1055,7 @@ export class AdminService {
           amount: received,
           source: 'ADMIN',
           refKey: ADMIN_LATE_PAYMENT_REF,
-          note: ['Admin ghi nhận tiền về muộn', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+          note: [`${opts.byStaff ? 'Kế toán' : 'Admin'} ghi nhận tiền về muộn`, bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
         },
       );
       this.logger.warn(`Admin ${adminId} ghi nhận tiền về muộn ${received}đ cho đơn đã đóng ${order.code}` + (bankRef ? ` (mã GD ${bankRef})` : ''));

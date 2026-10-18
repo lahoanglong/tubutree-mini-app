@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { DealerService } from './dealer.service';
@@ -29,6 +30,7 @@ export class RejectRewardClaimDto {
 export class DealerAdminController {
   constructor(private readonly dealer: DealerService) {}
 
+  @AllowStaff('KE_TOAN')
   @Get()
   list(@Query() q: ListRewardClaimsQuery) {
     return this.dealer.listRewardClaims(q.status, q.page, q.limit);
@@ -44,9 +46,11 @@ export class DealerAdminController {
     return this.dealer.rejectRewardClaim(adminId, id, dto.reason);
   }
 
+  /** Kế toán chi thưởng ĐÃ được ADMIN duyệt; duyệt/từ chối/mở lại vẫn chỉ ADMIN (người duyệt khác người chi). */
+  @AllowStaff('KE_TOAN')
   @Post(':id/mark-paid')
-  markPaid(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewRewardClaimDto) {
-    return this.dealer.markRewardClaimPaid(adminId, id, dto.note);
+  markPaid(@CurrentUser('sub') adminId: string, @CurrentUser('role') role: string, @Param('id') id: string, @Body() dto: ReviewRewardClaimDto) {
+    return this.dealer.markRewardClaimPaid(adminId, id, dto.note, { byStaff: role !== 'ADMIN' });
   }
 
   /** Mở lại yêu cầu bị từ chối nhầm: REJECTED → PENDING (Q-09). */
@@ -72,9 +76,15 @@ export class ConfirmDealerPaymentDto {
 export class DealerOrderAdminController {
   constructor(private readonly dealer: DealerService) {}
 
+  @AllowStaff('KE_TOAN')
   @Post(':id/confirm-payment')
-  confirmPayment(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ConfirmDealerPaymentDto) {
-    return this.dealer.confirmDealerOrderPayment(adminId, id, dto);
+  confirmPayment(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: ConfirmDealerPaymentDto,
+  ) {
+    return this.dealer.confirmDealerOrderPayment(adminId, id, { ...dto, byStaff: role !== 'ADMIN' });
   }
 }
 
@@ -97,11 +107,13 @@ export class RecordDealerCreditPaymentDto {
 export class DealerCreditAdminController {
   constructor(private readonly dealer: DealerService) {}
 
+  @AllowStaff('KE_TOAN')
   @Get(':userId/credit-ledger')
   ledger(@Param('userId') userId: string) {
     return this.dealer.creditLedger(userId);
   }
 
+  @AllowStaff('KE_TOAN')
   @Post(':userId/credit-payment')
   recordPayment(
     @CurrentUser('sub') adminId: string,

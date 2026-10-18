@@ -1658,7 +1658,7 @@ export const STAFF_PERMISSION_LABELS: Record<StaffPermission, string> = {
   CSKH: 'CSKH — đơn, đổi trả, người dùng, mẫu tin nhanh, kiểm duyệt cộng đồng',
   KHO: 'Kho — trạng thái đơn, đẩy lại Pancake, vận đơn thu gom, nhận hàng trả',
   MARKETING: 'Marketing — voucher, flash sale, FAQ, Content Kit, Academy, mẫu thông báo, kiểm duyệt cộng đồng, báo cáo nguồn khách',
-  KE_TOAN: 'Kế toán — hoàn tiền khách, chi lệnh rút đã duyệt, đối soát đối tác, báo cáo doanh thu, file CSV tài chính',
+  KE_TOAN: 'Kế toán — xem đơn và xác nhận Đã nhận tiền, hoá đơn VAT, công nợ đại lý, chi thưởng đại lý đã duyệt, duyệt hoàn tiền sàn ngoài, hoàn tiền khách, chi lệnh rút đã duyệt, đối soát đối tác, báo cáo, CSV tài chính',
 };
 export interface OpsAccess {
   role: string;
