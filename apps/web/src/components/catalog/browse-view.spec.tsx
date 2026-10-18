@@ -319,6 +319,15 @@ describe('BrowseView — liên kết phân trang cho crawler', () => {
     expect(hrefs(container)[0]).toEqual(['prev', '/san-pham']);
   });
 
+  it('server không seed được (initial=null) mà URL là ?page=3: tải đúng trang 3, liên kết trước ?page=2 và sau ?page=4', async () => {
+    nav.search = 'page=3';
+    routes['/products'] = (q) => pageOf([product(30)], 200, Number(q?.page), 24);
+    const { container } = mount({ initial: null });
+    await flush();
+    expect(productCalls()[0]).toMatchObject({ page: 3 });
+    expect(hrefs(container)).toEqual([['prev', '/san-pham?page=2'], ['next', '/san-pham?page=4']]);
+  });
+
   it('ít sản phẩm, một trang: không vẽ thanh phân trang', async () => {
     const { container } = mount({ initial: seeded(1, 5) });
     expect(container.querySelector('nav[aria-label="Phân trang"]')).toBeNull();

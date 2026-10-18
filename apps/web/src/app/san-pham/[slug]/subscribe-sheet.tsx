@@ -136,8 +136,12 @@ export function SubscribeSheet({
   });
 
   // Sheet luôn gắn sẵn: lỗi của lần tạo trước không được nằm lại khi khách đóng, nạp Ví rồi mở lại.
+  // Đang gửi thì giữ nguyên, nếu không nút mở khoá giữa chừng và khách bấm ra POST thứ hai.
   const resetCreate = create.reset;
-  useEffect(() => resetCreate(), [visible, resetCreate]);
+  const creating = create.isPending;
+  useEffect(() => {
+    if (!creating) resetCreate();
+  }, [visible, creating, resetCreate]);
 
   const noAddress = addrQ.isSuccess && addresses.length === 0;
 

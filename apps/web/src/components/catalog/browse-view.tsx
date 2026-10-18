@@ -94,10 +94,11 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
 
   const seeded = initial !== null && initial.urlKey === urlKey && initial.startPage === page ? initial : null;
   // Danh sách seed bắt đầu từ trang > 1 thì khoá riêng: khi gỡ bộ lọc về đúng urlKey cũ, không dùng lại mục cache thiếu các trang đầu.
-  const listKey = seeded && seeded.startPage > 1 ? `${urlKey}#p${seeded.startPage}` : urlKey;
+  const startPage = seeded?.startPage ?? page;
+  const listKey = startPage > 1 ? `${urlKey}#p${startPage}` : urlKey;
   const products = useInfiniteQuery({
     ...browseQuery(coreHttp, listKey, (page) => toCatalogQuery(state, page, PAGE_LIMIT)),
-    initialPageParam: seeded?.startPage ?? 1,
+    initialPageParam: startPage,
     getNextPageParam: (last: CatalogPage) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
     ...(seeded ? { initialData: { pages: [seeded.page], pageParams: [seeded.startPage] }, staleTime: 60_000 } : {}),
   });
@@ -295,7 +296,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                 )}
                 <BrowsePager
                   state={state}
-                  startPage={seeded?.startPage ?? page}
+                  startPage={startPage}
                   lastPage={products.data?.pages.at(-1)?.meta.page ?? page}
                   hasNext={products.hasNextPage}
                 />

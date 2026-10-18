@@ -172,6 +172,32 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     expect(body().querySelector('[role="alert"]')).toBeNull();
   });
 
+  it('đang tạo mà đóng rồi mở lại sheet: nút vẫn khoá "Đang tạo…", không bắn POST thứ hai', async () => {
+    mocks.http.post.mockReturnValue(new Promise(() => undefined));
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen((v) => !v)}>đổi</button>
+          <SubscribeSheet visible={open} onClose={() => setOpen(false)} onNotice={onNotice} variationId="v1" quantity={2} />
+        </>
+      );
+    }
+    mounted.push(render(<Harness />));
+    await flush();
+    click(create());
+    await flush();
+    click(byText(body(), 'button', 'đổi')!);
+    await flush();
+    click(byText(body(), 'button', 'đổi')!);
+    await flush();
+    const pending = byText(body(), 'button', 'Đang tạo…') as HTMLButtonElement;
+    expect(pending.disabled).toBe(true);
+    click(pending);
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+  });
+
   it('chưa có địa chỉ thì nút Thêm địa chỉ sang /tai-khoan/dia-chi, không có nút tạo', async () => {
     mocks.getAddresses.mockResolvedValue([]);
     mount();
