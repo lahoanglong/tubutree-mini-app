@@ -37,7 +37,7 @@ import {
   pickPaymentMethod,
 } from '@/lib/checkout-rules';
 import { clearCheckoutSelection, recallCheckoutSelection, reconcileSelection } from '@/lib/checkout-selection';
-import { orderDetailHref } from '@/lib/order-view';
+import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
@@ -259,7 +259,7 @@ export default function CheckoutPage() {
       invalidateBalances(qc);
       // Chuyển khoản: sang trang VietQR để khách trả ngay (đối soát xong đơn tự xác nhận), như Mini App.
       if (isBank) setRedirectingCode(order.code);
-      if (isBank) router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
+      if (isBank) router.replace(bankPaymentHref(order.code));
     },
     onError: (e) => {
       // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
@@ -324,7 +324,7 @@ export default function CheckoutPage() {
           <p role="status" className="text-stone-700">
             Đang chuyển tới trang thanh toán…
           </p>
-          <Link href={`/thanh-toan/chuyen-khoan/${encodeURIComponent(redirectingCode)}`} className={`mt-4 inline-block ${ui.btnPrimary}`}>
+          <Link href={bankPaymentHref(redirectingCode)} className={`mt-4 inline-block ${ui.btnPrimary}`}>
             Mở trang thanh toán
           </Link>
         </div>

@@ -22,6 +22,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
+import { bankPaymentHref } from '@/lib/order-view';
 import { isWebRouteReady } from '@/lib/route-map';
 import { EMPTY_GEO, GeoPicker, type GeoValue } from '@/components/geo-picker';
 import { Field } from '@/components/ui/field';
@@ -263,7 +264,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
         {/* Đơn chuyển khoản: CTV cần QR/số tài khoản để gửi khách, không thì đơn nằm chờ thanh toán tới khi bị huỷ; trang đơn đã có QR nên dùng làm lối thay khi trang chuyển khoản riêng chưa mở. */}
         {bank && (payReady || orderReady) && (
           <Link
-            href={payReady ? `/thanh-toan/chuyen-khoan/${encodeURIComponent(code)}` : `/tai-khoan/don-hang/${encodeURIComponent(code)}`}
+            href={payReady ? bankPaymentHref(code) : `/tai-khoan/don-hang/${encodeURIComponent(code)}`}
             onClick={onClose}
             className={`${ui.btnPrimary} mt-4 w-full`}
           >

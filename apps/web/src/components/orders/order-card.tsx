@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Package } from 'lucide-react';
 import type { OrderView } from '@tubutree/app-core/api/orders';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
-import { buyerOrderStatusLabel, isReorderable, orderDetailHref } from '@/lib/order-view';
+import { bankPaymentHref, buyerOrderStatusLabel, isReorderable, orderDetailHref } from '@/lib/order-view';
 import { formatVnd } from '@/lib/format-vnd';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
@@ -75,7 +75,7 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
       {canPay && (
         <div data-testid="order-card-actions" className="flex items-center justify-between gap-2">
           {showsPaymentDeadline(o) ? <span className="text-xs text-stone-600">Hạn {formatDateTime(o.paymentDeadline)}</span> : <span />}
-          <Link href={`/thanh-toan/chuyen-khoan/${encodeURIComponent(o.code)}`} className={`${ui.btnPrimary} relative z-10`}>
+          <Link href={bankPaymentHref(o.code)} className={`${ui.btnPrimary} relative z-10`}>
             Thanh toán ngay
           </Link>
         </div>

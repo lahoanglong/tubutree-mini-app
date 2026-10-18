@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { orderDetailHref } from '@/lib/order-view';
+import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../bank-transfer-panel';
@@ -46,7 +46,7 @@ export default function BankPaymentPage() {
   if (phase === 'loading') body = <AuthLoading />;
   else if (phase === 'unavailable') body = <SessionUnavailable />;
   else if (phase === 'guest' || !code) {
-    body = <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo={`/thanh-toan/chuyen-khoan/${encodeURIComponent(code)}`} />;
+    body = <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo={bankPaymentHref(code)} />;
   } else {
     body = (
       <div className="mx-auto max-w-md">
