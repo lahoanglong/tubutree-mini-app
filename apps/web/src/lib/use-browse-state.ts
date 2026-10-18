@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { parsePage } from './catalog-filter';
 import { SEARCH_PARAM_KEYS, parseSearchState, serializeSearchState, type SearchState } from './search-state';
 
 export interface UseBrowseState {
@@ -10,6 +11,8 @@ export interface UseBrowseState {
   urlKey: string;
   /** `?focus=search` từ ô tìm ở trang chủ — dùng MỘT lần rồi `consumeFocus()`. */
   focusSearch: boolean;
+  /** `?page=` của URL (≥ 1): danh sách do server tải chỉ dùng được khi trang bắt đầu của nó khớp số này. */
+  page: number;
   update: (patch: Partial<SearchState>) => void;
   consumeFocus: () => void;
 }
@@ -44,6 +47,7 @@ export function useBrowseState(): UseBrowseState {
   const state = useMemo(() => parseSearchState(new URLSearchParams(raw)), [raw]);
   const urlKey = useMemo(() => serializeSearchState(state).toString(), [state]);
   const focusSearch = params.get('focus') === 'search';
+  const page = parsePage(params.get('page'));
 
   const latestRef = useRef(raw);
   const renderedRef = useRef(raw);
@@ -72,5 +76,5 @@ export function useBrowseState(): UseBrowseState {
     [write],
   );
 
-  return { state, urlKey, focusSearch, update, consumeFocus };
+  return { state, urlKey, focusSearch, page, update, consumeFocus };
 }

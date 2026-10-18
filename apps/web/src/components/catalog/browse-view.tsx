@@ -56,7 +56,7 @@ const errorMessage = (e: unknown) => (e instanceof Error && e.message ? e.messag
  */
 export default function BrowseView({ initial = null, brands: initialBrands, categories: initialCategories }: BrowseViewProps) {
   const router = useRouter();
-  const { state, urlKey, focusSearch, update, consumeFocus } = useBrowseState();
+  const { state, urlKey, focusSearch, page, update, consumeFocus } = useBrowseState();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Ô nhập theo `q` của URL mỗi khi URL đổi từ ngoài (Back, chạm từ khoá) — đặt trong render, không qua effect.
@@ -91,9 +91,11 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   // Chỉ gợi ý khi khách đang gõ: vào thẳng /san-pham?q=… (link, Back) không được bắn request gợi ý.
   const suggest = useSuggest(editing ? draft : '');
 
-  const seeded = initial !== null && initial.urlKey === urlKey ? initial : null;
+  const seeded = initial !== null && initial.urlKey === urlKey && initial.startPage === page ? initial : null;
+  // Danh sách seed bắt đầu từ trang > 1 thì khoá riêng: khi gỡ bộ lọc về đúng urlKey cũ, không dùng lại mục cache thiếu các trang đầu.
+  const listKey = seeded && seeded.startPage > 1 ? `${urlKey}#p${seeded.startPage}` : urlKey;
   const products = useInfiniteQuery({
-    ...browseQuery(coreHttp, urlKey, (page) => toCatalogQuery(state, page, PAGE_LIMIT)),
+    ...browseQuery(coreHttp, listKey, (page) => toCatalogQuery(state, page, PAGE_LIMIT)),
     initialPageParam: seeded?.startPage ?? 1,
     getNextPageParam: (last: CatalogPage) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
     ...(seeded ? { initialData: { pages: [seeded.page], pageParams: [seeded.startPage] }, staleTime: 60_000 } : {}),

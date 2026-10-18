@@ -308,12 +308,29 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
   });
 
   it('trang đầu do server tải là trang 2: "Xem thêm" tải tiếp trang 3', async () => {
+    nav.search = 'page=2';
     const initial = { urlKey: '', startPage: 2, page: { ...pageOf([product(7)], 100, 2, 24), filtersIgnored: false } };
     const { container } = mount({ initial });
     await flush();
     click(buttonByName(container, 'Xem thêm'));
     await flush();
     expect(productCalls().at(-1)).toEqual({ page: 3, limit: 24 });
+  });
+
+  it('vào thẳng ?page=3, đổi bộ lọc rồi gỡ: về lại trang 1, không dùng lại danh sách bắt đầu từ trang 3', async () => {
+    nav.search = 'page=3';
+    routes['/products'] = (q) => pageOf([product(Number(q?.page ?? 1) * 10)], 100, Number(q?.page ?? 1), 24);
+    const initial = { urlKey: '', startPage: 3, page: { ...pageOf([product(30)], 100, 3, 24), filtersIgnored: false } };
+    const { container } = mount({ initial });
+    await flush();
+    expect(container.querySelector('a[href="/san-pham/sp-30"]')).not.toBeNull();
+    click(buttonByName(container, 'Dầu gội'));
+    await flush();
+    click(buttonByName(container, 'Bỏ lọc Dầu gội'));
+    await flush(8);
+    expect(productCalls().at(-1)).toEqual({ page: 1, limit: 24 });
+    expect(container.querySelector('a[href="/san-pham/sp-30"]')).toBeNull();
+    expect(container.querySelector('a[href="/san-pham/sp-10"]')).not.toBeNull();
   });
 
   it('tìm không ra: nói rõ từ khoá, không đổ lỗi cho bộ lọc, có lối thoát', async () => {
