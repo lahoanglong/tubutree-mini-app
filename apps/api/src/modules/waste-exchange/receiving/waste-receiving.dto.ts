@@ -6,6 +6,7 @@ import {
   type WasteRejectionReason,
   type WasteShortfallReason,
 } from '@tubutree/shared-types';
+import { WASTE_MAX_REQUEST_LINES } from '../waste.constants';
 
 export class WasteMatchDto {
   @IsOptional() @IsString() @MaxLength(32) parcelCode?: string;
@@ -21,7 +22,7 @@ export class WasteConfirmLineDto {
 }
 
 export class WasteConfirmDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => WasteConfirmLineDto) lines!: WasteConfirmLineDto[];
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(WASTE_MAX_REQUEST_LINES) @ValidateNested({ each: true }) @Type(() => WasteConfirmLineDto) lines!: WasteConfirmLineDto[];
   @IsOptional() @IsInt() @Min(1) @Max(100000) receivedWeightGrams?: number;
   @IsOptional() @ValidateNested() @Type(() => WasteMatchDto) match?: WasteMatchDto;
 }

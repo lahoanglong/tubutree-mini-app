@@ -5,6 +5,7 @@ export const WASTE_LOOKUP_PATTERN = /^(TR-[2-9A-HJKMNP-TV-Z]{5}|QG-[2-9A-HJKMNP-
 export const WASTE_REQUEST_POINTS_MAX = 2_000_000;
 export const WASTE_POINTS_MAX_PER_SITE = 200;
 export const WASTE_MAX_STAFF_PER_POINT = 5;
+export const WASTE_MAX_REQUEST_LINES = 50;
 export const WASTE_RECEIVE_REPLAY_MS = 10 * 60_000;
 export const WASTE_DESK_RECENT_MS = 24 * 3_600_000;
 export const GOMDON_DISPATCHED_STATUSES = ['3', '4', '5', '7'] as const;

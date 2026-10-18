@@ -7,6 +7,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { requireIdempotencyKey } from '../../../common/idempotency-key';
+import { WASTE_MAX_REQUEST_LINES } from '../waste.constants';
 import { WasteAccessService, type WasteCustomerContext, type WasteGateMode } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
@@ -53,7 +54,7 @@ export class WasteLineDto implements WasteLineInput {
 export class WastePreviewDto implements WastePreviewRequest {
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(WASTE_MAX_REQUEST_LINES)
   @ValidateNested({ each: true })
   @Type(() => WasteLineDto)
   lines!: WasteLineDto[];
@@ -79,7 +80,7 @@ export class WasteCreateDto implements WasteCreateRequest {
 
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(WASTE_MAX_REQUEST_LINES)
   @ValidateNested({ each: true })
   @Type(() => WasteLineDto)
   lines!: WasteLineDto[];
@@ -104,7 +105,7 @@ export class WasteCreateDto implements WasteCreateRequest {
 export class WasteEditDto implements WasteEditRequest {
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(WASTE_MAX_REQUEST_LINES)
   @ValidateNested({ each: true })
   @Type(() => WasteLineDto)
   lines!: WasteLineDto[];

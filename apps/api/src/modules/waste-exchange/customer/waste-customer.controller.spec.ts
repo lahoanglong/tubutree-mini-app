@@ -1,10 +1,14 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { HTTP_CODE_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { createValidationPipe } from '../../../common/validation-pipe';
 import { parseTreeBuyKey } from '../../game/tree-purchase-key';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { WASTE_MAX_REQUEST_LINES } from '../waste.constants';
+import { WasteConfirmDto } from '../receiving/waste-receiving.dto';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
@@ -228,5 +232,29 @@ describe('read DTOs (global ValidationPipe)', () => {
   });
   it('tracking DTO trims both fields', async () => {
     await expect(run(WasteTrackingDto, { carrier: ' GHTK ', trackingCode: ' S1 ' })).resolves.toMatchObject({ carrier: 'GHTK', trackingCode: 'S1' });
+  });
+});
+
+describe('request line cap is one shared limit', () => {
+  const declared = (n: number) => Array.from({ length: n }, (_, i) => ({ itemId: `i${i}`, declaredQty: 1 }));
+  const confirmed = (n: number) => declared(n).map((l) => ({ ...l, receivedQty: 1 }));
+  const errorKeys = (cls: new () => object, body: object) =>
+    validateSync(plainToInstance(cls, body)).flatMap((e) => Object.keys(e.constraints ?? {}));
+  const cases: Array<[string, new () => object, (n: number) => object]> = [
+    ['create', WasteCreateDto, (n) => ({ method: 'MAIL_IN', lines: declared(n), consent: true, packagingConsent: true, postagePaidConsent: true })],
+    ['edit', WasteEditDto, (n) => ({ lines: declared(n) })],
+    ['preview', WastePreviewDto, (n) => ({ lines: declared(n) })],
+    ['confirm', WasteConfirmDto, (n) => ({ lines: confirmed(n) })],
+  ];
+  it('the cap is 50', () => {
+    expect(WASTE_MAX_REQUEST_LINES).toBe(50);
+  });
+  it.each(cases)('%s DTO accepts the cap and rejects one more line with maxSize', (_name, cls, body) => {
+    expect(errorKeys(cls, body(WASTE_MAX_REQUEST_LINES))).toEqual([]);
+    expect(errorKeys(cls, body(WASTE_MAX_REQUEST_LINES + 1))).toEqual(['arrayMaxSize']);
+  });
+  it('a request created with the most lines can still be confirmed with the same count', () => {
+    expect(errorKeys(WasteCreateDto, cases[0]![2](WASTE_MAX_REQUEST_LINES))).toEqual([]);
+    expect(errorKeys(WasteConfirmDto, { lines: confirmed(WASTE_MAX_REQUEST_LINES) })).toEqual([]);
   });
 });

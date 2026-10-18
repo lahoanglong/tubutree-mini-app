@@ -4,7 +4,7 @@ describe('waste constants', () => {
   it('pins the lock classes, consent version and numeric limits', () => {
     expect(C.WASTE_LOCK_CLASS).toEqual({ CUSTOMER: 731001, TRACKING: 731002, STAFF_CAP: 731003, POINT_CREATE: 731004 });
     expect(C.WASTE_CONSENT_VERSION).toBe('2026-10-17.1');
-    expect([C.WASTE_REQUEST_POINTS_MAX, C.WASTE_POINTS_MAX_PER_SITE, C.WASTE_MAX_STAFF_PER_POINT, C.WASTE_RECEIVE_REPLAY_MS, C.WASTE_DESK_RECENT_MS]).toEqual([2_000_000, 200, 5, 600_000, 86_400_000]);
+    expect([C.WASTE_REQUEST_POINTS_MAX, C.WASTE_POINTS_MAX_PER_SITE, C.WASTE_MAX_STAFF_PER_POINT, C.WASTE_RECEIVE_REPLAY_MS, C.WASTE_DESK_RECENT_MS, C.WASTE_MAX_REQUEST_LINES]).toEqual([2_000_000, 200, 5, 600_000, 86_400_000, 50]);
   });
   it('pins the status lists', () => {
     expect([...C.GOMDON_DISPATCHED_STATUSES]).toEqual(['3', '4', '5', '7']);
