@@ -46,11 +46,13 @@ docker run -d --rm --tmpfs /var/lib/postgresql/data --name "$PG_NAME" \
 docker run -d --rm --tmpfs /data --name "$REDIS_NAME" \
   -p "127.0.0.1:$REDIS_PORT:6379" redis:7-alpine >/dev/null
 
+# Hỏi qua TCP: lúc initdb, entrypoint chạy một máy chủ tạm chỉ nghe socket unix rồi tắt đi để khởi động lại; hỏi qua socket thì
+# vòng chờ thoát sớm và lần kiểm dưới rơi đúng khe máy chủ đang khởi động lại.
 for _ in $(seq 1 60); do
-  docker exec "$PG_NAME" pg_isready -U tubu -d tubutree >/dev/null 2>&1 && break
+  docker exec "$PG_NAME" pg_isready -h 127.0.0.1 -U tubu -d tubutree >/dev/null 2>&1 && break
   sleep 1
 done
-docker exec "$PG_NAME" pg_isready -U tubu -d tubutree >/dev/null || { echo "Postgres tạm không sẵn sàng" >&2; exit 1; }
+docker exec "$PG_NAME" pg_isready -h 127.0.0.1 -U tubu -d tubutree >/dev/null || { echo "Postgres tạm không sẵn sàng" >&2; exit 1; }
 for _ in $(seq 1 30); do
   [[ "$(docker exec "$REDIS_NAME" redis-cli ping 2>/dev/null)" == "PONG" ]] && break
   sleep 1
