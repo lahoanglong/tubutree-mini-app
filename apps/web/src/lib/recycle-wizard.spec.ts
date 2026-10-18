@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   EMPTY_DRAFT,
   clearDraft,
+  clearPointsNav,
+  clearWizardStorage,
+  markResume,
+  takeResume,
+  peekResume,
   loadDraft,
   saveDraft,
   savePointsNav,
@@ -50,5 +55,31 @@ describe('nháp Đổi rác trong sessionStorage (thay navigation state của Mi
       { itemId: 'item-battery', declaredQty: 1 },
       { itemId: 'item-milk', declaredQty: 2 },
     ]);
+  });
+});
+
+describe('cờ tiếp tục wizard và dọn khoá', () => {
+  it('markResume bật cờ, peek không xoá, take đọc rồi xoá', () => {
+    expect(peekResume()).toBe(false);
+    markResume();
+    expect(peekResume()).toBe(true);
+    expect(takeResume()).toBe(true);
+    expect(peekResume()).toBe(false);
+  });
+  it('clearPointsNav xoá khoá điều hướng chọn điểm', () => {
+    savePointsNav({ returnTo: '/doi-rac/tao?step=method', draft: DRAFT, selectedItemIds: ['a'] });
+    clearPointsNav();
+    expect(loadPointsNav()).toBeNull();
+  });
+  it('clearWizardStorage xoá nháp, điều hướng, nháp trả về và cờ', () => {
+    saveDraft(DRAFT);
+    savePointsNav({ returnTo: '/doi-rac/tao?step=method', draft: DRAFT, selectedItemIds: ['a'] });
+    saveReturn(DRAFT);
+    markResume();
+    clearWizardStorage();
+    expect(loadDraft()).toBeNull();
+    expect(loadPointsNav()).toBeNull();
+    expect(takeReturn()).toBeNull();
+    expect(peekResume()).toBe(false);
   });
 });

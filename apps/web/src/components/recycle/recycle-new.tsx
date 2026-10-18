@@ -24,7 +24,11 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import {
   EMPTY_DRAFT,
   clearDraft,
+  clearWizardStorage,
   loadDraft,
+  markResume,
+  peekResume,
+  takeResume,
   saveDraft,
   savePointsNav,
   takeReturn,
@@ -114,9 +118,18 @@ export function RecycleNew() {
   useEffect(() => {
     const back = takeReturn();
     if (back) saveDraft(back);
-    setDraft(back ?? loadDraft() ?? EMPTY_DRAFT);
+    // Bước 2 chỉ đọc cờ (nạp lại trang vẫn giữ nháp); bước 1 đọc rồi xoá cờ, nên vào mới từ trang chủ thì không có cờ.
+    const resume = step === 'method' ? peekResume() : takeResume();
+    const next = back ?? (resume ? loadDraft() : null);
+    if (!next && step === 'items') clearDraft();
+    // Hàm cập nhật giữ giá trị đã đọc khi effect chạy lần hai (StrictMode), vì cờ đã bị xoá ở lần đầu.
+    setDraft((prev) => (prev !== EMPTY_DRAFT ? prev : (next ?? EMPTY_DRAFT)));
     setReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    if (phase === 'guest') clearWizardStorage();
+  }, [phase]);
   useEffect(() => {
     if (ready && !submitted.current) saveDraft(draft);
   }, [draft, ready]);
@@ -201,7 +214,7 @@ export function RecycleNew() {
     onSuccess: async (r) => {
       rotate();
       submitted.current = true;
-      clearDraft();
+      clearWizardStorage();
       await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
       router.replace(`/doi-rac/yeu-cau/${r.id}`);
     },
@@ -241,6 +254,7 @@ export function RecycleNew() {
       });
     const next = () => {
       saveDraft(draft);
+      markResume();
       router.push(METHOD_STEP_PATH);
     };
     const p = debounced.length > 0 ? itemsPreviewQ.data : undefined;
@@ -294,6 +308,7 @@ export function RecycleNew() {
   };
   const pickPoint = () => {
     saveDraft(draft);
+    markResume();
     savePointsNav({ returnTo: METHOD_STEP_PATH, draft, selectedItemIds: lineInputs.map((l) => l.itemId) });
     router.replace('/doi-rac/diem-nhan');
   };

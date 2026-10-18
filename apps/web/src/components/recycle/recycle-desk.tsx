@@ -264,7 +264,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-start">
         <div className="flex flex-col gap-4">
           <QuotaCard point={point} />
-          <WasteDeskPerk point={point} />
+          <WasteDeskPerk key={point.id} point={point} />
           <WasteDeskReport pointId={point.id} />
           <p className="text-sm text-stone-600">Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.</p>
         </div>

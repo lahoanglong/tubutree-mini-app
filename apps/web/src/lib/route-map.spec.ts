@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import routeMap from '@tubutree/app-core/route-map.json';
 import {
   isWebRouteReady,
@@ -18,8 +18,16 @@ describe('isWebRouteReady', () => {
     expect(isWebRouteReady('/')).toBe(true);
   });
 
-  it('route còn pending thì chưa sẵn sàng', () => {
-    expect(isWebRouteReady('/cong-dong/xep-hang')).toBe(false);
+  it('route còn pending thì chưa sẵn sàng (bản đồ giả, không phụ thuộc lane nào đã xong chưa)', async () => {
+    vi.resetModules();
+    vi.doMock('@tubutree/app-core/route-map.json', () => ({
+      default: { groups: [{ lane: 't', items: [{ miniapp: '/x', web: '/chua-xong', pending: true }, { miniapp: '/y', web: '/da-xong' }] }] },
+    }));
+    const fake = await import('./route-map');
+    expect(fake.isWebRouteReady('/chua-xong')).toBe(false);
+    expect(fake.isWebRouteReady('/da-xong')).toBe(true);
+    vi.doUnmock('@tubutree/app-core/route-map.json');
+    vi.resetModules();
   });
 
   it('khớp cả dòng có tham số và bỏ qua query của đường vào', () => {

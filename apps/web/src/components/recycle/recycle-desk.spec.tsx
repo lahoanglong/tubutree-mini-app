@@ -510,6 +510,19 @@ describe('/doi-rac/quay: ưu đãi và báo cáo tháng', () => {
     expect(c.textContent).toContain('Đã gửi, chờ Tubu duyệt');
     expect(dialog()).toBeNull();
   });
+  it('chủ hai điểm: gửi duyệt ở điểm A rồi đổi sang điểm B thì B không hiện "Đã gửi"', async () => {
+    state.points = [makeDeskPoint(), makeDeskPoint({ id: 'pt-2', name: 'Đại lý B' })];
+    const c = await mount();
+    click(button(c, 'Chỉnh sửa'));
+    await flush();
+    typeInto(label(dialog()!, 'Nội dung ưu đãi'), 'Tặng túi vải');
+    click(byText(dialog()!, 'button', 'Gửi duyệt'));
+    await flush(10);
+    expect(c.textContent).toContain('Đã gửi, chờ Tubu duyệt');
+    click(byText(c, '[role="tab"]', 'Đại lý B'));
+    await flush();
+    expect(c.textContent).not.toContain('Đã gửi, chờ Tubu duyệt');
+  });
   it('nhân viên đại lý không có nút Chỉnh sửa', async () => {
     state.points = [makeDeskPoint({ myRole: 'STAFF' })];
     const c = await mount();

@@ -4,7 +4,7 @@ import type { WastePreviewDTO, WastePreviewRequest } from '@tubutree/shared-type
 import { byText, click, flush, render, selectValue, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
-import { EMPTY_DRAFT, loadDraft, loadPointsNav, saveDraft, saveReturn, type WasteWizardDraft } from '@/lib/recycle-wizard';
+import { EMPTY_DRAFT, loadDraft, loadPointsNav, markResume, saveDraft, saveReturn, type WasteWizardDraft } from '@/lib/recycle-wizard';
 import { makeRequestDetail, makeWasteMe, makeWastePoint } from './recycle-fixtures';
 
 // Chép ý recycle-new.spec.tsx (Mini App, §4.2, §4.3, §15.2, §16.1): chọn món, ước tính debounce, chọn cách giao, cam kết,
@@ -75,7 +75,9 @@ const PICKED: WasteWizardDraft = { ...DRAFT, method: 'DROP_OFF', pointId: 'pt-1'
 const atStep2 = (draft: WasteWizardDraft = DRAFT) => {
   state.search = 'step=method';
   saveDraft(draft);
+  markResume();
 };
+const toLineInputsOf = (d: WasteWizardDraft | null) => Object.entries(d?.lines ?? {}).filter(([, q]) => q > 0);
 const CONSENT = 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này';
 
 let mounted: Rendered[] = [];
@@ -218,11 +220,18 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(loadDraft()).toEqual({ ...EMPTY_DRAFT, lines: { 'item-carton': 1 } });
     expect(state.push).toHaveBeenCalledWith('/doi-rac/tao?step=method');
   });
-  it('nạp lại trang giữ nguyên số lượng đã chọn', async () => {
+  it('quay lại bước 1 từ bước 2 (đã bấm Tiếp tục) giữ nguyên số lượng đã chọn', async () => {
     saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 7 } });
+    markResume();
     const c = await mount();
     expect(card(c, 'Thùng carton').textContent).toContain('7');
     expect(state.replace).not.toHaveBeenCalled();
+  });
+  it('vào mới bước 1 (không từ trong wizard) → nháp rỗng, nháp cũ bị xoá', async () => {
+    saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 7, 'item-gone': 3 } });
+    const c = await mount();
+    expect(card(c, 'Thùng carton').textContent).not.toContain('7');
+    expect(toLineInputsOf(loadDraft())).toEqual([]);
   });
   it('chương trình tắt hoặc tài khoản bị khoá → về /doi-rac', async () => {
     state.me = makeWasteMe({ blocked: true });

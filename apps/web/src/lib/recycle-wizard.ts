@@ -17,6 +17,7 @@ export const EMPTY_DRAFT: WasteWizardDraft = { lines: {}, method: null, pointId:
 const DRAFT_KEY = 'tubu_recycle_draft';
 const NAV_KEY = 'tubu_recycle_points_nav';
 const RETURN_KEY = 'tubu_recycle_points_return';
+const RESUME_KEY = 'tubu_recycle_resume';
 const METHODS: readonly string[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP'];
 
 const codeUnitCompare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -86,6 +87,19 @@ function parseDraft(v: unknown): WasteWizardDraft | null {
 export const loadDraft = (): WasteWizardDraft | null => parseDraft(read(DRAFT_KEY));
 export const saveDraft = (draft: WasteWizardDraft): void => write(DRAFT_KEY, draft);
 export const clearDraft = (): void => remove(DRAFT_KEY);
+
+/** Cờ "đang đi trong wizard": chỉ khi có cờ mới nạp lại nháp, để vào mới từ trang chủ luôn bắt đầu rỗng như Mini App. */
+export const markResume = (): void => write(RESUME_KEY, true);
+export const peekResume = (): boolean => read(RESUME_KEY) === true;
+export function takeResume(): boolean {
+  const on = peekResume();
+  remove(RESUME_KEY);
+  return on;
+}
+export const clearPointsNav = (): void => remove(NAV_KEY);
+export function clearWizardStorage(): void {
+  [DRAFT_KEY, NAV_KEY, RETURN_KEY, RESUME_KEY].forEach(remove);
+}
 
 export function savePointsNav(nav: WastePointsNav): void {
   const returnTo = safeReturnPath(nav.returnTo);
