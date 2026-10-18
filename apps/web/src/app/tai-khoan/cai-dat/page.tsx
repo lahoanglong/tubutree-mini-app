@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { fetchNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@tubutree/app-core/api/account';
-import { applyFontScale, loadFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
+import { applyFontScale, readFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,8 +43,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let alive = true;
-    void loadFontScale().then((s) => {
-      if (!alive) return;
+    void readFontScale().then((s) => {
+      if (!alive || !s) return;
       setFontScale(s);
       applyFontScale(s);
     });

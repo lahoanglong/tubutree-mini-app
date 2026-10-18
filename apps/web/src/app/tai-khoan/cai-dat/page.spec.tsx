@@ -190,6 +190,14 @@ describe('/tai-khoan/cai-dat: cỡ chữ', () => {
     expect(radios(container).map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true']);
   });
 
+  it('chưa chọn cỡ nào: mở trang không đè cỡ chữ mặc định của trình duyệt', async () => {
+    document.documentElement.style.fontSize = '';
+    delete document.documentElement.dataset.fontScale;
+    await mount();
+    expect(document.documentElement.style.fontSize).toBe('');
+    expect(document.documentElement.dataset.fontScale).toBeUndefined();
+  });
+
   it('mở trang với cỡ đã lưu thì chọn sẵn cỡ đó', async () => {
     mocks.storageGet.mockResolvedValue(JSON.stringify({ fontScale: 'small' }));
     const { container } = await mount();
