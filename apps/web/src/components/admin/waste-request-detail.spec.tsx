@@ -439,6 +439,7 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     const table = c.querySelector('[data-counting-lines]')!;
     expect(Array.from(table.querySelectorAll('th')).map((t) => t.textContent)).toEqual(['Loại hàng', 'Khách khai', 'Thực nhận', 'Lý do thiếu']);
     for (const tr of Array.from(table.querySelectorAll('tbody tr'))) expect(tr.querySelectorAll('td')).toHaveLength(4);
+    for (const tr of Array.from(table.querySelectorAll('tbody tr'))) expect(tr.querySelectorAll('td')[1]?.textContent).not.toContain('Khách khai');
     expect(table.querySelector('input[aria-label^="Thực nhận "]')).not.toBeNull();
     const weightLabel = c.querySelector('input[name="receivedWeightGrams"]')!.closest('label')!.querySelector('span')!;
     expect(weightLabel.className).toContain('block');

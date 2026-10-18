@@ -258,7 +258,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
               return (
                 <tr key={l.itemId} className="border-b border-stone-100">
                   <td className={`${TD} font-medium text-stone-900`}>{l.itemName}</td>
-                  <td className={`${TD} text-xs text-stone-600`}>{`Khách khai ${formatCount(l.declaredQty)} ${l.unitLabel}`}</td>
+                  <td className={`${TD} text-xs text-stone-600`}>{`${formatCount(l.declaredQty)} ${l.unitLabel}`}</td>
                   <td className={TD}>
                     <input
                       name={`received-${l.itemId}`}
