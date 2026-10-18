@@ -8,6 +8,7 @@ import { formatCount } from '@/lib/checkout-points';
 import { WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
 import { BTN_PRIMARY, BTN_XS_SECONDARY, chipClass, Notice, ScrollRegion, ToneBadge } from './ui';
 import type { WasteSeed } from './waste-tab';
+import { WastePointDetail } from './waste-point-detail';
 import { WastePointForm } from './waste-point-form';
 
 type Filter = 'all' | 'pending' | 'perk';
@@ -43,6 +44,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
   const rows = list.data ?? [];
   const warehouseExists = (all.data ?? []).some((p) => p.kind === 'WAREHOUSE');
   const alerts = overview.data?.alerts ?? [];
+  const detailPoint = detailId ? ((all.data ?? []).find((p) => p.id === detailId) ?? rows.find((p) => p.id === detailId) ?? null) : null;
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
@@ -127,6 +129,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
           </tbody>
         </table>
       </ScrollRegion>
+      {detailPoint && <WastePointDetail point={detailPoint} onClose={() => setDetailId(null)} />}
       {panel && (
         <WastePointForm
           point={panel.point}

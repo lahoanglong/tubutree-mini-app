@@ -111,6 +111,26 @@ describe('WastePointsSection', () => {
     expect(c.querySelector<HTMLInputElement>('input[name="kind"][value="WAREHOUSE"]')!.disabled).toBe(true);
   });
 
+  it('Chi tiết mở chi tiết điểm (người ở điểm, ưu đãi, nhật ký, số lượng tháng)', async () => {
+    const api = mockFetch({
+      '/admin/waste/points/p1/report': { body: { pointId: 'p1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] } },
+      '/admin/waste/requests': { body: { rows: [], nextCursor: null } },
+      '/admin/waste/points/p5': { body: wastePoint({ id: 'p5', name: 'Tiệm Sách Sáu' }) },
+      '/admin/waste/points': { body: ALL },
+      '/admin/waste/items': { body: [wasteItem()] },
+      '/admin/waste/overview': { body: OVERVIEW },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WastePointsSection />);
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('[data-point-detail]')).toBeNull();
+    click(btn(row(r.container, 'p1'), 'Chi tiết'));
+    await flush();
+    expect(r.container.querySelector('[data-point-detail="p1"]')).not.toBeNull();
+    expectNoBannedCopy(r.container.textContent);
+  });
+
   it('cảnh báo bất thường hiện ở đúng điểm (5.5)', async () => {
     const { c } = await mount();
     expect(c.querySelector('[data-point-alerts="p1"]')!.textContent).toContain('Đã dùng 72% hạn mức trong 10 ngày đầu tháng');
