@@ -54,7 +54,7 @@ Pancake là **kho**. Tubu là **cửa hàng online và sổ tiền, điểm, hoa
 
 ## 4. Những gì KHÔNG về Tubu, và hậu quả
 
-1. **Sửa địa chỉ, thêm bớt món, đổi tổng tiền của đơn trên Pancake.** Tubu giữ số cũ. Khách thấy sai địa chỉ và sai tổng. Hoàn tiền, hoa hồng, đối soát tính theo số cũ. Hệ thống chưa cảnh báo lệch (**⏳ đang làm**).
+1. **Sửa địa chỉ, thêm bớt món, đổi tổng tiền của đơn trên Pancake.** Tubu giữ số cũ. Khách thấy sai địa chỉ và sai tổng. Hoàn tiền, hoa hồng, đối soát tính theo số cũ. Khi **tổng tiền** trên Pancake khác tổng của Tubu, đơn tự vào hàng đợi "Cần xử lý Pancake" với lý do "Tổng tiền Pancake lệch với Tubu" kèm số lệch. Hệ thống chỉ báo, không tự sửa đơn Tubu. Sửa địa chỉ, hoặc đổi món mà tổng không đổi, thì hệ thống không thấy được.
 2. **Đơn tạo thẳng trên Pancake** (khách gọi, chat). Tubu bỏ qua đơn này: không Điểm Xanh, không lịch sử đơn của khách, không hoa hồng CTV, doanh thu app thiếu. Chức năng "Lên đơn hộ" cho CSKH: **⏳ đang làm**.
 3. **Khách mua tại quầy trên Pancake POS.** Không vào Tubu. Muốn cộng Điểm Xanh thì dùng Màn thu ngân.
 4. **Thông tin khách** (tên, SĐT, ghi chú) nhập trên Pancake. Không về Tubu.
@@ -62,7 +62,7 @@ Pancake là **kho**. Tubu là **cửa hàng online và sổ tiền, điểm, hoa
 
 ## 5. Quy tắc vàng
 
-1. **Không sửa đơn trên Pancake. Huỷ ở Tubu và đặt lại.** Ngoại lệ duy nhất: khi hàng đợi "Cần xử lý Pancake" ghi rõ bảo bạn sửa tay (ví dụ báo đã thu tiền để shipper không thu lần nữa).
+1. **Không sửa đơn trên Pancake. Huỷ ở Tubu và đặt lại.** Lỡ sửa rồi và thấy lý do "Tổng tiền Pancake lệch với Tubu": huỷ đơn ở Tubu rồi đặt lại, hoặc trả đơn Pancake về đúng nội dung đơn Tubu (lý do tự biến mất khi Pancake báo lại đơn đúng tổng). Ngoại lệ duy nhất: khi hàng đợi "Cần xử lý Pancake" ghi rõ bảo bạn sửa tay (ví dụ báo đã thu tiền để shipper không thu lần nữa).
 2. **Đơn tạo thẳng trên Pancake không tích điểm.** Nói rõ với khách. Chỉ tạo tay khi khách không dùng được app, và khi chủ shop đồng ý (cần xác nhận).
 3. **Huỷ đơn ở Tubu**, không huỷ ở Pancake. Chỉ huỷ tay ở Pancake khi Tubu báo "Pancake: chưa huỷ được".
 4. **Không giao đơn có ghi chú "CHỜ CHUYỂN KHOẢN … CHƯA GIAO"** trên Pancake. Chờ ghi chú đổi thành "ĐÃ THANH TOÁN".

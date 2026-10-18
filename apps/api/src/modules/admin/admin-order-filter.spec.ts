@@ -1,4 +1,11 @@
-import { buildAdminOrderWhere, normalizeAdminOrderSearch, pancakeUnsyncedWhere, recipientPhoneVariants, searchPhone } from './admin-order-filter';
+import {
+  buildAdminOrderWhere,
+  normalizeAdminOrderSearch,
+  ORDER_KINDS,
+  pancakeUnsyncedWhere,
+  recipientPhoneVariants,
+  searchPhone,
+} from './admin-order-filter';
 
 describe('searchPhone — SĐT gõ/dán ở ô tìm về dạng 0xxxxxxxxx', () => {
   it.each([
@@ -62,5 +69,49 @@ describe('pancakeUnsyncedWhere — lọc "Chưa lên Pancake"', () => {
       type: 'DEALER',
       items: { some: { backorderedQty: { gt: 0 } } },
     });
+  });
+});
+
+describe('buildAdminOrderWhere — loại đơn, thanh toán, nền tảng, người giới thiệu (D1-17)', () => {
+  it('mỗi loại đơn là một điều kiện loại trừ nhau: đại lý > CTV lên hộ > gian hàng > CTV > lẻ', () => {
+    expect(buildAdminOrderWhere({ kind: 'dealer' })).toEqual({ type: 'DEALER' });
+    expect(buildAdminOrderWhere({ kind: 'ctv_assisted' })).toEqual({ type: 'RETAIL', placedForCustomer: true });
+    expect(buildAdminOrderWhere({ kind: 'storefront' })).toEqual({
+      type: 'RETAIL',
+      placedForCustomer: false,
+      storefrontId: { not: null },
+    });
+    expect(buildAdminOrderWhere({ kind: 'ctv' })).toEqual({
+      type: 'RETAIL',
+      placedForCustomer: false,
+      storefrontId: null,
+      referrerUserId: { not: null },
+    });
+    expect(buildAdminOrderWhere({ kind: 'retail' })).toEqual({
+      type: 'RETAIL',
+      placedForCustomer: false,
+      storefrontId: null,
+      referrerUserId: null,
+    });
+    expect(ORDER_KINDS).toEqual(['retail', 'ctv', 'dealer', 'ctv_assisted', 'storefront']);
+  });
+
+  it('tình trạng thanh toán, nền tảng, CTV và gian hàng lọc đúng cột có index', () => {
+    expect(buildAdminOrderWhere({ payment: 'PAID' })).toEqual({ paymentStatus: 'PAID' });
+    expect(buildAdminOrderWhere({ platform: 'web' })).toEqual({ platform: 'web' });
+    expect(buildAdminOrderWhere({ referrerUserId: 'u1' })).toEqual({ referrerUserId: 'u1' });
+    expect(buildAdminOrderWhere({ storefrontId: 's1' })).toEqual({ storefrontId: 's1' });
+  });
+
+  it('ghép AND với bộ lọc sẵn có và không đè lên search (search có OR riêng)', () => {
+    expect(buildAdminOrderWhere({ status: 'DELIVERED', payment: 'UNPAID', platform: 'miniapp', kind: 'dealer' })).toEqual({
+      AND: [{ status: 'DELIVERED' }, { type: 'DEALER' }, { paymentStatus: 'UNPAID' }, { platform: 'miniapp' }],
+    });
+    const w = buildAdminOrderWhere({ search: 'abc', searchUserIds: [], kind: 'retail' });
+    expect(w.AND).toHaveLength(2);
+  });
+
+  it('không chọn gì thì không thêm điều kiện nào', () => {
+    expect(buildAdminOrderWhere({ kind: undefined, payment: undefined, platform: undefined })).toEqual({});
   });
 });
