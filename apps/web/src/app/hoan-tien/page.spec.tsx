@@ -15,11 +15,12 @@ const state = vi.hoisted(() => ({
   click: null as null | (() => Promise<unknown>),
   calls: [] as Call[],
   opened: [] as string[],
+  win: null as null | { opener: unknown; location: { replace: (u: string) => void }; close: () => void },
+  openCalls: [] as unknown[][],
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
-vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { openExternal: (u: string) => state.opened.push(u) } }));
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: async (path: string) => {
@@ -76,8 +77,15 @@ beforeEach(() => {
   state.click = async () => ({ deeplink: 'https://aff.example/abc' });
   state.calls = [];
   state.opened = [];
+  state.openCalls = [];
+  state.win = { opener: 'x', location: { replace: (u: string) => void state.opened.push(u) }, close: vi.fn() };
+  vi.spyOn(window, 'open').mockImplementation(((...a: unknown[]) => {
+    state.openCalls.push(a);
+    return state.win;
+  }) as typeof window.open);
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   mounted.forEach((m) => m.unmount());
   mounted = [];
   document.body.innerHTML = '';
@@ -185,6 +193,7 @@ describe('/hoan-tien — chọn sàn và nhận hoàn tiền', () => {
     expect(postsOf('/cashback/click')).toHaveLength(1);
     expect(postsOf('/cashback/click')[0]!.body).toEqual({ merchantId: 'm1', productUrl: undefined });
     expect(state.opened).toEqual(['https://aff.example/abc']);
+    expect(state.win!.opener).toBeNull();
     expect(dialog()).toBeNull();
     expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...');
   });
@@ -212,6 +221,36 @@ describe('/hoan-tien — chọn sàn và nhận hoàn tiền', () => {
     click(buyBtn());
     await flush(5);
     expect(state.opened).toEqual([]);
+    expect(state.win!.close).toHaveBeenCalled();
+  });
+
+  it('tab được mở ngay trong cú bấm, trước khi có phản hồi của máy chủ, và không dùng noopener', async () => {
+    let resolve!: (v: unknown) => void;
+    state.click = () => new Promise((r) => (resolve = r));
+    const c = await mount();
+    click(tile(c, 'Shopee'));
+    await flush(3);
+    click(buyBtn());
+    expect(state.openCalls).toHaveLength(1);
+    expect(state.openCalls[0]![2]).toBeUndefined();
+    await flush(2);
+    expect(state.opened).toEqual([]);
+    resolve({ deeplink: 'https://aff.example/abc' });
+    await flush(5);
+    expect(state.opened).toEqual(['https://aff.example/abc']);
+  });
+
+  it('trình duyệt chặn cửa sổ mới (window.open trả null) → giữ khung và hiện liên kết để khách tự bấm', async () => {
+    state.win = null;
+    const c = await mount();
+    click(tile(c, 'Shopee'));
+    await flush(3);
+    click(buyBtn());
+    await flush(5);
+    const a = dialog()!.querySelector('a[href="https://aff.example/abc"]');
+    expect(a?.textContent).toContain('Mở sàn');
+    expect(a?.getAttribute('target')).toBe('_blank');
+    expect(a?.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('tạo click lỗi → báo lỗi trong khung, KHÔNG mở link', async () => {
@@ -225,6 +264,7 @@ describe('/hoan-tien — chọn sàn và nhận hoàn tiền', () => {
     await flush(5);
     expect(dialog()!.querySelector('[role="alert"]')?.textContent).toBe('Sàn đang bảo trì');
     expect(state.opened).toEqual([]);
+    expect(state.win!.close).toHaveBeenCalled();
   });
 });
 

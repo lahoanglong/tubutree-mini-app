@@ -14,7 +14,6 @@ import { CASHBACK_TXN_META, formatRatePct } from '@/lib/cashback-copy';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { platformBridge } from '@/lib/platform-bridge';
 import { loginHref } from '@/lib/return-to';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Badge } from '@/components/ui/badge';
@@ -68,15 +67,37 @@ export default function CashbackPage() {
   const [clickError, setClickError] = useState<string | null>(null);
   // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
   const clickBusy = useRef(false);
+  // Tab đối tác phải mở ngay trong cú bấm: đợi phản hồi POST xong mới window.open thì hết "kích hoạt người dùng" và trình duyệt chặn.
+  const partnerTab = useRef<Window | null>(null);
+  const [blockedLink, setBlockedLink] = useState<string | null>(null);
 
   const clickMut = useMutation({
     mutationFn: (merchantId: string) => createCashbackClick(coreHttp, merchantId),
     onSuccess: (r) => {
+      const win = partnerTab.current;
+      partnerTab.current = null;
+      if (!isHttpUrl(r.deeplink)) {
+        win?.close();
+        setSelected(null);
+        setNotice('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...');
+        return;
+      }
+      if (!win) {
+        // Bị chặn cửa sổ mới: giữ khung để khách tự bấm liên kết, vì click đã được ghi nhận.
+        setBlockedLink(r.deeplink);
+        return;
+      }
+      // Tab trống mở không noopener nên phải tự ngắt opener trước khi đưa tới trang đối tác.
+      win.opener = null;
+      win.location.replace(r.deeplink);
       setSelected(null);
       setNotice('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...');
-      if (isHttpUrl(r.deeplink)) platformBridge.openExternal(r.deeplink);
     },
-    onError: (e) => setClickError(errText(e)),
+    onError: (e) => {
+      partnerTab.current?.close();
+      partnerTab.current = null;
+      setClickError(errText(e));
+    },
     onSettled: () => {
       clickBusy.current = false;
     },
@@ -85,11 +106,14 @@ export default function CashbackPage() {
     if (clickBusy.current) return;
     clickBusy.current = true;
     setClickError(null);
+    setBlockedLink(null);
+    partnerTab.current = window.open('about:blank', '_blank');
     clickMut.mutate(merchantId);
   };
   const closeSheet = () => {
     setSelected(null);
     setClickError(null);
+    setBlockedLink(null);
   };
 
   const balance = (() => {
@@ -234,6 +258,14 @@ export default function CashbackPage() {
             {clickError && (
               <p role="alert" className={ui.error}>
                 {clickError}
+              </p>
+            )}
+            {blockedLink && (
+              <p className="text-sm text-stone-900">
+                Trình duyệt đã chặn cửa sổ mới.{' '}
+                <a href={blockedLink} target="_blank" rel="noopener noreferrer" className="font-semibold text-forest-700 underline">
+                  Mở sàn
+                </a>
               </p>
             )}
           </div>
