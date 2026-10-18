@@ -9,6 +9,7 @@ import type { ClaimNotifier } from './external-claim-status';
 import { startOfVnMonth } from '../../common/vn-time';
 import { recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim } from './external-claim-status';
+import { settlePoints } from './external-claim.rules';
 import { claimPoints, maskClaimCode } from './external-points-rate';
 
 const logger = new Logger('ExternalClaimRelease');
@@ -54,16 +55,22 @@ export async function releaseClaim(
     if (!user) reviewReason = 'Tài khoản không còn';
     else if (user.isBlocked) reviewReason = 'Tài khoản đang bị khoá';
     else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
-    else if (points > row.points) {
-      // Tiền hàng tăng sau lúc claim được duyệt: điểm mới vượt mức đã qua kiểm thì phải kiểm lại ngưỡng và trần tháng.
+    let finalPoints = points ?? 0;
+    let settleNote: string | null = null;
+    if (!reviewReason && points !== null && points > row.points) {
+      // Tiền hàng tăng sau lúc claim qua kiểm: vượt ngưỡng tự duyệt thì người kiểm lại; chỉ vượt trần tháng thì cộng ở mức chốt, không dưới điểm đã kiểm.
       const reviewAbove = opts.reviewAboveVnd ?? 2_000_000;
       const cap = opts.monthlyPointsCap ?? 200_000;
-      const month = await tx.externalPointsClaim.aggregate({
-        where: { userId: row.userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
-        _sum: { points: true },
-      });
-      if ((order.goodsValue ?? 0) > reviewAbove) reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
-      else if ((month._sum.points ?? 0) + points > cap) reviewReason = 'Điểm tính lại vượt trần tháng';
+      if ((order.goodsValue ?? 0) > reviewAbove) {
+        reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
+      } else {
+        const month = await tx.externalPointsClaim.aggregate({
+          where: { userId: row.userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
+          _sum: { points: true },
+        });
+        finalPoints = settlePoints({ newPoints: points, checkedPoints: row.points, others: month._sum.points ?? 0, cap });
+        if (finalPoints < points) settleNote = `Chốt theo trần tháng: ${finalPoints} thay vì ${points} điểm`;
+      }
     }
     if (reviewReason) {
       await tx.externalPointsClaim.updateMany({ where: { id: row.id, state: 'PENDING' }, data: { state: 'REVIEW', reviewReason } });
@@ -71,7 +78,6 @@ export async function releaseClaim(
       return { outcome: 'TO_REVIEW' as const, userId: row.userId, points: 0, code };
     }
 
-    const finalPoints = points as number;
     const moved = await tx.externalPointsClaim.updateMany({
       where: { id: row.id, state: 'PENDING' },
       data: { state: 'CREDITED', creditedAt: now, points: finalPoints },
@@ -91,7 +97,7 @@ export async function releaseClaim(
     // Dòng sổ đã có mà claim vẫn PENDING là sổ và claim lệch nhau: rollback, không đoán.
     if (!res.applied) throw new Error(`releaseClaim ${row.id}: đã có dòng sổ ${prefix}:${order.pancakeOrderId}`);
     await tx.externalPointsClaim.update({ where: { id: row.id }, data: { pointsTxId: res.entryId } });
-    await recordClaimEvent(tx, { claimId: row.id, action: 'CREDIT', fromState: 'PENDING', toState: 'CREDITED', userIdBefore: row.userId, userIdAfter: row.userId, note: `${finalPoints} điểm` });
+    await recordClaimEvent(tx, { claimId: row.id, action: 'CREDIT', fromState: 'PENDING', toState: 'CREDITED', userIdBefore: row.userId, userIdAfter: row.userId, note: settleNote ?? `${finalPoints} điểm` });
     return { outcome: 'CREDITED' as const, userId: row.userId, points: finalPoints, code };
   });
 }

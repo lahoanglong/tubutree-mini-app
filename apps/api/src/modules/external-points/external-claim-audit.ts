@@ -42,11 +42,22 @@ export async function recordClaimEvent(db: Pick<Prisma.TransactionClient, 'exter
   });
 }
 
-/** Người đã gắn claim hoặc đưa claim vào REVIEW: không được tự duyệt claim đó. */
+/** Người đã gắn claim, đưa claim vào REVIEW hoặc mở lại mã (rồi người khác nhận lại): không được tự duyệt claim đó. */
 export async function claimIntroducers(db: Pick<Prisma.TransactionClient, 'externalClaimEvent'>, claimId: string): Promise<string[]> {
   const rows = await db.externalClaimEvent.findMany({
-    where: { claimId, action: { in: ['ATTACH', 'TO_REVIEW'] }, actorId: { not: null } },
+    where: { claimId, action: { in: ['ATTACH', 'TO_REVIEW', 'VOID_REOPEN'] }, actorId: { not: null } },
     select: { actorId: true },
   });
   return rows.map((r) => r.actorId!).filter(Boolean);
+}
+
+/** User gốc sau khi gộp tài khoản (`mergedIntoId`), đi tối đa 5 bước để không treo nếu dữ liệu vòng. */
+export async function canonicalUserId(db: Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<string> {
+  let cur = userId;
+  for (let i = 0; i < 5; i++) {
+    const u = await db.user.findUnique({ where: { id: cur }, select: { mergedIntoId: true } });
+    if (!u?.mergedIntoId) return cur;
+    cur = u.mergedIntoId;
+  }
+  return cur;
 }

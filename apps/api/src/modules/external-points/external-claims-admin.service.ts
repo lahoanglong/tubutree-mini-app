@@ -16,9 +16,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
-import { claimIntroducers, recordClaimEvent } from './external-claim-audit';
+import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
-import { evaluateClaimRules } from './external-claim.rules';
+import { evaluateClaimRules, settlePoints } from './external-claim.rules';
 import { advisoryUserLock, type CreatedClaim, ExternalClaimService, rejectionOf, USER_SELECT } from './external-claim.service';
 import { UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { normalizeTrackingCode } from './external-order.mapper';
@@ -157,8 +157,10 @@ export class ExternalClaimsAdminService {
     );
   }
 
-  private forbidSelf(actorId: string, ownerId: string | null): void {
-    if (ownerId && ownerId === actorId) throw new ForbiddenException({ code: 'SELF_ACTION', message: 'Bạn không được xử lý claim hay lần gửi mã của chính mình.' });
+  /** So hai phía sau khi quy về user gốc (`mergedIntoId`): người làm là tài khoản đã gộp của chủ claim cũng bị chặn. */
+  private async forbidSelf(actorId: string, ownerId: string | null, db: Pick<Prisma.TransactionClient, 'user'> = this.prisma): Promise<void> {
+    if (!ownerId) return;
+    if (ownerId === actorId || (await canonicalUserId(db, ownerId)) === (await canonicalUserId(db, actorId))) throw new ForbiddenException({ code: 'SELF_ACTION', message: 'Bạn không được xử lý claim hay lần gửi mã của chính mình.' });
   }
 
   /**
@@ -169,31 +171,37 @@ export class ExternalClaimsAdminService {
     const cfg = await loadClaimConfig(this.config);
     const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true } });
     if (!head) throw new NotFoundException('Không tìm thấy claim.');
-    this.forbidSelf(actorId, head.userId);
+    await this.forbidSelf(actorId, head.userId);
     const out = await this.prisma.$transaction(async (tx) => {
       if (head.userId) await advisoryUserLock(tx, head.userId);
       if (!(await lockOrderThenClaim(tx, id))) throw new NotFoundException('Không tìm thấy claim.');
       await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${id} FOR UPDATE`;
       const c = await tx.externalPointsClaim.findUniqueOrThrow({ where: { id }, include: { externalOrder: true } });
       if (c.state !== 'REVIEW') throw new ConflictException('Claim không ở trạng thái chờ duyệt.');
-      this.forbidSelf(actorId, c.userId);
-      if ((await claimIntroducers(tx, id)).includes(actorId)) throw new ForbiddenException({ code: 'SAME_INTRODUCER', message: 'Người gắn đơn hoặc đưa claim vào chờ duyệt không được tự duyệt claim đó.' });
+      await this.forbidSelf(actorId, c.userId, tx);
+      const actorRoot = await canonicalUserId(tx, actorId);
+      let introduced = false;
+      for (const i of await claimIntroducers(tx, id)) if (i === actorId || (await canonicalUserId(tx, i)) === actorRoot) introduced = true;
+      if (introduced) throw new ForbiddenException({ code: 'SAME_INTRODUCER', message: 'Người gắn đơn hoặc đưa claim vào chờ duyệt không được tự duyệt claim đó.' });
       const o = c.externalOrder;
       if (['RETURNED', 'CANCELLED', 'DELETED'].includes(o.status)) throw new BadRequestException('Đơn đã bị huỷ hoặc hoàn trên sàn nên không duyệt được.');
-      const points = claimPoints(o.goodsValue, Number(c.ratePct));
-      if (points === null || points <= 0) throw new BadRequestException('Đơn chưa có tiền hàng hợp lệ để tính điểm.');
+      const fullPoints = claimPoints(o.goodsValue, Number(c.ratePct));
+      if (fullPoints === null || fullPoints <= 0) throw new BadRequestException('Đơn chưa có tiền hàng hợp lệ để tính điểm.');
+      let points = fullPoints;
       if (c.userId) {
         const month = await tx.externalPointsClaim.aggregate({
           where: { userId: c.userId, kind: 'SCAN', id: { not: id }, createdAt: { gte: startOfVnMonth(c.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
           _sum: { points: true },
         });
-        if ((month._sum.points ?? 0) + points > cfg.monthlyPointsCap) throw rejectionOf('MONTHLY_CAP');
+        // Duyệt ở mức chốt thay vì ném lỗi: khách không mất phần điểm hợp lệ. Hết chỗ trần (chốt = 0) thì mới từ chối.
+        points = settlePoints({ newPoints: fullPoints, checkedPoints: c.points, others: month._sum.points ?? 0, cap: cfg.monthlyPointsCap });
+        if (points <= 0) throw rejectionOf('MONTHLY_CAP');
       }
       const releaseAt =
         o.status === 'DELIVERED' && o.deliveredAt ? new Date(o.deliveredAt.getTime() + cfg.pendingDays * 864e5) : o.status === 'PARTIAL_RETURN' ? new Date(now.getTime() + cfg.pendingDays * 864e5) : null;
       const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null } });
       if (res.count !== 1) throw new ConflictException('Claim vừa được xử lý bởi người khác.');
-      await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: `${points} điểm` });
+      await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: points < fullPoints ? `Chốt theo trần tháng: ${points} thay vì ${fullPoints} điểm` : `${points} điểm` });
       return { userId: c.userId, points, channel: o.channel, trackingCode: o.trackingCode, releaseAt };
     });
     if (out.userId) {
@@ -206,14 +214,14 @@ export class ExternalClaimsAdminService {
   async voidClaim(id: string, actorId: string, reason: string, reopen: boolean): Promise<{ id: string; state: 'VOIDED' }> {
     const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true } });
     if (!head) throw new NotFoundException('Không tìm thấy claim.');
-    this.forbidSelf(actorId, head.userId);
+    await this.forbidSelf(actorId, head.userId);
     const c = await this.prisma.$transaction(async (tx) => {
       if (!(await lockOrderThenClaim(tx, id))) throw new NotFoundException('Không tìm thấy claim.');
       await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${id} FOR UPDATE`;
       const cur = await tx.externalPointsClaim.findUniqueOrThrow({ where: { id }, include: { externalOrder: { select: { trackingCode: true } } } });
       if (cur.state === 'CREDITED') throw new ConflictException('Claim đã cộng điểm, hãy dùng "Đảo điểm" (chỉ ADMIN).');
       if (!UNPAID.includes(cur.state)) throw new ConflictException('Claim không còn ở trạng thái chưa cộng.');
-      this.forbidSelf(actorId, cur.userId);
+      await this.forbidSelf(actorId, cur.userId, tx);
       const res = await tx.externalPointsClaim.updateMany({
         where: { id, state: { in: UNPAID } },
         data: { state: 'VOIDED', voidReason: reopen ? `Huỷ và mở lại mã: ${reason}` : reason, decidedById: actorId, ...(reopen ? { claimedCode: null } : {}) },
@@ -234,7 +242,7 @@ export class ExternalClaimsAdminService {
   async reverse(id: string, actorId: string, reason: string): Promise<AdminReverseClaimResponse> {
     const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true } });
     if (!head) throw new NotFoundException('Không tìm thấy claim.');
-    this.forbidSelf(actorId, head.userId);
+    await this.forbidSelf(actorId, head.userId);
     const res = await reverseCreditedClaim(this.prisma, id, { reason, actorId });
     if (!res) throw new ConflictException('Claim không còn ở trạng thái đã cộng điểm.');
     const c = await this.prisma.externalPointsClaim.findUnique({ where: { id }, include: { externalOrder: { select: { trackingCode: true } } } });
@@ -255,7 +263,7 @@ export class ExternalClaimsAdminService {
   async keepPoints(id: string, actorId: string, note: string): Promise<{ id: string }> {
     const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true } });
     if (!head) throw new NotFoundException('Không tìm thấy claim.');
-    this.forbidSelf(actorId, head.userId);
+    await this.forbidSelf(actorId, head.userId);
     await this.prisma.$transaction(async (tx) => {
       if (!(await lockOrderThenClaim(tx, id))) throw new NotFoundException('Không tìm thấy claim.');
       await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${id} FOR UPDATE`;
@@ -278,7 +286,7 @@ export class ExternalClaimsAdminService {
     const out = await this.prisma.$transaction(async (tx) => {
       const attempt = await tx.externalClaimAttempt.findUnique({ where: { id: attemptId } });
       if (!attempt) throw new NotFoundException('Không tìm thấy lần gửi mã.');
-      this.forbidSelf(actor.id, attempt.userId);
+      await this.forbidSelf(actor.id, attempt.userId, tx);
       await advisoryUserLock(tx, attempt.userId);
       const fresh = await tx.externalClaimAttempt.findUnique({ where: { id: attemptId } });
       if (!fresh || fresh.resolvedAt || fresh.result !== 'UNMATCHED') throw new ConflictException('Lần gửi mã này đã được xử lý.');

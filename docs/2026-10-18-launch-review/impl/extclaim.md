@@ -67,6 +67,8 @@ Bước 1 đã tạo `external_points_claims`, `external_claim_attempts` và uni
 - Xoá SĐT về null 7 ngày sau claim cuối thuộc bước 3.
 - UNKNOWN qua `submit` không tạo claim: ghi attempt UNMATCHED kèm `externalOrderId` để hiện ở "Cần xử lý", nhân viên gắn tay.
 - Chưa có kiểm thử kết nối Pancake thật; unit test mock client.
+- `note` của nhân viên (attach, keep-points, lý do huỷ) có thể chứa SĐT hoặc tên và nhật ký `external_claim_events` không bị xoá khi xoá tài khoản.
+- Hai CSKH thông đồng (một người gắn hoặc mở lại mã, người kia duyệt) thì không chặn được; nhật ký ghi đủ người và thời điểm để truy.
 - Web lint đang đỏ sẵn ở `apps/web/src/components/admin/commission-rates-tab.tsx:452` (file không thuộc gói này, đỏ cả ở `3552c368`).
 
 ## Kiểm thử
@@ -89,4 +91,16 @@ Schema đổi: thêm model `ExternalClaimEvent` (bảng `external_claim_events`)
 - C5: chặn trùng theo mã: có claim còn hiệu lực (khác VOIDED) trên đơn khác cùng mã vận đơn/mã đơn sàn thì ALREADY_CLAIMED.
 
 Kiểm thử thêm: `external-claims-review.race-spec.ts` (A1, tự xử lý, nhật ký chỉ-thêm và dấu vết mở lại mã, B1, B2, B3, C5), mở rộng rules/service/config/admin/ma trận quyền/ops-inbox spec. Chỉ A2 được chứng minh đỏ trước khi sửa; các test A1/B/C viết cùng lúc với sửa, chưa chạy lại trên mã cũ.
+
+## Sửa sau review lượt 2
+
+Không đổi schema, không đổi hợp đồng kiểu (không thêm giá trị enum); lý do REVIEW mới chỉ là chuỗi `reviewReason`.
+
+- N1: người làm VOID_REOPEN được tính là người đưa claim vào (`claimIntroducers`), nên không duyệt được claim đó. Nhận lại mã đã mở lại luôn vào REVIEW ("Mã được nhân viên mở lại, cần người khác duyệt"), kể cả đơn không có 3 số cuối; luật này dùng chung cho gắn đơn.
+- N2: gửi mã hoặc gắn vào đơn PARTIAL_RETURN thì claim vào REVIEW, duyệt đặt `releaseAt` như B1. Rà trạng thái khác và thêm lưới an toàn vào "Cần xử lý" cho claim PENDING không có đường tới hạn: đơn OPEN/RETURNING quá 60 ngày kể từ lúc claim, đơn DELIVERED thiếu `deliveredAt`, đơn PARTIAL_RETURN chưa ai duyệt hoặc thiếu `releaseAt`.
+- N3: `settlePoints = min(điểm mới, max(điểm đã kiểm, trần - điểm các claim khác))`; điểm của chính claim không bị tính hai lần vì tổng tháng loại trừ claim này. Lúc cộng: chỉ vượt trần (không vượt ngưỡng REVIEW) thì cộng ở mức chốt; vượt ngưỡng REVIEW vẫn REVIEW. Lúc duyệt: duyệt ở mức chốt, chỉ ném MONTHLY_CAP khi không còn chỗ (chốt = 0). Mức chốt ghi vào nhật ký (CREDIT/APPROVE).
+- C5: chỉ so mã khách gửi (không còn so cả `trackingCodes` của chính đơn); bỏ qua khi hai đơn đều có `marketplaceOrderSn` và khác nhau.
+- `forbidSelf` và kiểm người duyệt quy hai phía qua `mergedIntoId` về user gốc (tối đa 5 bước).
+
+Test đỏ trước khi sửa (chạy trên mã của commit `ac4b0a9b`, `external-claims-review.race-spec.ts`, nhóm "review lượt 2"): 7 test đỏ, đủ cho N1, N2 (REVIEW và lưới an toàn), N3 (cộng và duyệt), C5 và mergedIntoId. Sau sửa: 40/40 test của `external-claims*` xanh. Hai test cũ đổi kỳ vọng theo hành vi mới: (h) nhận lại mã mở lại giờ vào REVIEW; B3 vượt trần giờ cộng ở mức chốt 3.000 thay vì REVIEW.
 
