@@ -137,6 +137,8 @@ export interface OrderDTO {
    * không nút hủy, chỉ câu "Tubu đang xử lý đơn này". API cũ chưa trả.
    */
   manualHandling?: boolean;
+  /** Hạn chuyển khoản của đơn đang chờ tiền (ISO), API danh sách đơn đã trả sẵn. */
+  paymentDeadline?: string | null;
   /** Thu gom vật liệu tái chế (vận đơn đổi hàng Gomdon/BestExpress) — xem lib/recycling.ts. */
   hasRecyclingPickup?: boolean;
   recyclingNote?: string | null;

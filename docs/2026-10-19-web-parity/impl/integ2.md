@@ -22,3 +22,5 @@
 | brand-actions.tsx:267 | /dai-ly | pending, giữ ẩn |
 | order-extras.tsx:43, thanh-toan/page.tsx:115 | /doi-rac/* | pending, giữ dự phòng |
 | storefront-owner.tsx:18, diem-xanh:412 | /san-pham | đã mở, giống |
+| tai-khoan/page.tsx:123 | menu tài khoản: /dai-ly, /nhan-vien, /chu-thuong-hieu | pending, giữ ẩn như Mini App chưa có trang web; các mục còn lại đã mở, giống |
+| vuon-xanh/page.tsx:82-83 | /doi-rac (cần cấu hình waste bật), /cong-dong | /doi-rac pending, giữ ẩn; /cong-dong đã mở, giống |

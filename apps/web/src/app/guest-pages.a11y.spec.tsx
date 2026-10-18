@@ -267,7 +267,7 @@ describe('trang khách — chi tiết đơn (C-025)', () => {
   it('/tai-khoan: mỗi đơn dẫn tới trang chi tiết; đơn chuyển khoản chờ thanh toán có lối "Thanh toán" riêng', async () => {
     shop.orders = [
       { code: 'TB-1', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 150000, paymentMethod: 'COD', createdAt: '2026-10-01T00:00:00Z', items: [] },
-      { code: 'TB-2', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 99000, paymentMethod: 'BANK_TRANSFER', createdAt: '2026-10-02T00:00:00Z', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString(), items: [] },
+      { code: 'TB-2', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 99000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: '2026-10-02T00:00:00Z', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString(), items: [] },
       { code: 'TB-3', status: 'DELIVERED', subtotal: 1, discount: 0, shippingFee: 0, total: 80000, paymentMethod: 'BANK_TRANSFER', createdAt: '2026-10-03T00:00:00Z', items: [] },
     ];
     const { container } = mount(<AccountPage />);
@@ -278,7 +278,7 @@ describe('trang khách — chi tiết đơn (C-025)', () => {
     expect(link('TB-1')!.textContent).toBe('Xem chi tiết');
     const pay = container.querySelector<HTMLAnchorElement>('a[href="/thanh-toan/chuyen-khoan/TB-2"]')!;
     expect(accessibleName(pay)).toBe('Thanh toán đơn TB-2');
-    expect(pay.textContent).toBe('Thanh toán');
+    expect(pay.textContent).toBe('Thanh toán ngay');
     expect(link('TB-3')!.textContent).toBe('Xem chi tiết');
   });
 

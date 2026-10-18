@@ -125,4 +125,27 @@ describe('danh sách đơn — nút Thanh toán', () => {
     expect(c.querySelector('a[aria-label^="Thanh toán đơn TB-3"]')).toBeNull();
     expect(c.querySelector('a[aria-label="Xem chi tiết đơn TB-3"]')?.getAttribute('href')).toBe('/tai-khoan/don-hang/TB-3');
   });
+
+  it('đơn chuyển khoản quá hạn hoặc Tubu đang xử lý tay: không mời trả, về link Xem chi tiết như canPayOrderNow của Mini App', async () => {
+    const past = new Date(Date.now() - 3_600_000).toISOString();
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    state.orders = [
+      { ...order('TB-4', [item('Dầu gội')]), status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: past },
+      { ...order('TB-5', [item('Xà phòng')]), status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: future, manualHandling: true },
+    ];
+    const c = await mount();
+    for (const code of ['TB-4', 'TB-5']) {
+      expect(c.querySelector(`a[aria-label="Thanh toán đơn ${code}"]`)).toBeNull();
+      expect(c.querySelector(`a[aria-label="Xem chi tiết đơn ${code}"]`)?.getAttribute('href')).toBe(`/tai-khoan/don-hang/${code}`);
+    }
+  });
+
+  it('đơn còn hạn ghi "Thanh toán ngay" và in hạn như thẻ đơn Mini App', async () => {
+    state.orders = [
+      { ...order('TB-6', [item('Dầu gội')]), status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString() },
+    ];
+    const c = await mount();
+    expect(c.querySelector('a[aria-label="Thanh toán đơn TB-6"]')?.textContent).toBe('Thanh toán ngay');
+    expect(c.querySelector('li')!.textContent).toMatch(/Hạn \d/);
+  });
 });

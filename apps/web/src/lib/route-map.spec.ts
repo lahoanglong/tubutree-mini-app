@@ -25,7 +25,7 @@ describe('isWebRouteReady', () => {
       '/vuon-xanh', '/kho-qua', '/ctv', '/ctv/gian-hang',
     ];
     for (const p of opened) expect(isWebRouteReady(p), p).toBe(true);
-    for (const p of ['/dai-ly', '/doi-rac', '/doi-rac/tao', '/doi-rac/yeu-cau/x']) expect(isWebRouteReady(p), p).toBe(false);
+    for (const p of ['/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong', '/chu-thuong-hieu', '/doi-rac', '/doi-rac/tao', '/doi-rac/yeu-cau/x']) expect(isWebRouteReady(p), p).toBe(false);
   });
 
   it('route còn pending thì chưa sẵn sàng', () => {

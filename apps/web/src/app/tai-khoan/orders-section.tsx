@@ -8,14 +8,14 @@ import { fetchOrdersPage, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import {
   ORDER_TABS,
   buyerOrderStatusLabel,
-  canPayAgain,
   orderDetailHref,
   bankPaymentHref,
   orderStatusTone,
   type OrderTabKey,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
-import { formatDate } from '@/lib/format-date';
+import { formatDate, formatDateTime } from '@/lib/format-date';
+import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
 import { formatCount } from '@/lib/checkout-points';
 
 /** Số sản phẩm đầu mỗi đơn hiện tên + ảnh; phần còn lại gộp thành "và N sản phẩm khác". */
@@ -153,10 +153,13 @@ export function OrdersSection() {
                 <OrderItemsPreview items={o.items} />
                 <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
                 {/* Đơn chuyển khoản còn chờ tiền: lối riêng "Thanh toán" vì đó là việc khách còn phải làm. */}
-                {canPayAgain(o) ? (
-                  <Link href={bankPaymentHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>
-                    Thanh toán
-                  </Link>
+                {canPayNow(o) ? (
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    {showsPaymentDeadline(o) ? <span className="text-xs text-stone-600">Hạn {formatDateTime(o.paymentDeadline)}</span> : <span />}
+                    <Link href={bankPaymentHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={ui.btnPrimary}>
+                      Thanh toán ngay
+                    </Link>
+                  </div>
                 ) : (
                   <Link
                     href={orderDetailHref(o.code)}
