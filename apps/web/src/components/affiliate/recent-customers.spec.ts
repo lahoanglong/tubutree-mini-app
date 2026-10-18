@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  MAX_RECENT_CUSTOMERS, loadRecentCustomers, recentCustomerLabel, saveRecentCustomer,
+  MAX_RECENT_CUSTOMERS, clearRecentCustomers, loadRecentCustomers, recentCustomerLabel, saveRecentCustomer,
   type RecentCustomer,
 } from './recent-customers';
 
@@ -79,5 +79,15 @@ describe('recent-customers (C-064)', () => {
 
   it('nhãn chip: tên + 3 số cuối SĐT để phân biệt khách trùng tên', () => {
     expect(recentCustomerLabel(cust({ recipient: 'Nguyễn An', phone: '0901234567' }))).toBe('Nguyễn An · …567');
+  });
+
+  it('clearRecentCustomers xoá khách của mọi tài khoản, giữ khoá khác (máy dùng chung sau khi CTV đăng xuất)', () => {
+    saveRecentCustomer('u1', cust(), 100);
+    saveRecentCustomer('u2', cust({ phone: '0900000002' }), 100);
+    localStorage.setItem('tubu_other', 'giữ');
+    clearRecentCustomers();
+    expect(loadRecentCustomers('u1')).toEqual([]);
+    expect(loadRecentCustomers('u2')).toEqual([]);
+    expect(localStorage.getItem('tubu_other')).toBe('giữ');
   });
 });

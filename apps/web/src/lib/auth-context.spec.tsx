@@ -94,6 +94,7 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     mocks.restoreSession.mockResolvedValue({ kind: 'ok', data: { accessToken: 'at', user: USER } });
     localStorage.setItem('tubu_invoice', '{"taxCode":"0100000001"}');
     localStorage.setItem('tubu_invoice:u1', '{"taxCode":"0312345678"}');
+    localStorage.setItem('tubu_ctv_recent_customers:u1', '[{"recipient":"An"}]');
     localStorage.setItem('tubu_other', 'giữ');
     function LogoutProbe() {
       const { logout } = useAuth();
@@ -120,6 +121,7 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(text()).toBe('init|idle|-');
     expect(localStorage.getItem('tubu_invoice')).toBeNull();
     expect(localStorage.getItem('tubu_invoice:u1')).toBeNull();
+    expect(localStorage.getItem('tubu_ctv_recent_customers:u1')).toBeNull();
     expect(localStorage.getItem('tubu_other')).toBe('giữ');
     vi.unstubAllGlobals();
   });

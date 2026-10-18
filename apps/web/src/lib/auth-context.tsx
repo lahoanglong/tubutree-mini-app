@@ -11,6 +11,7 @@ import {
   restoreSession,
 } from './client-api';
 import { clearSavedInvoices } from './saved-invoice';
+import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { readFirstTouchCookie } from './entry-source';
 
 export interface WebUser {
@@ -204,6 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionUnavailable(false);
     qc.clear(); // xóa cache giỏ/đơn để không hiện dữ liệu user cũ
     clearSavedInvoices();
+    clearRecentCustomers();
   }, [qc]);
 
   const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName' | 'avatarUrl'>>) => {

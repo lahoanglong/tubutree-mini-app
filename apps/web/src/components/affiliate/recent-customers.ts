@@ -64,6 +64,20 @@ export function saveRecentCustomer(userId: string | undefined, customer: RecentC
   write(userId, [{ ...customer, usedAt: now }, ...rest].slice(0, MAX_RECENT_CUSTOMERS));
 }
 
+/** Xoá khách gần đây của mọi tài khoản trên trình duyệt này: web hay chạy trên máy dùng chung, SĐT và địa chỉ khách cuối không được ở lại sau đăng xuất. */
+export function clearRecentCustomers(): void {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(`${KEY_PREFIX}:`)) stale.push(k);
+    }
+    stale.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* chế độ riêng tư: không có gì để xoá */
+  }
+}
+
 /** Tên + 3 số cuối SĐT để phân biệt các khách trùng tên. */
 export function recentCustomerLabel(c: RecentCustomer): string {
   const tail = normalizeCustomerPhone(c.phone).slice(-3);
