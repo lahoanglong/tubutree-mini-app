@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chạy e2e web (E2E_SCOPE=web) trên Postgres + Redis tạm, không đụng DB/Redis dùng chung và không đọc apps/api/.env.
+# Chạy e2e web (E2E_SCOPE=web) trên Postgres + Redis tạm, không đụng DB/Redis dùng chung và vô hiệu apps/api/.env: Nest nạp .env cho khoá chưa có trong môi trường, nên mọi khoá tích hợp được export rỗng ở dưới.
 # Dùng: apps/e2e/scripts/web-gate.sh [đối số playwright, vd: tests/web-checkout.web.spec.ts]
 set -euo pipefail
 
@@ -61,6 +61,13 @@ export DATABASE_URL="postgresql://tubu:tubu@127.0.0.1:$PG_PORT/tubutree"
 export REDIS_URL="redis://127.0.0.1:$REDIS_PORT"
 export JWT_ACCESS_SECRET="gate-access-secret-$(openssl rand -hex 16)"
 export JWT_REFRESH_SECRET="gate-refresh-secret-$(openssl rand -hex 16)"
+# Biến đã export (kể cả rỗng) không bị .env ghi đè: không để đơn e2e chạm Pancake/Gomdon/Zalo thật, CORS chỉ cho web e2e.
+export PANCAKE_API_KEY= PANCAKE_SHOP_ID= PANCAKE_WEBHOOK_SECRET= GOMDON_PHONE= GOMDON_PASSWORD= GOMDON_WEBHOOK_SECRET=
+export ZALO_OA_ACCESS_TOKEN= ZALO_OA_REFRESH_TOKEN= ZALO_OA_WEBHOOK_SECRET= ZALO_APP_SECRET=
+export ZALOPAY_APP_ID= ZALOPAY_KEY1= ZALOPAY_KEY2= ACCESSTRADE_TOKEN= ACCESSTRADE_PUBLISHER_ID= ACCESSTRADE_WEBHOOK_SECRET=
+export OPS_ALERT_WEBHOOK_URL= OPS_ALERT_EMAIL_TO= SMTP_HOST= SMTP_USER= SMTP_PASS=
+export DEEPSEEK_API_KEY= GEMINI_API_KEY= ANTIGRAVITY_GATEWAY_URL= ANTIGRAVITY_GATEWAY_KEY=
+export CORS_ORIGINS="http://localhost:$E2E_WEB_PORT"
 export NODE_ENV=test
 export PORT="$E2E_API_PORT"
 export CI=1

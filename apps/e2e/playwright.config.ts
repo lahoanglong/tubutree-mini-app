@@ -69,7 +69,7 @@ const webServer: WebServer = {
   url: WEB_URL,
   cwd: '../..',
   // Web admin gọi đúng API vừa start (mặc định next.config.mjs là :3001).
-  env: { NEXT_PUBLIC_API_BASE_URL: `${API_URL}/api` },
+  env: { NEXT_PUBLIC_API_BASE_URL: `${API_URL}/api`, API_BASE_URL: `${API_URL}/api` },
   timeout: 180_000,
   reuseExistingServer: !process.env.CI,
 };
