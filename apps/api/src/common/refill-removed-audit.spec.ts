@@ -97,6 +97,12 @@ describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)',
     expect(cleanup).toContain('waste.lane_pickup_enabled');
     expect(cleanup).toContain('đã tắt lại');
   });
+  it('đường vào tab Đổi rác luôn có nhóm Khách hàng ở playbook, checklist, runbook và sổ tay', () => {
+    for (const f of ['docs/launch/pilot-order-playbook.md', 'docs/launch/recycle-rewards-launch-checklist.md', 'docs/launch/deploy-rollback-runbook.md', 'docs/launch/so-tay-van-hanh/kho.md', 'docs/launch/so-tay-van-hanh/admin.md']) {
+      expect(doc(f)).not.toMatch(/Quản trị(?:,| ›|>) Đổi rác/);
+    }
+    expect(doc('apps/web/src/components/admin/gomdon-config-card.tsx')).not.toMatch(/(?<!Khách hàng › )Đổi rác ›/);
+  });
   it('Gomdon và khoá go-live nói đúng công tắc mới', () => {
     expect(doc('docs/integrations/gomdon.md')).toContain('wasteRequestId');
     const k = doc('docs/GO-LIVE-KEYS.md');

@@ -670,7 +670,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 ### 7.1 Mang tới kho (xác nhận tại quầy)
 
-- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác; Quản trị, Đổi rác.
+- **Ai**: Người thử và nhân viên kho. **Ở đâu**: Mini App, Đổi rác; Quản trị, Khách hàng, Đổi rác.
 - **Làm**: Người thử tạo yêu cầu "Mang tới điểm nhận" cho kho HCMC với 3 túi lớn Nilon chống sốc (không dùng carton vì T3 đã dùng hết trần ngày của carton). Nhân viên kho mở yêu cầu theo mã, đếm thực nhận và xác nhận tại quầy.
 - **Đúng là**: yêu cầu chuyển sang hoàn tất (COMPLETED) ngay sau khi nhân viên xác nhận; Điểm Xanh được cộng đúng theo số thực nhận (không theo số khai); khách thấy số điểm trong lịch sử.
 - **Bằng chứng**: Phụ lục P12 (`status`, `pointsAwarded`, sự kiện trong `waste_events`).
@@ -709,7 +709,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 ### 7.5 Thu hồi điểm
 
-- **Ai**: Quản trị. **Ở đâu**: Quản trị, Đổi rác, Yêu cầu.
+- **Ai**: Quản trị. **Ở đâu**: Quản trị, Khách hàng, Đổi rác, Yêu cầu.
 - **Làm**: mở yêu cầu đã cộng điểm ở 7.1, bấm thu hồi và nhập lý do. Làm đúng thứ tự xử lý gian lận ở checklist mục 7.
 - **Đúng là**: yêu cầu đóng với lý do thu hồi; số điểm đã cộng bị trừ lại (chỉ thu tối đa số Điểm Xanh thường khách còn; phần không thu được ghi ở reversalShortfallPoints; số dư không bao giờ âm).
 - **Hoàn tác**: không.

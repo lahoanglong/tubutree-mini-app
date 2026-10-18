@@ -22,7 +22,7 @@ Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API
 - [ ] Xem trước Thể lệ (`/recycle/rules`). Owner: chủ dự án. Bằng chứng: ảnh chụp màn.
 - [ ] Xem trước thẻ "Chương trình đang tạm dừng", trạng thái khách bị khoá, thẻ xin đăng nhập và số điện thoại, các nhãn trạng thái đóng của yêu cầu. Owner: chủ dự án. Bằng chứng: ảnh chụp màn.
 - [ ] Xem trước ba phần admin: Yêu cầu, Quà, Cấu hình chung. Owner: chủ dự án. Bằng chứng: ảnh chụp màn.
-- [ ] Admin viết thể lệ công khai vào `waste.rules_text` (Quản trị, Đổi rác, Cấu hình chung): thời gian, phạm vi, món nhận, mức quy đổi, trần ngày và tháng, hạn điểm 12 tháng, điều kiện, quyền từ chối và thu hồi điểm khi có gian lận (spec 14.2); kiểm `/recycle/rules` hiện đúng (văn bản trống thì trang hiện "Thể lệ đang được cập nhật"). Owner: admin. Bằng chứng: ảnh chụp trang Thể lệ.
+- [ ] Admin viết thể lệ công khai vào `waste.rules_text` (Quản trị, Khách hàng, Đổi rác, Cấu hình chung): thời gian, phạm vi, món nhận, mức quy đổi, trần ngày và tháng, hạn điểm 12 tháng, điều kiện, quyền từ chối và thu hồi điểm khi có gian lận (spec 14.2); kiểm `/recycle/rules` hiện đúng (văn bản trống thì trang hiện "Thể lệ đang được cập nhật"). Owner: admin. Bằng chứng: ảnh chụp trang Thể lệ.
 - [ ] Người duyệt đối chiếu từng màn với mockup ở 390 px và với chữ lớn của hệ điều hành. Mockup (`docs/superpowers/specs/assets/2026-10-17-recycle-rewards/`) chỉ là tham chiếu hình; tên mẫu và chữ "đưa đi tái sinh" trong đó chỉ để minh hoạ. Owner: thiết kế. Bằng chứng: biên bản duyệt.
 - [ ] Đo một lượt xác nhận tại quầy bằng đồng hồ. Owner: kho. Bằng chứng: số giây ghi lại.
 
