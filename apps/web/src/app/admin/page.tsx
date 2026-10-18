@@ -148,6 +148,7 @@ import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
 import { ProductCategoriesTab } from '@/components/admin/product-categories-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
 import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
+import { ExternalClaimsTab } from '@/components/admin/external-claims-tab';
 import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
@@ -177,6 +178,7 @@ type Tab =
   | 'customerRefunds'
   | 'orders'
   | 'externalOrders'
+  | 'externalClaims'
   | 'returns'
   | 'users'
   | 'config'
@@ -216,6 +218,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
+      { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
       { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
     ],
   },
@@ -289,10 +292,10 @@ const DEFAULT_TAB: Tab = 'inbox';
  */
 const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['refill'],
-  CSKH: ['inbox', 'orders', 'externalOrders', 'returns', 'users', 'quickReplies', 'community'],
+  CSKH: ['inbox', 'orders', 'externalOrders', 'externalClaims', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
   MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
-  KE_TOAN: ['inbox', 'orders', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
+  KE_TOAN: ['inbox', 'orders', 'externalClaims', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
 function staffTabs(perms: readonly string[]): Set<Tab> {
   const out = new Set<Tab>(STAFF_TABS.BASE);
@@ -434,6 +437,7 @@ export default function AdminPage() {
       dealerClaims: 'dealerClaims',
       payouts: 'payouts',
       refillPending: 'refill',
+      externalPoints: 'externalClaims',
     };
     setTab(target[k]);
   };
@@ -494,6 +498,7 @@ export default function AdminPage() {
           {active === 'productCategories' && <ProductCategoriesTab />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
+          {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}

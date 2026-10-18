@@ -17,6 +17,7 @@ vi.mock('zmp-sdk/apis', () => ({
   requestSendNotification: vi.fn(),
   getStorage: vi.fn(),
   setStorage: vi.fn(),
+  scanQRCode: vi.fn(),
 }));
 
 import {
@@ -26,6 +27,7 @@ import {
   requestSendNotification as zmpRequestSendNotification,
   getStorage,
   setStorage,
+  scanQRCode,
 } from 'zmp-sdk/apis';
 import {
   callPhone,
@@ -36,6 +38,8 @@ import {
   shouldShowFollowOaPrompt,
   hasOA,
   shareLink,
+  scanCode,
+  isCancelMessage,
 } from './zmp-bridge';
 
 const mockedZmpFollowOA = vi.mocked(zmpFollowOA);
@@ -224,5 +228,36 @@ describe('shareLink — payload luôn hợp lệ với schema openShareSheet c�
     expect(title.length).toBeLessThanOrEqual(100);
     expect(title).toBe(`${'a'.repeat(98)}…`);
     expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(title)).toBe(false);
+  });
+});
+
+describe('scanCode — phân biệt khách tự đóng camera với lỗi thật', () => {
+  const scan = vi.mocked(scanQRCode);
+  beforeEach(() => scan.mockReset());
+
+  it('đọc được: trả nội dung đã cắt khoảng trắng; rỗng: failed', async () => {
+    scan.mockResolvedValueOnce({ content: '  SPXVN123  ' } as never);
+    expect(await scanCode()).toEqual({ kind: 'ok', content: 'SPXVN123' });
+    scan.mockResolvedValueOnce({ content: '' } as never);
+    expect(await scanCode()).toEqual({ kind: 'failed' });
+  });
+
+  it('lỗi có từ huỷ/cancel trọn vẹn: cancelled', async () => {
+    for (const message of ['User cancelled', 'Người dùng đã huỷ', 'Nguoi dung huy', 'cancel', 'đã hủy thao tác']) {
+      scan.mockRejectedValueOnce({ message });
+      expect(await scanCode()).toEqual({ kind: 'cancelled' });
+    }
+  });
+
+  it('lỗi thật chứa chuỗi con "huy" (chuyen, khuyen) vẫn là failed để khách thấy gợi ý nhập tay', async () => {
+    for (const message of ['Khong the chuyen sang camera', 'Khuyen khich cap quyen camera', 'Permission denied']) {
+      scan.mockRejectedValueOnce({ message });
+      expect(await scanCode()).toEqual({ kind: 'failed' });
+    }
+  });
+
+  it('isCancelMessage chịu được message dạng mảng và dấu câu', () => {
+    expect(isCancelMessage('Error: cancelled.')).toBe(true);
+    expect(isCancelMessage('chuyển khoản lỗi')).toBe(false);
   });
 });

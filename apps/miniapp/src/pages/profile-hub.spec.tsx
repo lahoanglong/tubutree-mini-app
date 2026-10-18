@@ -166,3 +166,25 @@ describe('Lối vào Trợ lý AI ở hub Cá nhân theo công tắc AI', () => 
     expect(screen.getByText('Mua chung nhóm')).toBeInTheDocument();
   });
 });
+
+describe('Lối vào Tích điểm đơn sàn (nhóm Tài sản)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+  });
+
+  it('ẩn khi cờ tích điểm đơn sàn tắt hoặc API cũ chưa trả', async () => {
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByText('Tích điểm đơn sàn')).toBeNull();
+  });
+
+  it('hiện và đi tới /points/scan khi cờ bật', async () => {
+    mocks.getPublicConfig.mockImplementation(async () => ({ loyalty: { marketplaceClaimEnabled: true, earnPct: 2, vndPerPoint: 50 } }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Tích điểm đơn sàn'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/points/scan', undefined);
+  });
+});
