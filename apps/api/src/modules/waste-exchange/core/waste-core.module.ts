@@ -1,4 +1,13 @@
 import { Module } from '@nestjs/common';
+import { WasteAccessService } from './waste-access.service';
+import { WasteConfigService } from './waste-config.service';
+import { WasteEventsService } from './waste-events';
+import { WasteHoldService } from './waste-hold.service';
+import { WasteNotifierService } from './waste-notifier.service';
+import { WasteShipLockService } from './waste-ship-lock.service';
 
-@Module({})
+@Module({
+  providers: [WasteConfigService, WasteEventsService, WasteNotifierService, WasteAccessService, WasteHoldService, WasteShipLockService],
+  exports: [WasteConfigService, WasteEventsService, WasteNotifierService, WasteAccessService, WasteHoldService, WasteShipLockService],
+})
 export class WasteCoreModule {}

@@ -10,6 +10,7 @@ import { publicCommunityUrl } from './community-links';
 import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
 import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from '../loyalty/earn-rates';
+import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
 const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
@@ -59,6 +60,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     communityZaloGroupUrl,
     communityFacebookUrl,
     communityTiktokUrl,
+    waste,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', 200000),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -94,6 +96,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>('community.zalo_group_url', ''),
     config.get<unknown>('community.facebook_url', ''),
     config.get<unknown>('community.tiktok_url', ''),
+    computeWastePublicFlags(config).catch(() => ({ enabled: false, dropoff: false, mailin: false, pickup: false })),
   ]);
   return {
     freeshipThreshold,
@@ -105,6 +108,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     affiliatePitWithhold: { pct: pitPct, threshold: pitThreshold },
     cashbackHoldDays,
     recyclingEnabled,
+    waste,
     shippingEta: toShippingEta(etaMinDays, etaMaxDays),
     groupBuy: { discountPct: groupBuyDiscountPct, targetSize: groupBuyTargetSize },
     returnWindowDays,

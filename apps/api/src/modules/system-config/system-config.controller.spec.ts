@@ -324,3 +324,26 @@ describe('SystemConfigController.publicConfig — aiAdvisorEnabled (công tắc 
     expect(await flag()).toBe(false);
   });
 });
+
+describe('SystemConfigController.publicConfig — waste (spec 11.5)', () => {
+  it('defaults -> waste all false, recyclingEnabled still present', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.waste).toEqual({ enabled: false, dropoff: false, mailin: false, pickup: false });
+    expect(out).toHaveProperty('recyclingEnabled', false);
+  });
+  it('programme on -> dropoff and mailin on, pickup off by default', async () => {
+    const out = await new SystemConfigController(makeConfig({ 'waste.enabled': true })).publicConfig();
+    expect(out.waste).toEqual({ enabled: true, dropoff: true, mailin: true, pickup: false });
+  });
+  it('a failing waste read -> waste all false, the rest of the endpoint intact', async () => {
+    const config = {
+      get: jest.fn(async (key: string, fb?: unknown) => {
+        if (key.startsWith('waste.')) throw new Error('db');
+        return fb;
+      }),
+    } as unknown as SystemConfigService;
+    const out = await new SystemConfigController(config).publicConfig();
+    expect(out.waste).toEqual({ enabled: false, dropoff: false, mailin: false, pickup: false });
+    expect(out.freeshipThreshold).toBe(200000);
+  });
+});
