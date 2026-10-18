@@ -217,4 +217,72 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.getByRole('button', { name: 'Tạm dừng' }).click();
     expect((await paused).body).toEqual({ status: 'PAUSED' });
   });
+
+  const detailOrder = (over: Record<string, unknown> = {}) => ({
+    ...listedOrder('TUBU2026101900004'), id: 'o4', deliveredAt: '2026-10-03T03:00:00Z', pointsEarned: 50, pointsUsed: 0,
+    shippingAddress: { recipient: 'Nguyễn Văn An', phone: '0912345678', province: 'Hà Nội', ward: 'Phường Ba Đình', street: '12 Phố Huế' },
+    ...over,
+  });
+
+  test('chi tiết đơn đã giao: mốc giao, Điểm Xanh đã cộng, hoá đơn VAT mở PDF ở tab mới và đánh giá từng món', async ({ page, api }) => {
+    mockBuyer(api);
+    api.get('/orders/TUBU2026101900004', detailOrder({
+      invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.example/4.pdf',
+      items: [{ id: 'it4', productName: 'Dầu gội bồ kết hữu cơ', variationName: '500ml', unitPrice: 150000, quantity: 1, total: 150000, productSlug: 'dau-goi', reviewable: true }],
+    }));
+    api.get('/orders/me/returns', []);
+
+    await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
+    await expect(page.getByRole('heading', { name: 'Đơn hàng #TUBU2026101900004', level: 1 })).toBeVisible();
+    await expect(page.getByText('Giao lúc 10:00 03/10/2026')).toBeVisible();
+    await expect(page.getByText('Đã cộng +50 Điểm Xanh vào tài khoản')).toBeVisible();
+    const pdf = page.getByRole('link', { name: 'Tải PDF' });
+    await expect(pdf).toHaveAttribute('href', 'https://hoadon.example/4.pdf');
+    await expect(pdf).toHaveAttribute('target', '_blank');
+    await expect(page.getByRole('link', { name: 'Viết đánh giá' })).toBeVisible();
+  });
+
+  test('huỷ đơn đã trả tiền: chọn nhận về Ví Tubu thì POST /cancel gửi refundMethod WALLET', async ({ page, api }) => {
+    mockBuyer(api);
+    const paid = detailOrder({ status: 'CONFIRMED', deliveredAt: null, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', canCancel: true });
+    let current: Record<string, unknown> = paid;
+    api.get('/orders/TUBU2026101900004', () => current);
+    api.get('/orders/me/refund-bank', { bank: null });
+    api.post('/orders/TUBU2026101900004/cancel', () => {
+      current = { ...paid, status: 'CANCELLED', canCancel: false };
+      return current;
+    });
+
+    await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
+    await page.getByRole('button', { name: 'Hủy đơn' }).click();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.getByRole('radio', { name: /Ví Tubu/ }).check();
+    const cancelled = api.waitForCall('POST', '/orders/:code/cancel');
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Hủy đơn' }).click();
+    expect((await cancelled).body).toEqual({ refundMethod: 'WALLET' });
+    await expect(page.getByText(/Đã hủy đơn hàng/)).toBeVisible();
+  });
+
+  test('sổ địa chỉ: đặt mặc định gọi PATCH isDefault; xoá phải xác nhận rồi báo Đã xóa địa chỉ', async ({ page, api }) => {
+    mockBuyer(api);
+    const second = { ...ADDR, id: 'a2', recipient: 'Trần Thị Bình', phone: '0987654321', isDefault: false };
+    api.get('/me/addresses', [ADDR, second]);
+    api.patch('/me/addresses/:id', { ...second, isDefault: true });
+    api.delete('/me/addresses/:id', { ok: true });
+
+    await page.goto('/tai-khoan/dia-chi');
+    await expect(page.getByRole('heading', { name: 'Sổ địa chỉ', level: 1 })).toBeVisible();
+    const patched = api.waitForCall('PATCH', '/me/addresses/:id');
+    await page.getByRole('button', { name: 'Đặt địa chỉ của Trần Thị Bình làm mặc định' }).click();
+    expect((await patched).body).toEqual({ isDefault: true });
+
+    await page.getByRole('button', { name: 'Xóa địa chỉ của Trần Thị Bình' }).click();
+    await page.getByRole('button', { name: 'Giữ lại' }).click();
+    expect(api.callsTo('DELETE', '/me/addresses/:id')).toHaveLength(0);
+    await page.getByRole('button', { name: 'Xóa địa chỉ của Trần Thị Bình' }).click();
+    const deleted = api.waitForCall('DELETE', '/me/addresses/:id');
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Xóa' }).click();
+    await deleted;
+    await expect(page.getByText('Đã xóa địa chỉ.')).toBeVisible();
+  });
 });
