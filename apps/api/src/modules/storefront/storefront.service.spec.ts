@@ -7,7 +7,7 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import type { AffiliateService } from '../affiliate/affiliate.service';
 
 const config = {
-  get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
+  get: async <T>(k: string, fb?: T): Promise<T> => (k === 'storefront.require_approval' ? false : fb) as T,
 } as unknown as SystemConfigService;
 
 // Mặc định không có bậc (null) — test nào cần assert huy hiệu bậc tự override qua tham số thứ 3.
@@ -1043,7 +1043,7 @@ describe('StorefrontService.getPublicByHost', () => {
 
 describe('StorefrontService — gian hàng khách được thấy (D3-02)', () => {
   const configWith = (over: Record<string, unknown>) =>
-    ({ get: async <T>(k: string, fb?: T): Promise<T> => (k in over ? (over[k] as T) : (fb as T)) }) as unknown as SystemConfigService;
+    ({ get: async <T>(k: string, fb?: T): Promise<T> => (k in over ? (over[k] as T) : k === 'storefront.require_approval' ? (false as T) : (fb as T)) }) as unknown as SystemConfigService;
   const sfRow = { id: 's1', slug: 'linh', title: 'Shop', isPublished: true, type: 'CTV', isPartner: false, approvedAt: null, ownerUserId: 'u1', collections: [], owner: { referralCode: 'LINH' } };
 
   it('trang công khai chỉ tra gian hàng đã đăng, chưa bị gỡ, chủ không bị khoá và (CTV) còn thuộc vai trò hưởng hoa hồng', async () => {

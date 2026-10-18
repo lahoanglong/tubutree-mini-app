@@ -18,7 +18,7 @@ describe('homeBlockOrder (spec 5b.1, plan 4b Ruling 8)', () => {
     expect(homeBlockOrder('new', false)).toEqual(homeBlockOrder('new'));
   });
 
-  // D7 việc 1 (chủ dự án chưa chốt, cờ home.new_customer_layout): Quà khách mới và Danh mục lên trước giờ vàng.
+  // D7 việc 1 (cờ home.new_customer_layout): Quà khách mới và Danh mục lên trước giờ vàng.
   it('bố cục mới cho khách mới (cờ bật): Quà khách mới rồi Danh mục ngay sau dải đơn, trước giờ vàng; khách cũ không đổi', () => {
     expect(homeBlockOrder('new', true)).toEqual([
       'search', 'purchased', 'orderStrip', 'welcome', 'categories', 'flash', 'bestSellers', 'forYou', 'recentlyViewed', 'featured', 'newArrivals', 'extras',

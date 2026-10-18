@@ -1,7 +1,8 @@
 import { authorBadge } from './author-badge';
 
-/** Cờ SystemConfig bật xem trước công khai; chỉ boolean true thật mới bật, mặc định tắt. */
+/** Cờ SystemConfig bật xem trước công khai; chỉ boolean true thật mới bật, mặc định bật. */
 export const PUBLIC_PREVIEW_KEY = 'community.public_preview';
+export const PUBLIC_PREVIEW_DEFAULT = true;
 
 /** Số bài cho khách chưa đăng nhập xem thử: đủ để thấy cộng đồng có người, không thay cho việc đăng nhập để đọc tiếp. */
 export const PUBLIC_PREVIEW_POSTS = 5;

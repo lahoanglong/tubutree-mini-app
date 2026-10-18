@@ -91,7 +91,7 @@ export const GOOD_DB: DbSnapshot = {
     'shipping.flat_fee_below_threshold': 19000,
     'shipping.gomdon.recycling_enabled': true,
     'shipping.gomdon.config': {
-      defaultWarehouse: { name: 'Kho Tubu', phone: '0965573541', address: '1 Đường A', ward: 'Phường B', district: 'Quận C', province: 'Thành phố D' },
+      defaultWarehouse: { name: 'Kho Tubu', phone: '0899149229', address: '1 Đường A', ward: 'Phường B', district: 'Quận C', province: 'Thành phố D' },
       defaultWeightFallback: 500,
     },
     'merchant.commission_pct': 0.15,

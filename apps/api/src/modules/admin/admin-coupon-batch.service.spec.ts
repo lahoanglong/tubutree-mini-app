@@ -171,26 +171,26 @@ describe('AdminCouponBatchService — nhân viên Marketing (D1-05)', () => {
     prisma.user = { findMany: jest.fn().mockResolvedValue(users) };
   };
 
-  it('nhân viên tạo lô vượt trần (mỗi thẻ giảm quá 200.000đ) → 403, không sinh mã', async () => {
+  it('nhân viên tạo lô vượt trần (mỗi thẻ giảm quá 100.000đ) → 403, không sinh mã', async () => {
     const { svc, createMany } = make();
-    await expect(svc.create({ ...INPUT, value: 300_000, minOrder: 500_000 }, staff)).rejects.toThrow(ForbiddenException);
+    await expect(svc.create({ ...INPUT, value: 150_000, minOrder: 500_000 }, staff)).rejects.toThrow(ForbiddenException);
     await expect(svc.create({ ...INPUT, type: 'PERCENT', value: 20 }, staff)).rejects.toThrow('Giảm tối đa');
     expect(createMany).not.toHaveBeenCalled();
   });
 
   it('ngân sách ngày của nhân viên tính cả lô: số mã × mức giảm mỗi mã (mỗi mã 1 lượt)', async () => {
     const big = make();
-    await expect(big.svc.create({ ...INPUT, quantity: 2000, value: 20_000 }, staff)).rejects.toThrow(/40\.000\.000đ.*còn 30\.000\.000đ/);
+    await expect(big.svc.create({ ...INPUT, quantity: 2000, value: 20_000 }, staff)).rejects.toThrow(/40\.000\.000đ.*còn 10\.000\.000đ/);
     expect(big.createMany).not.toHaveBeenCalled();
 
     const near = make();
-    near.prisma.$queryRaw = jest.fn().mockResolvedValue([{ used: BigInt(15_000_000) }]);
-    await expect(near.svc.create({ ...INPUT, quantity: 1000, value: 20_000 }, staff)).rejects.toThrow('còn 15.000.000đ');
+    near.prisma.$queryRaw = jest.fn().mockResolvedValue([{ used: BigInt(5_000_000) }]);
+    await expect(near.svc.create({ ...INPUT, quantity: 300, value: 20_000 }, staff)).rejects.toThrow('còn 5.000.000đ');
     expect(near.createMany).not.toHaveBeenCalled();
 
     const ok = make();
-    ok.prisma.$queryRaw = jest.fn().mockResolvedValue([{ used: BigInt(10_000_000) }]);
-    await ok.svc.create({ ...INPUT, quantity: 1000, value: 20_000 }, staff);
+    ok.prisma.$queryRaw = jest.fn().mockResolvedValue([{ used: BigInt(4_000_000) }]);
+    await ok.svc.create({ ...INPUT, quantity: 300, value: 20_000 }, staff);
     expect(ok.createMany).toHaveBeenCalled();
     const locks = (ok.prisma.$executeRaw as jest.Mock).mock.calls.flatMap((c: unknown[]) => c.slice(1));
     expect(locks).toContain('coupon.staff_budget:s1');
@@ -245,9 +245,9 @@ describe('AdminCouponBatchService — nhân viên Marketing (D1-05)', () => {
 
   it('lô nhân viên tạo đã vượt trần mới → nhân viên không bật lại; tắt thì được', async () => {
     const { svc, prisma, findMany } = make();
-    findMany.mockResolvedValue([batchRow({ value: 300_000 })]);
+    findMany.mockResolvedValue([batchRow({ value: 150_000 })]);
     withUsers(prisma, [{ id: 's2', role: 'STAFF' }]);
-    await expect(svc.setActive('shopee', true, staff)).rejects.toThrow('200.000');
+    await expect(svc.setActive('shopee', true, staff)).rejects.toThrow('100.000');
     expect((prisma.coupon as { updateMany: jest.Mock }).updateMany).not.toHaveBeenCalled();
     await svc.setActive('shopee', false, staff);
     expect((prisma.coupon as { updateMany: jest.Mock }).updateMany).toHaveBeenCalledWith({

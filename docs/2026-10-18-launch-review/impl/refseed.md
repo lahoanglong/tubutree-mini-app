@@ -58,7 +58,7 @@ R = tham chiếu bắt buộc, nạp mặc định; B = giá trị kinh doanh ch
 | `community_goals` | 1 | R? | có, nếu chưa có mốc nào ACTIVE | Mốc "Cùng Tubu góp quỹ trồng cây", 100.000 giọt, 200 cây. Không có mốc thì 💧 thu hoạch không góp vào đâu |
 | `seasons` | 1 | X | không | Mùa hè 2026 đã hết hạn 2026-08-31; nạp chỉ thêm dòng chết. Code chỉ nạp khi `endAt` còn ở tương lai. Season Pass đã ẩn (PD-1); banner mùa tự ẩn khi không có mùa |
 | `system_configs` | 132 trong seed | R / B / X | 118 mặc định (113 từ seed + 5 mới), 6 chỉ có cờ, 13 loại | Xem mục 3.1 và 3.2 |
-| `system_configs` `payment.*` | 4 | D | không | Số tài khoản mẫu `9984606774`. Migration `20260625070000` đã chèn 4 dòng này vào mọi DB mới (go-live check `db.bank_account` cảnh báo). Chủ shop nhập số thật ở Quản trị |
+| `system_configs` `payment.*` | 4 | D | không | Số tài khoản mẫu `9984606774`. Migration `20260625070000` đã chèn 4 dòng này vào mọi DB mới; migration `20261018200000_launch_owner_config` đổi sang tài khoản thật đã chốt (8386790906) khi dòng còn giá trị mẫu, go-live check `db.bank_account` chỉ cảnh báo khi còn số mẫu cũ |
 | `system_configs` `refill.*`, họ `shipping.gomdon.` | 5 + 2 | X | không | Thuộc gói đổi vỏ/đổi rác (phiên khác); migration đã chèn dòng. Họ Gomdon loại theo tiền tố nên khoá Gomdon thêm sau cũng không lọt |
 | `system_configs` `shipping.free_threshold`, `shipping.flat_fee_below_threshold` | 2 | X | không | Phí ship là quyết định của chủ shop: vắng thì `go-live:check` mục `db.shipping_rates` WARN (`db-checks.ts:257`) buộc xác nhận, mã dùng 200.000đ và 19.000đ (`pricing.service.ts:15,53`). Nạp thì WARN biến mất khi chưa ai xác nhận |
 | `categories` (sản phẩm) | 7 | D | không | Migration `20260616000000_demo_catalog_multibrand` đã tạo cùng id |

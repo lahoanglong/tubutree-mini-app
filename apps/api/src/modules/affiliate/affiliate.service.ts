@@ -1308,7 +1308,7 @@ export class AffiliateService {
    */
   private async effectiveHoldDays(): Promise<number> {
     const [holdDays, returnWindowDays] = await Promise.all([
-      this.config.get<number>('affiliate.hold_days', 20),
+      this.config.get<number>('affiliate.hold_days', 10),
       this.config.get<number>('returns.window_days', 7),
     ]);
     return Math.max(Number(holdDays) || 0, Number(returnWindowDays) || 0);

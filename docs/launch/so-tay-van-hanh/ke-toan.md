@@ -36,7 +36,7 @@ Khách hứa được nhận tiền sau 1 đến 3 ngày làm việc. Giữ đú
 2. Bấm "Duyệt" (ghi chú tuỳ chọn). Lệnh thành "Đã duyệt, chờ chuyển khoản".
 3. Chuyển đúng **số tiền hiện trên lệnh**. Rồi nhập "Mã giao dịch NH", bấm "Đã chuyển khoản".
 4. Từ chối: ghi lý do (CTV đọc được), bấm "Từ chối". Tiền hoặc hoa hồng tự hoàn lại cho CTV, không cần làm gì thêm.
-Thời gian từ lúc đơn giao đến lúc CTV có tiền ngân hàng thường hơn 3 tuần (giữ hoa hồng 20 ngày). Tubu chưa xuất được file chuyển khoản hàng loạt (**⏳ đang làm**): chuyển từng lệnh.
+Thời gian từ lúc đơn giao đến lúc CTV có tiền ngân hàng thường khoảng hai tuần (giữ hoa hồng 10 ngày). Tubu chưa xuất được file chuyển khoản hàng loạt (**⏳ đang làm**): chuyển từng lệnh.
 
 **Thuế TNCN của CTV.** Cuối màn "Duyệt yêu cầu rút tiền": khối **"Khấu trừ thuế TNCN theo tháng"**. Chọn "Tháng báo cáo". Bảng: Người nhận, MST/CCCD, Số lần chi, Thu nhập, Thuế đã khấu trừ, Thực nhận. Hệ thống trừ 10% mỗi lần rút từ 2.000.000đ. Dòng "Thiếu MST/CCCD": liên hệ CTV. Dùng bảng này kê khai. Cấp chứng từ khấu trừ cho CTV làm ngoài Tubu (cần xác nhận mẫu và hạn).
 

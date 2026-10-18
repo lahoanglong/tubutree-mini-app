@@ -43,13 +43,20 @@ export async function collectDemoData(db: DemoReader, now: Date = new Date()): P
   };
 }
 
+/**
+ * Chủ dự án giữ ba mã này cho đợt ra mắt (chạy `--keep-coupon=` cho cả ba ở bước dọn). Luôn được coi là đã duyệt nên không
+ * làm check đỏ; vẫn WARN để mở Quản trị xác nhận điều kiện. Mã demo nào ngoài danh sách vẫn FAIL.
+ */
+const OWNER_KEPT_DEMO_COUPONS: readonly string[] = ['WELCOME30', 'FREESHIP', 'XANH10'];
+
 function acceptedCoupons(env: Env): Set<string> {
-  return new Set(
-    (env.GO_LIVE_ACCEPT_DEMO_COUPONS ?? '')
+  return new Set([
+    ...OWNER_KEPT_DEMO_COUPONS,
+    ...(env.GO_LIVE_ACCEPT_DEMO_COUPONS ?? '')
       .split(',')
       .map((c) => c.trim().toUpperCase())
       .filter(Boolean),
-  );
+  ]);
 }
 
 const couponList = (cs: DemoDataSnapshot['liveCoupons']) => cs.map((c) => `${c.code} (hạn ${c.endAt.slice(0, 10)})`).join(', ');

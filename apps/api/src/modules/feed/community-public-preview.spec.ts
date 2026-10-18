@@ -6,7 +6,7 @@ import { PUBLIC_CACHE, PUBLIC_CACHE_POLICY_KEY } from '../../common/decorators/p
 import { PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, publicAuthorName, publicSnippet, publicTitle } from './community-public-preview';
 import type { PrismaService } from '../../prisma/prisma.service';
 
-// D5-07: khách chưa đăng nhập xem trước vài bài đã đăng (đọc, không đăng/thích/bình luận); cờ community.public_preview mặc định tắt.
+// D5-07: khách chưa đăng nhập xem trước vài bài đã đăng (đọc, không đăng/thích/bình luận); cờ community.public_preview mặc định bật.
 function row(over: Record<string, unknown> = {}) {
   return {
     id: 'p1',

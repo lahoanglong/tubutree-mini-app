@@ -60,5 +60,5 @@ Thứ tự gợi ý. Mọi lệnh chạy ở `/opt/tubutree` sau khi mã mới �
 
 1. Backup ngoài máy lưu ở đâu (R2 vài USD/tháng, hay Google Drive sẵn có)? Mặc định tài liệu dùng `r2:tubutree-backups/db` làm ví dụ, đổi được.
 2. Chấp nhận mất tối đa 6 giờ sổ Ví/Điểm khi khôi phục? Mặc định 6 giờ (nếu muốn 1 giờ đổi `*/6` thành `*/1`; nhớ `BACKUP_KEEP_COUNT` và `REMOTE_KEEP_DAYS`).
-3. VPS có bao nhiêu vCPU? Mặc định mỗi service tối đa 1 lõi (an toàn mọi máy); một tiến trình Node cộng engine Prisma và GC dùng được hơn 1 lõi lúc đông, nên máy nhiều lõi nên đặt `API_CPUS=2` (chưa đo trên VPS).
+3. VPS có bao nhiêu vCPU? Mặc định mỗi service tối đa 1 lõi (an toàn mọi máy); một tiến trình Node cộng engine Prisma và GC dùng được hơn 1 lõi lúc đông, nên máy nhiều lõi nên đặt `API_CPUS=2`. Chủ dự án đã xác nhận VPS có từ 8 vCPU, nên khuyến nghị là `API_CPUS=2` (chưa đo tải thật).
 4. Có muốn API chạy không phải root không (cần một lượt dựng image để thử)? Mặc định để sau ngày ra mắt.

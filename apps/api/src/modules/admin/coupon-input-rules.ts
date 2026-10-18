@@ -65,13 +65,13 @@ export function assertNotOwnCoupon(actor: CouponActor, ownerId: string | undefin
 export const actorUserId = (actor: CouponActor): string | null => (actor === SYSTEM_ACTOR ? null : actor.id);
 
 export const STAFF_COUPON_MAX_PERCENT_KEY = 'coupon.staff_max_percent';
-export const STAFF_COUPON_MAX_PERCENT_DEFAULT = 50;
+export const STAFF_COUPON_MAX_PERCENT_DEFAULT = 30;
 export const STAFF_COUPON_MAX_AMOUNT_KEY = 'coupon.staff_max_amount_vnd';
-export const STAFF_COUPON_MAX_AMOUNT_DEFAULT = 200_000;
+export const STAFF_COUPON_MAX_AMOUNT_DEFAULT = 100_000;
 export const STAFF_COUPON_MAX_USAGE_KEY = 'coupon.staff_max_usage';
 export const STAFF_COUPON_MAX_USAGE_DEFAULT = 1000;
 export const STAFF_COUPON_DAILY_BUDGET_KEY = 'coupon.staff_daily_budget_vnd';
-export const STAFF_COUPON_DAILY_BUDGET_DEFAULT = 30_000_000;
+export const STAFF_COUPON_DAILY_BUDGET_DEFAULT = 10_000_000;
 
 export interface StaffCouponCaps {
   maxPercent: number;

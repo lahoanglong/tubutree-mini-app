@@ -16,7 +16,7 @@ export const GOMDON_PRODUCTION_BASE_URL = 'https://admin.gomdon.com.vn';
 
 export const DEFAULT_GOMDON_WAREHOUSE: GomdonWarehouseConfig = {
   name: 'Fuwa3e Tubu HCM',
-  phone: '0965573541',
+  phone: '0899149229',
   address: 'Golf Park, 1 đường số 2',
   ward: 'Phường Long Bình',
   district: 'Thành phố Thủ Đức',

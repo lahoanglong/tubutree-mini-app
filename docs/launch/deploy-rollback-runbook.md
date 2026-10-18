@@ -143,7 +143,7 @@ Vì sao: BullMQ giữ mọi job trong Redis, `allkeys-lru` có thể xoá âm th
 
 Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab (6 giờ/lần)" và "Diễn tập restore". Tóm tắt những gì phải có:
 
-- `rclone config` đã tạo remote (ví dụ tên `r2`), thử được: `rclone lsd r2:`.
+- `rclone config` đã tạo remote Google Drive tên `gdrive` (scope `drive.file`, xác thực bằng `rclone authorize` trên laptop; từng bước ở mục "Remote Google Drive" của README trên), thử được: `rclone lsd gdrive:`.
 - Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=<remote>:<thư mục> HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
 - Bản trước mỗi deploy: `bash ops/backup-predeploy.sh` (nhãn `predeploy`, giữ 10 bản, không ping check của cron). Bước 6 mục 5 vẫn dùng `backup-db.sh` như cũ (bản cuối khi API đã dừng).
 - Một bản backup chạy tay thành công, và đã **diễn tập khôi phục** vào DB tạm rồi so số dòng:
@@ -206,7 +206,7 @@ Tất cả tương thích ngược: không đổi cổng, tên service, volume h
 | Trần CPU `cpus` cho api (1.0) và web (1.0) | `docker-compose.vietnix.yml` | web: bước 8, api: bước 9 (mỗi service nhận khi được tạo lại ở bước đó) | `docker inspect -f '{{.HostConfig.NanoCpus}}' "$($DC ps -q api)"` ra `1000000000` |
 | Vhost Apache: `ProxyPass ... ttl=30` và `mod_deflate` (nén JSON/HTML/JS/CSS) | `ops/vietnix-vhost-*.conf.phase2` | khi dán lại hai file này (xem dưới), độc lập với deploy | `bash ops/check-edge.sh` dòng `nén:` có `content-encoding=gzip` |
 
-Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`; nếu lớn hơn 1, đặt trong `.env` (KHÔNG sửa compose: `git status` bẩn làm bước 1 dừng) `API_CPUS=2`, `WEB_CPUS=1` rồi tạo lại container tương ứng (`$DC up -d --no-deps <service>`). Mặc định cố ý không vượt 1 lõi vì Docker từ chối khởi động container có `cpus` lớn hơn số vCPU (lỗi `Range of CPUs is from 0.01 to 1.00` ở bước 8 hoặc 9: đặt `*_CPUS` nhỏ hơn rồi chạy lại lệnh `up -d`).
+Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`. VPS của Tubu Tree có từ 8 vCPU nên khuyến nghị `API_CPUS=2` (và `WEB_CPUS=1`); máy ít lõi hơn thì đặt nhỏ hơn. Đặt trong `.env` (KHÔNG sửa compose: `git status` bẩn làm bước 1 dừng) `API_CPUS=2`, `WEB_CPUS=1` rồi tạo lại container tương ứng (`$DC up -d --no-deps <service>`). Mặc định cố ý không vượt 1 lõi vì Docker từ chối khởi động container có `cpus` lớn hơn số vCPU (lỗi `Range of CPUs is from 0.01 to 1.00` ở bước 8 hoặc 9: đặt `*_CPUS` nhỏ hơn rồi chạy lại lệnh `up -d`).
 
 **Không đổi cấu hình `postgres` hoặc `redis` trong `docker-compose.vietnix.yml` kèm một bản deploy.** `tools/deploy/deploy.sh` bước 4 chạy `dc up -d --no-build api` KHÔNG có `--no-deps`; compose v2 hội tụ luôn các service phụ thuộc, nên mọi thay đổi cấu hình của postgres hoặc redis (`cpus`, `shm_size`, `command`, `healthcheck`...) khiến chúng bị tạo lại ngay giữa deploy: DB ngắt khoảng 10 giây, 5xx, BullMQ mất kết nối. Vì vậy bản này cố ý không đổi hai service đó. Khi thực sự cần đổi, tạo lại chủ động NGOÀI giờ cao điểm, TRƯỚC khi chạy deploy: `$DC up -d --no-deps postgres redis` (dữ liệu ở volume, không mất); sau đó deploy bình thường sẽ không còn gì để tạo lại.
 
@@ -232,6 +232,78 @@ bash ops/check-edge.sh --local
 
 - [ ] Đã dán lại vhost phase2, `configtest` Syntax OK, `ops/check-edge.sh` không có FAIL
 - [ ] `nproc` đã xem và `*_CPUS` trong `.env` phù hợp (hoặc để mặc định 1 lõi mỗi service)
+
+### 1.6 Việc của chủ dự án quanh ngày ra mắt (cấu hình đã chốt 2026-10-18)
+
+Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, bố cục khách mới, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay. Việc dưới đây thì chủ dự án làm, theo thứ tự.
+
+#### 1.6.1 Đồng bộ TOÀN BỘ sản phẩm Pancake sang Tubu Tree (A5)
+
+Hệ thống chỉ có MỘT đường đưa sản phẩm từ Pancake sang: `PancakeSyncService` (`apps/api/src/modules/integrations/pancake/pancake-sync.service.ts`). Không có cờ bật/tắt riêng: có khoá Pancake trong `.env` là nó chạy.
+
+1. **Khoá trong `/opt/tubutree/.env`** (xem [docs/GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md)): `PANCAKE_API_KEY`, `PANCAKE_SHOP_ID` (đúng shop có hàng bán), `PANCAKE_WEBHOOK_SECRET` (bắt buộc ở production), `PANCAKE_BASE_URL` để mặc định `https://pos.pages.fm/api/v1`. Thiếu `PANCAKE_API_KEY` hoặc `PANCAKE_SHOP_ID` thì đồng bộ im lặng bỏ qua (log `Pancake chưa cấu hình`). Đổi `.env` xong phải tạo lại container api (`$DC up -d --no-deps api`), vì chỉ đọc `.env` lúc khởi động.
+2. **Thứ tự**: dọn demo (bước 7c) TRƯỚC khi API chạy với khoá Pancake. Sản phẩm demo có mã Pancake giả `seed-...`, nên quét toàn bộ coi chúng là "đã biến khỏi Pancake" và cũng tắt; đã tắt bằng lệnh dọn thì quét không đụng, và SKU đã đổi `DEMO-<sku>` nên không đụng SKU hàng thật.
+3. **Lần quét đầu tiên (toàn bộ)** tự chạy khi API khởi động (chỉ replica giữ khoá cron). Chạy tay thì Quản trị, tab "Sức khoẻ hệ thống", nút "Đồng bộ danh mục Pancake" (hoặc `POST /api/admin/pancake/sync` bằng tài khoản ADMIN). KHÔNG chọn "ghi đè tồn kho" (`?withStock=1`) cho lần đầu: hàng mới được tạo với đúng tồn Pancake rồi, ghi đè chỉ dùng khi tồn kho đã lệch thật. Kết quả hiện số sản phẩm đã đồng bộ; log API: `Đã đồng bộ N sản phẩm từ Pancake`. 409 `CATALOG_SYNC_RUNNING` nghĩa là một lượt khác đang chạy: đợi vài phút.
+4. **Sau đó tự chạy**: mỗi 15 phút (chỉ sản phẩm đổi từ lần trước) và mỗi đêm 03:30 (quét toàn bộ, có bước ngừng bán hàng đã xoá khỏi Pancake). Sau mỗi lần API khởi động lại, lượt 15 phút đầu tiên cũng là quét toàn bộ (mốc "lần trước" nằm trong bộ nhớ).
+5. **Cái gì được sao chép**:
+   - Tên, mô tả, ảnh (ảnh sản phẩm, rồi ảnh biến thể; Pancake không có ảnh thì giữ ảnh cũ), giá bán (`retail_price`), giá khuyến mãi (`sale_price`), cân nặng, SKU, thuộc tính biến thể. **Các trường này bị ghi đè mỗi lần đồng bộ**: sửa tên, mô tả, giá trong Quản trị sẽ mất; muốn đổi thì đổi ở Pancake.
+   - Tồn kho đi theo chênh lệch và trừ phần đang giữ chỗ, nên quét toàn bộ không hồi sinh hàng vừa bán hết.
+   - Sản phẩm mới tạo ra với nhãn `Tubu Tree`, phân khúc suy từ tên (`forSegment`), `isFeatured = false`, đã duyệt và ĐANG BÁN ngay: khách thấy toàn bộ hàng của shop Pancake ngay sau lần quét đầu. Có món không muốn bán trên app thì tắt tay trong Quản trị sau lần quét (tắt tay được giữ, đồng bộ không tự bật lại).
+   - Biến thể chưa có giá hợp lệ: không mở bán tới khi Pancake có giá (`pancakeHold = NO_PRICE`), không hiện "0đ".
+6. **Danh mục: đồng bộ KHÔNG gán danh mục** (khoảng trống đã biết, không chặn việc bán). Sản phẩm mới có `categoryIds` rỗng: vẫn thấy ở danh sách chung, tìm kiếm, trang sản phẩm và theo phân khúc, nhưng KHÔNG thấy trong trang từng danh mục, và danh mục không có sản phẩm bị Mini App ẩn (7 danh mục demo được giữ lại sẽ ẩn cho tới khi có hàng). Quản trị chưa có màn gán danh mục cho hàng kho Tubu; tech lead gán bằng SQL (đồng bộ không ghi đè `categoryIds`):
+
+   ```bash
+   psqlq -c "SELECT id, slug, name FROM categories ORDER BY \"sortOrder\""
+   psqlq -c "UPDATE products SET \"categoryIds\" = ARRAY['<id danh mục>'] WHERE \"pancakeId\" IN ('<mã Pancake 1>','<mã Pancake 2>')"
+   ```
+
+   Danh mục Mini App được ghi nhớ khoảng một phút nên đợi hoặc tải lại. Nếu chủ dự án muốn gán tự động theo nhóm hàng Pancake thì đó là một tính năng mới (đọc nhóm hàng Pancake rồi ánh xạ sang danh mục), cần tech lead làm sau ra mắt.
+7. **Ngừng bán hàng đã xoá khỏi Pancake (`deactivateMissing`) có thể ẩn nhầm không?** Chỉ chạy ở lần quét toàn bộ, và chỉ khi Pancake trả `total_pages`/`total_entries` và đọc đủ số trang, số sản phẩm; thiếu một trong hai thì lượt đó báo lỗi và KHÔNG tắt gì. Chỉ đụng sản phẩm, biến thể có mã Pancake (bỏ hàng đối tác tự giao, mã `MCH_...`, và hàng tắt tay). Nếu số bị loại vượt nửa số đang bán thì không tự tắt, chỉ ghi lỗi `vượt ngưỡng an toàn` vào log. Ẩn nhầm vẫn có thể xảy ra khi: đặt nhầm `PANCAKE_SHOP_ID` sang shop khác ít hàng hơn (dưới ngưỡng nửa), hoặc nhân viên lưu trữ/xoá sản phẩm trên Pancake. Hàng bị tắt kiểu này mang `pancakeHold = REMOVED` và tự bật lại ở lần quét sau khi Pancake trả lại; xem log `Ngừng bán vì không còn trên Pancake:` (liệt kê mã) và Quản trị, Sức khoẻ hệ thống, trạng thái đồng bộ danh mục.
+8. **Kiểm sau lần quét đầu**: `psqlq -c "SELECT count(*) FILTER (WHERE \"isActive\") AS dang_ban, count(*) AS tong FROM products WHERE \"pancakeId\" NOT LIKE 'seed-%'"` khớp số sản phẩm trên Pancake; mở Mini App, tìm một món, thêm giỏ, xem giá và tồn đúng như Pancake.
+
+#### 1.6.2 Backup lên Google Drive (A11)
+
+Đã chốt lưu bản backup ngoài máy trên Google Drive. Làm theo [tools/backup/README.md](../../tools/backup/README.md), mục "Remote Google Drive" (tạo remote `gdrive` với scope `drive.file`, xác thực trên laptop bằng `rclone authorize`). Tóm tắt:
+
+1. Laptop: `rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ=="`, đăng nhập Google, chép khối `{"access_token":...}`. VPS: `rclone config`, remote tên `gdrive`, loại `drive`, scope `drive.file`, "Use web browser to automatically authenticate" chọn `n`, dán khối JSON. `rclone config update gdrive use_trash false` để bản cũ bị xoá hẳn thay vì chiếm chỗ trong thùng rác.
+2. Thử: `rclone mkdir gdrive:tubutree-backups && rclone lsd gdrive:`.
+3. Cron mỗi 6 giờ, một dòng, có `RCLONE_REMOTE=gdrive:tubutree-backups` và `REMOTE_KEEP_DAYS=90` (mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)): `17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=gdrive:tubutree-backups REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=<url> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1`.
+4. Trước mỗi deploy: `cd /opt/tubutree && COMPOSE_FILE=docker-compose.vietnix.yml RCLONE_REMOTE=gdrive:tubutree-backups bash ops/backup-predeploy.sh`.
+5. Diễn tập khôi phục MỘT lần trước ra mắt với bản lấy từ `gdrive:` (`rclone copy gdrive:tubutree-backups/<file> /tmp/`), khối lệnh ở mục 1.2 và README, ghi thời gian vào ô RTO.
+
+#### 1.6.3 Đợt thẻ hộp hàng sàn đầu tiên (A12)
+
+Quản trị, tab Voucher, khung "Thẻ hộp hàng sàn (mã ẩn)" (chi tiết từng bước: [impl/claim.md](../2026-10-18-launch-review/impl/claim.md) mục 4). Điền đúng cấu hình đã chốt:
+
+| Ô | Giá trị |
+|---|---|
+| Kiểu đợt | "Lô mã riêng (mỗi thẻ một mã)" |
+| Tiền tố lô | một tiền tố riêng mỗi đợt, ví dụ `SHOPEE11` |
+| Số thẻ | số thẻ sẽ in (tối đa 2.000 mỗi lô) |
+| Loại và mức giảm | giảm tiền, 30.000đ |
+| Đơn tối thiểu | 199.000đ |
+| Ngày bắt đầu, hết hạn | hôm nay, và hôm nay cộng 60 ngày |
+| Chỉ khách mới | bật (mặc định) |
+
+Trước đó đặt một lần `app.miniapp_base_url` (Cấu hình, nhóm `app`) = `https://zalo.me/s/<appId>`, rồi bấm "Tạo lô và tải CSV" và gửi file cho nhà in. Freeship đơn đầu từ 199.000đ đã bật sẵn (`shipping.first_order_free_enabled`, `shipping.first_order_free_min_subtotal`) và cộng dồn với mã thẻ chỉ-khách-mới: đơn đầu vừa được giảm 30.000đ trên tiền hàng vừa được miễn phí giao kiện Tubu; mã FREESHIP của khách không bị tiêu cho đơn đó.
+
+#### 1.6.4 Gian hàng CTV dạng `<mã>.tubutree.com` (B4)
+
+Mã web đã sẵn sàng: `apps/web/src/middleware.ts` nhận host `<một nhãn>.<tên miền gốc>` rồi viết lại trang chủ sang `/s/<nhãn>`; các nhãn `www`, `admin`, `api`, `app`, `mail` là của hệ thống; API đã cho phép CORS cho mọi `*.tubutree.com`. Tên miền gốc lấy từ biến BUILD `NEXT_PUBLIC_TENANT_ROOT_DOMAIN`, mặc định `tubutree.com`; `docker-compose.vietnix.yml` truyền sẵn `${WEB_DOMAIN}`, nên chỉ cần dựng lại web khi `WEB_DOMAIN` không phải `tubutree.com`. Việc còn lại là hạ tầng, làm theo thứ tự và KHÔNG bật cờ trước khi bước 4 qua:
+
+1. **DNS Cloudflare**: thêm bản ghi `A` tên `*` trỏ `14.225.207.177`. Các bản ghi riêng (`api`, `app`, `www`, `mail`, và `hello` của link-bio nếu trỏ chỗ khác) giữ nguyên, bản ghi riêng luôn thắng wildcard. Một nhãn nào còn rơi vào wildcard sẽ bị coi là gian hàng (vd `hello` sẽ thành `/s/hello`, 404).
+2. **Chứng chỉ wildcard**, chọn MỘT trong hai:
+   - Certbot DNS-01 với plugin Cloudflare (root): tạo token API Cloudflare quyền `Zone:DNS:Edit` cho zone `tubutree.com`, lưu `dns_cloudflare_api_token = <token>` vào `/root/.secrets/cloudflare.ini` (`chmod 600`), cài `python3-certbot-dns-cloudflare`, chạy `certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini --cert-name tubutree-wildcard -d '*.tubutree.com'`. Chứng chỉ nằm ở `/etc/letsencrypt/live/tubutree-wildcard/`, cron `certbot renew` hiện có tự gia hạn (kiểm `certbot renew --dry-run`).
+   - Hoặc bật proxy ☁ cam cho bản ghi `*` và dùng Origin Certificate của Cloudflare (Cloudflare, SSL/TLS, Origin Server, host `*.tubutree.com`), chế độ SSL "Full (strict)".
+3. **Vhost Apache cho wildcard** (file mới, ví dụ `ops/` bản sao đặt ở `/www/server/panel/vhost/apache/`; Apache chọn vhost khớp ĐẦU TIÊN theo thứ tự file, nên file này phải được nạp SAU hai vhost `app.` và `api.`, đặt tên file sắp xếp sau chúng): `ServerName` đặt `wildcard.tubutree.com`, `ServerAlias *.tubutree.com`, `SSLCertificateFile`/`SSLCertificateKeyFile` trỏ chứng chỉ ở bước 2, và đúng khối proxy của `ops/vietnix-vhost-app.conf.phase2` (`ProxyPreserveHost On`, `RequestHeader set X-Forwarded-Proto "https"`, `ProxyPass / http://127.0.0.1:14000/ ttl=30`, `ProxyPassReverse`). Cổng 80 chuyển hướng sang https. Chạy `apachectl configtest` rồi `apachectl -k graceful` (đừng restart: chung với ChoDeli/WordPress).
+4. **Kiểm**: `dig +short thu.tubutree.com` ra `14.225.207.177`; `curl -sI https://<mã-gian-hàng-thật>.tubutree.com/` trả 200 (trang gian hàng), `curl -sI https://khong-co-gian-hang.tubutree.com/` trả 404 của web (không phải trang WordPress hay lỗi chứng chỉ); `https://app.tubutree.com` và `https://api.tubutree.com/api/health` vẫn bình thường.
+5. **Bật cờ**: Quản trị, Cấu hình, `storefront.subdomain_enabled` = `true` (mặc định `false`). Từ lúc này trang gian hàng và trang quản lý của CTV mới hiện và chia sẻ link `<mã>.tubutree.com`. Nếu `WEB_DOMAIN` khác `tubutree.com` thì đặt `NEXT_PUBLIC_TENANT_ROOT_DOMAIN` đúng tên miền gốc, dựng lại web (`$DC build web` rồi `$DC up -d --no-deps web`) trước bước 4.
+
+Sự cố: tắt lại cờ `storefront.subdomain_enabled` là link `/s/<mã>` hoạt động lại như cũ, DNS và chứng chỉ để nguyên được.
+
+#### 1.6.5 Đăng ký website/ứng dụng với Bộ Công Thương
+
+Nếu chưa làm: đăng ký website (và ứng dụng Mini App) thương mại điện tử với Bộ Công Thương tại https://online.gov.vn (thông báo website bán hàng, hoặc đăng ký website cung cấp dịch vụ TMĐT). Cần giấy phép kinh doanh, thông tin pháp nhân (CÔNG TY TNHH TUBU TREE, MST 0319585995) và địa chỉ website `https://app.tubutree.com`; sau khi được xác nhận, đưa biểu tượng "Đã thông báo Bộ Công Thương" vào chân trang. Đây là việc chủ dự án tự làm, mã không làm thay được.
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
@@ -528,14 +600,14 @@ DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng 
    - Mục 4 có dòng `KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác`: mã đó không phải bản demo (chủ shop tạo hoặc đã sửa điều kiện), lệnh dọn không tắt nó dù có `--coupons=expire`. Chủ shop mở Quản trị, Mã giảm giá, xem điều kiện: giữ thì go-live bước 10 ra WARN nêu đúng tên mã đó; không giữ thì tắt tay ở Quản trị.
    Điểm dừng: dòng `DB:` không phải DB PROD; hoặc mục 3 có `dòng đơn hàng` lớn hơn 0 mà chưa ai biết đó là đơn gì (khách thật đặt hàng demo: báo chủ shop trước khi tắt); hoặc mục 1 có `KIỂM TAY TRƯỚC KHI APPLY` (sản phẩm demo có người sửa sau khi nạp). Với dòng cuối: đưa danh sách tên cho chủ shop. Không ai dùng các sản phẩm đó làm hàng thật thì làm tiếp; có thì chưa chạy `--apply`, báo tech lead (lệnh dọn không bỏ qua từng sản phẩm).
 
-2. Chủ shop quyết về 3 mã và ghi vào nhóm chat: (a) tắt cả ba; (b) giữ mã nào (vd `WELCOME30` làm mã ra mắt), tắt phần còn lại; (c) chưa quyết, giữ nguyên cả ba (go-live check bước 10 sẽ FAIL ở `db.demo_coupons` cho tới khi quyết). Lưu ý cho chủ shop: hệ thống đã tự tặng mỗi khách mới một mã chào mừng riêng 30.000đ cho đơn từ 199.000đ (cấu hình `voucher.welcome_amount`, `voucher.welcome_min_order`); giữ thêm `WELCOME30` thì khách mới được giảm chào mừng hai lần, mỗi mã một đơn.
+2. Về 3 mã: chủ dự án đã chốt (A4, 2026-10-18) GIỮ CẢ BA (`WELCOME30`, `FREESHIP`, `XANH10`) cho đợt ra mắt, nên làm đúng lệnh (c) ở điểm 3, KHÔNG thêm `--coupons=expire` (mặc định `--coupons=keep` đã giữ cả ba; `--keep-coupon` chỉ dùng kèm `--coupons=expire`, và `--coupons=expire --keep-coupon=WELCOME30,FREESHIP,XANH10` cũng cho kết quả giống hệt). Hai phương án (a) tắt cả ba và (b) giữ một phần chỉ dùng nếu chủ dự án đổi ý sau này. Lưu ý đã được chủ dự án chấp nhận: hệ thống tự tặng mỗi khách mới một mã chào mừng riêng 30.000đ cho đơn từ 199.000đ (cấu hình `voucher.welcome_amount`, `voucher.welcome_min_order`); giữ thêm `WELCOME30` thì khách mới được giảm chào mừng hai lần, mỗi mã một đơn. Mã demo nào ngoài ba mã này (nếu bản xem trước báo) vẫn phải được quyết như cũ.
 
-3. Thực hiện (một transaction: lỗi thì không đổi gì). Trước khi chạy: `ls .demo-cleanup-apply.txt` phải báo không có file. Có file (của lần deploy trước) thì đổi tên nó (`mv .demo-cleanup-apply.txt .demo-cleanup-apply.$(date +%Y%m%d%H%M).txt`), KHÔNG để `tee` ghi đè: file đó chứa khối hoàn tác. Chọn đúng một dòng theo quyết định ở điểm 2. `--expect-db` bắt buộc: lệnh so với tên DB mà API đang nối, khác nhau thì in `--expect-db=… khác DB đang nối (…)`, không làm gì; khi đó dừng, kiểm lại `.env`.
+3. Thực hiện (một transaction: lỗi thì không đổi gì). Trước khi chạy: `ls .demo-cleanup-apply.txt` phải báo không có file. Có file (của lần deploy trước) thì đổi tên nó (`mv .demo-cleanup-apply.txt .demo-cleanup-apply.$(date +%Y%m%d%H%M).txt`), KHÔNG để `tee` ghi đè: file đó chứa khối hoàn tác. Chọn đúng một dòng theo quyết định ở điểm 2 (đã chốt: dòng (c)). `--expect-db` bắt buộc: lệnh so với tên DB mà API đang nối, khác nhau thì in `--expect-db=… khác DB đang nối (…)`, không làm gì; khi đó dừng, kiểm lại `.env`.
 
    ```bash
    $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" --coupons=expire 2>&1 | tee .demo-cleanup-apply.txt                          # (a)
    $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" --coupons=expire --keep-coupon=WELCOME30 2>&1 | tee .demo-cleanup-apply.txt  # (b) giữ WELCOME30
-   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" 2>&1 | tee .demo-cleanup-apply.txt                                           # (c)
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" 2>&1 | tee .demo-cleanup-apply.txt                                           # (c) ĐÃ CHỐT: giữ cả ba mã
    ```
 
    Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Cuối kết quả có khối `-- HOÀN TÁC` (các câu SQL đưa đúng những dòng vừa đổi về như cũ, gồm hạn cũ của từng mã); file `.demo-cleanup-apply.txt` giữ khối đó, không xoá, không ghi đè file này. Kiểm chạy lại: dùng đúng lệnh vừa chạy nhưng `tee` sang file KHÁC, vd thay `tee .demo-cleanup-apply.txt` bằng `tee .demo-cleanup-rerun.txt`. Kết quả phải in `Đã tắt 0 sản phẩm, 0 biến thể` và `-- HOÀN TÁC: lần chạy này không đổi dòng nào.` Lỡ tee lần chạy lại vào `.demo-cleanup-apply.txt` thì khối hoàn tác thật đã mất: báo tech lead ngay (hoàn tác khi đó phải dựng tay từ bản xem trước `.demo-cleanup-preview.txt`).
@@ -606,7 +678,7 @@ Ghi giờ kết thúc: khách đã đặt hàng được lại từ lúc này. T
 $DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
 ```
 
-Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (chủ shop duyệt giữ ở bước 7c, chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=WELCOME30` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
+Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (ba mã `WELCOME30`, `FREESHIP`, `XANH10` luôn được tính là đã duyệt vì chủ dự án giữ chúng cho đợt ra mắt, không cần đặt gì; mã demo khác mà chủ shop duyệt giữ thì chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
 
 Một FAIL sửa được ngay mà không cần quay lại: `db.refill_location` ("chưa có điểm nhận vỏ nào"). Migration `20261015070000` chỉ chuyển địa chỉ cũ `refill.pickup_address` thành điểm đầu tiên khi địa chỉ đó đã có; PROD chưa từng điền thì bảng rỗng và khách không có chỗ mang vỏ tới. Thêm ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ rồi chạy lại lệnh trên. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
 
