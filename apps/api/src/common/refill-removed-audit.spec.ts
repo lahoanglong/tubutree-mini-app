@@ -83,7 +83,25 @@ describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)',
     const p = doc('docs/launch/pilot-order-playbook.md');
     for (const gone of ['refill_pickup_locations', 'bottle_returns', 'refill.seeds_per_bottle', 'Gửi lại vật liệu tái chế', 'Đổi vỏ chai']) expect(p).not.toContain(gone);
     expect(p).not.toMatch(/hai điểm nhận vỏ/i);
-    for (const must of ['waste_requests', 'Thu kèm rác', 'Thùng carton cũ: 3 thùng']) expect(p).toContain(must);
+    for (const must of ['waste_requests', 'Thu kèm rác', 'Thùng carton cũ: 10 thùng']) expect(p).toContain(must);
+    expect(p).not.toContain('Thùng carton cũ: 3 thùng');
+  });
+  it('playbook: nói chỗ bật hai công tắc của khách bằng đúng nhãn trên màn Cấu hình chung và dặn tắt lại ở bước dọn dẹp', () => {
+    const p = doc('docs/launch/pilot-order-playbook.md');
+    const card = doc('apps/web/src/components/admin/waste-config-card.tsx');
+    for (const label of ['Bật chương trình với khách', 'Cách Thu kèm đơn (còn cần cờ Gomdon)']) {
+      expect(card).toContain(`label: '${label}'`);
+      expect(p).toContain(label);
+    }
+    const cleanup = p.slice(p.indexOf('## 10. Dọn dẹp sau khi thử'), p.indexOf('## 11. Bảng kết quả'));
+    expect(cleanup).toContain('waste.lane_pickup_enabled');
+    expect(cleanup).toContain('đã tắt lại');
+  });
+  it('đường vào tab Đổi rác luôn có nhóm Khách hàng ở playbook, checklist, runbook và sổ tay', () => {
+    for (const f of ['docs/launch/pilot-order-playbook.md', 'docs/launch/recycle-rewards-launch-checklist.md', 'docs/launch/deploy-rollback-runbook.md', 'docs/launch/so-tay-van-hanh/kho.md', 'docs/launch/so-tay-van-hanh/admin.md']) {
+      expect(doc(f)).not.toMatch(/Quản trị(?:,| ›|>) Đổi rác/);
+    }
+    expect(doc('apps/web/src/components/admin/gomdon-config-card.tsx')).not.toMatch(/(?<!Khách hàng › )Đổi rác ›/);
   });
   it('Gomdon và khoá go-live nói đúng công tắc mới', () => {
     expect(doc('docs/integrations/gomdon.md')).toContain('wasteRequestId');

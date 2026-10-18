@@ -87,7 +87,7 @@ Ghi chú trạng thái:
 | `collect_amount` | Tiền thu hộ, VND. Ví dụ lỗi ở API cập nhật cho thấy COD chỉ nhận từ 0 đến 5.000.000 | COD chưa trả thì gửi `order.total`, còn lại gửi `0`. Checkout chặn COD khi một đơn (một kiện) trên 5 triệu, xét từng đơn sau khi tách theo nơi giao | đã khớp |
 | `weight` | **Gram**, số nguyên | Tổng `Variation.weight` (kiểu Int) nhân số lượng. Thiếu thì lấy 500 g | đã khớp |
 | `width` / `height` / `length` | **Milimét** | `0`, không khai kích thước, giống mẫu | đã khớp |
-| `note` | Ghi chú trên bưu kiện | Do máy chủ dựng (`buildPickupRecyclingNote`): mã `TR-` + "<món>: N <đơn vị>", ví dụ `Thu kèm rác TR-…: Thùng carton cũ: 3 thùng`; không có chữ khách gõ | đã khớp |
+| `note` | Ghi chú trên bưu kiện | Do máy chủ dựng (`buildPickupRecyclingNote`): mã `TR-` + "<món>: N <đơn vị>", ví dụ `Thu kèm rác TR-…: Thùng carton cũ: 10 thùng`; không có chữ khách gõ | đã khớp |
 | `source_province/district/ward/address/phone/name` | Cả sáu trường bắt buộc, kể cả quận/huyện | Lấy từ kho `shipping.gomdon.config.defaultWarehouse` | đã khớp |
 | `dest_province/district/ward/address/phone/name` | Cả sáu trường bắt buộc. Bảng trường của tài liệu ghi nhầm là `district_*`, còn request và response mẫu đều dùng `dest_*` | `dest_*`. Địa chỉ hai cấp (không còn quận) thì ô quận lấy tạm tên phường | đã khớp tên trường. Việc Gomdon chấp nhận địa chỉ hai cấp thì tài liệu không nói |
 

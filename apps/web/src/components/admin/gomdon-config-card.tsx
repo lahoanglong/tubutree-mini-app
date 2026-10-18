@@ -187,7 +187,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
 
       {st && (
         <p className="mt-1 text-xs text-stone-600">
-          Khách chỉ thấy lựa chọn thu gom khi bật thêm &quot;Bật chương trình với khách&quot; và &quot;Cách Thu kèm đơn&quot; ở Đổi rác › Cấu hình chung.
+          Khách chỉ thấy lựa chọn thu gom khi bật thêm &quot;Bật chương trình với khách&quot; và &quot;Cách Thu kèm đơn&quot; ở Khách hàng › Đổi rác › Cấu hình chung.
         </p>
       )}
 

@@ -593,6 +593,7 @@ describe('GomdonConfigCard — cổng thật của khách', () => {
     expect(container.textContent).not.toContain('ĐANG thấy');
     expect(container.textContent).toContain('Bật chương trình với khách');
     expect(container.textContent).toContain('Cách Thu kèm đơn');
+    expect(container.textContent).toContain('ở Khách hàng › Đổi rác › Cấu hình chung.');
     click(container.querySelector('input[role="switch"]'));
     await flush();
     expect(puts).toEqual([{ key: 'shipping.gomdon.recycling_enabled', value: true }]);
