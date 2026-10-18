@@ -58,6 +58,9 @@ const ACCOUNT: string[] = [
   'components/account/font-scale.ts',
   'app/tai-khoan/thong-bao/page.tsx',
   'components/account/notification-view.ts',
+  'app/gioi-thieu/page.tsx',
+  'app/gioi-thieu/about-view.tsx',
+  'lib/faq-fallback.ts',
   'components/account/account-menu.ts',
   'components/account/avatar-crop-sheet.tsx',
 ];

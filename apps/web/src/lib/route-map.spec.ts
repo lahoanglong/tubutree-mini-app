@@ -90,7 +90,13 @@ describe('publicStaticRoutes', () => {
   it('chỉ route công khai, không tham số, không pending, không query', () => {
     const r = publicStaticRoutes();
     expect(r).toContain('/');
-    expect(r).not.toContain('/gioi-thieu');
+    const pendingPublic = (routeMap.routes as { items: { web?: string; private?: boolean; pending?: boolean }[] }[])
+      .flatMap((g) => g.items)
+      .filter((i) => i.pending && !i.private && i.web && !i.web.includes(':') && !i.web.includes('?'))
+      .map((i) => i.web!);
+    expect(pendingPublic.length).toBeGreaterThan(0);
+    for (const w of pendingPublic) expect(r).not.toContain(w);
+    expect(r).toContain('/gioi-thieu');
     expect(r.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
   });
 });

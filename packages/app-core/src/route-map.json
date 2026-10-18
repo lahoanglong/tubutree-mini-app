@@ -20,7 +20,7 @@
       { "miniapp": "/addresses", "web": "/tai-khoan/dia-chi", "private": true }
     ]},
     { "lane": "account", "items": [
-      { "miniapp": "/about", "web": "/gioi-thieu", "private": false, "pending": true },
+      { "miniapp": "/about", "web": "/gioi-thieu", "private": false },
       { "miniapp": "/profile", "web": "/tai-khoan", "private": true },
       { "miniapp": "/edit-profile", "web": "/tai-khoan/ho-so", "private": true },
       { "miniapp": "/settings", "web": "/tai-khoan/cai-dat", "private": true },
