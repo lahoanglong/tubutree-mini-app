@@ -182,3 +182,65 @@ test.describe('Web khách: Vườn Xanh', () => {
     expect(api.callsTo('GET', '/game/profile')).toHaveLength(0);
   });
 });
+
+/**
+ * Web khách: Trợ lý AI (/tu-van). Hỏi bằng câu gợi ý và bằng phím Enter, thẻ sản phẩm dẫn tới /san-pham/[slug],
+ * lỗi thì có "Thử lại" gửi lại đúng câu cũ, công tắc tắt AI đưa về Trang chủ.
+ */
+test.describe('Trợ lý AI (/tu-van)', () => {
+  const PRODUCT = {
+    id: 'p1', name: 'Nước rửa chén bồ hòn', slug: 'nuoc-rua-chen-bo-hon', brand: 'Tubu', shortDesc: null,
+    thumbnail: null, basePrice: 90000, salePrice: 70000,
+  };
+
+  function mockAdvisor(api: MockApi, enabled = true) {
+    api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
+    api.get('/me', () => USER);
+    api.get('/config/public', { freeshipThreshold: 500000, aiAdvisorEnabled: enabled, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+  }
+
+  test('bấm câu gợi ý và hỏi bằng Enter gửi đúng body, hiện thẻ sản phẩm dẫn tới trang sản phẩm', async ({ page, api }) => {
+    mockAdvisor(api);
+    api.post('/ai-advisor/chat', () => ({ reply: 'Bạn thử loại này nhé', products: [PRODUCT] }));
+    await page.goto('/tu-van');
+    await page.getByRole('button', { name: 'Gợi ý quà tặng sống xanh' }).click();
+    await expect(page.getByText('Bạn thử loại này nhé')).toBeVisible();
+    expect(api.callsTo('POST', '/ai-advisor/chat')[0]!.body).toEqual({ message: 'Gợi ý quà tặng sống xanh', history: [] });
+
+    await page.getByRole('textbox', { name: 'Nhập câu hỏi' }).fill('Có nước giặt không?');
+    await page.getByRole('textbox', { name: 'Nhập câu hỏi' }).press('Enter');
+    await expect(page.getByText('Có nước giặt không?')).toBeVisible();
+    await expect.poll(() => api.callsTo('POST', '/ai-advisor/chat')).toHaveLength(2);
+    expect((api.callsTo('POST', '/ai-advisor/chat')[1]!.body as { history: unknown[] }).history).toHaveLength(2);
+    await expect(page.getByRole('link', { name: /Nước rửa chén bồ hòn/ }).first()).toHaveAttribute('href', '/san-pham/nuoc-rua-chen-bo-hon');
+  });
+
+  test('lỗi: tin xin lỗi kèm Thử lại, bấm thì gửi lại đúng câu cũ và không nhân đôi tin của bạn', async ({ page, api }) => {
+    mockAdvisor(api);
+    let n = 0;
+    api.post('/ai-advisor/chat', () => (n++ === 0 ? reply(500, { message: 'Hết hạn mức' }) : { reply: 'Ổn rồi', products: [] }));
+    await page.goto('/tu-van');
+    await page.getByRole('textbox', { name: 'Nhập câu hỏi' }).fill('Xin chào');
+    await page.getByRole('button', { name: 'Gửi' }).click();
+    await expect(page.getByText('Xin lỗi, mình chưa trả lời được lúc này 🌿')).toBeVisible();
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('Ổn rồi')).toBeVisible();
+    expect(api.callsTo('POST', '/ai-advisor/chat').map((c) => (c.body as { message: string }).message)).toEqual(['Xin chào', 'Xin chào']);
+    await expect(page.getByText('Xin chào', { exact: true })).toHaveCount(1);
+  });
+
+  test('server báo tắt AI: về Trang chủ, không gọi chat', async ({ page, api }) => {
+    mockAdvisor(api, false);
+    await page.goto('/tu-van');
+    await expect(page).toHaveURL(/\/$/);
+    expect(api.callsTo('POST', '/ai-advisor/chat')).toHaveLength(0);
+  });
+
+  test('khách chưa đăng nhập được mời đăng nhập, không gọi chat', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
+    api.get('/config/public', { freeshipThreshold: 500000, aiAdvisorEnabled: true });
+    await page.goto('/tu-van');
+    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    expect(api.callsTo('POST', '/ai-advisor/chat')).toHaveLength(0);
+  });
+});

@@ -35,7 +35,7 @@
     ]},
     { "lane": "game", "items": [
       { "miniapp": "/game", "web": "/vuon-xanh", "private": true },
-      { "miniapp": "/ai-advisor", "web": "/tu-van", "private": true, "pending": true }
+      { "miniapp": "/ai-advisor", "web": "/tu-van", "private": true }
     ]},
     { "lane": "community", "items": [
       { "miniapp": "/feed", "web": "/cong-dong", "private": false, "pending": true },

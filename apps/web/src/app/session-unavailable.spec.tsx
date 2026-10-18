@@ -50,6 +50,7 @@ import WalletPage from './tai-khoan/vi-tubu/page';
 import RewardsPage from './kho-qua/page';
 import RewardsMinePage from './kho-qua/cua-toi/page';
 import GamePage from './vuon-xanh/page';
+import AdvisorPage from './tu-van/page';
 import CashbackPage from './hoan-tien/page';
 import WishlistPage from './tai-khoan/yeu-thich/page';
 
@@ -93,7 +94,10 @@ const LOYALTY: PageCase[] = [
 ];
 const COMMUNITY: PageCase[] = [];
 const AFFILIATE: PageCase[] = [];
-const GAME: PageCase[] = [['/vuon-xanh', () => <GamePage />]];
+const GAME: PageCase[] = [
+  ['/vuon-xanh', () => <GamePage />],
+  ['/tu-van', () => <AdvisorPage />],
+];
 const PRO: PageCase[] = [];
 const RECYCLE: PageCase[] = [];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
