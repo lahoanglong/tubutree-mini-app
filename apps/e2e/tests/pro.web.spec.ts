@@ -143,7 +143,7 @@ test.describe('Web bảng lương', () => {
       profile,
     });
     api.get('/staff/attendance/history', []);
-    api.on('PUT', '/staff/bank', profile);
+    api.put('/staff/bank', profile);
 
     await page.goto('/nhan-vien/bang-luong');
     await expect(page.getByRole('heading', { name: 'Lương của tôi', level: 1 })).toBeVisible();
