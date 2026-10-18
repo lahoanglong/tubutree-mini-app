@@ -481,7 +481,7 @@ export function computeWasteAlerts(db: PrismaService, now: Date, t: WasteAlertTh
 export function readPickupGate(config: Pick<SystemConfigService, 'get'> | undefined, gomdonEnabled: () => Promise<boolean>): Promise<boolean>; // pre-tx: waste.enabled ∧ waste.lane_pickup_enabled ∧ gomdon; undefined config → false
 export interface LockedPickupRequest { id: string; code: string; lines: { itemName: string; unitLabel: string; declaredQty: number }[] }
 export function lockPickupRequestForCheckout(tx: Prisma.TransactionClient, userId: string, wasteRequestId: string): Promise<LockedPickupRequest>; // FOR UPDATE where id,userId,method PICKUP,status OPEN,orderId NULL → else 409 'Yêu cầu thu rác đã hết hạn hoặc đã huỷ'; flags blockedAt/shipLockedAt → 409 'Thu kèm rác đang tạm dừng với tài khoản của bạn, hãy tắt công tắc để đặt đơn'
-export function buildPickupRecyclingNote(req: LockedPickupRequest): string; // includes TR- code + "N <unit> <item>" lines, no customer text
+export function buildPickupRecyclingNote(req: LockedPickupRequest): string; // includes TR- code + "<item>: N <unit>" lines, no customer text
 export function attachPickupRequest(tx: Prisma.TransactionClient, userId: string, requestId: string, orderId: string): Promise<void>; // updateMany (id,userId,PICKUP,OPEN,orderId NULL) set orderId, expiresAt NULL; count≠1 → 409 (same text); REQUEST_ATTACHED event actor CUSTOMER
 // pickup/waste-pickup-hooks.service.ts
 WastePickupHooks: onOrderCancelled(orderId: string): Promise<void>; onOrderDelivered(orderId: string): Promise<void>; // never throw; deliveredAt re-read from DB

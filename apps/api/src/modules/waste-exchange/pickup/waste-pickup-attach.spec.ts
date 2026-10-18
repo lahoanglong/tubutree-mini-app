@@ -114,7 +114,7 @@ describe('lockPickupRequestForCheckout (§12.2 step 2 (a) and (b))', () => {
 });
 
 describe('buildPickupRecyclingNote (§12.2 step 2 (c))', () => {
-  it('server-built: TR code then "N <unit> <item>" lines, no customer text', () => {
+  it('server-built: TR code then "<item>: N <unit>" lines, no customer text', () => {
     expect(buildPickupRecyclingNote({ id: 'r1', code: 'TR-ABC23', lines: LINES })).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ, Thùng carton: 2 thùng');
   });
 
