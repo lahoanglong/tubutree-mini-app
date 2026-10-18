@@ -2245,3 +2245,57 @@ describe('AdminService.getDealerPriceHistory — sổ lịch sử giá đại l�
     expect(res.meta.total).toBe(1);
   });
 });
+
+describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
+  const base = {
+    code: 'VIP1',
+    type: 'AMOUNT' as const,
+    value: 50_000,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2099-12-31T00:00:00.000Z',
+  };
+  const staff = { id: 's1', staff: true };
+
+  it('nhân viên không tạo mã cá nhân cho chính mình', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 's1' }) } });
+    await expect(
+      mkAdmin(prisma).createCoupon({ ...base, scope: 'USER_GROUP', scopeMeta: { userId: 's1' } }, staff),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên tạo mã cá nhân cho khách khác được; ghi sổ người tạo', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const create = jest.fn().mockResolvedValue({ id: 'c1', code: 'VIP1' });
+    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }) } });
+    await mkAdmin(prisma).createCoupon({ ...base, scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } }, staff);
+    expect(create).toHaveBeenCalled();
+    expect(warn.mock.calls.map((c) => String(c[0])).some((m) => m.includes('s1') && m.includes('VIP1'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('nhân viên không bật lại / gia hạn mã cá nhân của chính mình', async () => {
+    const findUnique = jest.fn().mockResolvedValue({
+      id: 'c1',
+      code: 'BDAY-S1',
+      scope: 'USER_GROUP',
+      scopeMeta: { userId: 's1' },
+      startAt: new Date('2026-01-01'),
+      endAt: new Date('2026-02-01'),
+    });
+    const update = jest.fn();
+    const prisma = makePrisma({ coupon: { findUnique, update } });
+    await expect(mkAdmin(prisma).updateCoupon('c1', { endAt: '2099-01-01T00:00:00.000Z' }, staff)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('quản trị viên vẫn tạo mã cá nhân cho tài khoản của mình (thử mã)', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 'a1' }) } });
+    await mkAdmin(prisma).createCoupon({ ...base, scope: 'USER_GROUP', scopeMeta: { userId: 'a1' } }, { id: 'a1', staff: false });
+    expect(create).toHaveBeenCalled();
+  });
+});

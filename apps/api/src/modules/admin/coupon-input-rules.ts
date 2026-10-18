@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { formatVnd } from '../orders/refund-destination';
 
 /** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
@@ -38,5 +38,21 @@ export function assertCouponInput(data: {
       `Mức giảm ${formatVnd(data.value)} phải nhỏ hơn đơn tối thiểu ${formatVnd(data.minOrder)} — không thì đơn ở mức tối thiểu được giảm hết tiền hàng. ` +
         'Kiểm tra lại số 0 của hai ô.',
     );
+  }
+}
+
+/** Người bấm tạo/sửa mã: nhân viên (STAFF) hay quản trị viên; `system` khi gọi từ job/seed. */
+export interface CouponActor {
+  id: string;
+  staff: boolean;
+}
+export const SYSTEM_ACTOR: CouponActor = { id: 'system', staff: false };
+
+export const actorLabel = (actor: CouponActor) => `${actor.staff ? 'Nhân viên' : 'Admin'} ${actor.id}`;
+
+/** Nhân viên Marketing tạo mã cho khách, không tự cấp hay gia hạn mã cá nhân của chính mình. */
+export function assertNotOwnCoupon(actor: CouponActor, ownerId: string | undefined): void {
+  if (actor.staff && ownerId && ownerId === actor.id) {
+    throw new ForbiddenException('Không tạo hay sửa mã giảm giá cá nhân của chính mình — nhờ quản trị viên.');
   }
 }

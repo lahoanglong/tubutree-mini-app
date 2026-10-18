@@ -58,8 +58,8 @@ describe('AdminCouponBatchController (D2-03: lô mã thẻ hộp hàng)', () => 
     };
     const ctrl = new AdminCouponBatchController(svc as unknown as AdminCouponBatchService);
     const dto = plainToInstance(CreateCouponBatchDto, VALID);
-    await expect(ctrl.create(dto)).resolves.toBe('c');
-    expect(svc.create).toHaveBeenCalledWith(dto);
+    await expect(ctrl.create('s1', 'STAFF', dto)).resolves.toBe('c');
+    expect(svc.create).toHaveBeenCalledWith(dto, { id: 's1', staff: true });
     await expect(ctrl.list()).resolves.toBe('l');
     await expect(ctrl.codes('SHOPEE11')).resolves.toBe('k');
     expect(svc.codes).toHaveBeenCalledWith('SHOPEE11');

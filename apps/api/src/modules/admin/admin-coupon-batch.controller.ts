@@ -4,6 +4,7 @@ import { Transform } from 'class-transformer';
 import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AdminCouponBatchService, BATCH_PREFIX_RE, COUPON_BATCH_MAX } from './admin-coupon-batch.service';
 import { COUPON_AMOUNT_MAX, MaxIfAmount, MaxIfPercent } from './admin.controller';
 
@@ -36,8 +37,8 @@ export class AdminCouponBatchController {
   constructor(private readonly batches: AdminCouponBatchService) {}
 
   @Post()
-  create(@Body() dto: CreateCouponBatchDto) {
-    return this.batches.create(dto);
+  create(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Body() dto: CreateCouponBatchDto) {
+    return this.batches.create(dto, { id: actorId, staff: role === 'STAFF' });
   }
 
   @Get()

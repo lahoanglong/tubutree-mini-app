@@ -1,9 +1,9 @@
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { assertCouponInput } from './coupon-input-rules';
+import { actorLabel, assertCouponInput, SYSTEM_ACTOR, type CouponActor } from './coupon-input-rules';
 
 /** Trần mã mỗi lô: một lần in thẻ; lô lớn hơn thì chia nhiều tiền tố. */
 export const COUPON_BATCH_MAX = 2000;
@@ -69,12 +69,14 @@ export interface BatchSummary {
  */
 @Injectable()
 export class AdminCouponBatchService {
+  private readonly logger = new Logger(AdminCouponBatchService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
   ) {}
 
-  async create(input: CouponBatchInput) {
+  async create(input: CouponBatchInput, actor: CouponActor = SYSTEM_ACTOR) {
     const batch = input.prefix.trim().toUpperCase();
     const startAt = new Date(input.startAt);
     const endAt = new Date(input.endAt);
@@ -115,6 +117,7 @@ export class AdminCouponBatchService {
       },
       { timeout: 60_000 },
     );
+    this.logger.warn(`${actorLabel(actor)} tạo lô mã ${batch} (${codes.length} mã): ${JSON.stringify(input)}`);
     return {
       batch,
       created: codes.length,

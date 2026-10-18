@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { AdminCouponBatchService, CARD_CODE_ALPHABET, CARD_CODE_LENGTH, cardCode, claimUrl } from './admin-coupon-batch.service';
@@ -94,6 +94,14 @@ describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)',
     expect((createMany.mock.calls[1][0].data as unknown[]).length).toBe(1);
     expect(out.created).toBe(3);
     expect(out.codes).toHaveLength(3);
+  });
+
+  it('ghi sổ ai tạo lô (nhân viên Marketing tạo được, D1-05)', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const { svc } = make();
+    await svc.create(INPUT, { id: 's1', staff: true });
+    expect(warn.mock.calls.map((c) => String(c[0])).some((m) => m.includes('Nhân viên s1') && m.includes('SHOPEE'))).toBe(true);
+    warn.mockRestore();
   });
 
   it('tiền tố đã có lô → 409, không ghi', async () => {

@@ -586,14 +586,19 @@ export class AdminController {
 
   @AllowStaff('MARKETING')
   @Post('coupons')
-  createCoupon(@Body() dto: CreateCouponDto) {
-    return this.admin.createCoupon(dto);
+  createCoupon(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Body() dto: CreateCouponDto) {
+    return this.admin.createCoupon(dto, { id: actorId, staff: role === 'STAFF' });
   }
 
   @AllowStaff('MARKETING')
   @Patch('coupons/:id')
-  updateCoupon(@Param('id') id: string, @Body() dto: UpdateCouponDto) {
-    return this.admin.updateCoupon(id, dto);
+  updateCoupon(
+    @CurrentUser('sub') actorId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateCouponDto,
+  ) {
+    return this.admin.updateCoupon(id, dto, { id: actorId, staff: role === 'STAFF' });
   }
 
   /** Xem trước bảng giá đại lý theo bậc (khớp / không khớp / lỗi / ngoài khoảng giá lẻ) — không ghi gì. */
