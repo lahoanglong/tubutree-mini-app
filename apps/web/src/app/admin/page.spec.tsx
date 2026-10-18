@@ -385,6 +385,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
   });
 
   it('tab Đổi rác luôn hiện với ADMIN dù waste.enabled tắt (spec 11.7, 16.2)', async () => {
+    mocks.config = [{ key: 'waste.enabled', value: 'false', description: 'Bật đổi rác', category: 'waste' }];
     window.history.replaceState(null, '', '/admin?tab=waste');
     const { container } = await mount();
     const btn = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Đổi rác')!;
