@@ -198,8 +198,17 @@ export async function deleteItData(
   const orders = Prisma.sql`SELECT "id" FROM "orders" WHERE "userId" = ANY(${userIds}::text[])`;
   const variations = Prisma.sql`SELECT "id" FROM "variations" WHERE "productId" = ANY(${productIds}::text[])`;
   await prisma.$executeRaw`DELETE FROM "return_requests" WHERE "userId" = ANY(${userIds}::text[])`;
+  await prisma.$executeRaw`
+    DELETE FROM "waste_events"
+    WHERE "actorUserId" = ANY(${userIds}::text[])
+       OR "requestId" IN (SELECT "id" FROM "waste_requests" WHERE "userId" = ANY(${userIds}::text[]))
+       OR "giftRedemptionId" IN (SELECT "id" FROM "waste_gift_redemptions" WHERE "userId" = ANY(${userIds}::text[]))`;
   // Mọi bảng tham chiếu users/đơn/sản phẩm/biến thể bằng khoá ngoại RESTRICT (ON DELETE CASCADE/SET NULL tự dọn theo).
   for (const table of [
+    'waste_gift_redemptions',
+    'waste_requests',
+    'waste_point_staff',
+    'waste_user_flags',
     'points_transactions',
     'wallet_transactions',
     'coin_transactions',

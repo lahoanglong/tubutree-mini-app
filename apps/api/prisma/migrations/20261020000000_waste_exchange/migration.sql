@@ -412,3 +412,124 @@ ALTER TABLE "waste_gift_redemptions" ADD CONSTRAINT "waste_gift_redemptions_user
 -- AddForeignKey
 ALTER TABLE "waste_gift_redemptions" ADD CONSTRAINT "waste_gift_redemptions_giftId_fkey" FOREIGN KEY ("giftId") REFERENCES "waste_gifts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+
+-- BEGIN WASTE HAND-WRITTEN CONSTRAINTS
+-- Ràng buộc viết tay §11.3: index unique có điều kiện và CHECK mà Prisma schema không biểu diễn được, chạy lại không lỗi.
+
+CREATE UNIQUE INDEX IF NOT EXISTS "points_transactions_recycle_ref_key"
+ON "points_transactions" ("refId")
+WHERE "refType" = 'RECYCLE';
+
+CREATE UNIQUE INDEX IF NOT EXISTS "points_transactions_recycle_reverse_key"
+ON "points_transactions" ("refId")
+WHERE "refType" = 'RECYCLE_REVERSED';
+
+CREATE UNIQUE INDEX IF NOT EXISTS "points_transactions_gift_refund_key"
+ON "points_transactions" ("refId")
+WHERE "refType" = 'GIFT_REFUND';
+
+CREATE UNIQUE INDEX IF NOT EXISTS "waste_points_one_warehouse_key"
+ON "waste_points" ("kind")
+WHERE "kind" = 'WAREHOUSE';
+
+CREATE UNIQUE INDEX IF NOT EXISTS "waste_point_staff_one_owner_key"
+ON "waste_point_staff" ("pointId")
+WHERE "role" = 'OWNER' AND "isActive";
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_items" ADD CONSTRAINT "waste_items_hazardous_not_active_chk" CHECK (NOT ("hazardous" AND "status" = 'ACTIVE'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_items" ADD CONSTRAINT "waste_items_units_per_point_chk" CHECK ("unitsPerPoint" >= 1);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_items" ADD CONSTRAINT "waste_items_points_per_group_chk" CHECK ("pointsPerGroup" >= 1);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_items" ADD CONSTRAINT "waste_items_drops_chk" CHECK ("dropsPerUnit" >= 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_items" ADD CONSTRAINT "waste_items_daily_cap_chk" CHECK ("dailyCapQty" IS NULL OR "dailyCapQty" >= 1);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_items" ADD CONSTRAINT "waste_items_monthly_cap_chk" CHECK ("monthlyCapQty" IS NULL OR "monthlyCapQty" >= 1);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_points" ADD CONSTRAINT "waste_points_partner_quota_chk" CHECK ("kind" = 'WAREHOUSE' OR "monthlyQuotaPoints" IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_points" ADD CONSTRAINT "waste_points_warehouse_active_chk" CHECK ("kind" <> 'WAREHOUSE' OR "status" = 'ACTIVE');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_requests" ADD CONSTRAINT "waste_requests_expires_at_chk" CHECK (NOT ("status" = 'OPEN' AND "orderId" IS NOT NULL AND "expiresAt" IS NOT NULL) AND ("method" <> 'MAIL_IN' OR "status" <> 'IN_TRANSIT' OR "expiresAt" IS NULL) AND ("method" <> 'PICKUP' OR "status" <> 'IN_TRANSIT' OR "expiresAt" IS NOT NULL));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_request_lines" ADD CONSTRAINT "waste_request_lines_received_chk" CHECK ("receivedQty" IS NULL OR ("receivedQty" >= 0 AND "receivedQty" <= "declaredQty"));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_request_lines" ADD CONSTRAINT "waste_request_lines_declared_chk" CHECK ("declaredQty" >= 1);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_point_usage" ADD CONSTRAINT "waste_point_usage_points_chk" CHECK ("pointsUsed" >= 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_gifts" ADD CONSTRAINT "waste_gifts_stock_chk" CHECK ("stock" IS NULL OR "stock" >= 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_gifts" ADD CONSTRAINT "waste_gifts_voucher_fields_chk" CHECK ("kind" <> 'VOUCHER' OR ("voucherType" IS NOT NULL AND "voucherValue" IS NOT NULL AND "voucherValidDays" IS NOT NULL));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_gifts" ADD CONSTRAINT "waste_gifts_points_cost_chk" CHECK ("kind" = 'TREE' OR "pointsCost" BETWEEN 1 AND 2000000);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE "waste_gift_redemptions" ADD CONSTRAINT "waste_gift_redemptions_ready_chk" CHECK ("status" <> 'READY' OR ("code" IS NOT NULL AND "giftKind" IN ('SEED_PACK', 'GIFT')));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- END WASTE HAND-WRITTEN CONSTRAINTS

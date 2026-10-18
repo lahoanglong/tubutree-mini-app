@@ -58,7 +58,14 @@ describe('Partial unique indexes after migrate deploy (real Postgres)', () => {
       expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toContain(name);
       expect(report.present).toContain(name);
     }
-    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(20);
+    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(23);
+  });
+
+  it('Đổi rác lấy quà: the five hand-written waste and points_transactions keys exist after migrate deploy', async () => {
+    const report = await checkPartialUniqueIndexes(prisma);
+    for (const name of ['points_transactions_recycle_ref_key', 'points_transactions_recycle_reverse_key', 'points_transactions_gift_refund_key', 'waste_points_one_warehouse_key', 'waste_point_staff_one_owner_key']) {
+      expect(report.present).toContain(name);
+    }
   });
 
   it('a schema whose tables lack the conditional indexes (what db push leaves behind) is reported as missing all of them', async () => {
