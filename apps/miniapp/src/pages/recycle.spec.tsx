@@ -86,6 +86,23 @@ describe('/recycle trang vào (§4.1)', () => {
     expect(await screen.findByText('Bạn đã gửi khoảng 1,9 kg bao bì cho Tubu')).toBeInTheDocument();
     expect(screen.getByText('Ước tính theo khối lượng trung bình')).toBeInTheDocument();
   });
+  it('tác động dưới 50 g làm tròn về 0 kg → không có dòng; từ 50 g thì hiện số trang thật in', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ impactGrams: 30 }));
+    const { unmount } = renderPage();
+    await screen.findByText('Điểm Xanh của bạn');
+    expect(screen.queryByText(/kg bao bì/)).toBeNull();
+    expect(screen.queryByText('Ước tính theo khối lượng trung bình')).toBeNull();
+    unmount();
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ impactGrams: 100 }));
+    renderPage();
+    expect(await screen.findByText('Bạn đã gửi khoảng 0,1 kg bao bì cho Tubu')).toBeInTheDocument();
+  });
+  it('impactGrams 0 → không có dòng tác động', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ impactGrams: 0 }));
+    renderPage();
+    await screen.findByText('Điểm Xanh của bạn');
+    expect(screen.queryByText(/kg bao bì/)).toBeNull();
+  });
   it('không có impactGrams → không có dòng tác động', async () => {
     renderPage();
     await screen.findByText('Điểm Xanh của bạn');
@@ -98,6 +115,11 @@ describe('/recycle trang vào (§4.1)', () => {
     expect(await screen.findByText('Mang tới điểm nhận')).toBeInTheDocument();
     expect(screen.queryByText('Gửi về kho Tubu HCM')).toBeNull();
     expect(screen.queryByText('Thu kèm đơn mua')).toBeNull();
+  });
+  it('tiêu đề khối cách đổi không đếm số thẻ', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Cách đổi' })).toBeInTheDocument();
+    expect(screen.queryByText('Ba cách đổi')).toBeNull();
   });
   it('cờ pickup tắt → không có thẻ Thu kèm đơn', async () => {
     renderPage();
@@ -133,6 +155,25 @@ describe('/recycle trang vào (§4.1)', () => {
   it('không có deskPoints → không có lối vào đại lý', async () => {
     renderPage();
     await screen.findByText('Điểm Xanh của bạn');
+    expect(screen.queryByText(/Nhận hàng tại điểm/)).toBeNull();
+  });
+  it.each([
+    ['chương trình tạm dừng', { programmeEnabled: false }],
+    ['khách bị khoá', { blocked: true }],
+  ] as const)('%s + có deskPoints → vẫn có lối vào /recycle/desk', async (_label, over) => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ ...over, deskPoints: [{ id: 'pt-1', name: 'Kho Tubu TP.HCM', kind: 'WAREHOUSE' }] }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Nhận hàng tại điểm/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/desk');
+  });
+  it.each([
+    ['chương trình tạm dừng', { programmeEnabled: false }],
+    ['khách bị khoá', { blocked: true }],
+  ] as const)('%s + không có deskPoints → không có lối vào điểm', async (_label, over) => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ ...over, deskPoints: [] }));
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    await waitFor(() => expect(screen.getByText(/Chương trình đang tạm dừng|Tài khoản của bạn tạm không tham gia/)).toBeInTheDocument());
     expect(screen.queryByText(/Nhận hàng tại điểm/)).toBeNull();
   });
   it('liên kết Thể lệ', async () => {

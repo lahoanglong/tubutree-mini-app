@@ -20,7 +20,7 @@ import { formatNumber, formatPoints } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
 import { nextRewardProgress } from '../utils/waste-labels';
 import { DeclaredCountedTable } from './recycle-request';
-import { formatImpactKg } from './recycle';
+import { impactLine } from './recycle';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 
@@ -57,6 +57,7 @@ export default function RecycleDonePage() {
   const me = meQ.data;
   const p = nextRewardProgress(rewardsQ.data);
   const drops = r.dropsAwarded ?? 0;
+  const impact = impactLine(r.impactGrams);
 
   return shell(
     <>
@@ -85,9 +86,9 @@ export default function RecycleDonePage() {
           <Text variant="body-sm" as="span">{`+${formatNumber(drops)} giọt nước vào bình của bạn`}</Text>
         </div>
       )}
-      {r.impactGrams != null && (
+      {impact && (
         <Card>
-          <Text variant="body-sm" as="div">{`Bạn đã gửi khoảng ${formatImpactKg(r.impactGrams)} kg bao bì cho Tubu`}</Text>
+          <Text variant="body-sm" as="div">{impact}</Text>
           <Text variant="caption" tone="tertiary" as="div">Ước tính theo khối lượng trung bình</Text>
         </Card>
       )}
