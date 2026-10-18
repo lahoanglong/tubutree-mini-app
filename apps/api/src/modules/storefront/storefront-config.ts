@@ -1,11 +1,11 @@
 import type { SystemConfigService } from '../system-config/system-config.service';
 
 /**
- * Gian hàng CTV mới phải được admin duyệt lần đầu mới hiện trên trang công khai. Tắt (mặc định, chủ dự án chưa chốt): gian hàng đã
- * đăng hiện ngay như trước, chỉ gian hàng đã duyệt mới có tick xanh và nhãn "CTV tuyển chọn".
+ * Gian hàng CTV mới phải được admin duyệt lần đầu mới hiện trên trang công khai. Mặc định bật. Tắt: gian hàng đã
+ * đăng hiện ngay, chỉ gian hàng đã duyệt mới có tick xanh và nhãn "CTV tuyển chọn".
  */
 export const STOREFRONT_REQUIRE_APPROVAL_KEY = 'storefront.require_approval';
-export const DEFAULT_STOREFRONT_REQUIRE_APPROVAL = false;
+export const DEFAULT_STOREFRONT_REQUIRE_APPROVAL = true;
 
 /**
  * Cho CTV/đối tác dùng link `<tên>.tubutree.com`. Tắt cho tới khi DNS wildcard và chứng chỉ xong (D6-02): mọi nơi chỉ hiện và

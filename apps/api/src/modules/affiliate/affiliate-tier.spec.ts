@@ -139,7 +139,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expect(res.currentRevenue).toBe(12_000_000);
       // Doanh số chờ chốt hiển thị riêng, KHÔNG cộng vào điều kiện nhận thưởng.
       expect(res.pendingRevenue).toBe(40_000_000);
-      expect(res.holdDays).toBe(20);
+      expect(res.holdDays).toBe(10);
       expect(res.milestones).toHaveLength(CTV_MONTHLY_MILESTONES.length);
       expect(findMany.mock.calls[0][0].where).toEqual({ userId: 'ctv-1', monthKey: { in: ['2026-09', '2026-08'] } });
 

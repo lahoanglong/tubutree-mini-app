@@ -11,7 +11,7 @@ import { startOfVnDay } from '../../common/vn-time';
 import { decodeServedImage } from '../../common/served-image';
 import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
-import { PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
+import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
 import { DEFAULT_UNANSWERED_ALERT_HOURS, listUnansweredQuestions, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from './community-unanswered';
 
@@ -377,7 +377,7 @@ export class CommunityFeedService {
    * route cần đăng nhập.
    */
   async publicPreview() {
-    if ((await this.config.get<unknown>(PUBLIC_PREVIEW_KEY, false)) !== true) throw new NotFoundException('Không tìm thấy.');
+    if ((await this.config.get<unknown>(PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_DEFAULT)) !== true) throw new NotFoundException('Không tìm thấy.');
     const rows = await this.prisma.feedPost.findMany({
       where: { status: 'PUBLISHED', kind: { in: [...PUBLIC_PREVIEW_KINDS] } },
       orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],

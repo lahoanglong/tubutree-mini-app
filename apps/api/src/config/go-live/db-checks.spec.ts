@@ -315,11 +315,17 @@ describe('evaluateDb', () => {
     it('chưa có khoá nào thì FAIL', () => {
       expect(status(dbWith({ dropConfigs: ['payment.bank_bin', 'payment.bank_account_no', 'payment.bank_account_name'] }), 'db.bank_account')).toBe('FAIL');
     });
-    it('còn số mặc định của seed thì WARN, chỉ in 4 số cuối', () => {
+    it('còn số mẫu cũ thì WARN, chỉ in 4 số cuối', () => {
       const r = byId(run(dbWith({ configs: { 'payment.bank_account_no': '9984606774' } })), 'db.bank_account');
       expect(r.status).toBe('WARN');
       expect(r.detail).toContain('6774');
       expect(r.detail).not.toContain('9984606774');
+    });
+    it('tài khoản thật đã chốt (8386790906) thì PASS, chỉ in 4 số cuối', () => {
+      const r = byId(run(dbWith({ configs: { 'payment.bank_account_no': '8386790906' } })), 'db.bank_account');
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toContain('0906');
+      expect(r.detail).not.toContain('8386790906');
     });
     it('đủ thì PASS và không in đầy đủ số tài khoản', () => {
       const r = byId(run(GOOD_DB), 'db.bank_account');
@@ -361,14 +367,14 @@ describe('evaluateDb', () => {
     });
     it('thiếu khoá cấu hình thì WARN', () => expect(status(dbWith({ dropConfigs: ['shipping.gomdon.config'] }), 'db.gomdon_warehouse')).toBe('WARN'));
     it('thiếu trường thì FAIL', () => {
-      const cfg = { defaultWarehouse: { name: 'Kho', phone: '0965573541', address: '1 A', ward: '', district: 'Q', province: 'T' } };
+      const cfg = { defaultWarehouse: { name: 'Kho', phone: '0899149229', address: '1 A', ward: '', district: 'Q', province: 'T' } };
       const r = byId(run(dbWith({ configs: { 'shipping.gomdon.config': cfg } })), 'db.gomdon_warehouse');
       expect(r.status).toBe('FAIL');
       expect(r.detail).toContain('ward');
     });
     it('cấu hình không phải object thì FAIL', () => expect(status(dbWith({ configs: { 'shipping.gomdon.config': 'abc' } }), 'db.gomdon_warehouse')).toBe('FAIL'));
     it('còn kho mặc định của seed thì WARN', () => {
-      const cfg = { defaultWarehouse: { name: 'Fuwa3e Tubu HCM', phone: '0965573541', address: 'Golf Park', ward: 'Phường Long Bình', district: 'Thành phố Thủ Đức', province: 'Thành phố Hồ Chí Minh' } };
+      const cfg = { defaultWarehouse: { name: 'Fuwa3e Tubu HCM', phone: '0899149229', address: 'Golf Park', ward: 'Phường Long Bình', district: 'Thành phố Thủ Đức', province: 'Thành phố Hồ Chí Minh' } };
       expect(status(dbWith({ configs: { 'shipping.gomdon.config': cfg } }), 'db.gomdon_warehouse')).toBe('WARN');
     });
     it('đủ thì PASS', () => expect(status(GOOD_DB, 'db.gomdon_warehouse')).toBe('PASS'));

@@ -182,9 +182,13 @@ describe('Freeship đơn đầu (D2-08)', () => {
   }
   const ON = { 'shipping.first_order_free_enabled': true };
 
-  it('mặc định TẮT (chưa có dòng cấu hình): không áp, không đọc thêm DB', async () => {
+  it('mặc định BẬT từ 199.000đ (chưa có dòng cấu hình): khách thật chưa có đơn được áp', async () => {
+    await expect(firstOrderFreeShipFrom(makeConfig({}), db().prisma, 'u1')).resolves.toBe(199_000);
+  });
+
+  it('cờ tắt tường minh: không áp, không đọc thêm DB', async () => {
     const { prisma, findUser, findOrder } = db();
-    await expect(firstOrderFreeShipFrom(makeConfig({}), prisma, 'u1')).resolves.toBeNull();
+    await expect(firstOrderFreeShipFrom(makeConfig({ 'shipping.first_order_free_enabled': false }), prisma, 'u1')).resolves.toBeNull();
     expect(findUser).not.toHaveBeenCalled();
     expect(findOrder).not.toHaveBeenCalled();
   });
@@ -199,9 +203,10 @@ describe('Freeship đơn đầu (D2-08)', () => {
     await expect(firstOrderFreeShipFrom(undefined, db().prisma, 'u1')).resolves.toBeNull();
   });
 
-  it('bật + khách thật chưa có đơn → ngưỡng tiền hàng (mặc định 0 = mọi đơn đầu)', async () => {
+  it('bật + khách thật chưa có đơn → ngưỡng tiền hàng (mặc định 199.000, 0 = mọi đơn đầu)', async () => {
     const { prisma, findOrder } = db();
-    await expect(firstOrderFreeShipFrom(makeConfig(ON), prisma, 'u1')).resolves.toBe(0);
+    await expect(firstOrderFreeShipFrom(makeConfig(ON), prisma, 'u1')).resolves.toBe(199_000);
+    await expect(firstOrderFreeShipFrom(makeConfig({ ...ON, 'shipping.first_order_free_min_subtotal': 0 }), db().prisma, 'u1')).resolves.toBe(0);
     expect(findOrder.mock.calls[0][0].where).toEqual({ userId: 'u1', status: { not: 'CANCELLED' } });
     await expect(
       firstOrderFreeShipFrom(makeConfig({ ...ON, 'shipping.first_order_free_min_subtotal': 99000 }), db().prisma, 'u1'),

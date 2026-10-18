@@ -25,22 +25,24 @@ export async function freeShipThreshold(config: Pick<SystemConfigService, 'get'>
 
 export const FIRST_ORDER_FREESHIP_ENABLED_KEY = 'shipping.first_order_free_enabled';
 export const FIRST_ORDER_FREESHIP_MIN_KEY = 'shipping.first_order_free_min_subtotal';
+export const FIRST_ORDER_FREESHIP_ENABLED_DEFAULT = true;
+export const FIRST_ORDER_FREESHIP_MIN_DEFAULT = 199_000;
 
 /**
  * Freeship đơn đầu (D2-08): ngưỡng tiền hàng kiện Tubu để đơn đầu của khách được miễn phí giao, null = không áp. Chỉ khách thật
  * (cùng luật voucher chào mừng: tài khoản deviceId mới tạo vô hạn) chưa có đơn nào ngoài đơn huỷ (common/first-order.ts).
- * Mặc định tắt; chỉ đọc DB khi cờ bật. Giỏ (thanh tiến độ) và checkout cùng dùng hàm này.
+ * Mặc định bật từ 199.000đ; chỉ đọc DB khi cờ bật. Giỏ (thanh tiến độ) và checkout cùng dùng hàm này.
  */
 export async function firstOrderFreeShipFrom(
   config: Pick<SystemConfigService, 'get'> | undefined,
   prisma: Pick<PrismaService, 'user' | 'order'>,
   userId: string,
 ): Promise<number | null> {
-  if (!config || (await config.get<boolean>(FIRST_ORDER_FREESHIP_ENABLED_KEY, false)) !== true) return null;
+  if (!config || (await config.get<boolean>(FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_ENABLED_DEFAULT)) !== true) return null;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
   if (!isRealUser(user)) return null;
   if (await hasPriorOrder(prisma, userId)) return null;
-  const min: unknown = await config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, 0);
+  const min: unknown = await config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT);
   return typeof min === 'number' && Number.isFinite(min) && min >= 0 ? min : null;
 }
 

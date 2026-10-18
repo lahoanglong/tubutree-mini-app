@@ -93,7 +93,7 @@ describe('ComboService.computeForStorefront', () => {
     } as any;
   }
   // Config mặc định trần 30% (fallback), test riêng override khi cần trần khác.
-  const config = { get: async (_k: string, fb?: unknown) => fb } as any;
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
 
   it('slug rỗng → không giảm (không query)', async () => {
     const prisma = makePrisma([]);

@@ -1703,7 +1703,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
 
   it('storefrontVisibility: vai trò hưởng hoa hồng và cờ duyệt cho bộ lọc gian hàng công khai', async () => {
     const svc = new AffiliateService(makePrisma(), config, pricing, pancakeOrder, coins, analytics);
-    expect(await svc.storefrontVisibility()).toEqual({ eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false });
+    expect(await svc.storefrontVisibility()).toEqual({ eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: true });
   });
 
   it('findEligibleReferrer: hoa hoá mã; null khi không có / chính người mua / không phải CTV-đại lý', async () => {

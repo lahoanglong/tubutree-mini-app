@@ -2,10 +2,10 @@ import type { SystemConfigService } from './system-config.service';
 import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
 import { toShippingEta } from './shipping-eta';
 import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../affiliate/affiliate.service';
-import { PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
+import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
 import { EVENT_REWARD_MAX_POINTS } from '../feed/community-limits';
 import { DEALER_MAX_DISCOUNT_PCT_DEFAULT, DEALER_REVIEW_HOURS_DEFAULT } from '../dealer/dealer-config';
-import { FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
+import { FIRST_ORDER_FREESHIP_ENABLED_DEFAULT, FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
@@ -75,14 +75,14 @@ export async function buildPublicConfig(config: SystemConfigService) {
     // Mặc định khớp VouchersService (cron và cấp ngay lúc đăng ký), PricingService và CheckoutService: cùng khoá, cùng fallback.
     config.get<number>('voucher.welcome_amount', 30000),
     config.get<number>('voucher.welcome_min_order', 199000),
-    config.get<unknown>(FIRST_ORDER_FREESHIP_ENABLED_KEY, false),
-    config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, 0),
+    config.get<unknown>(FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_ENABLED_DEFAULT),
+    config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT),
     config.get<number>('loyalty.vnd_per_point', 10000),
     config.get<number>('loyalty.vnd_per_point_redeem', 1000),
     config.get<unknown>('loyalty.max_redeem_pct', LOYALTY_MAX_REDEEM_PCT_DEFAULT),
     config.get<unknown>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS),
-    config.get<unknown>('home.new_customer_layout', false),
-    config.get<unknown>(PUBLIC_PREVIEW_KEY, false),
+    config.get<unknown>('home.new_customer_layout', true),
+    config.get<unknown>(PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_DEFAULT),
     config.get<unknown>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT),
     config.get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT),
   ]);

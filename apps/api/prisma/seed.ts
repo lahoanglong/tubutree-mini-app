@@ -40,10 +40,10 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'voucher.birthday_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá sinh nhật mặc định (đ) cho hạng chưa có mức riêng (mức riêng theo hạng nằm ở bảng hạng thành viên)', createOnly: true },
   { key: 'voucher.winback_days', value: 60, category: 'voucher', description: 'Khách từng mua nhưng quá số ngày này chưa đặt lại thì nhận mã giảm giá quay lại', createOnly: true },
   { key: 'voucher.winback_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá quay lại (đ)', createOnly: true },
-  { key: 'coupon.staff_max_percent', value: 50, category: 'voucher', description: 'Mã giảm % do nhân viên (không phải quản trị viên) tạo hoặc sửa: mức giảm tối đa (%, số nguyên 1–100)', createOnly: true },
-  { key: 'coupon.staff_max_amount_vnd', value: 200000, category: 'voucher', description: 'Mã do nhân viên tạo hoặc sửa: số tiền giảm tối đa (đ) của mã giảm tiền, và Giảm tối đa bắt buộc của mã giảm %', createOnly: true },
+  { key: 'coupon.staff_max_percent', value: 30, category: 'voucher', description: 'Mã giảm % do nhân viên (không phải quản trị viên) tạo hoặc sửa: mức giảm tối đa (%, số nguyên 1–100)', createOnly: true },
+  { key: 'coupon.staff_max_amount_vnd', value: 100000, category: 'voucher', description: 'Mã do nhân viên tạo hoặc sửa: số tiền giảm tối đa (đ) của mã giảm tiền, và Giảm tối đa bắt buộc của mã giảm %', createOnly: true },
   { key: 'coupon.staff_max_usage', value: 1000, category: 'voucher', description: 'Mã do nhân viên tạo hoặc sửa: tổng lượt dùng tối đa của một mã (số nguyên 1–100.000)', createOnly: true },
-  { key: 'coupon.staff_daily_budget_vnd', value: 30000000, category: 'voucher', description: 'Ngân sách mã của mỗi nhân viên trong một ngày (đ): tổng mức giảm tối đa × tổng lượt của mọi mã, lô người đó tạo trong ngày. 0 = nhân viên không tạo được mã', createOnly: true },
+  { key: 'coupon.staff_daily_budget_vnd', value: 10000000, category: 'voucher', description: 'Ngân sách mã của mỗi nhân viên trong một ngày (đ): tổng mức giảm tối đa × tổng lượt của mọi mã, lô người đó tạo trong ngày. 0 = nhân viên không tạo được mã', createOnly: true },
   {
     key: 'voucher.milestones',
     value: [
@@ -57,7 +57,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   },
 
   // Affiliate
-  { key: 'affiliate.hold_days', value: 20, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
+  { key: 'affiliate.hold_days', value: 10, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
   // Q-31: cửa sổ ghi nhận "chạm" giới thiệu CTV (AffiliateService.recordTouch). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'affiliate.attribution_days', value: 7, category: 'affiliate', description: 'Số ngày giữ ghi nhận giới thiệu (chạm link CTV/nhãn) cho đơn đặt sau đó', createOnly: true },
   { key: 'affiliate.min_withdraw_bank', value: 50000, category: 'affiliate', description: 'Min rút STK' },
@@ -195,9 +195,9 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'refill.pickup_hours', value: '', category: 'refill', description: 'CŨ (dự phòng): giờ mở cửa điểm nhận vỏ. Quản lý ở Quản trị → Đổi vỏ chai → Điểm nhận vỏ.' },
   { key: 'refill.pickup_phone', value: '', category: 'refill', description: 'CŨ (dự phòng): SĐT điểm nhận vỏ. Quản lý ở Quản trị → Đổi vỏ chai → Điểm nhận vỏ.' },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
-  { key: 'payment.bank_account_no', value: '9984606774', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
-  { key: 'payment.bank_account_name', value: 'CONG TY TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
-  { key: 'payment.bank_name', value: 'Techcombank', category: 'payment', description: 'Tên ngân hàng (hiển thị)' },
+  { key: 'payment.bank_account_no', value: '8386790906', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
+  { key: 'payment.bank_account_name', value: 'CONG TY TNHH TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
+  { key: 'payment.bank_name', value: 'Ngân hàng TMCP Kỹ Thương Việt Nam', category: 'payment', description: 'Tên ngân hàng (hiển thị)' },
   {
     key: 'game.spin_prizes',
     value: [
@@ -230,7 +230,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
     value: {
       defaultWarehouse: {
         name: 'Fuwa3e Tubu HCM',
-        phone: '0965573541',
+        phone: '0899149229',
         address: 'Golf Park, 1 đường số 2',
         ward: 'Phường Long Bình',
         district: 'Thành phố Thủ Đức',

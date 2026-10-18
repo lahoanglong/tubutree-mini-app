@@ -179,15 +179,15 @@ describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)'
 
 // D2-07b: khối "Quà khách mới" và các chữ có số (D5-10) đọc từ đây. Mặc định phải bằng mặc định trong mã của nơi dùng số đó.
 describe('SystemConfigController.publicConfig — số cho khách mới và Điểm Xanh', () => {
-  it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu tắt, 10.000đ = 1 điểm, 1 điểm = 1.000đ', async () => {
+  it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu từ 199.000đ, 10.000đ = 1 điểm, 1 điểm = 1.000đ', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.newCustomer).toEqual({
       welcomeVoucher: { amount: 30000, minOrder: 199000 },
-      firstOrderFreeShip: { enabled: false, minSubtotal: 0 },
+      firstOrderFreeShip: { enabled: true, minSubtotal: 199000 },
     });
     expect(out.loyalty).toEqual({ vndPerPoint: 10000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2, pointExpireMonths: 12 });
-    expect(out.homeNewCustomerLayout).toBe(false);
-    expect(out.communityPublicPreview).toBe(false);
+    expect(out.homeNewCustomerLayout).toBe(true);
+    expect(out.communityPublicPreview).toBe(true);
   });
 
   it('admin đổi → trả giá trị mới của đúng khoá mà cron voucher, checkout và pricing đang đọc', async () => {

@@ -98,7 +98,8 @@ export const CONFIG_KEYS_OF_INTEREST = [
 ] as const;
 
 export const COD_CAP_VND = 5_000_000;
-const SEED_BANK_ACCOUNT = '9984606774';
+// Số mẫu cũ trong migration 20260625070000: chỉ số này mới bị coi là chưa xác nhận; tài khoản thật đã chốt thì PASS.
+const PLACEHOLDER_BANK_ACCOUNT = '9984606774';
 
 export interface DbContext {
   phase: GoLivePhase;
@@ -316,8 +317,8 @@ function bankCheck(s: DbSnapshot): CheckResult {
     return fail(G_DB, 'db.bank_account', title, `thiếu hoặc sai: ${lack.join(', ')}`, 'Điền ở Quản trị, Cấu hình, nhóm payment; thiếu thì trang chuyển khoản báo lỗi và khách không trả được.');
   }
   const last4 = (no as string).trim().slice(-4);
-  if ((no as string).trim() === SEED_BANK_ACCOUNT) {
-    return warn(G_DB, 'db.bank_account', title, `số tài khoản (đuôi ${last4}) vẫn là giá trị mặc định trong seed`, 'Xác nhận đó đúng là tài khoản thật của Tubu Tree, và Pancake POS đã liên kết tài khoản này để tự đối soát.');
+  if ((no as string).trim() === PLACEHOLDER_BANK_ACCOUNT) {
+    return warn(G_DB, 'db.bank_account', title, `số tài khoản (đuôi ${last4}) vẫn là số mẫu cũ`, 'Đổi sang tài khoản thật của Tubu Tree ở Quản trị, Cấu hình, nhóm payment, và liên kết tài khoản đó với Pancake POS để tự đối soát.');
   }
   return pass(G_DB, 'db.bank_account', title, `BIN ${(bin as string).trim()}, số tài khoản đuôi ${last4}`);
 }

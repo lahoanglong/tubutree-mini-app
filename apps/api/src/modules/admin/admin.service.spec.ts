@@ -2267,10 +2267,10 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
   };
 
   it.each([
-    ['% vượt trần 50%', { type: 'PERCENT', value: 60, maxDiscount: 100_000 }, 'tối đa 50%'],
+    ['% vượt trần 30%', { type: 'PERCENT', value: 40, maxDiscount: 50_000 }, 'tối đa 30%'],
     ['% không có Giảm tối đa', { type: 'PERCENT', value: 20, maxDiscount: undefined }, 'Giảm tối đa'],
-    ['% có Giảm tối đa vượt 200.000đ', { type: 'PERCENT', value: 20, maxDiscount: 300_000 }, '200.000'],
-    ['số tiền vượt 200.000đ', { type: 'AMOUNT', value: 250_000, minOrder: 500_000 }, '200.000'],
+    ['% có Giảm tối đa vượt 100.000đ', { type: 'PERCENT', value: 20, maxDiscount: 150_000 }, '100.000'],
+    ['số tiền vượt 100.000đ', { type: 'AMOUNT', value: 150_000, minOrder: 500_000 }, '100.000'],
     ['không có Tổng lượt dùng', { usageLimit: undefined }, 'Tổng lượt'],
   ])('nhân viên tạo mã %s → 403, không ghi', async (_label, over, msg) => {
     const { create, p } = creating(over);
@@ -2280,9 +2280,14 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
   });
 
   it('nhân viên tạo mã trong trần → ghi người tạo', async () => {
-    const { create, p } = creating({ type: 'PERCENT', value: 50, maxDiscount: 200_000 });
+    const { create, p } = creating({ type: 'PERCENT', value: 30, maxDiscount: 100_000 });
     await p;
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ createdById: 's1', updatedById: 's1' }) }));
+  });
+
+  it('trần mặc định khi chưa cấu hình: 30%, 100.000đ, 10.000.000đ/ngày, 1.000 lượt', async () => {
+    const { loadStaffCouponCaps } = await import('./coupon-input-rules');
+    await expect(loadStaffCouponCaps(cfg())).resolves.toEqual({ maxPercent: 30, maxAmount: 100_000, maxUsage: 1000, dailyBudget: 10_000_000 });
   });
 
   it('trần đọc từ cấu hình coupon.staff_max_percent / coupon.staff_max_amount_vnd', async () => {
@@ -2332,17 +2337,17 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
     it.each([
       ['giảm tiền: giá trị × lượt', { type: 'AMOUNT', value: 50_000, usageLimit: 100 }],
       ['giảm %: Giảm tối đa × lượt', { type: 'PERCENT', value: 20, maxDiscount: 100_000, usageLimit: 50 }],
-      ['freeship: trần tiền nhân viên (200.000đ) × lượt', { type: 'FREESHIP', value: 0, usageLimit: 25 }],
-    ])('%s (5.000.000đ): hôm nay đã phát 25.000.000đ → được; 26.000.000đ → 400 nói còn bao nhiêu', async (_label, over) => {
-      const ok = budgetCreate(over, 25_000_000);
+      ['freeship: trần tiền nhân viên (100.000đ) × lượt', { type: 'FREESHIP', value: 0, usageLimit: 50 }],
+    ])('%s (5.000.000đ): hôm nay đã phát 5.000.000đ → được; 6.000.000đ → 400 nói còn bao nhiêu', async (_label, over) => {
+      const ok = budgetCreate(over, 5_000_000);
       await ok.p;
       expect(ok.create).toHaveBeenCalled();
       expect(rawValues(ok.prisma.$executeRaw)).toContain('coupon.staff_budget:s1');
       expect(rawValues(ok.prisma.$queryRaw)).toContain('s1');
 
-      const over1 = budgetCreate(over, 26_000_000);
+      const over1 = budgetCreate(over, 6_000_000);
       await expect(over1.p).rejects.toBeInstanceOf(BadRequestException);
-      await expect(budgetCreate(over, 26_000_000).p).rejects.toThrow(/còn 4\.000\.000đ.*nhờ quản trị viên tạo/);
+      await expect(budgetCreate(over, 6_000_000).p).rejects.toThrow(/còn 4\.000\.000đ.*nhờ quản trị viên tạo/);
       expect(over1.create).not.toHaveBeenCalled();
     });
 
@@ -2410,7 +2415,7 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
 
     it('mã nhân viên tạo đã vượt trần mới (trần vừa hạ) → nhân viên không bật lại được', async () => {
       const { update, p } = editing(row({ value: 300_000, minOrder: 1_000_000 }), 'STAFF', { isActive: true });
-      await expect(p).rejects.toThrow('200.000');
+      await expect(p).rejects.toThrow('100.000');
       expect(update).not.toHaveBeenCalled();
     });
 
@@ -2440,16 +2445,16 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
       };
       const values = (m: jest.Mock) => m.mock.calls.flatMap((c: unknown[]) => c.slice(1));
 
-      it('100 → 200 lượt × 50.000đ = thêm 5.000.000đ: ngày tạo đã phát 25.000.000đ → được', async () => {
-        const { update, prisma, p } = raising({ usageLimit: 200 }, 25_000_000);
+      it('100 → 200 lượt × 50.000đ = thêm 5.000.000đ: ngày tạo đã phát 5.000.000đ → được', async () => {
+        const { update, prisma, p } = raising({ usageLimit: 200 }, 5_000_000);
         await p;
         expect(update).toHaveBeenCalled();
         expect(values(prisma.$executeRaw!)).toContain('coupon.staff_budget:s2');
         expect(values(prisma.$queryRaw!)).toEqual(expect.arrayContaining(['s2', new Date('2026-10-16T17:00:00.000Z'), new Date('2026-10-17T17:00:00.000Z')]));
       });
 
-      it('đã phát 26.000.000đ → 400, không ghi', async () => {
-        const { update, p } = raising({ usageLimit: 200 }, 26_000_000);
+      it('đã phát 6.000.000đ → 400, không ghi', async () => {
+        const { update, p } = raising({ usageLimit: 200 }, 6_000_000);
         await expect(p).rejects.toThrow(/còn 4\.000\.000đ/);
         expect(update).not.toHaveBeenCalled();
       });

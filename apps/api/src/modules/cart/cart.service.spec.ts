@@ -9,7 +9,8 @@ import type { AnalyticsEventsService } from '../analytics/analytics-events.servi
 import type { ComboService } from '../storefront/combo.service';
 
 const coupons = {} as unknown as CouponsService;
-const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+// Freeship đơn đầu mặc định bật; các test không xét nó tắt cờ để khỏi phải dựng bảng user/order.
+const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'shipping.first_order_free_enabled' ? false : fb) as T } as unknown as SystemConfigService;
 const flash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as unknown as FlashSaleService;
 // Stub dùng chung cho các test KHÔNG assert analytics (guard tồn kho/coupon/...) — không test nào
 // trong nhóm này đi tới nhánh addItem() thành công (đều throw sớm), nên record()/recordBestEffort()
@@ -159,7 +160,7 @@ describe('CartService guard tồn kho', () => {
   it('getCart: ngưỡng freeship theo hạng của khách, cùng ngưỡng checkout dùng (R2-ENGAGE-16)', async () => {
     const tierConfig = {
       get: async <T>(k: string, fb?: T): Promise<T> =>
-        (k === 'shipping.tier_freeship_overrides' ? { LOC_BIEC: 99000 } : k === 'shipping.free_threshold' ? 200000 : fb) as T,
+        (k === 'shipping.tier_freeship_overrides' ? { LOC_BIEC: 99000 } : k === 'shipping.free_threshold' ? 200000 : k === 'shipping.first_order_free_enabled' ? false : fb) as T,
     } as unknown as SystemConfigService;
     const cartRow = (tierId: string | null) => ({ id: 'c1', couponCode: null, items: [], user: { tierId } });
     const prisma = {

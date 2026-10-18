@@ -427,7 +427,7 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(qc.isFetching()).toBe(0);
   });
 
-  // D2-07b + D7 việc 1: khối "Quà khách mới" và cờ bố cục home.new_customer_layout (mặc định tắt, chủ dự án chưa chốt).
+  // D2-07b + D7 việc 1: khối "Quà khách mới" và cờ bố cục home.new_customer_layout (mặc định bật ở API).
   describe('khối "Quà khách mới" và cờ home.new_customer_layout', () => {
     it('cờ tắt (mặc định): giữ thứ tự cũ của khách mới, khối Quà khách mới đứng ngay sau Danh mục', async () => {
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });

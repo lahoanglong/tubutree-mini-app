@@ -55,7 +55,7 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 **CTV: luật hoa hồng (nói đúng với CTV).**
 - Hoa hồng tính theo từng sản phẩm. Hiện **chưa nhập được %** (**⏳ đang làm**) nên mọi sản phẩm thật cho 0đ. Xem "Xử lý tình huống".
 - Ghi công đơn theo thứ tự: mã giới thiệu khách nhập, rồi gian hàng CTV khách đang xem, rồi lần bấm link CTV trong 7 ngày gần nhất.
-- Đơn "Đã giao hàng" thì hoa hồng ở trạng thái "Đang chờ · đang giữ" trong 20 ngày (hoặc hết hạn đổi/trả nếu dài hơn). Sau đó thành "Có thể rút". Khách trả hàng thì hoa hồng bị thu hồi.
+- Đơn "Đã giao hàng" thì hoa hồng ở trạng thái "Đang chờ · đang giữ" trong 10 ngày (hoặc hết hạn đổi/trả nếu dài hơn). Sau đó thành "Có thể rút". Khách trả hàng thì hoa hồng bị thu hồi.
 - Rút về **Ví Tubu**: có ngay. Rút về **ngân hàng**: tối thiểu 50.000đ, rút hết số dư, nhập số tài khoản mỗi lần. Lệnh đi qua "Chờ duyệt", "Đã duyệt · chờ chuyển", "Đã chuyển" (kế toán xử lý).
 - Một lần rút từ 2.000.000đ trở lên bị khấu trừ thuế TNCN 10%. CTV khai mã số thuế hoặc CCCD một lần.
 
@@ -82,7 +82,7 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 
 **CTV hỏi "hoa hồng sao bằng 0đ".** Đúng: hệ thống chưa nhập % hoa hồng (**⏳ đang làm**). Không hứa số tiền. Không tự bù đơn đã giao trước đó (cần xác nhận khi có % thì có bù không). Báo chủ shop. Chưa mời thêm CTV khi chưa sửa xong.
 
-**CTV hỏi vì sao chưa rút được.** Mở **Cá nhân › Hợp tác › Cộng tác viên**. "Đang chờ · đơn chưa giao": khách chưa nhận hàng. "Đang giữ": chờ đủ 20 ngày. "Có thể rút": rút được. Đơn bị trả thì hoa hồng mất.
+**CTV hỏi vì sao chưa rút được.** Mở **Cá nhân › Hợp tác › Cộng tác viên**. "Đang chờ · đơn chưa giao": khách chưa nhận hàng. "Đang giữ": chờ đủ 10 ngày. "Có thể rút": rút được. Đơn bị trả thì hoa hồng mất.
 
 **CTV nói khách mua nhưng không có hoa hồng.** Hỏi khách có nhập mã không, có mở link của CTV trong 7 ngày không. Chưa có công cụ tra người giới thiệu của một đơn hay gán lại (**⏳ đang làm**). Ghi mã đơn và tên CTV, gửi kỹ thuật.
 

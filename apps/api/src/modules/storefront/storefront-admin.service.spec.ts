@@ -6,7 +6,8 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
-const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+// Duyệt lần đầu mặc định bật; các test ở đây xét gỡ/đăng lại nên tắt cờ để gian hàng đã đăng hiện ngay.
+const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'storefront.require_approval' ? false : fb) as T } as unknown as SystemConfigService;
 const affiliate = { commissionEligibleRoles: async () => new Set(['AFFILIATE', 'DEALER']) } as unknown as AffiliateService;
 
 const row = (over: Record<string, unknown> = {}) => ({

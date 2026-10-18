@@ -83,7 +83,7 @@ Chỗ nào khác đề xuất ban đầu thì có ghi "(đổi)".
 | A3 | Hàng của gian hàng đối tác có trả hoa hồng CTV không? Nếu có thì ai chịu? | Không trả mặc định. Muốn trả thì đặt % từng sản phẩm, Tubu chịu | Khi trả, khoản này không trừ vào đối soát đối tác |
 | A4 | Ba mã demo đang có sẵn trong DB: WELCOME30 (giảm 30k cho đơn từ 199k), FREESHIP (đơn từ 99k, không giới hạn tổng lượt), XANH10 (giảm 10%, tối đa 50k) | Tắt cả ba bằng script dọn demo khi deploy | WELCOME30 trùng voucher chào mừng hệ thống tự tặng, nên khách mới được giảm hai lần. Kiểm go-live sẽ báo FAIL cho tới khi chốt |
 | A5 | 44 sản phẩm demo, 8 nhãn (BH.Nong, Cobote, Fuwa3e, Hector, Le Plateau Coffee, Pơ Lang, Sokfram, Visante), 7 danh mục | Tắt 44 SP demo. Giữ danh mục để gán hàng thật. Nhãn nào không phải Tubu phân phối thì ẩn | Không tắt thì khách mua được hàng giá demo |
-| A6 | Tài khoản nhận chuyển khoản `9984606774` Techcombank "CONG TY TUBU TREE" | Xác nhận đúng, hoặc gửi số đúng | Đang nằm sẵn trong migration. Sai thì khách chuyển nhầm tiền |
+| A6 | (đã chốt: 8386790906, CONG TY TNHH TUBU TREE, Techcombank; số cũ `9984606774` là số mẫu) Tài khoản nhận chuyển khoản `9984606774` Techcombank "CONG TY TUBU TREE" | Xác nhận đúng, hoặc gửi số đúng | Đang nằm sẵn trong migration. Sai thì khách chuyển nhầm tiền |
 | A7 | Các số tiền đang có trong migration: voucher chào mừng/sinh nhật/quay lại, thưởng mốc chi tiêu, hoa hồng đối tác 15%, mua chung giảm 15%, khấu trừ TNCN 10% khi vượt 2 triệu, đổi trả 7 ngày | Giữ nguyên. Kế toán kiểm lại mức TNCN | Đây là tiền thật khi chạy |
 | A8 | Nạp bộ giá trị kinh doanh mặc định lúc deploy: giải vòng quay, điểm mốc mời bạn, giảm giá đặt định kỳ, freeship theo hạng, 4 hạng thành viên, 4 bậc đại lý, 4 nhiệm vụ | Có. Chạy lệnh có cờ `--with-business-defaults`. Bảng số đầy đủ ở `impl/refseed.md` mục 3.2 | Không nạp thì admin không duyệt được đại lý (chưa có bậc), và thẻ hạng hứa freeship mà không thực hiện |
 | A9 | Nội dung 4 trang pháp lý (điều khoản, bảo mật, đổi trả, vận chuyển) + pháp nhân (tên, MST, địa chỉ) + số ngày hoàn tiền/giao hàng. Đã đăng ký website với Bộ Công Thương chưa? | Agent đã dựng khung trang có biển "BẢN NHÁP". Chủ dự án dán nội dung đã duyệt vào Admin → Cấu hình → `legal.*` trước ngày mở bán | Thiếu là rủi ro pháp lý. Trang đăng nhập đang trỏ tới các trang này |
@@ -181,12 +181,12 @@ Chỗ nào khác đề xuất ban đầu thì có ghi "(đổi)".
 - VPS có bao nhiêu vCPU? Máy nhiều lõi nên đặt `API_CPUS=2`.
 - Có nhóm Zalo/fanpage/TikTok để dẫn khách vào cộng đồng không?
 - AI tư vấn đã có khoá nhà cung cấp chưa? Có thì bật sau khi thử 20 câu hỏi thật.
-- Kho gomdon "Fuwa3e Tubu HCM", Golf Park 1 đường số 2, P. Long Bình, TP Thủ Đức, 0965573541: có đúng không?
+- Kho gomdon "Fuwa3e Tubu HCM", Golf Park 1 đường số 2, P. Long Bình, TP Thủ Đức: địa chỉ giữ nguyên; SĐT kho đã chốt là 0899149229 (không còn 0965573541).
 
 ## Việc chủ dự án phải tự làm (agent không làm thay được)
 
 1. DNS Cloudflare `api.`/`app.tubutree.com` → `14.225.207.177` (DNS-only), rồi chạy certbot.
-2. Chọn nơi lưu backup ngoài VPS, cài cron backup, diễn tập khôi phục một lần.
+2. Backup ngoài VPS đã chốt lưu trên Google Drive: tạo remote `gdrive` (scope `drive.file`, xác thực bằng `rclone authorize` trên laptop), cài cron 6 giờ/lần với `RCLONE_REMOTE=gdrive:tubutree-backups`, diễn tập khôi phục một lần. Từng bước: `docs/launch/deploy-rollback-runbook.md` mục 1.6.2 và `tools/backup/README.md`.
 3. Uptime monitor cho `api/health` và `app`.
 4. Mở Cloudinary, đặt `VITE_CLOUDINARY_*`. Chưa có thì khách không đổi được ảnh đại diện; màn hình đã ghi rõ lý do.
 5. Khoá bắt buộc: Pancake (API key, shop id, webhook secret), `ZALO_APP_ID/SECRET`, `THROTTLE_BYPASS_TOKEN` (≥ 32 ký tự), kênh cảnh báo `OPS_ALERT_*`. Web PROD: `NEXT_PUBLIC_ZALO_APP_ID` để hiện nút "Mở trên Zalo".
@@ -201,3 +201,7 @@ Chỗ nào khác đề xuất ban đầu thì có ghi "(đổi)".
 11. Kiểm điều khoản Shopee/Lazada/TikTok Shop về thẻ trong hộp hàng trước khi in.
 12. Điền 2 chỗ trống trong sổ tay vận hành: người phụ trách kỹ thuật, người phụ trách Pancake.
 13. Đơn thử đầu tiên qua Pancake: sửa tay một món trên Pancake, xem "Cần xử lý Pancake" có báo lệch đúng không; mở thêm một đơn không sửa, xem có bị báo nhầm không. Repo chưa có payload webhook Pancake thật nên chưa biết chắc field tổng tiền. Báo nhầm hàng loạt thì tắt `pancake.total_mismatch_check` trong Cấu hình và gửi payload cho kỹ thuật.
+14. Đồng bộ toàn bộ sản phẩm từ Pancake: đặt khoá Pancake, chạy lần quét đầu, rồi nhờ kỹ thuật gán danh mục cho hàng mới (đồng bộ không gán danh mục). Từng bước và rủi ro: runbook mục 1.6.1.
+15. Tạo đợt thẻ hộp hàng sàn đầu tiên với cấu hình đã chốt (30.000đ, đơn từ 199.000đ, hạn 60 ngày, chỉ khách mới, mỗi thẻ một mã): runbook mục 1.6.3.
+16. Gian hàng `<mã>.tubutree.com`: DNS wildcard `*.tubutree.com` trên Cloudflare, chứng chỉ wildcard (certbot DNS-01 plugin Cloudflare hoặc proxy cam + origin cert), vhost Apache wildcard, kiểm `https://<mã>.tubutree.com`, rồi bật `storefront.subdomain_enabled`. Từng bước: runbook mục 1.6.4.
+17. Đăng ký website/ứng dụng với Bộ Công Thương tại https://online.gov.vn nếu chưa làm (runbook mục 1.6.5).

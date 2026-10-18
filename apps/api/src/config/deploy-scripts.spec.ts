@@ -267,7 +267,7 @@ describe('ops/crontab.backup.example', () => {
   const sample = readFileSync(join(REPO, 'ops/crontab.backup.example'), 'utf8');
 
   it('dòng cron 6 giờ/lần được go-live:check nhận ra: có backup-db.sh, remote rclone và healthcheck', () => {
-    expect(parseCronBackup(sample)).toEqual({ hasBackupLine: true, remoteName: 'r2', hasHealthcheck: true });
+    expect(parseCronBackup(sample)).toEqual({ hasBackupLine: true, remoteName: 'gdrive', hasHealthcheck: true });
     const active = sample.split('\n').filter((l) => /backup-db\.sh/.test(l) && !l.trim().startsWith('#'));
     expect(active).toHaveLength(1);
     expect(active[0]).toMatch(/^17 \*\/6 \* \* \* /);

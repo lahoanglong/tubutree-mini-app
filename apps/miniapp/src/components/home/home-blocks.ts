@@ -18,7 +18,7 @@ const RETURNING: readonly HomeBlockId[] = [
 const NEW: readonly HomeBlockId[] = [
   'search', 'purchased', 'orderStrip', 'flash', 'bestSellers', 'categories', 'welcome', 'forYou', 'recentlyViewed', 'featured', 'newArrivals', 'extras',
 ];
-// Bố cục chủ dự án chưa chốt (cờ home.new_customer_layout, D7 việc 1): Quà khách mới + Danh mục lên trước giờ vàng.
+// Bố cục khách mới (cờ home.new_customer_layout, D7 việc 1): Quà khách mới + Danh mục lên trước giờ vàng.
 // 'purchased'/'orderStrip' tự rỗng với khách mới nên Quà khách mới vẫn là khối đầu tiên người ta thấy sau ô tìm.
 const NEW_LAYOUT: readonly HomeBlockId[] = [
   'search', 'purchased', 'orderStrip', 'welcome', 'categories', 'flash', 'bestSellers', 'forYou', 'recentlyViewed', 'featured', 'newArrivals', 'extras',

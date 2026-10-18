@@ -33,8 +33,8 @@ describe('resolvePublishedStorefront', () => {
 describe('loadPublicVisibility', () => {
   const config = (values: Record<string, unknown>) => ({ get: async (k: string, fb?: unknown) => (k in values ? values[k] : fb) }) as any;
 
-  it('mặc định: CTV + đại lý, không bắt duyệt', async () => {
-    expect(await loadPublicVisibility(config({}))).toEqual({ eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false });
+  it('mặc định: CTV + đại lý, bắt duyệt lần đầu', async () => {
+    expect(await loadPublicVisibility(config({}))).toEqual({ eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: true });
   });
 
   it('đọc khoá vai trò và cờ duyệt từ cấu hình; cờ lạ không mở', async () => {
