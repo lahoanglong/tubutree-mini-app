@@ -1,15 +1,19 @@
-import { BadRequestException, ConflictException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { WasteConfirmRequest } from '@tubutree/shared-types';
+import type { WasteConfirmRequest, WasteRejectRequest } from '@tubutree/shared-types';
+import { assertActiveAdmin } from '../../../common/staff-access';
 import { writeWasteEvent } from '../core/waste-events';
 import { lockWasteStaffCap } from '../waste-locks';
 import { WasteConfirmService, type WasteStaffCall } from './waste-confirm.service';
+import { loadAdminRequestDetail } from './waste-admin-detail.mapper';
 import * as matchModule from './waste-match';
 import { incrementPointUsage, pointUsage, staffConfirmedToday } from './waste-quota';
 
 jest.mock('../waste-locks');
 jest.mock('./waste-quota');
 jest.mock('../core/waste-events');
+jest.mock('./waste-admin-detail.mapper');
+jest.mock('../../../common/staff-access');
 
 const EXPIRES_AT = new Date('2027-10-18T00:00:00.000Z');
 const CFG = { enabled: true, staffDailyCapPoints: 1_000_000, shortfallLockPct: 50, shortfallLockStreak: 3 };
@@ -86,6 +90,8 @@ function setup(o: Setup = {}) {
   (incrementPointUsage as jest.Mock).mockImplementation(async () => (order.push('incrementPointUsage'), o.incremented === undefined ? 10_000 : o.incremented));
   (pointUsage as jest.Mock).mockImplementation(async () => (order.push('pointUsage'), o.usage ?? { pointsUsed: 10_000, confirmations: 1 }));
   (writeWasteEvent as jest.Mock).mockImplementation(async () => (order.push('writeWasteEvent'), { id: 'e1' }));
+  (assertActiveAdmin as jest.Mock).mockImplementation(async () => (order.push('assertActiveAdmin'), { id: 'a1', role: 'ADMIN', phone: null }));
+  (loadAdminRequestDetail as jest.Mock).mockResolvedValue({ id: 'r1' });
   const evaluate = jest.spyOn(matchModule, 'evaluateMatch').mockResolvedValue(o.matchOutcome ?? { ok: true, basis: 'TR_CODE' });
 
   const tx = {
@@ -137,7 +143,11 @@ function setup(o: Setup = {}) {
   };
   const rewards = { grant: jest.fn(async () => (order.push('grant'), o.grant ?? true)), expiresAt: jest.fn().mockResolvedValue(EXPIRES_AT) };
   const systemConfig = { get: jest.fn().mockResolvedValue(o.tankCap ?? 500) };
-  const notifier = { pointsCredited: jest.fn(async () => void order.push('notify')) };
+  const notifier = {
+    pointsCredited: jest.fn(async () => void order.push('notify')),
+    requestRejected: jest.fn(async () => void order.push('notify')),
+    requestExpired: jest.fn(async () => void order.push('notify')),
+  };
   const shipLock = { evaluateAndLock: jest.fn(async () => (order.push('shipLock'), { locked: false, shipLockedAt: null, cancelledRequestIds: [] })) };
   const svc = new WasteConfirmService(prisma as never, config as never, access as never, rewards as never, systemConfig as never, notifier as never, shipLock as never);
   const call: WasteStaffCall = { callerUserId: 's1', requestId: 'r1', route: o.route ?? 'DESK', device: { ip: '10.0.0.0', userAgent: 'jest' } };
@@ -507,5 +517,224 @@ describe('WasteConfirmService.confirm', () => {
     const h = warehouseCase({ row: whRow(), flags: { blockedAt: null, shipLockedAt: new Date('2026-10-01T00:00:00Z') } });
     await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
     expect(h.rewards.grant).toHaveBeenCalledTimes(1);
+  });
+});
+
+const rejectBody = (o: Partial<WasteRejectRequest> = {}): WasteRejectRequest => ({ rejectionReason: 'WET', ...o });
+const rejected = (o: Record<string, unknown> = {}) => row({ status: 'REJECTED', confirmedByUserId: 's1', rejectionReason: 'WET', ...o });
+const updateArg = (tx: { wasteRequest: { updateMany: jest.Mock } }) =>
+  tx.wasteRequest.updateMany.mock.calls[0]?.[0] as { where: Record<string, unknown>; data: Record<string, unknown> & { closedAt: Date } };
+const PROGRAMME_OFF = 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.';
+
+describe('WasteConfirmService.reject', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a. rejects a DROP_OFF at a PARTNER point with no points and no counter', async () => {
+    const h = setup();
+    const result = await h.svc.reject(h.call, rejectBody());
+    expect(result).toEqual({ requestId: 'r1', code: 'TR-ABCDE', status: 'REJECTED' });
+    expect(updateArg(h.tx)).toEqual(
+      expect.objectContaining({ data: { status: 'REJECTED', closedAt: expect.any(Date), rejectionReason: 'WET', rejectionNote: null, confirmedByUserId: 's1' } }),
+    );
+    expect(writeWasteEvent).toHaveBeenCalledTimes(1);
+    expect((writeWasteEvent as jest.Mock).mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        kind: 'REQUEST_REJECTED',
+        actorUserId: 's1',
+        actorRole: 'POINT_STAFF',
+        requestId: 'r1',
+        pointId: 'p1',
+        meta: expect.objectContaining({
+          route: 'DESK',
+          matchBasis: null,
+          rejectionReason: 'WET',
+          rejectionNote: null,
+          subjectUserId: 'u1',
+          staffUserId: 's1',
+          before: { status: 'OPEN' },
+          after: { status: 'REJECTED' },
+        }),
+      }),
+    );
+    expect(h.notifier.requestRejected).toHaveBeenCalledWith('u1', { id: 'r1', code: 'TR-ABCDE' }, 'WET');
+    expect(h.order.indexOf('tx end')).toBeLessThan(h.order.indexOf('notify'));
+    expect(h.shipLock.evaluateAndLock).not.toHaveBeenCalled();
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+    expect(incrementPointUsage).not.toHaveBeenCalled();
+    expect(lockWasteStaffCap).not.toHaveBeenCalled();
+    expect(staffConfirmedToday).not.toHaveBeenCalled();
+    noCustomerField(result);
+  });
+
+  describe('b. the programme switch', () => {
+    it('the warehouse still rejects a MAIL_IN and a DROP_OFF while the programme is off', async () => {
+      const mail = warehouseCase({ row: whRow({ status: 'IN_TRANSIT' }), cfg: { enabled: false } });
+      await expect(mail.svc.reject(mail.call, rejectBody({ match: { parcelCode: 'TR-ABCDE' } }))).resolves.toEqual(expect.objectContaining({ status: 'REJECTED' }));
+      const drop = warehouseCase({ row: row({ pointId: 'wh' }), cfg: { enabled: false } });
+      await expect(drop.svc.reject(drop.call, rejectBody())).resolves.toEqual(expect.objectContaining({ status: 'REJECTED' }));
+    });
+    it('a PARTNER desk is refused by the access check before any transaction', async () => {
+      const h = setup({ cfg: { enabled: false } });
+      h.access.assertPointAccess.mockRejectedValue(new ForbiddenException(PROGRAMME_OFF));
+      await expect(h.svc.reject(h.call, rejectBody())).rejects.toThrow(new ForbiddenException(PROGRAMME_OFF));
+      expect(h.prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  it('c. a blocked customer is still rejected (R17.3.60)', async () => {
+    const h = setup({ row: row({ user: { id: 'u1', phone: '0900000001', isBlocked: true } }), flags: { blockedAt: new Date('2026-10-01T00:00:00Z') } });
+    await expect(h.svc.reject(h.call, rejectBody())).resolves.toEqual({ requestId: 'r1', code: 'TR-ABCDE', status: 'REJECTED' });
+    expect(h.tx.wasteRequest.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('d. OTHER needs a note', async () => {
+    const h = setup();
+    await expect(h.svc.reject(h.call, rejectBody({ rejectionReason: 'OTHER', rejectionNote: '  ' }))).rejects.toThrow(new BadRequestException('Lý do Khác cần ghi chú'));
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    const ok = setup();
+    await ok.svc.reject(ok.call, rejectBody({ rejectionReason: 'OTHER', rejectionNote: ' vỏ hộp rách ' }));
+    expect(updateArg(ok.tx)).toEqual(expect.objectContaining({ data: expect.objectContaining({ rejectionReason: 'OTHER', rejectionNote: 'vỏ hộp rách' }) }));
+  });
+
+  it('e. a failed match basis is a 409 and writes nothing (R17.3.95)', async () => {
+    const h = warehouseCase({ row: whRow({ status: 'IN_TRANSIT' }), matchOutcome: { ok: false, reason: 'NO_MATCH' } });
+    const err = await h.svc.reject(h.call, rejectBody()).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).message).toMatch(/^Căn cứ đối chiếu không hợp lệ:/);
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+    expect(h.notifier.requestRejected).not.toHaveBeenCalled();
+  });
+
+  it('f. a MAIL_IN RECEIVED reject for unpaid postage evaluates the ship lock after commit', async () => {
+    const h = warehouseCase({ row: whRow() });
+    await expect(h.svc.reject(h.call, rejectBody({ rejectionReason: 'UNPAID_POSTAGE' }))).resolves.toEqual(expect.objectContaining({ status: 'REJECTED' }));
+    expect(h.shipLock.evaluateAndLock).toHaveBeenCalledTimes(1);
+    expect(h.shipLock.evaluateAndLock).toHaveBeenCalledWith('u1', { shortfallLockPct: 50, shortfallLockStreak: 3 });
+    expect(h.order.indexOf('tx end')).toBeLessThan(h.order.indexOf('shipLock'));
+  });
+
+  describe('g. replay', () => {
+    it('the same reject by the same caller returns the stored result and writes nothing', async () => {
+      const h = setup({ row: rejected() });
+      await expect(h.svc.reject(h.call, rejectBody())).resolves.toEqual({ requestId: 'r1', code: 'TR-ABCDE', status: 'REJECTED' });
+      expect(writeWasteEvent).not.toHaveBeenCalled();
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      expect(h.notifier.requestRejected).not.toHaveBeenCalled();
+      expect(h.shipLock.evaluateAndLock).not.toHaveBeenCalled();
+      expect(h.order).not.toContain('notify');
+    });
+    it.each([
+      ['another reason', rejected(), rejectBody({ rejectionReason: 'DIRTY' })],
+      ['another staff member', rejected({ confirmedByUserId: 's2' }), rejectBody()],
+    ])('%s is a 409', async (_n, data, b) => {
+      const h = setup({ row: data });
+      await expect(h.svc.reject(h.call, b)).rejects.toThrow(new ConflictException('Yêu cầu đã bị từ chối'));
+    });
+  });
+
+  it('a stale status (count 0) is a 409 retry', async () => {
+    const h = setup({ updateCount: 0 });
+    await expect(h.svc.reject(h.call, rejectBody())).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+  });
+
+  it('keeps the 4a bans', async () => {
+    const h = setup({ row: row({ userId: 's1', user: { id: 's1', phone: '0900000001', isBlocked: false } }) });
+    await expect(h.svc.reject(h.call, rejectBody())).rejects.toThrow(new ForbiddenException('Bạn không thể xác nhận yêu cầu này'));
+  });
+
+  it('a PICKUP transition is conditional on orderId', async () => {
+    const h = warehouseCase({ row: row({ method: 'PICKUP', pointId: 'wh', status: 'RECEIVED', orderId: 'o1', order: { status: 'DELIVERED' } }) });
+    await h.svc.reject(h.call, rejectBody());
+    expect(updateArg(h.tx)).toEqual(
+      expect.objectContaining({ where: { id: 'r1', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] }, orderId: 'o1' } }),
+    );
+  });
+});
+
+describe('WasteConfirmService.closeLost', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
+  const lost = { reason: 'Hãng vận chuyển báo mất' };
+
+  it('h. a MAIL_IN IN_TRANSIT closes as LOST without a ship-lock evaluation', async () => {
+    const h = warehouseCase({ row: row({ method: 'MAIL_IN', status: 'IN_TRANSIT', pointId: 'wh' }) });
+    await expect(h.svc.closeLost('a1', 'r1', lost)).resolves.toEqual({ id: 'r1' });
+    expect(assertActiveAdmin).toHaveBeenCalledWith(h.prisma, 'a1');
+    expect(updateArg(h.tx)).toEqual({
+      where: { id: 'r1', status: 'IN_TRANSIT', method: 'MAIL_IN' },
+      data: { status: 'EXPIRED', closedAt: expect.any(Date), closeReason: 'LOST' },
+    });
+    expect(writeWasteEvent).toHaveBeenCalledTimes(1);
+    expect((writeWasteEvent as jest.Mock).mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        kind: 'REQUEST_CLOSED_LOST',
+        actorUserId: 'a1',
+        actorRole: 'ADMIN',
+        requestId: 'r1',
+        pointId: 'wh',
+        meta: { reason: lost.reason, closeReason: 'LOST', subjectUserId: 'u1', before: { status: 'IN_TRANSIT' }, after: { status: 'EXPIRED', closeReason: 'LOST' } },
+      }),
+    );
+    const closedAt = updateArg(h.tx).data.closedAt;
+    expect(h.notifier.requestExpired).toHaveBeenCalledWith('u1', { id: 'r1', code: 'TR-ABCDE' }, 'LOST', closedAt);
+    expect(h.order.indexOf('tx end')).toBeLessThan(h.order.indexOf('notify'));
+    expect(h.shipLock.evaluateAndLock).not.toHaveBeenCalled();
+    expect(loadAdminRequestDetail).toHaveBeenCalledWith(h.prisma, h.access, 'r1', true);
+  });
+
+  it('i. a PICKUP RECEIVED closes as LOST_AT_WAREHOUSE with the orderId condition', async () => {
+    const h = warehouseCase({ row: row({ method: 'PICKUP', status: 'RECEIVED', pointId: 'wh', orderId: 'o1' }) });
+    await h.svc.closeLost('a1', 'r1', lost);
+    expect(updateArg(h.tx)).toEqual(
+      expect.objectContaining({
+        where: { id: 'r1', status: 'RECEIVED', method: 'PICKUP', orderId: 'o1' },
+        data: expect.objectContaining({ closeReason: 'LOST_AT_WAREHOUSE' }),
+      }),
+    );
+  });
+
+  it('j. a DROP_OFF OPEN cannot be closed as lost', async () => {
+    const h = setup();
+    await expect(h.svc.closeLost('a1', 'r1', lost)).rejects.toThrow('Yêu cầu này không đóng vì thất lạc được');
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+  });
+
+  it('k. a STAFF user is refused before any transaction', async () => {
+    const h = setup();
+    (assertActiveAdmin as jest.Mock).mockRejectedValue(new ForbiddenException('Chỉ quản trị viên mới làm được thao tác này.'));
+    await expect(h.svc.closeLost('s1', 'r1', lost)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('l. a missing request is a 404 and writes nothing', async () => {
+    const h = setup();
+    h.tx.wasteRequest.findUnique.mockResolvedValue(null as never);
+    await expect(h.svc.closeLost('a1', 'r1', lost)).rejects.toThrow(new NotFoundException('Không tìm thấy mã'));
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+    expect(h.notifier.requestExpired).not.toHaveBeenCalled();
+  });
+
+  it('a stale status (count 0) is a 409 retry', async () => {
+    const h = warehouseCase({ row: row({ method: 'MAIL_IN', status: 'IN_TRANSIT', pointId: 'wh' }), updateCount: 0 });
+    await expect(h.svc.closeLost('a1', 'r1', lost)).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    expect(h.notifier.requestExpired).not.toHaveBeenCalled();
+  });
+
+  it('a failed message does not fail the close', async () => {
+    const h = warehouseCase({ row: row({ method: 'MAIL_IN', status: 'IN_TRANSIT', pointId: 'wh' }) });
+    h.notifier.requestExpired.mockRejectedValueOnce(new Error('boom'));
+    await expect(h.svc.closeLost('a1', 'r1', lost)).resolves.toEqual({ id: 'r1' });
   });
 });

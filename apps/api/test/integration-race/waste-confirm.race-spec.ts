@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { SystemConfig } from '@prisma/client';
+import { Prisma, type SystemConfig } from '@prisma/client';
 import type { WasteConfirmResultDTO } from '@tubutree/shared-types';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -25,11 +25,13 @@ import {
   createWastePoint,
   createWasteRequest,
   holdFirstCall,
+  raceWithHold,
   waitUntil,
 } from './fixtures/waste-fixtures';
 
 const CONFIG_KEYS = ['waste.enabled', 'loyalty.point_expire_months', 'waste.staff_daily_cap_points'];
 const DIFFERENT_FIGURES = 'Yêu cầu đã được xác nhận với số liệu khác';
+const NOT_CONFIRMABLE = 'Yêu cầu không ở trạng thái xác nhận được';
 
 let moduleRef: TestingModule;
 let prisma: PrismaService;
@@ -323,5 +325,45 @@ describe('WasteConfirmService races (real Postgres)', () => {
     expect(results[0]).toMatchObject({ status: 'fulfilled', value: expect.objectContaining({ pointsAwarded: 10_000 }) });
     expect(results[1].status).toBe('rejected');
     expect(s.errors[0]).toContain('NOT_OPEN');
+  });
+
+  it('reject(A) then confirm(B) on one MAIL_IN RECEIVED request', async () => {
+    const customer = await newUser();
+    const r = await mailInReceived(customer.id, 10);
+    const [a2, b2] = [await newUser({ role: 'STAFF' }), await newUser({ role: 'STAFF' })];
+    const lockSql = Prisma.sql`SELECT "id" FROM "waste_requests" WHERE "id" = ${r.id} FOR UPDATE`;
+    const results = await raceWithHold(
+      prisma,
+      lockSql,
+      () => confirmSvc.reject(call(a2.id, r.id, 'ADMIN'), { rejectionReason: 'WET' }),
+      () => confirmSvc.confirm(call(b2.id, r.id, 'ADMIN'), body(10)),
+    );
+    const s = summarize(results);
+    expect(s.errors.join()).not.toMatch(/40P01|P2034/);
+    expect(results[0]).toMatchObject({ status: 'fulfilled', value: { requestId: r.id, status: 'REJECTED' } });
+    expect(results[1].status).toBe('rejected');
+    expect(s.errors[0]).toContain(NOT_CONFIRMABLE);
+    await expect(prisma.pointsTransaction.count({ where: { refType: 'RECYCLE', refId: r.id } })).resolves.toBe(0);
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'REJECTED', confirmedByUserId: a2.id });
+  });
+
+  it('confirm(B) then reject(A) on one MAIL_IN RECEIVED request', async () => {
+    const customer = await newUser();
+    const r = await mailInReceived(customer.id, 10);
+    const [a2, b2] = [await newUser({ role: 'STAFF' }), await newUser({ role: 'STAFF' })];
+    const lockSql = Prisma.sql`SELECT "id" FROM "waste_requests" WHERE "id" = ${r.id} FOR UPDATE`;
+    const results = await raceWithHold(
+      prisma,
+      lockSql,
+      () => confirmSvc.confirm(call(b2.id, r.id, 'ADMIN'), body(10)),
+      () => confirmSvc.reject(call(a2.id, r.id, 'ADMIN'), { rejectionReason: 'WET' }),
+    );
+    const s = summarize(results);
+    expect(s.errors.join()).not.toMatch(/40P01|P2034/);
+    expect(results[0]).toMatchObject({ status: 'fulfilled', value: expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000 }) });
+    expect(results[1].status).toBe('rejected');
+    expect(s.errors[0]).toContain(NOT_CONFIRMABLE);
+    await expect(prisma.pointsTransaction.count({ where: { refType: 'RECYCLE', refId: r.id } })).resolves.toBe(1);
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'COMPLETED', confirmedByUserId: b2.id });
   });
 });
