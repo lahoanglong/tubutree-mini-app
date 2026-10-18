@@ -159,7 +159,7 @@ function GeoFields({ value, onChange }: { value: GeoValue; onChange: (v: GeoValu
           {savedProvince && <option value={value.provinceCode}>{value.province}</option>}
           {provinces.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
         </select>
-        {provincesQ.isError && <span role="alert" className="mt-0.5 block text-[11px] text-danger-fg">Không tải được danh sách tỉnh/thành.</span>}
+        {provincesQ.isError && <GeoLoadFailed what="tỉnh/thành" onRetry={() => void provincesQ.refetch()} />}
       </Field>
       <Field label="Phường/xã">
         <select
@@ -176,9 +176,18 @@ function GeoFields({ value, onChange }: { value: GeoValue; onChange: (v: GeoValu
           {savedWard && <option value={value.wardCode}>{value.ward}</option>}
           {communes.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
         </select>
-        {communesQ.isError && <span role="alert" className="mt-0.5 block text-[11px] text-danger-fg">Không tải được danh sách phường/xã.</span>}
+        {communesQ.isError && <GeoLoadFailed what="phường/xã" onRetry={() => void communesQ.refetch()} />}
       </Field>
     </>
+  );
+}
+
+function GeoLoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <span role="alert" className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-danger-fg">
+      <span>{`Không tải được danh sách ${what}.`}</span>
+      <button type="button" className={BTN_XS_SECONDARY} onClick={onRetry}>Thử lại</button>
+    </span>
   );
 }
 

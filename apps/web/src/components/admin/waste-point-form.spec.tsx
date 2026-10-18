@@ -177,6 +177,27 @@ describe('WastePointForm', () => {
     expect(labels).toContain('Phường/xã');
   });
 
+  it('danh sách tỉnh/thành lỗi: có nút "Thử lại" gọi tải lại và danh sách hiện ra', async () => {
+    let provinceCalls = 0;
+    const api = mockFetch({
+      '/geo/communes': { body: [] },
+      '/geo/provinces': () => (++provinceCalls === 1 ? { status: 500, body: { message: 'lỗi' } } : { body: [{ code: '84_VN79', name: 'TP. Hồ Chí Minh' }] }),
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WastePointForm point={null} items={ITEMS} warehouseExists onSaved={vi.fn()} onCancel={() => undefined} />);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    expect(c.textContent).toContain('Không tải được danh sách tỉnh/thành.');
+    const retry = btn(c, 'Thử lại');
+    expect(retry.className).toContain('min-h-');
+    click(retry);
+    await flush();
+    expect(provinceCalls).toBe(2);
+    expect(c.textContent).not.toContain('Không tải được danh sách tỉnh/thành.');
+    expect(q(c, 'select[aria-label="Tỉnh/thành"]')!.textContent).toContain('TP. Hồ Chí Minh');
+  });
+
   it('sửa điểm: phường/xã đã lưu vẫn hiện khi danh sách chưa có hoặc chưa tải xong', async () => {
     const { c } = await mount({ point: wastePoint({ communeCode: '84_VN79_99999', communeName: 'Phường Đã Lưu' }) });
     const select = q(c, 'select[aria-label="Phường/xã"]') as unknown as HTMLSelectElement;
