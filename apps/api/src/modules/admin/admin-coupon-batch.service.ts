@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -166,17 +166,21 @@ export class AdminCouponBatchService {
        LIMIT 200`;
   }
 
-  async codes(rawBatch: string) {
+  /** Nhân viên chỉ xem mã lô do chính mình tạo: lộ mã lô khác là đem đi nhận bằng tài khoản khác, lách trần B19. */
+  async codes(rawBatch: string, actor: CouponActor = SYSTEM_ACTOR) {
     const batch = rawBatch.trim().toUpperCase();
     const [rows, base] = await Promise.all([
       this.prisma.coupon.findMany({
         where: { batch },
         orderBy: { code: 'asc' },
-        select: { code: true, isActive: true, _count: { select: { claims: true, redemptions: true } } },
+        select: { code: true, isActive: true, createdById: true, _count: { select: { claims: true, redemptions: true } } },
       }),
       this.claimUrlBase(),
     ]);
     if (rows.length === 0) throw new NotFoundException('Không tìm thấy lô mã.');
+    if (actor.staff && rows.some((r) => r.createdById !== actor.id)) {
+      throw new ForbiddenException('Lô này do người khác tạo, chỉ ADMIN xem được mã.');
+    }
     return {
       batch,
       claimUrlBase: base || null,

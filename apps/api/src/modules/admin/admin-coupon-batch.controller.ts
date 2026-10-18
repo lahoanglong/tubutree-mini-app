@@ -53,8 +53,8 @@ export class AdminCouponBatchController {
   }
 
   @Get(':batch/codes')
-  codes(@Param('batch') batch: string) {
-    return this.batches.codes(batch);
+  codes(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Param('batch') batch: string) {
+    return this.batches.codes(batch, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   @Patch(':batch')

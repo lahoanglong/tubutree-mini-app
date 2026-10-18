@@ -151,6 +151,38 @@ describe('AdminCouponBatchService.codes / setActive', () => {
     ]);
   });
 
+  describe('codes: nhân viên chỉ xem mã lô do chính mình tạo (chặn gom mã đem nhận bằng tài khoản khác)', () => {
+    const row = (createdById: string | null) => ({ code: 'SHOPEE-AAAA2222', isActive: true, createdById, _count: { claims: 0, redemptions: 0 } });
+
+    it('lô của chính nhân viên → xem được', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('s1'), row('s1')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).resolves.toMatchObject({ batch: 'SHOPEE' });
+    });
+
+    it('lô do ADMIN / hệ thống tạo → 403', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('a1')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toThrow('chỉ ADMIN xem được mã');
+      findMany.mockResolvedValue([row(null)]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('lô của nhân viên khác, hoặc lẫn một mã của người khác → 403', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('s2')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toBeInstanceOf(ForbiddenException);
+      findMany.mockResolvedValue([row('s1'), row('s2')]);
+      await expect(svc.codes('shopee', { id: 's1', staff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('ADMIN xem được mọi lô', async () => {
+      const { svc, findMany } = make();
+      findMany.mockResolvedValue([row('s2')]);
+      await expect(svc.codes('shopee', { id: 'a1', staff: false })).resolves.toMatchObject({ batch: 'SHOPEE' });
+    });
+  });
+
   it('codes: lô không tồn tại → 404', async () => {
     const { svc, findMany } = make();
     findMany.mockResolvedValue([]);
