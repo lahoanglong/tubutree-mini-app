@@ -349,6 +349,10 @@ export class SystemConfigService {
     return key in SystemConfigService.RANGES || key in SystemConfigService.JSON_RULES;
   }
 
+  static writeRuleKeys(): string[] {
+    return [...Object.keys(SystemConfigService.RANGES), ...Object.keys(SystemConfigService.JSON_RULES)];
+  }
+
   private assertInRange(key: string, value: unknown): void {
     const jsonRule = SystemConfigService.JSON_RULES[key];
     if (jsonRule) {

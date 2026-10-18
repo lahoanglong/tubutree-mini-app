@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SYSTEM_CONFIGS, TIERS } from '../../../prisma/seed';
 import { SystemConfigService } from './system-config.service';
+import { adminConfigRuleKeys } from '../admin/admin-config-rules';
 import type { PrismaService } from '../../prisma/prisma.service';
 import {
   BUSINESS_CONFIG_KEYS,
@@ -161,9 +162,10 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
     expect(unclassified).toEqual([]);
   });
 
-  it('danh sách loại không có dòng thừa: mọi khoá/tiền tố loại đều còn khoá tương ứng trong seed.ts', () => {
+  it('danh sách loại không có dòng thừa: mọi khoá/tiền tố loại đều còn khoá tương ứng trong seed.ts (khoá không có trong seed.ts thì phải còn luật ghi)', () => {
     const seeded = keysOf(SYSTEM_CONFIGS);
-    for (const key of Object.keys(EXCLUDED_CONFIG_KEYS)) expect(seeded).toContain(key);
+    const ruled = new Set([...SystemConfigService.writeRuleKeys(), ...adminConfigRuleKeys()]);
+    for (const key of Object.keys(EXCLUDED_CONFIG_KEYS)) expect(seeded.includes(key) || ruled.has(key)).toBe(true);
     for (const prefix of Object.keys(EXCLUDED_CONFIG_PREFIXES)) expect(seeded.some((k) => k.startsWith(`${prefix}.`))).toBe(true);
   });
 
@@ -190,6 +192,17 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
   // rồi sửa danh sách ở đây cùng commit. Đừng cập nhật danh sách mà không xem khoá mới có nhạy cảm không.
   it('danh sách khoá nạp mặc định lên DB thật khớp danh sách đã duyệt', () => {
     expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS)).sort()).toEqual(APPROVED_LOADED_KEYS);
+  });
+
+  it('khoá có luật ghi mà không được nạp thì vô hình ở tab Cấu hình: mỗi khoá phải được nạp hoặc bị loại có lý do', () => {
+    const loaded = new Set(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS)));
+    const business = new Set(keysOf(selectBusinessConfigs(SYSTEM_CONFIGS)));
+    const ruled = [...new Set([...SystemConfigService.writeRuleKeys(), ...adminConfigRuleKeys()])];
+    const invisible = ruled.filter((k) => !loaded.has(k) && !business.has(k) && classifyConfigKey(k) !== 'excluded');
+    const message = invisible.length
+      ? `Khoá có luật ghi nhưng không được nạp lên DB thật nên chủ shop không thấy ở tab Cấu hình: ${invisible.join(', ')}. Sửa: thêm vào EXTRA_CONFIGS (config-selection.ts) với giá trị mặc định trong mã, hoặc EXCLUDED_CONFIG_KEYS kèm lý do.`
+      : '';
+    expect({ message, invisible }).toEqual({ message: '', invisible: [] });
   });
 
   it('bốn khoá legal.* được nạp với giá trị rỗng, bằng mặc định trong mã (LegalConfigController trả null thì web dùng bản nháp), để admin có chỗ dán nội dung đã duyệt', () => {

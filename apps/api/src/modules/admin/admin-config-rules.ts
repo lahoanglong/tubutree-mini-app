@@ -205,6 +205,10 @@ export function hasAdminConfigRule(key: string): boolean {
   return key in RULES || key in PAIR_OF;
 }
 
+export function adminConfigRuleKeys(): string[] {
+  return [...Object.keys(RULES), ...Object.keys(PAIR_OF)];
+}
+
 /**
  * Ném BadRequest nếu `value` sai luật của khoá; khoá không có luật riêng → bỏ qua. `partnerValue` là giá trị hiện lưu
  * của khoá đối ứng (configPartnerKey) cho luật so chéo; không truyền hoặc null/undefined = chưa có gì để so.
