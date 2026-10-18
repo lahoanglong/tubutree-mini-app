@@ -235,22 +235,22 @@ test.describe('Web khách: CTV', () => {
     expect(api.callsTo('POST', '/storefront/me/apply-template')[0]!.body).toEqual({ categoryId: 'cat1' });
   });
 
-  test('gian hàng: tạo bộ sưu tập combo, thêm sản phẩm, đăng — đúng body như Mini App', async ({ page, api }) => {
+  test('gian hàng: tạo bộ sưu tập (chỉ tên), thêm sản phẩm, đăng — đúng body như Mini App', async ({ page, api }) => {
     mockSession(api);
     api.get('/storefront/me', SF());
     api.get('/storefront/me/products', [{ id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 }]);
     api.get('/storefront/me/stats', EMPTY_STATS);
     api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
-    api.post('/storefront/me/collections', { id: 'c2', title: 'Combo Tết', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 15, sortOrder: 1, items: [] });
+    api.post('/storefront/me/collections', { id: 'c2', title: 'Combo Tết', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] });
     api.post('/storefront/me/collections/:id/items', { id: 'i2', productId: 'p2' });
     api.post('/storefront/me/publish', SF({ isPublished: true }));
     await page.goto('/ctv/gian-hang');
     await page.getByLabel('Tên bộ sưu tập (khách sẽ thấy)').fill('Combo Tết');
-    await page.getByLabel('Loại bộ sưu tập').selectOption('COMBO');
-    await page.getByLabel('Giảm giá combo (%)').fill('15');
+    await expect(page.getByLabel('Loại bộ sưu tập')).toHaveCount(0);
+    await expect(page.getByLabel('Giảm giá combo (%)')).toHaveCount(0);
     await page.getByRole('button', { name: 'Tạo bộ sưu tập' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/collections')).toHaveLength(1);
-    expect(api.callsTo('POST', '/storefront/me/collections')[0]!.body).toEqual({ title: 'Combo Tết', kind: 'COMBO', comboDiscountPct: 15 });
+    expect(api.callsTo('POST', '/storefront/me/collections')[0]!.body).toEqual({ title: 'Combo Tết' });
     await page.getByRole('button', { name: 'Thêm sản phẩm' }).first().click();
     await page.getByRole('button', { name: 'Thêm Xà phòng' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/collections/:id/items')).toHaveLength(1);

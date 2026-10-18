@@ -380,22 +380,13 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     expect((inputByLabel('Tên bộ sưu tập (khách sẽ thấy)') as HTMLInputElement).value).toBe('');
   });
 
-  it('tạo bộ sưu tập combo: gửi kind, bố cục và % giảm; % ngoài 0..100 bị chặn', async () => {
+  it('form tạo bộ sưu tập chỉ có ô tên, không có chọn loại, bố cục hay % giảm', async () => {
     mount();
     await flush();
-    typeInto(inputByLabel('Tên bộ sưu tập (khách sẽ thấy)'), 'Combo Tết');
-    selectValue(document.querySelector('select'), 'COMBO');
-    await flush();
-    const pct = Array.from(document.querySelectorAll('input')).find((i) => i.closest('div')?.textContent?.includes('Giảm giá combo'))!;
-    typeInto(pct, '150');
-    expect((btn('Tạo bộ sưu tập') as HTMLButtonElement).disabled).toBe(true);
-    expect(text()).toContain('Nhập số nguyên từ 0 đến 100.');
-    typeInto(pct, '15');
-    const layout = document.querySelectorAll('select')[1]!;
-    selectValue(layout, 'CAROUSEL');
-    click(btn('Tạo bộ sưu tập'));
-    await flush();
-    expect(writes().map((c) => c.body)).toEqual([{ title: 'Combo Tết', kind: 'COMBO', comboDiscountPct: 15, layout: 'CAROUSEL' }]);
+    expect(document.querySelectorAll('select').length).toBe(0);
+    expect(text()).not.toContain('Loại bộ sưu tập');
+    expect(text()).not.toContain('Bố cục');
+    expect(text()).not.toContain('Giảm giá combo');
   });
 
   it('bộ sưu tập combo hiện nhãn combo kèm % và bố cục', async () => {
@@ -406,34 +397,20 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     expect(text()).toContain('Cuộn ngang');
   });
 
-  it('sửa bộ sưu tập thường: đổi tên và bố cục, không có ô % giảm', async () => {
+  it('sửa bộ sưu tập: chỉ đổi tên, PATCH chỉ gửi title, kể cả với combo', async () => {
+    state.sf = storefront({ collections: [{ id: 'c1', title: 'Combo A', kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 12, sortOrder: 0, items: [item()] }] });
     mount();
     await flush();
     click(btn('Sửa bộ sưu tập'));
     await flush();
+    expect(dialog()?.querySelectorAll('select').length).toBe(0);
+    expect(dialog()?.querySelectorAll('input').length).toBe(1);
     expect(dialog()?.textContent).not.toContain('Giảm giá combo');
-    const name = dialog()!.querySelector('input')!;
-    typeInto(name, '  Tên mới ');
-    selectValue(dialog()!.querySelector('select'), 'STACK');
+    expect(dialog()?.textContent).not.toContain('Bố cục');
+    typeInto(dialog()!.querySelector('input'), '  Tên mới ');
     click(btn('Lưu', dialog()!));
     await flush();
-    expect(writes().map((c) => [c.method, c.path, c.body])).toEqual([['patch', '/storefront/me/collections/c1', { title: 'Tên mới', layout: 'STACK' }]]);
-  });
-
-  it('sửa bộ sưu tập combo: gửi cả % giảm; % sai thì khoá nút Lưu', async () => {
-    state.sf = storefront({ collections: [{ id: 'c1', title: 'Combo A', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 12, sortOrder: 0, items: [item()] }] });
-    mount();
-    await flush();
-    click(btn('Sửa bộ sưu tập'));
-    await flush();
-    const pct = Array.from(dialog()!.querySelectorAll('input'))[1]!;
-    expect(pct.value).toBe('12');
-    typeInto(pct, 'abc');
-    expect((btn('Lưu', dialog()!) as HTMLButtonElement).disabled).toBe(true);
-    typeInto(pct, '20');
-    click(btn('Lưu', dialog()!));
-    await flush();
-    expect(writes()[0]!.body).toEqual({ title: 'Combo A', layout: 'GRID', comboDiscountPct: 20 });
+    expect(writes().map((c) => [c.method, c.path, c.body])).toEqual([['patch', '/storefront/me/collections/c1', { title: 'Tên mới' }]]);
   });
 
   it('xoá bộ sưu tập phải xác nhận; Huỷ thì không gọi API', async () => {

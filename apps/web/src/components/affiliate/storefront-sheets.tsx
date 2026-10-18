@@ -26,15 +26,11 @@ import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontImageUpload } from './storefront-image-upload';
-import { comboPctValue, KIND_LABEL, LAYOUT_LABEL } from './storefront-rules';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from './storefront-theme';
 
 export const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 export type Notify = (text: string, error?: boolean) => void;
-
-type Layout = keyof typeof LAYOUT_LABEL;
-type Kind = keyof typeof KIND_LABEL;
 
 function InlineError({ text }: { text: string | null }) {
   return text ? (
@@ -42,28 +38,6 @@ function InlineError({ text }: { text: string | null }) {
       {text}
     </p>
   ) : null;
-}
-
-function LayoutSelect({ value, onChange }: { value: Layout; onChange: (v: Layout) => void }) {
-  return (
-    <Field label="Bố cục">
-      <select className={ui.field} value={value} onChange={(e) => onChange(e.target.value as Layout)}>
-        {(Object.keys(LAYOUT_LABEL) as Layout[]).map((k) => (
-          <option key={k} value={k}>
-            {LAYOUT_LABEL[k]}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-}
-
-function ComboPctField({ value, onChange, invalid }: { value: string; onChange: (v: string) => void; invalid: boolean }) {
-  return (
-    <Field label="Giảm giá combo (%)" error={invalid ? 'Nhập số nguyên từ 0 đến 100.' : undefined}>
-      <input className={invalid ? ui.fieldError : ui.field} inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} />
-    </Field>
-  );
 }
 
 /** Chọn mẫu dựng sẵn theo danh mục khi tạo gian hàng mới (mỗi mẫu = 1 bộ sưu tập + tối đa 8 sản phẩm nổi bật); luôn có lối "Bỏ qua". */
@@ -384,7 +358,7 @@ function ConfigForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () 
   );
 }
 
-/** Sửa bộ sưu tập: tên, bố cục và (với combo) % giảm. Loại NORMAL/COMBO không đổi được sau khi tạo (API không nhận). */
+/** Sửa bộ sưu tập: chỉ đổi tên, giống Mini App (loại, bố cục, % giảm combo không có giao diện). */
 export function CollectionSheet({
   collection,
   onClose,
@@ -403,19 +377,9 @@ export function CollectionSheet({
 
 function CollectionForm({ collection, onClose, onSaved }: { collection: StorefrontCollectionEdit; onClose: () => void; onSaved: Notify }) {
   const [title, setTitle] = useState(collection.title);
-  const [layout, setLayout] = useState<Layout>(collection.layout);
-  const [pct, setPct] = useState(String(collection.comboDiscountPct ?? 0));
   const [error, setError] = useState<string | null>(null);
-  const combo = collection.kind === 'COMBO';
-  const pctValue = comboPctValue(pct);
-  const pctInvalid = combo && pctValue === null;
   const saveMut = useMutation({
-    mutationFn: () =>
-      updateCollection(coreHttp, collection.id, {
-        title: title.trim(),
-        layout,
-        ...(combo && pctValue !== null && { comboDiscountPct: pctValue }),
-      }),
+    mutationFn: () => updateCollection(coreHttp, collection.id, { title: title.trim() }),
     onSuccess: () => {
       onSaved('Đã lưu bộ sưu tập');
       onClose();
@@ -428,37 +392,22 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
       <Field label="Tên bộ sưu tập">
         <input className={ui.field} maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
-      <LayoutSelect value={layout} onChange={setLayout} />
-      {combo && <ComboPctField value={pct} onChange={setPct} invalid={pctInvalid} />}
       <InlineError text={error} />
-      <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!title.trim() || pctInvalid || saveMut.isPending} onClick={() => saveMut.mutate()}>
+      <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!title.trim() || saveMut.isPending} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu'}
       </button>
     </div>
   );
 }
 
-/** Form tạo bộ sưu tập: phải có TÊN do CTV đặt; chọn loại (thường/combo), bố cục và % giảm combo. */
-export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { title: string; kind?: Kind; layout?: Layout; comboDiscountPct?: number }, onSuccess: () => void) => void; pending: boolean }) {
+/** Form tạo bộ sưu tập: chỉ cần TÊN do CTV đặt, giống Mini App. */
+export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { title: string }, onSuccess: () => void) => void; pending: boolean }) {
   const [title, setTitle] = useState('');
-  const [kind, setKind] = useState<Kind>('NORMAL');
-  const [layout, setLayout] = useState<Layout>('GRID');
-  const [pct, setPct] = useState('10');
-  const combo = kind === 'COMBO';
-  const pctValue = comboPctValue(pct);
-  const pctInvalid = combo && pctValue === null;
 
   const submit = () => {
-    if (!title.trim() || pctInvalid) return;
+    if (!title.trim()) return;
     // Chỉ xoá tên khi tạo xong: bị từ chối hay mất mạng thì CTV còn tên để sửa.
-    onCreate(
-      {
-        title: title.trim(),
-        ...(combo && { kind, comboDiscountPct: pctValue! }),
-        ...(layout !== 'GRID' && { layout }),
-      },
-      () => setTitle(''),
-    );
+    onCreate({ title: title.trim() }, () => setTitle(''));
   };
 
   return (
@@ -472,23 +421,10 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <button type="button" className={ui.btnSecondary} disabled={!title.trim() || pctInvalid || pending} onClick={submit}>
+        <button type="button" className={ui.btnSecondary} disabled={!title.trim() || pending} onClick={submit}>
           <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
           Tạo bộ sưu tập
         </button>
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <Field label="Loại bộ sưu tập">
-          <select className={ui.field} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-            {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
-              <option key={k} value={k}>
-                {KIND_LABEL[k]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <LayoutSelect value={layout} onChange={setLayout} />
-        {combo && <ComboPctField value={pct} onChange={setPct} invalid={pctInvalid} />}
       </div>
     </div>
   );

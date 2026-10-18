@@ -9,14 +9,6 @@ export function storefrontHost(sf: { slug: string; subdomain?: string | null; su
   return sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`;
 }
 
-/** % giảm combo: số nguyên 0..100 (đúng DTO của API); khác thế trả null để form báo lỗi thay vì gửi lên. */
-export function comboPctValue(raw: string): number | null {
-  const t = raw.trim();
-  if (!/^\d{1,3}$/.test(t)) return null;
-  const n = Number(t);
-  return n <= 100 ? n : null;
-}
-
 export interface StatRow {
   key: string;
   name: string;

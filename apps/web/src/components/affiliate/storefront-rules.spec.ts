@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   absoluteKitLink,
-  comboPctValue,
   questPercent,
   shareCaptions,
   shareFallbackText,
@@ -24,19 +23,6 @@ describe('storefrontHost', () => {
     expect(storefrontHost({ slug: 'a', subdomain: 'brand1', subdomainEnabled: true })).toBe('brand1.tubutree.com');
     expect(storefrontHost({ slug: 'a', subdomain: 'brand1', subdomainEnabled: false })).toBe('/s/a');
     expect(storefrontHost({ slug: 'a', subdomain: null, subdomainEnabled: true })).toBe('/s/a');
-  });
-});
-
-describe('comboPctValue', () => {
-  it('chỉ nhận số nguyên 0..100', () => {
-    expect(comboPctValue('15')).toBe(15);
-    expect(comboPctValue(' 0 ')).toBe(0);
-    expect(comboPctValue('100')).toBe(100);
-    expect(comboPctValue('101')).toBeNull();
-    expect(comboPctValue('-1')).toBeNull();
-    expect(comboPctValue('7.5')).toBeNull();
-    expect(comboPctValue('')).toBeNull();
-    expect(comboPctValue('abc')).toBeNull();
   });
 });
 

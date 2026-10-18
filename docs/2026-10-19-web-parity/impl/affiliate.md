@@ -62,7 +62,7 @@ Vòng 2 (1 MINOR):
 
 ## 5. Câu hỏi cho chủ dự án
 
-1. Web có UI chọn loại COMBO, bố cục, % giảm combo mà Mini App không có (đề lane yêu cầu). Mặc định: body chỉ thêm `kind`/`layout`/`comboDiscountPct` khi khác mặc định; % số nguyên 0-100. Cần duyệt.
+1. Mini App và web chỉ đặt tên bộ sưu tập; API cho phép COMBO/bố cục/% giảm combo (trần `storefront.max_combo_pct`, mặc định 30). Có mở giao diện này cho cả hai nền tảng không? Mặc định: không, web giống Mini App.
 2. Trang `/thanh-toan/chuyen-khoan/:code` còn pending. Mặc định: dẫn sang `/tai-khoan/don-hang/:code` (có QR); khi route mở sẽ hiện "Mở trang thanh toán (gửi khách)".
 3. Tạo gian hàng xong mà áp mẫu lỗi: giữ sheet mở, chọn lại gọi lại `POST /storefront` (giống Mini App). Mặc định: không đổi.
 4. Nút "Xem trước" khi còn nháp báo cần đăng trước, không điều hướng (giống Mini App).
