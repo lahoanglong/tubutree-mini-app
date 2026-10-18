@@ -158,6 +158,17 @@ describe('hub /tai-khoan — menu theo nhóm', () => {
     expect(c.textContent).toContain('Đơn hàng của tôi');
   });
 
+  it('mỗi nhóm menu là vùng có tên đúng bằng h2 của nó', async () => {
+    const c = await mount();
+    const sections = Array.from(c.querySelectorAll('section[aria-labelledby]'));
+    expect(sections.length).toBeGreaterThanOrEqual(4);
+    for (const sec of sections) {
+      const ids = sec.getAttribute('aria-labelledby')!.split(/\s+/);
+      expect(ids).toHaveLength(1);
+      expect(document.getElementById(ids[0]!)?.textContent).toBe(sec.querySelector('h2')?.textContent);
+    }
+  });
+
   it('Sổ địa chỉ, Ví Tubu, Điểm Xanh là liên kết; mục trỏ route pending thì ẩn', async () => {
     mocks.notReady = new Set(['/mua-chung', '/tai-khoan/thong-bao']);
     const c = await mount();

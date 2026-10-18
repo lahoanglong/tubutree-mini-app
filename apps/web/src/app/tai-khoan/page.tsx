@@ -210,9 +210,9 @@ export default function AccountPage() {
       </section>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {menu.map((section) => (
-          <section key={section.group} aria-labelledby={`${noticeId}-${section.group}`} className="min-w-0">
-            <h2 id={`${noticeId}-${section.group}`} className="mb-1.5 ml-1 text-xs font-semibold uppercase tracking-wide text-stone-600">
+        {menu.map((section, gi) => (
+          <section key={section.group} aria-labelledby={`${noticeId}-g${gi}`} className="min-w-0">
+            <h2 id={`${noticeId}-g${gi}`} className="mb-1.5 ml-1 text-xs font-semibold uppercase tracking-wide text-stone-600">
               {section.group}
             </h2>
             <ul className={`${ui.card} divide-y divide-stone-200 overflow-hidden`}>
