@@ -200,6 +200,24 @@ describe('ExternalClaimsTab', () => {
     expect(btn(admin.container, 'Gắn đơn')).not.toBeNull();
   });
 
+  it('lần gửi mã có người khác cùng gửi: hiện số người và danh sách (tên, SĐT che, giờ VN); không có thì không hiện khối', async () => {
+    stub({
+      claims: [],
+      attempts: [
+        attempt({ otherSubmittersCount: 2, otherSubmitters: [{ userId: 'u7', userName: 'Bích', userPhoneMasked: '091****678', createdAt: '2026-03-01T17:30:00.000Z' }, { userId: 'u8', userName: null, userPhoneMasked: null, createdAt: '2026-03-02T01:00:00.000Z' }] }),
+        attempt({ id: 'a2', maskedCode: 'SH***222', otherSubmittersCount: 0, otherSubmitters: [] }),
+      ],
+    });
+    const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+    await flush();
+    const rows = [...r.container.querySelectorAll('[data-external-attempt]')];
+    const block = rows[0]!.querySelector('[data-other-submitters]')!;
+    expect(block.textContent).toContain('2 người khác cùng gửi mã này');
+    expect(block.textContent).toContain('Bích · 091****678 · gửi lúc 00:30 02/03/2026');
+    expect(block.textContent).toContain('— · không có SĐT');
+    expect(rows[1]!.querySelector('[data-other-submitters]')).toBeNull();
+  });
+
   it('gắn đơn gửi pancakeOrderId và note; kết quả REVIEW báo chờ người khác duyệt', async () => {
     const m = stub({ claims: [], attempts: [attempt({ externalOrderId: 'e9' })], post: () => ({ body: { claimId: 'c9', state: 'REVIEW' } }) });
     const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
@@ -338,18 +356,39 @@ describe('ExternalClaimsTab', () => {
       expect(call.init?.body).toBeUndefined();
     });
 
-    it('API trả 400 NOTE_REQUIRED: báo lỗi tiếng Việt rõ ràng', async () => {
+    it('API vẫn trả 400 NOTE_REQUIRED khi hộp ghi chú đang mở: mở lại hộp, lỗi ngay trong hộp, giữ nội dung đã gõ', async () => {
       stub({ claims: [phoneClaim()], post: () => ({ status: 400, body: { statusCode: 400, code: 'NOTE_REQUIRED', message: 'english' } }) });
       const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
       await flush();
       click(btn(r.container, 'Duyệt'));
       await flush();
-      typeInto(confirmDialog()!.querySelector('textarea'), 'x');
+      typeInto(confirmDialog()!.querySelector('textarea'), 'xyz');
       answerConfirm(true);
       await flush();
-      const alert = r.container.querySelector('[role="alert"]')!;
-      expect(alert.textContent).toContain('cần ghi chú');
-      expect(alert.textContent).not.toContain('english');
+      const dlg = confirmDialog()!;
+      expect(dlg.querySelector('[data-input-error]')!.textContent).toContain('cần ghi chú');
+      expect(dlg.textContent).not.toContain('english');
+      expect(dlg.querySelector('textarea')!.value).toBe('xyz');
+    });
+
+    it('ghi chú dưới 3 ký tự thật (ok, chỉ ký tự vô hình): nêu rõ và không cho gửi; đủ 3 ký tự thì gửi', async () => {
+      const m = stub({ claims: [phoneClaim()] });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      click(btn(r.container, 'Duyệt'));
+      await flush();
+      const accept = () => confirmDialog()!.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!;
+      for (const bad of ['ok', ' a ', '\u200b\u200d\u00ad\u2800  ', 'a\u3164b']) {
+        typeInto(confirmDialog()!.querySelector('textarea'), bad);
+        expect(accept().disabled).toBe(true);
+        expect(confirmDialog()!.querySelector('[data-input-error]')!.textContent).toBe('Ghi chú cần ít nhất 3 ký tự');
+      }
+      typeInto(confirmDialog()!.querySelector('textarea'), 'abc');
+      expect(accept().disabled).toBe(false);
+      expect(confirmDialog()!.querySelector('[data-input-error]')).toBeNull();
+      answerConfirm(true);
+      await flush();
+      expect(m.calls.some((c) => c.url.endsWith('/c1/approve'))).toBe(true);
     });
 
     it('M2: REVIEW vì lý do khác mà mốc vẫn cũ: vẫn hỏi ghi chú, có nhắc không ghi SĐT đầy đủ', async () => {

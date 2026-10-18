@@ -185,6 +185,21 @@ describe('Trang Tích điểm đơn ngoài app', () => {
     expect(result.querySelector('.lucide-circle-check, .lucide-check-circle-2')).toBeNull();
   });
 
+  it('mã đang được tài khoản khác chờ: đúng câu CSKH, icon thông tin, không spinner đang tìm, không "Đã ghi nhận"', async () => {
+    mocks.submitExternalClaim.mockResolvedValue({
+      status: 'CLAIMED_BY_OTHER', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
+    });
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+    const result = await screen.findByTestId('claim-result');
+    expect(result).toHaveTextContent('Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.');
+    expect(result).not.toHaveTextContent('Chưa thấy đơn này');
+    expect(result).not.toHaveTextContent('Đã ghi nhận');
+    expect(result.querySelector('.lucide-info')).not.toBeNull();
+    expect(result.querySelector('.lucide-clock')).toBeNull();
+  });
+
   it('claim đã huỷ, thu hồi, hết hạn: điểm nhạt và gạch ngang, không dùng màu thương hiệu', async () => {
     const mk = (id: string, state: string) => ({ id, channel: 'Lazada', maskedCode: `LZ***${id}`, state, points: 500, expectedCreditAt: null, creditedAt: null, createdAt: '2026-10-01T00:00:00.000Z' });
     mocks.getMyExternalClaims.mockResolvedValue({ data: [mk('1', 'VOIDED'), mk('2', 'REVERSED'), mk('3', 'LAPSED'), mk('4', 'CREDITED')], meta: { page: 1, limit: 10, total: 4 }, searching: [] });

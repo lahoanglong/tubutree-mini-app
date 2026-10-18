@@ -205,4 +205,24 @@ describe('ExternalClaimService.rematchOne', () => {
     expect(await rematch(svc)).toBe('RESOLVED');
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'EXTERNAL_POINTS_CLAIM_NOT_FOUND', expect.anything(), expect.anything());
   });
+
+  describe('khe đua: lượt chờ của người khác biến mất giữa createMany và findFirst', () => {
+    it('findFirst ra null: thử createMany lại một lần, ghi được thì SEARCHING và không ghi NOT_FOUND', async () => {
+      const { svc, tx } = build({ config: flagOn });
+      tx.externalClaimAttempt.createMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+      const res = await svc.submit('u1', 'SPXVN0123456789');
+      expect(res.status).toBe('SEARCHING');
+      expect(tx.externalClaimAttempt.createMany).toHaveBeenCalledTimes(2);
+      expect(tx.externalClaimAttempt.create).not.toHaveBeenCalled();
+    });
+
+    it('thử lại vẫn không ghi được và không thấy ai đang chờ: ghi NOT_FOUND và trả CLAIMED_BY_OTHER', async () => {
+      const { svc, tx, attemptCreate } = build({ config: flagOn });
+      tx.externalClaimAttempt.createMany.mockResolvedValue({ count: 0 });
+      const res = await svc.submit('u1', 'SPXVN0123456789');
+      expect(res.status).toBe('CLAIMED_BY_OTHER');
+      expect(tx.externalClaimAttempt.createMany).toHaveBeenCalledTimes(2);
+      expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'NOT_FOUND' }) });
+    });
+  });
 });
