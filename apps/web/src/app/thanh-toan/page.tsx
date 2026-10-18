@@ -80,8 +80,12 @@ export default function CheckoutPage() {
   const [redirectingCode, setRedirectingCode] = useState<string | null>(null);
   // Một key cho một nội dung đơn trong phiên thanh toán: bấm lại sau lỗi mạng gửi lại cùng đơn; đổi nội dung thì key mới.
   const orderKeys = useRef(createOrderKeyRing());
+  // Lần đặt trước chưa rõ kết quả (mạng rớt/5xx): khi có mạng lại, giỏ nạp lại có thể đã khác (đơn đã tạo lấy mất các dòng đã chọn),
+  // nên body lần bấm lại đổi theo và sinh key mới, tạo đơn thứ hai. Giữ nguyên dữ liệu cho tới khi lần đặt tiếp theo có kết quả rõ.
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const refetchOnReconnect = !outcomeUnknown;
 
-  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated', refetchOnReconnect });
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
   // Số dư Ví Tubu lấy từ máy chủ (không từ ảnh chụp lúc đăng nhập): khách vừa được hoàn tiền về ví hoặc vừa tiêu ví
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
@@ -94,6 +98,7 @@ export default function CheckoutPage() {
     queryKey: WASTE_QUERY_KEYS.me,
     queryFn: () => getWasteMe(coreHttp),
     enabled: phase === 'authenticated' && pickupFlag,
+    refetchOnReconnect,
   });
   const attachable = attachablePickup(wasteMeQ.data, pickupFlag);
   // Chưa có yêu cầu thu kèm thì dòng dẫn sang màn tạo yêu cầu; màn đó chưa có trên web thì ẩn dòng, không dẫn khách tới 404.
@@ -151,6 +156,7 @@ export default function CheckoutPage() {
     queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds),
     // Chờ giỏ tải xong: địa chỉ có thể về trước, lúc đó chưa biết giỏ có trống không và báo giá giỏ trống bị 400.
     enabled: !!addressId && phase === 'authenticated' && cartLoaded && cartReady && !cartEmpty,
+    refetchOnReconnect,
   });
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
@@ -217,7 +223,10 @@ export default function CheckoutPage() {
     },
     onSuccess: (order) => {
       orderKeys.current.reset();
-      if (paymentToSend !== 'BANK_TRANSFER') setPlaced(order);
+      setOutcomeUnknown(false);
+      // Theo đơn máy chủ đã tạo, không theo radio đang chọn lúc phản hồi về.
+      const isBank = order.paymentMethod === 'BANK_TRANSFER';
+      if (!isBank) setPlaced(order);
       if (wantInvoice) saveInvoice(userId, invoice);
       clearCheckoutSelection();
       void qc.invalidateQueries({ queryKey: ['cart'] });
@@ -226,10 +235,11 @@ export default function CheckoutPage() {
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);
       // Chuyển khoản: sang trang VietQR để khách trả ngay (đối soát xong đơn tự xác nhận), như Mini App.
-      if (paymentToSend === 'BANK_TRANSFER') setRedirectingCode(order.code);
-      if (paymentToSend === 'BANK_TRANSFER') router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
+      if (isBank) setRedirectingCode(order.code);
+      if (isBank) router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
     onError: (e) => {
+      setOutcomeUnknown(isOutcomeUnknown(e));
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
       // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
@@ -461,7 +471,7 @@ export default function CheckoutPage() {
                           name="pay"
                           checked={payment === p.k}
                           onChange={() => setPayment(p.k)}
-                          disabled={!!reason}
+                          disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
                           className="h-6 w-6 shrink-0 accent-forest-600"
                         />
