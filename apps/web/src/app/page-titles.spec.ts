@@ -12,6 +12,7 @@ import { metadata as settings } from './tai-khoan/cai-dat/layout';
 import { metadata as notifications } from './tai-khoan/thong-bao/layout';
 import { metadata as rewards } from './kho-qua/layout';
 import { metadata as myRewards } from './kho-qua/cua-toi/layout';
+import { metadata as game } from './vuon-xanh/layout';
 import { metadata as cashback } from './hoan-tien/layout';
 import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
@@ -40,7 +41,7 @@ const LOYALTY: TitleCase[] = [
 ];
 const COMMUNITY: TitleCase[] = [];
 const AFFILIATE: TitleCase[] = [];
-const GAME: TitleCase[] = [];
+const GAME: TitleCase[] = [['/vuon-xanh', game, 'Vườn Xanh — Tubu Tree']];
 const PRO: TitleCase[] = [];
 const RECYCLE: TitleCase[] = [];
 const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
