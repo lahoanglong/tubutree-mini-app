@@ -112,6 +112,21 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
       mocks.publicConfig.waste.enabled = true;
     }
   });
+  it('danh sách rỗng khi cấu hình công khai chưa tải → chưa kết luận tạm dừng hay chưa được gắn', async () => {
+    mocks.getDeskPoints.mockResolvedValue([]);
+    mocks.publicConfig.isLoaded = false;
+    mocks.publicConfig.waste.enabled = false;
+    try {
+      renderPage();
+      await waitFor(() => expect(mocks.getDeskPoints).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByText('Chương trình đang tạm dừng')).toBeNull();
+      expect(screen.queryByText(/chưa được gắn/)).toBeNull();
+    } finally {
+      mocks.publicConfig.isLoaded = true;
+      mocks.publicConfig.waste.enabled = true;
+    }
+  });
   it('đại lý: thẻ hạn mức tháng (đã dùng, còn lại) + ghi chú không tự cộng điểm', async () => {
     renderPage();
     expect(await screen.findByText('Hạn mức điểm tháng này')).toBeInTheDocument();

@@ -390,6 +390,7 @@ function DeskContent() {
   }
   if (pointsQ.data.length === 0) {
     // Máy chủ bỏ qua điểm của đại lý khi chương trình tắt, nên danh sách rỗng lúc đó không có nghĩa là mất quyền.
+    if (!cfg.isLoaded) return <Skeleton height={120} />;
     if (!cfg.waste.enabled) return <EmptyState art="box" heading={PAUSED_TEXT} />;
     return <EmptyState art="box" heading="Tài khoản của bạn chưa được gắn với điểm nhận nào" />;
   }
