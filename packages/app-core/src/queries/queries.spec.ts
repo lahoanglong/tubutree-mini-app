@@ -16,7 +16,6 @@ import * as home from './home';
 import * as loyalty from './loyalty';
 import * as orders from './orders';
 import * as payment from './payment';
-import * as refill from './refill';
 import * as reviews from './reviews';
 import * as subs from './subscriptions';
 import * as wallet from './wallet';
@@ -90,8 +89,6 @@ const cases: Case[] = [
   ['externalClaims', (h) => externalPoints.externalClaimsQuery(h, 2, 10), ['external-claims', 2], '/me/external-points/claims'],
   ['cashbackMerchants', (h) => cashback.cashbackMerchantsQuery(h), ['cashback-merchants'], '/cashback/merchants'],
   ['cashbackTxn', (h) => cashback.cashbackTxnQuery(h), ['cashback-txn'], '/cashback/transactions'],
-  ['refill', (h) => refill.refillQuery(h), ['refill'], '/refill/me'],
-  ['adminRefillPending', (h) => refill.adminRefillPendingQuery(h), ['admin-refill-pending'], '/refill/admin/pending'],
   ['wasteMe', (h) => waste.wasteMeQuery(h), ['waste', 'me'], '/waste/me'],
   ['wasteItems', (h) => waste.wasteItemsQuery(h), ['waste', 'items'], '/waste/items'],
   ['wastePoints', (h) => waste.wastePointsQuery(h, null), ['waste', 'points', null], '/waste/points'],

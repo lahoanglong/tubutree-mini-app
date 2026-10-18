@@ -31,7 +31,6 @@
       { "miniapp": "/wallet", "web": "/tai-khoan/vi-tubu", "private": true },
       { "miniapp": "/rewards", "web": "/kho-qua", "private": true, "pending": true },
       { "miniapp": "/rewards/mine", "web": "/kho-qua/cua-toi", "private": true, "pending": true },
-      { "miniapp": "/refill", "web": "/doi-vo", "private": true, "pending": true },
       { "miniapp": "/cashback", "web": "/hoan-tien", "private": false, "pending": true }
     ]},
     { "lane": "game", "items": [
@@ -71,7 +70,8 @@
       { "miniapp": "/recycle/desk", "web": "/doi-rac/quay", "private": true, "pending": true }
     ]},
     { "lane": "skip", "items": [
-      { "miniapp": "/points/scan", "skip": "Q2: quét mã đơn sàn cần SĐT đã xác minh và máy quét QR, chỉ có ở Mini App" }
+      { "miniapp": "/points/scan", "skip": "Q2: quét mã đơn sàn cần SĐT đã xác minh và máy quét QR, chỉ có ở Mini App" },
+      { "miniapp": "/refill", "skip": "Mini App đã gỡ Refill, /refill chỉ còn chuyển sang /recycle; web không làm /doi-vo" }
     ]}
   ],
   "features": [

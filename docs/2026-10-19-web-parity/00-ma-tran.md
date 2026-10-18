@@ -34,7 +34,7 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 22 | `/wallet` | wallet.tsx | `/tai-khoan/vi-tubu` (một phần) | giữ | thiếu | loyalty | riêng tư | Rút tiền (idempotency, phí/mức tối thiểu), giới thiệu bạn, lịch sử. **Tiền: 2 lượt review** |
 | 23 | `/rewards` | rewards.tsx | — | `/kho-qua` | mới | loyalty | riêng tư | Đổi điểm lấy quà. **Điểm: 2 lượt review** |
 | 24 | `/rewards/mine` | rewards-mine.tsx | — | `/kho-qua/cua-toi` | mới | loyalty | riêng tư | QR mã quà |
-| 25 | `/refill` | refill.tsx | — | `/doi-vo` | mới | loyalty | riêng tư | Trả vỏ, idempotency |
+| 25 | `/refill` | (chuyển sang `/recycle`) | — | — | skip | — | — | Nhánh đổi rác gỡ Refill (0b258d34), Mini App chỉ còn `<Navigate to="/recycle">`; route map để skip |
 | 26 | `/cashback` | cashback.tsx | — | `/hoan-tien` | mới | loyalty | công khai một phần | Giữ cờ `CASHBACK_ENABLED` (đang tắt). `openAffiliateLink` thành mở tab mới |
 | 27 | `/points/scan` | external-points.tsx | — | — | skip | — | — | Q2: quét mã đơn sàn chỉ ở Mini App (cần SĐT đã xác minh và máy quét QR). Web không có route; hub tài khoản trên web hiện lời dặn mở Mini App khi cờ bật |
 | 28 | `/game` | game.tsx | — | `/vuon-xanh` | mới | game | riêng tư | Lớn nhất (103 test). Không dùng Zalo SDK |
@@ -85,6 +85,6 @@ Web có mà Mini App không có (giữ nguyên, không thuộc đợt này): `/m
 | `openShareSheet` | sản phẩm, mua chung, ví, CTV, gian hàng, nhãn | Web Share API, dự phòng chép link (`share-button.tsx`) |
 | `openChat`, `followOA` | sản phẩm, đơn, giới thiệu, cài đặt | Link `https://zalo.me/<OA id>` |
 | `requestSendNotification` | cài đặt | Không có trên web |
-| `openPhone` | giới thiệu, đổi vỏ | `tel:` |
+| `openPhone` | giới thiệu | `tel:` |
 | `openWebview` | đơn (tra vận đơn, hoá đơn), cashback | Mở tab mới |
 | `getStorage`, `setStorage` | cài đặt, lời mời OA | `localStorage` bọc try/catch |
