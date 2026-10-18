@@ -160,13 +160,17 @@ Không có.
 - Một số spec chép từ Mini App (share-link, brand-origins, search-state...) hoặc viết cùng lúc với code, không có bước đỏ trước.
 - Sửa ngoài chủ file (không đổi hành vi): `apps/e2e/tests/web-customer.web.spec.ts`, `lib/next-config-redirects.spec.ts`, `components/site-header.spec.tsx`, `site-search.tenant.spec.tsx`, `guest-pages.a11y.spec.tsx`, `test-utils/render-hook.tsx` (mới).
 
+### integ2/integ4 (2 mục)
+- QR trên đơn quá hạn: web không dựng QR khi quá hạn như `canPayOrderNow` của Mini App. Đã xử lý ở c63e6ea2.
+- Gom mọi chỗ nối `/thanh-toan/chuyen-khoan/...` về `bankPaymentHref`. Đã xử lý ở 42134975.
+
 ### order (10 mục)
 - VoucherSheet: giữ CouponBox inline.
 - Chưa chuyển các hàm giỏ và đặt đơn sang `@tubutree/app-core/api/*`; vẫn dùng `@/lib/shop-client`.
 - Giỏ chưa có debounce 380ms, optimistic update, StorefrontContextBar, SuggestedRail khi rỗng.
 - Chưa đối chiếu màn thành công với OrderSuccess; điểm dùng được lấy từ báo giá.
 - Chưa có analytics mua lại (web chưa có lớp analytics).
-- Trang chi tiết đơn vẫn dựng panel QR nội tuyến; nút Thanh toán ở hub `/tai-khoan` (lane account) vẫn dẫn tới chi tiết đơn.
+- Trang chi tiết đơn chỉ dựng panel QR nội tuyến khi `canPayNow` (còn hạn), đơn quá hạn hiện hạn và chữ tự huỷ; đã xử lý ở c63e6ea2, chưa kiểm chứng trên trình duyệt. Nút Thanh toán ở hub `/tai-khoan` nay sang `/thanh-toan/chuyen-khoan/<code>` khi `canPayNow`, như Mini App (integ2, gộp 11410e72).
 - Link "Thu kèm rác" ẩn tới khi lane recycle mở `/doi-rac/tao`. Đã xử lý ở 0d732366: route đã mở, nhánh chính của thanh-toan/page.tsx chạy; khoá bằng spec route map thật, không cần sửa code.
 - TDD không trọn ở `checkout-waste`, `use-remaining`, `reorder.ts`, `orders-tabs.ts`, `subscription-price.ts`, `oa-prompt.ts` (spec viết cùng lượt).
 - Đã sửa spec cũ của lane: checkout-idempotency, checkout-waste, order-actions (ngày tương đối), guest-pages.a11y; `checkout-race.spec` nay mount cùng SiteHeader.

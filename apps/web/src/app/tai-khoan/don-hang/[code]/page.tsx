@@ -14,7 +14,6 @@ import {
   addressLine,
   buyerOrderStatusLabel,
   canCancelOrder,
-  canPayAgain,
   discountRows,
   orderPaymentStatusLabel,
   isHandedToCarrier,
@@ -28,6 +27,7 @@ import {
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { reviewHref } from '@/lib/reviews-client';
+import { canPayNow } from '@/components/orders/order-rules';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
@@ -65,9 +65,13 @@ export default function OrderDetailPage() {
   // Lỗi/đang tải thì rơi về hotline mặc định: kênh liên hệ không được biến mất vì API cấu hình chậm.
   const supportQ = useQuery({ queryKey: ['public-support'], queryFn: getPublicSupport, staleTime: 5 * 60_000 });
   const support = supportQ.data ?? DEFAULT_SUPPORT;
-  // Tiền về thì đơn hết "chờ thanh toán" và `canPayAgain` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
+  // Tiền về thì đơn hết "chờ thanh toán" và `canPayNow` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
   // "Đã nhận thanh toán" bị gỡ ngay sau khi vừa hiện. Ghi nhớ trong trang tới khi khách rời trang.
   const [paidNotice, setPaidNotice] = useState(false);
+  // Khung QR đã dựng lúc còn hạn thì giữ tới khi rời trang (như trang chuyển khoản của Mini App): qua hạn giữa chừng mà
+  // gỡ khung là mất lần dò thấy tiền về của khách vừa chuyển sát giờ.
+  const [qrShown, setQrShown] = useState(false);
+  if (!qrShown && orderQ.data && canPayNow(orderQ.data)) setQrShown(true);
   const refreshOrder = useCallback(() => {
     setPaidNotice(true);
     void qc.invalidateQueries({ queryKey: ['order', code] });
@@ -131,6 +135,7 @@ export default function OrderDetailPage() {
   const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned ?? 0, pointsReversed, o.pointsReturnReversed);
   const cancelClosed = !canCancelOrder(o, user?.id) && isHandedToCarrier(o);
+  const showPayPanel = canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice;
   const returnedQty = returnedByLine(
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
@@ -148,7 +153,7 @@ export default function OrderDetailPage() {
       {o.manualHandling ? (
         <p className="mt-2 text-sm text-stone-700">Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.</p>
       ) : (
-        !canPayAgain(o) &&
+        !showPayPanel &&
         showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
           <p className="mt-2 text-sm font-medium text-warning-fg">
             Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
@@ -185,9 +190,9 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      {(canPayAgain(o) || paidNotice) && (
+      {showPayPanel && (
         <div className="mt-2">
-          {canPayAgain(o) && (
+          {canPayNow(o) && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
               Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
             </p>

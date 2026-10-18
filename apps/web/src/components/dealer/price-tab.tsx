@@ -10,6 +10,7 @@ import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from '@tubutree/app-core
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
+import { bankPaymentHref } from '@/lib/order-view';
 import { useDebounced } from '@/lib/use-debounced';
 import { ui } from '@/lib/guest-ui';
 import { Badge } from '@/components/ui/badge';
@@ -167,7 +168,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
       orderKey.current = newIdempotencyKey();
       setQty({});
       // Chỉ đơn máy chủ trả về còn chờ chuyển khoản mới có trang để chuyển; đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái.
-      if (method === 'PREPAID' && order.paymentMethod === 'BANK_TRANSFER' && order.status === 'PENDING_PAYMENT') router.push(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
+      if (method === 'PREPAID' && order.paymentMethod === 'BANK_TRANSFER' && order.status === 'PENDING_PAYMENT') router.push(bankPaymentHref(order.code));
     },
     onError: (e) => setNotice({ text: errText(e), error: true }),
     onSettled: () => {
