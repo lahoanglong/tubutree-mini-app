@@ -76,6 +76,7 @@ async function lookUp(code = 'tr-8k2m9') {
   fireEvent.click(screen.getByRole('button', { name: 'Tra mã' }));
 }
 const line = (name: string) => screen.getByText(name).closest('[data-line]') as HTMLElement;
+const minus = (name: string, n: number) => { for (let i = 0; i < n; i++) fireEvent.click(within(line(name)).getByRole('button', { name: 'Giảm số lượng' })); };
 const plus = (name: string, n: number) => { for (let i = 0; i < n; i++) fireEvent.click(within(line(name)).getByRole('button', { name: 'Tăng số lượng' })); };
 
 beforeEach(() => {
@@ -157,39 +158,48 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
     expect(screen.getByText('090****567')).toBeInTheDocument();
     expect(within(line('Thùng carton')).getByText('Khách khai 5 thùng')).toBeInTheDocument();
   });
-  it('bộ đếm số thực nhận bắt đầu từ 0 và không vượt số khai', async () => {
+  it('bộ đếm số thực nhận điền sẵn số khai, hiện "Tối đa N", không vượt số khai và chưa hỏi lý do', async () => {
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 7);
+    expect(within(line('Thùng carton')).getByText('5')).toBeInTheDocument();
+    expect(within(line('Thùng carton')).getByText('Tối đa 5')).toBeInTheDocument();
+    plus('Thùng carton', 2);
     expect(within(line('Thùng carton')).getByText('5')).toBeInTheDocument();
     expect(within(line('Thùng carton')).getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Xác nhận đã nhận' })).toBeEnabled();
+    expect(screen.queryByText('Chọn lý do cho món nhận thiếu để xác nhận')).toBeNull();
   });
   it('điểm sẽ cộng tính trực tiếp theo nhóm', async () => {
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 0 điểm')).toBeInTheDocument();
-    plus('Thùng carton', 5);
-    plus('Vỏ hộp sữa', 4);
-    expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 5.000 điểm')).toBeInTheDocument();
-    plus('Vỏ hộp sữa', 1);
     expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 6.000 điểm')).toBeInTheDocument();
+    minus('Vỏ hộp sữa', 1);
+    expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 5.000 điểm')).toBeInTheDocument();
+    minus('Thùng carton', 5);
+    minus('Vỏ hộp sữa', 4);
+    expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 0 điểm')).toBeInTheDocument();
     expect(deskPreviewPoints([{ unitsPerPoint: 5, pointsPerGroup: 1000, hazardous: true }], { a: 5 }, ['a'])).toBe(0);
   });
   it('dòng thiếu phải có lý do (7 lý do §4.10) thì nút xác nhận mới mở', async () => {
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
-    plus('Vỏ hộp sữa', 3);
+    minus('Vỏ hộp sữa', 2);
     const confirm = screen.getByRole('button', { name: 'Xác nhận đã nhận' });
     expect(confirm).toBeDisabled();
+    expect(screen.getByText('Chọn lý do cho món nhận thiếu để xác nhận')).toBeInTheDocument();
+    expect(within(line('Vỏ hộp sữa')).getByText('Lý do nhận thiếu')).toBeInTheDocument();
     const reason = within(line('Vỏ hộp sữa')).getByRole('combobox', { name: 'Lý do nhận thiếu: Vỏ hộp sữa' });
+    expect(within(reason).getByRole('option', { name: 'Chọn lý do' })).toBeDisabled();
+    expect(reason).toHaveValue('');
     expect(within(reason).getAllByRole('option').slice(1).map((o) => o.textContent)).toEqual(['Ướt', 'Bẩn', 'Lẫn vật lạ', 'Sai loại', 'Hỏng', 'Không nhận', 'Khác']);
     expect(within(line('Thùng carton')).queryByRole('combobox')).toBeNull();
     fireEvent.change(reason, { target: { value: 'DIRTY' } });
     expect(confirm).toBeEnabled();
+    expect(screen.queryByText('Chọn lý do cho món nhận thiếu để xác nhận')).toBeNull();
   });
   it('món nguy hại: bộ đếm khoá ở 0, lý do Sai loại tự đặt', async () => {
     lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 2 }] });
@@ -221,8 +231,6 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
-    plus('Vỏ hộp sữa', 5);
     mocks.getDeskPoints.mockResolvedValue([makeDeskPoint({ quota: { limit: 500_000, used: 126_000, remaining: 374_000 } })]);
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }, { itemId: 'item-milk', declaredQty: 5, receivedQty: 5 }] }));
@@ -235,7 +243,7 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
+    minus('Vỏ hộp sữa', 5);
     fireEvent.change(within(line('Vỏ hộp sữa')).getByRole('combobox'), { target: { value: 'WET' } });
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm.mock.calls[0]![1].lines[1]).toEqual({ itemId: 'item-milk', declaredQty: 5, receivedQty: 0, shortfallReason: 'WET' }));
@@ -248,7 +256,6 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     renderPage();
     await lookUp('TR-8K2M9');
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }], match: { parcelCode: 'TR-8K2M9' } }));
     fireEvent.click(screen.getByRole('button', { name: 'Từ chối cả yêu cầu' }));
@@ -262,8 +269,6 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
-    plus('Vỏ hộp sữa', 5);
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalled());
     expect(mocks.deskConfirm.mock.calls[0]![1]).not.toHaveProperty('match');
@@ -275,7 +280,6 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     renderPage();
     await lookUp('TR-8K2M9');
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
     // Lần tải lại không bao giờ xong, nên chỉ còn phần ghi thẳng vào cache quyết định thẻ hạn mức hiện ra.
     mocks.getDeskPoints.mockReturnValue(new Promise(() => {}));
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
@@ -291,7 +295,6 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     renderPage();
     await lookUp('TR-8K2M9');
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalled());
     expect(mocks.deskConfirm.mock.calls[0]![1]).not.toHaveProperty('match');
@@ -309,8 +312,6 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    plus('Thùng carton', 5);
-    plus('Vỏ hộp sữa', 5);
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: msg, type: 'error' })));
   });
