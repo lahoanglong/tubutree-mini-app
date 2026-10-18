@@ -141,7 +141,7 @@ describe('ComboService.computeForStorefront', () => {
     const where = prisma.storefront.findFirst.mock.calls[0][0].where;
     expect(where.takenDownAt).toBeNull();
     expect(where.AND).toContainEqual({ OR: [{ ownerUserId: null }, { owner: { isBlocked: false } }] });
-    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER'] } } }] });
+    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
   });
 
   it('cờ bắt duyệt bật thì gian hàng CTV chưa duyệt cũng không có combo', async () => {

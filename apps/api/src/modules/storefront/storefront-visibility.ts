@@ -16,14 +16,22 @@ export function isStorefrontApproved(sf: { type: StorefrontType; isPartner: bool
 }
 
 /**
+ * Vai trò của chủ mà gian hàng CTV còn hiện với khách: nhóm hưởng hoa hồng, và ADMIN (tài khoản vận hành tự lập gian hàng CTV
+ * không hưởng hoa hồng nhưng gian hàng vẫn phải hiện).
+ */
+function visibleOwnerRoles(opts: PublicVisibilityOptions): UserRole[] {
+  return opts.eligibleRoles.includes('ADMIN') ? [...opts.eligibleRoles] : [...opts.eligibleRoles, 'ADMIN'];
+}
+
+/**
  * Điều kiện để khách thấy một gian hàng: đã đăng, không bị admin gỡ, chủ không bị khoá, và (gian hàng CTV) chủ còn thuộc vai trò
- * hưởng hoa hồng, nên CTV bị hạ về khách thường thì gian hàng ẩn theo. Gian hàng MERCHANT/BRAND không xét vai trò. Dùng chung cho
+ * hưởng hoa hồng (hoặc là ADMIN), nên CTV bị hạ về khách thường thì gian hàng ẩn theo. Gian hàng MERCHANT/BRAND không xét vai trò. Dùng chung cho
  * trang công khai, sitemap và mọi nơi tra gian hàng cho khách.
  */
 export function publicStorefrontWhere(opts: PublicVisibilityOptions): Prisma.StorefrontWhereInput {
   const and: Prisma.StorefrontWhereInput[] = [
     { OR: [{ ownerUserId: null }, { owner: { isBlocked: false } }] },
-    { OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: [...opts.eligibleRoles] } } }] },
+    { OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: visibleOwnerRoles(opts) } } }] },
   ];
   if (opts.requireApproval) and.push({ OR: [{ approvedAt: { not: null } }, { type: { not: 'CTV' } }, { isPartner: true }] });
   return { isPublished: true, takenDownAt: null, AND: and };
@@ -43,7 +51,7 @@ export function ownerHiddenReason(
   }
   if (!sf.isPublished) return null;
   if (owner?.isBlocked) return 'Tài khoản của bạn đang bị khoá nên gian hàng không hiện với khách.';
-  if (sf.type === 'CTV' && !(owner && opts.eligibleRoles.includes(owner.role))) {
+  if (sf.type === 'CTV' && !(owner && visibleOwnerRoles(opts).includes(owner.role))) {
     return 'Tài khoản của bạn hiện không thuộc nhóm CTV nên gian hàng đang ẩn với khách. Đăng ký lại CTV để gian hàng hiện trở lại.';
   }
   if (opts.requireApproval && !isStorefrontApproved(sf)) return 'Gian hàng đang chờ Tubu Tree duyệt lần đầu; khi được duyệt sẽ hiện với khách.';

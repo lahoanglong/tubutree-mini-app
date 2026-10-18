@@ -1013,14 +1013,14 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
     expect(where.isPublished).toBe(true);
     expect(where.takenDownAt).toBeNull();
     expect(where.AND).toContainEqual({ OR: [{ ownerUserId: null }, { owner: { isBlocked: false } }] });
-    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER'] } } }] });
+    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
   });
 
   it('vai trò hưởng hoa hồng lấy từ cấu hình: bớt DEALER thì CTV là đại lý cũng ẩn', async () => {
     const findFirst = jest.fn().mockResolvedValue(sfRow);
     const only = { getPublicTier: async () => null, commissionEligibleRoles: async () => new Set(['AFFILIATE']) } as unknown as AffiliateService;
     await new StorefrontService(makePrisma({ storefront: { findFirst } }), config, only).getPublicBySlug('linh');
-    expect(findFirst.mock.calls[0][0].where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE'] } } }] });
+    expect(findFirst.mock.calls[0][0].where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'ADMIN'] } } }] });
   });
 
   it('cờ storefront.require_approval bật: thêm điều kiện đã duyệt; tắt: không', async () => {
@@ -1043,7 +1043,7 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
     await new StorefrontService(makePrisma({ storefront: { findMany } }), config, affiliate).getPublicList();
     const where = findMany.mock.calls[0][0].where;
     expect(where.takenDownAt).toBeNull();
-    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER'] } } }] });
+    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
   });
 
   it('trả cờ approved để web chỉ hiện tick xanh và "CTV tuyển chọn" khi đã duyệt (CTV chưa duyệt: false; đối tác: true)', async () => {

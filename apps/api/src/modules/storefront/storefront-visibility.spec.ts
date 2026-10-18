@@ -12,7 +12,16 @@ describe('publicStorefrontWhere', () => {
 
   it('gian hàng CTV phải có chủ thuộc vai trò hưởng hoa hồng; gian hàng loại khác (MERCHANT, BRAND) không xét vai trò', () => {
     const where = publicStorefrontWhere({ eligibleRoles: ROLES, requireApproval: false });
-    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER'] } } }] });
+    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
+  });
+
+  it('gian hàng CTV của ADMIN vẫn hiện dù ADMIN không hưởng hoa hồng; không thêm ADMIN hai lần khi khoá đã có', () => {
+    const roles = (opts: { eligibleRoles: readonly ('AFFILIATE' | 'ADMIN')[] }) =>
+      (publicStorefrontWhere({ ...opts, requireApproval: false }).AND as { OR: { owner?: { role: { in: string[] } } }[] }[])
+        .flatMap((c) => c.OR)
+        .find((c) => c.owner?.role)!.owner!.role.in;
+    expect(roles({ eligibleRoles: ['AFFILIATE'] })).toEqual(['AFFILIATE', 'ADMIN']);
+    expect(roles({ eligibleRoles: ['AFFILIATE', 'ADMIN'] })).toEqual(['AFFILIATE', 'ADMIN']);
   });
 
   it('cờ duyệt tắt: không xét duyệt; bật: CTV phải được duyệt (đối tác và nhãn hàng luôn tính là đã duyệt)', () => {
@@ -59,6 +68,10 @@ describe('ownerHiddenReason', () => {
   it('CTV bị hạ về khách thường: gian hàng ẩn, có giải thích; MERCHANT cùng chủ thì không bị ảnh hưởng', () => {
     expect(ownerHiddenReason(live, { ...owner, role: 'CUSTOMER' }, opts)).toContain('CTV');
     expect(ownerHiddenReason({ ...live, type: 'MERCHANT', isPartner: true }, { ...owner, role: 'CUSTOMER' }, opts)).toBeNull();
+  });
+
+  it('gian hàng CTV của ADMIN: không ẩn, không bảo "Đăng ký lại CTV"', () => {
+    expect(ownerHiddenReason(live, { ...owner, role: 'ADMIN' }, opts)).toBeNull();
   });
 
   it('cờ duyệt bật mà chưa duyệt: báo đang chờ duyệt; đã duyệt thì không', () => {

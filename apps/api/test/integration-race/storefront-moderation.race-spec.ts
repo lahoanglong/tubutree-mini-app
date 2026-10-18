@@ -148,6 +148,17 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       expect(await visible(s.slug)).toBe(true);
     });
 
+    it('gian hàng CTV của ADMIN vẫn hiện, không có lý do ẩn, và ghi công gian hàng nhưng không ghi công hoa hồng cho ADMIN', async () => {
+      const adminOwner = await user('ADMIN');
+      const buyer = await user('CUSTOMER');
+      const s = await store(adminOwner);
+      expect(await visible(s.slug)).toBe(true);
+      expect((await svc.getMine(adminOwner.id)).publicHiddenReason).toBeNull();
+      expect((await svc.getPublicList()).map((r) => r.slug)).toContain(s.slug);
+      const affiliate = Object.assign(Object.create(AffiliateService.prototype), { prisma, config }) as AffiliateService;
+      expect(await resolveAttribution(prisma, affiliate, buyer.id, { storefrontSlug: s.slug })).toMatchObject({ referrerUserId: null, storefront: { id: s.id } });
+    });
+
     it('cờ storefront.require_approval: bật thì CTV chưa duyệt ẩn, đã duyệt hiện, đối tác luôn hiện; tắt thì hiện hết', async () => {
       const owner = await user('AFFILIATE');
       const owner2 = await user('AFFILIATE');
