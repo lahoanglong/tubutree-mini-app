@@ -1,6 +1,23 @@
 'use client';
 
-/** Chỗ gắn các cổng mức ứng dụng (nhận mã giảm giá, giới thiệu lần đầu). Chưa có cổng nào: lane account thêm vào đây. */
-export function AppGates() {
+import { useEffect } from 'react';
+import { applyFontScale, readFontScale } from '@/components/account/font-scale';
+
+/** Áp cỡ chữ khách đã chọn ở Cài đặt cho mọi trang, giống Mini App áp lúc mở app. */
+function FontScaleApplier() {
+  useEffect(() => {
+    let alive = true;
+    void readFontScale().then((scale) => {
+      if (alive && scale) applyFontScale(scale);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   return null;
+}
+
+/** Chỗ gắn các cổng mức ứng dụng (nhận mã giảm giá, giới thiệu lần đầu). */
+export function AppGates() {
+  return <FontScaleApplier />;
 }
