@@ -31,11 +31,12 @@ function runWithFakeDocker(
     `#!/usr/bin/env bash
 echo "docker $*" >> "${log}"
 if [ -n "$FAIL_ON" ] && [[ "$*" == *"$FAIL_ON"* ]]; then exit 1; fi
+case "$*" in *"migrate deploy"*) touch "${log}.migrated";; *" stop api"*) touch "${log}.stopped";; *" start api"*|*"up -d"*) rm -f "${log}.stopped";; esac
 case "$*" in
-  *"State.Running"*) echo "\${FAKE_API_RUNNING:-false}";;
+  *"State.Running"*) if [ -f "${log}.stopped" ]; then echo false; else echo "\${FAKE_API_RUNNING:-false}"; fi;;
   *inspect*) echo healthy;;
   *" ps -q "*) echo fakeid;;
-  *"psql"*) q="$(cat)"; if [ -n "$FAKE_PSQL_FAIL" ]; then exit 1; fi; case "$q" in *points_1d*) echo "\${FAKE_POINTS_1D_APPLIED:-0}";; *) echo 1;; esac;;
+  *"psql"*) q="$(cat)"; if [ -n "$FAKE_PSQL_FAIL" ]; then exit 1; fi; case "$q" in *points_1d*) if [ -n "$FAKE_POINTS_1D_AFTER_MIGRATE" ] && [ -f "${log}.migrated" ]; then echo "$FAKE_POINTS_1D_AFTER_MIGRATE"; else echo "\${FAKE_POINTS_1D_APPLIED:-0}"; fi;; *) echo 1;; esac;;
 esac
 exit 0
 `,
@@ -137,8 +138,12 @@ describe('tools/deploy/deploy.sh: migration points_1d (đổi đơn vị điểm
     const seed = idx(calls, 'prisma:seed:reference');
     const upApi = idx(calls, 'up -d --no-build api');
     expect(build).toBeGreaterThan(-1);
-    expect(stop).toBeGreaterThan(build);
-    expect(migrate).toBeGreaterThan(stop);
+    const check = idx(calls, 'node dist/config/check-env.js');
+    const backup = idx(calls, 'pg_dump');
+    expect(check).toBeGreaterThan(build);
+    expect(stop).toBeGreaterThan(check);
+    expect(backup).toBeGreaterThan(stop);
+    expect(migrate).toBeGreaterThan(backup);
     expect(seed).toBeGreaterThan(migrate);
     expect(upApi).toBeGreaterThan(seed);
     expect(out).toMatch(/backup/);
@@ -158,7 +163,7 @@ describe('tools/deploy/deploy.sh: migration points_1d (đổi đơn vị điểm
     expect(idx(calls, ' stop api')).toBeGreaterThan(-1);
     expect(idx(calls, 'prisma:seed:reference')).toBe(-1);
     expect(idx(calls, ' up ')).toBe(-1);
-    expect(out).toMatch(/API đã bị dừng/);
+    expect(out).toMatch(/API đang tắt/);
   });
 
   it('API cũ đang chạy, points_1d chưa áp, seed-reference lỗi → không bật API', () => {
@@ -167,25 +172,71 @@ describe('tools/deploy/deploy.sh: migration points_1d (đổi đơn vị điểm
     expect(idx(calls, ' up ')).toBe(-1);
   });
 
-  it('API đang dừng và points_1d chưa áp → deploy chạy bình thường (build, migrate, thay container)', () => {
-    const { status, calls } = run({ FAKE_API_RUNNING: 'false', FAKE_POINTS_1D_APPLIED: '0' });
-    expect(status).toBe(0);
-    expect(idx(calls, 'migrate deploy')).toBeGreaterThan(idx(calls, ' build api web'));
-    expect(idx(calls, ' stop ')).toBe(-1);
-    expect(idx(calls, 'prisma:seed:reference')).toBe(-1);
-  });
-
   it('points_1d đã áp xong thì API đang chạy không còn bị chặn bởi nó', () => {
     const { status, calls } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '1' });
     expect(status).toBe(0);
     expect(idx(calls, ' stop ')).toBe(-1);
+    expect(idx(calls, 'prisma:seed:reference')).toBe(-1);
   });
 
-  it('api mới không healthy sau khi points_1d đã áp → KHÔNG gợi ý quay image cũ, nói khôi phục backup', () => {
+  it('deploy chồng lên bản đã qua points_1d, api mới không healthy → vẫn in lệnh quay image cũ (không có gì để khôi phục backup)', () => {
     const { status, out } = run({ FAKE_POINTS_1D_APPLIED: '1' }, { failOn: '.State.Health' });
+    expect(status).not.toBe(0);
+    expect(out).toMatch(/docker tag \S+ \S+/);
+    expect(out).not.toMatch(/KHÔNG quay lại image/);
+  });
+
+  it('nhánh dừng API: points_1d vừa áp trong lần chạy này, api mới không healthy → KHÔNG gợi ý quay image, nói khôi phục backup', () => {
+    const { status, out } = run(
+      { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0', FAKE_POINTS_1D_AFTER_MIGRATE: '1' },
+      { failOn: '.State.Health' },
+    );
     expect(status).not.toBe(0);
     expect(out).not.toMatch(/docker tag \S+ \S+/);
     expect(out).toMatch(/khôi phục backup/);
+  });
+
+  it('API cũ đang chạy, points_1d chưa áp, .env lỗi → API cũ KHÔNG bị dừng, chưa backup', () => {
+    const { status, calls } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' }, { failOn: 'check-env' });
+    expect(status).toBe(2);
+    expect(idx(calls, ' stop ')).toBe(-1);
+    expect(idx(calls, 'pg_dump')).toBe(-1);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+  });
+
+  it('backup lỗi sau khi dừng API → bật lại API cũ, thoát khác 0, chưa migrate', () => {
+    const { status, calls, out } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' }, { failOn: 'pg_dump' });
+    expect(status).not.toBe(0);
+    const stop = idx(calls, ' stop api');
+    expect(stop).toBeGreaterThan(-1);
+    expect(idx(calls, ' start api')).toBeGreaterThan(stop);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+    expect(out).toMatch(/backup lỗi/);
+  });
+
+  it('dừng API lỗi → câu báo rõ, chưa backup, chưa migrate', () => {
+    const { status, calls, out } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' }, { failOn: ' stop api' });
+    expect(status).toBe(2);
+    expect(out).toMatch(/không dừng được API cũ/);
+    expect(idx(calls, 'pg_dump')).toBe(-1);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+  });
+
+  it('chạy lại khi API đã dừng mà points_1d chưa áp (sau lần lỗi) → vẫn chạy seed-reference trước khi bật API', () => {
+    const { status, calls } = run({ FAKE_API_RUNNING: 'false', FAKE_POINTS_1D_APPLIED: '0' });
+    expect(status).toBe(0);
+    const migrate = idx(calls, 'migrate deploy');
+    const seed = idx(calls, 'prisma:seed:reference');
+    expect(seed).toBeGreaterThan(migrate);
+    expect(idx(calls, 'up -d --no-build api')).toBeGreaterThan(seed);
+    expect(idx(calls, ' stop ')).toBe(-1);
+  });
+
+  it('migrate lỗi khi API đã tắt từ trước → câu báo không nói "Container cũ vẫn phục vụ"', () => {
+    const { status, out } = run({ FAKE_API_RUNNING: 'false', FAKE_POINTS_1D_APPLIED: '0' }, { failOn: 'migrate deploy' });
+    expect(status).toBe(2);
+    expect(out).not.toMatch(/Container cũ vẫn phục vụ/);
+    expect(out).toMatch(/API đang tắt/);
   });
 
   it('không đọc được DB (psql lỗi) khi api mới không healthy → cảnh báo kiểm points_1d, KHÔNG in lệnh quay image cũ', () => {

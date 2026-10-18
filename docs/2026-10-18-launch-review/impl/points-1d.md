@@ -20,7 +20,7 @@ Nhánh `lr2/points1d`, dựa trên `review/2026-10-18-launch`. Kế hoạch: `po
 - Dấu đã chạy: `system_configs.loyalty.vnd_per_point_redeem = 1`. Có dấu thì no-op. Dòng có mà khác 1 và khác 1000 thì RAISE, không ghi gì.
 - Kiểm tràn INT4 trước khi ghi, RAISE nêu bảng.cột.
 - Nhân 1.000 các cột điểm của 14 bảng, khoá cấu hình có trần chống nhân đôi, ghi lịch sử `system_config_history` (changedBy `migration:points_1d`). Không đụng `updatedAt`.
-- Thứ tự vận hành: build image, dừng API, `prisma migrate deploy`, `seed-reference`, bật API (`deploy.sh` tự làm khi API đang chạy mà `points_1d` chưa áp). Chạy seed-reference trước migrate sẽ ghi dấu = 1 và bỏ qua việc nhân.
+- Thứ tự vận hành: build image, kiểm .env, dừng API, backup, `prisma migrate deploy`, `seed-reference`, bật API (`deploy.sh` tự làm khi API đang chạy mà `points_1d` chưa áp). Chạy seed-reference trước migrate sẽ ghi dấu = 1 và bỏ qua việc nhân.
 - Rollback: `prisma/manual/pd3_xu_to_points_rollback.sql` từ chối chạy khi dấu đã có. Chưa có script rollback riêng cho points-1d (cần sao lưu DB trước migrate).
 
 ## Kiểm chứng (DB tạm `lr2p1d-pg`, cổng 5565)
@@ -69,4 +69,11 @@ Mỗi nhóm là commit mới, không amend.
 6. `referral-notice-reconcile.cron.ts`: hàm `shownPointsMatch` coi log đã gửi khi `data.points` bằng `delta` hoặc `data.points * 1000` bằng `delta`. Spec mới `referral-notice-reconcile.cron.spec.ts`.
 7. `points-1d-migration.race-spec.ts:185`: đổi tên ca thành dấu dòng lịch sử `sch_pts1d_<md5>`.
 
-Chưa kiểm: `deploy.sh` chỉ chạy với docker giả, chưa chạy compose thật.
+
+### Bổ sung sau soát của reviewer
+- Backup chạy SAU `dc stop api` (`ops/backup-predeploy.sh`, dùng trong `deploy.sh`), vì backup ở đầu workflow chạy trước `git pull` và build nên khôi phục nó mất mọi ghi trong lúc build. Backup lỗi thì `dc start api`, thoát mã 2, chưa migrate. `deploy.yml` và `ops/README-vietnix-deploy.md` đã cập nhật.
+- `POINTS_1D_PENDING_AT_START` tính trước build, không phụ thuộc API đang chạy: chạy lại khi API đã dừng sau lần lỗi vẫn chạy seed-reference. Chỉ dừng API khi cờ bật và API đang chạy. Câu báo lỗi chọn theo API đang chạy hay đã tắt. `dc stop api` lỗi in câu báo rồi thoát mã 2.
+- `rollback_hint` chỉ chặn quay image khi cờ đó bật (points_1d áp trong chính lần chạy này, hoặc lúc đầu không đọc được DB). Deploy chồng lên bản đã qua points_1d vẫn in lệnh quay image.
+- `formatPoints` cho thêm: `system-config.service.ts` (trần POINTS của seasonpass), `order-reversal.service.ts` (hai log thu hồi thưởng giới thiệu). Spec: `points-unit-guard.spec.ts`.
+- Giới hạn đã biết: tin ZNS đã xếp hàng trước migrate mang chữ dựng sẵn theo đơn vị cũ (`notifications.service.ts:165`, `templateData` lưu trong job). Chỉ là hiển thị, không sửa.
+- Chưa kiểm: `deploy.sh` chỉ chạy với docker giả, chưa chạy compose thật.

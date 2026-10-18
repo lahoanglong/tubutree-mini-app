@@ -175,6 +175,7 @@ describe('PD-3 T16 (b) + (f): khoá *_points có biên giá trị; seed nằm tr
     const tier = (premium: unknown) => [{ xp: 30, free: { type: 'SEEDS', amount: 20 }, premium }];
     await expect(svc.set('seasonpass.tiers', tier({ type: 'XU', amount: 5000 }), 'admin')).rejects.toThrow(BadRequestException);
     await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 100_001 }), 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 100_001 }), 'admin')).rejects.toThrow(/tối đa 100\.000 Điểm Xanh/);
     await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 5_000 }), 'admin')).resolves.toBeUndefined();
   });
 

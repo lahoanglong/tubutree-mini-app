@@ -108,7 +108,10 @@ cd /opt/tubutree
 #    `bash ops/backup-predeploy.sh` (nhãn predeploy, giữ riêng 10 bản); chưa có thì dòng dưới vẫn chạy như cũ
 COMPOSE_FILE=docker-compose.vietnix.yml bash tools/backup/backup-db.sh
 # 2. Đưa mã lên (git bundle / git merge --ff-only)
-# 3. Build -> migrate bằng image MỚI -> thay api -> thay web
+# 3. Build -> migrate bằng image MỚI -> thay api -> thay web.
+#    Bản có migration points_1d (một chiều) mà API đang chạy: deploy.sh build, kiểm .env, dừng API, backup LẠI bằng
+#    ops/backup-predeploy.sh (bản ở bước 1 chạy trước build nên thiếu mọi ghi trong lúc build), migrate, seed-reference, bật API.
+#    Backup lỗi thì API cũ được bật lại, chưa migrate gì.
 bash tools/deploy/deploy.sh
 # 4. Kiểm sau deploy (bằng image mới)
 docker compose -f docker-compose.vietnix.yml run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
@@ -130,7 +133,7 @@ bị chặn ở production. Lệnh này chỉ tạo dòng còn thiếu, không g
 sản phẩm, người dùng, mã giảm giá, tài khoản ngân hàng, nên chạy lại sau mỗi lần phát hành cũng được.
 Hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá có giá trị kinh doanh KHÔNG nạp ở lệnh này: chỉ nạp khi
 thêm `--with-business-defaults`, sau khi chủ dự án duyệt bảng ở `docs/2026-10-18-launch-review/impl/refseed.md`
-mục 3.2 (chưa nạp thì admin chưa duyệt được hồ sơ đại lý). `deploy.sh` chưa gọi nó.
+mục 3.2 (chưa nạp thì admin chưa duyệt được hồ sơ đại lý). `deploy.sh` chỉ gọi nó trong luồng `points_1d` (bản có migration đó chưa áp); deploy thường vẫn không gọi.
 
 `tools/deploy/deploy.sh` giữ đúng thứ tự: `docker compose run` **không** build lại image, nên
 chạy `run --rm api pnpm exec prisma migrate deploy` trước khi build sẽ áp thư mục migrations của

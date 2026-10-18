@@ -15,6 +15,7 @@ import { createBankRefund, endCustomerPayee, recordWalletRefund } from './refund
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { distributeByWeight, remainingPointsBack, returnedGoods, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
+import { formatPoints } from '../../common/format-points';
 import { paidLineTotals } from '../affiliate/commission-base';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
 
@@ -262,7 +263,7 @@ export class OrderReversalService {
       const revoked = await revokeReferralRewardForOrder(tx, order);
       if (revoked?.shortfall) {
         this.logger.warn(
-          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
+          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${formatPoints(revoked.revoked)} điểm, thiếu ${formatPoints(revoked.shortfall)} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
       referralNotices = revoked?.notices ?? [];
@@ -511,7 +512,7 @@ export class OrderReversalService {
       });
       if (revoked?.shortfall) {
         this.logger.warn(
-          `Thu hồi một phần thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
+          `Thu hồi một phần thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${formatPoints(revoked.revoked)} điểm, thiếu ${formatPoints(revoked.shortfall)} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
       result.referralNotices = revoked?.notices ?? [];

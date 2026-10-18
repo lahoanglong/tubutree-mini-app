@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PICKUP_PHONE_PATTERN } from '../../common/phone';
+import { formatPoints } from '../../common/format-points';
 import { COMMUNITY_LINK_KEYS, communityUrlProblem } from './community-links';
 import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
@@ -363,7 +364,7 @@ export class SystemConfigService {
           const r = t[track] as { type?: unknown; amount?: unknown } | undefined;
           if (!r || (r.type !== 'SEEDS' && r.type !== 'POINTS')) return `${track}.type chỉ nhận SEEDS hoặc POINTS (XU đã gộp vào Điểm Xanh)`;
           if (!Number.isInteger(r.amount) || (r.amount as number) < 0) return `${track}.amount phải là số nguyên ≥ 0`;
-          if (r.type === 'POINTS' && (r.amount as number) > max) return `${track}.amount POINTS tối đa ${max} Điểm Xanh (không phải xu)`;
+          if (r.type === 'POINTS' && (r.amount as number) > max) return `${track}.amount POINTS tối đa ${formatPoints(max)} Điểm Xanh (không phải xu)`;
         }
       }
       return null;

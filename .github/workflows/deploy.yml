@@ -43,7 +43,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Backup DB trước migrate
-        # Dump postgres ra /var/backups/tubutree trước khi build/deploy mới.
+        # Dump postgres ra /var/backups/tubutree trước khi build/deploy mới (bản có points_1d còn được deploy.sh backup lại sau khi dừng API).
         # Nếu deploy hỏng → bash tools/backup/restore-db.sh <file>.sql.gz (xem tools/backup/README.md).
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -102,4 +102,9 @@ jobs:
             git pull --ff-only
             # build → kiểm .env + migrate bằng image mới → thay api → thay web (xem script vì sao thứ tự này).
             # deploy.sh thoát 2 (chưa build gì) khi bản có migration 20261015150000 mà API cũ còn chạy: làm tay theo runbook.
+            # Bản có migration 20261018210000_points_1d (một chiều): deploy.sh tự build, dừng API, backup LẠI (bản ở bước đầu chạy trước
+            # git pull và build nên thiếu mọi ghi trong lúc build), migrate, seed-reference, bật API. Backup lỗi thì bật lại API, chưa migrate.
+            POSTGRES_USER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2- || true)
+            POSTGRES_DB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2- || true)
+            export POSTGRES_USER="${POSTGRES_USER:-tubu}" POSTGRES_DB="${POSTGRES_DB:-tubutree}"
             COMPOSE_FILE="${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}" bash tools/deploy/deploy.sh
