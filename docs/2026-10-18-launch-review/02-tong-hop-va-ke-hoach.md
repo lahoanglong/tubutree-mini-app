@@ -246,6 +246,15 @@ i. **Runbook và tài liệu:**
    - Bật B9 sẽ tạo claim bù cho đơn chat trong 60 ngày gần nhất.
    - `coupons.createdAt` của mã cũ bằng giờ chạy migration.
 
+j. **Mở lô đất (Vườn Xanh):** `POST /game/garden/unlock` nhận `slot` (ô khách định mở). Bấm đúp, hay lệnh đến sau khi lệnh kia đã xong, trả lại đúng ô đó thay vì mở thêm ô thứ hai và trừ thêm 💧. Lỗi có sẵn từ trước; race CI bắt được khi pool đủ lớn. Mini App mới gửi `slot`, nên API phải lên trước Mini App (đúng ràng buộc 1 của runbook).
+
+k. **Từ review của phiên đổi rác trên module external-points:**
+   - Claim chat đã được admin duyệt tay không bị cron đưa về REVIEW vì lệch SĐT nữa.
+   - Claim PHONE chưa có chủ và đã mất `orderPhone` thì không duyệt được (báo huỷ claim).
+   - Sổ điểm có nhãn cho 4 mã của đơn chat và đơn sàn, thay cho "Điều chỉnh Điểm Xanh".
+
+CI GitHub trên `1b98b388`: CI, Docker build, Playwright E2E đầy đủ và Race suite (3 phần) đều xanh. Đây là lần đầu race xanh trên GitHub.
+
 **Ghi nhận, không sửa:**
 - Gian hàng CTV có từ trước deploy bị ẩn cho tới khi admin duyệt. Đây là đúng quyết định B3 ("duyệt lần đầu"), và hiện chưa có dữ liệu thật.
 - Đơn chat được tính vào xét hạng, đúng như `impl/extpoints-plan.md`. Đơn sàn thì không.
