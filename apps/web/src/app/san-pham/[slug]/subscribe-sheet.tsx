@@ -135,6 +135,10 @@ export function SubscribeSheet({
     },
   });
 
+  // Sheet luôn gắn sẵn: lỗi của lần tạo trước không được nằm lại khi khách đóng, nạp Ví rồi mở lại.
+  const resetCreate = create.reset;
+  useEffect(() => resetCreate(), [visible, resetCreate]);
+
   const noAddress = addrQ.isSuccess && addresses.length === 0;
 
   return (

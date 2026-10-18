@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { unnamedControls } from '@/test-utils/a11y';
@@ -146,6 +147,29 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     await flush();
     expect(body().querySelector('[role="alert"]')!.textContent).toContain('Số dư Ví Tubu không đủ');
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('lỗi cũ không còn khi đóng rồi mở lại sheet (đã nạp Ví xong mở lại, chưa bấm gì)', async () => {
+    mocks.http.post.mockRejectedValue(new Error('Số dư Ví Tubu không đủ'));
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen((v) => !v)}>đổi</button>
+          <SubscribeSheet visible={open} onClose={() => setOpen(false)} onNotice={onNotice} variationId="v1" quantity={2} />
+        </>
+      );
+    }
+    mounted.push(render(<Harness />));
+    await flush();
+    click(create());
+    await flush();
+    expect(body().querySelector('[role="alert"]')).not.toBeNull();
+    click(byText(body(), 'button', 'đổi')!);
+    await flush();
+    click(byText(body(), 'button', 'đổi')!);
+    await flush();
+    expect(body().querySelector('[role="alert"]')).toBeNull();
   });
 
   it('chưa có địa chỉ thì nút Thêm địa chỉ sang /tai-khoan/dia-chi, không có nút tạo', async () => {
