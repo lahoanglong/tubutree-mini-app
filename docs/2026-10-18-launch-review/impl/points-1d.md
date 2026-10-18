@@ -20,7 +20,7 @@ Nhánh `lr2/points1d`, dựa trên `review/2026-10-18-launch`. Kế hoạch: `po
 - Dấu đã chạy: `system_configs.loyalty.vnd_per_point_redeem = 1`. Có dấu thì no-op. Dòng có mà khác 1 và khác 1000 thì RAISE, không ghi gì.
 - Kiểm tràn INT4 trước khi ghi, RAISE nêu bảng.cột.
 - Nhân 1.000 các cột điểm của 14 bảng, khoá cấu hình có trần chống nhân đôi, ghi lịch sử `system_config_history` (changedBy `migration:points_1d`). Không đụng `updatedAt`.
-- Thứ tự vận hành: dừng API, `prisma migrate deploy`, `seed-reference`, bật API. Chạy seed-reference trước migrate sẽ ghi dấu = 1 và bỏ qua việc nhân.
+- Thứ tự vận hành: build image, dừng API, `prisma migrate deploy`, `seed-reference`, bật API (`deploy.sh` tự làm khi API đang chạy mà `points_1d` chưa áp). Chạy seed-reference trước migrate sẽ ghi dấu = 1 và bỏ qua việc nhân.
 - Rollback: `prisma/manual/pd3_xu_to_points_rollback.sql` từ chối chạy khi dấu đã có. Chưa có script rollback riêng cho points-1d (cần sao lưu DB trước migrate).
 
 ## Kiểm chứng (DB tạm `lr2p1d-pg`, cổng 5565)
@@ -48,7 +48,7 @@ Nhánh `lr2/points1d`, dựa trên `review/2026-10-18-launch`. Kế hoạch: `po
 Mỗi nhóm là commit mới, không amend.
 - Dấu migration: chỉ bỏ qua khi có dòng lịch sử `sch_pts1d_<md5 của loyalty.vnd_per_point_redeem>` do `migration:points_1d` ghi. Redeem = 1 mà không có dấu: RAISE nếu có user số dư điểm khác 0 hoặc có bất kỳ `points_transactions`; DB rỗng điểm thì chạy tiếp. Test race: preset redeem=1 có dữ liệu, chỉ có sổ điểm, DB rỗng, chạy lại là no-op.
 - `seed-reference.ts`: `assertPoints1dApplied` đọc `_prisma_migrations` (xong, chưa rollback), từ chối nạp nếu `points_1d` chưa xong. Test trong `seed-reference-cli.spec.ts`.
-- `deploy.sh`: thoát mã 2 trước build/migrate khi API đang chạy mà `points_1d` còn chờ; `rollback_hint` không gợi ý image cũ sau khi `points_1d` đã áp. 4 ca mới trong `deploy-scripts.spec.ts`.
+- `deploy.sh`: khi API đang chạy mà `points_1d` còn chờ: build, kiểm .env, dừng API, migrate, `prisma:seed:reference`, bật API (xem mục Sửa sau review lượt 2); `rollback_hint` không gợi ý image cũ sau khi `points_1d` đã áp hoặc khi không đọc được DB.
 - Điều kiện chống nhân đôi theo trần cũ: nhiệm vụ `rewardPoints <= 500`, sự kiện cộng đồng `<= 1000`, trần POS `<= 10_000_000`.
 - Lý do nợ giới thiệu (`REFERRAL_*_DEBT:...:<số>`): số cuối nhân 1.000.
 - Thông báo `XU_CONVERTED` (`nlog_xu2pts_*`) dựng lại từ `xu_points_conversions` và mẫu hiện tại, số có dấu chấm nghìn.
