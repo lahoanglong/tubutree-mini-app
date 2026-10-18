@@ -167,7 +167,7 @@ Không có.
 - Chưa đối chiếu màn thành công với OrderSuccess; điểm dùng được lấy từ báo giá.
 - Chưa có analytics mua lại (web chưa có lớp analytics).
 - Trang chi tiết đơn vẫn dựng panel QR nội tuyến; nút Thanh toán ở hub `/tai-khoan` (lane account) vẫn dẫn tới chi tiết đơn.
-- Link "Thu kèm rác" ẩn tới khi lane recycle mở `/doi-rac/tao`.
+- Link "Thu kèm rác" ẩn tới khi lane recycle mở `/doi-rac/tao`. Đã xử lý ở 0d732366: route đã mở, nhánh chính của thanh-toan/page.tsx chạy; khoá bằng spec route map thật, không cần sửa code.
 - TDD không trọn ở `checkout-waste`, `use-remaining`, `reorder.ts`, `orders-tabs.ts`, `subscription-price.ts`, `oa-prompt.ts` (spec viết cùng lượt).
 - Đã sửa spec cũ của lane: checkout-idempotency, checkout-waste, order-actions (ngày tương đối), guest-pages.a11y; `checkout-race.spec` nay mount cùng SiteHeader.
 - Chưa chạy Playwright: các ca trong `order.web.spec.ts` chưa kiểm chứng.
@@ -183,7 +183,7 @@ Không có.
 - Chưa kiểm tra giao diện thật (máy tính, 320px): không chạy Playwright, chỉ viết spec.
 - Gate chưa có một lần xanh trọn vẹn (xem mục 2).
 - Season pass ẩn theo cờ `SEASON_PASS_ENABLED=false`, API không được gọi.
-- Link đổi rác và link Bảng tin cộng đồng chỉ hiện khi `/doi-rac`, `/cong-dong` đã bỏ pending (lane khác). Đã xử lý ở a1bb2cca cho `/cong-dong`; `/doi-rac` vẫn pending (lane recycle).
+- Link đổi rác và link Bảng tin cộng đồng chỉ hiện khi `/doi-rac`, `/cong-dong` đã bỏ pending (lane khác). Đã xử lý ở a1bb2cca cho `/cong-dong`; `/doi-rac` vẫn pending (lane recycle). Đã xử lý ở 0d732366: /doi-rac đã bỏ pending; menu hub, Điểm Xanh, Vườn Xanh, thông báo, chi tiết đơn đều trỏ đúng, không lệch so với Mini App.
 - Haptic không có bản web, bỏ qua.
 - Nút Gửi của /tu-van chỉ báo đang gửi bằng `aria-busy`, không có spinner.
 - Spec /tu-van có 28 test so với 29 của Mini App (gộp vài ca, cùng ý nghĩa).
