@@ -119,6 +119,10 @@ describe('seed mẫu thông báo', () => {
     expect(byCode.size).toBe(templates.length);
   });
 
+  it('Refill đã gỡ: seed không còn mẫu REFILL_*', () => {
+    expect(seededTemplates().map((t) => t.code).filter((c) => c.startsWith('REFILL_'))).toEqual([]);
+  });
+
   describe('migration đưa mẫu thiếu lên prod (prod không chạy seed)', () => {
     const MIGRATION = join(__dirname, '../../../prisma/migrations/20261010150000_reference_data_templates_voucher_eta/migration.sql');
     const inserted = [...readFileSync(MIGRATION, 'utf-8').matchAll(/\('([^']+)', '([A-Z_]+)', '([A-Z]+)', '([^']*)'\)/g)].map((m) => ({
@@ -165,8 +169,6 @@ describe('seed mẫu thông báo', () => {
       'COMMUNITY_POST_LIKED',
       'COMMUNITY_POST_COMMENTED',
       'COMMUNITY_POST_HIDDEN',
-      'REFILL_APPROVED',
-      'REFILL_REJECTED',
       // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.
       'ORDER_AWAITING_PAYMENT',
       'ORDER_PAYMENT_EXPIRED',
