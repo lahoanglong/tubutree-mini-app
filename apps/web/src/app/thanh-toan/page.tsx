@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ShoppingBag } from 'lucide-react';
+import { CheckCircle2, Recycle, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
+import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { AddressForm } from '@/components/address-form';
@@ -16,6 +17,7 @@ import {
   checkoutQuote,
   placeOrder,
   getMe,
+  getPublicConfig,
   formatVnd,
   type AddressDTO,
   type OrderDTO,
@@ -48,6 +50,8 @@ import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoic
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
 import { createOrderKeyRing } from '@/lib/order-key-ring';
+import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
+import { coreHttp } from '@/lib/core-http';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -67,6 +71,7 @@ export default function CheckoutPage() {
   const [invoice, setInvoice] = useState(EMPTY_INVOICE);
   // Mã giới thiệu khách tự nhập ở đây (đã được server xác nhận) khác mã đến từ link gian hàng (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
+  const [attachWaste, setAttachWaste] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   // Một key cho một nội dung đơn trong phiên thanh toán: bấm lại sau lỗi mạng gửi lại cùng đơn; đổi nội dung thì key mới.
   const orderKeys = useRef(createOrderKeyRing());
@@ -77,6 +82,15 @@ export default function CheckoutPage() {
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
   const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
+  // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ máy chủ; chưa tải xong thì ẩn, không hứa dịch vụ chưa chắc có.
+  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+  const pickupFlag = configQ.data?.waste?.pickup === true;
+  const wasteMeQ = useQuery({
+    queryKey: WASTE_QUERY_KEYS.me,
+    queryFn: () => getWasteMe(coreHttp),
+    enabled: phase === 'authenticated' && pickupFlag,
+  });
+  const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
 
   // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
   // chuyển sang tính tiền cả giỏ). Chỉ đối chiếu với giỏ thật khi đã tải xong để không xoá nhầm lựa chọn.
@@ -149,6 +163,7 @@ export default function CheckoutPage() {
   }, [partnerPoints.disabled, usePoints]);
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền) nên ẩn lựa chọn phương thức và gửi COD cho khớp.
   const zeroNote = quote ? zeroTotalNote(quote) : null;
+  const paymentToSend = zeroNote ? 'COD' : payment;
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
   const splitNote = shipmentsNote(shipments);
@@ -168,9 +183,10 @@ export default function CheckoutPage() {
     mutationFn: () => {
       const body = {
         addressId: addressId!,
-        paymentMethod: zeroNote ? 'COD' : payment,
+        paymentMethod: paymentToSend,
         ...(note.trim() ? { note: note.trim() } : {}),
         ...(itemIds ? { itemIds } : {}),
+        ...(attachWaste && pickupReq ? { wasteRequestId: pickupReq.id } : {}),
         ...(wantInvoice
           ? {
               invoiceRequest: {
@@ -199,10 +215,14 @@ export default function CheckoutPage() {
       clearCheckoutSelection();
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
+      if (attachWaste && pickupReq) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);
     },
     onError: (e) => {
+      // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
+      // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
+      if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
       if (e instanceof ApiError && e.code === 'CART_CHANGED') {
         // Giỏ vừa đổi ở nơi khác (hoặc lần bấm trước đã đặt xong): dựng lại giỏ, báo giá và danh sách đơn.
         void qc.invalidateQueries({ queryKey: ['cart'] });
@@ -458,6 +478,54 @@ export default function CheckoutPage() {
               {note.length}/{ORDER_NOTE_MAX} ký tự
             </p>
           </section>
+
+          {pickupReq !== undefined && (
+            <section id="checkout-waste-pickup" className={`p-4 ${ui.card}`}>
+              {pickupReq === null ? (
+                <Link href="/doi-rac/tao" className="flex min-h-11 items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-3">
+                    <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                    <span>
+                      <span className="block font-semibold text-stone-900">Thu kèm rác</span>
+                      <span className="block text-xs text-stone-600">Tạo yêu cầu để bưu tá lấy rác khi giao đơn này</span>
+                    </span>
+                  </span>
+                  <span aria-hidden="true" className="text-stone-600">
+                    ›
+                  </span>
+                </Link>
+              ) : (
+                <>
+                  <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-stone-900">
+                    <span className="flex items-center gap-3">
+                      <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                      Thu kèm rác
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={attachWaste}
+                      onChange={(e) => setAttachWaste(e.target.checked)}
+                      disabled={place.isPending}
+                      className="h-6 w-6 shrink-0 accent-forest-600"
+                    />
+                  </label>
+                  <div className="mt-2 rounded-control bg-stone-100 p-3 text-xs text-stone-700">
+                    <p className="text-sm font-semibold text-stone-900">{pickupReq.code}</p>
+                    {pickupReq.lines.map((l) => (
+                      <p key={`${l.itemName}-${l.unitLabel}`} className="mt-0.5">
+                        {l.itemName}: {l.declaredQty} {l.unitLabel}
+                      </p>
+                    ))}
+                    <p className="mt-1 font-semibold text-success-fg">Ước tính {pickupReq.estimatedPoints.toLocaleString('vi-VN')} điểm</p>
+                    {attachWaste && <p className="mt-1">Ghi mã lên túi, bưu tá lấy khi giao đơn.</p>}
+                    {attachWaste && paymentToSend === 'BANK_TRANSFER' && (
+                      <p className="mt-1">Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
 
           <ReferralCodeBox
             linkedCode={sfCtx.referralCode}

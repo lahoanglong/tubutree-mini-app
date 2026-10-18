@@ -152,6 +152,8 @@ export interface OrderDTO {
 /** GET /config/public — chỉ những giá trị vốn đã hiển thị công khai (xem system-config.controller.ts). */
 export interface PublicConfig {
   freeshipThreshold?: number;
+  /** Cờ chương trình đổi rác do máy chủ bật; API cũ chưa trả thì coi như tắt. */
+  waste?: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 
@@ -335,6 +337,8 @@ export const placeOrder = (
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;
+    /** Yêu cầu thu rác PICKUP đang mở khách bật "Thu kèm rác" để gắn vào đơn này. */
+    wasteRequestId?: string;
   },
   idempotencyKey: string,
 ) =>
