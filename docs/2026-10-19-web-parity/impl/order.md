@@ -64,3 +64,22 @@ Vòng 3:
 3. Sau lỗi mạng khi đặt, nếu khách đổi lựa chọn thì chặn và báo "Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại." (lệch đề xuất gốc). Mặc định: chặn một lần, bấm sau gửi đơn mới.
 4. "Theo dõi ngay" OA trên web chỉ mở trang OA và luôn trả false; chữ báo "Đã mở trang Tubu Tree trên Zalo, bấm Quan tâm...". Mặc định: chữ này, do tôi tự chọn.
 5. Nút Thanh toán ở hub `/tai-khoan` dẫn tới trang chuyển khoản thay vì chi tiết đơn? Mặc định: giữ nguyên (lane account).
+
+## 6. Hoàn tất sau gate/review
+
+Gate cuối run5-3 (`gate-logs/order/run5-3/summary.txt`) có dòng DONE, mọi bước rc=0: app-core 429 ca; web-test 231 file, 3435 ca (cả TZ UTC); Mini App 282 file, 4214 ca (không dưới 4214); typecheck, lint, lint-vars, lint-parity, web-build, miniapp-build đều xanh. Chưa chạy Playwright (luật cứng).
+
+Review vòng 4 (trước ee816fd9/3772cf2a):
+- MAJOR đóng băng bị vô hiệu vì so body suy từ dữ liệu máy chủ (ví, yêu cầu rác nạp lại): sửa ở 3772cf2a (đếm lần khách tự đổi lựa chọn, `choiceRev`).
+- MINOR xoá băng khi 401/429: 3772cf2a (giữ băng khi 401/408/429).
+- MINOR thiếu test (5xx, bấm đúp cùng nhịp, thông điệp đơn trước, nạp lại khi có mạng): 3772cf2a.
+- MINOR gợi ý chỉ hiện cho NetworkError, link /tai-khoan: 3772cf2a; spec liên quan c992dece, 3f034cba.
+
+Review vòng 5:
+- MAJOR gợi ý PREVIOUS_MAYBE_PLACED hứa "không tạo thêm đơn" trong khi lần bấm sau tạo đơn mới: ab055128 (tách hai văn bản, test khẳng định không chứa câu đó).
+- MINOR giỏ rỗng sau lỗi mạng che mất yêu cầu đã đóng băng: ab055128 (state `maybePlaced`, nút Kiểm tra lại gửi đúng body và key cũ; liên kết Đơn của tôi ở thành công và giỏ rỗng dẫn tới /tai-khoan/don-hang).
+
+Chưa có vòng review nào xác nhận lại ab055128.
+
+Câu hỏi mới cho chủ dự án:
+6. Lệch Mini App ở đặt đơn: web đóng băng body và key sau lần chưa rõ kết quả (Mini App đổi key khi fingerprint đổi, có cùng lỗ hổng khi nạp lại lúc có mạng). Giữ lệch cho web, hay sửa cả Mini App? Mặc định: giữ lệch ở web, không đụng Mini App.
