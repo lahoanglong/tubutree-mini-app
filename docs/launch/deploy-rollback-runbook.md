@@ -95,6 +95,7 @@ Ghi: số migration chờ áp ______ . Đối chiếu từng tên với bảng d
 | Migration (nếu có trong danh sách chờ áp) | Vì sao nặng hoặc nguy hiểm | Việc cần làm |
 |---|---|---|
 | `20261012110000_pd3_xu_to_points`, `20261012130000_pd3_freeze_coins` (PD-3) | Quy đổi số dư xu thành điểm (khoá `users` và `coin_transactions`), rồi thêm ràng buộc `coinsBalance = 0`. Migration DỪNG deploy nếu có user xu âm, xu lệch sổ, hoặc `loyalty.vnd_per_point_redeem` khác 1000. Một chiều | Chạy trước ba truy vấn kiểm ở dưới bảng; phải ra 0, 0 và (không dòng hoặc 1000) |
+| `20261018210000_points_1d` (Điểm Xanh 1 điểm = 1đ) | Nhân 1.000 mọi số điểm (số dư, sổ điểm, giá quà, cấu hình, hạng thành viên) trong MỘT giao dịch, khoá nhiều bảng; thêm dòng lịch sử `sch_pts1d_*` làm dấu đã chạy. Một chiều. Dừng nếu `loyalty.vnd_per_point_redeem` đã là 1 mà DB có điểm nhưng không có dấu của chính migration này, hoặc nếu số nhân tràn INT4 | API phải DỪNG trước khi migrate (`deploy.sh` từ chối nếu API còn chạy). Backup ngay trước migrate là bắt buộc: hoàn tác = khôi phục backup (mục 7.3), không có script đảo ngược |
 | `20261014003644_p1_pancake_outbound_sync_state` (p1) | Viết lại MỌI đơn đã có `pancakeOrderId` (đặt `pancakePushStatus = 'SYNCED'`) và dựng 2 chỉ mục mới trên `orders` | Thời gian tỉ lệ số đơn đã đẩy Pancake; tính vào cửa sổ (mục 3) |
 | `20261014150000_p4_admin_ops_search` (p4) | Điền `users.fullNameSearch` cho mọi user, dựng 2 chỉ mục GIN và 1 chỉ mục biểu thức trên `users`/`orders` | Tỉ lệ số user và số đơn; tính vào cửa sổ |
 | `20261014003831_p8_seller_merchant_fulfilment` (p8) | Thêm cột, 3 chỉ mục, 2 khoá ngoại trên `orders`; đổi dữ liệu một chiều: hoa hồng PAID của lệnh rút REQUESTED hoặc APPROVED về APPROVED, `products.pancakeId` và `variations.pancakeId` cho phép NULL và đặt NULL cho mã `MCH_`, đơn cũ được gán gian hàng | Tính vào cửa sổ; sau khi chạy thì KHÔNG quay lại bằng image (7.0) |
@@ -551,6 +552,8 @@ Bốn khoá `legal.dieu-khoan`, `legal.bao-mat`, `legal.doi-tra`, `legal.van-chu
 
 Kỳ vọng: thoát 0 và in mỗi nhóm một dòng `[seed-reference] <nhóm>: ...`. Lần đầu trên DB mới các dòng có dạng `+N mới` (ví dụ `notification_templates: +28 mới`); lần chạy sau đều `đủ sẵn`. Dòng `seasons` luôn là "bỏ qua: mùa mẫu đã hết hạn" cho tới khi chủ dự án chốt mùa mới (Vườn Xanh không hiện banner mùa trong lúc đó). Dòng cuối "chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt)" là đúng ý: lệnh KHÔNG cờ không nạp hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá cấu hình có giá trị khác mặc định trong mã (vòng quay, thưởng mốc giới thiệu, bậc Subscribe & Save, freeship theo hạng, thưởng chuỗi 7 ngày, Season Pass). Đó là các con số tiền, điểm, xác suất chủ dự án chưa quyết.
 
+Thứ tự bắt buộc khi danh sách chờ áp có `points_1d`: backup, dừng API, `prisma migrate deploy`, `prisma:seed:reference`, bật API. `prisma:seed:reference` từ chối chạy nếu `points_1d` chưa xong (nạp khoá cấu hình giá trị cũ trước migrate sẽ bị nhân 1.000 lần nữa).
+
 CHỈ chạy lệnh có cờ sau khi chủ dự án đã duyệt bảng giá trị ở mục 3.2 của `docs/2026-10-18-launch-review/impl/refseed.md`:
 
 ```bash
@@ -767,6 +770,7 @@ cat .pending-migrations
 
 - p8 (`20261014003831_p8_seller_merchant_fulfilment`) đổi hoa hồng PAID của lệnh rút REQUESTED hoặc APPROVED về APPROVED, cho `products.pancakeId` và `variations.pancakeId` cho phép NULL và đặt NULL cho mã `MCH_`: code cũ khai báo cột này là chuỗi bắt buộc và duy nhất nên đọc các dòng đó bị lỗi.
 - PD-3 quy đổi số dư xu về 0 và thêm ràng buộc `coinsBalance = 0`: code cũ vẫn ghi xu sẽ bị từ chối, và số dư xu đã bị đổi thành điểm không tự quay lại.
+- `20261018210000_points_1d` nhân 1.000 mọi số điểm: image cũ đọc số điểm theo đơn vị cũ nên giá quà, trần và số dư sai nghiêm trọng. Hoàn tác = khôi phục backup trước migrate (7.3); không quay image, không có script đảo ngược.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
 
 Vì vậy: danh sách chờ áp có migration ngoài năm cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
