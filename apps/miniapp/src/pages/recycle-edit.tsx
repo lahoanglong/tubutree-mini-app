@@ -106,6 +106,7 @@ export default function RecycleEditPage() {
 
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
   if (q.isError) return shell(<ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
+  if (meQ.isError && !me) return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
   if (!r || !draft || !ready || leave || !me) return shell(<Skeleton height={120} />, r?.code);
 
   const setLine = (itemId: string, n: number) => setEdited((d) => ({ ...(d ?? draft), lines: { ...(d ?? draft).lines, [itemId]: n } }));

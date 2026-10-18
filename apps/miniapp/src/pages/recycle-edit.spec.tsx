@@ -87,6 +87,15 @@ describe('/recycle/r/:id/edit (§4.5, §7.4)', () => {
     renderPage();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/r/req-1', { replace: true }));
   });
+  it('/waste/me lỗi → câu lỗi + "Thử lại" (không skeleton mãi); bấm thì tải lại', async () => {
+    mocks.getWasteMe.mockRejectedValueOnce(new Error('Máy chủ bận'));
+    renderPage();
+    expect(await screen.findByText('Máy chủ bận')).toBeInTheDocument();
+    expect(mocks.getWasteMe).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByText('Thùng carton')).toBeInTheDocument();
+    expect(mocks.getWasteMe).toHaveBeenCalledTimes(2);
+  });
   it('bộ đếm lấy số đã khai; trần cộng thêm phần đang giữ của chính yêu cầu', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [{ ...ITEM_CARTON, monthRemainingQty: 0 }, ITEM_MILK] }));
     renderPage();
