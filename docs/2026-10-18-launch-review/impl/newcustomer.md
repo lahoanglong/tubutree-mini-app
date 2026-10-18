@@ -14,8 +14,8 @@ Ba khoá SystemConfig mới, đều có mặc định trong mã, có luật ghi 
 
 ### D2-07a: cấp voucher chào mừng ngay khi tạo tài khoản thật (`fdfc8a1a`)
 
-- `VouchersService.grantWelcomeNow(userId)` dùng đúng điều kiện và đúng `grant()` của cron `welcomeVouchers` (khách thật, role CUSTOMER, chưa có đơn, tạo trong 24 giờ, mã tất định `WELCOME-<USERID>`, mệnh giá và đơn tối thiểu đọc từ `voucher.welcome_amount` / `voucher.welcome_min_order`). Không đổi mệnh giá, điều kiện hay hạn 30 ngày. Cron mỗi giờ vẫn chạy làm lưới an toàn.
-- `AuthService` gọi hàm này ở ba chỗ tạo hoặc nâng tài khoản thật: đăng nhập Zalo Mini App lần đầu, đăng nhập OAuth lần đầu, và `ensurePhoneForCurrentUser` khi tài khoản khách vãng lai được nâng tại chỗ thành tài khoản Zalo thật. Khách vãng lai (zaloId `guest_*`, không số điện thoại) không được cấp. Lỗi cấp bị nuốt và ghi log, không làm rớt đăng nhập; cron cấp bù ở lượt sau.
+- `VouchersService.grantWelcomeNow(userId, { becameRealNow? })` dùng đúng điều kiện và đúng `grant()` của cron `welcomeVouchers` (khách thật, role CUSTOMER, chưa có đơn ngoài đơn huỷ, chưa gộp vào tài khoản khác, tạo trong 24 giờ, mã tất định `WELCOME-<USERID>`, mệnh giá và đơn tối thiểu đọc từ `voucher.welcome_amount` / `voucher.welcome_min_order`). Không đổi mệnh giá, điều kiện hay hạn 30 ngày. Cron mỗi giờ vẫn chạy làm lưới an toàn.
+- `AuthService` gọi hàm này ở ba chỗ tạo hoặc nâng tài khoản thật: đăng nhập Zalo Mini App lần đầu, đăng nhập OAuth lần đầu, và `ensurePhoneForCurrentUser` khi tài khoản khách vãng lai được nâng tại chỗ thành tài khoản Zalo thật. `AuthService` truyền `{ becameRealNow: true }` ở cả ba chỗ (đều là lúc vừa thành khách thật), nên riêng điều kiện 24 giờ được bỏ: khách vãng lai dùng app quá 24 giờ rồi mới đăng nhập Zalo vẫn nhận mã, vì `createdAt` của dòng nâng cấp là ngày dùng app lần đầu. Cron không truyền nên giữ cửa sổ 24 giờ. Khách vãng lai (zaloId `guest_*`, không số điện thoại) không được cấp. Lỗi cấp bị nuốt và ghi log, không làm rớt đăng nhập; cron cấp bù ở lượt sau.
 - Chống cấp trùng nhờ mã tất định (`coupon.code` unique) và `grant()` nuốt P2002.
 - Chưa có công tắc tắt voucher chào mừng: luật ghi `voucher.welcome_amount` có min 1.000đ, nên đường cấp ngay chạy y như cron. Đây là hành vi cũ, không đổi.
 - Race test trên Postgres thật: `apps/api/test/integration-race/welcome-voucher-signup.race-spec.ts` (7 ca): 8 tài khoản đăng nhập lần đầu song song với 2 lượt cron mỗi tài khoản đúng 1 voucher và 1 thông báo; ép hai lần cấp ngay cùng qua cửa kiểm trùng (barrier trên `coupon.findUnique`) thì một bên thua P2002 nhưng trả false, không ném lỗi; ép cấp ngay và cron cùng qua cửa kiểm trùng; 5 lần đăng nhập lại song song; khách vãng lai, tài khoản có đơn, tài khoản quá 24 giờ không được cấp; nâng khách vãng lai song song với cron; cấp ngay lỗi thì cron cấp bù đúng 1 mã. Đã kiểm đột biến: bỏ nhánh nuốt P2002 thì ca "ép hai lần cấp ngay" đỏ.
@@ -50,7 +50,7 @@ Ba khoá SystemConfig mới, đều có mặc định trong mã, có luật ghi 
 
 ### D5-10: bỏ số cứng trong chữ (`4139fa7b`)
 
-- Màn đơn hàng trống: mệnh giá và ngưỡng voucher chào mừng theo `voucher.welcome_amount` / `voucher.welcome_min_order` qua config công khai (mã không đòi đơn tối thiểu thì bỏ cụm "từ …"; chưa có số thì không nhắc voucher).
+- Màn đơn hàng trống: chỉ nhắc mã chào mừng khi `GET /me/new-customer-offer` trả kèm mã của khách (khách mới, mã giảm số tiền, mệnh giá > 0); mệnh giá và đơn tối thiểu lấy từ chính mã đó, không từ config công khai (config có mệnh giá không có nghĩa khách nhận được: chưa cấp, đã dùng, hết hạn, tài khoản vãng lai). Mã không đòi đơn tối thiểu thì bỏ cụm "từ …". Đang tải hay lỗi thì không nhắc. Truy vấn chỉ chạy ở tab Tất cả khi danh sách đơn rỗng, cùng khoá `['new-customer-offer', userId]` với khối Quà khách mới.
 - Trang đăng ký đại lý: "Giá sỉ đến X%" theo `dealer.max_discount_pct` (dùng `formatRatePct` sẵn có); "xét duyệt trong vòng N giờ" theo khoá mới `dealer.review_hours`. Chưa có số (API cũ, chưa tải xong, cấu hình hỏng) thì bỏ con số, không hiện số mặc định. Mặc định 45% và 24 giờ nằm một chỗ ở `dealer/dealer-config.ts`, `DealerService` và config công khai cùng dùng.
 - Gợi ý thưởng sự kiện cộng đồng (trang kiểm duyệt, chỉ admin): "1 điểm = Y, tối đa M điểm" với Y từ `loyalty.vnd_per_point_redeem` và M từ hằng số API `EVENT_REWARD_MAX_POINTS` (`feed/community-limits.ts`, DTO `@Max` dùng chung). M là giới hạn của API chứ không phải SystemConfig.
 - Config công khai thêm `dealer { maxDiscountPct, reviewHours }` (giá trị hỏng thành null) và `community { eventRewardMaxPoints }`.
@@ -58,27 +58,24 @@ Ba khoá SystemConfig mới, đều có mặc định trong mã, có luật ghi 
 
 ## 2. Lệnh kiểm chứng đã chạy
 
-Chạy ở worktree `lr-newcustomer`, Node 22, DB race `lr-newcustomer-pg` (cổng 5568, `tubutree_it`). Không chạy full suite, build, Playwright; không đụng DB dev hay PROD. Kết quả sau lượt sửa review (tip `9a4da79b` trước commit báo cáo này):
+Chạy ở worktree `lr-newcustomer`, Node 22, DB race `lr-newcustomer-pg` (cổng 5568, `tubutree_it`, dựng lại cho lượt review 2). Không chạy full suite, build, Playwright; không đụng DB dev hay PROD. Kết quả sau lượt sửa review 2 (tip `e7c9f008` trước commit báo cáo này):
 
 ```
-cd apps/api && npx jest src/modules/vouchers src/modules/auth src/modules/feed src/modules/loyalty src/modules/system-config src/modules/catalog src/modules/pricing src/modules/dealer src/common
-  Test Suites: 87 passed, 87 total   Tests: 2002 passed, 2002 total
-  (`prisma/reference-data` không có spec riêng trong jest; phần đó do reference-config-selection.spec.ts ở system-config và race reference-seed phủ)
-cd apps/api && DATABASE_URL=<.../tubutree_it> npx jest -c test/integration-race/jest.config.js --runInBand reference-seed welcome-voucher-signup vouchers-real-user auth-merge-guest
-  Test Suites: 4 passed, 4 total     Tests: 34 passed, 34 total   (xem ghi chú về độ ổn định bên dưới)
-cd apps/miniapp && TZ=UTC npx vitest run <mọi spec đã đổi từ nhánh gốc> src/pages/product-detail src/components/home src/pages/home src/services src/i18n src/utils
-  Test Files  81 passed (81)         Tests  924 passed (924)
-  (lặp lại với TZ=Asia/Ho_Chi_Minh: cùng kết quả 81 passed, 924 passed)
+cd apps/api && DATABASE_URL=<.../tubutree_it> npx jest -c test/integration-race/jest.config.js --runInBand welcome-voucher-signup vouchers-real-user auth-merge-guest pf3-merge-guest-lots reference-seed
+  Test Suites: 5 passed, 5 total     Tests: 54 passed, 54 total   (một lần chạy, máy load average 37 đến 46)
+cd apps/api && npx jest src/modules/vouchers src/modules/auth src/modules/loyalty src/modules/feed src/modules/system-config
+  Test Suites: 40 passed, 40 total   Tests: 1228 passed, 1228 total
+cd apps/miniapp && TZ=UTC npx vitest run src/pages/orders.spec.tsx src/pages/feed.spec.tsx src/i18n/vi-no-hardcoded-amounts.spec.ts src/pages/about src/pages/product-detail src/components/home src/pages/home src/services src/i18n src/utils src/components/community
+  Test Files  90 passed (90)         Tests  1099 passed (1099)
+  (lặp lại với TZ=Asia/Ho_Chi_Minh: cùng kết quả 90 passed, 1099 passed)
 npx tsc --noEmit  (apps/api, apps/miniapp, apps/web)   cả ba exit 0
-npx eslint <mọi file .ts/.tsx đã đổi từ nhánh gốc> --max-warnings=0 (api 32 file, miniapp 34 file, web 6 file)   exit 0
+npx eslint <file .ts/.tsx đổi từ da4db84f> --max-warnings=0 (api 6 file, miniapp 5 file)   exit 0
 npm run -s lint:vars   OK — every var(--x) reference is defined.
 ```
 
-Web không đổi trong lượt sửa review; kết quả vitest web của lượt đầu (56 file, 771 test, cả hai múi giờ) vẫn là bản mới nhất.
+Lượt đầu của review 1 (tip `9a4da79b`): jest 87 suite 2002 test, vitest miniapp 81 file 924 test ở cả hai múi giờ, tsc và eslint sạch cho 3 app (web 56 file 771 test không đổi từ lượt đầu). Ở lượt đó bộ bốn race spec chạy 5 lần trên máy load 65 đến 70: 3 lần xanh, 1 lần `auth-merge-guest` đỏ một test (không lưu thông báo), 1 lần `reference-seed` đỏ vì tiến trình con `npx tsx prisma/seed.ts` thoát mã 1; chạy lại đều xanh. Lượt này bộ năm race spec xanh ngay lần đầu; vẫn chưa chứng minh được nguyên nhân hai lần đỏ cũ nên nên chạy lại `auth-merge-guest` và `reference-seed` trên máy rảnh trước khi gộp.
 
-Ghi chú độ ổn định: trong lúc kiểm chứng máy có tải rất cao (load average 65 đến 70, nhiều phiên chạy song song). Bộ bốn race spec chạy 5 lần: 3 lần xanh hoàn toàn; 1 lần `auth-merge-guest` đỏ một test (không lưu thông báo lỗi) và 1 lần `reference-seed` đỏ ở DB C vì tiến trình con `npx tsx prisma/seed.ts` thoát mã 1 (test dựng seed.ts gốc bằng `spawnSync`, không in lỗi của nó). Cả hai chạy lại ngay sau đó đều xanh, `auth-merge-guest` xanh cả khi chạy riêng; hai chỗ này không đụng file nào của gói (seed.ts và code gộp tài khoản khách không đổi). Coi là chập chờn do tải, nhưng chưa chứng minh được nguyên nhân; nên chạy lại hai spec này trên máy rảnh trước khi gộp.
-
-Mỗi mục đều viết test đỏ trước rồi mới sửa mã (đã thấy đỏ đúng lý do ở từng mục), kể cả các mục L1 đến L5.
+Mỗi mục đều viết test đỏ trước rồi mới sửa mã. Riêng ca race "đơn đã huỷ" của review 2 lần đầu đỏ vì dùng nhầm trạng thái `PENDING` (không có trong enum, đúng là `PENDING_PAYMENT`), đã sửa test rồi hoàn tác tạm mã nguồn để thấy đỏ đúng lý do (khách có đơn huỷ không nhận mã) trước khi áp lại bản sửa.
 
 ## 3. Chưa làm hoặc cố ý để lại
 
@@ -116,6 +113,16 @@ Merge `review/2026-10-18-launch` vào nhánh (`de43d29b`), `config-selection.ts`
 | L4 | `5cba21ef` | Xem trước cộng đồng che số điện thoại và email ở tiêu đề (hàm `publicTitle`) như đoạn đầu bài; route chuyển sang policy mới `USER_CONTENT` (`max-age=30, s-maxage=60`) thay cho STATIC (`s-maxage=300`) |
 | L5 | `9a4da79b` | Regex số tiền cứng nhận thêm `30k`, `199.000 đ`, `199.000 ₫`, `1.000đ` (đã có), `199000đ`, `5 triệu`, `VND`, không bắt nhầm "10.000 điểm" hay "2 ký tự"; quét thêm `pages/about-data.ts`. FAQ dự phòng thành `fallbackFaq(cfg)` đọc từ config công khai: mốc tích, giá trị 1 điểm, trần %, hạn điểm, số ngày đổi trả (API thêm `loyalty.maxRedeemPct`, `loyalty.pointExpireMonths`, chuẩn hoá giống `getOverview` và `pointsExpiryFrom`). Thiếu hay hỏng thì bỏ riêng phần đó |
 
+Review lượt 2 (tip trước khi sửa: `da4db84f`):
+
+| Mức | Commit | Việc |
+|---|---|---|
+| MEDIUM | `dfab4610` | Khách vãng lai quá 24 giờ nâng lên Zalo thật vẫn nhận voucher: `grantWelcomeNow(userId, { becameRealNow: true })` bỏ riêng điều kiện `createdAt`, giữ mọi điều kiện còn lại; `AuthService` truyền ở ba đường vừa thành khách thật, cron giữ cửa sổ 24 giờ. Màn đơn trống chỉ nhắc mã khi API trả kèm mã, số lấy từ mã. Race: khách tạo từ 2 ngày trước nâng cấp nhận đúng 1 mã, gọi thêm hai lần song song vẫn 1 mã; đỏ trước (không nhận mã) |
+| LOW | `155a1519` | "Chưa có đơn" của voucher chào mừng dùng chung định nghĩa với `hasPriorOrder` qua hằng `COUNTED_ORDER_WHERE` (`common/first-order.ts`): đơn đã huỷ không chặn, đơn chờ thanh toán và đã giao vẫn chặn. Race đỏ trước (khách có đơn huỷ không nhận mã) |
+| LOW | `8cb0574d` | `welcomeWhere` thêm `mergedIntoId: null`: dòng đã gộp không được cấp (đường ngay, becameRealNow, cron). Race đỏ trước |
+| LOW | `111d984c` | Xem trước cộng đồng: `staleTime` của khách chưa đăng nhập từ 5 phút xuống 30 giây (test mở lại sau 10 giây dùng bản cũ, sau 61 giây tải lại; đỏ trước). Báo cáo sửa thời gian gỡ bài và ghi rủi ro bài rác của người tin cậy (mục 3 và câu hỏi 2) |
+| LOW | `e7c9f008` | Bộ lọc số tiền cứng bắt thêm `199,000đ`, `199 000đ` (kể cả dấu cách không ngắt), `1tr`, `1 tr`, `1,5tr`; thêm ca không bắt nhầm ("1 000 điểm", "1 trong 3", "10 trẻ", "Mã SALE1TR", số điện thoại, "12 345 đường"). Đỏ trước với mười ca mới |
+
 Số trong `about-data.ts` không nằm trong config: chỉ còn "100%" của lô điểm quy đổi từ xu cũ (luật cố định ở `pricing.service`, không có khoá), có chú thích lý do ngay trên dòng. Danh sách ngoại lệ có `// hardcoded-amount-ok` của spec vẫn trống vì "100%" không phải số tiền.
 
 ## 4. Câu hỏi cho chủ dự án
@@ -143,4 +150,10 @@ bd431768 test(reference-seed): ba khoá bổ sung của gói khách mới nằm 
 723dbbb8 fix(loyalty): getNewCustomerOffer chỉ coi khách thật là khách mới, khách deviceId không bị hứa quà (L3)
 5cba21ef fix(feed): xem trước cộng đồng che số điện thoại và email cả ở tiêu đề, proxy chỉ giữ 60 giây (L4)
 9a4da79b fix(i18n): FAQ dự phòng đọc số từ config công khai; bộ lọc số tiền cứng bắt thêm 30k, "199.000 đ", "199.000 ₫" (L5)
+da4db84f docs(newcustomer): báo cáo sau review, sửa đường dẫn route, ghi chồng ưu đãi WELCOME-<id> với WELCOME30 và freeship đơn đầu
+dfab4610 fix(vouchers): khách vãng lai dùng app quá 24 giờ rồi nâng lên Zalo thật vẫn nhận voucher chào mừng; màn đơn trống chỉ nhắc mã khi khách có mã thật
+155a1519 fix(vouchers): voucher chào mừng dùng cùng định nghĩa "chưa có đơn" với hasPriorOrder, đơn đã huỷ không chặn
+8cb0574d fix(vouchers): dòng đã gộp vào tài khoản khác không được cấp voucher chào mừng
+111d984c fix(community): xem trước công khai ở máy khách chỉ tươi 30 giây; báo cáo ghi đúng thời gian gỡ bài và rủi ro bài rác
+e7c9f008 test(i18n): bộ lọc số tiền cứng bắt thêm 199,000đ, 199 000đ và 1tr, không bắt nhầm điểm hay chữ thường
 ```
