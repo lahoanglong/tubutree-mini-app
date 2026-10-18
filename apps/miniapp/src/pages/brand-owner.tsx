@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Page, Input, useSnackbar, useNavigate } from 'zmp-ui';
-import { Check, Gift, Plus } from 'lucide-react';
+import { Check, Gift, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getOwnedBrand,
@@ -14,6 +14,7 @@ import { getErrorMessage } from '../services/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Button } from '../components/ui/button';
+import { IconButton } from '../components/ui/icon-button';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { PageHeader } from '../components/ui/page-header';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -229,15 +230,14 @@ function Editor({ brand }: { brand: OwnedBrand }) {
               <Heading variant="title-sm" as="h2">Khuyến mãi</Heading>
             </div>
             {brand.promotions.map((p) => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, padding: '6px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Text variant="body-sm" as="div">{p.title}</Text>
                   {p.subtitle && <Text variant="caption" tone="secondary" as="div">{p.subtitle}</Text>}
                 </div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <Button variant="ghost" onPress={() => startEdit(p)}>Sửa</Button>
-                  <Button variant="ghost" style={{ color: 'var(--color-text-danger)' }} onPress={() => setConfirmDeleteId(p.id)}>Xoá</Button>
-                </div>
+                {/* Nút ZaUI có min-width 120px: hai nút chữ "Sửa"/"Xoá" ép cột tiêu đề còn ~110px, mỗi dòng vài từ. */}
+                <IconButton icon={Pencil} label={`Sửa khuyến mãi ${p.title}`} style={{ flexShrink: 0 }} onPress={() => startEdit(p)} />
+                <IconButton icon={Trash2} label={`Xoá khuyến mãi ${p.title}`} style={{ flexShrink: 0 }} onPress={() => setConfirmDeleteId(p.id)} />
               </div>
             ))}
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
