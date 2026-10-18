@@ -50,6 +50,7 @@ describe('lookupMissMeta (spec 11.1 LOOKUP_MISS rule)', () => {
     expect(lookupMissMeta('abc')).toEqual({ length: 3, classes: 'L' });
     expect(lookupMissMeta('TR-IO0O1')).toEqual({ length: 8, classes: 'LDS' });
     expect(lookupMissMeta('a.b')).toEqual({ length: 3, classes: 'LS' });
+    expect(lookupMissMeta('đ12')).toEqual({ length: 3, classes: 'LD' });
     expect(Object.keys(lookupMissMeta('0901234567'))).toEqual(['length', 'classes']);
   });
 });

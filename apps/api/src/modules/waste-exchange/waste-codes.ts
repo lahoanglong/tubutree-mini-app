@@ -20,7 +20,7 @@ export function normalizeTracking(raw: string): string {
 // LOOKUP_MISS stores the typed text only when it looks like a Tubu code; anything else (a phone number typed into the code box) keeps shape only.
 export function lookupMissMeta(raw: string): { code?: string; length: number; classes: string } {
   const text = normalizeWasteCode(raw);
-  const classes = [/[A-Za-z]/.test(text) ? 'L' : '', /\d/.test(text) ? 'D' : '', /[^A-Za-z\d]/.test(text) ? 'S' : ''].join('');
+  const classes = [/\p{L}/u.test(text) ? 'L' : '', /\d/.test(text) ? 'D' : '', /[^\p{L}\d]/u.test(text) ? 'S' : ''].join('');
   const meta = { length: text.length, classes };
   return WASTE_LOOKUP_PATTERN.test(text) ? { code: text, ...meta } : meta;
 }
