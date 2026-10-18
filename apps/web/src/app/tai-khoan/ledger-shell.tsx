@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { ui } from '@/lib/guest-ui';
 
 /** Khung chung của các trang sổ cái trong tài khoản (Điểm Xanh, Ví Tubu). */
-export function LedgerShell({ title, children }: { title: string; children: React.ReactNode }) {
+export function LedgerShell({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
+    <main className={`mx-auto px-4 py-6 ${wide ? 'max-w-5xl' : 'max-w-3xl'}`}>
       <Link href="/tai-khoan" className={ui.backLink}>
         ← Tài khoản
       </Link>

@@ -16,13 +16,12 @@ const CORE: TitleCase[] = [
   ['/dang-nhap', login, 'Đăng nhập — Tubu Tree'],
   ['/tai-khoan', account, 'Tài khoản — Tubu Tree'],
   ['/tai-khoan/dia-chi', addresses, 'Sổ địa chỉ — Tubu Tree'],
-  ['/tai-khoan/diem-xanh', points, 'Lịch sử Điểm Xanh — Tubu Tree'],
   ['/tai-khoan/vi-tubu', wallet, 'Ví Tubu — Tubu Tree'],
 ];
 const SHOP: TitleCase[] = [];
 const ORDER: TitleCase[] = [];
 const ACCOUNT: TitleCase[] = [];
-const LOYALTY: TitleCase[] = [];
+const LOYALTY: TitleCase[] = [['/tai-khoan/diem-xanh', points, 'Hạng thành viên & Điểm Xanh — Tubu Tree']];
 const COMMUNITY: TitleCase[] = [];
 const AFFILIATE: TitleCase[] = [];
 const GAME: TitleCase[] = [];

@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
  */
 const READS_STANDARD_LOT_ON_PURPOSE: Record<string, string> = {
   'lib/checkout-points.ts': 'pointsSummary và checkoutPointsOffer: nơi cộng hai lô',
+  'lib/loyalty-copy.ts': 'tierProgressPercent: API cũ chưa trả điểm xét hạng thì đo theo số dư, đúng như Mini App',
   'lib/export-csv.ts': 'CSV người dùng: truyền cả hai lô vào pointsSummary',
 };
 
