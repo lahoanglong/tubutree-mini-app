@@ -17,6 +17,8 @@ export interface LoyaltyOverview {
   expiringPoints?: { amount: number; expiresAt: string } | null;
   /** Số tháng điểm thường hết hạn kể từ ngày nhận (cấu hình). Optional: API cũ chưa trả. */
   pointExpireMonths?: number;
+  /** Hệ số server nhân khi tích điểm (1 khi chưa có hạng, dù `tier` hiển thị hạng thấp nhất). Optional: API cũ chưa trả. */
+  earnMultiplier?: number;
   /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
   pointsTotal?: number;
   /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */

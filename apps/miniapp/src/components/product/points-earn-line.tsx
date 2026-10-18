@@ -7,9 +7,10 @@ import { pointsEarnPreview } from '../../utils/points-earn';
 import { vi } from '../../i18n/vi';
 
 /**
- * Hệ số hạng của khách, hoặc null khi chưa biết: khách chưa đăng nhập và tài khoản chưa có hạng thì server tính hệ số 1
- * (getTierMultiplier); tài khoản có hạng chỉ biết được từ tổng quan Điểm Xanh đã tải ở màn khác (không gọi thêm API ở
- * PDP, trang đông khách nhất), chưa có thì nói chung thay vì đoán.
+ * Hệ số hạng của khách, hoặc null khi chưa biết. Khách chưa đăng nhập và tài khoản chưa có hạng thì server tính hệ số 1
+ * (getTierMultiplier), kể cả khi tổng quan Điểm Xanh trong bộ nhớ đệm hiển thị hạng thấp nhất cho họ. Tài khoản có hạng
+ * chỉ biết được từ tổng quan đã tải ở màn khác (không gọi thêm API ở PDP, trang đông khách nhất): lấy `earnMultiplier`
+ * server trả, API cũ chưa trả thì lấy hệ số của hạng hiển thị, chưa có tổng quan thì nói chung thay vì đoán.
  */
 function tierMultiplierOf(
   authStatus: string,
@@ -18,8 +19,9 @@ function tierMultiplierOf(
 ): number | null {
   if (authStatus === 'loading') return null;
   if (authStatus !== 'authenticated') return 1;
-  if (overview) return overview.tier?.multiplier ?? 1;
-  return tierId === null ? 1 : null;
+  if (tierId === null) return 1;
+  if (!overview) return null;
+  return overview.earnMultiplier ?? overview.tier?.multiplier ?? 1;
 }
 
 /** Dòng "Nhận … Điểm Xanh" dưới giá ở PDP (D2-07c). `goods` là giá trị hàng đang chọn (đơn giá × số lượng). */

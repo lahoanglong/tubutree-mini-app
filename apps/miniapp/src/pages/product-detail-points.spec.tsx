@@ -112,6 +112,34 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     expect(await screen.findByText('Nhận tối đa 25 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
+  // Overview trả hạng thấp nhất (hệ số 1.2) cho tài khoản chưa có hạng, nhưng server tích với hệ số 1.
+  it('tài khoản chưa có hạng, tổng quan trong bộ nhớ đệm hiển thị hạng thấp nhất hệ số 1.2 (chưa có earnMultiplier): vẫn hệ số 1', async () => {
+    mocks.auth.status = 'authenticated';
+    mocks.auth.user = { tierId: null };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['loyalty'], { tier: { id: 'MAM_XANH', name: 'Mầm Xanh', multiplier: 1.2, perks: null } });
+    renderPdp(qc);
+    expect(await screen.findByText('Nhận tối đa 25 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
+  });
+
+  it('tài khoản chưa có hạng, API trả earnMultiplier 1 kèm hạng hiển thị hệ số 1.2: dùng 1', async () => {
+    mocks.auth.status = 'authenticated';
+    mocks.auth.user = { tierId: null };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['loyalty'], { earnMultiplier: 1, tier: { id: 'MAM_XANH', name: 'Mầm Xanh', multiplier: 1.2, perks: null } });
+    renderPdp(qc);
+    expect(await screen.findByText('Nhận tối đa 25 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
+  });
+
+  it('tài khoản có hạng: ưu tiên earnMultiplier server trả (1.5) hơn hệ số của hạng hiển thị', async () => {
+    mocks.auth.status = 'authenticated';
+    mocks.auth.user = { tierId: 'LOC_BIEC' };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['loyalty'], { earnMultiplier: 1.5, tier: { id: 'LOC_BIEC', name: 'Lộc Biếc', multiplier: 1.2, perks: null } });
+    renderPdp(qc);
+    expect(await screen.findByText('Nhận tối đa 37 Điểm Xanh (≈37.000đ) khi đơn giao thành công')).toBeInTheDocument();
+  });
+
   it('đang kiểm tra phiên đăng nhập: chưa hứa số nào', async () => {
     mocks.auth.status = 'loading';
     renderPdp();

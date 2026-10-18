@@ -870,6 +870,34 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(ov.nextTier).toMatchObject({ id: 'loc', minSpending: 5_000_000 });
   });
 
+  // L2: khách chưa có hạng được hiển thị hạng thấp nhất (tiers[0]) nhưng server tích điểm với hệ số 1 (getTierMultiplier(null)).
+  describe('getOverview: earnMultiplier là hệ số server sẽ dùng khi tích điểm', () => {
+    const MULT_TIERS = [
+      { id: 'mam', name: 'Mầm Xanh', sortOrder: 0, minPoints: 0, minSpending: null, pointMultiplier: 1.2, perks: [] },
+      { id: 'loc', name: 'Lộc Biếc', sortOrder: 1, minPoints: 500, minSpending: 5_000_000, pointMultiplier: 1.5, perks: [] },
+    ];
+    const overviewFor = (user: { tierId: string | null; tier: unknown }) => {
+      const prisma = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, ...user }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(MULT_TIERS) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      return new LoyaltyService(prisma, makeConfig()).getOverview('u1');
+    };
+
+    it('chưa có hạng, hạng thấp nhất có hệ số 1.2 → earnMultiplier 1 dù tier hiển thị vẫn là 1.2', async () => {
+      const ov = await overviewFor({ tierId: null, tier: null });
+      expect(ov.tier).toMatchObject({ id: 'mam', multiplier: 1.2 });
+      expect(ov.earnMultiplier).toBe(1);
+    });
+
+    it('đã có hạng → earnMultiplier bằng hệ số của hạng đó', async () => {
+      const ov = await overviewFor({ tierId: 'loc', tier: MULT_TIERS[1] });
+      expect(ov.earnMultiplier).toBe(1.5);
+    });
+  });
+
   it('getOverview: SystemConfig sai kiểu → tỷ lệ rơi về mặc định (10.000đ/điểm, 1.000đ/điểm, 20%)', async () => {
     const config = { get: async <T>(_k: string, _fb?: T): Promise<T> => 'oops' as unknown as T } as unknown as SystemConfigService;
     const prisma = {

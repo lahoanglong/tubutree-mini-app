@@ -629,6 +629,8 @@ export class LoyaltyService {
       lockedUntil: lock.lockedUntil?.toISOString() ?? null,
       redeemablePoints,
       redeemableTotal: redeemablePoints + user.pointsConvertedBalance,
+      /** Hệ số server sẽ nhân khi tích điểm: 1 khi chưa có hạng, dù `tier` bên dưới hiển thị hạng thấp nhất (xem getTierMultiplier). */
+      earnMultiplier: user.tier ? Number(user.tier.pointMultiplier) : 1,
       tier: current
         ? {
             id: current.id,
