@@ -316,6 +316,36 @@ describe('cổng đối tác — tab Gian hàng & Subdomain', () => {
     expect(mocks.updateStore).toHaveBeenCalledWith(expect.objectContaining({ subdomain: 'minh-an-moi' }));
   });
 
+  it('cờ subdomain bật: hiện link riêng, ô nhập subdomain và dòng xem trước dạng subdomain', async () => {
+    mocks.store = { ...STORE, subdomain: 'minhan', subdomainEnabled: true };
+    const root = await mount();
+    expect(root.textContent).toContain('Đường dẫn gian hàng riêng:');
+    expect(root.querySelector('a[href="https://minhan.tubutree.com"]')).not.toBeNull();
+    expect(byText(root, 'label', 'Subdomain riêng biệt')).not.toBeNull();
+    expect(root.querySelector('input[placeholder="ten-thuong-hieu"]')).not.toBeNull();
+    expect(root.textContent).toContain('minhan.tubutree.com');
+  });
+
+  it('cờ subdomain tắt: không có link, ô nhập, chữ .tubutree.com; xem trước và nút xem gian hàng dùng /s/<slug>', async () => {
+    mocks.store = { ...STORE, subdomain: null, subdomainEnabled: false };
+    const root = await mount();
+    expect(root.textContent).not.toContain('Đường dẫn gian hàng riêng');
+    expect(byText(root, 'label', 'Subdomain riêng biệt')).toBeNull();
+    expect(root.querySelector('input[placeholder="ten-thuong-hieu"]')).toBeNull();
+    expect(root.textContent).not.toContain('tubutree.com');
+    expect(root.textContent).toContain('/s/minh-an');
+    expect(root.querySelector('a[href="/s/minh-an"]')).not.toBeNull();
+  });
+
+  it('cờ subdomain tắt dù dữ liệu còn subdomain: vẫn ẩn, và lưu không gửi subdomain', async () => {
+    mocks.store = { ...STORE, subdomain: 'minhan', subdomainEnabled: false };
+    const root = await mount();
+    expect(root.textContent).not.toContain('tubutree.com');
+    click(byText(root, 'button', 'Lưu cấu hình gian hàng'));
+    await flush();
+    expect(mocks.updateStore.mock.calls[0]![0].subdomain).toBeUndefined();
+  });
+
   it('D7-10: ô URL logo và ảnh bìa có ảnh xem trước; đổi liên kết thì ảnh đổi theo và Lưu vẫn gửi đúng liên kết', async () => {
     mocks.store = { ...STORE, avatarUrl: 'https://cdn.example/logo.png', coverUrl: '' };
     const root = await mount();
