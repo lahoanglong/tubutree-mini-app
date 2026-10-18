@@ -10,6 +10,7 @@ import type {
   WasteRejectionReason,
   WasteRequestDetailDTO,
   WasteRequestStatus,
+  WasteRequestSummaryDTO,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { formatNumber, formatPoints, formatVnd } from './format';
@@ -141,6 +142,33 @@ export function closedLabel(
       return { label: `Đã thu hồi ${formatPoints(r.reversedPoints ?? 0)}`, reason: r.reversalReason };
     default:
       return null;
+  }
+}
+
+/** Dòng trạng thái của một yêu cầu cho khách (danh sách, thẻ trang chủ, trang chi tiết); tên bước theo §4.6. */
+export function requestStatusText(
+  r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'closeReason' | 'orderCode' | 'pointsAwarded'>,
+  opts: { blocked?: boolean } = {},
+): string {
+  switch (r.status) {
+    case 'OPEN':
+      if (r.method === 'DROP_OFF') return 'Chờ bạn mang tới';
+      if (r.method === 'MAIL_IN') return 'Chờ bạn gửi kiện';
+      return r.orderCode ? 'Chờ kho nhận' : 'Chờ gắn vào đơn';
+    case 'IN_TRANSIT':
+      return 'Đang vận chuyển';
+    case 'RECEIVED':
+      return opts.blocked ? 'Đang chờ Tubu xem lại' : 'Kho đã nhận, đang đếm';
+    case 'COMPLETED':
+      return (r.pointsAwarded ?? 0) > 0 ? `Đã cộng ${formatPoints(r.pointsAwarded ?? 0)}` : 'Chưa đủ để cộng điểm';
+    case 'REJECTED':
+      return 'Bị từ chối';
+    case 'CANCELLED':
+      return 'Đã huỷ';
+    case 'REVERSED':
+      return 'Đã thu hồi điểm';
+    default:
+      return closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null })!.label;
   }
 }
 

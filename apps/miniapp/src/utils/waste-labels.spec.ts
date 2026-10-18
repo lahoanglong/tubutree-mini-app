@@ -161,3 +161,25 @@ describe('điểm nhận (§4.4)', () => {
   });
   it('dd/mm theo giờ VN', () => { expect(L.dayMonth('2026-10-24T17:30:00.000Z')).toBe('25/10'); });
 });
+
+describe('requestStatusText (F0, F7, §4.6)', () => {
+  const base = { method: 'DROP_OFF', status: 'OPEN', closeReason: null, orderCode: null, pointsAwarded: null } as const;
+  it.each([
+    [{ method: 'DROP_OFF', status: 'OPEN' }, 'Chờ bạn mang tới'],
+    [{ method: 'MAIL_IN', status: 'OPEN' }, 'Chờ bạn gửi kiện'],
+    [{ method: 'PICKUP', status: 'OPEN', orderCode: null }, 'Chờ gắn vào đơn'],
+    [{ method: 'PICKUP', status: 'OPEN', orderCode: 'TB123' }, 'Chờ kho nhận'],
+    [{ method: 'MAIL_IN', status: 'IN_TRANSIT' }, 'Đang vận chuyển'],
+    [{ method: 'MAIL_IN', status: 'RECEIVED' }, 'Kho đã nhận, đang đếm'],
+    [{ status: 'COMPLETED', pointsAwarded: 4000 }, 'Đã cộng 4.000 điểm'],
+    [{ status: 'COMPLETED', pointsAwarded: 0 }, 'Chưa đủ để cộng điểm'],
+    [{ status: 'COMPLETED', pointsAwarded: null }, 'Chưa đủ để cộng điểm'],
+    [{ status: 'REJECTED' }, 'Bị từ chối'],
+    [{ status: 'CANCELLED' }, 'Đã huỷ'],
+    [{ status: 'REVERSED' }, 'Đã thu hồi điểm'],
+    [{ status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' }, 'Hết hạn giữ chỗ'],
+  ])('%o', (over, text) => { expect(L.requestStatusText({ ...base, ...over } as never)).toBe(text); });
+  it('khách bị khoá: RECEIVED đọc "Đang chờ Tubu xem lại"', () => {
+    expect(L.requestStatusText({ ...base, method: 'MAIL_IN', status: 'RECEIVED' }, { blocked: true })).toBe('Đang chờ Tubu xem lại');
+  });
+});

@@ -157,6 +157,7 @@ describe('/recycle trang vào (§4.1)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /TR-8K2M9/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/r/req-1');
     expect(screen.getByRole('list', { name: 'Tiến độ TR-8K2M9' })).toBeInTheDocument();
+    expect(screen.getByText('Đang vận chuyển')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Yêu cầu của tôi' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/requests');
   });

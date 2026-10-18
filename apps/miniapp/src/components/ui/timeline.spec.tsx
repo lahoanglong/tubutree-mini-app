@@ -32,4 +32,18 @@ describe('Timeline (§16.1)', () => {
     expect(container.querySelectorAll('button, a, [tabindex]')).toHaveLength(0);
     expect(findNestedInteractive(container)).toEqual([]);
   });
+  it('compact: chữ bước hiện tại hiện ra dưới các chấm, ẩn với trình đọc màn hình', () => {
+    const { container } = render(<Timeline steps={STEPS} current={1} compact />);
+    const visible = container.querySelector('div[aria-hidden]');
+    expect(visible).toHaveTextContent('Vận chuyển');
+    expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Vận chuyển, đang diễn ra');
+  });
+  it('compact: mọi bước xong thì chữ là bước cuối', () => {
+    const { container } = render(<Timeline steps={STEPS} current={4} compact />);
+    expect(container.querySelector('div[aria-hidden]')).toHaveTextContent('Cộng điểm');
+  });
+  it('không compact: không có chữ phụ dưới danh sách', () => {
+    const { container } = render(<Timeline steps={STEPS} current={1} />);
+    expect(container.querySelector('div[aria-hidden]')).toBeNull();
+  });
 });

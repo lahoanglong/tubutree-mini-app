@@ -21,7 +21,7 @@ const STATE_TEXT: Record<StepState, string> = {
 
 export function Timeline({ steps, current, label = 'Tiến độ yêu cầu', compact = false }: TimelineProps) {
   const size = compact ? 16 : 24;
-  return (
+  const list = (
     <ol
       aria-label={label}
       style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: compact ? 'row' : 'column', gap: compact ? 8 : 12 }}
@@ -68,5 +68,19 @@ export function Timeline({ steps, current, label = 'Tiến độ yêu cầu', co
         );
       })}
     </ol>
+  );
+  if (!compact) return list;
+  const caption = steps[Math.min(current, steps.length - 1)];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      {list}
+      {caption && (
+        <div aria-hidden style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Text variant="caption" tone="secondary">
+            {caption}
+          </Text>
+        </div>
+      )}
+    </div>
   );
 }
