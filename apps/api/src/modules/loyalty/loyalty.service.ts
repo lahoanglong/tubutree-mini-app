@@ -669,11 +669,13 @@ export class LoyaltyService {
   }
 
   /**
-   * Khối "Quà khách mới" ở Trang chủ: chỉ cho khách chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts), kèm
+   * Khối "Quà khách mới" ở Trang chủ: chỉ cho khách thật (cùng isRealUser với voucher chào mừng và freeship đơn đầu, nếu không
+   * khách deviceId sẽ được hứa quà server không cho) chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts), kèm
    * voucher chào mừng nếu còn dùng được. Voucher lấy qua getAvailableCoupons nên hiện thì áp được, đúng như ví voucher.
    */
   async getNewCustomerOffer(userId: string) {
-    if (await hasPriorOrder(this.prisma, userId)) return { isNewCustomer: false as const, welcomeVoucher: null };
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(user) || (await hasPriorOrder(this.prisma, userId))) return { isNewCustomer: false as const, welcomeVoucher: null };
     const code = voucherCode('WELCOME', userId);
     const voucher = (await this.getAvailableCoupons(userId)).find((c) => c.code === code);
     return {

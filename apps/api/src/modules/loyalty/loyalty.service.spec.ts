@@ -1299,7 +1299,26 @@ describe('LoyaltyService.getNewCustomerOffer', () => {
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
-  it('khách mới nhưng chưa có voucher (cron chưa chạy, khách vãng lai, đã dùng hay hết hạn) → welcomeVoucher null, vẫn là khách mới', async () => {
+  // Luật freeship đơn đầu (pricing firstOrderFreeShipFrom) và voucher chào mừng chỉ cho khách thật: khách deviceId tạo vô hạn.
+  it('khách vãng lai (zaloId guest_…, chưa SĐT) chưa có đơn → không phải khách mới, không hứa quà, không đụng đơn và ví voucher', async () => {
+    const { svc, orderFindFirst, prisma } = setup({
+      priorOrder: false,
+      user: { id: 'me', tierId: null, zaloId: 'guest_dev-1', phone: null },
+    });
+    expect(await svc.getNewCustomerOffer('me')).toEqual({ isNewCustomer: false, welcomeVoucher: null });
+    expect(orderFindFirst).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('dòng guest đã xác thực SĐT vẫn là khách thật (cùng isRealUser với freeship đơn đầu)', async () => {
+    const { svc } = setup({
+      priorOrder: false,
+      user: { id: 'me', tierId: null, zaloId: 'guest_dev-1', phone: '0901234567' },
+    });
+    expect((await svc.getNewCustomerOffer('me')).isNewCustomer).toBe(true);
+  });
+
+  it('khách mới nhưng chưa có voucher (cron chưa chạy, đã dùng hay hết hạn) → welcomeVoucher null, vẫn là khách mới', async () => {
     const { svc } = setup({ priorOrder: false, coupons: [coupon('PUB', 'PUBLIC', null)] });
     expect(await svc.getNewCustomerOffer('me')).toEqual({ isNewCustomer: true, welcomeVoucher: null });
   });
