@@ -174,4 +174,26 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
     expect(to('DEALER_REWARD_CLAIM_NEW', { dealer: 'A' })).toBeNull();
     expect(to('DEALER_REWARD_CLAIM_APPROVED', {})).toBe('/dealer');
   });
+
+  it('đổi rác: theo tiền tố, id lấy từ nội dung (§11.6)', () => {
+    expect(to('WASTE_POINTS_CREDITED', { request_id: 'req-1' })).toBe('/recycle/done/req-1');
+    expect(to('WASTE_GIFT_CANCELLED', { redemption_id: 'red-1' })).toBe('/rewards/mine');
+    expect(to('WASTE_PERK_REVIEWED', { point_id: 'pt-1' })).toBe('/recycle/desk');
+    for (const code of ['WASTE_PARCEL_RECEIVED', 'WASTE_REQUEST_REJECTED', 'WASTE_REQUEST_EXPIRED', 'WASTE_PICKUP_STARTED', 'WASTE_PICKUP_CANCELLED', 'WASTE_POINTS_REVERSED']) {
+      expect(to(code, { request_id: 'r/2' })).toBe('/recycle/r/r%2F2');
+    }
+    expect(to('WASTE_SHIP_LOCKED', {})).toBe('/recycle');
+    expect(to('WASTE_POINTS_CREDITED', {})).toBe('/recycle');
+    expect(to('REFILL_RETURN_CREDITED', {})).toBe('/recycle');
+  });
+  it('tin thu kèm đơn có order_code vẫn mở yêu cầu, không mở đơn', () => {
+    expect(to('WASTE_PICKUP_STARTED', { request_id: 'req-3', order_code: 'TUBU1' })).toBe('/recycle/r/req-3');
+  });
+});
+
+describe('notificationMeta — Đổi rác lấy quà', () => {
+  it('mọi mã WASTE có nhãn riêng thay vì "Thông báo"', () => {
+    expect(notificationMeta('WASTE_POINTS_CREDITED').title).toBe('Đổi rác lấy quà');
+    expect(notificationMeta('WASTE_GIFT_CANCELLED').title).toBe('Đổi rác lấy quà');
+  });
 });
