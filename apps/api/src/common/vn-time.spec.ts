@@ -1,4 +1,4 @@
-import { formatVnDate, formatVnDateTime, startOfVnDay, startOfVnMonth, vnDateParts, vnMonthKey } from './vn-time';
+import { formatVnDate, formatVnDateTime, startOfVnDay, startOfNextVnMonth, startOfVnMonth, vnDateParts, vnMonthKey } from './vn-time';
 
 // Jest chạy với TZ=UTC (test/jest-global-utc.js) nên các phép tính dưới đây chỉ đúng nếu helper
 // thật sự tính theo lịch VN chứ không theo giờ local.
@@ -17,6 +17,15 @@ describe('vn-time (lịch giờ VN, độc lập TZ host)', () => {
     expect(startOfVnMonth(d).toISOString()).toBe('2026-09-30T17:00:00.000Z');
     expect(vnMonthKey(d)).toBe('2026-10');
     expect(vnDateParts(d)).toEqual({ year: 2026, month: 10, day: 1 });
+  });
+
+  it('startOfNextVnMonth: đầu tháng VN kế tiếp, qua ranh giới tháng và năm', () => {
+    expect(startOfNextVnMonth(new Date('2026-10-15T00:00:00Z')).toISOString()).toBe('2026-10-31T17:00:00.000Z');
+    expect(startOfNextVnMonth(new Date('2026-09-30T20:00:00Z')).toISOString()).toBe('2026-10-31T17:00:00.000Z'); // 03:00 1/10 VN
+    expect(startOfNextVnMonth(new Date('2026-09-30T16:59:00Z')).toISOString()).toBe('2026-09-30T17:00:00.000Z'); // 23:59 30/9 VN
+    expect(startOfNextVnMonth(new Date('2026-12-31T16:59:00Z')).toISOString()).toBe('2026-12-31T17:00:00.000Z');
+    expect(startOfNextVnMonth(new Date('2026-12-31T17:00:00Z')).toISOString()).toBe('2027-01-31T17:00:00.000Z'); // 00:00 1/1/2027 VN
+    expect(startOfNextVnMonth(new Date('2026-12-10T00:00:00Z')).toISOString()).toBe('2026-12-31T17:00:00.000Z');
   });
 
   it('formatVnDate: hạn 00:00 ngày 10/10 VN hiển thị 10/10/2026, không lùi về 9/10', () => {
