@@ -16,6 +16,7 @@ import { metadata as cashback } from './hoan-tien/layout';
 import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
 import { metadata as orders } from './tai-khoan/don-hang/layout';
 import { metadata as bankPayment } from './thanh-toan/chuyen-khoan/[code]/layout';
+import { metadata as dealer } from './dai-ly/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -46,7 +47,7 @@ const LOYALTY: TitleCase[] = [
 const COMMUNITY: TitleCase[] = [];
 const AFFILIATE: TitleCase[] = [];
 const GAME: TitleCase[] = [];
-const PRO: TitleCase[] = [];
+const PRO: TitleCase[] = [['/dai-ly', dealer, 'Kênh đại lý — Tubu Tree']];
 const RECYCLE: TitleCase[] = [];
 const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 

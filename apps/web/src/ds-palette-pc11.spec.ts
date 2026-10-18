@@ -65,7 +65,18 @@ const LOYALTY: string[] = [];
 const COMMUNITY: string[] = [];
 const AFFILIATE: string[] = [];
 const GAME: string[] = [];
-const PRO: string[] = [];
+const PRO: string[] = [
+  'app/dai-ly/page.tsx',
+  'components/dealer/dealer-shell.tsx',
+  'components/dealer/dealer-apply.tsx',
+  'components/dealer/dealer-hub.tsx',
+  'components/dealer/price-tab.tsx',
+  'components/dealer/orders-tab.tsx',
+  'components/dealer/credit-tab.tsx',
+  'components/dealer/report-tab.tsx',
+  'components/dealer/rewards-card.tsx',
+  'lib/dealer-view.ts',
+];
 const RECYCLE: string[] = [];
 const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
