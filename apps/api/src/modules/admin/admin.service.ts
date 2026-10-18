@@ -584,8 +584,9 @@ export class AdminService {
     if (user.role !== 'STAFF') {
       throw new BadRequestException('Chỉ gán nhóm việc cho tài khoản Nhân viên (STAFF) — cấp vai trò nhân viên trước.');
     }
+    // So và ghi sổ theo tập đã sắp xếp: thứ tự lưu là thứ tự STAFF_PERMISSIONS, không trùng thứ tự chữ cái.
     const before = [...user.staffPermissions].sort().join(',');
-    const after = perms.join(',');
+    const after = [...perms].sort().join(',');
     if (before === after) return { id: userId, staffPermissions: perms, changed: false };
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: userId }, data: { staffPermissions: perms } }),
