@@ -235,6 +235,19 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ['waste'] }));
     expect(mocks.login).not.toHaveBeenCalled();
   });
+  it('NEED_PHONE + chương trình bật + có deskPoints: thẻ xin số kèm lối vào /recycle/desk', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }] }));
+    renderPage();
+    expect(await screen.findByText('Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Nhận hàng tại điểm/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/desk');
+  });
+  it('NEED_PHONE + không có deskPoints: chỉ thẻ xin số', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, deskPoints: [] }));
+    renderPage();
+    expect(await screen.findByText('Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác')).toBeInTheDocument();
+    expect(screen.queryByText(/Nhận hàng tại điểm/)).toBeNull();
+  });
   it('NEED_PHONE + chương trình tắt: chỉ thẻ tạm dừng, không có thẻ đăng nhập', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ programmeEnabled: false, eligibility: 'NEED_PHONE', balance: null, monthUsage: null }));
     renderPage();
