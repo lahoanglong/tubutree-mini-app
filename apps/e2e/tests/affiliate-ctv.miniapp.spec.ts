@@ -65,11 +65,10 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Điểm Xanh
     mockCtv(api);
     await page.goto('/affiliate');
 
-    await expect(page.getByText('Thưởng Mốc Doanh Số Tháng')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Thưởng mốc doanh số tháng')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('tháng 9/2026 · Đã chốt 3.200.000đ')).toBeVisible();
     await expect(page.getByText('Đang chờ chốt:', { exact: false })).toBeVisible();
-    // Mốc 10tr chưa đạt → khoá, ghi số còn thiếu theo doanh số ĐÃ CHỐT.
-    await expect(page.getByRole('button', { name: 'Chưa đạt' })).toBeDisabled();
+    // Mốc 10tr chưa đạt → không có nút nhận, ghi số còn thiếu theo doanh số ĐÃ CHỐT.
     await expect(page.getByText('Còn thiếu 6.800.000đ doanh số đã chốt')).toBeVisible();
 
     const claim = page.getByRole('button', { name: 'Nhận thưởng' });
@@ -81,7 +80,7 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Điểm Xanh
     expect(call.body).toEqual({ month: '2026-09' });
 
     await expect(page.getByText('Chúc mừng bạn đã nhận 50 Điểm Xanh', { exact: false })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('button', { name: 'Đã nhận', exact: true })).toBeDisabled({ timeout: 5_000 });
+    await expect(page.getByText('Đã nhận', { exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Đã cộng vào Điểm Xanh')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);
     expect(api.callsTo('POST', '/affiliate/milestones/:id/claim')).toHaveLength(1);
@@ -91,17 +90,30 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Điểm Xanh
     mockCtv(api, { monthKey: '2026-08', revenue: 3_500_000, milestones: [MILESTONE_3M] });
     await page.goto('/affiliate');
 
-    await expect(page.getByText('Còn thưởng tháng 8/2026 chưa nhận', { exact: false })).toBeVisible({ timeout: 15_000 });
-    // 2 nút "Nhận thưởng": tháng trước (hiện trước) và tháng này.
+    await expect(page.getByText('Thưởng tháng 8/2026 chưa nhận', { exact: false })).toBeVisible({ timeout: 15_000 });
+    // 2 nút "Nhận thưởng": tháng trước (hiện trước) và tháng này; từ 2 mốc nhận được có thêm "Nhận tất cả".
     const buttons = page.getByRole('button', { name: 'Nhận thưởng' });
     await expect(buttons).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Nhận tất cả (2 mốc, +100 điểm)' })).toBeVisible();
 
     const posted = api.waitForCall('POST', '/affiliate/milestones/:id/claim');
     await buttons.first().click();
     const call = await posted;
     expect(call.body).toEqual({ month: '2026-08' });
     // Đã nhận hết mốc tháng trước → khối tháng trước biến mất, còn nút của tháng này.
-    await expect(page.getByText('Còn thưởng tháng 8/2026 chưa nhận', { exact: false })).toHaveCount(0, { timeout: 5_000 });
+    await expect(page.getByText('Thưởng tháng 8/2026 chưa nhận', { exact: false })).toHaveCount(0, { timeout: 5_000 });
     await expect(page.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /Nhận tất cả/ })).toHaveCount(0);
+  });
+
+  test('Nhận tất cả: gọi lần lượt từng mốc, tháng trước trước, rồi báo số mốc đã nhận', async ({ page, api }) => {
+    mockCtv(api, { monthKey: '2026-08', revenue: 3_500_000, milestones: [MILESTONE_3M] });
+    await page.goto('/affiliate');
+
+    await page.getByRole('button', { name: /Nhận tất cả/ }).click({ timeout: 15_000 });
+    await expect(page.getByText('Đã nhận 2 mốc thưởng.')).toBeVisible({ timeout: 5_000 });
+    const calls = api.callsTo('POST', '/affiliate/milestones/:id/claim');
+    expect(calls.map((c) => (c.body as { month: string }).month)).toEqual(['2026-08', '2026-09']);
+    await expect(page.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);
   });
 });

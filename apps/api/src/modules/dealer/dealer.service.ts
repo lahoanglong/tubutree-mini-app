@@ -31,7 +31,7 @@ interface BonusTier {
  * PENDING_PAYMENT/CONFIRMED (đơn đã trả tiền còn được hoàn thẳng về ví). Đơn ở 2 trạng thái đó
  * mà được tính doanh số thì đặt đơn to cuối kỳ → nhận thưởng → tự huỷ là "in" thưởng từ không khí.
  */
-const DEALER_SETTLED_STATUSES: readonly string[] = ['PACKED', 'SHIPPING', 'DELIVERED'];
+export const DEALER_SETTLED_STATUSES: readonly string[] = ['PACKED', 'SHIPPING', 'DELIVERED'];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -371,13 +371,12 @@ export class DealerService {
   }
 
   async creditLedger(userId: string) {
-    const entries = await this.prisma.dealerCreditLedger.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
-    const balance = entries.reduce((s, e) => s + e.delta, 0);
-    return { balance, entries };
+    // `balance` là tổng cả sổ; `entries` chỉ 200 dòng gần nhất — cộng từ entries thì đại lý quá 200 dòng hiện sai dư nợ.
+    const [entries, agg] = await Promise.all([
+      this.prisma.dealerCreditLedger.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200 }),
+      this.prisma.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } }),
+    ]);
+    return { balance: agg._sum.delta ?? 0, entries };
   }
 
   /**

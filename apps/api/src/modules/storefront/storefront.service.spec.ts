@@ -75,6 +75,26 @@ describe('StorefrontService.getOrCreateMine', () => {
     const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.getOrCreateMine('u1')).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  // D3-03: CTV được duyệt lên đại lý giữ gian hàng CTV; mở lại được, nhưng đại lý không tạo gian hàng CTV mới
+  // (mô hình bán lẻ online của đại lý chưa chốt, Q1).
+  it('đại lý đang có gian hàng CTV: trả gian hàng đó, không tạo mới', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'd1', role: 'DEALER', referralCode: 'D', fullName: 'D' });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', type: 'CTV', isPartner: true });
+    const sf = await new StorefrontService(prisma, config, affiliate).getOrCreateMine('d1');
+    expect(sf.id).toBe('s1');
+    expect(prisma.storefront.findFirst).toHaveBeenCalledWith({ where: { ownerUserId: 'd1', type: 'CTV' } });
+    expect(prisma.storefront.create).not.toHaveBeenCalled();
+  });
+
+  it('đại lý chưa có gian hàng CTV: không tạo, báo như trước', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'd1', role: 'DEALER', referralCode: 'D', fullName: 'D' });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(null);
+    await expect(new StorefrontService(prisma, config, affiliate).getOrCreateMine('d1')).rejects.toThrow('Chỉ CTV mới tạo được gian hàng.');
+    expect(prisma.storefront.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('StorefrontService.getMine', () => {
@@ -528,6 +548,28 @@ describe('StorefrontService.pickerProducts', () => {
     // KHÔNG lộ mảng variations (chứa affiliateRate từng biến thể) cho CTV
     expect((first as any).variations).toBeUndefined();
     expect(JSON.stringify(r)).not.toContain('affiliateRate');
+  });
+});
+
+describe('StorefrontService.pickerProducts cho đại lý (D3-03)', () => {
+  const picker = (role: string, trace: { storefront?: boolean; commission?: boolean }) => {
+    const prisma = makePrisma({
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      commission: { findFirst: jest.fn().mockResolvedValue(trace.commission ? { id: 'c1' } : null) },
+    });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(trace.storefront ? { id: 's1' } : null);
+    return new StorefrontService(prisma, config, affiliate).pickerProducts('u1', {});
+  };
+
+  it('đại lý có gian hàng CTV hoặc có hoa hồng xem được danh sách', async () => {
+    await expect(picker('DEALER', { storefront: true })).resolves.toEqual([]);
+    await expect(picker('DEALER', { commission: true })).resolves.toEqual([]);
+  });
+
+  it('đại lý thuần và khách thường vẫn không xem được % hoa hồng', async () => {
+    await expect(picker('DEALER', {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(picker('CUSTOMER', { storefront: true, commission: true })).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
