@@ -313,3 +313,167 @@ test.describe('Web khách: trang sản phẩm', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 });
+
+const signedIn = (page: import('@playwright/test').Page) =>
+  page.addInitScript(() => {
+    try {
+      localStorage.setItem('tubu_web_session', '1');
+    } catch {
+      // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+    }
+  });
+
+const group = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  product: { name: `Sản phẩm ${id}`, slug: `sp-${id}`, thumbnail: null },
+  targetSize: 5, currentSize: 2, unitPrice: 80000, basePrice: 100000, discountPct: 20, status: 'OPEN',
+  expiresAt: new Date(Date.now() + 3 * 3600_000).toISOString(), joined: false, isOwner: false, ...over,
+});
+
+const noHorizontalScroll = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+test.describe('Web: yêu thích', () => {
+  test('khách chưa đăng nhập: mời đăng nhập và không gọi /me/wishlist', async ({ page, api }) => {
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.goto('/tai-khoan/yeu-thich');
+    await expect(page.getByRole('link', { name: 'Đăng nhập với Zalo' })).toHaveAttribute('href', '/dang-nhap?returnTo=%2Ftai-khoan%2Fyeu-thich');
+    expect(api.callsTo('GET', '/me/wishlist')).toHaveLength(0);
+  });
+
+  test('đã đăng nhập: hiện lưới sản phẩm yêu thích; danh sách rỗng thì có lối khám phá', async ({ page, api }) => {
+    await signedIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/me/wishlist', [product(1), product(2)]);
+    await page.goto('/tai-khoan/yeu-thich');
+    await expect(page.getByRole('heading', { level: 1, name: 'Sản phẩm yêu thích' })).toBeVisible();
+    await expect(page.getByText('Sản phẩm 1')).toBeVisible();
+    await expect(page.getByText('Sản phẩm 2')).toBeVisible();
+  });
+
+  test('danh sách rỗng: trạng thái trống dẫn sang /san-pham', async ({ page, api }) => {
+    await signedIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/me/wishlist', []);
+    await page.goto('/tai-khoan/yeu-thich');
+    await expect(page.getByText('Chưa có sản phẩm yêu thích')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Khám phá sản phẩm' })).toHaveAttribute('href', '/san-pham');
+  });
+});
+
+test.describe('Web: mua chung', () => {
+  test('khách chưa đăng nhập: xem được danh sách, bấm Đăng nhập để tham gia sang đăng nhập kèm returnTo, không gửi tham gia', async ({ page, api }) => {
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/group-buy', [group('g1')]);
+    await page.goto('/mua-chung');
+    await expect(page.getByRole('heading', { level: 1, name: 'Mua chung giá tốt' })).toBeVisible();
+    await expect(page.getByText('2/5 người')).toBeVisible();
+    await page.getByRole('button', { name: 'Đăng nhập để tham gia' }).click();
+    await page.waitForURL(/\/dang-nhap/);
+    expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/mua-chung');
+    expect(api.callsTo('POST', '/group-buy/:id/join')).toHaveLength(0);
+  });
+
+  test('đã đăng nhập: tham gia gửi POST /group-buy/:id/join rồi báo đã tham gia', async ({ page, api }) => {
+    await signedIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123' }));
+    api.get('/group-buy', [group('g1')]);
+    api.post('/group-buy/g1/join', { joined: true, currentSize: 3, status: 'OPEN' });
+    await page.goto('/mua-chung');
+    await page.getByRole('button', { name: /Tham gia mua chung/ }).click();
+    await api.waitForCall('POST', '/group-buy/g1/join');
+    await expect(page.getByText('Đã tham gia nhóm')).toBeVisible();
+  });
+
+  test('link mời /mua-chung/:id: nhóm được mời hiện đầu danh sách kèm biểu ngữ', async ({ page, api }) => {
+    await signedIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/group-buy', [group('g1')]);
+    api.get('/group-buy/g2', group('g2'));
+    await page.goto('/mua-chung/g2');
+    await expect(page.getByText('Bạn được mời vào nhóm này')).toBeVisible();
+    await expect(page.getByText('Sản phẩm g2')).toBeVisible();
+    await expect(page.getByText('Sản phẩm g1')).toBeVisible();
+  });
+
+  test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/group-buy', [group('g1', { product: { name: 'Một sản phẩm có tên rất dài để thử tràn ngang trên màn hình hẹp', slug: 'sp', thumbnail: null } })]);
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto('/mua-chung');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe('Web: nhãn hàng', () => {
+  const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT ?? '3001'}`;
+
+  async function firstBrandSlug(request: import('@playwright/test').APIRequestContext) {
+    const res = await request.get(`${API_ORIGIN}/api/brands`).catch(() => null);
+    if (!res?.ok()) return null;
+    return ((await res.json()) as { slug?: string | null }[]).find((b) => b.slug)?.slug ?? null;
+  }
+
+  test('đăng nhập: Theo dõi gửi POST rồi đổi thành Đang theo dõi; bấm lại gửi DELETE', async ({ page, api, request }) => {
+    const slug = await firstBrandSlug(request);
+    test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
+    await signedIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 3 });
+    api.get(`/brand/${slug}/share-to-earn`, { eligible: false });
+    api.post(`/brand/${slug}/follow`, { following: true, followerCount: 4 });
+    api.delete(`/brand/${slug}/follow`, { following: false, followerCount: 3 });
+    await page.goto(`/brand/${slug}`);
+    await page.getByRole('button', { name: 'Theo dõi' }).click();
+    await api.waitForCall('POST', `/brand/${slug}/follow`);
+    await expect(page.getByRole('button', { name: 'Đang theo dõi' })).toBeVisible();
+    await page.getByRole('button', { name: 'Đang theo dõi' }).click();
+    await api.waitForCall('DELETE', `/brand/${slug}/follow`);
+    await expect(page.getByRole('button', { name: 'Theo dõi' })).toBeVisible();
+  });
+
+  test('khách chưa đăng nhập bấm Theo dõi: sang đăng nhập kèm returnTo về đúng trang nhãn', async ({ page, api, request }) => {
+    const slug = await firstBrandSlug(request);
+    test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.goto(`/brand/${slug}`);
+    await page.getByRole('button', { name: 'Theo dõi' }).click();
+    await page.waitForURL(/\/dang-nhap/);
+    expect(new URL(page.url()).searchParams.get('returnTo')).toBe(`/brand/${slug}`);
+    expect(api.callsTo('POST', `/brand/${slug}/follow`)).toHaveLength(0);
+  });
+
+  test('CTV đủ điều kiện: dải kiếm tiền mở sheet chia sẻ với link mang mã giới thiệu', async ({ page, api, request }) => {
+    const slug = await firstBrandSlug(request);
+    test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
+    await signedIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 3 });
+    api.get(`/brand/${slug}/share-to-earn`, { eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: slug });
+    await page.goto(`/brand/${slug}`);
+    await page.getByRole('button', { name: /nhận tới 15% hoa hồng/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chia sẻ nhãn hàng' });
+    await expect(dialog.getByText(new RegExp(`/brand/${slug}\\?ref=AFF1`)).first()).toBeVisible();
+  });
+});
+
+test.describe('Web khách: Hành trình nguyên liệu /cau-chuyen', () => {
+  test('mở ô nhãn: sheet có câu chuyện và nút dẫn tới /san-pham?brand= theo tên trong catalog', async ({ page, api }) => {
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.goto('/cau-chuyen');
+    await expect(page.getByRole('heading', { level: 1, name: 'Hành trình nguyên liệu' })).toBeVisible();
+    await page.getByRole('button', { name: /Le Plateau.*Lâm Đồng \(Cầu Đất\)/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Le Plateau' });
+    await expect(dialog.getByText(/Arabica Cầu Đất/)).toBeVisible();
+    await expect(dialog.getByRole('link', { name: 'Khám phá sản phẩm Le Plateau' })).toHaveAttribute('href', '/san-pham?brand=Le%20Plateau%20Coffee');
+  });
+
+  test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto('/cau-chuyen');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
+  });
+});
