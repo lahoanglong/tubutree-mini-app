@@ -233,6 +233,8 @@ describe('evaluateDb', () => {
       expect(r.status).toBe('WARN');
       expect(r.detail).toContain('Gomdon');
       expect(r.hint.length).toBeGreaterThan(10);
+      expect(r.hint).toContain('chạy đơn thử trên bản chưa mở cho khách thật');
+      expect(r.hint).toContain('cờ toàn cục');
     });
     it('waste.lane_pickup_enabled bật mà thiếu tài khoản Gomdon: WARN', () => {
       expect(W({}, { 'waste.enabled': true, 'waste.lane_pickup_enabled': true }, 'post-deploy', noCreds).status).toBe('WARN');

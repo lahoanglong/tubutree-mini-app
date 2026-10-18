@@ -235,7 +235,7 @@ Chi tiết đầy đủ ở `docs/integrations/gomdon.md` mục 3. Tóm tắt:
    `GOMDON_WEBHOOK_SECRET` thì API **không khởi động**.
 3. Nhờ quản trị Gomdon đăng ký webhook: có header thì URL `https://api.tubutree.com/api/webhooks/gomdon`
    kèm `x-webhook-token: <secret>`; chỉ nhập được URL thì `https://api.tubutree.com/api/webhooks/gomdon/<secret>`.
-4. `shipping.gomdon.recycling_enabled` là công tắc kỹ thuật (mặc định `false`). Khách chỉ thấy Thu kèm đơn khi bật thêm waste.enabled và waste.lane_pickup_enabled; `waste.lane_pickup_enabled` giữ tắt cho tới khi Gomdon trả lời bằng văn bản và một đơn thử chạy đạt (spec 12.4). Seed chỉ ghi mô tả của dòng này trên database mới (create-only), nên trên database đã có chạy một lần trong cửa sổ deploy:
+4. `shipping.gomdon.recycling_enabled` là công tắc kỹ thuật (mặc định `false`). Khách chỉ thấy Thu kèm đơn khi bật thêm waste.enabled và waste.lane_pickup_enabled; Đơn thử Thu kèm đơn chạy trong lúc chạy nội bộ, trên bản chưa mở cho khách thật: bật `waste.lane_pickup_enabled` để thử, dùng tài khoản nhân viên tạo yêu cầu Thu kèm đơn và đặt đơn thử Gomdon. Cờ là cờ toàn cục, không có danh sách theo khách, nên bật trên app đã mở công khai thì mọi khách đều thấy Thu kèm đơn. Chỉ để bật sau khi Gomdon trả lời bằng văn bản và đơn thử chạy đạt (spec 12.4); chưa đủ thì tắt lại, yêu cầu đã gắn vào đơn vẫn chạy tiếp. Seed chỉ ghi mô tả của dòng này trên database mới (create-only), nên trên database đã có chạy một lần trong cửa sổ deploy:
 
 ```sql
 UPDATE system_configs SET description = 'Công tắc kỹ thuật Gomdon. Khách chỉ thấy Thu kèm đơn khi bật thêm waste.enabled và waste.lane_pickup_enabled (cần Gomdon đã cấu hình env).' WHERE key = 'shipping.gomdon.recycling_enabled';

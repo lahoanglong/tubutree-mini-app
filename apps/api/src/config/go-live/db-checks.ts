@@ -241,7 +241,7 @@ function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
   const gomdonReady = s.configs['shipping.gomdon.recycling_enabled'] === true && Boolean(envValue(env, 'GOMDON_PHONE') && envValue(env, 'GOMDON_PASSWORD'));
   if (s.configs['waste.lane_pickup_enabled'] === true && !gomdonReady) {
     warnings.push('waste.lane_pickup_enabled bật nhưng Gomdon chưa sẵn sàng (công tắc shipping.gomdon.recycling_enabled hoặc GOMDON_PHONE/GOMDON_PASSWORD), nên đường Thu kèm đơn vẫn ẩn');
-    hints.push('Tắt waste.lane_pickup_enabled cho tới khi Gomdon trả lời bằng văn bản và đơn thử chạy đạt (spec 12.4), hoặc bật công tắc Gomdon và đặt tài khoản Gomdon.');
+    hints.push('Chỉ bật waste.lane_pickup_enabled để chạy đơn thử trên bản chưa mở cho khách thật (cờ toàn cục, không có danh sách theo khách); để bật lâu dài khi Gomdon đã trả lời bằng văn bản và đơn thử chạy đạt (spec 12.4), nếu không thì tắt lại. Muốn đơn thử chạy được thì bật công tắc Gomdon và đặt tài khoản Gomdon.');
   }
 
   const numOr = (key: keyof typeof WASTE_CONFIG_KEYS): number => {

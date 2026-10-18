@@ -41,14 +41,15 @@ Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API
 
 ## 4. Đường Thu kèm đơn (PICKUP)
 
-- [ ] `waste.lane_pickup_enabled` giữ `false` cho tới khi Gomdon trả lời bằng văn bản: đơn loại 3 chạy thật, thùng carton và nylon tính theo khối lượng, tỉnh xa, địa chỉ hoàn là kho Tubu, cước mỗi đơn, hàng không nhận, thu hàng cồng kềnh. Owner: chủ dự án. Bằng chứng: văn bản Gomdon.
+- [ ] Thứ tự thử: đơn thử Thu kèm đơn chạy trong lúc chạy nội bộ (mục 5), trên bản chưa mở cho khách thật. Bật `waste.lane_pickup_enabled` chỉ để thử; dùng tài khoản nhân viên tạo yêu cầu Thu kèm đơn rồi đặt đơn thử Gomdon. Cờ này là cờ toàn cục, không có danh sách theo khách: bật trên app đã mở công khai thì mọi khách đều thấy Thu kèm đơn. Thử xong mà Gomdon chưa trả lời bằng văn bản hoặc đơn thử chưa đạt thì tắt lại ngay; yêu cầu đã gắn vào đơn vẫn chạy tiếp vì cờ chỉ được đọc lúc tạo yêu cầu và lúc đặt đơn. Owner: chủ dự án. Bằng chứng: ghi chú ngày bật, ngày tắt.
+- [ ] `waste.lane_pickup_enabled` chỉ được để bật sau khi Gomdon trả lời bằng văn bản: đơn loại 3 chạy thật, thùng carton và nylon tính theo khối lượng, tỉnh xa, địa chỉ hoàn là kho Tubu, cước mỗi đơn, hàng không nhận, thu hàng cồng kềnh. Owner: chủ dự án. Bằng chứng: văn bản Gomdon.
 - [ ] Một đơn thử loại 3 (playbook Phần 3) chạy hết chuỗi trạng thái; ghi chú vận đơn đúng dạng `Thu kèm rác TR-…`. Owner: kho. Bằng chứng: mã đơn và mã TR-.
 - [ ] Có báo giá cước thật; chỉnh bảng phí gửi về kho `waste.mailin_fee_table` trong cùng thay đổi với việc bật đường này. Owner: chủ dự án. Bằng chứng: báo giá và giá trị cấu hình.
 - [ ] Quà vật lý chỉ nhận tại kho khác với quyết định 3.2 của chủ dự án nên cần chủ dự án đồng ý. Owner: chủ dự án. Bằng chứng: xác nhận bằng văn bản.
 
 ## 5. Chạy nội bộ
 
-- [ ] Chạy 2–4 tuần với nhân viên Tubu, kho HCMC và 1–2 đại lý quen; build không mở cho khách thật; chỉ hai cách Mang tới điểm và Gửi về kho; hạn mức đại lý nhỏ. Owner: chủ dự án. Bằng chứng: nhật ký tuần.
+- [ ] Chạy 2–4 tuần với nhân viên Tubu, kho HCMC và 1–2 đại lý quen; build không mở cho khách thật; chỉ hai cách Mang tới điểm và Gửi về kho, ngoại lệ duy nhất là đơn thử Thu kèm đơn ở mục 4; hạn mức đại lý nhỏ. Owner: chủ dự án. Bằng chứng: nhật ký tuần.
 - [ ] Đo: thời gian quầy mỗi lượt, tỷ lệ nhận được trên khai báo, tỷ lệ tái dùng thùng carton và xốp (giả định 40% và 50%), hàng đến có đúng giả định không. Owner: kho. Bằng chứng: bảng tính ngoài hệ thống.
 - [ ] Kho ghi số bó nhận và số bó tái dùng vào bảng tính ngoài hệ thống; chủ dự án đối chiếu hằng tháng. Owner: kho. Bằng chứng: bảng tính.
 - [ ] Thiệt hại chấp nhận ở giai đoạn 1: 100.000–300.000 điểm mỗi điểm nhận mỗi tháng (mệnh giá 100.000–300.000đ, 2–5 tài khoản thật). Owner: chủ dự án. Bằng chứng: xác nhận bằng văn bản.
