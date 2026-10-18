@@ -50,7 +50,7 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
   const [method, setMethod] = useState('');
   const [status, setStatus] = useState('');
   const [code, setCode] = useState('');
-  const [receivingId, setReceivingId] = useState<string | null>(null);
+  const [receiving, setReceiving] = useState<AdminWasteRequestRowDTO | null>(null);
   const presets = WASTE_QUEUE_PRESETS.filter((p) => isAdmin || !p.adminOnly);
 
   const query: AdminWasteRequestQuery = (() => {
@@ -72,7 +72,6 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
 
   const queueRows = (queue.data?.pages ?? []).flatMap((p) => p.rows);
   const lookupRows = lookup.data ?? [];
-  const receiving = receivingId ? ([...lookupRows, ...queueRows].find((r) => r.id === receivingId) ?? null) : null;
 
   const choosePreset = (key: WasteQueuePreset) => {
     setPreset(key);
@@ -117,12 +116,12 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
       {lookup.isSuccess && (
         <div data-lookup-results className="space-y-2">
           <h4 className="text-sm font-semibold text-stone-900">Kết quả tra mã</h4>
-          <RequestTable label="Kết quả tra mã" rows={lookupRows} receivingId={receivingId} onReceive={setReceivingId} />
+          <RequestTable label="Kết quả tra mã" rows={lookupRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} />
         </div>
       )}
 
       {receiving && (
-        <ReceivePanel key={receiving.id} row={receiving} onClose={() => setReceivingId(null)} />
+        <ReceivePanel key={receiving.id} row={receiving} onClose={() => setReceiving(null)} />
       )}
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Hàng đợi yêu cầu">
@@ -144,7 +143,7 @@ export function WasteRequestsSection({ isAdmin, seed }: { isAdmin: boolean; seed
       </div>
 
       {queue.isError && <Notice tone="danger" role="alert">Không tải được danh sách yêu cầu.</Notice>}
-      <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receivingId} onReceive={setReceivingId} />
+      <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} />
       {queue.isSuccess && queueRows.length === 0 && <p className="text-sm text-stone-600">Không có yêu cầu nào trong hàng đợi này.</p>}
       {queue.hasNextPage && (
         <button type="button" className={BTN_SECONDARY} disabled={queue.isFetchingNextPage} onClick={() => void queue.fetchNextPage()}>
@@ -164,7 +163,7 @@ function RequestTable({
   label: string;
   rows: AdminWasteRequestRowDTO[];
   receivingId: string | null;
-  onReceive: (id: string) => void;
+  onReceive: (row: AdminWasteRequestRowDTO) => void;
 }) {
   return (
     <ScrollRegion label={label}>
@@ -211,7 +210,7 @@ function RequestTable({
                 <td className={TD}>{formatDateTime(r.createdAt)}</td>
                 <td className={TD}>
                   {canReceive(r) && (
-                    <button type="button" className={BTN_XS_SECONDARY} aria-pressed={receivingId === r.id} onClick={() => onReceive(r.id)}>
+                    <button type="button" className={BTN_XS_SECONDARY} aria-pressed={receivingId === r.id} onClick={() => onReceive(r)}>
                       Nhận kiện
                     </button>
                   )}

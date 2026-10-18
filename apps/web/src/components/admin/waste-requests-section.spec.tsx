@@ -290,6 +290,25 @@ describe('WasteRequestsSection', () => {
     expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({});
   });
 
+  it('nhận kiện từ hàng đợi: kết quả vẫn hiện sau khi danh sách tải lại', async () => {
+    let received = false;
+    const { c } = await mount({
+      seed: { section: 'requests', preset: 'inTransit', n: 1 },
+      receive: () => {
+        received = true;
+        return { body: { outcome: 'RECEIVED', requestId: 'r1', receivedAt: '2026-10-17T02:05:00.000Z' } };
+      },
+      queue: () => ({ body: { rows: received ? [] : [wasteRequestRow()], nextCursor: null } }),
+    });
+    click(btn(row(c, 'r1'), 'Nhận kiện'));
+    typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-7K3M9Q');
+    click(confirmBtn(c));
+    await flush();
+    await flush();
+    expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
+    expect(c.textContent).toContain('Đã nhận kiện lúc 09:05. Mở màn đếm để đếm số thực nhận.');
+  });
+
   it('seed của hộp việc chọn sẵn hàng đợi; nhân viên bỏ qua hàng đợi chỉ admin (D3)', async () => {
     const a = await mount({ isAdmin: true, seed: { section: 'requests', preset: 'customerBlocked', n: 1 } });
     expect(chip(a.c, 'Chờ vì khách bị khoá').getAttribute('aria-pressed')).toBe('true');
