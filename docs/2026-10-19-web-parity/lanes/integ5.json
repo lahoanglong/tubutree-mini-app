@@ -1,0 +1,15 @@
+{
+ "reviewRounds": 1,
+ "maxRounds": 2,
+ "effort": "medium",
+ "reviewFocus": "Mọi lối vào đổi rác trên web (`/doi-rac/*`) trùng Mini App (`/recycle/*`): cùng chỗ đặt, cùng chữ, cùng điều kiện hiện (cờ tính năng đổi rác, đăng nhập, trạng thái đơn), cùng đích kèm tham số (ví dụ mã đơn khi thu kèm rác). Thanh toán gắn phiếu đổi rác gửi cùng body như Mini App. Không đổi endpoint/body API nào. Không có link nào trỏ route không tồn tại.",
+ "lane": "integ5",
+ "wt": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-integ5",
+ "branch": "web/integ5",
+ "tasks": [
+  {
+   "title": "Nối lối vào đổi rác sau khi recycle gộp",
+   "prompt": "Việc tích hợp sau khi lane recycle gộp vào `web/integration`: mọi route `/doi-rac/*` đã hết pending (`pnpm lint:parity` báo 0 pending). Các lane trước để ẩn link tới đổi rác khi route còn pending (ví dụ lane order: link \"Thu kèm rác\" ẩn tới khi `/doi-rac/tao` mở; lane game: link đổi rác; hub, thông báo). Lane này ĐƯỢC sửa file web của mọi lane đã gộp; không sửa file Mini App. Lane integ3 đang sửa mục menu hub `/tai-khoan` và khối đại lý `/brand/[slug]`; lane integ4 đang sửa khung QR ở `tai-khoan/don-hang/[code]/page.tsx` và gom `bankPaymentHref`: tránh sửa đúng các chỗ đó (nếu bắt buộc, sửa tối thiểu và ghi rõ trong báo cáo).\n\n1. Liệt kê mọi chỗ Mini App dẫn tới đổi rác: `grep -rn \"/recycle\" apps/miniapp/src` (bỏ spec và chính các trang recycle), gồm trang chủ, hub tài khoản, thanh toán (gắn phiếu đổi rác / thu kèm rác), chi tiết đơn, Điểm Xanh, thông báo (kind liên quan đổi rác), game/vườn, menu. Với mỗi chỗ: tìm chỗ web tương ứng, kiểm có link `/doi-rac/...` cùng chữ, cùng điều kiện, cùng tham số (tra `packages/app-core/src/route-map.json`). Ghi bảng vào báo cáo: chỗ Mini App (file:dòng) → chỗ web (file:dòng) → đã/chưa giống.\n2. Sửa chỗ thiếu hoặc lệch (test đỏ trước, commit riêng). Chỗ web rẽ nhánh theo `isWebRouteReady('/doi-rac...')`: nhánh chính nay chạy, kiểm hành vi đúng Mini App.\n3. Cập nhật `docs/2026-10-19-web-parity/98-cau-hoi-va-chua-kiem-chung.md`: các dòng \"Link đổi rác ... chỉ hiện khi /doi-rac đã bỏ pending\", \"Link 'Thu kèm rác' ẩn tới khi lane recycle mở /doi-rac/tao\" ghi \"đã xử lý ở <commit>\" ngay dòng đó (không xoá dòng)."
+  }
+ ]
+}
