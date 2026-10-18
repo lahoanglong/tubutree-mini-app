@@ -349,7 +349,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cấu hình & tích hợp',
     ]);
     const items = [...nav.querySelectorAll('button')];
-    expect(items).toHaveLength(36);
+    expect(items).toHaveLength(37);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
