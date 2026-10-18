@@ -46,6 +46,12 @@ export class AdminCouponBatchController {
     return this.batches.list();
   }
 
+  /** Link gốc Mini App để in QR mã chung; nhân viên Marketing không đọc được tab Cấu hình. */
+  @Get('claim-url-base')
+  claimUrlBase() {
+    return this.batches.claimBase();
+  }
+
   @Get(':batch/codes')
   codes(@Param('batch') batch: string) {
     return this.batches.codes(batch);

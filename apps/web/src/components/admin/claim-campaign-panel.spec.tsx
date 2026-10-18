@@ -36,7 +36,7 @@ const batch = (over: Partial<CouponBatchSummary> = {}): CouponBatchSummary => ({
   endAt: '2026-12-31T16:59:59.000Z',
   ...over,
 });
-const configRoute = (value: string) => ({ body: [{ key: 'app.miniapp_base_url', value, description: null, category: 'app' }] });
+const configRoute = (value: string) => ({ body: { claimUrlBase: value.replace(/\/+$/, '') || null } });
 const input = (r: Rendered, label: string) => r.container.querySelector(`[aria-label="${label}"]`);
 const bodyOf = (call: { init?: RequestInit } | undefined) => JSON.parse(String(call?.init?.body ?? '{}')) as Record<string, unknown>;
 
@@ -50,7 +50,7 @@ function mount(routes: Parameters<typeof mockFetch>[0]) {
 
 describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
   it('chưa đặt link Mini App: cảnh báo trước khi in thẻ', async () => {
-    const { r } = mount({ '/admin/config': configRoute(''), '/admin/coupon-batches': { body: [] } });
+    const { r } = mount({ '/admin/coupon-batches/claim-url-base': configRoute(''), '/admin/coupon-batches': { body: [] } });
     await flush();
     expect(r.container.textContent).toContain('Chưa đặt link Mini App');
     expect(r.container.textContent).toContain('Chưa có lô nào.');
@@ -67,7 +67,7 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
       ],
     };
     const { r, api } = mount({
-      '/admin/config': configRoute(BASE),
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
       '/admin/coupon-batches': (init) => (init?.method === 'POST' ? { body: created } : { body: [] }),
     });
     await flush();
@@ -93,7 +93,7 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
 
   it('lô đã tạo: hiện số thẻ đã nhận/đã dùng; tải lại CSV; tắt lô phải xác nhận', async () => {
     const { r, api } = mount({
-      '/admin/config': configRoute(BASE),
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
       '/admin/coupon-batches/SHOPEE11/codes': { body: { batch: 'SHOPEE11', claimUrlBase: BASE, codes: [{ code: 'SHOPEE11-AAAA2222', url: `${BASE}/?claim=SHOPEE11-AAAA2222`, claimed: true, used: false, isActive: true }] } },
       '/admin/coupon-batches/SHOPEE11': { body: { batch: 'SHOPEE11', updated: 500 } },
       '/admin/coupon-batches': { body: [batch()] },
@@ -120,7 +120,7 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
 
   it('bật lại lô đã tắt: cảnh báo mã tắt riêng cũng bật lại, phải xác nhận', async () => {
     const { r, api } = mount({
-      '/admin/config': configRoute(BASE),
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
       '/admin/coupon-batches/SHOPEE11': { body: { batch: 'SHOPEE11', updated: 500 } },
       '/admin/coupon-batches': { body: [batch({ active: 0 })] },
     });
@@ -142,7 +142,7 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
 
   it('mã chung: tạo mã CLAIM, mỗi khách 1 lượt, tổng lượt nhận theo ô nhập; báo link in QR', async () => {
     const { r, api } = mount({
-      '/admin/config': configRoute(`${BASE}/`),
+      '/admin/coupon-batches/claim-url-base': configRoute(`${BASE}/`),
       '/admin/coupon-batches': { body: [] },
       '/admin/coupons': { body: { id: 'c1' } },
     });
@@ -161,7 +161,7 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
 
   it('mã chung: chưa nhập Tổng lượt nhận hoặc < 1 thì không tạo được (mã lộ ra ngoài không có trần)', async () => {
     const { r, api } = mount({
-      '/admin/config': configRoute(BASE),
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
       '/admin/coupon-batches': { body: [] },
       '/admin/coupons': { body: { id: 'c1' } },
     });

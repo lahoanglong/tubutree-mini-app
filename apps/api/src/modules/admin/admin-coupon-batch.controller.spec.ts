@@ -55,6 +55,7 @@ describe('AdminCouponBatchController (D2-03: lô mã thẻ hộp hàng)', () => 
       list: jest.fn().mockResolvedValue('l'),
       codes: jest.fn().mockResolvedValue('k'),
       setActive: jest.fn().mockResolvedValue('s'),
+      claimBase: jest.fn().mockResolvedValue({ claimUrlBase: null }),
     };
     const ctrl = new AdminCouponBatchController(svc as unknown as AdminCouponBatchService);
     const dto = plainToInstance(CreateCouponBatchDto, VALID);
@@ -65,5 +66,6 @@ describe('AdminCouponBatchController (D2-03: lô mã thẻ hộp hàng)', () => 
     expect(svc.codes).toHaveBeenCalledWith('SHOPEE11');
     await expect(ctrl.setActive('SHOPEE11', { isActive: false })).resolves.toBe('s');
     expect(svc.setActive).toHaveBeenCalledWith('SHOPEE11', false);
+    await expect(ctrl.claimUrlBase()).resolves.toEqual({ claimUrlBase: null });
   });
 });

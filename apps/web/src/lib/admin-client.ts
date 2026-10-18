@@ -766,6 +766,8 @@ export interface CouponBatchSummary {
 export const createCouponBatch = (input: CouponBatchInput) =>
   apiFetch<CouponBatchCodes & { created: number }>('/admin/coupon-batches', { method: 'POST', body: input });
 export const listCouponBatches = () => apiFetch<CouponBatchSummary[]>('/admin/coupon-batches');
+/** Link gốc Mini App (app.miniapp_base_url) để in QR mã chung; null = chưa đặt. */
+export const getCouponClaimUrlBase = () => apiFetch<{ claimUrlBase: string | null }>('/admin/coupon-batches/claim-url-base');
 export const getCouponBatchCodes = (batch: string) =>
   apiFetch<CouponBatchCodes>(`/admin/coupon-batches/${encodeURIComponent(batch)}/codes`);
 export const setCouponBatchActive = (batch: string, isActive: boolean) =>

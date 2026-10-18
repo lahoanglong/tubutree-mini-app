@@ -70,6 +70,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/coupon-batches': [MARKETING],
   'PATCH /admin/coupon-batches/:batch': [MARKETING],
   'GET /admin/coupon-batches/:batch/codes': [MARKETING],
+  'GET /admin/coupon-batches/claim-url-base': [MARKETING],
   'GET /admin/coupons': [MARKETING],
   'POST /admin/coupons': [MARKETING],
   'PATCH /admin/coupons/:id': [MARKETING],

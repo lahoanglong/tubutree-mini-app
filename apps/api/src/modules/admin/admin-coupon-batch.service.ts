@@ -182,6 +182,10 @@ export class AdminCouponBatchService {
     return { batch, updated: res.count };
   }
 
+  async claimBase(): Promise<{ claimUrlBase: string | null }> {
+    return { claimUrlBase: (await this.claimUrlBase()) || null };
+  }
+
   private async claimUrlBase(): Promise<string> {
     const raw: unknown = await this.config.get<string>(MINIAPP_BASE_URL_KEY, '');
     return typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';

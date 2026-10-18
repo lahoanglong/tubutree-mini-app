@@ -104,6 +104,11 @@ describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)',
     warn.mockRestore();
   });
 
+  it('link gốc Mini App cho mã chung (nhân viên Marketing không đọc được tab Cấu hình)', async () => {
+    const { svc } = make();
+    await expect(svc.claimBase()).resolves.toEqual({ claimUrlBase: 'https://zalo.me/s/123' });
+  });
+
   it('tiền tố đã có lô → 409, không ghi', async () => {
     const { svc, createMany } = make({ existing: 5 });
     await expect(svc.create(INPUT)).rejects.toBeInstanceOf(ConflictException);
