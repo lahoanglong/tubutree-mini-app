@@ -70,6 +70,7 @@ interface ReversalRule {
 /** Khoá lô của điểm đơn giao (ORDER_DELIVERED) và của điểm thưởng đánh giá; luật ghép nằm ở ORDER_RULE, REVIEW_RULE. */
 export const orderLotKey = (orderId: string): string => `ORDER:${orderId}`;
 export const reviewLotKey = (reviewId: string): string => `REVIEW:${reviewId}`;
+export const externalLotKey = (claimId: string): string => `EXTERNAL:${claimId}`;
 
 const startsWith = (value: string | undefined, prefix: string): value is string => typeof value === 'string' && value.startsWith(prefix);
 
@@ -142,12 +143,26 @@ const REFERRAL_MILESTONE_RULE: ReversalRule = {
     t.refType === 'REFERRAL' && startsWith(t.reason, MILESTONE_REVOKE_PREFIX) ? milestoneKey(t.reason.slice(MILESTONE_REVOKE_PREFIX.length)) : null,
 };
 
+/**
+ * Điểm đơn ngoài app (external-points): dòng cộng MARKETPLACE_ORDER:<id Pancake> hay PANCAKE_CHAT_ORDER:<id Pancake> và dòng đảo
+ * cùng tên có hậu tố _REVERSED, đều mang refType EXTERNAL_ORDER và refId = id claim. Thiếu luật này thì dòng đảo đi FIFO, lô gốc
+ * còn nguyên trong sổ và tới hạn cron trừ lại đúng số điểm đã thu hồi.
+ */
+const EXTERNAL_PREFIXES = ['MARKETPLACE_ORDER', 'PANCAKE_CHAT_ORDER'] as const;
+const EXTERNAL_RULE: ReversalRule = {
+  lotKey: (t) =>
+    t.refType === 'EXTERNAL_ORDER' && t.refId && EXTERNAL_PREFIXES.some((p) => startsWith(t.reason, `${p}:`)) ? externalLotKey(t.refId) : null,
+  reversedLotKey: (t) =>
+    t.refType === 'EXTERNAL_ORDER' && t.refId && EXTERNAL_PREFIXES.some((p) => startsWith(t.reason, `${p}_REVERSED:`)) ? externalLotKey(t.refId) : null,
+};
+
 const REVERSAL_RULES: readonly ReversalRule[] = [
   ORDER_RULE,
   ORDER_PARTIAL_RETURN_RULE,
   REVIEW_RULE,
   REFERRAL_ORDER2_RULE,
   REFERRAL_MILESTONE_RULE,
+  EXTERNAL_RULE,
 ];
 
 function firstKey(t: PointExpiryTxn, pick: (rule: ReversalRule) => (t: PointExpiryTxn) => string | null): string | null {

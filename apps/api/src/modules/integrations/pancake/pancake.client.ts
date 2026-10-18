@@ -199,6 +199,33 @@ export class PancakeClient {
     }
   }
 
+  /**
+   * Đơn đã cập nhật từ mốc `sinceEpochSec` của các nguồn đơn `orderSources` (kéo dự phòng đơn sàn). Tham số `updateStatus`,
+   * `startDateTime` (epoch giây) và `order_sources[]` theo Open API; chưa kiểm bằng phản hồi thật.
+   */
+  async listUpdatedOrders(opts: { sinceEpochSec: number; orderSources: string[]; page: number; pageSize: number; timeoutMs?: number }): Promise<PancakeOrderDTO[]> {
+    this.assertConfigured();
+    try {
+      const { data } = await this.http.get<PancakeOrderListResponse>(`/shops/${this.shopId}/orders`, {
+        params: {
+          api_key: this.apiKey,
+          updateStatus: 'updated_at',
+          startDateTime: opts.sinceEpochSec,
+          'order_sources[]': opts.orderSources,
+          page_size: opts.pageSize,
+          page_number: opts.page,
+        },
+        timeout: opts.timeoutMs,
+        paramsSerializer: { indexes: null },
+      });
+      const body = assertSuccess(data, 'kéo đơn đã cập nhật');
+      if (!body || !Array.isArray(body.data)) throw new PancakeApiError('Pancake không trả danh sách đơn khi kéo đơn đã cập nhật.', true);
+      return body.data;
+    } catch (err) {
+      throw toPancakeError(err, 'kéo đơn đã cập nhật');
+    }
+  }
+
   /** Cập nhật một phần đơn (Open API: PUT /shops/{SHOP_ID}/orders/{ORDER_ID}). Huỷ = `{ status: 6 }`. */
   async updateOrder(
     orderId: string,

@@ -775,6 +775,11 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-referral-reward-paid', code: 'REFERRAL_REWARD_PAID', channel: 'INAPP', bodyTemplate: 'Bạn nhận {{points}} Điểm Xanh vì {{friend}} đã mua đơn thứ hai. Cảm ơn bạn đã giới thiệu Tubu Tree 🌿', createOnly: true },
   { id: 'nt-referral-milestone-paid', code: 'REFERRAL_MILESTONE_PAID', channel: 'INAPP', bodyTemplate: 'Bạn đã giới thiệu thành công {{count}} người bạn và nhận thêm {{points}} Điểm Xanh thưởng mốc 🌿', createOnly: true },
   { id: 'nt-referral-reward-revoked', code: 'REFERRAL_REWARD_REVOKED', channel: 'INAPP', bodyTemplate: 'Thưởng giới thiệu từ {{friend}} được thu lại vì {{cause}}: {{detail}}.', createOnly: true },
+  // Điểm đơn mua ngoài app (extclaim): báo khi ghi nhận, cộng, huỷ/thu hồi và khi không tìm thấy đơn.
+  { id: 'nt-external-points-pending', code: 'EXTERNAL_POINTS_PENDING', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã ghi nhận {{points}} Điểm Xanh chờ cộng cho đơn {{code}}. Điểm được cộng sau khi đơn giao thành công và hết thời gian giữ điểm 🌿', createOnly: true },
+  { id: 'nt-external-points-credited', code: 'EXTERNAL_POINTS_CREDITED', channel: 'INAPP', bodyTemplate: 'Bạn nhận {{points}} Điểm Xanh từ đơn {{code}} mua ngoài app. Cảm ơn bạn đã ủng hộ Tubu Tree 🌿', createOnly: true },
+  { id: 'nt-external-points-voided', code: 'EXTERNAL_POINTS_VOIDED', channel: 'INAPP', bodyTemplate: 'Điểm từ đơn {{code}} không được tích: {{detail}}.', createOnly: true },
+  { id: 'nt-external-points-claim-not-found', code: 'EXTERNAL_POINTS_CLAIM_NOT_FOUND', channel: 'INAPP', bodyTemplate: 'Tubu Tree chưa tích được điểm cho mã {{code}}: {{detail}}. Bạn có thể kiểm tra lại mã hoặc liên hệ hỗ trợ.', createOnly: true },
   { id: 'nt-game-checkin', code: 'GAME_CHECKIN_REMINDER', channel: 'INAPP', bodyTemplate: '🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿' },
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },
