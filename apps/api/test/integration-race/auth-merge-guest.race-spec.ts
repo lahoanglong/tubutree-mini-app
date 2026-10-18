@@ -527,7 +527,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     await prisma.wasteRequest.update({ where: { id: gReq.id }, data: { idempotencyKey: tReq.idempotencyKey } });
     const gRed = await createGiftRedemption(prisma, { userId: guest.id, status: 'FULFILLED' });
     const early = new Date('2026-09-01T00:00:00Z'); const late = new Date('2026-10-01T00:00:00Z');
-    await prisma.wasteUserFlags.create({ data: { userId: guest.id, shipLockedAt: early, shipUnlockedAt: late } });
+    await prisma.wasteUserFlags.create({ data: { userId: guest.id, shipLockedAt: early, shipUnlockedAt: late, blockedAt: early } });
     await prisma.wasteUserFlags.create({ data: { userId: target.id, shipLockedAt: late, shipUnlockedAt: early, blockedAt: late } });
     const dupPoint = await createWastePoint(prisma, { kind: 'PARTNER' });
     const movePoint = await createWastePoint(prisma, { kind: 'PARTNER' });
@@ -540,7 +540,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(await prisma.wasteRequest.findUniqueOrThrow({ where: { id: tReq.id } })).toMatchObject({ userId: target.id, idempotencyKey: tReq.idempotencyKey });
     expect((await prisma.wasteGiftRedemption.findUniqueOrThrow({ where: { id: gRed.id } })).userId).toBe(target.id);
     expect(await prisma.wasteUserFlags.findUnique({ where: { userId: guest.id } })).toBeNull();
-    expect(await prisma.wasteUserFlags.findUniqueOrThrow({ where: { userId: target.id } })).toMatchObject({ shipLockedAt: early, shipUnlockedAt: late, blockedAt: late });
+    expect(await prisma.wasteUserFlags.findUniqueOrThrow({ where: { userId: target.id } })).toMatchObject({ shipLockedAt: early, shipUnlockedAt: late, blockedAt: early });
     expect(await prisma.wastePointStaff.findMany({ where: { userId: { in: [guest.id, target.id] } }, orderBy: { pointId: 'asc' }, select: { pointId: true, userId: true, role: true, isActive: true } })).toEqual(
       [{ pointId: dupPoint.id, userId: target.id, role: 'OWNER', isActive: true }, { pointId: movePoint.id, userId: target.id, role: 'STAFF', isActive: true }].sort((a, b) => a.pointId.localeCompare(b.pointId)),
     );
