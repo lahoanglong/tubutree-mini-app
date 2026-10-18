@@ -1931,7 +1931,9 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
     const values = { ...BASE_CONFIG, ...extra };
     return { get: jest.fn().mockImplementation(async (k: string, fb?: unknown) => (k in values ? values[k] : fb)) };
   };
-  const ON = { 'shipping.first_order_free_enabled': true };
+  // Mặc định hệ thống nay BẬT từ 199k; các ca dưới dùng đơn 100k nên ghim ngưỡng 0 để kiểm cơ chế, ngưỡng mặc định có ca riêng.
+  const ON = { 'shipping.first_order_free_enabled': true, 'shipping.first_order_free_min_subtotal': 0 };
+  const OFF = { 'shipping.first_order_free_enabled': false };
 
   function setup(
     opts: { config?: { get: jest.Mock }; user?: unknown; priorOrders?: Array<unknown>; cartData?: unknown; validateAndCompute?: jest.Mock } = {},
@@ -1956,8 +1958,15 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
   const firstOrderLocks = (executeRaw: jest.Mock) =>
     executeRaw.mock.calls.filter((c) => (c[0] as TemplateStringsArray).join('?').includes('pg_advisory_xact_lock') && c[1] === 'first-order');
 
-  it('mặc định TẮT: phí giao như cũ (19k), không đọc đơn cũ, không khoá', async () => {
-    const { svc, orderCreate, findFirst, executeRaw } = setup();
+  it('mặc định BẬT từ 199k: đơn đầu 100k chưa đạt ngưỡng mặc định → phí giao như cũ, không miễn', async () => {
+    const { svc } = setup();
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(19000);
+    expect(q.firstOrderShipWaived).toBe(0);
+  });
+
+  it('TẮT tường minh: phí giao như cũ (19k), không đọc đơn cũ, không khoá', async () => {
+    const { svc, orderCreate, findFirst, executeRaw } = setup({ config: config(OFF) });
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.shippingFee).toBe(19000);
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);

@@ -116,13 +116,13 @@ describe('Mã giảm giá do nhân viên tạo (real Postgres)', () => {
     expect(rows.every((r) => r.isActive && r.updatedById === admin.id)).toBe(true);
   });
 
-  describe('ngân sách mã theo ngày của nhân viên (mặc định 30.000.000đ)', () => {
+  describe('ngân sách mã theo ngày của nhân viên (mặc định 10.000.000đ)', () => {
     const coupon = (over: Record<string, unknown> = {}) => ({
       code: `NS${randCode(8).toUpperCase().replace(/[^A-Z0-9]/g, 'X')}`,
       type: 'AMOUNT' as const,
-      value: 200_000,
+      value: 100_000,
       minOrder: 500_000,
-      usageLimit: 100,
+      usageLimit: 60,
       startAt: now(),
       endAt: future(),
       scope: 'PUBLIC' as const,
@@ -135,32 +135,32 @@ describe('Mã giảm giá do nhân viên tạo (real Postgres)', () => {
       return { ok: out.length - rejected.length, rejected };
     };
 
-    it('hai mã 20.000.000đ tạo song song sát ngân sách: chỉ một mã được ghi (lặp 5 vòng)', async () => {
+    it('hai mã 6.000.000đ tạo song song sát ngân sách: chỉ một mã được ghi (lặp 5 vòng)', async () => {
       for (let round = 0; round < 5; round++) {
         const staff = await realUser('STAFF');
         const actor = { id: staff.id, staff: true };
         const { ok, rejected } = await settle([admins.createCoupon(coupon(), actor), admins.createCoupon(coupon(), actor)]);
         expect({ round, ok }).toEqual({ round, ok: 1 });
-        expect(String((rejected[0]!.reason as Error).message)).toContain('còn 10.000.000đ');
+        expect(String((rejected[0]!.reason as Error).message)).toContain('còn 4.000.000đ');
         expect(await prisma.coupon.count({ where: { createdById: staff.id } })).toBe(1);
       }
     });
 
-    it('mã 20.000.000đ và lô 1.000 thẻ × 20.000đ song song: chỉ một bên được ghi', async () => {
+    it('mã 6.000.000đ và lô 300 thẻ × 20.000đ song song: chỉ một bên được ghi', async () => {
       const staff = await realUser('STAFF');
       const actor = { id: staff.id, staff: true };
-      const { ok } = await settle([admins.createCoupon(coupon(), actor), batches.create(batchInput({ quantity: 1000 }), actor)]);
+      const { ok } = await settle([admins.createCoupon(coupon(), actor), batches.create(batchInput({ quantity: 300 }), actor)]);
       expect(ok).toBe(1);
       const rows = await prisma.coupon.findMany({ where: { createdById: staff.id }, select: { batch: true } });
-      expect(rows.length === 1 || (rows.length === 1000 && rows.every((r) => r.batch))).toBe(true);
+      expect(rows.length === 1 || (rows.length === 300 && rows.every((r) => r.batch))).toBe(true);
     });
 
     it('cộng đủ mọi loại mã trong ngày (giảm %, freeship, giảm tiền); sửa tăng lượt tính phần chênh; quản trị viên không bị giới hạn', async () => {
       const staff = await realUser('STAFF');
       const actor = { id: staff.id, staff: true };
-      await admins.createCoupon(coupon({ type: 'PERCENT', value: 20, maxDiscount: 100_000, usageLimit: 100 }), actor);
-      await admins.createCoupon(coupon({ type: 'FREESHIP', value: 0, minOrder: undefined, usageLimit: 50 }), actor);
-      const amount = await admins.createCoupon(coupon({ value: 100_000, usageLimit: 90 }), actor);
+      await admins.createCoupon(coupon({ type: 'PERCENT', value: 20, maxDiscount: 50_000, usageLimit: 40 }), actor);
+      await admins.createCoupon(coupon({ type: 'FREESHIP', value: 0, minOrder: undefined, usageLimit: 30 }), actor);
+      const amount = await admins.createCoupon(coupon({ value: 50_000, usageLimit: 80 }), actor);
       await expect(admins.updateCoupon(amount.id, { usageLimit: 101 }, actor)).rejects.toThrow('còn 1.000.000đ');
       await admins.updateCoupon(amount.id, { usageLimit: 100 }, actor);
       await expect(admins.createCoupon(coupon({ value: 1_000, minOrder: 100_000, usageLimit: 1 }), actor)).rejects.toThrow('còn 0đ');
