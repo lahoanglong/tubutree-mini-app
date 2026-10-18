@@ -29,6 +29,13 @@ Phiên chạy: `tubutree-mini-app-8c` (Opus 5.5). Nền: `web/base` db9adca0. Nh
 | 2026-10-19 03:23 | 7. `game` | xong, đã gộp | gate lane: mọi bước xanh trừ miniapp-test 2 ca chập chờn (`profile-hub`, `subscribe-sheet`); lane không đụng file Mini App, phiên chính chạy riêng 2 file 20/20 xanh. Review 2 lượt: 1 MAJOR + 6 MINOR đều sửa. Route `/vuon-xanh`, `/tu-van` bỏ pending. Gộp → 17398cc5 (bốn spec danh sách, `resolve_lists.py`); sau gộp tsc sạch, TOÀN BỘ web vitest 316 file 5076 ca xanh, lint:parity 19 pending. Báo cáo `impl/game.md` |
 | 2026-10-19 03:23 | 10. `recycle` | đang chạy | wf_efad8081-6af, nhánh từ 17398cc5, port theo Mini App đổi rác ở `feat/recycle-rewards` 07ac5aa1 (phiên đổi rác còn sửa giao diện sau review vòng 2: commit mới của họ cần đồng bộ sau). Gate integration sau game (17398cc5): web 5076 (cả TZ=UTC), app-core 484, lint:parity 19 pending, build xanh; miniapp-test đỏ 49 ca/23 file lúc load ~150 (vitest chạy 540 s thay vì ~60 s, 24 ca timeout, còn lại `findBy` hết giờ). Mã Mini App giống hệt 885e814a (gate sau order xanh trọn 4214), app-core chỉ thêm file Mini App không import. Phiên chính chạy riêng: game-wheel-tabs 7/7, addresses 9/9, reviews-section 52/52, browse 39/39 (lần đầu 1 đỏ, lần hai xanh). Kết luận: do tải; gate cuối sẽ chạy lại toàn bộ Mini App khi máy nhẹ |
 
+## Việc tích hợp còn lại (integ2, sau khi community, pro, recycle gộp)
+
+- shop:9 — `apps/web/src/app/san-pham/[slug]/subscribe-sheet.tsx:122-124`: đặt định kỳ chuyển khoản đang `router.push(orderDetailHref(code))`; Mini App `subscribe-sheet.tsx:84-86` sang `/bank-payment/:code` → web phải sang `/thanh-toan/chuyen-khoan/:code` (route đã xong từ order).
+- order:5 — nút "Thanh toán" ở hub `/tai-khoan` (lane account): so với Mini App profile hub, dẫn đúng đích.
+- Rà mọi chỗ lane viết "khi route X còn pending thì ..." ở `98-cau-hoi-va-chua-kiem-chung.md`: route nào nay đã xong thì đổi về hành vi Mini App.
+- Đồng bộ commit mới của `feat/recycle-rewards` (phiên đổi rác còn sửa giao diện) nếu có.
+
 ## Nhánh nguồn cần theo dõi
 
 - `review/2026-10-18-launch` đã gộp tới d2dcbe0b (`lr2/polish` 2cea7a1b chưa vào launch lúc tạo nền).
