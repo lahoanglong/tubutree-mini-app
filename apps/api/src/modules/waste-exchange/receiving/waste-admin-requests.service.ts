@@ -357,6 +357,7 @@ export class WasteAdminRequestsService {
       if (Object.keys(data).length === 0) return flagsDto(userId, cur);
 
       const next = await tx.wasteUserFlags.update({ where: { userId }, data: { ...data, reason: body.reason, setByUserId: adminUserId } });
+      const keys = Object.keys(data) as ('shipLockedAt' | 'shipUnlockedAt' | 'blockedAt')[];
       await writeWasteEvent(tx, {
         kind: 'USER_FLAGS_UPDATED',
         actorUserId: adminUserId,
@@ -364,8 +365,8 @@ export class WasteAdminRequestsService {
         meta: {
           subjectUserId: userId,
           reason: body.reason,
-          before: { shipLockedAt: iso(cur.shipLockedAt), shipUnlockedAt: iso(cur.shipUnlockedAt), blockedAt: iso(cur.blockedAt) },
-          after: { shipLockedAt: iso(next.shipLockedAt), shipUnlockedAt: iso(next.shipUnlockedAt), blockedAt: iso(next.blockedAt) },
+          before: Object.fromEntries(keys.map((k) => [k, iso(cur[k])])),
+          after: Object.fromEntries(keys.map((k) => [k, iso(next[k])])),
         },
       });
       return flagsDto(userId, next);

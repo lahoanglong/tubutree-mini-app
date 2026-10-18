@@ -595,7 +595,7 @@ describe('WasteAdminRequestsService user flags', () => {
         kind: 'USER_FLAGS_UPDATED',
         actorUserId: 'a1',
         actorRole: 'ADMIN',
-        meta: expect.objectContaining({ subjectUserId: 'u1', reason: 'nghi ngờ' }),
+        meta: { subjectUserId: 'u1', reason: 'nghi ngờ', before: { shipLockedAt: null }, after: { shipLockedAt: NOW.toISOString() } },
       }),
     );
     expect(out).toMatchObject({ userId: 'u1', shipLockedAt: NOW.toISOString(), setByUserId: 'a1', reason: 'nghi ngờ' });
