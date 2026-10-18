@@ -31,7 +31,7 @@
       { "miniapp": "/wallet", "web": "/tai-khoan/vi-tubu", "private": true },
       { "miniapp": "/rewards", "web": "/kho-qua", "private": true },
       { "miniapp": "/rewards/mine", "web": "/kho-qua/cua-toi", "private": true },
-      { "miniapp": "/cashback", "web": "/hoan-tien", "private": false, "pending": true }
+      { "miniapp": "/cashback", "web": "/hoan-tien", "private": false }
     ]},
     { "lane": "game", "items": [
       { "miniapp": "/game", "web": "/vuon-xanh", "private": true, "pending": true },
