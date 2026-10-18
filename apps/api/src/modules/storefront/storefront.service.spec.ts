@@ -176,6 +176,24 @@ describe('StorefrontService.updateMine/publishMine', () => {
     expect(r.subdomain).toBe('pure-green');
   });
 
+  it('gửi lại đúng subdomain đang lưu (builder luôn gửi kèm): không kiểm từ khoá hay trùng, không ghi lại, vẫn lưu được trường khác', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1', subdomain: 'admin' });
+    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await svc.updateMine('u1', { subdomain: ' Admin ', title: 'Shop mới' });
+    expect(prisma.storefront.findFirst).toHaveBeenCalledTimes(1);
+    expect((prisma.storefront.update as jest.Mock).mock.calls[0][0].data).toEqual({ title: 'Shop mới' });
+  });
+
+  it('đổi sang subdomain khác vẫn bị kiểm từ khoá hệ thống', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1', subdomain: 'lan-xanh' });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.updateMine('u1', { subdomain: 'admin' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.storefront.update).not.toHaveBeenCalled();
+  });
+
   it('publish set isPublished + publishedAt', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() }, storefrontItem: { count: jest.fn().mockResolvedValue(2) } });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });

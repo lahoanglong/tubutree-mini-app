@@ -170,6 +170,8 @@ export class StorefrontService {
     },
   ) {
     const sf = await this.assertOwnedStorefront(userId);
+    // Builder gửi lại subdomain đang lưu mỗi lần bấm Lưu: không đổi thì bỏ qua, không kiểm từ khoá/trùng và không ghi lại.
+    if (dto.subdomain && dto.subdomain.trim().toLowerCase() === sf.subdomain) dto.subdomain = undefined;
     if (dto.subdomain) {
       const sub = normalizeSubdomain(dto.subdomain);
       // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-

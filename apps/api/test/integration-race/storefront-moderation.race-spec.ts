@@ -386,6 +386,18 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       expect((await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).publishedAt).toEqual(publishedAt);
     });
 
+    it('lưu lại subdomain đang có (thuộc từ khoá cấm, gian hàng cũ) không bị kiểm lại ở cả /merchant lẫn trình dựng; đổi sang từ cấm thì bị chặn', async () => {
+      const dealer = await user('DEALER');
+      const sf = await store(dealer, { type: 'MERCHANT', isPartner: true, subdomain: 'admin' });
+      const portal = new MerchantService(prisma, {} as never, undefined, config);
+      expect(await portal.updateStore(dealer.id, { subdomain: 'admin', title: 'Tên mới' })).toMatchObject({ id: sf.id, title: 'Tên mới', subdomain: 'admin' });
+      const ctv = await user('AFFILIATE');
+      const own = await store(ctv, { subdomain: 'api' });
+      expect(await svc.updateMine(ctv.id, { subdomain: 'API', title: 'Shop mới' })).toMatchObject({ id: own.id, title: 'Shop mới', subdomain: 'api' });
+      await expect(svc.updateMine(ctv.id, { subdomain: 'www' })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(portal.updateStore(dealer.id, { subdomain: 'cdn' })).rejects.toBeInstanceOf(BadRequestException);
+    });
+
     it('cờ subdomain tắt: trang công khai, builder và cổng đối tác không lộ subdomain; bật cờ thì lộ', async () => {
       const owner = await user('AFFILIATE');
       const sf = await store(owner, { subdomain: `it-sd-${randCode(6).toLowerCase()}`, customDomain: `it-${randCode(6).toLowerCase()}.example.vn` });

@@ -932,11 +932,14 @@ function MerchantConfigSheet({
 
   // Kho/hotline chỉ có nghĩa với gian hàng tự giao (D4); chuỗi rỗng = xoá (BE đổi '' thành null).
   const selfFulfils = isPartnerStore(sf);
+  // Chỉ gửi subdomain khi người dùng đã đổi: API kiểm từ khoá và trùng tên mỗi khi nhận subdomain.
+  const typedSubdomain = form.subdomain.trim().toLowerCase();
+  const subdomainChanged = typedSubdomain !== '' && typedSubdomain !== (sf.subdomain ?? '');
   const saveMut = useMutation({
     mutationFn: () =>
       updateStorefront({
         title: form.title.trim() || undefined,
-        subdomain: sf.subdomainEnabled && form.subdomain.trim() ? form.subdomain.trim().toLowerCase() : undefined,
+        subdomain: sf.subdomainEnabled && subdomainChanged ? form.subdomain.trim().toLowerCase() : undefined,
         themeColor: form.themeColor,
         ...(selfFulfils && {
           warehouseAddress: form.warehouseAddress.trim(),

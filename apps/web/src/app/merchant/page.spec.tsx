@@ -300,12 +300,20 @@ describe('cổng đối tác — tab Gian hàng & Subdomain', () => {
     expect(mocks.updateStore).toHaveBeenCalledWith({
       title: 'Minh An Xanh',
       headerNote: 'Sống xanh',
-      subdomain: 'minhan',
+      subdomain: undefined,
       themeColor: '#16a34a',
       coverUrl: '',
       avatarUrl: '',
       isPublished: true,
     });
+  });
+
+  it('đổi subdomain thì gửi giá trị mới đã cắt khoảng trắng và viết thường', async () => {
+    const root = await mount();
+    typeInto(inputByLabel(root, 'Subdomain riêng biệt'), '  Minh-An-Moi ');
+    click(byText(root, 'button', 'Lưu cấu hình gian hàng'));
+    await flush();
+    expect(mocks.updateStore).toHaveBeenCalledWith(expect.objectContaining({ subdomain: 'minh-an-moi' }));
   });
 
   it('D7-10: ô URL logo và ảnh bìa có ảnh xem trước; đổi liên kết thì ảnh đổi theo và Lưu vẫn gửi đúng liên kết', async () => {

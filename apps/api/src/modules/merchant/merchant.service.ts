@@ -465,7 +465,9 @@ export class MerchantService {
       updateData.publishedAt = null;
     }
 
-    if (dto.subdomain !== undefined) {
+    // Cổng gửi lại cả subdomain đang lưu mỗi lần bấm Lưu: giá trị không đổi thì không kiểm lại, kẻo gian hàng cũ có subdomain nay
+    // thuộc từ khoá cấm không lưu nổi trường khác.
+    if (dto.subdomain !== undefined && dto.subdomain.trim().toLowerCase() !== store.subdomain) {
       const cleanSub = normalizeSubdomain(dto.subdomain);
       // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-
       // với-subdomain, cho phép CTV chiếm subdomain trùng SLUG của gian hàng khác (P0-1,
@@ -478,7 +480,7 @@ export class MerchantService {
     if (dto.customDomain !== undefined) {
       if (dto.customDomain.trim() === '') {
         updateData.customDomain = null; // xoá tên miền riêng
-      } else {
+      } else if (dto.customDomain.trim().toLowerCase() !== store.customDomain) {
         // Trước đây KHÔNG có validate/kiểm trùng nào cho customDomain — ghi thẳng chuỗi bất kỳ,
         // kể cả trùng subdomain/slug của gian hàng khác (P0-1).
         const cleanDomain = normalizeCustomDomain(dto.customDomain);

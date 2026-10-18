@@ -465,6 +465,30 @@ describe('Link subdomain theo cờ (D3-11)', () => {
   });
 });
 
+describe('Subdomain chỉ gửi khi người dùng đổi (D3-11)', () => {
+  it('cờ bật, subdomain đang lưu không đổi: lưu cấu hình không gửi lại subdomain', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).getByPlaceholderText('vd: brand1')).toHaveValue('lan-xanh');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(mocks.updateStorefront.mock.calls[0]![0].subdomain).toBeUndefined();
+  });
+
+  it('cờ bật, đổi subdomain: gửi giá trị mới viết thường', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    const sheet = await screen.findByTestId('sheet');
+    fireEvent.change(within(sheet).getByPlaceholderText('vd: brand1'), { target: { value: ' Lan-Do ' } });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(mocks.updateStorefront.mock.calls[0]![0].subdomain).toBe('lan-do');
+  });
+});
+
 describe('Ảnh bìa trống (D7)', () => {
   it('chưa có ảnh bìa: hiện lời mời thêm ảnh bìa trong khung bìa; có ảnh thì không', async () => {
     const view = renderPage();

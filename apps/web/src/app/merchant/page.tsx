@@ -498,11 +498,13 @@ function StoreSettingsTab({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
+    const typedSubdomain = subdomain.trim().toLowerCase();
     mut.mutate({
       title: title.trim(),
-      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống là không đổi.
+      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống hay giữ nguyên là không đổi, vì API kiểm
+      // từ khoá và trùng tên mỗi khi nhận subdomain.
       headerNote: headerNote.trim(),
-      subdomain: subdomain.trim() || undefined,
+      subdomain: typedSubdomain && typedSubdomain !== (store.subdomain ?? '') ? typedSubdomain : undefined,
       themeColor,
       coverUrl: coverUrl.trim(),
       avatarUrl: avatarUrl.trim(),
