@@ -97,6 +97,17 @@ describe('tài liệu vận hành đã theo Đổi rác lấy quà (spec 13.2)',
     expect(cleanup).toContain('waste.lane_pickup_enabled');
     expect(cleanup).toContain('đã tắt lại');
   });
+  it('playbook: 7.5 làm sau cùng rồi mở khoá Người thử, đơn T13 của 7.4 có chỗ ghi và được dọn, Người thử phải bắt đầu từ mức không', () => {
+    const p = doc('docs/launch/pilot-order-playbook.md');
+    const step75 = p.slice(p.indexOf('### 7.5 Thu hồi điểm'), p.indexOf('## Phần 8.'));
+    expect(step75).toContain('sau cùng');
+    expect(step75).toContain('Mở khoá đổi rác');
+    const cleanup = p.slice(p.indexOf('## 10. Dọn dẹp sau khi thử'), p.indexOf('## 11. Bảng kết quả'));
+    expect(cleanup).toContain('T1 đến T13');
+    expect(cleanup).toContain('Mở khoá đổi rác');
+    expect(p).toMatch(/\| T13 \|/);
+    expect(p).toContain('chưa có yêu cầu nào trong tháng này');
+  });
   it('đường vào tab Đổi rác luôn có nhóm Khách hàng ở playbook, checklist, runbook và sổ tay', () => {
     for (const f of ['docs/launch/pilot-order-playbook.md', 'docs/launch/recycle-rewards-launch-checklist.md', 'docs/launch/deploy-rollback-runbook.md', 'docs/launch/so-tay-van-hanh/kho.md', 'docs/launch/so-tay-van-hanh/admin.md']) {
       expect(doc(f)).not.toMatch(/Quản trị(?:,| ›|>) Đổi rác/);
