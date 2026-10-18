@@ -38,6 +38,7 @@ const CORE: string[] = [
   'components/bottom-nav.tsx',
   'components/storefront-tracker.tsx',
   'components/app-gates.tsx',
+  'components/mini-app-only-notice.tsx',
   'lib/web-nav.ts',
 ];
 const SHOP: string[] = [];
