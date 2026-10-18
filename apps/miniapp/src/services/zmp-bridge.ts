@@ -12,6 +12,7 @@ import {
   requestSendNotification as zmpRequestSendNotification,
   getStorage,
   setStorage,
+  scanQRCode,
 } from 'zmp-sdk/apis';
 import { copyText } from '../utils/clipboard';
 import { WEB_BASE_URL } from '../utils/web-base-url';
@@ -123,6 +124,34 @@ export async function callPhone(phone: string) {
     await openPhone({ phoneNumber: number });
   } catch {
     window.location.href = `tel:${number}`;
+  }
+}
+
+const CANCEL_WORDS = new Set(['cancel', 'canceled', 'cancelled', 'huy', 'huỷ', 'hủy']);
+
+/** So từng từ trọn vẹn (không so chuỗi con: "chuyen", "khuyen" chứa "huy" nhưng không phải huỷ). */
+export function isCancelMessage(text: string): boolean {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{M}\p{N}]+/u)
+    .some((w) => CANCEL_WORDS.has(w.normalize('NFC')));
+}
+
+export type ScanCodeResult = { kind: 'ok'; content: string } | { kind: 'cancelled' } | { kind: 'failed' };
+
+/**
+ * Quét mã bằng camera Zalo. SDK không công bố mã lỗi riêng cho việc khách tự đóng camera, nên "cancelled" chỉ nhận ra được khi
+ * lỗi có chữ huỷ/cancel trong message; các lỗi khác (không có quyền camera, không đọc được) là "failed" và màn quét gợi ý nhập tay.
+ */
+export async function scanCode(): Promise<ScanCodeResult> {
+  try {
+    const res = await scanQRCode();
+    const content = typeof res?.content === 'string' ? res.content.trim() : '';
+    return content ? { kind: 'ok', content } : { kind: 'failed' };
+  } catch (e) {
+    const raw = (e as { message?: unknown } | null)?.message;
+    const text = Array.isArray(raw) ? raw.join(' ') : String(raw ?? '');
+    return isCancelMessage(text) ? { kind: 'cancelled' } : { kind: 'failed' };
   }
 }
 

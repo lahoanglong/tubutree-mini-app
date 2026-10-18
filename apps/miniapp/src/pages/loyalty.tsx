@@ -43,6 +43,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
+import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 
 /**
@@ -231,6 +232,7 @@ export default function LoyaltyPage() {
         <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>
+          <PointsBoostStrip placement="wallet" />
           {/* Medallion hạng */}
           <div style={{ padding: 16 }}>
             <div

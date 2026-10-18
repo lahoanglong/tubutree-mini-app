@@ -9,7 +9,7 @@ import { FIRST_ORDER_FREESHIP_ENABLED_DEFAULT, FIRST_ORDER_FREESHIP_ENABLED_KEY,
 import { publicCommunityUrl } from './community-links';
 import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
-import { DEFAULT_EARN_PCT, DEFAULT_MARKETPLACE_EARN_PCT, EARN_PCT_KEY, MARKETPLACE_EARN_PCT_KEY } from '../loyalty/earn-rates';
+import { DEFAULT_EARN_PCT, DEFAULT_MARKETPLACE_EARN_PCT, EARN_PCT_KEY, MARKETPLACE_EARN_PCT_KEY, MAX_MARKETPLACE_EARN_PCT } from '../loyalty/earn-rates';
 import { MARKETPLACE_CLAIM_ENABLED_KEY } from '../external-points/external-claim.config';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
@@ -124,7 +124,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
       earnPct,
       // Chỉ boolean true thật mới bật (cờ gõ nhầm không được hứa tích điểm đơn sàn). Tỉ lệ hỏng thì rơi về mặc định như phía cộng điểm.
       marketplaceClaimEnabled: marketplaceClaimEnabled === true,
-      marketplaceEarnPct: typeof marketplaceEarnPct === 'number' && marketplaceEarnPct > 0 && marketplaceEarnPct <= 20 ? marketplaceEarnPct : DEFAULT_MARKETPLACE_EARN_PCT,
+      marketplaceEarnPct: typeof marketplaceEarnPct === 'number' && Number.isFinite(marketplaceEarnPct) && marketplaceEarnPct > 0 ? Math.min(marketplaceEarnPct, MAX_MARKETPLACE_EARN_PCT) : DEFAULT_MARKETPLACE_EARN_PCT,
       // Bản app cũ chưa đọc earnPct: giữ số đồng cho 1 điểm.
       vndPerPoint: typeof earnPct === 'number' && earnPct > 0 ? Math.round(100 / earnPct) : Math.round(100 / DEFAULT_EARN_PCT),
       vndPerPointRedeem,

@@ -289,9 +289,13 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     const since = new Date(Date.now() - 365 * DAY);
     const tierPoints = await (loyalty as unknown as { tierPoints: (u: string, s: Date) => Promise<number> }).tierPoints(user.id, since);
     expect(tierPoints).toBe(0);
-    const before = (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).tierId;
+    // Bảng hạng là dữ liệu chung của cả bộ race (suite khác để lại hạng minPoints 0), nên so với
+    // một khách không có điểm nào thay vì so với tierId ban đầu.
+    const control = await mkUser();
+    await loyalty.recalcTier(control.id);
     await loyalty.recalcTier(user.id);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).tierId).toBe(before);
+    const tierOf = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id } })).tierId;
+    expect(await tierOf(user.id)).toBe(await tierOf(control.id));
   });
 
   it('(f) applyStatusToClaim: huỷ chưa cộng thành VOIDED một lần; giao sau khi huỷ tự động thì REVIEW', async () => {
