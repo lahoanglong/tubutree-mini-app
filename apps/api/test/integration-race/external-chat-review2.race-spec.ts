@@ -207,7 +207,7 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
       expect(await claimOf(id)).toMatchObject({ state: 'REVIEW', holdUntil: null });
     });
 
-    it('duyệt từ chối claim chưa chủ không còn SĐT nào (400, claim vẫn REVIEW, không ghi gì); còn SĐT trên đơn thì vẫn duyệt được', async () => {
+    it('duyệt từ chối claim chưa chủ mà orderPhone của claim đã mất (400, claim vẫn REVIEW, không ghi gì), kể cả khi SĐT trên đơn được ghi lại sau đó', async () => {
       const actor = await mkUser();
       const id = `CHAT${randCode(10)}`;
       const order = (await ingest(payload({ id, phone: phone(), goods: 500_000, deliveredDaysAgo: 20 })))!;
@@ -225,8 +225,9 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
       expect((await eventsOf(c.id)).length).toBe(eventsBefore);
 
       await prisma.externalOrder.update({ where: { id: order.id }, data: { phone: phone() } });
-      await expect(adminSvc().approve(c.id, actor.id)).resolves.toEqual({ id: c.id, state: 'PENDING' });
-      expect(await claimOf(id)).toMatchObject({ state: 'PENDING', decidedById: actor.id });
+      await expect(adminSvc().approve(c.id, actor.id)).rejects.toMatchObject({ status: 400 });
+      expect(await claimOf(id)).toMatchObject({ state: 'REVIEW', decidedById: null });
+      expect((await eventsOf(c.id)).length).toBe(eventsBefore);
     });
   });
 

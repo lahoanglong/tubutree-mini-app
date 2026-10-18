@@ -268,8 +268,9 @@ export class ExternalClaimsAdminService {
       await tx.$queryRaw`SELECT "id" FROM "external_points_claims" WHERE "id" = ${id} FOR UPDATE`;
       const c = await tx.externalPointsClaim.findUniqueOrThrow({ where: { id }, include: { externalOrder: true } });
       if (c.state !== 'REVIEW') throw new ConflictException('Claim không ở trạng thái chờ duyệt.');
-      // Không có chủ và không còn SĐT nào để liên kết: cron sẽ đưa claim về REVIEW mỗi lần, duyệt chỉ lặp vô ích.
-      if (c.kind === 'PHONE' && !c.userId && !(c.orderPhone ?? c.externalOrder.phone)) {
+      // Liên kết và releaseClaim chỉ đọc orderPhone của claim, không đọc SĐT hiện trên đơn (webhook đầy đủ có thể ghi lại SĐT đơn sau khi
+      // retention đã xoá): claim chưa có chủ mà orderPhone đã mất thì không ai liên kết được, cron đưa về REVIEW mỗi lần và duyệt chỉ lặp vô ích.
+      if (c.kind === 'PHONE' && !c.userId && !c.orderPhone) {
         throw new BadRequestException('Claim chưa có chủ và không còn SĐT để liên kết nên không có ai để cộng điểm. Hãy huỷ claim.');
       }
       await this.forbidSelf(actorId, c.userId, tx);
