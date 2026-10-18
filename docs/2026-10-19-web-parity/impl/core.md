@@ -1,20 +1,65 @@
 # Lane core (đợt 0a)
 
-## Chứng minh `next build` nạp được `@tubutree/app-core`
+## 1. Đã làm
 
-Hai adapter web (`core-http.ts`, `core-http-server.ts`) chỉ `import type` từ app-core nên bị xoá lúc biên dịch, và chưa trang nào dùng chúng. Vì vậy `next build` thường chưa biên dịch file nào của `packages/app-core`. Lane core không sửa trang của lane khác để thêm import chỉ vì mục đích chứng minh, nên đã chứng minh bằng một trang thăm dò tạm, không commit:
+| Mục | Commit | File chính |
+|---|---|---|
+| Gói app-core, cờ tính năng chuyển vào gói, Mini App re-export | 06028ebe | `packages/app-core/{package,tsconfig,vitest.config}`, `src/http.ts`, `src/features.ts`, `src/route-map.json`, `src/forbidden-imports.spec.ts`, `apps/miniapp/src/utils/features.ts`, `apps/web/next.config.mjs` |
+| Adapter HttpClient client (bọc `apiFetch`) + dựng query giống axios | 14e44a8e | `apps/web/src/lib/core-http.ts`, `core-query.ts` |
+| Adapter HttpClient server component | c8d99670 | `apps/web/src/lib/core-http-server.ts` |
+| Adapter HttpClient Mini App (bọc axios) | 03b6b268 | `apps/miniapp/src/services/core-http.ts` |
+| Review 1: danh sách rỗng khi build lúc API chưa lên | c32ed29f | `core-http-server.ts` (`getListOrEmptyAtBuild`) |
+| Review 1: adapter client luôn trả promise bị từ chối, spec qua `apiFetch` thật | 79e90f30 | `core-http.ts`, `core-http-client-api.spec.ts` |
+| Review 1: siết spec cấm import | 1994b7cf | `packages/app-core/src/forbidden-imports.spec.ts` |
+| Bằng chứng `next build` nạp app-core, kết quả gate | 6f8d0f85, 2cfbe05e | file này |
 
-- Trang `apps/web/src/app/zz-probe/page.tsx` có `import { CASHBACK_ENABLED } from '@tubutree/app-core/features'` và render `String(CASHBACK_ENABLED)`.
-- `pnpm --filter @tubutree/web build` qua. Route `/zz-probe` được dựng; `.next/server/app/zz-probe/page.js` chứa `children:String(!1)` (giá trị `false` lấy từ `packages/app-core/src/features.ts`), và `page.js.nft.json` liệt kê `packages/app-core/package.json`.
-- Đã xoá trang thăm dò và `.next` sau khi kiểm.
+Test thêm: app-core 48; web thêm 5 spec adapter (41 test); Mini App 4243 -> 4259.
 
-Kết luận: `transpilePackages: ['@tubutree/app-core']` cùng `exports: { './*': './src/*.ts' }` và `type: module` chạy được với webpack/SWC của Next 14.2.35. Phía Mini App đã chứng minh bằng `vite build` (bundle `utils/features.ts` qua re-export).
+## 2. Kiểm chứng
 
-Hoãn cho lane sau: chưa có import giá trị thật của app-core trong bản build web. Lane `core-api` hoặc `shop` thêm import giá trị đầu tiên vào trang sẽ tự chạy `pnpm --filter @tubutree/web build` trong gate của mình, và đó là lần kiểm chứng đầu tiên trong mã thật (giả định hợp lệ vì đã có bằng chứng thăm dò ở trên).
+```
+export PATH=$HOME/.local/node/node-v22.23.3-darwin-arm64/bin:$PATH
+pnpm install --prefer-offline
+pnpm --filter @tubutree/shared-types build
+pnpm --filter @tubutree/app-core typecheck && pnpm --filter @tubutree/app-core test
+pnpm --filter @tubutree/web typecheck && pnpm --filter @tubutree/web lint && pnpm --filter @tubutree/web test
+(cd apps/web && TZ=UTC npx vitest run)
+pnpm --filter @tubutree/miniapp typecheck && pnpm --filter @tubutree/miniapp lint && pnpm --filter @tubutree/miniapp test
+pnpm lint:vars
+pnpm --filter @tubutree/web build && pnpm --filter @tubutree/miniapp build
+```
 
-## Gate cuối của lane
+- install: up to date
+- app-core: typecheck 0 lỗi; Test Files 2 passed, Tests 48 passed
+- web: typecheck 0 lỗi; lint "No ESLint warnings or errors"; Test Files 195 passed, Tests 3044 passed (cả `TZ=UTC`)
+- miniapp: typecheck, lint sạch; Test Files 282 passed, Tests 4259 passed (>= 4243)
+- lint:vars: OK every var(--x) reference is defined
+- web build qua; miniapp build "built in 12.08s"
 
-- app-core: typecheck sạch; test 2 file, 48 test qua.
-- web: typecheck sạch, lint không cảnh báo; vitest 195 file, 3044 test qua; `TZ=UTC npx vitest run` 195 file, 3044 test qua.
-- miniapp: typecheck và lint sạch; vitest 282 file, 4259 test qua (không dưới 4243).
-- `pnpm lint:vars` OK; `pnpm --filter @tubutree/web build` và `pnpm --filter @tubutree/miniapp build` qua.
+Bằng chứng `next build` nạp app-core: trang thăm dò tạm `zz-probe` import `CASHBACK_ENABLED` từ `@tubutree/app-core/features`; build qua, `page.js` chứa `children:String(!1)`, `page.js.nft.json` liệt kê `packages/app-core/package.json`. Đã xoá trang thăm dò và `.next`, không commit.
+
+## 3. Review
+
+Lượt 1:
+- MAJOR adapter server mất nhánh build-time của `fetchList`: đã sửa ở c32ed29f.
+- MINOR `call` ném đồng bộ với URIError: sửa ở 79e90f30.
+- MINOR spec cấm import thủng (.tsx, `react/*`, global khác): sửa ở 1994b7cf.
+- MINOR spec adapter mock cả `apiFetch`: sửa ở 79e90f30 (spec qua `apiFetch` thật).
+- MINOR `next build` chưa nạp app-core: xem lượt 2.
+
+Lượt 2:
+- MINOR còn lại (nạp app-core trong build web): chưa thêm import giá trị vào mã thật vì trang cần cờ thuộc lane khác; đã chứng minh bằng trang thăm dò (6f8d0f85) và ghi hoãn ở trên.
+- Ghi nhận: `src/pages/profile-hub.spec.tsx` của Mini App chập chờn (vài lần trong ba chạy riêng lẻ), có trước lane này; không sửa test Mini App.
+
+## 4. Chưa làm, cố ý để lại, chưa kiểm chứng
+
+- `route-map.json` chỉ là stub `{ routes: [], features: [] }`.
+- `core-http-server.ts` chép lại `BASE` và logic header bypass của `lib/api.ts` (không export, file thuộc lane khác). Muốn một nguồn thì lane sở hữu `api.ts` export rồi adapter import lại.
+- Chưa có import giá trị app-core trong mã web thật; lane `core-api` hoặc `shop` là lần kiểm chứng đầu tiên.
+- Script `lint` của app-core là `tsc --noEmit`.
+- Không chạy Playwright.
+- `apps/miniapp/package.json`, `apps/web/package.json` đã sửa; lane khác sửa hai file này cần rebase theo 06028ebe.
+
+## 5. Câu hỏi cho chủ dự án
+
+Không có.
