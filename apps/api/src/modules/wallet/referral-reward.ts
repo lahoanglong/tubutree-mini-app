@@ -77,10 +77,10 @@ export interface ReferralGrant {
 
 /**
  * Giá trị Điểm Xanh của một khoản thưởng cấp bằng xu trước gộp: số xu đó đã nằm trong lô quy đổi
- * (migration B, 1.000 xu = 1 điểm làm tròn lên), nên thu hồi trừ đúng chừng ấy ở lô CONVERTED (OQ-9).
+ * (migration B quy đổi số dư; từ points-1d 1 xu = 1 điểm), nên thu hồi trừ đúng chừng ấy ở lô CONVERTED (OQ-9).
  */
 export function legacyXuToPoints(xu: number): number {
-  return Math.ceil(Math.max(xu, 0) / 1000);
+  return Math.max(xu, 0);
 }
 
 /** Số Điểm Xanh phải thu khi thu hồi toàn bộ một khoản thưởng. */

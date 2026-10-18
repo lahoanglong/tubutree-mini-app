@@ -128,25 +128,25 @@ describe('LoyaltyPage — thẻ hạng', () => {
 });
 
 describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (ENGAGE-21)', () => {
-  const RATES = { vndPerPoint: 10_000, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 };
+  const RATES = { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 };
 
-  it('nói rõ cứ 10.000đ = 1 điểm và 1 điểm = 1.000đ khi dùng, lấy từ cấu hình API', async () => {
+  it('nói rõ tích bao nhiêu % tiền hàng và 1 điểm = 1.000đ khi dùng, lấy từ cấu hình API', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
     renderPage();
-    expect(await screen.findByText('Cứ 10.000đ mua hàng = 1 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Tích 2% tiền hàng thành Điểm Xanh')).toBeInTheDocument();
     expect(screen.getByText('1 điểm = 1.000đ khi dùng ở bước thanh toán (tối đa 20% giá trị đơn)')).toBeInTheDocument();
   });
 
-  it('tỷ lệ cấu hình khác thì chữ đổi theo, không hardcode 10.000đ', async () => {
-    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: { ...RATES, vndPerPoint: 12_000 } });
+  it('tỷ lệ cấu hình khác thì chữ đổi theo, không hardcode 2%', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: { ...RATES, earnPct: 3, vndPerPoint: 33 } });
     renderPage();
-    expect(await screen.findByText('Cứ 12.000đ mua hàng = 1 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Tích 3% tiền hàng thành Điểm Xanh')).toBeInTheDocument();
   });
 
   it('dòng "còn X điểm" kèm số tiền mua hàng tương ứng', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
     renderPage();
-    expect(await screen.findByText(/tương đương khoảng 12,5 triệu mua hàng/)).toBeInTheDocument();
+    expect(await screen.findByText(/tương đương khoảng 62\.500đ mua hàng/)).toBeInTheDocument();
   });
 
   it('danh sách hạng quy mốc ra tiền mua hàng 12 tháng', async () => {
@@ -163,7 +163,7 @@ describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (EN
   it('API cũ chưa trả rates → không hiện dòng giải thích, danh sách hạng vẫn theo điểm', async () => {
     renderPage();
     await screen.findByText(/Tích điểm ×1/);
-    expect(screen.queryByText(/Cứ .* mua hàng = 1 điểm/)).toBeNull();
+    expect(screen.queryByText(/Tích .* tiền hàng thành Điểm Xanh/)).toBeNull();
     expect(screen.getByText(/từ 2\.500 điểm tích luỹ/)).toBeInTheDocument();
   });
 });

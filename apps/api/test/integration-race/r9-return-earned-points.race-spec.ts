@@ -25,7 +25,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
-import { createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { createUser, randCode, pinConfig, setConfig, summarize, warmPool } from './helpers';
 
 const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
@@ -42,6 +42,8 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
   let cart: CartService;
   let loyalty: LoyaltyService;
   let returns: OrderReturnsService;
+
+  let restoreRedeem: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -84,12 +86,13 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
     await setConfig(prisma, 'shipping.free_threshold', 200_000);
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);
     await setConfig(prisma, 'shipping.tier_freeship_overrides', {});
-    await setConfig(prisma, 'loyalty.vnd_per_point', 10_000);
-    await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1_000);
+    await setConfig(prisma, 'loyalty.earn_pct', 2);
+    restoreRedeem = await pinConfig(prisma, 'loyalty.vnd_per_point_redeem', 1);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.2);
   });
 
   afterAll(async () => {
+    await restoreRedeem?.();
     await moduleRef?.close();
   });
 
@@ -127,8 +130,8 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
   }
 
   /**
-   * T 300.000 (Tubu) + mật ong 200.000 + trà 2 × 150.000 (ký gửi, Tubu giao hộ), dùng 100 Điểm Xanh (chỉ trừ vào T): tiền hàng
-   * thực trả 700.000 → 70 điểm tích, cộng khi giao.
+   * T 300.000 (Tubu) + mật ong 200.000 + trà 2 × 150.000 (ký gửi, Tubu giao hộ), dùng 100.000 Điểm Xanh (chỉ trừ vào T): tiền hàng
+   * thực trả 700.000 → 14.000 điểm tích (2%), cộng khi giao.
    */
   async function deliveredOrder() {
     const store = await consignmentStore();
@@ -137,18 +140,18 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
     const tea = await variation(150_000, store.id);
     const tierId = `IT_${randCode(8)}`;
     await prisma.membershipTier.create({ data: { id: tierId, name: `Hạng ${tierId}`, minPoints: 0, discountPct: 0, pointMultiplier: 1, perks: {} } });
-    const u = await createUser(prisma, { phone: phone(), pointsConvertedBalance: 100, tierId });
+    const u = await createUser(prisma, { phone: phone(), pointsConvertedBalance: 100_000, tierId });
     const addr = await prisma.address.create({
       data: { userId: u.id, recipient: 'Khach IT', phone: phone(), province: 'Ha Noi', district: '', ward: 'Phuong IT', street: '1 Duong IT', provinceCode: '84_VN01', districtCode: '', wardCode: '00001' },
     });
     await cart.addItem(u.id, { variationId: t.id, quantity: 1 });
     await cart.addItem(u.id, { variationId: honey.id, quantity: 1 });
     await cart.addItem(u.id, { variationId: tea.id, quantity: 2 });
-    const q = await checkout.quote(u.id, { addressId: addr.id, pointsToUse: 100 } as never);
-    await checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 100, expectedTotal: q.total } as never, `itr7-${randCode(12)}`);
+    const q = await checkout.quote(u.id, { addressId: addr.id, pointsToUse: 100_000 } as never);
+    await checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 100_000, expectedTotal: q.total } as never, `itr7-${randCode(12)}`);
     const order = await prisma.order.findFirstOrThrow({ where: { userId: u.id }, include: { items: true } });
     const item = (vid: string) => order.items.find((i) => i.variationId === vid)!;
-    expect(order).toMatchObject({ subtotal: 800_000, pointsUsed: 100, pointsDiscount: 100_000, shippingFee: 0, total: 700_000, pointsEarned: 70 });
+    expect(order).toMatchObject({ subtotal: 800_000, pointsUsed: 100_000, pointsDiscount: 100_000, shippingFee: 0, total: 700_000, pointsEarned: 14_000 });
     expect([item(t.id), item(honey.id), item(tea.id)].map((i) => [i.paidTotal, i.pointsDiscount])).toEqual([
       [200_000, 100_000],
       [200_000, 0],
@@ -166,21 +169,21 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
       0,
     );
 
-  it('trả mật ong + 1 trà (khách trả 350.000 trên 700.000) thu đúng 35 điểm tích, cả lúc xem trước lẫn lúc duyệt (trước: 31 theo giá gốc)', async () => {
+  it('trả mật ong + 1 trà (khách trả 350.000 trên 700.000) thu đúng 7.000 điểm tích, cả lúc xem trước lẫn lúc duyệt (trước: 6.200 theo giá gốc)', async () => {
     const o = await deliveredOrder();
     const req = await returns.request(o.userId, o.order.code, {
       reasonCode: 'OTHER',
       reason: 'Không cần nữa',
       items: [{ orderItemId: o.honey.id, quantity: 1 }, { orderItemId: o.tea.id, quantity: 1 }],
     });
-    expect(await returns.preview(req.id)).toMatchObject({ goods: 350_000, pointsUsedBack: 0, pointsEarnedBack: 35 });
+    expect(await returns.preview(req.id)).toMatchObject({ goods: 350_000, pointsUsedBack: 0, pointsEarnedBack: 7_000 });
     await returns.review(o.admin.id, req.id, { approve: true });
-    expect(await prisma.returnRequest.findUniqueOrThrow({ where: { id: req.id } })).toMatchObject({ pointsReversed: 35, pointsRefunded: 0 });
-    expect(await earnedReversed(o.userId, o.order.code)).toBe(-35);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: o.userId } })).pointsBalance).toBe(35);
+    expect(await prisma.returnRequest.findUniqueOrThrow({ where: { id: req.id } })).toMatchObject({ pointsReversed: 7_000, pointsRefunded: 0 });
+    expect(await earnedReversed(o.userId, o.order.code)).toBe(-7_000);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: o.userId } })).pointsBalance).toBe(7_000);
   });
 
-  it('hai admin duyệt cùng lúc một yêu cầu: chỉ một lần thu 35 điểm', async () => {
+  it('hai admin duyệt cùng lúc một yêu cầu: chỉ một lần thu 7.000 điểm', async () => {
     const o = await deliveredOrder();
     const req = await returns.request(o.userId, o.order.code, {
       reasonCode: 'OTHER',
@@ -190,10 +193,10 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
     const second = await createUser(prisma, { role: 'ADMIN' });
     const s = summarize(await Promise.allSettled([returns.review(o.admin.id, req.id, { approve: true }), returns.review(second.id, req.id, { approve: true })]));
     expect(s.fulfilled).toHaveLength(1);
-    expect(await earnedReversed(o.userId, o.order.code)).toBe(-35);
+    expect(await earnedReversed(o.userId, o.order.code)).toBe(-7_000);
   });
 
-  it('trả ba lần (mật ong + 1 trà, trà còn lại, rồi T): 35 + 15 + 20, cộng lại đúng 70 điểm đã tích', async () => {
+  it('trả ba lần (mật ong + 1 trà, trà còn lại, rồi T): 7.000 + 3.000 + 4.000, cộng lại đúng 14.000 điểm đã tích', async () => {
     const o = await deliveredOrder();
     const ask = (items: { orderItemId: string; quantity: number }[]) =>
       returns.request(o.userId, o.order.code, { reasonCode: 'OTHER', reason: 'Không cần nữa', items });
@@ -201,14 +204,14 @@ describe('Thu hồi Điểm Xanh tích khi trả một phần theo tiền thực
     const r1 = await ask([{ orderItemId: o.honey.id, quantity: 1 }, { orderItemId: o.tea.id, quantity: 1 }]);
     await returns.review(o.admin.id, r1.id, { approve: true });
     const r2 = await ask([{ orderItemId: o.tea.id, quantity: 1 }]);
-    expect(await returns.preview(r2.id)).toMatchObject({ goods: 150_000, pointsEarnedBack: 15 });
+    expect(await returns.preview(r2.id)).toMatchObject({ goods: 150_000, pointsEarnedBack: 3_000 });
     await returns.review(o.admin.id, r2.id, { approve: true });
-    expect(await earnedReversed(o.userId, o.order.code)).toBe(-50);
+    expect(await earnedReversed(o.userId, o.order.code)).toBe(-10_000);
 
     const r3 = await ask([{ orderItemId: o.t.id, quantity: 1 }]);
-    expect(await returns.preview(r3.id)).toMatchObject({ isFull: true, pointsEarnedBack: 20 });
+    expect(await returns.preview(r3.id)).toMatchObject({ isFull: true, pointsEarnedBack: 4_000 });
     await returns.review(o.admin.id, r3.id, { approve: true });
-    expect(await earnedReversed(o.userId, o.order.code)).toBe(-70);
+    expect(await earnedReversed(o.userId, o.order.code)).toBe(-14_000);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: o.userId } })).pointsBalance).toBe(0);
   });
 });

@@ -31,7 +31,7 @@ const CONFIG = {
     welcomeVoucher: { amount: 25_000, minOrder: 150_000 },
     firstOrderFreeShip: { enabled: false, minSubtotal: 0 },
   },
-  loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
+  loyalty: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1_000 },
 };
 const VOUCHER = { code: 'WELCOME-U1', type: 'AMOUNT' as const, value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' };
 const OFFER = { isNewCustomer: true, welcomeVoucher: VOUCHER };
@@ -61,7 +61,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(region).toHaveTextContent('Cho đơn từ 150.000đ');
     expect(region).toHaveTextContent('Dùng đến 17/11/2026');
     expect(region).toHaveTextContent('Miễn phí giao cho đơn từ 350.000đ');
-    expect(region).toHaveTextContent('Mỗi 20.000đ mua hàng được 1 Điểm Xanh, 1 điểm giảm 1.000đ');
+    expect(region).toHaveTextContent('Mỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm giảm 1.000đ');
     expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
     expect(region.textContent).not.toMatch(/30\.000|199\.000|10\.000đ|12%/);
   });

@@ -36,9 +36,9 @@ export function buildLoyaltyWrites(f: NumbersForm): { writes?: { key: string; va
   if (pts.error) return { error: `Điểm danh — ${pts.error}` };
   const max = parseIntInRange(f.maxOrderTotal, 1000, 1_000_000_000, 'Trần mỗi hoá đơn');
   if (max.error) return { error: max.error };
-  const staff = parseIntInRange(f.staffCap, 1, 10_000_000, 'Trần điểm/nhân viên/ngày');
+  const staff = parseIntInRange(f.staffCap, 1, 1_000_000_000, 'Trần điểm/nhân viên/ngày');
   if (staff.error) return { error: staff.error };
-  const member = parseIntInRange(f.memberCap, 1, 10_000_000, 'Trần điểm/thành viên/ngày');
+  const member = parseIntInRange(f.memberCap, 1, 1_000_000_000, 'Trần điểm/thành viên/ngày');
   if (member.error) return { error: member.error };
   return {
     writes: [
@@ -153,7 +153,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         }}
       >
         <div>
-          <div className="text-xs font-semibold uppercase text-stone-500">Điểm danh 7 ngày (điểm mỗi ngày, 0–100)</div>
+          <div className="text-xs font-semibold uppercase text-stone-500">Điểm danh 7 ngày (điểm mỗi ngày, 0–100.000)</div>
           <div className="mt-1 grid grid-cols-7 gap-1.5">
             {form.checkin.map((v, i) => (
               <label key={i} className="text-center text-[11px] text-stone-500">

@@ -9,6 +9,7 @@ import { FIRST_ORDER_FREESHIP_ENABLED_DEFAULT, FIRST_ORDER_FREESHIP_ENABLED_KEY,
 import { publicCommunityUrl } from './community-links';
 import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
+import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from '../loyalty/earn-rates';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
 const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
@@ -47,7 +48,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     welcomeMinOrder,
     firstOrderFree,
     firstOrderFreeMin,
-    vndPerPoint,
+    earnPct,
     vndPerPointRedeem,
     maxRedeemPct,
     pointExpireMonths,
@@ -82,8 +83,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<number>('voucher.welcome_min_order', 199000),
     config.get<unknown>(FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_ENABLED_DEFAULT),
     config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT),
-    config.get<number>('loyalty.vnd_per_point', 10000),
-    config.get<number>('loyalty.vnd_per_point_redeem', 1000),
+    config.get<number>(EARN_PCT_KEY, DEFAULT_EARN_PCT),
+    config.get<number>('loyalty.vnd_per_point_redeem', 1),
     config.get<unknown>('loyalty.max_redeem_pct', LOYALTY_MAX_REDEEM_PCT_DEFAULT),
     config.get<unknown>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS),
     config.get<unknown>('home.new_customer_layout', true),
@@ -115,7 +116,9 @@ export async function buildPublicConfig(config: SystemConfigService) {
     },
     // Hai giá trị sau giải thích cách dùng/hạn điểm; chuẩn hoá giống getOverview và pointsExpiryFrom để chữ nói đúng điều server làm.
     loyalty: {
-      vndPerPoint,
+      earnPct,
+      // Bản app cũ chưa đọc earnPct: giữ số đồng cho 1 điểm.
+      vndPerPoint: typeof earnPct === 'number' && earnPct > 0 ? Math.round(100 / earnPct) : Math.round(100 / DEFAULT_EARN_PCT),
       vndPerPointRedeem,
       maxRedeemPct: typeof maxRedeemPct === 'number' && maxRedeemPct >= 0 && maxRedeemPct <= 1 ? maxRedeemPct : LOYALTY_MAX_REDEEM_PCT_DEFAULT,
       pointExpireMonths: normalizePointExpireMonths(pointExpireMonths),

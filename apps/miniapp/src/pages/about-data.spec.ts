@@ -56,21 +56,21 @@ describe('fallbackFaq sau khi gộp TubuXu vào Điểm Xanh (PD-3)', () => {
 describe('fallbackFaq: con số lấy từ cấu hình công khai (D5-10)', () => {
   const find = (q: RegExp, cfg?: Parameters<typeof fallbackFaq>[0]) => fallbackFaq(cfg).find((f) => q.test(f.q))?.a ?? '';
   const CFG = {
-    loyalty: { vndPerPoint: 12_000, vndPerPointRedeem: 1_000, maxRedeemPct: 0.3, pointExpireMonths: 6 },
+    loyalty: { earnPct: 3, vndPerPointRedeem: 1_000, maxRedeemPct: 0.3, pointExpireMonths: 6 },
     returnWindowDays: 14,
   };
 
   it('Điểm Xanh: mốc tích, giá trị 1 điểm, trần % và hạn điểm theo config', () => {
     const a = find(/Điểm Xanh là gì/, CFG);
-    expect(a).toContain('12.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh.');
+    expect(a).toContain('Mỗi đơn đã giao tích 3% tiền hàng thành Điểm Xanh.');
     expect(a).toContain('1 Điểm Xanh đổi 1.000đ khi thanh toán, tối đa 30% giá trị đơn.');
     expect(a).toContain('Điểm có hạn 6 tháng.');
     expect(a).not.toMatch(/10\.000đ|20%|12 tháng/);
   });
 
   it('mốc khác → câu đổi theo: 5.000đ/điểm, 500đ/điểm, trần 10%, 24 tháng', () => {
-    const a = find(/Điểm Xanh là gì/, { loyalty: { vndPerPoint: 5_000, vndPerPointRedeem: 500, maxRedeemPct: 0.1, pointExpireMonths: 24 } });
-    expect(a).toContain('5.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh.');
+    const a = find(/Điểm Xanh là gì/, { loyalty: { earnPct: 5, vndPerPointRedeem: 500, maxRedeemPct: 0.1, pointExpireMonths: 24 } });
+    expect(a).toContain('Mỗi đơn đã giao tích 5% tiền hàng thành Điểm Xanh.');
     expect(a).toContain('1 Điểm Xanh đổi 500đ khi thanh toán, tối đa 10% giá trị đơn.');
     expect(a).toContain('Điểm có hạn 24 tháng.');
   });
@@ -88,8 +88,8 @@ describe('fallbackFaq: con số lấy từ cấu hình công khai (D5-10)', () =
   });
 
   it('thiếu từng phần thì chỉ bỏ phần đó: có mốc tích nhưng chưa có hạn điểm', () => {
-    const a = find(/Điểm Xanh là gì/, { loyalty: { vndPerPoint: 12_000, vndPerPointRedeem: 1_000 } });
-    expect(a).toContain('12.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh.');
+    const a = find(/Điểm Xanh là gì/, { loyalty: { earnPct: 3, vndPerPointRedeem: 1_000 } });
+    expect(a).toContain('Mỗi đơn đã giao tích 3% tiền hàng thành Điểm Xanh.');
     expect(a).toContain('1 Điểm Xanh đổi 1.000đ khi thanh toán.');
     // "100%" của lô điểm quy đổi là luật cố định, không phải số của config.
     expect(a).not.toMatch(/\d+ tháng|tối đa \d+%/);

@@ -16,8 +16,8 @@ afterEach(() => {
 });
 
 const MISSIONS = [
-  { id: 'm-first', code: 'FIRST_ORDER', title: 'Đơn đầu tiên', description: 'Hoàn tất đơn đầu', rewardPoints: 30, goal: 1, isRepeatable: false, claimedCount: 12 },
-  { id: 'm-streak', code: 'CHECKIN_7', title: 'Điểm danh 7 ngày', description: 'Giữ chuỗi 7 ngày', rewardPoints: 20, goal: 7, isRepeatable: true, claimedCount: 3 },
+  { id: 'm-first', code: 'FIRST_ORDER', title: 'Đơn đầu tiên', description: 'Hoàn tất đơn đầu', rewardPoints: 30_000, goal: 1, isRepeatable: false, claimedCount: 12 },
+  { id: 'm-streak', code: 'CHECKIN_7', title: 'Điểm danh 7 ngày', description: 'Giữ chuỗi 7 ngày', rewardPoints: 20_000, goal: 7, isRepeatable: true, claimedCount: 3 },
 ];
 const REWARDS = [
   { id: 'reward-freeship', title: 'Voucher Miễn phí vận chuyển', description: 'x', pointsCost: 20, type: 'FREESHIP', value: 0, minOrder: 99000, redeemedCount: 40, redeemed30d: 9 },
@@ -55,29 +55,29 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     const row = container.querySelector<HTMLElement>('[data-mission="FIRST_ORDER"]')!;
     const save = byText(row, 'button', 'Lưu') as HTMLButtonElement;
     expect(save.disabled).toBe(true);
-    typeInto(row.querySelector('input[name="rewardPoints"]'), '40');
+    typeInto(row.querySelector('input[name="rewardPoints"]'), '40000');
     click(save);
     await flush();
     const [call] = api.patches();
     expect(call!.url).toContain('/admin/engagement/missions/m-first');
-    expect(JSON.parse(String(call!.init!.body))).toEqual({ title: 'Đơn đầu tiên', description: 'Hoàn tất đơn đầu', rewardPoints: 40 });
+    expect(JSON.parse(String(call!.init!.body))).toEqual({ title: 'Đơn đầu tiên', description: 'Hoàn tất đơn đầu', rewardPoints: 40000 });
     expect(row.textContent).toContain('Đã lưu');
   });
 
   it('điểm không hợp lệ khoá nút Lưu; lỗi API hiện nguyên văn', async () => {
-    stub({ status: 400, body: { message: 'rewardPoints must not be greater than 500' } });
+    stub({ status: 400, body: { message: 'rewardPoints must not be greater than 500000' } });
     const { container } = mount(<EngagementTab />);
     await flush();
     const row = container.querySelector<HTMLElement>('[data-mission="CHECKIN_7"]')!;
     const save = byText(row, 'button', 'Lưu') as HTMLButtonElement;
     typeInto(row.querySelector('input[name="rewardPoints"]'), '2.5');
     expect(save.disabled).toBe(true);
-    typeInto(row.querySelector('input[name="rewardPoints"]'), '501');
+    typeInto(row.querySelector('input[name="rewardPoints"]'), '500001');
     expect(save.disabled).toBe(true);
-    expect(row.textContent).toContain('Điểm thưởng từ 0 đến 500');
-    typeInto(row.querySelector('input[name="rewardPoints"]'), '25');
+    expect(row.textContent).toContain('Điểm thưởng từ 0 đến 500.000');
+    typeInto(row.querySelector('input[name="rewardPoints"]'), '25000');
     click(save);
     await flush();
-    expect(row.textContent).toContain('rewardPoints must not be greater than 500');
+    expect(row.textContent).toContain('rewardPoints must not be greater than 500000');
   });
 });

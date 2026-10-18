@@ -23,7 +23,7 @@ import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/c
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { GameService } from '../../src/modules/game/game.service';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
-import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
+import { createOrder, createUser, randCode, pinConfig, setConfig, warmPool } from './helpers';
 
 const DAY = 864e5;
 
@@ -49,6 +49,8 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   let game: GameService;
   let variationId: string;
   const touched: string[] = [];
+
+  let restoreRedeem: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -95,7 +97,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
     game = moduleRef.get(GameService);
 
     await setConfig(prisma, 'returns.window_days', 7);
-    await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
+    restoreRedeem = await pinConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.5);
     await setConfig(prisma, 'loyalty.point_expire_months', 12);
     await setConfig(prisma, 'game.spin_buy_cost_points', 10);
@@ -120,6 +122,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   });
 
   afterAll(async () => {
+    await restoreRedeem?.();
     await moduleRef?.close();
   });
 
@@ -166,7 +169,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   type Holder = { user: { id: string }; addr: { id: string } };
   const spenders: Record<string, { cost: number; whenLocked: 'reject' | 'clamp'; run: (u: Holder) => Promise<unknown> }> = {
     'đổi voucher (LoyaltyService.redeemReward)': {
-      cost: 20,
+      cost: 20_000,
       whenLocked: 'reject',
       run: (u) => loyalty.redeemReward(u.user.id, 'reward-freeship'),
     },
@@ -230,17 +233,17 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   describe.each(Object.entries(spenders))('%s', (_name, spender) => {
     it('cache cấu hình trống: mọi lần đọc cấu hình trượt cache đều xảy ra khi KHÔNG có tx nào đang mở (cửa sổ 1 ngày → điểm tự do, tiêu được)', async () => {
       await setConfig(prisma, 'returns.window_days', 1);
-      const u = await holder(60);
+      const u = await holder(60_000);
       const inTxMisses = watchConfigMissesInTx();
 
       await spender.run(u);
 
       expect(inTxMisses).toEqual([]);
-      expect(await balance(u.user.id)).toBe(60 - spender.cost);
+      expect(await balance(u.user.id)).toBe(60_000 - spender.cost);
     });
 
     it('giá trị cửa sổ đọc ngoài tx là giá trị cấu hình thật: cửa sổ 7 ngày → điểm đơn giao 2 ngày trước còn khoá, số dư nguyên', async () => {
-      const u = await holder(60);
+      const u = await holder(60_000);
       const inTxMisses = watchConfigMissesInTx();
 
       if (spender.whenLocked === 'reject') {
@@ -253,7 +256,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
       }
 
       expect(inTxMisses).toEqual([]);
-      expect(await balance(u.user.id)).toBe(60);
+      expect(await balance(u.user.id)).toBe(60_000);
     });
   });
 });

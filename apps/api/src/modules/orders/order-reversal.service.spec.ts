@@ -177,12 +177,12 @@ describe('OrderReversalService', () => {
     expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
   });
 
-  // PD-3 (spec 6.2, OQ-8): đơn XU cũ huỷ/trả sau gộp → hoàn ceil(total/1000) Điểm Xanh lô quy đổi.
+  // PD-3 (spec 6.2, OQ-8): đơn XU cũ huỷ/trả sau gộp → hoàn đúng total Điểm Xanh lô quy đổi (1 điểm = 1đ).
   // Không cộng xu (users_coins_frozen), không về Ví (xu không ra tiền, Q-03a).
   it.each([
-    [150000, 150],
-    [150001, 151],
-    [999, 1],
+    [150000, 150000],
+    [150001, 150001],
+    [999, 999],
   ])('đơn XU cũ %iđ → +%i điểm lô CONVERTED (ORDER_REFUND_XU), không cộng xu, không hoàn Ví', async (total, points) => {
     const order = makeOrder({ paymentMethod: 'XU', paymentStatus: 'PAID', total });
     const tx = makeTx(order);
@@ -343,7 +343,7 @@ describe('OrderReversalService', () => {
     await service.reverseFinancials(tx as never, order);
     expect(tx.orderCustomerRefund.create).not.toHaveBeenCalled();
     expect(applyWalletDelta).not.toHaveBeenCalled();
-    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 150 } } });
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 150000 } } });
   });
 
   it('KHÔNG hoàn tiền khi paymentStatus không còn PAID (race đã thua)', async () => {
@@ -427,7 +427,7 @@ describe('OrderReversalService', () => {
     await service.reverseFinancials(tx as never, order);
     await service.reverseFinancials(tx as never, order);
     expect(tx.user.update).toHaveBeenCalledTimes(1);
-    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 150 } } });
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 150000 } } });
     expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledTimes(1);
     expect(tx.coinTransaction.create).not.toHaveBeenCalled();
   });

@@ -121,37 +121,37 @@ export class SystemConfigService {
     'voucher.welcome_min_order': { min: 0, max: 50_000_000, note: 'đồng (0 = không yêu cầu đơn tối thiểu)' },
     // 0 ngày = coi mọi khách từng mua là "đã bỏ đi" và cấp mã cho tất cả.
     'voucher.winback_days': { min: 1, max: 365, note: 'số ngày' },
-    // PD-3: khoá tính bằng Điểm Xanh (1 điểm = 1.000đ). Khoá xu cũ cùng nghĩa có giá trị 200–100.000; gõ/chép
-    // nhầm giá trị xu vào đây là thưởng gấp 1.000 lần, nên biên chặn ngay lúc ghi. `integer`: điểm là số nguyên
+    // PD-3 / points-1d: khoá tính bằng Điểm Xanh (1 điểm = 1đ). Biên chặn gõ nhầm đơn vị cũ (1 điểm = 1.000đ) hoặc
+    // bội số của nó ngay lúc ghi. `integer`: điểm là số nguyên
     // (cột INTEGER; RewardPointsService.grant ném 500 với số lẻ nên thưởng 2.5 sẽ không bao giờ được cấp).
-    'referral.referrer_reward_points': { min: 0, max: 100, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
-    'community.post_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
-    'community.answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
-    'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
+    'referral.referrer_reward_points': { min: 0, max: 100_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
+    'community.post_reward_points': { min: 0, max: 20_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
+    'community.answer_reward_points': { min: 0, max: 20_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
+    'community.best_answer_reward_points': { min: 0, max: 20_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
     // Điểm UY TÍN cộng đồng (cấp Mầm đến Cổ thụ), không phải Điểm Xanh. Cột reputation/amount là INTEGER: số lẻ làm giao dịch lỗi,
     // và bumpReputation nuốt lỗi đó nên người đăng bài không được cộng mà không ai biết. Số lớn đưa người đăng bài lên cấp cao nhất ngay.
     'community.rep_post': { min: 0, max: 100, note: 'điểm uy tín mỗi bài được đăng (0 = không cộng)', integer: true },
     'community.rep_answer': { min: 0, max: 100, note: 'điểm uy tín mỗi câu trả lời (0 = không cộng)', integer: true },
     'community.rep_best': { min: 0, max: 100, note: 'điểm uy tín cho câu trả lời được chọn hay nhất (0 = không cộng)', integer: true },
     'community.daily_rep_cap': { min: 0, max: 1000, note: 'điểm uy tín tối đa mỗi người mỗi ngày (0 = không ai được cộng)', integer: true },
-    'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu', integer: true },
-    'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
+    'game.tree_points_price': { min: 1, max: 500_000, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1đ), không phải xu', integer: true },
+    'game.spin_buy_cost_points': { min: 1, max: 1_000_000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
     'game.spin_voucher_min_order_multiplier': { min: 1, max: 50, note: 'hệ số nguyên (6 = voucher 20.000đ cho đơn từ 120.000đ)', integer: true },
     // ADMINOPS-3: các khoá tiền/điểm đọc thẳng vào checkout, ví, rút tiền. Phí âm làm tổng đơn nhỏ hơn tiền hàng;
-    // 1đ = 1 điểm là tích điểm gấp 10.000 lần. Chặn ngay lúc ghi.
+    // Tích điểm là phần trăm tiền hàng nên 100 (thay vì 2) là tích gấp 50 lần. Chặn ngay lúc ghi.
     'shipping.flat_fee_below_threshold': { min: 0, max: 1_000_000, note: 'đồng phí ship cố định', integer: true },
     'shipping.free_threshold': { min: 0, max: 50_000_000, note: 'đồng (đơn từ mức này được freeship)', integer: true },
     'shipping.first_order_free_min_subtotal': { min: 0, max: 50_000_000, note: 'đồng tiền hàng tối thiểu để đơn đầu được freeship (0 = mọi đơn đầu)', integer: true },
-    'loyalty.vnd_per_point': { min: 1000, max: 1_000_000, note: 'đồng chi tiêu cho 1 Điểm Xanh (10000 = 10.000đ/điểm)', integer: true },
+    'loyalty.earn_pct': { min: 0.1, max: 20, note: 'phần trăm tiền hàng (sau giảm giá, không gồm ship) tích thành Điểm Xanh (2 = 2%), trước hệ số hạng' },
     'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
     'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
     'affiliate.min_withdraw_bank': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
     'referral.min_order_amount': { min: 0, max: 50_000_000, note: 'đồng', integer: true },
     'groupbuy.max_open_per_user': { min: 1, max: 100, note: 'số nhóm', integer: true },
     'game.max_plots': { min: 1, max: 50, note: 'số lô đất', integer: true },
-    // OQ-11: lô Điểm Xanh quy đổi từ xu là tiền khách trả trước theo giá 1 điểm = 1.000đ; đổi tỉ giá là
+    // OQ-11: lô Điểm Xanh quy đổi từ xu là tiền khách trả trước theo giá 1 điểm = 1đ; đổi tỉ giá là
     // làm lô đó mất hoặc tăng giá trị cho mọi khách.
-    'loyalty.vnd_per_point_redeem': { min: 1000, max: 1000, note: 'đồng/điểm, khoá cứng từ PD-3 (lô quy đổi)' },
+    'loyalty.vnd_per_point_redeem': { min: 1, max: 1, note: 'đồng/điểm, khoá cứng từ points-1d (lô quy đổi)' },
     // p8-seller: phí giao/phí sàn đối tác đọc thẳng vào checkout và đối soát; hạn SLA và thời gian chờ đọc vào cron.
     'merchant.default_shipping_fee': { min: 0, max: 500000, note: 'đồng', integer: true },
     'merchant.commission_pct': { min: 0, max: 0.5, note: 'phân số (0.15 = 15%)' },
@@ -231,10 +231,10 @@ export class SystemConfigService {
   /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
   private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days']);
 
-  /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ (bản xu cũ tối đa 30.000 xu = 30 điểm). */
-  private static readonly SEASONPASS_POINTS_MAX = 100;
-  /** Thưởng mốc giới thiệu lớn nhất hợp lệ (bản xu cũ tối đa 100.000 xu = 100 điểm). */
-  private static readonly REFERRAL_MILESTONE_POINTS_MAX = 500;
+  /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ. */
+  private static readonly SEASONPASS_POINTS_MAX = 100_000;
+  /** Thưởng mốc giới thiệu lớn nhất hợp lệ. */
+  private static readonly REFERRAL_MILESTONE_POINTS_MAX = 500_000;
 
   /**
    * Kiểm dạng cho khoá JSON có đơn vị tiền bên trong (RANGES chỉ kiểm số). Trả lời lỗi hoặc null.

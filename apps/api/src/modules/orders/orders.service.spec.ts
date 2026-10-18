@@ -233,7 +233,7 @@ describe('OrdersService.cancel', () => {
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
-  it('PD-3: đơn XU cũ + PAID huỷ → hoàn ceil(total/1000) Điểm Xanh lô quy đổi — KHÔNG hoàn ví, KHÔNG cộng xu', async () => {
+  it('PD-3: đơn XU cũ + PAID huỷ → hoàn đúng total Điểm Xanh lô quy đổi (1 điểm = 1đ) — KHÔNG hoàn ví, KHÔNG cộng xu', async () => {
     const { svc, userUpdate, coinCreate, pointsInsert } = makeService({
       ...baseOrder,
       paymentMethod: 'XU',
@@ -242,14 +242,14 @@ describe('OrdersService.cancel', () => {
     await svc.cancel('u1', 'TUBU1');
     // Xu không ra tiền (Q-03a): không vào walletBalance; xu đã khoá (users_coins_frozen): không vào coinsBalance.
     expect(userUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { pointsConvertedBalance: { increment: 300 } } }),
+      expect.objectContaining({ data: { pointsConvertedBalance: { increment: 300000 } } }),
     );
     expect(userUpdate).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: { walletBalance: { increment: 300000 } } }),
     );
     expect(pointsInsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: [expect.objectContaining({ userId: 'u1', delta: 300, lot: 'CONVERTED', reason: 'ORDER_REFUND_XU:TUBU1', refType: 'ORDER' })],
+        data: [expect.objectContaining({ userId: 'u1', delta: 300000, lot: 'CONVERTED', reason: 'ORDER_REFUND_XU:TUBU1', refType: 'ORDER' })],
       }),
     );
     expect(coinCreate).not.toHaveBeenCalled();

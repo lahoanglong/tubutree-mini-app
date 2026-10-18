@@ -12,7 +12,7 @@ import {
 import { formatVnd } from '@/lib/shop-client';
 import { BTN_XS_PRIMARY, INPUT_CLASS, Notice } from './ui';
 
-const REWARD_POINTS_MAX = 500;
+const REWARD_POINTS_MAX = 500_000;
 
 /**
  * Nhiệm vụ Vườn Xanh và danh mục quà đổi Điểm Xanh. Cách tính tiến độ nhiệm vụ gắn với mã nhiệm vụ nên chỉ sửa được chữ
@@ -102,7 +102,7 @@ function MissionRow({ item }: { item: AdminMission }) {
           className={INPUT_CLASS}
         />
       </label>
-      {!pointsOk && <p className="mt-1 text-xs text-warning-fg">Điểm thưởng từ 0 đến {REWARD_POINTS_MAX}, số nguyên.</p>}
+      {!pointsOk && <p className="mt-1 text-xs text-warning-fg">Điểm thưởng từ 0 đến {REWARD_POINTS_MAX.toLocaleString('vi-VN')}, số nguyên.</p>}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"

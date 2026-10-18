@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { formatPoints } from '../../common/format-points';
 import type { Order } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -382,7 +383,7 @@ export class OrderStatusService {
     // ORDER_DELIVERED chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
     const notifyData: Record<string, string> = { ...opts.notifyData, order_code: order.code };
     if (targetStatus === 'DELIVERED' && order.pointsEarned > 0) {
-      notifyData.points_note = ` Bạn được cộng ${order.pointsEarned} Điểm Xanh.`;
+      notifyData.points_note = ` Bạn được cộng ${formatPoints(order.pointsEarned)} Điểm Xanh.`;
     }
     // Admin/hệ thống/Pancake huỷ hoặc trả đơn đã trả tiền: khách được báo số tiền hoàn và nơi tiền về (R2-LIFECYCLE-5).
     if ((targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && notifyData.refund_note === undefined) {

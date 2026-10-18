@@ -32,9 +32,10 @@ function runWithFakeDocker(
 echo "docker $*" >> "${log}"
 if [ -n "$FAIL_ON" ] && [[ "$*" == *"$FAIL_ON"* ]]; then exit 1; fi
 case "$*" in
+  *"State.Running"*) echo "\${FAKE_API_RUNNING:-false}";;
   *inspect*) echo healthy;;
   *" ps -q "*) echo fakeid;;
-  *"psql"*) cat > /dev/null;;
+  *"psql"*) q="$(cat)"; case "$q" in *points_1d*) echo "\${FAKE_POINTS_1D_APPLIED:-0}";; *) echo 1;; esac;;
 esac
 exit 0
 `,
@@ -121,6 +122,40 @@ describe('tools/deploy/deploy.sh', () => {
     const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { failOn: 'migrate deploy' });
     expect(status).not.toBe(0);
     expect(idx(calls, ' up ')).toBe(-1);
+  });
+});
+
+describe('tools/deploy/deploy.sh: migration points_1d (đổi đơn vị điểm, không chạy khi API cũ còn phục vụ)', () => {
+  const run = (env: Record<string, string>, extra: { failOn?: string } = {}) => runWithFakeDocker('tools/deploy/deploy.sh', [], { env, ...extra });
+
+  it('API cũ đang chạy và points_1d chưa áp → dừng exit 2 trước build/migrate, hướng dẫn backup, dừng API, migrate, seed-reference', () => {
+    const { status, calls, out } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' });
+    expect(status).toBe(2);
+    expect(out).toContain('20261018210000_points_1d');
+    expect(out).toMatch(/backup/);
+    expect(out).toMatch(/dừng API/i);
+    expect(out).toMatch(/seed-reference/);
+    expect(idx(calls, ' build ')).toBe(-1);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+    expect(idx(calls, ' up ')).toBe(-1);
+  });
+
+  it('API đang dừng và points_1d chưa áp → deploy chạy bình thường (build, migrate, thay container)', () => {
+    const { status, calls } = run({ FAKE_API_RUNNING: 'false', FAKE_POINTS_1D_APPLIED: '0' });
+    expect(status).toBe(0);
+    expect(idx(calls, 'migrate deploy')).toBeGreaterThan(idx(calls, ' build api web'));
+  });
+
+  it('points_1d đã áp xong thì API đang chạy không còn bị chặn bởi nó', () => {
+    const { status } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '1' });
+    expect(status).toBe(0);
+  });
+
+  it('api mới không healthy sau khi points_1d đã áp → KHÔNG gợi ý quay image cũ, nói khôi phục backup', () => {
+    const { status, out } = run({ FAKE_POINTS_1D_APPLIED: '1' }, { failOn: '.State.Health' });
+    expect(status).not.toBe(0);
+    expect(out).not.toMatch(/docker tag \S+ \S+/);
+    expect(out).toMatch(/khôi phục backup/);
   });
 });
 

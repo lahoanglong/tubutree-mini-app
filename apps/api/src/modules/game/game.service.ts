@@ -15,6 +15,7 @@ import { ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
+import { formatPoints } from '../../common/format-points';
 import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
 
 interface SpinPrize {
@@ -70,9 +71,9 @@ export class GameService {
     // config thì nhãn trên nút vẫn hiện giá cũ, bấm xong mới biết trừ khác.
     const [streakFreezeCost, treePointsPrice, tankCapacity, spinCostPoints] = await Promise.all([
       this.config.get<number>('game.streak_freeze_cost', 80),
-      this.config.get<number>('game.tree_points_price', 50),
+      this.config.get<number>('game.tree_points_price', 50_000),
       this.config.get<number>('game.tank_capacity', 500),
-      this.config.get<number>('game.spin_buy_cost_points', 10),
+      this.config.get<number>('game.spin_buy_cost_points', 10_000),
     ]);
     const streakRepairable =
       !!profile.brokenStreakAt &&
@@ -114,11 +115,11 @@ export class GameService {
   async spin(userId: string) {
     if (!this.loyalty) throw new Error('GameService.spin cần LoyaltyService để đọc điểm đang khoá');
     const loyalty = this.loyalty;
-    const cost = await this.config.get<number>('game.spin_buy_cost_points', 10);
+    const cost = await this.config.get<number>('game.spin_buy_cost_points', 10_000);
     const rawLimit = Number(await this.config.get<number>('game.spin_buy_daily_limit', 5));
     // Config hỏng rơi về mặc định; 0/âm nghĩa là khoá vòng quay (không hiểu thành "không giới hạn").
     const dailyLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5;
-    const notEnough = `Cần ${cost} Điểm Xanh để quay.`;
+    const notEnough = `Cần ${formatPoints(cost)} Điểm Xanh để quay.`;
     const prizes = this.usableSpinPrizes(await this.config.get<SpinPrize[]>('game.spin_prizes', []));
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
@@ -432,13 +433,13 @@ export class GameService {
     if (!this.loyalty) throw new Error('GameService.buyTree cần LoyaltyService để đọc điểm đang khoá');
     const loyalty = this.loyalty;
     const key = parseTreeBuyKey(idempotencyKey);
-    const price = await this.config.get<number>('game.tree_points_price', 50);
+    const price = await this.config.get<number>('game.tree_points_price', 50_000);
     if (!Number.isSafeInteger(price) || price <= 0) {
       throw new BadRequestException('Tính năng góp quỹ trồng cây chưa khả dụng.');
     }
     const certificateCode = key ? treeCertificateCodeFor(userId, key) : `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     const reason = `GAME_BUY_TREE:${certificateCode}`;
-    const notEnough = `Cần ${price} Điểm Xanh để góp quỹ trồng cây.`;
+    const notEnough = `Cần ${formatPoints(price)} Điểm Xanh để góp quỹ trồng cây.`;
     // Đọc ngoài tx rồi truyền cho lockedOrderPoints, cùng lý do như spin().
     const windowDays = await loyalty.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {

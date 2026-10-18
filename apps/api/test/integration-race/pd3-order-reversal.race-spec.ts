@@ -19,7 +19,7 @@ import { createOrder, createUser, summarize, warmPool } from './helpers';
  * PD-3 hoàn điểm khi huỷ đơn trên Postgres thật (spec 2.5, 6.2; T10, T11).
  *  - T10: đơn tiêu cả hai lô → huỷ trả mỗi lô đúng phần đã tiêu, đúng một lần, dù khách huỷ và luồng
  *    admin/webhook (gọi thẳng reverseOrderPoints, xem order-status.service.ts / admin.service.ts) chạy chồng.
- *  - T11: đơn XU cũ (trước PD-3) bị huỷ → hoàn ceil(total/1000) điểm lô CONVERTED, không hoàn Ví, không
+ *  - T11: đơn XU cũ (trước PD-3) bị huỷ → hoàn total điểm lô CONVERTED (1 điểm = 1đ), không hoàn Ví, không
  *    đụng coinsBalance (đã đóng băng bằng CHECK users_coins_frozen), không hoàn hai lần.
  */
 describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
@@ -225,19 +225,19 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
     return prisma.walletTransaction.count({ where: { userId } });
   }
 
-  it('T11: khách huỷ đơn XU cũ 123.456đ → +124 điểm lô CONVERTED, Ví và xu không đổi, đơn REFUNDED', async () => {
+  it('T11: khách huỷ đơn XU cũ 123.456đ → +123.456 điểm lô CONVERTED, Ví và xu không đổi, đơn REFUNDED', async () => {
     const { user, order } = await legacyXuOrder(123_456);
 
     await orders.cancel(user.id, order.code);
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-    expect(after.pointsConvertedBalance).toBe(124);
+    expect(after.pointsConvertedBalance).toBe(123_456);
     expect(after.pointsBalance).toBe(0);
     expect(after.coinsBalance).toBe(0);
     expect(after.walletBalance).toBe(0);
     expect(await walletRows(user.id)).toBe(0);
     expect(await refundRows(order.id)).toEqual([
-      { reason: `ORDER_REFUND_XU:${order.code}`, lot: 'CONVERTED', delta: 124, expiresAt: null },
+      { reason: `ORDER_REFUND_XU:${order.code}`, lot: 'CONVERTED', delta: 123_456, expiresAt: null },
     ]);
     const o = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect([o.status, o.paymentStatus]).toEqual(['CANCELLED', 'REFUNDED']);
@@ -263,7 +263,7 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
     expect(refundedNow.length).toBeLessThanOrEqual(1);
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-    expect(after.pointsConvertedBalance).toBe(50);
+    expect(after.pointsConvertedBalance).toBe(50_000);
     expect(after.coinsBalance).toBe(0);
     expect(after.walletBalance).toBe(0);
     expect(await walletRows(user.id)).toBe(0);
@@ -282,7 +282,7 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
     expect(summarize(results).rejected).toHaveLength(0);
 
     const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-    expect(after.pointsConvertedBalance).toBe(10);
+    expect(after.pointsConvertedBalance).toBe(9_001);
     expect(after.walletBalance).toBe(0);
     expect(await refundRows(order.id)).toHaveLength(1);
   });

@@ -298,9 +298,17 @@ export default function LoyaltyPage() {
                     />
                   </div>
                   <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng
-                    {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để
-                    lên hạng {next.name}
+                    {next.spendingToGo != null ? (
+                      <>
+                        Còn <b>{moneyShort(next.spendingToGo)}</b> mua hàng để lên hạng {next.name}
+                      </>
+                    ) : (
+                      <>
+                        Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng
+                        {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để
+                        lên hạng {next.name}
+                      </>
+                    )}
                   </Text>
                 </div>
               ) : (

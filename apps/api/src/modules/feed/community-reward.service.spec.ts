@@ -23,10 +23,10 @@ function make(d: ReturnType<typeof deps>) {
 const keys = (d: ReturnType<typeof deps>) => d.config.get.mock.calls.map((c: unknown[]) => c[0]);
 
 describe('CommunityRewardService.rewardPost', () => {
-  it('mặc định 1 Điểm Xanh (community.post_reward_points), reason COMMUNITY_POST + refType COMMUNITY', async () => {
+  it('mặc định 1.000 Điểm Xanh (community.post_reward_points), reason COMMUNITY_POST + refType COMMUNITY', async () => {
     const d = deps();
     await make(d).rewardPost('u1', 'p1');
-    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 1, 'COMMUNITY_POST:p1', 'COMMUNITY', 'p1', d.prisma, EXP);
+    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 1000, 'COMMUNITY_POST:p1', 'COMMUNITY', 'p1', d.prisma, EXP);
     expect(keys(d)).toContain('community.post_reward_points');
   });
 
@@ -34,7 +34,7 @@ describe('CommunityRewardService.rewardPost', () => {
     const d = deps();
     d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.post_reward' ? 200 : f));
     await make(d).rewardPost('u1', 'p1');
-    expect(d.rewards.grant.mock.calls[0][1]).toBe(1);
+    expect(d.rewards.grant.mock.calls[0][1]).toBe(1000);
     expect(keys(d)).not.toContain('community.post_reward');
   });
 
@@ -104,7 +104,7 @@ describe('CommunityRewardService.rewardPost', () => {
 });
 
 describe('CommunityRewardService.rewardAnswer', () => {
-  it('mặc định 0 điểm (0,1 điểm không biểu diễn được) → không thưởng', async () => {
+  it('mặc định 0 điểm → không thưởng', async () => {
     const d = deps();
     await make(d).rewardAnswer('answerer', 'author', 'c1');
     expect(d.rewards.grant).not.toHaveBeenCalled();
@@ -151,11 +151,11 @@ describe('CommunityRewardService.rewardEventWinner', () => {
 });
 
 describe('CommunityRewardService.rewardBestAnswer', () => {
-  it('mặc định 1 điểm (community.best_answer_reward_points), reason khoá theo POST (không theo comment)', async () => {
+  it('mặc định 1.000 điểm (community.best_answer_reward_points), reason khoá theo POST (không theo comment)', async () => {
     const d = deps();
     await make(d).rewardBestAnswer('answerer', 'author', 'p1');
     // tham số cuối là tx — best-answer cũng đếm-rồi-cấp trong transaction như rewardPost/rewardAnswer.
-    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1', d.prisma, EXP);
+    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1000, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1', d.prisma, EXP);
     expect(keys(d)).not.toContain('community.best_answer_reward');
   });
 

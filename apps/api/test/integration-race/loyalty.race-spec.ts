@@ -14,7 +14,7 @@ describe('LoyaltyService race (real Postgres)', () => {
   let prisma: PrismaService;
   let loyalty: LoyaltyService;
 
-  const MEMBER_DAILY_CAP = 100;
+  const MEMBER_DAILY_CAP = 20_000;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -29,9 +29,9 @@ describe('LoyaltyService race (real Postgres)', () => {
     // Config PHẢI có trước lần get() đầu (SystemConfigService cache 60s).
     await setConfig(prisma, 'loyalty.pos_credit_enabled', true);
     await setConfig(prisma, 'loyalty.pos_member_daily_points_cap', MEMBER_DAILY_CAP);
-    await setConfig(prisma, 'loyalty.pos_staff_daily_points_cap', 3000);
+    await setConfig(prisma, 'loyalty.pos_staff_daily_points_cap', 3_000_000);
     await setConfig(prisma, 'loyalty.pos_max_order_total', 5_000_000);
-    await setConfig(prisma, 'loyalty.vnd_per_point', 10000);
+    await setConfig(prisma, 'loyalty.earn_pct', 2);
   });
 
   afterAll(async () => {
@@ -97,8 +97,8 @@ describe('LoyaltyService race (real Postgres)', () => {
   });
 
   it('(d) redeemReward: điểm đơn còn có thể bị trả hàng bị khoá (SQL thật) + 5 request song song không đụng phần khoá', async () => {
-    const reward = DEFAULT_REWARD_CATALOG.find((r) => r.id === 'reward-discount-50k')!; // 50 điểm
-    const user = await createUser(prisma, { pointsBalance: 150 });
+    const reward = DEFAULT_REWARD_CATALOG.find((r) => r.id === 'reward-discount-50k')!; // 50.000 điểm
+    const user = await createUser(prisma, { pointsBalance: 150_000 });
     const DAY = 864e5;
     const now = Date.now();
     const credit = async (
@@ -122,22 +122,22 @@ describe('LoyaltyService race (real Postgres)', () => {
       }
       return o;
     };
-    await credit('DELIVERED', 2, 60); // còn trong hạn đổi/trả 7 ngày → KHOÁ
-    await credit('DELIVERED', 30, 40); // hết hạn → dùng được
-    await credit('DELIVERED', 30, 30, { openReturn: true }); // hết hạn nhưng đang có yêu cầu đổi/trả → KHOÁ
-    await credit('RETURNED', 3, 20, { reversed: true }); // đã trả + đã trừ điểm → không khoá nữa
-    await credit('RETURNED', 3, 15); // đã trả, reverseOrderPoints CHƯA chạy → KHOÁ
+    await credit('DELIVERED', 2, 60_000); // còn trong hạn đổi/trả 7 ngày → KHOÁ
+    await credit('DELIVERED', 30, 40_000); // hết hạn → dùng được
+    await credit('DELIVERED', 30, 30_000, { openReturn: true }); // hết hạn nhưng đang có yêu cầu đổi/trả → KHOÁ
+    await credit('RETURNED', 3, 20_000, { reversed: true }); // đã trả + đã trừ điểm → không khoá nữa
+    await credit('RETURNED', 3, 15_000); // đã trả, reverseOrderPoints CHƯA chạy → KHOÁ
 
     const ov = await loyalty.getOverview(user.id);
-    expect(ov).toMatchObject({ pointsBalance: 150, lockedPoints: 105, lockedReturnPoints: 45, redeemablePoints: 45 });
+    expect(ov).toMatchObject({ pointsBalance: 150_000, lockedPoints: 105_000, lockedReturnPoints: 45_000, redeemablePoints: 45_000 });
     // Chỉ đơn trong hạn đổi/trả mới có mốc ngày: giao 2 ngày trước + 7 ngày.
     expect(Math.abs(new Date(ov.lockedUntil!).getTime() - (now + 5 * DAY))).toBeLessThan(5_000);
 
-    // Dùng được 45 < 50 → từ chối rõ ràng, không trừ gì.
-    await expect(loyalty.redeemReward(user.id, reward.id)).rejects.toThrow(/60 điểm từ đơn mới giao sẽ dùng được sau ngày/);
+    // Dùng được 45.000 < 50.000 → từ chối rõ ràng, không trừ gì.
+    await expect(loyalty.redeemReward(user.id, reward.id)).rejects.toThrow(/60[.,]?000 điểm từ đơn mới giao sẽ dùng được sau ngày/);
 
-    // Cộng thêm 60 điểm "cũ" (không khoá) → dùng được 105 → 5 request song song đổi quà 50: đúng 2 thành công.
-    await prisma.user.update({ where: { id: user.id }, data: { pointsBalance: { increment: 60 } } });
+    // Cộng thêm 60.000 điểm "cũ" (không khoá) → dùng được 105.000 → 5 request song song đổi quà 50.000: đúng 2 thành công.
+    await prisma.user.update({ where: { id: user.id }, data: { pointsBalance: { increment: 60_000 } } });
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => loyalty.redeemReward(user.id, reward.id)));
     const s = summarize(results);
     const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
@@ -148,15 +148,15 @@ describe('LoyaltyService race (real Postgres)', () => {
     expect(s.fulfilled).toHaveLength(2);
     expect(s.rejected).toHaveLength(3);
     for (const r of s.rejected) expect(r.reason).toBeInstanceOf(BadRequestException);
-    expect(after.pointsBalance).toBe(110); // 210 − 2×50; KHÔNG đụng 105 điểm đang khoá
-    expect(after.pointsBalance).toBeGreaterThanOrEqual(105);
+    expect(after.pointsBalance).toBe(110_000); // 210.000 − 2×50.000; KHÔNG đụng 105.000 điểm đang khoá
+    expect(after.pointsBalance).toBeGreaterThanOrEqual(105_000);
   });
 
   it('(c1) creditPosPoints: 5 concurrent credits with the same receiptId -> 1 pos_point_credits row, points once', async () => {
     const staff = await createUser(prisma, { role: 'STAFF' });
     const member = await createUser(prisma, { pointsBalance: 0 });
     const receiptId = `RC-SAME-${member.id}`;
-    const orderTotal = 300_000; // 30 điểm ở 10.000đ/điểm, hệ số 1
+    const orderTotal = 300_000; // 2% tiền hàng = 6.000 điểm, hệ số 1
 
     const results = await Promise.allSettled(
       Array.from({ length: 5 }, () =>
@@ -180,8 +180,8 @@ describe('LoyaltyService race (real Postgres)', () => {
 
     expect(credits).toHaveLength(1);
     expect(ledger).toHaveLength(1);
-    expect(credits[0]!.points).toBe(30);
-    expect(after.pointsBalance).toBe(30);
+    expect(credits[0]!.points).toBe(6_000);
+    expect(after.pointsBalance).toBe(6_000);
     // Idempotent replay: mọi request cùng hoá đơn đều thành công, chỉ 1 cái thật sự cộng.
     expect(s.fulfilled).toHaveLength(5);
     expect(s.fulfilled.filter((f) => !f.value.replayed)).toHaveLength(1);
@@ -190,7 +190,7 @@ describe('LoyaltyService race (real Postgres)', () => {
   it('(c2) creditPosPoints: concurrent credits with different receipts exceeding member daily cap -> total <= cap', async () => {
     const staff = await createUser(prisma, { role: 'STAFF' });
     const member = await createUser(prisma, { pointsBalance: 0 });
-    const orderTotal = 300_000; // 30 điểm/hoá đơn; 6 hoá đơn = 180 > cap 100 → tối đa 3 hoá đơn (90)
+    const orderTotal = 300_000; // 6.000 điểm/hoá đơn; 6 hoá đơn = 36.000 > cap 20.000 → tối đa 3 hoá đơn (18.000)
     const N = 6;
 
     const results = await Promise.allSettled(
@@ -216,7 +216,7 @@ describe('LoyaltyService race (real Postgres)', () => {
     console.log('[c2] fulfilled=%d rejected=%d credited=%d cap=%d errors=%j', s.fulfilled.length, s.rejected.length, total, MEMBER_DAILY_CAP, [...new Set(s.errors)]);
 
     expect(total).toBeLessThanOrEqual(MEMBER_DAILY_CAP);
-    expect(total).toBe(90); // cap chặn đúng ở biên: 3 × 30
+    expect(total).toBe(18_000); // cap chặn đúng ở biên: 3 × 6.000
     expect(agg._count).toBe(3);
     expect(s.fulfilled).toHaveLength(3);
     expect(s.rejected).toHaveLength(N - 3);

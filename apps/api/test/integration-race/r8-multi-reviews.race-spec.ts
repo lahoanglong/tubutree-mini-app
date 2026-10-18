@@ -141,8 +141,8 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     expect(rows).toHaveLength(1);
     expect(rows[0]!.orderId).toBe(orders[1]!.id);
     expect(txs).toHaveLength(1);
-    expect(balance).toBe(5);
-    expect(rows[0]!.pointsEarned).toBe(5);
+    expect(balance).toBe(5_000);
+    expect(rows[0]!.pointsEarned).toBe(5_000);
   });
 
   it('gửi đồng thời cho HAI đơn khác nhau của cùng sản phẩm → 2 đánh giá, điểm chỉ thưởng MỘT lần', async () => {
@@ -164,10 +164,10 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
       const { balance, txs, rows } = await ledger(u.id);
       expect(rows.map((r) => r.orderId).sort()).toEqual([orders[0]!.id, orders[1]!.id].sort());
       expect(rows.filter((r) => r.pointsEarned > 0)).toHaveLength(1);
-      expect(rows.reduce((s, r) => s + r.pointsEarned, 0)).toBe(15);
+      expect(rows.reduce((s, r) => s + r.pointsEarned, 0)).toBe(15_000);
       expect(txs).toHaveLength(1);
       expect(txs[0]!.refId).toBe(rows.find((r) => r.pointsEarned > 0)!.id);
-      expect(balance).toBe(15);
+      expect(balance).toBe(15_000);
       expect(await stats(p.id)).toEqual({ ratingAvg: 4, reviewCount: 2 });
     }
   });
@@ -190,7 +190,7 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     expect(rows).toHaveLength(4);
     expect(new Set(rows.map((r) => r.orderId)).size).toBe(4);
     expect(txs).toHaveLength(1);
-    expect(balance).toBe(5);
+    expect(balance).toBe(5_000);
     expect((await stats(p.id)).reviewCount).toBe(4);
   });
 
@@ -203,7 +203,7 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     expect(before.canReview && before.reason === null ? before.reviewableOrders.map((o) => o.code) : []).toEqual([orders[0]!.code, orders[1]!.code]);
 
     const first = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 5, comment: 'Lần 1', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'] });
-    expect(first).toMatchObject({ updated: false, pointsEarned: 10 });
+    expect(first).toMatchObject({ updated: false, pointsEarned: 10_000 });
 
     const mid = await reviews.canReview(u.id, p.slug);
     expect(mid).toMatchObject({ canReview: true, reason: null, rewardAvailable: false, purchaseCount: 2 });
@@ -220,8 +220,8 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     expect(after.myReviews.map((r) => r.id)).toEqual([second.id, first.id]);
 
     const { balance, txs } = await ledger(u.id);
-    expect(txs.map((t) => t.delta)).toEqual([10]);
-    expect(balance).toBe(10);
+    expect(txs.map((t) => t.delta)).toEqual([10_000]);
+    expect(balance).toBe(10_000);
   });
 
   it('danh sách công khai: mọi đánh giá đang hiện của khách (cả đơn cũ) đều hiện, mới nhất trước; số liệu khớp sản phẩm', async () => {
@@ -250,12 +250,12 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     const { u, orders } = await buyerWithOrders(v.id, 3);
     const first = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 5 });
     const second = await reviews.create(u.id, p.slug, { orderId: orders[1]!.id, rating: 4 });
-    expect([first.pointsEarned, second.pointsEarned]).toEqual([5, 0]);
+    expect([first.pointsEarned, second.pointsEarned]).toEqual([5_000, 0]);
 
     await reviews.remove(u.id, 'USER', second.id);
     let book = await ledger(u.id);
-    expect(book.txs.map((t) => t.delta)).toEqual([5]);
-    expect(book.balance).toBe(5);
+    expect(book.txs.map((t) => t.delta)).toEqual([5_000]);
+    expect(book.balance).toBe(5_000);
     expect(book.rows.map((r) => r.id)).toEqual([first.id]);
 
     // Đơn 2 mở lại để viết; còn giữ thưởng của đánh giá đầu nên vẫn 0 điểm.
@@ -264,15 +264,15 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
 
     await reviews.remove(u.id, 'USER', first.id);
     book = await ledger(u.id);
-    expect(book.txs.map((t) => t.delta)).toEqual([5, -5]);
+    expect(book.txs.map((t) => t.delta)).toEqual([5_000, -5_000]);
     expect(book.balance).toBe(0);
 
     // Thưởng đã thu hồi đủ: đánh giá mới (đơn 3) nhận lại đúng một lần thưởng; tổng sổ của cặp vẫn chỉ một phần thưởng.
     const third = await reviews.create(u.id, p.slug, { orderId: orders[2]!.id, rating: 5 });
-    expect(third.pointsEarned).toBe(5);
+    expect(third.pointsEarned).toBe(5_000);
     book = await ledger(u.id);
-    expect(book.txs.reduce((s, t) => s + t.delta, 0)).toBe(5);
-    expect(book.balance).toBe(5);
+    expect(book.txs.reduce((s, t) => s + t.delta, 0)).toBe(5_000);
+    expect(book.balance).toBe(5_000);
     expect(await stats(p.id)).toEqual({ ratingAvg: 4, reviewCount: 2 });
   });
 
@@ -280,25 +280,25 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     const { p, v } = await product();
     const { u, orders } = await buyerWithOrders(v.id, 3);
     const first = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 5 });
-    expect(first.pointsEarned).toBe(5);
+    expect(first.pointsEarned).toBe(5_000);
 
     await reviews.remove(u.id, 'USER', first.id);
     let book = await ledger(u.id);
-    expect(book.txs.map((t) => t.delta)).toEqual([5, -5]);
+    expect(book.txs.map((t) => t.delta)).toEqual([5_000, -5_000]);
     expect(book.balance).toBe(0);
 
     const second = await reviews.create(u.id, p.slug, { orderId: orders[1]!.id, rating: 4 });
-    expect(second).toMatchObject({ updated: false, pointsEarned: 5 });
+    expect(second).toMatchObject({ updated: false, pointsEarned: 5_000 });
     // Đã được thưởng lại một lần: đánh giá tiếp theo (kể cả viết lại cho đơn vừa xoá) không còn điểm.
     const third = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 3 });
     expect(third).toMatchObject({ updated: false, pointsEarned: 0 });
 
     book = await ledger(u.id);
-    expect(book.txs.map((t) => t.delta)).toEqual([5, -5, 5]);
-    expect(book.txs.reduce((s, t) => s + t.delta, 0)).toBe(5);
-    expect(book.balance).toBe(5);
+    expect(book.txs.map((t) => t.delta)).toEqual([5_000, -5_000, 5_000]);
+    expect(book.txs.reduce((s, t) => s + t.delta, 0)).toBe(5_000);
+    expect(book.balance).toBe(5_000);
     expect(book.rows.map((r) => [r.orderId, r.pointsEarned])).toEqual([
-      [orders[1]!.id, 5],
+      [orders[1]!.id, 5_000],
       [orders[0]!.id, 0],
     ]);
   });
@@ -310,7 +310,7 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     const { p, v } = await product();
     const { u, orders } = await buyerWithOrders(v.id, 2);
     const first = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 5 });
-    expect(first.pointsEarned).toBe(5);
+    expect(first.pointsEarned).toBe(5_000);
 
     const held = holdBeforeCommit(prisma);
     const heldReviews = new ReviewsService(held.prisma, moduleRef.get(AnalyticsEventsService), moduleRef.get(LoyaltyService));
@@ -324,11 +324,11 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     held.open();
     const [, second] = await Promise.all([removing, creating]);
 
-    expect(second).toMatchObject({ updated: false, pointsEarned: 5 });
+    expect(second).toMatchObject({ updated: false, pointsEarned: 5_000 });
     const { balance, txs, rows } = await ledger(u.id);
-    expect(txs.map((t) => t.delta)).toEqual([5, -5, 5]);
-    expect(balance).toBe(5);
-    expect(rows.map((r) => [r.id, r.pointsEarned])).toEqual([[second.id, 5]]);
+    expect(txs.map((t) => t.delta)).toEqual([5_000, -5_000, 5_000]);
+    expect(balance).toBe(5_000);
+    expect(rows.map((r) => [r.id, r.pointsEarned])).toEqual([[second.id, 5_000]]);
   });
 
   it('sửa theo từng dòng: gửi cho đơn đã có đánh giá chỉ sửa đúng đánh giá của đơn đó, không đụng đánh giá đơn kia', async () => {
@@ -338,7 +338,7 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     const second = await reviews.create(u.id, p.slug, { orderId: orders[1]!.id, rating: 4, comment: 'Hai' });
 
     const edited = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 1, comment: 'Một đã sửa' });
-    expect(edited).toMatchObject({ id: first.id, updated: true, pointsEarned: 5 });
+    expect(edited).toMatchObject({ id: first.id, updated: true, pointsEarned: 5_000 });
     expect(await prisma.review.findUniqueOrThrow({ where: { id: second.id } })).toMatchObject({ rating: 4, comment: 'Hai' });
     expect(await stats(p.id)).toEqual({ ratingAvg: 2.5, reviewCount: 2 });
     expect((await ledger(u.id)).txs).toHaveLength(1);

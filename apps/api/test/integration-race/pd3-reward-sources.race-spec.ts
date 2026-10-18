@@ -76,10 +76,10 @@ describe('PD-3 nguồn thưởng chuyển sang Điểm Xanh (real Postgres)', ()
 
     const list = await quests.listQuests(user.id);
     expect(list.quests.find((q) => q.code === 'publish')).toMatchObject({ done: true, claimed: true });
-    expect(list.totalEarnedPoints).toBe(1);
+    expect(list.totalEarnedPoints).toBe(1000);
 
     const res = await quests.claimQuest(user.id, 'publish');
-    expect(res).toMatchObject({ claimed: true, alreadyClaimed: true, rewardPoints: 1, pointsBalance: 0 });
+    expect(res).toMatchObject({ claimed: true, alreadyClaimed: true, rewardPoints: 1000, pointsBalance: 0 });
     expect(await standard(user.id)).toEqual({ balance: 0, ledger: 0, coins: 0 });
     expect(await prisma.pointsTransaction.count({ where: { userId: user.id } })).toBe(0);
   });
@@ -97,9 +97,9 @@ describe('PD-3 nguồn thưởng chuyển sang Điểm Xanh (real Postgres)', ()
       select: { delta: true, lot: true, expiresAt: true, reason: true },
     });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ delta: 1, lot: 'STANDARD', reason: 'STOREFRONT_QUEST:publish' });
+    expect(rows[0]).toMatchObject({ delta: 1000, lot: 'STANDARD', reason: 'STOREFRONT_QUEST:publish' });
     expect(rows[0]!.expiresAt).not.toBeNull();
-    expect(await standard(user.id)).toEqual({ balance: 1, ledger: 1, coins: 0 });
+    expect(await standard(user.id)).toEqual({ balance: 1000, ledger: 1000, coins: 0 });
     expect(await prisma.coinTransaction.count({ where: { userId: user.id } })).toBe(0);
   });
 

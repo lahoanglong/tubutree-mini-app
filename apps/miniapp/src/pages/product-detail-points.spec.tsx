@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   fetchProduct: vi.fn(),
   getCart: vi.fn(),
   auth: { status: 'idle' as string, user: null as { tierId?: string | null } | null },
-  config: { isLoaded: true, loyalty: { vndPerPoint: 10_000, vndPerPointRedeem: 1_000 } } as Record<string, unknown>,
+  config: { isLoaded: true, loyalty: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1 } } as Record<string, unknown>,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -71,18 +71,18 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     mocks.getCart.mockResolvedValue({ items: [], freeshipThreshold: 200_000, itemCount: 0 });
     mocks.auth.status = 'idle';
     mocks.auth.user = null;
-    mocks.config = { isLoaded: true, loyalty: { vndPerPoint: 10_000, vndPerPointRedeem: 1_000 } };
+    mocks.config = { isLoaded: true, loyalty: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1 } };
   });
 
-  it('khách chưa đăng nhập: số điểm và giá trị quy đổi theo mốc trong config công khai (250.000đ / 10.000đ = 25 điểm)', async () => {
+  it('khách chưa đăng nhập: số điểm và giá trị quy đổi theo tỉ lệ trong config công khai (250.000đ × 2% = 5.000 điểm)', async () => {
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 25 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
-  it('số theo mốc admin đặt, không theo số cứng: 5.000đ/điểm và 500đ/điểm', async () => {
-    mocks.config = { isLoaded: true, loyalty: { vndPerPoint: 5_000, vndPerPointRedeem: 500 } };
+  it('số theo tỉ lệ admin đặt, không theo số cứng: 1,5% và 0,5đ/điểm', async () => {
+    mocks.config = { isLoaded: true, loyalty: { earnPct: 1.5, vndPerPoint: 67, vndPerPointRedeem: 0.5 } };
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 50 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận tối đa 3.750 Điểm Xanh (≈1.875đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
   it('API cũ chưa trả mốc điểm: chỉ nói chung, không có con số', async () => {
@@ -102,14 +102,14 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(['loyalty'], { tier: { id: 'LOC_BIEC', name: 'Lộc Biếc', multiplier: 1.2, perks: null } });
     renderPdp(qc);
-    expect(await screen.findByText('Nhận tối đa 30 Điểm Xanh (≈30.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận tối đa 6.000 Điểm Xanh (≈6.000đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
   it('tài khoản chưa có hạng: hệ số 1 như server (getTierMultiplier null → 1)', async () => {
     mocks.auth.status = 'authenticated';
     mocks.auth.user = { tierId: null };
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 25 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
   // Overview trả hạng thấp nhất (hệ số 1.2) cho tài khoản chưa có hạng, nhưng server tích với hệ số 1.
@@ -119,7 +119,7 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(['loyalty'], { tier: { id: 'MAM_XANH', name: 'Mầm Xanh', multiplier: 1.2, perks: null } });
     renderPdp(qc);
-    expect(await screen.findByText('Nhận tối đa 25 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
   it('tài khoản chưa có hạng, API trả earnMultiplier 1 kèm hạng hiển thị hệ số 1.2: dùng 1', async () => {
@@ -128,7 +128,7 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(['loyalty'], { earnMultiplier: 1, tier: { id: 'MAM_XANH', name: 'Mầm Xanh', multiplier: 1.2, perks: null } });
     renderPdp(qc);
-    expect(await screen.findByText('Nhận tối đa 25 Điểm Xanh (≈25.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
   it('tài khoản có hạng: ưu tiên earnMultiplier server trả (1.5) hơn hệ số của hạng hiển thị', async () => {
@@ -137,7 +137,7 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(['loyalty'], { earnMultiplier: 1.5, tier: { id: 'LOC_BIEC', name: 'Lộc Biếc', multiplier: 1.2, perks: null } });
     renderPdp(qc);
-    expect(await screen.findByText('Nhận tối đa 37 Điểm Xanh (≈37.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận tối đa 7.500 Điểm Xanh (≈7.500đ) khi đơn giao thành công')).toBeInTheDocument();
   });
 
   it('đang kiểm tra phiên đăng nhập: chưa hứa số nào', async () => {

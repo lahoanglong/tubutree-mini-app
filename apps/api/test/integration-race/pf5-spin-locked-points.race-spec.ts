@@ -363,18 +363,18 @@ describe('PF-5a vòng quay không tiêu điểm đơn còn trong hạn đổi/tr
      * đơn khoá, và phần hụt rơi vào ORDER_REVERSED. Nếu sau này thu hồi đánh giá và thu hồi thưởng giới thiệu được chặn ở
      * max(0, số dư - lockedOrderPoints) thì hụt chuyển sang dòng của lô bị thu hồi và test này phải đổi theo.
      */
-    it('đơn giao +20 (khoá) + đánh giá video +15, quay tốn 10 (dùng được 15), xoá đánh giá thu hồi đủ 15, trả đơn: ORDER_REVERSED chỉ -10, số dư 0', async () => {
+    it('đơn giao +20 (khoá) + đánh giá video +15.000, quay tốn 10 (dùng được 15.000), xoá đánh giá thu hồi đủ 15.000, trả đơn: ORDER_REVERSED chỉ -10, số dư 0', async () => {
       const { user, order } = await holder({ lockedPts: 20, freePts: 0 });
       const product = await reviewableProduct(user.id);
       const review = await reviews.create(user.id, product.slug, { rating: 5, videoUrl: VIDEO });
-      expect(review.pointsEarned).toBe(15);
-      expect(await balance(user.id)).toBe(35);
+      expect(review.pointsEarned).toBe(15_000);
+      expect(await balance(user.id)).toBe(15_020);
 
       await game.spin(user.id);
-      expect(await balance(user.id)).toBe(25);
+      expect(await balance(user.id)).toBe(15_010);
 
       await reviews.remove(user.id, 'USER', review.id);
-      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-15]);
+      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-15_000]);
       expect(await balance(user.id)).toBe(10);
 
       await returnOrder(order.id);

@@ -47,6 +47,11 @@ running_image() {
 rollback_hint() {
   local svc="$1" prev="$2" id name
   read -r id name <<<"$prev"
+  if migration_applied "$POINTS_1D_MIGRATION"; then
+    log "KHÔNG quay lại image $svc cũ: migration $POINTS_1D_MIGRATION đã nhân 1.000 mọi số điểm, code cũ đọc điểm theo 1 điểm = 1.000đ nên sẽ trừ/đổi sai tiền."
+    log "Cách xử lý: sửa lỗi của bản mới rồi deploy lại, hoặc khôi phục backup chụp ngay trước deploy này (tools/backup/restore-db.sh, ops/backup-predeploy.sh) rồi mới chạy lại image cũ."
+    return 0
+  fi
   if [ -n "${id:-}" ] && [ -n "${name:-}" ]; then
     log "Quay lại image $svc trước đó (chỉ an toàn khi schema DB sau migrate vẫn tương thích với nó — xem runbook mục 7):"
     log "  docker tag $id $name && docker compose -f $COMPOSE_FILE up -d --no-build --no-deps $svc"
@@ -58,6 +63,9 @@ rollback_hint() {
 # Migration đổi chỉ mục duy nhất của bảng reviews: API cũ vẫn ghi đánh giá theo khoá cũ, nên không được áp khi API cũ còn
 # phục vụ (runbook mục 0.1). Bản không chứa migration này, hoặc DB đã áp xong nó, không bị chặn.
 GUARDED_MIGRATION="20261015150000_r8_multi_reviews_unique_per_order"
+# Migration đổi đơn vị Điểm Xanh (nhân 1.000 mọi số điểm): API cũ còn chạy thì cache cấu hình 60 giây của nó giữ tỉ giá cũ, khách
+# đổi điểm được giảm gấp 1.000 lần số điểm bị trừ, đơn tạo trong lúc migrate lưu đơn vị cũ, và khoá bảng có thể deadlock (P3009).
+POINTS_1D_MIGRATION="20261018210000_points_1d"
 
 api_running() {
   local id
@@ -66,13 +74,19 @@ api_running() {
 }
 
 # Đọc DB bằng biến môi trường của chính container postgres, nên không cần đọc .env. Không đọc được thì coi như CHƯA áp.
-guarded_migration_pending() {
-  [ -d "apps/api/prisma/migrations/$GUARDED_MIGRATION" ] || return 1
+migration_applied() {
   local applied
-  applied="$(printf '%s\n' "SELECT count(*) FROM _prisma_migrations WHERE migration_name = '$GUARDED_MIGRATION' AND finished_at IS NOT NULL AND rolled_back_at IS NULL" \
+  applied="$(printf '%s\n' "SELECT count(*) FROM _prisma_migrations WHERE migration_name = '$1' AND finished_at IS NOT NULL AND rolled_back_at IS NULL" \
     | dc exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' 2>/dev/null || true)"
-  [ "$(printf '%s' "$applied" | tr -d '[:space:]')" != 1 ]
+  [ "$(printf '%s' "$applied" | tr -d '[:space:]')" = 1 ]
 }
+
+migration_pending() {
+  [ -d "apps/api/prisma/migrations/$1" ] || return 1
+  ! migration_applied "$1"
+}
+
+guarded_migration_pending() { migration_pending "$GUARDED_MIGRATION"; }
 
 log "=== Deploy $(git rev-parse --short HEAD 2>/dev/null || echo '?') với $COMPOSE_FILE ==="
 PREV_API="$(running_image api)"
@@ -80,6 +94,12 @@ PREV_WEB="$(running_image web)"
 
 if api_running && guarded_migration_pending; then
   log "ERROR: bản này có migration $GUARDED_MIGRATION (đổi chỉ mục duy nhất của bảng reviews) chưa áp, mà API cũ đang chạy và vẫn ghi đánh giá theo khoá cũ — DỪNG, chưa build hay migrate gì. Làm tay theo docs/launch/deploy-rollback-runbook.md: dừng API cũ, backup, migrate, bật web rồi API mới."
+  exit 2
+fi
+
+if api_running && migration_pending "$POINTS_1D_MIGRATION"; then
+  log "ERROR: bản này có migration $POINTS_1D_MIGRATION (đổi 1 Điểm Xanh = 1.000đ thành 1đ, nhân 1.000 mọi số điểm) chưa áp, mà API cũ đang chạy — DỪNG, chưa build hay migrate gì."
+  log "Làm đúng thứ tự: 1) backup ngay trước (ops/backup-predeploy.sh), 2) dừng API: docker compose -f $COMPOSE_FILE stop api, 3) chạy lại deploy.sh này (build, migrate bằng image mới, bật API mới), 4) seed-reference nếu cần (nó từ chối chạy khi migration chưa xong). Không quay lại image cũ sau bước 3: hoàn tác = khôi phục backup. Chi tiết: docs/launch/deploy-rollback-runbook.md."
   exit 2
 fi
 

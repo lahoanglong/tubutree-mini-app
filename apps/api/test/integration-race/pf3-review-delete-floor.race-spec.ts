@@ -11,7 +11,7 @@ import { ReviewsService } from '../../src/modules/reviews/reviews.service';
 import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
 
 const DAY = 864e5;
-const REVIEW_POINTS = 5;
+const REVIEW_POINTS = 5_000;
 
 /**
  * PF-3 mục 2: xoá đánh giá đã thưởng mà khách đã tiêu hết điểm không được đẩy pointsBalance xuống dưới 0. ReviewsService.remove
@@ -114,7 +114,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
   }
 
   const VIDEO = 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4';
-  const VIDEO_POINTS = 15;
+  const VIDEO_POINTS = 15_000;
 
   /** Đơn COD đang xử lý dùng `points` Điểm Xanh, ghi sổ như CheckoutService (dòng ORDER_REDEEM + trừ số dư). */
   async function codOrderSpending(userId: string, points: number) {
@@ -161,26 +161,26 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
   it('đã tiêu một phần điểm đánh giá (còn 3/5) → chỉ thu hồi 3, số dư về 0 chứ không -2', async () => {
     const { user, product } = await player();
     const review = await reviews.create(user.id, product.slug, { rating: 5 });
-    await spend(user.id, 2);
-    expect(await balance(user.id)).toBe(3);
+    await spend(user.id, 2_000);
+    expect(await balance(user.id)).toBe(3_000);
 
     await reviews.remove(user.id, 'USER', review.id);
 
     expect(await balance(user.id)).toBe(0);
-    expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-3]);
+    expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-3_000]);
   });
 
   it('có lô cũ 30: tiêu 33 ăn lô cũ rồi 3 của lô đánh giá → thu hồi 2 (phần còn lại), số dư 0 chứ không -3', async () => {
     const { user, product } = await player();
-    await legacyUnlimited(user.id, 30);
+    await legacyUnlimited(user.id, 30_000);
     const review = await reviews.create(user.id, product.slug, { rating: 5 });
-    await spend(user.id, 33);
-    expect(await balance(user.id)).toBe(2);
+    await spend(user.id, 33_000);
+    expect(await balance(user.id)).toBe(2_000);
 
     await reviews.remove(user.id, 'USER', review.id);
 
     expect(await balance(user.id)).toBe(0);
-    expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-2]);
+    expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-2_000]);
   });
 
   describe('thưởng đánh giá chỉ nhận một lần cho mỗi (khách, sản phẩm) dù xoá rồi tạo lại (Q-30)', () => {
@@ -218,9 +218,9 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
     it('chỉ thu hồi được một phần (đã tiêu 2/5, thu hồi 3) → phần giữ lại là thưởng đã nhận, tạo lại không thưởng thêm', async () => {
       const { user, product } = await player();
       const first = await reviews.create(user.id, product.slug, { rating: 5 });
-      await spend(user.id, 2);
+      await spend(user.id, 2_000);
       await reviews.remove(user.id, 'USER', first.id);
-      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-3]);
+      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-3_000]);
 
       const again = await reviews.create(user.id, product.slug, { rating: 4 });
 
@@ -230,7 +230,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
 
     it('điểm thưởng đã hết hạn và cron đã trừ rồi mới xoá → tạo lại cũng không thưởng lại (thưởng lần đầu đã nhận)', async () => {
       const { user, product } = await player();
-      await legacyUnlimited(user.id, 30);
+      await legacyUnlimited(user.id, 30_000);
       const first = await reviews.create(user.id, product.slug, { rating: 5 });
       await ageLedger(user.id, 13);
       await expiry.expirePoints();
@@ -239,7 +239,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
       const again = await reviews.create(user.id, product.slug, { rating: 4 });
 
       expect(again.pointsEarned).toBe(0);
-      expect(await balance(user.id)).toBe(30);
+      expect(await balance(user.id)).toBe(30_000);
     });
 
     it('thu hồi đủ rồi tạo lại vẫn được thưởng (đúng một lần thưởng đang giữ): tạo → xoá → tạo lại → xoá về 0', async () => {
@@ -284,9 +284,9 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
     const { user, product } = await player();
     const review = await reviews.create(user.id, product.slug, { rating: 5 });
     await backdateReviewReward(user.id, 2);
-    await gameLot(user.id, 40, new Date(Date.now() - 1 * DAY));
-    await spend(user.id, 40); // FIFO ăn lô đánh giá 5 rồi 35 của lô game: số dư 5 nằm ở lô game
-    expect(await balance(user.id)).toBe(5);
+    await gameLot(user.id, 40_000, new Date(Date.now() - 1 * DAY));
+    await spend(user.id, 40_000); // FIFO ăn lô đánh giá 5.000 rồi 35.000 của lô game: số dư 5.000 nằm ở lô game
+    expect(await balance(user.id)).toBe(5_000);
 
     await reviews.remove(user.id, 'USER', review.id);
 
@@ -297,9 +297,9 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
 
   it('thu hồi một phần rồi qua hạn: cron không trừ gì thêm, số dư không âm', async () => {
     const { user, product } = await player();
-    await legacyUnlimited(user.id, 30);
+    await legacyUnlimited(user.id, 30_000);
     const review = await reviews.create(user.id, product.slug, { rating: 5 });
-    await spend(user.id, 33);
+    await spend(user.id, 33_000);
     await reviews.remove(user.id, 'USER', review.id);
 
     await ageLedger(user.id, 13);
@@ -312,22 +312,22 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
 
   it('điểm đánh giá còn nguyên: thu hồi đủ 5, chống tạo → xoá → tạo lại để farm điểm vẫn giữ', async () => {
     const { user, product } = await player();
-    await legacyUnlimited(user.id, 30);
+    await legacyUnlimited(user.id, 30_000);
     const review = await reviews.create(user.id, product.slug, { rating: 5 });
-    expect(await balance(user.id)).toBe(35);
+    expect(await balance(user.id)).toBe(35_000);
 
     await reviews.remove(user.id, 'USER', review.id);
 
-    expect(await balance(user.id)).toBe(30);
+    expect(await balance(user.id)).toBe(30_000);
     expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
     const again = await reviews.create(user.id, product.slug, { rating: 4 });
     await reviews.remove(user.id, 'USER', again.id);
-    expect(await balance(user.id)).toBe(30);
+    expect(await balance(user.id)).toBe(30_000);
   });
 
   it('điểm đã quá hạn và cron đã trừ, khách còn điểm khác: không thu hồi lần hai (bất biến PE-3), dòng REVIEW_DELETE không có', async () => {
     const { user, product } = await player();
-    await legacyUnlimited(user.id, 30);
+    await legacyUnlimited(user.id, 30_000);
     const review = await reviews.create(user.id, product.slug, { rating: 5 });
     await ageLedger(user.id, 13);
     await expiry.expirePoints();
@@ -336,6 +336,6 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
     await reviews.remove(user.id, 'ADMIN', review.id);
 
     expect(await reviewDeleteRows(user.id)).toHaveLength(0);
-    expect(await balance(user.id)).toBe(30);
+    expect(await balance(user.id)).toBe(30_000);
   });
 });

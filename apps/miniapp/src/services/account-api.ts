@@ -29,6 +29,8 @@ export interface LoyaltyOverview {
    * nextTier.pointsToGo tính theo số này. Optional: API cũ chưa trả.
    */
   tierPoints?: number;
+  /** Tiền mua 12 tháng (đơn đã giao, trừ phần hoàn): thước đo thật của hạng. Optional: API cũ chưa trả. */
+  spent12m?: number;
   /**
    * Điểm CHƯA đổi quà được vì đơn còn có thể bị trả hàng (đơn mới giao còn trong hạn đổi/trả, đơn
    * đang có yêu cầu đổi/trả). Optional: API cũ chưa trả.
@@ -41,7 +43,15 @@ export interface LoyaltyOverview {
   /** Điểm dùng được để đổi quà ngay = số dư − lockedPoints (≥ 0). */
   redeemablePoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
-  nextTier: { id: string; name: string; minPoints: number; minSpending?: number | null; pointsToGo: number } | null;
+  nextTier: {
+    id: string;
+    name: string;
+    minPoints: number;
+    minSpending?: number | null;
+    pointsToGo: number;
+    /** Số tiền mua còn thiếu để lên hạng này; null khi hạng không có mốc chi tiêu. Optional: API cũ chưa trả. */
+    spendingToGo?: number | null;
+  } | null;
   tiers: { id: string; name: string; minPoints: number; minSpending?: number | null; multiplier: number }[];
   /** Quy tắc tích/đổi điểm từ cấu hình để giải thích trên màn Điểm Xanh. Optional: API cũ chưa trả. */
   rates?: LoyaltyRates;
@@ -321,14 +331,20 @@ export function checkInView(s: CheckInStatusResponse): { canCheckIn: boolean; bu
 }
 
 /**
- * % tiến độ từ SÀN điểm hạng hiện tại → ngưỡng hạng kế, theo điểm XÉT HẠNG (tierPoints) — cùng
- * con số backend dùng cho pointsToGo. Tính theo số dư (có điểm danh/POS) sẽ vẽ thanh gần đầy trong
- * khi backend không bao giờ cho lên hạng.
+ * % tiến độ lên hạng kế. Hạng có mốc chi tiêu thì đo theo TIỀN MUA 12 tháng (spent12m, cùng số backend dùng để xét hạng
+ * và tính spendingToGo); hạng không có mốc chi tiêu hoặc API cũ chưa trả spent12m thì đo theo điểm XÉT HẠNG (tierPoints).
+ * Đo theo số dư (có điểm danh/POS) sẽ vẽ thanh gần đầy trong khi backend không bao giờ cho lên hạng.
  */
 export function tierProgressPercent(ov: LoyaltyOverview): number {
   const next = ov.nextTier;
   if (!next) return 100;
-  const curMin = ov.tiers.find((t) => t.id === ov.tier?.id)?.minPoints ?? 0;
+  const curTier = ov.tiers.find((t) => t.id === ov.tier?.id);
+  if (next.minSpending != null && ov.spent12m !== undefined) {
+    const curSpend = curTier?.minSpending ?? 0;
+    if (next.minSpending <= curSpend) return 100;
+    return Math.min(100, Math.max(0, Math.round(((ov.spent12m - curSpend) / (next.minSpending - curSpend)) * 100)));
+  }
+  const curMin = curTier?.minPoints ?? 0;
   if (next.minPoints <= curMin) return 100;
   const pts = ov.tierPoints ?? ov.pointsBalance;
   return Math.min(100, Math.max(0, Math.round(((pts - curMin) / (next.minPoints - curMin)) * 100)));

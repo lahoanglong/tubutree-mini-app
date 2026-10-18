@@ -38,7 +38,7 @@ Bấm "Tạo voucher". Khách nhập mã ở ô "Nhập mã giảm giá" khi tha
 
 **Nhiệm vụ Vườn Xanh.** **Khuyến mãi › Nhiệm vụ & quà đổi điểm.** Sửa tiêu đề, mô tả, "Điểm thưởng" (0 đến mức tối đa), bấm "Lưu". Điểm mới chỉ áp cho lượt nhận sau khi lưu. Danh mục quà đổi điểm cố định: muốn thêm quà hoặc đổi giá điểm, nhờ kỹ thuật.
 
-**Sự kiện cộng đồng.** Màn "Kiểm duyệt cộng đồng" trên Mini App, tab "Sự kiện": nhập tên, mô tả, ảnh bìa, "Thưởng Điểm Xanh" (1 điểm = 1.000đ, tối đa 1.000 điểm), ngày, bấm "Tạo sự kiện". Hết hạn: "Chọn người thắng", "Đóng".
+**Sự kiện cộng đồng.** Màn "Kiểm duyệt cộng đồng" trên Mini App, tab "Sự kiện": nhập tên, mô tả, ảnh bìa, "Thưởng Điểm Xanh" (1 điểm = 1đ, tối đa 1.000.000 điểm), ngày, bấm "Tạo sự kiện". Hết hạn: "Chọn người thắng", "Đóng".
 
 **Báo cáo vi phạm cộng đồng.** Cùng màn kiểm duyệt, tab "Báo cáo": đọc nội dung bị báo, bấm "Ẩn nội dung" nếu vi phạm, rồi "Đã xử lý".
 

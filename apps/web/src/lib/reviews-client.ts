@@ -114,9 +114,9 @@ export const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản
 export function rewardHint(o: { isEdit: boolean; rewardAvailable: boolean; hasImages: boolean; hasVideo: boolean }): string {
   if (o.isEdit) return EDIT_HINT;
   if (!o.rewardAvailable) return REWARD_ALREADY_GIVEN;
-  if (o.hasVideo) return `${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`;
-  if (o.hasImages) return `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh!`;
-  return `${FIRST_REVIEW_ONLY}: thêm ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá được khi đã mua và nhận hàng.`;
+  if (o.hasVideo) return `${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15.000 Điểm Xanh!`;
+  if (o.hasImages) return `${FIRST_REVIEW_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!`;
+  return `${FIRST_REVIEW_ONLY}: thêm ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
 }
 
 /** Câu nói rõ đánh giá đang soạn thuộc lần mua nào; null khi chỉ mua một lần hoặc chưa biết đơn. */
