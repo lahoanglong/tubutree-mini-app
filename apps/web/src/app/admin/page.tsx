@@ -498,7 +498,7 @@ export default function AdminPage() {
           {active === 'productCategories' && <ProductCategoriesTab />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
-          {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
+          {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}

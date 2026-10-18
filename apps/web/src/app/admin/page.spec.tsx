@@ -2141,6 +2141,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Việc cần xử lý',
       'Báo cáo',
       'Đơn hàng',
+      'Tích điểm đơn sàn',
       'Đơn đối tác & đối soát',
       'Hoàn tiền khách',
       'Hoàn tiền sàn ngoài',
@@ -2633,6 +2634,36 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     const kho = await mount();
     expect(navItems(kho.container)).not.toContain('Đơn ngoài app');
     expect(kho.container.textContent).not.toContain('Nguồn đã thấy');
+  });
+
+  it('mục Tích điểm đơn sàn: ADMIN, CSKH và KE_TOAN (chỉ xem) mở được; KHO thì không; khoá hộp việc externalPoints mở đúng tab', async () => {
+    const api = mockFetch({
+      '/admin/external-claims/attempts?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+      '/admin/external-claims?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    window.history.replaceState(null, '', '/admin?tab=externalClaims');
+    const admin = await mount();
+    expect(navItems(admin.container)).toContain('Tích điểm đơn sàn');
+    expect(admin.container.querySelector('h2')!.textContent).toBe('Tích điểm đơn sàn');
+    admin.unmount();
+    mounted = [];
+
+    for (const perms of [['CSKH'], ['KE_TOAN']]) {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: perms };
+      window.history.replaceState(null, '', '/admin?tab=externalClaims');
+      const r = await mount();
+      expect(navItems(r.container)).toContain('Tích điểm đơn sàn');
+      expect(r.container.querySelector('h2')!.textContent).toBe('Tích điểm đơn sàn');
+      r.unmount();
+      mounted = [];
+    }
+
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=externalClaims');
+    const kho = await mount();
+    expect(navItems(kho.container)).not.toContain('Tích điểm đơn sàn');
   });
 
   it('CSKH có mục Cộng đồng và vào được từ link ?tab=community; KHO thì không (link rơi về mục đầu)', async () => {

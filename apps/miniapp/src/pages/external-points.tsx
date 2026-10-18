@@ -215,8 +215,8 @@ function ClaimForm() {
           </Text>
         )}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <Button fullWidth loading={submit.isPending} onPress={send}>{t.submit}</Button>
-          <Button variant="secondary" icon={ScanLine} onPress={scan}>{t.scan}</Button>
+          <Button fullWidth loading={submit.isPending} onPress={send} style={{ flex: 1, minWidth: 0 }}>{t.submit}</Button>
+          <Button variant="secondary" icon={ScanLine} onPress={scan} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t.scan}</Button>
         </div>
       </Card>
       {result && <ResultCard result={result} />}

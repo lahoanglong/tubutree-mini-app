@@ -5,6 +5,8 @@ import type { GomdonAlertView } from './recycling';
 import type {
   AdminExternalAttemptListResponse,
   AdminExternalClaimListResponse,
+  AdminAttachAttemptResponse,
+  AdminExternalClaimDetail,
   AdminExternalClaimRow,
   AdminReverseClaimResponse,
   ExternalClaimState,
@@ -2026,6 +2028,9 @@ export const listExternalOrderSources = () =>
 
 // ── Tích điểm đơn sàn bằng mã vận đơn (B6 bước 2) ──
 export type {
+  AdminAttachAttemptResponse,
+  AdminExternalClaimDetail,
+  AdminExternalClaimEvent,
   AdminExternalClaimRow,
   AdminExternalAttemptRow,
   AdminReverseClaimResponse,
@@ -2038,7 +2043,7 @@ export const listExternalClaims = (f: { state?: ExternalClaimState; q?: string }
   if (f.q) qs.set('q', f.q);
   return apiFetch<AdminExternalClaimListResponse>(`/admin/external-claims?${qs.toString()}`);
 };
-export const getExternalClaim = (id: string) => apiFetch<AdminExternalClaimRow>(`/admin/external-claims/${encodeURIComponent(id)}`);
+export const getExternalClaim = (id: string) => apiFetch<AdminExternalClaimDetail>(`/admin/external-claims/${encodeURIComponent(id)}`);
 export const listExternalClaimAttempts = (page = 1, limit = 20) =>
   apiFetch<AdminExternalAttemptListResponse>(`/admin/external-claims/attempts?page=${page}&limit=${limit}`);
 export const approveExternalClaim = (id: string) =>
@@ -2050,7 +2055,12 @@ export const voidExternalClaim = (id: string, reason: string, reopen: boolean) =
   });
 export const reverseExternalClaim = (id: string, reason: string) =>
   apiFetch<AdminReverseClaimResponse>(`/admin/external-claims/${encodeURIComponent(id)}/reverse`, { method: 'POST', body: { reason } });
-export const attachExternalClaimAttempt = (id: string, pancakeOrderId: string) =>
-  apiFetch(`/admin/external-claims/attempts/${encodeURIComponent(id)}/attach`, { method: 'POST', body: { pancakeOrderId } });
+export const attachExternalClaimAttempt = (id: string, pancakeOrderId: string, note?: string) =>
+  apiFetch<AdminAttachAttemptResponse>(`/admin/external-claims/attempts/${encodeURIComponent(id)}/attach`, {
+    method: 'POST',
+    body: { pancakeOrderId, note },
+  });
+export const keepExternalClaimPoints = (id: string, note: string) =>
+  apiFetch<{ id: string }>(`/admin/external-claims/${encodeURIComponent(id)}/keep-points`, { method: 'POST', body: { note } });
 export const rejectExternalClaimAttempt = (id: string, note?: string) =>
   apiFetch(`/admin/external-claims/attempts/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { note } });

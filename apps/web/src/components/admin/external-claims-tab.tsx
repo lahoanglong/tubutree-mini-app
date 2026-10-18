@@ -6,6 +6,7 @@ import {
   approveExternalClaim,
   attachExternalClaimAttempt,
   getExternalClaim,
+  keepExternalClaimPoints,
   listExternalClaimAttempts,
   listExternalClaims,
   nextPageParam,
@@ -17,11 +18,16 @@ import {
   type ExternalClaimState,
 } from '@/lib/admin-client';
 import {
+  EVENT_ACTION_LABEL,
+  adminClaimErrorText,
+  creditedOnClosedOrder,
+  isIntroducer,
   CLAIM_SOURCE_LABEL,
   CLAIM_STATE_LABEL,
   CLAIM_STATE_ORDER,
   CLAIM_STATE_TONE,
   claimActions,
+  type ClaimActor,
   groupThousands,
 } from '@/lib/external-claims';
 import { formatDateTime } from '@/lib/format-date';
@@ -30,19 +36,13 @@ import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
 
-interface Who {
-  isAdmin: boolean;
-  /** Nhóm CSKH (hoặc ADMIN): duyệt, huỷ, xử lý lần gửi mã. KE_TOAN không có quyền này. */
-  canAct: boolean;
-}
-
-const errorText = (e: unknown) => (e instanceof Error ? e.message : 'Thao tác thất bại.');
+type Who = ClaimActor;
 
 /**
  * Điểm Xanh cho đơn sàn khách tự nhập mã vận đơn. CSKH duyệt claim cần kiểm, huỷ (có lý do, có thể mở lại mã) và xử lý lần gửi
  * mã chưa ghép được; chỉ ADMIN đảo điểm đã cộng. KE_TOAN chỉ xem. SĐT luôn che.
  */
-export function ExternalClaimsTab({ isAdmin, canAct }: Who) {
+export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
   const [state, setState] = useState<ExternalClaimState | ''>('REVIEW');
   const [typed, setTyped] = useState('');
   const q = useDebounced(typed.trim(), 300);
@@ -54,7 +54,7 @@ export function ExternalClaimsTab({ isAdmin, canAct }: Who) {
   });
   const rows = claims.data?.pages.flatMap((p) => p.data) ?? [];
   const total = claims.data?.pages[0]?.meta.total;
-  const who = { isAdmin, canAct };
+  const who = { isAdmin, canAct, meId };
 
   return (
     <div className="space-y-4">
@@ -64,6 +64,7 @@ export function ExternalClaimsTab({ isAdmin, canAct }: Who) {
       </div>
       <Notice>
         Khách nhập mã vận đơn đơn sàn trong Mini App để tích Điểm Xanh. Điểm chỉ được cộng khi đơn giao thành công và qua thời gian đối soát.
+        Không ai xử lý được yêu cầu của chính mình, và người gắn đơn hoặc đưa yêu cầu vào chờ duyệt không tự duyệt được.
         {!canAct && ' Bạn chỉ có quyền xem.'}
       </Notice>
       <div className="flex flex-wrap items-center gap-2">
@@ -99,7 +100,7 @@ export function ExternalClaimsTab({ isAdmin, canAct }: Who) {
           </button>
         </div>
       )}
-      <AttemptsSection canAct={canAct || isAdmin} />
+      <AttemptsSection who={who} />
     </div>
   );
 }
@@ -112,7 +113,8 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
   const [done, setDone] = useState<string | null>(null);
   const detail = useQuery({ queryKey: ['admin-external-claim', c.id], queryFn: () => getExternalClaim(c.id), enabled: open });
   const row = detail.data ?? c;
-  const acts = claimActions(c.state, who);
+  const acts = claimActions(c, who);
+  const blockedApprove = acts.approve && isIntroducer(detail.data?.events ?? [], who.meId);
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['admin-external-claims'] });
@@ -127,7 +129,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
       refresh();
     },
     onError: (e) => {
-      setErr(errorText(e));
+      setErr(adminClaimErrorText(e));
       refresh();
     },
   });
@@ -163,7 +165,17 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
     if (reason) mut.mutate(async () => `Đã thu hồi ${groupThousands((await reverseExternalClaim(c.id, reason)).reversedPoints)} điểm.`);
   };
 
-  const anyAction = acts.approve || acts.void || acts.voidAndReopen || acts.reverse;
+  const keep = async () => {
+    const note = await ask({
+      title: 'Giữ điểm, gỡ cờ',
+      message: `Đơn của mã ${c.maskedCode} bị hoàn một phần. Giữ nguyên Điểm Xanh đã cộng và gỡ cờ "Cần xử lý" (không thu hồi một phần). Ghi lại để đối soát.`,
+      confirmLabel: 'Giữ điểm',
+      input: { label: 'Ghi chú (vì sao giữ điểm)', maxLength: 300, required: true },
+    });
+    if (note) mut.mutate(async () => (await keepExternalClaimPoints(c.id, note), 'Đã giữ điểm và gỡ cờ.'));
+  };
+
+  const anyAction = acts.approve || acts.void || acts.voidAndReopen || acts.reverse || acts.keepPoints;
   return (
     <li data-external-claim={c.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -171,6 +183,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
         <span className="flex shrink-0 flex-wrap gap-1">
           <ToneBadge tone="info">{c.channel ? `${CLAIM_SOURCE_LABEL[c.source]} · ${c.channel}` : CLAIM_SOURCE_LABEL[c.source]}</ToneBadge>
           <ToneBadge tone={CLAIM_STATE_TONE[c.state]}>{CLAIM_STATE_LABEL[c.state]}</ToneBadge>
+          {creditedOnClosedOrder(c) && <ToneBadge tone="danger">Đã cộng, đơn đã đóng: cần đảo điểm</ToneBadge>}
         </span>
       </div>
       <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs text-stone-600 sm:grid-cols-2">
@@ -180,7 +193,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
         <div>Điểm: {c.points > 0 ? `${groupThousands(c.points)} điểm` : 'chưa tính được'}</div>
         <div>Trạng thái đơn: {c.orderStatus}</div>
         <div>Gửi lúc: {formatDateTime(c.createdAt)}</div>
-        {c.reviewReason && <div className="sm:col-span-2">Lý do cần duyệt: <span className="font-medium text-warning-fg">{c.reviewReason}</span></div>}
+        {c.reviewReason && <div className="sm:col-span-2">{c.state === 'CREDITED' ? 'Cờ cần xử lý' : 'Lý do cần duyệt'}: <span className="font-medium text-warning-fg">{c.reviewReason}</span></div>}
         {c.voidReason && <div className="sm:col-span-2">Lý do huỷ: <span className="font-medium text-danger-fg">{c.voidReason}</span></div>}
       </dl>
       {open && (
@@ -192,6 +205,22 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
           <div>Giao lúc: {row.deliveredAt ? formatDateTime(row.deliveredAt) : '—'}</div>
           <div>Cộng lúc: {row.creditedAt ? formatDateTime(row.creditedAt) : '—'}</div>
           <div>Người xử lý: {row.decidedById ?? '—'}</div>
+          {detail.data && (
+            <div className="sm:col-span-2" data-claim-events>
+              <div className="font-medium">Lịch sử thao tác</div>
+              {detail.data.events.length === 0 && <div className="text-stone-500">Chưa có thao tác nào.</div>}
+              <ol className="mt-0.5 space-y-0.5">
+                {detail.data.events.map((e) => (
+                  <li key={e.id}>
+                    {formatDateTime(e.createdAt)} · {EVENT_ACTION_LABEL[e.action] ?? e.action}
+                    {e.fromState && e.toState && e.fromState !== e.toState ? ` (${CLAIM_STATE_LABEL[e.fromState as ExternalClaimState] ?? e.fromState} sang ${CLAIM_STATE_LABEL[e.toState as ExternalClaimState] ?? e.toState})` : ''}
+                    {' · '}{e.actorId ? `người xử lý ${e.actorId}` : 'hệ thống'}
+                    {e.note ? ` · ${e.note}` : ''}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </dl>
       )}
       {done && <p role="status" className="mt-2 text-xs text-success-fg">{done}</p>}
@@ -202,9 +231,20 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
         </button>
         {anyAction && (
           <>
-            {acts.approve && <button type="button" disabled={mut.isPending} onClick={() => void approve()} className={BTN_XS_PRIMARY}>Duyệt</button>}
+            {acts.approve && (
+              <button
+                type="button"
+                disabled={mut.isPending || blockedApprove}
+                title={blockedApprove ? 'Bạn đã gắn đơn hoặc đưa yêu cầu này vào chờ duyệt nên không tự duyệt được.' : undefined}
+                onClick={() => void approve()}
+                className={BTN_XS_PRIMARY}
+              >
+                Duyệt
+              </button>
+            )}
             {acts.void && <button type="button" disabled={mut.isPending} onClick={() => void voidIt(false)} className={BTN_XS_DANGER}>Huỷ</button>}
             {acts.voidAndReopen && <button type="button" disabled={mut.isPending} onClick={() => void voidIt(true)} className={BTN_XS_DANGER}>Huỷ và mở lại mã</button>}
+            {acts.keepPoints && <button type="button" disabled={mut.isPending} onClick={() => void keep()} className={BTN_XS_SECONDARY}>Giữ điểm, gỡ cờ</button>}
             {acts.reverse && <button type="button" disabled={mut.isPending} onClick={() => void reverse()} className={BTN_XS_DANGER}>Đảo điểm</button>}
           </>
         )}
@@ -214,7 +254,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
   );
 }
 
-function AttemptsSection({ canAct }: { canAct: boolean }) {
+function AttemptsSection({ who }: { who: Who }) {
   const attempts = useInfiniteQuery({
     queryKey: ['admin-external-claim-attempts'],
     queryFn: ({ pageParam }) => listExternalClaimAttempts(pageParam),
@@ -232,7 +272,7 @@ function AttemptsSection({ canAct }: { canAct: boolean }) {
       {attempts.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Không có lần gửi mã nào cần xử lý.</p>}
       <ul className="space-y-2">
         {rows.map((a) => (
-          <AttemptRow key={a.id} attempt={a} canAct={canAct} />
+          <AttemptRow key={a.id} attempt={a} who={who} />
         ))}
       </ul>
       {attempts.hasNextPage && (
@@ -246,28 +286,47 @@ function AttemptsSection({ canAct }: { canAct: boolean }) {
   );
 }
 
-function AttemptRow({ attempt: a, canAct }: { attempt: AdminExternalAttemptRow; canAct: boolean }) {
+function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who: Who }) {
   const qc = useQueryClient();
   const { ask, dialog } = useConfirm();
   const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const own = !!who.meId && a.userId === who.meId;
+  const canAct = (who.isAdmin || who.canAct) && !own;
+  // Đã thấy đơn mà vẫn nằm đây nghĩa là nguồn đơn chưa xác định: chỉ ADMIN gắn được.
+  const canAttach = canAct && (who.isAdmin || a.externalOrderId === null);
   const mut = useMutation({
-    mutationFn: (run: () => Promise<unknown>) => run(),
-    onSuccess: () => setErr(null),
+    mutationFn: (run: () => Promise<string | null>) => run(),
+    onSuccess: (msg) => {
+      setErr(null);
+      setDone(msg);
+    },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['admin-external-claim-attempts'] });
       void qc.invalidateQueries({ queryKey: ['admin-external-claims'] });
       void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
     },
-    onError: (e) => setErr(errorText(e)),
+    onError: (e) => setErr(adminClaimErrorText(e)),
   });
   const attach = async () => {
     const id = await ask({
       title: 'Gắn lần gửi mã vào đơn',
-      message: `Gắn mã ${a.maskedCode} của khách vào một đơn Pancake. Nhân viên đã xác minh nên claim vào thẳng trạng thái chờ cộng điểm, bỏ qua trần ngày, trần tháng và tuổi đơn.`,
-      confirmLabel: 'Gắn đơn',
+      message: `Gắn mã ${a.maskedCode} của khách vào một đơn Pancake. Đơn khớp mã thì yêu cầu vào thẳng chờ cộng điểm, bỏ qua trần ngày, trần tháng và tuổi đơn. Nếu mã không khớp đơn hoặc nguồn đơn chưa xác định thì chỉ ADMIN gắn được, cần ghi chú, và yêu cầu vào chờ duyệt để người khác duyệt.`,
+      confirmLabel: 'Tiếp tục',
       input: { label: 'Mã đơn Pancake', maxLength: 100, required: true },
     });
-    if (id) mut.mutate(() => attachExternalClaimAttempt(a.id, id));
+    if (!id) return;
+    const note = await ask({
+      title: 'Ghi chú khi gắn đơn',
+      message: `Gắn mã ${a.maskedCode} vào đơn Pancake #${id}. Ghi chú bắt buộc nếu mã không khớp đơn hoặc nguồn đơn chưa xác định; nếu mã khớp thì có thể để trống.`,
+      confirmLabel: 'Gắn đơn',
+      input: { label: 'Ghi chú (lý do gắn)', maxLength: 300 },
+    });
+    if (note === null) return;
+    mut.mutate(async () => {
+      const r = await attachExternalClaimAttempt(a.id, id, note || undefined);
+      return r.state === 'REVIEW' ? 'Đã gắn đơn, yêu cầu đang chờ người khác duyệt.' : 'Đã gắn đơn, điểm đang chờ cộng.';
+    });
   };
   const reject = async () => {
     const note = await ask({
@@ -277,7 +336,7 @@ function AttemptRow({ attempt: a, canAct }: { attempt: AdminExternalAttemptRow; 
       tone: 'danger',
       input: { label: 'Ghi chú (tuỳ chọn)', maxLength: 300 },
     });
-    if (note !== null) mut.mutate(() => rejectExternalClaimAttempt(a.id, note || undefined));
+    if (note !== null) mut.mutate(async () => (await rejectExternalClaimAttempt(a.id, note || undefined), 'Đã từ chối lần gửi mã.'));
   };
   return (
     <li data-external-attempt={a.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
@@ -289,10 +348,16 @@ function AttemptRow({ attempt: a, canAct }: { attempt: AdminExternalAttemptRow; 
         Khách: {a.userName ?? '—'} · {a.userPhoneMasked ?? 'không có SĐT'} · gửi lúc {formatDateTime(a.createdAt)}
       </div>
       {a.note && <div className="mt-0.5 text-xs text-stone-600">Ghi chú: {a.note}</div>}
+      {done && <p role="status" className="mt-1 text-xs text-success-fg">{done}</p>}
       {err && <p role="alert" className="mt-1 text-xs text-danger-fg">{err}</p>}
+      {own && <p className="mt-1 text-xs text-stone-500">Đây là lần gửi mã của chính bạn, bạn không tự xử lý được.</p>}
       {canAct && (
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" disabled={mut.isPending} onClick={() => void attach()} className={BTN_XS_PRIMARY}>Gắn đơn</button>
+          {canAttach ? (
+            <button type="button" disabled={mut.isPending} onClick={() => void attach()} className={BTN_XS_PRIMARY}>Gắn đơn</button>
+          ) : (
+            <span className="self-center text-xs text-stone-500">Nguồn đơn chưa xác định: chỉ ADMIN gắn được.</span>
+          )}
           <button type="button" disabled={mut.isPending} onClick={() => void reject()} className={BTN_XS_DANGER}>Từ chối</button>
         </div>
       )}

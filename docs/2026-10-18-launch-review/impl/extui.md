@@ -25,10 +25,17 @@ Chỗ đặt:
 - vitest miniapp: `pages/external-points.spec.tsx`, `components/loyalty/points-boost-strip.spec.tsx`, thêm ca vào `profile-hub.spec.tsx` và `loyalty-copy.spec.ts`.
 - Playwright (`apps/e2e/tests/external-points.miniapp.spec.ts`, mock ở `tests/support/external-points-mocks.ts`): gửi mã thành công, lỗi ALREADY_CLAIMED, cờ tắt. Chạy bằng `pnpm test:miniapp` (mock toàn bộ API, không cần DB).
 
-## Tab admin (NHÁP, chưa xong)
+## Tab admin "Tích điểm đơn sàn"
 
-Đã có bản nháp (`components/admin/external-claims-tab.tsx`, `lib/external-claims.ts`, hàm trong `lib/admin-client.ts`, menu "Tích điểm đơn sàn" trong `page.tsx`, khoá `externalPoints` ở ops-inbox, spec đếm menu 37 sang 38) theo API hiện tại. Chưa có test vitest cho tab. Chờ commit mới của `lr2/extclaim` (attach thêm `note` và chỉ ADMIN khi mã không khớp, không tự thao tác claim của mình, "giữ điểm, gỡ cờ", audit, mã lỗi mới) rồi gộp (merge) và hoàn thiện.
+Đã gộp `lr2/extclaim` (ac4b0a9b) vào nhánh bằng merge. Menu "Tích điểm đơn sàn" (nhóm Đơn hàng & giao vận, tổng menu 38), khoá hộp việc `externalPoints` mở thẳng tab này. Quyền: ADMIN và CSKH thao tác, KE_TOAN chỉ xem, KHO không thấy.
 
-## Chưa chụp ảnh
+- Danh sách lọc theo trạng thái và tìm kiếm; "Chi tiết" tải `AdminExternalClaimDetail` và hiện lịch sử thao tác (`events`).
+- Nút: Duyệt (xác nhận), Huỷ và Huỷ và mở lại mã (bắt buộc lý do), Đảo điểm (chỉ ADMIN, bắt buộc lý do, báo số điểm thực thu hồi), Giữ điểm gỡ cờ (chỉ ADMIN, chỉ khi claim đã cộng đang có cờ, bắt buộc note). Claim đã cộng mà đơn đã đóng có nhãn "cần đảo điểm".
+- Lần gửi mã chưa ghép được: Gắn đơn (hỏi mã đơn Pancake rồi ghi chú) và Từ chối. Kết quả REVIEW báo "đang chờ người khác duyệt".
+- Ẩn trước khi gọi API: mọi nút trên claim và lần gửi mã của chính mình (SELF_ACTION); nút Gắn đơn với CSKH khi lần gửi mã đã thấy đơn nhưng nguồn lạ (chỉ ADMIN); nút Duyệt bị vô hiệu khi lịch sử cho thấy chính bạn đã gắn đơn hoặc đưa claim vào chờ duyệt (SAME_INTRODUCER, chỉ biết sau khi mở Chi tiết).
+- Không biết trước (mã không khớp đơn khi gắn, thiếu note, claim không còn cờ): hiện câu tiếng Việt theo `code` (`adminClaimErrorText`), mã lạ thì nguyên văn message API.
+- Test: `components/admin/external-claims-tab.spec.tsx`, `lib/external-claims.spec.ts`, ca mới ở `app/admin/page.spec.tsx`.
 
-Chưa chạy bộ chụp UI.
+## Ảnh chụp
+
+`extui-img/extui-scan.png` (màn quét mã) và `extui-img/extui-home.png` (dải ở trang chủ; các thẻ "Chưa mock" trong ảnh là do mock e2e). Chưa chụp trang sản phẩm và tab admin (cần mock sản phẩm / chạy Next).
