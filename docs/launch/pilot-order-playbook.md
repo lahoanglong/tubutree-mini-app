@@ -684,8 +684,8 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 - **Ai**: Người thử. **Ở đâu**: Mini App, Quà (`/rewards`), Quà của tôi (`/rewards/mine`).
 - **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Đổi quà TREE: cây được trồng trong Vườn Xanh.
 - **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần; quà TREE xuất hiện ở Vườn Xanh.
-- **Bằng chứng**: Phụ lục P12 và `points_transactions` của người thử.
-- **Hoàn tác**: huỷ quà vật lý với hoàn điểm (`refundPoints`) theo checklist mục 7.
+- **Bằng chứng**: Phụ lục P7 (`points_transactions` của người thử: dòng điểm trừ cho từng quà).
+- **Hoàn tác**: không hoàn tác được voucher và quà TREE: voucher thành coupon ngay, quà TREE đi qua Vườn Xanh, nên không bao giờ ở trạng thái chờ nhận. Điểm đã trừ là chi phí thử, ghi vào cột "Sau" của bảng B.5. Muốn thử huỷ có hoàn điểm thì đổi thêm một quà loại "Gói hạt giống" hoặc "Quà tặng" (hiện ở trạng thái "Chờ nhận"), rồi huỷ ở Quản trị, Khách hàng, Đổi rác, Quà với `refundPoints` (checklist mục 7).
 
 `[ ] Đạt  [ ] Không đạt`
 
@@ -834,7 +834,7 @@ Không bỏ sót: để lại cấu hình thử là rủi ro thật.
 - [ ] Gian hàng đối tác thử: tạm nghỉ hoặc huỷ xuất bản nếu không phải đối tác thật.
 - [ ] Đánh giá thử: giữ hoặc ẩn ở Quản trị, Đánh giá.
 - [ ] Mã đơn thử đã ghi đủ ở B.7 để loại khỏi báo cáo doanh số/chuyển đổi (hệ thống không có cờ "đơn thử").
-- [ ] Số dư Ví Tubu, Điểm Xanh, ngân hàng đối chiếu với bảng B.5 (cột "Sau"). Chênh lệch phải giải thích được bằng chính các đơn thử.
+- [ ] Số dư Ví Tubu, Điểm Xanh, ngân hàng đối chiếu với bảng B.5 (cột "Sau"). Chênh lệch phải giải thích được bằng chính các đơn thử và các quà đã đổi ở 7.4 (voucher và quà TREE không hoàn lại điểm).
 
 ## 11. Bảng kết quả (chủ shop điền)
 
