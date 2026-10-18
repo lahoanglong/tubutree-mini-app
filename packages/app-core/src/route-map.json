@@ -8,7 +8,7 @@
       { "miniapp": "/group-buy", "web": "/mua-chung", "private": false },
       { "miniapp": "/group-buy/:id", "web": "/mua-chung/:id", "private": false },
       { "miniapp": "/brand/:slug", "web": "/brand/:slug", "private": false },
-      { "miniapp": "/brand-story", "web": "/cau-chuyen", "private": false, "pending": true }
+      { "miniapp": "/brand-story", "web": "/cau-chuyen", "private": false }
     ]},
     { "lane": "order", "items": [
       { "miniapp": "/cart", "web": "/gio-hang", "private": true },

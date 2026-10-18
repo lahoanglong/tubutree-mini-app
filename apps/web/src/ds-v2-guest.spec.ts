@@ -83,6 +83,9 @@ const SHOP: string[] = [
   'app/mua-chung/[id]/page.tsx',
   'app/mua-chung/group-buy-view.tsx',
   'app/brand/[slug]/brand-actions.tsx',
+  'app/cau-chuyen/page.tsx',
+  'app/cau-chuyen/brand-story-view.tsx',
+  'app/cau-chuyen/brand-map.tsx',
 ];
 const ORDER: string[] = [];
 const ACCOUNT: string[] = [];
