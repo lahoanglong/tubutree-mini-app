@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   cancelOrder: vi.fn(),
   fetchMyRefunds: vi.fn(),
   fetchRefundBank: vi.fn(),
+  getWasteRequestByOrder: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -37,6 +38,10 @@ vi.mock('../services/shop-api', () => ({
   addToCart: vi.fn(),
   repurchaseOrder: vi.fn(),
 }));
+vi.mock('../services/waste-api', async (orig) => ({
+  ...(await orig<object>()),
+  getWasteRequestByOrder: mocks.getWasteRequestByOrder,
+}));
 vi.mock('../services/zmp-bridge', () => ({
   hasOA: false,
   openOAChat: vi.fn(),
@@ -56,6 +61,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import OrderDetailPage from './order-detail';
 import { STATUS_COLOR } from '../utils/order-status';
+import { makeRequestDetail } from '../services/waste-test-fixtures';
 
 const ORDER = {
   id: 'o1',
@@ -604,5 +610,44 @@ describe('OrderDetailPage — đơn gian hàng tự giao và đơn cùng lần �
     await screen.findByText(/Xà bông thảo mộc/);
     expect(screen.queryByText(/Giao bởi/)).toBeNull();
     expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();
+  });
+});
+
+describe('OrderDetailPage — dòng yêu cầu thu rác (§12.2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchOrder.mockResolvedValue(ORDER);
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+  it('đơn không thu kèm → không gọi /waste/requests/by-order, không có dòng', async () => {
+    renderPage();
+    await screen.findByText('TT001');
+    expect(mocks.getWasteRequestByOrder).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Yêu cầu thu rác/)).toBeNull();
+  });
+  it('đơn thu kèm → dòng "Yêu cầu thu rác TR-…" dẫn tới trang theo dõi', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, hasRecyclingPickup: true, recyclingNote: 'TR-PICK1: 12 thùng' });
+    mocks.getWasteRequestByOrder.mockResolvedValue(makeRequestDetail({ id: 'req-p', code: 'TR-PICK1', method: 'PICKUP', orderCode: 'TT001', orderId: 'o1' }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Yêu cầu thu rác TR-PICK1/ }));
+    expect(mocks.getWasteRequestByOrder).toHaveBeenCalledWith('o1');
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/r/req-p');
+  });
+  it('404 (đơn cũ trước đổi rác) → không có dòng, không báo lỗi', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, hasRecyclingPickup: true });
+    mocks.getWasteRequestByOrder.mockRejectedValue(new AxiosError('nf', 'ERR_BAD_REQUEST', undefined, undefined, { status: 404 } as AxiosResponse));
+    renderPage();
+    await screen.findByText('TT001');
+    await waitFor(() => expect(mocks.getWasteRequestByOrder).toHaveBeenCalled());
+    expect(screen.queryByText(/Yêu cầu thu rác/)).toBeNull();
+  });
+  it('không còn khối thu gom cũ; mã vận đơn Gomdon vẫn hiện như mọi đơn', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, hasRecyclingPickup: true, gomdonStatus: '3', recyclingNote: 'x', shippingCode: 'BE123456', shippingPartner: 'BestExpress' });
+    mocks.getWasteRequestByOrder.mockResolvedValue(makeRequestDetail());
+    const { container } = renderPage();
+    await screen.findByText('TT001');
+    expect(container.querySelector('#order-recycling')).toBeNull();
+    expect(container.textContent).not.toMatch(/tài trợ 100% phí thu gom|Vật dụng gửi|tái chế/);
+    expect(screen.getByText('BE123456')).toBeInTheDocument();
   });
 });
