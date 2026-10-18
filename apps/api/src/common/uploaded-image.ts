@@ -55,6 +55,27 @@ export function isUploadedImage(value: unknown, options: UploadedImageOptions = 
   return isUploadedMediaUrl(value);
 }
 
+const MAX_STOREFRONT_IMAGE_URL_LENGTH = 2_048;
+
+/**
+ * Ảnh đại diện/ảnh bìa gian hàng: chuỗi rỗng (xoá ảnh), ảnh raster base64, hoặc URL https không kèm user:pass. Nhận mọi host https vì
+ * cổng /merchant cho dán link ảnh; web chỉ tải ảnh về dựng thẻ chia sẻ khi host nằm trong danh sách cho phép (web/lib/og-image-fetch.ts),
+ * nên địa chỉ nội bộ (http://api:3001, 169.254.169.254) bị chặn ngay lúc lưu và lúc tải.
+ */
+export function isStorefrontImageValue(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (value.trim() === '') return true;
+  if (value.startsWith('data:')) return isUploadedImage(value);
+  if (value.length > MAX_STOREFRONT_IMAGE_URL_LENGTH) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return url.protocol === 'https:' && !url.username && !url.password;
+}
+
 /** Ảnh người dùng tự tải lên (đánh giá, bài cộng đồng, minh chứng đổi/trả): chỉ host upload tin cậy hoặc ảnh raster base64. */
 export function IsUploadedImage(options: UploadedImageOptions = {}, validationOptions?: ValidationOptions) {
   const types = options.allowGif === false ? 'png/jpeg/webp' : 'png/jpeg/webp/gif';

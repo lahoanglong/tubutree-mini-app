@@ -1,8 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { StorefrontService } from './storefront.service';
 import { StorefrontQuestService } from './storefront-quest.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
@@ -11,7 +14,7 @@ import { OptionalNotNull } from '../../common/decorators/optional-not-null.decor
 // nên trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn (body limit là 10MB).
 const IMAGE_MAX = 1_500_000;
 
-class UpdateStorefrontDto {
+export class UpdateStorefrontDto {
   @OptionalNotNull()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
@@ -95,8 +98,34 @@ export class StorefrontController {
   @Get('me/quests') listQuests(@CurrentUser('sub') uid: string) { return this.quests.listQuests(uid); }
   @Post('me/quests/:code/claim') claimQuest(@CurrentUser('sub') uid: string, @Param('code') code: string) { return this.quests.claimQuest(uid, code); }
 
-  @Public() @Get('public/:slug') publicView(@Param('slug') slug: string) { return this.svc.getPublicBySlug(slug); }
-  @Public() @Get('by-host') byHost(@Query('host') host: string) { return this.svc.getPublicByHost(host); }
+  // Không đọc người gọi nên cache chung được; `publicView` là thứ web SSR/ISR và miniapp gọi ở mọi lượt mở trang gian hàng.
+  @Public() @PublicCache('CATALOG') @Get('public/:slug') publicView(@Param('slug') slug: string) { return this.svc.getPublicBySlug(slug); }
+  @Public() @PublicCache('CATALOG') @Get('by-host') byHost(@Query('host') host: string) { return this.svc.getPublicByHost(host); }
+
+  /**
+   * Ảnh base64 của gian hàng (đại diện, bìa): JSON công khai trả đường dẫn này thay vì nhúng nguyên văn. Cache chỉ ở trình duyệt
+   * (`private`) để gian hàng bị gỡ không còn nằm ở CDN dùng chung: vĩnh viễn khi mã `v` khớp nội dung ảnh hiện tại, 5 phút khi
+   * `v` sai/thiếu. helmet đặt Cross-Origin-Resource-Policy: same-origin mặc định; web và miniapp khác origin nạp ảnh bằng thẻ
+   * img nên route này phải mở cross-origin. Một trang gian hàng tải ảnh bằng thẻ img không token (đếm theo IP) nên nâng hạn mức
+   * riêng cho route này.
+   */
+  @Throttle({ default: { limit: 1200, ttl: 60_000 } })
+  @Public()
+  @Get('image/:id/:kind')
+  async image(
+    @Param('id') id: string,
+    @Param('kind') kind: string,
+    @Query('v') version: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { mime, data, versionOk } = await this.svc.getPublicImage(id, kind, version);
+    res.set({
+      'Cache-Control': versionOk ? 'private, max-age=31536000, immutable' : 'private, max-age=300',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(data, { type: mime });
+  }
   // Danh sách nhẹ cho web sitemap.ts — KHÔNG dùng path param ':slug' nên không đụng route
   // 'public/:slug' phía trên (2 literal segment khác nhau, Express không mơ hồ).
   @Public() @Get('public-list') publicList() { return this.svc.getPublicList(); }

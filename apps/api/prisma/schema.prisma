@@ -656,6 +656,15 @@ model Storefront {
   ordersPausedAt      DateTime?
   isPublished         Boolean                  @default(false)
   publishedAt         DateTime?
+  /// Admin duyệt gian hàng CTV (tick xanh, nhãn "CTV tuyển chọn"). NULL = chưa duyệt. Gian hàng đối tác và nhãn hàng luôn tính là đã duyệt
+  /// (không đọc cột này): đối tác đã qua bước duyệt đại lý, nhãn hàng do admin tạo.
+  approvedAt          DateTime?
+  approvedById        String?
+  /// Admin gỡ đăng vì vi phạm: chủ không đăng lại được cho tới khi admin đăng lại. NULL = không bị gỡ. Giữ `publishedAt` nguyên để
+  /// "Đăng lại" khôi phục đúng trạng thái trước khi gỡ.
+  takenDownAt         DateTime?
+  takenDownReason     String?
+  takenDownById       String?
   collections         StorefrontCollection[]
   products            Product[]                @relation("StorefrontProducts")
   fulfilledOrders     Order[]                  @relation("OrderFulfiller")

@@ -186,6 +186,15 @@ export async function getBrands(): Promise<BrandCount[]> {
   return fetchList<BrandCount>('/brands', 600, (json) => json as BrandCount[]);
 }
 
+/**
+ * Ảnh do chính API phục vụ (ảnh gian hàng base64) về JSON dưới dạng đường dẫn tương đối API. Ghép với gốc API CÔNG KHAI cho
+ * thẻ img và thẻ chia sẻ (không dùng API_BASE_URL: giá trị đó có thể là địa chỉ nội bộ giữa các container mà trình duyệt không tới được).
+ */
+const PUBLIC_API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
+export function publicMediaUrl<T extends string | null | undefined>(src: T): T | string {
+  return typeof src === 'string' && src.startsWith('/') && !src.startsWith('//') ? `${PUBLIC_API_BASE}${src}` : src;
+}
+
 export interface CategoryItem {
   id: string;
   name: string;
@@ -199,7 +208,9 @@ export async function getCategories(): Promise<CategoryItem[]> {
 }
 
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
-  return fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
+  const sf = await fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
+  if (!sf) return sf;
+  return { ...sf, ...(sf.avatarUrl !== undefined && { avatarUrl: publicMediaUrl(sf.avatarUrl) }), ...(sf.coverUrl !== undefined && { coverUrl: publicMediaUrl(sf.coverUrl) }) };
 }
 
 /** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Lỗi API: xem fetchList. */
@@ -245,6 +256,10 @@ export interface StorefrontDetail {
   customDomain?: string | null;
   type?: string | null;
   isPartner?: boolean;
+  /** Admin đã duyệt gian hàng (tick xanh, "CTV tuyển chọn"). API cũ chưa trả thì coi như chưa duyệt. */
+  approved?: boolean;
+  /** Cờ link `<tên>.tubutree.com`: tắt (hoặc API cũ chưa trả) thì không hiện URL subdomain. */
+  subdomainEnabled?: boolean;
   title: string;
   headerNote?: string | null;
   avatarUrl?: string | null;

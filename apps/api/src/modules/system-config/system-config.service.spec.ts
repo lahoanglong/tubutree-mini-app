@@ -312,6 +312,9 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     ],
     // Vai trò hưởng hoa hồng CTV: rỗng là không ai hưởng, sai tên vai trò là âm thầm về mặc định — chặn ngay lúc ghi.
     ['affiliate.commission_eligible_roles', ['AFFILIATE', 'DEALER'], [[], 'AFFILIATE', ['CTV'], ['AFFILIATE', 1], { AFFILIATE: true }]],
+    // Cờ gian hàng: chuỗi "false" hay số 0 mà lọt vào thì đọc ra tắt âm thầm, nên chỉ nhận boolean ngay lúc ghi.
+    ['storefront.require_approval', true, ['true', 'false', 1, 0, null, {}]],
+    ['storefront.subdomain_enabled', false, ['true', 'false', 1, 0, null, []]],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
     const ok = mk(fine);
     await ok.svc.set(key, fine as never, 'admin1');

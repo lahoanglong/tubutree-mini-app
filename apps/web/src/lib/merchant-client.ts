@@ -13,6 +13,8 @@ export interface MerchantStore {
   slug: string;
   subdomain?: string | null;
   customDomain?: string | null;
+  /** Cờ `storefront.subdomain_enabled`: tắt thì không hiện, không nhận và không quảng bá link subdomain; thiếu = coi như bật (API cũ). */
+  subdomainEnabled?: boolean;
   title: string;
   headerNote?: string | null;
   avatarUrl?: string | null;

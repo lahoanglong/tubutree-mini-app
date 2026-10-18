@@ -104,6 +104,7 @@ import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
+import { StorefrontsTab } from '@/components/admin/storefronts-tab';
 import { MerchantFulfilmentTab } from '@/components/admin/merchant-fulfilment-tab';
 import { NotificationTemplatesTab } from '@/components/admin/notification-templates-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
@@ -184,6 +185,7 @@ type Tab =
   | 'quickReplies'
   | 'notificationTemplates'
   | 'merchantProducts'
+  | 'storefronts'
   | 'merchantFulfilment'
   | 'cashback'
   | 'posCredits'
@@ -230,6 +232,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
       { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+      { k: 'storefronts', label: 'Gian hàng' },
       { k: 'brands', label: 'Nhãn hàng' },
     ],
   },
@@ -519,6 +522,7 @@ export default function AdminPage() {
           {active === 'attendance' && <AttendanceTab />}
           {active === 'coupons' && <CouponsTab />}
           {active === 'brands' && <BrandsTab />}
+          {active === 'storefronts' && <StorefrontsTab />}
           {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
           {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} isAdmin={isAdmin} />}
           {active === 'flashSales' && <FlashSalesTab />}

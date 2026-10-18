@@ -138,6 +138,8 @@ const APPROVED_LOADED_KEYS = [
     'shipping.eta_max_days',
     'shipping.eta_min_days',
     'storefront.identifier_cooldown_days',
+    'storefront.require_approval',
+    'storefront.subdomain_enabled',
     'subscribe.discount_pct',
     'subscribe.stock_retry_days',
     'support.email',

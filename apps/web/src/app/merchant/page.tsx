@@ -293,7 +293,7 @@ export default function MerchantPage() {
               </span>
             )}
           </div>
-          {store?.subdomain && !restricted && (
+          {store?.subdomain && store.subdomainEnabled !== false && !restricted && (
             <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-stone-500">
               <span>Đường dẫn gian hàng riêng:</span>
               <a
@@ -311,7 +311,7 @@ export default function MerchantPage() {
         {store && !restricted && (
           <div className="flex items-center gap-2">
             <Link
-              href={`/s/${store.subdomain || store.slug}`}
+              href={`/s/${store.subdomainEnabled !== false && store.subdomain ? store.subdomain : store.slug}`}
               target="_blank"
               className={`inline-flex items-center gap-1.5 rounded-control border border-stone-450 bg-stone-0 px-4 py-2 text-xs font-semibold text-stone-700 transition hover:border-forest-600 hover:bg-forest-50 hover:text-forest-800 ${TOUCH_H}`}
             >
@@ -478,6 +478,7 @@ function StoreSettingsTab({
   const [title, setTitle] = useState(store.title ?? '');
   const [headerNote, setHeaderNote] = useState(store.headerNote ?? '');
   const [subdomain, setSubdomain] = useState(store.subdomain ?? '');
+  const subdomainOn = store.subdomainEnabled !== false;
   const [themeColor, setThemeColor] = useState(store.themeColor ?? DEFAULT_THEME_COLOR);
   const [coverUrl, setCoverUrl] = useState(store.coverUrl ?? '');
   const [avatarUrl, setAvatarUrl] = useState(store.avatarUrl ?? '');
@@ -498,11 +499,13 @@ function StoreSettingsTab({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
+    const typedSubdomain = subdomain.trim().toLowerCase();
     mut.mutate({
       title: title.trim(),
-      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống là không đổi.
+      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống hay giữ nguyên là không đổi, vì API kiểm
+      // từ khoá và trùng tên mỗi khi nhận subdomain.
       headerNote: headerNote.trim(),
-      subdomain: subdomain.trim() || undefined,
+      subdomain: subdomainOn && typedSubdomain && typedSubdomain !== (store.subdomain ?? '') ? typedSubdomain : undefined,
       themeColor,
       coverUrl: coverUrl.trim(),
       avatarUrl: avatarUrl.trim(),
@@ -526,21 +529,23 @@ function StoreSettingsTab({
           />
         </div>
 
-        <div>
-          <label htmlFor="merchant-store-subdomain" className="block text-xs font-medium text-stone-700">Subdomain riêng biệt</label>
-          <div className="mt-1 flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-50 px-3 py-2 text-sm focus-within:border-forest-600 focus-within:bg-stone-0 sm:min-h-[36px]">
-            <span className="text-stone-500">https://</span>
-            <input
-              id="merchant-store-subdomain"
-              value={subdomain}
-              onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
-              placeholder="ten-thuong-hieu"
-              className="min-w-0 flex-1 bg-transparent px-1 font-semibold text-forest-700"
-            />
-            <span className="text-stone-500">.tubutree.com</span>
+        {subdomainOn && (
+          <div>
+            <label htmlFor="merchant-store-subdomain" className="block text-xs font-medium text-stone-700">Subdomain riêng biệt</label>
+            <div className="mt-1 flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-50 px-3 py-2 text-sm focus-within:border-forest-600 focus-within:bg-stone-0 sm:min-h-[36px]">
+              <span className="text-stone-500">https://</span>
+              <input
+                id="merchant-store-subdomain"
+                value={subdomain}
+                onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
+                placeholder="ten-thuong-hieu"
+                className="min-w-0 flex-1 bg-transparent px-1 font-semibold text-forest-700"
+              />
+              <span className="text-stone-500">.tubutree.com</span>
+            </div>
+            <p className="mt-1 text-xs text-stone-500">Chỉ dùng chữ thường a-z, số 0-9 và dấu gạch ngang (độ dài 3-30 ký tự).</p>
           </div>
-          <p className="mt-1 text-xs text-stone-500">Chỉ dùng chữ thường a-z, số 0-9 và dấu gạch ngang (độ dài 3-30 ký tự).</p>
-        </div>
+        )}
 
         <div>
           <span id="merchant-store-theme-color" className="block text-xs font-medium text-stone-700">Màu chủ đạo giao diện (Theme Color)</span>
@@ -669,7 +674,7 @@ function StoreSettingsTab({
                 </div>
                 <div className="min-w-0 flex-1 pt-7">
                   <p className="truncate text-xs font-bold text-stone-900">{title || 'Tên gian hàng'}</p>
-                  <p className="truncate text-[10px] text-stone-500">{subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com'}</p>
+                  <p className="truncate text-[10px] text-stone-500">{subdomainOn ? (subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com') : `/s/${store.slug}`}</p>
                 </div>
               </div>
 

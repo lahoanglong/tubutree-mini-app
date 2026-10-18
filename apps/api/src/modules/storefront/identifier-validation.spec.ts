@@ -79,3 +79,39 @@ describe('RESERVED_STOREFRONT_IDENTIFIERS', () => {
     }
   });
 });
+
+describe('từ dành riêng cho subdomain/slug (D3-02)', () => {
+  it.each(['cskh', 'hotro', 'khuyenmai', 'zalo', 'hello', 'support', 'official', 'facebook', 'shopee', 'lazada', 'tiktok', 'chodeli'])(
+    '"%s" giống tên kênh hỗ trợ/nền tảng, khách dễ nhầm là Tubu Tree → bị chặn',
+    (word) => {
+      expect(RESERVED_STOREFRONT_IDENTIFIERS.has(word)).toBe(true);
+      expect(() => normalizeSubdomain(word)).toThrow(BadRequestException);
+    },
+  );
+
+  it('chặn kể cả khi gõ HOA hoặc thừa khoảng trắng', () => {
+    expect(() => normalizeSubdomain('  CSKH ')).toThrow(BadRequestException);
+  });
+});
+
+describe('assertIdentifierAvailable — tên nhãn đang có', () => {
+  const noStorefront = { findFirst: jest.fn().mockResolvedValue(null) };
+
+  it('trùng slug hoặc tên của một nhãn hàng → chặn (gian hàng CTV không được mạo danh nhãn)', async () => {
+    const findFirst = jest.fn().mockResolvedValue({ id: 'b1' });
+    const prisma = { storefront: noStorefront, brand: { findFirst } };
+    await expect(assertIdentifierAvailable(prisma as never, 'lamy', 's1')).rejects.toThrow('nhãn hàng');
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [{ slug: 'lamy' }, { name: { equals: 'lamy', mode: 'insensitive' } }],
+        NOT: { storefront: { id: 's1' } },
+      },
+      select: { id: true },
+    });
+  });
+
+  it('nhãn hàng không trùng → qua; nhãn gắn với CHÍNH gian hàng này được loại khỏi phép kiểm (NOT storefront.id)', async () => {
+    const prisma = { storefront: noStorefront, brand: { findFirst: jest.fn().mockResolvedValue(null) } };
+    await expect(assertIdentifierAvailable(prisma as never, 'lamy', 's1')).resolves.toBeUndefined();
+  });
+});

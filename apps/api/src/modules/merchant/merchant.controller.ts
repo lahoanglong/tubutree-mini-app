@@ -204,17 +204,17 @@ export class MerchantController {
   async getStore(@CurrentUser('sub') userId: string, @CurrentUser('role') role: string) {
     const store = role === 'CUSTOMER' ? await this.merchant.getStoreOfPayoutOwner(userId) : await this.merchant.getOrCreateStore(userId);
     // Cổng dùng để biết gian hàng đã tắt cờ còn phiếu đối soát để xem (không phải thử gọi /merchant/settlement rồi nhận 403).
-    return { ...store, hasPayouts: await this.fulfilment.storeHasPayouts(store.id) };
+    return { ...(await this.merchant.presentStore(store)), hasPayouts: await this.fulfilment.storeHasPayouts(store.id) };
   }
 
   @Put('store')
-  updateStore(@CurrentUser('sub') userId: string, @Body() dto: UpdateMerchantStoreDto) {
-    return this.merchant.updateStore(userId, dto);
+  async updateStore(@CurrentUser('sub') userId: string, @Body() dto: UpdateMerchantStoreDto) {
+    return this.merchant.presentStore(await this.merchant.updateStore(userId, dto));
   }
 
   @Post('store/publish')
-  publishStore(@CurrentUser('sub') userId: string, @Body() dto: PublishMerchantStoreDto) {
-    return this.merchant.publishStore(userId, dto.isPublished);
+  async publishStore(@CurrentUser('sub') userId: string, @Body() dto: PublishMerchantStoreDto) {
+    return this.merchant.presentStore(await this.merchant.publishStore(userId, dto.isPublished));
   }
 
   @Post('store/pause')
