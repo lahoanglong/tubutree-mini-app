@@ -1191,10 +1191,14 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
 
     it('chưa bấm "Đã nhận hàng về" → ghi "đã hoàn trên Tubu", KHÔNG bảo hoàn tay, giữ nhắc "Đã nhận hàng về", không báo động lại', async () => {
       const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
-      const { proc, prisma, txUpdateMany, txExecuteRaw, historyCreate } = setup(delivered, undefined, alerts);
+      const { proc, prisma, txUpdateMany, txExecuteRaw, txQueryRaw, historyCreate } = setup(delivered, undefined, alerts);
       (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: null }]);
       await proc.onStatusUpdated({ id: 'p1', status: 15 });
-      const raw = (prisma.$executeRaw as jest.Mock).mock.calls;
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      // Khoá dòng đơn trước câu ghi (câu ghi sau có snapshot mới, thấy được "Đã nhận hàng về" vừa commit).
+      expect(txQueryRaw).toHaveBeenCalledTimes(1);
+      expect((txQueryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?')).toContain('FOR UPDATE');
+      const raw = txExecuteRaw.mock.calls;
       expect(raw).toHaveLength(1);
       const [sql, reason] = raw[0] as [TemplateStringsArray, string];
       expect(sql.join('?')).toContain('"receivedAt" IS NULL');
@@ -1203,7 +1207,6 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       expect(reason).not.toMatch(/hoàn tiền\/điểm.*bằng tay/);
       expect(alerts.alert).not.toHaveBeenCalled();
       expect(statusFlips(txUpdateMany)).toHaveLength(0);
-      expect(txExecuteRaw).not.toHaveBeenCalled();
       expect(historyCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({ fromStatus: 'DELIVERED', toStatus: 'DELIVERED', actorType: 'PANCAKE', note: expect.stringContaining('đã hoàn trên Tubu') }),
       });
