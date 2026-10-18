@@ -173,12 +173,10 @@ describe('Huỷ phiếu đối soát cần lý do (R4-PARTNER-4)', () => {
 });
 
 describe('DTO gian hàng đối tác: ảnh đại diện và ảnh bìa', () => {
-  it.each(['avatarUrl', 'coverUrl'])('%s chỉ nhận https, ảnh raster base64 hoặc chuỗi rỗng', async (field) => {
-    for (const ok of ['https://res.cloudinary.com/x/a.jpg', `data:image/jpeg;base64,${'A'.repeat(64)}`, '']) {
-      await expect(run(UpdateMerchantStoreDto, { [field]: ok })).resolves.toBeDefined();
-    }
-    for (const bad of ['http://api:3001/a.png', 'http://169.254.169.254/x', 'javascript:alert(1)', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=']) {
-      expect(await message(UpdateMerchantStoreDto, { [field]: bad })).toContain(field);
-    }
+  it.each(['avatarUrl', 'coverUrl'])('%s chỉ kiểm là chuỗi và độ dài; việc kiểm https nằm ở service, chỉ khi giá trị đổi', async (field) => {
+    await expect(run(UpdateMerchantStoreDto, { [field]: 'http://old.example/a.png' })).resolves.toBeDefined();
+    await expect(run(UpdateMerchantStoreDto, { [field]: '' })).resolves.toBeDefined();
+    expect(await message(UpdateMerchantStoreDto, { [field]: 123 })).toContain(field);
+    expect(await message(UpdateMerchantStoreDto, { [field]: 'a'.repeat(1_500_001) })).toContain(field);
   });
 });

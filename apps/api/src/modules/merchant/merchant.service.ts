@@ -13,6 +13,7 @@ import {
   assertIdentifierAvailable,
   recordReleasedIdentifiers,
 } from '../storefront/identifier-validation';
+import { assertStorefrontImagesAllowed } from '../storefront/storefront-images';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { notifyAdmins } from '../../common/notify-admins';
@@ -418,6 +419,7 @@ export class MerchantService {
     const cooldownDays =
       (await this.config?.get<number>('storefront.identifier_cooldown_days', DEFAULT_IDENTIFIER_COOLDOWN_DAYS)) ??
       DEFAULT_IDENTIFIER_COOLDOWN_DAYS;
+    assertStorefrontImagesAllowed(dto, store);
     const partner = isPartnerStore(store);
     if ((dto.shippingFee !== undefined || dto.freeShipFrom !== undefined) && !partner) {
       throw new BadRequestException('Phí giao hàng chỉ áp dụng cho gian hàng đối tác tự giao hàng.');

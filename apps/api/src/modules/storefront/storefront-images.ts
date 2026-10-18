@@ -1,5 +1,7 @@
+import { BadRequestException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { decodeServedImage } from '../../common/served-image';
+import { isStorefrontImageValue } from '../../common/uploaded-image';
 
 export type StorefrontImageKind = 'avatar' | 'cover';
 
@@ -34,4 +36,23 @@ export function publicStorefrontImage(storefrontId: string, kind: StorefrontImag
   if (!value) return null;
   if (!value.startsWith('data:')) return value;
   return decodeServedImage(value) ? storefrontImageRef(storefrontId, kind, storefrontImageVersion(storefrontId, kind, value)) : null;
+}
+
+const IMAGE_FIELDS = ['avatarUrl', 'coverUrl'] as const;
+
+/**
+ * Ảnh đại diện/ảnh bìa mới phải là https hoặc ảnh raster base64 (hoặc rỗng để xoá). Chỉ kiểm giá trị khác giá trị đang lưu: trình dựng
+ * và cổng /merchant gửi lại cả hai ảnh mỗi lần Lưu, nên gian hàng cũ lưu ảnh http hay SVG từ trước vẫn đổi được tên mà không bị 400.
+ */
+export function assertStorefrontImagesAllowed(
+  dto: { avatarUrl?: string; coverUrl?: string },
+  current: { avatarUrl?: string | null; coverUrl?: string | null },
+): void {
+  for (const field of IMAGE_FIELDS) {
+    const next = dto[field];
+    if (next === undefined || next === current[field]) continue;
+    if (!isStorefrontImageValue(next)) {
+      throw new BadRequestException(`${field} chỉ nhận đường dẫn https hoặc ảnh base64 png/jpeg/webp/gif (để trống để xoá ảnh).`);
+    }
+  }
 }

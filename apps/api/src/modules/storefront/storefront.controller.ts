@@ -9,7 +9,6 @@ import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { StorefrontService } from './storefront.service';
 import { StorefrontQuestService } from './storefront-quest.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
-import { IsStorefrontImageValue } from '../../common/uploaded-image';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary),
 // nên trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn (body limit là 10MB).
@@ -23,8 +22,8 @@ export class UpdateStorefrontDto {
   @MaxLength(120)
   title?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) headerNote?: string;
-  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) @IsStorefrontImageValue() avatarUrl?: string;
-  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) @IsStorefrontImageValue() coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @OptionalNotNull() @IsString() theme?: string;
   // Không tìm thấy danh sách theme hợp lệ tường minh trong storefront.service.ts để dùng @IsIn —
   // chỉ ràng buộc themeColor (mã hex #rrggbb, khớp default '#16a34a' ở getPublicBySlug).

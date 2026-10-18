@@ -10,7 +10,7 @@ import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods'
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
 import { decodeServedImage } from '../../common/served-image';
-import { isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
+import { assertStorefrontImagesAllowed, isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
 import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
 import { isStorefrontApproved, ownerHiddenReason, publicStorefrontWhere } from './storefront-visibility';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
@@ -170,6 +170,7 @@ export class StorefrontService {
     },
   ) {
     const sf = await this.assertOwnedStorefront(userId);
+    assertStorefrontImagesAllowed(dto, sf);
     // Builder gửi lại subdomain đang lưu mỗi lần bấm Lưu: không đổi thì bỏ qua, không kiểm từ khoá/trùng và không ghi lại.
     if (dto.subdomain && dto.subdomain.trim().toLowerCase() === sf.subdomain) dto.subdomain = undefined;
     if (dto.subdomain) {

@@ -171,6 +171,49 @@ describe('MerchantService', () => {
       expect(data).not.toHaveProperty('customDomain');
     });
 
+    describe('ảnh đại diện và ảnh bìa chỉ kiểm khi đổi', () => {
+      const SVG = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+      const setup = (stored: Record<string, unknown>) => {
+        const store = { id: 's1', ownerUserId: 'u1', collections: [], title: 'Đại lý', ...stored };
+        const update = jest.fn().mockImplementation(({ data }) => ({ ...store, ...data }));
+        const prisma = makePrisma({
+          user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+          storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
+          product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+          $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+        });
+        return { svc: new MerchantService(prisma, orderStatus), update };
+      };
+
+      it('gian hàng cũ lưu ảnh http hoặc SVG: chỉ đổi tên, trang gửi lại đúng hai ảnh cũ vẫn lưu được', async () => {
+        const { svc, update } = setup({ avatarUrl: 'http://old.example/a.png', coverUrl: SVG });
+        await expect(svc.updateStore('u1', { title: 'Tên mới', avatarUrl: 'http://old.example/a.png', coverUrl: SVG })).resolves.toMatchObject({ title: 'Tên mới' });
+        expect(update).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ['avatarUrl', 'http://other.example/b.png'],
+        ['coverUrl', 'http://other.example/b.png'],
+        ['avatarUrl', 'http://169.254.169.254/x'],
+        ['coverUrl', SVG],
+        ['avatarUrl', 'javascript:alert(1)'],
+        ['coverUrl', 'https://u:p@evil.vn/a.png'],
+      ])('đổi %s sang giá trị không an toàn (%s) → 400, không ghi', async (field, value) => {
+        const { svc, update } = setup({ avatarUrl: 'http://old.example/a.png', coverUrl: 'http://old.example/c.png' });
+        const attempt = svc.updateStore('u1', { [field]: value });
+        await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
+        await expect(attempt).rejects.toThrow(field);
+        expect(update).not.toHaveBeenCalled();
+      });
+
+      it('đổi sang https, base64 raster hoặc chuỗi rỗng (xoá ảnh) vẫn được', async () => {
+        for (const value of ['https://res.cloudinary.com/x/a.jpg', `data:image/jpeg;base64,${'A'.repeat(64)}`, '']) {
+          const { svc } = setup({ avatarUrl: 'http://old.example/a.png' });
+          await expect(svc.updateStore('u1', { avatarUrl: value })).resolves.toBeDefined();
+        }
+      });
+    });
+
     it('đổi sang subdomain khác vẫn bị kiểm từ khoá hệ thống', async () => {
       const store = { id: 's1', ownerUserId: 'u1', collections: [], subdomain: 'dai-ly-xanh' };
       const prisma = makePrisma({

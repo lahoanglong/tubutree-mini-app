@@ -6,12 +6,10 @@ const pipe = createValidationPipe();
 const run = (value: unknown) => pipe.transform(value, { type: 'body', metatype: UpdateStorefrontDto }) as Promise<UpdateStorefrontDto>;
 
 describe('DTO sửa gian hàng: ảnh đại diện và ảnh bìa', () => {
-  it.each(['avatarUrl', 'coverUrl'])('%s chỉ nhận https, ảnh raster base64 hoặc chuỗi rỗng', async (field) => {
-    for (const ok of ['https://res.cloudinary.com/x/a.jpg', `data:image/png;base64,${'A'.repeat(64)}`, '']) {
-      await expect(run({ [field]: ok })).resolves.toBeDefined();
-    }
-    for (const bad of ['http://api:3001/a.png', 'http://127.0.0.1/a.png', 'https://u:p@evil.vn/a.png', 'data:text/html;base64,PGgxPg==']) {
-      await expect(run({ [field]: bad })).rejects.toBeInstanceOf(BadRequestException);
-    }
+  it.each(['avatarUrl', 'coverUrl'])('%s chỉ kiểm là chuỗi và độ dài; việc kiểm https nằm ở service, chỉ khi giá trị đổi', async (field) => {
+    await expect(run({ [field]: 'http://old.example/a.png' })).resolves.toBeDefined();
+    await expect(run({ [field]: '' })).resolves.toBeDefined();
+    await expect(run({ [field]: 123 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run({ [field]: 'a'.repeat(1_500_001) })).rejects.toBeInstanceOf(BadRequestException);
   });
 });

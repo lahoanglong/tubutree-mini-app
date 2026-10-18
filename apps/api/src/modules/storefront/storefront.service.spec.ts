@@ -194,6 +194,47 @@ describe('StorefrontService.updateMine/publishMine', () => {
     expect(prisma.storefront.update).not.toHaveBeenCalled();
   });
 
+  describe('ảnh đại diện và ảnh bìa chỉ kiểm khi đổi', () => {
+    const SVG = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    const update = async (stored: Record<string, unknown>, dto: Record<string, string>) => {
+      const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+      (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1', ...stored });
+      (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+      const result = new StorefrontService(prisma, config, affiliate).updateMine('u1', dto);
+      return { prisma, result };
+    };
+
+    it('gian hàng cũ lưu ảnh http hoặc SVG: chỉ đổi tên, client gửi lại đúng hai ảnh cũ vẫn lưu được', async () => {
+      const { prisma, result } = await update(
+        { avatarUrl: 'http://old.example/a.png', coverUrl: SVG },
+        { title: 'Tên mới', avatarUrl: 'http://old.example/a.png', coverUrl: SVG },
+      );
+      await expect(result).resolves.toMatchObject({ title: 'Tên mới' });
+      expect(prisma.storefront.update).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['avatarUrl', 'http://other.example/b.png'],
+      ['coverUrl', 'http://other.example/b.png'],
+      ['avatarUrl', 'http://169.254.169.254/x'],
+      ['coverUrl', SVG],
+      ['avatarUrl', 'javascript:alert(1)'],
+      ['coverUrl', 'https://u:p@evil.vn/a.png'],
+    ])('đổi %s sang giá trị không an toàn (%s) → 400, không ghi', async (field, value) => {
+      const { prisma, result } = await update({ avatarUrl: 'http://old.example/a.png', coverUrl: 'http://old.example/c.png' }, { [field]: value });
+      await expect(result).rejects.toBeInstanceOf(BadRequestException);
+      await expect(result).rejects.toThrow(field);
+      expect(prisma.storefront.update).not.toHaveBeenCalled();
+    });
+
+    it('đổi sang https, base64 raster hoặc chuỗi rỗng (xoá ảnh) vẫn được', async () => {
+      for (const value of ['https://res.cloudinary.com/x/a.jpg', `data:image/png;base64,${'A'.repeat(64)}`, '']) {
+        const { result } = await update({ avatarUrl: 'http://old.example/a.png' }, { avatarUrl: value });
+        await expect(result).resolves.toBeDefined();
+      }
+    });
+  });
+
   it('publish set isPublished + publishedAt', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() }, storefrontItem: { count: jest.fn().mockResolvedValue(2) } });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });

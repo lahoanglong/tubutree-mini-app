@@ -76,21 +76,6 @@ export function isStorefrontImageValue(value: unknown): value is string {
   return url.protocol === 'https:' && !url.username && !url.password;
 }
 
-export function IsStorefrontImageValue(validationOptions?: ValidationOptions) {
-  return (object: object, propertyName: string) => {
-    registerDecorator({
-      name: 'isStorefrontImageValue',
-      target: object.constructor,
-      propertyName,
-      options: validationOptions,
-      validator: {
-        validate: (value: unknown) => isStorefrontImageValue(value),
-        defaultMessage: (args: ValidationArguments) => `${args.property} chỉ nhận đường dẫn https hoặc ảnh base64 png/jpeg/webp/gif (để trống để xoá ảnh).`,
-      },
-    });
-  };
-}
-
 /** Ảnh người dùng tự tải lên (đánh giá, bài cộng đồng, minh chứng đổi/trả): chỉ host upload tin cậy hoặc ảnh raster base64. */
 export function IsUploadedImage(options: UploadedImageOptions = {}, validationOptions?: ValidationOptions) {
   const types = options.allowGif === false ? 'png/jpeg/webp' : 'png/jpeg/webp/gif';
