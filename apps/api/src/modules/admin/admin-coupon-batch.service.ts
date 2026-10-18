@@ -9,7 +9,9 @@ import {
   assertCouponInput,
   assertStaffCouponCaps,
   assertStaffCreatedCoupons,
+  assertStaffDailyBudget,
   loadStaffCouponCaps,
+  staffCouponPerUse,
   SYSTEM_ACTOR,
   type CouponActor,
 } from './coupon-input-rules';
@@ -90,7 +92,8 @@ export class AdminCouponBatchService {
     const startAt = new Date(input.startAt);
     const endAt = new Date(input.endAt);
     assertCouponInput({ ...input, startAt, endAt });
-    if (actor.staff) assertStaffCouponCaps({ ...input, usageLimit: 1 }, await loadStaffCouponCaps(this.config));
+    const staffCaps = actor.staff ? await loadStaffCouponCaps(this.config) : null;
+    if (staffCaps) assertStaffCouponCaps({ ...input, usageLimit: 1 }, staffCaps);
     const base = await this.claimUrlBase();
 
     const codes = await this.prisma.$transaction(
@@ -99,6 +102,9 @@ export class AdminCouponBatchService {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${BATCH_LOCK}), hashtext(${batch}))`;
         if ((await tx.coupon.count({ where: { batch } })) > 0) {
           throw new ConflictException(`Tiền tố ${batch} đã dùng cho một lô khác. Chọn tiền tố khác (vd thêm tháng: ${batch}11).`);
+        }
+        if (staffCaps) {
+          await assertStaffDailyBudget(tx, actor.id, new Date(), input.quantity * staffCouponPerUse(input, staffCaps), staffCaps);
         }
         const row = (code: string): Prisma.CouponCreateManyInput => ({
           code,

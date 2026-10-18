@@ -178,6 +178,31 @@ describe('AdminCouponBatchService — nhân viên Marketing (D1-05)', () => {
     expect(createMany).not.toHaveBeenCalled();
   });
 
+  it('ngân sách ngày của nhân viên tính cả lô: số mã × mức giảm mỗi mã (mỗi mã 1 lượt)', async () => {
+    const big = make();
+    await expect(big.svc.create({ ...INPUT, quantity: 2000, value: 20_000 }, staff)).rejects.toThrow(/40\.000\.000đ.*còn 30\.000\.000đ/);
+    expect(big.createMany).not.toHaveBeenCalled();
+
+    const near = make();
+    near.prisma.$queryRaw = jest.fn().mockResolvedValue([{ used: BigInt(15_000_000) }]);
+    await expect(near.svc.create({ ...INPUT, quantity: 1000, value: 20_000 }, staff)).rejects.toThrow('còn 15.000.000đ');
+    expect(near.createMany).not.toHaveBeenCalled();
+
+    const ok = make();
+    ok.prisma.$queryRaw = jest.fn().mockResolvedValue([{ used: BigInt(10_000_000) }]);
+    await ok.svc.create({ ...INPUT, quantity: 1000, value: 20_000 }, staff);
+    expect(ok.createMany).toHaveBeenCalled();
+    const locks = (ok.prisma.$executeRaw as jest.Mock).mock.calls.flatMap((c: unknown[]) => c.slice(1));
+    expect(locks).toContain('coupon.staff_budget:s1');
+  });
+
+  it('quản trị viên tạo lô lớn: không tính ngân sách nhân viên', async () => {
+    const { svc, createMany, prisma } = make();
+    await svc.create({ ...INPUT, quantity: 2000, value: 200_000, minOrder: 500_000 }, admin);
+    expect(createMany).toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
   it('nhân viên tạo lô trong trần → mỗi mã ghi người tạo', async () => {
     const { svc, createMany } = make();
     await svc.create(INPUT, staff);

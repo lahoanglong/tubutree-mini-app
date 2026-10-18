@@ -1349,8 +1349,10 @@ model Coupon {
   /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.
   createdById     String?
   updatedById     String?
+  createdAt       DateTime           @default(now())
 
   @@index([batch])
+  @@index([createdById, createdAt])
   @@map("coupons")
 }
 

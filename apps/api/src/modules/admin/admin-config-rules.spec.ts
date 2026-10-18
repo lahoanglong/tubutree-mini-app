@@ -163,6 +163,13 @@ describe('validateAdminConfigValue', () => {
     expect(v('coupon.staff_max_amount_vnd', 200_000)).not.toThrow();
     expect(v('coupon.staff_max_amount_vnd', 500)).toThrow(/coupon\.staff_max_amount_vnd/);
     expect(v('coupon.staff_max_amount_vnd', '200000')).toThrow(BadRequestException);
+    expect(v('coupon.staff_daily_budget_vnd', 30_000_000)).not.toThrow();
+    expect(v('coupon.staff_daily_budget_vnd', 0)).not.toThrow();
+    expect(v('coupon.staff_daily_budget_vnd', 1_000_000_001)).toThrow(/coupon\.staff_daily_budget_vnd/);
+    expect(v('coupon.staff_daily_budget_vnd', -1)).toThrow(BadRequestException);
+    expect(v('coupon.staff_max_usage', 1000)).not.toThrow();
+    expect(v('coupon.staff_max_usage', 0)).toThrow(/coupon\.staff_max_usage/);
+    expect(v('coupon.staff_max_usage', 1.5)).toThrow(BadRequestException);
   });
 
   it('khoá khác: không can thiệp (SystemConfigService tự giữ kiểu/khoảng)', () => {
