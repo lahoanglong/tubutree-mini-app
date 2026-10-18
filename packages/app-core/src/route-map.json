@@ -1,1 +1,82 @@
-{ "routes": [], "features": [] }
+{
+  "routes": [
+    { "lane": "shop", "items": [
+      { "miniapp": "/", "web": "/", "private": false },
+      { "miniapp": "/browse", "web": "/san-pham", "private": false, "pending": true },
+      { "miniapp": "/product/:slug", "web": "/san-pham/:slug", "private": false },
+      { "miniapp": "/wishlist", "web": "/tai-khoan/yeu-thich", "private": true, "pending": true },
+      { "miniapp": "/group-buy", "web": "/mua-chung", "private": false, "pending": true },
+      { "miniapp": "/group-buy/:id", "web": "/mua-chung/:id", "private": false, "pending": true },
+      { "miniapp": "/brand/:slug", "web": "/brand/:slug", "private": false },
+      { "miniapp": "/brand-story", "web": "/cau-chuyen", "private": false, "pending": true }
+    ]},
+    { "lane": "order", "items": [
+      { "miniapp": "/cart", "web": "/gio-hang", "private": true },
+      { "miniapp": "/checkout", "web": "/thanh-toan", "private": true },
+      { "miniapp": "/bank-payment/:code", "web": "/thanh-toan/chuyen-khoan/:code", "private": true, "pending": true },
+      { "miniapp": "/orders", "web": "/tai-khoan/don-hang", "private": true, "pending": true },
+      { "miniapp": "/subscriptions", "web": "/tai-khoan/don-hang?tab=subscriptions", "private": true, "pending": true },
+      { "miniapp": "/order/:code", "web": "/tai-khoan/don-hang/:code", "private": true },
+      { "miniapp": "/addresses", "web": "/tai-khoan/dia-chi", "private": true }
+    ]},
+    { "lane": "account", "items": [
+      { "miniapp": "/about", "web": "/gioi-thieu", "private": false, "pending": true },
+      { "miniapp": "/profile", "web": "/tai-khoan", "private": true },
+      { "miniapp": "/edit-profile", "web": "/tai-khoan/ho-so", "private": true, "pending": true },
+      { "miniapp": "/settings", "web": "/tai-khoan/cai-dat", "private": true, "pending": true },
+      { "miniapp": "/notifications", "web": "/tai-khoan/thong-bao", "private": true, "pending": true }
+    ]},
+    { "lane": "loyalty", "items": [
+      { "miniapp": "/loyalty", "web": "/tai-khoan/diem-xanh", "private": true },
+      { "miniapp": "/wallet", "web": "/tai-khoan/vi-tubu", "private": true },
+      { "miniapp": "/rewards", "web": "/kho-qua", "private": true, "pending": true },
+      { "miniapp": "/rewards/mine", "web": "/kho-qua/cua-toi", "private": true, "pending": true },
+      { "miniapp": "/refill", "web": "/doi-vo", "private": true, "pending": true },
+      { "miniapp": "/cashback", "web": "/hoan-tien", "private": false, "pending": true }
+    ]},
+    { "lane": "game", "items": [
+      { "miniapp": "/game", "web": "/vuon-xanh", "private": true, "pending": true },
+      { "miniapp": "/ai-advisor", "web": "/tu-van", "private": true, "pending": true }
+    ]},
+    { "lane": "community", "items": [
+      { "miniapp": "/feed", "web": "/cong-dong", "private": false, "pending": true },
+      { "miniapp": "/feed/leaderboard", "web": "/cong-dong/xep-hang", "private": true, "pending": true },
+      { "miniapp": "/feed/events", "web": "/cong-dong/su-kien", "private": true, "pending": true },
+      { "miniapp": "/feed/:id", "web": "/cong-dong/:id", "private": true, "pending": true },
+      { "miniapp": "/academy", "web": "/hoc-vien", "private": false, "pending": true },
+      { "miniapp": "/academy/:courseId", "web": "/hoc-vien/:courseId", "private": false, "pending": true }
+    ]},
+    { "lane": "affiliate", "items": [
+      { "miniapp": "/s/:slug", "web": "/s/:slug", "private": false },
+      { "miniapp": "/affiliate", "web": "/ctv", "private": true, "pending": true },
+      { "miniapp": "/storefront", "web": "/ctv/gian-hang", "private": true, "pending": true }
+    ]},
+    { "lane": "pro", "items": [
+      { "miniapp": "/dealer", "web": "/dai-ly", "private": true, "pending": true },
+      { "miniapp": "/staff", "web": "/nhan-vien", "private": true, "pending": true },
+      { "miniapp": "/my-payroll", "web": "/nhan-vien/bang-luong", "private": true, "pending": true },
+      { "miniapp": "/brand-owner", "web": "/chu-thuong-hieu", "private": true, "pending": true },
+      { "miniapp": "/admin", "web": "/admin", "private": true },
+      { "miniapp": "/admin/community", "web": "/admin?tab=community", "private": true }
+    ]},
+    { "lane": "recycle", "items": [
+      { "miniapp": "/recycle", "web": "/doi-rac", "private": true, "pending": true },
+      { "miniapp": "/recycle/rules", "web": "/doi-rac/quy-dinh", "private": false, "pending": true },
+      { "miniapp": "/recycle/new", "web": "/doi-rac/tao", "private": true, "pending": true },
+      { "miniapp": "/recycle/points", "web": "/doi-rac/diem-nhan", "private": true, "pending": true },
+      { "miniapp": "/recycle/r/:id", "web": "/doi-rac/yeu-cau/:id", "private": true, "pending": true },
+      { "miniapp": "/recycle/r/:id/edit", "web": "/doi-rac/yeu-cau/:id/sua", "private": true, "pending": true },
+      { "miniapp": "/recycle/requests", "web": "/doi-rac/yeu-cau", "private": true, "pending": true },
+      { "miniapp": "/recycle/done/:id", "web": "/doi-rac/xong/:id", "private": true, "pending": true },
+      { "miniapp": "/recycle/desk", "web": "/doi-rac/quay", "private": true, "pending": true }
+    ]},
+    { "lane": "skip", "items": [
+      { "miniapp": "/points/scan", "skip": "Q2: quét mã đơn sàn cần SĐT đã xác minh và máy quét QR, chỉ có ở Mini App" }
+    ]}
+  ],
+  "features": [
+    { "id": "coupon-claim", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "CouponClaimGate"], "web": ["apps/web/src/components/app-gates.tsx", "CouponClaimGate"], "pending": true },
+    { "id": "onboarding", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "OnboardingGate"], "web": ["apps/web/src/components/app-gates.tsx", "OnboardingGate"], "pending": true },
+    { "id": "storefront-source", "lane": "core", "miniapp": ["apps/miniapp/src/components/app.tsx", "recordReferralTouch"], "web": ["apps/web/src/components/storefront-tracker.tsx", "rememberEntryLink"] }
+  ]
+}

@@ -42,7 +42,7 @@ Riêng tư = cần đăng nhập, thêm vào `PRIVATE_PATHS` (`apps/web/src/lib/
 | 30 | `/feed/:id` | post-detail.tsx | — | `/cong-dong/[id]` | mới | community | riêng tư (Mini App bắt đăng nhập) | |
 | 31 | `/feed/events` | community-events.tsx | — | `/cong-dong/su-kien` | mới | community | riêng tư | |
 | 32 | `/feed/leaderboard` | community-leaderboard.tsx | — | `/cong-dong/xep-hang` | mới | community | riêng tư | |
-| 33 | `/academy`, `/academy/:courseId` | academy.tsx | — | `/hoc-vien`, `/hoc-vien/[id]` | mới | community | công khai | Hoàn thành bài cần đăng nhập |
+| 33 | `/academy`, `/academy/:courseId` | academy.tsx | — | `/hoc-vien`, `/hoc-vien/[courseId]` | mới | community | công khai | Hoàn thành bài cần đăng nhập |
 | 34 | `/ai-advisor` | ai-advisor.tsx | — | `/tu-van` | mới | ai | riêng tư | Cờ `aiAdvisorEnabled` |
 | 35 | `/affiliate` | affiliate.tsx | — | `/ctv` | mới | affiliate | riêng tư | Đăng ký CTV, link, hoa hồng, rút, thuế, mốc thưởng, lên đơn hộ. **Tiền: 2 lượt review** |
 | 36 | `/storefront` | storefront-builder.tsx | — | `/ctv/gian-hang` | mới | affiliate | riêng tư | Không lẫn với cổng `/merchant` |

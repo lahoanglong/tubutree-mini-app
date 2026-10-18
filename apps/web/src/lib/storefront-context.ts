@@ -96,6 +96,21 @@ export function rememberReferral(code: string): void {
   write({ ...current, referralCode: code.trim().toUpperCase() || current.referralCode });
 }
 
+/**
+ * Nguồn vào từ link (`?s=` gian hàng CTV, `?ref=` mã giới thiệu), cùng quy tắc `setContext` của Mini App:
+ * thiếu `s` thì xoá slug cũ (link `/?ref=` thuần không được thừa hưởng gian hàng của lần xem trước, kẻo gán nhầm
+ * `storefrontSlug` vào đơn); có `s` thì là gian hàng CTV.
+ */
+export function rememberEntryLink(slug: string | null, ref: string | null): void {
+  if (!slug && !ref) return;
+  const current = read();
+  write({
+    slug: slug ?? null,
+    referralCode: ref ? ref.trim().toUpperCase() || null : null,
+    kind: slug ? 'CTV' : current.kind,
+  });
+}
+
 export function clearStorefrontContext(): void {
   if (typeof window === 'undefined') return;
   try {

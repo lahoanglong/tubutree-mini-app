@@ -8,6 +8,8 @@ vi.mock('@/components/site-header', () => ({ default: () => <header data-testid=
 vi.mock('@/components/site-footer', () => ({ default: () => <footer data-testid="footer" /> }));
 vi.mock('@/components/admin/portal-header', () => ({ default: () => <header data-testid="portal-header" /> }));
 vi.mock('@/components/hide-on-portals', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
+vi.mock('@/components/bottom-nav', () => ({ default: () => <nav data-testid="bottom-nav" /> }));
+vi.mock('@/components/app-gates', () => ({ AppGates: () => <i data-testid="app-gates" /> }));
 vi.mock('@/components/storefront-tracker', () => ({ ReferralCapture: () => null }));
 
 import RootLayout, { metadata, viewport } from './layout';
@@ -18,6 +20,16 @@ describe('RootLayout — thanh đầu theo khu vực', () => {
 
   it('SiteHeader nằm trong HideOnPortals, PortalHeader đứng ngay sau và tự ẩn ở trang khách', () => {
     expect(src).toMatch(/<HideOnPortals>\s*<SiteHeader \/>\s*<\/HideOnPortals>\s*<PortalHeader \/>/);
+  });
+
+  it('gắn thanh đáy điện thoại sau chân trang và AppGates trước thanh đầu', () => {
+    const html = renderToStaticMarkup(
+      <RootLayout>
+        <main>Nội dung</main>
+      </RootLayout>,
+    );
+    expect(html.indexOf('data-testid="footer"')).toBeLessThan(html.indexOf('data-testid="bottom-nav"'));
+    expect(html.indexOf('data-testid="app-gates"')).toBeLessThan(html.indexOf('data-testid="header"'));
   });
 
   it('cả hai thanh đầu đứng trước nội dung trang', () => {

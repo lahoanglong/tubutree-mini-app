@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 // Ngoại lệ có chủ ý, static-scan vẫn đếm nhưng không phải icon/màu giao diện: `merchant/theme-colors.ts` là dữ liệu
 // màu lưu ở Storefront.themeColor (không nằm trong MIGRATED); dấu ✓ trong <title> của generateMetadata brand (PARTIAL
 // bên dưới); placeholder 🌿 của Content Kit ghi bằng escape \u{1F33F} vì là chữ mẫu cho CTV, không phải icon.
-const MIGRATED = [
+const CORE: string[] = [
   'app/admin/layout.tsx',
   'app/merchant/layout.tsx',
   'app/merchant/page.tsx',
@@ -58,6 +58,16 @@ const MIGRATED = [
   'components/admin/waste-gifts-section.tsx',
   'components/admin/waste-config-card.tsx',
 ];
+const SHOP: string[] = [];
+const ORDER: string[] = [];
+const ACCOUNT: string[] = [];
+const LOYALTY: string[] = [];
+const COMMUNITY: string[] = [];
+const AFFILIATE: string[] = [];
+const GAME: string[] = [];
+const PRO: string[] = [];
+const RECYCLE: string[] = [];
+const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
 

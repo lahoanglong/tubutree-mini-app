@@ -59,13 +59,24 @@ afterEach(() => {
   mounted = [];
 });
 
-const PAGES: [string, () => JSX.Element][] = [
+type PageCase = [string, () => JSX.Element];
+const CORE: PageCase[] = [
   ['/gio-hang', () => <CartPage />],
   ['/thanh-toan', () => <CheckoutPage />],
   ['/tai-khoan', () => <AccountPage />],
   ['/tai-khoan/don-hang/[code]', () => <OrderDetailPage />],
   ['/tai-khoan/dia-chi', () => <AddressBookPage />],
 ];
+const SHOP: PageCase[] = [];
+const ORDER: PageCase[] = [];
+const ACCOUNT: PageCase[] = [];
+const LOYALTY: PageCase[] = [];
+const COMMUNITY: PageCase[] = [];
+const AFFILIATE: PageCase[] = [];
+const GAME: PageCase[] = [];
+const PRO: PageCase[] = [];
+const RECYCLE: PageCase[] = [];
+const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 describe.each(PAGES)('mở %s khi cờ phiên còn mà API không trả lời', (_name, page) => {
   it('nói không kết nối được, KHÔNG mời đăng nhập lại', async () => {
