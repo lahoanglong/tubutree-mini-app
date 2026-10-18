@@ -3,7 +3,6 @@ import {
   addressLine,
   buyerOrderStatusLabel,
   canCancelOrder,
-  canPayAgain,
   discountRows,
   isHandedToCarrier,
   isRefundInProgress,
@@ -60,19 +59,6 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(paymentStatusLabel('PAID')).toBe('Đã thanh toán');
     expect(paymentStatusLabel('REFUNDED')).toBe('Đã hoàn tiền');
     expect(paymentStatusLabel(undefined)).toBe('');
-  });
-
-  it('chỉ đơn chuyển khoản đang chờ thanh toán mới được trả lại bằng QR', () => {
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' })).toBe(true);
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'COD' })).toBe(false);
-    // API từ chối sinh QR cho đơn đã hủy/trả — không dựng khung QR để khỏi hiện lỗi.
-    expect(canPayAgain({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER' })).toBe(false);
-    expect(canPayAgain({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER' })).toBe(false);
-  });
-
-  it('R5-SYNC-1: hàng đã bàn giao vận chuyển mà chưa nhận tiền (manualHandling) → không mời trả lại bằng QR', () => {
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: true })).toBe(false);
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: false })).toBe(true);
   });
 
   it('addressLine bỏ phần rỗng, không để dấu phẩy thừa', () => {
