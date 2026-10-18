@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getMemberCard: vi.fn(),
   postDailyCheckIn: vi.fn(),
   copyText: vi.fn(),
+  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -27,6 +28,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/loyalty', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../store/auth', () => {
   const state = { status: 'authenticated', user: { id: 'u1' } };
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
@@ -78,6 +80,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.publicConfig.waste.enabled = true;
   try {
     localStorage.clear();
   } catch {
@@ -108,16 +111,27 @@ describe('LoyaltyPage — thẻ hạng', () => {
     expect(container.querySelector('[style*="width: 50%"]')).toBeNull();
   });
 
-  it('các lối tắt dẫn đúng trang: Vườn Cây → /game, Trạm Refill → /refill, Kho quà → /rewards, mua sắm → /browse', async () => {
+  it('các lối tắt dẫn đúng trang: Vườn Cây → /game, Đổi rác lấy quà → /recycle, Kho quà → /rewards, mua sắm → /browse', async () => {
     renderPage();
     fireEvent.click(await screen.findByText('Vườn Cây Tubu'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
-    fireEvent.click(screen.getByText('Trạm Refill'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/refill');
+    fireEvent.click(screen.getByText('Đổi rác lấy quà'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
     fireEvent.click(screen.getByRole('button', { name: /Kho quà/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/rewards');
     fireEvent.click(screen.getByText(/Mua sắm để tích thêm Điểm Xanh/));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/browse');
+  });
+});
+
+describe('LoyaltyPage — lối vào Đổi rác theo cờ chương trình', () => {
+  it('chương trình tắt → không có hàng Đổi rác; hàng Kho quà vẫn hiện', async () => {
+    mocks.publicConfig.waste.enabled = false;
+    renderPage();
+    await screen.findByText('Lịch sử Điểm Xanh');
+    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+    expect(screen.queryByText('Trạm Refill')).toBeNull();
+    expect(screen.getByText('Kho quà')).toBeInTheDocument();
   });
 });
 

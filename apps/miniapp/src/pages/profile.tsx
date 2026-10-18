@@ -43,7 +43,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
     group: 'Mua sắm',
     items: [
       { Icon: Users, label: 'Mua chung nhóm', to: '/group-buy', hint: GROUP_BUY_MENU_HINT },
-      { Icon: Recycle, label: 'Trạm Refill & Đổi vỏ', to: '/refill', hint: 'Tích giọt nước xanh' },
+      { Icon: Recycle, label: 'Đổi rác lấy quà', to: '/recycle', hint: 'Đổi bao bì lấy Điểm Xanh' },
       { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },
       { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
       { Icon: MapPin, label: 'Sổ địa chỉ', to: '/addresses' },

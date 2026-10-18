@@ -21,6 +21,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
@@ -69,6 +70,7 @@ function useLastNonNull<T>(value: T | null): T | null {
 
 export default function LoyaltyPage() {
   const navigate = useNavigate();
+  const publicConfig = usePublicConfig();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
@@ -454,18 +456,20 @@ export default function LoyaltyPage() {
               trailing="chevron"
               onPress={() => navigate('/game')}
             />
-            <ListRow
-              icon={
-                <IconTile>
-                  <Icon icon={Recycle} tone="brand" />
-                </IconTile>
-              }
-              title="Trạm Refill"
-              subtitle="Đổi vỏ tích nước"
-              trailing="chevron"
-              onPress={() => navigate('/refill')}
-              style={{ borderTop: '1px solid var(--color-border-subtle)' }}
-            />
+            {publicConfig.waste.enabled && (
+              <ListRow
+                icon={
+                  <IconTile>
+                    <Icon icon={Recycle} tone="brand" />
+                  </IconTile>
+                }
+                title="Đổi rác lấy quà"
+                subtitle="Đổi bao bì lấy Điểm Xanh"
+                trailing="chevron"
+                onPress={() => navigate('/recycle')}
+                style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+              />
+            )}
             <ListRow
               icon={
                 <IconTile>

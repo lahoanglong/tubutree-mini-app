@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('zmp-ui', () => ({
@@ -10,6 +12,12 @@ import { MENU } from './profile';
 
 describe('Hub Cá nhân (spec 4a.1)', () => {
   const targets = MENU.flatMap((s) => s.items.map((i) => i.to));
+  it('mục "Đổi rác lấy quà" thay "Trạm Refill & Đổi vỏ", luôn hiện (§16.1)', () => {
+    const items = MENU.flatMap((s) => s.items);
+    expect(items.find((i) => i.to === '/recycle')?.label).toBe('Đổi rác lấy quà');
+    expect(targets).not.toContain('/refill');
+    expect(items.some((i) => /Refill|Đổi vỏ/.test(i.label))).toBe(false);
+  });
   it('bỏ mục đã có ở tab bar: Đơn hàng, Đặt định kỳ', () => {
     expect(targets).not.toContain('/orders');
     expect(targets).not.toContain('/subscriptions');
@@ -65,5 +73,12 @@ describe('Gợi ý mua chung không hứa sai mức giảm (ENGAGE-20)', () => {
     const item = MENU.flatMap((s) => s.items).find((i) => i.to === '/group-buy');
     expect(item?.hint).toBeTruthy();
     expect(item?.hint).not.toMatch(/\d/);
+  });
+});
+
+describe('lối vào Đổi rác không thêm lệnh gọi mạng (§16.1)', () => {
+  const SRC = join(process.cwd(), 'src');
+  it.each(['pages/home.tsx', 'pages/game.tsx', 'pages/profile.tsx', 'pages/loyalty.tsx'])('%s không gọi waste-api', (f) => {
+    expect(readFileSync(join(SRC, f), 'utf8')).not.toMatch(/waste-api|useWasteMe/);
   });
 });
