@@ -14,6 +14,7 @@ export function CommentRow({
   onReport,
   onRemove,
   removing,
+  error,
 }: {
   comment: FeedComment;
   canMarkBest: boolean;
@@ -22,6 +23,7 @@ export function CommentRow({
   onReport: () => void;
   onRemove: () => void;
   removing: boolean;
+  error?: string | null;
 }) {
   return (
     <li
@@ -52,6 +54,11 @@ export function CommentRow({
         <button type="button" disabled={marking} onClick={onMarkBest} className={`${ui.btnSecondary} mt-2`}>
           Chọn hay nhất
         </button>
+      )}
+      {error && (
+        <p role="alert" className="mt-2 rounded-control bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+          {error}
+        </p>
       )}
     </li>
   );

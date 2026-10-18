@@ -84,6 +84,7 @@ export default function PostDetailPage() {
   const [reportReason, setReportReason] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState<{ commentId: string; message: string } | null>(null);
   // Lỗi của thao tác trong sheet/ô nhập hiện ngay tại chỗ: banner đầu trang nằm dưới lớp phủ của sheet hoặc ngoài màn hình khi đã cuộn.
   const [editError, setEditError] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -125,8 +126,19 @@ export default function PostDetailPage() {
     },
     onError: (e) => setReplyError(errorText(e)),
   });
-  const markBest = useMutation({ mutationFn: (commentId: string) => setBestAnswer(coreHttp, id, commentId), onSuccess: () => ok(), onError: onFail });
-  const removeCommentMut = useMutation({ mutationFn: (commentId: string) => removeComment(coreHttp, commentId), onSuccess: () => ok(), onError: onFail });
+  // Lỗi của thao tác trên một bình luận hiện ngay dưới bình luận đó: dải lỗi đầu trang nằm ngoài màn hình khi danh sách dài.
+  const markBest = useMutation({
+    mutationFn: (commentId: string) => setBestAnswer(coreHttp, id, commentId),
+    onMutate: () => setCommentError(null),
+    onSuccess: () => ok(),
+    onError: (e, commentId) => setCommentError({ commentId, message: errorText(e) }),
+  });
+  const removeCommentMut = useMutation({
+    mutationFn: (commentId: string) => removeComment(coreHttp, commentId),
+    onMutate: () => setCommentError(null),
+    onSuccess: () => ok(),
+    onError: (e, commentId) => setCommentError({ commentId, message: errorText(e) }),
+  });
   const editMut = useMutation({
     mutationFn: (patch: { title?: string; body: string }) => editPost(coreHttp, id, patch),
     onSuccess: () => {
@@ -371,6 +383,7 @@ export default function PostDetailPage() {
                 onReport={() => openReport({ targetType: 'COMMENT', targetId: c.id })}
                 onRemove={() => removeCommentMut.mutate(c.id)}
                 removing={removeCommentMut.isPending && removeCommentMut.variables === c.id}
+                error={commentError?.commentId === c.id ? commentError.message : null}
               />
             ))}
           </ul>

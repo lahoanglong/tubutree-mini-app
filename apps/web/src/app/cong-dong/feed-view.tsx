@@ -79,6 +79,15 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
   const [tagName, setTagName] = useState<string | undefined>(urlTagName);
   const dq = useDebounced(q, 300);
 
+  // Cờ ?deleted=1 chỉ để báo một lần: gỡ khỏi URL để Back, tải lại hay chia sẻ liên kết không báo lại.
+  useEffect(() => {
+    if (params.get('deleted') !== '1') return;
+    const sp = new URLSearchParams(params.toString());
+    sp.delete('deleted');
+    const rest = sp.toString();
+    router.replace(rest ? `/cong-dong?${rest}` : '/cong-dong');
+  }, [params, router]);
+
   // Bấm hashtag ở thẻ bài đổi URL khi trang đã mở: đồng bộ lại bộ lọc theo URL.
   useEffect(() => {
     setTag(urlTag);

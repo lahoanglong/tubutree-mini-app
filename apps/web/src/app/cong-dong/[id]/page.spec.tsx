@@ -345,6 +345,29 @@ describe('/cong-dong/[id] — thao tác', () => {
     expect(mocks.post).toHaveBeenCalledWith('/feed/p1/best-answer/c1');
   });
 
+  it('chọn hay nhất lỗi: thông báo hiện ngay dưới bình luận đó, không chỉ ở đầu trang', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.post.mockRejectedValue(new Error('không đủ quyền'));
+    const { container } = await mount();
+    click(buttons(container, 'Chọn hay nhất')[0]!);
+    await flush(6);
+    const rows = Array.from(container.querySelectorAll('[data-testid="comment-row"]'));
+    const withAlert = rows.filter((r) => r.querySelector('[role="alert"]')?.textContent?.includes('không đủ quyền'));
+    expect(withAlert).toHaveLength(1);
+    expect(withAlert[0]!.textContent).toContain('Trả lời của Bình');
+  });
+
+  it('ẩn bình luận lỗi: thông báo hiện ngay dưới bình luận đó', async () => {
+    mocks.del.mockRejectedValue(new Error('máy chủ bận'));
+    const { container } = await mount();
+    click(btn(container, 'Ẩn nội dung'));
+    await flush(6);
+    const rows = Array.from(container.querySelectorAll('[data-testid="comment-row"]'));
+    const withAlert = rows.filter((r) => r.querySelector('[role="alert"]')?.textContent?.includes('máy chủ bận'));
+    expect(withAlert).toHaveLength(1);
+    expect(withAlert[0]!.textContent).toContain('Trả lời của Tôi');
+  });
+
   it('ADMIN cũng chọn được câu hay nhất; người khác và bài không phải câu hỏi thì không thấy nút', async () => {
     stub(POST({ kind: 'QUESTION', title: 'Hỏi' }));
     const a = await mount();

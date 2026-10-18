@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { getFeedPublicPreview, type FeedPreviewItem } from '@tubutree/app-core/api/feed';
 import { getPublicConfig, type PublicConfig } from '@tubutree/app-core/api/config';
+import { CommunityChannels } from '@/components/community/community-channels';
 import { PublicPreviewList } from '@/components/community/public-preview-list';
 import { createServerHttp } from '@/lib/core-http-server';
 import { FeedShell } from './feed-shell';
@@ -27,7 +28,14 @@ export default async function CommunityPage() {
     // useSearchParams (bộ lọc thẻ) buộc phần client nằm sau Suspense; HTML công khai là bản xem trước của khách.
     <Suspense
       fallback={
-        <FeedShell subtitle={Boolean(preview?.length)}>{preview && preview.length > 0 ? <PublicPreviewList posts={preview} /> : null}</FeedShell>
+        <FeedShell subtitle={Boolean(preview?.length)}>
+          {preview && preview.length > 0 ? (
+            <>
+              <CommunityChannels {...(config ? { initialConfig: config } : {})} />
+              <PublicPreviewList posts={preview} />
+            </>
+          ) : null}
+        </FeedShell>
       }
     >
       <FeedView initialPreview={preview} initialConfig={config} />

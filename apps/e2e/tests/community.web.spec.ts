@@ -147,7 +147,8 @@ test.describe('Web khách: cộng đồng', () => {
     const removed = api.waitForCall('DELETE', '/feed/p1');
     await page.getByRole('dialog', { name: 'Xoá bài viết này?' }).getByRole('button', { name: 'Xoá', exact: true }).click();
     await removed;
-    await expect(page).toHaveURL(/\/cong-dong$/);
+    await expect(page).toHaveURL(/\/cong-dong\?deleted=1$/);
+    await expect(page.getByRole('status')).toContainText('Đã xoá bài');
   });
 
   test('chi tiết bài khi chưa đăng nhập: mời đăng nhập và quay lại đúng bài', async ({ page, api }) => {

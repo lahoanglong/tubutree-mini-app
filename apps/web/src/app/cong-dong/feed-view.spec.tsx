@@ -292,6 +292,19 @@ describe('FeedView — đã đăng nhập', () => {
     mocks.search = '';
   });
 
+  it('?deleted=1 được gỡ khỏi URL sau khi báo, giữ nguyên các tham số khác', async () => {
+    mocks.search = 'deleted=1&tag=t1&tagName=Rau';
+    const { container } = await mount();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã xoá bài');
+    expect(mocks.replace).toHaveBeenCalledWith('/cong-dong?tag=t1&tagName=Rau');
+    mocks.search = 'deleted=1';
+    mounted.pop()!.unmount();
+    mocks.replace.mockReset();
+    await mount();
+    expect(mocks.replace).toHaveBeenCalledWith('/cong-dong');
+    mocks.search = '';
+  });
+
   it('đúng một h1 "Cộng đồng Vườn Tubu" ở mọi trạng thái', async () => {
     mocks.auth.status = 'idle';
     mocks.auth.initialized = false;
