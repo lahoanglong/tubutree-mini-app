@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { formatPoints } from '../../common/format-points';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { pointsExpiryFrom } from '../loyalty/points-expiry-date';
@@ -8,7 +9,7 @@ import { loadClaimConfig } from './external-claim.config';
 import type { ClaimNotifier } from './external-claim-status';
 import { advisoryPhoneLock, last3, phoneDiffers, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, type ChatConfig } from './external-chat.config';
-import { holdUntilOf, releaseAtOf } from './external-chat.rules';
+import { holdUntilOf, PHONE_STALE_REASON, phoneVerifiedFresh, releaseAtOf, STALE_APPROVE_MARK } from './external-chat.rules';
 import { startOfVnMonth } from '../../common/vn-time';
 import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
 import { advisoryUserLock } from './external-claim.service';
@@ -22,6 +23,13 @@ const MAX_BATCHES = 20;
 const RELEASE_LOCK = 'external-points.release';
 
 export type ReleaseOutcome = 'CREDITED' | 'SKIPPED' | 'TO_REVIEW' | 'HELD';
+
+/** Claim đã được duyệt kèm ghi chú khi mốc xác minh SĐT còn cũ (xem approve): người duyệt đã kiểm người nhận nên không bắt kiểm lại. */
+async function approvedDespiteStale(tx: Pick<Prisma.TransactionClient, 'externalClaimEvent'>, row: { id: string; decidedById: string | null }): Promise<boolean> {
+  if (row.decidedById === null) return false;
+  const e = await tx.externalClaimEvent.findFirst({ where: { claimId: row.id, action: 'APPROVE', note: { contains: STALE_APPROVE_MARK } }, select: { id: true } });
+  return !!e;
+}
 
 /**
  * Cộng điểm một claim tới hạn trong MỘT transaction: khoá claim rồi users, chuyển PENDING sang CREDITED có điều kiện trạng thái, kiểm
@@ -57,8 +65,8 @@ export async function releaseClaim(
       await advisoryUserLock(tx, head.userId);
     }
     if (!(await lockOrderThenClaim(tx, claimId))) return skipped;
-    const [row] = await tx.$queryRaw<{ id: string; userId: string | null; externalOrderId: string; ratePct: string; points: number; decidedById: string | null; releaseAt: Date | null; createdAt: Date; countsForTier: boolean; orderPhone: string | null }[]>`
-      SELECT "id", "userId", "externalOrderId", "ratePct"::text AS "ratePct", "points", "decidedById", "releaseAt", "createdAt", "countsForTier", "orderPhone" FROM "external_points_claims"
+    const [row] = await tx.$queryRaw<{ id: string; userId: string | null; externalOrderId: string; ratePct: string; points: number; decidedById: string | null; releaseAt: Date | null; createdAt: Date; countsForTier: boolean; orderPhone: string | null; multiplier: string; creditedGoodsValue: number | null }[]>`
+      SELECT "id", "userId", "externalOrderId", "ratePct"::text AS "ratePct", "multiplier"::text AS "multiplier", "points", "decidedById", "releaseAt", "createdAt", "countsForTier", "orderPhone", "creditedGoodsValue" FROM "external_points_claims"
        WHERE "id" = ${claimId} AND "state" = 'PENDING' FOR UPDATE`;
     if (!row || (!row.userId && !chat)) return skipped;
     const order = await tx.externalOrder.findUniqueOrThrow({
@@ -111,12 +119,14 @@ export async function releaseClaim(
     const userId = row.userId!;
     const kind = chat ? ('PHONE' as const) : ('SCAN' as const);
 
-    const [user] = await tx.$queryRaw<{ isBlocked: boolean; role: string; phone: string | null; tierId: string | null }[]>`
-      SELECT "isBlocked", "role"::text AS "role", "phone", "tierId" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+    const [user] = await tx.$queryRaw<{ isBlocked: boolean; role: string; phone: string | null; tierId: string | null; phoneVerifiedAt: Date | null }[]>`
+      SELECT "isBlocked", "role"::text AS "role", "phone", "tierId", "phoneVerifiedAt" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
     let multiplier = 1;
     if (chat && user) {
       const tier = user.tierId ? await tx.membershipTier.findUnique({ where: { id: user.tierId }, select: { pointMultiplier: true } }) : null;
-      multiplier = tierMultiplierOf({ tier });
+      // Điểm đã chốt ở lần kiểm gần nhất (tạo, liên kết, duyệt) là điểm được cộng: hạng tăng sau đó không nâng điểm (claim đã qua kiểm
+      // trần/ngưỡng theo hệ số cũ), hạng giảm thì hạ theo.
+      multiplier = Math.min(tierMultiplierOf({ tier }), Number(row.multiplier));
     }
     const points = claimPoints(order.goodsValue, Number(row.ratePct), multiplier);
     let reviewReason: string | null = null;
@@ -125,30 +135,34 @@ export async function releaseClaim(
     else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
     else if (chat && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
     else if (chat && (user.role === 'STAFF' || user.role === 'ADMIN') && row.decidedById === null) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
+    else if (chat && !phoneVerifiedFresh(user.phoneVerifiedAt, { now, maxDays: opts.chat!.phoneVerifiedMaxDays }) && !(await approvedDespiteStale(tx, row))) reviewReason = PHONE_STALE_REASON;
     let finalPoints = points ?? 0;
     let settleNote: string | null = null;
-    if (!reviewReason && points !== null && points > row.points) {
-      if (chat) {
-        // Điểm lúc cộng lớn hơn điểm đã qua kiểm (tiền hàng hay hạng tăng): các luật chỉ kiểm lúc tạo/liên kết (trần theo người tạo,
-        // người nhận, ngưỡng) không thể chạy lại đầy đủ ở đây, nên người kiểm quyết thay vì chốt tự động.
+    if (!reviewReason && chat) {
+      // Tiền hàng lớn hơn lúc kiểm: các luật chỉ kiểm lúc tạo/liên kết/duyệt (trần theo người tạo, ngưỡng) không chạy lại được ở đây, người
+      // kiểm quyết. Duyệt đặt lại mốc tiền hàng đã kiểm nên chỉ vào REVIEW một lần cho mỗi lần tăng. Bằng hoặc thấp hơn thì cộng không quá điểm đã kiểm.
+      const checkedGoods = row.creditedGoodsValue;
+      if (checkedGoods !== null ? (order.goodsValue ?? 0) > checkedGoods : (points ?? 0) > row.points) {
         reviewReason = 'Tiền hàng tăng sau khi kiểm (điểm tính lại lớn hơn điểm đã duyệt), cần nhân viên kiểm';
       } else {
-        // Tiền hàng tăng sau lúc claim qua kiểm: vượt ngưỡng tự duyệt thì người kiểm lại; chỉ vượt trần tháng thì cộng ở mức chốt, không dưới điểm đã kiểm.
-        const reviewAbove = opts.reviewAboveVnd ?? 2_000_000;
-        const cap = opts.monthlyPointsCap ?? 200_000;
-        if ((order.goodsValue ?? 0) > reviewAbove) {
-          reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
-        } else {
-          const others =
-            (
-              await tx.externalPointsClaim.aggregate({
-                where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
-                _sum: { points: true },
-              })
-            )._sum.points ?? 0;
-          finalPoints = settlePoints({ newPoints: points, checkedPoints: row.points, others, cap });
-          if (finalPoints < points) settleNote = `Chốt theo trần tháng: ${finalPoints} thay vì ${points} điểm`;
-        }
+        finalPoints = Math.min(points ?? 0, row.points);
+      }
+    } else if (!reviewReason && points !== null && points > row.points) {
+      // Tiền hàng tăng sau lúc claim qua kiểm: vượt ngưỡng tự duyệt thì người kiểm lại; chỉ vượt trần tháng thì cộng ở mức chốt, không dưới điểm đã kiểm.
+      const reviewAbove = opts.reviewAboveVnd ?? 2_000_000;
+      const cap = opts.monthlyPointsCap ?? 200_000;
+      if ((order.goodsValue ?? 0) > reviewAbove) {
+        reviewReason = 'Tiền hàng tăng vượt ngưỡng tự duyệt';
+      } else {
+        const others =
+          (
+            await tx.externalPointsClaim.aggregate({
+              where: { userId, kind: 'SCAN', id: { not: row.id }, createdAt: { gte: startOfVnMonth(row.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
+              _sum: { points: true },
+            })
+          )._sum.points ?? 0;
+        finalPoints = settlePoints({ newPoints: points, checkedPoints: row.points, others, cap });
+        if (finalPoints < points) settleNote = `Chốt theo trần tháng: ${finalPoints} thay vì ${points} điểm`;
       }
     }
     if (reviewReason) {

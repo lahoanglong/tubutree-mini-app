@@ -92,7 +92,7 @@ export function evaluateChatClaim(f: ChatClaimFacts): ChatDecision {
 
   let reviewReason: string | null = null;
   if (points === null) reviewReason = 'Chưa tính được tiền hàng của đơn';
-  else if (f.member?.phoneStale) reviewReason = 'SĐT xác minh đã cũ, cần kiểm người nhận';
+  else if (f.member?.phoneStale) reviewReason = PHONE_STALE_REASON;
   else if (f.member?.isStaff) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
   else if (f.phoneIsStaff) reviewReason = 'SĐT trên đơn trùng SĐT của một nhân viên Tubu Tree, cần người khác duyệt';
   else if (f.creatorIsMember) reviewReason = 'Người tạo đơn trên Pancake chính là thành viên nhận điểm, cần người khác duyệt';
@@ -165,6 +165,12 @@ export function linkableMemberPhone(u: { phone: string | null; zaloId: string | 
   if (u.isBlocked || u.mergedIntoId) return null;
   return u.phone;
 }
+
+/** Lý do REVIEW khi mốc xác minh SĐT của người nhận đã cũ. Duyệt claim mang lý do này (mốc vẫn cũ) phải có ghi chú. */
+export const PHONE_STALE_REASON = 'SĐT xác minh đã cũ, cần kiểm người nhận';
+
+/** Dấu trong ghi chú sự kiện APPROVE: người duyệt đã kiểm người nhận dù mốc cũ, nên lúc cộng không bắt kiểm lại. */
+export const STALE_APPROVE_MARK = 'SĐT xác minh cũ';
 
 /** `phoneVerifiedAt` còn trong hạn (không có mốc = chưa từng xác minh). Mốc ở tương lai (lệch đồng hồ) vẫn tính là mới. */
 export const phoneVerifiedFresh = (at: Date | null, verify: { now: Date; maxDays: number }): boolean =>

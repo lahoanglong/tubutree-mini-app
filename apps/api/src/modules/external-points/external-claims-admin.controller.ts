@@ -24,6 +24,11 @@ export class ClaimReasonDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(300) reason!: string;
 }
 
+export class ApproveClaimDto {
+  /** Bắt buộc khi claim chờ vì "SĐT xác minh đã cũ" và mốc đó vẫn cũ lúc duyệt. */
+  @IsOptional() @Trim() @IsString() @MaxLength(300) note?: string;
+}
+
 export class ClaimNoteDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(300) note!: string;
 }
@@ -78,8 +83,8 @@ export class ExternalClaimsAdminController {
   }
 
   @Post(':id/approve')
-  approve(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    return this.admin.approve(id, user.sub);
+  approve(@Param('id') id: string, @Body() dto: ApproveClaimDto | undefined, @CurrentUser() user: JwtPayload) {
+    return this.admin.approve(id, user.sub, new Date(), dto?.note);
   }
 
   @Post(':id/void')

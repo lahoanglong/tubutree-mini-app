@@ -232,6 +232,7 @@ export async function ensureChatClaim(
               ratePct: decision.ratePct,
               multiplier: decision.multiplier,
               points: decision.points,
+              creditedGoodsValue: order.goodsValue,
               countsForTier: true,
               claimedCode: null,
               orderPhone: phone,
@@ -386,7 +387,7 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
           }
           const res = await tx.externalPointsClaim.updateMany({
             where: { id: fresh.id, userId: null, state: fresh.state },
-            data: { userId: member.id, state, reviewReason, points, multiplier: member.tierMultiplier, holdUntil: null },
+            data: { userId: member.id, state, reviewReason, points, multiplier: member.tierMultiplier, creditedGoodsValue: order.goodsValue, holdUntil: null },
           });
           if (res.count !== 1) continue;
           ids.push(fresh.id);

@@ -145,3 +145,43 @@ Không thêm cột, không thêm migration (không có `20261019180000_*`).
 ### Ghi chú kiểm chứng lượt 2
 
 `r12-merge-four-guests.race-spec.ts` (khớp pattern `merge`) đỏ không ổn định khi máy quá tải (load trung bình 30 đến 39): `ServiceUnavailableException` do thua tranh khoá gộp. Cùng spec, cùng DB, chạy hai lần liên tiếp thì lần đỏ lần xanh; với `auth.service.ts` của 99452048 (trước chatpts) và của bản này đều từng xanh, khi chạy riêng xanh 8 lần. Phần gộp khách không đọc `phone` khi Zalo không trả số (spec này luôn trả null), nên không có đường nào từ thay đổi lượt 2 tới ca đó. Coi là flake do tải, chưa chứng minh được nguyên nhân gốc.
+
+## Sửa sau review lượt 3
+
+Mã nguồn gốc của kết quả đỏ: 7234d1dc. Race mới `test/integration-race/external-chat-review3.race-spec.ts` (9 ca), chạy trên Postgres thật, đỏ 7/9 trước khi sửa (hai ca xanh là ca đã đúng sẵn: "tiền hàng tăng SAU duyệt" và "REVIEW vì lý do khác, duyệt không cần ghi chú").
+
+### Kết quả đỏ trước khi sửa
+
+- R5 (hạng tăng x2 sau khi qua kiểm): `releaseClaim` trả TO_REVIEW thay vì cộng 10.000. Kết hợp tiền hàng tăng với hạng tăng thì duyệt (dùng hệ số cũ) rồi cộng (hệ số mới) lại vào REVIEW: vòng REVIEW, PENDING, REVIEW.
+- R6 (claim bị chốt trần 100.000 lúc liên kết, hạng x2 tính lại 200.000): TO_REVIEW thay vì cộng 100.000.
+- "Tiền hàng và hạng cùng tăng": đỏ vì duyệt không lưu hệ số mới.
+- "Tiền hàng giảm": `creditedGoodsValue` null sau khi tạo (cột mới chỉ được ghi lúc cộng).
+- L2: danh sách thiếu trường thành viên; duyệt claim lý do SĐT cũ không có ghi chú vẫn qua.
+- L3a: mốc xác minh cũ đi giữa lúc chờ, vẫn CREDITED.
+
+### Luật mới (L1)
+
+- Điểm chốt ở lần kiểm gần nhất (tạo, liên kết, duyệt) là điểm được cộng. `releaseClaim` không tính lại lên: hệ số lúc cộng = `min(hệ số hạng hiện tại, hệ số đã kiểm)`, điểm cộng = `min(điểm tính lại, điểm đã kiểm)`. Hạng giảm hay tiền hàng giảm thì điểm hạ theo; hạng tăng thì không.
+- Chỉ vào REVIEW khi tiền hàng hiện tại của đơn lớn hơn tiền hàng đã kiểm. Mốc đã kiểm lưu ở cột có sẵn `creditedGoodsValue`, ghi ở `ensureChatClaim`, `linkClaimsByPhone` và `approve` (duyệt dùng tiền hàng và hạng HIỆN TẠI, lưu cả `multiplier`). Lúc cộng cột này ghi tiền hàng đã cộng (bằng hoặc thấp hơn mốc đã kiểm), nên `chatSpending12m` (chỉ đọc claim CREDITED) giữ nguyên nghĩa. Không thêm cột, không migration. Claim PHONE cũ có `creditedGoodsValue` null (không có trên PROD vì chưa deploy) rơi về luật cũ (điểm tính lại lớn hơn điểm đã kiểm thì REVIEW).
+- Claim đơn sàn (SCAN) không đổi.
+
+### Thông tin người nhận cho người duyệt (L2)
+
+- `GET /admin/external-claims` và `/:id` thêm cho claim PHONE đã có chủ: `memberPhoneVerifiedAt`, `memberPhoneStale`, `memberCreatedAt`, `memberDeliveredAppOrders` (null với claim không phải PHONE hay chưa có chủ); tên thành viên là `userName` có sẵn. Kiểu thêm vào `AdminExternalClaimRow` (shared-types) ở dạng tuỳ chọn để không làm gãy chỗ khác dựng dữ liệu mẫu.
+- `POST /admin/external-claims/:id/approve` nhận body tuỳ chọn `{ note }`. Claim có lý do "SĐT xác minh đã cũ" mà mốc còn cũ lúc duyệt: thiếu `note` thì 400 `NOTE_REQUIRED`; có thì ghi vào sự kiện APPROVE kèm dấu "SĐT xác minh cũ".
+- Tab web `external-claims-tab.tsx` KHÔNG sửa ở nhánh này: tệp đó chỉ có trên nhánh `lr2/extui` / `review/2026-10-18-launch`, không có ở nền của `lr2/chatpts`. Cần một gói nhỏ trên nhánh review để hiện các trường mới cạnh lý do REVIEW, nhãn cảnh báo khi `memberPhoneStale`, và ô ghi chú khi duyệt claim lý do SĐT cũ.
+
+### L3
+
+- (a) Lúc cộng claim PHONE kiểm lại mốc xác minh của thành viên: cũ và claim chưa được duyệt kèm ghi chú sau lý do SĐT cũ thì vào REVIEW với lý do đó. Duyệt kèm ghi chú (dấu trong sự kiện APPROVE) thì cộng, không vòng lại.
+- (b) Chỉ ghi nhận, không sửa: `applyGrants` (đăng nhập, `auth.service.ts` quanh dòng 368 đến 378) có thể chạy trên số cũ trong lúc người dùng đổi số, nên một grant theo số cũ có thể được cấp cho tài khoản vừa rời số đó.
+
+### Giới hạn đã biết thêm
+
+- Đơn tạo trước khi hạng tăng không được hệ số mới: điểm đã chốt ở hệ số lúc kiểm.
+- Claim đã duyệt mà trước lúc cộng mốc xác minh SĐT mới cũ đi, và duyệt không phải vì lý do SĐT cũ, vẫn quay lại REVIEW một lần (duyệt lại thì cần ghi chú).
+
+### Cần chủ quyết
+
+- Mini App có nên xin lại SĐT định kỳ (để mốc `phoneVerifiedAt` không tự cũ sau 180 ngày) không? Hiện không đổi Mini App: mốc chỉ mới lại khi Zalo trả số, nên thành viên lâu không xin số lại sẽ luôn vào REVIEW chờ ghi chú.
+

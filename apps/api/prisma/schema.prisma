@@ -3228,7 +3228,8 @@ model ExternalPointsClaim {
   orderPhone      String?
   /// Claim PHONE: id nhân viên tạo đơn trên Pancake (payload `creator.id`), để áp trần điểm tự cộng theo người tạo.
   creatorRef      String?
-  /// Claim PHONE: tiền hàng của đơn LÚC cộng điểm. Chi tiêu 12 tháng xét hạng dùng số này, sửa đơn về sau không làm hạng nhảy.
+  /// Claim PHONE: tiền hàng của đơn ở lần kiểm gần nhất (tạo, liên kết, duyệt); releaseClaim chuyển REVIEW khi tiền hàng hiện tại lớn hơn số này.
+  /// Lúc cộng ghi lại đúng tiền hàng đã cộng, nên với claim CREDITED chi tiêu 12 tháng xét hạng dùng số này, sửa đơn về sau không làm hạng nhảy.
   creditedGoodsValue Int?
   /// Ngày VN 'YYYY-MM-DD' lúc tạo claim, để đếm trần ngày.
   dayKey          String

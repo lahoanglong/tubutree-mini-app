@@ -111,6 +111,15 @@ export interface AdminExternalClaimRow {
   deliveredAt: string | null;
   creditedAt: string | null;
   createdAt: string;
+  /**
+   * Chỉ claim PHONE đã có thành viên (null ở các dòng còn lại): để người kiểm đối chiếu người nhận với lý do REVIEW. `memberPhoneVerifiedAt`
+   * là lần gần nhất Zalo trả đúng SĐT này; `memberPhoneStale` = mốc đó đã quá hạn xác minh (hoặc chưa có), nên người nhận chưa được xác nhận.
+   */
+  memberPhoneVerifiedAt?: string | null;
+  memberPhoneStale?: boolean;
+  memberCreatedAt?: string | null;
+  /** Số đơn mua trong app của thành viên đã giao (DELIVERED): thành viên đã mua thật thì SĐT đáng tin hơn. */
+  memberDeliveredAppOrders?: number | null;
 }
 
 /** Một dòng nhật ký chỉ-thêm của claim: mọi thao tác của người, cron và khách. */
@@ -155,6 +164,11 @@ export interface AdminExternalAttemptRow {
 export interface AdminExternalAttemptListResponse {
   data: AdminExternalAttemptRow[];
   meta: { page: number; limit: number; total: number };
+}
+
+/** Duyệt claim. `note` bắt buộc khi lý do REVIEW là "SĐT xác minh đã cũ" và mốc đó vẫn cũ lúc duyệt (người duyệt ghi cách đã xác nhận người nhận). */
+export interface AdminApproveClaimRequest {
+  note?: string;
 }
 
 export interface AdminExternalReasonRequest {
