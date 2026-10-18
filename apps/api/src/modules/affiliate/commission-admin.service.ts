@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
-import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from './commission-rate';
+import { loadDefaultRate } from './commission-rate';
 import {
   AFFILIATE_MAX_RATE_KEY,
   DEFAULT_AFFILIATE_MAX_RATE_PCT,
@@ -34,10 +34,11 @@ const BLOCKING: ReadonlySet<RateImportStatus> = new Set(['INVALID', 'OVER_CAP', 
 type Db = PrismaService | Prisma.TransactionClient;
 
 const toRate = (d: Prisma.Decimal | null): number | null => (d === null ? null : Number(d));
+const toDecimal = (rate: number | null): Prisma.Decimal | null => (rate === null ? null : new Prisma.Decimal(rate));
 
 type LockedRate = { id: string; sku: string; affiliateRate: Prisma.Decimal | null };
-type RateChange = { sku: string; from: number | null; to: number };
-const toChanges = (rows: LockedRate[], to: number): RateChange[] => rows.map((v) => ({ sku: v.sku, from: toRate(v.affiliateRate), to }));
+type RateChange = { sku: string; from: number | null; to: number | null };
+const toChanges = (rows: LockedRate[], to: number | null): RateChange[] => rows.map((v) => ({ sku: v.sku, from: toRate(v.affiliateRate), to }));
 
 /** Cursor "Tải thêm" của danh sách % hoa hồng: (tên, id) sản phẩm cuối trang, base64url JSON — web coi là chuỗi mờ. */
 export function encodeListCursor(p: { name: string; id: string }): string {
@@ -78,7 +79,7 @@ export class CommissionAdminService {
   ) {}
 
   async defaultRate(): Promise<number> {
-    return sanitizeDefaultRate(await this.config.get<unknown>(AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT));
+    return loadDefaultRate(this.config);
   }
 
   async maxRate(): Promise<number> {
@@ -161,22 +162,22 @@ export class CommissionAdminService {
     };
   }
 
-  /** Đặt % cho một biến thể (kể cả biến thể đang tắt — bật lại thì đã có %). */
-  async setVariationRate(adminId: string, variationId: string, rate: number) {
-    await this.assertRate(rate);
+  /** Đặt % cho một biến thể (kể cả biến thể đang tắt — bật lại thì đã có %). `rate = null`: xoá % riêng, về mức mặc định. */
+  async setVariationRate(adminId: string, variationId: string, rate: number | null) {
+    if (rate !== null) await this.assertRate(rate);
     return this.prisma.$transaction(async (tx) => {
       const [before] = await tx.$queryRaw<LockedRate[]>`
         SELECT "id", "sku", "affiliateRate" FROM "variations" WHERE "id" = ${variationId} FOR NO KEY UPDATE`;
       if (!before) throw new NotFoundException('Không tìm thấy biến thể.');
-      await tx.variation.update({ where: { id: variationId }, data: { affiliateRate: new Prisma.Decimal(rate) } });
-      this.logRateChanges(adminId, 'đặt % hoa hồng CTV cho biến thể', toChanges([before], rate));
+      await tx.variation.update({ where: { id: variationId }, data: { affiliateRate: toDecimal(rate) } });
+      this.logRateChanges(adminId, rate === null ? 'xoá % hoa hồng CTV của biến thể (về mặc định)' : 'đặt % hoa hồng CTV cho biến thể', toChanges([before], rate));
       return { id: before.id, sku: before.sku, affiliateRate: rate };
     });
   }
 
   /** Đặt cùng một % cho mọi biến thể ĐANG BÁN của sản phẩm (biến thể đang tắt giữ nguyên). */
-  async setProductRate(adminId: string, productId: string, rate: number) {
-    await this.assertRate(rate);
+  async setProductRate(adminId: string, productId: string, rate: number | null) {
+    if (rate !== null) await this.assertRate(rate);
     return this.prisma.$transaction(async (tx) => {
       const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, name: true } });
       if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
@@ -185,8 +186,8 @@ export class CommissionAdminService {
         WHERE "productId" = ${productId} AND "isActive" = true
         ORDER BY "id" FOR NO KEY UPDATE`;
       if (locked.length === 0) throw new BadRequestException('Sản phẩm không có biến thể đang bán để đặt %.');
-      await tx.variation.updateMany({ where: { id: { in: locked.map((v) => v.id) } }, data: { affiliateRate: new Prisma.Decimal(rate) } });
-      this.logRateChanges(adminId, `đặt % hoa hồng CTV cho sản phẩm ${productId} (${product.name})`, toChanges(locked, rate));
+      await tx.variation.updateMany({ where: { id: { in: locked.map((v) => v.id) } }, data: { affiliateRate: toDecimal(rate) } });
+      this.logRateChanges(adminId, `${rate === null ? 'xoá % (về mặc định)' : 'đặt %'} hoa hồng CTV cho sản phẩm ${productId} (${product.name})`, toChanges(locked, rate));
       return { productId, updated: locked.length, affiliateRate: rate };
     });
   }
@@ -223,7 +224,7 @@ export class CommissionAdminService {
   private logRateChanges(adminId: string, action: string, changes: RateChange[], summary = `đổi ${changes.length} biến thể`) {
     this.logger.log(`Admin ${adminId} ${action}: ${summary}.`);
     for (let i = 0; i < changes.length; i += LOG_CHUNK) {
-      const part = changes.slice(i, i + LOG_CHUNK).map((c) => `${c.sku}: ${c.from ?? 'chưa có'}→${c.to}`);
+      const part = changes.slice(i, i + LOG_CHUNK).map((c) => `${c.sku}: ${c.from ?? 'mặc định'}→${c.to ?? 'mặc định'}`);
       this.logger.log(`Admin ${adminId} ${action} (${i + 1}–${i + part.length}/${changes.length}): ${part.join('; ')}`);
     }
   }
@@ -250,15 +251,15 @@ export class CommissionAdminService {
           );
         }
         const changes = preview.rows.filter((r) => r.status === 'OK');
-        const byRate = new Map<number, string[]>();
-        for (const r of changes) byRate.set(r.rate!, [...(byRate.get(r.rate!) ?? []), r.sku]);
+        const byRate = new Map<number | null, string[]>();
+        for (const r of changes) byRate.set(r.rate, [...(byRate.get(r.rate) ?? []), r.sku]);
         for (const [rate, skus] of byRate) {
-          await tx.variation.updateMany({ where: { sku: { in: skus } }, data: { affiliateRate: new Prisma.Decimal(rate) } });
+          await tx.variation.updateMany({ where: { sku: { in: skus } }, data: { affiliateRate: toDecimal(rate) } });
         }
         this.logRateChanges(
           adminId,
           'nhập CSV % hoa hồng CTV',
-          changes.map((r) => ({ sku: r.sku, from: r.currentRate, to: r.rate! })),
+          changes.map((r) => ({ sku: r.sku, from: r.currentRate, to: r.rate })),
           `đổi ${changes.length} biến thể, giữ nguyên ${preview.counts.UNCHANGED}, không khớp ${preview.counts.NOT_FOUND}`,
         );
         return { preview, changes };
@@ -307,9 +308,9 @@ export class CommissionAdminService {
         variationName: v?.name ?? null,
       };
       if (p.problem) return { ...base, status: 'INVALID' as const, message: p.problem };
-      const shape = rateProblem(p.rate, Number.POSITIVE_INFINITY);
+      const shape = p.clear ? null : rateProblem(p.rate, Number.POSITIVE_INFINITY);
       if (shape) return { ...base, status: 'INVALID' as const, message: shape };
-      const over = rateProblem(p.rate, maxRate);
+      const over = p.clear ? null : rateProblem(p.rate, maxRate);
       if (over) return { ...base, status: 'OVER_CAP' as const, message: over };
       if ((skuCount.get(p.sku) ?? 0) > 1) return { ...base, status: 'DUPLICATE' as const, message: 'SKU xuất hiện nhiều lần trong file' };
       if (!v) return { ...base, status: 'NOT_FOUND' as const, message: 'không có biến thể nào mang SKU này' };

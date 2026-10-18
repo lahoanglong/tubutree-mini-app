@@ -92,8 +92,9 @@ export const listCommissionRates = (p: { q?: string; missing?: boolean; cursor?:
   if (p.cursor) sp.set('cursor', p.cursor);
   return apiFetch<CommissionRatesPage>(`/admin/commission-rates?${sp.toString()}`);
 };
-export const setVariationRate = (variationId: string, rate: number) =>
-  apiFetch<{ id: string; sku: string; affiliateRate: number }>(`/admin/commission-rates/variations/${encodeURIComponent(variationId)}`, {
+/** `rate = null`: xoá % riêng, biến thể về mức mặc định. */
+export const setVariationRate = (variationId: string, rate: number | null) =>
+  apiFetch<{ id: string; sku: string; affiliateRate: number | null }>(`/admin/commission-rates/variations/${encodeURIComponent(variationId)}`, {
     method: 'PUT',
     body: { rate },
   });

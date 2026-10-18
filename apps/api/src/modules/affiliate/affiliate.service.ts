@@ -60,7 +60,7 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
-import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, resolveVariationRate, sanitizeDefaultRate } from './commission-rate';
+import { loadDefaultRate, resolveVariationRate } from './commission-rate';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
@@ -896,7 +896,7 @@ export class AffiliateService {
       where: { id: { in: variationIds } },
       select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true, storefrontId: true } } },
     });
-    const defaultPct = sanitizeDefaultRate(await this.config.get<unknown>(AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT));
+    const defaultPct = await loadDefaultRate(this.config);
     const ownConsignment = await this.ownConsignmentVariationIds(order.id, order.referrerUserId, db);
     // Sản phẩm bị chặn affiliate (product.affiliateBlocked) → rate=0, KHÔNG tính hoa hồng cho
     // dòng hàng đó, dù link/CTV nào đã trót chia sẻ trước khi bị chặn (mirror storefront/brand

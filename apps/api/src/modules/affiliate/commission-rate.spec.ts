@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { resolveVariationRate, sanitizeDefaultRate } from './commission-rate';
+import { loadDefaultRate, maxResolvedRate, resolveVariationRate, sanitizeDefaultRate } from './commission-rate';
 
 const base = { explicit: null, blocked: false, partnerProduct: false, ownConsignment: false, defaultPct: 8 };
 
@@ -33,5 +33,25 @@ describe('sanitizeDefaultRate', () => {
   });
   it('giá trị hỏng → 8', () => {
     for (const v of [-1, 51, 7.5, '8', null, undefined, NaN]) expect(sanitizeDefaultRate(v)).toBe(8);
+  });
+});
+
+const cfg = (values: Record<string, unknown>) => ({ get: async <T>(k: string, fb?: T) => (k in values ? values[k] : fb) as T });
+
+describe('loadDefaultRate', () => {
+  it('mặc định 8, không vượt trần max_rate_pct', async () => {
+    expect(await loadDefaultRate(cfg({}) as never)).toBe(8);
+    expect(await loadDefaultRate(cfg({ 'affiliate.default_rate_pct': 20, 'affiliate.max_rate_pct': 12 }) as never)).toBe(12);
+    expect(await loadDefaultRate(cfg({ 'affiliate.default_rate_pct': 5, 'affiliate.max_rate_pct': 12 }) as never)).toBe(5);
+  });
+});
+
+describe('maxResolvedRate (huy hiệu "+X% hoa hồng")', () => {
+  it('NULL hàng Tubu → mặc định; NULL hàng đối tác → 0; có đặt riêng thì theo mức đó; bị chặn → 0', () => {
+    expect(maxResolvedRate([{ affiliateRate: null }, { affiliateRate: 5 }], { storefrontId: null }, 8)).toBe(8);
+    expect(maxResolvedRate([{ affiliateRate: null }], { storefrontId: 'sf' }, 8)).toBe(0);
+    expect(maxResolvedRate([{ affiliateRate: null }, { affiliateRate: 5 }], { storefrontId: 'sf' }, 8)).toBe(5);
+    expect(maxResolvedRate([{ affiliateRate: null }], { affiliateBlocked: true }, 8)).toBe(0);
+    expect(maxResolvedRate([{ affiliateRate: 3 }], {}, 8)).toBe(3);
   });
 });

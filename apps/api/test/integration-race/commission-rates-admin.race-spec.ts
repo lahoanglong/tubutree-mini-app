@@ -155,6 +155,26 @@ describe('Admin đặt % hoa hồng CTV (real Postgres)', () => {
     expect(ref.commissions).toEqual([expect.objectContaining({ amount: 27_000, status: 'LOCKED', rate: 10 })]);
   });
 
+  it('xoá % riêng (đơn lẻ và CSV "mặc định") → NULL, đơn sau hưởng mức mặc định; hoa hồng đơn cũ giữ nguyên', async () => {
+    const ctv = await createUser(prisma, { role: 'AFFILIATE', phone: randomPhone() });
+    const v = await pancakeVariation(100_000);
+    const w = await pancakeVariation(100_000);
+    await admin.setVariationRate(adminUserId, v.id, 15);
+    await admin.setVariationRate(adminUserId, w.id, 15);
+    const old = await assistedOrder(ctv.id, v.id, 1);
+    expect(await prisma.commission.findFirstOrThrow({ where: { orderId: old.id } })).toMatchObject({ amount: 15_000 });
+
+    await admin.setVariationRate(adminUserId, v.id, null);
+    expect(await rateOf(v.id)).toBeNull();
+    const wSku = (await prisma.variation.findUniqueOrThrow({ where: { id: w.id } })).sku;
+    await admin.applyImport(adminUserId, `${wSku},mặc định`);
+    expect(await rateOf(w.id)).toBeNull();
+
+    const next = await assistedOrder(ctv.id, v.id, 1);
+    expect(await prisma.commission.findFirstOrThrow({ where: { orderId: next.id } })).toMatchObject({ amount: 8_000 });
+    expect(await prisma.commission.findFirstOrThrow({ where: { orderId: old.id } })).toMatchObject({ amount: 15_000 });
+  });
+
   it('đơn lên hộ khách: ADMIN lên hộ → không có hoa hồng (khung đơn báo vai trò không hưởng); CTV lên hộ → có như cũ', async () => {
     const v = await pancakeVariation(150_000);
     await admin.setVariationRate(adminUserId, v.id, 10);

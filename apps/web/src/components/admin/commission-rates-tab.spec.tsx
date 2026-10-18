@@ -88,7 +88,9 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(t).toContain('10 nghĩa là 10%');
     expect(container.querySelectorAll('[data-commission-product]')).toHaveLength(2);
     const rows = container.querySelectorAll<HTMLElement>('[data-commission-variation]');
-    expect(rows[0]!.textContent).toContain('Chưa có %');
+    // NULL hiện tỉ lệ hiệu lực: hàng Tubu theo mức mặc định 8%, hàng đối tác 0đ.
+    expect(rows[0]!.textContent).toContain('Mặc định 8% ≈ 8.000đ/sp');
+    expect(rows[2]!.textContent).toContain('Hàng đối tác chưa đặt %: 0đ');
     expect(rows[0]!.textContent).toContain('Giá sỉ: Vàng 80.000');
     expect(rows[1]!.textContent).toContain('7,5%');
     expect(t).toContain('Gian hàng đối tác');
@@ -116,6 +118,18 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     await flush();
     const rows = open.container.querySelectorAll<HTMLElement>('[data-commission-variation]');
     expect(rows[1]!.textContent).toContain('≈ 12.000');
+  });
+
+  it('"Về mặc định": chỉ hiện ở biến thể có % riêng, bấm → PUT rate null', async () => {
+    const m = stub({ '/admin/commission-rates/variations/v2': { body: { id: 'v2', sku: 'NRC-1L', affiliateRate: null } } });
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    const rows = container.querySelectorAll<HTMLElement>('[data-commission-variation]');
+    expect(rows[0]!.textContent).not.toContain('Về mặc định');
+    click(byText(rows[1]!, 'button', 'Về mặc định'));
+    await flush();
+    expect(bodyOf(m, '/variations/v2')).toEqual({ rate: null });
+    expect(m.calls.find((c) => c.url.includes('/variations/v2'))?.init?.method).toBe('PUT');
   });
 
   it('lưu xong, danh sách tải lại với mức mới: "Đã lưu" vẫn hiện, ô nhập theo mức mới', async () => {
@@ -222,7 +236,7 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(bodyOf(m, '/import/preview')).toEqual({ csv: 'NRC-500,10\nZZZ,5' });
     const rows = container.querySelectorAll<HTMLElement>('[data-import-row]');
     expect([...rows].map((r) => r.dataset.importRow)).toEqual(['NOT_FOUND', 'OK']);
-    expect(rows[1]!.textContent).toContain('Chưa có % → 10%');
+    expect(rows[1]!.textContent).toContain('mặc định → 10%');
 
     typeInto(ta, 'NRC-500,10\nZZZ,6');
     expect(byText(container, 'button', 'Áp dụng 1 dòng')).toBeNull();

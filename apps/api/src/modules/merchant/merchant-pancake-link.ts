@@ -210,7 +210,8 @@ export async function linkTubuFulfilledVariation(
 
   const moved = await tx.variation.updateMany({
     where: { id: target.variationId, productId: target.productId },
-    data: { productId: product.id },
+    // Xoá % hoa hồng CTV đã đặt khi còn là hàng Tubu: hàng đối tác chỉ có hoa hồng khi admin đặt lại riêng.
+    data: { productId: product.id, affiliateRate: null },
   });
   if (moved.count === 0) throw new ConflictException(LINK_TAKEN_MESSAGE);
 
@@ -285,7 +286,8 @@ export async function unlinkTubuFulfilledVariation(
 
   await tx.variation.updateMany({
     where: { id: link.variationId, productId },
-    data: { productId: link.originProductId },
+    // Về lại sản phẩm gốc: bỏ % do admin đặt khi biến thể ở gian hàng đối tác, để theo mức mặc định như hàng Tubu khác.
+    data: { productId: link.originProductId, affiliateRate: null },
   });
   const product = await tx.product.findUniqueOrThrow({
     where: { id: productId },

@@ -184,7 +184,7 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
     await linkTubuFulfilledVariation(t as never, product, OPTS);
     expect(t.variation.updateMany).toHaveBeenCalledWith({
       where: { id: 'var-pk', productId: 'tubu-shell' },
-      data: { productId: 'prod-a' },
+      data: { productId: 'prod-a', affiliateRate: null },
     });
     expect(t.variation.deleteMany).toHaveBeenCalledWith({ where: { productId: 'prod-a', pancakeId: null } });
     expect(t.product.update).toHaveBeenCalledWith({
@@ -218,7 +218,7 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
   it('R2-MERCHANT-1: admin xác nhận chuyển → chuyển và ghi takeover để gỡ liên kết trả về đúng chỗ', async () => {
     const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
     await linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true, takeoverProductId: 'tubu-shell' });
-    expect(t.variation.updateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-shell' }, data: { productId: 'prod-a' } });
+    expect(t.variation.updateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-shell' }, data: { productId: 'prod-a', affiliateRate: null } });
     expect(t.merchantPancakeLink.create.mock.calls[0][0].data).toMatchObject({ takeover: true, originDeactivated: true });
   });
 
@@ -238,7 +238,7 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
     const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
     t.merchantPancakeLink.create.mockResolvedValue({ id: 'link-9' });
     const linked = await linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true, takeoverProductId });
-    expect(t.variation.updateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-shell' }, data: { productId: 'prod-a' } });
+    expect(t.variation.updateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-shell' }, data: { productId: 'prod-a', affiliateRate: null } });
     expect(t.merchantPancakeLink.create.mock.calls[0][0].data).toMatchObject({ takeover: true, originProductId: 'tubu-shell' });
     expect(linked).toEqual({ linkId: 'link-9', originProductId: 'tubu-shell', takeover: true });
   });
@@ -315,7 +315,7 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
     });
     expect(t.variation.updateMany).toHaveBeenCalledWith({
       where: { id: 'var-pk', productId: 'prod-a' },
-      data: { productId: 'tubu-shell' },
+      data: { productId: 'tubu-shell', affiliateRate: null },
     });
     expect(t.variation.create.mock.calls[0][0].data).toMatchObject({ productId: 'prod-a', pancakeId: null, stock: 0 });
     const productLock = t.$queryRaw.mock.calls[0] as unknown as [string[], ...unknown[]];

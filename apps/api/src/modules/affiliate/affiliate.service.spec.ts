@@ -2123,6 +2123,14 @@ describe('AffiliateService.createCommissionForOrder — mức mặc định affi
     expect(create.mock.calls[0][0].data.lineAmounts).toEqual({ i1: 8000 });
   });
 
+  it('mặc định không vượt trần max_rate_pct hiện hành (trần hạ sau khi đặt mặc định)', async () => {
+    const cfg = { get: async <T>(k: string, fb?: T) => (k === 'affiliate.default_rate_pct' ? 20 : k === 'affiliate.max_rate_pct' ? 10 : fb) } as unknown as SystemConfigService;
+    const create = jest.fn();
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } }], create);
+    await new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    expect(create.mock.calls[0][0].data.lineAmounts).toEqual({ i1: 10000 });
+  });
+
   it('đổi mặc định về 0 → biến thể chưa đặt ra 0đ; giá trị cấu hình hỏng → quay về 8%', async () => {
     const v = [{ id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } }];
     expect(await runSpy(v, 0)).toBeNull();

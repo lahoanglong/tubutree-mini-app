@@ -40,7 +40,27 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect($queryRaw.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]!);
     expect(update.mock.calls[0][0].where).toEqual({ id: 'v1' });
     expect(update.mock.calls[0][0].data.affiliateRate.toString()).toBe('12');
-    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toMatch(/admin-1.*A1: chưa có→12/);
+    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toMatch(/admin-1.*A1: mặc định→12/);
+  });
+
+  it('rate null: xoá % riêng (về mặc định), không kiểm trần, log cũ→mặc định', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'v1', sku: 'A1', affiliateRate: dec(12) }]);
+    const { svc } = make({ variation: { update }, $queryRaw });
+    expect(await svc.setVariationRate('admin-1', 'v1', null)).toEqual({ id: 'v1', sku: 'A1', affiliateRate: null });
+    expect(update.mock.calls[0][0].data).toEqual({ affiliateRate: null });
+    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toMatch(/A1: 12→mặc định/);
+  });
+
+  it('rate null cho cả sản phẩm: ghi null cho mọi biến thể đang bán', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 2 });
+    const { svc } = make({
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', name: 'SP' }) },
+      variation: { updateMany },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'A1', affiliateRate: dec(5) }, { id: 'v2', sku: 'A2', affiliateRate: null }]),
+    });
+    await svc.setProductRate('a', 'p1', null);
+    expect(updateMany.mock.calls[0][0].data).toEqual({ affiliateRate: null });
   });
 
   it('vượt trần cấu hình / âm / số lẻ (7.5, 0.1) → 400 kèm gợi ý số nguyên, không mở transaction', async () => {
@@ -83,7 +103,7 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect(updateMany.mock.calls[0][0].data.affiliateRate.toString()).toBe('8');
     const logs = logSpy.mock.calls.map((c) => c[0]).join('\n');
     expect(logs).toContain('admin-2');
-    expect(logs).toContain('A1: chưa có→8; A2: 5→8');
+    expect(logs).toContain('A1: mặc định→8; A2: 5→8');
   });
 
   it('đặt % cả sản phẩm: không có sản phẩm → 404; không còn biến thể đang bán → 400; cả hai không ghi', async () => {
@@ -107,7 +127,7 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect(q).toMatch(/v\."isActive" = true AND v\."affiliateRate" IS NULL AND p\."isActive" = true AND p\."storefrontId" IS NULL/);
     expect(q).toMatch(/ORDER BY v\."id" FOR NO KEY UPDATE OF v/);
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ['v1', 'v3'] }, affiliateRate: null });
-    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toContain('A1: chưa có→10; C3: chưa có→10');
+    expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toContain('A1: mặc định→10; C3: mặc định→10');
   });
 
   it('áp % khi không còn biến thể nào chưa có % → 0, không ghi', async () => {
@@ -177,6 +197,17 @@ describe('CommissionAdminService — nhập CSV "sku,%"', () => {
     expect(v.updateMany).not.toHaveBeenCalled();
   });
 
+  it('CSV ô "mặc định": xem trước OK khi đang có %, UNCHANGED khi đã trống; áp → ghi null', async () => {
+    const v = variationMock();
+    const { svc } = make({ variation: v });
+    const pv = await svc.previewImport('B2,mặc định\nA1,default');
+    expect(pv.rows.map((r) => [r.sku, r.status, r.rate])).toEqual([['B2', 'OK', null], ['A1', 'UNCHANGED', null]]);
+    expect(pv.canApply).toBe(true);
+    await svc.applyImport('admin-9', 'B2,mặc định\nC3,10');
+    const calls = v.updateMany.mock.calls.map((c) => [c[0].where.sku.in, c[0].data.affiliateRate === null ? null : c[0].data.affiliateRate.toString()]);
+    expect(calls).toEqual([[['B2'], null], [['C3'], '10']]);
+  });
+
   it('áp: ghi theo nhóm mức %, bỏ qua SKU không khớp và dòng giữ nguyên, log từng thay đổi kèm admin', async () => {
     const v = variationMock();
     const { svc, prisma } = make({ variation: v });
@@ -194,7 +225,7 @@ describe('CommissionAdminService — nhập CSV "sku,%"', () => {
     expect(call.data.affiliateRate.toString()).toBe('10');
     const logs = logSpy.mock.calls.map((c) => c[0]).join('\n');
     expect(logs).toContain('admin-9');
-    expect(logs).toContain('A1: chưa có→10');
+    expect(logs).toContain('A1: mặc định→10');
     expect(logs).toContain('C3: 5→10');
   });
 

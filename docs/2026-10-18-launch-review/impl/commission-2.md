@@ -20,8 +20,17 @@ Màn "Hoa hồng & giá sỉ": hiện "Mức mặc định khi để trống: X%
 - Unit: `commission-rate.spec.ts` (null/0/12/chặn/đối tác/ký gửi/sanitize), `affiliate.service.spec.ts` (mặc định, đối tác, DEALER, cấu hình hỏng).
 - Race (Postgres thật): `commission-create` (mặc định + chốt), `commission-rates-admin` (sửa theo luật mới), `partial-return-commission-tier` (dòng "không hoa hồng" nay đặt rate 0 tường minh).
 
+## Sửa sau review
+1. Race spec dùng `affiliateRate: null` với nghĩa "không hoa hồng" sửa sang 0 tường minh: q1-money-refunds (dòng phấn), partial-return-commission-tier. Quét toàn bộ 97 race spec có commission/referrer: chỉ q1-money-refunds còn đỏ.
+2. Huy hiệu storefront picker và banner nhãn dùng `maxResolvedRate` (cùng `resolveVariationRate`, hàng đối tác NULL = 0). `getShareToEarn` xét `affiliate.commission_eligible_roles` (đại lý thấy banner); `BrandService` nhận thêm `SystemConfigService`.
+3. Duyệt "Tubu giao hộ" và gỡ liên kết đặt `affiliateRate: null` cùng `variation.updateMany` (merchant-pancake-link.ts); race (l) ở merchant-pancake-link.
+4. Xoá % riêng: `PUT commission-rates/variations|products/:id` nhận `{rate: null}`; CSV ô "mặc định"/"mac dinh"/"macdinh"/"default" (preview OK/UNCHANGED, áp ghi NULL); web nút "Về mặc định" và gợi ý CSV. Race: commission-rates-admin.
+5. `loadDefaultRate` = min(mặc định, trần `affiliate.max_rate_pct`) dùng khi tính hoa hồng, admin list, huy hiệu; `SystemConfigService.set` từ chối mặc định > trần và hạ trần < mặc định.
+6. Dòng NULL trên web: "Mặc định X% ≈ Yđ/sp" (hàng Tubu) hoặc "Hàng đối tác chưa đặt %: 0đ"; preview CSV ghi "mặc định".
+7. Test snapshot viết lại trong partial-return-commission-tier: a NULL (8.000) + b 10% (10.000), đổi mặc định 8 → 20, trả dòng a → cắt đúng 8.000 theo lineAmounts (đường tính lại cũ cho NULL = 0 sẽ cắt 0, nên test đỏ nếu bỏ lineAmounts); finally khôi phục giá trị cũ. Test yếu ở commission-create bỏ phần đổi mặc định.
+Điểm còn lại: ctv-assisted-late-payment đỏ một lần trên DB đã dùng qua nhiều spec, xanh hai lần liên tiếp trên DB sạch (chưa rõ nguyên nhân, nghi flaky thời gian).
+
 ## Điểm mở
-- Huy hiệu "hoa hồng tới X%" ở storefront.service.ts:246 và brand.service.ts:157 vẫn lấy max `affiliateRate` (NULL = 0), nên biến thể chưa đặt không hiện % dù được hưởng mặc định. Chưa sửa (ngoài phạm vi).
 - Hai đường tính lại legacy (order-reversal.commissionByLine, productCommissionBreakdown) vẫn coi NULL = 0; chỉ ảnh hưởng hoa hồng cũ thiếu `lineAmounts`.
 - `prisma/seed.ts` dev (file phiên khác) chưa có khoá; mã dùng mặc định 8.
 - "Áp % cho biến thể chưa có %" (fillMissingRates) còn nguyên; giờ chỉ cần khi muốn mức khác mặc định.

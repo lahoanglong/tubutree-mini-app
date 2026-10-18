@@ -154,6 +154,44 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
       expect((await prisma.order.findUniqueOrThrow({ where: { id: o.order.id } })).status).toBe('DELIVERED');
     });
 
+    it('rate chốt lúc đặt: đổi mặc định sau khi tạo đơn rồi trả một phần → cắt theo lineAmounts đã lưu, không theo mặc định mới', async () => {
+      const key = 'affiliate.default_rate_pct';
+      const before = await prisma.systemConfig.findUnique({ where: { key } });
+      try {
+        const ctv = await createUser(prisma, { role: 'AFFILIATE' });
+        const buyer = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+        const admin = await createUser(prisma, { role: 'ADMIN' });
+        // a chưa có % (hưởng mặc định 8% = 8.000), b có 10% riêng (10.000).
+        const [a, b] = await Promise.all([variation(100_000, null), variation(100_000, 10)]);
+        const order = await createOrder(prisma, {
+          userId: buyer.id,
+          referrerUserId: ctv.id,
+          status: 'DELIVERED',
+          deliveredAt: new Date(),
+          subtotal: 200_000,
+          total: 200_000,
+          items: {
+            create: [
+              { variationId: a.id, productName: 'A', variationName: 'Mặc định', unitPrice: 100_000, quantity: 1, total: 100_000, paidTotal: 100_000 },
+              { variationId: b.id, productName: 'B', variationName: 'Mặc định', unitPrice: 100_000, quantity: 1, total: 100_000, paidTotal: 100_000 },
+            ],
+          },
+        });
+        await affiliate.createCommissionForOrder(order.id);
+        await affiliate.lockCommissionsForOrder(order.id);
+        expect(await commissionOf(order.id)).toMatchObject({ amount: 18_000 });
+
+        await setConfig(prisma, key, 20);
+        const itemA = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id, variationId: a.id } });
+        const r = await partialReturn(admin.id, buyer.id, order.code, [{ orderItemId: itemA.id, quantity: 1 }]);
+        expect(r.commissionReversed).toBe(8_000);
+        expect(await commissionOf(order.id)).toMatchObject({ amount: 10_000, commissionableTotal: 100_000 });
+      } finally {
+        if (before) await prisma.systemConfig.update({ where: { key }, data: { value: before.value as never } });
+        else await prisma.systemConfig.deleteMany({ where: { key } });
+      }
+    });
+
     it('trả món không hoa hồng không đổi gì; trả nốt cả đơn → commission bị huỷ (REJECTED), không còn tính vào doanh số', async () => {
       const o = await ctvOrder();
       await partialReturn(o.admin.id, o.buyer.id, o.order.code, [{ orderItemId: o.c.id, quantity: 1 }]);

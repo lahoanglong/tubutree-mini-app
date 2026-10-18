@@ -109,7 +109,7 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
     expect(rows[0]!.amount).toBe(20_000);
   });
 
-  it('biến thể chưa có % → hưởng mặc định 8%; đổi mặc định sau đó không ghi đè hoa hồng đã chốt', async () => {
+  it('biến thể chưa có % → hoa hồng theo mặc định 8% và lineAmounts ghi đúng dòng', async () => {
     const ctv = await createUser(prisma, { role: 'AFFILIATE' });
     const buyer = await createUser(prisma);
     const v = await variation({ retailPrice: 200_000, affiliateRate: null });
@@ -121,19 +121,11 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
         create: [{ variationId: v.id, productName: 'SP IT', variationName: 'Mặc định', unitPrice: 200_000, quantity: 1, total: 200_000 }],
       },
     });
-    try {
-      await affiliate.createCommissionForOrder(order.id);
-      await prisma.systemConfig.upsert({
-        where: { key: 'affiliate.default_rate_pct' },
-        update: { value: 20 },
-        create: { key: 'affiliate.default_rate_pct', value: 20, category: 'affiliate' },
-      });
-      const row = await prisma.commission.findFirstOrThrow({ where: { orderId: order.id } });
-      expect(row.amount).toBe(16_000);
-      expect(row.lineAmounts).toEqual({ [(await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } })).id]: 16_000 });
-    } finally {
-      await prisma.systemConfig.deleteMany({ where: { key: 'affiliate.default_rate_pct' } });
-    }
+    await affiliate.createCommissionForOrder(order.id);
+    const row = await prisma.commission.findFirstOrThrow({ where: { orderId: order.id } });
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(row.amount).toBe(16_000);
+    expect(row.lineAmounts).toEqual({ [item.id]: 16_000 });
   });
 
   it('DB chặn dòng hoa hồng thứ 2 cho cùng (đơn, người hưởng)', async () => {

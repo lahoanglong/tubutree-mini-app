@@ -7,6 +7,8 @@ import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
 import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliate/commission-eligibility';
+import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from '../affiliate/commission-rate';
+import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate } from '../affiliate/commission-rate-csv';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 
 const DISPLAY_NAME_MAX = 100;
@@ -388,12 +390,31 @@ export class SystemConfigService {
     }
   }
 
+  /** Mức mặc định hoa hồng không được vượt trần % mỗi biến thể: kiểm cả khi hạ trần xuống dưới mặc định đang áp. */
+  private async assertRateCapsConsistent(key: string, value: unknown): Promise<void> {
+    if (typeof value !== 'number') return;
+    if (key === AFFILIATE_DEFAULT_RATE_KEY) {
+      const max = sanitizeMaxRate(await this.get<unknown>(AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT));
+      if (value > max) {
+        throw new BadRequestException(`"${key}" (${value}%) vượt trần ${max}% của "${AFFILIATE_MAX_RATE_KEY}". Nâng trần trước.`);
+      }
+    } else if (key === AFFILIATE_MAX_RATE_KEY) {
+      const def = sanitizeDefaultRate(await this.get<unknown>(AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT));
+      if (value < def) {
+        throw new BadRequestException(`"${key}" (${value}%) thấp hơn mức mặc định ${def}% của "${AFFILIATE_DEFAULT_RATE_KEY}". Hạ mức mặc định trước.`);
+      }
+    }
+  }
+
   async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
     const unset = value === null && SystemConfigService.NULLABLE_KEYS.has(key);
     if ((value === null && !unset) || value === undefined) {
       throw new BadRequestException(`Giá trị cho SystemConfig "${key}" không được null/undefined.`);
     }
-    if (!unset) this.assertInRange(key, value);
+    if (!unset) {
+      this.assertInRange(key, value);
+      await this.assertRateCapsConsistent(key, value);
+    }
     const stored = unset ? Prisma.JsonNull : (value as object);
     const dotIndex = key.indexOf('.');
     const category = dotIndex > 0 ? key.slice(0, dotIndex) : 'misc';

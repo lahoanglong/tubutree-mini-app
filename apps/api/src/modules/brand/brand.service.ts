@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from '../affiliate/commission-eligibility';
+import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
 import type { BrandSalesPeriod } from './dto/brand.dto';
 
 interface Cert {
@@ -82,7 +85,10 @@ function assertPromotionWindow(startAt: Date, endAt: Date): void {
 
 @Injectable()
 export class BrandService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: SystemConfigService,
+  ) {}
 
   /** Trang nhãn flagship cho khách. `now` truyền vào để test tất định. KHÔNG lộ % hoa hồng. */
   async getPublicBySlug(slug: string, now: Date = new Date()) {
@@ -140,7 +146,7 @@ export class BrandService {
     };
   }
 
-  /** Banner "Chia sẻ nhận HH" — CHỈ AFFILIATE thấy %; khách thường eligible=false (guardrail server-side). */
+  /** Banner "Chia sẻ nhận HH" — chỉ vai trò hưởng hoa hồng (affiliate.commission_eligible_roles: CTV, đại lý) thấy %; khách thường eligible=false (guardrail server-side). */
   async getShareToEarn(slug: string, userId: string) {
     const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true, slug: true } });
     if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
@@ -148,13 +154,17 @@ export class BrandService {
       where: { id: userId },
       select: { role: true, referralCode: true },
     });
-    if (user.role !== 'AFFILIATE') return { eligible: false as const };
-    const variations = await this.prisma.variation.findMany({
-      where: { product: { brandId: brand.id, isActive: true, affiliateBlocked: false } },
-      select: { affiliateRate: true },
-    });
+    const roles = sanitizeEligibleRoles(await this.config.get<unknown>(COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES));
+    if (!roles.has(user.role)) return { eligible: false as const };
+    const [variations, defaultPct] = await Promise.all([
+      this.prisma.variation.findMany({
+        where: { product: { brandId: brand.id, isActive: true, affiliateBlocked: false } },
+        select: { affiliateRate: true, product: { select: { storefrontId: true } } },
+      }),
+      loadDefaultRate(this.config),
+    ]);
     const maxAffiliateRate = variations.reduce(
-      (m, v) => Math.max(m, v.affiliateRate ? Number(v.affiliateRate) : 0),
+      (m, v) => Math.max(m, maxResolvedRate([v], { storefrontId: v.product.storefrontId }, defaultPct)),
       0,
     );
     return { eligible: true as const, maxAffiliateRate, referralCode: user.referralCode, brandSlug: brand.slug };

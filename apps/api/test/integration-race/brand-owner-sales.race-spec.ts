@@ -4,6 +4,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { BrandService } from '../../src/modules/brand/brand.service';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
 
@@ -20,7 +21,7 @@ describe('BrandService.getOwnedSales (real Postgres)', () => {
   const DAY = 864e5;
 
   beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [BrandService] }).compile();
+    moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [BrandService, SystemConfigService] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);

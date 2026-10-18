@@ -112,7 +112,7 @@ function RateList() {
       )}
       <ul className="space-y-3">
         {products.map((p) => (
-          <ProductCard key={p.id} product={p} maxRate={maxRate} tierNames={tierNames} />
+          <ProductCard key={p.id} product={p} maxRate={maxRate} defaultRate={first?.defaultRate ?? 8} tierNames={tierNames} />
         ))}
       </ul>
       {list.hasNextPage && (
@@ -187,7 +187,17 @@ function FillMissing({ missingTubu, maxRate }: { missingTubu: number; maxRate: n
   );
 }
 
-function ProductCard({ product: p, maxRate, tierNames }: { product: CommissionProduct; maxRate: number; tierNames: Map<string, string> }) {
+function ProductCard({
+  product: p,
+  maxRate,
+  defaultRate,
+  tierNames,
+}: {
+  product: CommissionProduct;
+  maxRate: number;
+  defaultRate: number;
+  tierNames: Map<string, string>;
+}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [text, setText] = useState('');
@@ -251,7 +261,7 @@ function ProductCard({ product: p, maxRate, tierNames }: { product: CommissionPr
       )}
       <ul className="mt-2 divide-y divide-stone-200 border-t border-stone-200">
         {p.variations.map((v) => (
-          <VariationRow key={v.id} v={v} blocked={p.affiliateBlocked} maxRate={maxRate} tierNames={tierNames} />
+          <VariationRow key={v.id} v={v} blocked={p.affiliateBlocked} partner={p.isPartner} maxRate={maxRate} defaultRate={defaultRate} tierNames={tierNames} />
         ))}
       </ul>
       {dialog}
@@ -262,12 +272,16 @@ function ProductCard({ product: p, maxRate, tierNames }: { product: CommissionPr
 function VariationRow({
   v,
   blocked,
+  partner,
   maxRate,
+  defaultRate,
   tierNames,
 }: {
   v: CommissionVariation;
   blocked: boolean;
+  partner: boolean;
   maxRate: number;
+  defaultRate: number;
   tierNames: Map<string, string>;
 }) {
   const qc = useQueryClient();
@@ -281,9 +295,9 @@ function VariationRow({
   }
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const mut = useMutation({
-    mutationFn: (rate: number) => setVariationRate(v.id, rate),
+    mutationFn: (rate: number | null) => setVariationRate(v.id, rate),
     onSuccess: (r) => {
-      setMsg({ ok: true, text: `Đã lưu ${formatRate(r.affiliateRate)}.` });
+      setMsg({ ok: true, text: r.affiliateRate === null ? 'Đã về mức mặc định.' : `Đã lưu ${formatRate(r.affiliateRate)}.` });
       void qc.invalidateQueries({ queryKey: LIST_KEY });
     },
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không lưu được %.') }),
@@ -307,8 +321,21 @@ function VariationRow({
         </div>
         <div className="mt-0.5 text-stone-500">
           Giá {formatVnd(price)} ·{' '}
-          <span className={v.affiliateRate === null ? 'font-semibold text-warning-fg' : 'text-stone-700'}>{formatRate(v.affiliateRate)}</span>
-          {!blocked && v.affiliateRate !== null && v.affiliateRate > 0 && <> ≈ {formatVnd(Math.floor((price * v.affiliateRate) / 100))}/sp</>}
+          {v.affiliateRate === null ? (
+            partner ? (
+              <span className="font-semibold text-warning-fg">Hàng đối tác chưa đặt %: 0đ</span>
+            ) : (
+              <>
+                <span className="text-stone-700">Mặc định {formatRate(defaultRate)}</span>
+                {!blocked && defaultRate > 0 && <> ≈ {formatVnd(Math.floor((price * defaultRate) / 100))}/sp</>}
+              </>
+            )
+          ) : (
+            <>
+              <span className="text-stone-700">{formatRate(v.affiliateRate)}</span>
+              {!blocked && v.affiliateRate > 0 && <> ≈ {formatVnd(Math.floor((price * v.affiliateRate) / 100))}/sp</>}
+            </>
+          )}
         </div>
         {dealer.length > 0 && (
           <div className="mt-0.5 text-stone-500">
@@ -348,6 +375,17 @@ function VariationRow({
         <button type="button" onClick={onSave} disabled={mut.isPending || !dirty} className={BTN_XS_PRIMARY}>
           {mut.isPending ? 'Đang lưu…' : 'Lưu'}
         </button>
+        {v.affiliateRate !== null && (
+          <button
+            type="button"
+            onClick={() => !mut.isPending && mut.mutate(null)}
+            disabled={mut.isPending}
+            aria-label={`Về mặc định ${v.sku}`}
+            className={BTN_XS_SECONDARY}
+          >
+            Về mặc định
+          </button>
+        )}
       </div>
     </li>
   );
@@ -397,7 +435,7 @@ function RateCsvImport() {
     <section aria-label="Nhập % hoa hồng từ CSV" className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3">
       <h3 className="text-sm font-semibold text-stone-900">Nhập % hoa hồng từ Excel (CSV &ldquo;sku,%&rdquo;)</h3>
       <p className="text-xs text-stone-600">
-        Dán 2 cột SKU và % từ Excel, mỗi dòng một SKU. Xem trước rồi mới áp; còn dòng lỗi (sai định dạng, vượt trần, SKU lặp) thì
+        Dán 2 cột SKU và % từ Excel, mỗi dòng một SKU; gõ "mặc định" ở cột % để xoá % riêng (về mức mặc định). Xem trước rồi mới áp; còn dòng lỗi (sai định dạng, vượt trần, SKU lặp) thì
         không dòng nào được ghi.
       </p>
       <textarea
@@ -453,7 +491,7 @@ function RateCsvImport() {
                 <ToneBadge tone={RATE_IMPORT_STATUS[r.status].tone}>{RATE_IMPORT_STATUS[r.status].label}</ToneBadge>
                 {(r.status === 'OK' || r.status === 'UNCHANGED') && (
                   <span className="text-stone-700">
-                    {formatRate(r.currentRate)} → {formatRate(r.rate)}
+                    {r.currentRate === null ? 'mặc định' : formatRate(r.currentRate)} → {r.rate === null ? 'mặc định' : formatRate(r.rate)}
                   </span>
                 )}
                 {r.productName && <span className="min-w-0 break-words text-stone-500">{[r.productName, r.variationName].filter(Boolean).join(' · ')}</span>}
