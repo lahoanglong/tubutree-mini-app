@@ -21,6 +21,7 @@ async function mount(
   opts: {
     isAdmin?: boolean;
     detail?: WasteRequestAdminDetailDTO;
+    detailRoute?: Route;
     confirm?: Route;
     reject?: Route;
     reverse?: Route;
@@ -39,7 +40,7 @@ async function mount(
     '/admin/waste/requests/r1/close-lost': opts.closeLost ?? { body: detail },
     '/admin/waste/requests/r1/reopen': opts.reopen ?? { body: detail },
     '/admin/waste/unmatched': opts.unmatched ?? { body: [] },
-    '/admin/waste/requests/r1': { body: detail },
+    '/admin/waste/requests/r1': opts.detailRoute ?? { body: detail },
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
   const onClose = vi.fn();
@@ -105,6 +106,39 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
       receivedWeightGrams: 2500,
     });
     expect(c.textContent).toContain('Đã cộng 17.000 điểm cho khách.');
+  });
+
+  it('thông báo kết quả vẫn hiện khi refetch đã chuyển yêu cầu sang trạng thái khác', async () => {
+    let done = false;
+    const confirmed = await mount({
+      detailRoute: () => ({ body: done ? wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000 }) : wasteRequestDetail() }),
+      confirm: () => {
+        done = true;
+        return { body: CONFIRMED };
+      },
+    });
+    click(btn(confirmed.c, 'Xác nhận số đếm'));
+    answerConfirm(true);
+    await flush();
+    await flush();
+    expect(confirmed.c.querySelector('[data-counting]')).toBeNull();
+    expect(confirmed.c.textContent).toContain('Đã cộng 17.000 điểm cho khách.');
+
+    let rejected = false;
+    const reject = await mount({
+      detailRoute: () => ({ body: rejected ? wasteRequestDetail({ status: 'REJECTED' }) : wasteRequestDetail() }),
+      reject: () => {
+        rejected = true;
+        return { body: { requestId: 'r1', code: 'TR-7K3M9Q', status: 'REJECTED' } };
+      },
+    });
+    click(btn(reject.c, 'Từ chối cả yêu cầu'));
+    selectValue(select(reject.c, 'rejectionReason'), 'OVERSIZE');
+    click(btn(reject.c, 'Xác nhận từ chối'));
+    await flush();
+    await flush();
+    expect(reject.c.querySelector('[data-reject-panel]')).toBeNull();
+    expect(reject.c.textContent).toContain('Đã từ chối yêu cầu.');
   });
 
   it('nhận đủ: không gửi khoá shortfallReason, không gửi cân nặng trống', async () => {
@@ -242,6 +276,30 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     await flush();
     const status = full.c.querySelector('[role="status"]')!;
     expect(status.textContent).toBe('Đã thu hồi 12.000 điểm.');
+  });
+
+  it('thu hồi từ yêu cầu gửi tận nơi: báo số không thu được dù refetch đã đổi trạng thái', async () => {
+    let done = false;
+    const { c } = await mount({
+      isAdmin: true,
+      detailRoute: () => ({
+        body: done
+          ? wasteRequestDetail({ method: 'DROP_OFF', status: 'REVERSED', pointsAwarded: 17_000, reversedPoints: 12_000, reversalShortfallPoints: 5000 })
+          : wasteRequestDetail({ method: 'DROP_OFF', status: 'COMPLETED', pointsAwarded: 17_000 }),
+      }),
+      reverse: () => {
+        done = true;
+        return { body: { requestId: 'r1', status: 'REVERSED', pointsTaken: 12_000, shortfallPoints: 5000 } };
+      },
+    });
+    click(btn(c, 'Thu hồi điểm'));
+    typeInto(dialogArea(), 'Khai khống');
+    answerConfirm(true);
+    await flush();
+    await flush();
+    expect(c.textContent).toContain('Còn 5.000 điểm không thu được vì khách đã tiêu.');
+    expect(c.textContent).toContain('12.000 điểm, không thu được 5.000 điểm');
+    expect(btn(c, 'Thu hồi điểm')).toBeNull();
   });
 
   it('huỷ hộp thoại thu hồi thì không gọi API', async () => {

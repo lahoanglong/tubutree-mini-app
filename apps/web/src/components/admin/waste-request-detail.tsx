@@ -63,6 +63,8 @@ function useRefresh(id: string) {
 export function WasteRequestDetail({ id, isAdmin, onClose }: { id: string; isAdmin: boolean; onClose: () => void }) {
   const q = useQuery({ queryKey: ['admin-waste-request', id], queryFn: () => getWasteRequest(id) });
   const r = q.data;
+  // Held here, not in the blocks: a refetch moves the request to a status that unmounts them.
+  const [flash, setFlash] = useState<string | null>(null);
 
   return (
     <section data-request-detail={id} className="space-y-4 rounded-control border border-stone-200 bg-stone-0 p-4">
@@ -74,16 +76,17 @@ export function WasteRequestDetail({ id, isAdmin, onClose }: { id: string; isAdm
       {q.isError && <Notice tone="danger" role="alert">{errText(q.error)}</Notice>}
       {r && (
         <>
-          <Header r={r} />
+          <Header r={r} isAdmin={isAdmin} />
           {canCountRequest(r) ? (
             <>
-              <CountingBlock key={r.id} r={r} />
-              <RejectBlock r={r} />
+              <CountingBlock key={r.id} r={r} onFlash={setFlash} />
+              <RejectBlock r={r} onFlash={setFlash} />
             </>
           ) : (
             <LinesTable r={r} />
           )}
-          {isAdmin && <AdminActions r={r} />}
+          {flash && <Notice tone="success" role="status">{flash}</Notice>}
+          {isAdmin && <AdminActions r={r} onFlash={setFlash} />}
           {isAdmin && r.events && <EventLog events={r.events} />}
         </>
       )}
@@ -91,7 +94,7 @@ export function WasteRequestDetail({ id, isAdmin, onClose }: { id: string; isAdm
   );
 }
 
-function Header({ r }: { r: WasteRequestAdminDetailDTO }) {
+function Header({ r, isAdmin }: { r: WasteRequestAdminDetailDTO; isAdmin: boolean }) {
   const tracking = [r.carrier, r.trackingCode].filter((x): x is string => x !== null && x !== '').join(' · ');
   const rows: [string, string | null][] = [
     ['Cách giao', WASTE_METHOD_LABELS[r.method]],
@@ -105,6 +108,12 @@ function Header({ r }: { r: WasteRequestAdminDetailDTO }) {
     ['Kho nhận lúc', r.receivedAt ? formatDateTime(r.receivedAt) : null],
     ['Hoàn tất lúc', r.completedAt ? formatDateTime(r.completedAt) : null],
     ['Điểm đã cộng', r.pointsAwarded !== null ? `${formatCount(r.pointsAwarded)} điểm` : null],
+    [
+      'Đã thu hồi',
+      isAdmin && r.reversedPoints !== null
+        ? `${formatCount(r.reversedPoints)} điểm${r.reversalShortfallPoints ? `, không thu được ${formatCount(r.reversalShortfallPoints)} điểm` : ''}`
+        : null,
+    ],
     ['Lý do từ chối', r.rejectionReason ? `${WASTE_REJECTION_REASON_LABELS[r.rejectionReason]}${r.rejectionNote ? `: ${r.rejectionNote}` : ''}` : null],
     ['Cân nặng thực nhận', r.receivedWeightGrams !== null ? `${formatCount(r.receivedWeightGrams)} gram` : null],
   ];
@@ -158,7 +167,7 @@ const parseQty = (raw: string, max: number): number | null => {
   return n <= max ? n : null;
 };
 
-function CountingBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
+function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const refresh = useRefresh(r.id);
   const { confirm, dialog } = useConfirm();
   const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, String(l.declaredQty)])));
@@ -175,6 +184,7 @@ function CountingBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
     mutationFn: (body: WasteConfirmRequest) => confirmWasteRequest(r.id, body),
     onSuccess: (res) => {
       setResult(res.pointsAwarded);
+      onFlash(`Đã cộng ${formatCount(res.pointsAwarded)} điểm cho khách.`);
       refresh();
     },
     onError: (e) => setErr(errText(e)),
@@ -207,6 +217,7 @@ function CountingBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
       return;
     }
     setErr(null);
+    onFlash(null);
     const lines: WasteConfirmLineInput[] = parsed.map(({ line, qty }) => {
       const reason = reasons[line.itemId];
       return qty! < line.declaredQty && reason
@@ -270,7 +281,6 @@ function CountingBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
       <p className="text-sm font-medium text-stone-900">{`Điểm sẽ cộng: ${formatCount(total)}`}</p>
       {!anyInvalid && missingReason && <p className="text-xs text-stone-600">Chọn lý do cho dòng nhận thiếu</p>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
-      {result !== null && <Notice tone="success" role="status">{`Đã cộng ${formatCount(result)} điểm cho khách.`}</Notice>}
       <button type="button" className={BTN_PRIMARY} disabled={!ready || save.isPending} onClick={() => void submit()}>
         Xác nhận số đếm
       </button>
@@ -279,7 +289,7 @@ function CountingBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
   );
 }
 
-function RejectBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
+function RejectBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const refresh = useRefresh(r.id);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<WasteRejectionReason | ''>('');
@@ -292,6 +302,7 @@ function RejectBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
     mutationFn: (body: WasteRejectRequest) => rejectWasteRequest(r.id, body),
     onSuccess: () => {
       setDone(true);
+      onFlash('Đã từ chối yêu cầu.');
       refresh();
     },
     onError: (e) => setErr(errText(e)),
@@ -308,6 +319,7 @@ function RejectBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
     if (inFlight.current || reject.isPending || !ready) return;
     inFlight.current = true;
     setErr(null);
+    onFlash(null);
     const body: WasteRejectRequest = { rejectionReason: reason as WasteRejectionReason };
     if (noteTrim !== '') body.rejectionNote = noteTrim;
     reject.mutate(body);
@@ -348,7 +360,6 @@ function RejectBlock({ r }: { r: WasteRequestAdminDetailDTO }) {
       </label>
       {needsNote && <p className="text-xs text-danger-fg">Ghi chú bắt buộc khi chọn Khác</p>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
-      {done && <Notice tone="success" role="status">Đã từ chối yêu cầu.</Notice>}
       <div className="flex gap-2">
         <button type="button" className={BTN_PRIMARY} disabled={!ready || reject.isPending} onClick={submit}>Xác nhận từ chối</button>
         <button type="button" className={BTN_SECONDARY} onClick={() => setOpen(false)}>Huỷ</button>
@@ -363,12 +374,11 @@ const canCloseLost = (r: WasteRequestAdminDetailDTO) =>
 const canReopen = (r: WasteRequestAdminDetailDTO) =>
   r.status === 'EXPIRED' && (r.method === 'MAIL_IN' || (r.method === 'PICKUP' && r.orderId !== null));
 
-function AdminActions({ r }: { r: WasteRequestAdminDetailDTO }) {
+function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const qc = useQueryClient();
   const refresh = useRefresh(r.id);
   const { ask, dialog } = useConfirm();
   const [reopening, setReopening] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // React Query re-renders only after a zero-delay timer, so a second synchronous click still sees the button enabled.
   const inFlight = useRef(false);
@@ -380,7 +390,7 @@ function AdminActions({ r }: { r: WasteRequestAdminDetailDTO }) {
   const reverse = useMutation({
     mutationFn: (reason: string) => reverseWasteRequest(r.id, { reason }),
     onSuccess: (res) => {
-      setNotice(
+      onFlash(
         `Đã thu hồi ${formatCount(res.pointsTaken)} điểm.${res.shortfallPoints > 0 ? ` Còn ${formatCount(res.shortfallPoints)} điểm không thu được vì khách đã tiêu.` : ''}`,
       );
       refresh();
@@ -391,7 +401,7 @@ function AdminActions({ r }: { r: WasteRequestAdminDetailDTO }) {
   const closeLost = useMutation({
     mutationFn: (reason: string) => closeLostWasteRequest(r.id, { reason }),
     onSuccess: () => {
-      setNotice('Đã đóng yêu cầu vì thất lạc.');
+      onFlash('Đã đóng yêu cầu vì thất lạc.');
       refresh();
     },
     onError,
@@ -401,7 +411,7 @@ function AdminActions({ r }: { r: WasteRequestAdminDetailDTO }) {
     mutationFn: (body: WasteReopenRequest) => reopenWasteRequest(r.id, body),
     onSuccess: () => {
       setReopening(false);
-      setNotice('Đã mở lại yêu cầu.');
+      onFlash('Đã mở lại yêu cầu.');
       refresh();
       void qc.invalidateQueries({ queryKey: ['admin-waste-unmatched'] });
     },
@@ -417,14 +427,14 @@ function AdminActions({ r }: { r: WasteRequestAdminDetailDTO }) {
       return;
     }
     setErr(null);
-    setNotice(null);
+    onFlash(null);
     run(reason);
   };
   const submitReopen = (body: WasteReopenRequest) => {
     if (inFlight.current || reopen.isPending) return;
     inFlight.current = true;
     setErr(null);
-    setNotice(null);
+    onFlash(null);
     reopen.mutate(body);
   };
 
@@ -462,9 +472,8 @@ function AdminActions({ r }: { r: WasteRequestAdminDetailDTO }) {
         )}
       </div>
       {reopening && <ReopenPanel requestId={r.id} busy={reopen.isPending} onSubmit={submitReopen} onCancel={() => setReopening(false)} />}
-      {showCost && <CostForm key={r.carrierCostVnd ?? 'none'} r={r} onDone={refresh} />}
+      {showCost && <CostForm key={r.carrierCostVnd ?? 'none'} r={r} onFlash={onFlash} onDone={refresh} />}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
-      {notice && <Notice tone="success" role="status">{notice}</Notice>}
       {dialog}
     </div>
   );
@@ -515,15 +524,14 @@ function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: strin
   );
 }
 
-function CostForm({ r, onDone }: { r: WasteRequestAdminDetailDTO; onDone: () => void }) {
+function CostForm({ r, onFlash, onDone }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void; onDone: () => void }) {
   const [cost, setCost] = useState(r.carrierCostVnd !== null ? String(r.carrierCostVnd) : '');
-  const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const inFlight = useRef(false);
   const save = useMutation({
     mutationFn: (carrierCostVnd: number) => setWasteRequestCost(r.id, { carrierCostVnd }),
     onSuccess: () => {
-      setSaved(true);
+      onFlash('Đã lưu phí ship.');
       onDone();
     },
     onError: (e) => setErr(errText(e)),
@@ -537,7 +545,7 @@ function CostForm({ r, onDone }: { r: WasteRequestAdminDetailDTO; onDone: () => 
     if (inFlight.current || save.isPending || !valid) return;
     inFlight.current = true;
     setErr(null);
-    setSaved(false);
+    onFlash(null);
     save.mutate(Number(trim));
   };
   return (
@@ -551,17 +559,13 @@ function CostForm({ r, onDone }: { r: WasteRequestAdminDetailDTO; onDone: () => 
             inputMode="numeric"
             className={`${FIELD_CLASS} mt-1 block w-40`}
             value={cost}
-            onChange={(e) => {
-              setCost(e.target.value);
-              setSaved(false);
-            }}
+            onChange={(e) => setCost(e.target.value)}
           />
         </label>
         <button type="button" className={BTN_SECONDARY} disabled={!valid || save.isPending} onClick={submit}>Lưu phí ship</button>
       </div>
       {trim !== '' && !valid && <p className="text-xs text-danger-fg">Phí ship là số nguyên không âm</p>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
-      {saved && <Notice tone="success" role="status">Đã lưu phí ship.</Notice>}
     </div>
   );
 }
