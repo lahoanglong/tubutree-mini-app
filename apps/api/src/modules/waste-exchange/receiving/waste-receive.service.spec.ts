@@ -429,12 +429,14 @@ describe('WasteReceiveService unmatched parcels', () => {
   it('3b. CLOSE on a row that is no longer open is a 409 with no event', async () => {
     const h = setup({ unmatchedCount: 0 });
     await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'CLOSE', note: 'n' })).rejects.toThrow('Dòng hàng không rõ chủ không còn mở');
+    await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'CLOSE', note: 'n' })).rejects.toBeInstanceOf(ConflictException);
     expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
   it('4. MATCH ticks the request, resolves the row, writes one event and notifies after the commit', async () => {
     const h = setup({ row: matchable() });
     const result = await h.svc.resolveUnmatched('s1', 'um1', match);
+    expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ where: unknown }])[0].where).toEqual({ id: 'r1', method: 'MAIL_IN', status: { in: ['OPEN', 'IN_TRANSIT'] } });
     expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ data: unknown }])[0].data).toEqual({ status: 'RECEIVED', receivedAt: expect.any(Date) });
     expect(h.tx.wasteUnmatchedParcel.updateMany).toHaveBeenCalledWith({
       where: { id: 'um1', status: 'OPEN' },
@@ -466,7 +468,12 @@ describe('WasteReceiveService unmatched parcels', () => {
   it('5. MATCH onto a PICKUP request pins the update to its order', async () => {
     const h = setup({ row: matchable({ method: 'PICKUP', orderId: 'o1', order: { status: 'DELIVERED' } }) });
     await h.svc.resolveUnmatched('s1', 'um1', match);
-    expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ where: unknown }])[0].where).toMatchObject({ orderId: 'o1' });
+    expect((h.tx.wasteRequest.updateMany.mock.calls[0] as unknown as [{ where: unknown }])[0].where).toEqual({
+      id: 'r1',
+      method: 'PICKUP',
+      status: { in: ['OPEN', 'IN_TRANSIT'] },
+      orderId: 'o1',
+    });
   });
 
   it('6. MATCH refuses DROP_OFF, an undelivered PICKUP, EXPIRED and a closed request without writing', async () => {
@@ -492,12 +499,14 @@ describe('WasteReceiveService unmatched parcels', () => {
   it('6b. a lost request update race is a retry 409 and the row stays open', async () => {
     const h = setup({ row: matchable(), updateCount: 0 });
     await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow('Vui lòng thử lại');
+    await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toBeInstanceOf(ConflictException);
     expect(h.tx.wasteUnmatchedParcel.updateMany).not.toHaveBeenCalled();
   });
 
   it('7. MATCH onto an unknown request is a 404 and resolves nothing', async () => {
     const h = setup({ row: null });
     await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'missing', note: 'n' })).rejects.toThrow(new NotFoundException('Không tìm thấy mã'));
+    await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'missing', note: 'n' })).rejects.toBeInstanceOf(NotFoundException);
     expect(h.tx.wasteUnmatchedParcel.updateMany).not.toHaveBeenCalled();
     expect(writeWasteEvent).not.toHaveBeenCalled();
   });
@@ -505,12 +514,14 @@ describe('WasteReceiveService unmatched parcels', () => {
   it('7b. MATCH on an unknown unmatched row is a 404 before any transaction', async () => {
     const h = setup({ umRow: null });
     await expect(h.svc.resolveUnmatched('s1', 'nope', match)).rejects.toThrow(new NotFoundException('Không tìm thấy dòng hàng không rõ chủ'));
+    await expect(h.svc.resolveUnmatched('s1', 'nope', match)).rejects.toBeInstanceOf(NotFoundException);
     expect(h.prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('8. MATCH where the row was closed meanwhile rolls back the request change and sends nothing', async () => {
     const h = setup({ row: matchable(), unmatchedCount: 0 });
     await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow('Dòng hàng không rõ chủ không còn mở');
+    await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toBeInstanceOf(ConflictException);
     expect(h.order).toContain('request updateMany');
     expect(h.order).not.toContain('tx end');
     expect(h.order).not.toContain('notify');
