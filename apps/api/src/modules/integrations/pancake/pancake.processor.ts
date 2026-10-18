@@ -546,13 +546,18 @@ export class PancakeProcessor extends WorkerHost {
     const waiting = approved.filter((r) => !r.receivedAt).length;
     if (waiting > 0) {
       const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để cộng kho.`;
-      // Kiểm "còn yêu cầu chưa nhận" ngay trong câu ghi: admin bấm "Đã nhận hàng về" chen giữa (đã gỡ nhắc sau commit)
-      // thì không ghi lại lời nhắc cũ.
-      await this.prisma.$executeRaw`
-        UPDATE "orders" SET "pancakeAttention" = ${reason}, "pancakeAttentionAt" = NOW()
-        WHERE "id" = ${order.id}
-          AND ("pancakeAttention" IS NULL OR "pancakeAttention" <> ${reason})
-          AND EXISTS (SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = ${order.id} AND rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL)`;
+      // Khoá dòng đơn trước rồi mới ghi ở câu lệnh sau: EXISTS bên dưới dùng snapshot lúc câu lệnh bắt đầu, nên nếu chỉ chờ khoá trong chính
+      // câu UPDATE thì vẫn thấy yêu cầu "chưa nhận" dù admin vừa bấm "Đã nhận hàng về" và commit; còn câu gỡ nhắc của receive() chạy sau commit
+      // bỏ qua dòng đang bị ghi dở (đọc bản cũ chưa có nhắc), nên nhắc kẹt lại. Có khoá thì hoặc câu ghi thấy đã nhận, hoặc ghi xong trước và
+      // câu gỡ nhắc thấy nó.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
+        await tx.$executeRaw`
+          UPDATE "orders" SET "pancakeAttention" = ${reason}, "pancakeAttentionAt" = NOW()
+          WHERE "id" = ${order.id}
+            AND ("pancakeAttention" IS NULL OR "pancakeAttention" <> ${reason})
+            AND EXISTS (SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = ${order.id} AND rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL)`;
+      });
     } else {
       await clearPancakeAttention(this.prisma, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
     }

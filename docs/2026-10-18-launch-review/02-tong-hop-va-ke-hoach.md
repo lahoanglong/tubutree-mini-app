@@ -252,6 +252,7 @@ k. **Từ review của phiên đổi rác trên module external-points:**
    - Claim chat đã được admin duyệt tay không bị cron đưa về REVIEW vì lệch SĐT nữa.
    - Claim PHONE chưa có chủ và đã mất `orderPhone` thì không duyệt được (báo huỷ claim).
    - Sổ điểm có nhãn cho 4 mã của đơn chat và đơn sàn, thay cho "Điều chỉnh Điểm Xanh".
+   - Claim SCAN đã duyệt (tiền hàng trên ngưỡng tự duyệt, hoặc bị trần tháng cắt) trước đây bị cron đưa về REVIEW ở mỗi lần cộng. Nay cộng đúng số điểm đã chốt khi tiền hàng không tăng; tiền hàng tăng thì vẫn kiểm lại.
 
 CI GitHub trên `1b98b388`: CI, Docker build, Playwright E2E đầy đủ và Race suite (3 phần) đều xanh. Đây là lần đầu race xanh trên GitHub.
 
