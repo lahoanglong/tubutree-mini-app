@@ -12,7 +12,7 @@ import { formatPoints } from '../../common/format-points';
 import { maskPhoneOrNull, maskVnPhonesInText } from '../../common/mask-pii';
 import { paginated, skipTake } from '../../common/pagination';
 import { parseTypedVnPhone } from '../../common/phone';
-import { startOfVnMonth, vnDateKey } from '../../common/vn-time';
+import { startOfNextVnMonth, startOfVnMonth, vnDateKey } from '../../common/vn-time';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -300,13 +300,13 @@ export class ExternalClaimsAdminService {
         // Trần tháng theo SĐT. Không có SĐT (đã xoá khỏi đơn) thì không còn gì để cộng dồn: duyệt nguyên điểm.
         const capPhone = c.orderPhone ?? o.phone;
         if (capPhone) {
-          const others = await chatMonthPoints(tx, { phone: capPhone, userId: c.userId, since: startOfVnMonth(c.createdAt), excludeClaimId: id });
+          const others = await chatMonthPoints(tx, { phone: capPhone, userId: c.userId, since: startOfVnMonth(c.createdAt), until: startOfNextVnMonth(c.createdAt), excludeClaimId: id });
           points = settlePoints({ newPoints: fullPoints, checkedPoints: c.points, others, cap: chatCfg.monthlyPointsCap });
           if (points <= 0) throw rejectionOf('MONTHLY_CAP');
         }
       } else if (c.userId) {
         const month = await tx.externalPointsClaim.aggregate({
-          where: { userId: c.userId, kind: 'SCAN', id: { not: id }, createdAt: { gte: startOfVnMonth(c.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
+          where: { userId: c.userId, kind: 'SCAN', id: { not: id }, createdAt: { gte: startOfVnMonth(c.createdAt), lt: startOfNextVnMonth(c.createdAt) }, state: { in: ['PENDING', 'REVIEW', 'CREDITED'] } },
           _sum: { points: true },
         });
         // Duyệt ở mức chốt thay vì ném lỗi: khách không mất phần điểm hợp lệ. Hết chỗ trần (chốt = 0) thì mới từ chối.

@@ -61,4 +61,10 @@ describe('/thanh-toan — dòng ưu đãi combo và hạng thành viên', () => 
     expect(r.container.textContent).not.toContain('Ưu đãi combo');
     expect(r.container.textContent).not.toContain('Ưu đãi hạng thành viên');
   });
+
+  it('dòng Điểm Xanh nhóm nghìn: 25000 điểm hiện "25.000"', async () => {
+    calls.extra = { pointsUsed: 25000, pointsDiscount: 25000, total: SUBTOTAL - 25000 + 30000 };
+    const r = await mount();
+    expect(r.container.textContent).toContain('Điểm Xanh (25.000)');
+  });
 });

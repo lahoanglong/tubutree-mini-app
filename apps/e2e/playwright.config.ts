@@ -95,7 +95,7 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
     // Mảng: "admin.spec.ts" (spec gốc) + "admin-analytics.spec.ts" (Task 21) — regex đơn trước đây
     // chỉ khớp đúng "admin.spec.ts" nên file spec admin mới thứ 2 bị bỏ sót hoàn toàn (không match
     // project nào cả → CI `playwright test` không chạy, không báo lỗi).
-    testMatch: [/.*admin\.spec\.ts/, /.*admin-analytics\.spec\.ts/, /.*admin-customer-refunds\.spec\.ts/, /.*admin-waste\.spec\.ts/],
+    testMatch: [/.*admin\.spec\.ts/, /.*admin-analytics\.spec\.ts/, /.*admin-customer-refunds\.spec\.ts/, /.*admin-external-claims\.spec\.ts/, /.*admin-waste\.spec\.ts/],
   },
   {
     name: 'Web Customer',

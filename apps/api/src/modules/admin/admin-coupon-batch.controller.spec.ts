@@ -61,9 +61,10 @@ describe('AdminCouponBatchController (D2-03: lô mã thẻ hộp hàng)', () => 
     const dto = plainToInstance(CreateCouponBatchDto, VALID);
     await expect(ctrl.create('s1', 'STAFF', dto)).resolves.toBe('c');
     expect(svc.create).toHaveBeenCalledWith(dto, { id: 's1', staff: true });
-    await expect(ctrl.list()).resolves.toBe('l');
-    await expect(ctrl.codes('SHOPEE11')).resolves.toBe('k');
-    expect(svc.codes).toHaveBeenCalledWith('SHOPEE11');
+    await expect(ctrl.list('s1', 'STAFF')).resolves.toBe('l');
+    expect(svc.list).toHaveBeenCalledWith({ id: 's1', staff: true });
+    await expect(ctrl.codes('s1', 'STAFF', 'SHOPEE11')).resolves.toBe('k');
+    expect(svc.codes).toHaveBeenCalledWith('SHOPEE11', { id: 's1', staff: true });
     await expect(ctrl.setActive('s1', 'STAFF', 'SHOPEE11', { isActive: false })).resolves.toBe('s');
     expect(svc.setActive).toHaveBeenCalledWith('SHOPEE11', false, { id: 's1', staff: true });
     await ctrl.setActive('a1', 'ADMIN', 'SHOPEE11', { isActive: true });

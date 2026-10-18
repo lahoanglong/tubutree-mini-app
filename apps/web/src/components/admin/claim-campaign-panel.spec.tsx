@@ -32,6 +32,7 @@ const batch = (over: Partial<CouponBatchSummary> = {}): CouponBatchSummary => ({
   minOrder: 99000,
   maxDiscount: null,
   newCustomerOnly: true,
+  mine: true,
   startAt: '2026-11-01T00:00:00.000Z',
   endAt: '2026-12-31T16:59:59.000Z',
   ...over,
@@ -116,6 +117,23 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     const patch = api.calls.find((c) => c.init?.method === 'PATCH');
     expect(patch?.url).toContain('/admin/coupon-batches/SHOPEE11');
     expect(bodyOf(patch)).toEqual({ isActive: false });
+  });
+
+  it('lô do người khác tạo (mine=false): không tải được CSV, có gợi ý tiếng Việt, không gọi API mã', async () => {
+    const { r, api } = mount({
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
+      '/admin/coupon-batches': { body: [batch({ mine: false })] },
+    });
+    await flush();
+    const row = r.container.querySelector('[data-testid="claim-batch-SHOPEE11"]')!;
+    expect(row.textContent).toContain('Lô do người khác tạo');
+    const btn = byText(row, 'button', 'Tải lại CSV') as HTMLButtonElement | null;
+    if (btn) {
+      expect(btn.disabled).toBe(true);
+      click(btn);
+      await flush();
+    }
+    expect(api.calls.some((c) => c.url.includes('/codes'))).toBe(false);
   });
 
   it('bật lại lô đã tắt: cảnh báo mã tắt riêng cũng bật lại, phải xác nhận', async () => {

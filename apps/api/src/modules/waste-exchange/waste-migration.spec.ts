@@ -80,8 +80,8 @@ describe('waste migration, hand-written constraints section', () => {
 });
 
 describe('KNOWN_PARTIAL_UNIQUE_INDEXES', () => {
-  it('has 23 sorted entries including the three new points_transactions keys', () => {
-    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(23);
+  it('has 26 sorted entries including the three waste exchange points_transactions keys', () => {
+    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(26);
     expect([...KNOWN_PARTIAL_UNIQUE_INDEXES]).toEqual([...KNOWN_PARTIAL_UNIQUE_INDEXES].sort());
     for (const n of ['points_transactions_recycle_ref_key', 'points_transactions_recycle_reverse_key', 'points_transactions_gift_refund_key']) {
       expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toContain(n);

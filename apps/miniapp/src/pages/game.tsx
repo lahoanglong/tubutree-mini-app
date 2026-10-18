@@ -159,7 +159,7 @@ export default function GamePage() {
             onNext={nextQuiz}
           />
 
-          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10} onSpin={handleSpin} onResult={wheelPrize.onResult} />
+          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10_000} onSpin={handleSpin} onResult={wheelPrize.onResult} />
 
           {/* Lối vào Đổi rác lấy quà (spec 4.9) */}
           {publicConfig.waste.enabled && (

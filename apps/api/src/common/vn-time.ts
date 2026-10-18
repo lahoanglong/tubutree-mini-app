@@ -23,6 +23,12 @@ export function startOfVnMonth(d: Date = new Date()): Date {
   return new Date(Date.UTC(year, month - 1, 1) - VN_OFFSET_MS);
 }
 
+/** 00:00 giờ VN ngày 1 của tháng KẾ TIẾP tháng chứa `d`: cận trên (loại trừ) của cửa sổ tháng. */
+export function startOfNextVnMonth(d: Date = new Date()): Date {
+  const { year, month } = vnDateParts(d);
+  return new Date(Date.UTC(year, month, 1) - VN_OFFSET_MS);
+}
+
 /** 'YYYY-MM-DD' theo giờ VN. */
 export function vnDateKey(d: Date = new Date()): string {
   return new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);

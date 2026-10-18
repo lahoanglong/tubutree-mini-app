@@ -344,11 +344,19 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
     renderPage();
     await screen.findByText(/Tích điểm ×1\.2/);
     expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
-    expect(localStorage.getItem('tubu_last_tier_min')).toBe('2500');
+    expect(localStorage.getItem('tubu_last_tier_min_v2')).toBe('2500');
+  });
+
+  it('mốc lưu trước đợt đổi ngưỡng điểm (khoá cũ) bị bỏ qua: không chúc mừng giả', async () => {
+    localStorage.setItem('tubu_last_tier_min', '0');
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: TIER2, nextTier: null });
+    renderPage();
+    await screen.findByText(/Tích điểm ×1\.2/);
+    expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
   });
 
   it('mốc cũ thấp hơn hạng hiện tại: chúc mừng kèm quyền lợi, "Tuyệt vời!" đóng lại', async () => {
-    localStorage.setItem('tubu_last_tier_min', '0');
+    localStorage.setItem('tubu_last_tier_min_v2', '0');
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: TIER2, nextTier: null });
     renderPage();
     expect(await screen.findByText('Chúc mừng lên hạng Lộc Biếc!')).toBeInTheDocument();
@@ -359,7 +367,7 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
   });
 
   it('mốc cũ bằng hạng hiện tại: không chúc mừng', async () => {
-    localStorage.setItem('tubu_last_tier_min', '0');
+    localStorage.setItem('tubu_last_tier_min_v2', '0');
     renderPage();
     await screen.findByText(/Tích điểm ×1 /);
     expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
