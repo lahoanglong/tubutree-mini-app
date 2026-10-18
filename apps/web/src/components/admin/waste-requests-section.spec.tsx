@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { expectNoBannedCopy, wasteRequestRow } from '@/test-utils/fixtures/waste-admin';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { expectNoBannedCopy, wasteRequestRow, wasteUnmatched } from '@/test-utils/fixtures/waste-admin';
 import { formatDateTime } from '@/lib/format-date';
 import type { WasteSeed } from './waste-tab';
 import { WasteRequestsSection } from './waste-requests-section';
@@ -27,10 +27,19 @@ async function mount(
   opts: { isAdmin?: boolean; seed?: WasteSeed | null; queue?: Route; lookup?: Route; receive?: Route; receive9?: Route; unmatched?: Route } = {},
 ) {
   const api = mockFetch({
+    '/admin/waste/unmatched/un1/resolve': { body: wasteUnmatched({ status: 'RESOLVED' }) },
+    '/admin/waste/unmatched/un3/resolve': { body: wasteUnmatched({ id: 'un3', status: 'RESOLVED' }) },
     '/admin/waste/requests/lookup': opts.lookup ?? { body: [] },
     '/admin/waste/requests/r1/receive': opts.receive ?? { body: { outcome: 'RECEIVED', requestId: 'r1', receivedAt: '2026-10-17T02:05:00.000Z' } },
     '/admin/waste/requests/r9/receive': opts.receive9 ?? { body: { outcome: 'RECEIVED', requestId: 'r9', receivedAt: '2026-10-17T02:05:00.000Z' } },
-    '/admin/waste/unmatched': opts.unmatched ?? { body: { id: 'un1' } },
+    '/admin/waste/unmatched':
+      opts.unmatched ??
+      ((init) => ({
+        body:
+          init?.method === 'POST'
+            ? { id: 'un1' }
+            : [wasteUnmatched(), wasteUnmatched({ id: 'un3', reason: 'TR_TRACKING_CONFLICT', trackingCode: 'GHN777', relatedRequestId: 'r4' })],
+      })),
     '/admin/waste/requests': opts.queue ?? { body: PAGE_ONE },
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -67,7 +76,7 @@ describe('WasteRequestsSection', () => {
 
   it('nhân viên không thấy danh sách chỉ admin và không gọi bộ lọc chỉ admin (15.4)', async () => {
     const { c, api } = await mount({ isAdmin: false });
-    expect(chips(c).map((b) => b.textContent)).toEqual(['Kho cần đếm', 'Đang gửi về kho', 'Chờ vì khách bị khoá', 'Chờ vì đơn chưa giao', 'Hết hạn']);
+    expect(chips(c).map((b) => b.textContent)).toEqual(['Kho cần đếm', 'Đang gửi về kho', 'Chờ vì khách bị khoá', 'Chờ vì đơn chưa giao', 'Hết hạn', 'Hàng không rõ chủ']);
     for (const b of chips(c)) click(b);
     await flush();
     const urls = api.calls.map((x) => x.url);
@@ -80,6 +89,7 @@ describe('WasteRequestsSection', () => {
     const { c, api } = await mount({ isAdmin: true });
     const labels = chips(c).map((b) => b.textContent);
     expect(labels.slice(-2)).toEqual(['Gửi kho quá hạn xem lại', 'Mâu thuẫn với đơn']);
+    expect(labels.indexOf('Hàng không rõ chủ')).toBe(labels.length - 3);
     click(chip(c, 'Gửi kho quá hạn xem lại'));
     await flush();
     expect(requestUrls(api).some((u) => u.endsWith('?filter=TRANSIT_OVERDUE'))).toBe(true);
@@ -345,6 +355,168 @@ describe('WasteRequestsSection', () => {
     click(btn(lookupRow(admin.c, 'r1'), 'Nhận kiện'));
     expectNoBannedCopy(admin.c.textContent);
     const staff = await mount({ isAdmin: false });
+    expectNoBannedCopy(staff.c.textContent);
+  });
+});
+
+describe('hàng không rõ chủ', () => {
+  const unmatchedUrls = (api: { calls: { url: string }[] }) => api.calls.map((x) => x.url).filter((u) => u.includes('/admin/waste/unmatched'));
+  const unRow = (c: HTMLElement, id: string) => c.querySelector<HTMLElement>(`[data-unmatched="${id}"]`)!;
+  const form = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-unmatched-form]')!;
+  const openView = async (opts: Parameters<typeof mount>[0] = {}) => {
+    const m = await mount(opts);
+    click(chip(m.c, 'Hàng không rõ chủ'));
+    await flush();
+    return m;
+  };
+
+  it('danh sách kiện đang mở: giờ nhận, mã vận đơn, mô tả, lý do', async () => {
+    const { c, api } = await openView();
+    expect(unmatchedUrls(api).pop()!.endsWith('/admin/waste/unmatched')).toBe(true);
+    const t = unRow(c, 'un1').textContent!;
+    for (const x of [formatDateTime('2026-10-16T02:00:00.000Z'), 'GHN · GHN999', 'Thùng carton băng keo xanh', 'Không khớp yêu cầu nào']) {
+      expect(t).toContain(x);
+    }
+    click(c.querySelector('input[name="showResolved"]'));
+    await flush();
+    expect(unmatchedUrls(api).pop()!.endsWith('/admin/waste/unmatched?status=RESOLVED')).toBe(true);
+    expect(byText(c, 'label', 'Xem kiện đã xử lý')).not.toBeNull();
+  });
+
+  it('ghi kiện không rõ chủ: chỉ mô tả kiện, không ghi tên hay số điện thoại', async () => {
+    const { c, api } = await openView();
+    const f = form(c);
+    expect(f.textContent).toContain('Chỉ mô tả kiện, không ghi tên hay số điện thoại người gửi.');
+    expect(Array.from(f.querySelectorAll('input, textarea')).map((e) => e.getAttribute('name'))).toEqual(['carrier', 'trackingCode', 'description']);
+    expect(btn(f, 'Ghi kiện')!.disabled).toBe(true);
+    typeInto(f.querySelector('input[name="carrier"]'), 'GHN');
+    typeInto(f.querySelector('input[name="trackingCode"]'), 'GHN555');
+    typeInto(f.querySelector('input[name="description"]'), 'Bao nilon đen 3 kg');
+    const b = btn(f, 'Ghi kiện')!;
+    click(b);
+    click(b);
+    await flush();
+    const sent = posts(api, '/admin/waste/unmatched');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.url.endsWith('/admin/waste/unmatched')).toBe(true);
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ carrier: 'GHN', trackingCode: 'GHN555', description: 'Bao nilon đen 3 kg' });
+    expect((form(c).querySelector('input[name="description"]') as HTMLInputElement).value).toBe('');
+  });
+
+  it('mô tả quá 200 ký tự hay để trống thì không ghi được', async () => {
+    const { c } = await openView();
+    const f = form(c);
+    typeInto(f.querySelector('input[name="description"]'), 'a'.repeat(201));
+    expect(f.textContent).toContain('Mô tả tối đa 200 ký tự');
+    expect(btn(f, 'Ghi kiện')!.disabled).toBe(true);
+    typeInto(f.querySelector('input[name="description"]'), 'a'.repeat(200));
+    expect(f.textContent).not.toContain('Mô tả tối đa 200 ký tự');
+    expect(btn(f, 'Ghi kiện')!.disabled).toBe(false);
+    typeInto(f.querySelector('input[name="description"]'), '   ');
+    expect(btn(f, 'Ghi kiện')!.disabled).toBe(true);
+  });
+
+  it('khớp kiện với yêu cầu: tra mã, chọn dòng (không tự chọn), ghi chú bắt buộc', async () => {
+    const { c, api } = await openView({ lookup: { body: [wasteRequestRow()] } });
+    click(btn(unRow(c, 'un1'), 'Khớp yêu cầu'));
+    const panel = c.querySelector<HTMLElement>('[data-match-panel]')!;
+    typeInto(panel.querySelector('input[name="matchCode"]'), 'TR-7K3M9Q');
+    click(btn(panel, 'Tra'));
+    await flush();
+    const radios = panel.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    expect(radios).toHaveLength(1);
+    expect(radios[0]!.checked).toBe(false);
+    const ok = () => btn(panel, 'Xác nhận khớp')!;
+    expect(ok().disabled).toBe(true);
+    click(radios[0]!);
+    expect(ok().disabled).toBe(true);
+    typeInto(panel.querySelector('textarea[name="resolveNote"]'), 'Mã TR trên kiện khớp');
+    expect(ok().disabled).toBe(false);
+    click(ok());
+    click(ok());
+    await flush();
+    const sent = posts(api, '/admin/waste/unmatched/un1/resolve');
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ action: 'MATCH', requestId: 'r1', note: 'Mã TR trên kiện khớp' });
+    expect(c.querySelector('[data-match-panel]')).toBeNull();
+  });
+
+  it('tra mã không thấy: lỗi hiện nguyên văn trong bảng khớp', async () => {
+    const { c } = await openView({ lookup: { status: 404, body: { message: 'Không tìm thấy mã' } } });
+    click(btn(unRow(c, 'un1'), 'Khớp yêu cầu'));
+    const panel = c.querySelector<HTMLElement>('[data-match-panel]')!;
+    typeInto(panel.querySelector('input[name="matchCode"]'), 'XXX');
+    click(btn(panel, 'Tra'));
+    await flush();
+    expect(panel.querySelector('[role="alert"]')!.textContent).toContain('Không tìm thấy mã');
+    expect(panel.querySelectorAll('input[type="radio"]')).toHaveLength(0);
+  });
+
+  it('đóng kiện hỏi ghi chú rồi gửi CLOSE', async () => {
+    const { c, api } = await openView();
+    click(btn(unRow(c, 'un1'), 'Đóng'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d.textContent).toContain('Đóng kiện không rõ chủ');
+    const ta = d.querySelector<HTMLTextAreaElement>('textarea')!;
+    expect(ta).not.toBeNull();
+    expect(d.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!.disabled).toBe(true);
+    typeInto(ta, 'Đã trả lại hãng');
+    answerConfirm(true);
+    await flush();
+    const sent = posts(api, '/admin/waste/unmatched/un1/resolve');
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ action: 'CLOSE', note: 'Đã trả lại hãng' });
+  });
+
+  it('huỷ hộp thoại đóng kiện thì không gửi gì', async () => {
+    const { c, api } = await openView();
+    click(btn(unRow(c, 'un1'), 'Đóng'));
+    await flush();
+    answerConfirm(false);
+    await flush();
+    expect(posts(api, '/resolve')).toHaveLength(0);
+  });
+
+  it('kiện mâu thuẫn mã TR- và mã vận đơn: chỉ admin khớp được', async () => {
+    const staff = await openView({ isAdmin: false });
+    const s3 = unRow(staff.c, 'un3');
+    expect(btn(s3, 'Khớp yêu cầu')).toBeNull();
+    expect(s3.textContent).toContain('Chỉ admin khớp được kiện này');
+    expect(btn(s3, 'Đóng')).not.toBeNull();
+    expect(btn(unRow(staff.c, 'un1'), 'Khớp yêu cầu')).not.toBeNull();
+    const admin = await openView({ isAdmin: true });
+    expect(btn(unRow(admin.c, 'un3'), 'Khớp yêu cầu')).not.toBeNull();
+    expect(unRow(admin.c, 'un3').textContent).not.toContain('Chỉ admin khớp được kiện này');
+  });
+
+  it('lỗi của máy chủ hiện nguyên văn', async () => {
+    const { c } = await openView({ unmatched: (init) => (init?.method === 'POST' ? { status: 400, body: { message: 'Mô tả không hợp lệ' } } : { body: [wasteUnmatched()] }) });
+    const f = form(c);
+    typeInto(f.querySelector('input[name="description"]'), 'Thùng nhỏ');
+    click(btn(f, 'Ghi kiện'));
+    await flush();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Mô tả không hợp lệ');
+    expect(btn(form(c), 'Ghi kiện')!.disabled).toBe(false);
+  });
+
+  it('seed wasteUnmatched mở thẳng hàng không rõ chủ (D3)', async () => {
+    const { c, api } = await mount({ isAdmin: false, seed: { section: 'requests', preset: 'unmatched', n: 1 } });
+    expect(chip(c, 'Hàng không rõ chủ').getAttribute('aria-pressed')).toBe('true');
+    expect(chip(c, 'Kho cần đếm').getAttribute('aria-pressed')).toBe('false');
+    expect(unmatchedUrls(api).some((u) => u.endsWith('/admin/waste/unmatched'))).toBe(true);
+    expect(unRow(c, 'un1')).not.toBeNull();
+    click(chip(c, 'Kho cần đếm'));
+    await flush();
+    expect(unRow(c, 'un1')).toBeNull();
+    expect(row(c, 'r1')).not.toBeNull();
+  });
+
+  it('không có chữ cấm', async () => {
+    const admin = await openView({ isAdmin: true });
+    click(btn(unRow(admin.c, 'un1'), 'Khớp yêu cầu'));
+    expectNoBannedCopy(admin.c.textContent);
+    const staff = await openView({ isAdmin: false });
     expectNoBannedCopy(staff.c.textContent);
   });
 });
