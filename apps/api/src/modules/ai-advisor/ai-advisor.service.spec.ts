@@ -4,8 +4,12 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { LlmUnavailableException, type LlmClient } from './llm.client';
 import type { FaqService } from '../faq/faq.service';
 
+// Id bắt đầu bằng `g` là tài khoản khách (zaloId guest_*, chưa có SĐT); còn lại là user thật.
 function makePrisma(products: unknown[] = []) {
-  return { product: { findMany: jest.fn().mockResolvedValue(products) } } as unknown as PrismaService;
+  const findUnique = jest.fn().mockImplementation(({ where }: { where: { id: string } }) =>
+    Promise.resolve(where.id.startsWith('g') ? { phone: null, zaloId: `guest_${where.id}` } : { phone: null, zaloId: `z_${where.id}` }),
+  );
+  return { product: { findMany: jest.fn().mockResolvedValue(products) }, user: { findUnique } } as unknown as PrismaService;
 }
 function makeLlm(over: Record<string, unknown> = {}) {
   return {
@@ -153,5 +157,43 @@ describe('AiAdvisorService.chat — fallback và giới hạn', () => {
     expect(llm.complete).toHaveBeenCalledTimes(30);
     await s.chat('u2', 'cần nước rửa chén');
     expect(llm.complete).toHaveBeenCalledTimes(31);
+  });
+});
+
+describe('AiAdvisorService.chat — trần chung cho tài khoản khách', () => {
+  it('lượt thứ 11 trong phút từ các khách khác nhau bị từ chối, user thật vẫn qua', async () => {
+    const llm = makeLlm();
+    const s = new AiAdvisorService(makePrisma(PRODUCTS), llm, makeFaq());
+    for (let i = 0; i < 10; i++) await s.chat(`g${i}`, 'cần nước rửa chén');
+    expect(llm.complete).toHaveBeenCalledTimes(10);
+    const refused = await s.chat('g10', 'cần nước rửa chén');
+    expect(refused.reply).toContain('nhiều bạn hỏi');
+    expect(llm.complete).toHaveBeenCalledTimes(10);
+    const real = await s.chat('u1', 'cần nước rửa chén');
+    expect(real.reply).toBe('Xin chào! 🌿');
+    expect(llm.complete).toHaveBeenCalledTimes(11);
+  });
+
+  it('lượt của user thật không tốn phần trần của khách', async () => {
+    const llm = makeLlm();
+    const s = new AiAdvisorService(makePrisma(PRODUCTS), llm, makeFaq());
+    for (let i = 0; i < 20; i++) await s.chat(`u${i}`, 'cần nước rửa chén');
+    const guest = await s.chat('g1', 'cần nước rửa chén');
+    expect(guest.reply).toBe('Xin chào! 🌿');
+  });
+
+  it('qua phút mới thì trần khách được làm mới', async () => {
+    const llm = makeLlm();
+    const s = new AiAdvisorService(makePrisma(PRODUCTS), llm, makeFaq());
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(1_000_000);
+      for (let i = 0; i < 11; i++) await s.chat(`g${i}`, 'cần nước rửa chén');
+      expect(llm.complete).toHaveBeenCalledTimes(10);
+      now.mockReturnValue(1_000_000 + 61_000);
+      expect((await s.chat('g11', 'cần nước rửa chén')).reply).toBe('Xin chào! 🌿');
+    } finally {
+      now.mockRestore();
+    }
   });
 });
