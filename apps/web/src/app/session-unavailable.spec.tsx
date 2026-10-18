@@ -46,6 +46,7 @@ import EditProfilePage from './tai-khoan/ho-so/page';
 import SettingsPage from './tai-khoan/cai-dat/page';
 import NotificationsPage from './tai-khoan/thong-bao/page';
 import LeaderboardPage from './cong-dong/xep-hang/page';
+import EventsPage from './cong-dong/su-kien/page';
 import PostDetailPage from './cong-dong/[id]/page';
 
 let mounted: Rendered[] = [];
@@ -82,6 +83,7 @@ const ACCOUNT: PageCase[] = [
 const LOYALTY: PageCase[] = [];
 const COMMUNITY: PageCase[] = [
   ['/cong-dong/xep-hang', () => <LeaderboardPage />],
+  ['/cong-dong/su-kien', () => <EventsPage />],
   ['/cong-dong/[id]', () => <PostDetailPage />],
 ];
 const AFFILIATE: PageCase[] = [];

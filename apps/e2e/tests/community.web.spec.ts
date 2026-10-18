@@ -155,4 +155,34 @@ test.describe('Web khách: cộng đồng', () => {
     await page.goto('/cong-dong/p1');
     await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/cong-dong/p1')}`);
   });
+
+  test('sự kiện: chọn sự kiện xem bài dự thi, đăng bài dự thi gửi kèm eventId', async ({ page, api }) => {
+    mockSession(api);
+    const day = 24 * 3600 * 1000;
+    api.get('/feed/events', [
+      { id: 'e1', title: 'Thử thách vườn xanh', description: 'Khoe góc vườn', coverUrl: null, startAt: new Date(Date.now() - day).toISOString(), endAt: new Date(Date.now() + 5 * day).toISOString(), rewardPoints: 5, status: 'ACTIVE', winnerUserId: null, createdAt: NOW },
+    ]);
+    api.get('/feed/events/e1/posts', { posts: [POST('p1', 'Lan Anh')], nextCursor: null });
+    api.post('/feed', { id: 'p9', status: 'APPROVED' });
+    await page.goto('/cong-dong/su-kien');
+    await expect(page.getByRole('heading', { name: 'Sự kiện', level: 1 })).toBeVisible();
+    await page.getByRole('button', { name: /Thử thách vườn xanh/ }).click();
+    await expect(page.getByRole('heading', { name: 'Bài dự thi' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Mẹo của Lan Anh' })).toHaveAttribute('href', '/cong-dong/p1');
+
+    await page.getByRole('button', { name: 'Đăng bài dự thi' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Đăng bài' });
+    await expect(dialog.getByText('Dự thi: Thử thách vườn xanh')).toBeVisible();
+    await dialog.getByLabel('Chia sẻ chi tiết…').fill('Góc vườn của mình');
+    const sent = api.waitForCall('POST', '/feed');
+    await dialog.getByRole('button', { name: 'Đăng', exact: true }).click();
+    expect((await sent).body).toMatchObject({ kind: 'SHOWCASE', eventId: 'e1', body: 'Góc vườn của mình' });
+    await expect(page.getByRole('status')).toContainText('Đã đăng bài');
+  });
+
+  test('sự kiện khi chưa đăng nhập: mời đăng nhập và quay lại đúng trang', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
+    await page.goto('/cong-dong/su-kien');
+    await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/cong-dong/su-kien')}`);
+  });
 });

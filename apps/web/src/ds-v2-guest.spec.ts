@@ -74,6 +74,7 @@ const COMMUNITY: string[] = [
   'app/cong-dong/feed-view.tsx',
   'app/cong-dong/feed-shell.tsx',
   'app/cong-dong/xep-hang/page.tsx',
+  'app/cong-dong/su-kien/page.tsx',
   'app/cong-dong/[id]/page.tsx',
   'app/cong-dong/[id]/comment-row.tsx',
   'app/cong-dong/[id]/post-sheets.tsx',
