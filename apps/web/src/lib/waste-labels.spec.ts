@@ -74,11 +74,16 @@ describe('waste-labels', () => {
     expect(wasteEventKindLabel('NOPE')).toBe('Sự kiện khác');
     expect(wasteEventKindLabel('toString')).toBe('Sự kiện khác');
     expect(wasteActorRoleLabel('SYSTEM')).toBe('Hệ thống');
-    expect(wasteEventMetaLines(null)).toEqual([]);
-    expect(wasteEventMetaLines({ subjectUserId: 'u-1', device: { ua: 'x' }, before: { status: 'OPEN' } })).toEqual([]);
-    expect(wasteEventMetaLines({ after: { pointsAwarded: 3000 } })).toEqual(['Cộng 3.000 điểm']);
-    expect(wasteEventMetaLines({ pointsAwarded: 0 })).toEqual(['Cộng 0 điểm']);
-    expect(wasteEventMetaLines({ pointsTaken: 500, shortfallPoints: 0, reason: ' Nhầm ' })).toEqual(['Thu hồi 500 điểm', 'Lý do: Nhầm']);
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', null)).toEqual([]);
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', { subjectUserId: 'u-1', device: { ua: 'x' }, before: { status: 'OPEN' } })).toEqual([]);
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', { after: { pointsAwarded: 3000 } })).toEqual(['Cộng 3.000 điểm']);
+    expect(wasteEventMetaLines('REQUEST_CONFIRMED', { pointsAwarded: 0 })).toEqual(['Cộng 0 điểm']);
+    expect(wasteEventMetaLines('POINTS_REVERSED', { reason: 'Nhầm', pointsAwarded: 17000, pointsTaken: 5000, shortfallPoints: 12000 })).toEqual([
+      'Thu hồi 5.000 điểm',
+      'Còn thiếu 12.000 điểm chưa thu hồi được',
+      'Lý do: Nhầm',
+    ]);
+    expect(wasteEventMetaLines('POINTS_REVERSED', { pointsTaken: 500, shortfallPoints: 0, reason: ' Nhầm ' })).toEqual(['Thu hồi 500 điểm', 'Lý do: Nhầm']);
     expectNoBannedCopy([...Object.values(WASTE_EVENT_KIND_LABELS), ...Object.values(WASTE_ACTOR_ROLE_LABELS), ...Object.values(WASTE_MATCH_BASIS_LABELS)].join(' '));
   });
 

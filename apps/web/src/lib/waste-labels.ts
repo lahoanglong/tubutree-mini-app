@@ -201,11 +201,12 @@ const lookup = (map: Record<string, string>, v: unknown): string | null =>
   typeof v === 'string' && Object.prototype.hasOwnProperty.call(map, v) ? map[v]! : null;
 
 /** Only fields whose meaning is known are rendered; ids, device data and before/after dumps are dropped. */
-export function wasteEventMetaLines(meta: Record<string, unknown> | null): string[] {
+export function wasteEventMetaLines(kind: string, meta: Record<string, unknown> | null): string[] {
   if (meta === null) return [];
   const after = typeof meta.after === 'object' && meta.after !== null ? (meta.after as Record<string, unknown>) : {};
   const lines: string[] = [];
-  const awarded = num(meta.pointsAwarded) ?? num(after.pointsAwarded);
+  // POINTS_REVERSED also stores the original credit in meta.pointsAwarded; showing it there would read as a new credit.
+  const awarded = kind === 'REQUEST_CONFIRMED' ? (num(meta.pointsAwarded) ?? num(after.pointsAwarded)) : null;
   if (awarded !== null) lines.push(`Cộng ${formatCount(awarded)} điểm`);
   const taken = num(meta.pointsTaken);
   if (taken !== null) lines.push(`Thu hồi ${formatCount(taken)} điểm`);

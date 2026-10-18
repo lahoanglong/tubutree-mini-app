@@ -614,22 +614,25 @@ function EventLog({ events }: { events: AdminWasteEventDTO[] }) {
     <div className="space-y-2 border-t border-stone-200 pt-4">
       <h3 className="text-sm font-semibold text-stone-900">Nhật ký sự kiện</h3>
       <ul data-request-events className="space-y-2">
-        {events.map((e) => (
+        {events.map((e) => {
+          const metaLines = wasteEventMetaLines(e.kind, e.meta);
+          return (
           <li key={e.id} className="space-y-1 text-xs text-stone-700">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>{formatDateTime(e.createdAt)}</span>
               <span className="font-medium text-stone-900">{wasteEventKindLabel(e.kind)}</span>
               <span>{wasteActorRoleLabel(e.actorRole)}</span>
             </div>
-            {wasteEventMetaLines(e.meta).length > 0 && (
+            {metaLines.length > 0 && (
               <ul className="list-disc pl-5">
-                {wasteEventMetaLines(e.meta).map((l) => (
+                {metaLines.map((l) => (
                   <li key={l}>{l}</li>
                 ))}
               </ul>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
