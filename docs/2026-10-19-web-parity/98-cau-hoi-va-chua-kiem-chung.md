@@ -45,17 +45,17 @@ Không có.
 - loyalty:5. Có muốn chèn formatter để chuyển nốt các hàm chữ sang app-core, và hợp nhất `fingerprintOf`/`newIdempotencyKey` với `utils/idempotency.ts` của Mini App? Mặc định: không.
 
 ### shop (11 câu)
-- shop:1. Web có cần gửi `search_performed`, `search_result_clicked`, `filter_applied` không, tới endpoint nào? Mặc định: không gửi.
+- shop:1. Web có cần gửi `search_performed`, `search_result_clicked`, `filter_applied` không, tới endpoint nào? Mặc định: không gửi. Đã xử lý ở c63e6ea2 (trang chi tiết đơn dùng `canPayNow`).
 - shop:2. Hai bản mua lại (`components/reorder/*` của shop, `components/orders/*` của order): giữ bản nào? Mặc định: giữ cả hai, bản shop đã khoá CTA sau thêm một phần; xử lý ở tích hợp.
 - shop:3. Khối đại lý trên `/brand/[slug]`: có hiện "Đăng ký đại lý" cho mọi người đã đăng nhập và sửa test BUYERWEB-18 không? Mặc định: chỉ hiện cho người đã có hồ sơ đại lý, ẩn khi `/dai-ly` còn pending.
-- shop:4. Bài mẫu chia sẻ nhãn cho người không phải CTV: mặc định không hiện, chỉ QR, link, nút chia sẻ.
+- shop:4. Bài mẫu chia sẻ nhãn cho người không phải CTV: mặc định không hiện, chỉ QR, link, nút chia sẻ. Đã xử lý ở 42134975 (gom về `bankPaymentHref`; còn lại chỉ ctv-order-sheet dò route bằng `/thanh-toan/chuyen-khoan/x`).
 - shop:5. Chữ dải tăng điểm Trang chủ đổi từ "Mua trong Mini App tích nhiều hơn" thành "Mua trực tiếp tại Tubu Tree ...": xác nhận chữ? Mặc định: chữ mới.
-- shop:6. Giờ vàng ở Trang chủ chỉ link `/san-pham/{slug}` (không truyền variationId, trang sản phẩm tự chọn phân loại đang giờ vàng). Mặc định: như vậy, chưa kiểm bằng trình duyệt.
+- shop:6. Giờ vàng ở Trang chủ chỉ link `/san-pham/{slug}` (không truyền variationId, trang sản phẩm tự chọn phân loại đang giờ vàng). Mặc định: như vậy, chưa kiểm bằng trình duyệt. Đã xử lý ở c63e6ea2.
 - shop:7. Sau đăng nhập quay về trang sản phẩm: chỉ tự mở lại sheet định kỳ, không tự tạo nhóm mua chung. Mặc định: như Mini App.
 - shop:8. Có muốn bỏ nút "Xem thêm" thay cho `?page=N`, tức giữ cả hai như hiện tại? Mặc định: giữ cả hai (Xem thêm cho người dùng, link trang cho crawler).
 - shop:9. Đặt định kỳ chọn chuyển khoản: sang `/tai-khoan/don-hang/<code>` vì `/thanh-toan/chuyen-khoan/:code` còn pending. Đổi khi lane order xong? Đã xử lý ở 095b105a (sang `/thanh-toan/chuyen-khoan/<code>` như Mini App).
-- shop:10. Emoji trong chữ hiển thị đã bỏ để khớp quy ước; emoji nhận diện nhãn ở `lib/brand-origins.ts` giữ như Mini App. Mặc định: như vậy.
-- shop:11. Số sàn test Mini App 4243 trong luật so với 4214 thực tế: sàn đúng là bao nhiêu? Mặc định: coi 4214 là mốc hiện tại.
+- shop:10. Emoji trong chữ hiển thị đã bỏ để khớp quy ước; emoji nhận diện nhãn ở `lib/brand-origins.ts` giữ như Mini App. Mặc định: như vậy. Đã xử lý ở c63e6ea2: đơn quá hạn không dựng QR, hiện hạn và "quá hạn đơn sẽ tự huỷ"; trang `/thanh-toan/chuyen-khoan/[code]` giống `bank-payment.tsx` (không chặn theo hạn, khung hiện "Đã quá hạn chuyển khoản", PAID hiện "Đã nhận thanh toán").
+- shop:11. Số sàn test Mini App 4243 trong luật so với 4214 thực tế: sàn đúng là bao nhiêu? Mặc định: coi 4214 là mốc hiện tại. Đã xử lý ở 42134975.
 
 ### order (5 câu + 1 câu mới từ mục "Hoàn tất sau gate/review")
 - order:1. Đổi CouponBox thành VoucherSheet như Mini App? Mặc định: giữ inline.
