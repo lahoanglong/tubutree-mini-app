@@ -54,6 +54,14 @@ describe('WastePointsSection', () => {
     expect(row(c, 'wh').textContent).toContain('Không hạn mức');
   });
 
+  it('bảng điểm: 7 cột và bề rộng tối thiểu vừa cột nội dung 1280 px, lượt xác nhận và nhân viên chung một ô', async () => {
+    const { c } = await mount();
+    const heads = Array.from(c.querySelectorAll('thead th')).map((th) => th.textContent);
+    expect(heads).toEqual(['Điểm', 'Giờ mở cửa', 'Hàng nhận', 'Trạng thái', 'Hạn mức tháng', 'Lượt và nhân viên', 'Thao tác']);
+    expect(c.querySelector('table')!.className).toContain('min-w-[900px]');
+    expect(row(c, 'p1').textContent).toMatch(/6 lượt\d+ nhân viên/);
+  });
+
   it('bảng điểm: giờ mở cửa, hàng nhận và thanh mức dùng đổi màu theo cảnh báo và khi đầy', async () => {
     const { c } = await mount();
     expect(row(c, 'p1').textContent).toContain('T2 08:00–20:00');

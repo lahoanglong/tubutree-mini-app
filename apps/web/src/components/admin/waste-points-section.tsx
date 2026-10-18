@@ -76,17 +76,15 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
       {list.isError && <Notice tone="danger" role="alert">Không tải được danh sách điểm nhận.</Notice>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       <ScrollRegion label="Bảng điểm nhận">
-        <table className="w-full min-w-[1200px] border-collapse">
+        <table className="w-full min-w-[900px] border-collapse">
           <thead>
             <tr className="border-b border-stone-200">
               <th className={TH}>Điểm</th>
-              <th className={TH}>Địa chỉ</th>
               <th className={TH}>Giờ mở cửa</th>
               <th className={TH}>Hàng nhận</th>
               <th className={TH}>Trạng thái</th>
               <th className={TH}>Hạn mức tháng</th>
-              <th className={TH}>Lượt xác nhận</th>
-              <th className={TH}>Nhân viên</th>
+              <th className={TH}>Lượt và nhân viên</th>
               <th className={TH}>Thao tác</th>
             </tr>
           </thead>
@@ -95,11 +93,11 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
               const pointAlerts = alerts.filter((a) => a.pointId === p.id);
               return (
                 <tr key={p.id} data-point={p.id} className="border-b border-stone-100">
-                  <td className={TD}>
+                  <td className={`${TD} min-w-[150px]`}>
                     <div className="font-medium text-stone-900">{p.name}</div>
                     <div className="text-xs text-stone-600">{WASTE_POINT_KIND_LABELS[p.kind]}</div>
+                    <div className="mt-0.5 max-w-[220px] text-xs text-stone-600">{`${p.addressLine}, ${p.communeName}, ${p.provinceName}`}</div>
                   </td>
-                  <td className={TD}>{`${p.addressLine}, ${p.communeName}, ${p.provinceName}`}</td>
                   <td className={TD}>
                     {hoursOf(p).length === 0 ? '—' : <ul className="space-y-0.5 text-xs">{hoursOf(p).map((h) => <li key={h} className="whitespace-nowrap">{h}</li>)}</ul>}
                   </td>
@@ -120,16 +118,18 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
                     {p.monthlyQuotaPoints === null ? (
                       'Không hạn mức'
                     ) : (
-                      <div className="min-w-[140px] space-y-1">
+                      <div className="min-w-[120px] space-y-1">
                         <div>{`${formatCount(p.monthUsage.pointsUsed)} / ${formatCount(p.monthlyQuotaPoints)} điểm`}</div>
                         <QuotaBar used={p.monthUsage.pointsUsed} quota={p.monthlyQuotaPoints} full={p.quotaFull} paceAlert={pointAlerts.some((a) => a.kind === 'QUOTA_PACE')} />
                       </div>
                     )}
                   </td>
-                  <td className={TD}>{`${formatCount(p.monthUsage.confirmations)} lượt`}</td>
-                  <td className={TD}>{formatCount(p.staff.length)}</td>
                   <td className={TD}>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="whitespace-nowrap">{`${formatCount(p.monthUsage.confirmations)} lượt`}</div>
+                    <div className="whitespace-nowrap text-xs text-stone-600">{`${formatCount(p.staff.length)} nhân viên`}</div>
+                  </td>
+                  <td className={`${TD} min-w-[112px]`}>
+                    <div className="flex flex-wrap gap-1 whitespace-nowrap">
                       <button type="button" className={BTN_XS_SECONDARY} onClick={() => setPanel({ point: p })}>Sửa</button>
                       <button type="button" className={BTN_XS_SECONDARY} onClick={() => setDetailId(p.id)}>Chi tiết</button>
                       {p.hiddenInactive && (

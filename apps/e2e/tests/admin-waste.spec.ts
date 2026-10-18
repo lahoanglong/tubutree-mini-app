@@ -1,6 +1,7 @@
 import { test, expect, type MockApi } from './support/mock-api';
 import type {
   AdminGiftRedemptionRowDTO,
+  AdminWastePointDTO,
   AdminWasteRequestRowDTO,
   WasteMonthMetrics,
   WasteOverviewDTO,
@@ -229,5 +230,28 @@ test.describe('Admin — Đổi rác lấy quà', () => {
     await page.getByText('Xem báo cáo tháng', { exact: true }).click();
     await expect(page.locator('[data-metric="pointsIssued"]')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('bảng điểm nhận: nút Chi tiết và Sửa của hàng đầu nằm trong màn hình 1280 px', async ({ page, api }) => {
+    const hours = [{ open: '08:00', close: '20:00' }];
+    const point: AdminWastePointDTO = {
+      id: 'wp-e2e', kind: 'PARTNER', name: 'Tạp hoá Cô Ba', addressLine: '12 Lê Lợi', provinceCode: '79', provinceName: 'TP. Hồ Chí Minh',
+      communeCode: '26734', communeName: 'Phường Bến Thành', lat: null, lng: null, phone: null,
+      openingHours: { MON: hours, TUE: hours, WED: hours, THU: hours, FRI: hours, SAT: [{ open: '08:00', close: '12:00' }] },
+      acceptedItemIds: [], perkText: null, quotaFull: false, distanceKm: null, status: 'ACTIVE', monthlyQuotaPoints: 100_000,
+      monthUsage: { monthKey: '2026-10', pointsUsed: 82_000, confirmations: 41 }, perkPendingText: 'Tặng một túi vải cho khách đổi trên 5 thùng',
+      giftHandoverEnabled: false, note: null, sortOrder: 10, activatedAt: null, lastConfirmedAt: null, hiddenInactive: true, staff: [],
+    };
+    api.get('/admin/waste/points', [point]);
+    await page.goto('/admin?tab=waste');
+    await expect(page.locator('[data-month-strip]')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Điểm nhận', exact: true }).click();
+    const row = page.locator('[data-point="wp-e2e"]');
+    await expect(row).toContainText('Tạp hoá Cô Ba');
+    for (const name of ['Sửa', 'Chi tiết', 'Kích hoạt lại']) {
+      const box = await row.getByRole('button', { name, exact: true }).boundingBox();
+      expect(box, name).not.toBeNull();
+      expect(box!.x + box!.width, name).toBeLessThanOrEqual(1280);
+    }
   });
 });
