@@ -1,5 +1,4 @@
 import type { SystemConfigService } from './system-config.service';
-import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
 import { toShippingEta } from './shipping-eta';
 import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../affiliate/affiliate.service';
 import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
@@ -34,7 +33,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
     subscribeDiscountPct,
     affiliateMinWithdrawBank,
     cashbackHoldDays,
-    recyclingEnabled,
     etaMinDays,
     etaMaxDays,
     hotline,
@@ -66,9 +64,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<number>('subscribe.discount_pct', 0.12),
     config.get<number>('affiliate.min_withdraw_bank', 50000),
     config.get<number>('cashback.hold_days', 30),
-    // Chỉ trả boolean — KHÔNG lộ cấu hình/tài khoản Gomdon. true khi Gomdon đã cấu hình VÀ admin
-    // bật shipping.gomdon.recycling_enabled; miniapp chỉ hiện lựa chọn thu gom khi true.
-    isGomdonRecyclingEnabled(config).catch(() => false),
     config.get<number | null>('shipping.eta_min_days', null),
     config.get<number | null>('shipping.eta_max_days', null),
     config.get<unknown>('support.hotline', '0899 149 229'),
@@ -107,7 +102,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
     affiliateMinWithdrawBank,
     affiliatePitWithhold: { pct: pitPct, threshold: pitThreshold },
     cashbackHoldDays,
-    recyclingEnabled,
     waste,
     shippingEta: toShippingEta(etaMinDays, etaMaxDays),
     groupBuy: { discountPct: groupBuyDiscountPct, targetSize: groupBuyTargetSize },
