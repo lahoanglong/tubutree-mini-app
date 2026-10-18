@@ -118,6 +118,20 @@ describe('WastePointForm', () => {
     expect(edit.c.textContent).not.toContain('gắn chủ điểm rồi mới kích hoạt');
   });
 
+  it('đổi loại sang đại lý khi đang chọn Đang nhận của kho thì status rơi về không phải ACTIVE', async () => {
+    const { api, c } = await mount({ warehouseExists: false });
+    click(q(c, 'input[name="kind"][value="WAREHOUSE"]'));
+    await flush();
+    click(q(c, 'input[name="kind"][value="PARTNER"]'));
+    await flush();
+    expect(q(c, 'select[name="status"]')!.value).not.toBe('ACTIVE');
+    expect(c.querySelector<HTMLOptionElement>('select[name="status"] option[value="ACTIVE"]')!.disabled).toBe(true);
+    await fillNew(c);
+    click(btn(c, 'Đăng ký điểm'));
+    await flush();
+    expect(body(callsTo(api, '/admin/waste/points', 'POST')[0]!).status).not.toBe('ACTIVE');
+  });
+
   it('toạ độ ngoài biên và giờ đóng trước giờ mở bị chặn', async () => {
     const { c } = await mount();
     await fillNew(c);
