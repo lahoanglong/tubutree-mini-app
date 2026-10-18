@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   click: null as null | (() => Promise<unknown>),
   calls: [] as Call[],
   opened: [] as string[],
-  win: null as null | { opener: unknown; location: { replace: (u: string) => void }; close: () => void },
+  win: null as null | { opener: unknown; closed?: boolean; location: { replace: (u: string) => void }; close: () => void },
   openCalls: [] as unknown[][],
 }));
 

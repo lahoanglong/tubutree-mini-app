@@ -81,8 +81,8 @@ export default function CashbackPage() {
         setClickError('Không mở được liên kết sàn — Vui lòng thử lại sau');
         return;
       }
-      if (!win) {
-        // Bị chặn cửa sổ mới: giữ khung để khách tự bấm liên kết, vì click đã được ghi nhận.
+      if (!win || win.closed) {
+        // Bị chặn cửa sổ mới hoặc khách đã đóng tab trống: giữ khung để khách tự bấm liên kết, vì click đã được ghi nhận.
         setBlockedLink(r.deeplink);
         return;
       }
