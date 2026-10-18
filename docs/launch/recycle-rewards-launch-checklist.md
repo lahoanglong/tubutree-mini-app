@@ -68,7 +68,7 @@ Làm đúng thứ tự:
 
 - [ ] Trước khi bấm thu hồi: huỷ các lượt đổi quà vật lý `READY` của khách, có hoàn điểm hoặc không. `refundPoints` không có mặc định với khách bị khoá hoặc đã `REVERSED`, nên admin phải chọn rõ. Thu hồi trước rồi huỷ có hoàn điểm sau sẽ trả lại phần mà việc thu hồi không lấy lại được. Owner: admin. Bằng chứng: nhật ký sự kiện.
 - [ ] Vô hiệu các coupon đã đổi nhưng chưa dùng (`coupon.isActive = false`). Owner: admin. Bằng chứng: danh sách coupon.
-- [ ] Đặt `waste_user_flags.blockedAt` (Quản trị, Đổi rác, khách). Owner: admin. Bằng chứng: dòng cờ.
+- [ ] Đặt `waste_user_flags.blockedAt`: Quản trị, Khách hàng, Người dùng, mở khách, mục "Đổi rác", bấm "Khoá đổi rác" (nút "Khoá gửi kho" khoá riêng đường gửi kho và thu kèm đơn). Owner: admin. Bằng chứng: dòng cờ.
 - [ ] Bấm thu hồi và ghi lý do. Owner: admin. Bằng chứng: yêu cầu ở trạng thái đã thu hồi.
 
 ## 8. Giới hạn đã biết và số chưa kiểm chứng

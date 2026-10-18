@@ -64,7 +64,11 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 - "Đã xử lý tay" (ghi chú): bạn đã xử lý ngoài hệ thống, ví dụ gọi hãng tạo vận đơn riêng.
 Báo động Gomdon hiện ngay trong chi tiết đơn, bấm "Đã xử lý" sau khi xong.
 
-**Đổi rác** (mọi nhân viên): **Quản trị › Đổi rác**. Cách nhận hàng ở cửa kho: docs/launch/recycle-rewards-launch-checklist.md, mục 6.
+**Đổi rác** (mọi nhân viên): **Quản trị › Khách hàng › Đổi rác › Yêu cầu**. Hai thẻ ở "Việc cần xử lý" mở thẳng tới đây: "Kiện đổi rác chờ đếm" và "Kiện không rõ chủ".
+- Mở yêu cầu: gõ mã vào ô "Mã yêu cầu, mã đơn hoặc mã vận đơn", bấm "Tra", rồi bấm "Mở" ở dòng kết quả.
+- Nhận kiện gửi về kho hoặc kiện thu kèm đơn: bấm "Nhận kiện", gõ "Mã TR- trên kiện", bấm "Xác nhận đã nhận kiện". Nhận theo mã TR-, không theo mã vận đơn của hãng. Kiện còn cước thu thì bấm "Từ chối tại cửa (chưa trả cước)".
+- Đếm: ở khối "Đếm hàng thực nhận", gõ số thực nhận của từng món (nhận thiếu thì chọn lý do), bấm "Xác nhận số đếm". Điểm cộng theo số thực nhận, không theo số khách khai.
+- Kiện không khớp yêu cầu nào: bấm "Hàng không rõ chủ", điền "Mô tả kiện", bấm "Ghi kiện". Chỉ mô tả kiện, không ghi tên hay số điện thoại người gửi.
 
 **Khách mua tại quầy.** Pancake POS không tự cộng Điểm Xanh. Bấm link **"Màn thu ngân (tích điểm tại quầy)"** góc trên bên phải trang Quản trị. Quét thẻ hoặc nhập SĐT, "Tra cứu". Nhập "Tổng tiền hoá đơn" và "Mã hoá đơn POS", bấm "Tích điểm". Mỗi hoá đơn tích một lần, không tự tích cho chính mình. Màn báo "đang TẮT": nhờ admin bật.
 
