@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -134,6 +134,10 @@ export default function RecycleRequestPage() {
   const [qrOpen, setQrOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editingTracking, setEditingTracking] = useState(false);
+
+  useEffect(() => {
+    if (phase === 'guest') navigate('/recycle', { replace: true });
+  }, [phase, navigate]);
 
   const authed = phase === 'authenticated';
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.request(id), queryFn: () => getWasteRequest(id), enabled: authed });

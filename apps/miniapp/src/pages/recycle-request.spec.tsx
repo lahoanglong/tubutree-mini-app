@@ -77,6 +77,7 @@ const PICKUP = (over: Partial<WasteRequestDetailDTO> = {}) => makeRequestDetail(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.auth.status = 'authenticated';
   mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
   mocks.getWasteMe.mockResolvedValue(makeWasteMe());
   mocks.getWasteRequest.mockResolvedValue(makeRequestDetail());
@@ -273,6 +274,12 @@ describe('/recycle/r/:id — trạng thái đóng và kết quả (§4.6)', () =
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Xem yêu cầu của tôi' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/requests', { replace: true });
+  });
+  it('khách (chưa đăng nhập) → về /recycle thay vì skeleton mãi', async () => {
+    mocks.auth.status = 'idle';
+    renderPage();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle', { replace: true }));
+    expect(mocks.getWasteRequest).not.toHaveBeenCalled();
   });
   it('một PageHeader, không lồng nút', async () => {
     mocks.getWasteRequest.mockResolvedValue(MAIL());
