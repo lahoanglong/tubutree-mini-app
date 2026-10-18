@@ -64,6 +64,7 @@ const RecycleRequestsPage = lazy(() => import('../pages/recycle-requests'));
 const RecycleDonePage = lazy(() => import('../pages/recycle-done'));
 const RecycleDeskPage = lazy(() => import('../pages/recycle-desk'));
 const RewardsPage = lazy(() => import('../pages/rewards'));
+const RewardsMinePage = lazy(() => import('../pages/rewards-mine'));
 const ProfilePage = lazy(() => import('../pages/profile'));
 const LoyaltyPage = lazy(() => import('../pages/loyalty'));
 const WalletPage = lazy(() => import('../pages/wallet'));
@@ -211,6 +212,7 @@ export default function MyApp() {
                     <Route path="/recycle/done/:id" element={<RecycleDonePage />} />
                     <Route path="/recycle/desk" element={<RecycleDeskPage />} />
                     <Route path="/rewards" element={<RewardsPage />} />
+                    <Route path="/rewards/mine" element={<RewardsMinePage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/loyalty" element={<LoyaltyPage />} />
                     <Route path="/wallet" element={<WalletPage />} />

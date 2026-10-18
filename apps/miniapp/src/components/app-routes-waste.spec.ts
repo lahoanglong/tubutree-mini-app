@@ -16,6 +16,7 @@ const ROUTES: ReadonlyArray<readonly [path: string, component: string, page: str
   ['/recycle/done/:id', 'RecycleDonePage', 'recycle-done'],
   ['/recycle/desk', 'RecycleDeskPage', 'recycle-desk'],
   ['/rewards', 'RewardsPage', 'rewards'],
+  ['/rewards/mine', 'RewardsMinePage', 'rewards-mine'],
 ];
 
 describe('route Đổi rác lấy quà ở app.tsx (§16.1: một dòng lazy và một Route)', () => {

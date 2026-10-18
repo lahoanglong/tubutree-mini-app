@@ -37,6 +37,7 @@ const FILES = [
   'src/pages/recycle-desk.tsx',
   'src/components/waste-desk-perk.tsx',
   'src/pages/rewards.tsx',
+  'src/pages/rewards-mine.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
