@@ -24,7 +24,7 @@ Tài liệu bắt buộc đọc phần liên quan: \`${DOCS}/01-thiet-ke.md\` (t
 Luật cứng:
 - Không git push, không PR, không merge vào main, không deploy, không ghi DB dùng chung. Không chạy Playwright (chỉ viết spec), trừ khi việc của bạn nói rõ.
 - Không đổi hành vi API đang có; chỉ thêm khi thật cần, có test.
-- Không sửa test của Mini App để cho xanh. Test Mini App phải xanh, tổng số test vitest Mini App không giảm so với lúc lane bắt đầu (và không dưới 4243). \`profile-hub.spec.tsx\` của Mini App đôi khi chập chờn do tải: chạy riêng lại trước khi kết luận.
+- Không sửa test của Mini App để cho xanh. Test Mini App phải xanh, tổng số test vitest Mini App không giảm so với lúc lane bắt đầu (và không dưới ${A.miniappFloor ?? 4243}). \`profile-hub.spec.tsx\` của Mini App đôi khi chập chờn do tải: chạy riêng lại trước khi kết luận.
 - Chỉ sửa file thuộc lane này theo 02-ke-hoach.md. Cần sửa file của lane khác thì ghi lại, không sửa.
 - Không xoá hay revert file mình không tạo. Không \`pkill -f\`; chỉ kill theo cổng: \`lsof -ti tcp:<port> -sTCP:LISTEN | xargs kill\`. Docker chỉ \`docker run --rm --tmpfs\` và \`docker rm -f -v\`.
 - Không viết comment kể lại thay đổi; comment chỉ giải thích lý do không hiển nhiên, theo idiom và mật độ comment của code xung quanh (tiếng Việt như code hiện có).

@@ -62,7 +62,7 @@ pnpm --filter @tubutree/shared-types build
 pnpm --filter @tubutree/app-core typecheck && pnpm --filter @tubutree/app-core test
 pnpm --filter @tubutree/web typecheck && pnpm --filter @tubutree/web lint && pnpm --filter @tubutree/web test
 (cd apps/web && TZ=UTC npx vitest run)
-pnpm --filter @tubutree/miniapp typecheck && pnpm --filter @tubutree/miniapp test   # Tests >= 4243
+pnpm --filter @tubutree/miniapp typecheck && pnpm --filter @tubutree/miniapp test   # Tests >= 4214 (sàn sau khi nhánh đổi rác gỡ Refill; xem PROGRESS.md)
 pnpm lint:vars && pnpm lint:parity
 pnpm --filter @tubutree/web build && pnpm --filter @tubutree/miniapp build
 ```
