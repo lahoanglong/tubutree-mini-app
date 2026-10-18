@@ -65,6 +65,25 @@ Nhánh `lr/roles`, worktree `.claude/worktrees/lr-roles`. Chưa push. Mặc đ�
   - Matrix spec đưa mọi route có `/admin` ở bất kỳ vị trí nào vào bảng, kể cả khi `@Roles` có trộn vai trò khác. Mọi route như vậy phải có trong `EXPECTED`.
   - Hiện các route đó đều đã có trong bảng. Đã thử: đổi `@Roles` của `GET /feed/admin/events` thành `('ADMIN','DEALER')` và bỏ dòng khỏi bảng. Spec cũ vẫn xanh; spec mới đỏ ở 2 test.
 
+**Sửa sau review lượt 3 (APPROVE với sửa). Gộp `review/2026-10-18-launch` `cc662454` ở `8afeb99b`:**
+- **1. Ngân sách mã theo ngày, CAO** (`339720a6`):
+  - Khoá mới: `coupon.staff_daily_budget_vnd` = 30.000.000 (0–1.000.000.000) và `coupon.staff_max_usage` = 1000 (1–100.000). Cả hai có trong `seed.ts`, `APPROVED_LOADED_KEYS` và luật ghi.
+  - Cách tính:
+    - Mức trần một lượt: giảm tiền = giá trị; giảm % = Giảm tối đa; freeship = `coupon.staff_max_amount_vnd`.
+    - Mức phơi của một mã = mức trần một lượt × tổng lượt. Lô = số mã × mức trần một lượt.
+    - Tổng mức phơi mọi mã và lô một nhân viên tạo trong ngày VN, kể cả mã đã tắt, cộng phần mới, không vượt ngân sách. Vượt thì 400, câu báo nói còn bao nhiêu và "nhờ quản trị viên tạo".
+  - Sửa tăng tổng lượt: phần chênh tính vào ngân sách của **ngày tạo mã**, theo người tạo. Vì vậy sửa mã cũ cũng không vượt được ngân sách của ngày đó. Nếu tính vào hôm nay mà không lưu lại thì sửa nhiều mã cũ sẽ lách được.
+  - Chống race: kiểm và ghi trong cùng transaction, có `pg_advisory_xact_lock(hashtext('coupon.staff_budget:' || người tạo))`. Race 5 vòng 2 yêu cầu song song: chỉ 1 qua; bỏ khoá thì race đỏ.
+  - ADMIN không bị giới hạn.
+  - Migration `20261018180000_coupon_created_at` thêm cột `coupons.createdAt` và index `(createdById, createdAt)`.
+- **2. Bộ lọc mẫu thông báo, TRUNG BÌNH** (`386939af`):
+  - Chuẩn hoá NFKC trước khi kiểm.
+  - Dãy số: bắt từ 8 chữ số, giữa hai chữ số liền nhau có tối đa 2 ký tự `[\s.,-_/]`. Kiểm trên toàn văn bản, kể cả query của link. Chỉ bỏ ra ngoài mã số của OA / Mini App của shop.
+  - Link: bắt cả link có scheme lẫn tên miền trần. Tên miền trần tính là link khi có đường dẫn hoặc có đuôi tên miền hay gặp, nên "Tp.HCM" không bị chặn. Host đọc bằng `new URL()`; có `\` trong phần host thì từ chối. Biến `{{key}}` không bị coi là link.
+  - Có test cho mọi ca reviewer đã thử, cùng các ca hợp lệ: "199.000đ", "30k", link tubutree.
+  - **Lưu ý:** ngày đầy đủ `31/12/2026` có 8 chữ số nên bị chặn. Marketing ghi `31/12` hoặc dùng biến `{{expire_date}}`.
+- **3. Ghi chú đơn trong CSV, THẤP** (`ae5a52a7`): người không phải ADMIN xuất thì cột ghi chú che các dãy giống SĐT / số tài khoản, giữ 3 số cuối (`****-***-678`). Dùng chung regex với mục 2. ADMIN thấy nguyên văn.
+
 ## 2. Bảng quyền (ADMIN luôn ✓; "mọi NV" = route `@Roles` có STAFF, nhân viên chưa có nhóm cũng vào)
 
 Nguồn sự thật: `EXPECTED` trong `staff-permissions.matrix.spec.ts` (spec xanh = bảng khớp mã).
@@ -220,13 +239,19 @@ Nguồn sự thật: `EXPECTED` trong `staff-permissions.matrix.spec.ts` (spec x
 - **/reviews/:id**: `POST /reviews/:id/visibility`
 
 ## 3. Kiểm chứng
-Chạy bằng Node 22 (`$HOME/.local/node/node-v22.23.3-darwin-arm64/bin`), sau lượt sửa 2, trên tip của nhánh.
+Lượt 3, trên tip của nhánh, DB `tubutree_it` mới:
+- `migrate deploy` báo "All migrations have been successfully applied."; drift báo "No difference detected."
+- Race `staff-coupons` (gồm 3 ca ngân sách), `reference-seed`, `staff-order-export-mask`: `Test Suites: 3 passed` · `Tests: 18 passed`.
+- jest `src/common src/modules/{admin,coupons,orders,notifications} src/modules/system-config prisma/reference-data`: `Test Suites: 103 passed` · `Tests: 2208 passed`.
+- tsc api và web: exit 0. Vitest `src/components/admin src/app/admin`: `46 passed` · `751 passed`.
+
+Lượt 2 — chạy bằng Node 22 (`$HOME/.local/node/node-v22.23.3-darwin-arm64/bin`), sau lượt sửa 2, trên tip của nhánh lúc đó.
 - DB riêng `tubutree_it` (container `lr-roles-pg`, cổng 5576), tạo mới: `prisma migrate deploy` báo "All migrations have been successfully applied."; `migrate diff --from-url … --to-schema-datamodel` báo "No difference detected."
 - Race (Postgres thật, `tubutree_it` mới migrate): `q1-money-refunds`, `staff-coupons`, `reference-seed`, `p5-refunds-returns`, `r5-money`, `merchant-payout-cancel`, `coupon-preview-equals-quote`, `split-coupon-release`, `p6-promo-abuse`, `claim-first-order`, `admin-orders-r6`, `admin-user-detail`, `ops-health`, `feed-images`, `merchant-admin-todo`, `ctv-notifications`: `Test Suites: 16 passed, 16 total` · `Tests: 130 passed, 130 total`.
 - API jest `src/common src/modules/{admin,coupons,orders,notifications,affiliate,merchant} prisma/reference-data src/modules/system-config`: `Test Suites: 128 passed, 128 total` · `Tests: 2739 passed, 2739 total`.
 - Web vitest `src/app/admin src/components/admin src/lib`: `Test Files 98 passed (98)` · `Tests 1455 passed (1455)`.
 - `npx tsc --noEmit` api và web: exit 0. `npx eslint` trên 38 file api và 4 file web đổi ở lượt 2: exit 0.
-- Có đổi schema: một migration `20261018160000_coupon_actor` (2 cột nullable).
+- Có đổi schema: migration `20261018160000_coupon_actor` (2 cột nullable). Lượt 3 thêm `20261018180000_coupon_created_at`.
 
 ## 4. Chưa làm / cố ý để lại
 - **D1-15 Lương:** chỉ có trên miniapp và chỉ ADMIN. Để nguyên, các route `admin/payroll*` vẫn chỉ ADMIN. Khi chuyển tab Lương sang web mới gắn KE_TOAN.
@@ -244,6 +269,6 @@ Chạy bằng Node 22 (`$HOME/.local/node/node-v22.23.3-darwin-arm64/bin`), sau 
 3. **Kế toán có cần xem danh sách đơn** (`GET admin/orders`)? **Mặc định: không.** Kế toán đã có CSV đơn và dòng hàng ở tab Báo cáo.
 4. **Academy cho marketing:** đã mở theo ma trận D1 mục 3 ("FAQ, Content Kit, Academy, mẫu thông báo"), dù prompt không ghi. Muốn bỏ thì gỡ `@AllowStaff` ở lớp `academy-admin.controller.ts` và bỏ `'academy'` khỏi `STAFF_TABS.MARKETING`.
 5. **Marketing còn thiếu các quyền sau, đang chỉ ADMIN:** nhiệm vụ & quà đổi điểm (`admin/engagement`, file phiên đổi-rác đang sửa), sự kiện cộng đồng và chọn người thắng (có thưởng Điểm Xanh), nhãn hàng/khuyến mãi nhãn hàng, Retention & North-star, báo cáo doanh thu. Có mở không? **Mặc định: không.**
-6. **Trần mã giảm giá do nhân viên tạo hoặc sửa: mặc định 50% / 200.000đ** (`coupon.staff_max_percent` = 50, `coupon.staff_max_amount_vnd` = 200000, sửa ở Cấu hình). Mã % phải có "Giảm tối đa" ≤ 200.000đ, mọi mã phải có tổng lượt dùng. Mức này đã hợp với khuyến mãi thật chưa? Cần mức cao hơn thì ADMIN tạo mã, vì ADMIN không bị trần. Cũng cần xác nhận: dòng hoàn tiền khách (END_CUSTOMER) chưa có tài khoản nhận giờ chỉ ADMIN xử lý được, có đúng ý không?
+6. **Trần mã giảm giá do nhân viên tạo hoặc sửa: mặc định 50% / 200.000đ** (`coupon.staff_max_percent` = 50, `coupon.staff_max_amount_vnd` = 200000, sửa ở Cấu hình). Mã % phải có "Giảm tối đa" ≤ 200.000đ, mọi mã phải có tổng lượt dùng. Thêm **ngân sách 30.000.000đ mỗi nhân viên mỗi ngày** (`coupon.staff_daily_budget_vnd`), tính bằng tổng mức giảm tối đa × tổng lượt của mọi mã và lô người đó tạo trong ngày. Một mã tối đa **1.000 lượt** (`coupon.staff_max_usage`). Ví dụ: một mã 200.000đ × 150 lượt đã dùng hết ngân sách của ngày. Các mức này đã hợp với khuyến mãi thật chưa? Cần mức cao hơn thì ADMIN tạo mã, vì ADMIN không bị trần hay ngân sách. Cũng cần xác nhận: dòng hoàn tiền khách (END_CUSTOMER) chưa có tài khoản nhận giờ chỉ ADMIN xử lý được, có đúng ý không?
 7. **Mọi nhân viên duyệt đổi vỏ chai và tích điểm tại quầy**, kể cả marketing và kế toán. Quyền này có từ trước. Có giới hạn theo nhóm không? **Mặc định: giữ nguyên.**
 8. **Danh sách 24 mẫu thông báo marketing sửa được** (`MARKETING_TEMPLATE_CODES` trong `notification-templates-admin.service.ts`) đã đúng chưa? **Mặc định:** gồm voucher, flash sale, giỏ bỏ quên, giảm giá, nhắc mua lại, nhắc đánh giá, nhắc điểm, game, gian hàng nổi bật và cộng đồng. Không gồm `COMMUNITY_EVENT_WINNER` (có thưởng), mua chung và các mẫu tiền. Mẫu mới mặc định chỉ ADMIN sửa.
