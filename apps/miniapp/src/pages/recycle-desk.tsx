@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Input, Page, useSnackbar } from 'zmp-ui';
-import { ChevronDown } from 'lucide-react';
+import { CheckCircle2, ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   WasteConfirmLineInput,
@@ -51,6 +51,14 @@ const GIFT_STATUS_TEXT: Record<Exclude<WasteDeskGiftDTO['status'], 'READY'>, str
   FULFILLED: 'Quà đã được trao',
   CANCELLED: 'Lượt đổi quà đã huỷ',
 };
+
+interface DeskDone {
+  code: string;
+  customerName: string;
+  pointsAwarded: number;
+  /** Chỉ số máy chủ trả về; null khi điểm không giới hạn hạn mức. */
+  remaining: { label: string; value: number } | null;
+}
 
 type DeskLine = WasteDeskRequestDTO['lines'][number];
 
@@ -166,6 +174,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [received, setReceived] = useState<Record<string, number>>({});
   const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [done, setDone] = useState<DeskDone | null>(null);
 
   const point = points.find((p) => p.id === pointId) ?? points[0]!;
 
@@ -175,6 +184,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setLookup(res.type === 'REQUEST' ? res.request : null);
       setGift(res.type === 'GIFT' ? res.redemption : null);
       setLookedUpCode(c.trim());
+      setDone(null);
       setReceived(
         res.type === 'REQUEST' && !isReadOnly(res.request)
           ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.hazardous ? 0 : l.declaredQty]))
@@ -217,6 +227,18 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       qc.setQueryData<WasteDeskPointDTO[]>(WASTE_QUERY_KEYS.desk, (old) =>
         old?.map((p) => (p.id === target ? { ...p, quota: res.quota, staffDailyCapRemaining: res.staffDailyCapRemaining } : p)),
       );
+      const targetPoint = points.find((p) => p.id === target) ?? point;
+      setDone({
+        code: req.code,
+        customerName: req.customerName,
+        pointsAwarded: res.pointsAwarded,
+        remaining: res.quota
+          ? { label: 'Hạn mức còn lại', value: res.quota.remaining }
+          : targetPoint.kind === 'WAREHOUSE'
+            ? { label: 'Còn được xác nhận hôm nay', value: res.staffDailyCapRemaining }
+            : null,
+      });
+      setCode('');
       finish();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -270,6 +292,31 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
           Tra mã
         </Button>
       </div>
+
+      {done && (
+        <Card>
+          <div role="status" style={{ ...COLUMN, gap: 12, alignItems: 'center', textAlign: 'center' }}>
+            <Icon icon={CheckCircle2} size="lg" tone="brand" />
+            <Heading variant="title-md" as="h2">{`Đã ghi nhận. Tubu sẽ cộng ${formatPoints(done.pointsAwarded)} cho khách`}</Heading>
+            <Text variant="body-md" as="div">{`Yêu cầu ${done.code} của ${done.customerName} đã xong`}</Text>
+            {done.remaining && (
+              <Text variant="body-sm" tone="secondary" as="div">{`${done.remaining.label}: ${formatPoints(done.remaining.value)}`}</Text>
+            )}
+            <Button
+              fullWidth
+              variant="secondary"
+              onPress={() => {
+                setDone(null);
+                setCode('');
+                setLookup(null);
+                setGift(null);
+              }}
+            >
+              Nhận yêu cầu khác
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {request && (
         <Card>

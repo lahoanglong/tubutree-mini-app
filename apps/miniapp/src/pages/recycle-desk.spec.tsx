@@ -261,7 +261,24 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }, { itemId: 'item-milk', declaredQty: 5, receivedQty: 5 }] }));
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Tubu sẽ cộng 6.000 điểm cho khách', type: 'success' }));
     expect(await screen.findByText('Còn 374.000 điểm')).toBeInTheDocument();
-    expect(screen.queryByText('Ng*** A')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xác nhận đã nhận' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Từ chối cả yêu cầu' })).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Đã ghi nhận. Tubu sẽ cộng 6.000 điểm cho khách');
+    expect(screen.getByText('Yêu cầu TR-8K2M9 của Ng*** A đã xong')).toBeInTheDocument();
+    expect(screen.getByText('Hạn mức còn lại: 374.000 điểm')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mã yêu cầu hoặc mã nhận quà')).toHaveValue('');
+  });
+  it('thẻ kết quả ở lại màn tới khi bấm "Nhận yêu cầu khác"; số hạn mức lấy từ phản hồi, không bịa khi điểm không giới hạn', async () => {
+    mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 6000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 150_000 });
+    renderPage();
+    await lookUp();
+    await screen.findByText('Ng*** A');
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
+    expect(await screen.findByText('Yêu cầu TR-8K2M9 của Ng*** A đã xong')).toBeInTheDocument();
+    expect(screen.queryByText(/Hạn mức còn lại:/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Nhận yêu cầu khác' }));
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByLabelText('Mã yêu cầu hoặc mã nhận quà')).toHaveValue('');
   });
   it('dòng thiếu gửi kèm shortfallReason', async () => {
     mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 5000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 150_000 });
