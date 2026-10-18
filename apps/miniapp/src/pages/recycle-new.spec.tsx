@@ -283,8 +283,8 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     renderPage();
     const pickup = await screen.findByRole('radio', { name: /Thu kèm đơn/ });
     const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
-    expect(await within(pickup).findByText('tháng này bạn không còn đủ trần cho một gói thu kèm đơn')).toBeInTheDocument();
-    expect(within(mail).getByText('tháng này bạn không còn đủ trần cho một gói gửi kho')).toBeInTheDocument();
+    expect(await within(pickup).findByText('Tháng này bạn không còn đủ trần cho một gói thu kèm đơn')).toBeInTheDocument();
+    expect(within(mail).getByText('Tháng này bạn không còn đủ trần cho một gói gửi kho')).toBeInTheDocument();
     expect(within(pickup).queryByText(/gói gửi kho/)).toBeNull();
   });
   it('NEED_PROVINCE → ô chọn tỉnh trên thẻ Gửi về kho; chọn → preview lại với provinceCode', async () => {

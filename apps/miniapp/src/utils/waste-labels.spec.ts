@@ -78,7 +78,7 @@ describe('lời khoá từ /waste/preview (§4.3)', () => {
     [{ code: 'MAX_OPEN', openCount: 2 }, 'Bạn đang có 3 yêu cầu chưa xong'],
     [{ code: 'PICKUP_PENDING', pickupRequestCode: 'TR-ABCDE' }, 'Bạn đã có yêu cầu thu kèm TR-ABCDE, hãy gắn vào đơn kế tiếp'],
     [{ code: 'BELOW_MIN', missingPoints: 6000 }, 'Cần thêm 6.000 điểm'],
-    [{ code: 'MONTH_CAP_FOR_MIN' }, 'tháng này bạn không còn đủ trần cho một gói gửi kho'],
+    [{ code: 'MONTH_CAP_FOR_MIN' }, 'Tháng này bạn không còn đủ trần cho một gói gửi kho'],
     [{ code: 'NEED_PROVINCE' }, 'Chọn tỉnh để ước tính phí ship'],
     [{ code: 'ITEM_DAY_CAP', itemId: 'item-carton' }, 'Thùng carton: mang tới điểm nhận hôm nay chỉ còn 2 thùng'],
     [{ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }, 'Tháng này Thùng carton chỉ còn 4 thùng'],
@@ -92,8 +92,8 @@ describe('lời khoá từ /waste/preview (§4.3)', () => {
   ] as const)('%o', (block, text) => { expect(L.blockMessage(block as never, ctx)).toBe(text); });
   it('MONTH_CAP_FOR_MIN nêu đúng đường theo cách giao của thẻ', () => {
     const block = { code: 'MONTH_CAP_FOR_MIN' } as never;
-    expect(L.blockMessage(block, { ...ctx, method: 'PICKUP' })).toBe('tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
-    expect(L.blockMessage(block, { ...ctx, method: 'MAIL_IN' })).toBe('tháng này bạn không còn đủ trần cho một gói gửi kho');
+    expect(L.blockMessage(block, { ...ctx, method: 'PICKUP' })).toBe('Tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
+    expect(L.blockMessage(block, { ...ctx, method: 'MAIL_IN' })).toBe('Tháng này bạn không còn đủ trần cho một gói gửi kho');
   });
 });
 

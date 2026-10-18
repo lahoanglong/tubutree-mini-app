@@ -198,7 +198,7 @@ export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): st
     case 'BELOW_MIN':
       return `Cần thêm ${formatPoints(block.missingPoints ?? 0)}`;
     case 'MONTH_CAP_FOR_MIN':
-      return `tháng này bạn không còn đủ trần cho một gói ${ctx.method === 'PICKUP' ? 'thu kèm đơn' : 'gửi kho'}`;
+      return `Tháng này bạn không còn đủ trần cho một gói ${ctx.method === 'PICKUP' ? 'thu kèm đơn' : 'gửi kho'}`;
     case 'NEED_PROVINCE':
       return 'Chọn tỉnh để ước tính phí ship';
     case 'ITEM_DAY_CAP':
