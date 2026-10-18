@@ -53,7 +53,10 @@ const CORE: string[] = [
 ];
 const SHOP: string[] = [];
 const ORDER: string[] = [];
-const ACCOUNT: string[] = [];
+const ACCOUNT: string[] = [
+  'app/tai-khoan/ho-so/page.tsx',
+  'components/account/avatar-crop-sheet.tsx',
+];
 const LOYALTY: string[] = [];
 const COMMUNITY: string[] = [];
 const AFFILIATE: string[] = [];

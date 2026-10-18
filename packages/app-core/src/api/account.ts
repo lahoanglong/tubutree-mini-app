@@ -5,6 +5,8 @@ export interface MeProfile {
   id: string;
   fullName: string | null;
   email: string | null;
+  /** Chỉ đọc: UpdateMeDto không nhận số điện thoại. API cũ chưa trả thì vắng. */
+  phone?: string | null;
   avatarUrl: string | null;
   dob: string | null;
   onboarded: boolean;
