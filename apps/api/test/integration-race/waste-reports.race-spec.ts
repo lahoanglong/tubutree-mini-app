@@ -1,6 +1,9 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
+import { WasteAccessService } from '../../src/modules/waste-exchange/core/waste-access.service';
+import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-config.service';
 import { WasteReportsService } from '../../src/modules/waste-exchange/catalog/waste-reports.service';
 import { createUser, deleteItData, warmPool } from './helpers';
 import { cleanupWaste, createWasteItem, createWastePoint, createWasteRequest, createWarehouse } from './fixtures/waste-fixtures';
@@ -25,7 +28,10 @@ describe('waste-reports (real Postgres)', () => {
   ];
 
   beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [WasteReportsService] }).compile();
+    moduleRef = await Test.createTestingModule({
+      imports: [PrismaModule],
+      providers: [SystemConfigService, WasteConfigService, WasteAccessService, WasteReportsService],
+    }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
