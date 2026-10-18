@@ -34,6 +34,7 @@ const FILES = [
   'src/pages/recycle-edit.tsx',
   'src/pages/recycle-requests.tsx',
   'src/pages/recycle-done.tsx',
+  'src/pages/recycle-desk.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
