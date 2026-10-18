@@ -39,6 +39,7 @@ describe('WasteDeskController routes', () => {
     expect(Reflect.getMetadata(THROTTLE_KEY, proto.reject)).toBe(30);
     expect(Reflect.getMetadata(THROTTLE_KEY, proto.submitPerk)).toBe(10);
     expect(Reflect.getMetadata(THROTTLE_KEY, proto.points)).toBeUndefined();
+    for (const h of ['lookup', 'confirm', 'reject', 'submitPerk'] as const) expect(Reflect.getMetadata('THROTTLER:TTLdefault', proto[h])).toBe(60_000);
   });
 
   it('carries no @Roles on the class or any handler', () => {
@@ -87,6 +88,12 @@ describe('desk body validation', () => {
     const out = (await run(WasteConfirmDto, { lines: [line], receivedWeightGrams: 100000, match: { parcelTracking: 'x'.repeat(64) } })) as WasteConfirmDto;
     expect(out).toBeInstanceOf(WasteConfirmDto);
     expect(out.match?.parcelTracking).toHaveLength(64);
+  });
+
+  it('accepts valid reject, perk and lookup bodies', async () => {
+    await expect(run(WasteRejectDto, { rejectionReason: 'OTHER', rejectionNote: 'x'.repeat(500), match: { parcelCode: 'TR-ABC' } })).resolves.toBeInstanceOf(WasteRejectDto);
+    await expect(run(WastePerkDto, { perkText: 'x'.repeat(300) })).resolves.toBeInstanceOf(WastePerkDto);
+    await expect(run(WasteDeskLookupDto, { code: 'x'.repeat(64) })).resolves.toBeInstanceOf(WasteDeskLookupDto);
   });
 
   it.each([
