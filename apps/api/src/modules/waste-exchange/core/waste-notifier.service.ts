@@ -21,7 +21,7 @@ export const WASTE_EXPIRED_DETAIL_TEXT: Record<WasteCloseReason, string> = {
   HOLD_EXPIRED: 'hết hạn giữ chỗ, phần trần của bạn đã được trả lại',
   PICKUP_NO_SHOW: 'kho chưa nhận được rác thu kèm đơn',
   PICKUP_NOT_DISPATCHED: 'Tubu chưa sắp xếp được người đến lấy rác thu kèm đơn, xin lỗi bạn. Bạn có thể gửi về kho Tubu ở lần sau',
-  LOST: 'đã đóng vì kiện thất lạc trên đường gửi',
+  LOST: 'kiện thất lạc trên đường gửi. Bạn nhắn Tubu Tree để được hỗ trợ',
   LOST_AT_WAREHOUSE: 'kiện bị thất lạc tại kho Tubu, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ',
   SHIP_LOCKED: 'đường gửi kho và thu kèm đơn đang tạm dừng',
   ORDER_CANCELLED: 'đơn mua gắn kèm đã bị huỷ',

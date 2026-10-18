@@ -208,7 +208,7 @@ describe('WasteAdminItemsService', () => {
 
     await svc.reorder('a1', { ids: ['i9', 'i1'] });
 
-    expect(sqlOf($queryRaw.mock.calls[0]!)).toContain('FROM "waste_items" ORDER BY "id" FOR UPDATE');
+    expect(sqlOf($queryRaw.mock.calls[0]!)).toContain('FROM "waste_items" ORDER BY "id" FOR NO KEY UPDATE');
     expect($queryRaw).toHaveBeenCalledTimes(1);
     expect(wasteItem.update.mock.calls.map((c) => c[0])).toEqual([
       { where: { id: 'i9' }, data: { sortOrder: 10 } },

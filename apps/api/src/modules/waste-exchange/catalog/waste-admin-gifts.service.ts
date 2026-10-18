@@ -156,7 +156,8 @@ export class WasteAdminGiftsService {
     const ids = body.ids;
     await this.prisma.$transaction(async (tx) => {
       // Every row locked in one global order, so two reorders with opposite bodies queue instead of deadlocking.
-      await tx.$queryRaw`SELECT "id" FROM "waste_gifts" ORDER BY "id" FOR UPDATE`;
+      // NO KEY UPDATE, not FOR UPDATE: it stays compatible with the KEY SHARE of a child FK insert, which locks in body order.
+      await tx.$queryRaw`SELECT "id" FROM "waste_gifts" ORDER BY "id" FOR NO KEY UPDATE`;
       const all = await tx.wasteGift.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }], select: { id: true } });
       const known = new Set(all.map((g) => g.id));
       if (new Set(ids).size !== ids.length || ids.length !== all.length || !ids.every((i) => known.has(i))) {
