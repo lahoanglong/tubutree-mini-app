@@ -24,10 +24,11 @@ export default function BottomNav() {
   const pathname = usePathname();
   const { status } = useAuth();
   const isRoot = isWebRootPath(pathname);
+  const tabs = readyNavTabs();
   const activeQ = useQuery({
     queryKey: ACTIVE_ORDER_COUNT_KEY,
     queryFn: fetchActiveOrderCount,
-    enabled: isRoot && status === 'authenticated',
+    enabled: isRoot && status === 'authenticated' && tabs.some((t) => t.badge === 'active-orders'),
     staleTime: 30_000,
     retry: false,
   });
@@ -42,7 +43,7 @@ export default function BottomNav() {
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-stone-200 bg-stone-0 shadow-card"
         style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {readyNavTabs().map((t) => {
+        {tabs.map((t) => {
           const active = pathname === t.path;
           const count = t.badge === 'active-orders' ? activeOrders : 0;
           return (

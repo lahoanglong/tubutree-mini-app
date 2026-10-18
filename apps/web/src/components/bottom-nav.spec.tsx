@@ -104,6 +104,12 @@ describe('BottomNav (điện thoại)', () => {
     expect((mocks.query.mock.calls.at(-1)![0] as { enabled: boolean }).enabled).toBe(false);
   });
 
+  it('không hỏi badge khi mục Đơn hàng chưa hiện (route còn pending)', () => {
+    mocks.ready = (p) => p !== '/tai-khoan/don-hang';
+    render('/');
+    expect((mocks.query.mock.calls[0]![0] as { enabled: boolean }).enabled).toBe(false);
+  });
+
   it('globals.css ẩn thanh khi có sticky-action-bar', () => {
     const css = readFileSync(fileURLToPath(new URL('../app/globals.css', import.meta.url)), 'utf8');
     expect(css).toMatch(/body\.has-sticky-bar\s+\[data-bottom-nav\]\s*\{[^}]*display:\s*none/);
