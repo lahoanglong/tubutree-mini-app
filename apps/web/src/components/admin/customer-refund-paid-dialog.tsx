@@ -29,6 +29,7 @@ export function CustomerRefundPaidDialog({
   refund,
   mode = 'paid',
   takeOverFrom = null,
+  canEnterBank = true,
   onClose,
   onDone,
 }: {
@@ -36,6 +37,8 @@ export function CustomerRefundPaidDialog({
   mode?: RefundAction;
   /** Khoản đang do admin khác chuyển khoản: hộp bắt ghi lý do tiếp quản (R3-MONEY-4). */
   takeOverFrom?: { holder: string; since: string | null } | null;
+  /** Chỉ quản trị viên nhập tài khoản nhận; nhân viên chỉ chuyển tới tài khoản đã có. */
+  canEnterBank?: boolean;
   onClose: () => void;
   onDone: (outcome: MarkPaidOutcome) => void;
 }) {
@@ -62,7 +65,8 @@ export function CustomerRefundPaidDialog({
   const bankEntryRef = useRef<HTMLDivElement>(null);
   const toBank = needsBankAccount(refund);
   // Khoản của khách có tài khoản nhưng khách chưa chọn nơi nhận: admin nhập tài khoản khách gửi qua hỗ trợ.
-  const needsEntry = toBank && !refund.bankAccountNo;
+  const staffBlocked = !canEnterBank && !refund.bankAccountNo;
+  const needsEntry = toBank && !refund.bankAccountNo && canEnterBank;
   // Cờ đồng bộ chặn lần bấm thứ hai trước khi React kịp vẽ lại nút đã khoá.
   const inFlight = useRef(false);
 
@@ -95,7 +99,7 @@ export function CustomerRefundPaidDialog({
   const busy = mut.isPending;
 
   const submit = () => {
-    if (inFlight.current || busy) return;
+    if (inFlight.current || busy || staffBlocked) return;
     if (!claiming && !bankRef.trim()) {
       setRefMissing(true);
       setError('Nhập mã giao dịch ngân hàng của lần chuyển khoản.');
@@ -234,6 +238,7 @@ export function CustomerRefundPaidDialog({
         </div>
 
         <div className="mt-3 space-y-3">
+          {staffBlocked && <Notice tone="warning">Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập.</Notice>}
           {needsEntry && (
             <div ref={bankEntryRef} className="space-y-2 rounded-control border border-warning-fg bg-warning-bg p-3">
               <p className="text-xs text-warning-fg">Khách chưa chọn nơi nhận. Nhập tài khoản khách đã gửi cho Tubu.</p>
@@ -345,7 +350,7 @@ export function CustomerRefundPaidDialog({
             ref={acceptRef}
             type="button"
             data-confirm="accept"
-            disabled={busy}
+            disabled={busy || staffBlocked}
             onClick={submit}
             className="min-h-[44px] rounded-control bg-warning-fg px-4 text-sm font-medium text-stone-0 hover:brightness-90 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
           >

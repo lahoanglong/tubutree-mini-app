@@ -1345,8 +1345,14 @@ model Coupon {
   // Lô mã in thẻ do admin sinh cùng cấu hình: gom số đã nhận/đã dùng và xuất lại CSV theo lô.
   batch           String?
   claims          CouponClaim[]
+  /// Người tạo / sửa gần nhất qua trang quản trị (null = mã hệ thống hoặc tạo trước khi có cột). Nhân viên chỉ sửa được
+  /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.
+  createdById     String?
+  updatedById     String?
+  createdAt       DateTime           @default(now())
 
   @@index([batch])
+  @@index([createdById, createdAt])
   @@map("coupons")
 }
 

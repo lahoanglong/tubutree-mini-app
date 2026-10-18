@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { hasPriorOrder } from '../../common/first-order';
 import { formatVnDate } from '../../common/vn-time';
-import { isCouponEligible } from './coupon-scope';
+import { OWN_COUPON_MSG, isCouponEligible, isOwnStaffCoupon } from './coupon-scope';
 import { NEW_CUSTOMER_ONLY_MSG, normalizeCouponCode } from './coupons.service';
 
 /** Khoá theo mã khi đếm lượt nhận (cặp với hashtext(couponId)); khác dạng khoá (mã, khách) của CouponsService.redeem. */
@@ -54,8 +54,12 @@ export class CouponClaimService {
     if (now < coupon.startAt) throw new BadRequestException(`Mã giảm giá áp dụng từ ngày ${formatVnDate(coupon.startAt)}.`);
 
     // Mọi lần nhận đòi tài khoản thật: mã thẻ riêng chỉ có một lượt nhận, tài khoản khách (deviceId mới) không được giữ chỗ.
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, tierId: true, phone: true, zaloId: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, tierId: true, phone: true, zaloId: true, role: true },
+    });
     if (!user || !isRealUser(user)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
+    if (isOwnStaffCoupon(coupon, user)) throw new BadRequestException(OWN_COUPON_MSG);
     // Khách cũ không giữ chỗ của thẻ "chỉ khách mới": thẻ đó còn để khách mới khác nhận.
     if (coupon.newCustomerOnly && (await hasPriorOrder(this.prisma, userId))) throw new BadRequestException(NEW_CUSTOMER_ONLY_MSG);
 

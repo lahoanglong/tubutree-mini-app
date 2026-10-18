@@ -4,6 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { AllowStaff } from '../../common/staff-permissions';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaginationQuery } from '../../common/pagination';
 import { MerchantFulfilmentService } from './merchant-fulfilment.service';
@@ -49,11 +50,13 @@ class MerchantPayoutListQuery extends PaginationQuery {
 export class MerchantAdminController {
   constructor(private readonly fulfilment: MerchantFulfilmentService) {}
 
+  @AllowStaff('KE_TOAN')
   @Get('overview')
   overview() {
     return this.fulfilment.adminOverview();
   }
 
+  @AllowStaff('KE_TOAN')
   @Get('statements/:storefrontId')
   statement(@Param('storefrontId') storefrontId: string) {
     return this.fulfilment.adminStatement(storefrontId);
@@ -69,21 +72,30 @@ export class MerchantAdminController {
     return this.fulfilment.confirmConsignment(adminId, id);
   }
 
+  @AllowStaff('KE_TOAN')
   @Get('payouts')
   payouts(@Query() q: MerchantPayoutListQuery) {
     return this.fulfilment.listPayouts(q.storefrontId, q.page, q.limit, q.status);
   }
 
+  @AllowStaff('KE_TOAN')
   @Post('payouts')
   createPayout(@CurrentUser('sub') adminId: string, @Body() dto: CreateMerchantPayoutDto) {
     return this.fulfilment.createPayout(adminId, dto.storefrontId, dto.note, dto.expectedTotal);
   }
 
+  @AllowStaff('KE_TOAN')
   @Post('payouts/:id/paid')
-  markPaid(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: MarkMerchantPayoutPaidDto) {
-    return this.fulfilment.markPayoutPaid(adminId, id, dto.bankRef);
+  markPaid(
+    @CurrentUser('sub') adminId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: MarkMerchantPayoutPaidDto,
+  ) {
+    return this.fulfilment.markPayoutPaid(adminId, id, dto.bankRef, { byStaff: role !== 'ADMIN' });
   }
 
+  @AllowStaff('KE_TOAN')
   @Post('payouts/:id/cancel')
   cancelPayout(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: CancelMerchantPayoutDto) {
     return this.fulfilment.cancelPayout(adminId, id, dto.reason);

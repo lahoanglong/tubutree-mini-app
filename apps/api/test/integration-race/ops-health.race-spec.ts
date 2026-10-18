@@ -165,5 +165,13 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'refillPending', 'returnsPending']);
     const kho = await inbox.counts({ role: 'STAFF', staffPermissions: ['KHO'] });
     expect(kho.items.map((i) => i.key).sort()).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'refillPending', 'returnsToReceive']);
+    const marketing = await inbox.counts({ role: 'STAFF', staffPermissions: ['MARKETING'] });
+    expect(marketing.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'refillPending']);
+    const keToan = await inbox.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+    expect(keToan.items.map((i) => i.key).sort()).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'refillPending']);
+    const adminCount = (k: string) => after.items.find((i) => i.key === k)?.count;
+    for (const k of ['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle']) {
+      expect(keToan.items.find((i) => i.key === k)?.count).toBe(adminCount(k));
+    }
   });
 });

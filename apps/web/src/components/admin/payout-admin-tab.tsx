@@ -42,9 +42,10 @@ const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
  * REQUESTED không có màn nào xử lý — tiền bị trừ khỏi số dư CTV (hoặc commission bị khoá) rồi
  * "biến mất" khỏi mọi hàng đợi. Từ chối BẮT BUỘC lý do và TỰ ĐỘNG hoàn tiền/commission (BE:
  * AffiliateService.rejectPayout) — không cần thao tác hoàn tiền thủ công nào thêm ở đây.
+ * `canReview=false` (nhân viên KE_TOAN): chỉ chi lệnh đã được ADMIN duyệt, nên mặc định mở hàng "Đã duyệt, chờ chuyển khoản".
  */
-export function PayoutAdminTab() {
-  const [filter, setFilter] = useState<AdminPayoutStatus | ''>('REQUESTED');
+export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
+  const [filter, setFilter] = useState<AdminPayoutStatus | ''>(canReview ? 'REQUESTED' : 'APPROVED');
   const [page, setPage] = useState(1);
   const q = useQuery({
     queryKey: ['admin-payouts', filter, page],
@@ -85,7 +86,7 @@ export function PayoutAdminTab() {
         </p>
       )}
       <div className="space-y-2">
-        {q.data?.data.map((p) => <PayoutRow key={p.id} payout={p} />)}
+        {q.data?.data.map((p) => <PayoutRow key={p.id} payout={p} canReview={canReview} />)}
         {q.data?.data.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có lệnh rút nào{filter ? ` ở trạng thái "${PAYOUT_STATUS_LABEL[filter]}"` : ''}.
@@ -217,12 +218,13 @@ function PitReportSection() {
 
 type Action = 'approve' | 'reject' | 'markPaid';
 
-export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
+export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout; canReview?: boolean }) {
   const qc = useQueryClient();
   const [text, setText] = useState('');
   const [bankRef, setBankRef] = useState('');
   const [err, setErr] = useState<string | null>(null);
-  const acts = payoutActions(p.status);
+  const flow = payoutActions(p.status);
+  const acts = canReview ? flow : { ...flow, approve: false, reject: false };
   const { confirm, dialog } = useConfirm();
 
   const mut = useMutation({
@@ -322,6 +324,8 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
           {p.paidAt && <div>Đã chuyển khoản lúc: {formatDateTime(p.paidAt)}</div>}
         </div>
       )}
+
+      {!canReview && flow.approve && <p className="mt-2 text-xs text-stone-500">Chờ quản trị viên duyệt trước khi chuyển khoản.</p>}
 
       {actionable && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">

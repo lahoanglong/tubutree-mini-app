@@ -11,31 +11,50 @@ import { validateSync } from 'class-validator';
 import { AdminReportsController, PayoutExportQuery, RefundExportQuery, ReportRangeQuery } from './admin-reports.controller';
 
 describe('AdminReportsController', () => {
-  it('chỉ ADMIN: không route nào mở cho nhân viên (@AllowStaff)', () => {
+  // Doanh thu và file tài chính: ADMIN + KE_TOAN; bảng nguồn khách: ADMIN + MARKETING. CSKH/KHO không vào route nào.
+  const ACCESS: Record<string, string[]> = {
+    revenue: ['KE_TOAN'],
+    sources: ['MARKETING'],
+    exportOrderItems: ['KE_TOAN'],
+    exportTax: ['KE_TOAN'],
+    exportPayouts: ['KE_TOAN'],
+    exportRefunds: ['KE_TOAN'],
+  };
+
+  it('@Roles ADMIN ở lớp; mỗi route mở đúng một nhóm việc (@AllowStaff) theo bảng', () => {
     expect(Reflect.getMetadata(ROLES_KEY, AdminReportsController)).toEqual(['ADMIN']);
+    expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, AdminReportsController)).toBeUndefined();
     const methods = Object.getOwnPropertyNames(AdminReportsController.prototype).filter((m) => m !== 'constructor');
-    expect(methods.length).toBeGreaterThan(0);
+    expect(methods.sort()).toEqual(Object.keys(ACCESS).sort());
     for (const m of methods) {
       expect(Reflect.getMetadata(ROLES_KEY, AdminReportsController.prototype[m as keyof AdminReportsController])).toBeUndefined();
-      expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, AdminReportsController.prototype[m as keyof AdminReportsController])).toBeUndefined();
+      expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, AdminReportsController.prototype[m as keyof AdminReportsController])).toEqual(ACCESS[m]);
     }
   });
 
-  it('RolesGuard thật: ADMIN qua, khách và nhân viên CSKH/KHO bị chặn ở mọi route báo cáo và xuất file', () => {
+  it('RolesGuard thật: ADMIN qua; KE_TOAN chỉ doanh thu và file tài chính, MARKETING chỉ nguồn khách; CSKH/KHO, khách bị chặn', () => {
     const guard = new RolesGuard(new Reflector());
-    const methods = Object.getOwnPropertyNames(AdminReportsController.prototype).filter((m) => m !== 'constructor');
     const ctx = (m: string, user: object) =>
       ({
         switchToHttp: () => ({ getRequest: () => ({ user }) }),
         getHandler: () => AdminReportsController.prototype[m as keyof AdminReportsController],
         getClass: () => AdminReportsController,
       }) as unknown as ExecutionContext;
-    expect(methods).toEqual(expect.arrayContaining(['revenue', 'sources', 'exportOrderItems', 'exportTax', 'exportPayouts', 'exportRefunds']));
-    for (const m of methods) {
-      expect(guard.canActivate(ctx(m, { role: 'ADMIN' }))).toBe(true);
-      for (const user of [{ role: 'CUSTOMER' }, { role: 'AFFILIATE' }, { role: 'DEALER' }, { role: 'STAFF', staffPermissions: ['CSKH', 'KHO'] }]) {
-        expect(() => guard.canActivate(ctx(m, user))).toThrow(ForbiddenException);
+    const can = (m: string, user: object) => {
+      try {
+        return guard.canActivate(ctx(m, user));
+      } catch (e) {
+        if (e instanceof ForbiddenException) return false;
+        throw e;
       }
+    };
+    for (const m of Object.keys(ACCESS)) {
+      expect(can(m, { role: 'ADMIN' })).toBe(true);
+      for (const user of [{ role: 'CUSTOMER' }, { role: 'AFFILIATE' }, { role: 'DEALER' }, { role: 'STAFF', staffPermissions: ['CSKH', 'KHO'] }, { role: 'STAFF', staffPermissions: [] }]) {
+        expect(can(m, user)).toBe(false);
+      }
+      expect(can(m, { role: 'STAFF', staffPermissions: ['KE_TOAN'] })).toBe(ACCESS[m]!.includes('KE_TOAN'));
+      expect(can(m, { role: 'STAFF', staffPermissions: ['MARKETING'] })).toBe(ACCESS[m]!.includes('MARKETING'));
     }
   });
 

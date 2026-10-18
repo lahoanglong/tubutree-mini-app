@@ -3,6 +3,8 @@ import { ApiTags } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AdminCouponBatchService, BATCH_PREFIX_RE, COUPON_BATCH_MAX } from './admin-coupon-batch.service';
 import { COUPON_AMOUNT_MAX, MaxIfAmount, MaxIfPercent } from './admin.controller';
 
@@ -29,18 +31,25 @@ export class SetCouponBatchActiveDto {
 
 @ApiTags('admin-coupon-batches')
 @Roles('ADMIN')
+@AllowStaff('MARKETING')
 @Controller('admin/coupon-batches')
 export class AdminCouponBatchController {
   constructor(private readonly batches: AdminCouponBatchService) {}
 
   @Post()
-  create(@Body() dto: CreateCouponBatchDto) {
-    return this.batches.create(dto);
+  create(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Body() dto: CreateCouponBatchDto) {
+    return this.batches.create(dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   @Get()
   list() {
     return this.batches.list();
+  }
+
+  /** Link gốc Mini App để in QR mã chung; nhân viên Marketing không đọc được tab Cấu hình. */
+  @Get('claim-url-base')
+  claimUrlBase() {
+    return this.batches.claimBase();
   }
 
   @Get(':batch/codes')
@@ -49,7 +58,12 @@ export class AdminCouponBatchController {
   }
 
   @Patch(':batch')
-  setActive(@Param('batch') batch: string, @Body() dto: SetCouponBatchActiveDto) {
-    return this.batches.setActive(batch, dto.isActive);
+  setActive(
+    @CurrentUser('sub') actorId: string,
+    @CurrentUser('role') role: string,
+    @Param('batch') batch: string,
+    @Body() dto: SetCouponBatchActiveDto,
+  ) {
+    return this.batches.setActive(batch, dto.isActive, { id: actorId, staff: role !== 'ADMIN' });
   }
 }

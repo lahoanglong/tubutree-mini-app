@@ -1,7 +1,12 @@
 import 'reflect-metadata';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { DismissOverpaymentDto, ListCustomerRefundsQuery, VerifyOverpaymentDto } from './customer-refunds-admin.controller';
+import {
+  CustomerRefundsAdminController,
+  DismissOverpaymentDto,
+  ListCustomerRefundsQuery,
+  VerifyOverpaymentDto,
+} from './customer-refunds-admin.controller';
 
 async function errorsFor<T extends object>(cls: new () => T, plain: Record<string, unknown>) {
   const errs = await validate(plainToInstance(cls, plain), { whitelist: true });
@@ -31,5 +36,29 @@ describe('Hàng chờ Hoàn tiền khách — khoản tiền dư Pancake chờ �
     expect(await errorsFor(DismissOverpaymentDto, { reason: 'abc' })).toContain('reason.minLength');
     expect(await errorsFor(DismissOverpaymentDto, { reason: 'x'.repeat(301) })).toContain('reason.maxLength');
     expect(await errorsFor(DismissOverpaymentDto, { reason: 'Cùng một lần chuyển' })).toEqual([]);
+  });
+});
+
+describe('CustomerRefundsAdminController — báo service người bấm là nhân viên (D1-05)', () => {
+  const refunds = {
+    claim: jest.fn().mockResolvedValue({}),
+    verifyOverpayment: jest.fn().mockResolvedValue({}),
+    dismissOverpayment: jest.fn().mockResolvedValue({}),
+    markPaid: jest.fn().mockResolvedValue({}),
+  };
+  const ctl = new CustomerRefundsAdminController(refunds as never);
+
+  it.each([
+    ['STAFF', true],
+    ['DEALER', true],
+    ['ADMIN', false],
+  ])('%s → byStaff=%s ở mọi thao tác ghi tiền', async (role, byStaff) => {
+    await ctl.claim('u', role, 'r1', {});
+    await ctl.verify('u', role, 'r1', {});
+    await ctl.dismiss('u', role, 'r1', { reason: 'Cùng một lần chuyển' });
+    await ctl.markPaid('u', role, 'r1', { bankRef: 'FT1' });
+    for (const fn of Object.values(refunds)) {
+      expect(fn).toHaveBeenLastCalledWith('u', 'r1', expect.objectContaining({ byStaff }));
+    }
   });
 });

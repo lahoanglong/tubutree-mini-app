@@ -434,6 +434,8 @@ describe('CommunityFeedService.getImage (endpoint ảnh bài)', () => {
   const admin = { sub: 'adm', role: 'ADMIN' };
   const cskh = { sub: 'cs', role: 'STAFF', staffPermissions: ['CSKH'] };
   const kho = { sub: 'kho', role: 'STAFF', staffPermissions: ['KHO'] };
+  const marketing = { sub: 'mkt', role: 'STAFF', staffPermissions: ['MARKETING'] };
+  const keToan = { sub: 'kt', role: 'STAFF', staffPermissions: ['KE_TOAN'] };
   const post = (status: string, img: string | null = PNG) => [{ status, userId: 'author', img }];
   const svc = (rows: unknown[]) => {
     const prisma = makePrisma();
@@ -491,16 +493,16 @@ describe('CommunityFeedService.getImage (endpoint ảnh bài)', () => {
   });
 
   describe.each(['PENDING', 'HIDDEN', 'REMOVED'])('bài %s', (status) => {
-    it('tác giả, ADMIN, STAFF nhóm CSKH xem được, và ảnh không vào cache dùng chung', async () => {
-      for (const viewer of [author, admin, cskh]) {
+    it('tác giả, ADMIN, STAFF nhóm CSKH hoặc MARKETING (người kiểm duyệt) xem được, và ảnh không vào cache dùng chung', async () => {
+      for (const viewer of [author, admin, cskh, marketing]) {
         const r = await svc(post(status)).svc.getImage('p1', 0, viewer, undefined);
         expect(r.data.toString()).toBe('png-bytes');
         expect(r.isPublic).toBe(false);
       }
     });
 
-    it('khách chưa đăng nhập, người dùng khác và STAFF nhóm KHO đều nhận 404', async () => {
-      for (const viewer of [undefined, stranger, kho]) {
+    it('khách chưa đăng nhập, người dùng khác và STAFF nhóm KHO hoặc KE_TOAN đều nhận 404', async () => {
+      for (const viewer of [undefined, stranger, kho, keToan]) {
         await expect(svc(post(status)).svc.getImage('p1', 0, viewer, undefined)).rejects.toBeInstanceOf(NotFoundException);
       }
     });

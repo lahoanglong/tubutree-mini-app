@@ -8,6 +8,12 @@ import {
   CART_ABANDON_MIN_HOURS_KEY,
 } from '../lifecycle/remarketing.service';
 import { FLASH_MAX_DISCOUNT_DEFAULT, FLASH_MAX_DISCOUNT_KEY } from '../flash-sale/flash-sale.service';
+import {
+  STAFF_COUPON_DAILY_BUDGET_KEY,
+  STAFF_COUPON_MAX_AMOUNT_KEY,
+  STAFF_COUPON_MAX_PERCENT_KEY,
+  STAFF_COUPON_MAX_USAGE_KEY,
+} from './coupon-input-rules';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -198,6 +204,10 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'loyalty.pos_staff_daily_points_cap': (k, v) => assertIntInRange(k, v, 1, POS_POINTS_CAP_MAX, 'điểm'),
   'loyalty.pos_member_daily_points_cap': (k, v) => assertIntInRange(k, v, 1, POS_POINTS_CAP_MAX, 'điểm'),
   [PENDING_PAYMENT_TTL_KEY]: (k, v) => assertIntInRange(k, v, MIN_TTL_HOURS, MAX_TTL_HOURS, 'giờ'),
+  [STAFF_COUPON_MAX_PERCENT_KEY]: (k, v) => assertIntInRange(k, v, 1, 100, '%'),
+  [STAFF_COUPON_MAX_AMOUNT_KEY]: (k, v) => assertIntInRange(k, v, 1000, 100_000_000, 'đ'),
+  [STAFF_COUPON_MAX_USAGE_KEY]: (k, v) => assertIntInRange(k, v, 1, 100_000, 'lượt'),
+  [STAFF_COUPON_DAILY_BUDGET_KEY]: (k, v) => assertIntInRange(k, v, 0, 1_000_000_000, 'đ'),
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */

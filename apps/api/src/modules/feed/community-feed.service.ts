@@ -9,6 +9,7 @@ import { authorBadge } from './author-badge';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { startOfVnDay } from '../../common/vn-time';
 import { decodeServedImage } from '../../common/served-image';
+import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
 import { PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
@@ -466,7 +467,8 @@ export class CommunityFeedService {
     const isPublic = row.status === 'PUBLISHED';
     const versionOk = matchesFeedImageVersion(version, postId, index, row.img);
     if (!isPublic) {
-      const isModerator = viewer?.role === 'ADMIN' || (viewer?.role === 'STAFF' && !!viewer.staffPermissions?.includes('CSKH'));
+      const isModerator =
+        viewer?.role === 'ADMIN' || (viewer?.role === 'STAFF' && COMMUNITY_MODERATORS.some((p) => viewer.staffPermissions?.includes(p)));
       const allowed =
         isModerator ||
         (!!viewer && viewer.sub === row.userId) ||

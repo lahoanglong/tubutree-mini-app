@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { IsIn, IsOptional } from 'class-validator';
 import type { CustomerRefundKind, CustomerRefundStatus, PayoutStatus } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { vnDateKey } from '../../common/vn-time';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AdminService } from './admin.service';
@@ -35,8 +36,9 @@ export class RefundExportQuery extends ReportRangeQuery {
 }
 
 /**
- * Báo cáo và file xuất cho kế toán/marketing (D1-04, D2-02, D1-14). Chỉ ADMIN (không @AllowStaff): số tiền, tài khoản ngân hàng
- * và thông tin thuế không dành cho nhân viên CSKH/KHO. Đặt ở controller riêng để không đụng AdminController.
+ * Báo cáo và file xuất cho kế toán/marketing (D1-04, D2-02, D1-14). Doanh thu và file tài chính (số tiền, tài khoản ngân hàng,
+ * thông tin thuế) chỉ ADMIN và KE_TOAN; marketing chỉ đọc bảng nguồn khách. CSKH/KHO không vào. Đặt ở controller riêng để không
+ * đụng AdminController.
  */
 @Roles('ADMIN')
 @Controller('admin/reports')
@@ -48,24 +50,28 @@ export class AdminReportsController {
   ) {}
 
   /** Doanh thu theo ngày × kênh trong khoảng ngày (tối đa 366 ngày) và các số KPI của khoảng đó. */
+  @AllowStaff('KE_TOAN')
   @Get('revenue')
   revenue(@Query() q: ReportRangeQuery) {
     return this.reports.revenueReport(q);
   }
 
   /** Khách mới theo nguồn chạm đầu × tuần: đơn đầu, đơn hai trong 30 ngày, doanh thu (tối đa 180 ngày, mặc định 30 ngày). */
+  @AllowStaff('MARKETING')
   @Get('sources')
   sources(@Query() q: ReportRangeQuery) {
     return this.reports.sourceReport(q);
   }
 
   /** CSV theo dòng hàng của đúng tập đơn mà `GET /admin/orders/export` xuất với cùng bộ lọc. */
+  @AllowStaff('KE_TOAN')
   @Get('order-items/export')
   async exportOrderItems(@Query() q: ExportOrdersQuery, @Res() res: Response) {
     await streamCsv(res, `dong-hang-${vnDateKey()}.csv`, orderItemCsvChunks(this.prisma, await this.admin.adminOrderWhere(q)));
   }
 
   /** Khấu trừ TNCN của CTV theo người nhận, lệnh đã chi trong khoảng ngày chi (tối đa 366 ngày). */
+  @AllowStaff('KE_TOAN')
   @Get('exports/tax')
   async exportTax(@Query() q: ReportRangeQuery, @Res() res: Response) {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
@@ -73,6 +79,7 @@ export class AdminReportsController {
   }
 
   /** Lệnh rút tiền (hoa hồng CTV và Ví Tubu) theo ngày yêu cầu, lọc trạng thái nếu có. */
+  @AllowStaff('KE_TOAN')
   @Get('exports/payouts')
   async exportPayouts(@Query() q: PayoutExportQuery, @Res() res: Response) {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
@@ -80,6 +87,7 @@ export class AdminReportsController {
   }
 
   /** Khoản hoàn tiền khách theo ngày tạo khoản hoàn, lọc trạng thái/loại nếu có. */
+  @AllowStaff('KE_TOAN')
   @Get('exports/refunds')
   async exportRefunds(@Query() q: RefundExportQuery, @Res() res: Response) {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });

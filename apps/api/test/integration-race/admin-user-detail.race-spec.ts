@@ -9,6 +9,12 @@ import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-f
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../../src/config/env.validation';
+import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { RolesGuard } from '../../src/common/guards/roles.guard';
+import { PayoutAdminController } from '../../src/modules/affiliate/payout-admin.controller';
+import { FaqAdminController } from '../../src/modules/faq/faq-admin.controller';
+import { AdminController } from '../../src/modules/admin/admin.controller';
 import { createOrder, createUser } from './helpers';
 
 /**
@@ -60,6 +66,47 @@ describe('Chi tiết người dùng + nhóm việc nhân viên (real Postgres)',
     const ev = await prisma.userAdminEvent.findMany({ where: { userId: staff.id, kind: 'STAFF_PERMISSIONS' } });
     expect(ev).toHaveLength(1);
     expect(ev[0]).toMatchObject({ fromValue: '', toValue: 'CSKH,KHO', actorId: boss.id });
+  });
+
+  it('nhóm MARKETING/KE_TOAN (D1-05): lưu theo thứ tự chuẩn, JwtStrategy đọc lại, RolesGuard thật mở đúng route; gỡ nhóm là mất quyền ngay', async () => {
+    const boss = await createUser(prisma, { role: 'ADMIN', phone: phone() });
+    const staff = await createUser(prisma, { role: 'STAFF', phone: phone() });
+    const guard = new RolesGuard(new Reflector());
+    const can = (controller: object, handler: object, user: object) => {
+      const ctx = { switchToHttp: () => ({ getRequest: () => ({ user }) }), getHandler: () => handler, getClass: () => controller } as unknown as ExecutionContext;
+      try {
+        return guard.canActivate(ctx);
+      } catch (e) {
+        if (e instanceof ForbiddenException) return false;
+        throw e;
+      }
+    };
+    const routes = (user: object) => ({
+      payoutPaid: can(PayoutAdminController, PayoutAdminController.prototype.markPaid, user),
+      payoutApprove: can(PayoutAdminController, PayoutAdminController.prototype.approve, user),
+      faqCreate: can(FaqAdminController, FaqAdminController.prototype.create, user),
+      setConfig: can(AdminController, AdminController.prototype.setConfig, user),
+      setRole: can(AdminController, AdminController.prototype.setUserRole, user),
+    });
+
+    await admin.setStaffPermissions(boss.id, staff.id, ['KE_TOAN', 'MARKETING']);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: staff.id } })).staffPermissions).toEqual(['MARKETING', 'KE_TOAN']);
+    // Cùng tập nhóm, khác thứ tự: không đổi gì, không ghi sổ.
+    await expect(admin.setStaffPermissions(boss.id, staff.id, ['MARKETING', 'KE_TOAN'])).resolves.toMatchObject({ changed: false });
+    sessions.invalidate(staff.id);
+    const both = await strategy.validate({ sub: staff.id, role: 'STAFF' });
+    expect(routes(both)).toEqual({ payoutPaid: true, payoutApprove: false, faqCreate: true, setConfig: false, setRole: false });
+
+    await admin.setStaffPermissions(boss.id, staff.id, ['KE_TOAN']);
+    sessions.invalidate(staff.id);
+    const keToan = await strategy.validate({ sub: staff.id, role: 'STAFF' });
+    expect(routes(keToan)).toEqual({ payoutPaid: true, payoutApprove: false, faqCreate: false, setConfig: false, setRole: false });
+
+    const ev = await prisma.userAdminEvent.findMany({ where: { userId: staff.id, kind: 'STAFF_PERMISSIONS' }, orderBy: { createdAt: 'asc' } });
+    expect(ev.map((e) => [e.fromValue, e.toValue])).toEqual([
+      ['', 'KE_TOAN,MARKETING'],
+      ['KE_TOAN,MARKETING', 'KE_TOAN'],
+    ]);
   });
 
   it('hạ STAFF về khách thì xoá nhóm việc; đổi vai trò, khoá, mở khoá đều vào sổ; chi tiết trả đủ các phần', async () => {

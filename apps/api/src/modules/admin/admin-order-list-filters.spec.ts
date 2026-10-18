@@ -156,7 +156,7 @@ describe('Controller + DTO — bộ lọc mới của GET /admin/orders (D1-17)'
     const orderCsv = jest.fn().mockResolvedValue((async function* () {})());
     const ctl = new AdminController({ orderCsv } as never, {} as never);
     const res = { setHeader: jest.fn(), write: jest.fn(), end: jest.fn(), on: jest.fn(), once: jest.fn(), writableEnded: false } as never;
-    await ctl.exportOrders(Object.assign(new ExportOrdersQuery(), { kind: 'dealer', payment: 'PAID' }), res).catch(() => undefined);
-    expect(orderCsv).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dealer', payment: 'PAID' }));
+    await ctl.exportOrders(Object.assign(new ExportOrdersQuery(), { kind: 'dealer', payment: 'PAID' }), 'ADMIN', res).catch(() => undefined);
+    expect(orderCsv).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dealer', payment: 'PAID' }), { maskPhones: false });
   });
 });

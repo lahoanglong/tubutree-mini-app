@@ -40,6 +40,10 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'voucher.birthday_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá sinh nhật mặc định (đ) cho hạng chưa có mức riêng (mức riêng theo hạng nằm ở bảng hạng thành viên)', createOnly: true },
   { key: 'voucher.winback_days', value: 60, category: 'voucher', description: 'Khách từng mua nhưng quá số ngày này chưa đặt lại thì nhận mã giảm giá quay lại', createOnly: true },
   { key: 'voucher.winback_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá quay lại (đ)', createOnly: true },
+  { key: 'coupon.staff_max_percent', value: 50, category: 'voucher', description: 'Mã giảm % do nhân viên (không phải quản trị viên) tạo hoặc sửa: mức giảm tối đa (%, số nguyên 1–100)', createOnly: true },
+  { key: 'coupon.staff_max_amount_vnd', value: 200000, category: 'voucher', description: 'Mã do nhân viên tạo hoặc sửa: số tiền giảm tối đa (đ) của mã giảm tiền, và Giảm tối đa bắt buộc của mã giảm %', createOnly: true },
+  { key: 'coupon.staff_max_usage', value: 1000, category: 'voucher', description: 'Mã do nhân viên tạo hoặc sửa: tổng lượt dùng tối đa của một mã (số nguyên 1–100.000)', createOnly: true },
+  { key: 'coupon.staff_daily_budget_vnd', value: 30000000, category: 'voucher', description: 'Ngân sách mã của mỗi nhân viên trong một ngày (đ): tổng mức giảm tối đa × tổng lượt của mọi mã, lô người đó tạo trong ngày. 0 = nhân viên không tạo được mã', createOnly: true },
   {
     key: 'voucher.milestones',
     value: [

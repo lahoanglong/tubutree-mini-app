@@ -634,6 +634,31 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(JSON.parse(String(api.pays()[0]!.init?.body))).toEqual({ bankRef: 'FT9' });
   });
 
+  it('nhân viên Kế toán: khoản khách chưa có tài khoản → không có ô nhập tài khoản, nhờ quản trị viên nhập, không gửi', async () => {
+    const api = stub({ list: () => [refund({ kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED' })] });
+    const { container } = mount(<CustomerRefundsTab isAdmin={false} />);
+    await flush();
+    click(byText(container, 'button', 'Bắt đầu chuyển khoản'));
+    await flush(1);
+    const d = confirmDialog()!;
+    expect(d.querySelector('[name="accountNumber"]')).toBeNull();
+    expect(d.textContent).toContain('Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập');
+    expect(accept(d).disabled).toBe(true);
+    click(accept(d));
+    await flush();
+    expect(api.claims()).toHaveLength(0);
+  });
+
+  it('nhân viên Kế toán: khoản khách cuối đơn CTV chưa có tài khoản → không xác nhận được, nhờ quản trị viên', async () => {
+    const api = stub({ list: () => [refund({ kind: 'END_CUSTOMER', userId: null })] });
+    const { container } = mount(<CustomerRefundsTab isAdmin={false} />);
+    await flush();
+    const d = await openDialog(container);
+    expect(d.textContent).toContain('Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập');
+    expect(accept(d).disabled).toBe(true);
+    expect(api.pays()).toHaveLength(0);
+  });
+
   it('BUYERMINI-7: tiền về muộn chưa có tài khoản → hộp "Bắt đầu chuyển khoản" yêu cầu nhập tài khoản khách cung cấp và gửi kèm', async () => {
     const api = stub({ list: () => [refund({ kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED', phone: null, recipientName: null })] });
     const { container } = mount(<CustomerRefundsTab />);

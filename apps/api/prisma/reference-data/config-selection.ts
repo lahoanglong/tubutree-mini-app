@@ -12,6 +12,7 @@ import type { ConfigSeed } from '../../src/modules/system-config/config-seed';
 export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'loyalty',
   'voucher',
+  'coupon',
   'affiliate',
   'cashback',
   'wallet',

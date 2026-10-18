@@ -10,6 +10,7 @@ import {
   CreateCouponDto,
   DealerAppsQuery,
   DealerPriceHistoryQuery,
+  ExportOrdersQuery,
   GomdonMarkHandledDto,
   GomdonRetryDto,
   ListOrdersQuery,
@@ -292,6 +293,34 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     const returns = { listForAdmin: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
     await new ReturnsAdminController(returns as never).list(Object.assign(new ReturnRequestsQuery(), { page: 2, limit: 10 }));
     expect(returns.listForAdmin).toHaveBeenCalledWith(undefined, 2, 10, undefined);
+  });
+
+  it('xuất CSV đơn: người xuất không phải quản trị viên thì che SĐT (D1-05)', async () => {
+    async function* empty(): AsyncGenerator<string> {}
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    await ctrl.exportOrders({} as never, 'STAFF', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: true });
+    await ctrl.exportOrders({} as never, 'ADMIN', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: false });
+  });
+
+  it('xuất CSV đơn có bộ lọc mới (loại đơn, thanh toán, ngày, gian hàng): kế toán vẫn bị che SĐT, bộ lọc giữ nguyên (D1-05, D1-17)', async () => {
+    async function* empty(): AsyncGenerator<string> {}
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const q = Object.assign(new ExportOrdersQuery(), {
+      kind: 'ctv' as const,
+      payment: 'PAID' as const,
+      platform: 'miniapp' as const,
+      from: '2026-10-01',
+      to: '2026-10-18',
+      storefront: 'an',
+    });
+    await ctrl.exportOrders(q, 'STAFF', res as never);
+    expect(admin.orderCsv).toHaveBeenLastCalledWith(q, { maskPhones: true });
   });
 
   it('DealerPriceHistoryQuery nhận variationId', async () => {

@@ -438,12 +438,14 @@ export class AdminController {
   }
 
   /** Ô chọn sản phẩm/biến thể (Flash Sale, Content Kit) thay cho nhập Variation/Product ID. */
+  @AllowStaff('MARKETING')
   @Get('products/search')
   searchProducts(@Query() q: ProductSearchQuery) {
     return this.admin.searchProducts(q.q ?? '');
   }
 
   /** Nhãn cho các Variation ID đã lưu (danh sách mặt hàng của đợt Flash Sale). */
+  @AllowStaff('MARKETING')
   @Get('variations/lookup')
   lookupVariations(@Query() q: VariationLookupQuery) {
     return this.admin.lookupVariations(q.ids);
@@ -490,9 +492,10 @@ export class AdminController {
    * File CSV cho kế toán: MỌI đơn khớp bộ lọc đang xem (ADMINOPS-12), ghi dần từng lô thay vì dựng cả file trong bộ nhớ.
    * Trước đây nút "Xuất CSV" chỉ xuất 20 đơn của trang hiện tại mà không báo.
    */
+  @AllowStaff('KE_TOAN')
   @Get('orders/export')
-  async exportOrders(@Query() q: ExportOrdersQuery, @Res() res: Response) {
-    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q));
+  async exportOrders(@Query() q: ExportOrdersQuery, @CurrentUser('role') role: string, @Res() res: Response) {
+    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q, { maskPhones: role !== 'ADMIN' }));
   }
 
   @Get('users/export')
@@ -610,19 +613,27 @@ export class AdminController {
     return this.admin.setConfig(adminId, dto.key, dto.value);
   }
 
+  @AllowStaff('MARKETING')
   @Get('coupons')
   listCoupons(@Query() q: ListCouponsQuery) {
     return this.admin.listCoupons(q);
   }
 
+  @AllowStaff('MARKETING')
   @Post('coupons')
-  createCoupon(@Body() dto: CreateCouponDto) {
-    return this.admin.createCoupon(dto);
+  createCoupon(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Body() dto: CreateCouponDto) {
+    return this.admin.createCoupon(dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
+  @AllowStaff('MARKETING')
   @Patch('coupons/:id')
-  updateCoupon(@Param('id') id: string, @Body() dto: UpdateCouponDto) {
-    return this.admin.updateCoupon(id, dto);
+  updateCoupon(
+    @CurrentUser('sub') actorId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateCouponDto,
+  ) {
+    return this.admin.updateCoupon(id, dto, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   /** Xem trước bảng giá đại lý theo bậc (khớp / không khớp / lỗi / ngoài khoảng giá lẻ) — không ghi gì. */

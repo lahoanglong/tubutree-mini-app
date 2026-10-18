@@ -165,16 +165,16 @@ describe('Ảnh bài cộng đồng phục vụ qua endpoint riêng (real Postgr
     expect((await get(`/feed/posts/${p.id}/images/1`)).status).toBe(404);
   });
 
-  it('bài PENDING: tác giả, ADMIN, STAFF CSKH xem được (không cache dùng chung); khách, người khác, STAFF KHO nhận 404', async () => {
+  it('bài PENDING: tác giả, ADMIN, STAFF CSKH/MARKETING xem được (không cache dùng chung); khách, người khác, STAFF KHO/KE_TOAN nhận 404', async () => {
     const p = await post({ status: 'PENDING', images: [WEBP] });
     const url = `/feed/posts/${p.id}/images/0`;
-    for (const viewer of [as(author), as(admin, 'ADMIN'), as(cskh, 'STAFF', ['CSKH'])]) {
+    for (const viewer of [as(author), as(admin, 'ADMIN'), as(cskh, 'STAFF', ['CSKH']), as(kho, 'STAFF', ['MARKETING'])]) {
       const res = await get(url, viewer);
       expect(res.status).toBe(200);
       expect(res.headers.get('cache-control')).toBe('private, no-store');
       expect(res.headers.get('content-type')).toBe('image/webp');
     }
-    for (const viewer of [undefined, as(stranger), as(kho, 'STAFF', ['KHO'])]) {
+    for (const viewer of [undefined, as(stranger), as(kho, 'STAFF', ['KHO']), as(cskh, 'STAFF', ['KE_TOAN'])]) {
       expect((await get(url, viewer)).status).toBe(404);
     }
   });
