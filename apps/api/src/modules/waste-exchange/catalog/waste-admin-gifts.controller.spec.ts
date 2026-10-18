@@ -5,7 +5,14 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { NOT_NULL_CONSTRAINT } from '../../../common/decorators/optional-not-null.decorator';
 import { ROLES_KEY } from '../../../common/decorators/roles.decorator';
-import { GiftFulfilByIdDto, GiftRedemptionsQueryDto, WasteAdminGiftsController, WasteGiftCancelDto } from './waste-admin-gifts.controller';
+import {
+  GiftFulfilByIdDto,
+  GiftRedemptionsQueryDto,
+  WasteAdminGiftsController,
+  WasteGiftCancelDto,
+  WasteGiftCreateDto,
+  WasteGiftUpdateDto,
+} from './waste-admin-gifts.controller';
 
 type VErr = { constraints?: Record<string, string>; children?: VErr[] };
 const keysOf = (errs: VErr[]): string[] => errs.flatMap((e) => [...Object.keys(e.constraints ?? {}), ...keysOf(e.children ?? [])]);
@@ -74,7 +81,7 @@ describe('WasteAdminGiftsController', () => {
       cancel: jest.fn().mockResolvedValue({ id: 'r1' }),
       fulfilById: jest.fn().mockResolvedValue({ id: 'r1' }),
     };
-    const c = new WasteAdminGiftsController(svc as never);
+    const c = new WasteAdminGiftsController(svc as never, {} as never);
     await c.queue('a1', { overdue: true });
     expect(svc.queue).toHaveBeenCalledWith('a1', { overdue: true });
     await c.cancel('a1', 'r1', { reason: 'Khách đổi ý', refundPoints: false });
@@ -83,8 +90,31 @@ describe('WasteAdminGiftsController', () => {
 
   it('fulfil passes the caller, id and code to fulfilById', async () => {
     const svc = { fulfilById: jest.fn().mockResolvedValue({ id: 'r1' }) };
-    const out = await new WasteAdminGiftsController(svc as never).fulfil('s1', 'r1', { code: 'QG-ABCDEFGH' });
+    const out = await new WasteAdminGiftsController(svc as never, {} as never).fulfil('s1', 'r1', { code: 'QG-ABCDEFGH' });
     expect(svc.fulfilById).toHaveBeenCalledWith('s1', 'r1', { code: 'QG-ABCDEFGH' });
     expect(out).toEqual({ id: 'r1' });
+  });
+  it('declares the gift catalogue routes, roles, throttles and DTO rules', async () => {
+    const routes: [keyof typeof proto, RequestMethod, string][] = [
+      ['listGifts', RequestMethod.GET, 'gifts'],
+      ['createGift', RequestMethod.POST, 'gifts'],
+      ['updateGift', RequestMethod.PATCH, 'gifts/:id'],
+      ['reorderGifts', RequestMethod.PUT, 'gifts/order'],
+    ];
+    for (const [name, method, path] of routes) {
+      expect(Reflect.getMetadata(METHOD_METADATA, proto[name])).toBe(method);
+      expect(Reflect.getMetadata(PATH_METADATA, proto[name])).toBe(path);
+      expect(Reflect.getMetadata(ROLES_KEY, proto[name])).toEqual(['ADMIN']);
+    }
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', proto.listGifts)).toBeUndefined();
+    for (const name of ['createGift', 'updateGift', 'reorderGifts'] as const) {
+      expect(Reflect.getMetadata('THROTTLER:LIMITdefault', proto[name])).toBe(30);
+    }
+
+    expect((await errorKeys(WasteGiftCreateDto, { kind: 'GIFT', name: 'Túi', pointsCost: 2_000_001 })).length).toBeGreaterThanOrEqual(1);
+    expect(await errorKeys(WasteGiftUpdateDto, { pointsCost: null })).toContain(NOT_NULL_CONSTRAINT);
+    expect(await errorKeys(WasteGiftUpdateDto, { stock: null })).toEqual([]);
+    const badVoucher = { type: 'AMOUNT', value: 1000, minOrder: null, maxDiscount: null, validDays: 0 };
+    expect((await errorKeys(WasteGiftCreateDto, { kind: 'VOUCHER', name: 'Giảm', pointsCost: 10_000, voucher: badVoucher })).length).toBeGreaterThanOrEqual(1);
   });
 });
