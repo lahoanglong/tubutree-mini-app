@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   params: { code: 'TB-9' } as Record<string, string>,
   order: null as unknown,
   orderCalls: [] as string[],
-  qr: { paymentStatus: 'UNPAID' as string, calls: 0 },
+  qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined },
   support: { hotline: '0984 606 774', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -36,7 +36,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getBankQr: async () => {
     mocks.qr.calls += 1;
     return {
-      orderCode: 'TB-9', amount: 330000, paymentStatus: mocks.qr.paymentStatus,
+      orderCode: 'TB-9', amount: 330000, paymentStatus: mocks.qr.paymentStatus, paymentDeadline: mocks.qr.paymentDeadline,
       bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
       memo: 'TB-9', qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png',
     };
@@ -88,7 +88,7 @@ beforeEach(() => {
   mocks.params = { code: 'TB-9' };
   mocks.order = structuredClone(ORDER);
   mocks.orderCalls = [];
-  mocks.qr = { paymentStatus: 'UNPAID', calls: 0 };
+  mocks.qr = { paymentStatus: 'UNPAID', calls: 0, paymentDeadline: undefined };
   mocks.support = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
 });
 afterEach(() => {
@@ -276,6 +276,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     try {
       vi.setSystemTime(new Date('2026-10-19T11:59:50Z'));
       mocks.order = { ...ORDER, paymentDeadline: '2026-10-19T12:00:00Z' };
+      mocks.qr.paymentDeadline = '2026-10-19T12:00:00Z';
       let bump = () => {};
       const Host = () => {
         const [, set] = useState(0);
@@ -292,6 +293,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
       await act(async () => bump());
       await flush(4);
       expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
+      expect((container.textContent ?? '').split('quá hạn đơn sẽ tự huỷ').length - 1).toBe(1);
 
       mocks.qr.paymentStatus = 'PAID';
       const check = buttons(container).find((b) => (b.textContent ?? '').includes('kiểm tra lại'))!;

@@ -135,6 +135,7 @@ export default function OrderDetailPage() {
   const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned ?? 0, pointsReversed, o.pointsReturnReversed);
   const cancelClosed = !canCancelOrder(o, user?.id) && isHandedToCarrier(o);
+  const showPayPanel = canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice;
   const returnedQty = returnedByLine(
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
@@ -152,7 +153,7 @@ export default function OrderDetailPage() {
       {o.manualHandling ? (
         <p className="mt-2 text-sm text-stone-700">Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.</p>
       ) : (
-        !canPayNow(o) &&
+        !showPayPanel &&
         showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
           <p className="mt-2 text-sm font-medium text-warning-fg">
             Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
@@ -189,7 +190,7 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      {(canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice) && (
+      {showPayPanel && (
         <div className="mt-2">
           {canPayNow(o) && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
