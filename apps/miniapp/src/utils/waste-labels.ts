@@ -153,13 +153,29 @@ export function closedLabel(
   }
 }
 
+export interface RequestPauseFacts {
+  programmeEnabled?: boolean;
+  blocked?: boolean;
+  shipLockedAt?: string | null;
+  cfg: { enabled: boolean; pickup: boolean; isLoaded: boolean };
+}
+
+/** Yêu cầu đang mở mà bước khách phải làm tiếp đang tạm dừng (chương trình tắt, khách bị khoá, kênh Thu kèm đơn tắt). */
+export function isRequestPaused(r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'orderCode'>, f: RequestPauseFacts): boolean {
+  if (r.status !== 'OPEN') return false;
+  if (r.method === 'DROP_OFF') return (f.cfg.isLoaded && !f.cfg.enabled) || f.programmeEnabled === false || !!f.blocked;
+  if (r.method === 'PICKUP') return !r.orderCode && (!!f.blocked || !!f.shipLockedAt || !f.cfg.pickup);
+  return false;
+}
+
 /** Dòng trạng thái của một yêu cầu cho khách (danh sách, thẻ trang chủ, trang chi tiết); tên bước theo §4.6. */
 export function requestStatusText(
   r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'closeReason' | 'orderCode' | 'pointsAwarded'>,
-  opts: { blocked?: boolean } = {},
+  opts: { blocked?: boolean; paused?: boolean } = {},
 ): string {
   switch (r.status) {
     case 'OPEN':
+      if (opts.paused && (r.method === 'DROP_OFF' || (r.method === 'PICKUP' && !r.orderCode))) return 'Đang tạm dừng';
       if (r.method === 'DROP_OFF') return 'Chờ bạn mang tới';
       if (r.method === 'MAIL_IN') return 'Chờ bạn gửi kiện';
       return r.orderCode ? 'Chờ kho nhận' : 'Chờ gắn vào đơn';

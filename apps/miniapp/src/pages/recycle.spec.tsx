@@ -216,6 +216,44 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     for (const t of ['Điểm Xanh của bạn', 'Đổi rác ngay', 'Mang tới điểm nhận', 'Thùng carton', 'Kho quà']) expect(screen.queryByText(t)).toBeNull();
     expect(screen.getByRole('button', { name: /TR-8K2M9/ })).toBeInTheDocument();
   });
+  it('chương trình tắt: yêu cầu Mang tới và Thu kèm đơn chưa gắn đọc "Đang tạm dừng", Gửi về kho giữ nhãn cũ', async () => {
+    mocks.getWasteMe.mockResolvedValue(
+      makeWasteMe({
+        programmeEnabled: false,
+        openRequests: [
+          makeRequestSummary({ id: 'r-d', code: 'TR-DROP1' }),
+          makeRequestSummary({ id: 'r-p', code: 'TR-PICK1', method: 'PICKUP' }),
+          makeRequestSummary({ id: 'r-m', code: 'TR-MAIL1', method: 'MAIL_IN' }),
+        ],
+      }),
+    );
+    renderPage();
+    await screen.findByText('Chương trình đang tạm dừng');
+    expect(screen.getAllByText('Đang tạm dừng')).toHaveLength(2);
+    expect(screen.getByText('Chờ bạn gửi kiện')).toBeInTheDocument();
+    expect(screen.queryByText('Chờ bạn mang tới')).toBeNull();
+    expect(screen.queryByText('Chờ gắn vào đơn')).toBeNull();
+  });
+  it('khách bị khoá: yêu cầu Mang tới đọc "Đang tạm dừng"', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true, openRequests: [makeRequestSummary()] }));
+    renderPage();
+    await screen.findByText('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree');
+    expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
+    expect(screen.queryByText('Chờ bạn mang tới')).toBeNull();
+  });
+  it('chương trình bật: Mang tới đọc "Chờ bạn mang tới"; Thu kèm đơn tạm dừng khi cờ pickup tắt', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ openRequests: [makeRequestSummary(), makeRequestSummary({ id: 'r-p', code: 'TR-PICK1', method: 'PICKUP' })] }));
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
+    const first = renderPage();
+    expect(await screen.findByText('Chờ bạn mang tới')).toBeInTheDocument();
+    expect(screen.getByText('Chờ gắn vào đơn')).toBeInTheDocument();
+    first.unmount();
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false };
+    renderPage();
+    expect(await screen.findByText('Chờ bạn mang tới')).toBeInTheDocument();
+    expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
+    expect(screen.queryByText('Chờ gắn vào đơn')).toBeNull();
+  });
   it('khách bị khoá: thẻ khoá, yêu cầu RECEIVED ghi "Đang chờ Tubu xem lại"', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true, openRequests: [makeRequestSummary({ method: 'MAIL_IN', status: 'RECEIVED' })] }));
     renderPage();
