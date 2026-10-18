@@ -2,7 +2,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { click, render, type Rendered } from '@/test-utils/dom';
+import { createRoot } from 'react-dom/client';
 import { Sheet } from './sheet';
+
+// render() của test-utils bọc QueryClientProvider nên root.render lại sẽ remount; ở đây cần cùng cây để thử đổi prop.
+function mountPlain(ui: React.ReactElement) {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => root.render(ui));
+  mounted.push({ container, root, unmount: () => { act(() => root.unmount()); container.remove(); } });
+  return root;
+}
 
 let mounted: Rendered[] = [];
 const mount = (ui: React.ReactElement) => {
@@ -90,5 +101,49 @@ describe('Sheet', () => {
     mounted = [];
     expect(document.activeElement).toBe(opener);
     opener.remove();
+  });
+
+  it('hai sheet chồng nhau: Tab xoay trong sheet trên cùng, Esc chỉ đóng sheet trên cùng', () => {
+    const outerClose = vi.fn();
+    const innerClose = vi.fn();
+    const ui = (inner: boolean) => (
+      <Sheet open onClose={outerClose} title="Ngoài">
+        <button>ngoai-1</button>
+        <Sheet open={inner} onClose={innerClose} title="Trong">
+          <button>trong-1</button>
+        </Sheet>
+      </Sheet>
+    );
+    const root = mountPlain(ui(false));
+    act(() => root.render(ui(true)));
+    const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+    const innerDialog = dialogs[dialogs.length - 1]!;
+    expect(innerDialog.contains(document.activeElement)).toBe(true);
+    key('Tab');
+    expect(innerDialog.contains(document.activeElement)).toBe(true);
+    key('Tab');
+    expect(innerDialog.contains(document.activeElement)).toBe(true);
+    key('Escape');
+    expect(innerClose).toHaveBeenCalledTimes(1);
+    expect(outerClose).not.toHaveBeenCalled();
+  });
+
+  it('đổi dismissible khi đang mở không làm focus nhảy', () => {
+    const ui = (d: boolean) => (
+      <Sheet open onClose={() => {}} dismissible={d} footer={<button>go</button>}>
+        <input aria-label="first" />
+      </Sheet>
+    );
+    const root = mountPlain(ui(true));
+    const go = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'go')!;
+    go.focus();
+    act(() => root.render(ui(false)));
+    expect(document.activeElement).toBe(go);
+  });
+
+  it('chừa safe-area đáy cho footer', () => {
+    mount(<Sheet open onClose={() => {}} footer={<button>go</button>}>x</Sheet>);
+    const footer = document.querySelector<HTMLElement>('[data-sheet-footer]')!;
+    expect(footer.style.paddingBottom).toContain('safe-area-inset-bottom');
   });
 });

@@ -25,6 +25,12 @@ const SIZE_CLASS: Record<SheetSize, string> = {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// Ngăn xếp sheet đang mở: chỉ sheet trên cùng xử lý bàn phím; bộ đếm khoá cuộn để đóng sai thứ tự LIFO không trả overflow sai.
+const openStack: symbol[] = [];
+let scrollLocks = 0;
+let savedOverflow = '';
+const SAFE_BOTTOM = { paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' } as const;
+
 /**
  * Sheet chuẩn của web: trượt từ đáy trên điện thoại, hộp thoại giữa màn hình từ md trở lên. Cùng API với `BottomSheet`
  * của Mini App (`open`/`onClose`/`title`/`description`/`footer`/`size`/`dismissible`). `dismissible=false` chặn cả nút X,
@@ -35,11 +41,15 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const dismissibleRef = useRef(dismissible);
+  dismissibleRef.current = dismissible;
 
   useEffect(() => {
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
-    const prevOverflow = document.body.style.overflow;
+    const id = Symbol('sheet');
+    openStack.push(id);
+    if (scrollLocks++ === 0) savedOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const panel = panelRef.current;
     const items = () => Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
@@ -47,7 +57,8 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
     (items()[0] ?? panel)?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissible) {
+      if (openStack[openStack.length - 1] !== id) return;
+      if (e.key === 'Escape' && dismissibleRef.current) {
         e.stopPropagation();
         onCloseRef.current();
         return;
@@ -73,10 +84,12 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
+      const at = openStack.indexOf(id);
+      if (at >= 0) openStack.splice(at, 1);
+      if (--scrollLocks === 0) document.body.style.overflow = savedOverflow;
       opener?.focus?.();
     };
-  }, [open, dismissible]);
+  }, [open]);
 
   if (!open || typeof document === 'undefined') return null;
   const titleId = `${uid}-title`;
@@ -111,10 +124,14 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
             </button>
           )}
         </div>
-        <div data-sheet-body className="flex-1 overflow-y-auto px-4 pb-4 pt-2">
+        <div data-sheet-body className="flex-1 overflow-y-auto px-4 pb-4 pt-2" style={footer ? undefined : SAFE_BOTTOM}>
           {children}
         </div>
-        {footer && <div className="border-t border-stone-200 p-4">{footer}</div>}
+        {footer && (
+          <div data-sheet-footer className="border-t border-stone-200 p-4" style={SAFE_BOTTOM}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,
