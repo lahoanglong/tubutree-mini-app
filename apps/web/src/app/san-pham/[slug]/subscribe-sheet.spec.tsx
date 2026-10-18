@@ -128,14 +128,14 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     expect(body().textContent).not.toMatch(/ZaloPay|VNPAY/i);
   });
 
-  it('chuyển khoản mà đơn đầu chờ thanh toán thì mở trang chi tiết đơn đó để lấy mã chuyển khoản', async () => {
+  it('chuyển khoản mà đơn đầu chờ thanh toán thì mở trang chuyển khoản của đơn đó như Mini App', async () => {
     mocks.http.post.mockResolvedValue({ ...SUB, firstOrder: { id: 'o2', code: 'TB-2', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', total: 160000 } });
     mount();
     await flush();
     click(radio(/Chuyển khoản ngân hàng/));
     click(create());
     await flush();
-    expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/don-hang/TB-2');
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-2');
     expect(mocks.http.post).toHaveBeenCalledWith('/me/subscriptions', expect.objectContaining({ paymentMethod: 'BANK_TRANSFER' }));
   });
 

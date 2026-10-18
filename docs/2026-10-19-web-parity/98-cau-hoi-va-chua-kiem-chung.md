@@ -24,7 +24,7 @@ Không có.
 - core-shell:2. Web nay gửi `kind` và `storefrontSlug` trong `/affiliate/touch` từ `ReferralCapture`, ref được viết hoa. API so khớp không phân biệt hoa thường. Mặc định: giống Mini App; cần xác nhận API xử lý đúng.
 - core-shell:3. Khi `?s=` không kèm ref và context gian hàng là nhãn (kind khác CTV) thiếu mã giới thiệu: web không gửi touch bằng slug, Mini App thì gửi. Mặc định: không gửi (an toàn hơn). Muốn giống hệt Mini App thì cần quyết.
 - core-shell:4. Tên biến compose `ZALO_OA_ID`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET` do lane đặt; cần đặt giá trị ở môi trường deploy. Mặc định: dùng các tên này.
-- core-shell:5. `/cashback` đặt `private: false` theo ma trận. Khi hết pending, `/hoan-tien` vào sitemap dù cờ `CASHBACK_ENABLED` tắt. Mặc định: giữ nguyên; lane loyalty cần cân nhắc.
+- core-shell:5. `/cashback` đặt `private: false` theo ma trận. Khi hết pending, `/hoan-tien` vào sitemap dù cờ `CASHBACK_ENABLED` tắt. Mặc định: giữ nguyên; lane loyalty cần cân nhắc. Đã xử lý ở b8a738bb (sitemap bỏ `/hoan-tien` khi `CASHBACK_ENABLED` tắt, có test trong sitemap.spec.ts); integ2 xác nhận lại.
 
 ### account (9 câu)
 - account:1. Sàn test Mini App là 4214 hay 4243? Gate cho 4214; commit 35ef41ee ghi sàn 4214 sau khi nhánh đổi rác gỡ Refill. Mặc định: coi 4214 là đúng, lane không đụng file Mini App.
@@ -53,7 +53,7 @@ Không có.
 - shop:6. Giờ vàng ở Trang chủ chỉ link `/san-pham/{slug}` (không truyền variationId, trang sản phẩm tự chọn phân loại đang giờ vàng). Mặc định: như vậy, chưa kiểm bằng trình duyệt.
 - shop:7. Sau đăng nhập quay về trang sản phẩm: chỉ tự mở lại sheet định kỳ, không tự tạo nhóm mua chung. Mặc định: như Mini App.
 - shop:8. Có muốn bỏ nút "Xem thêm" thay cho `?page=N`, tức giữ cả hai như hiện tại? Mặc định: giữ cả hai (Xem thêm cho người dùng, link trang cho crawler).
-- shop:9. Đặt định kỳ chọn chuyển khoản: sang `/tai-khoan/don-hang/<code>` vì `/thanh-toan/chuyen-khoan/:code` còn pending. Đổi khi lane order xong?
+- shop:9. Đặt định kỳ chọn chuyển khoản: sang `/tai-khoan/don-hang/<code>` vì `/thanh-toan/chuyen-khoan/:code` còn pending. Đổi khi lane order xong? Đã xử lý ở 095b105a (sang `/thanh-toan/chuyen-khoan/<code>` như Mini App).
 - shop:10. Emoji trong chữ hiển thị đã bỏ để khớp quy ước; emoji nhận diện nhãn ở `lib/brand-origins.ts` giữ như Mini App. Mặc định: như vậy.
 - shop:11. Số sàn test Mini App 4243 trong luật so với 4214 thực tế: sàn đúng là bao nhiêu? Mặc định: coi 4214 là mốc hiện tại.
 
@@ -62,12 +62,12 @@ Không có.
 - order:2. Điểm dùng được ở thanh toán lấy từ `/me/loyalty` như Mini App? Mặc định: giữ `redeemablePoints` của báo giá.
 - order:3. Sau lỗi mạng khi đặt, nếu khách đổi lựa chọn thì chặn và báo "Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại." (lệch đề xuất gốc). Mặc định: chặn một lần, bấm sau gửi đơn mới.
 - order:4. "Theo dõi ngay" OA trên web chỉ mở trang OA và luôn trả false; chữ báo "Đã mở trang Tubu Tree trên Zalo, bấm Quan tâm...". Mặc định: chữ này, do tôi tự chọn.
-- order:5. Nút Thanh toán ở hub `/tai-khoan` dẫn tới trang chuyển khoản thay vì chi tiết đơn? Mặc định: giữ nguyên (lane account).
+- order:5. Nút Thanh toán ở hub `/tai-khoan` dẫn tới trang chuyển khoản thay vì chi tiết đơn? Mặc định: giữ nguyên (lane account). Đã xử lý ở 095b105a + 9b91a9ce (xét hạn/xử lý tay như canPayOrderNow, chữ Thanh toán ngay, in hạn; nút Thanh toán ở hub dẫn `/thanh-toan/chuyen-khoan/<code>`, giống `onPay` của Mini App `orders.tsx:118`).
 - order:6 (mới, mục 6 "Hoàn tất sau gate/review"). Lệch Mini App ở đặt đơn: web đóng băng body và key sau lần chưa rõ kết quả (Mini App đổi key khi fingerprint đổi, có cùng lỗ hổng khi nạp lại lúc có mạng). Giữ lệch cho web, hay sửa cả Mini App? Mặc định: giữ lệch ở web, không đụng Mini App.
 
 ### affiliate (6 câu)
 - affiliate:1. Mini App và web chỉ đặt tên bộ sưu tập; API cho phép COMBO/bố cục/% giảm combo (trần `storefront.max_combo_pct`, mặc định 30). Có mở giao diện này cho cả hai nền tảng không? Mặc định: không, web giống Mini App.
-- affiliate:2. Trang `/thanh-toan/chuyen-khoan/:code` còn pending. Mặc định: dẫn sang `/tai-khoan/don-hang/:code` (có QR); khi route mở sẽ hiện "Mở trang thanh toán (gửi khách)".
+- affiliate:2. Trang `/thanh-toan/chuyen-khoan/:code` còn pending. Mặc định: dẫn sang `/tai-khoan/don-hang/:code` (có QR); khi route mở sẽ hiện "Mở trang thanh toán (gửi khách)". Đã đúng từ lane affiliate (ctv-order-sheet.tsx:249-266, test ctv-order-sheet.spec.tsx:267); integ2 khoá route map ở a1bb2cca (route đã mở nên link "Mở trang thanh toán (gửi khách)" hiện và trỏ `/thanh-toan/chuyen-khoan/<code>`; test ctv-order-sheet.spec.tsx khoá cả hai nhánh).
 - affiliate:3. Tạo gian hàng xong mà áp mẫu lỗi: giữ sheet mở, chọn lại gọi lại `POST /storefront` (giống Mini App). Mặc định: không đổi.
 - affiliate:4. Nút "Xem trước" khi còn nháp báo cần đăng trước, không điều hướng (giống Mini App).
 - affiliate:5. `shareLink` tuyệt đối của nơi khác: nút Chia sẻ chép bài mẫu kèm link. Mặc định: dùng cách này.
@@ -127,7 +127,7 @@ Không có.
 - REORDER_REMINDER: nút "Mua lại ngay" chỉ điều hướng, chờ ReorderSheet của lane order (nối tại `notification-view.ts`, kind `reorder`).
 - Không chép: sự kiện analytics `notification_opened`, dòng phiên bản, hoạt ảnh/popstate của overlay chi tiết, `settings-legacy-sync`.
 - Hàng "Theo dõi Zalo OA" luôn hiện "Theo dõi" (web không đọc được trạng thái theo dõi).
-- Nút hành động thông báo và mục menu trỏ route lane khác sẽ ẩn cho tới khi route bỏ pending.
+- Nút hành động thông báo và mục menu trỏ route lane khác sẽ ẩn cho tới khi route bỏ pending. Đã xử lý ở a1bb2cca (đích đã mở, trừ route của pro/recycle vẫn ẩn).
 - Tiêu đề/noindex spec: `/gioi-thieu` là trang công khai nên không đưa vào page-titles, guest-auth-gate, session-unavailable.
 - Mini App có cùng lỗi gửi lại `dob` (edit-profile.tsx); không sửa theo luật lane.
 - Mục Mã giảm giá ở hub dẫn tới `/tai-khoan/diem-xanh`; lane loyalty cần đảm bảo trang đó có phần mã giảm giá.
@@ -153,7 +153,7 @@ Không có.
 - Trang chủ bỏ gộp request `/home`+`/home/me`, kéo để làm mới, nhớ số ô khung chờ.
 - Web không có snackbar: dùng dòng `role=status`/`alert`; mua lại một phần thì sheet ở lại kèm "Xem giỏ".
 - `components/product-pagination.tsx`, `homeHref`/`pageHref` trong `lib/catalog-filter.ts` không còn nơi dùng, để nguyên.
-- Link tới route lane khác (`/tu-van`, `/cong-dong`, định kỳ) bị ẩn khi pending, hiện lại khi route hết pending.
+- Link tới route lane khác (`/tu-van`, `/cong-dong`, định kỳ) bị ẩn khi pending, hiện lại khi route hết pending. Đã xử lý ở a1bb2cca (`/tu-van`, `/cong-dong`, định kỳ đều đã mở).
 - Chưa kiểm chứng middleware xử lý `/san-pham` trên host CTV.
 - Chat OA chỉ mở `zalo.me/<oaId>` không kèm nội dung câu hỏi. Nút chia sẻ ghi "Chia sẻ" thay vì "Chia sẻ Zalo".
 - Nút Tham gia/Theo dõi khi phiên unavailable gọi retrySession.
@@ -183,7 +183,7 @@ Không có.
 - Chưa kiểm tra giao diện thật (máy tính, 320px): không chạy Playwright, chỉ viết spec.
 - Gate chưa có một lần xanh trọn vẹn (xem mục 2).
 - Season pass ẩn theo cờ `SEASON_PASS_ENABLED=false`, API không được gọi.
-- Link đổi rác và link Bảng tin cộng đồng chỉ hiện khi `/doi-rac`, `/cong-dong` đã bỏ pending (lane khác).
+- Link đổi rác và link Bảng tin cộng đồng chỉ hiện khi `/doi-rac`, `/cong-dong` đã bỏ pending (lane khác). Đã xử lý ở a1bb2cca cho `/cong-dong`; `/doi-rac` vẫn pending (lane recycle).
 - Haptic không có bản web, bỏ qua.
 - Nút Gửi của /tu-van chỉ báo đang gửi bằng `aria-busy`, không có spinner.
 - Spec /tu-van có 28 test so với 29 của Mini App (gộp vài ca, cùng ý nghĩa).

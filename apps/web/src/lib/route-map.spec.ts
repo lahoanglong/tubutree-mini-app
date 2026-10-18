@@ -18,6 +18,16 @@ describe('isWebRouteReady', () => {
     expect(isWebRouteReady('/')).toBe(true);
   });
 
+  it('mọi đích mà web rẽ nhánh theo isWebRouteReady đã mở, trừ đổi rác còn pending', () => {
+    const opened = [
+      '/thanh-toan/chuyen-khoan/x', '/tai-khoan/don-hang/x', '/tai-khoan/don-hang', '/tai-khoan/don-hang?tab=subscriptions',
+      '/tai-khoan/thong-bao', '/cong-dong', '/cong-dong/xep-hang', '/cong-dong/su-kien', '/hoc-vien', '/tu-van', '/san-pham',
+      '/vuon-xanh', '/kho-qua', '/ctv', '/ctv/gian-hang', '/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong', '/chu-thuong-hieu',
+    ];
+    for (const p of opened) expect(isWebRouteReady(p), p).toBe(true);
+    for (const p of ['/doi-rac', '/doi-rac/tao', '/doi-rac/yeu-cau/x']) expect(isWebRouteReady(p), p).toBe(false);
+  });
+
   it('route còn pending thì chưa sẵn sàng', () => {
     expect(isWebRouteReady('/doi-rac')).toBe(false);
   });

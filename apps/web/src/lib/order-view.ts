@@ -195,6 +195,7 @@ export function orderPaymentStatusShort(o: PaymentView, refunds?: readonly Refun
 }
 
 export const orderDetailHref = (code: string): string => `/tai-khoan/don-hang/${encodeURIComponent(code)}`;
+export const bankPaymentHref = (code: string): string => `/thanh-toan/chuyen-khoan/${encodeURIComponent(code)}`;
 
 /**
  * Khớp điều kiện của miniapp (`canPayNow`) và của API: GET /payments/bank-qr từ chối đơn đã hủy/trả,
