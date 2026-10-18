@@ -551,3 +551,30 @@ INSERT INTO "waste_gifts" ("id", "kind", "name", "description", "label", "points
   ('gift-tree', 'TREE', 'Góp quỹ trồng cây', 'Dùng Điểm Xanh góp vào quỹ trồng cây của Tubu Tree.', NULL, 0, 'ACTIVE', 50, NULL, NULL, NULL, NULL, NULL, NOW())
 ON CONFLICT DO NOTHING;
 -- END WASTE SEED DATA
+
+-- BEGIN WASTE CONFIG ROWS
+-- Dòng cấu hình mặc định của Đổi rác lấy quà: prod chạy migrate deploy chứ không chạy seed.ts. Chạy lại không đổi gì.
+INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES
+  ('waste.enabled', 'false'::jsonb, 'Cờ tổng của chương trình Đổi rác lấy quà, tắt thì khách không tạo được yêu cầu mới và bàn đại lý bị chặn, kho vẫn xử lý yêu cầu đã có.', 'waste', NOW()),
+  ('waste.lane_dropoff_enabled', 'true'::jsonb, 'Bật cách giao Mang tới điểm nhận cho yêu cầu mới.', 'waste', NOW()),
+  ('waste.lane_mailin_enabled', 'true'::jsonb, 'Bật cách giao Gửi về kho cho yêu cầu mới.', 'waste', NOW()),
+  ('waste.lane_pickup_enabled', 'false'::jsonb, 'Bật cách giao Thu kèm đơn cho yêu cầu mới, còn cần cờ Gomdon hiện có.', 'waste', NOW()),
+  ('waste.mailin_min_points', '15000'::jsonb, 'Số Điểm Xanh tối thiểu của một gói gửi kho, không được lớn hơn trần điểm tháng của khách.', 'waste', NOW()),
+  ('waste.pickup_min_points', '10000'::jsonb, 'Số Điểm Xanh tối thiểu của một gói thu kèm đơn, không được lớn hơn trần điểm tháng của khách.', 'waste', NOW()),
+  ('waste.customer_monthly_cap_points', '60000'::jsonb, 'Trần Điểm Xanh mỗi khách được cộng từ đổi rác trong một tháng.', 'waste', NOW()),
+  ('waste.max_open_requests', '3'::jsonb, 'Số yêu cầu đổi rác một khách được mở cùng lúc.', 'waste', NOW()),
+  ('waste.request_hold_days', '7'::jsonb, 'Số ngày giữ chỗ một yêu cầu và chờ khách nhập mã vận đơn.', 'waste', NOW()),
+  ('waste.pickup_wait_days', '14'::jsonb, 'Số ngày chờ hàng thu kèm về kho sau khi đơn mua đã giao.', 'waste', NOW()),
+  ('waste.in_transit_review_days', '30'::jsonb, 'Yêu cầu gửi kho đang vận chuyển quá ngần này ngày thì vào danh sách admin xem lại.', 'waste', NOW()),
+  ('waste.mailin_max_weight_kg', '20'::jsonb, 'Khối lượng tối đa của mỗi kiện gửi kho, tính bằng kg, theo giới hạn của hãng chuyển phát.', 'waste', NOW()),
+  ('waste.mailin_max_edge_cm', '50'::jsonb, 'Cạnh dài tối đa của mỗi kiện gửi kho, tính bằng cm.', 'waste', NOW()),
+  ('waste.shortfall_lock_pct', '50'::jsonb, 'Yêu cầu hoàn tất mà điểm cộng chưa tới (100 trừ ngần này) phần trăm điểm ước tính thì tính là một lần nhận thiếu.', 'waste', NOW()),
+  ('waste.shortfall_lock_streak', '3'::jsonb, 'Số lần nhận thiếu liền nhau thì khoá đường gửi kho và thu kèm đơn của khách.', 'waste', NOW()),
+  ('waste.staff_daily_cap_points', '1000000'::jsonb, 'Trần Điểm Xanh mỗi nhân viên kho hoặc điểm nhận được xác nhận trong một ngày.', 'waste', NOW()),
+  ('waste.gift_claim_days', '60'::jsonb, 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.', 'waste', NOW()),
+  ('waste.point_inactive_days', '60'::jsonb, 'Điểm nhận đối tác không có lượt xác nhận nào quá ngần này ngày kể từ lần xác nhận cuối hoặc lần kích hoạt thì bị ẩn khỏi danh sách khách.', 'waste', NOW()),
+  ('waste.mailin_fee_table', '{"zones":[],"defaultZone":{"name":"Toàn quốc","low":30000,"high":85000}}'::jsonb, 'Bảng ước tính phí ship gửi kho theo vùng tỉnh, mỗi vùng có phí thấp và phí cao, cộng một vùng mặc định cho tỉnh chưa xếp.', 'waste', NOW()),
+  ('waste.alert_thresholds', '{"quotaPacePct":60,"quotaPaceDays":10,"fullMatchPct":95,"fullMatchMinSample":10,"repeatCustomerCount":3,"repeatCustomerDays":7,"avgUnitsFactor":2,"lookupMissCount":10,"lookupMissDays":1,"staffDirectCount":5,"staffDirectDays":7}'::jsonb, 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.', 'waste', NOW()),
+  ('waste.rules_text', '""'::jsonb, 'Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có.', 'waste', NOW())
+ON CONFLICT ("key") DO NOTHING;
+-- END WASTE CONFIG ROWS

@@ -6,6 +6,7 @@ import { readApiSql, splitSqlStatements } from './sql-script';
 import {
   cleanupWaste, createGiftRedemption, createWarehouse, createWasteGift, createWasteItem, createWastePoint, createWasteRequest,
 } from './fixtures/waste-fixtures';
+import { WASTE_CONFIG_KEYS } from '../../src/modules/waste-exchange/waste-config.keys';
 
 const MIGRATION = 'prisma/migrations/20261020000000_waste_exchange/migration.sql';
 // Spec 11.4 (lines 306-312) with $3 and $4 cast to int; M3.1a incrementPointUsage uses this exact text.
@@ -269,5 +270,14 @@ describe('seeded reference data after migrate deploy', () => {
     const before = await prisma.wasteGift.findMany({ where: { id: { startsWith: 'reward-' } }, orderBy: { id: 'asc' } });
     for (const s of splitSqlStatements(section)) await prisma.$executeRawUnsafe(s);
     expect(await prisma.wasteGift.findMany({ where: { id: { startsWith: 'reward-' } }, orderBy: { id: 'asc' } })).toEqual(before);
+  });
+  it('the 21 waste.* config rows exist after migrate deploy (prod never runs seed.ts)', async () => {
+    const rows = await prisma.systemConfig.findMany({ where: { key: { startsWith: 'waste.' } }, orderBy: { key: 'asc' } });
+    expect(rows.map((r) => r.key)).toEqual(Object.keys(WASTE_CONFIG_KEYS).sort());
+    for (const r of rows) {
+      const def = WASTE_CONFIG_KEYS[r.key as keyof typeof WASTE_CONFIG_KEYS];
+      expect({ key: r.key, category: r.category, description: r.description }).toEqual({ key: r.key, category: 'waste', description: def.description });
+      expect(typeof r.value).toBe(typeof def.default);
+    }
   });
 });

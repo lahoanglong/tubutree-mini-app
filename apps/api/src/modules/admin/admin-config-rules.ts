@@ -208,7 +208,10 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   [STAFF_COUPON_MAX_PERCENT_KEY]: (k, v) => assertIntInRange(k, v, 1, 100, '%'),
   [STAFF_COUPON_MAX_AMOUNT_KEY]: (k, v) => assertIntInRange(k, v, 1000, 100_000_000, 'đ'),
   [STAFF_COUPON_MAX_USAGE_KEY]: (k, v) => assertIntInRange(k, v, 1, 100_000, 'lượt'),
-  [STAFF_COUPON_DAILY_BUDGET_KEY]: (k, v) => assertIntInRange(k, v, 0, 1_000_000_000, 'đ'),
+  [STAFF_COUPON_DAILY_BUDGET_KEY]: (k, v) => assertIntInRange(k, v, 0, 1_000_000_000, 'đ'),  'waste.enabled': assertBoolean,
+  'waste.lane_dropoff_enabled': assertBoolean,
+  'waste.lane_mailin_enabled': assertBoolean,
+  'waste.lane_pickup_enabled': assertBoolean,
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */

@@ -14,6 +14,7 @@ import {
   communityCategoryUpsertArgs,
   retireCommunityCategoriesArgs,
 } from '../src/modules/feed/community-categories-seed';
+import { assertWasteConfigSeedRows } from '../src/modules/waste-exchange/waste-config.keys';
 import { WASTE_SEED_GIFTS, WASTE_SEED_ITEMS, wasteGiftUpsertArgs, wasteItemUpsertArgs } from '../src/modules/waste-exchange/waste-seed-data';
 import { COMMUNITY_GOAL_SEED, SEASON_SEED } from './reference-data/garden';
 
@@ -303,7 +304,29 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'retention.notification_logs_days', value: 180, category: 'retention', description: 'Giữ notification_logs bao nhiêu ngày (sàn 30)', createOnly: true },
   { key: 'retention.webhook_events_days', value: 90, category: 'retention', description: 'Giữ log webhook Pancake/Gomdon/tin nhắn OA bao nhiêu ngày (sàn 14)', createOnly: true },
   { key: 'retention.refresh_sessions_days', value: 30, category: 'retention', description: 'Xoá refresh token đã thu hồi/hết hạn quá bao nhiêu ngày (sàn 7)', createOnly: true },
+  { key: 'waste.enabled', value: false, category: 'waste', description: 'Cờ tổng của chương trình Đổi rác lấy quà, tắt thì khách không tạo được yêu cầu mới và bàn đại lý bị chặn, kho vẫn xử lý yêu cầu đã có.', createOnly: true },
+  { key: 'waste.lane_dropoff_enabled', value: true, category: 'waste', description: 'Bật cách giao Mang tới điểm nhận cho yêu cầu mới.', createOnly: true },
+  { key: 'waste.lane_mailin_enabled', value: true, category: 'waste', description: 'Bật cách giao Gửi về kho cho yêu cầu mới.', createOnly: true },
+  { key: 'waste.lane_pickup_enabled', value: false, category: 'waste', description: 'Bật cách giao Thu kèm đơn cho yêu cầu mới, còn cần cờ Gomdon hiện có.', createOnly: true },
+  { key: 'waste.mailin_min_points', value: 15_000, category: 'waste', description: 'Số Điểm Xanh tối thiểu của một gói gửi kho, không được lớn hơn trần điểm tháng của khách.', createOnly: true },
+  { key: 'waste.pickup_min_points', value: 10_000, category: 'waste', description: 'Số Điểm Xanh tối thiểu của một gói thu kèm đơn, không được lớn hơn trần điểm tháng của khách.', createOnly: true },
+  { key: 'waste.customer_monthly_cap_points', value: 60_000, category: 'waste', description: 'Trần Điểm Xanh mỗi khách được cộng từ đổi rác trong một tháng.', createOnly: true },
+  { key: 'waste.max_open_requests', value: 3, category: 'waste', description: 'Số yêu cầu đổi rác một khách được mở cùng lúc.', createOnly: true },
+  { key: 'waste.request_hold_days', value: 7, category: 'waste', description: 'Số ngày giữ chỗ một yêu cầu và chờ khách nhập mã vận đơn.', createOnly: true },
+  { key: 'waste.pickup_wait_days', value: 14, category: 'waste', description: 'Số ngày chờ hàng thu kèm về kho sau khi đơn mua đã giao.', createOnly: true },
+  { key: 'waste.in_transit_review_days', value: 30, category: 'waste', description: 'Yêu cầu gửi kho đang vận chuyển quá ngần này ngày thì vào danh sách admin xem lại.', createOnly: true },
+  { key: 'waste.mailin_max_weight_kg', value: 20, category: 'waste', description: 'Khối lượng tối đa của mỗi kiện gửi kho, tính bằng kg, theo giới hạn của hãng chuyển phát.', createOnly: true },
+  { key: 'waste.mailin_max_edge_cm', value: 50, category: 'waste', description: 'Cạnh dài tối đa của mỗi kiện gửi kho, tính bằng cm.', createOnly: true },
+  { key: 'waste.shortfall_lock_pct', value: 50, category: 'waste', description: 'Yêu cầu hoàn tất mà điểm cộng chưa tới (100 trừ ngần này) phần trăm điểm ước tính thì tính là một lần nhận thiếu.', createOnly: true },
+  { key: 'waste.shortfall_lock_streak', value: 3, category: 'waste', description: 'Số lần nhận thiếu liền nhau thì khoá đường gửi kho và thu kèm đơn của khách.', createOnly: true },
+  { key: 'waste.staff_daily_cap_points', value: 1_000_000, category: 'waste', description: 'Trần Điểm Xanh mỗi nhân viên kho hoặc điểm nhận được xác nhận trong một ngày.', createOnly: true },
+  { key: 'waste.gift_claim_days', value: 60, category: 'waste', description: 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.', createOnly: true },
+  { key: 'waste.point_inactive_days', value: 60, category: 'waste', description: 'Điểm nhận đối tác không có lượt xác nhận nào quá ngần này ngày kể từ lần xác nhận cuối hoặc lần kích hoạt thì bị ẩn khỏi danh sách khách.', createOnly: true },
+  { key: 'waste.mailin_fee_table', value: { zones: [], defaultZone: { name: 'Toàn quốc', low: 30_000, high: 85_000 } }, category: 'waste', description: 'Bảng ước tính phí ship gửi kho theo vùng tỉnh, mỗi vùng có phí thấp và phí cao, cộng một vùng mặc định cho tỉnh chưa xếp.', createOnly: true },
+  { key: 'waste.alert_thresholds', value: { quotaPacePct: 60, quotaPaceDays: 10, fullMatchPct: 95, fullMatchMinSample: 10, repeatCustomerCount: 3, repeatCustomerDays: 7, avgUnitsFactor: 2, lookupMissCount: 10, lookupMissDays: 1, staffDirectCount: 5, staffDirectDays: 7 }, category: 'waste', description: 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.', createOnly: true },
+  { key: 'waste.rules_text', value: '', category: 'waste', description: 'Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có.', createOnly: true },
 ];
+assertWasteConfigSeedRows(SYSTEM_CONFIGS);
 
 export const TIERS = [
   {
