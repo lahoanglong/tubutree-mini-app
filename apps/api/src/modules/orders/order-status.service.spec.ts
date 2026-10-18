@@ -917,3 +917,87 @@ describe('OrderStatusService.setStatus — onlyIfUnpaid (cron huỷ đơn quá h
     expect(tx.order.updateMany.mock.calls[0][0].where).toEqual({ id: 'o1', status: 'CONFIRMED' });
   });
 });
+
+describe('OrderStatusService — hook thu kèm rác sau commit (§12.2 bước 3)', () => {
+  function setup(from: string, opts: { flip?: number; credit?: jest.Mock; hooks?: Partial<Record<'onOrderCancelled' | 'onOrderDelivered', jest.Mock>> } = {}) {
+    const tx = {
+      order: { updateMany: jest.fn().mockResolvedValue({ count: opts.flip ?? 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: 'u1' }) },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const order = makeOrder({ status: from });
+    const seen: string[] = [];
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      $transaction: jest.fn(async (fn: (t: unknown) => unknown) => {
+        const r = await fn(tx);
+        seen.push('tx end');
+        return r;
+      }),
+    };
+    const loyalty = {
+      creditOrderPoints: opts.credit ?? jest.fn(async () => { seen.push('creditOrderPoints'); return true; }),
+      reverseOrderPoints: jest.fn().mockResolvedValue(0),
+    };
+    const hooks = {
+      onOrderCancelled: jest.fn(async () => { seen.push('onOrderCancelled'); }),
+      onOrderDelivered: jest.fn(async () => { seen.push('onOrderDelivered'); }),
+      ...opts.hooks,
+    };
+    const svc = new OrderStatusService(
+      prisma as unknown as PrismaService,
+      loyalty as unknown as LoyaltyService,
+      { lockCommissionsForOrder: jest.fn().mockResolvedValue(0), grantReferralReward: jest.fn().mockResolvedValue(undefined), reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService,
+      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { reverseFinancials: jest.fn().mockResolvedValue(null) } as unknown as OrderReversalService,
+      undefined,
+      undefined,
+      undefined,
+      hooks as never,
+    );
+    return { svc, prisma, loyalty, hooks, seen };
+  }
+
+  it('DELIVERED thắng → onOrderDelivered(o1) sau khi tx đổi trạng thái đã xong (không chạy trong callback, spec 10.1), TRƯỚC runDeliveredEffects (cộng điểm đơn)', async () => {
+    const { svc, hooks, seen } = setup('SHIPPING');
+    await svc.setStatus('o1', 'DELIVERED' as never);
+    expect(hooks.onOrderDelivered).toHaveBeenCalledWith('o1');
+    expect(seen.indexOf('tx end')).toBeGreaterThanOrEqual(0);
+    expect(seen.indexOf('tx end')).toBeLessThan(seen.indexOf('onOrderDelivered'));
+    expect(seen.indexOf('onOrderDelivered')).toBeLessThan(seen.indexOf('creditOrderPoints'));
+    expect(hooks.onOrderCancelled).not.toHaveBeenCalled();
+  });
+
+  it('runDeliveredEffects ném lỗi → hook vẫn đã chạy', async () => {
+    const { svc, hooks } = setup('SHIPPING', { credit: jest.fn().mockRejectedValue(new Error('points db')) });
+    await expect(svc.setStatus('o1', 'DELIVERED' as never)).rejects.toThrow('points db');
+    expect(hooks.onOrderDelivered).toHaveBeenCalledTimes(1);
+  });
+
+  it('hook lỗi (ngoài hợp đồng) → đường giao vẫn xong, việc sau giao vẫn chạy', async () => {
+    const { svc, loyalty } = setup('SHIPPING', { hooks: { onOrderDelivered: jest.fn().mockRejectedValue(new Error('hook')) } });
+    await expect(svc.setStatus('o1', 'DELIVERED' as never)).resolves.toBeDefined();
+    expect(loyalty.creditOrderPoints).toHaveBeenCalledTimes(1);
+  });
+
+  it('CANCELLED thắng → onOrderCancelled(o1) trong cùng lần gọi, sau khi tx đổi trạng thái đã xong (§17.3, admin huỷ)', async () => {
+    const { svc, hooks, seen } = setup('CONFIRMED');
+    await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
+    expect(hooks.onOrderCancelled).toHaveBeenCalledWith('o1');
+    expect(seen.indexOf('tx end')).toBeGreaterThanOrEqual(0);
+    expect(seen.indexOf('tx end')).toBeLessThan(seen.indexOf('onOrderCancelled'));
+    expect(hooks.onOrderDelivered).not.toHaveBeenCalled();
+  });
+
+  it('thua đua (count 0), trạng thái khác, hay DELIVERED lặp → không gọi hook (quét bù lo phần sót)', async () => {
+    const lost = setup('SHIPPING', { flip: 0 });
+    await lost.svc.setStatus('o1', 'DELIVERED' as never).catch(() => undefined);
+    expect(lost.hooks.onOrderDelivered).not.toHaveBeenCalled();
+    const packed = setup('CONFIRMED');
+    await packed.svc.setStatus('o1', 'PACKED' as never);
+    expect(packed.hooks.onOrderCancelled).not.toHaveBeenCalled();
+    expect(packed.hooks.onOrderDelivered).not.toHaveBeenCalled();
+    const repeat = setup('DELIVERED');
+    await repeat.svc.setStatus('o1', 'DELIVERED' as never);
+    expect(repeat.hooks.onOrderDelivered).not.toHaveBeenCalled();
+  });
+});
