@@ -426,7 +426,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
   return (
     <div className="flex flex-col gap-3">
       <Field label="Tên bộ sưu tập">
-        <input className={ui.field} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className={ui.field} maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
       <LayoutSelect value={layout} onChange={setLayout} />
       {combo && <ComboPctField value={pct} onChange={setPct} invalid={pctInvalid} />}
@@ -439,7 +439,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
 }
 
 /** Form tạo bộ sưu tập: phải có TÊN do CTV đặt; chọn loại (thường/combo), bố cục và % giảm combo. */
-export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { title: string; kind?: Kind; layout?: Layout; comboDiscountPct?: number }) => void; pending: boolean }) {
+export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { title: string; kind?: Kind; layout?: Layout; comboDiscountPct?: number }, onSuccess: () => void) => void; pending: boolean }) {
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<Kind>('NORMAL');
   const [layout, setLayout] = useState<Layout>('GRID');
@@ -450,12 +450,15 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
 
   const submit = () => {
     if (!title.trim() || pctInvalid) return;
-    onCreate({
-      title: title.trim(),
-      ...(combo && { kind, comboDiscountPct: pctValue! }),
-      ...(layout !== 'GRID' && { layout }),
-    });
-    setTitle('');
+    // Chỉ xoá tên khi tạo xong: bị từ chối hay mất mạng thì CTV còn tên để sửa.
+    onCreate(
+      {
+        title: title.trim(),
+        ...(combo && { kind, comboDiscountPct: pctValue! }),
+        ...(layout !== 'GRID' && { layout }),
+      },
+      () => setTitle(''),
+    );
   };
 
   return (
@@ -465,6 +468,7 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
           className={`${ui.field} flex-1`}
           aria-label="Tên bộ sưu tập (khách sẽ thấy)"
           placeholder="Tên bộ sưu tập (khách sẽ thấy)"
+          maxLength={80}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />

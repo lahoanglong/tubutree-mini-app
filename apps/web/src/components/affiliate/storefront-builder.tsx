@@ -322,7 +322,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             </section>
           ))}
 
-          <NewCollectionForm pending={newColMut.isPending} onCreate={(dto) => newColMut.mutate(dto)} />
+          <NewCollectionForm pending={newColMut.isPending} onCreate={(dto, onSuccess) => newColMut.mutate(dto, { onSuccess })} />
         </div>
 
         <div className="mt-3 space-y-3 lg:mt-0">
