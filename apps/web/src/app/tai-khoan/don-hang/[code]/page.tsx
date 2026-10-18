@@ -262,7 +262,7 @@ export default function OrderDetailPage() {
             <Row key={r.label} label={r.label} value={`-${formatVnd(r.amount)}`} positive />
           ))}
           {(o.pointsUsed ?? 0) > 0 && !o.pointsDiscount && (
-            <Row label="Điểm Xanh đã dùng" value={formatCount(o.pointsUsed ?? 0)} />
+            <Row label="Điểm Xanh đã dùng" value={`${formatCount(o.pointsUsed ?? 0)} điểm`} />
           )}
           <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} />
           <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900">

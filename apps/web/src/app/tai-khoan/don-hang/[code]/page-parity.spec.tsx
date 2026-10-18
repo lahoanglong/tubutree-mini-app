@@ -148,7 +148,7 @@ describe('chi tiết đơn web — mốc thời gian và Điểm Xanh', () => {
     mocks.order = { ...ORDER, discount: 20000, pointsUsed: 2000, pointsDiscount: 0 };
     const t = text((await mount()).container);
     expect(t).toContain('Điểm Xanh đã dùng');
-    expect(t).toContain('2.000');
+    expect(t).toContain('2.000 điểm');
   });
 });
 
