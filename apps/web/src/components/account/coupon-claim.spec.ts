@@ -69,6 +69,11 @@ describe('withoutClaimParam: xoá ?claim= khỏi URL, giữ phần còn lại', 
   it('hết tham số thì bỏ luôn dấu ?', () => {
     expect(withoutClaimParam('/?claim=AB12')).toBe('/');
   });
+  it('link mã nằm trong hash cũng được xoá, giữ phần hash còn lại', () => {
+    expect(withoutClaimParam('/#?claim=SHOPEE-AB12CD34')).toBe('/');
+    expect(withoutClaimParam('/san-pham/x#claim=AB12&gia=1')).toBe('/san-pham/x#gia=1');
+    expect(withoutClaimParam('/x#/product/a?claim=LAZ-X2Y3&r=1')).toBe('/x#/product/a?r=1');
+  });
   it('không có claim thì giữ nguyên', () => {
     expect(withoutClaimParam('/gio-hang?a=1')).toBe('/gio-hang?a=1');
   });

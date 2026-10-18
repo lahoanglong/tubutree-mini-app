@@ -26,7 +26,20 @@ export function readClaimParam(...urlParts: string[]): string | null {
 export function withoutClaimParam(href: string): string {
   const url = new URL(href, 'https://x.invalid');
   url.searchParams.delete('claim');
-  return `${url.pathname}${url.search}${url.hash}`;
+  return `${url.pathname}${url.search}${hashWithoutClaim(url.hash)}`;
+}
+
+/** Hash dạng `#?claim=`, `#claim=` hoặc `#/duong-dan?claim=`: cùng cách tách với readClaimParam; hash không có claim thì giữ nguyên. */
+function hashWithoutClaim(hash: string): string {
+  const body = hash.replace(/^#/, '');
+  const q = body.indexOf('?');
+  const head = q >= 0 ? body.slice(0, q) : '';
+  const params = new URLSearchParams(q >= 0 ? body.slice(q + 1) : body);
+  if (!params.has('claim')) return hash;
+  params.delete('claim');
+  const rest = params.toString();
+  const next = q >= 0 ? `${head}${rest ? `?${rest}` : ''}` : rest;
+  return next ? `#${next}` : '';
 }
 
 export async function savePendingClaim(code: string): Promise<void> {
