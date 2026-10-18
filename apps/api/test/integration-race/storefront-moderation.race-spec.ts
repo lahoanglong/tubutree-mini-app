@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { StorefrontType, UserRole } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
@@ -307,6 +307,14 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       expect(approved.approvedAt).not.toBeNull();
       await admin.setApproved(a1.id, s.id, false);
       expect((await prisma.storefront.findUniqueOrThrow({ where: { id: s.id } })).approvedAt).toBeNull();
+    });
+
+    it('chỉ gian hàng CTV được duyệt: MERCHANT bị từ chối 400, không ghi mốc duyệt, không báo "CTV tuyển chọn"', async () => {
+      const adminUser = await user('ADMIN');
+      const m = await store(await user('CUSTOMER'), { type: 'MERCHANT', isPartner: true });
+      await expect(admin.setApproved(adminUser.id, m.id, true)).rejects.toBeInstanceOf(BadRequestException);
+      expect((await prisma.storefront.findUniqueOrThrow({ where: { id: m.id } })).approvedAt).toBeNull();
+      expect(notify).not.toHaveBeenCalled();
     });
 
     it('đăng lại gian hàng khi chủ đang bị khoá: bỏ dấu gỡ nhưng không báo "hiển thị lại với khách"; mở khoá rồi gỡ và đăng lại thì báo', async () => {

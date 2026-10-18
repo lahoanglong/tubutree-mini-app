@@ -175,10 +175,23 @@ describe('StorefrontAdminService.setApproved', () => {
     const { svc, storefront, notify } = setup();
     await svc.setApproved('admin1', 's1', true);
     const call = storefront.updateMany.mock.calls[0][0];
-    expect(call.where).toEqual({ id: 's1', approvedAt: null });
+    expect(call.where).toEqual({ id: 's1', type: 'CTV', approvedAt: null });
     expect(call.data.approvedById).toBe('admin1');
     expect(call.data.approvedAt).toBeInstanceOf(Date);
     expect(notify).toHaveBeenCalledWith('u1', 'STOREFRONT_APPROVED', { store: 'Shop Linh' });
+  });
+
+  it.each(['MERCHANT', 'BRAND'])('gian hàng %s không có bước duyệt: 400, không ghi, không gửi "CTV tuyển chọn"', async (type) => {
+    const { svc, storefront, notify } = setup({ storefront: { findUnique: jest.fn().mockResolvedValue(row({ type })) } });
+    await expect(svc.setApproved('admin1', 's1', true)).rejects.toBeInstanceOf(BadRequestException);
+    expect(storefront.updateMany).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('duyệt gian hàng không tồn tại → 404', async () => {
+    const { svc, storefront } = setup({ storefront: { findUnique: jest.fn().mockResolvedValue(null) } });
+    await expect(svc.setApproved('admin1', 'nope', true)).rejects.toBeInstanceOf(NotFoundException);
+    expect(storefront.updateMany).not.toHaveBeenCalled();
   });
 
   it('duyệt gian hàng đã duyệt: không đổi mốc duyệt cũ, không báo lại', async () => {

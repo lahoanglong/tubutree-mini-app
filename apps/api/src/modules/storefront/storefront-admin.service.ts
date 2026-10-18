@@ -164,8 +164,14 @@ export class StorefrontAdminService {
   }
 
   async setApproved(adminId: string, id: string, approved: boolean) {
+    if (approved) {
+      const target = await this.prisma.storefront.findUnique({ where: { id }, select: { type: true } });
+      if (!target) throw new NotFoundException('Không tìm thấy gian hàng.');
+      // Chỉ gian hàng CTV có bước duyệt; gian hàng nhãn hàng và đối tác luôn tính là đã duyệt, tin "CTV tuyển chọn" sẽ sai với họ.
+      if (target.type !== 'CTV') throw new BadRequestException('Chỉ gian hàng CTV mới cần duyệt.');
+    }
     const { count } = approved
-      ? await this.prisma.storefront.updateMany({ where: { id, approvedAt: null }, data: { approvedAt: new Date(), approvedById: adminId } })
+      ? await this.prisma.storefront.updateMany({ where: { id, type: 'CTV', approvedAt: null }, data: { approvedAt: new Date(), approvedById: adminId } })
       : await this.prisma.storefront.updateMany({ where: { id, approvedAt: { not: null } }, data: { approvedAt: null, approvedById: null } });
     const sf = await this.summaryOf(id);
     if (count === 1) {
