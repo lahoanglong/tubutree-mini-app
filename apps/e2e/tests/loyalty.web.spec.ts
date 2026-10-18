@@ -162,3 +162,116 @@ test.describe('Web khách: Ví Tubu', () => {
     expect(api.callsTo('GET', '/me/wallet')).toHaveLength(0);
   });
 });
+
+/**
+ * Web khách: Kho quà (/kho-qua), Quà của tôi (/kho-qua/cua-toi) và Hoàn tiền (/hoan-tien). Đổi quà gửi đúng một POST redeem
+ * kèm Idempotency-Key dù bấm đúp; Hoàn tiền gửi POST /cashback/click rồi mở link đối tác ở tab mới.
+ */
+const CLAIM_POINT = {
+  name: 'Kho Tubu TP.HCM', addressLine: '99 Nguyễn Văn Linh', communeName: 'Phường Tân Phong', provinceName: 'TP.HCM',
+  openingHours: { MON: [{ open: '08:00', close: '17:00' }] },
+};
+const REWARD_ITEMS = [
+  { id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: 'Đơn từ 99.000đ', label: null, pointsCost: 20_000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: true, claimInstructions: null, voucher: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, validDays: 30 }, sortOrder: 1 },
+  { id: 'reward-discount-50k', kind: 'VOUCHER', name: 'Giảm 50.000đ', description: 'Đơn từ 300.000đ', label: null, pointsCost: 50_000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: false, claimInstructions: null, voucher: { type: 'AMOUNT', value: 50000, minOrder: 300000, maxDiscount: null, validDays: 30 }, sortOrder: 2 },
+  { id: 'gift-seed', kind: 'SEED_PACK', name: 'Gói hạt giống Tubu', description: 'Hạt rau mầm', label: null, pointsCost: 25_000, imageUrl: null, stockRemaining: 3, soldOut: false, canRedeem: true, claimInstructions: 'Nhận tại kho Tubu TP.HCM', voucher: null, sortOrder: 4 },
+];
+const REDEMPTION = {
+  id: 'red-1', giftId: 'gift-seed', giftKind: 'SEED_PACK', giftName: 'Gói hạt giống Tubu', pointsCost: 25_000, status: 'READY', code: 'QG-8K2M9P4T',
+  claimExpiresAt: '2026-12-16T17:30:00.000Z', claimPoint: CLAIM_POINT, fulfilledAt: null, cancelledAt: null, cancelReason: null, refundedPoints: null, couponCode: null, createdAt: '2026-10-17T03:00:00.000Z',
+};
+
+function mockRewards(api: MockApi, state: { redeemed: boolean }) {
+  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
+  api.get('/me', () => USER);
+  api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+  api.get('/me/loyalty', { pointsBalance: 30_000, pointsConvertedBalance: 5000, lockedPoints: 0, redeemablePoints: 30_000, tier: null, nextTier: null, tiers: TIERS });
+  api.get('/me/loyalty/rewards', () => ({
+    pointsBalance: state.redeemed ? 10_000 : 30_000, pointsConvertedBalance: 5000, lockedPoints: 0, redeemablePoints: state.redeemed ? 10_000 : 30_000,
+    giftClaimDays: 60, claimPoint: CLAIM_POINT, rewards: REWARD_ITEMS,
+  }));
+  api.get('/me/loyalty/rewards/mine', () => [REDEMPTION]);
+  api.post('/me/loyalty/rewards/:id/redeem', () => {
+    state.redeemed = true;
+    return {
+      success: true, message: 'ok', pointsSpent: 20_000, remainingPoints: 10_000,
+      redemption: { ...REDEMPTION, giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC', claimPoint: null },
+      coupon: { code: 'FREESHIP-ABC', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, endAt: '2026-11-16T16:59:59.000Z' },
+    };
+  });
+}
+
+const CASHBACK_MERCHANTS = [{ id: 'm1', slug: 'shopee', name: 'Shopee', logoUrl: '', category: 'mall', baseRate: '0.05', terms: 'Không áp dụng đơn hoàn huỷ.' }];
+
+test.describe('Web khách: Kho quà và Hoàn tiền', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+  });
+
+  test('Kho quà: số dư hai lô, thẻ đủ điểm và thiếu điểm theo tab', async ({ page, api }) => {
+    mockRewards(api, { redeemed: false });
+    await page.goto('/kho-qua');
+    await expect(page.getByRole('heading', { name: 'Kho quà', level: 1 })).toBeVisible();
+    await expect(page.getByText('35.000 điểm')).toBeVisible();
+    await expect(page.getByText('Cần thêm 20.000 điểm')).toBeVisible();
+    await page.getByRole('tab', { name: 'Cây và hạt' }).click();
+    await expect(page.getByText('Còn 3')).toBeVisible();
+  });
+
+  test('đổi mã giảm giá: bấm đúp chỉ gửi một POST redeem kèm Idempotency-Key, báo mã đã vào ví', async ({ page, api }) => {
+    mockRewards(api, { redeemed: false });
+    await page.goto('/kho-qua');
+    await page.getByRole('button', { name: 'Đổi' }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'Xác nhận đổi quà' });
+    await expect(dialog.getByText('-20.000 điểm')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Xác nhận đổi' }).dblclick();
+    await expect(page.getByText('Mã FREESHIP-ABC đã vào ví mã giảm giá')).toBeVisible();
+    const posts = api.callsTo('POST', '/me/loyalty/rewards/:id/redeem');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.path).toBe('/me/loyalty/rewards/reward-freeship/redeem');
+    expect(posts[0]!.headers['idempotency-key']).toBeTruthy();
+  });
+
+  test('Quà của tôi: mã QG- cỡ lớn, QR, nơi nhận và hạn nhận', async ({ page, api }) => {
+    mockRewards(api, { redeemed: false });
+    await page.goto('/kho-qua/cua-toi');
+    await expect(page.getByRole('heading', { name: 'Quà của tôi', level: 1 })).toBeVisible();
+    await expect(page.getByText('QG-8K2M9P4T', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'QR' })).toBeVisible();
+    await expect(page.getByText('Nhận tại Kho Tubu TP.HCM')).toBeVisible();
+    await expect(page.getByText('Hạn nhận 17/12/2026')).toBeVisible();
+  });
+
+  test('khách chưa đăng nhập được mời đăng nhập, không gọi API kho quà', async ({ page, api }) => {
+    api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
+    await page.goto('/kho-qua');
+    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    expect(api.callsTo('GET', '/me/loyalty/rewards')).toHaveLength(0);
+  });
+
+  test('Hoàn tiền: chọn sàn, POST /cashback/click đúng merchantId rồi mở link đối tác ở tab mới', async ({ page, api, context }) => {
+    api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
+    api.get('/me', () => USER);
+    api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+    api.get('/cashback/merchants', CASHBACK_MERCHANTS);
+    api.get('/cashback/transactions', []);
+    api.get('/me/wallet', { walletBalance: 0, cashbackPending: 123_000, commissionApproved: 0, commissionPending: 0, withdrawMin: 100_000, withdrawFee: 3_000 });
+    api.post('/cashback/click', () => ({ deeplink: 'https://example.com/aff/abc' }));
+    await page.route('https://example.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>Sàn</title>' }));
+    await page.goto('/hoan-tien');
+    await expect(page.getByText('123.000đ')).toBeVisible();
+    await page.getByRole('button', { name: /Shopee/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Shopee' });
+    await expect(dialog.getByText('Sàn xác nhận đơn → hoàn tiền vào Ví Tubu (sau 45 ngày)')).toBeVisible();
+    const popup = context.waitForEvent('page');
+    await dialog.getByRole('button', { name: 'Mua sắm & nhận hoàn tiền' }).click();
+    expect((await popup).url()).toBe('https://example.com/aff/abc');
+    expect(api.callsTo('POST', '/cashback/click')[0]!.body).toEqual({ merchantId: 'm1' });
+  });
+});
