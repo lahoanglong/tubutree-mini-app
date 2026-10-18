@@ -5,16 +5,18 @@ import {
   CheckCircle2,
   Globe,
   MapPin,
+  PackageSearch,
   Phone,
   CreditCard,
   ShieldCheck,
-  Truck,
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
 import { getStorefront, formatSold } from '@/lib/api';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
+import { EmptyState } from '@/components/empty-state';
+import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 
 export const revalidate = 300;
@@ -30,7 +32,7 @@ export async function generateMetadata({
   const firstImg =
     sf.collections?.[0]?.items?.[0]?.product?.thumbnail ?? sf.coverUrl ?? undefined;
   const title = `${sf.title} — Tubu Tree`;
-  const description = sf.headerNote ?? 'Gian hàng sống xanh tuyển chọn trên Tubu Tree';
+  const description = sf.headerNote ?? 'Gian hàng sống xanh trên Tubu Tree';
   return {
     title,
     description,
@@ -72,6 +74,8 @@ export default async function StorefrontPage({
   ].filter(Boolean);
   const fullWarehouseAddress = selfFulfils && warehouseParts.length > 0 ? warehouseParts.join(', ') : null;
   const contactPhone = selfFulfils ? sf.warehousePhone : null;
+  const badgeLabel = storefrontBadgeLabel(sf);
+  const collections = (sf.collections ?? []).filter((c) => (c.items?.length ?? 0) > 0);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
@@ -120,10 +124,13 @@ export default async function StorefrontPage({
                   {sf.title.slice(0, 1).toUpperCase()}
                 </div>
               )}
-              {/* Verified check badge */}
-              <div className="absolute -bottom-1.5 -right-1.5 rounded-full bg-stone-0 p-0.5 shadow-card">
-                <CheckCircle2 className="h-5 w-5 fill-forest-600 text-stone-0" aria-hidden="true" />
-              </div>
+              {/* Tick xanh chỉ cho gian hàng admin đã duyệt: không phải mọi CTV một chạm đều "tuyển chọn". */}
+              {badgeLabel && (
+                <div data-verified-mark className="absolute -bottom-1.5 -right-1.5 rounded-full bg-stone-0 p-0.5 shadow-card">
+                  <CheckCircle2 className="h-5 w-5 fill-forest-600 text-stone-0" aria-hidden="true" />
+                  <span className="sr-only">Đã được Tubu Tree duyệt</span>
+                </div>
+              )}
             </div>
 
             {/* Brand Title & Meta */}
@@ -132,10 +139,12 @@ export default async function StorefrontPage({
                 <h1 className="font-display text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl">
                   {sf.title}
                 </h1>
-                <span className="inline-flex items-center gap-1 rounded-full bg-forest-700 px-2.5 py-0.5 text-xs font-semibold text-stone-0 shadow-card">
-                  <Sparkles className="h-3 w-3" aria-hidden="true" />
-                  {sf.type === 'MERCHANT' ? 'Đối tác chính hãng' : 'CTV tuyển chọn'}
-                </span>
+                {badgeLabel && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-forest-700 px-2.5 py-0.5 text-xs font-semibold text-stone-0 shadow-card">
+                    <Sparkles className="h-3 w-3" aria-hidden="true" />
+                    {badgeLabel}
+                  </span>
+                )}
                 {sf.ownerTier && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-semibold text-warning-fg ring-1 ring-inset ring-warning-fg">
                     <span aria-hidden="true">{sf.ownerTier.emoji}</span>
@@ -207,15 +216,15 @@ export default async function StorefrontPage({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
             <ShieldCheck className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-            <span className="text-xs font-semibold text-stone-800">100% Chính hãng</span>
+            <span className="text-xs font-semibold text-stone-800">Sản phẩm đã qua duyệt của Tubu Tree</span>
           </div>
           <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-            <Truck className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-            <span className="text-xs font-semibold text-stone-800">Xuất kho tận gốc</span>
+            <PackageSearch className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+            <span className="text-xs font-semibold text-stone-800">Theo dõi đơn trên Tubu Tree</span>
           </div>
           <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
             <CreditCard className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-            <span className="text-xs font-semibold text-stone-800">VietQR Napas247</span>
+            <span className="text-xs font-semibold text-stone-800">Thanh toán qua Tubu Tree</span>
           </div>
           <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
             <RotateCcw className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
@@ -225,7 +234,15 @@ export default async function StorefrontPage({
       </section>
 
       {/* ── Product Collections ── */}
-      {sf.collections?.map((c) => (
+      {collections.length === 0 && (
+        <EmptyState
+          title="Gian hàng chưa có sản phẩm nào để xem"
+          body="Chủ gian hàng đang cập nhật. Bạn có thể xem các sản phẩm khác trên Tubu Tree."
+          actionHref="/"
+          actionLabel="Xem sản phẩm trên Tubu Tree"
+        />
+      )}
+      {collections.map((c) => (
         <section key={c.id} className="mt-8">
           <div className="mb-4 flex items-center gap-2.5">
             <span

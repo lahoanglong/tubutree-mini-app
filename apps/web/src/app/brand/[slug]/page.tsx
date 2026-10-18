@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { Award, BadgeCheck, Sparkles, Leaf } from 'lucide-react';
 import { getBrand, formatSold } from '@/lib/api';
 import { ProductPriceRow } from '@/components/flash-price';
+import { EmptyState } from '@/components/empty-state';
 
 export const revalidate = 300;
 
@@ -100,6 +101,14 @@ export default async function BrandPage({
         </section>
       )}
 
+      {b.products.length === 0 && (
+        <EmptyState
+          title="Nhãn hàng chưa có sản phẩm đang bán"
+          body="Nhãn đang cập nhật sản phẩm. Bạn có thể xem các sản phẩm khác trên Tubu Tree."
+          actionHref="/"
+          actionLabel="Xem sản phẩm trên Tubu Tree"
+        />
+      )}
       {b.products.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>

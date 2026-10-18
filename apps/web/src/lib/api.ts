@@ -233,6 +233,8 @@ export interface StorefrontDetail {
   customDomain?: string | null;
   type?: string | null;
   isPartner?: boolean;
+  /** Admin đã duyệt gian hàng (tick xanh, "CTV tuyển chọn"). API cũ chưa trả thì coi như chưa duyệt. */
+  approved?: boolean;
   title: string;
   headerNote?: string | null;
   avatarUrl?: string | null;

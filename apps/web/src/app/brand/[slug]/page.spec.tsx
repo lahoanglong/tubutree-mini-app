@@ -121,3 +121,18 @@ describe('trang nhãn hàng — ảnh sản phẩm (D6-05)', () => {
     expect(img.getAttribute('decoding')).toBe('async');
   });
 });
+
+describe('trang nhãn hàng — trạng thái rỗng (D5-05)', () => {
+  it('nhãn chưa có sản phẩm đang bán: có thông báo rỗng và nút về danh mục thay vì để trang trắng', async () => {
+    mocks.brand = { ...BRAND, products: [] };
+    const box = await html();
+    expect(box.textContent).toContain('Nhãn hàng chưa có sản phẩm đang bán');
+    const cta = box.querySelector<HTMLAnchorElement>('a[href="/"]')!;
+    expect(cta.textContent).toContain('Xem sản phẩm trên Tubu Tree');
+    expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Sản phẩm');
+  });
+
+  it('nhãn có sản phẩm: không hiện thông báo rỗng', async () => {
+    expect((await html()).textContent).not.toContain('Nhãn hàng chưa có sản phẩm đang bán');
+  });
+});
