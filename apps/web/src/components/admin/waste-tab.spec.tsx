@@ -102,11 +102,10 @@ describe('WasteTab', () => {
   it('ADMIN: các số còn lại của 17.2: lý do từ chối, thực nhận so với khai, hạn mức đại lý, khối lượng, đơn mua', async () => {
     const { c } = await mount(<WasteTab isAdmin />);
     expect(metric(c, 'rejections')).toContain('Hàng nguy hại (pin, hoá chất)');
-    expect(metric(c, 'rejections')).toContain('2');
-    expect(metric(c, 'rejections')).toContain('11,8%');
+    expect(metric(c, 'rejections')).toContain('Hàng nguy hại (pin, hoá chất): 2 · 11,8%');
     expect(metric(c, 'receivedDeclaredPct')).toContain('Mang tới điểm nhận');
     expect(metric(c, 'receivedDeclaredPct')).toContain('86,7%');
-    expect(metric(c, 'receivedDeclaredPct')).toContain('—');
+    expect(metric(c, 'receivedDeclaredPct')).toContain('Thu kèm đơn: —');
     expect(metric(c, 'quotaByPoint')).toContain('Tạp hoá Cô Ba');
     expect(metric(c, 'quotaByPoint')).toContain('40.000 / 100.000');
     expect(metric(c, 'quotaByPoint')).toContain('6 lượt');
