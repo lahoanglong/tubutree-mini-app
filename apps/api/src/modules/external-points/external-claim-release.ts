@@ -133,7 +133,7 @@ export async function releaseClaim(
     if (!user) reviewReason = 'Tài khoản không còn';
     else if (user.isBlocked) reviewReason = 'Tài khoản đang bị khoá';
     else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
-    else if (chat && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
+    else if (chat && row.decidedById === null && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
     else if (chat && (user.role === 'STAFF' || user.role === 'ADMIN') && row.decidedById === null) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
     else if (chat && !phoneVerifiedFresh(user.phoneVerifiedAt, { now, maxDays: opts.chat!.phoneVerifiedMaxDays }) && !(await approvedDespiteStale(tx, row))) reviewReason = PHONE_STALE_REASON;
     let finalPoints = points ?? 0;
