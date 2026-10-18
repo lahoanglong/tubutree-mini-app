@@ -519,7 +519,7 @@ export default function AdminPage() {
           {active === 'contentKit' && <ContentKitTab />}
           {active === 'academy' && <AcademyTab />}
           {active === 'quickReplies' && <QuickReplyTab />}
-          {active === 'notificationTemplates' && <NotificationTemplatesTab />}
+          {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab />}
           {active === 'reports' && <ReportsTab sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
         </div>

@@ -1024,6 +1024,8 @@ export interface AdminNotificationTemplate {
   /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
   znsFailed30d?: number;
   znsLastError?: { text: string; at: string } | null;
+  /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
+  staffEditable?: boolean;
 }
 export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
 export const updateNotificationTemplate = (

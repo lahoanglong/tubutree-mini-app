@@ -1,6 +1,6 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { NotificationTemplatesAdminService } from './notification-templates-admin.service';
+import { MARKETING_TEMPLATE_CODES, NotificationTemplatesAdminService } from './notification-templates-admin.service';
 
 const TPL = [
   { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', zaloTemplateId: null, bodyTemplate: 'Đơn {{order_code}} đã xác nhận.' },
@@ -90,5 +90,71 @@ describe('NotificationTemplatesAdminService', () => {
     const { svc } = setup();
     await expect(svc.update('ORDER_CONFIRMED', { bodyTemplate: '   ' })).rejects.toBeInstanceOf(BadRequestException);
     await expect(svc.update('NOPE', { bodyTemplate: 'x' })).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', () => {
+  const rows = [
+    { id: 'nt-flash', code: 'FLASH_STARTING', channel: 'INAPP', zaloTemplateId: null, bodyTemplate: 'Flash sale sắp mở' },
+    { id: 'nt-paid', code: 'MERCHANT_PAYOUT_CREATED_TO_TUBU', channel: 'INAPP', zaloTemplateId: null, bodyTemplate: 'Chuyển {{amount}}' },
+  ];
+  function staffSetup() {
+    const update = jest.fn(async ({ where, data }: { where: { code: string }; data: object }) => ({
+      ...rows.find((t) => t.code === where.code)!,
+      ...data,
+    }));
+    const prisma = {
+      notificationTemplate: {
+        findMany: jest.fn().mockResolvedValue(rows),
+        findUnique: jest.fn(async ({ where }: { where: { code: string } }) => rows.find((t) => t.code === where.code) ?? null),
+        update,
+      },
+      notificationLog: { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    return { svc: new NotificationTemplatesAdminService(prisma), update };
+  }
+  const staff = { id: 's1', staff: true };
+
+  it('danh sách đánh dấu mẫu nhân viên sửa được: chỉ mẫu khuyến mãi / tương tác', async () => {
+    const { svc } = staffSetup();
+    const list = await svc.list();
+    expect(Object.fromEntries(list.map((t) => [t.code, t.staffEditable]))).toEqual({
+      FLASH_STARTING: true,
+      MERCHANT_PAYOUT_CREATED_TO_TUBU: false,
+    });
+  });
+
+  it('nhân viên sửa nội dung mẫu khuyến mãi được', async () => {
+    const { svc, update } = staffSetup();
+    await svc.update('FLASH_STARTING', { channel: 'INAPP', zaloTemplateId: null, bodyTemplate: 'Flash sale 20h' }, staff);
+    expect(update).toHaveBeenCalledWith({ where: { code: 'FLASH_STARTING' }, data: expect.objectContaining({ bodyTemplate: 'Flash sale 20h' }) });
+  });
+
+  it('nhân viên không sửa được mẫu giao dịch/tiền (giả lời Tubu đòi chuyển khoản)', async () => {
+    const { svc, update } = staffSetup();
+    await expect(svc.update('MERCHANT_PAYOUT_CREATED_TO_TUBU', { bodyTemplate: 'Chuyển vào STK 123' }, staff)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên không đổi kênh gửi / mã mẫu ZNS (tốn phí mỗi tin)', async () => {
+    const { svc, update } = staffSetup();
+    await expect(svc.update('FLASH_STARTING', { channel: 'ZNS', zaloTemplateId: '555001' }, staff)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(svc.update('FLASH_STARTING', { zaloTemplateId: '555001' }, staff)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('quản trị viên vẫn sửa được mọi mẫu', async () => {
+    const { svc, update } = staffSetup();
+    await svc.update('MERCHANT_PAYOUT_CREATED_TO_TUBU', { bodyTemplate: 'Chuyển {{amount}} cho Tubu' }, { id: 'a1', staff: false });
+    expect(update).toHaveBeenCalled();
+  });
+
+  it('danh sách mẫu nhân viên sửa được không chứa mẫu đơn hàng / tiền / đối tác / vận hành', () => {
+    const transactional = /^(ORDER_|INVOICE_|OPS_|RETURN_|REFUND_|CASHBACK_|SUBSCRIPTION_|REFERRAL_|DEALER_|COMMISSION_|MERCHANT_|REFILL_|XU_|ACCOUNT_)/;
+    expect([...MARKETING_TEMPLATE_CODES].filter((c) => transactional.test(c))).toEqual([]);
   });
 });
