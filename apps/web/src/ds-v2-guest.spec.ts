@@ -111,7 +111,28 @@ const ACCOUNT: string[] = [
   'components/account/avatar-crop-sheet.tsx',
 ];
 const LOYALTY: string[] = ['app/tai-khoan/diem-xanh/page.tsx', 'app/tai-khoan/vi-tubu/page.tsx', 'app/tai-khoan/ledger-shell.tsx', 'app/kho-qua/page.tsx', 'app/kho-qua/cua-toi/page.tsx', 'app/hoan-tien/page.tsx', 'components/loyalty/claim-point.tsx'];
-const COMMUNITY: string[] = [];
+const COMMUNITY: string[] = [
+  'app/cong-dong/page.tsx',
+  'app/cong-dong/feed-view.tsx',
+  'app/cong-dong/feed-shell.tsx',
+  'app/cong-dong/xep-hang/page.tsx',
+  'app/cong-dong/su-kien/page.tsx',
+  'app/cong-dong/[id]/page.tsx',
+  'app/cong-dong/[id]/comment-row.tsx',
+  'app/cong-dong/[id]/post-sheets.tsx',
+  'app/hoc-vien/academy-auth.tsx',
+  'app/hoc-vien/academy-shell.tsx',
+  'app/hoc-vien/course-list.tsx',
+  'app/hoc-vien/[courseId]/course-detail.tsx',
+  'components/community/community-channels.tsx',
+  'components/community/image-upload.tsx',
+  'components/community/post-card.tsx',
+  'components/community/post-composer.tsx',
+  'components/community/post-parts.tsx',
+  'components/community/product-picker.tsx',
+  'components/community/public-preview-list.tsx',
+  'components/community/rank.tsx',
+];
 const AFFILIATE: string[] = [
   'app/ctv/page.tsx',
   'components/affiliate/ctv-shortcuts.tsx',

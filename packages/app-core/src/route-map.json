@@ -38,12 +38,12 @@
       { "miniapp": "/ai-advisor", "web": "/tu-van", "private": true }
     ]},
     { "lane": "community", "items": [
-      { "miniapp": "/feed", "web": "/cong-dong", "private": false, "pending": true },
-      { "miniapp": "/feed/leaderboard", "web": "/cong-dong/xep-hang", "private": true, "pending": true },
-      { "miniapp": "/feed/events", "web": "/cong-dong/su-kien", "private": true, "pending": true },
-      { "miniapp": "/feed/:id", "web": "/cong-dong/:id", "private": true, "pending": true },
-      { "miniapp": "/academy", "web": "/hoc-vien", "private": false, "pending": true },
-      { "miniapp": "/academy/:courseId", "web": "/hoc-vien/:courseId", "private": false, "pending": true }
+      { "miniapp": "/feed", "web": "/cong-dong", "private": false },
+      { "miniapp": "/feed/leaderboard", "web": "/cong-dong/xep-hang", "private": true },
+      { "miniapp": "/feed/events", "web": "/cong-dong/su-kien", "private": true },
+      { "miniapp": "/feed/:id", "web": "/cong-dong/:id", "private": true },
+      { "miniapp": "/academy", "web": "/hoc-vien", "private": true },
+      { "miniapp": "/academy/:courseId", "web": "/hoc-vien/:courseId", "private": true }
     ]},
     { "lane": "affiliate", "items": [
       { "miniapp": "/s/:slug", "web": "/s/:slug", "private": false },

@@ -20,6 +20,9 @@ import { metadata as orders } from './tai-khoan/don-hang/layout';
 import { metadata as bankPayment } from './thanh-toan/chuyen-khoan/[code]/layout';
 import { metadata as ctv } from './ctv/layout';
 import { metadata as ctvStorefront } from './ctv/gian-hang/layout';
+import { metadata as leaderboard } from './cong-dong/xep-hang/layout';
+import { metadata as events } from './cong-dong/su-kien/layout';
+import { metadata as postDetail } from './cong-dong/[id]/layout';
 import { generateMetadata as orderDetail } from './tai-khoan/don-hang/[code]/layout';
 
 type TitleCase = [string, Metadata, string];
@@ -47,7 +50,11 @@ const LOYALTY: TitleCase[] = [
   ['/kho-qua/cua-toi', myRewards, 'Quà của tôi — Tubu Tree'],
   ['/hoan-tien', cashback, 'Hoàn tiền — Tubu Tree'],
 ];
-const COMMUNITY: TitleCase[] = [];
+const COMMUNITY: TitleCase[] = [
+  ['/cong-dong/xep-hang', leaderboard, 'Bảng xếp hạng — Tubu Tree'],
+  ['/cong-dong/su-kien', events, 'Sự kiện — Tubu Tree'],
+  ['/cong-dong/[id]', postDetail, 'Bài viết cộng đồng — Tubu Tree'],
+];
 const AFFILIATE: TitleCase[] = [
   ['/ctv', ctv, 'Cộng tác viên — Tubu Tree'],
   ['/ctv/gian-hang', ctvStorefront, 'Gian hàng của tôi — Tubu Tree'],

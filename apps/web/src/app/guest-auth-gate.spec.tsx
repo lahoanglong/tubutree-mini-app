@@ -19,8 +19,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  useParams: () => ({ code: 'TB-77' }),
   usePathname: () => '/tai-khoan/don-hang',
+  useParams: () => ({ code: 'TB-77', id: 'p1' }),
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -57,6 +57,11 @@ import CashbackPage from './hoan-tien/page';
 import WishlistPage from './tai-khoan/yeu-thich/page';
 import CtvPage from './ctv/page';
 import CtvStorefrontPage from './ctv/gian-hang/page';
+import LeaderboardPage from './cong-dong/xep-hang/page';
+import EventsPage from './cong-dong/su-kien/page';
+import PostDetailPage from './cong-dong/[id]/page';
+import { CourseList } from './hoc-vien/course-list';
+import { CourseDetailView } from './hoc-vien/[courseId]/course-detail';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -99,7 +104,13 @@ const LOYALTY: PageCase[] = [
   ['/kho-qua/cua-toi', () => <RewardsMinePage />, '/kho-qua/cua-toi'],
   ['/hoan-tien', () => <CashbackPage />, '/hoan-tien'],
 ];
-const COMMUNITY: PageCase[] = [];
+const COMMUNITY: PageCase[] = [
+  ['/cong-dong/xep-hang', () => <LeaderboardPage />, '/cong-dong/xep-hang'],
+  ['/cong-dong/su-kien', () => <EventsPage />, '/cong-dong/su-kien'],
+  ['/cong-dong/[id]', () => <PostDetailPage />, '/cong-dong/p1'],
+  ['/hoc-vien', () => <CourseList />, '/hoc-vien'],
+  ['/hoc-vien/[courseId]', () => <CourseDetailView courseId="c1" />, '/hoc-vien/c1'],
+];
 const AFFILIATE: PageCase[] = [
   ['/ctv', () => <CtvPage />, '/ctv'],
   ['/ctv/gian-hang', () => <CtvStorefrontPage />, '/ctv/gian-hang'],
