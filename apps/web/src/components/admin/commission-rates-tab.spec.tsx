@@ -46,6 +46,7 @@ const PAGE: CommissionRatesPage = {
   ],
   nextCursor: null,
   maxRate: 50,
+  defaultRate: 8,
   summary: { missing: 2, missingTubu: 1 },
 };
 
@@ -82,7 +83,8 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(container.textContent).toContain('Đang tải…');
     await flush();
     const t = container.textContent ?? '';
-    expect(t).toContain('2 biến thể đang bán chưa có % (CTV nhận 0đ)');
+    expect(t).toContain('2 biến thể đang bán chưa có % riêng');
+    expect(t).toContain('Mức mặc định khi để trống: 8%');
     expect(t).toContain('10 nghĩa là 10%');
     expect(container.querySelectorAll('[data-commission-product]')).toHaveLength(2);
     const rows = container.querySelectorAll<HTMLElement>('[data-commission-variation]');

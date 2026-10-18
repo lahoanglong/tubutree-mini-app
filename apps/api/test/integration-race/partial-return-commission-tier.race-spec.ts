@@ -93,7 +93,7 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
     async function ctvOrder() {
       const ctv = await createUser(prisma, { role: 'AFFILIATE' });
       const buyer = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
-      const [a, b, c] = await Promise.all([variation(35_000, 10), variation(50_000, 5), variation(20_000, null)]);
+      const [a, b, c] = await Promise.all([variation(35_000, 10), variation(50_000, 5), variation(20_000, 0)]);
       const order = await createOrder(prisma, {
         userId: buyer.id,
         referrerUserId: ctv.id,

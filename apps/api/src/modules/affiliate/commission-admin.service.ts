@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
+import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from './commission-rate';
 import {
   AFFILIATE_MAX_RATE_KEY,
   DEFAULT_AFFILIATE_MAX_RATE_PCT,
@@ -64,7 +65,8 @@ const LOG_CHUNK = 100;
  * ra 0đ. Đồng bộ Pancake không ghi cột này (pancake-sync.service upsertProduct), nên mức admin đặt không bị ghi đè.
  *
  * Không có bảng nhật ký chung: mọi lần ghi để lại log có id admin cùng giá trị cũ → mới (theo SKU).
- * Không tự đặt % mặc định nào: biến thể chưa đặt giữ NULL (hoa hồng 0đ) tới khi admin chọn mức.
+ * Biến thể chưa đặt giữ NULL và hưởng mức mặc định `affiliate.default_rate_pct` lúc đặt đơn (commission-rate.ts); hàng đối tác
+ * chưa đặt vẫn 0đ.
  */
 @Injectable()
 export class CommissionAdminService {
@@ -74,6 +76,10 @@ export class CommissionAdminService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
   ) {}
+
+  async defaultRate(): Promise<number> {
+    return sanitizeDefaultRate(await this.config.get<unknown>(AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT));
+  }
 
   async maxRate(): Promise<number> {
     return sanitizeMaxRate(await this.config.get<unknown>(AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT));
@@ -107,7 +113,7 @@ export class CommissionAdminService {
         : {}),
       ...(opts.missing ? { isActive: true, variations: { some: { isActive: true, affiliateRate: null } } } : {}),
     };
-    const [rows, maxRate, missing, missingTubu] = await Promise.all([
+    const [rows, maxRate, defaultRate, missing, missingTubu] = await Promise.all([
       this.prisma.product.findMany({
         where,
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -137,6 +143,7 @@ export class CommissionAdminService {
         },
       }),
       this.maxRate(),
+      this.defaultRate(),
       this.prisma.variation.count({ where: { isActive: true, affiliateRate: null, product: { isActive: true } } }),
       this.prisma.variation.count({ where: { isActive: true, affiliateRate: null, product: { isActive: true, storefrontId: null } } }),
     ]);
@@ -149,6 +156,7 @@ export class CommissionAdminService {
       })),
       nextCursor: rows.length > opts.take && page.length ? encodeListCursor(page[page.length - 1]!) : null,
       maxRate,
+      defaultRate,
       summary: { missing, missingTubu },
     };
   }

@@ -178,6 +178,8 @@ export class SystemConfigService {
     'affiliate.attribution_days': { min: 1, max: 365, note: 'số ngày', integer: true },
     // Trần % hoa hồng CTV admin được đặt cho biến thể (commission-admin.service). PHẦN TRĂM, không phải phân số như pit_withhold_pct.
     'affiliate.max_rate_pct': { min: 0, max: 100, note: 'phần trăm (50 = 50%)' },
+    // % hoa hồng CTV cho biến thể chưa đặt riêng (commission-rate.ts). Số nguyên như mức từng biến thể (RATE_MAX_DECIMALS = 0).
+    'affiliate.default_rate_pct': { min: 0, max: 50, note: 'phần trăm (8 = 8%)', integer: true },
     'flashsale.default_per_user_limit': { min: 1, max: 1000, note: 'số sản phẩm mỗi người', integer: true },
     // ADMINOPS-3 (vòng 3, R3-UI-4): các khoá số còn lại nhận số âm, số khổng lồ hay số thực nên "đã lưu" mà tính năng chạy sai
     // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.

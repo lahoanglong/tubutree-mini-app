@@ -29,7 +29,7 @@ const errText = (e: unknown, fallback: string) => (e instanceof Error && e.messa
 
 /**
  * "Hoa hồng & giá sỉ" (D1-01, D3-01, D1-06): % hoa hồng CTV từng biến thể — nguồn duy nhất của hoa hồng, hàng đồng bộ từ
- * Pancake không mang % nên biến thể chưa đặt thì CTV nhận 0đ — và nhập giá sỉ theo bậc đại lý (API có sẵn, trước đây
+ * Pancake không mang % nên biến thể chưa đặt hưởng mức mặc định (affiliate.default_rate_pct) — và nhập giá sỉ theo bậc đại lý (API có sẵn, trước đây
  * không màn nào gọi). Không tự đặt mức nào: mọi mức do admin chọn.
  */
 export function CommissionRatesTab() {
@@ -38,8 +38,9 @@ export function CommissionRatesTab() {
       <div>
         <h2 className="font-display text-lg font-semibold text-stone-900">Hoa hồng & giá sỉ</h2>
         <p className="mt-1 text-sm text-stone-600">
-          % hoa hồng CTV tính trên số tiền khách trả cho từng dòng hàng: <strong>10 nghĩa là 10%</strong>. Biến thể chưa có % thì CTV
-          nhận 0đ cho dòng đó; đặt 0% khi cố ý không trả hoa hồng.
+          % hoa hồng CTV tính trên số tiền khách trả cho từng dòng hàng: <strong>10 nghĩa là 10%</strong>. Để trống % thì dòng đó hưởng
+          <strong> mức mặc định</strong> (đổi ở tab Cấu hình, khoá <code>affiliate.default_rate_pct</code>); hàng gian hàng đối tác để trống
+          thì 0đ. Đặt 0% khi cố ý không trả hoa hồng.
         </p>
       </div>
       <RateList />
@@ -71,9 +72,10 @@ function RateList() {
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
           <span className={first.summary.missing > 0 ? 'font-semibold text-warning-fg' : 'text-success-fg'}>
             {first.summary.missing > 0
-              ? `${first.summary.missing} biến thể đang bán chưa có % (CTV nhận 0đ)`
+              ? `${first.summary.missing} biến thể đang bán chưa có % riêng`
               : 'Mọi biến thể đang bán đã có %'}
           </span>
+          <span className="text-xs text-stone-600">Mức mặc định khi để trống: {formatRate(first.defaultRate)}</span>
           <span className="text-xs text-stone-500">Trần mỗi biến thể: {formatRate(maxRate)} (cấu hình affiliate.max_rate_pct)</span>
         </div>
       )}

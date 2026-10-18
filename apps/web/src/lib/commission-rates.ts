@@ -31,6 +31,8 @@ export interface CommissionRatesPage {
   items: CommissionProduct[];
   nextCursor: string | null;
   maxRate: number;
+  /** % hoa hồng cho biến thể chưa đặt riêng (affiliate.default_rate_pct). */
+  defaultRate: number;
   /** missing: biến thể đang bán chưa có %; missingTubu: phần hàng Tubu (phần "áp cho chưa có %" sẽ đổi). */
   summary: { missing: number; missingTubu: number };
 }

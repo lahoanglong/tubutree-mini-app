@@ -45,7 +45,7 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
 
   const randomPhone = () => `09${String(randomInt(0, 100_000_000)).padStart(8, '0')}`;
 
-  async function variation(opts: { retailPrice?: number; affiliateRate?: number; stock?: number } = {}) {
+  async function variation(opts: { retailPrice?: number; affiliateRate?: number | null; stock?: number } = {}) {
     const tag = randCode(8);
     const product = await prisma.product.create({
       data: {
@@ -67,7 +67,7 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
         name: 'Mặc định',
         attributes: {},
         retailPrice: opts.retailPrice ?? 100_000,
-        affiliateRate: opts.affiliateRate ?? 10,
+        affiliateRate: opts.affiliateRate === undefined ? 10 : opts.affiliateRate,
         stock: opts.stock ?? 100,
         isActive: true,
       },
@@ -107,6 +107,33 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.affiliateUserId).toBe(ctv.id);
     expect(rows[0]!.amount).toBe(20_000);
+  });
+
+  it('biến thể chưa có % → hưởng mặc định 8%; đổi mặc định sau đó không ghi đè hoa hồng đã chốt', async () => {
+    const ctv = await createUser(prisma, { role: 'AFFILIATE' });
+    const buyer = await createUser(prisma);
+    const v = await variation({ retailPrice: 200_000, affiliateRate: null });
+    const order = await createOrder(prisma, {
+      userId: buyer.id,
+      referrerUserId: ctv.id,
+      total: 200_000,
+      items: {
+        create: [{ variationId: v.id, productName: 'SP IT', variationName: 'Mặc định', unitPrice: 200_000, quantity: 1, total: 200_000 }],
+      },
+    });
+    try {
+      await affiliate.createCommissionForOrder(order.id);
+      await prisma.systemConfig.upsert({
+        where: { key: 'affiliate.default_rate_pct' },
+        update: { value: 20 },
+        create: { key: 'affiliate.default_rate_pct', value: 20, category: 'affiliate' },
+      });
+      const row = await prisma.commission.findFirstOrThrow({ where: { orderId: order.id } });
+      expect(row.amount).toBe(16_000);
+      expect(row.lineAmounts).toEqual({ [(await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } })).id]: 16_000 });
+    } finally {
+      await prisma.systemConfig.deleteMany({ where: { key: 'affiliate.default_rate_pct' } });
+    }
   });
 
   it('DB chặn dòng hoa hồng thứ 2 cho cùng (đơn, người hưởng)', async () => {
