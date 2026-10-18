@@ -54,6 +54,8 @@ const SHOP: string[] = [];
 const ORDER: string[] = [];
 const ACCOUNT: string[] = [
   'app/tai-khoan/ho-so/page.tsx',
+  'app/tai-khoan/cai-dat/page.tsx',
+  'components/account/font-scale.ts',
   'components/account/account-menu.ts',
   'components/account/avatar-crop-sheet.tsx',
 ];

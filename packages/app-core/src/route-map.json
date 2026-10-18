@@ -23,7 +23,7 @@
       { "miniapp": "/about", "web": "/gioi-thieu", "private": false, "pending": true },
       { "miniapp": "/profile", "web": "/tai-khoan", "private": true },
       { "miniapp": "/edit-profile", "web": "/tai-khoan/ho-so", "private": true },
-      { "miniapp": "/settings", "web": "/tai-khoan/cai-dat", "private": true, "pending": true },
+      { "miniapp": "/settings", "web": "/tai-khoan/cai-dat", "private": true },
       { "miniapp": "/notifications", "web": "/tai-khoan/thong-bao", "private": true, "pending": true }
     ]},
     { "lane": "loyalty", "items": [
