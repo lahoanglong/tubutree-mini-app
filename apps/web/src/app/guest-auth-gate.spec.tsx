@@ -41,6 +41,7 @@ import CartPage from './gio-hang/page';
 import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
 import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
+import WishlistPage from './tai-khoan/yeu-thich/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -66,7 +67,7 @@ const CORE: PageCase[] = [
   ['/tai-khoan', () => <AccountPage />, '/tai-khoan'],
   ['/tai-khoan/don-hang/[code]', () => <OrderDetailPage />, '/tai-khoan/don-hang/TB-77'],
 ];
-const SHOP: PageCase[] = [];
+const SHOP: PageCase[] = [['/tai-khoan/yeu-thich', () => <WishlistPage />, '/tai-khoan/yeu-thich']];
 const ORDER: PageCase[] = [];
 const ACCOUNT: PageCase[] = [];
 const LOYALTY: PageCase[] = [];

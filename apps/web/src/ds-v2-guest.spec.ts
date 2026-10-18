@@ -78,6 +78,7 @@ const SHOP: string[] = [
   'components/home/points-boost-strip.tsx',
   'components/reorder/purchased-rail.tsx',
   'components/reorder/reorder-sheet.tsx',
+  'app/tai-khoan/yeu-thich/page.tsx',
 ];
 const ORDER: string[] = [];
 const ACCOUNT: string[] = [];
