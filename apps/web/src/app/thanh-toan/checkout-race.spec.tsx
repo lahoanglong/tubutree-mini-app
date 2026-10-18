@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { NetworkError } from '@/lib/client-api';
 
@@ -28,11 +29,21 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   placeOrder: (...args: unknown[]) => m.placeOrder(...args),
 }));
 
+vi.mock('next/image', () => ({ default: () => null }));
+vi.mock('@/components/site-search', () => ({ default: () => null }));
+
 import CheckoutPage from './page';
+import SiteHeader from '@/components/site-header';
+
+let qcRef: QueryClient;
+function GrabClient() {
+  qcRef = useQueryClient();
+  return null;
+}
 
 let mounted: Rendered[] = [];
 const mount = async () => {
-  const r = render(<CheckoutPage />);
+  const r = render(<><GrabClient /><SiteHeader /><CheckoutPage /></>);
   mounted.push(r);
   await flush(8);
   return r;
@@ -55,23 +66,38 @@ afterEach(() => {
 });
 
 describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu nạp lại', () => {
-  it('lỗi mạng khi đặt một phần giỏ rồi trình duyệt có mạng lại: không nạp lại giỏ để body không đổi theo', async () => {
+  const failFirst = async () => {
     sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['A'] }));
-    m.placeOrder.mockRejectedValue(new NetworkError(false));
+    m.placeOrder.mockRejectedValueOnce(new NetworkError(false)).mockResolvedValue({ id: 'o1', code: 'TT1', paymentMethod: 'COD', total: 130000 });
     const r = await mount();
     click(placeButton(r));
     await flush(6);
-    const cartCalls = m.getCart.mock.calls.length;
+    return r;
+  };
+  const expectResentSame = async (r: Rendered) => {
+    click(placeButton(r));
+    await flush(6);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    expect(m.placeOrder.mock.calls[1]![0]).toEqual(m.placeOrder.mock.calls[0]![0]);
+    expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
+  };
+
+  it('lỗi mạng khi đặt một phần giỏ rồi có mạng lại, header cùng quan sát giỏ nạp lại: bấm lại gửi đúng body và key cũ', async () => {
+    const r = await failFirst();
     m.getCart.mockResolvedValue(cartOf('B'));
     window.dispatchEvent(new Event('offline'));
     window.dispatchEvent(new Event('online'));
     await flush(8);
-    expect(m.getCart.mock.calls.length).toBe(cartCalls);
-    click(placeButton(r));
-    await flush(6);
-    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    await expectResentSame(r);
     expect(m.placeOrder.mock.calls[1]![0].itemIds).toEqual(['A']);
-    expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
+  });
+
+  it('lỗi mạng rồi giỏ bị làm mới trực tiếp: bấm lại vẫn gửi đúng body và key cũ', async () => {
+    const r = await failFirst();
+    m.getCart.mockResolvedValue(cartOf('B'));
+    await qcRef.invalidateQueries({ queryKey: ['cart'] });
+    await flush(8);
+    await expectResentSame(r);
   });
 
   it('khách đổi radio sang chuyển khoản trong lúc chờ, máy chủ tạo đơn COD: không chuyển sang trang VietQR', async () => {

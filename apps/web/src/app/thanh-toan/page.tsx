@@ -62,6 +62,10 @@ const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-con
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
 
+type PlaceBody = Parameters<typeof placeOrder>[0];
+const CHOICE_FIELDS = ['addressId', 'paymentMethod', 'note', 'wasteRequestId', 'invoiceRequest', 'pointsToUse', 'referralCode'] as const;
+const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
+
 export default function CheckoutPage() {
   const phase = useAuthPhase();
   const { user } = useAuth();
@@ -80,12 +84,11 @@ export default function CheckoutPage() {
   const [redirectingCode, setRedirectingCode] = useState<string | null>(null);
   // Một key cho một nội dung đơn trong phiên thanh toán: bấm lại sau lỗi mạng gửi lại cùng đơn; đổi nội dung thì key mới.
   const orderKeys = useRef(createOrderKeyRing());
-  // Lần đặt trước chưa rõ kết quả (mạng rớt/5xx): khi có mạng lại, giỏ nạp lại có thể đã khác (đơn đã tạo lấy mất các dòng đã chọn),
-  // nên body lần bấm lại đổi theo và sinh key mới, tạo đơn thứ hai. Giữ nguyên dữ liệu cho tới khi lần đặt tiếp theo có kết quả rõ.
-  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
-  const refetchOnReconnect = !outcomeUnknown;
+  // Lần đặt trước chưa rõ kết quả (mạng rớt/5xx): máy chủ có thể đã tạo đơn, mà giỏ/báo giá nạp lại (header cũng quan sát giỏ)
+  // sẽ làm body đổi và sinh key mới, tạo đơn thứ hai. Đóng băng chính yêu cầu: bấm lại gửi nguyên body và key đó cho tới khi có kết quả rõ.
+  const unknownAttempt = useRef<{ body: PlaceBody; key: string } | null>(null);
 
-  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated', refetchOnReconnect });
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
   // Số dư Ví Tubu lấy từ máy chủ (không từ ảnh chụp lúc đăng nhập): khách vừa được hoàn tiền về ví hoặc vừa tiêu ví
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
@@ -98,7 +101,6 @@ export default function CheckoutPage() {
     queryKey: WASTE_QUERY_KEYS.me,
     queryFn: () => getWasteMe(coreHttp),
     enabled: phase === 'authenticated' && pickupFlag,
-    refetchOnReconnect,
   });
   const attachable = attachablePickup(wasteMeQ.data, pickupFlag);
   // Chưa có yêu cầu thu kèm thì dòng dẫn sang màn tạo yêu cầu; màn đó chưa có trên web thì ẩn dòng, không dẫn khách tới 404.
@@ -156,7 +158,6 @@ export default function CheckoutPage() {
     queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds),
     // Chờ giỏ tải xong: địa chỉ có thể về trước, lúc đó chưa biết giỏ có trống không và báo giá giỏ trống bị 400.
     enabled: !!addressId && phase === 'authenticated' && cartLoaded && cartReady && !cartEmpty,
-    refetchOnReconnect,
   });
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
@@ -192,9 +193,10 @@ export default function CheckoutPage() {
   // chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
   const overStock = outOfStockLine(checkoutItems);
 
+  const attempt = useRef<{ body: PlaceBody; key: string } | null>(null);
   const place = useMutation({
     mutationFn: () => {
-      const body = {
+      const body: PlaceBody = {
         addressId: addressId!,
         paymentMethod: paymentToSend,
         ...(note.trim() ? { note: note.trim() } : {}),
@@ -219,11 +221,23 @@ export default function CheckoutPage() {
         storefrontSlug: ctvSlug,
         referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
       };
-      return placeOrder(body, orderKeys.current.keyFor(body));
+      const frozen = unknownAttempt.current;
+      if (frozen) {
+        // Dữ liệu suy ra từ giỏ/báo giá (dòng đã chọn, tổng) có thể đã đổi vì đơn trước đã tạo: gửi lại nguyên yêu cầu cũ để máy chủ trả đơn cũ.
+        // Lựa chọn của chính khách đổi thì đây là đơn khác: không gửi, mời kiểm tra Đơn hàng; lần bấm sau đặt đơn mới.
+        if (CHOICE_FIELDS.some((f) => JSON.stringify(body[f]) !== JSON.stringify(frozen.body[f]))) {
+          void qc.invalidateQueries({ queryKey: ['orders'] });
+          return Promise.reject(new Error(PREVIOUS_MAYBE_PLACED));
+        }
+        return placeOrder(frozen.body, frozen.key);
+      }
+      const key = orderKeys.current.keyFor(body);
+      attempt.current = { body, key };
+      return placeOrder(body, key);
     },
     onSuccess: (order) => {
       orderKeys.current.reset();
-      setOutcomeUnknown(false);
+      unknownAttempt.current = null;
       // Theo đơn máy chủ đã tạo, không theo radio đang chọn lúc phản hồi về.
       const isBank = order.paymentMethod === 'BANK_TRANSFER';
       if (!isBank) setPlaced(order);
@@ -239,7 +253,7 @@ export default function CheckoutPage() {
       if (isBank) router.replace(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`);
     },
     onError: (e) => {
-      setOutcomeUnknown(isOutcomeUnknown(e));
+      unknownAttempt.current = isOutcomeUnknown(e) ? attempt.current : null;
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
       // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });

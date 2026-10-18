@@ -104,6 +104,9 @@ describe('/thanh-toan — Thu kèm rác (đổi rác lấy quà, §12.2 bước 
     expect(waste(r)!.textContent).toContain('Ghi mã lên túi, bưu tá lấy khi giao đơn.');
     click(placeButton(r));
     await flush(6);
+    expect(m.placeOrder).toHaveBeenCalledTimes(1);
+    click(placeButton(r));
+    await flush(6);
     expect(m.placeOrder.mock.calls[1]![0]).toMatchObject({ wasteRequestId: 'req-p' });
     expect(m.placeOrder.mock.calls[1]![1]).not.toBe(m.placeOrder.mock.calls[0]![1]);
   });

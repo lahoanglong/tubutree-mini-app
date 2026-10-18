@@ -73,9 +73,15 @@ describe('/thanh-toan — Idempotency-Key theo nội dung đơn (như Mini App)'
     await flush(4);
     click(placeButton(r));
     await flush(6);
+    expect(m.placeOrder).toHaveBeenCalledTimes(1);
+    click(placeButton(r));
+    await flush(6);
     expect(keyOf(1)).not.toBe(keyOf(0));
     click(radio(r, 'Thanh toán khi nhận hàng'));
     await flush(4);
+    click(placeButton(r));
+    await flush(6);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
     click(placeButton(r));
     await flush(6);
     expect(keyOf(2)).toBe(keyOf(0));
