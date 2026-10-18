@@ -30,7 +30,7 @@ Review: **2 lượt** (bọc `apiFetch`, phần token).
 | `order` | 4–9 | `app/gio-hang/**`, `app/thanh-toan/**`, `app/tai-khoan/don-hang/**`, `app/tai-khoan/orders-section.tsx` + `orders-list.spec.tsx`, `app/tai-khoan/dia-chi/**`, `components/checkout/**`, `components/orders/**` | **2 lượt** (thanh toán, hoàn tiền) |
 | `account` | 15, 17–20, 52, 53 | `app/tai-khoan/page.tsx`, `profile-section.tsx`, `app/tai-khoan/{ho-so,cai-dat,thong-bao}/**`, `app/gioi-thieu/**`, `components/account/**`, `components/app-gates.tsx` | **2 lượt** (nhận mã giảm giá, xoá tài khoản) |
 | `loyalty` | 21–26 | `app/tai-khoan/{diem-xanh,vi-tubu}/**`, `app/tai-khoan/ledger-shell.tsx` + `ledger-pages.spec.tsx`, `app/kho-qua/**`, `app/hoan-tien/**`, `components/loyalty/**` | **2 lượt** (điểm, rút tiền) |
-| `loyalty` (mở rộng) | 21–26 | Mini App: `pages/rewards.tsx`, `services/account-api.ts`, `utils/{unique-by-id,wallet-rules,waste-labels}.ts` (chỉ chuyển sang re-export từ app-core, không đổi hành vi); web: `lib/loyalty-copy.ts`, `lib/use-idempotency-key.ts` | — |
+| `loyalty` (mở rộng) | 21–26 | Mini App: `pages/rewards.tsx`, `services/account-api.ts`, `utils/{unique-by-id,wallet-rules,waste-labels,loyalty-copy}.ts` (chỉ chuyển sang re-export từ app-core, không đổi hành vi); web: `lib/loyalty-copy.ts`; app-core: `loyalty-copy.ts`, `lib/use-idempotency-key.ts` | — |
 
 Ranh giới đợt 1:
 - `account` **không gỡ** `OrdersSection` khỏi hub (spec `app/guest-pages.a11y.spec.tsx:265,283` kiểm link đơn ở hub); chỉ thêm menu như Mini App. `order` dùng lại `OrdersSection` cho `/tai-khoan/don-hang`.
