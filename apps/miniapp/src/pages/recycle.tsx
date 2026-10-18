@@ -24,6 +24,7 @@ import { formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
 import {
   METHOD_LABELS,
+  PAUSED_TEXT,
   POINT_VALUE_VND,
   TIMELINE_STEPS,
   closedLabel,
@@ -40,7 +41,6 @@ export function impactLine(grams: number | null | undefined): string | null {
   return kg > 0 ? `Bạn đã gửi khoảng ${formatNumber(kg)} kg bao bì cho Tubu` : null;
 }
 
-const PAUSED_TEXT = 'Chương trình đang tạm dừng';
 const BLOCKED_TEXT = 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree';
 const LOGIN_TEXT = 'Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác';
 

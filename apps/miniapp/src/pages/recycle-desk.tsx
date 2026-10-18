@@ -13,11 +13,12 @@ import type {
 } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, deskConfirm, deskFulfilGift, deskLookup, deskReject, getDeskPoints } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { AuthGate } from '../components/ui/auth-gate';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { EmptyState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { PageHeader } from '../components/ui/page-header';
 import { WasteDeskPerk, WasteDeskReport } from '../components/waste-desk-perk';
@@ -26,7 +27,7 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatNumber, formatPoints } from '../utils/format';
-import { DESK_REJECTION_OPTIONS, METHOD_LABELS, SHORTFALL_LABELS } from '../utils/waste-labels';
+import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const SELECT_STYLE: CSSProperties = {
@@ -382,8 +383,14 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
 function DeskContent() {
   const pointsQ = useQuery({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: getDeskPoints });
+  const cfg = usePublicConfig();
   if (pointsQ.isPending) return <Skeleton height={120} />;
-  if (pointsQ.isError || !pointsQ.data || pointsQ.data.length === 0) {
+  if (pointsQ.isError) {
+    return <ErrorState message={getErrorMessage(pointsQ.error)} onRetry={() => void pointsQ.refetch()} retrying={pointsQ.isFetching} />;
+  }
+  if (pointsQ.data.length === 0) {
+    // Máy chủ bỏ qua điểm của đại lý khi chương trình tắt, nên danh sách rỗng lúc đó không có nghĩa là mất quyền.
+    if (!cfg.waste.enabled) return <EmptyState art="box" heading={PAUSED_TEXT} />;
     return <EmptyState art="box" heading="Tài khoản của bạn chưa được gắn với điểm nhận nào" />;
   }
   return <DeskBody points={pointsQ.data} />;

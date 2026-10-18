@@ -16,6 +16,8 @@ import { formatNumber, formatPoints, formatVnd } from './format';
 
 export { PREVIEW_DEBOUNCE_MS } from './use-debounced';
 
+export const PAUSED_TEXT = 'Chương trình đang tạm dừng';
+
 /** Dưới ngưỡng này (km) điểm nhận được gắn "Nhanh nhất" (§4.4). */
 export const NEAREST_FAST_KM = 5;
 /** 1 điểm = 1đ (thang Điểm Xanh mới). */

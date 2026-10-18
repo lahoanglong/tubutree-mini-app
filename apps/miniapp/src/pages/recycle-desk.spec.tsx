@@ -92,6 +92,26 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
     expect(await screen.findByText('Tài khoản của bạn chưa được gắn với điểm nhận nào')).toBeInTheDocument();
     expect(screen.queryByLabelText('Mã yêu cầu hoặc mã nhận quà')).toBeNull();
   });
+  it('danh sách điểm lỗi → báo lỗi tải có nút Thử lại, bấm thì tải lại và vào được màn', async () => {
+    mocks.getDeskPoints.mockRejectedValueOnce(new Error('Mất kết nối'));
+    renderPage();
+    expect(await screen.findByText('Mất kết nối')).toBeInTheDocument();
+    expect(screen.queryByText('Tài khoản của bạn chưa được gắn với điểm nhận nào')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByLabelText('Mã yêu cầu hoặc mã nhận quà')).toBeInTheDocument();
+    expect(mocks.getDeskPoints).toHaveBeenCalledTimes(2);
+  });
+  it('không có điểm nào khi chương trình tắt → báo tạm dừng, không báo chưa được gắn', async () => {
+    mocks.getDeskPoints.mockResolvedValue([]);
+    mocks.publicConfig.waste.enabled = false;
+    try {
+      renderPage();
+      expect(await screen.findByText('Chương trình đang tạm dừng')).toBeInTheDocument();
+      expect(screen.queryByText('Tài khoản của bạn chưa được gắn với điểm nhận nào')).toBeNull();
+    } finally {
+      mocks.publicConfig.waste.enabled = true;
+    }
+  });
   it('đại lý: thẻ hạn mức tháng (đã dùng, còn lại) + ghi chú không tự cộng điểm', async () => {
     renderPage();
     expect(await screen.findByText('Hạn mức điểm tháng này')).toBeInTheDocument();
