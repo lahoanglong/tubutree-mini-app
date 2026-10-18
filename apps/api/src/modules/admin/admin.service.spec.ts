@@ -887,6 +887,23 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(findMany.mock.calls[1][0].where.batch).toBeUndefined();
   });
 
+  it('listCoupons: nhân viên chỉ thấy mã lô do chính mình tạo (cả khi tìm theo từ khoá); ADMIN không bị lọc', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = makePrisma({ coupon: { findMany, count }, couponRedemption: { groupBy: jest.fn() } });
+    const staff = { id: 's1', staff: true };
+    const own = { OR: [{ batch: null }, { createdById: 's1' }] };
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SHOPEE11-' }, staff);
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ code: { contains: 'SHOPEE11-' }, ...own });
+    expect(findMany.mock.calls[0][0].where.batch).toBeUndefined();
+    expect(count.mock.calls[0][0].where).toMatchObject(own);
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20 }, staff);
+    expect(findMany.mock.calls[1][0].where).toMatchObject({ batch: null, ...own });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SHOPEE11-' }, { id: 'a1', staff: false });
+    expect(findMany.mock.calls[2][0].where.OR).toBeUndefined();
+    expect(findMany.mock.calls[2][0].where.batch).toBeUndefined();
+  });
+
   it('D2-03: mã CLAIM trả kèm số khách đã nhận (đếm coupon_claims); mã khác không đếm', async () => {
     const findMany = jest.fn().mockResolvedValue([
       { id: 'c1', code: 'SHOPEE', scope: 'CLAIM', isActive: true },

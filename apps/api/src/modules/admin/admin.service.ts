@@ -1427,13 +1427,15 @@ export class AdminService {
    * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó, và mã thuộc lô thẻ hộp hàng
    * (xem theo lô ở AdminCouponBatchService) trừ khi tìm theo mã.
    */
-  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }) {
+  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }, actor: CouponActor = SYSTEM_ACTOR) {
     const now = new Date();
     const keyword = q.q ? normalizeCouponCode(q.q) : '';
     const where: Prisma.CouponWhereInput = {
       ...(keyword ? { code: { contains: escapePrismaLike(keyword) } } : {}),
       ...(q.scope ? { scope: q.scope as Prisma.CouponWhereInput['scope'] } : keyword ? {} : { scope: { not: 'USER_GROUP' } }),
       ...(keyword ? {} : { batch: null }),
+      // Tìm theo mã bỏ lọc lô; nhân viên chỉ được thấy mã lô do chính mình tạo, không thì dò `q=-` là lộ cả mã thẻ của lô khác để đem nhận.
+      ...(actor.staff ? { OR: [{ batch: null }, { createdById: actor.id }] } : {}),
       ...(q.status === 'active' ? { isActive: true, endAt: { gte: now } } : {}),
       ...(q.status === 'inactive' ? { isActive: false } : {}),
       ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
