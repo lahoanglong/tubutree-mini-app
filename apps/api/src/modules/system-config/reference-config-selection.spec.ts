@@ -50,6 +50,7 @@ const APPROVED_LOADED_KEYS = [
     'community.daily_post_reward_cap',
     'community.daily_rep_cap',
     'community.post_reward_points',
+    'community.public_preview',
     'community.rep_answer',
     'community.rep_best',
     'community.rep_post',
@@ -58,6 +59,7 @@ const APPROVED_LOADED_KEYS = [
     'coupon.staff_max_amount_vnd',
     'coupon.staff_max_percent',
     'dealer.max_discount_pct',
+    'dealer.review_hours',
     'dealer.reward_claim_grace_days',
     'flashsale.default_per_user_limit',
     'flashsale.max_discount_pct',
@@ -85,6 +87,7 @@ const APPROVED_LOADED_KEYS = [
     'groupbuy.max_open_per_user',
     'groupbuy.target_size',
     'groupbuy.window_hours',
+    'home.new_customer_layout',
     'legal.bao-mat',
     'legal.dieu-khoan',
     'legal.doi-tra',
@@ -247,6 +250,13 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
   it.each(EXTRA_CONFIGS.map((c) => [c.key, c] as const))('%s: giá trị nạp bằng mặc định đang nằm trong mã', (_key, extra) => {
     const source = readFileSync(join(API_ROOT, extra.fallbackSource.file), 'utf-8');
     expect(source).toContain(extra.fallbackSource.text);
+  });
+
+  // Admin đọc mô tả này để quyết bật cờ: phải nói cờ chỉ đổi thứ tự, không phải công tắc của khối chào mừng.
+  it('home.new_customer_layout: mô tả nói cờ chỉ đổi thứ tự, khối "Quà khách mới" luôn hiện với khách mới', () => {
+    const desc = EXTRA_CONFIGS.find((c) => c.key === 'home.new_customer_layout')!.description;
+    expect(desc).toMatch(/chỉ đổi thứ tự/);
+    expect(desc).toMatch(/luôn hiện/);
   });
 
   it('dòng nạp không còn cờ createOnly lẫn chú thích nguồn (cột SystemConfig không có hai trường này)', () => {

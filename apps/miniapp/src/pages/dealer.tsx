@@ -37,7 +37,8 @@ import {
   type PricelistRow,
 } from '../services/dealer-api';
 import { getErrorMessage } from '../services/api';
-import { formatDate, formatVnd } from '../utils/format';
+import { formatDate, formatRatePct, formatVnd } from '../utils/format';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
@@ -108,6 +109,8 @@ export default function DealerPage() {
 /* ─────────────── Đăng ký đại lý ─────────────── */
 function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejectionReason: string | null }) {
   const { openSnackbar } = useSnackbar();
+  const config = usePublicConfig();
+  const maxDiscountPct = config.isLoaded ? config.dealer?.maxDiscountPct : null;
   const qc = useQueryClient();
   const [form, setForm] = useState<DealerApplyInput>({
     businessName: '',
@@ -148,7 +151,7 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
             Trở thành đại lý Tubu
           </Heading>
           <Text variant="body-sm" tone="inverse" as="p" style={{ marginTop: 4, opacity: 0.8 }}>
-            Giá sỉ đến 45% · công nợ · đặt hàng nhanh số lượng lớn.
+            {maxDiscountPct ? vi.dealerApply.pitch(formatRatePct(maxDiscountPct)) : vi.dealerApply.pitchGeneric}
           </Text>
         </div>
 
@@ -200,6 +203,8 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
 }
 
 function DealerPending() {
+  const config = usePublicConfig();
+  const reviewHours = config.isLoaded ? config.dealer?.reviewHours : null;
   return (
     <DealerShell title="Hồ sơ đại lý">
       <div style={{ textAlign: 'center', padding: '64px 24px' }}>
@@ -208,7 +213,7 @@ function DealerPending() {
           Hồ sơ đang được duyệt
         </Heading>
         <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 8 }}>
-          Đội ngũ Tubu sẽ xét duyệt trong vòng 24 giờ và liên hệ lại với bạn qua Zalo.
+          {reviewHours ? vi.dealerApply.pendingBody(reviewHours) : vi.dealerApply.pendingBodyGeneric}
         </Text>
       </div>
     </DealerShell>

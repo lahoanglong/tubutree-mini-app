@@ -38,6 +38,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'attendance',
   'retention',
   'pancake',
+  'home',
 ];
 
 /**
@@ -82,6 +83,7 @@ export interface ExtraConfig extends ConfigSeed {
 }
 
 const FEED = 'src/modules/feed/community-feed.service.ts';
+const PUBLIC_CONFIG = 'src/modules/system-config/public-config.ts';
 const COMMISSION_RATE = 'src/modules/affiliate/commission-rate-csv.ts';
 const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
 const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts';
@@ -92,6 +94,9 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_best', value: 10, category: 'community', description: 'Điểm uy tín cộng cho câu trả lời được chọn hay nhất (lần chọn đầu)', fallbackSource: { file: FEED, text: "get<number>('community.rep_best', 10)" } },
   { key: 'community.daily_rep_cap', value: 30, category: 'community', description: 'Tổng điểm uy tín tối đa một người được cộng mỗi ngày', fallbackSource: { file: FEED, text: "get<number>('community.daily_rep_cap', 30)" } },
   { key: 'community.rep_thresholds', value: [0, 50, 200, 500], category: 'community', description: 'Mốc điểm uy tín để lên cấp 1 đến 4 (Mầm, Cây non, Cây trưởng thành, Cổ thụ)', fallbackSource: { file: FEED, text: 'const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];' } },
+  { key: 'dealer.review_hours', value: 24, category: 'dealer', description: 'Số giờ Tubu hẹn xét duyệt hồ sơ đại lý (chỉ để hiện chữ cho người đăng ký, không tự duyệt theo số này)', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT)" } },
+  { key: 'community.public_preview', value: false, category: 'community', description: 'true = khách chưa đăng nhập được xem trước vài bài cộng đồng đã đăng (chỉ đọc, thích/bình luận/đăng bài vẫn cần đăng nhập); false = phải đăng nhập mới thấy', fallbackSource: { file: FEED, text: 'get<unknown>(PUBLIC_PREVIEW_KEY, false)' } },
+  { key: 'home.new_customer_layout', value: false, category: 'home', description: 'Trang chủ Mini App: cờ chỉ đổi thứ tự khối, không bật/tắt khối. true = với khách chưa có đơn, "Quà khách mới" và danh mục lên ngay sau ô tìm và dải đơn, trước giờ vàng; false = giữ thứ tự cũ. Khối "Quà khách mới" luôn hiện với khách mới ở cả hai trường hợp', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('home.new_customer_layout', false)" } },
   { key: 'affiliate.max_rate_pct', value: 50, category: 'affiliate', description: 'Trần % hoa hồng CTV admin được đặt cho một biến thể (phần trăm, 50 = 50%)', fallbackSource: { file: COMMISSION_RATE, text: 'export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;' } },
   { key: 'affiliate.commission_eligible_roles', value: ['AFFILIATE', 'DEALER'], category: 'affiliate', description: 'Vai trò được ghi công đơn và hưởng hoa hồng CTV (thêm "CUSTOMER" nếu khách thường chia sẻ cũng được hưởng)', fallbackSource: { file: COMMISSION_ROLES, text: 'DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];' } },
   { key: 'pancake.total_mismatch_check', value: true, category: 'pancake', description: 'So tổng tiền Pancake với đơn Tubu mỗi lần webhook; lệch thì đưa đơn vào "Cần xử lý Pancake" (false = tắt khi báo nhầm hàng loạt)', fallbackSource: { file: PANCAKE_PROCESSOR, text: 'get<boolean>(PANCAKE_TOTAL_CHECK_KEY, true)' } },

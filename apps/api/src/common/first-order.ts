@@ -15,10 +15,13 @@ export interface OwnCheckout {
   checkoutGroup?: string | null;
 }
 
+/** Đơn được tính là "đã mua" của một khách: mọi đơn ngoài đơn huỷ. Dùng chung cho mọi nơi định nghĩa khách mới, kể cả lọc theo quan hệ `orders`. */
+export const COUNTED_ORDER_WHERE: Prisma.OrderWhereInput = { status: { not: 'CANCELLED' } };
+
 export function priorOrderWhere(userId: string, own: OwnCheckout = {}): Prisma.OrderWhereInput {
   return {
     userId,
-    status: { not: 'CANCELLED' },
+    ...COUNTED_ORDER_WHERE,
     ...(own.orderIds?.length ? { id: { notIn: own.orderIds } } : {}),
     ...(own.checkoutGroup ? { OR: [{ checkoutGroup: null }, { checkoutGroup: { not: own.checkoutGroup } }] } : {}),
   };

@@ -51,6 +51,7 @@ import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SectionTitle } from '../components/ui/section-title';
 import { PriceTag } from '../components/ui/price-tag';
+import { PointsEarnLine } from '../components/product/points-earn-line';
 import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
 import { ProductTile } from '../components/ui/product-tile';
@@ -396,6 +397,8 @@ export default function ProductDetailPage() {
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>{formatSold(p.sold)}</Text>
           )}
         </Box>
+
+        <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
 
         {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
         {flashItem && (

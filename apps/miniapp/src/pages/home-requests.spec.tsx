@@ -35,6 +35,16 @@ const PUBLIC_FEED = {
   flashActive: [],
   categories: [],
   brands: [{ brand: 'Cobote', count: 3 }],
+  publicConfig: {
+    freeshipThreshold: 350_000,
+    subscribeDiscountPct: 0.17,
+    affiliateWalletMultiplier: 1,
+    affiliateMinWithdrawBank: 50_000,
+    cashbackHoldDays: 30,
+    newCustomer: { welcomeVoucher: { amount: 25_000, minOrder: 150_000 }, firstOrderFreeShip: { enabled: false, minSubtotal: 0 } },
+    loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
+    homeNewCustomerLayout: false,
+  },
 };
 const ME_FEED = {
   forYou: [card('fy', 'Gợi ý riêng')],
@@ -44,6 +54,10 @@ const ME_FEED = {
   shippingOrders: { data: [], meta: { page: 1, limit: 1, total: 0 } },
   subscriptions: [],
   notifications: [],
+  newCustomerOffer: {
+    isNewCustomer: true,
+    welcomeVoucher: { code: 'WELCOME-U1', type: 'AMOUNT', value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' },
+  },
   purchasedLimit: 10,
 };
 
@@ -82,6 +96,8 @@ describe('Trang chủ gộp request (C-037)', () => {
     expect(await screen.findByText('Gợi ý riêng')).toBeInTheDocument();
     expect(await screen.findByText('Chỉ nổi bật')).toBeInTheDocument();
     expect(await screen.findByText('Cobote')).toBeInTheDocument();
+    // D2-07b: khối "Quà khách mới" (số công khai + ưu đãi của khách) đi cùng hai request gộp, không thêm request lẻ.
+    expect(await screen.findByText('Voucher chào mừng 25.000đ')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().sort()).toEqual(['/home', '/home/me']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
@@ -92,8 +108,22 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     renderHome();
     expect(await screen.findByText('Bán chạy nhất')).toBeInTheDocument();
+    expect(await screen.findByText('Đặt định kỳ giảm 17% mỗi đơn')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths()).toEqual(['/home']);
+  });
+
+  it('API gộp cũ chưa có khối cấu hình/ưu đãi khách mới: hai khối đó lùi về request lẻ, phần còn lại vẫn từ gộp', async () => {
+    const { publicConfig, ...oldPublic } = PUBLIC_FEED;
+    const { newCustomerOffer, ...oldMe } = ME_FEED;
+    mocks.routes['/home'] = () => ({ data: oldPublic });
+    mocks.routes['/home/me'] = () => ({ data: oldMe });
+    mocks.routes['/config/public'] = () => ({ data: publicConfig });
+    mocks.routes['/me/new-customer-offer'] = () => ({ data: newCustomerOffer });
+    renderHome();
+    expect(await screen.findByText('Voucher chào mừng 25.000đ')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(paths().sort()).toEqual(['/config/public', '/home', '/home/me', '/me/new-customer-offer']);
   });
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {

@@ -3,6 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isRealUser } from '../../common/real-user';
 import { hasPriorOrder } from '../../common/first-order';
+import { pointsForGoods } from './points-earn';
 
 export interface ShippingInput {
   subtotal: number; // sau giảm giá hàng (chưa gồm ship)
@@ -90,8 +91,7 @@ export class PricingService {
   /** Điểm tích cho giá trị hàng (đã trừ giảm giá), nhân multiplier hạng. */
   async calcPointsEarned(goodsValue: number, tierMultiplier = 1): Promise<number> {
     const vndPerPoint = await this.config.get<number>('loyalty.vnd_per_point', 10000);
-    if (vndPerPoint <= 0) return 0;
-    return Math.floor((goodsValue / vndPerPoint) * tierMultiplier);
+    return pointsForGoods(goodsValue, vndPerPoint, tierMultiplier);
   }
 
   /** Số VND tối đa có thể trừ bằng điểm cho 1 đơn. */

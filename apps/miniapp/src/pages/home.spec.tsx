@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   fetchCategories: vi.fn(),
   fetchPurchasedItems: vi.fn(),
   getNotifications: vi.fn(),
+  getPublicConfig: vi.fn(),
+  getNewCustomerOffer: vi.fn(),
   auth: { status: 'authenticated' as 'authenticated' | 'guest', user: { id: 'u1' } as { id: string } | null },
   onRefresh: undefined as undefined | (() => Promise<unknown> | void),
 }));
@@ -28,8 +30,9 @@ vi.mock('../services/shop-api', () => ({
   fetchPurchasedItems: mocks.fetchPurchasedItems,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
+  getPublicConfig: mocks.getPublicConfig,
 }));
-vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications }));
+vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications, getNewCustomerOffer: mocks.getNewCustomerOffer }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
 }));
@@ -50,6 +53,16 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import HomePage from './home';
 import { homeBlockOrder } from '../components/home/home-blocks';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
+
+const PUBLIC_CONFIG = {
+  freeshipThreshold: 350_000,
+  subscribeDiscountPct: 0.17,
+  affiliateWalletMultiplier: 1,
+  affiliateMinWithdrawBank: 50_000,
+  cashbackHoldDays: 30,
+  loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
+  homeNewCustomerLayout: false,
+};
 
 const card = (id: string, name: string) => ({
   id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true,
@@ -87,6 +100,8 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     mocks.fetchBrands.mockResolvedValue([]);
     mocks.fetchCategories.mockResolvedValue([]);
     mocks.getNotifications.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue(PUBLIC_CONFIG);
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null });
   });
 
   it('khách mới: thứ tự khối "new" (Bán chạy + Danh mục trước Dành cho bạn), kệ Mua lại + dải đơn giữ ô 2-3', async () => {
@@ -410,6 +425,61 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(mocks.getNotifications.mock.calls.length).toBe(before.notifications + 1);
     expect(mocks.fetchBrands.mock.calls.length).toBe(before.brands + 1);
     expect(qc.isFetching()).toBe(0);
+  });
+
+  // D2-07b + D7 việc 1: khối "Quà khách mới" và cờ bố cục home.new_customer_layout (mặc định tắt, chủ dự án chưa chốt).
+  describe('khối "Quà khách mới" và cờ home.new_customer_layout', () => {
+    it('cờ tắt (mặc định): giữ thứ tự cũ của khách mới, khối Quà khách mới đứng ngay sau Danh mục', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      expect(await screen.findByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
+      expect(blockOrder()).toEqual([...homeBlockOrder('new', false)]);
+      expect(blockOrder().slice(0, 7)).toEqual(['search', 'purchased', 'orderStrip', 'flash', 'bestSellers', 'categories', 'welcome']);
+      expect(block('welcome')).toContainElement(screen.getByRole('region', { name: 'Quà khách mới' }));
+    });
+
+    it('cờ bật: sau khi cấu hình về, Quà khách mới rồi Danh mục lên trước giờ vàng', async () => {
+      mocks.getPublicConfig.mockResolvedValue({ ...PUBLIC_CONFIG, homeNewCustomerLayout: true });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('new', true)]));
+      expect(blockOrder().slice(0, 6)).toEqual(['search', 'purchased', 'orderStrip', 'welcome', 'categories', 'flash']);
+      expect(await screen.findByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
+    });
+
+    it('cấu hình công khai chưa về hoặc lỗi → bố cục cũ (không đổi thứ tự khi chưa chắc)', async () => {
+      mocks.getPublicConfig.mockRejectedValue(new Error('boom'));
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      await screen.findByRole('region', { name: 'Bán chạy' });
+      expect(blockOrder()).toEqual([...homeBlockOrder('new', false)]);
+    });
+
+    it('khách cũ: bố cục khách cũ kể cả khi cờ bật, và không có khối Quà khách mới', async () => {
+      mocks.getPublicConfig.mockResolvedValue({ ...PUBLIC_CONFIG, homeNewCustomerLayout: true });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+      renderHome();
+      await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('returning')]));
+      await screen.findByRole('region', { name: 'Dành cho bạn' });
+      expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+    });
+
+    it('khách cũ đã được nhớ từ lần trước: ngay từ khung hình đầu không mount khối, không gọi API ưu đãi khách mới', async () => {
+      localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+      renderHome();
+      await screen.findByRole('region', { name: 'Dành cho bạn' });
+      expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
+    });
+
+    it('khách mới nhưng đã có đơn chờ giao (API: không còn là khách mới) → không hiện khối', async () => {
+      mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false, welcomeVoucher: null });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      await screen.findByRole('region', { name: 'Bán chạy' });
+      await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
+      expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+    });
   });
 
   describe('thứ tự khối không nhảy sau khung hình đầu (khách cũ mở lạnh)', () => {

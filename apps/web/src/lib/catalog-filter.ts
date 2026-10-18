@@ -21,9 +21,10 @@ export function parsePage(raw: string | string[] | null | undefined): number {
 }
 
 /** Đường dẫn trang chủ kèm bộ lọc; không có bộ lọc nào thì về `/` (không neo). Trang 1 không ghi ?page=. */
-export function homeHref(filter: { brand?: string; q?: string; page?: number }): string {
+export function homeHref(filter: { brand?: string; category?: string; q?: string; page?: number }): string {
   const params = new URLSearchParams();
   if (filter.brand) params.set('brand', filter.brand);
+  if (filter.category) params.set('category', filter.category);
   const q = normalizeSearchQuery(filter.q);
   if (q) params.set('q', q);
   if (filter.page && filter.page > 1) params.set('page', String(Math.floor(filter.page)));
@@ -32,7 +33,7 @@ export function homeHref(filter: { brand?: string; q?: string; page?: number }):
 }
 
 /** Liên kết phân trang: luôn neo #san-pham để bấm sang trang khác không nhảy về đầu trang chủ. */
-export function pageHref(filter: { brand?: string; q?: string }, page: number): string {
+export function pageHref(filter: { brand?: string; category?: string; q?: string }, page: number): string {
   const href = homeHref({ ...filter, page });
   return href.includes('#') ? href : `${href}#san-pham`;
 }

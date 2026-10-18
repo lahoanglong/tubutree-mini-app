@@ -6,6 +6,7 @@ import type { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import type { ZaloService } from './zalo.service';
 import type { RbacService } from '../staff/rbac/rbac.service';
+import type { VouchersService } from '../vouchers/vouchers.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
@@ -439,10 +440,10 @@ function makeGuestMergeFixture(opts: {
   };
 }
 
-function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>) {
+function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>, vouchers?: VouchersService) {
   const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
   const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
-  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac());
+  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac(), undefined, vouchers);
 }
 
 describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm thầm đổi user)', () => {
@@ -928,5 +929,87 @@ describe('isMergeBusy — lỗi gộp trả 503 "đang bận" thay vì lộ lỗ
     expect(isMergeBusy(known('P2002', 'Unique constraint failed'))).toBe(false);
     expect(isMergeBusy(new ConflictException('Tài khoản đã bị khoá'))).toBe(false);
     expect(isMergeBusy('40P01')).toBe(false);
+  });
+});
+
+// D2-07a: voucher chào mừng cấp ngay khi tài khoản thật được tạo (cron mỗi giờ vẫn là lưới).
+describe('AuthService — voucher chào mừng ngay khi tạo tài khoản thật (D2-07a)', () => {
+  const noUser = () => jest.fn().mockResolvedValue(null);
+  const echoCreate = () => jest.fn().mockImplementation(({ data }) => ({ id: 'newuser', role: 'CUSTOMER', ...data }));
+
+  function svcWith(user: Record<string, jest.Mock>, zalo: Record<string, jest.Mock>, vouchers?: Partial<VouchersService>) {
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    return new AuthService(prisma, jwt, config, zalo as unknown as ZaloService, mkRbac(), undefined, vouchers as VouchersService);
+  }
+  const miniZalo = () => ({
+    getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-new', name: 'A' }),
+    resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+  });
+  const grantMock = (impl?: () => Promise<boolean>) => ({ grantWelcomeNow: jest.fn(impl ?? (async () => true)) });
+
+  it('Mini App: tài khoản Zalo mới → cấp cho đúng id vừa tạo, trước khi trả token', async () => {
+    const vouchers = grantMock();
+    const res = await svcWith({ findUnique: noUser(), create: echoCreate() }, miniZalo(), vouchers).loginWithZaloMiniApp('c', 'at');
+    expect(res.accessToken).toBe('jwt');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledTimes(1);
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser', { becameRealNow: true });
+  });
+
+  it('Mini App: cấp lỗi (DB, thông báo) không làm rớt đăng nhập; cron giờ sau vẫn cấp', async () => {
+    const vouchers = grantMock(async () => {
+      throw new Error('db down');
+    });
+    const res = await svcWith({ findUnique: noUser(), create: echoCreate() }, miniZalo(), vouchers).loginWithZaloMiniApp('c', 'at');
+    expect(res.accessToken).toBe('jwt');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledTimes(1);
+  });
+
+  it('Mini App: tài khoản Zalo đã có → không cấp ở đường đăng nhập lại', async () => {
+    const vouchers = grantMock();
+    const existing = { id: 'u9', role: 'CUSTOMER', zaloId: 'z-new', fullName: 'A', phone: null, avatarUrl: null };
+    await svcWith({ findUnique: jest.fn().mockResolvedValue(existing), create: jest.fn() }, miniZalo(), vouchers).loginWithZaloMiniApp('c', 'at');
+    expect(vouchers.grantWelcomeNow).not.toHaveBeenCalled();
+  });
+
+  it('khách vãng lai (loginAsGuest) không bao giờ được cấp', async () => {
+    const vouchers = grantMock();
+    await svcWith({ findUnique: noUser(), create: echoCreate() }, {}, vouchers).loginAsGuest('dev12345');
+    expect(vouchers.grantWelcomeNow).not.toHaveBeenCalled();
+  });
+
+  it('Web OAuth: tài khoản Zalo mới → cấp cho id vừa tạo', async () => {
+    const vouchers = grantMock();
+    const zalo = { exchangeOAuthCode: jest.fn().mockResolvedValue('tok'), getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z9', name: 'W' }) };
+    await svcWith({ findUnique: noUser(), create: echoCreate() }, zalo, vouchers).loginWithZaloOAuth('code', 'verifier');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser', { becameRealNow: true });
+  });
+
+  it('không có VouchersService (test dựng tay) → đăng nhập vẫn chạy', async () => {
+    const res = await svcWith({ findUnique: noUser(), create: echoCreate() }, miniZalo()).loginWithZaloMiniApp('c', 'at');
+    expect(res.accessToken).toBe('jwt');
+  });
+
+  it('khách vãng lai nâng cấp tại chỗ lên tài khoản Zalo thật (ensurePhone) → cấp cho chính dòng đó', async () => {
+    const vouchers = grantMock();
+    const guest = { id: 'guest1', zaloId: 'guest_dev1', fullName: 'Khách', phone: null, avatarUrl: null, role: 'CUSTOMER', referralCode: 'RG1' };
+    const fixture = makeGuestMergeFixture({ guest });
+    const zalo = {
+      getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-new-real', name: 'Long' }),
+      resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+    };
+    await makeEnsurePhoneSvc(fixture, zalo, vouchers as unknown as VouchersService).ensurePhoneForCurrentUser('guest1', 'code', 'at');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('guest1', { becameRealNow: true });
+  });
+
+  it('gộp khách vào tài khoản có sẵn (ensurePhone) → không cấp thêm (tài khoản đích đã qua đường đăng ký)', async () => {
+    const vouchers = grantMock();
+    const guest = { id: 'guest1', zaloId: 'guest_dev1', fullName: 'Khách', phone: null, avatarUrl: null, role: 'CUSTOMER', referralCode: 'RG1' };
+    const target = { ...guest, id: 'target1', zaloId: 'z-real', referralCode: 'RT1' };
+    const fixture = makeGuestMergeFixture({ guest, target });
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real', name: 'Thật' }), resolvePhoneNumber: jest.fn().mockResolvedValue(null) };
+    await makeEnsurePhoneSvc(fixture, zalo, vouchers as unknown as VouchersService).ensurePhoneForCurrentUser('guest1', 'code', 'at');
+    expect(vouchers.grantWelcomeNow).not.toHaveBeenCalled();
   });
 });

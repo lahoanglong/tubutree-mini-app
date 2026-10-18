@@ -309,6 +309,9 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'affiliate.max_rate_pct',
         'affiliate.commission_eligible_roles',
         'pancake.total_mismatch_check',
+        'dealer.review_hours',
+        'community.public_preview',
+        'home.new_customer_layout',
       ];
       expect(createdBy(results).system_configs).toBe(extraKeys.length);
       expect(await pc.systemConfig.count({ where: { key: { in: extraKeys } } })).toBe(extraKeys.length);
