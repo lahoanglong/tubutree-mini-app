@@ -166,7 +166,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   type Holder = { user: { id: string }; addr: { id: string } };
   const spenders: Record<string, { cost: number; whenLocked: 'reject' | 'clamp'; run: (u: Holder) => Promise<unknown> }> = {
     'đổi voucher (LoyaltyService.redeemReward)': {
-      cost: 20,
+      cost: 20_000,
       whenLocked: 'reject',
       run: (u) => loyalty.redeemReward(u.user.id, 'reward-freeship'),
     },
@@ -230,17 +230,17 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
   describe.each(Object.entries(spenders))('%s', (_name, spender) => {
     it('cache cấu hình trống: mọi lần đọc cấu hình trượt cache đều xảy ra khi KHÔNG có tx nào đang mở (cửa sổ 1 ngày → điểm tự do, tiêu được)', async () => {
       await setConfig(prisma, 'returns.window_days', 1);
-      const u = await holder(60);
+      const u = await holder(60_000);
       const inTxMisses = watchConfigMissesInTx();
 
       await spender.run(u);
 
       expect(inTxMisses).toEqual([]);
-      expect(await balance(u.user.id)).toBe(60 - spender.cost);
+      expect(await balance(u.user.id)).toBe(60_000 - spender.cost);
     });
 
     it('giá trị cửa sổ đọc ngoài tx là giá trị cấu hình thật: cửa sổ 7 ngày → điểm đơn giao 2 ngày trước còn khoá, số dư nguyên', async () => {
-      const u = await holder(60);
+      const u = await holder(60_000);
       const inTxMisses = watchConfigMissesInTx();
 
       if (spender.whenLocked === 'reject') {
@@ -253,7 +253,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
       }
 
       expect(inTxMisses).toEqual([]);
-      expect(await balance(u.user.id)).toBe(60);
+      expect(await balance(u.user.id)).toBe(60_000);
     });
   });
 });

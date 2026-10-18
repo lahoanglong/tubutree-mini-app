@@ -112,15 +112,15 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
     const { balance, txs, rows } = await ledger(u.id);
     expect(rows).toHaveLength(1);
     expect(txs).toHaveLength(1);
-    expect(balance).toBe(5);
-    expect(rows[0]!.pointsEarned).toBe(5);
+    expect(balance).toBe(5_000);
+    expect(rows[0]!.pointsEarned).toBe(5_000);
   });
 
   it('gửi lại cho đơn đã đánh giá: sửa sao/nội dung/ảnh/video, không đổi số điểm, không thêm giao dịch điểm', async () => {
     const { p, v } = await product();
     const { u, o } = await buyer(v.id);
     const first = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Lần đầu' });
-    expect(first).toMatchObject({ updated: false, pointsEarned: 5 });
+    expect(first).toMatchObject({ updated: false, pointsEarned: 5_000 });
 
     // mua lại: thêm một đơn DELIVERED nữa, nhưng lần gửi này chọn lại đơn cũ nên là sửa
     await createOrder(prisma, {
@@ -140,11 +140,11 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
       comment: 'Dùng lâu thấy khác',
       images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg', 'https://res.cloudinary.com/x/image/upload/v1/2.jpg'],
       videoUrl: video,
-      pointsEarned: 5,
+      pointsEarned: 5_000,
       orderId: o.id,
     });
     expect(txs).toHaveLength(1);
-    expect(balance).toBe(5);
+    expect(balance).toBe(5_000);
 
     const prod = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, select: { ratingAvg: true, reviewCount: true } });
     expect(prod).toEqual({ ratingAvg: 2, reviewCount: 1 });
@@ -164,8 +164,8 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
 
     const { balance, txs, rows } = await ledger(u.id);
     expect(rows).toHaveLength(1);
-    expect(txs.map((t) => t.delta)).toEqual([10, -10, 10]);
-    expect(balance).toBe(10);
+    expect(txs.map((t) => t.delta)).toEqual([10_000, -10_000, 10_000]);
+    expect(balance).toBe(10_000);
   });
 
   it('sửa không bỏ ẩn đánh giá admin đã ẩn, sao trung bình vẫn loại đánh giá ẩn', async () => {
@@ -190,7 +190,7 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
     expect(rb.updated).toBe(false);
     const rowA = await prisma.review.findUniqueOrThrow({ where: { id: ra.id } });
     expect(rowA).toMatchObject({ rating: 5, comment: 'A', userId: a.u.id });
-    expect((await ledger(b.u.id)).balance).toBe(5);
+    expect((await ledger(b.u.id)).balance).toBe(5_000);
   });
 
   it('luật điều kiện giữ nguyên: chưa có đơn DELIVERED thì không tạo, và đã có đánh giá mà không còn đơn DELIVERED thì không sửa được', async () => {
@@ -260,7 +260,7 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
     expect(again).toMatchObject({ updated: false, pointsEarned: 0 });
     expect(again.id).not.toBe(first.id);
     expect(again.orderId).not.toBe(first.orderId);
-    expect((await ledger(u.id)).balance).toBe(5);
+    expect((await ledger(u.id)).balance).toBe(5_000);
     expect((await reviews.canReview(u.id, a.p.slug)).purchaseCount).toBe(2);
     // Hai lần mua đều đã có đánh giá: không gửi đơn thì là sửa đánh giá mới nhất, không tạo thứ ba.
     const third = await reviews.create(u.id, a.p.slug, { rating: 4, comment: 'Sửa lần 2' });
@@ -275,13 +275,13 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
     expect((await reviews.canReview(u.id, p.slug)).rewardAvailable).toBe(true);
 
     const first = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Một' });
-    expect(first.pointsEarned).toBe(5);
+    expect(first.pointsEarned).toBe(5_000);
     expect((await reviews.canReview(u.id, p.slug)).rewardAvailable).toBe(false);
 
     await reviews.remove(u.id, 'USER', first.id);
     expect((await reviews.canReview(u.id, p.slug)).rewardAvailable).toBe(true);
     const again = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Hai' });
-    expect(again.pointsEarned).toBe(5);
+    expect(again.pointsEarned).toBe(5_000);
 
     // Tiêu hết Điểm Xanh rồi xoá: không thu hồi được nên thưởng coi như đã dùng, tạo lại không thưởng.
     await prisma.user.update({ where: { id: u.id }, data: { pointsBalance: 0 } });

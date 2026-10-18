@@ -140,7 +140,7 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     const refId = `${a.id}:${b.id}`;
     if (opts.ledger === 'COIN') {
       await prisma.coinTransaction.create({ data: { userId: referrer.id, delta: LEGACY_REWARD_XU, reason, refType: 'REFERRAL', refId } });
-      const points = Math.ceil(LEGACY_REWARD_XU / 1000);
+      const points = LEGACY_REWARD_XU;
       await prisma.coinTransaction.create({
         data: { userId: referrer.id, delta: -LEGACY_REWARD_XU, reason: `XU_TO_POINTS:${points}`, refType: 'XU_MIGRATION', refId: referrer.id },
       });
@@ -434,20 +434,20 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(await balanceOf(referrer.id)).toBe(REWARD);
   });
 
-  it('(i) thưởng cấp bằng xu cũ: quy ra điểm ceil(xu/1000) rồi làm tròn xuống theo điểm, trừ lô CONVERTED; tổng = 5', async () => {
+  it('(i) thưởng cấp bằng xu cũ: quy ra điểm 1:1 rồi làm tròn xuống theo điểm, trừ lô CONVERTED; tổng = 5.000', async () => {
     const { referrer, referee, b } = await rewarded({ ledger: 'COIN' });
-    await returnUnits(referee.id, b, 1); // floor(5 × 1/3) = 1
-    await returnUnits(referee.id, b, 1); // floor(5 × 2/3) = 3 luỹ kế → 2
+    await returnUnits(referee.id, b, 1); // floor(5.000 × 1/3) = 1.666
+    await returnUnits(referee.id, b, 1); // floor(5.000 × 2/3) = 3.333 luỹ kế → 1.667
     let r = await revocations(referrer.id);
     expect(r.partial.map((p) => [p.delta, p.lot])).toEqual([
-      [-1, 'CONVERTED'],
-      [-2, 'CONVERTED'],
+      [-1_666, 'CONVERTED'],
+      [-1_667, 'CONVERTED'],
     ]);
-    expect(await balanceOf(referrer.id, 'CONVERTED')).toBe(2);
+    expect(await balanceOf(referrer.id, 'CONVERTED')).toBe(1_667);
     await returnUnits(referee.id, b, 1);
     r = await revocations(referrer.id);
-    expect(r.full.map((p) => [p.delta, p.lot])).toEqual([[-2, 'CONVERTED']]);
-    expect(r.total).toBe(5);
+    expect(r.full.map((p) => [p.delta, p.lot])).toEqual([[-1_667, 'CONVERTED']]);
+    expect(r.total).toBe(5_000);
     expect(await balanceOf(referrer.id, 'CONVERTED')).toBe(0);
   });
 

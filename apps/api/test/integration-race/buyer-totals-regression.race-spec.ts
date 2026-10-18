@@ -77,10 +77,10 @@ const PER_LINE_CHANGES: Record<string, { now: unknown; why: string }> = {
   },
   'groupbuy-coupon.orders[0].refunds.1 × G.goods': { now: 145_154, why: `mã mua chung là ${SCOPED}` },
   'groupbuy-coupon.orders[0].refunds.1 × A.goods': { now: 39_846, why: `mã mua chung là ${SCOPED}` },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × A.pointsEarnedBack': { now: 11, why: EARNED },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × B.pointsEarnedBack': { now: 5, why: EARNED },
-  'groupbuy-coupon.orders[0].refunds.1 × G.pointsEarnedBack': { now: 14, why: EARNED },
-  'groupbuy-coupon.orders[0].refunds.1 × A.pointsEarnedBack': { now: 4, why: EARNED },
+  'transfer-scoped-coupon-tier.orders[0].refunds.1 × A.pointsEarnedBack': { now: 11_062, why: EARNED },
+  'transfer-scoped-coupon-tier.orders[0].refunds.1 × B.pointsEarnedBack': { now: 5_129, why: EARNED },
+  'groupbuy-coupon.orders[0].refunds.1 × G.pointsEarnedBack': { now: 14_515, why: EARNED },
+  'groupbuy-coupon.orders[0].refunds.1 × A.pointsEarnedBack': { now: 3_985, why: EARNED },
 };
 
 describe('Hồi quy người mua: đơn không có hàng đối tác ra đúng số như trước nhánh Q8 (real Postgres)', () => {
@@ -138,9 +138,10 @@ describe('Hồi quy người mua: đơn không có hàng đối tác ra đúng s
       ['shipping.free_threshold', 200_000],
       ['shipping.flat_fee_below_threshold', 19_000],
       ['shipping.tier_freeship_overrides', {}],
-      ['loyalty.vnd_per_point', 10_000],
+      ['loyalty.earn_pct', 10],
       ['loyalty.vnd_per_point_redeem', 1_000],
       ['loyalty.max_redeem_pct', 0.2],
+      ['storefront.require_approval', false],
       ['storefront.max_combo_pct', 30],
       ['groupbuy.discount_pct', 15],
       ['groupbuy.target_size', 1],

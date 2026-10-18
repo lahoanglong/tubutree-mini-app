@@ -21,7 +21,7 @@
           "pointsDiscount": 0,
           "shippingFee": 0,
           "total": 210000,
-          "pointsEarned": 21,
+          "pointsEarned": 21000,
           "pointsUsed": 0,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -51,19 +51,19 @@
               "goods": 120000,
               "pointsUsedBack": 0,
               "convertedBack": 0,
-              "pointsEarnedBack": 12
+              "pointsEarnedBack": 12000
             },
             "1 × B": {
               "goods": 45000,
               "pointsUsedBack": 0,
               "convertedBack": 0,
-              "pointsEarnedBack": 5
+              "pointsEarnedBack": 4500
             },
             "cả đơn": {
               "goods": 210000,
               "shipping": 0,
               "pointsUsedBack": 0,
-              "pointsEarnedBack": 21
+              "pointsEarnedBack": 21000
             }
           },
           "commissions": []
@@ -93,7 +93,7 @@
           "pointsDiscount": 45000,
           "shippingFee": 0,
           "total": 148164,
-          "pointsEarned": 22,
+          "pointsEarned": 22224,
           "pointsUsed": 45,
           "pointsUsedConverted": 15,
           "commission": 0,
@@ -129,25 +129,25 @@
               "goods": 21860,
               "pointsUsedBack": 7,
               "convertedBack": 2,
-              "pointsEarnedBack": 3
+              "pointsEarnedBack": 3279
             },
             "1 × B": {
               "goods": 51008,
               "pointsUsedBack": 15,
               "convertedBack": 5,
-              "pointsEarnedBack": 8
+              "pointsEarnedBack": 7651
             },
             "1 × C": {
               "goods": 8096,
               "pointsUsedBack": 2,
               "convertedBack": 1,
-              "pointsEarnedBack": 1
+              "pointsEarnedBack": 1214
             },
             "cả đơn": {
               "goods": 148164,
               "shipping": 0,
               "pointsUsedBack": 45,
-              "pointsEarnedBack": 22
+              "pointsEarnedBack": 22224
             }
           },
           "commissions": []
@@ -177,7 +177,7 @@
           "pointsDiscount": 40000,
           "shippingFee": 0,
           "total": 266500,
-          "pointsEarned": 26,
+          "pointsEarned": 26650,
           "pointsUsed": 40,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -213,25 +213,25 @@
               "goods": 80807,
               "pointsUsedBack": 12,
               "convertedBack": 0,
-              "pointsEarnedBack": 8
+              "pointsEarnedBack": 8608
             },
             "1 × A": {
               "goods": 52239,
               "pointsUsedBack": 8,
               "convertedBack": 0,
-              "pointsEarnedBack": 5
+              "pointsEarnedBack": 4699
             },
             "1 × B": {
               "goods": 17549,
               "pointsUsedBack": 3,
               "convertedBack": 0,
-              "pointsEarnedBack": 2
+              "pointsEarnedBack": 1578
             },
             "cả đơn": {
               "goods": 266500,
               "shipping": 0,
               "pointsUsedBack": 40,
-              "pointsEarnedBack": 26
+              "pointsEarnedBack": 26650
             }
           },
           "commissions": []
@@ -261,7 +261,7 @@
           "pointsDiscount": 25000,
           "shippingFee": 0,
           "total": 158815,
-          "pointsEarned": 23,
+          "pointsEarned": 23822,
           "pointsUsed": 25,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -297,25 +297,25 @@
               "goods": 66583,
               "pointsUsedBack": 10,
               "convertedBack": 0,
-              "pointsEarnedBack": 10
+              "pointsEarnedBack": 11062
             },
             "1 × B": {
               "goods": 38588,
               "pointsUsedBack": 6,
               "convertedBack": 0,
-              "pointsEarnedBack": 6
+              "pointsEarnedBack": 5129
             },
             "1 × C": {
               "goods": 15057,
               "pointsUsedBack": 2,
               "convertedBack": 0,
-              "pointsEarnedBack": 2
+              "pointsEarnedBack": 2502
             },
             "cả đơn": {
               "goods": 158815,
               "shipping": 0,
               "pointsUsedBack": 25,
-              "pointsEarnedBack": 23
+              "pointsEarnedBack": 23822
             }
           },
           "commissions": []
@@ -345,7 +345,7 @@
           "pointsDiscount": 35000,
           "shippingFee": 0,
           "total": 177412,
-          "pointsEarned": 17,
+          "pointsEarned": 17741,
           "pointsUsed": 35,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -381,25 +381,25 @@
               "goods": 75190,
               "pointsUsedBack": 15,
               "convertedBack": 0,
-              "pointsEarnedBack": 7
+              "pointsEarnedBack": 7519
             },
             "1 × B": {
               "goods": 47848,
               "pointsUsedBack": 9,
               "convertedBack": 0,
-              "pointsEarnedBack": 5
+              "pointsEarnedBack": 4785
             },
             "1 × C": {
               "goods": 27187,
               "pointsUsedBack": 5,
               "convertedBack": 0,
-              "pointsEarnedBack": 3
+              "pointsEarnedBack": 2719
             },
             "cả đơn": {
               "goods": 177412,
               "shipping": 0,
               "pointsUsedBack": 35,
-              "pointsEarnedBack": 17
+              "pointsEarnedBack": 17741
             }
           },
           "commissions": [
@@ -439,7 +439,7 @@
           "pointsDiscount": 10000,
           "shippingFee": 0,
           "total": 185000,
-          "pointsEarned": 18,
+          "pointsEarned": 18500,
           "pointsUsed": 10,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -469,19 +469,19 @@
               "goods": 150000,
               "pointsUsedBack": 8,
               "convertedBack": 0,
-              "pointsEarnedBack": 15
+              "pointsEarnedBack": 14515
             },
             "1 × A": {
               "goods": 35000,
               "pointsUsedBack": 2,
               "convertedBack": 0,
-              "pointsEarnedBack": 3
+              "pointsEarnedBack": 3985
             },
             "cả đơn": {
               "goods": 185000,
               "shipping": 0,
               "pointsUsedBack": 10,
-              "pointsEarnedBack": 18
+              "pointsEarnedBack": 18500
             }
           },
           "commissions": []
@@ -511,7 +511,7 @@
           "pointsDiscount": 20000,
           "shippingFee": 19000,
           "total": 100000,
-          "pointsEarned": 8,
+          "pointsEarned": 8100,
           "pointsUsed": 20,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -541,19 +541,19 @@
               "goods": 44109,
               "pointsUsedBack": 11,
               "convertedBack": 0,
-              "pointsEarnedBack": 4
+              "pointsEarnedBack": 4411
             },
             "1 × B": {
               "goods": 18446,
               "pointsUsedBack": 5,
               "convertedBack": 0,
-              "pointsEarnedBack": 2
+              "pointsEarnedBack": 1845
             },
             "cả đơn": {
               "goods": 81000,
               "shipping": 19000,
               "pointsUsedBack": 20,
-              "pointsEarnedBack": 8
+              "pointsEarnedBack": 8100
             }
           },
           "commissions": []
@@ -583,7 +583,7 @@
           "pointsDiscount": 0,
           "shippingFee": 0,
           "total": 118000,
-          "pointsEarned": 11,
+          "pointsEarned": 11800,
           "pointsUsed": 0,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -607,13 +607,13 @@
               "goods": 59000,
               "pointsUsedBack": 0,
               "convertedBack": 0,
-              "pointsEarnedBack": 6
+              "pointsEarnedBack": 5900
             },
             "cả đơn": {
               "goods": 118000,
               "shipping": 0,
               "pointsUsedBack": 0,
-              "pointsEarnedBack": 11
+              "pointsEarnedBack": 11800
             }
           },
           "commissions": []
@@ -727,7 +727,7 @@
           "pointsDiscount": 0,
           "shippingFee": 0,
           "total": 275500,
-          "pointsEarned": 27,
+          "pointsEarned": 27550,
           "pointsUsed": 0,
           "pointsUsedConverted": 0,
           "commission": 0,
@@ -751,13 +751,13 @@
               "goods": 137750,
               "pointsUsedBack": 0,
               "convertedBack": 0,
-              "pointsEarnedBack": 14
+              "pointsEarnedBack": 13775
             },
             "cả đơn": {
               "goods": 275500,
               "shipping": 0,
               "pointsUsedBack": 0,
-              "pointsEarnedBack": 27
+              "pointsEarnedBack": 27550
             }
           },
           "commissions": []
