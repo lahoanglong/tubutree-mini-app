@@ -370,7 +370,7 @@ Nguồn: [docs/integrations/gomdon.md](../integrations/gomdon.md) (đối chiế
 
 - **Ai**: Người thử. **Ở đâu**: Mini App.
 - **Làm**: tạo một yêu cầu Đổi rác cách Thu kèm đơn (Mini App, Đổi rác, Đổi rác ngay, chọn 3 thùng carton, cách giao "Thu kèm đơn mua"), thêm SP-MIN vào giỏ, vào thanh toán, bật công tắc "Thu kèm rác" (thẻ tóm tắt hiện mã TR-), chọn COD, đặt hàng. Ghi mã đơn và mã TR-.
-- **Đúng là**: trong khoảng 1 phút, Quản trị, mở đơn: khối "Thu gom vật liệu tái chế (Gomdon)" ghi trạng thái "Tạo đơn thành công" (mã 1) và có dòng "Mã vận đơn BestExpress:" kèm mã. Pancake POS: đơn có tag `RECYCLING` và `GOMDON`; kho KHÔNG đặt thêm hãng khác. Ghi chú vận đơn do máy chủ dựng: mã TR- và "3 thùng Thùng carton cũ", không có chữ khách gõ.
+- **Đúng là**: trong khoảng 1 phút, Quản trị, mở đơn: khối "Thu gom vật liệu tái chế (Gomdon)" ghi trạng thái "Tạo đơn thành công" (mã 1) và có dòng "Mã vận đơn BestExpress:" kèm mã. Pancake POS: đơn có tag `RECYCLING` và `GOMDON`; kho KHÔNG đặt thêm hãng khác. Ghi chú vận đơn do máy chủ dựng: mã TR- và "Thùng carton cũ: 3 thùng", không có chữ khách gõ.
 - **Bằng chứng**: Phụ lục P1: `gomdonStatus = 1`, `gomdonOrderId` và `gomdonPartnerCode` có giá trị, `shippingPartner = BestExpress`.
 - **Hoàn tác**: bước 3.4 và 3.5 (T3 thì để giao thật, T4 dùng để thử huỷ).
 
@@ -673,7 +673,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 ### 7.3 Thu kèm đơn (chỉ sau checklist mục 4)
 
 - **Làm**: theo Phần 3, bước 3.1 và 3.2 (cần `waste.enabled` và `waste.lane_pickup_enabled` cùng bật, Gomdon đã trả lời bằng văn bản). Khi kho nhận kiện thu kèm, đếm và xác nhận.
-- **Đúng là**: ghi chú vận đơn là `Thu kèm rác TR-…: 3 thùng Thùng carton cũ`; điểm chỉ được cộng khi kho đếm.
+- **Đúng là**: ghi chú vận đơn là `Thu kèm rác TR-…: Thùng carton cũ: 3 thùng`; điểm chỉ được cộng khi kho đếm.
 - **Hoàn tác**: huỷ yêu cầu trước khi bưu tá lấy hàng.
 
 `[ ] Đạt  [ ] Không đạt`
