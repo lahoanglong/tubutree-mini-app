@@ -11,3 +11,10 @@ Hai adapter web (`core-http.ts`, `core-http-server.ts`) chỉ `import type` từ
 Kết luận: `transpilePackages: ['@tubutree/app-core']` cùng `exports: { './*': './src/*.ts' }` và `type: module` chạy được với webpack/SWC của Next 14.2.35. Phía Mini App đã chứng minh bằng `vite build` (bundle `utils/features.ts` qua re-export).
 
 Hoãn cho lane sau: chưa có import giá trị thật của app-core trong bản build web. Lane `core-api` hoặc `shop` thêm import giá trị đầu tiên vào trang sẽ tự chạy `pnpm --filter @tubutree/web build` trong gate của mình, và đó là lần kiểm chứng đầu tiên trong mã thật (giả định hợp lệ vì đã có bằng chứng thăm dò ở trên).
+
+## Gate cuối của lane
+
+- app-core: typecheck sạch; test 2 file, 48 test qua.
+- web: typecheck sạch, lint không cảnh báo; vitest 195 file, 3044 test qua; `TZ=UTC npx vitest run` 195 file, 3044 test qua.
+- miniapp: typecheck và lint sạch; vitest 282 file, 4259 test qua (không dưới 4243).
+- `pnpm lint:vars` OK; `pnpm --filter @tubutree/web build` và `pnpm --filter @tubutree/miniapp build` qua.
