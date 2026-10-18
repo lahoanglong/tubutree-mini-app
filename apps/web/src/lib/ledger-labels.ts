@@ -65,6 +65,10 @@ const POINTS_REASON_RULES: Record<string, ReasonRule> = {
   MISSION: { label: 'Thưởng nhiệm vụ Vườn Xanh' },
   REVIEW: { label: 'Đánh giá sản phẩm' },
   REVIEW_DELETE: { label: 'Thu hồi điểm đánh giá đã xoá' },
+  PANCAKE_CHAT_ORDER_REVERSED: { label: 'Thu hồi điểm đơn đặt qua tư vấn viên' },
+  PANCAKE_CHAT_ORDER: { label: 'Tích điểm đơn đặt qua tư vấn viên' },
+  MARKETPLACE_ORDER_REVERSED: { label: 'Thu hồi điểm đơn mua trên sàn' },
+  MARKETPLACE_ORDER: { label: 'Tích điểm đơn mua trên sàn' },
 };
 
 const FALLBACK_POINTS_LABEL = 'Điều chỉnh Điểm Xanh';

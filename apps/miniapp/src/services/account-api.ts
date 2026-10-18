@@ -282,6 +282,11 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('MISSION')) return 'Thưởng nhiệm vụ Vườn Xanh';
   if (reason.startsWith('REVIEW_DELETE')) return 'Thu hồi điểm đánh giá đã xoá';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
+  // Hậu tố _REVERSED phải đứng trước mã ngắn hơn vì cùng khớp startsWith.
+  if (reason.startsWith('PANCAKE_CHAT_ORDER_REVERSED:')) return 'Thu hồi điểm đơn đặt qua tư vấn viên';
+  if (reason.startsWith('PANCAKE_CHAT_ORDER:')) return 'Tích điểm đơn đặt qua tư vấn viên';
+  if (reason.startsWith('MARKETPLACE_ORDER_REVERSED:')) return 'Thu hồi điểm đơn mua trên sàn';
+  if (reason.startsWith('MARKETPLACE_ORDER:')) return 'Tích điểm đơn mua trên sàn';
   return 'Điều chỉnh Điểm Xanh';
 }
 
