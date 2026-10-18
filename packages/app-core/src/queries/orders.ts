@@ -16,10 +16,10 @@ export const orderQuery = (http: HttpClient, code: string) => ({
   queryKey: ['order', code] as const,
   queryFn: () => fetchOrder(http, code),
 });
-/** Khoá bắt đầu bằng ['orders'] để invalidateQueries({ queryKey: ['orders'] }) làm mới cả danh sách. `tab` là khoá tab trạng thái. */
-export const ordersListQuery = (http: HttpClient, tab: string, filter: OrderListFilter, page: number, limit: number) => ({
+/** Khoá bắt đầu bằng ['orders'] để invalidateQueries({ queryKey: ['orders'] }) làm mới cả danh sách. `tab` là khoá tab trạng thái. Dùng với useInfiniteQuery (initialPageParam 1): trang lấy từ pageParam, không nằm trong khoá. */
+export const ordersListQuery = (http: HttpClient, tab: string, filter: OrderListFilter, limit = 20) => ({
   queryKey: ['orders', 'list', tab] as const,
-  queryFn: () => fetchOrders(http, filter, page, limit),
+  queryFn: ({ pageParam }: { pageParam: number }) => fetchOrders(http, filter, pageParam, limit),
 });
 export const ordersHomeStripQuery = (http: HttpClient) => ({
   queryKey: ['orders', 'home-strip'] as const,
