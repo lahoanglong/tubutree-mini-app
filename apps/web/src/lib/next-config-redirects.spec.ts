@@ -9,3 +9,12 @@ describe('next.config redirects()', () => {
     expect(list.every((r) => r.permanent === false)).toBe(true);
   });
 });
+
+describe('next.config CSP', () => {
+  it('connect-src cho phép tải ảnh thẳng lên Cloudinary (đánh giá, minh chứng)', async () => {
+    const rules = await nextConfig.headers!();
+    const csp = rules.flatMap((r) => r.headers).find((h) => h.key === 'Content-Security-Policy-Report-Only')!.value;
+    const connect = csp.split('; ').find((d) => d.startsWith('connect-src '))!;
+    expect(connect.split(' ')).toContain('https://api.cloudinary.com');
+  });
+});

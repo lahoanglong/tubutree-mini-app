@@ -21,10 +21,16 @@ RUN pnpm --filter @tubutree/shared-types build
 # NEXT_PUBLIC_* phải có lúc BUILD (nhúng vào client bundle).
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_ZALO_APP_ID
+ARG NEXT_PUBLIC_ZALO_OA_ID
+ARG NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+ARG NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
 ARG NEXT_PUBLIC_SITE_URL
 ARG NEXT_PUBLIC_TENANT_ROOT_DOMAIN
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_ZALO_APP_ID=$NEXT_PUBLIC_ZALO_APP_ID
+ENV NEXT_PUBLIC_ZALO_OA_ID=$NEXT_PUBLIC_ZALO_OA_ID
+ENV NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=$NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+ENV NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=$NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_TENANT_ROOT_DOMAIN=$NEXT_PUBLIC_TENANT_ROOT_DOMAIN
 ENV NEXT_STANDALONE=1
@@ -41,6 +47,11 @@ RUN if [ -z "$NEXT_PUBLIC_ZALO_APP_ID" ]; then \
         exit 1; \
       fi; \
     fi
+# Ba biến dưới chỉ làm mất tính năng (nút Zalo OA, tải ảnh lên Cloudinary rơi về ảnh nén), không làm hỏng đăng nhập: cảnh báo, không dừng build.
+RUN for v in NEXT_PUBLIC_ZALO_OA_ID NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET; do \
+      eval "val=\$$v"; \
+      if [ -z "$val" ]; then echo "CANH BAO: $v rong - tinh nang tuong ung tren web se tat." >&2; fi; \
+    done
 RUN pnpm --filter @tubutree/web build
 
 # ──────────────────────────────────────────────────────────────
