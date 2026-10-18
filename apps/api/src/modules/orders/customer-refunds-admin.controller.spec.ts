@@ -62,3 +62,48 @@ describe('CustomerRefundsAdminController — báo service người bấm là nh�
     }
   });
 });
+
+describe('CustomerRefundsAdminController — che SĐT và số trong ghi chú với người không thấy SĐT đầy đủ', () => {
+  const row = { id: 'r1', phone: '0911222333', adminNote: 'Khách gọi 0988 777 666 xin hoàn', bankAccountNo: '0099887766', bankAccountName: 'KHACH A' };
+  const make = () => {
+    const refunds = {
+      list: jest.fn().mockResolvedValue({ data: [row], meta: { total: 1 } }),
+      claim: jest.fn().mockResolvedValue(row),
+      release: jest.fn().mockResolvedValue(row),
+      verifyOverpayment: jest.fn().mockResolvedValue(row),
+      dismissOverpayment: jest.fn().mockResolvedValue(row),
+      markPaid: jest.fn().mockResolvedValue(row),
+    };
+    return new CustomerRefundsAdminController(refunds as never);
+  };
+  const ketoan = { sub: 's1', role: 'STAFF', staffPermissions: ['KE_TOAN'] } as never;
+  const both = { sub: 's2', role: 'STAFF', staffPermissions: ['KE_TOAN', 'CSKH'] } as never;
+  const admin = { sub: 'a1', role: 'ADMIN' } as never;
+
+  it('danh sách: KE_TOAN một mình chỉ thấy 3 số cuối, tài khoản ngân hàng giữ đủ; ADMIN và KE_TOAN kiêm CSKH thấy đủ', async () => {
+    const ctl = make();
+    const masked = (await ctl.list({ page: 1, limit: 20 } as never, ketoan)) as { data: (typeof row)[] };
+    expect(masked.data[0]).toMatchObject({ phone: '*******333', bankAccountNo: '0099887766', bankAccountName: 'KHACH A' });
+    expect(masked.data[0]!.adminNote).not.toContain('0988 777 666');
+    expect(masked.data[0]!.adminNote).toContain('666');
+    for (const v of [admin, both]) {
+      const full = (await ctl.list({ page: 1, limit: 20 } as never, v)) as { data: (typeof row)[] };
+      expect(full.data[0]).toMatchObject({ phone: '0911222333', adminNote: row.adminNote });
+    }
+  });
+
+  it('mọi thao tác ghi trả về cũng che cho KE_TOAN, đủ cho ADMIN', async () => {
+    const ctl = make();
+    const calls = [
+      (v: never) => ctl.claim('s1', 'STAFF', 'r1', {}, v),
+      (v: never) => ctl.release('s1', 'r1', {}, v),
+      (v: never) => ctl.verify('s1', 'STAFF', 'r1', {}, v),
+      (v: never) => ctl.dismiss('s1', 'STAFF', 'r1', { reason: 'Cùng một lần chuyển' }, v),
+      (v: never) => ctl.markPaid('s1', 'STAFF', 'r1', { bankRef: 'FT1' }, v),
+    ];
+    for (const call of calls) {
+      expect(await call(ketoan)).toMatchObject({ phone: '*******333' });
+      expect(await call(admin)).toMatchObject({ phone: '0911222333' });
+    }
+  });
+});
