@@ -264,7 +264,7 @@ describe('Điểm đơn chat sau review lượt 3 (real Postgres)', () => {
       return { m, c: (await claimOf(String(p.id)))! };
     }
 
-    it.each([['chỉ ký tự vô hình', '\u200b\u200d\ufeff\u2060  '], ['dưới 3 ký tự', ' ab ']])('M1: ghi chú %s bị NOTE_REQUIRED', async (_n, note) => {
+    it.each([['chỉ ký tự vô hình', '\u200b\u200d\ufeff\u2060  '], ['dưới 3 ký tự', ' ab '], ['soft hyphen, Hangul và Braille trống', '\u00ad\u3164\u2800\u200e\u034f']])('M1: ghi chú %s bị NOTE_REQUIRED', async (_n, note) => {
       const { c } = await staleClaim();
       const admin = await mkUser({ role: 'ADMIN' });
       await expect(adminSvc().approve(c.id, admin.id, new Date(), note)).rejects.toMatchObject({ status: 400, response: { code: 'NOTE_REQUIRED' } });

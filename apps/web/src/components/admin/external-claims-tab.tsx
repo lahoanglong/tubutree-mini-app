@@ -26,6 +26,7 @@ import {
   PHONE_STALE_LABEL,
   adminClaimErrorText,
   approveNeedsNote,
+  approveNoteError,
   isNoteRequiredError,
   creditedOnClosedOrder,
   isIntroducer,
@@ -160,14 +161,20 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
     },
   });
 
-  const approveWithNote = async () => {
+  const approveWithNote = async (initial = '', error?: string): Promise<void> => {
     const note = await ask({
       title: 'Duyệt yêu cầu: SĐT xác minh đã cũ',
       message: `Mốc xác minh SĐT của thành viên đã cũ nên chưa chắc số vẫn của người đó. Hãy kiểm người nhận (ví dụ gọi xác nhận) rồi ghi lại cách bạn đã xác nhận cho mã ${c.maskedCode}. Không ghi số điện thoại đầy đủ vào ghi chú. Điểm được tính lại theo tiền hàng mới nhất của đơn.`,
       confirmLabel: 'Duyệt',
-      input: { label: 'Ghi chú (đã xác nhận người nhận bằng cách nào)', maxLength: 300, required: true },
+      input: { label: 'Ghi chú (đã xác nhận người nhận bằng cách nào)', maxLength: 300, required: true, validate: approveNoteError, initial, error },
     });
-    if (note) mut.mutate(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.'));
+    if (!note) return;
+    // Máy chủ vẫn đòi ghi chú (luật lệch hoặc mốc vừa đổi): mở lại hộp với lỗi ngay trong hộp, giữ nội dung đã gõ.
+    mut.mutateAsync(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.')).catch((e: unknown) => {
+      if (!isNoteRequiredError(e)) return;
+      setErr(null);
+      void approveWithNote(note, adminClaimErrorText(e));
+    });
   };
   const approve = async () => {
     if (approveNeedsNote(row)) return approveWithNote();

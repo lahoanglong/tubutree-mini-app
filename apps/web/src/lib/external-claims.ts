@@ -73,6 +73,19 @@ export const PHONE_STALE_LABEL = 'SĐT xác minh đã cũ, kiểm người nhậ
  */
 export const approveNeedsNote = (c: { kind: string; memberPhoneStale?: boolean }): boolean => c.kind === 'PHONE' && c.memberPhoneStale === true;
 
+/** Ký tự vô hình (cùng biểu thức với API `external-claim-note.ts`): không tính vào độ dài ghi chú. */
+export const INVISIBLE_CHARS = /[\p{Cf}\u034F\u115F\u1160\u17B4\u17B5\u180E\u2800\u3164\uFFA0]/gu;
+
+/** Ghi chú duyệt claim SĐT cũ cần ít nhất chừng này ký tự thật; khớp `MIN_NOTE_CHARS` của API. */
+export const NOTE_MIN_CHARS = 3;
+
+export const noteContentLength = (note: string): number => note.replace(INVISIBLE_CHARS, '').replace(/\s/g, '').length;
+
+export const NOTE_TOO_SHORT_TEXT = `Ghi chú cần ít nhất ${NOTE_MIN_CHARS} ký tự`;
+
+/** Lỗi cho ô ghi chú duyệt, hoặc null khi đủ dài. Ô trống không báo (nút đã bị khoá vì bắt buộc). */
+export const approveNoteError = (note: string): string | null => (note.trim() === '' || noteContentLength(note) >= NOTE_MIN_CHARS ? null : NOTE_TOO_SHORT_TEXT);
+
 export const isNoteRequiredError = (e: unknown): boolean => (e as { code?: unknown } | null)?.code === 'NOTE_REQUIRED';
 
 /** Đã cộng điểm mà đơn đã huỷ, hoàn hoặc xoá: lẽ ra phải đảo điểm. */
