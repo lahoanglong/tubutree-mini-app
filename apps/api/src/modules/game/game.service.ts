@@ -35,7 +35,8 @@ interface EcoImpact {
 }
 
 /** Thêm vào mô tả thẻ nhiệm vụ khi đơn đã giao nhưng chưa tính vì còn trong hạn đổi/trả. */
-const MISSION_WAITING_NOTE = 'Đơn đã giao đang trong thời gian đổi/trả hoặc đang chờ duyệt yêu cầu trả, thưởng mở khi hết hạn đổi/trả.';
+const MISSION_WAITING_NOTE =
+  'Đơn đã giao đang trong thời gian đổi/trả hoặc đang chờ duyệt yêu cầu trả, thưởng mở khi hết hạn đổi/trả và yêu cầu trả (nếu có) đã được xử lý.';
 
 /** Vườn Xanh Tubu (Build Spec §6.7). Tham số đọc từ SystemConfig. */
 @Injectable()

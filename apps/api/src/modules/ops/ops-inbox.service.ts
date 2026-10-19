@@ -34,6 +34,7 @@ export type InboxKey =
   | 'merchantPayoutsPending'
   | 'dealerApplications'
   | 'dealerClaims'
+  | 'dealerClaimsToPay'
   | 'payouts'
   | 'payoutsToPay'
   | 'communityPending'
@@ -98,6 +99,8 @@ export class OpsInboxService {
       { key: 'merchantPayoutsPending', audience: ['KE_TOAN'], count: () => p.merchantPayout.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerApplications', audience: 'ADMIN', count: () => p.dealerApplication.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerClaims', audience: 'ADMIN', count: () => p.dealerRewardClaim.count({ where: { status: 'PENDING' } }) },
+      // ADMIN đã duyệt, đang chờ kế toán chi và bấm "Đã chi" (DealerAdminController.markPaid mở cho KE_TOAN; duyệt vẫn chỉ ADMIN).
+      { key: 'dealerClaimsToPay', audience: ['KE_TOAN'], count: () => p.dealerRewardClaim.count({ where: { status: 'APPROVED' } }) },
       { key: 'payouts', audience: 'ADMIN', count: () => p.payout.count({ where: { status: 'REQUESTED' } }) },
       // ADMIN đã duyệt, đang chờ kế toán chuyển tiền và bấm "Đã chi" (duyệt chỉ ADMIN, chi do kế toán nên hai khoá tách nhau).
       { key: 'payoutsToPay', audience: ['KE_TOAN'], count: () => p.payout.count({ where: { status: 'APPROVED' } }) },

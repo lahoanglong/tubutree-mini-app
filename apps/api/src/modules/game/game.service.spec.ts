@@ -1520,6 +1520,17 @@ describe('GameService — nhiệm vụ FIRST_ORDER, REVIEW_3 chỉ tính đơn �
     expect(first!.description).toMatch(/đổi\/trả/);
   });
 
+  it('getMissions: đơn đã qua hạn đổi/trả nhưng còn yêu cầu trả chờ duyệt → thẻ không hứa "mở khi hết hạn", nói chờ yêu cầu trả được xử lý', async () => {
+    const prisma = prismaWith({
+      mission: { findMany: jest.fn().mockResolvedValue([FIRST]) },
+      order: { findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 30)]) },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([{ orderId: 'o1' }]) },
+    });
+    const [first] = await service(prisma, { 'returns.window_days': 7 }).getMissions('u1');
+    expect(first).toMatchObject({ code: 'FIRST_ORDER', progress: 0, completed: false });
+    expect(first!.description).toMatch(/yêu cầu trả[^.]*đã được xử lý/);
+  });
+
   /** Dòng trả đã duyệt của sản phẩm `productId` trên đơn `orderId` (qua dòng hàng i-<orderId> và biến thể v-<productId>). */
   const approvedReturn = (orderId: string, productId: string) => ({
     returnRequestItem: { findMany: jest.fn().mockResolvedValue([{ orderItemId: `i-${orderId}` }]) },

@@ -101,7 +101,7 @@ export class SystemConfigService {
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
     'wishlist.price_drop_min_pct': { min: 0, max: 1, note: 'phân số (0.05 = 5%)' },
     'wishlist.price_drop_cooldown_days': { min: 0, max: 90, note: 'số ngày (0 = tắt cooldown)', integer: true },
-    'community.author_notify_interval_minutes': { min: 0, max: 1440, note: 'số phút gộp tin "bài của bạn có người thích/bình luận" (0 = tắt tin)', integer: true },
+    'community.author_notify_interval_minutes': { min: 0, max: 1440, note: 'số phút gộp tin "bài của bạn có người thích/bình luận" và "câu hỏi của bạn có câu trả lời mới" (0 = tắt tin thích/bình luận; tin câu trả lời mới vẫn gửi nhưng không gộp)', integer: true },
     'community.unanswered_alert_hours': { min: 1, max: 720, note: 'số giờ câu hỏi chưa ai trả lời thì lên "Việc cần xử lý"', integer: true },
     'subscribe.stock_retry_days': { min: 0, max: 7, note: 'số đêm thử lại kỳ định kỳ khi hết hàng (0 = không thử lại)', integer: true },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },

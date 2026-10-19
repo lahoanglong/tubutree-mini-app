@@ -164,6 +164,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
         'merchantToSettle',
         'merchantPayoutsPending',
         'dealerApplications',
+        'dealerClaimsToPay',
         'payouts',
         'payoutsToPay',
         'invoicePending',
@@ -188,6 +189,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     const keToan = await inbox.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
     expect(keToan.items.map((i) => i.key).sort()).toEqual([
       'customerRefunds',
+      'dealerClaimsToPay',
       'invoicePending',
       'merchantPayoutsPending',
       'merchantToSettle',
@@ -196,7 +198,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       'wasteUnmatched',
     ]);
     const adminCount = (k: string) => after.items.find((i) => i.key === k)?.count;
-    for (const k of ['customerRefunds', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay']) {
+    for (const k of ['customerRefunds', 'dealerClaimsToPay', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay']) {
       expect(keToan.items.find((i) => i.key === k)?.count).toBe(adminCount(k));
     }
     await prisma.wasteRequest.delete({ where: { id: noShow.id } });

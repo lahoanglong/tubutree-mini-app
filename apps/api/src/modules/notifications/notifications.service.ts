@@ -176,8 +176,14 @@ export class NotificationsService {
     data: Record<string, string>,
   ): Promise<void> {
     const queue = this.notificationsQueue;
+    // Đọc cấu hình giờ yên tĩnh TRƯỚC khi ghi log: lỗi DB ở đây không để lại log PENDING không có job (kẹt mãi, và tin
+    // khuyến mãi vẫn bị đếm vào trần). Không có queue thì gửi ngay, không trễ.
+    const delay = queue ? await this.quietDelayMs() : 0;
+    const deliverAt = new Date(Date.now() + delay);
     // Trần chỉ áp cho tin khuyến mãi/hậu mãi (cùng danh sách mẫu Marketing được sửa); bỏ ZNS thì tin trong app vẫn đã lưu.
-    const cap = MARKETING_TEMPLATE_CODES.has(templateCode) ? await this.promoCap(userId) : null;
+    // Tin tạo trong giờ yên tĩnh tới tay khách sau nửa đêm: tính vào tháng của lúc tới, nếu không khách nhận 3 tin trong một
+    // tháng dương lịch khi tin tạo ngày cuối tháng.
+    const cap = MARKETING_TEMPLATE_CODES.has(templateCode) ? await this.promoCap(userId, deliverAt) : null;
     if (cap && (await this.promoZnsCount(this.prisma, cap)) >= cap.limit) {
       this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap.limit} tin khuyến mãi ZNS trong tháng.`);
       return;
@@ -192,6 +198,8 @@ export class NotificationsService {
       payload: { data },
       status: !result ? 'PENDING' : result.ok ? 'SENT' : 'FAILED',
       error: result && !result.ok ? znsFailureText(result) : null,
+      // Trần đếm theo sentAt: tin khuyến mãi bị trễ ghi mốc tới tay khách để rơi đúng tháng.
+      ...(cap && delay > 0 ? { sentAt: deliverAt } : {}),
     };
     const log = cap && queue ? await this.createCappedZnsLog(logData, cap) : await this.prisma.notificationLog.create({ data: logData });
     if (!log) {
@@ -208,7 +216,6 @@ export class NotificationsService {
     if (!queue) return;
 
     const job: ZnsSendJobData = { notificationLogId: log.id, phone, templateId, templateData: data };
-    const delay = await this.quietDelayMs();
     try {
       await withQueueTimeout(
         queue.add('zns-send', job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}`, ...(delay > 0 ? { delay } : {}) }),
@@ -235,12 +242,11 @@ export class NotificationsService {
   }
 
   /** null khi trần tắt (0) hoặc giá trị không hợp lệ thì dùng mặc định. */
-  private async promoCap(userId: string): Promise<PromoCap | null> {
+  private async promoCap(userId: string, at: Date): Promise<PromoCap | null> {
     const raw = this.config ? await this.config.get<unknown>(PROMO_CAP_KEY, DEFAULT_PROMO_MONTHLY_CAP) : DEFAULT_PROMO_MONTHLY_CAP;
     const limit = typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 ? raw : DEFAULT_PROMO_MONTHLY_CAP;
     if (limit === 0) return null;
-    const now = new Date();
-    return { userId, limit, from: startOfVnMonth(now), to: startOfNextVnMonth(now) };
+    return { userId, limit, from: startOfVnMonth(at), to: startOfNextVnMonth(at) };
   }
 
   private promoZnsCount(db: Pick<PrismaService, 'notificationLog'>, cap: PromoCap): Promise<number> {
