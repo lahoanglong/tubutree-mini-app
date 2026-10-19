@@ -3036,7 +3036,7 @@ model OaInboundMessage {
   messageText       String?  @db.Text
   rawPayload        Json
   matchedTemplateId String?
-  status            String   @default("RECEIVED") // RECEIVED | REPLIED | SKIPPED | FAILED
+  status            String   @default("RECEIVED") // RECEIVED | PROCESSING (đã claim, chưa gửi xong) | REPLIED | SKIPPED | FAILED
   createdAt         DateTime @default(now())
 
   @@index([zaloUserId])

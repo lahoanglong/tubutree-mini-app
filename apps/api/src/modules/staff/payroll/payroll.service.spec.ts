@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PayrollService } from './payroll.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { SystemConfigService } from '../../system-config/system-config.service';
@@ -30,27 +29,29 @@ const mk = (p: PrismaService) => new PayrollService(p, config);
 
 describe('PayrollService.ensureFines', () => {
   it('có phiên trễ → tạo LATE (1 lần)', async () => {
-    const create = jest.fn();
+    const createMany = jest.fn();
     const prisma = makePrisma({
       shift: { findMany: jest.fn().mockResolvedValue([{ id: 's1', cancelPenalty: false, sessions: [{ isLate: true }] }]) },
-      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), create },
+      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), createMany },
     });
     await mk(prisma).ensureFines('u1', new Date('2026-07-03'), 30000);
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ type: 'LATE', amount: 10000, shiftId: 's1' }) }),
-    );
+    expect(createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ type: 'LATE', amount: 10000, shiftId: 's1' })],
+      skipDuplicates: true,
+    });
   });
 
   it('ca huỷ trễ (cancelPenalty) → tạo LATE_CANCEL = 1h công (rate)', async () => {
-    const create = jest.fn();
+    const createMany = jest.fn();
     const prisma = makePrisma({
       shift: { findMany: jest.fn().mockResolvedValue([{ id: 's1', cancelPenalty: true, sessions: [] }]) },
-      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), create },
+      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), createMany },
     });
     await mk(prisma).ensureFines('u1', new Date('2026-07-03'), 25000);
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ type: 'LATE_CANCEL', amount: 25000 }) }),
-    );
+    expect(createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ type: 'LATE_CANCEL', amount: 25000 })],
+      skipDuplicates: true,
+    });
   });
 
   it('phạt đã tồn tại, số tiền đúng → không tạo trùng, không sửa', async () => {
@@ -80,16 +81,14 @@ describe('PayrollService.ensureFines', () => {
     expect(update).toHaveBeenCalledWith({ where: { id: 'a1' }, data: { amount: 30000 } });
   });
 
-  it('race: 2 recompute song song — pre-check đọc "chưa có phạt" nhưng create() đụng unique index (shiftId,type) → nuốt lỗi, KHÔNG throw, KHÔNG trừ lương 2 lần', async () => {
-    const create = jest.fn().mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }),
-    );
+  it('race: pre-check đọc "chưa có phạt" nhưng bản ghi đã có → createMany skipDuplicates (ON CONFLICT DO NOTHING) nên không throw, không làm hỏng transaction, không trừ lương 2 lần', async () => {
+    const createMany = jest.fn().mockResolvedValue({ count: 0 });
     const prisma = makePrisma({
       shift: { findMany: jest.fn().mockResolvedValue([{ id: 's1', cancelPenalty: false, sessions: [{ isLate: true }] }]) },
-      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), create }, // pre-check thua race
+      payrollAdjustment: { findFirst: jest.fn().mockResolvedValue(null), createMany },
     });
     await expect(mk(prisma).ensureFines('u1', new Date('2026-07-03'), 30000)).resolves.toBeUndefined();
-    expect(create).toHaveBeenCalledTimes(1);
+    expect(createMany).toHaveBeenCalledWith(expect.objectContaining({ skipDuplicates: true }));
   });
 });
 
@@ -133,6 +132,34 @@ describe('PayrollService.recomputeStaffMonth', () => {
     const out = await mk(prisma).recomputeStaffMonth('u1', 2026, 7);
     expect(out).toEqual({ id: 'm1', status: 'PAID' });
     expect(upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('PayrollService — khoá tháng (D4-03)', () => {
+  it('recompute, chốt và đã chi đều lấy khoá advisory (staffId, năm, tháng) TRƯỚC khi đọc/ghi', async () => {
+    for (const run of [
+      (svc: PayrollService) => svc.recomputeStaffMonth('u1', 2026, 7),
+      (svc: PayrollService) => svc.finalize('u1', 2026, 7),
+      (svc: PayrollService) => svc.markPaid('u1', 2026, 7, 'http://img/p.jpg', undefined, 'a1'),
+    ]) {
+      const order: string[] = [];
+      const prisma = makePrisma({
+        payrollMonth: {
+          findUnique: jest.fn().mockImplementation(async () => {
+            order.push('read');
+            return null;
+          }),
+          upsert: jest.fn().mockResolvedValue({}),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        $executeRaw: jest.fn().mockImplementation(async () => {
+          order.push('lock');
+        }),
+      });
+      await run(mk(prisma));
+      expect(order[0]).toBe('lock');
+      expect(((prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw.mock.calls[0] as unknown[]).slice(1)).toEqual(['payroll:u1:2026-7']);
+    }
   });
 });
 
@@ -442,7 +469,7 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
    * cả check LẪN create trong CÙNG 1 transaction, và phải LẤY LOCK TRƯỚC khi check — nếu không,
    * request thứ 2 vẫn có thể check xong trước khi request 1 tạo xong.
    */
-  it('khoá advisory PHẢI lấy trước, rồi mới check trùng, rồi mới tạo (order: lock → check → create) — để request đến sau luôn thấy bản ghi request trước vừa commit', async () => {
+  it('khoá tháng PHẢI lấy trước, rồi kiểm tháng, check trùng, tạo, tính lại ngày (order: lock → month → check → create → recompute) — để request đến sau luôn thấy bản ghi request trước vừa commit', async () => {
     const order: string[] = [];
     const prisma = base();
     (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
@@ -460,13 +487,21 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
       order.push('lock');
     });
     (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = executeRaw;
+    (prisma as unknown as { payrollMonth: Record<string, jest.Mock> }).payrollMonth.findUnique = jest.fn().mockImplementation(async () => {
+      order.push('month');
+      return null;
+    });
+    (prisma as unknown as { payrollDay: Record<string, jest.Mock> }).payrollDay.upsert = jest.fn().mockImplementation(async () => {
+      order.push('recompute');
+      return {};
+    });
 
     await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
 
-    expect(order).toEqual(['lock', 'check', 'create']);
-    // Khoá theo (staffId, workDate, type) — đúng phạm vi task yêu cầu, không lẫn amount/reason
-    // (2 khoản khác số tiền/lý do CÙNG ngày vẫn phải serialize qua nhau).
-    expect(executeRaw.mock.calls[0].slice(1)).toEqual(['u1:2026-07-03T00:00:00.000Z:MANUAL']);
+    expect(order).toEqual(['lock', 'month', 'check', 'create', 'recompute']);
+    // Một khoá duy nhất theo (nhân viên, năm, tháng) — cùng khoá với recompute/chốt/đã chi, nên khoản ghi không lọt vào tháng vừa PAID.
+    expect(executeRaw.mock.calls).toHaveLength(1);
+    expect(executeRaw.mock.calls[0].slice(1)).toEqual(['payroll:u1:2026-7']);
   });
 
   it('2 request "đồng thời" cùng ngày/số tiền/lý do (giả lập tuần tự do mock $transaction chạy đồng bộ) → chỉ request đầu tạo bản ghi, request sau tự nhận biết đã trùng', async () => {
@@ -489,6 +524,47 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
     expect(r1).toEqual({ adjusted: true });
     await expect(r2).rejects.toBeInstanceOf(ConflictException);
     expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PayrollService.writeInMonth — ghi dữ liệu đầu vào dưới khoá tháng', () => {
+  const day = new Date('2026-07-03');
+
+  it('tháng đã chốt/đã trả → 400 TRƯỚC khi ghi, không tính lại', async () => {
+    const prisma = makePrisma({
+      payrollMonth: { findUnique: jest.fn().mockResolvedValue({ status: 'PAID' }), upsert: jest.fn() },
+    });
+    const write = jest.fn();
+    await expect(mk(prisma).writeInMonth('u1', day, write)).rejects.toBeInstanceOf(BadRequestException);
+    expect(write).not.toHaveBeenCalled();
+    expect((prisma as unknown as { payrollDay: { upsert: jest.Mock } }).payrollDay.upsert).not.toHaveBeenCalled();
+  });
+
+  it('tháng mở → khoá, ghi bằng tx, rồi tính lại ngày trong cùng transaction; trả kết quả của write', async () => {
+    const order: string[] = [];
+    const prisma = makePrisma();
+    (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = jest.fn().mockImplementation(async () => order.push('lock'));
+    (prisma as unknown as { payrollDay: Record<string, jest.Mock> }).payrollDay.upsert = jest.fn().mockImplementation(async () => {
+      order.push('recompute');
+      return {};
+    });
+    const out = await mk(prisma).writeInMonth('u1', day, async (tx) => {
+      order.push('write');
+      expect(tx).toBe(prisma);
+      return 'kq';
+    });
+    expect(out).toBe('kq');
+    expect(order).toEqual(['lock', 'write', 'recompute']);
+  });
+
+  it('write ném lỗi (vd phiên đã đóng) → không tính lại', async () => {
+    const prisma = makePrisma();
+    await expect(
+      mk(prisma).writeInMonth('u1', day, async () => {
+        throw new BadRequestException('Phiên đã đóng.');
+      }),
+    ).rejects.toThrow('Phiên đã đóng');
+    expect((prisma as unknown as { payrollDay: { upsert: jest.Mock } }).payrollDay.upsert).not.toHaveBeenCalled();
   });
 });
 

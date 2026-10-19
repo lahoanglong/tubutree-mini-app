@@ -16,8 +16,11 @@ function setup(opts: {
   /** true = đã có claim OaGreetedUser trước đó (create() ném P2002) → KHÔNG phải tin đầu tiên. */
   alreadyGreeted?: boolean;
   sendResult?: boolean;
+  /** Số hàng claim RECEIVED → PROCESSING thắng được (0 = job khác đã claim). */
+  claimCount?: number;
 } = {}) {
   const update = jest.fn().mockResolvedValue({});
+  const claim = jest.fn().mockResolvedValue({ count: opts.claimCount ?? 1 });
   const greetedCreate = opts.alreadyGreeted
     ? jest.fn().mockRejectedValue(DUP_ERR)
     : jest.fn().mockResolvedValue({ zaloUserId: EVENT.zaloUserId });
@@ -25,6 +28,7 @@ function setup(opts: {
     oaInboundMessage: {
       findUnique: jest.fn().mockResolvedValue(opts.event === undefined ? EVENT : opts.event),
       update,
+      updateMany: claim,
     },
     oaGreetedUser: { create: greetedCreate },
   } as unknown as PrismaService;
@@ -36,13 +40,28 @@ function setup(opts: {
     sendText: jest.fn().mockResolvedValue(opts.sendResult ?? true),
   } as unknown as ZaloOaMessageClient;
   const proc = new ZaloOaEventsProcessor(prisma, cskh, client);
-  return { proc, prisma, cskh, client, update, greetedCreate };
+  return { proc, prisma, cskh, client, update, claim, greetedCreate };
 }
 
 describe('ZaloOaEventsProcessor.process', () => {
   it('event không tồn tại hoặc đã xử lý → bỏ qua, không update', async () => {
     const { proc, update } = setup({ event: null });
     await proc.process({ data: { eventId: 'evt1' } } as never);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('claim RECEIVED → PROCESSING trước khi gửi; job stalled chạy lại không gửi lần hai (D4-05)', async () => {
+    const { proc, client, claim } = setup({ matched: TEMPLATE });
+    await proc.process({ data: { eventId: 'evt1' } } as never);
+    expect(claim).toHaveBeenCalledWith({ where: { id: 'evt1', status: 'RECEIVED' }, data: { status: 'PROCESSING' } });
+    expect(claim.mock.invocationCallOrder[0]).toBeLessThan((client.sendText as jest.Mock).mock.invocationCallOrder[0]!);
+  });
+
+  it('claim không thắng (count=0, job khác đã nhận) → không gửi, không update', async () => {
+    const { proc, client, update, cskh } = setup({ matched: TEMPLATE, claimCount: 0 });
+    await proc.process({ data: { eventId: 'evt1' } } as never);
+    expect(client.sendText).not.toHaveBeenCalled();
+    expect(cskh.matchTemplate).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 
