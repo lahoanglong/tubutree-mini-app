@@ -21,6 +21,7 @@ beforeEach(() => {
   nav.back.mockClear();
   nav.push.mockClear();
   document.body.className = '';
+  try { sessionStorage.clear(); } catch { /* không có */ }
 });
 
 describe('BackButton', () => {
@@ -71,13 +72,72 @@ describe('BackButton', () => {
   });
 });
 
+describe('BackButton độ sâu', () => {
+  function setup() {
+    let bump = () => {};
+    function Host() {
+      const [, set] = useState(0);
+      bump = () => set((n) => n + 1);
+      return <BackButton />;
+    }
+    const m = mount(<Host />);
+    const go = (path: string, popped = false) => {
+      nav.pathname = path;
+      if (popped) window.dispatchEvent(new PopStateEvent('popstate'));
+      act(() => bump());
+    };
+    return { m, go };
+  }
+
+  it('A→B rồi lùi về A (popstate) thì nút ở A quay về "/" chứ không back() ra khỏi site', () => {
+    nav.pathname = '/san-pham/a';
+    const { m, go } = setup();
+    go('/san-pham/b');
+    go('/san-pham/a', true);
+    click(m.container.querySelector('button')!);
+    expect(nav.push).toHaveBeenCalledWith('/');
+    expect(nav.back).not.toHaveBeenCalled();
+  });
+
+  it('A→B: ở B vẫn back()', () => {
+    nav.pathname = '/san-pham/a';
+    const { m, go } = setup();
+    go('/san-pham/b');
+    click(m.container.querySelector('button')!);
+    expect(nav.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('độ sâu giữ qua F5 (sessionStorage)', () => {
+    nav.pathname = '/san-pham/a';
+    const { go } = setup();
+    go('/san-pham/b');
+    const m2 = mount(<BackButton />);
+    nav.pathname = '/san-pham/b';
+    click(m2.container.querySelector('button')!);
+    expect(nav.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('nút nổi thấp hơn Sheet (z-50) và OnboardingGate (z-60) để lớp phủ che được nó', () => {
+    const b = mount(<BackButton />).container.querySelector('button')!;
+    expect(Number(b.style.zIndex)).toBeLessThan(50);
+  });
+
+  it('hai bản cùng gắn: gỡ một bản không làm mất with-back-btn của bản còn lại', () => {
+    const a = mount(<BackButton />);
+    mount(<BackButton />);
+    a.unmount();
+    expect(document.body.classList.contains('with-back-btn')).toBe(true);
+    a.container.remove();
+  });
+});
+
 describe('PageHeader', () => {
-  it('đúng một h1, phụ đề, chừa chỗ cho nút lùi (mặc định) và hành động bên phải', () => {
+  it('đúng một h1, phụ đề, chừa chỗ cho nút lùi của layout (không tự gắn nút thứ hai) và hành động bên phải', () => {
     const c = mount(<PageHeader title="Giỏ hàng" subtitle="2 sản phẩm" actions={<button>Sửa</button>} />).container;
     expect(c.querySelectorAll('h1').length).toBe(1);
     expect(c.querySelector('h1')!.textContent).toBe('Giỏ hàng');
     expect(c.textContent).toContain('2 sản phẩm');
-    expect(c.querySelector('[aria-label="Quay lại"]')).not.toBeNull();
+    expect(c.querySelector('[aria-label="Quay lại"]')).toBeNull();
     expect(c.querySelector('h1')!.parentElement!.style.paddingLeft).toBe('48px');
     expect(c.textContent).toContain('Sửa');
   });

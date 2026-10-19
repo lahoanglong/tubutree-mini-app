@@ -125,6 +125,19 @@ describe('HomeHeader (đầu Trang chủ ở điện thoại)', () => {
     expect(container.querySelector('a[href="/gio-hang"]')!.getAttribute('aria-label')).toBe('Giỏ hàng, 2 sản phẩm');
   });
 
+  it('huy hiệu như CountBadge của Mini App: 18px, màu promo-solid, chữ 11', () => {
+    mocks.auth = { user: { fullName: 'An' }, status: 'authenticated' };
+    mocks.cart = { itemCount: 2 };
+    const { container } = mount(<HomeHeader unreadCount={3} authed />);
+    const badges = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="count-badge"]'));
+    expect(badges).toHaveLength(2);
+    for (const b of badges) {
+      expect(b.style.minWidth).toBe('18px');
+      expect(b.style.background).toBe('var(--color-promo-solid-bg)');
+      expect(b.style.fontSize).toBe('11px');
+    }
+  });
+
   it('chưa đăng nhập: không có chuông, vẫn có giỏ', () => {
     const { container } = mount(<HomeHeader unreadCount={0} authed={false} />);
     expect(container.querySelector('a[href="/tai-khoan/thong-bao"]')).toBeNull();
@@ -155,5 +168,11 @@ describe('globals.css', () => {
   const css = readFileSync(join(__dirname, '../app/globals.css'), 'utf8');
   it('trang con có nút lùi nổi được đệm đỉnh 48px chỉ ở dưới md, như body.with-back-btn .page của Mini App', () => {
     expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*body\.with-back-btn\s*\{[^}]*padding-top:\s*calc\(var\(--safe-top\) \+ 48px\)/);
+  });
+  it('trang hero (sản phẩm, thương hiệu, gian hàng) bỏ đệm 48px như .page-bleed của Mini App', () => {
+    expect(css).toMatch(/body\.with-back-btn:has\(\[data-page-bleed\]\)\s*\{[^}]*padding-top:\s*var\(--safe-top\)/);
+    for (const f of ['san-pham/[slug]', 'brand/[slug]', 's/[slug]']) {
+      expect(readFileSync(join(__dirname, '../app', f, 'page.tsx'), 'utf8')).toContain('data-page-bleed');
+    }
   });
 });

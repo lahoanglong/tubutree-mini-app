@@ -9,16 +9,10 @@ import { useAuth } from '@/lib/auth-context';
 import { useCartKey } from '@/lib/cart-key';
 import { getCart } from '@/lib/shop-client';
 import { homeText } from '@/lib/home-text';
+import { CountBadge } from '@/components/mini/badge';
 import tubuLogo from '@/assets/tubu-logo.png';
 
-const BUTTON = 'relative grid h-11 w-11 flex-none place-items-center rounded-full bg-[var(--color-action-secondary-bg)] text-[var(--color-text-brand)]';
-
-const CountPill = ({ count, tone, label }: { count: number; tone: string; label?: string }) =>
-  count > 0 ? (
-    <span {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })} className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-bold ring-2 ring-stone-0 ${tone}`}>
-      {count > 99 ? '99+' : count}
-    </span>
-  ) : null;
+const BUTTON = 'relative grid h-11 w-11 flex-none place-items-center rounded-full bg-[var(--color-action-secondary-bg)] text-[var(--color-text-primary)]';
 
 /**
  * Đầu Trang chủ ở điện thoại, như `HomeHeader` của Mini App: logo (tên trang cho trình đọc màn hình), chuông thông báo, giỏ.
@@ -36,13 +30,13 @@ export function HomeHeader({ unreadCount, authed }: { unreadCount: number; authe
       <div className="flex items-center gap-2">
         {authed && isWebRouteReady('/tai-khoan/thong-bao') && (
           <Link href="/tai-khoan/thong-bao" aria-label={unreadCount > 0 ? homeText.notificationsUnread(unreadCount) : homeText.notifications} className={BUTTON}>
-            <Bell className="h-6 w-6" aria-hidden="true" />
-            <CountPill count={unreadCount} tone="bg-promo-solid text-stone-900" label={homeText.unreadBadge(unreadCount)} />
+            <Bell className="h-5 w-5" aria-hidden="true" />
+            <CountBadge count={unreadCount} label={homeText.unreadBadge(unreadCount)} />
           </Link>
         )}
         <Link href="/gio-hang" aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'} className={BUTTON}>
           <ShoppingCart className="h-5 w-5" aria-hidden="true" />
-          <CountPill count={count} tone="bg-forest-600 text-stone-0" />
+          <CountBadge count={count} />
         </Link>
       </div>
     </div>

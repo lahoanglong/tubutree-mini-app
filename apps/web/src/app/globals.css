@@ -73,4 +73,8 @@ body.has-sticky-bar [data-bottom-nav] {
   body.with-back-btn {
     padding-top: calc(var(--safe-top) + 48px);
   }
+  /* Trang hero full-bleed (gallery/hero): nút lùi nằm trên hero nên không cần đệm, như .page.page-bleed của Mini App. */
+  body.with-back-btn:has([data-page-bleed]) {
+    padding-top: var(--safe-top);
+  }
 }

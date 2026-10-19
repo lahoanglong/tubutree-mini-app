@@ -73,7 +73,7 @@ export default async function StorefrontPage({
     .filter((c) => c.items.length > 0);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
       {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
       <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
 

@@ -69,7 +69,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6">
       <BackLink href="/">
         ← Về trang chủ
       </BackLink>

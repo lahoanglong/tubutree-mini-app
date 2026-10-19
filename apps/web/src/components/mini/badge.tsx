@@ -49,3 +49,21 @@ export function Badge({ children, tone = 'neutral', size = 'md', icon: IconCmp, 
 
 /** Alias — audit's own naming uses "StatusPill" for order/kiểm duyệt trạng thái contexts. */
 export const StatusPill = Badge;
+
+/** Huy hiệu đếm trên icon, đặt trong phần tử `position: relative`. Có `label` thì đọc được riêng, không thì để nhãn của nút cha đọc. */
+export function CountBadge({ count, label }: { count: number; label?: string }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      data-testid="count-badge"
+      {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}
+      style={{
+        position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, boxSizing: 'border-box', padding: '0 4px',
+        borderRadius: 'var(--radius-pill)', background: 'var(--color-promo-solid-bg)', color: 'var(--color-promo-solid-fg)',
+        fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}

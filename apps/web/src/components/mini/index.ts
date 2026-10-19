@@ -12,7 +12,7 @@ export { ListRow } from './list-row';
 export { SectionTitle } from './section-title';
 export { EmptyState } from './empty-state';
 export { StickyActionBar } from './sticky-action-bar';
-export { Badge, StatusPill } from './badge';
+export { Badge, StatusPill, CountBadge } from './badge';
 export { Chip } from './chip';
 export { KeyValueRow } from './key-value-row';
 export { PriceTag, Money, Points } from './price-tag';
