@@ -301,18 +301,26 @@ describe('/tai-khoan/diem-xanh — lối tắt', () => {
 });
 
 describe('/tai-khoan/diem-xanh — lịch sử Điểm Xanh', () => {
-  it('từng dòng bằng tiếng Việt, có dấu cộng/trừ, ngày và hạn', async () => {
+  it('từng dòng bằng nhãn ngắn như Mini App, có dấu cộng/trừ và ngày; không in mã đơn hay hạn từng dòng', async () => {
     const c = await mount();
     const rows = Array.from(c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li')).map((li) => li.textContent ?? '');
     expect(rows).toHaveLength(4);
-    expect(rows[0]).toContain('Dùng điểm khi thanh toán · TB1');
+    expect(rows[0]).toContain('Dùng điểm khi thanh toán');
+    expect(rows[0]).not.toContain('TB1');
     expect(rows[0]).toContain('−1.681');
     expect(rows[0]).toContain('14/10/2026');
     expect(rows[1]).toContain('+250');
-    expect(rows[1]).toContain('Hết hạn 14/10/2027');
+    expect(rows[1]).not.toContain('Hết hạn');
     expect(rows[2]).toContain('Điểm không hết hạn');
     expect(c.textContent).toContain('Điều chỉnh Điểm Xanh');
     expect(c.textContent).not.toContain('WEIRD_INTERNAL_CODE');
+  });
+
+  it('chỉ hiện 20 giao dịch gần nhất và không có dòng chú thích cuối như Mini App', async () => {
+    state.txns = Array.from({ length: 25 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
+    const c = await mount();
+    expect(c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li')).toHaveLength(20);
+    expect(c.textContent).not.toContain('Hiển thị tối đa');
   });
 
   it('chưa có giao dịch: câu báo trống; tải lỗi: báo lỗi và Thử lại', async () => {
@@ -460,5 +468,50 @@ describe('/tai-khoan/diem-xanh — trạng thái trang', () => {
   it('nút mua sắm dẫn về danh mục sản phẩm', async () => {
     const c = await mount();
     expect(byText(c, 'a', 'Mua sắm để tích thêm Điểm Xanh')?.getAttribute('href')).toBe('/');
+  });
+});
+
+describe('/tai-khoan/diem-xanh — giao diện điện thoại như Mini App', () => {
+  it('thẻ hạng giữ màu nền theo hạng (không bị nền trắng của thẻ đè), không viền ở điện thoại', async () => {
+    const c = await mount();
+    const card = c.querySelector('section[aria-label="Hạng thành viên"]')!;
+    expect(card.classList.contains('bg-sage-50')).toBe(true);
+    expect(card.classList.contains('bg-stone-0')).toBe(false);
+    expect(card.classList.contains('border')).toBe(false);
+  });
+
+  it('thanh tiến độ không in chữ nhãn (chỉ aria-label), thanh dày 10px', async () => {
+    const c = await mount();
+    const bar = c.querySelector('[role="progressbar"][aria-label="Tiến độ lên hạng kế"]') as HTMLElement;
+    expect(bar.getAttribute('aria-valuenow')).toBe('38');
+    expect(bar.className).toContain('h-2.5');
+    const card = c.querySelector('section[aria-label="Hạng thành viên"]')!;
+    expect(card.textContent).not.toContain('Tiến độ lên hạng kế');
+  });
+
+  it('nút thẻ thành viên số và nút mua sắm là nút phụ kiểu ZaUI ở điện thoại', async () => {
+    const c = await mount();
+    expect(byText(c, 'button', 'Thẻ thành viên số')!.className).toContain('max-md:bg-forest-50');
+    expect(byText(c, 'a', 'Mua sắm để tích thêm Điểm Xanh')!.className).toContain('max-md:bg-forest-50');
+  });
+
+  it('các thẻ khối không viền ở điện thoại', async () => {
+    const c = await mount();
+    const bordered = Array.from(c.querySelectorAll('section')).filter((s) => s.classList.contains('border'));
+    expect(bordered).toEqual([]);
+  });
+
+  it('lối tắt dùng mũi tên chevron, không dùng ký tự ›', async () => {
+    state.readyRoutes = new Set(['/vuon-xanh', '/kho-qua']);
+    const c = await mount();
+    const link = c.querySelector('a[href="/vuon-xanh"]')!;
+    expect(link.textContent).not.toContain('›');
+    expect(link.querySelectorAll('svg').length).toBe(2);
+  });
+
+  it('trang bỏ đệm 48px của body và có thanh tiêu đề trắng với h1 như Mini App', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:bg-stone-0');
   });
 });

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarCheck, Check, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout } from 'lucide-react';
+import { CalendarCheck, Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout } from 'lucide-react';
 import { postDailyCheckIn, type CheckInStatusResponse, type CouponDTO } from '@tubutree/app-core/api/loyalty';
 import { checkInQuery, couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
@@ -11,7 +11,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
 import { formatCount, lockedPointsLines, pointsSummary } from '@/lib/checkout-points';
-import { pointsReasonDetail } from '@/lib/ledger-labels';
+import { pointsReasonLabel } from '@/lib/ledger-labels';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { autoCouponName } from '@/lib/coupon-name';
@@ -33,8 +33,8 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { ProgressBar } from '@/components/ui/progress-bar';
 import { QrCode } from '@/components/ui/qr-code';
+import { miniBtnSecondary, miniCard, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
@@ -183,7 +183,7 @@ export default function LoyaltyPage() {
   return (
     <LedgerShell title={TITLE} wide>
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-          <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${ui.card} ${tierStyle.bg}`}>
+          <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
             <div aria-hidden="true" className="text-5xl leading-none">
               {tierStyle.emoji}
             </div>
@@ -202,7 +202,16 @@ export default function LoyaltyPage() {
 
             {next ? (
               <div className="mt-4 text-left">
-                <ProgressBar value={progress} max={100} label="Tiến độ lên hạng kế" />
+                <div
+                  role="progressbar"
+                  aria-label="Tiến độ lên hạng kế"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress}
+                  className="h-2.5 overflow-hidden rounded-full bg-stone-0"
+                >
+                  <div className={`h-full rounded-full bg-current ${tierStyle.fg}`} style={{ width: `${progress}%` }} />
+                </div>
                 <p className="mt-1.5 text-center text-xs text-stone-700">
                   {next.spendingToGo != null ? (
                     <>
@@ -228,7 +237,7 @@ export default function LoyaltyPage() {
               </div>
             )}
 
-            <button type="button" onClick={() => setShowCard(true)} className={`${ui.btnSecondary} mt-4 gap-2`}>
+            <button type="button" onClick={() => setShowCard(true)} className={`${miniBtnSecondary} mt-4 gap-2`}>
               <QrCodeIcon className="h-4 w-4" aria-hidden="true" />
               Thẻ thành viên số (mã QR)
             </button>
@@ -265,11 +274,11 @@ export default function LoyaltyPage() {
           {checkInQ.isLoading ? (
             <Skeleton height={120} />
           ) : checkInQ.isError ? (
-            <div className={`p-4 ${ui.card}`}>
+            <div className={`p-4 ${miniCard}`}>
               <InlineError message={`Chưa tải được lịch điểm danh: ${errText(checkInQ.error)}`} onRetry={() => void checkInQ.refetch()} />
             </div>
           ) : checkInQ.data && checkIn ? (
-            <section aria-label="Điểm danh" className={`p-4 ${ui.card}`}>
+            <section aria-label="Điểm danh" className={`p-4 ${miniCard}`}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <IconTile>
@@ -319,7 +328,7 @@ export default function LoyaltyPage() {
           ) : null}
 
           {shortcuts.length > 0 && (
-            <ul className={`divide-y divide-stone-200 ${ui.card}`}>
+            <ul className={`divide-y divide-stone-200 ${miniCard}`}>
               {shortcuts.map((s) => (
                 <li key={s.href}>
                   <Link href={s.href} className="flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50">
@@ -330,9 +339,7 @@ export default function LoyaltyPage() {
                       <span className="block text-sm font-semibold text-stone-900">{s.title}</span>
                       <span className="block text-xs text-stone-600">{s.sub}</span>
                     </span>
-                    <span aria-hidden="true" className="text-stone-500">
-                      ›
-                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
                   </Link>
                 </li>
               ))}
@@ -352,7 +359,7 @@ export default function LoyaltyPage() {
             </Section>
           )}
 
-          <section aria-label="Các hạng" className={`p-4 ${ui.card}`}>
+          <section aria-label="Các hạng" className={`p-4 ${miniCard}`}>
             <h2 className={`mb-3 ${ui.sectionTitle}`}>Các hạng</h2>
             <ul className="space-y-1.5">
               {data.tiers.map((t) => {
@@ -377,7 +384,7 @@ export default function LoyaltyPage() {
             </ul>
           </section>
 
-          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-span-2 ${ui.card}`}>
+          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-span-2 ${miniCard}`}>
             <h2 className={`mb-2 ${ui.sectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />
@@ -386,30 +393,26 @@ export default function LoyaltyPage() {
             ) : !txnQ.data || txnQ.data.length === 0 ? (
               <p className="py-3 text-center text-sm text-stone-600">Chưa có giao dịch điểm nào.</p>
             ) : (
-              <>
-                <ul className="divide-y divide-stone-200">
-                  {txnQ.data.map((t) => (
-                    <li key={t.id} className="flex items-start justify-between gap-3 py-2.5">
-                      <div className="min-w-0">
-                        <div className="break-words text-sm font-medium text-stone-900">{pointsReasonDetail(t.reason)}</div>
-                        <div className="text-xs text-stone-600">
-                          {formatDate(t.createdAt)}
-                          {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}
-                          {t.delta > 0 && t.expiresAt ? ` · Hết hạn ${formatDate(t.expiresAt)}` : ''}
-                        </div>
+              <ul className="divide-y divide-stone-200">
+                {txnQ.data.slice(0, 20).map((t) => (
+                  <li key={t.id} className="flex items-start justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="break-words text-sm font-medium text-stone-900">{pointsReasonLabel(t.reason)}</div>
+                      <div className="text-xs text-stone-600">
+                        {formatDate(t.createdAt)}
+                        {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}
                       </div>
-                      <SignedAmount delta={t.delta} text={formatCount(Math.abs(t.delta))} />
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-center text-xs text-stone-600">Hiển thị tối đa 100 giao dịch gần nhất.</p>
-              </>
+                    </div>
+                    <SignedAmount delta={t.delta} text={formatCount(Math.abs(t.delta))} />
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
       </div>
 
       <div className="mt-6 flex justify-center">
-        <Link href={isWebRouteReady('/san-pham') ? '/san-pham' : '/'} className={ui.btnSecondary}>
+        <Link href={isWebRouteReady('/san-pham') ? '/san-pham' : '/'} className={miniBtnSecondary}>
           Mua sắm để tích thêm Điểm Xanh →
         </Link>
       </div>
@@ -502,7 +505,7 @@ function MemberCardSheet({
       onClose={onClose}
       title="Thẻ Thành Viên Tubu"
       footer={
-        <button type="button" onClick={onClose} className={`${ui.btnSecondary} w-full`}>
+        <button type="button" onClick={onClose} className={`${miniBtnSecondary} w-full`}>
           Đóng
         </button>
       }
@@ -550,7 +553,7 @@ function MemberCardSheet({
 
 function Section({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
   return (
-    <section aria-label={title} className={`p-4 ${ui.card}`}>
+    <section aria-label={title} className={`p-4 ${miniCard}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className={ui.sectionTitle}>{title}</h2>
         {action && <span className="text-xs text-stone-600">{action}</span>}
