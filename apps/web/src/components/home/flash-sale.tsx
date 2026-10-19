@@ -17,7 +17,7 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
 
-const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44';
+const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 md:min-w-44 md:flex-1';
 const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1';
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
@@ -83,7 +83,7 @@ export function FlashSale() {
           const { price, was, pct } = flashDisplay(item);
           const sold = soldPercent(item.soldCount, item.quota);
           return (
-            <li key={item.itemId}>
+            <li key={item.itemId} className="md:flex md:min-w-44 md:flex-1">
               <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className={CARD}>
                 <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
                 <div className="p-2">

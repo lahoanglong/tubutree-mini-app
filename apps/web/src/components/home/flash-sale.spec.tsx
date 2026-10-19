@@ -198,3 +198,14 @@ describe('UpcomingFlashSales', () => {
     expect(c.querySelector('a[href="/san-pham/dau-goi"]')).not.toBeNull();
   });
 });
+
+describe('FlashSale — khổ máy tính (D7-30)', () => {
+  it('thẻ giờ vàng giãn đều bề ngang từ md như kệ Mua lại, không cố định 176px', async () => {
+    activeResult = async () => [active()];
+    const c = await mount(<FlashSale />);
+    const tile = c.querySelector('a[href="/san-pham/nuoc-rua-chen"]')!;
+    expect(tile.className).toContain('md:min-w-44');
+    expect(tile.className).toContain('md:flex-1');
+    expect(tile.parentElement!.className).toContain('md:flex-1');
+  });
+});
