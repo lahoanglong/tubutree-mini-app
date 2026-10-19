@@ -97,7 +97,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     expect(await screen.findByText('Chỉ nổi bật')).toBeInTheDocument();
     expect(await screen.findByText('Cobote')).toBeInTheDocument();
     // D2-07b: khối "Quà khách mới" (số công khai + ưu đãi của khách) đi cùng hai request gộp, không thêm request lẻ.
-    expect(await screen.findByText('Voucher chào mừng 25.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().sort()).toEqual(['/home', '/home/me']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
@@ -121,7 +121,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/config/public'] = () => ({ data: publicConfig });
     mocks.routes['/me/new-customer-offer'] = () => ({ data: newCustomerOffer });
     renderHome();
-    expect(await screen.findByText('Voucher chào mừng 25.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().sort()).toEqual(['/config/public', '/home', '/home/me', '/me/new-customer-offer']);
   });

@@ -124,6 +124,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
             key={item.id}
             data-item
             data-status={item.status}
+            aria-disabled={comingSoon || undefined}
             style={{
               display: 'flex',
               gap: 12,
@@ -131,7 +132,6 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
               borderRadius: 'var(--radius-card)',
               border: '1px solid var(--color-border-subtle)',
               background: 'var(--color-bg-surface)',
-              ...(comingSoon ? { opacity: 0.55 } : null),
             }}
           >
             <span data-item-media>
@@ -139,12 +139,12 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
             </span>
             <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Text variant="body-md" as="span" style={{ fontWeight: 600 }}>
+                <Text variant="body-md" as="span" tone={comingSoon ? 'tertiary' : 'primary'} style={{ fontWeight: 600 }}>
                   {item.name}
                 </Text>
                 {comingSoon && <Badge>Sắp nhận</Badge>}
               </div>
-              <Text variant="caption" tone="secondary" as="div">
+              <Text variant="caption" tone={comingSoon ? 'tertiary' : 'secondary'} as="div">
                 {ruleText(item)}
               </Text>
               {item.prepInstructions && (

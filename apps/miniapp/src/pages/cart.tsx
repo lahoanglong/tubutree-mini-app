@@ -38,6 +38,7 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { PriceTag } from '../components/ui/price-tag';
 import { Heading } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
@@ -256,6 +257,7 @@ export default function CartPage() {
                     onQty={(qty) => update.mutate({ id: line.id, qty })}
                     onRemove={() => handleRemove(line)}
                     onOpen={() => navigate(`/product/${line.slug}`)}
+                    pending={update.isPending && update.variables?.id === line.id}
                   />
                 ))}
               </Box>
@@ -299,6 +301,7 @@ export default function CartPage() {
           </Text>
           <Text
             role="button"
+            {...rowKeyboardProps()}
             size="small"
             bold
             onClick={handleUndo}
@@ -391,6 +394,7 @@ function CartLineRow({
   onQty,
   onRemove,
   onOpen,
+  pending,
 }: {
   line: CartLine;
   selected: boolean;
@@ -398,6 +402,8 @@ function CartLineRow({
   onQty: (qty: number) => void;
   onRemove: () => void;
   onOpen: () => void;
+  /** PATCH số lượng của chính dòng này đang bay: line.total lúc đó là số client tự nhân (optimistic), chưa phải số server. */
+  pending: boolean;
 }) {
   const overStock = line.quantity > line.stock;
   // Bấm +/- nhanh 5 lần trước đây gọi 5 PATCH song song → debounce qty cuối cùng
@@ -430,8 +436,9 @@ function CartLineRow({
         <span style={SR_ONLY}>{`Chọn ${line.productName}`}</span>
       </Checkbox>
       <Box
-        role="button"
-        aria-label={line.productName}
+        // Ảnh chỉ là đường tắt cho chuột/chạm; tên sản phẩm ngay bên cạnh là nút cho bàn phím và trình đọc màn hình,
+        // để một dòng không có hai nút trùng tên.
+        aria-hidden
         onClick={onOpen}
         style={{
           width: 64,
@@ -461,7 +468,7 @@ function CartLineRow({
 
       <Box style={{ flex: 1, minWidth: 0 }}>
         {/* Tên 1-2 dòng chỉ cao 18-36px: tubu-hit-44 nới vùng chạm lên 44px mà không đổi bố cục dòng. */}
-        <Text size="small" bold onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
+        <Text size="small" bold role="button" {...rowKeyboardProps()} onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
           {line.productName}
         </Text>
         {line.variationName && (
@@ -474,8 +481,8 @@ function CartLineRow({
         <Box style={{ marginTop: 4 }}>
           <PriceTag value={line.unitPrice} size="sm" />
         </Box>
-        {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Đang chờ đồng bộ SL thì ẩn. */}
-        {line.quantity > 1 && localQty === line.quantity && (
+        {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
+        {line.quantity > 1 && localQty === line.quantity && !pending && (
           <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', display: 'block', fontVariantNumeric: 'tabular-nums' }}>
             Thành tiền {formatVnd(line.total)}
           </Text>
@@ -548,6 +555,8 @@ function CouponBlock({
         p={3}
         mx={3}
         className="tubu-press"
+        role="button"
+        {...rowKeyboardProps()}
         onClick={() => {
           haptic('light');
           setSheetOpen(true);
@@ -684,7 +693,7 @@ function StickySummary({
               <Text size="xSmall" style={{ color: reached ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}>
                 {reached
                   ? tubuOnlyFreeship
-                    ? 'Phần hàng Tubu Tree giao được miễn phí ship'
+                    ? vi.cart.freeshipReachedTubuOnly
                     : vi.cart.freeshipReached
                   : vi.cart.freeshipProgress(formatVnd(remaining)) + (tubuOnlyFreeship ? ' cho phần hàng Tubu Tree giao' : '')}
               </Text>

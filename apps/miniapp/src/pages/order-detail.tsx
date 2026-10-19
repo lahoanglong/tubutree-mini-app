@@ -367,6 +367,8 @@ export default function OrderDetailPage() {
                 size="xSmall"
                 bold
                 className="tubu-press tubu-hit-44"
+                role="button"
+                {...rowKeyboardProps()}
                 style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onClick={() => {
                   haptic('light');

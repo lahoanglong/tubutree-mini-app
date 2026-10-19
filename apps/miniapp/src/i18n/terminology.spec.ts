@@ -50,7 +50,7 @@ describe('thuật ngữ Q-26 — một chữ cho một khái niệm', () => {
 
   it('không còn "voucher" trong câu chữ hiển thị cho khách', () => {
     expect(
-      offenders(/Kho voucher|Nhận [Vv]oucher|Chưa có voucher|giá voucher|Dùng voucher|nhận 30k voucher|Voucher sau khi|lấy voucher/),
+      offenders(/Kho voucher|Nhận [Vv]oucher|Chưa có voucher|giá voucher|Dùng voucher|nhận 30k voucher|Voucher sau khi|lấy voucher|Voucher chào mừng/),
     ).toEqual([]);
   });
 

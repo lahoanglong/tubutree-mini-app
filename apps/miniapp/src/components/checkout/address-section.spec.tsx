@@ -122,4 +122,19 @@ describe('AddressSection — cảnh báo địa giới cũ nằm trong đúng th
     expect(within(cardOf(/Chi/)).queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });
+  it('đang sửa thẻ 1 mà thẻ 1 biến khỏi danh sách (xoá ở màn khác, làm mới) → form đóng và thẻ đang chọn lại có nút sửa địa giới', () => {
+    const LEGACY2: AddressDTO = { ...LEGACY, id: 'a3', recipient: 'Chi', isDefault: false };
+    const client = new QueryClient();
+    const ui = (list: AddressDTO[], sel: string) => (
+      <QueryClientProvider client={client}>
+        <AddressSection addresses={list} selectedId={sel} onSelect={() => {}} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui([LEGACY, LEGACY2], 'a1'));
+    fireEvent.click(within(cardOf(/Ánh/)).getByRole('button', { name: viCopy.checkout.addressLegacyCta }));
+    expect(screen.getByTestId('address-form')).toBeInTheDocument();
+    rerender(ui([LEGACY2], 'a3'));
+    expect(screen.queryByTestId('address-form')).toBeNull();
+    expect(within(cardOf(/Chi/)).getByRole('button', { name: viCopy.checkout.addressLegacyCta })).toBeInTheDocument();
+  });
 });

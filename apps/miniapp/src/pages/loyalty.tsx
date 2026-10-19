@@ -56,7 +56,7 @@ const TIER_STYLE: Record<string, { emoji: string; color: string; bg: string }> =
 const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 
 function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   return `Giảm ${formatVnd(c.value)}`;
 }
@@ -440,7 +440,7 @@ export default function LoyaltyPage() {
               </div>
               <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
                 Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính
-                vào xét hạng; giọt nước Vườn Xanh điểm danh riêng trong Vườn Xanh.
+                vào xét hạng; giọt nước điểm danh riêng trong Vườn Xanh.
               </Text>
             </Card>
           ) : null}

@@ -116,7 +116,7 @@ export function VoucherSheet({
       return `Giảm ${coupon.value}%${maxText}`;
     }
     if (coupon.type === 'FREESHIP') {
-      return 'Miễn phí ship';
+      return 'Miễn phí giao hàng';
     }
     return `Giảm ${formatVnd(coupon.value)}`;
   };
@@ -208,7 +208,7 @@ export function VoucherSheet({
                   : preview.discount > 0
                     ? `Giảm ${formatVnd(preview.discount)} cho đơn này`
                     : (preview.freeshipSaving ?? 0) > 0
-                      ? `Miễn phí ship ${formatVnd(preview.freeshipSaving)} cho đơn này`
+                      ? `Miễn phí giao hàng ${formatVnd(preview.freeshipSaving)} cho đơn này`
                       : null;
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
@@ -269,7 +269,7 @@ export function VoucherSheet({
                       )}
                       {shipAlreadyFree && (
                         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                          Đơn này đã miễn phí ship
+                          Đơn này đã miễn phí giao hàng
                         </Text>
                       )}
                       {scope && (
