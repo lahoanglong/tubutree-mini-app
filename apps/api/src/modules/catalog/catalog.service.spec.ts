@@ -45,6 +45,47 @@ describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
     expect(r.map((c) => c.id)).toEqual(['p3', 'p2']); // giữ thứ tự từ query
   });
 
+  describe('cache co-occurrence (D9-04)', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('hai lần xem cùng sản phẩm trong TTL chỉ quét order_items một lần; danh sách card vẫn đọc tươi', async () => {
+      const prisma = {
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', slug: 'tinh-dau' }), findMany: jest.fn().mockResolvedValue([card('p2')]) },
+        $queryRaw: jest.fn().mockResolvedValue([{ productId: 'p2' }]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      await svc.boughtTogether('tinh-dau');
+      await svc.boughtTogether('tinh-dau');
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.product.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('hết TTL thì quét lại', async () => {
+      const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const prisma = {
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', slug: 'tinh-dau' }), findMany: jest.fn().mockResolvedValue([]) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      await svc.boughtTogether('tinh-dau');
+      now.mockReturnValue(1_000_000 + 10 * 60_000);
+      await svc.boughtTogether('tinh-dau');
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    });
+
+    it('sản phẩm khác nhau không dùng chung kết quả; bộ nhớ có trần', async () => {
+      let id = 0;
+      const prisma = {
+        product: { findUnique: jest.fn().mockImplementation(async () => ({ id: `p${++id}` })), findMany: jest.fn().mockResolvedValue([]) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      for (let i = 0; i < 700; i++) await svc.boughtTogether(`s${i}`);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(700);
+      expect((svc as unknown as { boughtTogetherCache: Map<string, unknown> }).boughtTogetherCache.size).toBeLessThanOrEqual(500);
+    });
+  });
+
   it('không có đơn co-occurrence → trả rỗng (FE fallback related)', async () => {
     const svc = setup([], []);
     const r = await svc.boughtTogether('tinh-dau');

@@ -97,6 +97,13 @@ export class CatalogService {
   private categoriesCache: { value: CategoryWithCount[]; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
 
+  // "Thường mua kèm" quét order_items 90 ngày; chi phí tăng theo doanh số của sản phẩm nên cache phần co-occurrence (id sản phẩm),
+  // còn thẻ sản phẩm vẫn đọc tươi để giá/tồn/ẩn hiện luôn đúng. Cùng hạn chế per-instance như brandsCache; có trần số khoá vì
+  // slug do khách gửi.
+  private readonly boughtTogetherCache = new Map<string, { ids: string[]; expiresAt: number }>();
+  private readonly BOUGHT_TOGETHER_TTL_MS = 10 * 60_000;
+  private readonly BOUGHT_TOGETHER_MAX_KEYS = 500;
+
   // Mapper public-safe cho getBySlug() — endpoint /products/:slug là @Public() (không cần đăng
   // nhập). KHÔNG được `include` trần cho variations/reviews: `include` kéo TOÀN BỘ cột của
   // Prisma, gồm dealerPrices/affiliateRate (giá sỉ đại lý + % hoa hồng CTV) và reservedStock/
@@ -314,25 +321,33 @@ export class CatalogService {
   async boughtTogether(slug: string) {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    const since = new Date(Date.now() - 90 * 864e5);
-    const rows = await this.prisma.$queryRaw<{ productId: string }[]>`
-      WITH target_orders AS (
-        SELECT DISTINCT oi."orderId"
-        FROM order_items oi
-        JOIN variations v ON v.id = oi."variationId"
-        JOIN orders o ON o.id = oi."orderId"
-        WHERE v."productId" = ${product.id} AND o."createdAt" >= ${since}
-      )
-      SELECT v2."productId" AS "productId", COUNT(*) AS cnt
-      FROM order_items oi2
-      JOIN variations v2 ON v2.id = oi2."variationId"
-      WHERE oi2."orderId" IN (SELECT "orderId" FROM target_orders)
-        AND v2."productId" <> ${product.id}
-      GROUP BY v2."productId"
-      ORDER BY cnt DESC
-      LIMIT 6`;
-    if (rows.length === 0) return [];
-    const ids = rows.map((r) => r.productId);
+    const hit = this.boughtTogetherCache.get(product.id);
+    let ids = hit && hit.expiresAt > Date.now() ? hit.ids : null;
+    if (!ids) {
+      const since = new Date(Date.now() - 90 * 864e5);
+      const rows = await this.prisma.$queryRaw<{ productId: string }[]>`
+        WITH target_orders AS (
+          SELECT DISTINCT oi."orderId"
+          FROM order_items oi
+          JOIN variations v ON v.id = oi."variationId"
+          JOIN orders o ON o.id = oi."orderId"
+          WHERE v."productId" = ${product.id} AND o."createdAt" >= ${since}
+        )
+        SELECT v2."productId" AS "productId", COUNT(*) AS cnt
+        FROM order_items oi2
+        JOIN variations v2 ON v2.id = oi2."variationId"
+        WHERE oi2."orderId" IN (SELECT "orderId" FROM target_orders)
+          AND v2."productId" <> ${product.id}
+        GROUP BY v2."productId"
+        ORDER BY cnt DESC
+        LIMIT 6`;
+      ids = rows.map((r) => r.productId);
+      if (this.boughtTogetherCache.size >= this.BOUGHT_TOGETHER_MAX_KEYS) {
+        this.boughtTogetherCache.delete(this.boughtTogetherCache.keys().next().value as string);
+      }
+      this.boughtTogetherCache.set(product.id, { ids, expiresAt: Date.now() + this.BOUGHT_TOGETHER_TTL_MS });
+    }
+    if (ids.length === 0) return [];
     const products = await this.prisma.product.findMany({
       where: { id: { in: ids }, ...PUBLIC_PRODUCT_WHERE },
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
