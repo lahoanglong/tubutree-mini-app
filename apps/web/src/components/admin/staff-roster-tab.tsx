@@ -73,6 +73,17 @@ export function StaffRosterTab() {
     if (ok) revokeM.mutate(p);
   };
 
+  const askCancelInvite = async (p: string) => {
+    const ok = await confirm({
+      title: 'Huỷ lời mời?',
+      message: `Huỷ lời mời chờ mở app của SĐT ${p}? Muốn cấp lại phải thêm lại từ đầu.`,
+      confirmLabel: 'Huỷ lời mời',
+      cancelLabel: 'Giữ lời mời',
+      tone: 'danger',
+    });
+    if (ok) revokeM.mutate(p);
+  };
+
   return (
     <div className="space-y-4">
       {dialog}
@@ -163,7 +174,7 @@ export function StaffRosterTab() {
                       type="button"
                       aria-label={`Huỷ lời mời · ${p.phone}`}
                       disabled={revokeM.isPending}
-                      onClick={() => revokeM.mutate(p.phone)}
+                      onClick={() => void askCancelInvite(p.phone)}
                       className={BTN_LINK_DANGER}
                     >
                       Huỷ

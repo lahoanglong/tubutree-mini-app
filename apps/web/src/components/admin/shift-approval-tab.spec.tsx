@@ -101,7 +101,16 @@ describe('ShiftApprovalTab (Duyệt ca)', () => {
     const api = stub([shift('a', 'PENDING'), shift('b', 'PENDING'), shift('c', 'REJECTED')]);
     const { container } = mount(<ShiftApprovalTab />);
     await flush();
+    // D7-15: bấm nhầm là duyệt cả các ca đáng ra phải từ chối, nên hỏi lại kèm số ca.
     click(byText(container, 'button', 'Duyệt tất cả (2)'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('2 ca');
+    answerConfirm(false);
+    await flush();
+    expect(api.to('/bulk-approve')).toHaveLength(0);
+    click(byText(container, 'button', 'Duyệt tất cả (2)'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(JSON.parse(api.to('/bulk-approve')[0]!.init!.body as string)).toEqual({ ids: ['a', 'b'] });
     expect(container.textContent).toContain('Đã duyệt 2 ca.');

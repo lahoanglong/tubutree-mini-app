@@ -218,6 +218,15 @@ function PitReportSection() {
 
 type Action = 'approve' | 'reject' | 'markPaid';
 
+/** Người nhận, số tiền, ngân hàng và STK: để người bấm đối chiếu đúng lệnh, không nhầm với lệnh cùng số tiền của người khác. */
+function recipientLines(p: AdminPayout): string {
+  const who = p.user?.fullName || p.user?.phone || p.userId;
+  const bank = p.bankInfo;
+  const lines = [`CTV: ${who}${p.user?.referralCode ? ` (mã ${p.user.referralCode})` : ''}`, `Số tiền: ${formatVnd(p.amount)}`];
+  lines.push(bank && (bank.bankName || bank.accountNumber) ? `Ngân hàng: ${bank.bankName ?? ''} · STK ${bank.accountNumber ?? ''} · ${bank.accountName ?? ''}` : 'Ngân hàng: CTV chưa khai tài khoản');
+  return lines.join('\n');
+}
+
 export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout; canReview?: boolean }) {
   const qc = useQueryClient();
   const [text, setText] = useState('');
@@ -246,8 +255,21 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
     },
   });
 
+  const recipient = recipientLines(p);
+
   const run = async (a: Action) => {
     setErr(null);
+    if (a === 'approve') {
+      // Sau khi duyệt, lệnh chỉ còn đường chi: không từ chối hay hoàn lại được nữa.
+      const ok = await confirm({
+        title: 'Duyệt lệnh rút tiền',
+        message: `${recipient}\n\nSau khi duyệt, lệnh KHÔNG còn từ chối hay hoàn tiền cho CTV được nữa; kế toán sẽ chuyển khoản theo thông tin trên.`,
+        confirmLabel: 'Duyệt lệnh rút',
+        cancelLabel: 'Chưa duyệt',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     if (a === 'reject') {
       const e = rejectPayoutReasonError(text);
       if (e) return setErr(e);
@@ -263,8 +285,9 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
     if (a === 'markPaid') {
       const ok = await confirm({
         title: 'Xác nhận đã chuyển khoản',
-        message: `Xác nhận ĐÃ CHUYỂN KHOẢN ${formatVnd(p.amount)} cho CTV?`,
+        message: `Xác nhận ĐÃ CHUYỂN KHOẢN ${formatVnd(p.amount)} cho CTV?\n\n${recipient}\nMã giao dịch: ${bankRef.trim() || 'chưa nhập'}`,
         confirmLabel: 'Đã chuyển khoản',
+        tone: 'danger',
       });
       if (!ok) return;
     }

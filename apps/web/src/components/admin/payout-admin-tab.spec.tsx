@@ -90,6 +90,56 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
   });
 });
 
+// D7-01, D7-16: duyệt rút tiền không còn đường từ chối trên giao diện, nên "Duyệt" và "Đã chuyển khoản" phải hỏi lại, nêu rõ
+// ai nhận, số tiền, ngân hàng, STK và dùng tông danger.
+describe('PayoutRow — hỏi lại khi duyệt và khi chi (D7-01, D7-16)', () => {
+  it('"Duyệt": hộp thoại danger nêu CTV, số tiền, ngân hàng, STK; Huỷ thì không gọi API; đồng ý gọi đúng một lần', async () => {
+    const api = mockFetch({ '/approve': { body: payout({ status: 'APPROVED' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout()} />);
+
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d).not.toBeNull();
+    const text = d.textContent ?? '';
+    expect(text).toContain('Nguyễn A');
+    expect(text).toContain('1.500.000');
+    expect(text).toContain('VCB');
+    expect(text).toContain('0123456789');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
+    expect(api.calls).toHaveLength(0);
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.filter((c) => c.url.includes('/admin/payouts/p1/approve'))).toHaveLength(1);
+  });
+
+  it('"Đã chuyển khoản": hộp thoại danger nêu CTV, ngân hàng, STK và mã giao dịch đã gõ', async () => {
+    const api = mockFetch({ '/mark-paid': { body: payout({ status: 'PAID' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    typeInto(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]'), 'FT26100001');
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    const d = confirmDialog()!;
+    const text = d.textContent ?? '';
+    expect(text).toContain('Nguyễn A');
+    expect(text).toContain('VCB');
+    expect(text).toContain('0123456789');
+    expect(text).toContain('FT26100001');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+  });
+});
+
 // C-097 (Q-29): màn duyệt/chi tiền chỉ đổi giao diện sang DS v2; nút thao tác tiền chạm được ở 390px.
 describe('PayoutRow / PayoutAdminTab — DS v2', () => {
   it('lệnh REQUESTED: "Duyệt" là nút chính forest, "Từ chối (hoàn tiền)" viền danger, cả hai cao 44px', () => {

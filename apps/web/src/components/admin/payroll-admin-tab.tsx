@@ -82,6 +82,15 @@ export function PayrollAdminTab() {
     onError: fail,
   });
 
+  const askFinalize = async (r: AdminPayrollRow) => {
+    const go = await confirm({
+      title: 'Chốt bảng lương?',
+      message: `Chốt bảng lương T${ym.month}/${ym.year} của ${r.staff.fullName ?? r.staff.phone ?? 'NV'}: ${fmtHM(r.month.totalMinutes)}, thực nhận ${formatVnd(r.month.net)}. Sau khi chốt, muốn sửa phải mở lại.`,
+      confirmLabel: 'Chốt lương',
+    });
+    if (go) finalizeM.mutate(r);
+  };
+
   const askReopen = async (r: AdminPayrollRow) => {
     const go = await confirm({
       title: 'Mở lại bảng lương?',
@@ -175,7 +184,7 @@ export function PayrollAdminTab() {
                     type="button"
                     aria-label={`Chốt · ${name}`}
                     disabled={finalizeM.isPending}
-                    onClick={() => finalizeM.mutate(row)}
+                    onClick={() => void askFinalize(row)}
                     className={BTN_XS_SECONDARY}
                   >
                     {finalizing ? 'Đang chốt…' : 'Chốt'}
