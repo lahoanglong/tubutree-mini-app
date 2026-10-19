@@ -15,11 +15,12 @@ export const ATTENTION_CANCELLED_ON_PANCAKE_ONLY = 'Pancake đã huỷ nhưng đ
 export const ATTENTION_CANCEL_AFTER_HANDOVER = 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển';
 /**
  * Pancake báo "Đã hoàn" cho đơn COD đã giao mà Tubu chưa có bằng chứng thu COD (DELIVERED có thể do kho bấm "Đã nhận" nhầm):
- * đơn đã sang RETURNED nhưng tiền chưa hoàn Ví — chờ admin/kế toán kiểm rồi hoàn tay.
+ * đơn đã sang RETURNED nhưng tiền chưa hoàn Ví. Cùng lúc có một khoản hoàn RETURN chờ đối soát (UNVERIFIED) ở mục "Hoàn tiền
+ * khách" của Kế toán — đó là nơi quyết định hoàn hay không, dòng này chỉ để kho/CSKH biết đơn đang chờ.
  */
 export const ATTENTION_COD_RETURN_UNVERIFIED =
   'Pancake báo "Đã hoàn" cho đơn COD đã giao — đơn đã chuyển "Đã trả hàng", điểm/hoa hồng đã đảo, nhưng hệ thống KHÔNG tự hoàn tiền vào Ví vì chưa có bằng chứng hãng đã thu COD. ' +
-  'Kiểm tra với kho/hãng vận chuyển: hãng đã thu COD và khách đã trả tiền thì hoàn tiền tay cho khách; chưa thu thì không hoàn.';
+  'Kế toán đối chiếu với hãng vận chuyển rồi xử lý ở mục "Hoàn tiền khách" (khoản "Trả hàng" chờ đối soát của đơn này): hãng đã thu COD thì xác nhận để hoàn cho khách, chưa thu thì bỏ qua kèm lý do.';
 /** Lời nhắc tạo phiếu trả trên Pancake lúc duyệt trả (OrderReturnsService.flagPancakeReturn). */
 export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Khách trả cả đơn'];
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */
@@ -56,5 +57,24 @@ export async function clearPancakeAttention(prisma: Pick<Prisma.TransactionClien
   await prisma.order.updateMany({
     where: { id: orderId, OR: prefixes.map((p) => ({ pancakeAttention: { startsWith: p } })) },
     data: { pancakeAttention: null, pancakeAttentionAt: null },
+  });
+}
+
+const ATTENTION_SEPARATOR = ' | ';
+
+/** Nối một lý do vào hàng cần xử lý mà không làm mất lý do đang có (cùng dấu nối với việc ghi dấu trạng thái bị chặn). */
+export const appendAttentionReason = (current: string | null | undefined, reason: string): string =>
+  current && !current.split(ATTENTION_SEPARATOR).includes(reason) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
+
+/** Gỡ đúng một lý do khỏi hàng cần xử lý (khi việc đó đã có người quyết); hết lý do thì đơn rời hàng đợi. */
+export async function removeAttentionReason(tx: Pick<Prisma.TransactionClient, 'order'>, orderId: string, reason: string): Promise<void> {
+  const row = await tx.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+  if (!row?.pancakeAttention) return;
+  const all = row.pancakeAttention.split(ATTENTION_SEPARATOR);
+  const rest = all.filter((part) => part !== reason);
+  if (rest.length === all.length) return;
+  await tx.order.updateMany({
+    where: { id: orderId },
+    data: rest.length > 0 ? { pancakeAttention: rest.join(ATTENTION_SEPARATOR) } : { pancakeAttention: null, pancakeAttentionAt: null },
   });
 }

@@ -11,6 +11,8 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
+import { partialReturnTotals } from './return-ledger';
+import { recordCodReturnUnverified } from './refund-queue';
 import { refundNote } from './order-returns.service';
 import {
   assertPaidBeforeFulfilment,
@@ -38,6 +40,7 @@ import {
   ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
   ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_UNDERPAID,
+  appendAttentionReason,
   clearPancakeAttention,
   flagPancakeAttention,
 } from '../integrations/pancake/pancake-attention';
@@ -185,7 +188,8 @@ export class OrderStatusService {
       returnedToSender?: boolean;
       /**
        * Trả hàng đơn COD mà DELIVERED chưa phải bằng chứng đã thu tiền (Pancake báo hàng hoàn về, kho có thể đã bấm "Đã nhận"
-       * nhầm): đảo kho/điểm/hoa hồng như thường nhưng KHÔNG tự hoàn Ví; đơn vào "Cần xử lý Pancake" cùng câu lật trạng thái.
+       * nhầm): đảo kho/điểm/hoa hồng như thường nhưng KHÔNG tự hoàn Ví; cùng tx ghi khoản chờ Kế toán đối soát (RETURN, UNVERIFIED)
+       * và đưa đơn vào "Cần xử lý Pancake". Chỉ có tác dụng với COD đang DELIVERED → RETURNED.
        */
       withholdCodRefund?: boolean;
       /** Lý do người vận hành nhập khi huỷ/trả — khách đọc nguyên văn trong tin báo (ghi chú nội bộ ở `note`). */
@@ -330,12 +334,20 @@ export class OrderStatusService {
         reversed = withholdCod
           ? await this.reversal.reverseFinancials(tx, order, { withholdCodRefund: true })
           : await this.reversal.reverseFinancials(tx, order);
-        // Cùng tx: nếu ghi sau commit mà chết giữa chừng thì đơn đã RETURNED, không tiền hoàn, và không ai biết phải kiểm.
+        // Cùng tx: ghi sau commit mà chết giữa chừng thì đơn đã RETURNED, không tiền hoàn, và không ai biết phải kiểm.
         if (withholdCod) {
-          await tx.order.updateMany({
-            where: { id: order.id },
-            data: { pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED, pancakeAttentionAt: new Date() },
-          });
+          const prior = await partialReturnTotals(tx, order.id);
+          const unverified = Math.max(0, order.total - prior.money);
+          // Đã trả đủ bằng các lần trả một phần thì không còn gì để hoàn, không cần kiểm.
+          if (unverified > 0) {
+            await recordCodReturnUnverified(tx, order, unverified);
+            // Lý do "ĐANG HOÀN" tự xong khi hàng đã về; mọi lý do khác (vd lệch tổng tiền) còn cần cho người quyết số hoàn.
+            const kept = order.pancakeAttention?.startsWith(PANCAKE_RETURNING_PREFIX) ? null : order.pancakeAttention;
+            await tx.order.updateMany({
+              where: { id: order.id },
+              data: { pancakeAttention: appendAttentionReason(kept, ATTENTION_COD_RETURN_UNVERIFIED), pancakeAttentionAt: new Date() },
+            });
+          }
         }
       }
       return true;

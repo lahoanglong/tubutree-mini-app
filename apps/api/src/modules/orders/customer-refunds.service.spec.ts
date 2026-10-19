@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CustomerRefundsService } from './customer-refunds.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 
 jest.mock('../wallet/wallet-ledger.service', () => ({
   applyWalletDelta: jest.fn().mockResolvedValue({ applied: true, balanceAfter: 0, entryId: 'wtx' }),
@@ -350,6 +351,89 @@ describe('CustomerRefundsService — khoản tiền dư Pancake chờ đối so�
       data: expect.objectContaining({ actorId: 'a1', note: expect.stringContaining('Không phải tiền trả dư') }),
     });
     expect(notifications.notify).not.toHaveBeenCalled();
+  });
+});
+
+const codReturn = (over: Record<string, unknown> = {}) =>
+  unverified({ kind: 'RETURN', refKey: 'cod-return-unverified', reason: 'RETURNED', amount: 300_000, ...over });
+
+describe('CustomerRefundsService — khoản hoàn COD trả hàng chờ kế toán đối soát (D12-01)', () => {
+  beforeEach(() => (applyWalletDelta as jest.Mock).mockClear());
+
+  const withAttention = (tx: ReturnType<typeof setup>['tx'], pancakeAttention: string | null) => {
+    const t = tx as unknown as { order: { findUnique: jest.Mock; updateMany: jest.Mock } };
+    t.order.findUnique = jest.fn().mockResolvedValue({ status: 'RETURNED', pancakeAttention });
+    t.order.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    return t.order;
+  };
+
+  it('xác nhận hãng đã thu COD → PENDING (khách/kế toán chọn nơi nhận), ghi lịch sử đơn, gỡ dòng "Cần xử lý Pancake" cùng tx', async () => {
+    const { service, tx, notifications } = setup(codReturn());
+    const order = withAttention(tx, ATTENTION_COD_RETURN_UNVERIFIED);
+    await service.verifyOverpayment('a1', 'r1', { note: 'GHN xác nhận đã thu 300.000đ ngày 15/10' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', kind: 'RETURN', status: 'UNVERIFIED' },
+      data: { status: 'PENDING', amount: 300_000, adminNote: 'GHN xác nhận đã thu 300.000đ ngày 15/10' },
+    });
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ actorId: 'a1', note: expect.stringContaining('COD') }),
+    });
+    expect(order.updateMany).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', expect.anything());
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+  });
+
+  it('dòng "Cần xử lý" còn lý do khác → chỉ gỡ lý do COD, giữ lý do còn lại', async () => {
+    const { service, tx } = setup(codReturn());
+    const order = withAttention(tx, `Tổng tiền Pancake lệch với Tubu | ${ATTENTION_COD_RETURN_UNVERIFIED}`);
+    await service.verifyOverpayment('a1', 'r1', {});
+    const data = order.updateMany.mock.calls[0][0].data;
+    expect(data.pancakeAttention).toBe('Tổng tiền Pancake lệch với Tubu');
+  });
+
+  it('chỉ xác nhận một phần → phần còn lại ghi DISMISSED cùng loại RETURN (không đẻ khoản mới)', async () => {
+    const { service, tx } = setup(codReturn());
+    withAttention(tx, null);
+    await service.verifyOverpayment('a1', 'r1', { amount: 100_000 });
+    expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ kind: 'RETURN', refKey: 'cod-return-unverified:rest', amount: 200_000, status: 'DISMISSED' })],
+      skipDuplicates: true,
+    });
+  });
+
+  it('hãng chưa thu → "Bỏ qua" bắt buộc lý do, DISMISSED, ghi lịch sử đơn, gỡ hàng cần xử lý, không báo khách', async () => {
+    const { service, tx, notifications } = setup(codReturn());
+    const order = withAttention(tx, ATTENTION_COD_RETURN_UNVERIFIED);
+    await expect(service.dismissOverpayment('a1', 'r1', { reason: ' ab ' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+
+    await service.dismissOverpayment('a1', 'r1', { reason: 'GHN báo chưa thu, hàng về kho nguyên tem' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', kind: 'RETURN', status: 'UNVERIFIED' },
+      data: expect.objectContaining({ status: 'DISMISSED', adminNote: 'GHN báo chưa thu, hàng về kho nguyên tem', completedBy: 'a1' }),
+    });
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ actorId: 'a1', note: expect.stringContaining('GHN báo chưa thu') }),
+    });
+    expect(order.updateMany).toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('khoản RETURN thường (yêu cầu trả hàng, refKey khác) không đi đường đối soát này', async () => {
+    const { service, tx } = setup(codReturn({ refKey: 'rr-123', status: 'PENDING' }));
+    await expect(service.verifyOverpayment('a1', 'r1', {})).rejects.toThrow('không còn chờ đối soát');
+    const other = setup(unverified({ kind: 'RETURN', refKey: 'rr-123' }));
+    await expect(other.service.verifyOverpayment('a1', 'r1', {})).rejects.toThrow('không còn chờ đối soát');
+    await expect(other.service.dismissOverpayment('a1', 'r1', { reason: 'Không phải khoản này' })).rejects.toThrow('không còn chờ đối soát');
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(other.tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('khách không "Bắt đầu chuyển khoản" được khoản COD chưa đối soát — nói đúng việc phải làm (không nhắc "tiền dư")', async () => {
+    const { service, prisma } = setup(codReturn({ bankAccountNo: '190312345678' }));
+    prisma.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.claim('a1', 'r1')).rejects.toThrow('chưa được xác nhận');
+    await expect(service.claim('a1', 'r1')).rejects.not.toThrow('trả dư');
   });
 });
 

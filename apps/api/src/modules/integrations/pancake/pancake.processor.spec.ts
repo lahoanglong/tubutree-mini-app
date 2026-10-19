@@ -1144,19 +1144,36 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       expect(flags[0]).toContain('COD');
       expect(flags[0]).toContain('KHÔNG tự hoàn');
       expect(alerts.alert).toHaveBeenCalledWith('TUBU1', flags[0], expect.any(String));
+      expect(prisma.orderCustomerRefund.createMany).toHaveBeenCalledTimes(1);
+      expect(prisma.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ kind: 'RETURN', refKey: 'cod-return-unverified', status: 'UNVERIFIED', amount: 300000, userId: 'u1' })],
+        skipDuplicates: true,
+      });
       const notified = (notifications.notify as jest.Mock).mock.calls.find(([, event]) => event === 'ORDER_RETURNED');
       expect(notified?.[2].refund_note).not.toContain('Ví Tubu');
     });
 
     it('đơn chuyển khoản đã PAID → vẫn tự hoàn đủ 300.000đ vào Ví, đảo điểm, không vào hàng cần xử lý', async () => {
       const spy = refundSpy();
-      const { proc, txUpdateMany, loyalty } = setup({ ...base, total: 300000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', status: 'DELIVERED' });
+      const { proc, prisma, txUpdateMany, loyalty } = setup({ ...base, total: 300000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', status: 'DELIVERED' });
       await proc.onStatusUpdated({ id: 'p1', status: 5 });
       expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'RETURNED' });
       expect(spy).toHaveBeenCalledTimes(1);
       expect(spy.mock.calls[0]).toEqual([expect.anything(), 'u1', expect.objectContaining({ id: 'o1' }), 300000]);
       expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
       expect(attentionFlags(txUpdateMany)).toHaveLength(0);
+      const rows = (prisma.orderCustomerRefund.createMany as jest.Mock).mock.calls.flatMap(([a]) => a.data as { status: string }[]);
+      expect(rows.map((r) => r.status)).not.toContain('UNVERIFIED');
+    });
+
+    it('Pancake gửi lại "Đã hoàn" sau khi đơn đã RETURNED → không khoản thứ hai, không báo ADMIN lần nữa', async () => {
+      refundSpy();
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, prisma, txUpdateMany } = setup({ ...base, total: 300000, paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'RETURNED', pancakeAttention: 'x' }, undefined, alerts);
+      await proc.onStatusUpdated({ id: 'p1', status: 5 });
+      expect(prisma.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+      expect(statusFlips(txUpdateMany)).toHaveLength(0);
+      expect(alerts.alert).not.toHaveBeenCalled();
     });
   });
 

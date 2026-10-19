@@ -575,8 +575,8 @@ export class PancakeProcessor extends WorkerHost {
       // COD không có "PAID" thật: DELIVERED có thể là kho bấm "Đã nhận" hàng loạt/nhầm, nên "Đã hoàn" không chứng minh khách đã trả tiền.
       const withholdCodRefund = returnedToSender && status === 'RETURNED' && order.paymentMethod === 'COD' && order.paymentStatus !== 'PAID';
       const after = await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note, returnedToSender, ...(withholdCodRefund ? { withholdCodRefund } : {}) });
-      if (withholdCodRefund && after.status === 'RETURNED' && after.pancakeAttention === ATTENTION_COD_RETURN_UNVERIFIED) {
-        // Dòng "Cần xử lý" đã ghi cùng câu lật trạng thái; ở đây chỉ báo ADMIN.
+      if (withholdCodRefund && order.status !== status && after.status === 'RETURNED' && after.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
+        // Dòng "Cần xử lý" và khoản chờ Kế toán đối soát đã ghi cùng tx lật trạng thái; ở đây chỉ báo ADMIN.
         await this.alerts.alert(order.code, ATTENTION_COD_RETURN_UNVERIFIED, PANCAKE_ALERT_TEMPLATE);
       }
       // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong.
