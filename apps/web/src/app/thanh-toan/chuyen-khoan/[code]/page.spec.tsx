@@ -89,6 +89,21 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(links.find((a) => a.textContent === 'Về trang chủ')?.getAttribute('href')).toBe('/');
   });
 
+  it('h1 là "Quét QR để chuyển khoản" khi đang chờ trả, đổi thành tiêu đề trung tính khi đã PAID hoặc chưa đăng nhập', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('h1')!.textContent).toContain('Quét QR để chuyển khoản');
+    mocks.qr.paymentStatus = 'PAID';
+    const paid = mount();
+    await flush();
+    expect(paid.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+    mocks.auth.status = 'idle';
+    mocks.auth.user = null;
+    const guest = mount();
+    await flush();
+    expect(guest.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+  });
+
   it('lỗi tải: báo lỗi, "Thử lại" và vẫn có lối xem đơn hàng', async () => {
     mocks.qr.fail = true;
     const c = mount();

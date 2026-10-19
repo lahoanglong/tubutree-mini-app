@@ -12,6 +12,8 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { BankTransferPanel } from '../../bank-transfer-panel';
 
 const TITLE = 'Quét QR để chuyển khoản';
+// Tên trang của Mini App khi chưa có QR để quét (đã trả, chưa đăng nhập).
+const NEUTRAL_TITLE = 'Thanh toán chuyển khoản';
 
 function readCode(raw: string | undefined): string {
   try {
@@ -80,7 +82,7 @@ export default function BankPaymentPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
       <TitleBand
-        title={TITLE}
+        title={paid || phase !== 'authenticated' || !code ? NEUTRAL_TITLE : TITLE}
         subtitle={!paid && code && phase === 'authenticated' ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
       />
       <div className="mt-2 max-md:pb-6">{body}</div>
