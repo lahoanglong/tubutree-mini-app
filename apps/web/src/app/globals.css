@@ -1,5 +1,6 @@
 @import '@tubutree/design-tokens/src/fonts.css';
 @import '@tubutree/design-tokens/src/tokens.css';
+@import '../components/mini/mini.css';
 
 @tailwind base;
 @tailwind components;
