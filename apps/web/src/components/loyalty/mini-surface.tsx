@@ -22,3 +22,8 @@ export const miniTitle =
 export function MiniTitleBar({ children }: { children: ReactNode }) {
   return <div className="max-md:-mx-4 max-md:bg-stone-0 max-md:py-3 max-md:pl-16 max-md:pr-4">{children}</div>;
 }
+
+/** Như `MiniTitleBar` nhưng cho tiêu đề đã tự chừa chỗ nút lùi và tự đệm dọc (`PageHeader` của components/ui). */
+export function MiniBar({ children }: { children: ReactNode }) {
+  return <div className="max-md:-mx-4 max-md:bg-stone-0 max-md:px-4">{children}</div>;
+}

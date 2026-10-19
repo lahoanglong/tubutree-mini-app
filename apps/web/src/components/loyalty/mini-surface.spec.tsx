@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
-import { miniBtnSecondary, miniCard, miniOutline, MiniTitleBar } from './mini-surface';
+import { miniBtnSecondary, miniCard, miniOutline, MiniBar, MiniTitleBar } from './mini-surface';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -39,5 +39,18 @@ describe('bề mặt kiểu Mini App ở điện thoại', () => {
     const bar = r.container.firstElementChild!;
     expect(bar.className).toContain('max-md:bg-stone-0');
     expect(bar.className).toContain('max-md:pl-16');
+  });
+
+  it('thanh nền trắng cho tiêu đề tự đệm: không thêm đệm dọc hay đệm trái', () => {
+    const r = render(
+      <MiniBar>
+        <h1>Hoàn tiền</h1>
+      </MiniBar>,
+    );
+    mounted.push(r);
+    const bar = r.container.firstElementChild!;
+    expect(bar.className).toContain('max-md:bg-stone-0');
+    expect(bar.className).not.toContain('max-md:py-3');
+    expect(bar.className).not.toContain('max-md:pl-16');
   });
 });

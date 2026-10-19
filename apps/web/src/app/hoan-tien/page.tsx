@@ -21,6 +21,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MiniBar, miniCard } from '@/components/loyalty/mini-surface';
 
 const DEFAULT_HOLD_DAYS = 30;
 
@@ -30,9 +31,7 @@ function MerchantLogo({ merchant, size }: { merchant: CashbackMerchant; size: nu
   const box = { width: size, height: size };
   if (!merchant.logoUrl) {
     return (
-      <span aria-hidden="true" style={box} className="mx-auto grid flex-none place-items-center rounded-full bg-stone-100 text-sm font-semibold text-stone-700">
-        {merchant.name.slice(0, 1).toUpperCase()}
-      </span>
+      <span aria-hidden="true" style={box} className="mx-auto block flex-none rounded-full bg-[linear-gradient(45deg,#34b764,#99e5b5)]" />
     );
   }
   // eslint-disable-next-line @next/next/no-img-element -- logo sàn từ API, miền không cố định nên next/image không cấu hình trước được
@@ -123,7 +122,7 @@ export default function CashbackPage() {
     if (walletQ.isError) return <ErrorState message={errText(walletQ.error)} onRetry={() => void walletQ.refetch()} />;
     if (!walletQ.data) return <Skeleton height={120} />;
     return (
-      <section aria-label="Hoàn tiền đã duyệt" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
+      <section aria-label="Hoàn tiền đã duyệt" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-raised max-md:from-[var(--clay-500)] max-md:to-[var(--clay-700)]">
         {/* `cashbackPending` chỉ cộng khi sàn đã CONFIRMED (cashback.service.ts): tiền đã chắc chắn, đang chờ về Ví. Gọi là "đang chờ"
             sẽ bị hiểu cùng nghĩa với nhãn "Chờ duyệt" của các giao dịch bên dưới, mà hai con số không bao giờ khớp. */}
         <div className="text-sm">Đã duyệt, chờ về Ví</div>
@@ -134,8 +133,10 @@ export default function CashbackPage() {
   })();
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      <PageHeader title="Hoàn tiền" backHref="/tai-khoan/vi-tubu" backLabel="Quay lại Ví Tubu" />
+    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
+      <MiniBar>
+        <PageHeader title="Hoàn tiền" backHref="/tai-khoan/vi-tubu" backLabel="Quay lại Ví Tubu" />
+      </MiniBar>
       <div role="status" aria-live="polite">
         {notice && <p className="mt-3 text-sm font-medium text-success-fg">{notice}</p>}
       </div>
@@ -168,10 +169,12 @@ export default function CashbackPage() {
                       setClickError(null);
                       setSelected(m);
                     }}
-                    className={`min-h-11 p-3 text-center transition hover:bg-stone-50 active:scale-95 ${ui.card}`}
+                    className={`min-h-11 p-3 text-center transition hover:bg-stone-50 active:scale-95 ${miniCard}`}
                   >
                     <MerchantLogo merchant={m} size={40} />
-                    <span className="mt-1.5 block text-sm font-medium text-stone-900">{m.name}</span>
+                    <span className="mt-1.5 block text-sm font-medium text-stone-900 max-md:text-[length:var(--type-label-size)] max-md:font-semibold max-md:leading-[var(--type-label-lh)]">
+                      {m.name}
+                    </span>
                     <span className="flex items-center justify-center gap-0.5 text-xs font-medium text-forest-700">
                       <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
                       {formatRatePct(m.baseRate)}
@@ -184,7 +187,7 @@ export default function CashbackPage() {
             )}
           </section>
 
-          <section aria-labelledby="cashback-txns" className={`p-4 ${ui.card}`}>
+          <section aria-labelledby="cashback-txns" className={`p-4 ${miniCard}`}>
             <h2 id="cashback-txns" className="mb-2.5 text-base font-semibold text-stone-900">
               Giao dịch hoàn tiền
             </h2>
@@ -198,7 +201,7 @@ export default function CashbackPage() {
                 {txnQ.data.map((t) => {
                   const m = CASHBACK_TXN_META[t.status];
                   return (
-                    <li key={t.id} className="flex items-center justify-between gap-2 border-b border-stone-200 py-2 last:border-b-0">
+                    <li key={t.id} className="flex items-center justify-between gap-2 border-b border-stone-200 py-2 last:border-b-0 max-md:last:border-b">
                       <div>
                         <div className="text-sm font-semibold tabular-nums text-success-fg">+{formatVnd(t.userReward)}</div>
                         <div className="text-xs text-stone-600">
