@@ -21,6 +21,8 @@ import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { BrowsePager } from './browse-pager';
+import { PhoneCartButton } from '@/components/phone-cart-button';
+import { phoneBrandText } from '@/lib/phone-ui';
 import { CategoryGrid } from './category-grid';
 import { FilterSheet } from './filter-sheet';
 import { RecentlyViewedRail } from './recently-viewed-rail';
@@ -147,7 +149,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
 
   return (
     <div>
-      <h1 className={`${ui.pageTitle} mb-3`}>{browseText.title}</h1>
+      <h1 className={`${ui.pageTitle} mb-3 max-md:sr-only`}>{browseText.title}</h1>
       <form
         role="search"
         onSubmit={(e) => {
@@ -173,7 +175,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             placeholder={browseText.searchPlaceholder}
             autoComplete="off"
             enterKeyHint="search"
-            className={`${ui.field} pl-9 pr-11`}
+            className={`${ui.field} pl-9 pr-11 max-md:rounded-full max-md:border-[var(--color-border-subtle)]`}
           />
           {draft !== '' && (
             <button
@@ -190,10 +192,12 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             </button>
           )}
         </div>
-        {editing && (
-          <button type="button" onClick={leaveSearchField} className={ui.btnText}>
+        {editing ? (
+          <button type="button" onClick={leaveSearchField} className={`${ui.btnText} ${phoneBrandText}`}>
             {browseText.cancel}
           </button>
+        ) : (
+          <PhoneCartButton />
         )}
       </form>
 

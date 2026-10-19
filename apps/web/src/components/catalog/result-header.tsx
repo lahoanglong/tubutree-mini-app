@@ -2,6 +2,7 @@ import { SlidersHorizontal, X } from 'lucide-react';
 import { browseText } from '@/lib/browse-text';
 import type { ActiveFilterChip, SearchState } from '@/lib/search-state';
 import { ui } from '@/lib/guest-ui';
+import { phoneSecondary } from '@/lib/phone-ui';
 import { Chip } from './chip';
 
 /**
@@ -31,7 +32,7 @@ export function ResultHeader({
         <p aria-live="polite" aria-atomic="true" data-testid="result-count" className="min-w-0 text-sm text-stone-600">
           {isLoading ? ' ' : browseText.resultCount(total)}
         </p>
-        <button type="button" onClick={onOpenFilters} className={`${ui.btnSecondary} flex-none gap-2`}>
+        <button type="button" onClick={onOpenFilters} className={`${ui.btnSecondary} ${phoneSecondary} flex-none gap-2`}>
           <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
           {filterCount > 0 ? browseText.filterButtonCount(filterCount) : browseText.filterButton}
         </button>

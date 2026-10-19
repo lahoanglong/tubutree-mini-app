@@ -21,7 +21,7 @@ export function Chip({
       className={`inline-flex min-h-11 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-4 text-sm transition-all ${
         selected
           ? 'bg-forest-600 font-semibold text-stone-0 shadow-card ring-2 ring-forest-600/30'
-          : 'border border-stone-300 bg-stone-0 font-medium text-stone-700 hover:border-stone-450 hover:bg-stone-50'
+          : 'border border-stone-300 bg-stone-0 font-medium text-stone-700 hover:border-stone-450 hover:bg-stone-50 max-md:border-0 max-md:bg-stone-100 max-md:text-[var(--color-text-secondary)]'
       }`}
     >
       {children}
