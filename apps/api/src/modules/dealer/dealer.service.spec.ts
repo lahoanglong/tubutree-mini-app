@@ -4,9 +4,18 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import { SELLABLE_PANCAKE_VARIATION_WHERE } from '../cart/sellable';
 import { TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 
+// Các ca ở file này kiểm tồn kho/idempotency/hạn mức với đơn vài trăm nghìn: tắt luật đơn sỉ (tối thiểu, phí giao,
+// khoá quá hạn) để chúng không phải dựng đơn 3 triệu. Luật đó có spec riêng: dealer-order-rules.spec.ts.
+const ORDER_RULES_OFF: Record<string, unknown> = {
+  'dealer.min_order_value_vnd': 0,
+  'dealer.shipping_fee_below_threshold_vnd': 0,
+  'dealer.block_credit_when_overdue': false,
+};
+
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
+  const all = { ...ORDER_RULES_OFF, ...values };
   return {
-    get: async <T>(key: string, fb?: T): Promise<T> => (key in values ? values[key] : fb) as T,
+    get: async <T>(key: string, fb?: T): Promise<T> => (key in all ? all[key] : fb) as T,
   } as unknown as SystemConfigService;
 }
 

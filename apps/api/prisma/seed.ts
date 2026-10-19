@@ -158,6 +158,11 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
   // Hạn gửi yêu cầu nhận thưởng mốc sau khi kỳ kết thúc (dealer.service). createOnly: không ghi đè giá trị admin.
   { key: 'dealer.reward_claim_grace_days', value: 30, category: 'dealer', description: 'Số ngày sau khi kỳ (quý/năm) kết thúc mà đại lý vẫn được gửi yêu cầu nhận thưởng mốc đã đạt trong kỳ đó', createOnly: true },
+  // Luật đơn sỉ đã chốt (nhóm C): tối thiểu 3 triệu, miễn phí giao từ 5 triệu, khoá mua chịu khi quá hạn (dealer.service placeOrder).
+  { key: 'dealer.min_order_value_vnd', value: 3_000_000, category: 'dealer', description: 'Đơn đại lý tối thiểu (đ, tính trên tiền hàng, chưa gồm phí giao). 0 = không chặn', createOnly: true },
+  { key: 'dealer.free_ship_threshold_vnd', value: 5_000_000, category: 'dealer', description: 'Đơn đại lý từ mức tiền hàng này (đ) thì miễn phí giao; dưới mức này thu phí giao', createOnly: true },
+  { key: 'dealer.shipping_fee_below_threshold_vnd', value: 19_000, category: 'dealer', description: 'Phí giao (đ) của đơn đại lý dưới ngưỡng miễn phí giao. Mặc định bằng phí giao phẳng của đơn lẻ (shipping.flat_fee_below_threshold)', createOnly: true },
+  { key: 'dealer.block_credit_when_overdue', value: true, category: 'dealer', description: 'true = đại lý còn nợ đơn quá hạn theo điều kiện thanh toán của bậc (NET n ngày) không đặt được đơn ghi công nợ, vẫn đặt được đơn trả trước. false = không khoá', createOnly: true },
 
   // Game
   { key: 'game.streak_7_bonus', value: { seeds: 10, free_spins: 1 }, category: 'game', description: 'Bonus chuỗi 7 ngày' },
