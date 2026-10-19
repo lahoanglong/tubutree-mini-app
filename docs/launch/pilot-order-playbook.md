@@ -186,6 +186,8 @@ Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đ
 
 ### 1.3 Kiểm tra mẫu ZNS đã được Zalo duyệt
 
+> **Lưu ý theo quyết định đã chốt:** chủ chỉ nộp 3 mẫu `REVIEW_REQUEST`, `GROUP_BUY_SUCCESS`, `GROUP_BUY_FAILED` (bảng khoá tham số ở [GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 2, Bước D). `ORDER_CONFIRMED` và `ORDER_SHIPPING` chưa nộp nên các bước 1.3 đến 1.6 và 2.2, 2.5 dưới đây, viết cho hai mẫu đó, chỉ chạy được khi chủ đã quyết nộp thêm; nếu chưa, bỏ qua 1.5 và 1.6 và thử ZNS bằng một trong 3 mẫu đã nộp.
+
 - **Ai**: Quản trị. **Ở đâu**: Zalo OA, mục ZNS, danh sách mẫu của OA Tubu Tree.
 - **Làm**: mở hai mẫu `ORDER_CONFIRMED` ("Đơn {{order_code}} đã được xác nhận…") và `ORDER_SHIPPING` ("Đơn {{order_code}} đang được giao…"). Kiểm tra trạng thái, ghi lại Template ID (một dãy số).
 - **Đúng là**: trạng thái **đã duyệt**; mẫu có đúng một tham số tên `order_code`. Nếu mẫu đang chờ duyệt thì chưa làm tiếp bước 1.4; Template ID chỉ có sau khi duyệt ([GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 2, Bước D, lead time 7 đến 14 ngày).
@@ -214,7 +216,7 @@ Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đ
 - **Bằng chứng**: Mẫu thông báo, dòng `ORDER_CONFIRMED`: số "lượt / 30 ngày" của dòng đó tăng 1 (nếu lỗi, dòng báo "<N> lượt ZNS lỗi trong 30 ngày, khách chưa nhận tin Zalo"); Phụ lục P4: dòng mới `channel = ZNS`, `status = SENT`. Lỗi thì `status = FAILED` hoặc `RETRYING`, cột `error` ghi "ZNS lỗi <mã>: <lời của Zalo>".
 - **Hoàn tác**: không có (tin đã gửi).
 
-> **Giả định cần xác nhận:** (1) **Định dạng số điện thoại.** Tubu lưu SĐT dạng `0xxxxxxxxx` và gửi nguyên cho Zalo, không đổi sang `84xxxxxxxxx`. Chưa ai xác nhận Zalo chấp nhận dạng đầu 0. Nếu lỗi ghi về số điện thoại không hợp lệ thì đây là việc phải sửa mã, không phải lỗi mẫu. (2) `error = 0` từ Zalo nghĩa là Zalo nhận lệnh gửi, chưa chắc khách đã nhận được tin (khách không dùng Zalo hoặc tắt nhận thông báo vẫn có thể báo thành công). Đối chiếu bằng mắt trên điện thoại.
+> **Giả định cần xác nhận:** (1) **Định dạng số điện thoại.** Tubu lưu SĐT dạng `0xxxxxxxxx` và đổi sang `84xxxxxxxxx` (0 + 9 số thành 84 + 9 số) ngay trước khi gửi Zalo, theo ví dụ của Zalo; log và bản lưu vẫn giữ số gốc. Chưa kiểm chứng với Zalo thật. Nếu lỗi ghi về số điện thoại không hợp lệ thì đây là việc phải sửa mã (`zns.client.ts`), không phải lỗi mẫu. (2) `error = 0` từ Zalo nghĩa là Zalo nhận lệnh gửi, chưa chắc khách đã nhận được tin (khách không dùng Zalo hoặc tắt nhận thông báo vẫn có thể báo thành công). Đối chiếu bằng mắt trên điện thoại.
 
 `[ ] Đạt  [ ] Không đạt  Mã đơn: ______`
 

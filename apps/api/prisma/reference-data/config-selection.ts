@@ -30,6 +30,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'dealer',
   'seasonpass',
   'groupbuy',
+  'notifications',
   'legal',
   'shipping',
   'returns',

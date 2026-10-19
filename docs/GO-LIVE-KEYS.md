@@ -59,7 +59,7 @@ gh workflow run ops.yml -f action=set-env   # ghi vào VM .env
 ## 2) Zalo Official Account (OA) + ZNS (thông báo)
 
 **Mục tiêu:** lấy `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN`.
-Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và **đăng nhập web bằng Zalo** (cần thêm Bước E: đăng ký Callback URL).
+Dùng cho: gửi **ZNS** (mời đánh giá, mua chung thành công/thất bại; voucher khi admin bật) và **đăng nhập web bằng Zalo** (cần thêm Bước E: đăng ký Callback URL).
 
 ### Bước A — Tạo OA
 1. Tạo **Official Account** tại https://oa.zalo.me → loại **Doanh nghiệp** (cần GPKD).
@@ -80,10 +80,33 @@ Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và **đăng n
 
 ### Bước D — Đăng ký template ZNS (LEAD TIME LÂU NHẤT ~7–14 ngày)
 6. Trong Zalo OA → **ZNS → Tạo mẫu thông báo**. Mỗi loại thông báo là 1 template được Zalo **duyệt nội dung** riêng.
-   Nội dung mẫu lấy từ `apps/api/prisma/seed.ts` (mảng `NOTIFICATION_TEMPLATES`). Ưu tiên đăng ký các mã đang để `channel: 'ZNS'`:
-   - `ORDER_CONFIRMED` — "Đơn {{order_code}} đã được xác nhận…"
-   - `ORDER_SHIPPING` — "Đơn {{order_code}} đang được giao…"
-   - (tuỳ nhu cầu: voucher welcome/birthday, nhắc mua lại…)
+   Nội dung mẫu lấy từ `apps/api/prisma/seed.ts` (mảng `NOTIFICATION_TEMPLATES`). Theo quyết định đã chốt (`docs/2026-10-18-launch-review/03-cau-hoi-sang.md`, nhóm C) **nộp ngay 3 mẫu giao dịch**:
+   - `REVIEW_REQUEST` — mời đánh giá sau khi đơn giao (tin giao dịch, gửi một lần mỗi đơn).
+   - `GROUP_BUY_SUCCESS` — mua chung thành công (kèm mã giảm).
+   - `GROUP_BUY_FAILED` — mua chung thất bại (nhóm hết hạn chưa đủ người).
+
+   `ORDER_CONFIRMED` và `ORDER_SHIPPING` **không nộp ở đợt này**: trong seed chúng đã đặt `channel: 'ZNS'` nhưng chưa có mã mẫu nên chỉ gửi trong app. Muốn gửi ZNS cho hai tin đó thì chủ phải quyết riêng (mỗi tin tính phí).
+   Các tin khuyến mãi/hậu mãi (voucher, nhắc mua lại, giỏ bỏ quên…) chỉ gửi ZNS khi admin chuyển kênh và nhập mã mẫu, và luôn bị trần 2 tin ZNS/khách/tháng cùng giờ yên tĩnh (xem "Giờ gửi và trần tin ZNS" bên dưới).
+
+   **Tên tham số trong mẫu Zalo duyệt phải GIỐNG HỆT khoá Tubu gửi** (phân biệt hoa/thường). Tham số đặt tên khác thì Zalo từ chối và tin lỗi cho tới khi sửa mẫu hoặc sửa mã. Bảng khoá (nguồn: `review-invite.service.ts`, `groupbuy.service.ts`):
+
+   | Mẫu | Khoá | Ý nghĩa | Ví dụ |
+   |---|---|---|---|
+   | `REVIEW_REQUEST` | `order_code` | Mã đơn đã giao | `TUBU48213` |
+   | | `product` | Tên sản phẩm chưa đánh giá; đơn nhiều sản phẩm thì "<tên SP đầu> và N sản phẩm khác" | `Nước rửa chén bồ hòn và 2 sản phẩm khác` |
+   | | `product_slug` | Đường dẫn sản phẩm, chỉ có khi sản phẩm có slug; để dựng link trong app, mẫu ZNS không cần dùng | `nuoc-rua-chen-bo-hon` |
+   | `GROUP_BUY_SUCCESS` | `discount` | Số tiền mã giảm, đã định dạng, không kèm "đ" | `15.000` |
+   | | `product` | Tên sản phẩm của nhóm; mã giảm chỉ dùng cho đúng sản phẩm này | `Nước rửa chén bồ hòn` |
+   | | `code` | Mã giảm giá của chính người nhận (mỗi người một mã) | `GBUY-K3F9X2AB-7QZ41MNP` |
+   | | `expires` | Hạn dùng mã, ngày/tháng/năm giờ VN (30 ngày kể từ lúc nhóm đủ người) | `16/11/2026` |
+   | `GROUP_BUY_FAILED` | `product` | Tên sản phẩm của nhóm đã đóng | `Nước rửa chén bồ hòn` |
+   | | `product_slug` | Đường dẫn sản phẩm, để dựng link trong app, mẫu ZNS không cần dùng | `nuoc-rua-chen-bo-hon` |
+
+   Mẫu ZNS chỉ nên khai các khoá có trong bảng. Chưa kiểm chứng với Zalo thật: Zalo có nhận `template_data` thừa khoá (ví dụ `product_slug` khi mẫu không khai) hay không. Nếu thử mà Zalo báo lỗi tham số, báo lại để bỏ `product_slug` khỏi dữ liệu gửi ZNS thay vì khai thêm tham số vô nghĩa.
+
+   **Giờ gửi và trần tin ZNS** (đọc từ Cấu hình, đổi được ở Quản trị):
+   - `notifications.zns_quiet_start_hour` = 21 và `notifications.zns_quiet_end_hour` = 8 (giờ VN): tin ZNS phát sinh từ 21:00 tới 08:00 được hoãn tới 08:00, không bỏ. Tin trong app vẫn lưu ngay. Hai giá trị bằng nhau là tắt giờ yên tĩnh.
+   - `notifications.zns_promo_monthly_cap` = 2: mỗi khách tối đa 2 tin ZNS khuyến mãi/hậu mãi mỗi tháng (theo tháng giờ VN, đếm tin chờ gửi, đang thử lại và đã gửi). Đủ thì bỏ kênh ZNS, tin trong app vẫn gửi. 0 = không giới hạn. Nhóm tính trần là các mẫu Marketing được sửa (`MARKETING_TEMPLATE_CODES`, gồm cả `REVIEW_REQUEST`); `GROUP_BUY_SUCCESS` và `GROUP_BUY_FAILED` không bị trần.
 7. Mỗi template Zalo duyệt sẽ cấp **Template ID**. Báo lại các Template ID này để map vào hệ thống (cấu hình `system_configs` hoặc `notification_templates`).
 
 ### Bước E — Đăng nhập web bằng Zalo (BẮT BUỘC để khách mua được trên web)
