@@ -40,7 +40,9 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     user: { update: jest.fn() },
-    $queryRaw: jest.fn().mockResolvedValue([]),
+    returnRequestItem: { findMany: jest.fn().mockResolvedValue([]) }, // chưa có lần trả nào được duyệt
+    orderItem: { findMany: jest.fn().mockResolvedValue([]) },
+    $queryRaw: jest.fn().mockResolvedValue([{ status: 'DELIVERED' }]), // khoá dòng đơn trong tx: đơn vẫn đã giao
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn(),
   };
@@ -310,6 +312,69 @@ describe('ReviewsService.create', () => {
       expect(order(lock)).toBeLessThan(order(prisma.pointsTransaction.findMany));
       expect(order(prisma.pointsTransaction.findMany)).toBeLessThan(order(prisma.review.create));
     });
+
+    describe('đơn đổi trạng thái hoặc sản phẩm đã bị trả (D1-01)', () => {
+      type Db = PrismaService & {
+        review: { create: jest.Mock };
+        pointsTransaction: { create: jest.Mock };
+        user: { update: jest.Mock };
+        returnRequestItem: { findMany: jest.Mock };
+        orderItem: { findMany: jest.Mock };
+        $queryRaw: jest.Mock;
+        $executeRaw: jest.Mock;
+      };
+      const photo = { images: ['https://res.cloudinary.com/x/image/upload/v1/a.jpg'] };
+      const returnedLine = (prisma: Db, variationId: string) => {
+        prisma.returnRequestItem.findMany.mockResolvedValue([{ orderItemId: 'it1' }]);
+        prisma.orderItem.findMany.mockResolvedValue([{ orderId: 'o1', variationId }]);
+      };
+
+      it('sản phẩm đã có dòng trả được duyệt trên đơn này (đơn vẫn giao vì còn hàng khác) → đánh giá 0 điểm, không ghi sổ, không cộng số dư', async () => {
+        const prisma = makePrisma({ variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]) } }) as Db;
+        returnedLine(prisma, 'v1');
+        await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, ...photo } as never);
+        expect(prisma.review.create.mock.calls[0]![0].data).toMatchObject({ orderId: 'o1', pointsEarned: 0 });
+        expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+        expect(prisma.user.update).not.toHaveBeenCalled();
+      });
+
+      it('dòng trả được duyệt là của sản phẩm khác → đánh giá vẫn được thưởng', async () => {
+        const prisma = makePrisma({
+          variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }, { id: 'v2', productId: 'p2' }]) },
+        }) as Db;
+        returnedLine(prisma, 'v2');
+        await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, ...photo } as never);
+        expect(prisma.review.create.mock.calls[0]![0].data).toMatchObject({ pointsEarned: 10_000 });
+      });
+
+      it('đọc dòng trả đã duyệt SAU khi lấy khoá cặp (lần duyệt giữ khoá tới commit) và trước khi tạo đánh giá', async () => {
+        const prisma = makePrisma() as Db;
+        await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
+        const at = (m: jest.Mock) => m.mock.invocationCallOrder[0]!;
+        expect(at(prisma.$executeRaw)).toBeLessThan(at(prisma.returnRequestItem.findMany));
+        expect(at(prisma.returnRequestItem.findMany)).toBeLessThan(at(prisma.review.create));
+      });
+
+      it('khoá dòng đơn (FOR SHARE) TRƯỚC khoá cặp, cùng thứ tự với lần duyệt trả (dòng đơn rồi khoá cặp) để không deadlock', async () => {
+        const prisma = makePrisma() as Db;
+        await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
+        const sql = (prisma.$queryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
+        expect(sql).toMatch(/FROM "orders" WHERE "id" = \? FOR SHARE/);
+        expect(prisma.$queryRaw.mock.calls[0]!.slice(1)).toEqual(['o1']);
+        expect(prisma.$queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(prisma.$executeRaw.mock.invocationCallOrder[0]!);
+      });
+
+      it('đơn vừa chuyển sang đã trả giữa lúc đọc và lúc lưu → BadRequest, không tạo đánh giá, không ghi điểm', async () => {
+        const prisma = makePrisma() as Db;
+        prisma.$queryRaw.mockResolvedValue([{ status: 'RETURNED' }]);
+        await expect(new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, ...photo } as never)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        expect(prisma.review.create).not.toHaveBeenCalled();
+        expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+        expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      });
+    });
   });
 
   it('hợp lệ không ảnh → +5.000 điểm, recompute rating denormalized, đánh dấu updated=false', async () => {
@@ -536,6 +601,8 @@ describe('ReviewsService.create', () => {
       pointsTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
       user: { update: jest.fn().mockResolvedValue({}) },
       product: { update: jest.fn().mockResolvedValue({}) },
+      returnRequestItem: { findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([{ status: 'DELIVERED' }]),
       $executeRaw: jest.fn().mockResolvedValue(1),
     };
     // recomputeRating(product.id, tx) gọi tx.review.aggregate + tx.product.update.

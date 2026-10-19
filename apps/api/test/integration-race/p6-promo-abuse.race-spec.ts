@@ -284,11 +284,11 @@ describe('p6-promo-abuse: mã giảm giá, giờ vàng, nhiệm vụ (real Postg
       expect((await prisma.user.findUniqueOrThrow({ where: { id: referrer.id } })).pointsBalance).toBe(0);
     });
 
-    it('FIRST_ORDER: đơn mới CONFIRMED chưa tính; đơn DELIVERED → 5 lần nhận song song chỉ cộng 20 điểm một lần', async () => {
+    it('FIRST_ORDER: đơn mới CONFIRMED chưa tính; đơn DELIVERED qua hạn đổi/trả → 5 lần nhận song song chỉ cộng 20 điểm một lần', async () => {
       const u = await realUser();
       const pending = await createOrder(prisma, { userId: u.id, status: 'CONFIRMED' });
       await expect(game.claimMission(u.id, 'FIRST_ORDER')).rejects.toThrow('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
-      await prisma.order.update({ where: { id: pending.id }, data: { status: 'DELIVERED', deliveredAt: new Date() } });
+      await prisma.order.update({ where: { id: pending.id }, data: { status: 'DELIVERED', deliveredAt: new Date(Date.now() - 30 * 864e5) } });
 
       const results = await Promise.allSettled(Array.from({ length: 5 }, () => game.claimMission(u.id, 'FIRST_ORDER')));
       const s = summarize(results);

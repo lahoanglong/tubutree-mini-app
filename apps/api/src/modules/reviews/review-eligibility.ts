@@ -12,6 +12,17 @@ export const REVIEWABLE_ORDER = {
   placedForCustomer: false,
 } as const satisfies Prisma.OrderWhereInput;
 
+const DAY_MS = 864e5;
+
+/**
+ * Đơn đã giao đã qua hạn đổi/trả (`returns.window_days`): khách không còn gửi được yêu cầu trả mới. Cùng mốc giao và cùng phép
+ * so sánh (`>` chặt) với OrderReturnsService.request; đơn cũ thiếu deliveredAt dùng updatedAt (muộn hơn mốc thật nên chỉ chậm mở).
+ */
+export function returnWindowClosed(order: { deliveredAt: Date | null; updatedAt: Date }, windowDays: number, now: Date): boolean {
+  const deliveredAt = order.deliveredAt ?? order.updatedAt;
+  return now.getTime() - deliveredAt.getTime() > windowDays * DAY_MS;
+}
+
 /**
  * Khoá advisory theo cặp (khách, sản phẩm) cho mọi lượt ghi sổ điểm đánh giá của cặp đó. Đánh giá cho hai đơn khác nhau
  * không đụng nhau ở khoá unique nên hai lượt tạo song song đều đọc sổ trống và cùng thưởng nếu không có khoá này.
@@ -62,4 +73,38 @@ export async function orderLineReviews(
     }),
   );
   return (itemId) => byItem.get(itemId) ?? NO_REVIEW;
+}
+
+type ReturnedLinesDb = Pick<Prisma.TransactionClient, 'returnRequestItem' | 'orderItem' | 'variation'>;
+
+/**
+ * Sản phẩm đã có dòng trả được duyệt (mọi số lượng) trên từng đơn: orderId → tập productId. Sản phẩm bị trả một phần cũng mất
+ * thưởng đánh giá (thưởng bị thu hồi lúc duyệt trả nếu đã có đánh giá), nên đánh giá viết SAU lần duyệt không được thưởng và
+ * không tính vào nhiệm vụ. Đơn chưa có lần trả nào chỉ tốn một truy vấn.
+ */
+export async function returnedProductsByOrder(db: ReturnedLinesDb, orderIds: readonly string[]): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  if (orderIds.length === 0) return out;
+  const lines = await db.returnRequestItem.findMany({
+    where: { quantity: { gt: 0 }, returnRequest: { orderId: { in: [...orderIds] }, status: 'APPROVED' } },
+    select: { orderItemId: true },
+  });
+  if (lines.length === 0) return out;
+  const items = await db.orderItem.findMany({
+    where: { id: { in: [...new Set(lines.map((l) => l.orderItemId))] } },
+    select: { orderId: true, variationId: true },
+  });
+  const variations = await db.variation.findMany({
+    where: { id: { in: [...new Set(items.map((it) => it.variationId))] } },
+    select: { id: true, productId: true },
+  });
+  const productOf = new Map(variations.map((v) => [v.id, v.productId]));
+  for (const it of items) {
+    const productId = productOf.get(it.variationId);
+    if (!productId) continue;
+    const set = out.get(it.orderId) ?? new Set<string>();
+    set.add(productId);
+    out.set(it.orderId, set);
+  }
+  return out;
 }

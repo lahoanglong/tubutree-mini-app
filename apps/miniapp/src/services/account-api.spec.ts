@@ -58,6 +58,7 @@ describe('pointsReasonLabel', () => {
     ['GAME_SPIN_COST:p1', 'Quay vòng quay may mắn'],
     ['MISSION:m1:2026-10-15', 'Thưởng nhiệm vụ Vườn Xanh'],
     ['REVIEW_DELETE:r1', 'Thu hồi điểm đánh giá đã xoá'],
+    ['REVIEW_RETURN:r1', 'Thu hồi điểm đánh giá (trả hàng)'],
     ['REFERRAL_ORDER2_DEBT:u1', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['REFERRAL_MILESTONE_DEBT:u1:3', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['MERGED:guest-1:ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],

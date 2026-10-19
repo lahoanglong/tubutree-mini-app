@@ -269,6 +269,7 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
   if (reason.startsWith('MISSION')) return 'Thưởng nhiệm vụ Vườn Xanh';
   if (reason.startsWith('REVIEW_DELETE')) return 'Thu hồi điểm đánh giá đã xoá';
+  if (reason.startsWith('REVIEW_RETURN')) return 'Thu hồi điểm đánh giá (trả hàng)';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
   return 'Điều chỉnh Điểm Xanh';
 }

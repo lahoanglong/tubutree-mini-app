@@ -5,10 +5,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
-import { loadPointExpiryTxns, lotRecoverable, reviewLotKey } from '../loyalty/loyalty-expiry.service';
 import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { decodeServedImage } from '../../common/served-image';
-import { REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
+import { returnedProductsByOrder, REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
+import { takeBackReviewReward } from './review-reward-reversal';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -186,11 +186,22 @@ export class ReviewsService {
     const expiresAt = await this.loyalty.pointsExpiresAt(new Date());
 
     return this.prisma.$transaction(async (tx) => {
+      // Đọc trạng thái đơn ở ngoài tx (purchasesOf) có thể cũ: đơn đang được trả cả đơn thì lần đảo (đã ghi trạng thái, giữ
+      // khoá dòng đơn) đã quét thưởng đánh giá trước khi đánh giá này tồn tại. Khoá chung dòng đơn để hoặc chờ lần đảo xong
+      // rồi từ chối, hoặc ghi xong trước khi lần đảo lật trạng thái và lần đảo thấy đánh giá. Lấy khoá đơn TRƯỚC khoá cặp
+      // (cùng thứ tự với lần đảo: dòng đơn, rồi khoá cặp, rồi dòng user) để không deadlock.
+      const [order] = await tx.$queryRaw<{ status: string }[]>`SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${orderId} FOR SHARE`;
+      if (order?.status !== REVIEWABLE_ORDER.status) {
+        throw new BadRequestException('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
+      }
       // pointsEarned nằm ngay trên dòng đánh giá nên phải biết trước review.create. Thưởng chỉ cho đánh giá đầu tiên của
       // cặp (khách, sản phẩm) nhưng đánh giá cho đơn khác không chạm khoá unique của đơn này: khoá theo cặp để sổ REVIEW
       // của cặp không đổi giữa lúc đọc và lúc ghi, lượt chờ khoá đọc được dòng thưởng lượt trước vừa ghi.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reviewRewardLockKey(userId, product.id)}))`;
-      const pointsEarned = (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
+      // Sản phẩm đã bị trả (dù một phần) trên chính đơn này: lần duyệt trả không còn đánh giá nào để thu hồi nên thưởng ở
+      // đây sẽ không bao giờ bị lấy lại. Lần duyệt giữ cùng khoá cặp tới khi commit nên đọc ở đây thấy đủ.
+      const returned = (await returnedProductsByOrder(tx, [orderId])).get(orderId)?.has(product.id) ?? false;
+      const pointsEarned = returned || (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
       const r = await tx.review.create({
         data: {
           userId,
@@ -398,47 +409,15 @@ export class ReviewsService {
           : [];
       await tx.review.delete({ where: { id } });
       // Hoàn tác điểm đã thưởng lúc tạo review — nếu không, user có thể farm điểm vô hạn bằng cách tạo review (+điểm)
-      // rồi xóa (đơn đó mở lại để viết) rồi tạo lại. Đánh giá không nhận thưởng (pointsEarned 0) không thu hồi gì.
-      // Điểm thưởng đã quá hạn thì cron đã (hoặc sẽ) trừ chính các điểm đó; thu hồi thêm là trừ hai lần và có thể kéo
-      // số dư âm. Dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
-      if (review.pointsEarned > 0 && !(await this.rewardExpired(tx, review.userId, id))) {
-        // Thu hồi tối đa phần lô đánh giá chưa mất theo sổ lô (lotRecoverable) và không quá số dư, nên số dư không bao
-        // giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi; không thu hồi được gì thì không ghi dòng nào (khác đơn hàng,
-        // xoá đánh giá không cần dấu "đã xử lý": dòng đánh giá đã mất nên không có lượt xoá thứ hai). Điểm đã thưởng nằm
-        // ở dòng REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
-        const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, review.userId), reviewLotKey(id));
-        const balance = Math.max(0, locked[0]?.pointsBalance ?? 0);
-        const take = Math.min(review.pointsEarned, recoverable ?? review.pointsEarned, balance);
-        if (take > 0) {
-          await tx.pointsTransaction.create({
-            data: {
-              userId: review.userId,
-              delta: -take,
-              reason: `REVIEW_DELETE:${review.productId}`,
-              refType: 'REVIEW',
-              refId: id,
-            },
-          });
-          // Số dư đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
-          const dec = await tx.user.updateMany({
-            where: { id: review.userId, pointsBalance: { gte: take } },
-            data: { pointsBalance: { decrement: take } },
-          });
-          if (dec.count !== 1) throw new Error(`Xoá đánh giá ${id}: số dư đổi giữa chừng`);
-        }
+      // rồi xóa (đơn đó mở lại để viết) rồi tạo lại. Đánh giá không nhận thưởng (pointsEarned 0) không thu hồi gì. Không
+      // thu hồi được gì thì không ghi dòng nào (khác đơn hàng, xoá đánh giá không cần dấu "đã xử lý": dòng đánh giá đã mất
+      // nên không có lượt xoá thứ hai).
+      if (review.pointsEarned > 0) {
+        await takeBackReviewReward(tx, review, locked[0]?.pointsBalance ?? 0, `REVIEW_DELETE:${review.productId}`);
       }
       await this.recomputeRating(review.productId, tx);
     });
     return { ok: true };
-  }
-
-  /** Dòng thưởng của đánh giá đã tới hạn chưa; cùng quy tắc `expiresAt <= now` với cron hết hạn. */
-  private async rewardExpired(tx: Prisma.TransactionClient, userId: string, reviewId: string): Promise<boolean> {
-    const credit = await tx.pointsTransaction.findFirst({
-      where: { userId, refType: 'REVIEW', refId: reviewId, delta: { gt: 0 } },
-      select: { expiresAt: true },
-    });
-    return credit?.expiresAt != null && credit.expiresAt.getTime() <= Date.now();
   }
 
   /** Admin ẩn/hiện review vi phạm (§6.13: ẩn KHÔNG xóa) — rating tính lại loại review ẩn. */

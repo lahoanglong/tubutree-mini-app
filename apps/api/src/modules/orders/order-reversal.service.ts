@@ -18,6 +18,7 @@ import { maskPhone } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
 import { paidLineTotals } from '../affiliate/commission-base';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
+import { lockRewardedReviewsOfOrder, lockReviewRewardsOfProducts, revokeReviewRewardsForReturn } from '../reviews/review-reward-reversal';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -69,6 +70,10 @@ export function isMoneyBackable(order: Pick<Order, 'paymentMethod' | 'paymentSta
   return order.paymentStatus === 'PAID';
 }
 
+/** Chỉ đơn bán lẻ tự mua đã giao mới có đánh giá được thưởng (REVIEWABLE_ORDER); đơn khác không có gì để thu hồi. */
+const canHaveReviewReward = (order: Pick<Order, 'status' | 'type' | 'placedForCustomer'>): boolean =>
+  order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer;
+
 /**
  * Đảo ngược tác động tài chính + tồn kho của một đơn hàng khi CANCELLED/RETURNED.
  *
@@ -104,6 +109,10 @@ export class OrderReversalService {
     order: OrderWithItems,
     opts: ReversalOptions = {},
   ): Promise<ReversalResult> {
+    // Khoá thưởng đánh giá TRƯỚC mọi ghi lên dòng users: xoá/tạo đánh giá lấy khoá này rồi mới tới dòng user.
+    const reviewable = canHaveReviewReward(order);
+    if (reviewable) await lockRewardedReviewsOfOrder(tx, order.id, null);
+
     // Đơn đã giao có thể đã được trả một phần (D3): lần đảo cả đơn chỉ hoàn phần còn lại — tiền, điểm lô quy đổi,
     // quota flash sale, kho đã nhận về. Đơn chưa giao thì không thể có lần trả nào.
     const prior = order.status === 'DELIVERED' ? await partialReturnTotals(tx, order.id, opts.returnRequestId) : NO_PARTIAL_RETURNS;
@@ -268,6 +277,9 @@ export class OrderReversalService {
       }
       referralNotices = revoked?.notices ?? [];
     }
+    // Thưởng đánh giá cấp ngay khi giao: đơn trả cả đơn thì thu hồi thưởng của mọi đánh giá trên đơn (đánh giá của dòng đã
+    // trả một phần trước đó đã thu hồi, bị bỏ qua).
+    if (reviewable) await revokeReviewRewardsForReturn(tx, order.id, null);
     return { moneyRefunded, pointsRefunded, refund, referralNotices };
   }
 
@@ -360,6 +372,11 @@ export class OrderReversalService {
   ): Promise<PartialReversalResult> {
     const { shares, requestId } = input;
     const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0 };
+
+    // Thưởng đánh giá của các sản phẩm bị trả: khoá trước mọi ghi lên dòng users (xem reverseFinancials).
+    const reviewable = canHaveReviewReward(order);
+    const returnedProductIds = reviewable ? await this.productIdsOfLines(tx, order, shares.lines) : [];
+    if (returnedProductIds.length > 0) await lockReviewRewardsOfProducts(tx, order.userId, returnedProductIds);
 
     // Suất flash trước mọi ghi lên dòng users, cùng thứ tự với đường tạo đơn (xem reverseFinancials).
     const byId = new Map(order.items.map((i) => [i.id, i]));
@@ -517,7 +534,26 @@ export class OrderReversalService {
       }
       result.referralNotices = revoked?.notices ?? [];
     }
+    // Đánh giá của sản phẩm bị trả (dù trả một phần số lượng) mất thưởng; sản phẩm khác giữ nguyên.
+    if (returnedProductIds.length > 0) await revokeReviewRewardsForReturn(tx, order.id, returnedProductIds);
     return result;
+  }
+
+  /** Sản phẩm của các dòng bị trả (mỗi sản phẩm một đánh giá nên hai biến thể cùng sản phẩm chung một đánh giá). */
+  private async productIdsOfLines(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    lines: { orderItemId: string; quantity: number }[],
+  ): Promise<string[]> {
+    const variationIds = new Set(
+      lines.flatMap((l) => {
+        const item = order.items.find((i) => i.id === l.orderItemId);
+        return item && l.quantity > 0 ? [item.variationId] : [];
+      }),
+    );
+    if (variationIds.size === 0) return [];
+    const variations = await tx.variation.findMany({ where: { id: { in: [...variationIds] } }, select: { productId: true } });
+    return [...new Set(variations.map((v) => v.productId))];
   }
 
   /**
