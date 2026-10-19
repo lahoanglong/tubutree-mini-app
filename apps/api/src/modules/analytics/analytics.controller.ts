@@ -19,8 +19,8 @@ export class AnalyticsController {
     @Body() dto: IngestEventsDto,
     @Headers('x-device-id') deviceId?: string,
   ): Promise<{ accepted: number }> {
-    for (const e of dto.events) {
-      await this.analytics.recordBestEffort({
+    await this.analytics.recordManyBestEffort(
+      dto.events.map((e) => ({
         eventId: e.eventId,
         eventName: e.eventName,
         occurredAt: new Date(e.occurredAt),
@@ -35,8 +35,8 @@ export class AnalyticsController {
         refCode: e.refCode ?? null,
         storefrontSlug: e.storefrontSlug ?? null,
         props: e.props ?? {},
-      });
-    }
+      })),
+    );
     return { accepted: dto.events.length };
   }
 }

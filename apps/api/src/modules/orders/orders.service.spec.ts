@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -1069,26 +1069,44 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     variations: ReturnType<typeof variation>[];
     inCart?: { variationId: string; quantity: number }[];
     addItem?: jest.Mock;
+    addItems?: jest.Mock;
   }) {
     const addItem = opts.addItem ?? jest.fn().mockResolvedValue(CART);
+    const addItems = opts.addItems ?? jest.fn().mockImplementation(async (_u: string, ls: unknown[]) => ls.map(() => ({ ok: true })));
     const getCart = jest.fn().mockResolvedValue(CART);
     const prisma = {
       order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status: 'DELIVERED', items: opts.items }) },
       variation: { findMany: jest.fn().mockResolvedValue(opts.variations) },
       cart: { findUnique: jest.fn().mockResolvedValue(opts.inCart ? { items: opts.inCart } : null) },
     } as unknown as PrismaService;
-    const cartSvc = { addItem, getCart } as unknown as CartService;
-    return { svc: new OrdersService(prisma, loyalty, cartSvc, notifications, config, affiliate, reversal), addItem, getCart };
+    const cartSvc = { addItem, addItems, getCart } as unknown as CartService;
+    return { svc: new OrdersService(prisma, loyalty, cartSvc, notifications, config, affiliate, reversal), addItem, addItems, getCart };
   }
 
+  it('D9-05: đơn 8 dòng → thêm cả loạt một lần và dựng giỏ đúng một lần, không gọi addItem từng dòng', async () => {
+    const ids = Array.from({ length: 8 }, (_, i) => i + 1);
+    const { svc, addItem, addItems, getCart } = makeRepurchaseService({
+      items: ids.map((i) => line(`i${i}`, `v${i}`, i)),
+      variations: ids.map((i) => variation(`v${i}`, 50)),
+    });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItem).not.toHaveBeenCalled();
+    expect(addItems).toHaveBeenCalledTimes(1);
+    expect(addItems.mock.calls[0][1]).toHaveLength(8);
+    expect(getCart).toHaveBeenCalledTimes(1);
+    expect(res.results).toHaveLength(8);
+  });
+
   it('không body (client cũ): thêm mọi dòng, addSource=repurchase; response VẪN là giỏ ở top-level + cart + results', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 2), line('i2', 'v2', 1)],
       variations: [variation('v1', 10), variation('v2', 10)],
     });
     const res = await svc.repurchase('u1', 'TUBU1');
-    expect(addItem).toHaveBeenNthCalledWith(1, 'u1', { variationId: 'v1', quantity: 2, addSource: 'repurchase' });
-    expect(addItem).toHaveBeenNthCalledWith(2, 'u1', { variationId: 'v2', quantity: 1, addSource: 'repurchase' });
+    expect(addItems).toHaveBeenCalledWith('u1', [
+      { variationId: 'v1', quantity: 2, addSource: 'repurchase' },
+      { variationId: 'v2', quantity: 1, addSource: 'repurchase' },
+    ]);
     expect(res).toMatchObject({ items: CART.items, subtotal: 150000, itemCount: 3 });
     expect(res.cart).toEqual(CART);
     expect(res.results).toEqual([
@@ -1109,20 +1127,20 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
   });
 
   it('items: chỉ các dòng được chọn, số lượng theo client', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 2), line('i2', 'v2', 1)],
       variations: [variation('v2', 10)],
     });
     const res = await svc.repurchase('u1', 'TUBU1', { items: [{ orderItemId: 'i2', quantity: 4 }] });
-    expect(addItem).toHaveBeenCalledTimes(1);
-    expect(addItem).toHaveBeenCalledWith('u1', { variationId: 'v2', quantity: 4, addSource: 'repurchase' });
+    expect(addItems).toHaveBeenCalledTimes(1);
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v2', quantity: 4, addSource: 'repurchase' }]);
     expect(res.results).toEqual([{ orderItemId: 'i2', status: 'added', addedQuantity: 4 }]);
   });
 
   it('orderItemId không thuộc đơn → 400 TRƯỚC mọi lần ghi', async () => {
-    const { svc, addItem } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 10)] });
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 10)] });
     await expect(svc.repurchase('u1', 'TUBU1', { items: [{ orderItemId: 'khac', quantity: 1 }] })).rejects.toBeInstanceOf(BadRequestException);
-    expect(addItem).not.toHaveBeenCalled();
+    expect(addItems).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1130,10 +1148,10 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     ['sản phẩm tắt', variation('v1', 10, { productActive: false }), 'INACTIVE'],
     ['sản phẩm chưa duyệt (trước đây thiếu kiểm này)', variation('v1', 10, { approval: 'REJECTED' }), 'NOT_APPROVED'],
     ['hết hàng', variation('v1', 0), 'OUT_OF_STOCK'],
-  ])('%s → skipped, không gọi addItem', async (_l, v, reason) => {
-    const { svc, addItem } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [v] });
+  ])('%s → skipped, không ghi giỏ', async (_l, v, reason) => {
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [v] });
     const res = await svc.repurchase('u1', 'TUBU1');
-    expect(addItem).not.toHaveBeenCalled();
+    expect(addItems).not.toHaveBeenCalled();
     expect(res.results).toEqual([{ orderItemId: 'i1', status: 'skipped', reason, addedQuantity: 0 }]);
   });
 
@@ -1143,8 +1161,8 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     expect(res.results[0]).toMatchObject({ status: 'skipped', reason: 'INACTIVE' });
   });
 
-  it('giỏ đã giữ hết tồn → EXCEEDS_STOCK; dòng sau vẫn được thêm (trước đây addItem ném giữa vòng lặp)', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+  it('giỏ đã giữ hết tồn → EXCEEDS_STOCK; dòng sau vẫn được thêm', async () => {
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 1), line('i2', 'v2', 1)],
       variations: [variation('v1', 3), variation('v2', 5)],
       inCart: [{ variationId: 'v1', quantity: 3 }],
@@ -1154,17 +1172,17 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
       { orderItemId: 'i1', status: 'skipped', reason: 'EXCEEDS_STOCK', addedQuantity: 0 },
       { orderItemId: 'i2', status: 'added', addedQuantity: 1 },
     ]);
-    expect(addItem).toHaveBeenCalledTimes(1);
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v2', quantity: 1, addSource: 'repurchase' }]);
   });
 
   it('muốn 5, còn chỗ 2 → partial, kẹp đúng 2', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 5)],
       variations: [variation('v1', 3)],
       inCart: [{ variationId: 'v1', quantity: 1 }],
     });
     const res = await svc.repurchase('u1', 'TUBU1');
-    expect(addItem).toHaveBeenCalledWith('u1', { variationId: 'v1', quantity: 2, addSource: 'repurchase' });
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v1', quantity: 2, addSource: 'repurchase' }]);
     expect(res.results).toEqual([{ orderItemId: 'i1', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 2 }]);
   });
 
@@ -1180,16 +1198,12 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     ]);
   });
 
-  it('addItem ném lỗi nghiệp vụ cho 1 dòng (race tồn kho / SP vừa bị ẩn) → dòng đó skipped, dòng khác vẫn chạy', async () => {
-    const addItem = jest
-      .fn()
-      .mockRejectedValueOnce(new BadRequestException('Chỉ còn 0 sản phẩm trong kho.'))
-      .mockRejectedValueOnce(new NotFoundException('Sản phẩm không khả dụng.'))
-      .mockResolvedValue(CART);
+  it('addItems báo lỗi nghiệp vụ cho 1 dòng (race tồn kho / SP vừa bị ẩn) → dòng đó skipped, dòng khác vẫn được thêm', async () => {
+    const addItems = jest.fn().mockResolvedValue([{ ok: false, error: 'STOCK' }, { ok: false, error: 'UNAVAILABLE' }, { ok: true }]);
     const { svc } = makeRepurchaseService({
       items: [line('i1', 'v1', 1), line('i2', 'v2', 1), line('i3', 'v3', 1)],
       variations: [variation('v1', 5), variation('v2', 5), variation('v3', 5)],
-      addItem,
+      addItems,
     });
     const res = await svc.repurchase('u1', 'TUBU1');
     expect(res.results.map((r) => [r.orderItemId, r.status, r.reason])).toEqual([
@@ -1200,15 +1214,15 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
   });
 
   it('lỗi hạ tầng (không phải lỗi nghiệp vụ) → ném ra, không nuốt', async () => {
-    const addItem = jest.fn().mockRejectedValue(new Error('connection reset'));
-    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)], addItem });
+    const addItems = jest.fn().mockRejectedValue(new Error('connection reset'));
+    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)], addItems });
     await expect(svc.repurchase('u1', 'TUBU1')).rejects.toThrow('connection reset');
   });
 
   it('addSource=reorder_notification được chuyển tới add_to_cart', async () => {
-    const { svc, addItem } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)] });
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)] });
     await svc.repurchase('u1', 'TUBU1', { addSource: 'reorder_notification' });
-    expect(addItem).toHaveBeenCalledWith('u1', { variationId: 'v1', quantity: 1, addSource: 'reorder_notification' });
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v1', quantity: 1, addSource: 'reorder_notification' }]);
   });
 });
 
