@@ -19,6 +19,7 @@ import {
   nextRewardProgress,
   pointAddress,
   ruleText,
+  TIMELINE_STEPS,
   timelineFor,
 } from './recycle-labels';
 import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
@@ -36,6 +37,12 @@ describe('nhãn Đổi rác', () => {
     expect(ruleText(ITEM_MILK)).toBe('5 vỏ = 1.000 điểm');
     expect(formatLineQty('Thùng carton cũ', 3, 'thùng')).toBe('Thùng carton cũ: 3 thùng');
   });
+  it('TIMELINE_STEPS: tên bước của từng đường như Mini App, bước đầu đường gửi kiện là "Gửi kiện"', () => {
+    expect(TIMELINE_STEPS.MAIL_IN).toEqual(['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm']);
+    expect(TIMELINE_STEPS.DROP_OFF).toEqual(['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm']);
+    expect(TIMELINE_STEPS.PICKUP).toEqual(['Đã tạo', 'Gắn vào đơn', 'Chờ kho nhận', 'Cộng điểm']);
+  });
+
   it('timelineFor: đường kho đi 0/1/2, đóng thì null, xong là bước 4', () => {
     expect(timelineFor({ method: 'MAIL_IN', status: 'IN_TRANSIT', orderCode: null })?.current).toBe(1);
     expect(timelineFor({ method: 'DROP_OFF', status: 'OPEN', orderCode: null })?.current).toBe(1);
