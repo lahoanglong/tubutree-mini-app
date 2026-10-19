@@ -78,6 +78,9 @@ const button = (c: ParentNode, name: string) => byText(c, 'button', name) as HTM
 const label = (c: ParentNode, text: string) => (byText(c, 'label', text) as HTMLLabelElement | null)?.control ?? null;
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 const lineOf = (c: ParentNode, name: string) => byText(c, '[data-line]', name) as HTMLElement;
+const minus = (c: ParentNode, name: string, n: number) => {
+  for (let i = 0; i < n; i++) click(lineOf(c, name).querySelector('[aria-label="Giảm số lượng"]'));
+};
 const plus = (c: ParentNode, name: string, n: number) => {
   for (let i = 0; i < n; i++) click(lineOf(c, name).querySelector('[aria-label="Tăng số lượng"]'));
 };
@@ -166,8 +169,31 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     const c = await mount();
     expect(c.textContent).toContain('Hạn mức điểm tháng này');
     expect(c.textContent).toContain('Đã dùng 120.000 / 500.000 điểm');
-    expect(c.textContent).toContain('Còn 380.000 điểm');
+    expect(c.textContent).toContain('Còn lại 380.000 điểm');
     expect(c.textContent).toContain('Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.');
+  });
+  it('một điểm: tên điểm hiện dưới tiêu đề; hạn mức có thanh tiến độ theo đã dùng trên giới hạn', async () => {
+    const c = await mount();
+    expect(byText(c, 'p', 'Đại lý Cô Ba')).not.toBeNull();
+    expect(c.querySelector<HTMLElement>('[data-testid="progress-fill"]')?.style.width).toBe('24%');
+  });
+  it('nhiều điểm: tên điểm chỉ nằm trên các tab, không lặp thành dòng riêng', async () => {
+    state.points = [makeDeskPoint(), WAREHOUSE_DESK];
+    const c = await mount();
+    expect(byText(c, 'p', 'Đại lý Cô Ba')).toBeNull();
+    expect(byText(c, '[role="tab"]', 'Đại lý Cô Ba')).not.toBeNull();
+  });
+  it('thứ tự: hạn mức, ô nhập mã, thẻ yêu cầu, rồi ưu đãi và báo cáo; xác nhận có thanh dính đáy', async () => {
+    const c = await mount();
+    await lookUp(c);
+    const before = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const quota = byText(c, 'p', 'Hạn mức điểm tháng này')!;
+    const input = label(c, CODE_LABEL)!;
+    const card = byText(c, 'h2', 'TR-8K2M9')!;
+    const perk = byText(c, 'p, h2, h3', 'Ưu đãi riêng của cửa hàng')!;
+    const report = c.querySelector('section[aria-label="Báo cáo tháng này"]')!;
+    expect(before(quota, input) && before(input, card) && before(card, perk) && before(perk, report)).toBe(true);
+    expect(byText(c.querySelector('[data-testid="sticky-bar"]')!, 'button', 'Xác nhận đã nhận')).not.toBeNull();
   });
   it('đại lý không giới hạn hạn mức tháng', async () => {
     state.points = [makeDeskPoint({ quota: null })];
@@ -214,35 +240,45 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     await lookUp(c, 'TR-XXXXX');
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không tìm thấy mã');
   });
-  it('bộ đếm bắt đầu từ 0 và không vượt số khai', async () => {
+  it('bộ đếm số thực nhận điền sẵn số khai, hiện "Tối đa N", không vượt số khai và chưa hỏi lý do', async () => {
     const c = await mount();
     await lookUp(c);
-    plus(c, 'Thùng carton', 7);
+    expect(lineOf(c, 'Thùng carton').querySelector('[aria-live]')?.textContent).toBe('5');
+    expect(lineOf(c, 'Thùng carton').textContent).toContain('Tối đa 5');
+    plus(c, 'Thùng carton', 2);
     expect(lineOf(c, 'Thùng carton').querySelector('[aria-live]')?.textContent).toBe('5');
     expect(lineOf(c, 'Thùng carton').querySelector('[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(c.querySelectorAll('select')).toHaveLength(0);
+    expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
+    expect(c.textContent).not.toContain('Chọn lý do cho món nhận thiếu để xác nhận');
   });
   it('điểm sẽ cộng tính trực tiếp theo nhóm', async () => {
     const c = await mount();
     await lookUp(c);
-    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 0 điểm');
-    plus(c, 'Thùng carton', 5);
-    plus(c, 'Vỏ hộp sữa', 4);
-    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 5.000 điểm');
-    plus(c, 'Vỏ hộp sữa', 1);
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 6.000 điểm');
+    minus(c, 'Vỏ hộp sữa', 1);
+    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 5.000 điểm');
+    minus(c, 'Thùng carton', 5);
+    minus(c, 'Vỏ hộp sữa', 4);
+    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 0 điểm');
     expect(deskPreviewPoints([{ unitsPerPoint: 5, pointsPerGroup: 1000, hazardous: true }], { a: 5 }, ['a'])).toBe(0);
   });
   it('dòng thiếu phải có lý do (7 lý do) thì nút xác nhận mới mở', async () => {
     const c = await mount();
     await lookUp(c);
-    plus(c, 'Thùng carton', 5);
-    plus(c, 'Vỏ hộp sữa', 3);
+    minus(c, 'Vỏ hộp sữa', 2);
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(true);
+    expect(c.textContent).toContain('Chọn lý do cho món nhận thiếu để xác nhận');
+    expect(lineOf(c, 'Vỏ hộp sữa').textContent).toContain('Lý do nhận thiếu');
     const reason = lineOf(c, 'Vỏ hộp sữa').querySelector<HTMLSelectElement>('select[aria-label="Lý do nhận thiếu: Vỏ hộp sữa"]')!;
+    expect(reason.options[0]!.textContent).toBe('Chọn lý do');
+    expect(reason.options[0]!.disabled).toBe(true);
+    expect(reason.value).toBe('');
     expect(Array.from(reason.options).slice(1).map((o) => o.textContent)).toEqual(['Ướt', 'Bẩn', 'Lẫn vật lạ', 'Sai loại', 'Hỏng', 'Không nhận', 'Khác']);
     expect(lineOf(c, 'Thùng carton').querySelector('select')).toBeNull();
     selectValue(reason, 'DIRTY');
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
+    expect(c.textContent).not.toContain('Chọn lý do cho món nhận thiếu để xác nhận');
   });
   it('món nguy hại: không có bộ đếm, gửi receivedQty 0 và lý do Sai loại', async () => {
     lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 2 }] });
@@ -276,22 +312,48 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
   it('xác nhận: body đủ dòng, báo Tubu sẽ cộng, hạn mức mới, xoá thẻ; không gửi match cho điểm đại lý', async () => {
     const c = await mount();
     await lookUp(c);
-    plus(c, 'Thùng carton', 5);
-    plus(c, 'Vỏ hộp sữa', 5);
     state.points = [makeDeskPoint({ quota: { limit: 500_000, used: 126_000, remaining: 374_000 } })];
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     const sent = calls('/waste/desk/requests/req-1/confirm');
     expect(sent).toHaveLength(1);
     expect(sent[0]!.body).toEqual({ lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }, { itemId: 'item-milk', declaredQty: 5, receivedQty: 5 }] });
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Tubu sẽ cộng 6.000 điểm cho khách');
-    expect(c.textContent).toContain('Còn 374.000 điểm');
-    expect(c.textContent).not.toContain('Ng*** A');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận. Tubu sẽ cộng 6.000 điểm cho khách');
+    expect(c.textContent).toContain('Còn lại 374.000 điểm');
+    expect(button(c, 'Xác nhận đã nhận')).toBeNull();
+    expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+    expect(c.textContent).toContain('Yêu cầu TR-8K2M9 của Ng*** A đã xong');
+    expect(c.textContent).toContain('Hạn mức còn lại: 374.000 điểm');
+    expect(label(c, CODE_LABEL)).toHaveProperty('value', '');
+  });
+  it('thẻ kết quả ở lại màn tới khi bấm "Nhận yêu cầu khác"; số hạn mức lấy từ phản hồi, không bịa khi điểm không giới hạn', async () => {
+    state.confirm = () => ({ ...CONFIRMED, quota: null });
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(10);
+    expect(c.textContent).toContain('Yêu cầu TR-8K2M9 của Ng*** A đã xong');
+    expect(c.textContent).not.toContain('Hạn mức còn lại:');
+    click(button(c, 'Nhận yêu cầu khác'));
+    await flush();
+    expect(c.querySelector('[role="status"]')).toBeNull();
+    expect(label(c, CODE_LABEL)).toHaveProperty('value', '');
+  });
+  it('kho: thẻ kết quả nêu số điểm còn được xác nhận hôm nay lấy từ phản hồi', async () => {
+    state.points = [WAREHOUSE_DESK];
+    lookupReq({ method: 'MAIL_IN', status: 'RECEIVED', pointId: 'wh-1', lines: [LINE0] });
+    state.confirm = () => ({ ...CONFIRMED, quota: null });
+    const c = await mount();
+    await lookUp(c, 'TR-8K2M9');
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(10);
+    expect(c.textContent).toContain('Còn được xác nhận hôm nay: 150.000 điểm');
+    expect(c.textContent).not.toContain('Hạn mức còn lại:');
   });
   it('dòng thiếu gửi kèm shortfallReason', async () => {
     const c = await mount();
     await lookUp(c);
-    plus(c, 'Thùng carton', 5);
+    minus(c, 'Vỏ hộp sữa', 5);
     selectValue(lineOf(c, 'Vỏ hộp sữa').querySelector('select'), 'WET');
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
@@ -306,7 +368,6 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     };
     const c = await mount();
     await lookUp(c, 'TR-8K2M9');
-    plus(c, 'Thùng carton', 5);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect(calls('/waste/desk/requests/req-1/confirm')[0]!.body).toEqual({
@@ -327,11 +388,10 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     state.confirm = () => ({ ...CONFIRMED, quota: null, staffDailyCapRemaining: 145_000 });
     const c = await mount();
     await lookUp(c, 'TR-8K2M9');
-    plus(c, 'Thùng carton', 5);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect((calls('/waste/desk/requests/req-1/confirm')[0]!.body as { match: unknown }).match).toEqual({ parcelCode: 'TR-8K2M9' });
-    expect(c.textContent).toContain('Còn 380.000 điểm');
+    expect(c.textContent).toContain('Còn lại 380.000 điểm');
     expect(c.textContent).not.toContain('Không giới hạn hạn mức tháng');
   });
   it('kho + kiện đã RECEIVED: không gửi match', async () => {
@@ -339,7 +399,6 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     lookupReq({ method: 'MAIL_IN', status: 'RECEIVED', pointId: 'wh-1', lines: [LINE0] });
     const c = await mount();
     await lookUp(c, 'TR-8K2M9');
-    plus(c, 'Thùng carton', 5);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect(calls('/waste/desk/requests/req-1/confirm')[0]!.body).not.toHaveProperty('match');
@@ -355,8 +414,6 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     };
     const c = await mount();
     await lookUp(c);
-    plus(c, 'Thùng carton', 5);
-    plus(c, 'Vỏ hộp sữa', 5);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect(c.querySelector('[role="alert"]')?.textContent).toContain(msg);
@@ -368,8 +425,6 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     };
     const c = await mount();
     await lookUp(c);
-    plus(c, 'Thùng carton', 5);
-    plus(c, 'Vỏ hộp sữa', 5);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Tài khoản này không có quyền nhận hàng tại điểm');
@@ -386,7 +441,9 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     ]);
     const send = byText(sheet, 'button', 'Từ chối yêu cầu') as HTMLButtonElement;
     expect(send.disabled).toBe(true);
+    expect(sheet.textContent).toContain('Chọn một lý do');
     click(sheet.querySelector('input[type="radio"][aria-label="Ướt"]'));
+    expect(sheet.textContent).not.toContain('Chọn một lý do');
     typeInto(label(sheet, 'Ghi chú (không bắt buộc)'), 'thùng ướt hết');
     click(send);
     await flush(10);
