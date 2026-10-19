@@ -282,7 +282,7 @@ export default function OrderDetailPage() {
                 {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
                   <Link
                     href={reviewHref(it.productSlug, o.id)}
-                    className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
+                    className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
                   >
                     <Star className="h-4 w-4" aria-hidden="true" />
                     {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}
@@ -297,7 +297,7 @@ export default function OrderDetailPage() {
 
       <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
         <h2 className={`${ui.sectionTitle} max-md:sr-only`}>Thanh toán</h2>
-        <div className="mt-2 space-y-1 text-sm">
+        <div className="mt-2 space-y-1 text-sm max-md:mt-0 max-md:space-y-2">
           <Row label="Tạm tính" value={formatVnd(o.subtotal)} />
           {/* Order.discount là tổng mã + combo + giảm hạng + Điểm Xanh: mỗi khoản một dòng, cùng cách tách với Mini App. */}
           {discountRows(o).map((r) => (
@@ -307,7 +307,7 @@ export default function OrderDetailPage() {
             <Row label="Điểm Xanh đã dùng" value={`${formatCount(o.pointsUsed ?? 0)} điểm`} />
           )}
           <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} />
-          <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900">
+          <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900 max-md:border-t-0 max-md:pt-0 max-md:text-base">
             <span>Tổng cộng</span>
             <span>{formatVnd(o.total)}</span>
           </div>
@@ -409,8 +409,8 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
 function Row({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
   return (
     <div className={`flex justify-between gap-3 ${positive ? 'text-success-fg' : 'text-stone-900'}`}>
-      <span className={positive ? '' : 'text-stone-600'}>{label}</span>
-      <span className="text-right">{value}</span>
+      <span className={positive ? '' : 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]'}>{label}</span>
+      <span className="text-right max-md:font-semibold">{value}</span>
     </div>
   );
 }

@@ -196,7 +196,7 @@ export default function EditProfilePage() {
   return shell(
     <form
       noValidate
-      className="mx-auto mt-4 flex max-w-md flex-col gap-4"
+      className="mx-auto mt-4 flex max-w-md flex-col gap-4 max-md:max-w-none max-md:gap-5"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -273,7 +273,7 @@ export default function EditProfilePage() {
         {done ?? ''}
       </p>
 
-      <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || uploadingAvatar} className={`${ui.btnPrimary} w-full`}>
+      <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
         {save.isPending ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />

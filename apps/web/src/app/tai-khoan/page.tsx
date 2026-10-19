@@ -160,7 +160,7 @@ export default function AccountPage() {
             </span>
           )}
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-lg font-bold">{fullName ?? 'Khách Tubu'}</span>
+            <span className="block truncate text-lg font-bold max-md:font-display">{fullName ?? 'Khách Tubu'}</span>
             <span className="mt-1.5 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2 py-0.5 text-xs font-semibold text-forest-800">
                 <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
@@ -197,7 +197,7 @@ export default function AccountPage() {
 
         <div className="mt-4 grid grid-cols-2 gap-6 max-md:relative max-md:-mt-5 max-md:gap-2.5 max-md:p-3 max-md:pb-0 md:grid-cols-3">
           <Link href="/tai-khoan/diem-xanh" className={TILE}>
-            <div className={TILE_VALUE}>{points.total.toLocaleString('vi-VN')}</div>
+            <div className={TILE_VALUE}>{points.total.toLocaleString('vi-VN')} điểm</div>
             <div className={TILE_LABEL}>Điểm Xanh</div>
             {points.convertedNote && <div className={`${TILE_LABEL} max-md:hidden`}>{points.convertedNote}</div>}
             <div className={TILE_MORE}>

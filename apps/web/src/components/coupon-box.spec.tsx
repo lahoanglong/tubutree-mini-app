@@ -223,13 +223,14 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
   const toggle = (box: HTMLElement) => box.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
   const panel = (box: HTMLElement) => box.querySelector<HTMLElement>('#coupon-panel')!;
 
-  it('mặc định thu gọn: chỉ một dòng "Mã giảm giá" có gợi ý số mã trong ví, phần nhập và danh sách ẩn', async () => {
+  it('mặc định thu gọn: chỉ một dòng "Mã giảm giá" có lời mời "Chọn mã" như Mini App (không đếm số mã), phần nhập và danh sách ẩn', async () => {
     state.coupons = [c('A1'), c('B2')];
     const box = await mount();
     expect(toggle(box).getAttribute('aria-expanded')).toBe('false');
     expect(toggle(box).getAttribute('aria-controls')).toBe('coupon-panel');
     expect(toggle(box).textContent).toContain('Mã giảm giá');
-    expect(toggle(box).textContent).toContain('Bạn có 2 mã');
+    expect(toggle(box).textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(toggle(box).textContent).toContain('Chọn mã');
     expect(panel(box).hidden).toBe(true);
   });
 
@@ -244,9 +245,9 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(panel(box).hidden).toBe(true);
   });
 
-  it('ví không có mã nào: gợi ý "Thêm mã"', async () => {
+  it('ví không có mã nào: vẫn mời "Chọn mã" như Mini App', async () => {
     const box = await mount();
-    expect(toggle(box).textContent).toContain('Thêm mã');
+    expect(toggle(box).textContent).toContain('Chọn mã');
   });
 
   it('áp mã lỗi thì mở lại ô nhập cùng lời báo, kể cả khi khách đã thu gọn dòng trong lúc chờ', async () => {

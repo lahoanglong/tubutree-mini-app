@@ -78,7 +78,10 @@ describe('cài đặt như Mini App (điện thoại)', () => {
     const h2 = container.querySelector('h2')!;
     expect(h2.className).toContain('max-md:font-ui');
     expect(h2.className).toContain('max-md:font-bold');
-    expect(promo(container).querySelector('span')!.className).toContain('max-md:font-semibold');
+    const row = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Cập nhật đơn hàng')!;
+    expect(row.className).toContain('max-md:font-semibold');
+    const link = container.querySelector('a[href="/tai-khoan/dia-chi"]')!;
+    expect(link.className).toContain('max-md:font-semibold');
     const logout = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đăng xuất')!;
     expect(logout.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(container.textContent).toContain('Tubu Tree · phiên bản 1.0.0');

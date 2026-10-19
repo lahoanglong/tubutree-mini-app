@@ -165,7 +165,7 @@ export default function AddressBookPage() {
                       <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs font-medium text-forest-800">Mặc định</span>
                     )}
                   </div>
-                  <p className="mt-1 break-words text-sm text-stone-700">{line(a)}</p>
+                  <p className="mt-1 break-words text-sm text-stone-700 max-md:mt-0.5 max-md:text-[length:var(--type-caption-size)] max-md:text-[color:var(--color-text-secondary)]">{line(a)}</p>
                   {isLegacyGeo(a) && (
                     <p className="mt-1 text-xs font-medium text-warning-fg">
                       Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025) — chưa giao được, bấm Sửa để chọn lại tỉnh/phường.
@@ -269,7 +269,7 @@ export default function AddressBookPage() {
                 setEditingId(null);
                 setAdding(true);
               }}
-              className={`${ui.btnPrimary} w-full gap-2 sm:w-auto max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]`}
+              className={`${ui.btnPrimary} w-full gap-2 sm:w-auto max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:shadow-none max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]`}
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               Thêm địa chỉ mới

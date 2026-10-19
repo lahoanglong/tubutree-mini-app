@@ -45,7 +45,7 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
           href={orderDetailHref(o.code)}
           aria-label={`Đơn ${o.code}`}
           aria-describedby={summaryId}
-          className="flex min-h-11 min-w-0 items-center break-all text-sm font-semibold tracking-wide text-stone-900 after:absolute after:inset-0 after:content-['']"
+          className="flex min-h-11 min-w-0 items-center break-all text-sm font-semibold tracking-wide text-stone-900 max-md:min-h-6 max-md:text-xs max-md:font-bold after:absolute after:inset-0 after:content-['']"
         >
           {o.code}
         </Link>
@@ -83,7 +83,7 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
       )}
       {canReorder && (
         <div data-testid="order-card-actions" className="flex justify-end">
-          <button type="button" onClick={onReorder} className={`${ui.btnSecondary} ${mini.secondary} relative z-10`}>
+          <button type="button" onClick={onReorder} className={`${ui.btnSecondary} ${mini.secondary} relative z-10 max-md:text-base`}>
             Mua lại
           </button>
         </div>

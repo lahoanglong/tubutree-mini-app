@@ -101,13 +101,14 @@ describe('giới thiệu như Mini App (điện thoại)', () => {
     expect(ship!.className).toContain('max-md:border-transparent');
   });
 
-  it('email chữ đen đậm không gạch chân; hotline xếp nhãn trên số dưới; tên chính sách đậm', async () => {
+  it('email chữ đen đậm không gạch chân; hotline chữ xanh đậm; tên chính sách đậm; lưới một cột không tràn ngang', async () => {
     const { container } = await mount();
     const mail = container.querySelector<HTMLAnchorElement>('a[href^="mailto:"]')!;
     expect(mail.className).toContain('max-md:text-[color:var(--color-text-primary)]');
     expect(mail.className).toContain('max-md:font-semibold');
     const hot = container.querySelector<HTMLAnchorElement>('a[href^="tel:"]')!;
-    expect(hot.parentElement!.className).toContain('max-md:flex-col');
+    expect(hot.className).toContain('max-md:text-[color:var(--color-text-brand)]');
+    expect(container.querySelector('main > div.grid')!.className).toContain('max-md:grid-cols-[minmax(0,1fr)]');
     const policy = container.querySelector<HTMLAnchorElement>('a[href="/chinh-sach/dieu-khoan"]')!;
     expect(policy.className).toContain('max-md:font-semibold');
   });

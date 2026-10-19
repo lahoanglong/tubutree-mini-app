@@ -52,7 +52,7 @@ export function AboutView({ initialFaqs, initialConfig, initialSupport }: { init
         </p>
       </section>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2 max-md:px-4">
+      <div className="mt-3 grid gap-3 md:grid-cols-2 max-md:grid-cols-[minmax(0,1fr)] max-md:px-4">
         <div className="md:col-span-2">
           <FaqSection initialFaqs={initialFaqs} initialConfig={initialConfig} />
         </div>
@@ -82,7 +82,7 @@ export function AboutView({ initialFaqs, initialConfig, initialSupport }: { init
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className={`${ui.card} p-4 ${mini.card}`}>
-      <h2 className={`mb-2 font-display text-base font-semibold text-stone-900 max-md:font-ui max-md:font-bold`}>{title}</h2>
+      <h2 className={`mb-2 font-display text-base font-semibold text-stone-900 max-md:font-ui max-md:text-[15px] max-md:font-bold`}>{title}</h2>
       {children}
     </section>
   );
@@ -167,7 +167,7 @@ function SupportSection({ initialSupport }: { initialSupport?: SupportContact })
     rows.push({
       label: 'Hotline',
       value: (
-        <a href={telHref(support.hotline)} aria-label={`Hotline ${formatPhoneDisplay(support.hotline)}, bấm để gọi`} className={`${ui.backLink} font-semibold max-md:text-[color:var(--color-text-primary)] max-md:no-underline`}>
+        <a href={telHref(support.hotline)} aria-label={`Hotline ${formatPhoneDisplay(support.hotline)}, bấm để gọi`} className={`${ui.backLink} font-semibold max-md:text-[color:var(--color-text-brand)] max-md:no-underline`}>
           {formatPhoneDisplay(support.hotline)}
         </a>
       ),
@@ -202,7 +202,7 @@ function SupportSection({ initialSupport }: { initialSupport?: SupportContact })
   return (
     <Section title="Hỗ trợ khách hàng">
       {rows.map((r, i) => (
-        <div key={r.label} className={`flex min-h-11 items-center justify-between gap-3 py-1 ${r.label === 'Hotline' ? 'max-md:flex-col max-md:items-start max-md:justify-center max-md:gap-0' : ''} ${i < rows.length - 1 ? 'border-b border-stone-200' : ''}`}>
+        <div key={r.label} className={`flex min-h-11 items-center justify-between gap-3 py-1 ${i < rows.length - 1 ? 'border-b border-stone-200' : ''}`}>
           <span className="text-sm text-stone-600">{r.label}</span>
           {r.value}
         </div>

@@ -98,7 +98,7 @@ export default function SettingsPage() {
         {platformBridge.oa.available && <FollowOaRow />}
         <div className="min-h-11 border-b border-stone-200 py-2">
           <p className="text-sm text-stone-900 max-md:font-semibold">Cập nhật đơn hàng</p>
-          <p className="text-xs text-stone-600">Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền</p>
+          <p className="text-xs text-stone-600 max-md:text-sm">Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền</p>
         </div>
         {prefsQ.isLoading && <Skeleton height={44} style={{ marginTop: 8 }} />}
         <SwitchRow label="Khuyến mãi & mã giảm giá" on={notify?.notifyPromo ?? false} disabled={switchesLocked} onToggle={() => void toggle('notifyPromo')} />
@@ -165,7 +165,7 @@ export default function SettingsPage() {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className={`${ui.card} p-4 ${mini.card}`}>
-      <h2 className="mb-2 font-display text-base font-semibold text-stone-900 max-md:font-ui max-md:font-bold">{title}</h2>
+      <h2 className="mb-2 font-display text-base font-semibold text-stone-900 max-md:font-ui max-md:text-[15px] max-md:font-bold">{title}</h2>
       {children}
     </section>
   );
@@ -185,7 +185,7 @@ function SwitchRow({ label, on, onToggle, disabled, last }: { label: string; on:
       }}
       className={`flex min-h-11 w-full items-center justify-between gap-3 py-2 text-left ${last ? '' : 'border-b border-stone-200'} ${disabled ? 'cursor-default opacity-60' : ''}`}
     >
-      <span className="text-sm text-stone-900 max-md:font-semibold">{label}</span>
+      <span className="text-sm text-stone-900">{label}</span>
       {/* Trạng thái tắt dùng stone-450 để thanh trượt đạt 3:1 với nền thẻ (WCAG 1.4.11). */}
       <span aria-hidden="true" className={`relative h-[26px] w-11 shrink-0 rounded-full transition-colors ${on ? 'bg-forest-600' : 'bg-stone-450'}`}>
         <span className={`absolute top-[3px] h-5 w-5 rounded-full bg-stone-0 shadow-card transition-all ${on ? 'left-[21px]' : 'left-[3px]'}`} />
@@ -198,7 +198,7 @@ function SwitchRow({ label, on, onToggle, disabled, last }: { label: string; on:
 function FollowOaRow() {
   return (
     <div className="flex min-h-11 items-center justify-between gap-3 border-b border-stone-200 py-2">
-      <span className="text-sm text-stone-900 max-md:font-semibold">Theo dõi Zalo OA</span>
+      <span className="text-sm text-stone-900">Theo dõi Zalo OA</span>
       <button type="button" onClick={() => void platformBridge.oa.follow()} className={`${ui.btnPrimary} min-h-11`}>
         Theo dõi
       </button>

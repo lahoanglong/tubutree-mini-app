@@ -39,7 +39,7 @@ export function OrderTimeline({ status, paymentMethod }: { status: string; payme
                   <span aria-hidden="true" className={`my-0.5 w-0.5 flex-1 ${done ? 'bg-forest-600' : 'bg-stone-200'}`} />
                 )}
               </div>
-              <div className={`text-sm ${i === steps.length - 1 ? '' : 'pb-4'}`}>
+              <div className={`text-sm ${i === steps.length - 1 ? '' : 'pb-4 max-md:pb-6'}`}>
                 <span
                   className={
                     active

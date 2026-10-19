@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronRight, TriangleAlert, Users } from 'lucide-react';
 import { recordReferralTouch } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 
 const MISS_MESSAGE = 'Không tìm thấy mã này, hoặc đây là mã của chính bạn. Bạn kiểm tra lại giúp Tubu nhé.';
 
@@ -47,7 +48,7 @@ export function ReferralCodeBox({
   const [checking, setChecking] = useState(false);
 
   const shell = (children: React.ReactNode) => (
-    <section aria-label="Mã giới thiệu" className={`p-4 ${ui.card}`}>
+    <section aria-label="Mã giới thiệu" className={`p-4 ${ui.card} ${mini.band}`}>
       {children}
     </section>
   );

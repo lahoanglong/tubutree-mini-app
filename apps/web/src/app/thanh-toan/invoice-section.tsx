@@ -2,6 +2,7 @@
 
 import { useId } from 'react';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 import type { InvoiceInfo } from '@/lib/checkout-rules';
 
 /** Yêu cầu xuất hoá đơn VAT (doanh nghiệp): bật thì cần đủ MST, tên công ty, địa chỉ và email — API validate IsEmail. */
@@ -30,7 +31,7 @@ export function InvoiceSection({
   ];
 
   return (
-    <section aria-label="Hoá đơn VAT" className={`p-4 ${ui.card}`}>
+    <section aria-label="Hoá đơn VAT" className={`p-4 ${ui.card} ${mini.band}`}>
       <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-stone-900">
         <input
           type="checkbox"
