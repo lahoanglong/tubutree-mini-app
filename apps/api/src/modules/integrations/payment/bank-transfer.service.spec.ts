@@ -50,6 +50,14 @@ describe('BankTransferService.getBankQr', () => {
     expect(r.qrImageUrl).toContain('img.vietqr.io');
   });
 
+  it('trả giờ máy chủ để app bù lệch đồng hồ điện thoại khi tính hạn chuyển khoản', async () => {
+    const before = Date.now();
+    const r = await new BankTransferService(makePrisma(ORDER), makeConfig()).getBankQr('TUBU250625001', 'u1');
+    const ms = Date.parse(r.serverNow);
+    expect(ms).toBeGreaterThanOrEqual(before);
+    expect(ms).toBeLessThanOrEqual(Date.now());
+  });
+
   it('đơn đã thanh toán → vẫn trả nhưng paymentStatus=PAID (FE ẩn QR)', async () => {
     const r = await new BankTransferService(makePrisma({ ...ORDER, paymentStatus: 'PAID' }), makeConfig()).getBankQr('TUBU250625001', 'u1');
     expect(r.paymentStatus).toBe('PAID');

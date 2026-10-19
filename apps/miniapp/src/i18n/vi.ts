@@ -571,6 +571,7 @@ export const vi = {
     },
     creditedOn: (date: string) => `Đã cộng ${date}`,
     expectedOn: (date: string) => `Dự kiến ${date}`,
+    sharePhone: 'Chia sẻ số điện thoại',
     reject: {
       DISABLED: 'Tính năng này chưa mở. Bạn quay lại sau nhé.',
       NOT_ELIGIBLE_USER: 'Bạn cần đăng nhập Zalo và cho phép Tubu xem số điện thoại để tích điểm đơn ngoài app.',
@@ -590,6 +591,8 @@ export const vi = {
   },
 
   wallet: {
+    withdrawUnknown:
+      'Chưa nhận được phản hồi từ máy chủ nên chưa rõ lệnh rút đã được ghi nhận chưa. Bạn kiểm tra lịch sử giao dịch của Ví trước khi rút lại nhé.',
     referralPromise: (minOrder: number, windowDays: number) =>
       `Bạn bè vào app bằng mã của bạn và có đơn thứ hai từ ${formatVnd(minOrder)} giao thành công trong ${windowDays} ngày kể từ đơn đầu → bạn nhận Điểm Xanh thưởng.`,
     referralMilestoneProgress: (remaining: number, bonusFormatted: string) =>

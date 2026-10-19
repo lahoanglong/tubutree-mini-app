@@ -12,6 +12,7 @@ import {
 import { formatVnd } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
+import { serverNow } from '../utils/server-clock';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
 import { useAuthStore } from '../store/auth';
@@ -85,7 +86,7 @@ export function FlashSale() {
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
   const [expiredTick, setExpiredTick] = useState(0);
   const soonestEndAt = useMemo(() => {
-    const now = Date.now();
+    const now = serverNow();
     const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
     return live.length > 0 ? new Date(Math.min(...live)) : null;
   }, [items, expiredTick]);

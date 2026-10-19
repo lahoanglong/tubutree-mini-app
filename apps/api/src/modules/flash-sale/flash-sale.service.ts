@@ -174,6 +174,8 @@ export class FlashSaleService {
         soldCount: it.soldCount,
         quota: it.quota,
         endAt: it.flashSale.endAt,
+        // App đếm ngược theo giờ máy chủ chứ không theo đồng hồ điện thoại (điện thoại khách hay lệch vài phút).
+        serverNow: now.toISOString(),
       }));
   }
 

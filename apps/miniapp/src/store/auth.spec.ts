@@ -395,7 +395,20 @@ describe('401 handler đăng ký lúc module load — dùng chung cơ chế refr
     const token = await handler();
 
     expect(token).toBeNull();
-    expect(useAuthStore.getState().status).toBe('idle');
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
+    // 'error' (không phải 'idle') để useSessionRecovery tự thử lại thay vì để khách ở màn mời đăng nhập (D14-04).
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionUnavailable);
+  });
+
+  it('refresh lỗi 5xx của máy chủ cũng là chưa biết phiên còn hay không → error, giữ refresh token', async () => {
+    const handler = unauthorizedHandler!;
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh-4' });
+    mockedRefresh.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 503 } });
+
+    expect(await handler()).toBeNull();
+
+    expect(useAuthStore.getState().status).toBe('error');
     expect(mockedRemoveStorage).not.toHaveBeenCalled();
   });
 });

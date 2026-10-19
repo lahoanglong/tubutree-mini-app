@@ -46,10 +46,7 @@ function pointsAnswer(loyalty: FaqConfig['loyalty']): string {
     }
   }
   const expiry = positive(pointExpireMonths) ? `Điểm có hạn ${pointExpireMonths} tháng.` : 'Điểm có hạn dùng.';
-  // "100%" là luật cố định của lô điểm quy đổi từ xu cũ (không có khoá cấu hình), khác với trần % của điểm thường ở trên.
-  const converted =
-    'Điểm quy đổi từ xu cũ thì không hết hạn và trừ được tới 100% giá trị hàng khi thanh toán, nhưng không dùng để đổi mã giảm giá.';
-  return [earn, redeem, expiry, converted].join(' ');
+  return [earn, redeem, expiry].join(' ');
 }
 
 /**

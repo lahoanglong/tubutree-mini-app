@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { serverNow } from '../utils/server-clock';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -27,7 +28,7 @@ export function useRemaining(target: Date | string | null | undefined): Remainin
   const key = target instanceof Date ? target.getTime() : target;
   const compute = (): Remaining => {
     if (target == null) return { text: '', expired: false };
-    const ms = new Date(target).getTime() - Date.now();
+    const ms = new Date(target).getTime() - serverNow();
     if (Number.isNaN(ms)) return { text: '', expired: false };
     return { text: formatRemaining(ms), expired: ms <= 0 };
   };

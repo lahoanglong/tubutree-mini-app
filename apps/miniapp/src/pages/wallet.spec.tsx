@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { AxiosError } from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -337,6 +338,94 @@ describe('WalletPage — rút tiền', () => {
     await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     fireEvent.click(screen.getByRole('button', { name: 'Rút 150.000đ' }));
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+});
+
+describe('WalletPage — rút tiền gặp lỗi chưa rõ kết quả (D14-03)', () => {
+  const failure = (status: number | undefined, code?: string) =>
+    new AxiosError(
+      'x',
+      code,
+      undefined,
+      undefined,
+      status ? ({ status, statusText: '', headers: {}, config: {} as never, data: { message: 'Số dư ví không đủ.' } } as never) : undefined,
+    );
+
+  async function openAndFill() {
+    stubLoaded();
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
+    await screen.findByText('Rút tiền về ngân hàng');
+    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '400000' } });
+    fireEvent.change(inputOf('Tên ngân hàng'), { target: { value: 'VCB' } });
+    fireEvent.change(inputOf('Số tài khoản'), { target: { value: '123456' } });
+    fireEvent.change(inputOf('Chủ tài khoản'), { target: { value: 'A' } });
+  }
+  const press = () => fireEvent.click(screen.getByRole('button', { name: 'Rút 400.000đ' }));
+
+  it.each([
+    ['quá thời gian (ECONNABORTED)', undefined, 'ECONNABORTED'],
+    ['mất mạng giữa chừng', undefined, 'ERR_NETWORK'],
+    ['máy chủ 502', 502, 'ERR_BAD_RESPONSE'],
+  ])('%s: bấm lại gửi đúng Idempotency-Key cũ, tải lại số dư và nhắc kiểm tra lịch sử', async (_name, status, code) => {
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValueOnce(failure(status, code)).mockResolvedValue({ ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 });
+    await openAndFill();
+    const walletCalls = mocks.getWallet.mock.calls.length;
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: expect.stringContaining('lịch sử') })));
+    await waitFor(() => expect(mocks.getWallet.mock.calls.length).toBeGreaterThan(walletCalls));
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
+  it('chưa rõ kết quả rồi đóng sheet và mở lại: vẫn dùng key của lệnh chưa rõ, không rút lần hai', async () => {
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValueOnce(failure(undefined, 'ECONNABORTED')).mockResolvedValue({ ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 });
+    await openAndFill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
+    await screen.findByText('Rút tiền về ngân hàng');
+    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '400000' } });
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
+  it.each([[401], [403], [408], [429]])('chưa rõ kết quả rồi lần sau gặp %i (request này không được xử lý): vẫn gửi key của lệnh chưa rõ', async (status) => {
+    mocks.withdraw.mockReset();
+    mocks.withdraw
+      .mockRejectedValueOnce(failure(undefined, 'ECONNABORTED'))
+      .mockRejectedValueOnce(failure(status, 'ERR_BAD_REQUEST'))
+      .mockResolvedValue({ ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 });
+    await openAndFill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(2));
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(3));
+    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+    expect(mocks.withdraw.mock.calls[2]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
+  it('máy chủ từ chối rõ ràng (400): lần bấm sau dùng key mới', async () => {
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValue(failure(400, 'ERR_BAD_REQUEST'));
+    await openAndFill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Số dư ví không đủ.', type: 'error' }));
+    press();
     await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
     expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
   });
