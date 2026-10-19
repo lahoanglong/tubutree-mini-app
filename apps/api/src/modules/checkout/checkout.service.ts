@@ -974,7 +974,7 @@ export class CheckoutService {
    * và xem trước mã dùng chung.
    */
   private async checkoutLines(userId: string, itemIds?: string[]) {
-    const fullCart = await this.cart.getCart(userId, null);
+    const fullCart = await this.cart.getCartForCheckout(userId);
     // Checkout TẬP CON: chỉ tính trên các dòng được chọn, tính lại subtotal từ subset (combo/
     // coupon/điểm/ship đều dựa subtotal này). Rỗng/thiếu itemIds = toàn giỏ (tương thích ngược).
     const subset = Array.isArray(itemIds) && itemIds.length > 0;

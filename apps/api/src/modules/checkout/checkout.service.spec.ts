@@ -150,13 +150,15 @@ function build(
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
   const cartData = (opts.cartData ?? CART) as { items: Array<Record<string, unknown>> };
+  const priced = async () => ({
+    unavailableItems: [],
+    ...cartData,
+    items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
+  });
   const cart = {
     // Đọc lúc gọi (không chụp lúc build): vài test sửa CART tại chỗ sau khi dựng service.
-    getCart: jest.fn().mockImplementation(async () => ({
-      unavailableItems: [],
-      ...cartData,
-      items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
-    })),
+    getCart: jest.fn().mockImplementation(priced),
+    getCartForCheckout: jest.fn().mockImplementation(priced),
     // Khoá giỏ trong tx đọc lại đúng các dòng giỏ hiện tại (không ai đổi giỏ giữa chừng).
     lockForCheckout: jest.fn().mockImplementation(async () =>
       cartData.items.map((it) => ({ id: it.id, variationId: it.variationId, quantity: it.quantity })),
