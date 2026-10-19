@@ -166,3 +166,12 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
     expect(c.querySelector('h1')?.textContent).toBe('Quà của tôi');
   });
 });
+
+describe('/kho-qua/cua-toi — giao diện điện thoại như Mini App', () => {
+  it('thẻ viền mảnh không bóng như Card outline', async () => {
+    state.mine = [makeGiftRedemption()];
+    const c = await mount();
+    expect(c.querySelector('[data-redemption]')!.className).toContain('max-md:shadow-none');
+  });
+});
+
