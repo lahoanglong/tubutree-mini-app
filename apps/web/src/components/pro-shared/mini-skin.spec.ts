@@ -11,7 +11,7 @@ describe('skin (lớp phủ Mini App cho nhóm pro)', () => {
   it('thẻ bỏ viền, dùng bóng elevation-1 ở điện thoại', () => {
     expect(skin.card).toContain(ui.card);
     expect(skin.card).toContain('max-md:border-transparent');
-    expect(skin.card).toContain('max-md:shadow-[var(--elevation-1)]');
+    expect(skin.card).toContain('max-md:[box-shadow:var(--elevation-1)]');
   });
   it('mọi lớp phủ đều nằm sau tiền tố max-md', () => {
     for (const cls of [skin.pageTitle, skin.cardTitle]) expect(cls).toMatch(/max-md:/);

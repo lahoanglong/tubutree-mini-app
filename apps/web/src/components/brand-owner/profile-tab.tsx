@@ -13,6 +13,7 @@ import {
 import { coreHttp } from '@/lib/core-http';
 import { EMPTY_PROMO, ownerActionError, promoDateRangeInvalid, promoPayload, promoToForm, type PromoForm } from '@/lib/brand-owner-view';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { useNotice } from '@/components/staff/staff-shell';
@@ -88,21 +89,22 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
     },
   });
 
+  const bigField = `${ui.field} max-md:text-[length:var(--type-body-lg-size)]`;
   const dateClass = `${ui.field} flex-1`;
 
   return (
     <div className="grid gap-4 pb-6 xl:grid-cols-2 xl:items-start">
       {notice && <div className="xl:col-span-2">{notice}</div>}
 
-      <section aria-label="Thông tin nhãn" className={`flex flex-col gap-3 p-4 ${ui.card}`}>
-        <h2 className="text-base font-semibold text-stone-900">Thông tin nhãn</h2>
+      <section aria-label="Thông tin nhãn" className={`flex flex-col gap-3 p-4 ${skin.card}`}>
+        <h2 className={skin.cardTitle}>Thông tin nhãn</h2>
         <BrandImageField label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} />
         <BrandImageField label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} />
         <Field label="Tagline">
-          <input className={ui.field} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} />
+          <input className={bigField} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} />
         </Field>
         <Field label="Nguồn gốc">
-          <input className={ui.field} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} />
+          <input className={bigField} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} />
         </Field>
         <Field label="Câu chuyện thương hiệu">
           <textarea className={`${ui.field} min-h-28 py-2`} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} />
@@ -112,8 +114,8 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
         </button>
       </section>
 
-      <section aria-label="Khuyến mãi" className={`flex flex-col gap-2 p-4 ${ui.card}`}>
-        <h2 className="flex items-center gap-1.5 text-base font-semibold text-stone-900">
+      <section aria-label="Khuyến mãi" className={`flex flex-col gap-2 p-4 ${skin.card}`}>
+        <h2 className={`flex items-center gap-1.5 ${skin.cardTitle}`}>
           <Gift className="h-4 w-4 text-forest-600" aria-hidden="true" />
           Khuyến mãi
         </h2>

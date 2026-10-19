@@ -542,7 +542,7 @@ describe('/nhan-vien — diện mạo Mini App ở điện thoại', () => {
     await mount();
     expect(btn(/Copy tuần trước/).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     const day = Array.from(document.querySelectorAll('section')).find((s) => s.querySelector('h2')?.textContent?.startsWith('T2'))!;
-    expect(day.className).toContain('max-md:shadow-[var(--elevation-1)]');
+    expect(day.className).toContain('max-md:[box-shadow:var(--elevation-1)]');
     expect(day.querySelector('h2')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
   });
 });

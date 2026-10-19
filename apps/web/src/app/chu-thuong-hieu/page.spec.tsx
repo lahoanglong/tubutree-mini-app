@@ -359,3 +359,20 @@ describe('tab Doanh thu', () => {
     expect(text()).toContain('Tài khoản này không có quyền quản lý nhãn hàng.');
   });
 });
+
+describe('/chu-thuong-hieu — diện mạo Mini App ở điện thoại', () => {
+  it('Xem trang nhãn là nút secondary; thẻ không viền; tiêu đề thẻ serif title-sm', async () => {
+    await mount();
+    expect(document.querySelector('a[href="/brand/sachi"]')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    const info = document.querySelector('section[aria-label="Thông tin nhãn"]')!;
+    expect(info.className).toContain('max-md:border-transparent');
+    expect(info.querySelector('h2')!.className).toContain('font-display');
+    expect(info.querySelector('h2')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+
+  it('ô Tagline và Nguồn gốc cỡ chữ body-lg như Mini App', async () => {
+    await mount();
+    expect(field('Tagline')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
+    expect(field('Nguồn gốc')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
+  });
+});
