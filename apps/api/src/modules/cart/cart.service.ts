@@ -93,13 +93,23 @@ export class CartService {
     return this.priceCart(userId, await this.attributedSlug(userId, storefrontSlug), itemIds);
   }
 
-  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[]) {
+  /**
+   * Giá giỏ cho checkout (báo giá, xem trước mã, đặt đơn): cùng dòng, subtotal, mã và combo như getCart, nhưng bỏ phần chỉ để
+   * hiển thị giỏ (giảm hạng, ngưỡng freeship). Checkout tự tính lại hai thứ đó từ khách nó đã đọc, nên không đọc hạng, khách và
+   * đơn cũ thêm một lần nữa.
+   */
+  async getCartForCheckout(userId: string): Promise<Omit<Awaited<ReturnType<CartService['getCart']>>, 'tierDiscount' | 'freeshipThreshold'>> {
+    const { tierDiscount: _tier, freeshipThreshold: _threshold, ...priced } = await this.priceCart(userId, undefined, undefined, true);
+    return priced;
+  }
+
+  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[], forCheckout = false) {
     const selection = itemIds && itemIds.length > 0 ? new Set(itemIds) : null;
     const cartId = await this.ensureCart(userId);
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
       include: {
-        user: { select: { tierId: true } },
+        user: forCheckout ? false : { select: { tierId: true } },
         items: {
           include: {
             variation: {
@@ -254,16 +264,19 @@ export class CartService {
       }
     }
 
-    // Giảm theo hạng đặt SAU combo và mã, trên phần còn lại, đúng thứ tự và cách làm tròn của checkout (combo → mã → hạng).
-    const tierDiscount = calcTierDiscount(
-      Math.max(0, couponBase - discount),
-      await tierDiscountPctOf(this.prisma, cart.user?.tierId),
-    );
+    // Checkout không dùng hai số này (nó tính lại từ khách đã đọc), nên bỏ đọc hạng và đơn cũ; không ai đọc hai giá trị 0 ở đường này.
+    let tierDiscount = 0;
+    let freeshipThreshold = 0;
+    if (!forCheckout) {
+      // Giảm theo hạng đặt SAU combo và mã, trên phần còn lại, đúng thứ tự và cách làm tròn của checkout (combo → mã → hạng).
+      const tierId = (cart as { user?: { tierId: string | null } | null }).user?.tierId;
+      tierDiscount = calcTierDiscount(Math.max(0, couponBase - discount), await tierDiscountPctOf(this.prisma, tierId));
 
-    // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
-    const tierThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
-    const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
-    const freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
+      // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
+      const tierThreshold = await freeShipThreshold(this.config, tierId);
+      const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+      freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
+    }
 
     return {
       items: lines,
@@ -396,8 +409,10 @@ export class CartService {
       outcomes.push({ ok: true });
     }
     if (accepted.length === 0) return outcomes;
+    // Hai lượt mua lại song song của cùng khách khoá các dòng giỏ theo thứ tự upsert: cùng thứ tự variationId thì chỉ chờ nhau, không khoá chéo (deadlock).
+    const byVariation = [...accepted].sort((a, b) => (a.variationId < b.variationId ? -1 : a.variationId > b.variationId ? 1 : 0));
     await this.prisma.$transaction(async (tx) => {
-      for (const line of accepted) {
+      for (const line of byVariation) {
         await tx.cartItem.upsert({
           where: { cartId_variationId: { cartId, variationId: line.variationId } },
           update: { quantity: { increment: line.quantity } },

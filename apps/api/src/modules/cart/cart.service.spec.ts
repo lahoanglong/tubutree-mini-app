@@ -157,6 +157,41 @@ describe('CartService guard tồn kho', () => {
     expect(resolveEffective).toHaveBeenCalledWith(['ok'], expect.any(Date), 'u1');
   });
 
+  it('getCartForCheckout (D9-07): cùng dòng, subtotal, mã như getCart nhưng không đọc lại hạng, khách và đơn cũ mà checkout tự đọc', async () => {
+    const onConfig = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'shipping.first_order_free_enabled' ? true : fb) as T,
+    } as unknown as SystemConfigService;
+    const row = {
+      id: 'c1',
+      couponCode: null,
+      user: { tierId: 'LOC_BIEC' },
+      items: [
+        { id: 'ci-a', variationId: 'a', quantity: 2, variation: { isActive: true, productId: 'p-a', salePrice: null, retailPrice: 10000, stock: 5, name: 'a', product: { isActive: true, approvalStatus: 'APPROVED', name: 'SP a', slug: 'a', thumbnail: null } } },
+      ],
+    };
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue(row) },
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0900000001', zaloId: 'z1' }) },
+      order: { findFirst: jest.fn().mockResolvedValue(null) },
+      membershipTier: { findUnique: jest.fn().mockResolvedValue({ discountPct: 0.05 }) },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, onConfig, flash, analytics, combo);
+
+    const full = await svc.getCart('u1', null);
+    expect(prisma.order.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.membershipTier.findUnique).toHaveBeenCalledTimes(1);
+    jest.clearAllMocks();
+    (prisma.cart.upsert as jest.Mock).mockResolvedValue({ id: 'c1' });
+    (prisma.cart.findUniqueOrThrow as jest.Mock).mockResolvedValue(row);
+
+    const { tierDiscount: _t, freeshipThreshold: _f, ...fullForCheckout } = full;
+    const forCheckout = await svc.getCartForCheckout('u1');
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.order.findFirst).not.toHaveBeenCalled();
+    expect(prisma.membershipTier.findUnique).not.toHaveBeenCalled();
+    expect(forCheckout).toEqual(fullForCheckout);
+  });
+
   it('getCart: ngưỡng freeship theo hạng của khách, cùng ngưỡng checkout dùng (R2-ENGAGE-16)', async () => {
     const tierConfig = {
       get: async <T>(k: string, fb?: T): Promise<T> =>
@@ -1043,6 +1078,24 @@ describe('CartService.addItems (D9-05: mua lại cả đơn một lượt)', () 
     const out = await svc.addItems('u1', [{ variationId: 'v1', quantity: 2 }, { variationId: 'v1', quantity: 2 }]);
     expect(out).toEqual([{ ok: true }, { ok: false, error: 'STOCK' }]);
     expect(txUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('upsert theo thứ tự variationId (không theo thứ tự dòng đến) để hai lượt mua lại song song khoá hàng cùng thứ tự', async () => {
+    const { svc, txUpsert, analyticsSpy } = setup([sellable('v1', 9), sellable('v2', 9), sellable('v3', 9)]);
+    const out = await svc.addItems('u1', [
+      { variationId: 'v3', quantity: 1 },
+      { variationId: 'v1', quantity: 1 },
+      { variationId: 'v2', quantity: 1 },
+      { variationId: 'v1', quantity: 2 },
+    ]);
+    expect(out).toEqual([{ ok: true }, { ok: true }, { ok: true }, { ok: true }]);
+    expect(txUpsert.mock.calls.map((c) => [c[0].where.cartId_variationId.variationId, c[0].create.quantity])).toEqual([
+      ['v1', 1],
+      ['v1', 2],
+      ['v2', 1],
+      ['v3', 1],
+    ]);
+    expect((analyticsSpy.recordMany as jest.Mock).mock.calls[0][1].map((e: { props: { variationId: string } }) => e.props.variationId)).toEqual(['v3', 'v1', 'v2', 'v1']);
   });
 
   it('không dòng nào đạt → không mở transaction; danh sách rỗng → không chạm DB', async () => {

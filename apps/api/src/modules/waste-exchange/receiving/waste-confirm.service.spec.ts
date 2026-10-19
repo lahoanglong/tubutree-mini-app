@@ -570,6 +570,20 @@ describe('WasteConfirmService, warehouse-only items at a PARTNER point', () => {
     expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
   });
 
+  it('lets a legacy request through when every warehouse-only line is counted 0 with a reason, and credits only the other lines', async () => {
+    const h = setup({ row: row({ lines: [carton, milkOnly], estimatedPoints: 20_000 }) });
+    const lines = [...full, { itemId: 'wi-milk', declaredQty: 50, receivedQty: 0, shortfallReason: 'WRONG_TYPE' as const }];
+    await expect(h.svc.confirm(h.call, body(lines))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000 }));
+    expect(h.rewards.grant).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refuses when the warehouse-only line is counted above 0, even if another line is 0', async () => {
+    const h = setup({ row: row({ lines: [carton, milkOnly], estimatedPoints: 20_000 }) });
+    const lines = [{ itemId: 'wi-carton', declaredQty: 10, receivedQty: 0, shortfallReason: 'WRONG_TYPE' as const }, { itemId: 'wi-milk', declaredQty: 50, receivedQty: 5, shortfallReason: 'OTHER' as const }];
+    await expect(h.svc.confirm(h.call, body(lines))).rejects.toThrow(new ConflictException(NOT_AT_PARTNER));
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+  });
+
   it('the warehouse confirms the same lines (DESK at the WAREHOUSE point, and the admin route)', async () => {
     const desk = setup({ row: row({ pointId: 'wh', lines: [milkOnly], estimatedPoints: 10_000 }), access: warehouseAccess });
     await expect(desk.svc.confirm(desk.call, body(milkBody))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000 }));

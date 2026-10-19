@@ -108,8 +108,6 @@ export class WasteConfirmService {
         }
         const { req, actorRole, pointKind, quota, m } = checked;
 
-        // After the replay branch on purpose: a request completed before the rule keeps answering its retries.
-        if (pointKind === 'PARTNER' && req.lines.some((l) => l.item.warehouseOnly)) throw new ConflictException(PARTNER_NOT_ACCEPTED);
         if (body.receivedWeightGrams !== undefined && pointKind !== 'WAREHOUSE') {
           throw new BadRequestException('Chỉ kho Tubu mới ghi khối lượng cân');
         }
@@ -126,6 +124,12 @@ export class WasteConfirmService {
           })),
           body.lines,
         );
+        // After the replay branch on purpose: a request completed before the rule keeps answering its retries.
+        // Counted 0 is let through: nothing from the warehouse-only line reaches the partner point, and the customer keeps the other lines.
+        if (pointKind === 'PARTNER') {
+          const warehouseOnly = new Set(req.lines.filter((l) => l.item.warehouseOnly).map((l) => l.itemId));
+          if (lines.some((l) => l.receivedQty > 0 && warehouseOnly.has(l.itemId))) throw new ConflictException(PARTNER_NOT_ACCEPTED);
+        }
         const points = lines.reduce((s, l) => s + l.pointsAwarded, 0);
         const bonus = lines.reduce((s, l) => s + l.drops, 0);
         if (points > WASTE_REQUEST_POINTS_MAX) throw new BadRequestException('Số điểm của một yêu cầu không được vượt 2.000.000');

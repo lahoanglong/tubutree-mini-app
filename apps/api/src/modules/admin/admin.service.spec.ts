@@ -878,13 +878,41 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ newCustomerOnly: false }) }));
   });
 
-  it('D2-03: danh sách mặc định ẩn mã thuộc lô thẻ (hàng nghìn mã, xem ở bảng lô); tìm theo mã thì vẫn thấy', async () => {
+  const rawSql = (q: unknown) => (q as { sql: string }).sql.replace(/\s+/g, ' ');
+
+  it('D2-03: danh sách mặc định ẩn mã thuộc lô thẻ và voucher cá nhân (một truy vấn thô lấy cả trang lẫn tổng); tìm theo mã thì vẫn thấy lô', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = makePrisma({ coupon: { findMany, count: jest.fn().mockResolvedValue(0) }, couponRedemption: { groupBy: jest.fn() } });
+    const $queryRaw = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({ coupon: { findMany, count: jest.fn().mockResolvedValue(0) }, couponRedemption: { groupBy: jest.fn() }, $queryRaw });
     await mkAdmin(prisma).listCoupons({ page: 1, limit: 20 });
-    expect(findMany.mock.calls[0][0].where).toMatchObject({ scope: { not: 'USER_GROUP' }, batch: null });
+    expect($queryRaw).toHaveBeenCalledTimes(1);
+    expect(rawSql($queryRaw.mock.calls[0][0])).toContain(`"scope" <> 'USER_GROUP' AND "batch" IS NULL`);
+    expect(findMany).not.toHaveBeenCalled();
     await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SHOPEE-AB' });
-    expect(findMany.mock.calls[1][0].where.batch).toBeUndefined();
+    expect(findMany.mock.calls[0][0].where.batch).toBeUndefined();
+    expect($queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('listCoupons mặc định: giữ thứ tự startAt giảm dần của truy vấn thô, tổng lấy từ COUNT OVER, lọc trạng thái nằm trong SQL', async () => {
+    const rows = [{ id: 'c2', code: 'B', scope: 'PUBLIC' }, { id: 'c1', code: 'A', scope: 'PUBLIC' }];
+    const findMany = jest.fn().mockResolvedValue([rows[1], rows[0]]);
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'c2', total: 7 }, { id: 'c1', total: 7 }]);
+    const prisma = makePrisma({ coupon: { findMany }, couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) }, $queryRaw });
+    const out = await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, status: 'expired' });
+    expect(out.data.map((c) => c.id)).toEqual(['c2', 'c1']);
+    expect(out.meta.total).toBe(7);
+    expect(rawSql($queryRaw.mock.calls[0][0])).toContain('"endAt" <');
+    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ['c2', 'c1'] } } });
+  });
+
+  it('listCoupons mặc định: trang vượt cuối danh sách → đếm riêng để tổng vẫn đúng', async () => {
+    const $queryRaw = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ n: 5 }]);
+    const findMany = jest.fn();
+    const prisma = makePrisma({ coupon: { findMany }, couponRedemption: { groupBy: jest.fn() }, $queryRaw });
+    const out = await mkAdmin(prisma).listCoupons({ page: 9, limit: 20 });
+    expect(out.data).toEqual([]);
+    expect(out.meta.total).toBe(5);
+    expect(findMany).not.toHaveBeenCalled();
   });
 
   it('listCoupons: nhân viên chỉ thấy mã lô do chính mình tạo (cả khi tìm theo từ khoá); ADMIN không bị lọc', async () => {
@@ -911,7 +939,8 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     ]);
     const claimGroupBy = jest.fn().mockResolvedValue([{ couponId: 'c1', _count: { _all: 4 } }]);
     const prisma = makePrisma({
-      coupon: { findMany, count: jest.fn().mockResolvedValue(2) },
+      coupon: { findMany },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'c1', total: 2 }, { id: 'c2', total: 2 }]),
       couponRedemption: { groupBy: jest.fn().mockResolvedValue([{ couponId: 'c1', _count: { _all: 2 } }]) },
       couponClaim: { groupBy: claimGroupBy },
     });
@@ -969,37 +998,47 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
   });
 });
 
-describe('AdminService.getDashboardStats', () => {
-  it('tổng hợp đúng số lượng đơn, doanh thu và cây trồng', async () => {
+describe('AdminService.getDashboardStats (D9-06: một lượt quét bảng orders)', () => {
+  const sqlText = (q: unknown): string => {
+    const asSql = q as { sql?: string; strings?: readonly string[] };
+    return asSql.sql ?? (Array.isArray(q) ? (q as string[]).join('?') : (asSql.strings ?? []).join('?'));
+  };
+
+  it('các số đếm theo trạng thái và ba tổng tiền đến từ MỘT truy vấn trên orders, không còn count/aggregate lẻ', async () => {
+    const orderKpi = {
+      total_orders: 15, pending_orders: 3, shipping_orders: 2, delivered_orders: 6, cancelled_orders: 2, returned_orders: 1,
+      collected: 1500000n, gmv: 2200000n, cod_pending: 190000n,
+    };
+    const $queryRaw = jest.fn(async (q: unknown) => {
+      const text = sqlText(q);
+      if (text.includes('dealer_credit_ledgers')) return [{ outstanding: 40000n }];
+      if (text.includes('return_requests')) return [{ all_refunds: 300000n, on_collected: 200000n }];
+      return [orderKpi];
+    });
+    const order = {
+      count: jest.fn(),
+      aggregate: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([{ id: 'o1', code: 'TB1', total: 100000, status: 'DELIVERED', paymentMethod: 'COD', createdAt: new Date() }]),
+    };
     const prisma = makePrisma({
+      $queryRaw,
+      order,
       returnRequest: { count: jest.fn().mockResolvedValue(2) },
-      $queryRaw: jest.fn().mockResolvedValue([{ all_refunds: 300000n, on_collected: 200000n }]),
-      order: {
-        count: jest.fn().mockResolvedValue(15),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { total: 1500000 } }),
-        findMany: jest.fn().mockResolvedValue([
-          { id: 'o1', code: 'TB1', total: 100000, status: 'DELIVERED', paymentMethod: 'COD', createdAt: new Date() },
-        ]),
-      },
-      user: {
-        count: jest.fn().mockResolvedValue(50),
-      },
-      product: {
-        count: jest.fn().mockResolvedValue(20),
-      },
-      plantedTree: {
-        count: jest.fn().mockResolvedValue(8),
-      },
+      user: { count: jest.fn().mockResolvedValue(50) },
+      product: { count: jest.fn().mockResolvedValue(20) },
+      plantedTree: { count: jest.fn().mockResolvedValue(8) },
     });
 
     const stats = await mkAdmin(prisma).getDashboardStats();
-    expect(stats.totalRevenue).toBe(1300000);
-    expect(stats.returnRefundTotal).toBe(300000);
-    expect(stats.pendingReturns).toBe(2);
-    expect(stats.totalOrders).toBe(15);
-    expect(stats.totalUsers).toBe(50);
-    expect(stats.plantedTreesCount).toBe(8);
-    expect(stats.recentOrders).toHaveLength(1);
+
+    expect(order.count).not.toHaveBeenCalled();
+    expect(order.aggregate).not.toHaveBeenCalled();
+    expect($queryRaw.mock.calls.filter(([q]) => /FROM orders o\b(?![\s\S]*return_requests)/.test(sqlText(q)) && !sqlText(q).includes('return_requests'))).toHaveLength(1);
+    expect(stats).toMatchObject({
+      totalOrders: 15, pendingOrders: 3, shippingOrders: 2, deliveredOrders: 6, cancelledOrders: 2, returnedOrders: 1,
+      totalRevenue: 1500000 - 200000, gmv: 2200000, codPendingValue: 190000, returnRefundTotal: 300000, dealerDebtOutstanding: 40000,
+      pendingReturns: 2, totalUsers: 50, totalProducts: 20, plantedTreesCount: 8,
+    });
   });
 });
 

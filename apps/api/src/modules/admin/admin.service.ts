@@ -40,7 +40,7 @@ import {
   type RecyclingFilter,
 } from './admin-order-filter';
 import { orderCsvChunks, userCsvChunks } from './admin-export';
-import { GMV_ORDER_WHERE, REVENUE_ORDER_SQL, REVENUE_ORDER_WHERE } from './admin-revenue';
+import { GMV_ORDER_SQL, REVENUE_ORDER_SQL } from './admin-revenue';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
@@ -734,20 +734,11 @@ export class AdminService {
   static readonly DETAIL_TAKE = 30;
 
   async getDashboardStats() {
-    // Định nghĩa "doanh thu" dùng chung với báo cáo theo ngày × kênh (admin-revenue.ts) để hai nơi không bao giờ lệch nhau.
-    const open = GMV_ORDER_WHERE;
-    const collected = REVENUE_ORDER_WHERE;
+    // Một lượt quét orders cho mọi số đếm theo trạng thái và ba tổng tiền. "Doanh thu" và GMV
+    // dùng đúng mảnh SQL chung với báo cáo theo ngày × kênh (admin-revenue.ts) để hai nơi không bao giờ lệch nhau.
     const [
-      totalOrders,
-      pendingOrders,
-      shippingOrders,
-      deliveredOrders,
-      cancelledOrders,
-      returnedOrders,
+      orderKpiRows,
       pendingReturns,
-      collectedResult,
-      gmvResult,
-      codPendingResult,
       refundRows,
       dealerDebtRows,
       totalUsers,
@@ -756,19 +747,30 @@ export class AdminService {
       plantedTreesCount,
       recentOrders,
     ] = await Promise.all([
-      this.prisma.order.count(),
-      this.prisma.order.count({ where: { status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } } }),
-      this.prisma.order.count({ where: { status: { in: ['PACKED', 'SHIPPING'] } } }),
-      this.prisma.order.count({ where: { status: 'DELIVERED' } }),
-      this.prisma.order.count({ where: { status: 'CANCELLED' } }),
-      this.prisma.order.count({ where: { status: 'RETURNED' } }),
+      this.prisma.$queryRaw<
+        {
+          total_orders: number;
+          pending_orders: number;
+          shipping_orders: number;
+          delivered_orders: number;
+          cancelled_orders: number;
+          returned_orders: number;
+          collected: bigint | null;
+          gmv: bigint | null;
+          cod_pending: bigint | null;
+        }[]
+      >`
+        SELECT COUNT(*)::int AS total_orders,
+               (COUNT(*) FILTER (WHERE o.status IN ('PENDING_PAYMENT', 'CONFIRMED')))::int AS pending_orders,
+               (COUNT(*) FILTER (WHERE o.status IN ('PACKED', 'SHIPPING')))::int AS shipping_orders,
+               (COUNT(*) FILTER (WHERE o.status = 'DELIVERED'))::int AS delivered_orders,
+               (COUNT(*) FILTER (WHERE o.status = 'CANCELLED'))::int AS cancelled_orders,
+               (COUNT(*) FILTER (WHERE o.status = 'RETURNED'))::int AS returned_orders,
+               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL}) AS collected,
+               SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL}) AS gmv,
+               SUM(o.total) FILTER (WHERE o."paymentMethod" = 'COD' AND o."paymentStatus" = 'UNPAID' AND o.status IN ('CONFIRMED', 'PACKED', 'SHIPPING')) AS cod_pending
+        FROM orders o`,
       this.prisma.returnRequest.count({ where: { status: 'REQUESTED' } }),
-      this.prisma.order.aggregate({ _sum: { total: true }, where: collected }),
-      this.prisma.order.aggregate({ _sum: { total: true }, where: open }),
-      this.prisma.order.aggregate({
-        _sum: { total: true },
-        where: { paymentMethod: 'COD', paymentStatus: 'UNPAID', status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING'] } },
-      }),
       this.prisma.$queryRaw<{ all_refunds: bigint | null; on_collected: bigint | null }[]>`
         SELECT
           SUM(r."refundAmount" + r."shippingRefund") AS all_refunds,
@@ -798,19 +800,20 @@ export class AdminService {
         },
       }),
     ]);
+    const kpi = orderKpiRows[0];
     const refunds = refundRows[0];
     const partialRefunds = Number(refunds?.on_collected ?? 0);
 
     return {
-      totalRevenue: (collectedResult._sum.total ?? 0) - partialRefunds,
-      gmv: gmvResult._sum.total ?? 0,
-      codPendingValue: codPendingResult._sum.total ?? 0,
-      totalOrders,
-      pendingOrders,
-      shippingOrders,
-      deliveredOrders,
-      cancelledOrders,
-      returnedOrders,
+      totalRevenue: Number(kpi?.collected ?? 0) - partialRefunds,
+      gmv: Number(kpi?.gmv ?? 0),
+      codPendingValue: Number(kpi?.cod_pending ?? 0),
+      totalOrders: kpi?.total_orders ?? 0,
+      pendingOrders: kpi?.pending_orders ?? 0,
+      shippingOrders: kpi?.shipping_orders ?? 0,
+      deliveredOrders: kpi?.delivered_orders ?? 0,
+      cancelledOrders: kpi?.cancelled_orders ?? 0,
+      returnedOrders: kpi?.returned_orders ?? 0,
       pendingReturns,
       returnRefundTotal: Number(refunds?.all_refunds ?? 0),
       dealerDebtOutstanding: Number(dealerDebtRows[0]?.outstanding ?? 0),
@@ -1457,10 +1460,16 @@ export class AdminService {
       ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
     };
     const { skip, take } = skipTake(q.page, q.limit);
-    const [rows, total] = await Promise.all([
-      this.prisma.coupon.findMany({ where, orderBy: { startAt: 'desc' }, skip, take }),
-      this.prisma.coupon.count({ where }),
-    ]);
+    let rows: Awaited<ReturnType<typeof this.prisma.coupon.findMany>>;
+    let total: number;
+    if (!keyword && !q.scope && !actor.staff) {
+      ({ rows, total } = await this.listDefaultCoupons(q.status, now, skip, take));
+    } else {
+      [rows, total] = await Promise.all([
+        this.prisma.coupon.findMany({ where, orderBy: { startAt: 'desc' }, skip, take }),
+        this.prisma.coupon.count({ where }),
+      ]);
+    }
     const ids = rows.map((r) => r.id);
     const grouped = ids.length
       ? await this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: ids } }, _count: { _all: true } })
@@ -1480,6 +1489,28 @@ export class AdminService {
       q.limit,
       total,
     );
+  }
+
+  /**
+   * Trang mặc định của tab Voucher (không tìm theo mã, không lọc scope, không phải nhân viên) bằng SQL thô: Prisma gửi enum dưới
+   * dạng CAST($1::text AS ...) nên Postgres không chứng minh được vị từ `scope <> 'USER_GROUP'` khớp partial index
+   * coupons_admin_list_idx và quét tuần tự cả bảng (hàng nghìn voucher cá nhân); chữ nghĩa thì chứng minh được. Một truy vấn
+   * lấy cả trang lẫn tổng (COUNT OVER) thay cho findMany + count.
+   */
+  private async listDefaultCoupons(status: 'active' | 'inactive' | 'expired' | undefined, now: Date, skip: number, take: number) {
+    const byStatus =
+      status === 'active' ? Prisma.sql`AND "isActive" AND "endAt" >= ${now}` : status === 'inactive' ? Prisma.sql`AND NOT "isActive"` : status === 'expired' ? Prisma.sql`AND "endAt" < ${now}` : Prisma.empty;
+    const filter = Prisma.sql`"scope" <> 'USER_GROUP' AND "batch" IS NULL ${byStatus}`;
+    const page = await this.prisma.$queryRaw<{ id: string; total: number }[]>(Prisma.sql`
+      SELECT "id", COUNT(*) OVER ()::int AS total FROM "coupons" WHERE ${filter} ORDER BY "startAt" DESC LIMIT ${take} OFFSET ${skip}`);
+    // Trang vượt quá cuối danh sách: không có dòng để mang tổng, đếm riêng (hiếm).
+    const total =
+      page[0]?.total ??
+      (skip > 0 ? ((await this.prisma.$queryRaw<{ n: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS n FROM "coupons" WHERE ${filter}`))[0]?.n ?? 0) : 0);
+    if (page.length === 0) return { rows: [], total };
+    const found = await this.prisma.coupon.findMany({ where: { id: { in: page.map((r) => r.id) } } });
+    const byId = new Map(found.map((c) => [c.id, c]));
+    return { rows: page.flatMap((r) => byId.get(r.id) ?? []), total };
   }
 
   /** Sửa nhanh mã đang chạy: tắt/bật, gia hạn/rút ngắn, đổi tổng lượt. Không sửa giá trị (tạo mã mới). */

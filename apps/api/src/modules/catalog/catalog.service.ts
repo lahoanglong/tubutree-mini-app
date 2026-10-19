@@ -342,7 +342,8 @@ export class CatalogService {
         ORDER BY cnt DESC
         LIMIT 6`;
       ids = rows.map((r) => r.productId);
-      if (this.boughtTogetherCache.size >= this.BOUGHT_TOGETHER_MAX_KEYS) {
+      // Làm mới đúng khoá đang có (hết hạn) thì không thêm khoá mới, nên không có lý do bỏ khoá của sản phẩm khác.
+      if (!this.boughtTogetherCache.has(product.id) && this.boughtTogetherCache.size >= this.BOUGHT_TOGETHER_MAX_KEYS) {
         this.boughtTogetherCache.delete(this.boughtTogetherCache.keys().next().value as string);
       }
       this.boughtTogetherCache.set(product.id, { ids, expiresAt: Date.now() + this.BOUGHT_TOGETHER_TTL_MS });
