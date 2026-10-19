@@ -146,10 +146,12 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     mockPilotCart(api);
     await page.goto('/cart');
 
-    // Dòng hàng: tên hiện ra, và "vùng bấm" ảnh là một nút riêng (aria-label = tên sản phẩm).
+    // Dòng hàng: tên là nút cho bàn phím/trình đọc màn hình; ảnh là đường tắt cho chuột/chạm (aria-hidden để một dòng
+    // không có hai nút trùng tên), nên tìm khung ảnh theo test id.
     await expect(page.getByText(PILOT_PRODUCT_NAME).first()).toBeVisible({ timeout: 15_000 });
     // exact: tránh khớp nút "Xoá <tên>" của cùng dòng.
-    const thumb = page.getByRole('button', { name: PILOT_PRODUCT_NAME, exact: true });
+    await expect(page.getByRole('button', { name: PILOT_PRODUCT_NAME, exact: true })).toBeVisible();
+    const thumb = page.getByTestId('cart-line-thumb').first();
     await expect(thumb).toBeVisible();
     const titleBox = await page.getByText(PILOT_PRODUCT_NAME, { exact: true }).first().boundingBox();
     const thumbBox = await thumb.boundingBox();
@@ -213,8 +215,9 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
       const s = getComputedStyle(el);
       return { bw: s.borderTopWidth, bs: s.borderTopStyle, bc: s.borderTopColor, bg: s.backgroundColor };
     };
-    const sel = await selected.evaluate(style);
-    const uns = await unselected.evaluate(style);
+    // Viền và nền nằm ở khung thẻ bọc nút radio (D6-03: cảnh báo địa giới cũ nằm trong cùng thẻ), không ở chính nút.
+    const sel = await selected.locator('xpath=..').evaluate(style);
+    const uns = await unselected.locator('xpath=..').evaluate(style);
 
     // Bug C1: var(--primary-600)/(--primary-50) không định nghĩa → không viền, nền trong suốt,
     // 2 thẻ trông y hệt nhau (chỉ aria-checked khác).

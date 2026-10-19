@@ -439,6 +439,7 @@ function CartLineRow({
         // Ảnh chỉ là đường tắt cho chuột/chạm; tên sản phẩm ngay bên cạnh là nút cho bàn phím và trình đọc màn hình,
         // để một dòng không có hai nút trùng tên.
         aria-hidden
+        data-testid="cart-line-thumb"
         onClick={onOpen}
         style={{
           width: 64,
