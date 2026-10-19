@@ -387,6 +387,16 @@ describe('Trợ lý AI: tự cuộn', () => {
   });
 });
 
+describe('Trợ lý AI: mốc cuộn', () => {
+  it('mốc cuối hội thoại chừa lề đáy bằng chiều cao thanh nhập để tin mới không bị thanh che', async () => {
+    state.chat = () => REPLY('Đây nhé');
+    const c = await mount();
+    await ask(c, 'Xin chào');
+    const end = c.querySelector('div[aria-hidden="true"].max-md\\:scroll-mb-\\[var\\(--sticky-bar-h\\)\\]');
+    expect(end).not.toBeNull();
+  });
+});
+
 describe('Trợ lý AI: tiêu đề và trợ năng', () => {
   it('đúng một h1 "Trợ lý AI Tubu", không tiêu đề lệch cấp, mọi nút có tên, vùng chạm đủ 44px', async () => {
     state.chat = () => REPLY('Đây nhé', [PRODUCT('a')]);

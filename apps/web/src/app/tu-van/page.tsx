@@ -164,7 +164,7 @@ function Advisor() {
             Trợ lý đang soạn…
           </div>
         )}
-        <div ref={endRef} aria-hidden="true" />
+        <div ref={endRef} aria-hidden="true" className="max-md:scroll-mb-[var(--sticky-bar-h)]" />
       </div>
 
       <p className="py-1 text-center text-xs text-stone-600">Gợi ý chỉ để tham khảo.</p>
