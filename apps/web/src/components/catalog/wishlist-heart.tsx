@@ -41,7 +41,16 @@ function sendToggle(qc: QueryClient, productId: string, want: boolean) {
  * chưa có phản hồi) rồi xếp lệnh vào hàng đợi; chỉ tải lại từ máy chủ khi không còn lệnh nào chờ để không ghi đè trạng thái lạc quan.
  * Khách chưa đăng nhập vẫn thấy nút; chạm thì sang đăng nhập rồi quay lại đúng trang.
  */
-export function WishlistHeart({ productId, className = '' }: { productId: string; className?: string }) {
+export function WishlistHeart({
+  productId,
+  className = '',
+  floating = false,
+}: {
+  productId: string;
+  className?: string;
+  /** Nổi trên góc ảnh thẻ như Mini App: vùng chạm 44px bọc vòng trắng 32px; đặt ở cha có `position: relative`. */
+  floating?: boolean;
+}) {
   const phase = useAuthPhase();
   const router = useRouter();
   const qc = useQueryClient();
@@ -70,9 +79,15 @@ export function WishlistHeart({ productId, className = '' }: { productId: string
       aria-label={liked ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
       aria-pressed={liked}
       onClick={onClick}
-      className={`inline-flex h-11 w-11 items-center justify-center rounded-control text-stone-700 hover:bg-stone-50 ${className}`}
+      className={`inline-flex h-11 w-11 items-center justify-center text-stone-700 ${floating ? 'absolute right-0.5 top-0.5' : 'rounded-control hover:bg-stone-50'} ${className}`}
     >
-      <Heart className={`h-[22px] w-[22px] ${liked ? 'fill-danger-fg text-danger-fg' : ''}`} strokeWidth={1.9} aria-hidden="true" />
+      {floating ? (
+        <span data-testid="heart-disc" className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)]">
+          <Heart className={`h-[22px] w-[22px] ${liked ? 'fill-danger-fg text-danger-fg' : ''}`} strokeWidth={1.9} aria-hidden="true" />
+        </span>
+      ) : (
+        <Heart className={`h-[22px] w-[22px] ${liked ? 'fill-danger-fg text-danger-fg' : ''}`} strokeWidth={1.9} aria-hidden="true" />
+      )}
     </button>
   );
 }

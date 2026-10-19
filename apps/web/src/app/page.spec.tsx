@@ -66,10 +66,11 @@ describe('HomePage — server render phần công khai', () => {
     expect(out).toContain('Thương hiệu Việt');
   });
 
-  it('khối khách vãng lai: có ô tìm sang /san-pham?focus=search, không có chuông, không có Dành cho bạn', async () => {
+  it('khối khách vãng lai: có ô tìm sang /san-pham?focus=search, chuông không huy hiệu như Mini App, không có Dành cho bạn', async () => {
     const out = await render();
     expect(out).toContain('href="/san-pham?focus=search"');
-    expect(out).not.toContain('Thông báo');
+    expect(out).toContain('aria-label="Thông báo"');
+    expect(out).not.toContain('chưa đọc');
     expect(out).not.toContain('Dành cho bạn');
   });
 

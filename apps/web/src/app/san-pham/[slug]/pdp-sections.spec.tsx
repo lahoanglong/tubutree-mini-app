@@ -6,6 +6,8 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 const mocks = vi.hoisted(() => ({ http: { get: vi.fn() } }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: mocks.http }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import { PdpRails } from './pdp-rails';

@@ -42,6 +42,7 @@ vi.mock('next/navigation', async () => {
 const http = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: http.get } }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 
 import BrowseView from './browse-view';
 

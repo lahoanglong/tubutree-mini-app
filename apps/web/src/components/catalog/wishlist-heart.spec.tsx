@@ -67,6 +67,23 @@ describe('WishlistHeart', () => {
     expect(heart(c).className).toContain('w-11');
   });
 
+  it('dạng nổi trên ảnh thẻ như Mini App: vùng chạm 44px ở góc, vòng trắng 32px bên trong', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    qc = new QueryClient();
+    act(() => {
+      root.render(createElement(QueryClientProvider, { client: qc }, createElement(WishlistHeart, { productId: 'p1', floating: true })));
+    });
+    unmount = () => {
+      act(() => root.unmount());
+      container.remove();
+    };
+    expect(heart(container).className).toMatch(/\babsolute\b/);
+    expect(heart(container).className).toContain('h-11');
+    expect(container.querySelector('[data-testid="heart-disc"]')!.className).toMatch(/\bh-8\b.*\bw-8\b.*\brounded-full\b/);
+  });
+
   it('khách chưa đăng nhập chạm tim thì sang đăng nhập và quay lại đúng trang, không nổi bọt lên thẻ cha', async () => {
     mocks.phase = 'guest';
     const parent = vi.fn();
