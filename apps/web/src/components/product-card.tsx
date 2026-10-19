@@ -76,14 +76,14 @@ export default function ProductCard({ product, priority = false }: { product: P;
             <span aria-hidden="true" className="h-[7px] w-[7px] flex-none rounded-full" style={{ background: brandAccent(product.brand) }} />
             {product.brand}
           </div>
-          <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-stone-900 transition-colors md:group-hover:text-forest-700">
+          <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium max-md:min-h-11 max-md:leading-[22px] text-stone-900 transition-colors md:group-hover:text-forest-700">
             {product.name}
           </h3>
 
           <ProductPriceRow
             product={product}
             className="order-2 mt-1 flex items-baseline gap-2 md:order-1 md:mt-2"
-            priceClassName="text-base font-bold text-stone-900"
+            priceClassName="text-base font-bold text-stone-900 max-md:text-sm"
             originalClassName="text-xs text-stone-500 line-through"
           />
 

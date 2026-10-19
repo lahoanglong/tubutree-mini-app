@@ -53,6 +53,12 @@ describe('ProductCard — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)',
     expect(html).not.toContain('Giờ vàng');
   });
 
+  it('ở điện thoại giá cỡ 14px và tên cao 22px/dòng như thẻ Mini App', () => {
+    const html = renderToStaticMarkup(<ProductCard product={PRODUCT as never} />);
+    expect(html).toContain('max-md:text-sm');
+    expect(html).toContain('max-md:leading-[22px]');
+  });
+
   it('có đợt Giờ vàng: giá 79.000đ, giá gốc 120.000đ gạch ngang, nhãn "Giờ vàng -34%"', async () => {
     api.flash = [FLASH];
     const c = await mount();
