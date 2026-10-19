@@ -283,6 +283,22 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
     expect(btn(container, 'Hủy đơn')).toBeUndefined();
   });
 
+  it('hủy lỗi rồi đơn chuyển SHIPPING (không còn nút nào): không dựng thanh nút dính đáy rỗng, body không có has-sticky-bar', async () => {
+    mocks.order = { ...BASE, status: 'PACKED' };
+    mocks.cancel.mockImplementation(async () => {
+      mocks.order = { ...BASE, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN1933', canCancel: false };
+      throw new Error('Đơn đã bàn giao cho đơn vị vận chuyển.');
+    });
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="order-action-bar"]')).not.toBeNull();
+    click(btn(container, 'Hủy đơn')!);
+    click(confirmCancelBtn(container));
+    await flush(12);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="order-action-bar"]')).toBeNull();
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+  });
+
   it('đơn đang đóng gói (chưa bàn giao vận chuyển) vẫn hủy được — D1, BUYERWEB-5', async () => {
     mocks.order = { ...BASE, status: 'PACKED' };
     const { container } = await mount();

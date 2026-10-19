@@ -9,12 +9,13 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
-import { fetchMyReturns, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
+import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
   buyerOrderStatusLabel,
   canCancelOrder,
   discountRows,
+  orderPaymentStatusLabel,
   isHandedToCarrier,
   orderDetailHref,
   orderPointsNote,
@@ -312,6 +313,11 @@ export default function OrderDetailPage() {
             <span>{formatVnd(o.total)}</span>
           </div>
           <Row label="Thanh toán" value={PAYMENT_METHOD_NAME[o.paymentMethod] ?? o.paymentMethod} />
+          {o.paymentStatus && (
+            <div className="max-md:hidden">
+              <PaymentStatusRow order={o} />
+            </div>
+          )}
           {pointsNote && (
             <p className={`mt-1 flex items-center gap-1 text-xs ${pointsNote.tone === 'success' ? 'text-success-fg' : 'text-stone-700'}`}>
               <Leaf className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
@@ -404,6 +410,17 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
       )}
     </section>
   );
+}
+
+/** Cùng khoá với khối Hoàn tiền: đơn REFUNDED còn khoản chuyển khoản chưa xong thì "Đang hoàn tiền". Mini App không có dòng này nên chỉ hiện ở máy tính. */
+function PaymentStatusRow({ order: o }: { order: OrderDetailDTO }) {
+  const refunds = useQuery({
+    queryKey: ['my-refunds', o.id],
+    queryFn: () => fetchMyRefunds(o.id!),
+    enabled: !!o.id && o.paymentStatus === 'REFUNDED',
+    retry: 0,
+  });
+  return <Row label="Tình trạng" value={orderPaymentStatusLabel(o, refunds.data)} />;
 }
 
 function Row({ label, value, positive }: { label: string; value: string; positive?: boolean }) {

@@ -240,7 +240,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
   it('UAT GOMDON-11: đơn COD đã giao (API vẫn để UNPAID) → "Đã thu tiền khi giao", không hiện "Chưa thanh toán"', async () => {
     mocks.order = { ...ORDER, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' };
     const { container } = await mount();
-    // Mini App không có dòng "Tình trạng" ở khối tiền; vẫn không được báo "Chưa thanh toán" cho đơn COD đã giao.
+    expect(container.textContent).toContain('Đã thu tiền khi giao');
     expect(container.textContent).not.toContain('Chưa thanh toán');
   });
 

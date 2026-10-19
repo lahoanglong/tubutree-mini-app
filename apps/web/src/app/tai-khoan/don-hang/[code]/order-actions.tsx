@@ -114,6 +114,8 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
     (cancelTriggerRef.current ?? cancelNoticeRef.current)?.focus();
   }, [confirmCancel, cancel.isPending, cancel.isSuccess, cancel.isError]);
 
+  const showsReturnButton = canRequestMore && returnWindow.open && !returnOpen && !returnSent;
+  const hasButtons = (canCancel && !cancel.isSuccess) || canReorder || showsReturnButton;
   // Lời từ chối hủy của BE phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
   const nothingToDo = !canCancel && !canReorder && !showsReturns && !cancel.isError;
   if (nothingToDo) return null;
@@ -183,6 +185,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
           </div>
         </div>
       ) : (
+        hasButtons && (
         <ActionRow>
           {canCancel && !cancel.isSuccess && (
             <button
@@ -202,7 +205,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
               Mua lại đơn này
             </button>
           )}
-          {canRequestMore && returnWindow.open && !returnOpen && !returnSent && (
+          {showsReturnButton && (
             <button
               type="button"
               onClick={() => {
@@ -216,6 +219,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
             </button>
           )}
         </ActionRow>
+        )
       )}
 
       {canRequestMore && !returnWindow.open && (
@@ -309,7 +313,11 @@ function ActionRow({ children }: { children: React.ReactNode }) {
     };
     measure();
     window.addEventListener('resize', measure);
+    // Số nút đổi (hủy xong, mua lại hiện ra) làm thanh cao thấp khác đi mà không có resize.
+    const observer = typeof ResizeObserver === 'undefined' || !bar ? null : new ResizeObserver(measure);
+    if (bar) observer?.observe(bar);
     return () => {
+      observer?.disconnect();
       window.removeEventListener('resize', measure);
       root.style.removeProperty('--sticky-bar-h');
       document.body.classList.remove('has-sticky-bar');

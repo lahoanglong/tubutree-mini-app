@@ -139,14 +139,15 @@ describe('chi tiết đơn như Mini App', () => {
     expect(steps[0]).toBe('Chờ thanh toán');
   });
 
-  it('khối tiền: nhãn "Thanh toán" với tên phương thức của Mini App, không có dòng "Tình trạng"', async () => {
+  it('khối tiền: nhãn "Thanh toán" với tên phương thức của Mini App, dòng "Tình trạng" chỉ ở máy tính', async () => {
     mocks.order = structuredClone(COD_DELIVERED);
     const { container } = await mount();
     const t = text(container);
     expect(t).toContain('Khi nhận hàng (COD)');
     expect(t).not.toContain('Thanh toán khi nhận hàng (COD)');
     expect(t).not.toContain('Phương thức');
-    expect(t).not.toContain('Tình trạng');
+    const status = Array.from(container.querySelectorAll('span')).find((e) => e.textContent === 'Tình trạng');
+    expect(status?.closest('.max-md\\:hidden')).not.toBeNull();
   });
 
   it('sản phẩm: một dòng "tên · phân loại ×SL", giá bên phải; đánh giá không gạch chân', async () => {
