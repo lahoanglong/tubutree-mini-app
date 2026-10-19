@@ -61,6 +61,8 @@ describe('PdpPrice theo phân loại đang chọn', () => {
     expect(byText(container, 'button', /Thêm vào giỏ/)!.textContent).toContain('289.000đ');
     expect(container.querySelector('.line-through')!.textContent).toBe('320.000đ');
     expect(container.querySelector('[data-testid="pdp-sale-badge"]')!.textContent).toBe('-10%');
+    // Mini App không hiện huy hiệu % ở dòng giá của trang sản phẩm; chỉ máy tính giữ.
+    expect(container.querySelector('[data-testid="pdp-sale-badge"]')!.className).toContain('max-md:hidden');
   });
 
   it('chưa chọn phân loại nào thì ghi "Từ" giá thấp nhất', async () => {

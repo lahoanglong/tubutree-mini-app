@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { AlertCircle, Check, Truck } from 'lucide-react';
+import { AlertCircle, Check, ChevronRight, Truck } from 'lucide-react';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
@@ -11,12 +11,13 @@ import { PdpSelectionProvider } from '@/components/pdp-selection';
 import ProductGallery from '@/components/product-gallery';
 import ShareButton from '@/components/share-button';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
+import { brandAccent } from '@/components/mini/brand-accent';
 import { createServerHttp } from '@/lib/core-http-server';
 import { isRetailOnly } from '@/lib/pdp-logic';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpSubscribeRow } from './pdp-extras';
 import { PdpRails } from './pdp-rails';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import BackLink from '@/components/back-link';
@@ -65,41 +66,59 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fulfillerText = pdpFulfillerText(product);
   const unavailableText = pdpUnavailableText(product);
   const partnerNote = unavailableText ? null : pdpPartnerNote(product);
+  const fulfillerIsTubu = fulfillerText === 'Tubu Tree giao hàng';
   const retailOnly = isRetailOnly(product);
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6">
+    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0">
       <BackLink href="/">
         ← Về trang chủ
       </BackLink>
-      <div className="mt-2 grid gap-8 md:grid-cols-2">
+      <div className="mt-2 grid gap-8 max-md:mt-0 max-md:gap-0 md:grid-cols-2">
         <ProductGallery images={images} name={product.name} />
         <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
-        <div>
+        <div data-testid="pdp-info" className="max-md:bg-stone-0 max-md:p-4">
           <div className="flex items-center justify-between gap-2">
+            {/* Điện thoại: chấm màu + tên nhãn xám + mũi tên như Mini App; đích vẫn là trang nhãn. */}
             {product.brandSlug ? (
               <Link
                 href={`/brand/${encodeURIComponent(product.brandSlug)}`}
-                className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 underline"
+                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 underline max-md:text-xs max-md:text-[var(--color-text-secondary)] max-md:no-underline"
               >
+                <span
+                  data-testid="brand-dot"
+                  aria-hidden="true"
+                  className="hidden h-2 w-2 rounded-full max-md:block"
+                  style={{ background: brandAccent(product.brand) }}
+                />
                 {product.brand}
+                <ChevronRight className="hidden h-4 w-4 text-[var(--color-text-tertiary)] max-md:block" aria-hidden="true" />
               </Link>
             ) : (
-              <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
+              <div className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 max-md:text-xs max-md:text-[var(--color-text-secondary)]">
+                <span aria-hidden="true" className="hidden h-2 w-2 rounded-full max-md:block" style={{ background: brandAccent(product.brand) }} />
+                {product.brand}
+              </div>
             )}
             <div className="flex items-center">
               <WishlistHeart productId={product.id} />
               <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
             </div>
           </div>
-          <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
+          <h1 className="font-display text-2xl font-semibold text-stone-900 max-md:font-[family-name:var(--font-ui)] max-md:text-lg max-md:leading-[1.44] sm:text-3xl max-md:sm:text-lg">{product.name}</h1>
           <PdpRating average={product.ratingAvg} count={product.reviewCount} />
-          <div className="flex flex-wrap items-baseline gap-x-3">
+          <div className="flex flex-wrap items-baseline gap-x-3 max-md:flex-nowrap">
             <PdpPrice product={product} />
-            {formatSold(product.sold) && <span className="mt-2 text-sm text-stone-500">{formatSold(product.sold)}</span>}
+            {formatSold(product.sold) && <span className="mt-2 text-sm text-stone-500 max-md:ml-auto max-md:text-xs">{formatSold(product.sold)}</span>}
           </div>
+          <PdpPointsEarn product={product} />
           <PdpFlashMeta />
+          {shortDesc && (
+            <p data-testid="pdp-short-desc" className="mt-3 whitespace-pre-line break-words text-stone-600 max-md:mt-2 max-md:text-sm max-md:text-[var(--color-text-secondary)]">
+              {shortDesc}
+            </p>
+          )}
           {unavailableText ? (
             <p
               data-testid="pdp-unavailable"
@@ -111,7 +130,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </p>
           ) : (
             fulfillerText && (
-              <p data-testid="pdp-fulfiller" className="mt-2 flex items-start gap-1.5 text-sm text-stone-700">
+              <p
+                data-testid="pdp-fulfiller"
+                className={`mt-2 flex items-start gap-1.5 text-sm text-stone-700 ${fulfillerIsTubu ? 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]' : ''}`}
+              >
                 <Truck className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
                 <span>{fulfillerText}</span>
               </p>
@@ -123,12 +145,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </p>
           )}
           {!fromStore && <PdpFreeship />}
-          {shortDesc && <p className="mt-3 whitespace-pre-line break-words text-stone-600">{shortDesc}</p>}
 
           {product.certifications.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div data-testid="pdp-certs" className="mt-3 flex flex-wrap gap-2">
               {product.certifications.map((c) => (
-                <span key={c} className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800">
+                <span
+                  key={c}
+                  className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:text-[var(--color-text-brand)]"
+                >
                   <Check className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
                   <span>{c}</span>
                 </span>
@@ -149,6 +173,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </PdpSelectionProvider>
       </div>
 
+      {/* Điện thoại: trang không đệm (ảnh tràn mép), nên các khối dưới tự đệm lại 16px. */}
+      <div className="max-md:px-4 max-md:py-6">
       <PdpIngredients ingredients={product.ingredients} />
       <PdpPromises>
         <PdpChatButton productName={product.name} />
@@ -161,6 +187,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </Suspense>
 
       <PdpRails slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
+      </div>
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
     </main>
