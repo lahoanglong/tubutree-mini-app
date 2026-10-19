@@ -305,7 +305,7 @@ export default function AddToCart({
                 type="button"
                 onClick={onBuyNow}
                 disabled={cannotBuy}
-                aria-label={`Mua ngay · ${total}`}
+                aria-label={`${buyLabel} · ${total}`}
                 className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
               >
                 <span className="block max-w-full truncate">{buyLabel}</span>

@@ -382,6 +382,7 @@ describe('AddToCart — Mua ngay', () => {
     click(buyButtons(container)[0]!);
     await flush(2);
     expect(buyButtons(container)[0]!.textContent).toBe('Đang xử lý…');
+    expect(bar(container).querySelector('button[aria-label^="Đang xử lý… · "]')).not.toBeNull();
     expect(buyButtons(container)[0]!.disabled).toBe(true);
     expect(addButton(container).disabled).toBe(true);
     release(CART);
