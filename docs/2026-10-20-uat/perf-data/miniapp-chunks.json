@@ -1,0 +1,4608 @@
+[
+ {
+  "file": "assets/index.ByCae4Gy.module.js",
+  "isEntry": true,
+  "isDynamicEntry": false,
+  "size": 688712,
+  "imports": [],
+  "dynamicImports": [
+   "assets/browse.BeBHq3bp.module.js",
+   "assets/product-detail.CoAKjhmw.module.js",
+   "assets/cart.0zFc7r8M.module.js",
+   "assets/checkout.CXhehQuH.module.js",
+   "assets/bank-payment.BsQfwY1v.module.js",
+   "assets/orders.CSMjbHP3.module.js",
+   "assets/order-detail.M80tODNG.module.js",
+   "assets/game.wqvjwb-8.module.js",
+   "assets/feed.D5onxyly.module.js",
+   "assets/community-leaderboard.Ci3iE4jt.module.js",
+   "assets/community-events.Ci_xhBNp.module.js",
+   "assets/post-detail.Bv2duxAD.module.js",
+   "assets/ai-advisor.D60g9Wib.module.js",
+   "assets/group-buy.2c5V3y0K.module.js",
+   "assets/recycle.5moIrKb6.module.js",
+   "assets/recycle-rules.BpKKXaar.module.js",
+   "assets/recycle-new.BImxvov8.module.js",
+   "assets/recycle-points.I8DQx_aY.module.js",
+   "assets/recycle-request.dDHj8N-u.module.js",
+   "assets/recycle-edit.d8ydJhwq.module.js",
+   "assets/recycle-requests.qQMIDyiM.module.js",
+   "assets/recycle-done.Ca4QUj51.module.js",
+   "assets/recycle-desk.XP4CuFyE.module.js",
+   "assets/rewards.Bw7AkW2O.module.js",
+   "assets/rewards-mine.DYZAuA5x.module.js",
+   "assets/profile.MMPZkjVV.module.js",
+   "assets/loyalty.HeneXOf2.module.js",
+   "assets/wallet.BqbpTu2s.module.js",
+   "assets/external-points.tcSYyMdn.module.js",
+   "assets/addresses.BopTYO3o.module.js",
+   "assets/notifications.ClTZBa8N.module.js",
+   "assets/affiliate.DzeczR-b.module.js",
+   "assets/academy.FSlr4EqT.module.js",
+   "assets/cashback.BYlxFoDN.module.js",
+   "assets/dealer.BZpPAPIT.module.js",
+   "assets/about.Cvbm_p7P.module.js",
+   "assets/wishlist.cZwW1m-T.module.js",
+   "assets/edit-profile.B7kxDvy4.module.js",
+   "assets/settings.CzrU3QW3.module.js",
+   "assets/brand-story.Ce87GW8f.module.js",
+   "assets/storefront-builder.-q_IjLGE.module.js",
+   "assets/storefront-view.K8sUD9NJ.module.js",
+   "assets/brand-view.Bm6JHitU.module.js",
+   "assets/brand-owner.Bf6pakNA.module.js",
+   "assets/admin.DaJpomif.module.js",
+   "assets/community-moderation.OMFYimU2.module.js",
+   "assets/staff.fwKMvEe5.module.js",
+   "assets/my-payroll.DCAkHheG.module.js",
+   "assets/not-found.DWe5zfIB.module.js"
+  ],
+  "byPkg": [
+   [
+    "(app src)",
+    272203
+   ],
+   [
+    "react-dom",
+    135704
+   ],
+   [
+    "zmp-sdk",
+    130774
+   ],
+   [
+    "axios",
+    127855
+   ],
+   [
+    "zmp-ui",
+    104476
+   ],
+   [
+    "@tanstack/query-core",
+    75672
+   ],
+   [
+    "@react-spring/core",
+    48437
+   ],
+   [
+    "@use-gesture/core",
+    38586
+   ],
+   [
+    "resize-observer-polyfill",
+    33640
+   ],
+   [
+    "@remix-run/router",
+    32483
+   ],
+   [
+    "lucide-react",
+    24958
+   ],
+   [
+    "react-transition-group",
+    21182
+   ],
+   [
+    "react-router",
+    20781
+   ],
+   [
+    "@react-spring/shared",
+    20642
+   ],
+   [
+    "react",
+    9012
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.production.min.js",
+    "rendered": 135093
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-sdk@2.51.4_@babel+core@7.29.7/node_modules/zmp-sdk/apis/external/zod/lib/index.mjs.js",
+    "rendered": 49496
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@react-spring+core@9.5.5_react@18.3.1/node_modules/@react-spring/core/dist/react-spring-core.esm.js",
+    "rendered": 48437
+   },
+   {
+    "id": "./src/i18n/vi.ts",
+    "rendered": 35701
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/resize-observer-polyfill@1.5.1/node_modules/resize-observer-polyfill/dist/ResizeObserver.es.js",
+    "rendered": 33640
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@remix-run+router@1.23.3/node_modules/@remix-run/router/dist/router.js",
+    "rendered": 32483
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@use-gesture+core@10.3.1/node_modules/@use-gesture/core/dist/actions-fe213e88.esm.js",
+    "rendered": 29038
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/axios@1.16.1/node_modules/axios/lib/utils.js",
+    "rendered": 24109
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/react-router@6.30.4_react@18.3.1/node_modules/react-router/dist/index.js",
+    "rendered": 20781
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@react-spring+shared@9.5.5_react@18.3.1/node_modules/@react-spring/shared/dist/react-spring-shared.esm.js",
+    "rendered": 20642
+   },
+   {
+    "id": "./src/components/app.tsx",
+    "rendered": 20050
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+query-core@5.100.14/node_modules/@tanstack/query-core/build/modern/queryObserver.js",
+    "rendered": 16090
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-sdk@2.51.4_@babel+core@7.29.7/node_modules/zmp-sdk/apis/constants.js",
+    "rendered": 14222
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/axios@1.16.1/node_modules/axios/lib/adapters/fetch.js",
+    "rendered": 13574
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+query-core@5.100.14/node_modules/@tanstack/query-core/build/modern/query.js",
+    "rendered": 12287
+   },
+   {
+    "id": "./src/components/onboarding.tsx",
+    "rendered": 10838
+   },
+   {
+    "id": "./src/components/flash-sale.tsx",
+    "rendered": 10098
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+query-core@5.100.14/node_modules/@tanstack/query-core/build/modern/queryClient.js",
+    "rendered": 8976
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@react-spring+animated@9.5.5_react@18.3.1/node_modules/@react-spring/animated/dist/react-spring-animated.esm.js",
+    "rendered": 8468
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@use-gesture+core@10.3.1/node_modules/@use-gesture/core/dist/use-gesture-core.esm.js",
+    "rendered": 8350
+   },
+   {
+    "id": "./src/services/shop-api.ts",
+    "rendered": 8326
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-sdk@2.51.4_@babel+core@7.29.7/node_modules/zmp-sdk/apis/common/token.js",
+    "rendered": 8249
+   },
+   {
+    "id": "./src/components/ui/empty-state.tsx",
+    "rendered": 7910
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/react-transition-group@4.4.5_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/react-transition-group/esm/Transition.js",
+    "rendered": 7908
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/app/index.js",
+    "rendered": 7827
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/axios@1.16.1/node_modules/axios/lib/core/AxiosHeaders.js",
+    "rendered": 7756
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/axios@1.16.1/node_modules/axios/lib/core/Axios.js",
+    "rendered": 7738
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/sheet/content.js",
+    "rendered": 7695
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/react@18.3.1/node_modules/react/cjs/react.production.min.js",
+    "rendered": 7688
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@react-spring+web@9.5.5_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@react-spring/web/dist/react-spring-web.esm.js",
+    "rendered": 7597
+   },
+   {
+    "id": "./src/pages/home.tsx",
+    "rendered": 7373
+   },
+   {
+    "id": "./src/components/ui/product-tile.tsx",
+    "rendered": 7106
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/axios@1.16.1/node_modules/axios/lib/adapters/xhr.js",
+    "rendered": 7026
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+query-core@5.100.14/node_modules/@tanstack/query-core/build/modern/mutation.js",
+    "rendered": 6907
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/axios@1.16.1/node_modules/axios/lib/helpers/toFormData.js",
+    "rendered": 6500
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+query-core@5.100.14/node_modules/@tanstack/query-core/build/modern/utils.js",
+    "rendered": 6467
+   },
+   {
+    "id": "./src/components/coupon-claim-gate.tsx",
+    "rendered": 6367
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/icon/icons.js",
+    "rendered": 6230
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/box/index.js",
+    "rendered": 5982
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/router/AnimationRoutes.js",
+    "rendered": 5891
+   }
+  ]
+ },
+ {
+  "file": "assets/affiliate.DzeczR-b.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 45694,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/geo-picker.9YvPVhIi.module.js",
+   "assets/use-suggest.JGyF1BcJ.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/user-plus.MWK4vCq2.module.js",
+   "assets/trash-2.DBzlQNdc.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/trophy.carzVTU6.module.js",
+   "assets/store.BhSGS1Z4.module.js",
+   "assets/receipt.BHTd45XD.module.js",
+   "assets/chevron-down.HOUY9alo.module.js",
+   "assets/badge-percent.BFuZUMWQ.module.js",
+   "assets/landmark.DeUZLTcc.module.js",
+   "assets/trending-up.DYjdXOjK.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/geo-api.CzdUGjtB.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/search-field.CGYrQRiG.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    80086
+   ],
+   [
+    "lucide-react",
+    2018
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/affiliate.tsx",
+    "rendered": 43386
+   },
+   {
+    "id": "./src/components/affiliate/ctv-order-sheet.tsx",
+    "rendered": 23535
+   },
+   {
+    "id": "./src/components/affiliate/milestone-rewards.tsx",
+    "rendered": 7297
+   },
+   {
+    "id": "./src/components/affiliate/ctv-shortcuts.tsx",
+    "rendered": 1969
+   },
+   {
+    "id": "./src/components/affiliate/recent-customers.ts",
+    "rendered": 1534
+   },
+   {
+    "id": "./src/components/affiliate/choice-card.tsx",
+    "rendered": 1196
+   },
+   {
+    "id": "./src/components/affiliate/milestone-copy.ts",
+    "rendered": 933
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/handshake.mjs",
+    "rendered": 696
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/graduation-cap.mjs",
+    "rendered": 568
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/link-2.mjs",
+    "rendered": 444
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/chevron-up.mjs",
+    "rendered": 310
+   },
+   {
+    "id": "./src/utils/vn-phone.ts",
+    "rendered": 171
+   },
+   {
+    "id": "./src/utils/tax-id.ts",
+    "rendered": 65
+   }
+  ]
+ },
+ {
+  "file": "assets/game.wqvjwb-8.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 43266,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/circle-alert.DZc7r4aw.module.js",
+   "assets/tree-pine.Ccw1UCej.module.js",
+   "assets/globe.CSPsWYRs.module.js",
+   "assets/map-pin.B0FKNQFo.module.js",
+   "assets/book-open.CC6vWLnT.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js",
+   "assets/target.WYEjMTig.module.js",
+   "assets/trophy.carzVTU6.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/game-api.B_4NcOnD.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    68654
+   ],
+   [
+    "lucide-react",
+    5288
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/game.tsx",
+    "rendered": 8423
+   },
+   {
+    "id": "./src/components/game/use-game-actions.ts",
+    "rendered": 4779
+   },
+   {
+    "id": "./src/components/game/checkin-streak.tsx",
+    "rendered": 4544
+   },
+   {
+    "id": "./src/components/game/harvest-celebration.tsx",
+    "rendered": 4420
+   },
+   {
+    "id": "./src/components/game/eco-impact.tsx",
+    "rendered": 4204
+   },
+   {
+    "id": "./src/components/wheel.tsx",
+    "rendered": 4011
+   },
+   {
+    "id": "./src/components/game/quiz-card.tsx",
+    "rendered": 3964
+   },
+   {
+    "id": "./src/components/game/wheel-prize-sheet.tsx",
+    "rendered": 3493
+   },
+   {
+    "id": "./src/components/game/garden-plots.tsx",
+    "rendered": 3465
+   },
+   {
+    "id": "./src/components/game/tree-actions.tsx",
+    "rendered": 3016
+   },
+   {
+    "id": "./src/components/game/missions-card.tsx",
+    "rendered": 2996
+   },
+   {
+    "id": "./src/components/game/weekly-leaderboard.tsx",
+    "rendered": 2860
+   },
+   {
+    "id": "./src/components/game/garden-hero.tsx",
+    "rendered": 2077
+   },
+   {
+    "id": "./src/components/game/community-goal.tsx",
+    "rendered": 1779
+   },
+   {
+    "id": "./src/components/game/species-codex.tsx",
+    "rendered": 1771
+   },
+   {
+    "id": "./src/components/game/tree-health-alert.tsx",
+    "rendered": 1540
+   },
+   {
+    "id": "./src/components/game/use-game-data.ts",
+    "rendered": 1482
+   },
+   {
+    "id": "./src/components/game/friend-gifts.tsx",
+    "rendered": 1459
+   },
+   {
+    "id": "./src/components/game/season-banner.tsx",
+    "rendered": 1287
+   },
+   {
+    "id": "./src/components/game/streak-repair.tsx",
+    "rendered": 1241
+   },
+   {
+    "id": "./src/components/game/game-link-row.tsx",
+    "rendered": 1120
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/snowflake.mjs",
+    "rendered": 913
+   },
+   {
+    "id": "./src/components/game/season-leaderboard.tsx",
+    "rendered": 872
+   },
+   {
+    "id": "./src/components/game/game-utils.ts",
+    "rendered": 843
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/brain.mjs",
+    "rendered": 822
+   },
+   {
+    "id": "./src/components/game/game-states.tsx",
+    "rendered": 777
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/shower-head.mjs",
+    "rendered": 765
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/ferris-wheel.mjs",
+    "rendered": 733
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/earth.mjs",
+    "rendered": 634
+   },
+   {
+    "id": "./src/components/game/use-locked-mutation.ts",
+    "rendered": 610
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/trees.mjs",
+    "rendered": 598
+   },
+   {
+    "id": "./src/components/game/game-tabs.tsx",
+    "rendered": 504
+   },
+   {
+    "id": "./src/components/game/game-card.tsx",
+    "rendered": 429
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/lock-open.mjs",
+    "rendered": 414
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/flame.mjs",
+    "rendered": 409
+   },
+   {
+    "id": "./src/components/game/use-wheel-prize.ts",
+    "rendered": 391
+   },
+   {
+    "id": "./src/components/game/lucky-wheel-card.tsx",
+    "rendered": 263
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/packages/app-core/src/features.ts",
+    "rendered": 34
+   }
+  ]
+ },
+ {
+  "file": "assets/checkout.CXhehQuH.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 43176,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/shipments.ZBiv2DXX.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/address-form.CfTewEwk.module.js",
+   "assets/product-thumb.CgYEnaVP.module.js",
+   "assets/retail-only.DgPAKM7R.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/repeat.dB0huhSQ.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/checkout-selection.BMs7nr5W.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/circle-alert.DZc7r4aw.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/coupon-name.Bb1-rOXO.module.js",
+   "assets/geo-picker.9YvPVhIi.module.js",
+   "assets/geo-api.CzdUGjtB.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/search-field.CGYrQRiG.module.js",
+   "assets/chevron-down.HOUY9alo.module.js",
+   "assets/subscription-options.7Qe8ImjA.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    78188
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/checkout.tsx",
+    "rendered": 49435
+   },
+   {
+    "id": "./src/components/checkout/order-success.tsx",
+    "rendered": 10986
+   },
+   {
+    "id": "./src/components/checkout/referral-code-box.tsx",
+    "rendered": 7246
+   },
+   {
+    "id": "./src/components/checkout/address-section.tsx",
+    "rendered": 6216
+   },
+   {
+    "id": "./src/utils/checkout-rules.ts",
+    "rendered": 3930
+   },
+   {
+    "id": "./src/utils/shipping-eta.ts",
+    "rendered": 375
+   }
+  ]
+ },
+ {
+  "file": "assets/product-detail.CoAKjhmw.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 37893,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/share-link.B81y1zwV.module.js",
+   "assets/group-buy-copy.bJQ3hVK-.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/star.C4oo09ah.module.js",
+   "assets/index.Bpe9zeDb.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/retail-only.DgPAKM7R.module.js",
+   "assets/suggested-rail.BdUxIL52.module.js",
+   "assets/storefront-context-bar.BIYnq3uv.module.js",
+   "assets/checkout-selection.BMs7nr5W.module.js",
+   "assets/content-kit-sheet.B3Kf09nQ.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/repeat.dB0huhSQ.module.js",
+   "assets/message-circle.2KMHrULu.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/subscription-options.7Qe8ImjA.module.js",
+   "assets/store.BhSGS1Z4.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    65184
+   ],
+   [
+    "lucide-react",
+    574
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/product-detail.tsx",
+    "rendered": 42767
+   },
+   {
+    "id": "./src/components/reviews-section.tsx",
+    "rendered": 19532
+   },
+   {
+    "id": "./src/components/product/points-earn-line.tsx",
+    "rendered": 1177
+   },
+   {
+    "id": "./src/utils/points-earn.ts",
+    "rendered": 735
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/megaphone.mjs",
+    "rendered": 574
+   },
+   {
+    "id": "./src/hooks/use-record-recently-viewed.ts",
+    "rendered": 513
+   },
+   {
+    "id": "./src/components/ui/section-title.tsx",
+    "rendered": 460
+   }
+  ]
+ },
+ {
+  "file": "assets/order-detail.M80tODNG.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 29814,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/order-status.BqguM1yt.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/support-contact.CPrHRHeZ.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/landmark.DeUZLTcc.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/star.C4oo09ah.module.js",
+   "assets/circle-x.CE405HnK.module.js",
+   "assets/message-square.m9CSTYql.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    51293
+   ],
+   [
+    "lucide-react",
+    391
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/order-detail.tsx",
+    "rendered": 33066
+   },
+   {
+    "id": "./src/components/orders/return-request-sheet.tsx",
+    "rendered": 9594
+   },
+   {
+    "id": "./src/components/orders/order-refunds.tsx",
+    "rendered": 4524
+   },
+   {
+    "id": "./src/components/orders/refund-destination-picker.tsx",
+    "rendered": 3712
+   },
+   {
+    "id": "./src/utils/format-shipping.ts",
+    "rendered": 397
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/rotate-ccw.mjs",
+    "rendered": 391
+   }
+  ]
+ },
+ {
+  "file": "assets/storefront-builder.-q_IjLGE.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 29222,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/storefront-api.Cdwjlhh9.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/content-kit-sheet.B3Kf09nQ.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/settings.CZwW8RLp.module.js",
+   "assets/eye-off.CEzu2bUs.module.js",
+   "assets/pencil.CbLszC15.module.js",
+   "assets/trash-2.DBzlQNdc.module.js",
+   "assets/pin.C6GIY-Ji.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/trending-up.DYjdXOjK.module.js",
+   "assets/target.WYEjMTig.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    47967
+   ],
+   [
+    "lucide-react",
+    2555
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/storefront-builder.tsx",
+    "rendered": 47532
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/user-round-cog.mjs",
+    "rendered": 939
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/image-plus.mjs",
+    "rendered": 589
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/message-square-plus.mjs",
+    "rendered": 550
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/eye.mjs",
+    "rendered": 477
+   },
+   {
+    "id": "./src/utils/storefront-theme.ts",
+    "rendered": 309
+   },
+   {
+    "id": "./src/utils/partner-store.ts",
+    "rendered": 126
+   }
+  ]
+ },
+ {
+  "file": "assets/dealer.BZpPAPIT.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 28018,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/dealer-api.D5fy_KJc.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/search-field.CGYrQRiG.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/store.BhSGS1Z4.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    45275
+   ],
+   [
+    "lucide-react",
+    2860
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/dealer.tsx",
+    "rendered": 44981
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/clipboard-list.mjs",
+    "rendered": 684
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/hourglass.mjs",
+    "rendered": 613
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/save.mjs",
+    "rendered": 550
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/plane.mjs",
+    "rendered": 516
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/award.mjs",
+    "rendered": 497
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/packages/app-core/src/dealer-pricing.ts",
+    "rendered": 294
+   },
+   {
+    "id": "./src/css/dealer-theme.css",
+    "rendered": 0
+   }
+  ]
+ },
+ {
+  "file": "assets/index.BlBwkc7A.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 27524,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "zmp-ui",
+    53235
+   ],
+   [
+    "react-is",
+    2720
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/TextArea.js",
+    "rendered": 6582
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/ClearableLabeledBaseInput.js",
+    "rendered": 6016
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/Input.js",
+    "rendered": 5811
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/BaseInput.js",
+    "rendered": 4244
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/OTP.js",
+    "rendered": 4031
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/icons/eye-invisible.js",
+    "rendered": 3080
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/index.js",
+    "rendered": 3025
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/Search.js",
+    "rendered": 2975
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/hooks/useMergedState.js",
+    "rendered": 2829
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/Password.js",
+    "rendered": 2733
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/react-is@18.3.1/node_modules/react-is/cjs/react-is.production.min.js",
+    "rendered": 2688
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/icons/eye.js",
+    "rendered": 1772
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/utils/commonUtils.js",
+    "rendered": 1474
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/icons/close-circle.js",
+    "rendered": 1124
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/icons/search-outlined.js",
+    "rendered": 1081
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/icons/warning.js",
+    "rendered": 1041
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/icons/info-circle.js",
+    "rendered": 1009
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/input/icons/success-circle.js",
+    "rendered": 920
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/utils/omit.js",
+    "rendered": 896
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/utils/ref.js",
+    "rendered": 710
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/utils/statusUtils.js",
+    "rendered": 665
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/hooks/useLayoutUpdateEffect.js",
+    "rendered": 430
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/hooks/useEvent.js",
+    "rendered": 412
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/utils/type.js",
+    "rendered": 237
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/config-provider/DisabledContext.js",
+    "rendered": 69
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/config-provider/SizeContext.js",
+    "rendered": 69
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/react-is@18.3.1/node_modules/react-is/cjs/react-is.production.min.js?commonjs-exports",
+    "rendered": 32
+   }
+  ]
+ },
+ {
+  "file": "assets/qr-code.ZYHIpMnd.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 24585,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "qrcode",
+    74487
+   ],
+   [
+    "dijkstrajs",
+    5372
+   ],
+   [
+    "(app src)",
+    541
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/qrcode.js",
+    "rendered": 15085
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/segments.js",
+    "rendered": 9620
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/mask-pattern.js",
+    "rendered": 6399
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/dijkstrajs@1.0.3/node_modules/dijkstrajs/dijkstra.js",
+    "rendered": 5343
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/version.js",
+    "rendered": 5054
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/mode.js",
+    "rendered": 4153
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/error-correction-code.js",
+    "rendered": 3445
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/alignment-pattern.js",
+    "rendered": 3107
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/renderer/utils.js",
+    "rendered": 3041
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/renderer/svg-tag.js",
+    "rendered": 1986
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/galois-field.js",
+    "rendered": 1921
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/browser.js",
+    "rendered": 1837
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/alphanumeric-data.js",
+    "rendered": 1832
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/polynomial.js",
+    "rendered": 1680
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/reed-solomon-encoder.js",
+    "rendered": 1642
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/utils.js",
+    "rendered": 1632
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/renderer/canvas.js",
+    "rendered": 1598
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/kanji-data.js",
+    "rendered": 1581
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/bit-matrix.js",
+    "rendered": 1524
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/numeric-data.js",
+    "rendered": 1218
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/format-info.js",
+    "rendered": 1133
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/regex.js",
+    "rendered": 1083
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/error-correction-level.js",
+    "rendered": 989
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/bit-buffer.js",
+    "rendered": 733
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/byte-data.js",
+    "rendered": 673
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/finder-pattern.js",
+    "rendered": 597
+   },
+   {
+    "id": "./src/components/qr-code.tsx",
+    "rendered": 541
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/can-promise.js",
+    "rendered": 277
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/version-check.js",
+    "rendered": 274
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/error-correction-level.js?commonjs-exports",
+    "rendered": 30
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/error-correction-code.js?commonjs-exports",
+    "rendered": 29
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/dijkstrajs@1.0.3/node_modules/dijkstrajs/dijkstra.js?commonjs-module",
+    "rendered": 29
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/alignment-pattern.js?commonjs-exports",
+    "rendered": 26
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/finder-pattern.js?commonjs-exports",
+    "rendered": 23
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/version-check.js?commonjs-exports",
+    "rendered": 22
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/mask-pattern.js?commonjs-exports",
+    "rendered": 21
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/galois-field.js?commonjs-exports",
+    "rendered": 21
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/polynomial.js?commonjs-exports",
+    "rendered": 20
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/format-info.js?commonjs-exports",
+    "rendered": 20
+   },
+   {
+    "id": "\u0000/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/qrcode@1.5.4/node_modules/qrcode/lib/core/segments.js?commonjs-exports",
+    "rendered": 18
+   }
+  ]
+ },
+ {
+  "file": "assets/admin.DaJpomif.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 21070,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/time-input.VOkX0w97.module.js",
+   "assets/payroll-api.BQlCd39F.module.js",
+   "assets/week.CofxkAWj.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/user-plus.MWK4vCq2.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/shield-check.DzgWJRib.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    39101
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/admin.tsx",
+    "rendered": 38833
+   },
+   {
+    "id": "./src/services/staff-api.ts",
+    "rendered": 268
+   }
+  ]
+ },
+ {
+  "file": "assets/browse.BeBHq3bp.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 18215,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/useInfiniteQuery.a1D_CB51.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/use-suggest.JGyF1BcJ.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/history.BsB4Vxl9.module.js",
+   "assets/search-field.CGYrQRiG.module.js",
+   "assets/unique-by-id.GphdY95W.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    30764
+   ],
+   [
+    "lucide-react",
+    686
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/browse.tsx",
+    "rendered": 9298
+   },
+   {
+    "id": "./src/components/catalog/filter-sheet.tsx",
+    "rendered": 5033
+   },
+   {
+    "id": "./src/components/catalog/suggest-list.tsx",
+    "rendered": 4669
+   },
+   {
+    "id": "./src/utils/search-state.ts",
+    "rendered": 4382
+   },
+   {
+    "id": "./src/hooks/use-scroll-restoration.ts",
+    "rendered": 1807
+   },
+   {
+    "id": "./src/components/catalog/result-header.tsx",
+    "rendered": 1665
+   },
+   {
+    "id": "./src/hooks/use-search-state.ts",
+    "rendered": 1407
+   },
+   {
+    "id": "./src/utils/recent-searches.ts",
+    "rendered": 1196
+   },
+   {
+    "id": "./src/components/catalog/sort-chips.tsx",
+    "rendered": 810
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/sliders-horizontal.mjs",
+    "rendered": 686
+   },
+   {
+    "id": "./src/services/discovery-events.ts",
+    "rendered": 283
+   },
+   {
+    "id": "./src/utils/search-tracking.ts",
+    "rendered": 214
+   }
+  ]
+ },
+ {
+  "file": "assets/loyalty.HeneXOf2.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 17272,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/coupon-name.Bb1-rOXO.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    29046
+   ],
+   [
+    "lucide-react",
+    1491
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/loyalty.tsx",
+    "rendered": 29046
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/qr-code.mjs",
+    "rendered": 952
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/calendar-check.mjs",
+    "rendered": 539
+   }
+  ]
+ },
+ {
+  "file": "assets/brand-story.Ce87GW8f.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 16278,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/map-pin.B0FKNQFo.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    26936
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/brand-story.tsx",
+    "rendered": 23467
+   },
+   {
+    "id": "./src/utils/brand-origins.ts",
+    "rendered": 3469
+   }
+  ]
+ },
+ {
+  "file": "assets/staff.fwKMvEe5.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 16237,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/week.CofxkAWj.module.js",
+   "assets/time-input.VOkX0w97.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/map-pin.B0FKNQFo.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    30145
+   ],
+   [
+    "lucide-react",
+    858
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/staff.tsx",
+    "rendered": 30145
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/log-in.mjs",
+    "rendered": 431
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/log-out.mjs",
+    "rendered": 427
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-new.BImxvov8.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 14457,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/product-thumb.CgYEnaVP.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/geo-api.CzdUGjtB.module.js",
+   "assets/use-idempotency-key.C-z9ezMv.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    23724
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle-new.tsx",
+    "rendered": 23724
+   }
+  ]
+ },
+ {
+  "file": "assets/post-detail.Bv2duxAD.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 14275,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/useInfiniteQuery.a1D_CB51.module.js",
+   "assets/rank-badge.CZaceTG_.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/post-card.BlAhPGux.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/pin.C6GIY-Ji.module.js",
+   "assets/pencil.CbLszC15.module.js",
+   "assets/trash-2.DBzlQNdc.module.js",
+   "assets/message-circle.2KMHrULu.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/globe.CSPsWYRs.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    26554
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/post-detail.tsx",
+    "rendered": 26554
+   }
+  ]
+ },
+ {
+  "file": "assets/cart.0zFc7r8M.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 14209,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/shipments.ZBiv2DXX.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/suggested-rail.BdUxIL52.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/storefront-context-bar.BIYnq3uv.module.js",
+   "assets/checkout-selection.BMs7nr5W.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/trash-2.DBzlQNdc.module.js",
+   "assets/coupon-name.Bb1-rOXO.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/store.BhSGS1Z4.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    25453
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/cart.tsx",
+    "rendered": 25121
+   },
+   {
+    "id": "./src/utils/cart-rules.ts",
+    "rendered": 332
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-desk.XP4CuFyE.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 13878,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/chevron-down.HOUY9alo.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    23875
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle-desk.tsx",
+    "rendered": 19620
+   },
+   {
+    "id": "./src/components/waste-desk-perk.tsx",
+    "rendered": 4255
+   }
+  ]
+ },
+ {
+  "file": "assets/wallet.BqbpTu2s.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 13607,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/useInfiniteQuery.a1D_CB51.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/unique-by-id.GphdY95W.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/landmark.DeUZLTcc.module.js",
+   "assets/shopping-bag.Bbpuft4j.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/history.BsB4Vxl9.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    22881
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/wallet.tsx",
+    "rendered": 21777
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/packages/app-core/src/wallet-rules.ts",
+    "rendered": 1104
+   }
+  ]
+ },
+ {
+  "file": "assets/orders.CSMjbHP3.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 13253,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/useInfiniteQuery.a1D_CB51.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/order-status.BqguM1yt.module.js",
+   "assets/subscription-options.7Qe8ImjA.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    22209
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/subscriptions-panel.tsx",
+    "rendered": 9223
+   },
+   {
+    "id": "./src/pages/orders.tsx",
+    "rendered": 4760
+   },
+   {
+    "id": "./src/components/orders/order-card.tsx",
+    "rendered": 4430
+   },
+   {
+    "id": "./src/components/subscription-edit-sheet.tsx",
+    "rendered": 2716
+   },
+   {
+    "id": "./src/components/orders/orders-tabs.ts",
+    "rendered": 737
+   },
+   {
+    "id": "./src/utils/subscription-price.ts",
+    "rendered": 343
+   }
+  ]
+ },
+ {
+  "file": "assets/community-moderation.OMFYimU2.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 13183,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/rank-badge.CZaceTG_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/post-card.BlAhPGux.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/eye-off.CEzu2bUs.module.js",
+   "assets/index.Bpe9zeDb.module.js",
+   "assets/trophy.carzVTU6.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/globe.CSPsWYRs.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js",
+   "assets/message-circle.2KMHrULu.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    22266
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/community-moderation.tsx",
+    "rendered": 22266
+   }
+  ]
+ },
+ {
+  "file": "assets/notifications.ClTZBa8N.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 13076,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/undo-2.jyHwsSYs.module.js",
+   "assets/circle-x.CE405HnK.module.js",
+   "assets/receipt.BHTd45XD.module.js",
+   "assets/file-text.BSnoKv4t.module.js",
+   "assets/shopping-bag.Bbpuft4j.module.js",
+   "assets/user-plus.MWK4vCq2.module.js",
+   "assets/store.BhSGS1Z4.module.js",
+   "assets/repeat.dB0huhSQ.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    18382
+   ],
+   [
+    "lucide-react",
+    2040
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/notifications.tsx",
+    "rendered": 17891
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/package-open.mjs",
+    "rendered": 874
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/package-check.mjs",
+    "rendered": 668
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/coins.mjs",
+    "rendered": 498
+   },
+   {
+    "id": "./src/components/reorder/reorder-reminder.ts",
+    "rendered": 491
+   }
+  ]
+ },
+ {
+  "file": "assets/brand-owner.Bf6pakNA.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 11956,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/brand-owner-api.CcEGW-i6.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/shopping-bag.Bbpuft4j.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/pencil.CbLszC15.module.js",
+   "assets/trash-2.DBzlQNdc.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    19805
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/brand-owner.tsx",
+    "rendered": 14613
+   },
+   {
+    "id": "./src/pages/brand-owner-sales.tsx",
+    "rendered": 4291
+   },
+   {
+    "id": "./src/components/ui/tiles.tsx",
+    "rendered": 901
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-request.dDHj8N-u.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 11034,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/support-contact.CPrHRHeZ.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/timeline.DYf_pGBA.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/message-square.m9CSTYql.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    17503
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle-request.tsx",
+    "rendered": 17503
+   }
+  ]
+ },
+ {
+  "file": "assets/edit-profile.B7kxDvy4.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 10604,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/index.Bpe9zeDb.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    18421
+   ],
+   [
+    "lucide-react",
+    996
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/edit-profile.tsx",
+    "rendered": 11818
+   },
+   {
+    "id": "./src/components/avatar-crop-modal.tsx",
+    "rendered": 6603
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/zoom-in.mjs",
+    "rendered": 534
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/zoom-out.mjs",
+    "rendered": 462
+   }
+  ]
+ },
+ {
+  "file": "assets/feed.D5onxyly.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 10566,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/useInfiniteQuery.a1D_CB51.module.js",
+   "assets/rank-badge.CZaceTG_.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/external-link.D41O1bta.module.js",
+   "assets/search-field.CGYrQRiG.module.js",
+   "assets/post-card.BlAhPGux.module.js",
+   "assets/post-composer.DwwrBls6.module.js",
+   "assets/message-circle.2KMHrULu.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/trophy.carzVTU6.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/globe.CSPsWYRs.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/use-suggest.JGyF1BcJ.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    17075
+   ],
+   [
+    "lucide-react",
+    1054
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/feed.tsx",
+    "rendered": 11012
+   },
+   {
+    "id": "./src/components/community/public-preview-list.tsx",
+    "rendered": 4392
+   },
+   {
+    "id": "./src/components/community/community-channels.tsx",
+    "rendered": 1671
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/party-popper.mjs",
+    "rendered": 1054
+   }
+  ]
+ },
+ {
+  "file": "assets/image-upload.5UiT54Ux.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 10280,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    15216
+   ],
+   [
+    "lucide-react",
+    1894
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/image-upload.tsx",
+    "rendered": 15216
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/camera.mjs",
+    "rendered": 560
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/refresh-cw.mjs",
+    "rendered": 534
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/video.mjs",
+    "rendered": 471
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/loader-circle.mjs",
+    "rendered": 329
+   }
+  ]
+ },
+ {
+  "file": "assets/profile.MMPZkjVV.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 10249,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/brand-owner-api.CcEGW-i6.module.js",
+   "assets/dealer-api.D5fy_KJc.module.js",
+   "assets/group-buy-copy.bJQ3hVK-.module.js",
+   "assets/map-pin.B0FKNQFo.module.js",
+   "assets/scan-line.DNvhIbD_.module.js",
+   "assets/store.BhSGS1Z4.module.js",
+   "assets/book-open.CC6vWLnT.module.js",
+   "assets/settings.CZwW8RLp.module.js",
+   "assets/index.Bpe9zeDb.module.js",
+   "assets/pencil.CbLszC15.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/shield-check.DzgWJRib.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    15852
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/profile.tsx",
+    "rendered": 15852
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-points.I8DQx_aY.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 9518,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/search-field.CGYrQRiG.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/map-pin.B0FKNQFo.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    15047
+   ],
+   [
+    "lucide-react",
+    331
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/waste-point-picker.tsx",
+    "rendered": 7786
+   },
+   {
+    "id": "./src/pages/recycle-points.tsx",
+    "rendered": 7261
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/navigation.mjs",
+    "rendered": 331
+   }
+  ]
+ },
+ {
+  "file": "assets/brand-view.Bm6JHitU.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 8881,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/dealer-api.D5fy_KJc.module.js",
+   "assets/store-page-shell.DxvAx2BA.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/badge-percent.BFuZUMWQ.module.js",
+   "assets/store.BhSGS1Z4.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    14509
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/brand-view.tsx",
+    "rendered": 14052
+   },
+   {
+    "id": "./src/services/brand-api.ts",
+    "rendered": 457
+   }
+  ]
+ },
+ {
+  "file": "assets/rewards.Bw7AkW2O.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 8646,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js",
+   "assets/game-api.B_4NcOnD.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/use-idempotency-key.C-z9ezMv.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    13018
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/rewards.tsx",
+    "rendered": 12559
+   },
+   {
+    "id": "./src/utils/points-rules-note.ts",
+    "rendered": 459
+   }
+  ]
+ },
+ {
+  "file": "assets/post-card.BlAhPGux.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 8578,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/rank-badge.CZaceTG_.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/globe.CSPsWYRs.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js",
+   "assets/message-circle.2KMHrULu.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    10726
+   ],
+   [
+    "lucide-react",
+    2447
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/community/post-card.tsx",
+    "rendered": 8446
+   },
+   {
+    "id": "./src/components/community/author-line.tsx",
+    "rendered": 1205
+   },
+   {
+    "id": "./src/components/community/post-tags.ts",
+    "rendered": 770
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/hash.mjs",
+    "rendered": 528
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/pen-line.mjs",
+    "rendered": 498
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/tree-deciduous.mjs",
+    "rendered": 485
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/book-marked.mjs",
+    "rendered": 471
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/circle-question-mark.mjs",
+    "rendered": 465
+   },
+   {
+    "id": "./src/utils/time-ago.ts",
+    "rendered": 305
+   }
+  ]
+ },
+ {
+  "file": "assets/order-status.BqguM1yt.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 8250,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    11100
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/refund-rules.ts",
+    "rendered": 6275
+   },
+   {
+    "id": "./src/utils/order-status.ts",
+    "rendered": 4825
+   }
+  ]
+ },
+ {
+  "file": "assets/bank-payment.BsQfwY1v.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 8070,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    13745
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/bank-payment.tsx",
+    "rendered": 12527
+   },
+   {
+    "id": "./src/hooks/use-remaining.ts",
+    "rendered": 1133
+   },
+   {
+    "id": "./src/services/payment-api.ts",
+    "rendered": 85
+   }
+  ]
+ },
+ {
+  "file": "assets/shipments.ZBiv2DXX.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 7853,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/coupon-name.Bb1-rOXO.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    14949
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/checkout/voucher-sheet.tsx",
+    "rendered": 13185
+   },
+   {
+    "id": "./src/utils/shipments.ts",
+    "rendered": 1539
+   },
+   {
+    "id": "./src/utils/coupon-scope.ts",
+    "rendered": 225
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle.5moIrKb6.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 7775,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/timeline.DYf_pGBA.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/history.BsB4Vxl9.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    12393
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle.tsx",
+    "rendered": 12393
+   }
+  ]
+ },
+ {
+  "file": "assets/my-payroll.DCAkHheG.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 7684,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/payroll-api.BQlCd39F.module.js",
+   "assets/week.CofxkAWj.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/landmark.DeUZLTcc.module.js",
+   "assets/chevron-down.HOUY9alo.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    12626
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/my-payroll.tsx",
+    "rendered": 12626
+   }
+  ]
+ },
+ {
+  "file": "assets/external-points.tcSYyMdn.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 7362,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/scan-line.DNvhIbD_.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    11933
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/external-points.tsx",
+    "rendered": 11251
+   },
+   {
+    "id": "./src/services/external-points-api.ts",
+    "rendered": 682
+   }
+  ]
+ },
+ {
+  "file": "assets/waste-labels.CcEj6Wub.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 7345,
+  "imports": [
+   "assets/reward-rules.B7hGQLlM.module.js",
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    9062
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/waste-labels.ts",
+    "rendered": 9062
+   }
+  ]
+ },
+ {
+  "file": "assets/about.Cvbm_p7P.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 7283,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/tree-pine.Ccw1UCej.module.js",
+   "assets/chevron-down.HOUY9alo.module.js",
+   "assets/external-link.D41O1bta.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    12472
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/about.tsx",
+    "rendered": 12472
+   }
+  ]
+ },
+ {
+  "file": "assets/cashback.BYlxFoDN.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 6863,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/index.Bpe9zeDb.module.js",
+   "assets/undo-2.jyHwsSYs.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    11951
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/cashback.tsx",
+    "rendered": 11647
+   },
+   {
+    "id": "./src/services/cashback-api.ts",
+    "rendered": 304
+   }
+  ]
+ },
+ {
+  "file": "assets/community-events.Ci_xhBNp.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 6286,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/useInfiniteQuery.a1D_CB51.module.js",
+   "assets/rank-badge.CZaceTG_.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js",
+   "assets/post-card.BlAhPGux.module.js",
+   "assets/post-composer.DwwrBls6.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/globe.CSPsWYRs.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js",
+   "assets/message-circle.2KMHrULu.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/use-suggest.JGyF1BcJ.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    9907
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/community-events.tsx",
+    "rendered": 9907
+   }
+  ]
+ },
+ {
+  "file": "assets/settings.CzrU3QW3.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 6253,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    10356
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/settings.tsx",
+    "rendered": 10356
+   }
+  ]
+ },
+ {
+  "file": "assets/post-composer.DwwrBls6.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 6251,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/rank-badge.CZaceTG_.module.js",
+   "assets/image-upload.5UiT54Ux.module.js",
+   "assets/use-suggest.JGyF1BcJ.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/post-card.BlAhPGux.module.js",
+   "assets/lightbulb.xaUw-Vr0.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    11644
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/community/post-composer.tsx",
+    "rendered": 7817
+   },
+   {
+    "id": "./src/components/community/product-picker.tsx",
+    "rendered": 3827
+   }
+  ]
+ },
+ {
+  "file": "assets/group-buy.2c5V3y0K.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 5822,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/share-link.B81y1zwV.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    9443
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/group-buy.tsx",
+    "rendered": 9443
+   }
+  ]
+ },
+ {
+  "file": "assets/product-thumb.CgYEnaVP.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 5593,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "@tanstack/query-core",
+    6496
+   ],
+   [
+    "@tanstack/react-query",
+    2705
+   ],
+   [
+    "(app src)",
+    1209
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+query-core@5.100.14/node_modules/@tanstack/query-core/build/modern/queriesObserver.js",
+    "rendered": 6496
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+react-query@5.100.14_react@18.3.1/node_modules/@tanstack/react-query/build/modern/useQueries.js",
+    "rendered": 2705
+   },
+   {
+    "id": "./src/components/ui/product-thumb.tsx",
+    "rendered": 1209
+   }
+  ]
+ },
+ {
+  "file": "assets/address-form.CfTewEwk.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 5451,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/geo-picker.9YvPVhIi.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    8213
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/address-form.tsx",
+    "rendered": 5575
+   },
+   {
+    "id": "./src/utils/address-memory.ts",
+    "rendered": 2009
+   },
+   {
+    "id": "./src/services/zalo-profile.ts",
+    "rendered": 629
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-edit.d8ydJhwq.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 5426,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js",
+   "assets/recycle-new.BImxvov8.module.js",
+   "assets/product-thumb.CgYEnaVP.module.js",
+   "assets/geo-api.CzdUGjtB.module.js",
+   "assets/use-idempotency-key.C-z9ezMv.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    6976
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle-edit.tsx",
+    "rendered": 6976
+   }
+  ]
+ },
+ {
+  "file": "assets/ai-advisor.D60g9Wib.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 5179,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    9339
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/ai-advisor.tsx",
+    "rendered": 9231
+   },
+   {
+    "id": "./src/services/ai-api.ts",
+    "rendered": 108
+   }
+  ]
+ },
+ {
+  "file": "assets/academy.FSlr4EqT.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 5126,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/file-text.BSnoKv4t.module.js",
+   "assets/book-open.CC6vWLnT.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    8350
+   ],
+   [
+    "lucide-react",
+    480
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/academy.tsx",
+    "rendered": 8084
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/circle-play.mjs",
+    "rendered": 480
+   },
+   {
+    "id": "./src/services/academy-api.ts",
+    "rendered": 266
+   }
+  ]
+ },
+ {
+  "file": "assets/geo-picker.9YvPVhIi.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 4788,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/geo-api.CzdUGjtB.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/search-field.CGYrQRiG.module.js",
+   "assets/chevron-down.HOUY9alo.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    7637
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/geo-picker.tsx",
+    "rendered": 7637
+   }
+  ]
+ },
+ {
+  "file": "assets/storefront-view.K8sUD9NJ.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 4709,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/storefront-api.Cdwjlhh9.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/suggested-rail.BdUxIL52.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/store-page-shell.DxvAx2BA.module.js",
+   "assets/message-square.m9CSTYql.module.js",
+   "assets/map-pin.B0FKNQFo.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    6648
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/storefront-view.tsx",
+    "rendered": 6350
+   },
+   {
+    "id": "./src/components/ui/tier-badge.tsx",
+    "rendered": 298
+   }
+  ]
+ },
+ {
+  "file": "assets/retail-only.DgPAKM7R.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 3968,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/subscription-options.7Qe8ImjA.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    6719
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/subscribe-sheet.tsx",
+    "rendered": 6582
+   },
+   {
+    "id": "./src/utils/retail-only.ts",
+    "rendered": 137
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-done.Ca4QUj51.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 3936,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/recycle-request.dDHj8N-u.module.js",
+   "assets/recycle.5moIrKb6.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/support-contact.CPrHRHeZ.module.js",
+   "assets/message-square.m9CSTYql.module.js",
+   "assets/copy.CKOByfqz.module.js",
+   "assets/timeline.DYf_pGBA.module.js",
+   "assets/index.BlBwkc7A.module.js",
+   "assets/history.BsB4Vxl9.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    4200
+   ],
+   [
+    "lucide-react",
+    420
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle-done.tsx",
+    "rendered": 4200
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/droplet.mjs",
+    "rendered": 420
+   }
+  ]
+ },
+ {
+  "file": "assets/content-kit-sheet.B3Kf09nQ.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 3924,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/share-sheet.CMOTDbH3.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    6420
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/content-kit-sheet.tsx",
+    "rendered": 6420
+   }
+  ]
+ },
+ {
+  "file": "assets/addresses.BopTYO3o.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 3905,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/address-form.CfTewEwk.module.js",
+   "assets/geo-picker.9YvPVhIi.module.js",
+   "assets/geo-api.CzdUGjtB.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/search-field.CGYrQRiG.module.js",
+   "assets/chevron-down.HOUY9alo.module.js",
+   "assets/index.BlBwkc7A.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    7254
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/addresses.tsx",
+    "rendered": 7254
+   }
+  ]
+ },
+ {
+  "file": "assets/index.Bpe9zeDb.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 3667,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "zmp-ui",
+    8072
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/avatar/avatar.js",
+    "rendered": 3609
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/avatar/group.js",
+    "rendered": 2301
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/avatar/block-icon.js",
+    "rendered": 1015
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/avatar/index.js",
+    "rendered": 822
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/zmp-ui@1.11.14_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/zmp-ui/esm/components/avatar/props-type.js",
+    "rendered": 325
+   }
+  ]
+ },
+ {
+  "file": "assets/week.CofxkAWj.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 3597,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    4952
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/attendance-api.ts",
+    "rendered": 2230
+   },
+   {
+    "id": "./src/utils/week.ts",
+    "rendered": 1873
+   },
+   {
+    "id": "./src/components/period-nav.tsx",
+    "rendered": 849
+   }
+  ]
+ },
+ {
+  "file": "assets/rewards-mine.DYZAuA5x.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 3530,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    4928
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/rewards-mine.tsx",
+    "rendered": 4928
+   }
+  ]
+ },
+ {
+  "file": "assets/community-leaderboard.Ci3iE4jt.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 3376,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/rank-badge.CZaceTG_.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    5061
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/community-leaderboard.tsx",
+    "rendered": 5061
+   }
+  ]
+ },
+ {
+  "file": "assets/share-sheet.CMOTDbH3.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 2847,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/qr-code.ZYHIpMnd.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    3394
+   ],
+   [
+    "lucide-react",
+    596
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/share-sheet.tsx",
+    "rendered": 3394
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/share-2.mjs",
+    "rendered": 596
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-requests.qQMIDyiM.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 2460,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js",
+   "assets/segmented-tabs.YQ2gYKVP.module.js",
+   "assets/waste-labels.CcEj6Wub.module.js",
+   "assets/reward-rules.B7hGQLlM.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    3048
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle-requests.tsx",
+    "rendered": 3048
+   }
+  ]
+ },
+ {
+  "file": "assets/subscription-options.7Qe8ImjA.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 2315,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/row-keyboard.DZp7jQGh.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    3008
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/subscription-options.tsx",
+    "rendered": 3008
+   }
+  ]
+ },
+ {
+  "file": "assets/dealer-api.D5fy_KJc.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 2284,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    3129
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/dealer-api.ts",
+    "rendered": 3129
+   }
+  ]
+ },
+ {
+  "file": "assets/rank-badge.CZaceTG_.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 2229,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    3189
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/feed-api.ts",
+    "rendered": 2567
+   },
+   {
+    "id": "./src/components/community/rank-badge.tsx",
+    "rendered": 622
+   }
+  ]
+ },
+ {
+  "file": "assets/time-input.VOkX0w97.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 2224,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    2238
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/shifts-api.ts",
+    "rendered": 1483
+   },
+   {
+    "id": "./src/components/ui/time-input.tsx",
+    "rendered": 755
+   }
+  ]
+ },
+ {
+  "file": "assets/waste-api.Dzapn-aj.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 2149,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    2718
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/waste-api.ts",
+    "rendered": 2718
+   }
+  ]
+ },
+ {
+  "file": "assets/game-api.B_4NcOnD.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1949,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    2173
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/game-api.ts",
+    "rendered": 2173
+   }
+  ]
+ },
+ {
+  "file": "assets/timeline.DYf_pGBA.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1801,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    3341
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/ui/timeline.tsx",
+    "rendered": 3341
+   }
+  ]
+ },
+ {
+  "file": "assets/wishlist.cZwW1m-T.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 1672,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/auth-gate.BhR3IKn_.module.js",
+   "assets/page-header.XsHRd-Kh.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    2811
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/wishlist.tsx",
+    "rendered": 1638
+   },
+   {
+    "id": "./src/components/product-card.tsx",
+    "rendered": 1173
+   }
+  ]
+ },
+ {
+  "file": "assets/useInfiniteQuery.a1D_CB51.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1619,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "@tanstack/query-core",
+    1976
+   ],
+   [
+    "@tanstack/react-query",
+    115
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+query-core@5.100.14/node_modules/@tanstack/query-core/build/modern/infiniteQueryObserver.js",
+    "rendered": 1976
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/@tanstack+react-query@5.100.14_react@18.3.1/node_modules/@tanstack/react-query/build/modern/useInfiniteQuery.js",
+    "rendered": 115
+   }
+  ]
+ },
+ {
+  "file": "assets/segmented-tabs.YQ2gYKVP.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1614,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1918
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/ui/segmented-tabs.tsx",
+    "rendered": 1918
+   }
+  ]
+ },
+ {
+  "file": "assets/reward-rules.B7hGQLlM.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1555,
+  "imports": [],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    2111
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/packages/app-core/src/reward-rules.ts",
+    "rendered": 2111
+   }
+  ]
+ },
+ {
+  "file": "assets/support-contact.CPrHRHeZ.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1371,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/message-square.m9CSTYql.module.js",
+   "assets/copy.CKOByfqz.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1552
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/support-contact.tsx",
+    "rendered": 1552
+   }
+  ]
+ },
+ {
+  "file": "assets/search-field.CGYrQRiG.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1323,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    2643
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/ui/search-field.tsx",
+    "rendered": 2643
+   }
+  ]
+ },
+ {
+  "file": "assets/storefront-api.Cdwjlhh9.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1185,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1662
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/storefront-api.ts",
+    "rendered": 1662
+   }
+  ]
+ },
+ {
+  "file": "assets/store-page-shell.DxvAx2BA.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 1081,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/sticky-action-bar.C9n4DRhX.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1613
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/store-page-shell.tsx",
+    "rendered": 1613
+   }
+  ]
+ },
+ {
+  "file": "assets/auth-gate.BhR3IKn_.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 904,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1712
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/ui/auth-gate.tsx",
+    "rendered": 1712
+   }
+  ]
+ },
+ {
+  "file": "assets/scan-line.DNvhIbD_.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 837,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    955
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/scan-line.mjs",
+    "rendered": 548
+   },
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/info.mjs",
+    "rendered": 407
+   }
+  ]
+ },
+ {
+  "file": "assets/receipt.BHTd45XD.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 833,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    880
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/receipt.mjs",
+    "rendered": 880
+   }
+  ]
+ },
+ {
+  "file": "assets/recycle-rules.BpKKXaar.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 832,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/waste-api.Dzapn-aj.module.js",
+   "assets/page-header.XsHRd-Kh.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1157
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/recycle-rules.tsx",
+    "rendered": 1157
+   }
+  ]
+ },
+ {
+  "file": "assets/payroll-api.BQlCd39F.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 709,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    954
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/payroll-api.ts",
+    "rendered": 954
+   }
+  ]
+ },
+ {
+  "file": "assets/storefront-context-bar.BIYnq3uv.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 697,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/store.BhSGS1Z4.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1153
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/storefront-context-bar.tsx",
+    "rendered": 1153
+   }
+  ]
+ },
+ {
+  "file": "assets/store.BhSGS1Z4.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 677,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    722
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/store.mjs",
+    "rendered": 722
+   }
+  ]
+ },
+ {
+  "file": "assets/page-header.XsHRd-Kh.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 662,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    1109
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/ui/page-header.tsx",
+    "rendered": 1109
+   }
+  ]
+ },
+ {
+  "file": "assets/settings.CZwW8RLp.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 661,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    709
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/settings.mjs",
+    "rendered": 709
+   }
+  ]
+ },
+ {
+  "file": "assets/trophy.carzVTU6.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 655,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    700
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/trophy.mjs",
+    "rendered": 700
+   }
+  ]
+ },
+ {
+  "file": "assets/star.C4oo09ah.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 651,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    677
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/star.mjs",
+    "rendered": 677
+   }
+  ]
+ },
+ {
+  "file": "assets/eye-off.CEzu2bUs.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 609,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    692
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/eye-off.mjs",
+    "rendered": 692
+   }
+  ]
+ },
+ {
+  "file": "assets/not-found.DWe5zfIB.module.js",
+  "isEntry": false,
+  "isDynamicEntry": true,
+  "size": 592,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    816
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/pages/not-found.tsx",
+    "rendered": 816
+   }
+  ]
+ },
+ {
+  "file": "assets/badge-percent.BFuZUMWQ.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 569,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    630
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/badge-percent.mjs",
+    "rendered": 630
+   }
+  ]
+ },
+ {
+  "file": "assets/suggested-rail.BdUxIL52.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 566,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    741
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/catalog/suggested-rail.tsx",
+    "rendered": 741
+   }
+  ]
+ },
+ {
+  "file": "assets/landmark.DeUZLTcc.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 564,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    639
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/landmark.mjs",
+    "rendered": 639
+   }
+  ]
+ },
+ {
+  "file": "assets/file-text.BSnoKv4t.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 564,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    630
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/file-text.mjs",
+    "rendered": 630
+   }
+  ]
+ },
+ {
+  "file": "assets/sticky-action-bar.C9n4DRhX.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 541,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    867
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/ui/sticky-action-bar.tsx",
+    "rendered": 867
+   }
+  ]
+ },
+ {
+  "file": "assets/share-link.B81y1zwV.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 540,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    848
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/share-link.ts",
+    "rendered": 520
+   },
+   {
+    "id": "./src/services/groupbuy-api.ts",
+    "rendered": 328
+   }
+  ]
+ },
+ {
+  "file": "assets/use-idempotency-key.C-z9ezMv.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 526,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    882
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/hooks/use-idempotency-key.ts",
+    "rendered": 882
+   }
+  ]
+ },
+ {
+  "file": "assets/pin.C6GIY-Ji.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 525,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    559
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/pin.mjs",
+    "rendered": 559
+   }
+  ]
+ },
+ {
+  "file": "assets/checkout-selection.BMs7nr5W.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 521,
+  "imports": [],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    904
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/checkout-selection.ts",
+    "rendered": 904
+   }
+  ]
+ },
+ {
+  "file": "assets/shopping-bag.Bbpuft4j.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 519,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    570
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/shopping-bag.mjs",
+    "rendered": 570
+   }
+  ]
+ },
+ {
+  "file": "assets/use-suggest.JGyF1BcJ.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 510,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js",
+   "assets/vn-fold.BVOkQldh.module.js",
+   "assets/use-debounced.GnhIl2eL.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    692
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/hooks/use-suggest.ts",
+    "rendered": 692
+   }
+  ]
+ },
+ {
+  "file": "assets/trash-2.DBzlQNdc.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 507,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    543
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/trash-2.mjs",
+    "rendered": 543
+   }
+  ]
+ },
+ {
+  "file": "assets/shield-check.DzgWJRib.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 494,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    541
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/shield-check.mjs",
+    "rendered": 541
+   }
+  ]
+ },
+ {
+  "file": "assets/user-plus.MWK4vCq2.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 489,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    534
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/user-plus.mjs",
+    "rendered": 534
+   }
+  ]
+ },
+ {
+  "file": "assets/tree-pine.Ccw1UCej.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 488,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    527
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/tree-pine.mjs",
+    "rendered": 527
+   }
+  ]
+ },
+ {
+  "file": "assets/brand-owner-api.CcEGW-i6.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 469,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    603
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/brand-owner-api.ts",
+    "rendered": 603
+   }
+  ]
+ },
+ {
+  "file": "assets/lightbulb.xaUw-Vr0.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 460,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    514
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/lightbulb.mjs",
+    "rendered": 514
+   }
+  ]
+ },
+ {
+  "file": "assets/book-open.CC6vWLnT.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 458,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    497
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/book-open.mjs",
+    "rendered": 497
+   }
+  ]
+ },
+ {
+  "file": "assets/vn-fold.BVOkQldh.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 456,
+  "imports": [],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    776
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/vn-fold.ts",
+    "rendered": 776
+   }
+  ]
+ },
+ {
+  "file": "assets/pencil.CbLszC15.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 455,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    492
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/pencil.mjs",
+    "rendered": 492
+   }
+  ]
+ },
+ {
+  "file": "assets/repeat.dB0huhSQ.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 451,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    478
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/repeat.mjs",
+    "rendered": 478
+   }
+  ]
+ },
+ {
+  "file": "assets/coupon-name.Bb1-rOXO.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 437,
+  "imports": [],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    638
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/coupon-name.ts",
+    "rendered": 638
+   }
+  ]
+ },
+ {
+  "file": "assets/map-pin.B0FKNQFo.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 433,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    479
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/map-pin.mjs",
+    "rendered": 479
+   }
+  ]
+ },
+ {
+  "file": "assets/external-link.D41O1bta.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 430,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    454
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/external-link.mjs",
+    "rendered": 454
+   }
+  ]
+ },
+ {
+  "file": "assets/circle-alert.DZc7r4aw.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 429,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    468
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/circle-alert.mjs",
+    "rendered": 468
+   }
+  ]
+ },
+ {
+  "file": "assets/message-circle.2KMHrULu.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 420,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    455
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/message-circle.mjs",
+    "rendered": 455
+   }
+  ]
+ },
+ {
+  "file": "assets/history.BsB4Vxl9.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 416,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    435
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/history.mjs",
+    "rendered": 435
+   }
+  ]
+ },
+ {
+  "file": "assets/globe.CSPsWYRs.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 416,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    442
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/globe.mjs",
+    "rendered": 442
+   }
+  ]
+ },
+ {
+  "file": "assets/message-square.m9CSTYql.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 412,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    447
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/message-square.mjs",
+    "rendered": 447
+   }
+  ]
+ },
+ {
+  "file": "assets/copy.CKOByfqz.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 410,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    432
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/copy.mjs",
+    "rendered": 432
+   }
+  ]
+ },
+ {
+  "file": "assets/target.WYEjMTig.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 400,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    435
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/target.mjs",
+    "rendered": 435
+   }
+  ]
+ },
+ {
+  "file": "assets/undo-2.jyHwsSYs.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 387,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    395
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/undo-2.mjs",
+    "rendered": 395
+   }
+  ]
+ },
+ {
+  "file": "assets/circle-x.CE405HnK.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 381,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    409
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/circle-x.mjs",
+    "rendered": 409
+   }
+  ]
+ },
+ {
+  "file": "assets/trending-up.DYjdXOjK.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 354,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    367
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/trending-up.mjs",
+    "rendered": 367
+   }
+  ]
+ },
+ {
+  "file": "assets/chevron-down.HOUY9alo.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 307,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "lucide-react",
+    308
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/node_modules/.pnpm/lucide-react@1.18.0_react@18.3.1/node_modules/lucide-react/dist/esm/icons/chevron-down.mjs",
+    "rendered": 308
+   }
+  ]
+ },
+ {
+  "file": "assets/group-buy-copy.bJQ3hVK-.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 264,
+  "imports": [],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    325
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/group-buy-copy.ts",
+    "rendered": 325
+   }
+  ]
+ },
+ {
+  "file": "assets/use-debounced.GnhIl2eL.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 214,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    321
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/utils/use-debounced.ts",
+    "rendered": 321
+   }
+  ]
+ },
+ {
+  "file": "assets/geo-api.CzdUGjtB.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 193,
+  "imports": [
+   "assets/index.ByCae4Gy.module.js"
+  ],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    187
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/services/geo-api.ts",
+    "rendered": 187
+   }
+  ]
+ },
+ {
+  "file": "assets/row-keyboard.DZp7jQGh.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 189,
+  "imports": [],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    270
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "./src/components/ui/row-keyboard.ts",
+    "rendered": 270
+   }
+  ]
+ },
+ {
+  "file": "assets/unique-by-id.GphdY95W.module.js",
+  "isEntry": false,
+  "isDynamicEntry": false,
+  "size": 109,
+  "imports": [],
+  "dynamicImports": [],
+  "byPkg": [
+   [
+    "(app src)",
+    204
+   ]
+  ],
+  "topModules": [
+   {
+    "id": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat/packages/app-core/src/unique-by-id.ts",
+    "rendered": 204
+   }
+  ]
+ }
+]

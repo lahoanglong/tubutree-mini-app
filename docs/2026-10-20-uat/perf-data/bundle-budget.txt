@@ -1,0 +1,15 @@
+Bundle miniapp (apps/miniapp/www)
+  JS            131 file    1508 KB raw     518 KB gzip
+  CSS             2 file     126 KB raw      20 KB gzip
+  Ảnh và font     7 file     198 KB raw     198 KB gzip
+  Tất cả        142 file    1833 KB raw     738 KB gzip
+  Ngưỡng cảnh báo: entry 700 KB, tổng 2048 KB (giới hạn dung lượng của Zalo: chưa kiểm)
+File lớn nhất:
+  assets/index.ByCae4Gy.module.js  685 KB raw / 217 KB gzip
+  assets/index-DX9QGa5R.css  126 KB raw / 20 KB gzip
+  assets/tubu-logo-Byq5sWhB.png  54 KB raw / 54 KB gzip
+  assets/affiliate.DzeczR-b.module.js  46 KB raw / 14 KB gzip
+  assets/game.wqvjwb-8.module.js  43 KB raw / 13 KB gzip
+  assets/checkout.CXhehQuH.module.js  43 KB raw / 12 KB gzip
+  assets/product-detail.CoAKjhmw.module.js  38 KB raw / 12 KB gzip
+  assets/order-detail.M80tODNG.module.js  30 KB raw / 10 KB gzip
