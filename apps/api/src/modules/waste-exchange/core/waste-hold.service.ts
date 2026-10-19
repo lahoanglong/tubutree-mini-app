@@ -233,7 +233,7 @@ export class WasteHoldService {
         }
         if (point.kind === 'PARTNER') {
           const links = new Set((await tx.wastePointItem.findMany({ where: { pointId }, select: { itemId: true } })).map((l) => l.itemId));
-          const missing = input.lines.filter((l) => itemById.has(l.itemId) && !links.has(l.itemId));
+          const missing = input.lines.filter((l) => itemById.has(l.itemId) && (!links.has(l.itemId) || itemById.get(l.itemId)!.warehouseOnly));
           const first = missing[0];
           if (first) {
             add({

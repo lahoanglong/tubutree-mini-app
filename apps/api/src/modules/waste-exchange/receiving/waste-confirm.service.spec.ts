@@ -19,9 +19,9 @@ const EXPIRES_AT = new Date('2027-10-18T00:00:00.000Z');
 const CFG = { enabled: true, staffDailyCapPoints: 1_000_000, shortfallLockPct: 50, shortfallLockStreak: 3 };
 const noCustomerField = (r: unknown) => expect(JSON.stringify(r)).not.toMatch(/"(userId|customerName|customerPhone|phone|fullName)"/);
 
-const carton = { id: 'l1', itemId: 'wi-carton', declaredQty: 10, receivedQty: null, shortfallReason: null, unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, item: { hazardous: false } };
-const milk = { id: 'l2', itemId: 'wi-milk', declaredQty: 10, receivedQty: null, shortfallReason: null, unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, item: { hazardous: false } };
-const bottle = { id: 'l1', itemId: 'wi-bottle', declaredQty: 3, receivedQty: null, shortfallReason: null, unitsPerPoint: 1, pointsPerGroup: 2000, dropsPerUnit: 2, gramsPerUnit: null, item: { hazardous: false } };
+const carton = { id: 'l1', itemId: 'wi-carton', declaredQty: 10, receivedQty: null, shortfallReason: null, unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, item: { hazardous: false, warehouseOnly: false } };
+const milk = { id: 'l2', itemId: 'wi-milk', declaredQty: 10, receivedQty: null, shortfallReason: null, unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, item: { hazardous: false, warehouseOnly: false } };
+const bottle = { id: 'l1', itemId: 'wi-bottle', declaredQty: 3, receivedQty: null, shortfallReason: null, unitsPerPoint: 1, pointsPerGroup: 2000, dropsPerUnit: 2, gramsPerUnit: null, item: { hazardous: false, warehouseOnly: false } };
 
 const partnerAccess = { kind: 'PARTNER', actorRole: 'POINT_STAFF', monthlyQuotaPoints: 100_000, caller: { id: 's1', phone: '0900000002', role: 'USER' } };
 const warehouseAccess = { kind: 'WAREHOUSE', actorRole: 'STAFF', monthlyQuotaPoints: null, caller: { id: 's1', phone: '0900000002', role: 'STAFF' } };
@@ -535,6 +535,61 @@ describe('WasteConfirmService.confirm', () => {
     const h = warehouseCase({ row: whRow(), flags: { blockedAt: null, shipLockedAt: new Date('2026-10-01T00:00:00Z') } });
     await expect(h.svc.confirm(h.call, body())).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
     expect(h.rewards.grant).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('WasteConfirmService, warehouse-only items at a PARTNER point', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const milkOnly = { ...milk, declaredQty: 50, item: { hazardous: false, warehouseOnly: true } };
+  const bottleOnly = { ...bottle, item: { hazardous: false, warehouseOnly: true } };
+  const milkBody = [{ itemId: 'wi-milk', declaredQty: 50, receivedQty: 50 }];
+  const NOT_AT_PARTNER = 'Điểm đại lý không xác nhận được món chỉ kho Tubu HCMC nhận. Từ chối yêu cầu hoặc chuyển khách tới kho.';
+
+  it.each([
+    ['milk carton', [milkOnly], milkBody],
+    ['Tubu bottle', [bottleOnly], [{ itemId: 'wi-bottle', declaredQty: 3, receivedQty: 3 }]],
+    ['carton mixed with milk', [carton, milkOnly], [...full, ...milkBody]],
+  ])('refuses %s: 409, no points, no counter, no state change, no event, no message', async (_n, lines, lineBody) => {
+    const h = setup({ row: row({ lines, estimatedPoints: 20_000 }) });
+    const call = h.svc.confirm(h.call, body(lineBody));
+    await expect(call).rejects.toThrow(new ConflictException(NOT_AT_PARTNER));
+    await expect(call).rejects.toBeInstanceOf(ConflictException);
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+    expect(incrementPointUsage).not.toHaveBeenCalled();
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(h.tx.wasteRequestLine.update).not.toHaveBeenCalled();
+    expect(h.tx.gameProfile.upsert).not.toHaveBeenCalled();
+    expect(h.tx.wastePoint.update).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+    expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
+  });
+
+  it('the warehouse confirms the same lines (DESK at the WAREHOUSE point, and the admin route)', async () => {
+    const desk = setup({ row: row({ pointId: 'wh', lines: [milkOnly], estimatedPoints: 10_000 }), access: warehouseAccess });
+    await expect(desk.svc.confirm(desk.call, body(milkBody))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000 }));
+    expect(desk.rewards.grant).toHaveBeenCalledTimes(1);
+
+    const admin = warehouseCase({ row: whRow({ lines: [milkOnly], estimatedPoints: 10_000 }) });
+    await expect(admin.svc.confirm(admin.call, body(milkBody))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+    expect(admin.rewards.grant).toHaveBeenCalledTimes(1);
+  });
+
+  it('a retry of a request already COMPLETED stays a replay, not an error', async () => {
+    const h = setup({ row: completed({ lines: [{ ...milkOnly, receivedQty: 50 }], pointsAwarded: 10_000 }) });
+    await expect(h.svc.confirm(h.call, body(milkBody))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000 }));
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+  });
+
+  it('the point staff can still reject such a request', async () => {
+    const h = setup({ row: row({ lines: [milkOnly], estimatedPoints: 10_000 }) });
+    await expect(h.svc.reject(h.call, { rejectionReason: 'WET' })).resolves.toEqual({ requestId: 'r1', code: 'TR-ABCDE', status: 'REJECTED' });
+    expect(h.rewards.grant).not.toHaveBeenCalled();
   });
 });
 

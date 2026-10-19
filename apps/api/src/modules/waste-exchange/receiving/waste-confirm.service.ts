@@ -55,7 +55,7 @@ type StoredRequest = {
   lines: StoredLine[];
 };
 const CONFIRM_INCLUDE = {
-  lines: { include: { item: { select: { hazardous: true } } } },
+  lines: { include: { item: { select: { hazardous: true, warehouseOnly: true } } } },
   user: { select: { id: true, phone: true, isBlocked: true } },
   order: { select: { status: true } },
 } satisfies Prisma.WasteRequestInclude;
@@ -65,6 +65,7 @@ type TxResult = { replay: boolean; result: WasteConfirmResultDTO; userId: string
 const NOT_FOUND = 'Không tìm thấy mã';
 const RETRY = 'Vui lòng thử lại';
 const DIFFERENT_FIGURES = 'Yêu cầu đã được xác nhận với số liệu khác';
+const PARTNER_NOT_ACCEPTED = 'Điểm đại lý không xác nhận được món chỉ kho Tubu HCMC nhận. Từ chối yêu cầu hoặc chuyển khách tới kho.';
 const PROGRAMME_OFF = 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.';
 
 function isUniqueViolation(e: unknown): boolean {
@@ -107,6 +108,8 @@ export class WasteConfirmService {
         }
         const { req, actorRole, pointKind, quota, m } = checked;
 
+        // After the replay branch on purpose: a request completed before the rule keeps answering its retries.
+        if (pointKind === 'PARTNER' && req.lines.some((l) => l.item.warehouseOnly)) throw new ConflictException(PARTNER_NOT_ACCEPTED);
         if (body.receivedWeightGrams !== undefined && pointKind !== 'WAREHOUSE') {
           throw new BadRequestException('Chỉ kho Tubu mới ghi khối lượng cân');
         }

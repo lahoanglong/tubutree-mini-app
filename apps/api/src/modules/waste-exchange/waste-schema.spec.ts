@@ -92,7 +92,7 @@ describe('waste schema (schema.prisma)', () => {
   });
 
   const DECLARATIONS: [string, RegExp[]][] = [
-    ['WasteItem', [/\bcode\s+String\s+@unique/, /@@index\(\[status, sortOrder\]\)/, /hazardous\s+Boolean\s+@default\(false\)/, /status\s+WasteItemStatus\s+@default\(HIDDEN\)/]],
+    ['WasteItem', [/\bcode\s+String\s+@unique/, /@@index\(\[status, sortOrder\]\)/, /hazardous\s+Boolean\s+@default\(false\)/, /warehouseOnly\s+Boolean\s+@default\(false\)/, /status\s+WasteItemStatus\s+@default\(HIDDEN\)/]],
     ['WastePoint', [/openingHours\s+Json\s+@default\("\{\}"\)/, /status\s+WastePointStatus\s+@default\(PENDING\)/, /giftHandoverEnabled\s+Boolean\s+@default\(false\)/]],
     ['WastePointStaff', [/@@unique\(\[pointId, userId\]\)/]],
     ['WasteRequest', [
@@ -119,7 +119,7 @@ describe('waste schema (schema.prisma)', () => {
 
   // Every column of contract section 2: schema.prisma is frozen after M1, so a missing column would need a new migration.
   const COLUMNS: Record<string, string[]> = {
-    WasteItem: ['id', 'code', 'name', 'unitLabel', 'unitsPerPoint', 'pointsPerGroup', 'dropsPerUnit', 'dailyCapQty', 'monthlyCapQty', 'status', 'prepInstructions', 'imageUrl', 'sortOrder', 'gramsPerUnit', 'hazardous', 'createdAt', 'updatedAt'],
+    WasteItem: ['id', 'code', 'name', 'unitLabel', 'unitsPerPoint', 'pointsPerGroup', 'dropsPerUnit', 'dailyCapQty', 'monthlyCapQty', 'status', 'prepInstructions', 'imageUrl', 'sortOrder', 'gramsPerUnit', 'hazardous', 'warehouseOnly', 'createdAt', 'updatedAt'],
     WastePoint: ['id', 'kind', 'name', 'addressLine', 'provinceCode', 'provinceName', 'communeCode', 'communeName', 'lat', 'lng', 'phone', 'openingHours', 'status', 'monthlyQuotaPoints', 'perkText', 'perkPendingText', 'giftHandoverEnabled', 'note', 'sortOrder', 'activatedAt', 'lastConfirmedAt', 'createdAt', 'updatedAt'],
     WastePointItem: ['pointId', 'itemId'],
     WastePointStaff: ['id', 'pointId', 'userId', 'role', 'isActive', 'createdAt', 'updatedAt'],

@@ -7,14 +7,14 @@ import {
 const SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261020000000_waste_exchange/migration.sql'), 'utf-8');
 const SEED = readFileSync(join(__dirname, '../../../prisma/seed.ts'), 'utf-8');
 
-const item = (id: string, code: string, name: string, unitLabel: string, n: number, m: number, drops: number, day: number | null, month: number | null, status: 'ACTIVE' | 'COMING_SOON', prep: string | null, sort: number, hazardous: boolean) =>
-  ({ id, code, name, unitLabel, unitsPerPoint: n, pointsPerGroup: m, dropsPerUnit: drops, dailyCapQty: day, monthlyCapQty: month, status, prepInstructions: prep, sortOrder: sort, hazardous });
+const item = (id: string, code: string, name: string, unitLabel: string, n: number, m: number, drops: number, day: number | null, month: number | null, status: 'ACTIVE' | 'COMING_SOON', prep: string | null, sort: number, hazardous: boolean, warehouseOnly = false) =>
+  ({ id, code, name, unitLabel, unitsPerPoint: n, pointsPerGroup: m, dropsPerUnit: drops, dailyCapQty: day, monthlyCapQty: month, status, prepInstructions: prep, sortOrder: sort, hazardous, warehouseOnly });
 
 const EXPECTED_ITEMS = [
   item('wi-carton', 'CARTON', 'Thùng carton cũ', 'thùng', 1, 1000, 0, 10, 60, 'ACTIVE', 'Gấp phẳng, giữ khô và sạch.', 10, false),
   item('wi-bubble-wrap', 'BUBBLE_WRAP', 'Nilon chống sốc', 'túi lớn', 1, 1000, 0, 10, 60, 'ACTIVE', 'Túi còn nguyên, khô, không dính băng keo hay nhãn.', 20, false),
-  item('wi-milk-carton', 'MILK_CARTON', 'Vỏ hộp sữa sạch', 'vỏ', 5, 1000, 0, 50, 300, 'ACTIVE', 'Rửa sạch, để ráo, ép dẹt.', 30, false),
-  item('wi-tubu-bottle', 'TUBU_BOTTLE', 'Vỏ chai, hộp Tubu Tree', 'vỏ', 1, 2000, 2, null, 20, 'ACTIVE', 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', 40, false),
+  item('wi-milk-carton', 'MILK_CARTON', 'Vỏ hộp sữa sạch', 'vỏ', 5, 1000, 0, 50, 300, 'ACTIVE', 'Rửa sạch, để ráo, ép dẹt.', 30, false, true),
+  item('wi-tubu-bottle', 'TUBU_BOTTLE', 'Vỏ chai, hộp Tubu Tree', 'vỏ', 1, 2000, 2, null, 20, 'ACTIVE', 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', 40, false, true),
   item('wi-battery', 'BATTERY', 'Pin đã dùng', 'viên', 1, 1000, 0, null, null, 'COMING_SOON', null, 50, true),
 ];
 
@@ -37,7 +37,7 @@ const FORBIDDEN = /cây\s+thật|\bmua (1 )?cây\b|CO2|CO₂|hấp thụ|giảm 
 const FORBIDDEN_LOWERCASE = /điểm Xanh/u;
 
 describe('waste reference data constants', () => {
-  it('items match contract section 6 (ids, rates, caps, status, hazardous)', () => {
+  it('items match contract section 6 (ids, rates, caps, status, hazardous) and only milk cartons and Tubu bottles are warehouse-only', () => {
     expect(WASTE_SEED_ITEMS).toEqual(EXPECTED_ITEMS);
   });
   it('gifts match contract section 6 and keep the legacy ids', () => {
