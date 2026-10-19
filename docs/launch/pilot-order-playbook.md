@@ -212,7 +212,7 @@ Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đ
 
 - **Ai**: Người thử. **Ở đâu**: Zalo trên điện thoại.
 - **Làm**: đặt đơn T1 theo bước 2.2.
-- **Đúng là**: trong khoảng 1 đến 2 phút, tin ZNS "Đơn TUBU… đã được xác nhận" tới Zalo của Người thử (COD thì tin tới ngay lúc đặt, vì COD vào thẳng "Đã xác nhận").
+- **Đúng là**: đặt đơn trong khung 08:00 đến 21:00 giờ VN thì trong khoảng 1 đến 2 phút, tin ZNS "Đơn TUBU… đã được xác nhận" tới Zalo của Người thử (COD thì tin tới ngay lúc đặt, vì COD vào thẳng "Đã xác nhận"). Đặt đơn từ 21:00 tới 08:00 thì tin ZNS được hoãn tới 08:00 sáng hôm sau, không bỏ: đó là giờ yên tĩnh, KHÔNG phải lỗi. Khung giờ đọc từ hai khoá Cấu hình `notifications.zns_quiet_start_hour` (mặc định 21) và `notifications.zns_quiet_end_hour` (mặc định 8); hai giá trị bằng nhau là tắt giờ yên tĩnh. Muốn thử ban đêm thì đặt hai khoá bằng nhau (vd cùng 8) rồi trả về 21 và 8 sau khi thử. Tin trong app vẫn lưu ngay.
 - **Bằng chứng**: Mẫu thông báo, dòng `ORDER_CONFIRMED`: số "lượt / 30 ngày" của dòng đó tăng 1 (nếu lỗi, dòng báo "<N> lượt ZNS lỗi trong 30 ngày, khách chưa nhận tin Zalo"); Phụ lục P4: dòng mới `channel = ZNS`, `status = SENT`. Lỗi thì `status = FAILED` hoặc `RETRYING`, cột `error` ghi "ZNS lỗi <mã>: <lời của Zalo>".
 - **Hoàn tác**: không có (tin đã gửi).
 

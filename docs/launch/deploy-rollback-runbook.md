@@ -16,7 +16,7 @@ Phạm vi: lần phát hành đưa PROD từ bản đang chạy lên SHA đã ch
 2. DỪNG API cũ TRƯỚC khi chạy `prisma migrate deploy` (migration đổi chỉ mục duy nhất của bảng đánh giá).
 3. Web mới lên CÙNG LÚC hoặc TRƯỚC API mới. Tab admin đã mở từ trước deploy phải được tải lại (xem mục 5, bước 12).
 4. Migration `20261014213300` khoá bảng `orders` (khoảng 14 giây cho mỗi 300.000 đơn, khoảng 2 giây dưới 50.000 đơn). Nếu PROD còn ở bản cũ, danh sách chờ áp còn có các migration nặng khác trên `orders` và `users` (bảng ở mục 1.0). Cách chọn giờ nằm ở mục 3.
-5. Quay lại bằng image chỉ hợp lệ khi schema sau migrate vẫn tương thích với image cũ (mục 7.0). Nếu danh sách chờ áp có BẤT KỲ migration nào ngoài sáu migration của đợt (ba chính: r6, r8 điểm nhận vỏ, r8 đánh giá; hai nhỏ thêm sau: r9 mốc tồn kho, r10 hàng trả cũ; một mới: Đổi rác lấy quà `20261020000000_waste_exchange`) thì đường quay lại duy nhất là khôi phục bản backup (7.3). Bản `main` ngày 2026-10-19 (sau PR #20, #21, #22) thêm 22 migration ngoài sáu cái này (mọi `20261018*`, `20261019*` và `20261020000000_waste_exchange`), nên lần deploy bản đó chỉ quay lại được bằng 7.3.
+5. Quay lại bằng image chỉ hợp lệ khi schema sau migrate vẫn tương thích với image cũ (mục 7.0). Nếu danh sách chờ áp có BẤT KỲ migration nào ngoài sáu migration của đợt (ba chính: r6, r8 điểm nhận vỏ, r8 đánh giá; hai nhỏ thêm sau: r9 mốc tồn kho, r10 hàng trả cũ; một mới: Đổi rác lấy quà `20261020000000_waste_exchange`) thì đường quay lại duy nhất là khôi phục bản backup (7.3). Bản nhánh UAT ngày 2026-10-20 (nền `main` sau PR #20, #21, #22, cộng ba migration thêm trong đêm UAT: `20261020010000_waste_item_warehouse_only`, `20261020100000_best_answer_reward_note_template`, `20261020100000_review_return_reversal`) có 210 thư mục migration và thêm 24 migration ngoài sáu cái này (mọi `20261018*`, `20261019*` và `20261020*` trừ `20261020000000_waste_exchange`; đếm lại bằng `ls apps/api/prisma/migrations | grep -E '^2026101[89]|^20261020' | grep -vc waste_exchange`, con số đổi mỗi khi thêm migration), nên lần deploy bản đó chỉ quay lại được bằng 7.3. Ba migration thêm trong đêm UAT cố ý KHÔNG đưa vào danh sách tương thích image (`IMAGE_COMPATIBLE_MIGRATIONS` trong `db-checks.ts`): chưa xét riêng việc image cũ chạy trên chúng, nên giữ đường quay lại an toàn là 7.3.
 
 ### 0.3 Hạ tầng hiện tại (đọc kỹ)
 
@@ -173,14 +173,15 @@ Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` 
 
 ### 1.3 Biến môi trường trong `/opt/tubutree/.env`
 
-Mở file bằng `nano .env` (hoặc, cho các khoá ghi được, trỏ lại GitHub Actions ở mục 2 rồi chạy `ops.yml`, hành động `set-env`; xem lưu ý dưới bảng, `set-env` KHÔNG thay được việc sửa tay cho vài khoá). Đối chiếu với [docs/GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md). Phải có, ngoài các khoá Pancake, Gomdon, Zalo đã có:
+Mở file bằng `nano .env` (hoặc, cho các khoá ghi được, trỏ lại GitHub Actions ở mục 2 rồi chạy `ops.yml`, hành động `set-env`; xem lưu ý dưới bảng, `set-env` KHÔNG thay được việc sửa tay cho vài khoá). Đối chiếu với [docs/GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md). Phải có, ngoài các khoá Pancake, Gomdon, Zalo đã có (`ACCESSTRADE_WEBHOOK_SECRET` nằm trong bảng dưới):
 
 | Khoá trong `.env` | Ghi chú |
 |---|---|
-| `OPS_ALERT_WEBHOOK_URL` | URL webhook Slack, Google Chat hoặc n8n (bắt đầu bằng `https://`) |
-| `OPS_ALERT_EMAIL_TO`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Đặt đủ cả bảy hoặc để trống cả bảy. Đặt dở thì API không khởi động |
+| `OPS_ALERT_WEBHOOK_URL` | URL webhook Slack, Google Chat hoặc n8n. Nên bắt đầu bằng `https://`; mã nhận cả `http://`, thiếu scheme thì API không khởi động |
+| `OPS_ALERT_EMAIL_TO`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Để trống cả bảy thì tắt kênh email. Đã đặt một biến thì chỉ bắt buộc `OPS_ALERT_EMAIL_TO`, `SMTP_HOST` và (`SMTP_FROM`, hoặc `SMTP_USER` là địa chỉ email để dùng thay); `SMTP_USER` và `SMTP_PASS` đi cặp; `SMTP_PORT`, `SMTP_SECURE` tuỳ chọn. Đặt dở thì API không khởi động |
 | `OPS_ALERT_ENV_LABEL` | Ví dụ `production`. Tối đa 24 ký tự, không có `[` `]` |
 | `CORS_ORIGINS` | Ví dụ `https://app.tubutree.com,https://tubutree.com` |
+| `ACCESSTRADE_WEBHOOK_SECRET` | Bắt buộc ở production: rỗng thì API không khởi động và `go-live:check` FAIL. Chuỗi ngẫu nhiên (`openssl rand -hex 32`), dán y hệt vào header `x-accesstrade-token` bên Accesstrade |
 | `AUTH_COOKIE_SAMESITE`, `AUTH_COOKIE_DOMAIN` | `lax` và (nếu cần chia sẻ phiên giữa subdomain) `.tubutree.com` |
 | `THROTTLE_BYPASS_TOKEN` | Chuỗi ngẫu nhiên từ 32 ký tự (`openssl rand -hex 32`), CÙNG một giá trị cho `api` và `web` (xem ghi chú dưới) |
 
@@ -606,7 +607,7 @@ psqlq -c "SELECT count(*) FILTER (WHERE \"kind\" = 'WAREHOUSE') AS kho, count(*)
 psqlq -c "SELECT count(*) AS thieu_tim_kiem FROM orders WHERE COALESCE(\"shippingAddress\" ->> 'recipient','') <> '' AND \"recipientSearch\" = ''"
 ```
 
-Kỳ vọng: `da_ap_xong` bằng (số "migrations" ghi ở bước 6) cộng (số chờ áp ở bước 4); bốn migration mới nhất (có `20261020000000_waste_exchange`) đều `xong = t`; `dang_do = 0`; chỉ còn đúng một chỉ mục `reviews_userId_productId_orderId_key` (chỉ mục cũ `reviews_userId_productId_key` đã mất); lần deploy đầu: `kho = 0`, `diem_doi_rac = 0` (admin tự nhập kho trước khi bật waste.enabled); `thieu_tim_kiem = 0`.
+Kỳ vọng: `da_ap_xong` bằng (số "migrations" ghi ở bước 6) cộng (số chờ áp ở bước 4); bốn migration mới nhất (bản 2026-10-20: `20261020100000_review_return_reversal`, `20261020100000_best_answer_reward_note_template`, `20261020010000_waste_item_warehouse_only`, `20261020000000_waste_exchange`; thêm migration mới thì danh sách này đổi theo) đều `xong = t`; `dang_do = 0`; chỉ còn đúng một chỉ mục `reviews_userId_productId_orderId_key` (chỉ mục cũ `reviews_userId_productId_key` đã mất); lần deploy đầu: `kho = 0`, `diem_doi_rac = 0` (admin tự nhập kho trước khi bật waste.enabled); `thieu_tim_kiem = 0`.
 
 ### Bước 7b. Nạp dữ liệu tham chiếu (lần deploy đầu, hoặc DB mới)
 
@@ -652,7 +653,7 @@ Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng
 
 ### Bước 7c. Dọn dữ liệu demo (API vẫn đang dừng)
 
-Migration `20260616000000_demo_catalog_multibrand` nạp vào MỌI DB mới 44 sản phẩm và 48 biến thể demo (giá giả, khách đặt được, đơn đẩy sang Pancake sẽ lỗi) cùng 3 mã giảm giá công khai còn hạn tới 31/12/2026 mà chủ dự án chưa duyệt: `WELCOME30` (giảm 30.000đ cho đơn từ 199.000đ, 1 lượt mỗi khách, không giới hạn tổng), `FREESHIP` (đơn từ 99.000đ, 3 lượt mỗi khách), `XANH10` (giảm 10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt mỗi khách). Bản thử trên VPS đã áp migration này từ tháng 6, nên dữ liệu đó có thể đang nằm trên PROD; DB dựng mới chắc chắn có. Làm bước này ở mọi lần deploy cho tới khi `db.demo_products` và `db.demo_coupons` đều PASS. Chạy lại an toàn: không còn gì để đổi thì không đổi gì.
+Migration `20260616000000_demo_catalog_multibrand` nạp vào MỌI DB mới 44 sản phẩm và 48 biến thể demo (giá giả, khách đặt được, đơn đẩy sang Pancake sẽ lỗi) cùng 3 mã giảm giá công khai còn hạn tới 31/12/2026, mà chủ dự án đã chốt GIỮ CẢ BA cho đợt ra mắt (A4, 2026-10-18; xem điểm 2 bên dưới): `WELCOME30` (giảm 30.000đ cho đơn từ 199.000đ, 1 lượt mỗi khách, không giới hạn tổng), `FREESHIP` (đơn từ 99.000đ, 3 lượt mỗi khách), `XANH10` (giảm 10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt mỗi khách). Bản thử trên VPS đã áp migration này từ tháng 6, nên dữ liệu đó có thể đang nằm trên PROD; DB dựng mới chắc chắn có. Làm bước này ở mọi lần deploy cho tới khi `db.demo_products` và `db.demo_coupons` đều PASS. Chạy lại an toàn: không còn gì để đổi thì không đổi gì.
 
 DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng tên do seed tạo: id khác, hạn tới 01/01/2027, cùng điều kiện như trên. Lệnh dọn và go-live check coi chúng là mã demo (nhận theo mã và điều kiện), xem trước ghi `[do seed tạo]`. DB như vậy còn dữ liệu demo khác mà lệnh này KHÔNG dọn: nhiệm vụ (`missions`), câu đố (`game_quizzes`), merchant hoàn tiền (`cashback_merchants`), mục tiêu cộng đồng, mùa giải, loài cây, cấp đại lý, mẫu thông báo do `prisma/seed.ts` tạo. Thấy `[do seed tạo]` ở mục 4 thì báo tech lead rà các bảng đó ở Quản trị trước khi mở bán.
 
