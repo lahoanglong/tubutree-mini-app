@@ -73,6 +73,28 @@ describe('GameEconomyService.checkIn', () => {
     expect(r.streakFrozeUsed).toBe(false);
   });
 
+  it('ghi có điều kiện khớp lần đọc (streakDays/streakFreezes/brokenStreakAt) — thao tác song song không bị ghi đè', async () => {
+    const brokenAt = new Date(Date.now() - 3_600_000);
+    const p = prisma(prof({ streakDays: 4, streakFreezes: 2, brokenStreakDays: 3, brokenStreakAt: brokenAt }));
+    await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1');
+    const where = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ userId: 'u1', streakDays: 4, streakFreezes: 2, brokenStreakAt: brokenAt });
+  });
+
+  it('ghi hụt vì hồ sơ vừa đổi → đọc lại, tính lại từ hồ sơ mới rồi ghi', async () => {
+    const p = prisma(prof({ streakDays: 1 }));
+    (p.gameProfile.findUnique as jest.Mock)
+      .mockResolvedValueOnce(prof({ streakDays: 1 }))
+      .mockResolvedValueOnce(prof({ streakDays: 11 }))
+      .mockResolvedValue({ totalSeeds: 130 });
+    (p.gameProfile.updateMany as jest.Mock).mockResolvedValueOnce({ count: 0 }).mockResolvedValue({ count: 1 });
+    const r = await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1');
+    expect(r.streakDays).toBe(12);
+    const calls = (p.gameProfile.updateMany as jest.Mock).mock.calls;
+    expect(calls[0]![0].data.streakDays).toBe(2);
+    expect(calls[1]![0].where).toMatchObject({ streakDays: 11 });
+  });
+
   it('lỡ NHIỀU ngày + có vé → KHÔNG dùng vé, reset = 1', async () => {
     const p = prisma(prof({ streakDays: 4, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 5 * DAY) }));
     const r = await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1');
@@ -217,7 +239,7 @@ describe('GameEconomyService.repairStreak', () => {
     const r = await new GameEconomyService(p, cfg({ 'game.streak_repair_cost': 150 }), sp(), analytics).repairStreak('u1');
     expect(r).toEqual({ repaired: true, streakDays: 6, totalSeeds: 50 });
     const call = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0];
-    expect(call.where).toMatchObject({ userId: 'u1', totalSeeds: { gte: 150 }, brokenStreakAt: { not: null } });
+    expect(call.where).toMatchObject({ userId: 'u1', totalSeeds: { gte: 150 }, streakDays: 1, brokenStreakDays: 5, brokenStreakAt: brokenAt });
     expect(call.data).toMatchObject({
       totalSeeds: { decrement: 150 },
       streakDays: 6,
