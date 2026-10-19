@@ -17,6 +17,8 @@ import { useRemaining } from '../hooks/use-remaining';
 import { Money } from '../components/ui/price-tag';
 import { PageHeader } from '../components/ui/page-header';
 import { SR_ONLY } from '../components/ui/sr-only';
+import { ErrorState } from '../components/ui/empty-state';
+import { SupportHotline } from '../components/support-hotline';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
@@ -30,6 +32,15 @@ function isFinalRejection(error: unknown): boolean {
   if (!isAxiosError(error)) return false;
   const status = error.response?.status;
   return status !== undefined && FINAL_REJECTION_STATUSES.has(status);
+}
+
+// 401/403 ở nút Kiểm tra: phiên đã hết và refresh bị từ chối. Không phải lỗi mạng nên không được báo "kiểm tra kết nối";
+// đơn vẫn chờ tiền, khách chỉ cần vào lại phiên rồi bấm lại.
+const SESSION_EXPIRED_MESSAGE = 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi bấm Kiểm tra nhé.';
+function isSessionExpired(error: unknown): boolean {
+  if (!isAxiosError(error)) return false;
+  const status = error.response?.status;
+  return status === 401 || status === 403;
 }
 
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
@@ -101,7 +112,11 @@ export default function BankPaymentPage() {
       }
     } catch (err) {
       openSnackbar({
-        text: isFinalRejection(err) ? getErrorMessage(err) : 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        text: isFinalRejection(err)
+          ? getErrorMessage(err)
+          : isSessionExpired(err)
+            ? SESSION_EXPIRED_MESSAGE
+            : 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
         type: 'error',
         position: 'top',
       });
@@ -112,9 +127,10 @@ export default function BankPaymentPage() {
 
   if (isLoading) {
     return (
-      <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
+      <Page style={{ background: 'var(--color-bg-canvas)', paddingTop: 'var(--safe-top)' }}>
         <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
-        <Box p={3} style={{ background: 'var(--color-bg-surface)' }}>
+        {/* Khung tiêu đề giả nằm đúng chỗ PageHeader (chừa 48px bên trái cho nút Quay lại) để màn không nhảy khi tải xong. */}
+        <Box style={{ background: 'var(--color-bg-surface)', padding: '12px 16px 12px 64px' }}>
           <Skeleton width={200} height={20} />
           <Skeleton width={240} height={13} style={{ marginTop: 8 }} />
         </Box>
@@ -159,20 +175,21 @@ export default function BankPaymentPage() {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
-        <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <Text style={{ color: 'var(--color-text-secondary)' }}>Không tải được thông tin thanh toán.</Text>
-          {/* loading+disabled không còn cùng gán 1 biến (Button, Task 10, đã tự chặn bấm-2-lần khi
-              loading — xem components/ui/button.tsx): trước đây `disabled={isFetching}` đi kèm
-              `loading={isFetching}` khiến spinner KHÔNG BAO GIỜ hiện (zmp-ui chỉ vẽ spinner khi
-              loading && !disabled) — cùng lỗi audit A4-01/A4-02/A4-04 đang được sửa trong migration
-              này. `isFetching` vẫn true suốt polling nền 4s lẫn lúc bấm tay, hành vi không đổi. */}
-          <Button loading={isFetching} onPress={() => void refetch()} style={{ marginTop: 16 }}>
-            Thử lại
-          </Button>
-          <Button variant="secondary" onPress={() => navigate(`/order/${code}`, { replace: true })} style={{ marginTop: 8 }}>
+        {/* Cùng bộ phận lỗi với các màn khác để lỗi mạng nói "mất mạng" và có hotline; ErrorState chỉ có một nút nên "Xem đơn hàng"
+            và hotline dựng ngay dưới (showSupport tắt để hotline không nằm trên nút phụ). */}
+        <ErrorState
+          title="Chưa tải được thông tin thanh toán"
+          message={getErrorMessage(error)}
+          showSupport={false}
+          retrying={isFetching}
+          onRetry={() => void refetch()}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: -24, padding: '0 32px 40px' }}>
+          <Button variant="secondary" onPress={() => navigate(`/order/${code}`, { replace: true })}>
             Xem đơn hàng
           </Button>
-        </Box>
+          <SupportHotline />
+        </div>
       </Page>
     );
   }
@@ -212,7 +229,8 @@ export default function BankPaymentPage() {
 
   // ── Chờ thanh toán: hiển thị VietQR ──
   return (
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 90 }}>
+    // Không dùng class "page": PageHeader đã chừa chỗ nút Quay lại và vùng an toàn, thêm .page sẽ cộng đệm 48px lần hai và tách tiêu đề khỏi nút.
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 90 }}>
       <PageHeader title="Quét QR để chuyển khoản" subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới" />
 
       <Box p={2}>
@@ -240,10 +258,13 @@ export default function BankPaymentPage() {
               onCopy={() => copy(data.memo, 'nội dung chuyển khoản')}
             />
           </Box>
-          <Text size="xSmall" style={{ color: 'var(--color-text-danger)', marginTop: 8 }}>
-            <Icon icon={TriangleAlert} size="sm" tone="danger" style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
-            Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
-          </Text>
+          {/* Hướng dẫn trước khi chuyển, chưa phải lỗi: khối lưu ý cùng màu với khung hạn thay cho chữ đỏ nhỏ. */}
+          <Box mt={2} p={3} data-testid="memo-note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)', textAlign: 'left' }}>
+            <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
+              <Icon icon={TriangleAlert} size="sm" tone="current" style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
+              Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
+            </Text>
+          </Box>
         </Box>
 
         {data.paymentDeadline && (

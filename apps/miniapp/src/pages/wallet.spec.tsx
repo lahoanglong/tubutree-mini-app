@@ -431,6 +431,125 @@ describe('WalletPage — rút tiền gặp lỗi chưa rõ kết quả (D14-03)'
   });
 });
 
+describe('WalletPage — cờ "lệnh rút chưa rõ kết quả" tự gỡ (P3 miniapp-logic)', () => {
+  const timeout = () => new AxiosError('x', 'ECONNABORTED');
+  const OK = { ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 };
+  const RECORDED_TX = { id: 't0', delta: -400_000, balanceAfter: 850_000, type: 'WITHDRAW', reason: 'Rút về ngân hàng (phí 3000đ)', orderId: null, createdAt: '2026-10-06T07:04:00.000Z' };
+
+  /** Sao kê trả `rows` thêm vào đầu trang 1 khi `history.extra` đã bật. */
+  function stubHistory(history: { extra: object[] }) {
+    mocks.getWallet.mockResolvedValue(WALLET);
+    mocks.getReferral.mockResolvedValue(REFERRAL);
+    mocks.getLoyalty.mockResolvedValue(LOYALTY);
+    mocks.getWalletTransactions.mockImplementation((page: number) =>
+      Promise.resolve(page === 1 ? { ...TXN_PAGE_1, data: [...history.extra, ...TXN_PAGE_1.data] } : TXN_PAGE_2),
+    );
+  }
+  async function fill() {
+    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '400000' } });
+    fireEvent.change(inputOf('Tên ngân hàng'), { target: { value: 'VCB' } });
+    fireEvent.change(inputOf('Số tài khoản'), { target: { value: '123456' } });
+    fireEvent.change(inputOf('Chủ tài khoản'), { target: { value: 'A' } });
+  }
+  const press = () => fireEvent.click(screen.getByRole('button', { name: 'Rút 400.000đ' }));
+  async function openSheet() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
+    await screen.findByText('Rút tiền về ngân hàng');
+  }
+  async function closeSheet() {
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByText('Rút tiền về ngân hàng')).toBeNull());
+  }
+
+  it('sao kê tải lại đã thấy đúng lệnh vừa hết thời gian chờ: lần rút sau đúng số tiền ấy là lệnh mới, key mới', async () => {
+    const history = { extra: [] as object[] };
+    stubHistory(history);
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
+    renderPage();
+    await openSheet();
+    await fill();
+    history.extra = [RECORDED_TX];
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('−400.000đ')).toBeInTheDocument();
+    await closeSheet();
+    await openSheet();
+    await fill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
+  it('sao kê tải lại vẫn chưa có lệnh: giữ key cũ để bấm lại không rút hai lần', async () => {
+    stubHistory({ extra: [] });
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
+    renderPage();
+    await openSheet();
+    await fill();
+    const historyCalls = mocks.getWalletTransactions.mock.calls.length;
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getWalletTransactions.mock.calls.length).toBeGreaterThan(historyCalls));
+    await closeSheet();
+    await openSheet();
+    await fill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
+  it('lệnh rút cùng số tiền đã nằm trong sao kê từ trước: không coi là lệnh vừa chưa rõ, vẫn giữ key cũ', async () => {
+    stubHistory({ extra: [{ ...RECORDED_TX, id: 'old', createdAt: '2026-09-01T07:04:00.000Z' }] });
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
+    renderPage();
+    await openSheet();
+    await fill();
+    const historyCalls = mocks.getWalletTransactions.mock.calls.length;
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getWalletTransactions.mock.calls.length).toBeGreaterThan(historyCalls));
+    await closeSheet();
+    await openSheet();
+    await fill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
+  it('khách rời màn Ví rồi vào lại: lệnh rút mới không mang key của lệnh chưa rõ kết quả trước đó', async () => {
+    stubHistory({ extra: [] });
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
+    const first = renderPage();
+    await openSheet();
+    await fill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    first.unmount();
+    renderPage();
+    await openSheet();
+    await fill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+});
+
+describe('WalletPage — số Điểm Xanh không gãy dòng (D6-11)', () => {
+  it('số điểm không xuống dòng và hạng thành viên nằm dưới số, không chen vào hàng làm cột số hẹp lại', async () => {
+    stubLoaded();
+    renderPage();
+    const points = await screen.findByText('50.000 điểm');
+    expect(points.style.whiteSpace).toBe('nowrap');
+    const column = points.parentElement as HTMLElement;
+    expect(column.contains(screen.getByText('Bạc'))).toBe(true);
+    expect(column.style.minWidth).toBe('0px');
+  });
+});
+
 describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường vào TubuXu (Q-26, PD-3)', () => {
   it('không còn nút/sheet đổi Ví sang xu, thẻ TubuXu hay mẹo ×1.2', async () => {
     stubLoaded();

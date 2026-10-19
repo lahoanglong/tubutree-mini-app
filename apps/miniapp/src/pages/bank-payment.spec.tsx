@@ -9,14 +9,23 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   getBankQr: vi.fn(),
   copyText: vi.fn(),
+  fetchSupportContact: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
+  Page: ({ children, className }: { children: ReactNode; className?: string }) => (
+    <div data-testid="page" className={className}>
+      {children}
+    </div>
+  ),
   useParams: () => ({ code: 'TT001' }),
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/bank-payment/TT001', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+}));
+vi.mock('./about-data', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchSupportContact: mocks.fetchSupportContact,
 }));
 vi.mock('../services/payment-api', () => ({ getBankQr: mocks.getBankQr }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -166,7 +175,7 @@ describe('Thanh toán chuyển khoản: mỗi trạng thái có đúng một h1 
 
     mocks.getBankQr.mockRejectedValue(new Error('x'));
     renderPage();
-    await screen.findByText('Không tải được thông tin thanh toán.');
+    await screen.findByText('Chưa tải được thông tin thanh toán');
     expect(onlyH1().textContent).toBe('Thanh toán chuyển khoản');
   });
 });
@@ -185,7 +194,7 @@ describe('Thanh toán chuyển khoản: lần dò nền lỗi không làm mất 
         position: 'top',
       }),
     );
-    expect(screen.queryByText('Không tải được thông tin thanh toán.')).toBeNull();
+    expect(screen.queryByText('Chưa tải được thông tin thanh toán')).toBeNull();
     expect(screen.getByText('0123456789')).toBeInTheDocument();
   });
 });
@@ -406,5 +415,99 @@ describe('Thanh toán chuyển khoản: đơn bị huỷ hoặc quá hạn khi �
     expect(screen.queryByAltText('VietQR')).toBeNull();
     expect(screen.queryByText('0123456789')).toBeNull();
     expect(screen.getByRole('button', { name: 'Xem đơn hàng' })).toBeInTheDocument();
+  });
+});
+
+describe('Thanh toán chuyển khoản: bố cục và hướng dẫn (D6-01, D6-12)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue(QR);
+  });
+  afterEach(() => document.body.classList.remove('with-back-btn'));
+
+  it('màn QR có PageHeader (đã chừa chỗ nút Quay lại) nên Page không mang class "page": không cộng đệm 48px lần hai', async () => {
+    document.body.classList.add('with-back-btn');
+    const { container } = renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Quét QR để chuyển khoản' });
+    expect(container.querySelector('.page')).toBeNull();
+  });
+
+  it('khung chờ tải mô phỏng đúng vị trí tiêu đề (cạnh nút Quay lại), không dùng class "page" nên màn không nhảy khi tải xong', () => {
+    mocks.getBankQr.mockReturnValue(new Promise(() => {}));
+    document.body.classList.add('with-back-btn');
+    const { container } = renderPage();
+    expect(container.querySelector('.page')).toBeNull();
+  });
+
+  it('"Giữ nguyên nội dung" nằm trong khối lưu ý màu cảnh báo, không dùng chữ đỏ như báo lỗi', async () => {
+    renderPage();
+    const hint = await screen.findByText(/Giữ nguyên nội dung/);
+    const note = hint.closest('[data-testid="memo-note"]') as HTMLElement;
+    expect(note).not.toBeNull();
+    expect(note.textContent).toContain('Giữ nguyên nội dung TT001 để hệ thống tự xác nhận.');
+    expect(note.getAttribute('style')).toContain('--color-status-warning-bg');
+    expect(note.innerHTML).not.toContain('--color-text-danger');
+    expect(note.innerHTML).not.toContain('color="var(--color-text-danger)"');
+  });
+});
+
+describe('Thanh toán chuyển khoản: lỗi tải có hướng dẫn và hotline (D6-02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockReset();
+    mocks.fetchSupportContact.mockResolvedValue({ hotline: '0984606774', email: null, zaloOaName: null });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('máy chủ lỗi: tiêu đề, câu hướng dẫn, nút Thử lại, Xem đơn hàng và hotline, không còn một dòng chữ trơn', async () => {
+    mocks.getBankQr.mockRejectedValue(new AxiosError('x', 'ERR_BAD_RESPONSE', undefined, undefined, { status: 503, statusText: '', headers: {}, config: {} as never, data: {} }));
+    renderPage();
+    expect(await screen.findByText('Chưa tải được thông tin thanh toán')).toBeInTheDocument();
+    expect(screen.getByText('Máy chủ đang bận, thử lại nhé.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem đơn hàng' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Gọi 0984 606 774/ })).toBeInTheDocument();
+    expect(screen.getByTestId('error-state-icon')).toBeInTheDocument();
+  });
+
+  it('mất mạng: nói thẳng "mất mạng" thay vì cùng câu với lỗi máy chủ', async () => {
+    vi.stubGlobal('navigator', { ...navigator, onLine: false });
+    mocks.getBankQr.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
+    renderPage();
+    expect(await screen.findByText(/Có vẻ mất mạng/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Gọi 0984 606 774/ })).toBeInTheDocument();
+  });
+
+  it('Thử lại gọi lại máy chủ; Xem đơn hàng mở chi tiết đơn', async () => {
+    mocks.getBankQr.mockRejectedValue(new Error('x'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.getBankQr.mock.calls.length).toBeGreaterThanOrEqual(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem đơn hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/order/TT001', { replace: true });
+  });
+});
+
+describe('Thanh toán chuyển khoản: nút Kiểm tra khi phiên hết hạn (P3 miniapp-logic)', () => {
+  const status = (s: number) =>
+    new AxiosError('x', 'ERR_BAD_REQUEST', undefined, undefined, { status: s, statusText: '', headers: {}, config: {} as never, data: { message: 'Unauthorized' } });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockReset();
+  });
+
+  it.each([[401], [403]])('gặp %i: báo phiên đăng nhập hết hạn và mời đăng nhập lại, không báo mất mạng', async (code) => {
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(status(code));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    const arg = mocks.openSnackbar.mock.calls[0]![0] as { text: string; type: string };
+    expect(arg.type).toBe('error');
+    expect(arg.text).toMatch(/phiên đăng nhập/i);
+    expect(arg.text).toMatch(/đăng nhập lại/i);
+    expect(arg.text).not.toMatch(/kết nối/i);
+    expect(screen.getByAltText('VietQR')).toBeInTheDocument();
   });
 });
