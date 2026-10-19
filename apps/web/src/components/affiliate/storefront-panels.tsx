@@ -8,6 +8,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { phoneFlatCard } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
@@ -30,7 +31,7 @@ export function StatsSection() {
   const rows = statsRows(data);
 
   return (
-    <section aria-label="Thống kê 30 ngày" className={`${ui.card} p-4`}>
+    <section aria-label="Thống kê 30 ngày" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-2.5 flex items-center gap-1.5">
         <TrendingUp className="h-5 w-5 text-forest-700" aria-hidden="true" />
         <h2 className={ui.sectionTitle}>Thống kê 30 ngày</h2>
@@ -70,7 +71,7 @@ export function QuestSection({ onNotice }: { onNotice: Notify }) {
   if (!data) return null;
 
   return (
-    <section aria-label="Hành trình gian hàng" className={`${ui.card} p-4`}>
+    <section aria-label="Hành trình gian hàng" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Target className="h-5 w-5 text-forest-700" aria-hidden="true" />

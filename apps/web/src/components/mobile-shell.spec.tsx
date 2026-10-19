@@ -118,7 +118,7 @@ describe('HomeHeader (đầu Trang chủ ở điện thoại)', () => {
   it('logo, chuông thông báo, giỏ; ẩn từ md vì thanh đầu website đảm nhiệm', () => {
     mocks.auth = { user: { fullName: 'An' }, status: 'authenticated' };
     mocks.cart = { itemCount: 2 };
-    const { container } = mount(<HomeHeader unreadCount={3} authed />);
+    const { container } = mount(<HomeHeader unreadCount={3} />);
     expect(container.firstElementChild!.className).toContain('md:hidden');
     expect(container.querySelector('img')!.getAttribute('alt')).toBe('Tubu Tree');
     expect(container.querySelector('a[href="/tai-khoan/thong-bao"]')!.getAttribute('aria-label')).toBe('Thông báo, 3 chưa đọc');
@@ -128,7 +128,7 @@ describe('HomeHeader (đầu Trang chủ ở điện thoại)', () => {
   it('huy hiệu như CountBadge của Mini App: 18px, màu promo-solid, chữ 11', () => {
     mocks.auth = { user: { fullName: 'An' }, status: 'authenticated' };
     mocks.cart = { itemCount: 2 };
-    const { container } = mount(<HomeHeader unreadCount={3} authed />);
+    const { container } = mount(<HomeHeader unreadCount={3} />);
     const badges = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="count-badge"]'));
     expect(badges).toHaveLength(2);
     for (const b of badges) {
@@ -138,9 +138,10 @@ describe('HomeHeader (đầu Trang chủ ở điện thoại)', () => {
     }
   });
 
-  it('chưa đăng nhập: không có chuông, vẫn có giỏ', () => {
-    const { container } = mount(<HomeHeader unreadCount={0} authed={false} />);
-    expect(container.querySelector('a[href="/tai-khoan/thong-bao"]')).toBeNull();
+  it('chưa đăng nhập: vẫn có chuông (không huy hiệu) và giỏ, như Mini App; trang Thông báo tự đòi đăng nhập', () => {
+    const { container } = mount(<HomeHeader unreadCount={0} />);
+    expect(container.querySelector('a[href="/tai-khoan/thong-bao"]')!.getAttribute('aria-label')).toBe('Thông báo');
+    expect(container.querySelector('[data-testid="count-badge"]')).toBeNull();
     expect(container.querySelector('a[href="/gio-hang"]')).not.toBeNull();
   });
 });

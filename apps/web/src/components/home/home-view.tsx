@@ -152,7 +152,7 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
 
   return (
     <HomeBlockErrorSuppressed.Provider value={pageDown}>
-      <HomeHeader unreadCount={unreadCount} authed={authed} />
+      <HomeHeader unreadCount={unreadCount} />
       {homeBlockOrder(kind, newCustomerLayout).map((id) => (
         <Fragment key={id}>
           <div data-home-block={id}>{blocks[id]}</div>
@@ -167,14 +167,17 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
   );
 }
 
-/** Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chuông thông báo chỉ khi đã đăng nhập. */
+/**
+ * Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chỉ ở điện thoại (từ md thanh đầu website đã có ô tìm).
+ * Chuông ở điện thoại nằm ở HomeHeader; từ md thanh đầu không có chuông nên hàng này giữ chuông cho khách đã đăng nhập.
+ */
 function SearchRow({ unreadCount, authed }: { unreadCount: number; authed: boolean }) {
   return (
-    <div className="flex items-center gap-2 pb-3">
+    <div className="flex items-center gap-2 pb-3 md:justify-end">
       <Link
         href="/san-pham?focus=search"
         aria-label={homeText.searchPlaceholder}
-        className="flex min-h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-stone-0 px-4 py-[11px] shadow-card transition md:min-h-11 md:border-stone-300 md:py-2.5 md:hover:border-stone-450"
+        className="flex min-h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-stone-0 px-4 py-[11px] shadow-card transition md:hidden"
       >
         <Search className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
         <span className="min-w-0 truncate text-sm text-stone-600">{homeText.searchPlaceholder}</span>

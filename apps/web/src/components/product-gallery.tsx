@@ -3,9 +3,11 @@
 import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Leaf } from 'lucide-react';
 
-const FRAME = 'relative aspect-square overflow-hidden rounded-sheet border border-stone-200 bg-forest-50 shadow-card';
+// Điện thoại: ảnh tràn mép, vuông, không viền như Gallery của Mini App; từ md là khung bo góc.
+const FRAME =
+  'relative aspect-square overflow-hidden rounded-sheet border border-stone-200 bg-forest-50 shadow-card max-md:rounded-none max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:shadow-none';
 const ARROW =
-  'absolute top-1/2 z-10 flex h-11 w-11 min-h-11 -translate-y-1/2 items-center justify-center rounded-full bg-stone-0/90 text-stone-900 shadow-card transition hover:bg-stone-0 disabled:hidden';
+  'absolute top-1/2 z-10 flex h-11 w-11 min-h-11 -translate-y-1/2 items-center justify-center rounded-full bg-stone-0/90 text-stone-900 shadow-card transition hover:bg-stone-0 disabled:hidden max-md:hidden';
 
 /**
  * Thư viện ảnh sản phẩm: vuốt ngang trên điện thoại (cuộn bám mép), mũi tên và dải ảnh nhỏ cho chuột/bàn phím.
@@ -94,16 +96,25 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
             </button>
             <p
               aria-live="polite"
-              className="absolute bottom-2 right-2 rounded-full bg-stone-900/70 px-2.5 py-0.5 text-xs font-medium text-stone-0"
+              className="absolute bottom-2 right-2 rounded-full bg-stone-900/70 px-2.5 py-0.5 text-xs font-medium text-stone-0 max-md:sr-only"
             >
               {active + 1}/{count}
             </p>
+            {/* Điện thoại: chấm tròn như Mini App thay cho số trang. */}
+            <div data-testid="gallery-dots" aria-hidden="true" className="absolute inset-x-0 bottom-2.5 flex justify-center gap-1.5 md:hidden">
+              {images.map((src, i) => (
+                <span
+                  key={src}
+                  className={`h-1.5 rounded-full transition-all ${i === active ? 'w-4 bg-stone-0' : 'w-1.5 bg-stone-0/60'}`}
+                />
+              ))}
+            </div>
           </>
         )}
       </div>
 
       {count > 1 && (
-        <ul className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Chọn ảnh">
+        <ul className="mt-3 flex gap-2 overflow-x-auto pb-1 max-md:hidden" aria-label="Chọn ảnh">
           {images.map((src, i) => (
             <li key={src} className="flex-none">
               <button

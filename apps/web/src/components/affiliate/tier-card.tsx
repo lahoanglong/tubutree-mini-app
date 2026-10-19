@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { AffiliateDashboard, CtvTiersResponse } from '@tubutree/app-core/api/affiliate';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { phoneFlatCard } from '@/lib/phone-ui';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { progressPct, tierRewardLabel } from './milestone-copy';
 
@@ -13,7 +14,7 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
   const [showAll, setShowAll] = useState(false);
   const { tier } = dash;
   return (
-    <section aria-label="Bậc CTV" className={`${ui.card} p-4`}>
+    <section aria-label="Bậc CTV" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-2xl leading-none" aria-hidden="true">

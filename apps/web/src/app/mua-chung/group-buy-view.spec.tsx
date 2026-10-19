@@ -110,6 +110,11 @@ describe('/mua-chung — danh sách nhóm', () => {
   it('lưới nhóm có cột co được (minmax(0,1fr)) để tên dài cắt bằng dấu ba chấm thay vì đẩy trang tràn ngang ở 320px', async () => {
     mocks.list = [GROUP('g1', { product: { name: 'Một sản phẩm có tên rất dài '.repeat(4), slug: 'sp', thumbnail: null } })];
     const c = await mount();
+    // Mini App: thẻ không viền, chữ body-sm/caption (lớn hơn text-sm/xs cũ).
+    const article = c.querySelector('article')!;
+    expect(article.className).toContain('max-md:border-0');
+    expect(article.className).toContain('max-md:shadow-[var(--elevation-1)]');
+    expect(c.querySelector('article a.font-semibold')!.className).toContain('max-md:text-[length:var(--type-body-sm-size)]');
     const grid = c.querySelector('article')?.parentElement;
     expect(grid?.className).toContain('grid-cols-[minmax(0,1fr)]');
   });

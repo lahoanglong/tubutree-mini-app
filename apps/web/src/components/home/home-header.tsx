@@ -16,9 +16,9 @@ const BUTTON = 'relative grid h-11 w-11 flex-none place-items-center rounded-ful
 
 /**
  * Đầu Trang chủ ở điện thoại, như `HomeHeader` của Mini App: logo (tên trang cho trình đọc màn hình), chuông thông báo, giỏ.
- * Từ md thanh đầu website đảm nhiệm nên khối này ẩn. Chuông chỉ khi đã đăng nhập (trang Thông báo cần phiên).
+ * Từ md thanh đầu website đảm nhiệm nên khối này ẩn. Chuông hiện cả với khách chưa đăng nhập như Mini App; trang Thông báo tự đòi đăng nhập.
  */
-export function HomeHeader({ unreadCount, authed }: { unreadCount: number; authed: boolean }) {
+export function HomeHeader({ unreadCount }: { unreadCount: number }) {
   const { status } = useAuth();
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: status === 'authenticated' });
   const count = cartQ.data?.itemCount ?? 0;
@@ -28,7 +28,7 @@ export function HomeHeader({ unreadCount, authed }: { unreadCount: number; authe
         <Image src={tubuLogo} alt="Tubu Tree" width={83} height={30} priority className="block h-[30px] w-[83px] object-contain" />
       </Link>
       <div className="flex items-center gap-2">
-        {authed && isWebRouteReady('/tai-khoan/thong-bao') && (
+        {isWebRouteReady('/tai-khoan/thong-bao') && (
           <Link href="/tai-khoan/thong-bao" aria-label={unreadCount > 0 ? homeText.notificationsUnread(unreadCount) : homeText.notifications} className={BUTTON}>
             <Bell className="h-5 w-5" aria-hidden="true" />
             <CountBadge count={unreadCount} label={homeText.unreadBadge(unreadCount)} />

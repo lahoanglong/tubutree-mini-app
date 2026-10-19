@@ -17,9 +17,12 @@ export function useIsStorefrontOwner(referralCode: string | null | undefined): b
 
 const guestHref = () => (isWebRouteReady('/san-pham') ? '/san-pham' : '/');
 
+/** Điện thoại: thanh dính đáy như StickyActionBar của Mini App; từ md là nút thường trong thẻ đầu trang. */
+const BAR = 'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg-stone-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]';
+
 function GuestLink({ label }: { label: string }) {
   return (
-    <Link href={guestHref()} className={ui.btnSecondary}>
+    <Link href={guestHref()} className={`${ui.btnSecondary} max-md:w-full max-md:border-forest-600 max-md:bg-forest-600 max-md:text-stone-0 max-md:hover:bg-forest-700`}>
       <ShoppingBag className="mr-1.5 h-4 w-4" aria-hidden="true" />
       {label}
     </Link>
@@ -30,13 +33,21 @@ function GuestLink({ label }: { label: string }) {
 export function StorefrontAction({ slug, title, referralCode }: { slug: string; title: string; referralCode?: string | null }) {
   const owner = useIsStorefrontOwner(referralCode);
   const [shareOpen, setShareOpen] = useState(false);
-  if (!owner) return <GuestLink label="Xem sản phẩm" />;
+  if (!owner) {
+    return (
+      <div className={BAR}>
+        <GuestLink label="Xem sản phẩm" />
+      </div>
+    );
+  }
   return (
     <>
-      <button type="button" className={ui.btnPrimary} onClick={() => setShareOpen(true)}>
-        <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-        Chia sẻ gian hàng
-      </button>
+      <div className={BAR}>
+        <button type="button" className={`${ui.btnPrimary} max-md:w-full`} onClick={() => setShareOpen(true)}>
+          <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Chia sẻ gian hàng
+        </button>
+      </div>
       <StorefrontShareSheet open={shareOpen} onClose={() => setShareOpen(false)} slug={slug} title={title} referralCode={referralCode} />
     </>
   );

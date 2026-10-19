@@ -171,14 +171,21 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page.getByRole('region', { name: 'Bán chạy' }).getByText('Bán chạy nhất')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Mới về vườn' }).getByText('Hàng mới nhất')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Dành cho bạn' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(0);
+    // Điện thoại: chuông hiện cả với khách như Mini App (trang Thông báo tự đòi đăng nhập); máy tính không có chuông cho khách.
+    const phone = (page.viewportSize()?.width ?? 1280) < 768;
+    await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(phone ? 1 : 0);
     expect(api.callsTo('GET', '/me/purchased-items')).toHaveLength(0);
 
     await page.getByRole('button', { name: 'Dầu gội' }).click();
     await expect(page).toHaveURL(/\/san-pham\?category=c-goi$/);
     await page.goBack();
-    await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
-    await expect(page).toHaveURL(/\/san-pham(\?focus=search)?$/);
+    if (phone) {
+      await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
+      await expect(page).toHaveURL(/\/san-pham(\?focus=search)?$/);
+    } else {
+      // Máy tính chỉ giữ ô tìm của thanh đầu website; ô vỏ ở trang chủ chỉ có ở điện thoại.
+      await expect(page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' })).toHaveCount(0);
+    }
   });
 
   test('khách cũ đã đăng nhập: chuông có số chưa đọc, Mua lại gửi POST /cart/items addSource repurchase rồi sang giỏ', async ({ page, api }) => {
@@ -191,6 +198,7 @@ test.describe('Web khách: Trang chủ /', () => {
     });
     mockHome(api);
     mockCustomer(api);
+    api.get('/me/wishlist/ids', []);
     api.post('/cart/items', { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 1 });
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
 
@@ -378,6 +386,7 @@ test.describe('Web: yêu thích', () => {
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
     api.get('/flash-sales/active', []);
     api.get('/me/wishlist', [product(1), product(2)]);
+    api.get('/me/wishlist/ids', [product(1).id, product(2).id]);
     await page.goto('/tai-khoan/yeu-thich');
     await expect(page.getByRole('heading', { level: 1, name: 'Sản phẩm yêu thích' })).toBeVisible();
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();

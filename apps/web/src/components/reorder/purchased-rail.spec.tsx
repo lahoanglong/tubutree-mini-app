@@ -52,6 +52,17 @@ describe('PurchasedRail', () => {
     expect(mocks.get).toHaveBeenCalledWith('/me/purchased-items', { query: { limit: 10 } });
   });
 
+  // D7-29/D7-30: tên SP cao đúng hai dòng (không lòi nửa dòng ba sát giá); từ md các thẻ chia đều bề ngang kệ thay vì dồn 2/3 bên trái.
+  it('tên cao đúng hai dòng; thẻ giãn đều bề ngang từ md', async () => {
+    const c = await mount();
+    const name = c.querySelector('section[aria-label="Mua lại"] p.line-clamp-2')!;
+    expect(name.className).toContain('h-8');
+    expect(name.className).not.toContain('min-h-');
+    const tile = c.querySelector('section[aria-label="Mua lại"] li')!;
+    expect(tile.className).toContain('md:flex-1');
+    expect(tile.className).toContain('md:min-w-44');
+  });
+
   it('mua một lần thì không có nhãn; có giá sale thì hiện giá sale kèm giá gạch', async () => {
     rail = async () => ({ items: [{ ...ITEM, timesBought: 1, salePrice: 59000 }], nextCursor: null });
     const c = await mount();

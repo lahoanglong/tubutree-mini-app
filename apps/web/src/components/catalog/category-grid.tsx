@@ -21,7 +21,7 @@ export function CategoryGrid({
 }) {
   return (
     <section aria-label={title} className="py-2">
-      <h2 className="mb-2 font-display text-lg font-semibold text-stone-900">{title}</h2>
+      <h2 className="mb-2 font-display text-lg font-semibold text-stone-900 max-md:text-base">{title}</h2>
       {isLoading ? (
         <div data-testid="category-grid-loading" aria-hidden="true" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {Array.from({ length: placeholderCount }, (_, i) => (

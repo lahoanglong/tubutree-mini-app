@@ -9,6 +9,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 const auth = vi.hoisted(() => ({ user: null as null | { referralCode: string } }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: auth.user, status: auth.user ? 'authenticated' : 'unauthenticated', initialized: true }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 vi.mock('@/components/storefront-tracker', () => ({
   StorefrontTracker: (props: unknown) => {
     api.tracker.push(props);

@@ -21,7 +21,7 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
   const name = item.variationName ? `${item.productName} · ${item.variationName}` : item.productName;
   const onSale = item.salePrice != null && item.salePrice < item.price;
   return (
-    <li className="flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card sm:w-44">
+    <li className="flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card sm:w-44 md:min-w-44 md:flex-1">
       <Link href={`/san-pham/${encodeURIComponent(item.slug)}`} className="block">
         <div className="aspect-square w-full bg-stone-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -29,7 +29,7 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
         </div>
         <div className="p-2">
           {item.brand && <p className="truncate text-xs text-stone-600">{item.brand}</p>}
-          <p className="line-clamp-2 min-h-[2.5rem] text-xs text-stone-900">{name}</p>
+          <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{name}</p>
           <div className="flex flex-wrap items-baseline gap-x-1.5">
             <span className="text-sm font-bold text-stone-900">{formatVnd(onSale ? item.salePrice! : item.price)}</span>
             {onSale && <span className="text-xs text-stone-500 line-through">{formatVnd(item.price)}</span>}

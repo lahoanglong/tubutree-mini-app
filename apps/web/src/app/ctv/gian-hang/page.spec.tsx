@@ -874,3 +874,43 @@ describe('không vỡ ở màn hẹp', () => {
     expect(container.querySelector('.sticky')).not.toBeNull();
   });
 });
+
+// Kiểu Mini App ở điện thoại (pages/storefront-builder.tsx): nút phụ nền nhạt không viền, ảnh bìa gradient, không nhãn bố cục, thẻ phẳng.
+describe('kiểu Mini App ở điện thoại', () => {
+  it('Sửa hồ sơ / Cấu hình nền xanh nhạt không viền; Gỡ đăng cũng vậy khi đã đăng', async () => {
+    state.sf = storefront({ isPublished: true });
+    mount();
+    await flush();
+    for (const name of ['Sửa hồ sơ', 'Cấu hình', 'Gỡ đăng']) {
+      expect(btn(name).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+      expect(btn(name).className).toContain('max-md:border-0');
+    }
+  });
+
+  it('ảnh bìa thiếu: gradient xanh nhạt, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu được bọc url("...")', async () => {
+    const a = mount();
+    await flush();
+    const cover = a.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!;
+    expect(cover.className).toContain('max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]');
+    expect(Array.from(cover.querySelectorAll('span')).find((s) => s.textContent === 'Thêm ảnh bìa')!.className).toContain('max-md:font-normal');
+    a.unmount();
+    state.sf = storefront({ coverUrl: 'https://cdn.example/c.jpg");background:red;("' });
+    const b = mount();
+    await flush();
+    const style = b.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!.getAttribute('style')!;
+    expect(style).toContain('url("https://cdn.example/c.jpg%22);background:red;(%22")');
+  });
+
+  it('chip bố cục không hiện ở điện thoại; "Nội dung" xanh đậm không gạch chân; thanh dưới nền nhạt, không xuống dòng', async () => {
+    state.sf = storefront({ isPublished: true });
+    mount();
+    await flush();
+    const layout = Array.from(document.querySelectorAll('span')).find((s) => s.textContent === 'Lưới');
+    if (layout) expect(layout.className).toContain('max-md:hidden');
+    const content = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Nội dung');
+    if (content) expect(content.className).toContain('max-md:no-underline');
+    const preview = document.querySelector<HTMLElement>('a[href^="/s/"]')!;
+    expect(preview.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(btn('Chia sẻ gian hàng').className).toContain('max-md:whitespace-nowrap');
+  });
+});
