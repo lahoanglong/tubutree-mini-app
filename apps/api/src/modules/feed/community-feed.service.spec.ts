@@ -802,7 +802,12 @@ describe('CommunityFeedService.addComment (thông báo — non-fatal)', () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'Long' });
     const notify = { notify: jest.fn().mockResolvedValue(undefined) };
     await makeSvc(prisma, undefined, notify).addComment('answerer', 'CUSTOMER', 'p1', 'Bạn tưới ít lại nhé');
-    expect(notify.notify).toHaveBeenCalledWith('author', 'COMMUNITY_NEW_ANSWER', { author: 'Long', title: 'Lá vàng phải làm sao?', post_id: 'p1' });
+    expect(notify.notify).toHaveBeenCalledWith(
+      'author',
+      'COMMUNITY_NEW_ANSWER',
+      { author: 'Long', title: 'Lá vàng phải làm sao?', post_id: 'p1' },
+      { dedupeKey: 'post-answer:p1', dedupeWithinMs: 3_600_000 },
+    );
   });
 
   it('answerer role STAFF → notify COMMUNITY_EXPERT_REPLIED thay vì NEW_ANSWER', async () => {
@@ -850,7 +855,12 @@ describe('CommunityFeedService.addComment (thông báo — non-fatal)', () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: null });
     const notify = { notify: jest.fn().mockResolvedValue(undefined) };
     await makeSvc(prisma, undefined, notify).addComment('answerer', 'CUSTOMER', 'p1', 'trả lời');
-    expect(notify.notify).toHaveBeenCalledWith('author', 'COMMUNITY_NEW_ANSWER', { author: 'Thành viên', title: 'câu hỏi của bạn', post_id: 'p1' });
+    expect(notify.notify).toHaveBeenCalledWith(
+      'author',
+      'COMMUNITY_NEW_ANSWER',
+      { author: 'Thành viên', title: 'câu hỏi của bạn', post_id: 'p1' },
+      { dedupeKey: 'post-answer:p1', dedupeWithinMs: 3_600_000 },
+    );
   });
 
   it('notify ném lỗi → bình luận vẫn tạo thành công (non-fatal)', async () => {
@@ -917,7 +927,34 @@ describe('CommunityFeedService.setBestAnswer (thông báo — non-fatal)', () =>
     (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' });
     const notify = { notify: jest.fn().mockResolvedValue(undefined) };
     await makeSvc(prisma, undefined, notify).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
-    expect(notify.notify).toHaveBeenCalledWith('answerer', 'COMMUNITY_BEST_ANSWER', { post_id: 'p1' });
+    expect(notify.notify).toHaveBeenCalledWith('answerer', 'COMMUNITY_BEST_ANSWER', { post_id: 'p1', reward_note: '' });
+  });
+
+  describe('lời tin chỉ nhắc Điểm Xanh khi điểm đã thật sự vào sổ (D5-03)', () => {
+    const run = async (reward: unknown) => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION', status: 'PUBLISHED' });
+      (prisma.feedComment.findUnique as jest.Mock).mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' });
+      const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+      await makeSvc(prisma, reward, notify).setBestAnswer('author', 'CUSTOMER', 'p1', 'c1');
+      return notify.notify.mock.calls[0][2] as Record<string, string>;
+    };
+    const rewardOf = (rewardBestAnswer: jest.Mock) => ({ rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer });
+
+    it('đã cộng 1.000 điểm → reward_note nêu số điểm', async () => {
+      const data = await run(rewardOf(jest.fn().mockResolvedValue(1000)));
+      expect(data.reward_note).toBe(' Bạn nhận thêm 1.000 Điểm Xanh thưởng.');
+    });
+
+    it('chạm trần ngày (thưởng trả 0) → reward_note rỗng', async () => {
+      const data = await run(rewardOf(jest.fn().mockResolvedValue(0)));
+      expect(data.reward_note).toBe('');
+    });
+
+    it('rewardBestAnswer ném lỗi → reward_note rỗng, tin vẫn gửi', async () => {
+      const data = await run(rewardOf(jest.fn().mockRejectedValue(new Error('boom'))));
+      expect(data.reward_note).toBe('');
+    });
   });
 
   it('chủ bài chọn câu trả lời của chính mình (edge-case) → KHÔNG notify', async () => {
@@ -2248,6 +2285,13 @@ describe('CommunityFeedService.pickWinner — báo người thắng (R2-ENGAGE-1
     });
   });
 
+  it('rewardEventWinner ném lỗi → câu báo KHÔNG hứa thưởng điểm', async () => {
+    const { svc, reward, notify } = setup(5);
+    reward.rewardEventWinner.mockRejectedValue(new Error('boom'));
+    await svc.pickWinner('ev1', 'u1');
+    expect(notify.notify).toHaveBeenCalledWith('u1', 'COMMUNITY_EVENT_WINNER', { title: 'Thi khoe vườn', reward: '' });
+  });
+
   it('sự kiện không có thưởng điểm → câu báo không nhắc điểm', async () => {
     const { svc, notify } = setup(0);
     await svc.pickWinner('ev1', 'u1');
@@ -2874,6 +2918,34 @@ describe('CommunityFeedService — báo tác giả khi bài có tương tác (D4
       await makeSvc(comment, undefined, notify, config).addComment('u2', 'CUSTOMER', 'p1', 'đẹp');
 
       expect(notify.notify).not.toHaveBeenCalled();
+    });
+
+    it('COMMUNITY_NEW_ANSWER dùng chung cửa sổ gộp: đổi 15 phút → dedupeWithinMs 15 phút, khoá theo bài', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...post(), kind: 'QUESTION' });
+      (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'Long' });
+      const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+      const config = makeConfig({ 'community.author_notify_interval_minutes': 15 });
+
+      await makeSvc(prisma, undefined, notify, config).addComment('u2', 'CUSTOMER', 'p1', 'tưới ít lại');
+
+      expect(notify.notify.mock.calls[0][1]).toBe('COMMUNITY_NEW_ANSWER');
+      expect(notify.notify.mock.calls[0][3]).toEqual({ dedupeKey: 'post-answer:p1', dedupeWithinMs: 15 * 60_000 });
+    });
+
+    it('0 (tắt tin thích/bình luận) không nuốt tin câu trả lời: vẫn gửi, không gộp', async () => {
+      const prisma = makePrisma();
+      (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...post(), kind: 'QUESTION' });
+      (prisma.feedComment.create as jest.Mock).mockResolvedValue({ id: 'c1' });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'Long' });
+      const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+      const config = makeConfig({ 'community.author_notify_interval_minutes': 0 });
+
+      await makeSvc(prisma, undefined, notify, config).addComment('u2', 'CUSTOMER', 'p1', 'tưới ít lại');
+
+      expect(notify.notify).toHaveBeenCalledWith('author', 'COMMUNITY_NEW_ANSWER', expect.any(Object));
+      expect(notify.notify.mock.calls[0][3]).toBeUndefined();
     });
 
     it.each([-5, 'abc', null, 1.5, 99999])('giá trị sai %p → dùng mặc định 60 phút, không âm thầm tắt hay mở toang', async (bad) => {
