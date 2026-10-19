@@ -1,4 +1,6 @@
-import { test as base, expect, type Request, type Route } from '@playwright/test';
+import { appendFileSync, mkdirSync, openSync, closeSync } from 'fs';
+import path from 'path';
+import { test as base, expect, type Page, type Request, type Route } from '@playwright/test';
 import type { AuthUser, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
 import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
 import type { CartSummary, PublicConfig } from '../../../miniapp/src/services/shop-api';
@@ -316,11 +318,89 @@ function corsHeaders(reqHeaders: Record<string, string>): Record<string, string>
   };
 }
 
+/** Tên file ảnh từ URL: `/` -> `index`, `/` giữa đường -> `__`, bỏ query trừ `tab`. */
+function visualName(url: string): { pathname: string; name: string } | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  const pathname = u.pathname;
+  let name = pathname.replace(/^\/+|\/+$/g, '').replace(/\//g, '__') || 'index';
+  const tab = u.searchParams.get('tab');
+  if (tab) name += `--tab-${tab}`;
+  return { pathname: pathname + (tab ? `?tab=${tab}` : ''), name: name.replace(/[^\w.\-@%]+/g, '_') };
+}
+
+/** Chụp ảnh màn hình + full-page; mọi lỗi bị nuốt để không làm đỏ test. */
+async function captureVisual(page: Page, dir: string, app: string, url: string, title: string): Promise<void> {
+  try {
+    const parsed = visualName(url);
+    if (!parsed) return;
+    const outDir = path.join(dir, app);
+    mkdirSync(outDir, { recursive: true });
+    const file = path.join(outDir, `${parsed.name}.jpg`);
+    // 'wx' đặt chỗ nguyên tử: nhiều worker song song cùng pathname thì chỉ một bên được chụp.
+    try {
+      closeSync(openSync(file, 'wx'));
+    } catch {
+      return;
+    }
+    await page.waitForLoadState('load', { timeout: 5000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 2500 }).catch(() => {});
+    await page.evaluate(() => document.fonts.ready.then(() => undefined)).catch(() => {});
+    await page
+      .waitForFunction(
+        () => !document.querySelector('[class*="skeleton" i], [class*="shimmer" i], [aria-busy="true"]'),
+        undefined,
+        { timeout: 2500 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: file, type: 'jpeg', quality: 70, scale: 'css' });
+    const height = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
+    const viewport = page.viewportSize() ?? { width: 390, height: 844 };
+    await page.screenshot({
+      path: path.join(outDir, `${parsed.name}.full.jpg`),
+      type: 'jpeg',
+      quality: 70,
+      scale: 'css',
+      fullPage: true,
+      clip: { x: 0, y: 0, width: viewport.width, height: Math.min(Math.max(height, viewport.height), 3000) },
+    });
+    appendFileSync(path.join(outDir, 'index.jsonl'), JSON.stringify({ pathname: parsed.pathname, file: `${parsed.name}.jpg`, test: title }) + '\n');
+  } catch {
+    // ảnh hỏng không được làm đỏ test
+  }
+}
+
 /**
  * `test` dùng cho MỌI spec miniapp. Fixture `api` là auto: kể cả test không nhận `api`, bộ chặn
  * /api/** và host ngoài vẫn được cài trước khi trang mở.
  */
-export const test = base.extend<{ api: MockApi }>({
+export const test = base.extend<{ api: MockApi; visualCapture: void }>({
+  visualCapture: [
+    async ({ page }, use, testInfo) => {
+      const dir = process.env.VISUAL_DIR;
+      if (!dir) {
+        await use();
+        return;
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      const app = testInfo.project.name.includes('Mini App') ? 'miniapp' : 'web';
+      let chain: Promise<void> = Promise.resolve();
+      page.on('framenavigated', (frame) => {
+        if (frame !== page.mainFrame()) return;
+        const url = frame.url();
+        chain = chain.then(() => captureVisual(page, dir, app, url, testInfo.title));
+      });
+      await use();
+      await chain.catch(() => {});
+    },
+    { auto: true },
+  ],
   api: [
     async ({ page }, use, testInfo) => {
       const api = new MockApi();
