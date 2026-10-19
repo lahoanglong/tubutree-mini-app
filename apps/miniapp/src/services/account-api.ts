@@ -2,7 +2,6 @@ import type { GiftRedemptionDTO, RedeemRewardResultDTO, RewardCatalogDTO, Reward
 import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
-import { formatNumber } from '../utils/format';
 import type { LoyaltyRates } from '../utils/loyalty-copy';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
@@ -274,61 +273,8 @@ export function pointsReasonLabel(rawReason: string): string {
   return 'Điều chỉnh Điểm Xanh';
 }
 
-/** dd/mm/yyyy theo giờ Việt Nam (UTC+7) — cùng quy ước với thông báo lỗi của backend. */
-function vnDate(iso: string): string {
-  const v = new Date(new Date(iso).getTime() + 7 * 3600 * 1000);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
-}
-
-/**
- * Giải thích vì sao 1 phần Điểm Xanh chưa đổi quà được (backend redeemReward chặn điểm của đơn còn
- * có thể bị trả hàng). null = không có điểm khoá / API cũ.
- */
-export function lockedPointsNote(
-  ov: Pick<LoyaltyOverview, 'pointsBalance' | 'lockedPoints' | 'lockedReturnPoints' | 'lockedUntil' | 'redeemablePoints'>,
-): string | null {
-  const locked = ov.lockedPoints ?? 0;
-  if (locked <= 0) return null;
-  const ret = ov.lockedReturnPoints ?? 0;
-  const inWindow = locked - ret;
-  const parts: string[] = [];
-  if (inWindow > 0 && ov.lockedUntil) {
-    parts.push(`${formatNumber(inWindow)} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDate(ov.lockedUntil)} (hết hạn đổi/trả hàng)`);
-  }
-  if (ret > 0) parts.push(`${formatNumber(ret)} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
-  if (parts.length === 0) parts.push(`${formatNumber(locked)} điểm từ đơn mới giao chưa dùng được`);
-  const usable = ov.redeemablePoints ?? Math.max(0, ov.pointsBalance - locked);
-  return `Đổi quà dùng được ${formatNumber(usable)} điểm: ${parts.join('; ')}.`;
-}
-
-export type RewardCardState =
-  | { kind: 'redeem' }
-  | { kind: 'soldOut' }
-  | { kind: 'locked' }
-  | { kind: 'need'; missing: number };
-
-/**
- * Trạng thái thẻ quà theo số máy chủ trả. Quà TREE đi qua `buyTree` nên tiêu cả hai lô; "Cần thêm" của nó phải tính
- * cùng tổng với `canRedeem`. Hết hàng đứng trước nên thẻ hết không bao giờ hiện "Cần thêm".
- */
-export function rewardCardState(
-  r: Pick<RewardItemDTO, 'kind' | 'pointsCost' | 'canRedeem' | 'soldOut'>,
-  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'>,
-): RewardCardState {
-  if (r.soldOut) return { kind: 'soldOut' };
-  if (r.canRedeem) return { kind: 'redeem' };
-  const spendable = r.kind === 'TREE' ? c.redeemablePoints + c.pointsConvertedBalance : c.redeemablePoints;
-  const missing = r.pointsCost - spendable;
-  return missing > 0 ? { kind: 'need', missing } : { kind: 'locked' };
-}
-
-/** Nút điểm danh: ghi đúng số điểm của ô hôm nay (ô backend sẽ trả khi bấm). */
-export function checkInView(s: CheckInStatusResponse): { canCheckIn: boolean; buttonLabel: string } {
-  if (s.checkedInToday) return { canCheckIn: false, buttonLabel: 'Đã điểm danh' };
-  const pts = s.todayPoints ?? s.rewards.find((r) => r.isToday)?.points ?? 0;
-  return { canCheckIn: true, buttonLabel: pts > 0 ? `Điểm danh +${pts}` : 'Điểm danh' };
-}
+export { lockedPointsNote, rewardCardState, type RewardCardState } from '@tubutree/app-core/reward-rules';
+export { checkInView, memberCardHint } from '@tubutree/app-core/loyalty-copy';
 
 /**
  * % tiến độ lên hạng kế. Hạng có mốc chi tiêu thì đo theo TIỀN MUA 12 tháng (spent12m, cùng số backend dùng để xét hạng
@@ -348,13 +294,6 @@ export function tierProgressPercent(ov: LoyaltyOverview): number {
   if (next.minPoints <= curMin) return 100;
   const pts = ov.tierPoints ?? ov.pointsBalance;
   return Math.min(100, Math.max(0, Math.round(((pts - curMin) / (next.minPoints - curMin)) * 100)));
-}
-
-/** Lời nhắc dưới QR thẻ thành viên — chỉ hứa tích điểm tại quầy khi backend thật sự bật. */
-export function memberCardHint(card: Pick<MemberCardResponse, 'posCreditEnabled'>): string {
-  return card.posCreditEnabled
-    ? 'Đưa mã QR này cho thu ngân khi thanh toán tại cửa hàng Tubu để được tích Điểm Xanh.'
-    : 'Đây là mã thành viên của bạn. Tích Điểm Xanh khi mua tại cửa hàng chưa được áp dụng — hiện điểm được tích khi mua hàng online.';
 }
 
 // Wallet

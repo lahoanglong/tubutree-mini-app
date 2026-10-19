@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
@@ -57,6 +58,10 @@ import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
 import { useCartKey } from '../services/cart-key';
 
+const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
+
+type PlaceBody = Parameters<typeof placeOrder>[0];
+
 /** `undefined` ẩn mục, `null` hiện dòng tạo yêu cầu, còn lại là yêu cầu PICKUP mở chưa gắn đơn để bật công tắc. */
 export function attachablePickup(me: WasteMeDTO | undefined, pickupFlag: boolean): WasteRequestSummaryDTO | null | undefined {
   if (!pickupFlag || !me || me.blocked || me.shipLockedAt) return undefined;
@@ -110,6 +115,22 @@ export default function CheckoutPage() {
   });
   // Một key cho một nội dung đơn trong phiên checkout: bấm lại sau lỗi mạng/quá thời gian là gửi lại cùng đơn (AD-004).
   const orderKeys = useRef(createOrderKeyRing());
+  // Lần đặt trước chưa rõ kết quả (mạng rớt/5xx): server có thể đã tạo đơn, mà ví/điểm/báo giá/giỏ nạp lại làm body đổi và sinh key
+  // mới, tạo đơn thứ hai. Đóng băng chính yêu cầu: bấm lại gửi nguyên body và key đó cho tới khi có kết quả rõ.
+  const unknownAttempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
+  const attempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
+  // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, điểm dùng được, địa chỉ mặc định
+  // được tính lại từ dữ liệu máy chủ ngay khi nạp lại, không phải khách đổi ý.
+  const choiceRev = useRef(0);
+  // Đơn trả về theo yêu cầu đã gửi (có thể là đơn cũ được gửi lại), không theo radio đang chọn lúc phản hồi về.
+  const sentMethod = useRef('');
+  // Bản sao của cờ đóng băng trong state: giỏ nạp lại thành rỗng thì form và nút Đặt hàng biến mất, màn giỏ trống phải còn lối gửi lại.
+  const [maybePlaced, setMaybePlaced] = useState(false);
+  const [placeNotice, setPlaceNotice] = useState<'unknown' | 'previous' | null>(null);
+  const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
+    choiceRev.current += 1;
+    fn(...args);
+  };
 
   // Guard auth: tránh gọi /cart, /me/addresses khi chưa silent-login xong (deeplink → 401).
   const cart = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: authed });
@@ -231,9 +252,25 @@ export default function CheckoutPage() {
         storefrontSlug: ctvSlug,
         itemIds,
       };
-      return placeOrder(body, orderKeys.current.keyFor(body));
+      const frozen = unknownAttempt.current;
+      if (frozen) {
+        // Dữ liệu suy ra từ giỏ/báo giá có thể đã đổi vì đơn trước đã tạo: gửi lại nguyên yêu cầu cũ để server trả đơn cũ.
+        // Lựa chọn của chính khách đổi thì đây là đơn khác: không gửi, mời kiểm tra Đơn hàng; lần bấm sau đặt đơn mới.
+        if (frozen.rev !== choiceRev.current) {
+          void queryClient.invalidateQueries({ queryKey: ['orders'] });
+          return Promise.reject(new Error(PREVIOUS_MAYBE_PLACED));
+        }
+        sentMethod.current = frozen.body.paymentMethod;
+        return placeOrder(frozen.body, frozen.key);
+      }
+      const key = orderKeys.current.keyFor(body);
+      attempt.current = { body, key, rev: choiceRev.current };
+      sentMethod.current = body.paymentMethod;
+      return placeOrder(body, key);
     },
     onSuccess: (o) => {
+      unknownAttempt.current = null;
+      setMaybePlaced(false);
       haptic('heavy');
       // Nhớ thông tin hoá đơn cho lần đặt sau (đỡ nhập lại).
       if (wantInvoice) {
@@ -255,15 +292,30 @@ export default function CheckoutPage() {
       // Refresh auth store (user.walletBalance / pointsBalance dùng ở header/checkout) để UI đồng bộ.
       void useAuthStore.getState().restore().catch(() => undefined);
       orderKeys.current.reset(); // đơn sau là đơn mới
+      setPlaceNotice(null);
       clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
-      if (paymentToSend === 'BANK_TRANSFER') {
+      if ((o.paymentMethod ?? sentMethod.current) === 'BANK_TRANSFER') {
         navigate(`/bank-payment/${o.code}`, { replace: true });
         return;
       }
       setPlaced(o);
     },
     onError: (e: unknown) => {
+      if (e instanceof Error && e.message === PREVIOUS_MAYBE_PLACED) {
+        unknownAttempt.current = null;
+        setMaybePlaced(false);
+        setPlaceNotice('previous');
+        openSnackbar({ text: PREVIOUS_MAYBE_PLACED, type: 'error' });
+        return;
+      }
+      // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
+      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      const rejectedBeforeService = status !== undefined && [401, 408, 429].includes(status);
+      if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
+      else if (!rejectedBeforeService) unknownAttempt.current = null;
+      setMaybePlaced(unknownAttempt.current !== null);
+      setPlaceNotice(isOutcomeUnknown(e) ? 'unknown' : null);
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi
       // server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) {
@@ -340,6 +392,27 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <ErrorState message={getErrorMessage(err)} onRetry={retry} />
+      </Shell>
+    );
+  }
+
+  if ((cart.data?.items.length ?? 0) === 0 && maybePlaced) {
+    return (
+      <Shell>
+        <EmptyState
+          art="basket"
+          heading="Đơn của bạn có thể đã được tạo"
+          body="Lần đặt trước chưa nhận được phản hồi và giỏ đã trống. Bấm Kiểm tra lại để hệ thống trả đúng đơn đó, không tạo thêm đơn."
+          ctaLabel={order.isPending ? 'Đang kiểm tra…' : 'Kiểm tra lại'}
+          onCta={() => {
+            if (!order.isPending) order.mutate();
+          }}
+        />
+        <Box p={4}>
+          <Button fullWidth variant="secondary" onPress={() => navigate('/orders', { replace: true })}>
+            Đơn của tôi
+          </Button>
+        </Box>
       </Shell>
     );
   }
@@ -440,7 +513,7 @@ export default function CheckoutPage() {
       <AddressSection
         addresses={addresses.data ?? []}
         selectedId={addressId}
-        onSelect={setAddressId}
+        onSelect={chosen(setAddressId)}
       />
 
       {/* ── Sản phẩm sẽ mua ── (liệt kê món; nếu checkout TẬP CON thì chỉ hiện món đã chọn) */}
@@ -590,7 +663,7 @@ export default function CheckoutPage() {
       <ReferralCodeBox
         linkedCode={sfCtx.referralCode}
         appliedCode={referralApplied}
-        onApplied={setReferralApplied}
+        onApplied={chosen(setReferralApplied)}
       />
 
       {/* ── Thanh toán ── */}
@@ -615,7 +688,8 @@ export default function CheckoutPage() {
             onClick={() => {
               if (m.disabled) return;
               haptic('light');
-              setPayment(m.value);
+              // Chạm lại đúng cách đang chọn không phải là đổi lựa chọn: không được mở băng của lần đặt chưa rõ kết quả.
+              if (m.value !== payment) chosen(setPayment)(m.value);
             }}
             flex
             alignItems="center"
@@ -662,6 +736,7 @@ export default function CheckoutPage() {
             onClick={() => {
               if (!pointsUsable) return;
               haptic('light');
+              choiceRev.current += 1;
               setUsePoints((v) => !v);
             }}
             flex
@@ -711,7 +786,10 @@ export default function CheckoutPage() {
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
-        <Input placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
+        <Input placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
+          choiceRev.current += 1;
+          setNote(e.target.value);
+        }} />
       </Box>
 
       {/* ── Thu kèm rác: gắn yêu cầu PICKUP đang mở vào đơn này (spec §12.2 bước 2) ── */}
@@ -735,6 +813,7 @@ export default function CheckoutPage() {
                 className="tubu-press"
                 onClick={() => {
                   haptic('light');
+                  choiceRev.current += 1;
                   setAttachWaste((v) => !v);
                 }}
                 flex
@@ -792,6 +871,7 @@ export default function CheckoutPage() {
           className="tubu-press"
           onClick={() => {
             haptic('light');
+            choiceRev.current += 1;
             setWantInvoice((v) => !v);
           }}
           flex
@@ -810,22 +890,34 @@ export default function CheckoutPage() {
             <Input
               label="Mã số thuế"
               value={invoice.taxCode}
-              onChange={(e) => setInvoice((f) => ({ ...f, taxCode: e.target.value }))}
+              onChange={(e) => {
+                choiceRev.current += 1;
+                setInvoice((f) => ({ ...f, taxCode: e.target.value }));
+              }}
             />
             <Input
               label="Tên công ty"
               value={invoice.companyName}
-              onChange={(e) => setInvoice((f) => ({ ...f, companyName: e.target.value }))}
+              onChange={(e) => {
+                choiceRev.current += 1;
+                setInvoice((f) => ({ ...f, companyName: e.target.value }));
+              }}
             />
             <Input
               label="Địa chỉ xuất hoá đơn"
               value={invoice.address}
-              onChange={(e) => setInvoice((f) => ({ ...f, address: e.target.value }))}
+              onChange={(e) => {
+                choiceRev.current += 1;
+                setInvoice((f) => ({ ...f, address: e.target.value }));
+              }}
             />
             <Input
               label="Email nhận hoá đơn"
               value={invoice.email}
-              onChange={(e) => setInvoice((f) => ({ ...f, email: e.target.value }))}
+              onChange={(e) => {
+                choiceRev.current += 1;
+                setInvoice((f) => ({ ...f, email: e.target.value }));
+              }}
             />
             {!invoiceValid && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
@@ -944,6 +1036,23 @@ export default function CheckoutPage() {
         )}
       </Box>
 
+      {placeNotice && (
+        <Box p={4} data-testid="place-notice" role="alert" style={{ background: 'var(--color-bg-surface)' }}>
+          {placeNotice === 'unknown' ? (
+            <Text size="small">
+              Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem Đơn của tôi.
+            </Text>
+          ) : (
+            <Text size="small">
+              Nếu đơn trước chưa có trong Đơn của tôi, bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
+            </Text>
+          )}
+          <Button size="md" variant="secondary" style={{ marginTop: 8 }} onPress={() => navigate('/orders')}>
+            Đơn của tôi
+          </Button>
+        </Box>
+      )}
+
       {/* ── Sticky CTA ── */}
       <StickyActionBar
         primary={
@@ -1018,6 +1127,7 @@ export default function CheckoutPage() {
         previewParams={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
         previewKey={cartPreviewKey(checkoutItems)}
         onCouponApplied={() => {
+          choiceRev.current += 1;
           void cart.refetch();
           void quote.refetch();
         }}

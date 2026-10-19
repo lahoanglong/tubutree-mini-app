@@ -9,6 +9,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart } from '@/lib/shop-client';
 import SiteSearch from '@/components/site-search';
 import { useCartKey } from '@/lib/cart-key';
+import { readyNavTabs } from '@/lib/web-nav';
 import tubuLogo from '@/assets/tubu-logo.png';
 
 export default function SiteHeader() {
@@ -30,6 +31,15 @@ export default function SiteHeader() {
         <div data-site-search className="order-last flex w-full empty:hidden sm:order-none sm:w-auto sm:max-w-md sm:flex-1">
           <SiteSearch />
         </div>
+
+        {/* Máy tính: cùng các mục gốc với thanh đáy điện thoại (mục chưa làm xong bị ẩn). */}
+        <nav aria-label="Mục chính" data-desktop-nav className="hidden items-center gap-1 text-sm md:flex">
+          {readyNavTabs().map((t) => (
+            <Link key={t.path} href={t.path} className="flex min-h-11 items-center rounded-control px-3 font-medium text-stone-700 transition hover:bg-forest-50 hover:text-forest-700">
+              {t.label}
+            </Link>
+          ))}
+        </nav>
 
         {/* Giỏ hàng & tài khoản */}
         <nav aria-label="Điều hướng chính" className="flex items-center gap-2 text-sm sm:gap-3">

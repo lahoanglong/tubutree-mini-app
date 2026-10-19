@@ -40,6 +40,52 @@ export function isCarrierBooked(o: CarrierFacts): boolean {
   return !!o.shippingCode && o.shippingCode !== o.gomdonOrderId && o.shippingCode !== o.gomdonPartnerCode;
 }
 
+/** Hàng đã rời kho cho hãng vận chuyển (đang giao, hoặc kho đã đặt hãng): từ đây không hủy được nữa. */
+export const isHandedToCarrier = (o: CarrierFacts): boolean => o.status === 'SHIPPING' || isCarrierBooked(o);
+
+/**
+ * Mốc thời gian đầu trang chi tiết đơn. `createdAt` là giờ ĐẶT; đứng cạnh "Đã giao" mà không có nhãn thì khách đọc thành giờ
+ * giao. Đơn đã giao có mốc giao thật thì hiện mốc đó.
+ */
+export function orderStamp(o: { status: string; createdAt: string; deliveredAt?: string | null }): { label: string; at: string } {
+  return o.status === 'DELIVERED' && o.deliveredAt ? { label: 'Giao lúc', at: o.deliveredAt } : { label: 'Đặt lúc', at: o.createdAt };
+}
+
+/**
+ * Dòng Điểm Xanh của đơn theo trạng thái: chưa giao thì "sẽ nhận", đã giao thì "đã cộng", đã hoàn thì đã thu hồi.
+ * `pointsTaken`: số điểm thực thu lại do trả hàng (API `pointsReturnReversed`). API cũ chưa trả thì chỉ có `pointsReversed`
+ * (phần chia chưa kẹp theo số dư) nên ghi "tối đa".
+ */
+export function orderPointsNote(
+  status: string,
+  pointsEarned: number,
+  pointsReversed = 0,
+  pointsTaken?: number,
+): { text: string; tone: 'success' | 'muted' } | null {
+  if (pointsEarned <= 0 || status === 'CANCELLED') return null;
+  const earned = formatCount(pointsEarned);
+  if (status === 'DELIVERED' && pointsTaken !== undefined) {
+    if (pointsTaken > 0) return { text: `Đã cộng +${earned}, đã thu lại ${formatCount(pointsTaken)} điểm do trả hàng`, tone: 'muted' };
+  } else if (status === 'DELIVERED' && pointsReversed > 0) {
+    return { text: `Đã cộng +${earned}, đã thu lại tối đa ${formatCount(pointsReversed)} do trả hàng`, tone: 'muted' };
+  }
+  if (status === 'DELIVERED') return { text: `Đã cộng +${earned} Điểm Xanh vào tài khoản`, tone: 'success' };
+  if (status === 'RETURNED') return { text: 'Điểm Xanh của đơn này đã được thu hồi', tone: 'muted' };
+  return { text: `Nhận +${earned} Điểm Xanh khi giao thành công`, tone: 'success' };
+}
+
+/** Hạn đổi/trả còn mở không, cùng cách tính của API (mốc giao, thiếu thì updatedAt); không có mốc nào thì để API quyết định. */
+export function returnWindowState(
+  o: { deliveredAt?: string | null; updatedAt?: string | null },
+  windowDays: number,
+  now: number = Date.now(),
+): { open: boolean; daysLeft: number } {
+  const base = o.deliveredAt ?? o.updatedAt;
+  if (!base) return { open: true, daysLeft: windowDays };
+  const left = (new Date(base).getTime() + windowDays * 864e5 - now) / 864e5;
+  return left > 0 ? { open: true, daysLeft: Math.ceil(left) } : { open: false, daysLeft: 0 };
+}
+
 /** Nhãn trạng thái cho khách: đơn đã đặt hãng thì nói rõ, khỏi khớp chip "Đang đóng gói" với lời "đã bàn giao". */
 export const buyerOrderStatusLabel = (o: CarrierFacts): string =>
   isCarrierBooked(o) ? 'Đã đặt đơn vị vận chuyển' : orderStatusLabel(o.status);
@@ -149,14 +195,7 @@ export function orderPaymentStatusShort(o: PaymentView, refunds?: readonly Refun
 }
 
 export const orderDetailHref = (code: string): string => `/tai-khoan/don-hang/${encodeURIComponent(code)}`;
-
-/**
- * Khớp điều kiện của miniapp (`canPayNow`) và của API: GET /payments/bank-qr từ chối đơn đã hủy/trả,
- * nên khung QR chỉ dựng cho đơn còn chờ thanh toán. Hàng đã bàn giao vận chuyển mà chưa nhận tiền (`manualHandling`) thì CSKH
- * thống nhất cách trả với khách — không mời trả thêm bằng QR để khách không trả hai lần (R5-SYNC-1).
- */
-export const canPayAgain = (o: { status: string; paymentMethod: string; manualHandling?: boolean | null }): boolean =>
-  o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER' && !o.manualHandling;
+export const bankPaymentHref = (code: string): string => `/thanh-toan/chuyen-khoan/${encodeURIComponent(code)}`;
 
 export function addressLine(
   a: { street?: string | null; ward?: string | null; district?: string | null; province?: string | null } | null | undefined,

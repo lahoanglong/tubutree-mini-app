@@ -19,7 +19,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  useParams: () => ({ code: 'TB-77' }),
+  usePathname: () => '/tai-khoan/don-hang',
+  useParams: () => ({ code: 'TB-77', id: 'p1' }),
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -40,7 +41,39 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 import CartPage from './gio-hang/page';
 import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
+import BankPaymentPage from './thanh-toan/chuyen-khoan/[code]/page';
+import OrdersPage from './tai-khoan/don-hang/page';
 import OrderDetailPage from './tai-khoan/don-hang/[code]/page';
+import EditProfilePage from './tai-khoan/ho-so/page';
+import SettingsPage from './tai-khoan/cai-dat/page';
+import NotificationsPage from './tai-khoan/thong-bao/page';
+import LoyaltyPage from './tai-khoan/diem-xanh/page';
+import WalletPage from './tai-khoan/vi-tubu/page';
+import RewardsPage from './kho-qua/page';
+import RewardsMinePage from './kho-qua/cua-toi/page';
+import GamePage from './vuon-xanh/page';
+import AdvisorPage from './tu-van/page';
+import CashbackPage from './hoan-tien/page';
+import WishlistPage from './tai-khoan/yeu-thich/page';
+import CtvPage from './ctv/page';
+import CtvStorefrontPage from './ctv/gian-hang/page';
+import LeaderboardPage from './cong-dong/xep-hang/page';
+import EventsPage from './cong-dong/su-kien/page';
+import PostDetailPage from './cong-dong/[id]/page';
+import { CourseList } from './hoc-vien/course-list';
+import { CourseDetailView } from './hoc-vien/[courseId]/course-detail';
+import DealerPage from './dai-ly/page';
+import StaffPage from './nhan-vien/page';
+import MyPayrollPage from './nhan-vien/bang-luong/page';
+import BrandOwnerPage from './chu-thuong-hieu/page';
+import RecyclePage from './doi-rac/page';
+import RecycleRequestsPage from './doi-rac/yeu-cau/page';
+import RecycleNewPage from './doi-rac/tao/page';
+import RecyclePointsPage from './doi-rac/diem-nhan/page';
+import RecycleRequestDetailPage from './doi-rac/yeu-cau/[id]/page';
+import RecycleEditPage from './doi-rac/yeu-cau/[id]/sua/page';
+import RecycleDonePage from './doi-rac/xong/[id]/page';
+import RecycleDeskPage from './doi-rac/quay/page';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -59,12 +92,62 @@ afterEach(() => {
   mounted = [];
 });
 
-const PAGES: [string, () => JSX.Element, string][] = [
+type PageCase = [string, () => JSX.Element, string];
+const CORE: PageCase[] = [
   ['/gio-hang', () => <CartPage />, '/gio-hang'],
   ['/thanh-toan', () => <CheckoutPage />, '/thanh-toan'],
   ['/tai-khoan', () => <AccountPage />, '/tai-khoan'],
   ['/tai-khoan/don-hang/[code]', () => <OrderDetailPage />, '/tai-khoan/don-hang/TB-77'],
 ];
+const SHOP: PageCase[] = [['/tai-khoan/yeu-thich', () => <WishlistPage />, '/tai-khoan/yeu-thich']];
+const ORDER: PageCase[] = [
+  ['/thanh-toan/chuyen-khoan/[code]', () => <BankPaymentPage />, '/thanh-toan/chuyen-khoan/TB-77'],
+  ['/tai-khoan/don-hang', () => <OrdersPage />, '/tai-khoan/don-hang'],
+];
+const ACCOUNT: PageCase[] = [
+  ['/tai-khoan/ho-so', () => <EditProfilePage />, '/tai-khoan/ho-so'],
+  ['/tai-khoan/cai-dat', () => <SettingsPage />, '/tai-khoan/cai-dat'],
+  ['/tai-khoan/thong-bao', () => <NotificationsPage />, '/tai-khoan/thong-bao'],
+];
+const LOYALTY: PageCase[] = [
+  ['/tai-khoan/diem-xanh', () => <LoyaltyPage />, '/tai-khoan/diem-xanh'],
+  ['/tai-khoan/vi-tubu', () => <WalletPage />, '/tai-khoan/vi-tubu'],
+  ['/kho-qua', () => <RewardsPage />, '/kho-qua'],
+  ['/kho-qua/cua-toi', () => <RewardsMinePage />, '/kho-qua/cua-toi'],
+  ['/hoan-tien', () => <CashbackPage />, '/hoan-tien'],
+];
+const COMMUNITY: PageCase[] = [
+  ['/cong-dong/xep-hang', () => <LeaderboardPage />, '/cong-dong/xep-hang'],
+  ['/cong-dong/su-kien', () => <EventsPage />, '/cong-dong/su-kien'],
+  ['/cong-dong/[id]', () => <PostDetailPage />, '/cong-dong/p1'],
+  ['/hoc-vien', () => <CourseList />, '/hoc-vien'],
+  ['/hoc-vien/[courseId]', () => <CourseDetailView courseId="c1" />, '/hoc-vien/c1'],
+];
+const AFFILIATE: PageCase[] = [
+  ['/ctv', () => <CtvPage />, '/ctv'],
+  ['/ctv/gian-hang', () => <CtvStorefrontPage />, '/ctv/gian-hang'],
+];
+const GAME: PageCase[] = [
+  ['/vuon-xanh', () => <GamePage />, '/vuon-xanh'],
+  ['/tu-van', () => <AdvisorPage />, '/tu-van'],
+];
+const PRO: PageCase[] = [
+  ['/dai-ly', () => <DealerPage />, '/dai-ly'],
+  ['/nhan-vien', () => <StaffPage />, '/nhan-vien'],
+  ['/nhan-vien/bang-luong', () => <MyPayrollPage />, '/nhan-vien/bang-luong'],
+  ['/chu-thuong-hieu', () => <BrandOwnerPage />, '/chu-thuong-hieu'],
+];
+const RECYCLE: PageCase[] = [
+  ['/doi-rac', () => <RecyclePage />, '/doi-rac'],
+  ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />, '/doi-rac/yeu-cau'],
+  ['/doi-rac/tao', () => <RecycleNewPage />, '/doi-rac/tao'],
+  ['/doi-rac/diem-nhan', () => <RecyclePointsPage />, '/doi-rac/tao'],
+  ['/doi-rac/yeu-cau/[id]', () => <RecycleRequestDetailPage params={{ id: 'req-77' }} />, '/doi-rac/yeu-cau/req-77'],
+  ['/doi-rac/yeu-cau/[id]/sua', () => <RecycleEditPage params={{ id: 'req-77' }} />, '/doi-rac/yeu-cau/req-77/sua'],
+  ['/doi-rac/xong/[id]', () => <RecycleDonePage params={{ id: 'req-77' }} />, '/doi-rac/xong/req-77'],
+  ['/doi-rac/quay', () => <RecycleDeskPage />, '/doi-rac/quay'],
+];
+const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 describe.each(PAGES)('khách chưa đăng nhập mở %s', (_name, page, returnTo) => {
   it('thấy nút đăng nhập Zalo mang theo returnTo, không kẹt ở "Đang tải…"', async () => {

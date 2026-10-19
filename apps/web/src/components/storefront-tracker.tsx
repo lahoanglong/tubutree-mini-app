@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { rememberReferral, rememberStorefront, getStorefrontContext } from '@/lib/storefront-context';
+import { rememberEntryLink, rememberStorefront, getStorefrontContext, ctvSlugFor } from '@/lib/storefront-context';
 import { recordReferralTouch } from '@/lib/shop-client';
 
 /**
@@ -35,7 +35,7 @@ export function StorefrontTracker({ slug, type, referralCode }: { slug: string; 
 }
 
 /**
- * Bắt `?ref=` trên BẤT KỲ trang nào (link CTV chia sẻ trỏ thẳng tới trang chủ/trang sản phẩm,
+ * Bắt `?ref=` và `?s=` trên BẤT KỲ trang nào (link CTV chia sẻ trỏ thẳng tới trang chủ/trang sản phẩm,
  * không qua /s/), và ghi "chạm giới thiệu" lên server.
  *
  * Chỉ nhớ vào sessionStorage là chưa đủ: khách mở link, xem rồi đóng tab, hôm sau mở tab mới và
@@ -46,15 +46,22 @@ export function ReferralCapture() {
   const { status } = useAuth();
 
   useEffect(() => {
-    const ref = new URLSearchParams(window.location.search).get('ref');
-    if (ref) rememberReferral(ref);
+    const params = new URLSearchParams(window.location.search);
+    rememberEntryLink(params.get('s'), params.get('ref'));
   }, []);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
-    const { referralCode } = getStorefrontContext();
+    const ctx = getStorefrontContext();
+    // Link gian hàng CTV không kèm ref thì mã giới thiệu chính là slug (như Mini App); gian hàng nhãn thì không.
+    const referralCode = ctx.referralCode ?? (ctx.kind === 'CTV' ? ctx.slug : null);
     if (!referralCode) return;
-    void recordReferralTouch({ referralCode }).catch(() => undefined);
+    const storefrontSlug = ctvSlugFor(ctx);
+    void recordReferralTouch({
+      referralCode,
+      ...(storefrontSlug ? { storefrontSlug } : {}),
+      kind: ctx.kind === null || ctx.kind === 'CTV' ? 'ctv' : 'brand',
+    }).catch(() => undefined);
   }, [status]);
 
   return null;

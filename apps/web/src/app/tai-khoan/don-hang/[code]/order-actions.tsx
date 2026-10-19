@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, RotateCcw, XCircle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -10,12 +9,11 @@ import {
   fetchMyRefunds,
   fetchMyReturns,
   formatVnd,
-  repurchaseOrder,
+  getPublicConfig,
   type OrderDetailDTO,
-  type RepurchaseResult,
   type ReturnRequestDTO,
 } from '@/lib/shop-client';
-import { canCancelOrder, isReorderable } from '@/lib/order-view';
+import { canCancelOrder, isReorderable, returnWindowState } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import {
@@ -32,15 +30,12 @@ import {
   type RefundBankInput,
   type RefundMethodChoice,
 } from '@/lib/refund-rules';
+import type { OrderItemView } from '@tubutree/app-core/api/orders';
+import { ReorderSheet } from '@/components/reorder/reorder-sheet';
+import { orderReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { RefundDestinationControl } from './order-refunds';
 import { ReturnRequestForm } from './return-request-form';
-
-/** Số dòng của lượt mua lại không thêm được (hết hàng/ngừng bán) hoặc chỉ thêm được một phần. */
-function repurchaseSummary(r: RepurchaseResult): { added: number; short: number } {
-  const added = r.results.filter((x) => x.addedQuantity > 0).length;
-  return { added, short: r.results.filter((x) => x.status !== 'added').length };
-}
 
 /**
  * Việc khách tự làm được trên đơn: hủy (khi còn kịp, đơn đã trả tiền thì chọn nơi nhận tiền hoàn), mua lại (đơn đã kết thúc),
@@ -48,13 +43,13 @@ function repurchaseSummary(r: RepurchaseResult): { added: number; short: number 
  * Quy tắc chỉ quyết định việc BÀY nút nào; BE vẫn kiểm lại và lời từ chối của BE (quá hạn đổi/trả, đã có yêu cầu…) hiện nguyên văn.
  */
 export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; userId: string | null | undefined }) {
-  const router = useRouter();
   const qc = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnKey, setReturnKey] = useState(0);
   const [returnSent, setReturnSent] = useState(false);
-  const [partial, setPartial] = useState<{ added: number; short: number } | null>(null);
+  // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target.
+  const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
   const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [cancelTouched, setCancelTouched] = useState(false);
@@ -83,6 +78,9 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
   );
+  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000, enabled: delivered, retry: 0 });
+  const returnDays = configQ.data?.returnWindowDays ?? 7;
+  const returnWindow = returnWindowState(o, returnDays);
   const canRequestMore =
     delivered && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
 
@@ -99,17 +97,6 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
       setConfirmCancel(false);
       // BE từ chối vì đơn vừa bàn giao vận chuyển (và đã đồng bộ trạng thái mới): tải lại để ẩn nút hủy.
       void qc.invalidateQueries({ queryKey: ['order', o.code] });
-    },
-  });
-
-  const repurchase = useMutation({
-    mutationFn: () => repurchaseOrder(o.code),
-    onSuccess: (res) => {
-      // Giỏ trong phản hồi không kèm gian hàng (không có combo): tải lại giỏ thay vì ghi số cũ vào cache.
-      void qc.invalidateQueries({ queryKey: ['cart'] });
-      const summary = repurchaseSummary(res);
-      if (summary.added > 0 && summary.short === 0) router.push('/gio-hang');
-      else setPartial(summary);
     },
   });
 
@@ -210,11 +197,11 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
             </button>
           )}
           {canReorder && (
-            <button type="button" onClick={() => repurchase.mutate()} disabled={repurchase.isPending} className={ui.btnPrimary}>
-              {repurchase.isPending ? 'Đang thêm vào giỏ…' : 'Mua lại đơn này'}
+            <button type="button" onClick={() => setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }))} className={ui.btnPrimary}>
+              Mua lại đơn này
             </button>
           )}
-          {canRequestMore && !returnOpen && !returnSent && (
+          {canRequestMore && returnWindow.open && !returnOpen && !returnSent && (
             <button
               type="button"
               onClick={() => {
@@ -230,26 +217,10 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
         </div>
       )}
 
-      {repurchase.isError && (
-        <p role="alert" className={`mt-3 ${ui.error}`}>
-          {repurchase.error instanceof Error ? repurchase.error.message : 'Không thêm được vào giỏ.'}
+      {canRequestMore && !returnWindow.open && (
+        <p className="mt-3 rounded-control bg-stone-50 p-3 text-xs text-stone-700">
+          {`Đã quá hạn đổi/trả (${returnDays} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.`}
         </p>
-      )}
-      {partial && (
-        <div role="status" className="mt-3 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
-          {partial.added > 0 ? (
-            <p>
-              Đã thêm {partial.added} sản phẩm vào giỏ. {partial.short} sản phẩm đã hết hàng, ngừng bán hoặc chỉ còn một phần nên chưa thêm đủ.
-            </p>
-          ) : (
-            <p>Các sản phẩm trong đơn này hiện đã hết hàng hoặc ngừng bán nên chưa thêm được vào giỏ.</p>
-          )}
-          {partial.added > 0 && (
-            <Link href="/gio-hang" className="mt-1 inline-flex min-h-11 items-center font-semibold underline">
-              Xem giỏ hàng
-            </Link>
-          )}
-        </div>
       )}
 
       {showsReturns && orderReturns.map((r) => (
@@ -273,6 +244,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
           }}
         />
       )}
+      <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />
     </section>
   );
 }

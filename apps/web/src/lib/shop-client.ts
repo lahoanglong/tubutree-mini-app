@@ -20,6 +20,8 @@ export interface CartLine {
   fulfiller?: LineFulfiller;
   /** Dòng đang tính giá Giờ vàng (`unitPrice` đã là giá Giờ vàng). API cũ chưa trả. */
   isFlash?: boolean;
+  /** Phần trăm suất Giờ vàng đã bán (chỉ dòng Giờ vàng). */
+  soldPct?: number | null;
   /** Số lượng vượt giới hạn mua Giờ vàng nên dòng tính giá thường: câu giải thích từ server. */
   flashLimitNotice?: string | null;
 }
@@ -135,6 +137,8 @@ export interface OrderDTO {
    * không nút hủy, chỉ câu "Tubu đang xử lý đơn này". API cũ chưa trả.
    */
   manualHandling?: boolean;
+  /** Hạn chuyển khoản của đơn đang chờ tiền (ISO), API danh sách đơn đã trả sẵn. */
+  paymentDeadline?: string | null;
   /** Thu gom vật liệu tái chế (vận đơn đổi hàng Gomdon/BestExpress) — xem lib/recycling.ts. */
   hasRecyclingPickup?: boolean;
   recyclingNote?: string | null;
@@ -152,6 +156,10 @@ export interface OrderDTO {
 /** GET /config/public — chỉ những giá trị vốn đã hiển thị công khai (xem system-config.controller.ts). */
 export interface PublicConfig {
   freeshipThreshold?: number;
+  /** Số ngày được đổi/trả kể từ khi nhận hàng; API cũ chưa trả thì dùng 7 như Mini App. */
+  returnWindowDays?: number;
+  /** Cờ chương trình đổi rác do máy chủ bật; API cũ chưa trả thì coi như tắt. */
+  waste?: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 
@@ -335,6 +343,8 @@ export const placeOrder = (
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;
+    /** Yêu cầu thu rác PICKUP đang mở khách bật "Thu kèm rác" để gắn vào đơn này. */
+    wasteRequestId?: string;
   },
   idempotencyKey: string,
 ) =>
@@ -379,6 +389,13 @@ export interface OrderDetailDTO extends OrderDTO {
   placedForCustomer?: boolean | null;
   referrerUserId?: string | null;
   deliveredAt?: string | null;
+  updatedAt?: string | null;
+  /** Điểm Xanh đơn này sẽ/đã cộng, và số điểm thực thu lại do trả hàng (API cũ chưa trả `pointsReturnReversed`). */
+  pointsEarned?: number;
+  pointsReturnReversed?: number;
+  /** Hoá đơn VAT: NOT_REQUESTED | REQUESTED | ISSUED | lỗi. */
+  invoiceStatus?: string | null;
+  invoiceUrl?: string | null;
   /** Mốc hành trình do hãng vận chuyển ghi (Pancake/Gomdon webhook), cũ → mới. */
   shippingHistory?: ShippingEvent[] | null;
   shippingStatus?: string | null;
@@ -415,6 +432,8 @@ export interface OrderDetailDTO extends OrderDTO {
     productSlug?: string | null;
     /** Đánh giá khách đã viết cho sản phẩm của dòng này ở chính đơn này (mỗi lần mua một đánh giá). */
     reviewId?: string | null;
+    /** Phần đại lý đặt vượt tồn, chờ nhập hàng chưa xuất kho. */
+    backorderedQty?: number;
     /** Dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá). */
     reviewable?: boolean;
   })[];
@@ -452,6 +471,8 @@ export interface ReturnRequestDTO {
   refundAmount?: number | null;
   shippingRefund?: number;
   pointsRefunded?: number;
+  /** Điểm Xanh đã cộng từ đơn mà phiếu này thu lại khi duyệt. */
+  pointsReversed?: number;
   fullReturn?: boolean;
   receivedAt?: string | null;
   items?: { orderItemId: string; quantity: number; refundAmount: number }[];

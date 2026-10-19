@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   params: { code: 'TB-9' } as Record<string, string>,
   order: null as unknown,
   orderCalls: [] as string[],
-  qr: { paymentStatus: 'UNPAID' as string, calls: 0 },
+  qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined },
   support: { hotline: '0984 606 774', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -36,7 +36,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getBankQr: async () => {
     mocks.qr.calls += 1;
     return {
-      orderCode: 'TB-9', amount: 330000, paymentStatus: mocks.qr.paymentStatus,
+      orderCode: 'TB-9', amount: 330000, paymentStatus: mocks.qr.paymentStatus, paymentDeadline: mocks.qr.paymentDeadline,
       bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
       memo: 'TB-9', qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png',
     };
@@ -88,7 +88,7 @@ beforeEach(() => {
   mocks.params = { code: 'TB-9' };
   mocks.order = structuredClone(ORDER);
   mocks.orderCalls = [];
-  mocks.qr = { paymentStatus: 'UNPAID', calls: 0 };
+  mocks.qr = { paymentStatus: 'UNPAID', calls: 0, paymentDeadline: undefined };
   mocks.support = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
 });
 afterEach(() => {
@@ -252,6 +252,59 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).not.toContain('Thanh toán trước');
     expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
     expect(buttons(container).map((b) => b.textContent)).not.toContain('Hủy đơn');
+  });
+
+  it('chờ chuyển khoản mà đã quá hạn thanh toán: không dựng QR, không mời trả, vẫn ghi hạn và "quá hạn đơn sẽ tự huỷ" như Mini App', async () => {
+    mocks.order = { ...ORDER, paymentDeadline: '2000-01-01T00:00:00Z' };
+    const { container } = await mount();
+    expect(mocks.qr.calls).toBe(0);
+    expect(container.querySelector('img[alt="VietQR"]')).toBeNull();
+    expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
+    expect(container.textContent).toContain('Thanh toán trước');
+    expect(container.textContent).toContain('quá hạn đơn sẽ tự huỷ');
+  });
+
+  it('chờ chuyển khoản còn hạn: dựng QR như cũ', async () => {
+    mocks.order = { ...ORDER, paymentDeadline: '2999-01-01T00:00:00Z' };
+    const { container } = await mount();
+    expect(mocks.qr.calls).toBeGreaterThan(0);
+    expect(container.textContent).toContain('Đơn đang chờ bạn chuyển khoản');
+  });
+
+  it('QR đã hiện lúc còn hạn thì ở lại khi trang dựng lại sau hạn, để lần dò thấy PAID vẫn báo "Đã nhận thanh toán"', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-19T11:59:50Z'));
+      mocks.order = { ...ORDER, paymentDeadline: '2026-10-19T12:00:00Z' };
+      mocks.qr.paymentDeadline = '2026-10-19T12:00:00Z';
+      let bump = () => {};
+      const Host = () => {
+        const [, set] = useState(0);
+        bump = () => set((n) => n + 1);
+        return <OrderDetailPage />;
+      };
+      const r = render(<Host />);
+      mounted.push(r);
+      await flush(8);
+      const { container } = r;
+      expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
+
+      vi.setSystemTime(new Date('2026-10-19T12:00:05Z'));
+      await act(async () => bump());
+      await flush(4);
+      expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
+      expect((container.textContent ?? '').split('quá hạn đơn sẽ tự huỷ').length - 1).toBe(1);
+
+      mocks.qr.paymentStatus = 'PAID';
+      const check = buttons(container).find((b) => (b.textContent ?? '').includes('kiểm tra lại'))!;
+      await act(async () => {
+        check.click();
+      });
+      await flush(12);
+      expect(container.textContent).toContain('Đã nhận thanh toán!');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('đơn đã hủy: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã hủy)', async () => {

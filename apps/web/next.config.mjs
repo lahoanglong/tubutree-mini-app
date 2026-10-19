@@ -1,5 +1,11 @@
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { buildCatalogRedirects } from './src/lib/catalog-redirects.mjs';
+import { buildMiniappRedirects } from './src/lib/miniapp-redirects.mjs';
+
+const require = createRequire(import.meta.url);
+const routeMap = require('@tubutree/app-core/route-map.json');
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,7 +50,7 @@ const cspReportOnly = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''}`,
+  `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''} https://api.cloudinary.com`,
 ].join('; ');
 
 /** @type {import('next').NextConfig} */
@@ -62,9 +68,14 @@ const nextConfig = {
     ...(standalone ? { outputFileTracingRoot: path.join(dirname, '../../') } : {}),
   },
   ...(standalone ? { output: 'standalone' } : {}),
-  transpilePackages: ['@tubutree/shared-types'],
+  transpilePackages: ['@tubutree/shared-types', '@tubutree/app-core'],
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api',
+  },
+  // Link cũ/đường dẫn Mini App dán lên web đi tới route web tương ứng (307, Next giữ query của đường vào).
+  async redirects() {
+    // Danh mục sản phẩm đã chuyển từ "/" sang /san-pham: link cũ "/?q|category|brand" đi theo (xem catalog-redirects.mjs).
+    return [...buildCatalogRedirects(), ...buildMiniappRedirects(routeMap.routes)];
   },
   // API đã có `helmet()` (apps/api/src/main.ts) nhưng web (trang khách hàng/admin thấy
   // trực tiếp) trước giờ không có header bảo mật nào — Caddy chỉ reverse-proxy thuần,

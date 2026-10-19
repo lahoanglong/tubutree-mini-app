@@ -44,6 +44,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Parity Mini App - web
+        run: pnpm lint:parity
+
       - name: Test
         # Unit test (loại @tubutree/e2e — Playwright cần DB + dev server, chạy riêng ở e2e.yml).
         run: pnpm test:ci

@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 // Ngoại lệ có chủ ý, static-scan vẫn đếm nhưng không phải icon/màu giao diện: `merchant/theme-colors.ts` là dữ liệu
 // màu lưu ở Storefront.themeColor (không nằm trong MIGRATED); dấu ✓ trong <title> của generateMetadata brand (PARTIAL
 // bên dưới); placeholder 🌿 của Content Kit ghi bằng escape \u{1F33F} vì là chữ mẫu cho CTV, không phải icon.
-const MIGRATED = [
+const CORE: string[] = [
   'app/admin/layout.tsx',
   'app/merchant/layout.tsx',
   'app/merchant/page.tsx',
@@ -58,6 +58,46 @@ const MIGRATED = [
   'components/admin/waste-gifts-section.tsx',
   'components/admin/waste-config-card.tsx',
 ];
+const SHOP: string[] = [];
+const ORDER: string[] = [];
+const ACCOUNT: string[] = [];
+const LOYALTY: string[] = [];
+const COMMUNITY: string[] = [];
+const AFFILIATE: string[] = [];
+const GAME: string[] = [];
+const PRO: string[] = [
+  'app/dai-ly/page.tsx',
+  'components/dealer/dealer-shell.tsx',
+  'components/dealer/dealer-apply.tsx',
+  'components/dealer/dealer-hub.tsx',
+  'components/dealer/price-tab.tsx',
+  'components/dealer/orders-tab.tsx',
+  'components/dealer/credit-tab.tsx',
+  'components/dealer/report-tab.tsx',
+  'components/dealer/rewards-card.tsx',
+  'lib/dealer-view.ts',
+  'app/nhan-vien/page.tsx',
+  'components/staff/staff-shell.tsx',
+  'components/staff/staff-hub.tsx',
+  'components/staff/today-card.tsx',
+  'components/staff/shift-sheets.tsx',
+  'app/nhan-vien/bang-luong/page.tsx',
+  'components/staff/payroll-hub.tsx',
+  'lib/week.ts',
+  'app/chu-thuong-hieu/page.tsx',
+  'components/brand-owner/brand-owner-hub.tsx',
+  'components/brand-owner/profile-tab.tsx',
+  'components/brand-owner/sales-tab.tsx',
+  'components/brand-owner/brand-image-field.tsx',
+  'components/brand-owner/view-brand-link.tsx',
+  'lib/brand-owner-view.ts',
+  'components/admin/staff-roster-tab.tsx',
+  'components/admin/shift-approval-tab.tsx',
+  'components/admin/payroll-admin-tab.tsx',
+  'components/admin/payroll-csv.ts',
+];
+const RECYCLE: string[] = ['app/doi-rac/quay/page.tsx', 'app/doi-rac/quay/layout.tsx', 'components/recycle/recycle-desk.tsx', 'components/recycle/recycle-desk-perk.tsx'];
+const MIGRATED = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
 

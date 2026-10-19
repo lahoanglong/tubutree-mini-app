@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
+import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { SITE_URL } from '@/lib/site';
+import { publicStaticRoutes } from '@/lib/route-map';
 import { getProducts, getStorefrontList } from '@/lib/api';
 
 export const revalidate = 3600;
@@ -22,6 +24,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1 },
   ];
+  for (const route of publicStaticRoutes()) {
+    if (route === '/') continue;
+    // Cùng cờ với robots noindex của layout /hoan-tien: không nộp URL mà chính trang đánh dấu noindex.
+    if (route === '/hoan-tien' && !CASHBACK_ENABLED) continue;
+    base.push({ url: `${SITE_URL}${route}`, changeFrequency: 'weekly', priority: 0.6 });
+  }
   // Không bắt lỗi: nếu nuốt lỗi rồi trả sitemap rút gọn thì ISR sẽ giữ bản thiếu cả giờ; để lỗi nổi lên
   // thì Next giữ sitemap đầy đủ lần trước. Lúc build API chưa chạy đã được getProducts/getStorefrontList xử lý.
   for (let page = 1; page <= MAX_PRODUCT_PAGES; page++) {

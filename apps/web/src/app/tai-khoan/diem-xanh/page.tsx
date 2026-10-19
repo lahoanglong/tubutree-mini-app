@@ -1,100 +1,576 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth-context';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CalendarCheck, Check, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout } from 'lucide-react';
+import { postDailyCheckIn, type CheckInStatusResponse, type CouponDTO } from '@tubutree/app-core/api/loyalty';
+import { checkInQuery, couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { getMe, getMyPointsLock, getPointsTransactions } from '@/lib/shop-client';
+import { coreHttp } from '@/lib/core-http';
+import { isWebRouteReady } from '@/lib/route-map';
 import { formatCount, lockedPointsLines, pointsSummary } from '@/lib/checkout-points';
 import { pointsReasonDetail } from '@/lib/ledger-labels';
 import { formatDate } from '@/lib/format-date';
+import { formatVnd } from '@/lib/format-vnd';
+import { autoCouponName } from '@/lib/coupon-name';
+import {
+  checkInView,
+  earnRuleLine,
+  expiringPointsNote,
+  memberCardHint,
+  moneyShort,
+  pointExpiryPolicyNote,
+  pointsToSpend,
+  redeemRuleLine,
+  tierProgressPercent,
+  tierThresholdLabel,
+} from '@/lib/loyalty-copy';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet } from '@/components/ui/sheet';
+import { Badge } from '@/components/ui/badge';
+import { ProgressBar } from '@/components/ui/progress-bar';
+import { QrCode } from '@/components/ui/qr-code';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 
-const TITLE = 'Lịch sử Điểm Xanh';
+const TITLE = 'Hạng thành viên & Điểm Xanh';
+const TIER_KEY = 'tubu_last_tier_min_v2';
 
-export default function PointsHistoryPage() {
+const TIER_STYLE: Record<string, { emoji: string; bg: string; fg: string }> = {
+  'Mầm Xanh': { emoji: '🌱', bg: 'bg-sage-50', fg: 'text-sage-700' },
+  'Lộc Biếc': { emoji: '🌿', bg: 'bg-sage-100', fg: 'text-sage-600' },
+  'Đại Thụ': { emoji: '🌳', bg: 'bg-forest-50', fg: 'text-forest-700' },
+  'Cổ Thụ': { emoji: '🌲', bg: 'bg-stone-100', fg: 'text-forest-900' },
+};
+const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
+
+const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+
+function couponLabel(c: CouponDTO): string {
+  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
+  return `Giảm ${formatVnd(c.value)}`;
+}
+
+export default function LoyaltyPage() {
   const phase = useAuthPhase();
-  const { user } = useAuth();
   const authed = phase === 'authenticated';
-  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: authed, refetchOnWindowFocus: true });
-  // Chỉ là ghi chú phụ: lỗi hay API cũ thì không hiện, không chặn số dư và lịch sử.
-  const lockQ = useQuery({ queryKey: ['points-lock'], queryFn: getMyPointsLock, enabled: authed, retry: false });
-  const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
+  const qc = useQueryClient();
+  const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed, refetchOnWindowFocus: true });
+  const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
+  const txnQ = useQuery({ ...pointsTxnQuery(coreHttp), enabled: authed });
+  const checkInQ = useQuery({ ...checkInQuery(coreHttp), enabled: authed });
+  const cardQ = useQuery({ ...memberCardQuery(coreHttp), enabled: authed });
+  const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
+
+  const [showCard, setShowCard] = useState(false);
+  const [celebrate, setCelebrate] = useState<string | null>(null);
+  // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
+  const checkInBusy = useRef(false);
+  const [checkInMsg, setCheckInMsg] = useState<{ text: string; error: boolean } | null>(null);
+
+  const refreshPoints = () => {
+    void qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey });
+    void qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
+    void qc.invalidateQueries({ queryKey: pointsTxnQuery(coreHttp).queryKey });
+  };
+
+  const checkInMut = useMutation({
+    mutationFn: () => postDailyCheckIn(coreHttp),
+    onSuccess: (res) => {
+      setCheckInMsg({ text: res.message, error: false });
+      // Khoá nút ngay, trước khi trạng thái mới về: bấm thêm lúc chờ sẽ bị 400 "đã điểm danh".
+      qc.setQueryData<CheckInStatusResponse>(checkInQuery(coreHttp).queryKey, (old) => (old ? { ...old, checkedInToday: true } : old));
+      refreshPoints();
+    },
+    onError: (e) => {
+      setCheckInMsg({ text: errText(e), error: true });
+      // Vd đã điểm danh trên thiết bị khác: tải lại để nút chuyển "Đã điểm danh".
+      void qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
+    },
+    onSettled: () => {
+      checkInBusy.current = false;
+    },
+  });
+  const doCheckIn = () => {
+    if (checkInBusy.current) return;
+    checkInBusy.current = true;
+    setCheckInMsg(null);
+    checkInMut.mutate();
+  };
+
+  const data = loyaltyQ.data;
+  const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
+  // So hạng hiện tại với lần xem trước: lần đầu chỉ ghi mốc, tránh chúc mừng giả cho khách hạng cao mở trang lần đầu.
+  useEffect(() => {
+    if (!data?.tier) return;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(TIER_KEY);
+    } catch {
+      /* không có localStorage: bỏ qua */
+    }
+    if (raw != null && curMin > Number(raw)) setCelebrate(data.tier.name);
+    try {
+      localStorage.setItem(TIER_KEY, String(curMin));
+    } catch {
+      /* không có localStorage: bỏ qua */
+    }
+  }, [data?.tier, curMin]);
 
   if (phase === 'loading') {
     return (
-      <LedgerShell title={TITLE}>
+      <LedgerShell title={TITLE} wide>
         <AuthLoading />
       </LedgerShell>
     );
   }
   if (phase === 'unavailable') {
     return (
-      <LedgerShell title={TITLE}>
+      <LedgerShell title={TITLE} wide>
         <SessionUnavailable />
       </LedgerShell>
     );
   }
   if (phase === 'guest') {
     return (
-      <LedgerShell title={TITLE}>
-        <LoginRequired message="Đăng nhập để xem lịch sử Điểm Xanh của bạn." returnTo="/tai-khoan/diem-xanh" />
+      <LedgerShell title={TITLE} wide>
+        <LoginRequired message="Đăng nhập để xem hạng thành viên và Điểm Xanh của bạn." returnTo="/tai-khoan/diem-xanh" />
+      </LedgerShell>
+    );
+  }
+  if (loyaltyQ.isLoading) {
+    return (
+      <LedgerShell title={TITLE} wide>
+        <div className="space-y-3">
+          <Skeleton height={180} />
+          <Skeleton height={80} />
+        </div>
+      </LedgerShell>
+    );
+  }
+  if (!data) {
+    return (
+      <LedgerShell title={TITLE} wide>
+        <ErrorState message={errText(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       </LedgerShell>
     );
   }
 
-  const balances = meQ.data ?? user;
-  const points = balances ? pointsSummary(balances) : null;
-  const rows = txnQ.data ?? [];
-  const lockLines = lockedPointsLines(lockQ.data);
+  const tierName = data.tier?.name ?? 'Mầm Xanh';
+  const tierStyle = data.tier ? (TIER_STYLE[data.tier.name] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
+  const perks = Array.isArray(data.tier?.perks) ? (data.tier.perks as string[]) : [];
+  const next = data.nextTier;
+  const rates = data.rates;
+  const progress = tierProgressPercent(data);
+  const lots = pointsSummary(data);
+  const expiring = expiringPointsNote(data.expiringPoints);
+  const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
+  const lockLines = lockedPointsLines(data);
+  const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
+  const wasteOn = configQ.data?.waste?.enabled === true;
+  const shortcuts = [
+    { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Cây Tubu', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
+    { href: '/doi-rac', icon: Recycle, title: 'Đổi rác lấy quà', sub: 'Đổi bao bì lấy Điểm Xanh', show: wasteOn && isWebRouteReady('/doi-rac') },
+    { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: isWebRouteReady('/kho-qua') },
+  ].filter((s) => s.show);
+  const celebrateStyle = celebrate ? (TIER_STYLE[celebrate] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
 
   return (
-    <LedgerShell title={TITLE}>
-      {points && (
-        <section aria-label="Số dư Điểm Xanh" className={`p-4 ${ui.card}`}>
-          <div className="text-2xl font-bold text-stone-900">{formatCount(points.total)}</div>
-          <div className="text-sm text-stone-600">Điểm Xanh hiện có</div>
-          {points.convertedNote && <div className="mt-0.5 text-xs text-stone-600">{points.convertedNote}</div>}
-          {lockLines.map((line) => (
-            <div key={line} className="mt-0.5 break-words text-xs text-stone-600">
-              {line}
+    <LedgerShell title={TITLE} wide>
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${ui.card} ${tierStyle.bg}`}>
+            <div aria-hidden="true" className="text-5xl leading-none">
+              {tierStyle.emoji}
             </div>
-          ))}
-        </section>
-      )}
+            <h2 className={`mt-2 font-display text-xl font-semibold ${tierStyle.fg}`}>{tierName}</h2>
+            <p className="mt-0.5 text-sm text-stone-700">
+              Tích điểm ×{data.tier?.multiplier ?? 1} · {formatCount(lots.total)} điểm Xanh
+            </p>
+            {lots.convertedNote && <p className="mt-0.5 text-xs text-stone-600">{lots.convertedNote}</p>}
+            {expiring && <p className={`mt-1.5 text-xs ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
+            {expiryPolicy && <p className="mt-0.5 text-xs text-stone-600">{expiryPolicy}</p>}
+            {lockLines.map((line) => (
+              <p key={line} className="mt-0.5 break-words text-xs text-stone-600">
+                {line}
+              </p>
+            ))}
 
-      {txnQ.isLoading ? (
-        <p className="py-10 text-center text-stone-600">Đang tải lịch sử…</p>
-      ) : txnQ.isError ? (
-        <div className={`mt-3 p-6 text-center ${ui.card}`}>
-          <p className={ui.error}>Không tải được lịch sử Điểm Xanh.</p>
-          <button type="button" onClick={() => void txnQ.refetch()} className={`${ui.btnText} mt-1 text-forest-700`}>
-            Thử lại
-          </button>
-        </div>
-      ) : rows.length === 0 ? (
-        <p className={`mt-3 p-6 text-center text-sm text-stone-600 ${ui.card}`}>Chưa có giao dịch điểm nào.</p>
-      ) : (
-        <>
-          <ul className={`mt-3 divide-y divide-stone-200 ${ui.card}`}>
-            {rows.map((t) => (
-              <li key={t.id} className="flex items-start justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <div className="break-words text-sm font-medium text-stone-900">{pointsReasonDetail(t.reason)}</div>
-                  <div className="text-xs text-stone-600">
-                    {formatDate(t.createdAt)}
-                    {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}
-                    {t.delta > 0 && t.expiresAt ? ` · Hết hạn ${formatDate(t.expiresAt)}` : ''}
+            {next ? (
+              <div className="mt-4 text-left">
+                <ProgressBar value={progress} max={100} label="Tiến độ lên hạng kế" />
+                <p className="mt-1.5 text-center text-xs text-stone-700">
+                  {next.spendingToGo != null ? (
+                    <>
+                      Còn <b>{moneyShort(next.spendingToGo)}</b> mua hàng để lên hạng {next.name}
+                    </>
+                  ) : (
+                    <>
+                      Còn <b>{formatCount(next.pointsToGo)}</b> điểm tích từ mua hàng
+                      {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để lên hạng{' '}
+                      {next.name}
+                    </>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <p className={`mt-3 text-sm ${tierStyle.fg}`}>Bạn đang ở hạng cao nhất 🎉</p>
+            )}
+
+            {rates && (
+              <div className="mt-3 space-y-0.5 text-xs text-stone-600">
+                <p>{earnRuleLine(rates, data.tier?.multiplier ?? 1)}</p>
+                <p>{redeemRuleLine(rates)}</p>
+              </div>
+            )}
+
+            <button type="button" onClick={() => setShowCard(true)} className={`${ui.btnSecondary} mt-4 gap-2`}>
+              <QrCodeIcon className="h-4 w-4" aria-hidden="true" />
+              Thẻ thành viên số (mã QR)
+            </button>
+          </section>
+
+          <Section title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
+            {couponsQ.isLoading ? (
+              <Skeleton height={64} />
+            ) : couponsQ.isError ? (
+              <InlineError message={`Chưa tải được mã giảm giá: ${errText(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
+            ) : couponsQ.data && couponsQ.data.length > 0 ? (
+              <ul className="space-y-2">
+                {couponsQ.data.map((c) => (
+                  <li key={c.code} className="flex items-center justify-between gap-2 rounded-control border border-dashed border-stone-450 bg-promo-bg p-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-promo-fg">{couponLabel(c)}</div>
+                      <div className="break-words text-xs text-stone-700">
+                        {autoCouponName(c.code) ?? `Mã ${c.code}`}
+                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-xs text-stone-600">HSD {formatDate(c.endAt)}</div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-3 text-center text-sm text-stone-600">
+                <span className="block font-semibold text-stone-800">Chưa có mã giảm giá khả dụng</span>
+                Đổi Điểm Xanh ở mục bên dưới để nhận mã.
+              </p>
+            )}
+          </Section>
+
+          {checkInQ.isLoading ? (
+            <Skeleton height={120} />
+          ) : checkInQ.isError ? (
+            <div className={`p-4 ${ui.card}`}>
+              <InlineError message={`Chưa tải được lịch điểm danh: ${errText(checkInQ.error)}`} onRetry={() => void checkInQ.refetch()} />
+            </div>
+          ) : checkInQ.data && checkIn ? (
+            <section aria-label="Điểm danh" className={`p-4 ${ui.card}`}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <IconTile>
+                    <CalendarCheck className="h-4 w-4 text-forest-600" aria-hidden="true" />
+                  </IconTile>
+                  <div className="min-w-0">
+                    <h2 className="font-display text-base font-semibold text-stone-900">Điểm danh nhận Điểm Xanh</h2>
+                    <div className="text-xs text-stone-600">
+                      Chuỗi: <b>{checkInQ.data.streakDays}</b> ngày liên tiếp {checkInQ.data.streakDays > 0 ? '🔥' : ''}
+                    </div>
                   </div>
                 </div>
-                <SignedAmount delta={t.delta} text={formatCount(Math.abs(t.delta))} />
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-center text-xs text-stone-600">Hiển thị tối đa 100 giao dịch gần nhất.</p>
-        </>
-      )}
+                <button type="button" disabled={!checkIn.canCheckIn || checkInMut.isPending} onClick={doCheckIn} className={`${ui.btnPrimary} shrink-0`}>
+                  {checkIn.buttonLabel}
+                </button>
+              </div>
+              {checkInMsg && (
+                <p role={checkInMsg.error ? 'alert' : 'status'} className={`mb-2 text-sm ${checkInMsg.error ? ui.error : 'text-success-fg'}`}>
+                  {checkInMsg.text}
+                </p>
+              )}
+              <ul className="grid grid-cols-7 gap-1.5 text-center">
+                {checkInQ.data.rewards.map((r) => (
+                  <li
+                    key={r.day}
+                    className={`rounded-control border p-1.5 ${r.isToday ? 'border-forest-600 bg-forest-50' : r.claimed ? 'border-forest-100 bg-stone-100' : 'border-transparent bg-stone-50'}`}
+                  >
+                    <div className="text-xs text-stone-600">N{r.day}</div>
+                    <div className={`mt-0.5 text-xs font-semibold ${r.claimed ? 'text-forest-700' : 'text-stone-900'}`}>+{formatCount(r.points)}</div>
+                    <div className="mt-0.5 flex justify-center text-stone-500">
+                      {r.claimed ? (
+                        <Check className="h-4 w-4 text-forest-600" aria-hidden="true" />
+                      ) : r.day === 7 ? (
+                        <Gift className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <Sprout className="h-4 w-4" aria-hidden="true" />
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-stone-600">
+                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng; giọt nước Vườn Xanh điểm danh riêng trong
+                Vườn Cây.
+              </p>
+            </section>
+          ) : null}
+
+          {shortcuts.length > 0 && (
+            <ul className={`divide-y divide-stone-200 ${ui.card}`}>
+              {shortcuts.map((s) => (
+                <li key={s.href}>
+                  <Link href={s.href} className="flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50">
+                    <IconTile>
+                      <s.icon className="h-4 w-4 text-forest-600" aria-hidden="true" />
+                    </IconTile>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-stone-900">{s.title}</span>
+                      <span className="block text-xs text-stone-600">{s.sub}</span>
+                    </span>
+                    <span aria-hidden="true" className="text-stone-500">
+                      ›
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {perks.length > 0 && (
+            <Section title="Quyền lợi của bạn">
+              <ul className="space-y-2">
+                {perks.map((p) => (
+                  <li key={p} className="flex items-center gap-2 text-sm text-stone-800">
+                    <Check className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          <section aria-label="Các hạng" className={`p-4 ${ui.card}`}>
+            <h2 className={`mb-3 ${ui.sectionTitle}`}>Các hạng</h2>
+            <ul className="space-y-1.5">
+              {data.tiers.map((t) => {
+                const active = t.name === tierName;
+                const ts = TIER_STYLE[t.name] ?? DEFAULT_STYLE;
+                return (
+                  <li
+                    key={t.id}
+                    aria-current={active ? 'true' : undefined}
+                    className={`flex items-center justify-between gap-2 rounded-control border p-3 ${active ? `${ts.bg} border-forest-600` : 'border-stone-200'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span aria-hidden="true">{ts.emoji}</span>
+                      <span className={`text-sm ${active ? 'font-bold' : ''}`}>{t.name}</span>
+                    </div>
+                    <span className="text-right text-xs text-stone-700">
+                      {tierThresholdLabel(t, rates)} · ×{t.multiplier}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-span-2 ${ui.card}`}>
+            <h2 className={`mb-2 ${ui.sectionTitle}`}>Lịch sử Điểm Xanh</h2>
+            {txnQ.isLoading ? (
+              <Skeleton height={64} />
+            ) : txnQ.isError ? (
+              <InlineError message="Không tải được lịch sử Điểm Xanh." onRetry={() => void txnQ.refetch()} />
+            ) : !txnQ.data || txnQ.data.length === 0 ? (
+              <p className="py-3 text-center text-sm text-stone-600">Chưa có giao dịch điểm nào.</p>
+            ) : (
+              <>
+                <ul className="divide-y divide-stone-200">
+                  {txnQ.data.map((t) => (
+                    <li key={t.id} className="flex items-start justify-between gap-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="break-words text-sm font-medium text-stone-900">{pointsReasonDetail(t.reason)}</div>
+                        <div className="text-xs text-stone-600">
+                          {formatDate(t.createdAt)}
+                          {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}
+                          {t.delta > 0 && t.expiresAt ? ` · Hết hạn ${formatDate(t.expiresAt)}` : ''}
+                        </div>
+                      </div>
+                      <SignedAmount delta={t.delta} text={formatCount(Math.abs(t.delta))} />
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-center text-xs text-stone-600">Hiển thị tối đa 100 giao dịch gần nhất.</p>
+              </>
+            )}
+          </section>
+      </div>
+
+      <div className="mt-6 flex justify-center">
+        <Link href={isWebRouteReady('/san-pham') ? '/san-pham' : '/'} className={ui.btnSecondary}>
+          Mua sắm để tích thêm Điểm Xanh →
+        </Link>
+      </div>
+
+      <MemberCardSheet
+        open={showCard}
+        onClose={() => setShowCard(false)}
+        card={cardQ.data}
+        loading={cardQ.isLoading}
+        error={cardQ.isError ? errText(cardQ.error) : null}
+        onRetry={() => void cardQ.refetch()}
+        tierLabel={`Hạng ${tierName} · ${formatCount(lots.total)} điểm Xanh`}
+        tierEmoji={tierStyle.emoji}
+      />
+
+      <Sheet
+        open={celebrate !== null}
+        onClose={() => setCelebrate(null)}
+        title={`Chúc mừng lên hạng ${celebrate ?? ''}!`}
+        footer={
+          <button type="button" onClick={() => setCelebrate(null)} className={`${ui.btnPrimary} w-full`}>
+            Tuyệt vời!
+          </button>
+        }
+      >
+        <div className="text-center">
+          <div aria-hidden="true" className="text-6xl leading-none">
+            {celebrateStyle.emoji}🎉
+          </div>
+          <p className="mt-2 text-sm text-stone-700">
+            Bạn vừa mở khoá quyền lợi mới của hạng {celebrate}. Cảm ơn bạn đã đồng hành sống xanh cùng Tubu 🌿
+          </p>
+          {perks.length > 0 && (
+            <ul className="mt-3 space-y-1.5 text-left">
+              {perks.slice(0, 4).map((p) => (
+                <li key={p} className="flex items-center gap-2 text-sm text-stone-800">
+                  <Check className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                  {p}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Sheet>
     </LedgerShell>
   );
+}
+
+function MemberCardSheet({
+  open,
+  onClose,
+  card,
+  loading,
+  error,
+  onRetry,
+  tierLabel,
+  tierEmoji,
+}: {
+  open: boolean;
+  onClose: () => void;
+  card: { memberCode: string; posCreditEnabled: boolean } | undefined;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  tierLabel: string;
+  tierEmoji: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+
+  const copy = async () => {
+    if (!card) return;
+    try {
+      await navigator.clipboard.writeText(card.memberCode);
+    } catch {
+      setCopyError(true);
+      return;
+    }
+    setCopyError(false);
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Thẻ Thành Viên Tubu"
+      footer={
+        <button type="button" onClick={onClose} className={`${ui.btnSecondary} w-full`}>
+          Đóng
+        </button>
+      }
+    >
+      <div className="text-center">
+        <Badge tone="brand">
+          <span aria-hidden="true">{tierEmoji}</span> {tierLabel}
+        </Badge>
+      </div>
+      <div className="mt-4 rounded-card border border-stone-200 bg-stone-50 p-3 text-center">
+        {loading ? (
+          <div className="flex justify-center">
+            <Skeleton width={180} height={180} />
+          </div>
+        ) : error || !card ? (
+          <InlineError message={`Chưa tải được mã thành viên: ${error ?? ''}`} onRetry={onRetry} />
+        ) : (
+          <>
+            <div className="flex justify-center">
+              <QrCode value={card.memberCode} size={180} />
+            </div>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <span className="font-mono text-lg font-bold tracking-widest text-stone-900">{card.memberCode}</span>
+              <button type="button" onClick={() => void copy()} className={`${ui.btnText} gap-1 text-forest-700 no-underline`}>
+                <Copy className="h-4 w-4" aria-hidden="true" />
+                {copied ? 'Đã chép' : 'Chép'}
+              </button>
+            </div>
+            <div role="status" className="text-xs">
+              {copied && <span className="text-success-fg">Đã sao chép mã thành viên</span>}
+              {copyError && <span className="text-danger-fg">Không sao chép được — hãy đọc mã cho nhân viên.</span>}
+            </div>
+          </>
+        )}
+      </div>
+      {card && (
+        <div className="mt-3 flex items-start gap-2 rounded-control bg-stone-100 p-2">
+          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+          <p className="text-xs text-stone-700">{memberCardHint(card)}</p>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+function Section({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
+  return (
+    <section aria-label={title} className={`p-4 ${ui.card}`}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className={ui.sectionTitle}>{title}</h2>
+        {action && <span className="text-xs text-stone-600">{action}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InlineError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="text-center">
+      <p className={ui.error}>{message}</p>
+      <button type="button" onClick={onRetry} className={`${ui.btnText} text-forest-700`}>
+        Thử lại
+      </button>
+    </div>
+  );
+}
+
+function IconTile({ children }: { children: React.ReactNode }) {
+  return <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-stone-100">{children}</span>;
 }

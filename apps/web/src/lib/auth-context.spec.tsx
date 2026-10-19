@@ -13,6 +13,7 @@ vi.mock('./client-api', async (orig) => ({
 import { AuthProvider, useAuth } from './auth-context';
 import { useAuthPhase } from './auth-phase';
 import { setSessionMarker, hasSessionMarker } from './client-api';
+import { loadDraft, markResume, peekResume, saveDraft, EMPTY_DRAFT } from './recycle-wizard';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -94,7 +95,10 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     mocks.restoreSession.mockResolvedValue({ kind: 'ok', data: { accessToken: 'at', user: USER } });
     localStorage.setItem('tubu_invoice', '{"taxCode":"0100000001"}');
     localStorage.setItem('tubu_invoice:u1', '{"taxCode":"0312345678"}');
+    localStorage.setItem('tubu_ctv_recent_customers:u1', '[{"recipient":"An"}]');
     localStorage.setItem('tubu_other', 'giữ');
+    saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 3 } });
+    markResume();
     function LogoutProbe() {
       const { logout } = useAuth();
       return (
@@ -120,7 +124,10 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(text()).toBe('init|idle|-');
     expect(localStorage.getItem('tubu_invoice')).toBeNull();
     expect(localStorage.getItem('tubu_invoice:u1')).toBeNull();
+    expect(localStorage.getItem('tubu_ctv_recent_customers:u1')).toBeNull();
     expect(localStorage.getItem('tubu_other')).toBe('giữ');
+    expect(loadDraft()).toBeNull();
+    expect(peekResume()).toBe(false);
     vi.unstubAllGlobals();
   });
 });

@@ -1,3 +1,4 @@
+import { privatePrefixes } from './route-map';
 import { SYSTEM_SUBDOMAINS, TENANT_ROOT_DOMAIN, tenantSubdomain } from './tenant-subdomain';
 
 /**
@@ -12,8 +13,13 @@ import { SYSTEM_SUBDOMAINS, TENANT_ROOT_DOMAIN, tenantSubdomain } from './tenant
 // `||` chứ không `??`: ARG/ENV của Dockerfile biến build không truyền arg thành chuỗi rỗng, mà `new URL('')` ném lỗi.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://app.tubutree.com').replace(/\/+$/, '');
 
-/** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. */
-export const PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap'];
+const BASE_PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap'];
+
+/** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. Danh sách gốc + tiền tố các route `private` của route map. */
+export const PRIVATE_PATHS = [
+  ...BASE_PRIVATE_PATHS,
+  ...privatePrefixes().filter((p) => !BASE_PRIVATE_PATHS.some((b) => p === b || p.startsWith(`${b}/`))),
+];
 
 /**
  * Cổng nội bộ có giao diện riêng — chân trang bán hàng (hotline khách) không hiển thị ở đây.

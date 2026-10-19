@@ -73,13 +73,13 @@ test.describe('Web khách (smoke)', () => {
     expect((body.match(/<url>/g) ?? []).length).toBe((body.match(/<\/url>/g) ?? []).length);
   });
 
-  test('ô tìm kiếm: gửi từ khoá điều hướng tới /?q=... và trang vẫn render', async ({ page }) => {
+  test('ô tìm kiếm: gửi từ khoá điều hướng tới /san-pham?q=... và trang vẫn render', async ({ page }) => {
     const health = watchHealth(page);
     await page.goto('/');
     const input = page.locator('#site-search-q');
     await input.fill('xanh');
     await input.press('Enter');
-    await expect(page).toHaveURL(/\/\?q=xanh/);
+    await expect(page).toHaveURL(/\/san-pham\?q=xanh/);
     await expect(page.locator('main')).toHaveCount(1);
     await expect(page.locator('h1')).toHaveCount(1);
     expect(health.pageErrors).toEqual([]);

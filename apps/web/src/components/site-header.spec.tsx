@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | n
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mocks.cart }) }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => p === '/' || p === '/tai-khoan' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
 
 import SiteHeader from './site-header';
 
@@ -71,5 +72,16 @@ describe('SiteHeader', () => {
     const out = render();
     expect(out).toMatch(/<img[^>]*alt="Tubu Tree"/);
     expect(out).not.toContain('SỐNG XANH AN LÀNH');
+  });
+
+  it('máy tính: điều hướng các mục gốc như thanh đáy, ẩn mục chưa làm xong, ẩn ở điện thoại', () => {
+    mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
+    const out = render();
+    const desk = out.match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
+    expect(desk).toMatch(/class="[^"]*hidden[^"]*md:flex/);
+    expect(desk).toContain('>Trang chủ<');
+    expect(desk).toContain('>Cá nhân<');
+    expect(desk).not.toContain('>Danh mục<');
+    expect(desk).not.toContain('>Vườn Xanh<');
   });
 });

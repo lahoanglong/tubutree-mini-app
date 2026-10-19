@@ -13,10 +13,13 @@ import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, type OrderDetail
 import {
   addressLine,
   buyerOrderStatusLabel,
-  canPayAgain,
+  canCancelOrder,
   discountRows,
   orderPaymentStatusLabel,
+  isHandedToCarrier,
   orderDetailHref,
+  orderPointsNote,
+  orderStamp,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
@@ -24,15 +27,19 @@ import {
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { reviewHref } from '@/lib/reviews-client';
+import { canPayNow } from '@/components/orders/order-rules';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
+import { formatCount } from '@/lib/checkout-points';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
 import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
 import { returnedByLine, showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
 import { OrderTimeline } from './order-timeline';
+import { FollowOaPrompt, OrderInvoice, OrderWasteLink } from './order-extras';
+import { CopyShippingCode } from './copy-shipping-code';
 
 export default function OrderDetailPage() {
   const params = useParams<{ code: string }>();
@@ -58,9 +65,13 @@ export default function OrderDetailPage() {
   // Lỗi/đang tải thì rơi về hotline mặc định: kênh liên hệ không được biến mất vì API cấu hình chậm.
   const supportQ = useQuery({ queryKey: ['public-support'], queryFn: getPublicSupport, staleTime: 5 * 60_000 });
   const support = supportQ.data ?? DEFAULT_SUPPORT;
-  // Tiền về thì đơn hết "chờ thanh toán" và `canPayAgain` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
+  // Tiền về thì đơn hết "chờ thanh toán" và `canPayNow` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
   // "Đã nhận thanh toán" bị gỡ ngay sau khi vừa hiện. Ghi nhớ trong trang tới khi khách rời trang.
   const [paidNotice, setPaidNotice] = useState(false);
+  // Khung QR đã dựng lúc còn hạn thì giữ tới khi rời trang (như trang chuyển khoản của Mini App): qua hạn giữa chừng mà
+  // gỡ khung là mất lần dò thấy tiền về của khách vừa chuyển sát giờ.
+  const [qrShown, setQrShown] = useState(false);
+  if (!qrShown && orderQ.data && canPayNow(orderQ.data)) setQrShown(true);
   const refreshOrder = useCallback(() => {
     setPaidNotice(true);
     void qc.invalidateQueries({ queryKey: ['order', code] });
@@ -120,6 +131,11 @@ export default function OrderDetailPage() {
 
   const o = orderQ.data;
   const orderReturns = o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : [];
+  const stamp = orderStamp(o);
+  const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
+  const pointsNote = orderPointsNote(o.status, o.pointsEarned ?? 0, pointsReversed, o.pointsReturnReversed);
+  const cancelClosed = !canCancelOrder(o, user?.id) && isHandedToCarrier(o);
+  const showPayPanel = canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice;
   const returnedQty = returnedByLine(
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
@@ -130,12 +146,14 @@ export default function OrderDetailPage() {
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
           {buyerOrderStatusLabel(o)}
         </span>
-        <span className="text-sm text-stone-600">Đặt lúc {formatDateTime(o.createdAt)}</span>
+        <span className="text-sm text-stone-600">
+          {stamp.label} {formatDateTime(stamp.at)}
+        </span>
       </div>
       {o.manualHandling ? (
         <p className="mt-2 text-sm text-stone-700">Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.</p>
       ) : (
-        !canPayAgain(o) &&
+        !showPayPanel &&
         showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
           <p className="mt-2 text-sm font-medium text-warning-fg">
             Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
@@ -172,9 +190,9 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      {(canPayAgain(o) || paidNotice) && (
+      {showPayPanel && (
         <div className="mt-2">
-          {canPayAgain(o) && (
+          {canPayNow(o) && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
               Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
             </p>
@@ -183,8 +201,14 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      <FollowOaPrompt />
       <OrderTimeline status={o.status} />
       <OrderActions order={o} userId={user?.id} />
+      {cancelClosed && (
+        <p className="mt-3 text-sm text-stone-700">
+          Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.
+        </p>
+      )}
       {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
 
       <section className={`mt-4 p-4 ${ui.card}`}>
@@ -206,6 +230,11 @@ export default function OrderDetailPage() {
                 <div className="mt-0.5 text-xs text-stone-600">
                   {formatVnd(it.unitPrice)} × {it.quantity}
                 </div>
+                {(it.backorderedQty ?? 0) > 0 && (
+                  <div className="mt-0.5 inline-block rounded-full bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning-fg">
+                    Đặt trước {it.backorderedQty}/{it.quantity} — chờ hàng về
+                  </div>
+                )}
                 {it.id && returnedQty.has(it.id) && (
                   <div className="mt-0.5 text-xs font-medium text-promo-fg">
                     Đã duyệt trả {returnedQty.get(it.id)}/{it.quantity}
@@ -236,6 +265,9 @@ export default function OrderDetailPage() {
           {discountRows(o).map((r) => (
             <Row key={r.label} label={r.label} value={`-${formatVnd(r.amount)}`} positive />
           ))}
+          {(o.pointsUsed ?? 0) > 0 && !o.pointsDiscount && (
+            <Row label="Điểm Xanh đã dùng" value={`${formatCount(o.pointsUsed ?? 0)} điểm`} />
+          )}
           <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} />
           <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900">
             <span>Tổng cộng</span>
@@ -243,9 +275,17 @@ export default function OrderDetailPage() {
           </div>
           <Row label="Phương thức" value={paymentMethodLabel(o.paymentMethod)} />
           {o.paymentStatus && <PaymentStatusRow order={o} />}
+          {pointsNote && (
+            <p className={`mt-1 flex items-center gap-1 text-xs ${pointsNote.tone === 'success' ? 'text-success-fg' : 'text-stone-700'}`}>
+              <Leaf className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+              {pointsNote.text}
+            </p>
+          )}
         </div>
       </section>
 
+      <OrderInvoice order={o} />
+      <OrderWasteLink order={o} />
       <DeliverySection order={o} />
 
       {o.note && (
@@ -281,7 +321,15 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
         {line && <p className="text-stone-700">{line}</p>}
         {!contact && !line && addr?.note && <p className="text-stone-700">{addr.note}</p>}
         {o.shippingPartner && <Row label="Đơn vị vận chuyển" value={o.shippingPartner} />}
-        {o.shippingCode && <Row label="Mã vận đơn" value={o.shippingCode} />}
+        {o.shippingCode && (
+          <div className="flex items-center justify-between gap-3">
+            <Row label="Mã vận đơn" value={o.shippingCode} />
+            <CopyShippingCode code={o.shippingCode} />
+          </div>
+        )}
+        {shippingEventLabel(o.shippingStatus) && (
+          <p className="text-xs font-medium text-success-fg">{shippingEventLabel(o.shippingStatus)}</p>
+        )}
         {tracking && (
           <a
             href={tracking}

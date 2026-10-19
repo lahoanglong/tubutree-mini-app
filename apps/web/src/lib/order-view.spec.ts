@@ -3,13 +3,17 @@ import {
   addressLine,
   buyerOrderStatusLabel,
   canCancelOrder,
-  canPayAgain,
   discountRows,
+  isHandedToCarrier,
   isRefundInProgress,
+  orderPointsNote,
+  orderStamp,
+  returnWindowState,
   isReorderable,
   ORDER_TABS,
   timelineIndex,
   orderDetailHref,
+  bankPaymentHref,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
@@ -21,6 +25,11 @@ import {
 } from './order-view';
 
 describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
+  it('bankPaymentHref mã hoá mã đơn vào trang chuyển khoản như /bank-payment/:code của Mini App', () => {
+    expect(bankPaymentHref('TB260927-001')).toBe('/thanh-toan/chuyen-khoan/TB260927-001');
+    expect(bankPaymentHref('A/B?#')).toBe('/thanh-toan/chuyen-khoan/A%2FB%3F%23');
+  });
+
   it('orderDetailHref mã hoá mã đơn vào đường dẫn chi tiết', () => {
     expect(orderDetailHref('TB260927-001')).toBe('/tai-khoan/don-hang/TB260927-001');
     expect(orderDetailHref('a/b c')).toBe('/tai-khoan/don-hang/a%2Fb%20c');
@@ -50,19 +59,6 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(paymentStatusLabel('PAID')).toBe('Đã thanh toán');
     expect(paymentStatusLabel('REFUNDED')).toBe('Đã hoàn tiền');
     expect(paymentStatusLabel(undefined)).toBe('');
-  });
-
-  it('chỉ đơn chuyển khoản đang chờ thanh toán mới được trả lại bằng QR', () => {
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' })).toBe(true);
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'COD' })).toBe(false);
-    // API từ chối sinh QR cho đơn đã hủy/trả — không dựng khung QR để khỏi hiện lỗi.
-    expect(canPayAgain({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER' })).toBe(false);
-    expect(canPayAgain({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER' })).toBe(false);
-  });
-
-  it('R5-SYNC-1: hàng đã bàn giao vận chuyển mà chưa nhận tiền (manualHandling) → không mời trả lại bằng QR', () => {
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: true })).toBe(false);
-    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: false })).toBe(true);
   });
 
   it('addressLine bỏ phần rỗng, không để dấu phẩy thừa', () => {
@@ -310,5 +306,51 @@ describe('discountRows — tách từng khoản giảm giá của đơn', () => 
     expect(discountRows({ discount: 98_000, pointsUsed: 60 })).toEqual([{ label: 'Giảm giá (gồm Điểm Xanh)', amount: 98_000 }]);
     expect(discountRows({ discount: 38_000, pointsUsed: 0 })).toEqual([{ label: 'Giảm giá', amount: 38_000 }]);
     expect(discountRows({ discount: 0, pointsUsed: 0 })).toEqual([]);
+  });
+});
+
+describe('orderStamp — mốc thời gian đầu trang chi tiết đơn', () => {
+  it('đơn đã giao có mốc giao thì hiện "Giao lúc", còn lại "Đặt lúc"', () => {
+    expect(orderStamp({ status: 'DELIVERED', createdAt: 'a', deliveredAt: 'b' })).toEqual({ label: 'Giao lúc', at: 'b' });
+    expect(orderStamp({ status: 'DELIVERED', createdAt: 'a', deliveredAt: null })).toEqual({ label: 'Đặt lúc', at: 'a' });
+    expect(orderStamp({ status: 'SHIPPING', createdAt: 'a', deliveredAt: 'b' })).toEqual({ label: 'Đặt lúc', at: 'a' });
+  });
+});
+
+describe('orderPointsNote — dòng Điểm Xanh theo trạng thái đơn', () => {
+  it('không có điểm hoặc đơn đã huỷ thì không có dòng', () => {
+    expect(orderPointsNote('DELIVERED', 0)).toBeNull();
+    expect(orderPointsNote('CANCELLED', 50)).toBeNull();
+  });
+  it('chưa giao: sẽ nhận; đã giao: đã cộng; đã hoàn: đã thu hồi', () => {
+    expect(orderPointsNote('CONFIRMED', 1200)).toEqual({ text: 'Nhận +1.200 Điểm Xanh khi giao thành công', tone: 'success' });
+    expect(orderPointsNote('DELIVERED', 50)).toEqual({ text: 'Đã cộng +50 Điểm Xanh vào tài khoản', tone: 'success' });
+    expect(orderPointsNote('RETURNED', 50)).toEqual({ text: 'Điểm Xanh của đơn này đã được thu hồi', tone: 'muted' });
+  });
+  it('trả hàng một phần: số thực thu của API thắng; chưa có thì ghi "tối đa"', () => {
+    expect(orderPointsNote('DELIVERED', 50, 30, 20)).toEqual({ text: 'Đã cộng +50, đã thu lại 20 điểm do trả hàng', tone: 'muted' });
+    expect(orderPointsNote('DELIVERED', 50, 30)).toEqual({ text: 'Đã cộng +50, đã thu lại tối đa 30 do trả hàng', tone: 'muted' });
+    expect(orderPointsNote('DELIVERED', 50, 0, 0)).toEqual({ text: 'Đã cộng +50 Điểm Xanh vào tài khoản', tone: 'success' });
+  });
+});
+
+describe('returnWindowState — hạn đổi/trả theo mốc giao', () => {
+  const now = Date.parse('2026-10-10T00:00:00Z');
+  it('còn hạn kèm số ngày còn lại, quá hạn thì đóng', () => {
+    expect(returnWindowState({ deliveredAt: '2026-10-08T00:00:00Z' }, 7, now)).toEqual({ open: true, daysLeft: 5 });
+    expect(returnWindowState({ deliveredAt: '2026-10-01T00:00:00Z' }, 7, now)).toEqual({ open: false, daysLeft: 0 });
+  });
+  it('thiếu mốc giao thì dùng updatedAt, không có mốc nào thì để API quyết định', () => {
+    expect(returnWindowState({ updatedAt: '2026-10-01T00:00:00Z' }, 7, now).open).toBe(false);
+    expect(returnWindowState({}, 7, now)).toEqual({ open: true, daysLeft: 7 });
+  });
+});
+
+describe('isHandedToCarrier — hàng đã rời kho', () => {
+  it('đang giao hoặc kho đã đặt hãng; mã vận đơn Gomdon không tính', () => {
+    expect(isHandedToCarrier({ status: 'SHIPPING' })).toBe(true);
+    expect(isHandedToCarrier({ status: 'PACKED', shippingCode: 'GHN1' })).toBe(true);
+    expect(isHandedToCarrier({ status: 'PACKED', shippingCode: 'G1', gomdonOrderId: 'G1' })).toBe(false);
+    expect(isHandedToCarrier({ status: 'CONFIRMED' })).toBe(false);
   });
 });

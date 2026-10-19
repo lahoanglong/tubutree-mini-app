@@ -57,3 +57,8 @@ html[data-tenant-host] [data-site-search] {
     padding-bottom: var(--sticky-bar-h);
   }
 }
+
+/* Thanh đáy điện thoại nhường chỗ cho thanh hành động dính của trang (giá/tổng + nút mua). */
+body.has-sticky-bar [data-bottom-nav] {
+  display: none;
+}

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { PRIVATE_PATHS, SITE_URL } from '@/lib/site';
+import { publicAllowPaths } from '@/lib/route-map';
 
 /**
  * Không có file này thì /admin, /merchant, /tai-khoan, /gio-hang, /thanh-toan đều lập chỉ mục
@@ -12,7 +13,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: '/',
+        // Longest-match: route công khai dưới tiền tố riêng tư (vd /doi-rac/quy-dinh) được mở lại.
+        allow: ['/', ...publicAllowPaths(PRIVATE_PATHS)],
         disallow: [...PRIVATE_PATHS, ...PRIVATE_PATHS.map((p) => `${p}/`)],
       },
     ],

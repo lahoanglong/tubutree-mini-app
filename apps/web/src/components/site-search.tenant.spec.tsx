@@ -8,6 +8,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
 }));
 

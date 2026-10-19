@@ -151,6 +151,9 @@ import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
 import { ExternalClaimsTab } from '@/components/admin/external-claims-tab';
 import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
+import { StaffRosterTab } from '@/components/admin/staff-roster-tab';
+import { ShiftApprovalTab } from '@/components/admin/shift-approval-tab';
+import { PayrollAdminTab } from '@/components/admin/payroll-admin-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
@@ -165,6 +168,9 @@ type Tab =
   | 'opsHealth'
   | 'waste'
   | 'attendance'
+  | 'staffRoster'
+  | 'shiftApproval'
+  | 'payroll'
   | 'dashboard'
   | 'dealers'
   | 'dealerClaims'
@@ -274,7 +280,15 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'notificationTemplates', label: 'Mẫu thông báo' },
     ],
   },
-  { label: 'Nhân sự', items: [{ k: 'attendance', label: 'Chấm công' }] },
+  {
+    label: 'Nhân sự',
+    items: [
+      { k: 'staffRoster', label: 'Nhân sự & quyền' },
+      { k: 'shiftApproval', label: 'Duyệt ca' },
+      { k: 'payroll', label: 'Lương' },
+      { k: 'attendance', label: 'Chấm công' },
+    ],
+  },
   {
     label: 'Cấu hình & tích hợp',
     items: [
@@ -560,6 +574,9 @@ export default function AdminPage() {
           {active === 'config' && <ConfigTab />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}
+          {active === 'staffRoster' && <StaffRosterTab />}
+          {active === 'shiftApproval' && <ShiftApprovalTab />}
+          {active === 'payroll' && <PayrollAdminTab />}
           {active === 'coupons' && <CouponsTab />}
           {active === 'brands' && <BrandsTab />}
           {active === 'storefronts' && <StorefrontsTab />}

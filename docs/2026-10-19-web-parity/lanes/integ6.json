@@ -1,0 +1,15 @@
+{
+ "reviewRounds": 2,
+ "maxRounds": 3,
+ "effort": "medium",
+ "reviewFocus": "Web đổi rác (`apps/web/src/app/doi-rac/**`, `apps/web/src/components/recycle/**`, thẻ đổi rác ở trang chủ/hub) phải theo đúng Mini App đổi rác ở bản mới `feat/recycle-rewards` 13ffd242: dòng trạng thái một câu cho mỗi yêu cầu, bước hiện tại, huy hiệu tạm dừng khi chương trình/điểm nhận tắt, ước tính phí gửi bưu điện có tên tỉnh, ước tính điểm chỉ khi yêu cầu còn đang xử lý, quầy (tên điểm, thanh hạn mức, nhập mã trước, xác nhận ở thanh dính, thẻ kết quả, lý do thiếu), chọn điểm nhận (lý do khoá, chip món). Điểm thưởng: web gửi cùng endpoint, body, Idempotency-Key như Mini App; không đổi API. So từng nhánh: chương trình tắt, điểm tạm dừng, hết hạn mức tháng, yêu cầu đang chờ/đã nhận/đã huỷ.",
+ "lane": "integ6",
+ "wt": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-integ6",
+ "branch": "web/integ6",
+ "tasks": [
+  {
+   "title": "Đồng bộ web đổi rác với Mini App đổi rác bản mới",
+   "prompt": "Lane recycle của web port theo Mini App đổi rác ở `feat/recycle-rewards` 07ac5aa1. Phiên đổi rác sau đó thêm hơn 20 commit sửa Mini App và đã gộp vào `web/integration` ở 7b606b85 (tip nhánh đổi rác 13ffd242). Web chưa theo các thay đổi này. Lane này ĐƯỢC sửa file web đổi rác (`apps/web/src/app/doi-rac/**`, `apps/web/src/components/recycle/**`, `packages/app-core/src/**` phần waste nếu cần) và thẻ đổi rác ở trang chủ/hub web; không sửa file Mini App, không sửa API.\n\n1. Liệt kê thay đổi Mini App: `git log --oneline 07ac5aa1..13ffd242 -- apps/miniapp/src` và `git diff 07ac5aa1 13ffd242 -- apps/miniapp/src` (tập trung `pages/recycle*.tsx`, `components/waste*`, `utils/waste*`, trang chủ/hub nếu có thẻ đổi rác, `utils/points-rules-note*`). Với mỗi commit: hành vi/chữ nào đổi, web tương ứng ở đâu. Ghi bảng vào báo cáo: commit Mini App → file web → đã theo/không cần (vì sao).\n2. Theo từng thay đổi trên web, giữ cùng chữ, cùng điều kiện, cùng endpoint/body. Test đỏ trước (chép ý nghĩa ca test Mini App tương ứng sang spec web), rồi code, commit riêng theo nhóm (trang tổng, tạo yêu cầu/chọn điểm, chi tiết/danh sách, quầy, thẻ trang chủ).\n3. Hàm thuần mới ở Mini App (ví dụ `utils/waste-labels.ts`, `utils/points-rules-note.ts`) nếu web cần thì chép sang app-core hoặc web theo cách lane loyalty đã làm (thân hàm giống hệt), không sửa file Mini App.\n4. Cập nhật `docs/2026-10-19-web-parity/impl/integ6.md` theo mẫu báo cáo lane (bảng ở mục 1, kiểm chứng, review, câu hỏi)."
+  }
+ ]
+}

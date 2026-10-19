@@ -11,6 +11,7 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "lint:vars": "node scripts/check-undefined-css-vars.mjs",
+    "lint:parity": "node scripts/check-platform-parity.mjs",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:ci": "turbo run test --filter=!@tubutree/e2e",

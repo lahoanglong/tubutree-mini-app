@@ -159,6 +159,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.62.7
         version: 5.100.14(react@18.3.1)
+      '@tubutree/app-core':
+        specifier: workspace:*
+        version: link:../../packages/app-core
       '@tubutree/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -256,6 +259,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.62.7
         version: 5.100.14(react@18.3.1)
+      '@tubutree/app-core':
+        specifier: workspace:*
+        version: link:../../packages/app-core
       '@tubutree/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -268,6 +274,9 @@ importers:
       next:
         specifier: ^14.2.18
         version: 14.2.35(@playwright/test@1.61.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.100.0)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -281,6 +290,9 @@ importers:
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.19
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
       '@types/react':
         specifier: ^18.3.17
         version: 18.3.30
@@ -302,6 +314,25 @@ importers:
       tailwindcss:
         specifier: ^3.4.16
         version: 3.4.19(tsx@4.22.4)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(jsdom@30.0.1)(sass@1.100.0)(terser@5.48.0)
+
+  packages/app-core:
+    dependencies:
+      '@tubutree/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      '@tubutree/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.19
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
@@ -2681,6 +2712,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cron@3.2.1:
     resolution: {integrity: sha512-w2n5l49GMmmkBFEsH9FIDhjZ1n1QgTMOCMGuQtOXs5veNiosZmso6bQGuqOJSYAXXrG84WQFVneNk+Yt0Ua9iw==}
@@ -3069,6 +3101,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

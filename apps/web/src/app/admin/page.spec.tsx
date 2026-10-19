@@ -365,7 +365,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cấu hình & tích hợp',
     ]);
     const items = [...nav.querySelectorAll('button')];
-    expect(items).toHaveLength(38);
+    expect(items).toHaveLength(41);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
@@ -373,6 +373,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Danh mục sản phẩm', 'Đại lý & công nợ', 'Gian hàng']),
     );
     expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ & quà đổi điểm']);
+    expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
     expect(group('Khách hàng')).toContain('Cộng đồng');
     expect(group('Khách hàng')).toContain('Đổi rác');
@@ -1989,7 +1990,7 @@ describe('admin/page — khung cuộn bảng focus được bằng bàn phím', 
 
 // PG-3 (axe heading-order): tiêu đề form của các tab sau h1 "Quản trị Tubu Tree" phải là h2, không nhảy h1 -> h3.
 describe('admin/page — thứ bậc heading của các tab', () => {
-  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders', 'inbox', 'opsHealth', 'waste', 'attendance'])(
+  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders', 'inbox', 'opsHealth', 'waste', 'attendance', 'staffRoster', 'shiftApproval', 'payroll'])(
     'tab %s: không nhảy cấp heading',
     async (tab) => {
       window.history.replaceState(null, '', `/admin?tab=${tab}`);
@@ -2042,6 +2043,16 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     expect(navItems(container)).toEqual(['Đổi rác']);
     expect(container.textContent).toContain('Đổi rác lấy quà');
     expect(container.textContent).not.toContain('Tất cả tham số');
+  });
+
+  it('nhân viên đủ mọi nhóm việc vẫn không thấy Nhân sự & quyền, Duyệt ca, Lương: chỉ ADMIN', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING', 'KE_TOAN'] };
+    window.history.replaceState(null, '', '/admin?tab=payroll');
+    const { container } = await mount();
+    const items = navItems(container);
+    for (const k of ['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']) expect(items).not.toContain(k);
+    expect(container.textContent).not.toContain('Xuất CSV');
   });
 
   it('CSKH ở tab Người dùng: xem chi tiết được, không có nút khoá, cấp quyền hay xuất CSV', async () => {

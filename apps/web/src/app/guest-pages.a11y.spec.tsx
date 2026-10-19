@@ -16,10 +16,11 @@ const mocks = vi.hoisted(() => ({
     handleCallback: vi.fn(),
   },
   search: new URLSearchParams(),
+  replace: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: mocks.replace }),
   useSearchParams: () => mocks.search,
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND');
@@ -72,9 +73,10 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   }),
   getProductStock: async () => ({}),
   addToCart: vi.fn(),
-  placeOrder: async () => ({
+  // Máy chủ thật trả lại đúng cách thanh toán khách đã gửi; web rẽ nhánh theo đơn trả về nên mock phải làm giống.
+  placeOrder: async (body: { paymentMethod: string }) => ({
     code: 'TB-9', status: 'PENDING_PAYMENT', subtotal: 300000, discount: 0, shippingFee: 30000, total: 330000,
-    paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: '2026-10-01T00:00:00Z', items: [],
+    paymentMethod: body.paymentMethod, paymentStatus: 'UNPAID', createdAt: '2026-10-01T00:00:00Z', items: [],
   }),
   getBankQr: async () => ({
     orderCode: 'TB-9', amount: 330000, paymentStatus: 'UNPAID',
@@ -160,8 +162,10 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     const { container } = mount(ui);
     await flush();
     expectAccessible(container);
+    // Nút tim yêu thích (chưa thích) đứng trước hai nút phân loại.
     const pressed = Array.from(container.querySelectorAll('button[aria-pressed]')).map((b) => b.getAttribute('aria-pressed'));
-    expect(pressed).toEqual(['true', 'false']);
+    expect(pressed).toEqual(['false', 'true', 'false']);
+    expect(container.querySelector('button[aria-label="Thêm yêu thích"]')!.getAttribute('aria-pressed')).toBe('false');
     const labels = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
     expect(labels).toEqual(expect.arrayContaining(['Giảm số lượng', 'Tăng số lượng']));
   });
@@ -207,17 +211,15 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     expect(container.querySelector('select[aria-label="Phường/xã"]')).not.toBeNull();
   });
 
-  it('/thanh-toan sau khi đặt đơn chuyển khoản: h1 → h2, nút Sao chép có tên, địa chỉ không còn dấu phẩy thừa', async () => {
+  it('/thanh-toan đặt đơn chuyển khoản: chuyển sang trang QR riêng thay vì dựng khung QR ngay tại trang đặt hàng', async () => {
     const { container } = mount(<CheckoutPage />);
     await flush();
     expect(container.textContent).toContain('1 Xuân Thuỷ, Cầu Giấy, Hà Nội');
-    click(Array.from(container.querySelectorAll('input[type="radio"]')).find((r) => (r as HTMLInputElement).name === 'pay') ?? null);
+    click(Array.from(container.querySelectorAll('input[type="radio"]')).filter((r) => (r as HTMLInputElement).name === 'pay')[1] ?? null);
     click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng') ?? null);
     await flush(8);
-    expect(container.textContent).toContain('Đặt hàng thành công!');
-    expectAccessible(container);
-    const copyLabels = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
-    expect(copyLabels).toEqual(expect.arrayContaining(['Sao chép: 9984606774', 'Sao chép: TB-9']));
+    expect(mocks.replace).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-9');
+    expect(container.textContent).not.toContain('Đặt hàng thành công!');
   });
 
   it('/tai-khoan: có h1 khi đã đăng nhập, khi chưa đăng nhập và khi đang tải', async () => {
@@ -265,7 +267,7 @@ describe('trang khách — chi tiết đơn (C-025)', () => {
   it('/tai-khoan: mỗi đơn dẫn tới trang chi tiết; đơn chuyển khoản chờ thanh toán có lối "Thanh toán" riêng', async () => {
     shop.orders = [
       { code: 'TB-1', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 150000, paymentMethod: 'COD', createdAt: '2026-10-01T00:00:00Z', items: [] },
-      { code: 'TB-2', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 99000, paymentMethod: 'BANK_TRANSFER', createdAt: '2026-10-02T00:00:00Z', items: [] },
+      { code: 'TB-2', status: 'PENDING_PAYMENT', subtotal: 1, discount: 0, shippingFee: 0, total: 99000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: '2026-10-02T00:00:00Z', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString(), items: [] },
       { code: 'TB-3', status: 'DELIVERED', subtotal: 1, discount: 0, shippingFee: 0, total: 80000, paymentMethod: 'BANK_TRANSFER', createdAt: '2026-10-03T00:00:00Z', items: [] },
     ];
     const { container } = mount(<AccountPage />);
@@ -274,8 +276,9 @@ describe('trang khách — chi tiết đơn (C-025)', () => {
     const link = (code: string) => container.querySelector<HTMLAnchorElement>(`a[href="/tai-khoan/don-hang/${code}"]`);
     expect(accessibleName(link('TB-1')!)).toBe('Xem chi tiết đơn TB-1');
     expect(link('TB-1')!.textContent).toBe('Xem chi tiết');
-    expect(accessibleName(link('TB-2')!)).toBe('Thanh toán đơn TB-2');
-    expect(link('TB-2')!.textContent).toBe('Thanh toán');
+    const pay = container.querySelector<HTMLAnchorElement>('a[href="/thanh-toan/chuyen-khoan/TB-2"]')!;
+    expect(accessibleName(pay)).toBe('Thanh toán đơn TB-2');
+    expect(pay.textContent).toBe('Thanh toán ngay');
     expect(link('TB-3')!.textContent).toBe('Xem chi tiết');
   });
 

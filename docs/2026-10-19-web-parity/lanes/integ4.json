@@ -1,0 +1,15 @@
+{
+ "reviewRounds": 1,
+ "maxRounds": 2,
+ "effort": "medium",
+ "reviewFocus": "Khung QR/thông tin chuyển khoản ở trang chi tiết đơn web chỉ hiện đúng khi Mini App hiện (`apps/miniapp/src/pages/order-detail.tsx` và `canPayOrderNow`/quy tắc tương đương): đơn quá hạn, đã huỷ, đã PAID, xử lý tay thì không mời chuyển khoản. So từng nhánh trạng thái và hạn (trước hạn, đúng hạn, sau hạn, không có hạn). Mọi đường dẫn tới trang chuyển khoản dùng một helper có encode mã đơn. Không đổi endpoint/body API nào.",
+ "lane": "integ4",
+ "wt": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-integ4",
+ "branch": "web/integ4",
+ "tasks": [
+  {
+   "title": "QR chuyển khoản ở chi tiết đơn theo hạn như Mini App, gom đường dẫn chuyển khoản",
+   "prompt": "Việc tích hợp sau integ2. Lane này ĐƯỢC sửa file web của lane order và các file web đang tự nối đường dẫn chuyển khoản; không sửa file Mini App, không sửa file lane recycle (`/doi-rac`), không sửa hub `/tai-khoan` (lane integ3 đang sửa). Nguồn: `docs/2026-10-19-web-parity/impl/integ2.md` (mục còn mở), `impl/order.md`. Mỗi mục: đọc Mini App, test đỏ trước, sửa, commit riêng.\n\n1. `apps/web/src/app/tai-khoan/don-hang/[code]/page.tsx` (khoảng dòng 188-190) hiện khung QR chuyển khoản cả cho đơn đã quá hạn thanh toán. Mini App `apps/miniapp/src/pages/order-detail.tsx` chỉ mời thanh toán khi `canPayOrderNow` (hoặc quy tắc tương đương; tìm trong Mini App) đúng. Web đã có `canPayNow` ở `apps/web/src/components/orders/order-rules.ts` (integ2 dùng cho hub). Cho trang chi tiết đơn web theo đúng quy tắc Mini App: khi nào hiện QR/nút sang trang chuyển khoản, khi nào hiện chữ đơn quá hạn/đã huỷ. Trang `/thanh-toan/chuyen-khoan/[code]` cũng kiểm: Mini App `bank-payment.tsx` xử lý đơn quá hạn/đã PAID thế nào, web phải giống.\n2. Gom mọi chỗ tự nối chuỗi `/thanh-toan/chuyen-khoan/` trong `apps/web/src` (ví dụ `components/orders/order-card.tsx`, `app/thanh-toan/page.tsx`, `components/dealer/price-tab.tsx`, affiliate) về helper `bankPaymentHref` ở `apps/web/src/lib/order-view.ts` (đã encode mã). Không đổi hành vi khác. grep lại sau khi sửa: chỉ còn helper và spec.\n3. Cập nhật `docs/2026-10-19-web-parity/98-cau-hoi-va-chua-kiem-chung.md`: mục integ2 về QR quá hạn và gom đường dẫn ghi \"đã xử lý ở <commit>\" (thêm dòng nếu chưa có, không xoá dòng)."
+  }
+ ]
+}

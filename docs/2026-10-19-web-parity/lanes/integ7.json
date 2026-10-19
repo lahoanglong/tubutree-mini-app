@@ -1,0 +1,15 @@
+{
+ "reviewRounds": 2,
+ "maxRounds": 3,
+ "effort": "medium",
+ "reviewFocus": "Điểm, hạt giống, vòng quay, kho quà: web gửi cùng endpoint, cùng body như Mini App bản 13ffd242 (ví dụ `POST /game/garden/unlock` kèm `slot` ô khách định mở; giá vòng quay mặc định khi API chưa trả `spinCostPoints`). Khoá mốc hạng trên web dùng `tubu_last_tier_min_v2` như Mini App để không chúc mừng lên hạng giả sau đợt đổi ngưỡng. Kho quà, quà của tôi, trang Điểm Xanh: chữ, thẻ, nhãn trạng thái, giải thích cách dùng điểm giống Mini App. Không đổi API, không sửa Mini App.",
+ "lane": "integ7",
+ "wt": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-integ7",
+ "branch": "web/integ7",
+ "tasks": [
+  {
+   "title": "Đồng bộ web game, Điểm Xanh, kho quà với Mini App bản mới",
+   "prompt": "Nhánh đổi rác 13ffd242 (đã gộp vào `web/integration`) mang theo các commit Mini App ngoài đổi rác mà web chưa theo (lane integ6 chỉ làm đổi rác). Lane này ĐƯỢC sửa file web của lane game, loyalty và `packages/app-core/src/api/game.ts` (cùng spec); không sửa file Mini App, không sửa API, không sửa file đổi rác (`/doi-rac`, `components/recycle`).\n\n1. Liệt kê: `git log --oneline 07ac5aa1..13ffd242 -- apps/miniapp/src` và `git diff 07ac5aa1 13ffd242 -- apps/miniapp/src`, BỎ các file đổi rác (`recycle*`, `waste*`). Đã biết: `components/game/garden-plots.tsx`, `components/game/use-game-actions.ts`, `services/game-api.ts` (`unlockPlot(slot)` gửi `{ currency: 'SEEDS', slot }`, 653b3e19), `pages/game.tsx` (giá vòng quay mặc định `?? 10_000`, 6c682012), `pages/loyalty.tsx` (khoá `tubu_last_tier_min_v2`, 587c4b0c), `pages/rewards.tsx` và `pages/rewards-mine.tsx` (icon theo loại quà, hàng giá + nút, giải thích cách dùng điểm, quà của tôi một kiểu thẻ, huy hiệu READY, QR căn giữa: eb9ecde0, b82a7ad4, 7832d7e1), `utils/points-rules-note.ts` (fa98a8e8), `components/ui/button.tsx`, `components/ui/timeline.tsx`. Ghi bảng vào báo cáo: commit Mini App → file web (`apps/web/src/app/vuon-xanh`, `components/game`, `app/kho-qua`, `app/tai-khoan/diem-xanh`, `app/tai-khoan/qua-cua-toi` hoặc tương ứng) → đã theo/không cần (vì sao).\n2. Theo từng thay đổi trên web, cùng chữ, cùng điều kiện, cùng endpoint/body (app-core `unlockPlot(http, slot?)` thêm `slot` như Mini App; nơi gọi trên web truyền `garden.nextUnlock.slot`). Test đỏ trước (chép ý nghĩa ca test Mini App tương ứng), rồi code, commit riêng theo nhóm (game, Điểm Xanh, kho quà/quà của tôi).\n3. Khoá mốc hạng: web `apps/web/src/app/tai-khoan/diem-xanh/page.tsx` đang dùng `tubu_last_tier_min`; đổi sang `tubu_last_tier_min_v2` như Mini App, kèm test.\n4. Cập nhật `docs/2026-10-19-web-parity/impl/integ7.md` theo mẫu báo cáo lane."
+  }
+ ]
+}

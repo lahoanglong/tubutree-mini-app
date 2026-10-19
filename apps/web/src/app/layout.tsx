@@ -6,6 +6,8 @@ import SiteFooter from '@/components/site-footer';
 import HideOnPortals from '@/components/hide-on-portals';
 import PortalHeader from '@/components/admin/portal-header';
 import { ReferralCapture } from '@/components/storefront-tracker';
+import { AppGates } from '@/components/app-gates';
+import BottomNav from '@/components/bottom-nav';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { SITE_URL, tenantHostBootScript } from '@/lib/site';
 
@@ -33,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* Link CTV chia sẻ thường trỏ thẳng tới trang sản phẩm kèm ?ref= — bắt ở mọi trang. */}
           <ReferralCapture />
           <EntrySourceCapture />
+          <AppGates />
           <HideOnPortals>
             <SiteHeader />
           </HideOnPortals>
@@ -41,6 +44,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="flex-1">{children}</div>
           <HideOnPortals>
             <SiteFooter />
+          </HideOnPortals>
+          <HideOnPortals>
+            <BottomNav />
           </HideOnPortals>
         </Providers>
       </body>
