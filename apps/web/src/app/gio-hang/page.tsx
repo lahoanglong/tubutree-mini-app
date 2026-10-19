@@ -467,7 +467,7 @@ export default function CartPage() {
         <div
           role="status"
           className={`fixed inset-x-3 z-30 mx-auto flex max-w-md items-center justify-between rounded-control bg-stone-900 px-4 py-2 text-sm text-stone-0 ${
-            showBar ? 'bottom-32 md:bottom-6' : 'bottom-6'
+            showBar ? 'bottom-[calc(var(--sticky-bar-h,8rem)+0.5rem)] md:bottom-6' : 'bottom-6'
           }`}
         >
           <span>Đã bỏ khỏi giỏ</span>
