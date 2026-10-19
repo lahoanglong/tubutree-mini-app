@@ -52,7 +52,8 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
       return rows.filter((c) => c.code.startsWith('MILESTONE'));
     }
     async function delivered(userId: string, total: number) {
-      return createOrder(prisma, { userId, status: 'DELIVERED', total });
+      // Giao 8 ngày trước: đã qua hạn đổi/trả (7 ngày), điều kiện để đơn được tính vào voucher mốc; createdAt giữ bây giờ để luôn trong tháng VN hiện tại.
+      return createOrder(prisma, { userId, status: 'DELIVERED', total, deliveredAt: new Date(Date.now() - 8 * DAY) });
     }
     async function partialReturn(
       orderId: string,
@@ -62,7 +63,8 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
       status: 'APPROVED' | 'REQUESTED' | 'REJECTED' = 'APPROVED',
     ) {
       return prisma.returnRequest.create({
-        data: { orderId, userId, reason: 'IT', status, refundAmount, shippingRefund, fullReturn: false },
+        // APPROVED mặc định đã nhận hàng về (xong việc): yêu cầu duyệt mà hàng chưa về còn giữ voucher mốc lại.
+        data: { orderId, userId, reason: 'IT', status, refundAmount, shippingRefund, fullReturn: false, receivedAt: status === 'APPROVED' ? new Date() : null },
       });
     }
 
@@ -99,11 +101,14 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
       expect((await milestoneCoupons(u.id)).map((x) => x.value)).toEqual([30_000]);
     });
 
-    it('yêu cầu REQUESTED / REJECTED chưa hoàn tiền → không trừ', async () => {
+    it('yêu cầu REJECTED chưa hoàn tiền → không trừ; yêu cầu REQUESTED còn mở → chờ xử lý xong mới cấp', async () => {
       const u = await realUser();
       const o = await delivered(u.id, 1_000_000);
-      await partialReturn(o.id, u.id, 500_000, 0, 'REQUESTED');
       await partialReturn(o.id, u.id, 500_000, 0, 'REJECTED');
+      const open = await partialReturn(o.id, u.id, 500_000, 0, 'REQUESTED');
+      await vouchers.milestoneVouchers();
+      expect(await milestoneCoupons(u.id)).toEqual([]);
+      await prisma.returnRequest.update({ where: { id: open.id }, data: { status: 'REJECTED' } });
       await vouchers.milestoneVouchers();
       expect((await milestoneCoupons(u.id)).map((x) => x.value)).toEqual([30_000]);
     });

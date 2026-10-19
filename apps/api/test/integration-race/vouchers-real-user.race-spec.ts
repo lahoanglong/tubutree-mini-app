@@ -136,8 +136,9 @@ describe('VouchersService real-user + batching (real Postgres)', () => {
 
   it('(f) milestone: guest / guest đã gộp chi tiêu vượt mốc không nhận; user Zalo và user có SĐT nhận đúng 1 lần', async () => {
     const [g, mg, z, p] = [await guest(), await mergedGuest(), await zaloUser(), await phoneUser()];
+    // Đơn chỉ được tính sau hạn đổi/trả (7 ngày): giao 8 ngày trước, còn createdAt = bây giờ để luôn nằm trong tháng VN hiện tại.
     for (const u of [g, mg, z, p]) {
-      await createOrder(prisma, { userId: u.id, status: 'DELIVERED', total: 6_000_000, subtotal: 6_000_000, createdAt: new Date(), deliveredAt: new Date() });
+      await createOrder(prisma, { userId: u.id, status: 'DELIVERED', total: 6_000_000, subtotal: 6_000_000, createdAt: new Date(), deliveredAt: new Date(Date.now() - 8 * 864e5) });
     }
 
     await vouchers.milestoneVouchers();

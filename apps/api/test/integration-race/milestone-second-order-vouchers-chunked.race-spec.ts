@@ -46,7 +46,8 @@ describe('VouchersService milestone + second-order chunked (real Postgres)', () 
     statics.MILESTONE_PAGE = 7;
     const errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     try {
-      // createdAt = bây giờ để đơn luôn nằm trong tháng VN hiện tại (cửa sổ tính của cron), kể cả ngày đầu tháng.
+      // createdAt = bây giờ để đơn luôn nằm trong tháng VN hiện tại (kỳ tính của cron), kể cả ngày đầu tháng; giao 8 ngày trước
+      // để đã qua hạn đổi/trả 7 ngày, điều kiện để đơn được tính.
       const tiers = [
         { spent: 6_000_000, reward: 200_000 },
         { spent: 3_500_000, reward: 100_000 },
@@ -57,7 +58,7 @@ describe('VouchersService milestone + second-order chunked (real Postgres)', () 
       for (let i = 0; i < 25; i++) {
         const t = tiers[i % tiers.length]!;
         const u = await phoneUser();
-        await createOrder(prisma, { userId: u.id, status: 'DELIVERED', total: t.spent, subtotal: t.spent, createdAt: new Date(), deliveredAt: new Date() });
+        await createOrder(prisma, { userId: u.id, status: 'DELIVERED', total: t.spent, subtotal: t.spent, createdAt: new Date(), deliveredAt: ago(8) });
         mine.push({ id: u.id, reward: t.reward });
       }
       const ids = mine.map((m) => m.id);

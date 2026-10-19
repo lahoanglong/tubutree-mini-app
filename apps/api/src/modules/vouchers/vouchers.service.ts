@@ -8,7 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
-import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
+import { formatVnDate, startOfNextVnMonth, startOfVnMonth, vnDateParts, vnMonthKey } from '../../common/vn-time';
 import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { voucherCode } from './voucher-code';
@@ -323,8 +323,8 @@ export class VouchersService {
   }
 
   /**
-   * Milestone (§6.6): chi tiêu đạt mốc trong 30 ngày → voucher tri ân. Chạy 5h sáng.
-   * Mặc định 1tr→30k, 3tr→100k, 5tr→200k. Idempotent theo (mốc, tháng) qua grant.
+   * Milestone (§6.6): chi tiêu đạt mốc trong tháng (đơn RETAIL khách tự đặt, đã hết hạn đổi/trả) → voucher tri ân. Chạy 5h sáng.
+   * Mặc định 1tr→30k, 3tr→100k, 5tr→200k. Idempotent theo (mốc, tháng tạo đơn) qua grant.
    *
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
@@ -339,53 +339,71 @@ export class VouchersService {
         { spend: 3_000_000, reward: 100_000 },
         { spend: 5_000_000, reward: 200_000 },
       ]);
-      // Cửa sổ tính PHẢI khớp với khoá idempotency bên dưới (`...-yyyy-mm`). Trước đây gom theo
-      // 30 ngày TRƯỢT nhưng khoá theo THÁNG: cùng một lần chi tiêu nằm trong cửa sổ trượt sinh
-      // khoá khác khi sang tháng mới → cấp voucher lần 2 cho đúng số tiền đó (P2,
-      // docs/2026-09-08-review-progress.md). Nay cả hai cùng dùng tháng dương lịch GIỜ VN
-      // (container chạy UTC nên phải trừ offset, nếu không mốc tháng lệch 7 tiếng).
-      const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-      const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-      const since = new Date(Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), 1) - VN_OFFSET_MS);
-      // Chi tiêu RÒNG: đơn đã giao nhưng được trả MỘT PHẦN vẫn ở DELIVERED với nguyên `total`, nên trừ tiền hàng + ship đã
-      // hoàn của các yêu cầu APPROVED (fullReturn=false, cùng định nghĩa LoyaltyService.partialReturnsByOrder), kẹp ở 0.
-      // Voucher mốc đã cấp từ trước KHÔNG thu hồi: coupon đã phát cho khách, chỉ lượt cấp sau mới tính theo số ròng.
-      const period = nowVn.toISOString().slice(0, 7); // yyyy-mm theo giờ VN
+      // Mỗi kỳ là một tháng dương lịch GIỜ VN theo THÁNG TẠO ĐƠN, khớp khoá idempotency `...-yyyy-mm` (container chạy UTC nên
+      // không dùng getMonth() trần). Gom theo 30 ngày trượt mà khoá theo tháng từng cấp voucher lần 2 cho cùng một lần chi
+      // tiêu (P2, docs/2026-09-08-review-progress.md). Đơn chỉ được tính sau khi hết hạn đổi/trả, nên đơn tạo cuối tháng
+      // thường hết hạn sang tháng sau: cron xét cả kỳ tháng trước để khách không mất mã, khoá chống trùng ngăn cấp hai lần.
+      const now = Date.now();
+      const currentStart = startOfVnMonth(new Date(now));
+      const periods = [
+        { start: startOfVnMonth(new Date(currentStart.getTime() - 1)), end: currentStart },
+        { start: currentStart, end: startOfNextVnMonth(new Date(now)) },
+      ];
+      const windowDays = await this.returnWindowDays();
+      const deliveredBefore = new Date(now - windowDays * 864e5);
       // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
       const byDescSpend = [...milestones].sort((a, b) => b.spend - a.spend);
       const lowestSpend = byDescSpend[byDescSpend.length - 1]?.spend;
       if (lowestSpend === undefined) return;
-      // Phân trang keyset theo userId: trước đây `GROUP BY ... LIMIT 1000` không ORDER BY nên khách ngoài 1000 dòng đầu
-      // không bao giờ được xét, lượt nào cũng lấy lại đúng nhóm đó. HAVING loại người dưới mốc thấp nhất ngay trong SQL
-      // để trang không bị chiếm bởi khách không đủ điều kiện; kết quả cấp không đổi vì hit chỉ có khi spent >= mốc thấp nhất.
-      let cursor = '';
-      for (;;) {
-        const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
-          SELECT o."userId", GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) AS spent
-          FROM orders o
-          LEFT JOIN (
-            SELECT "orderId", SUM(COALESCE("refundAmount", 0) + "shippingRefund") AS refunded
-            FROM return_requests
-            WHERE status::text = 'APPROVED' AND "fullReturn" = false
-            GROUP BY "orderId"
-          ) rr ON rr."orderId" = o.id
-          JOIN users u ON u.id = o."userId"
-          WHERE o.status::text = 'DELIVERED' AND o."createdAt" >= ${since} AND o."userId" > ${cursor}
-            AND ${REAL_USER_SQL}
-          GROUP BY o."userId"
-          HAVING GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) >= ${lowestSpend}
-          ORDER BY o."userId"
-          LIMIT ${VouchersService.MILESTONE_PAGE}`;
-        const hits = rows.flatMap((r) => {
-          const spent = Number(r.spent);
-          const hit = byDescSpend.find((m) => spent >= m.spend);
-          return hit ? [{ userId: r.userId, hit }] : [];
-        });
-        granted += await this.grantInChunks('milestoneVouchers', hits, ({ userId, hit }) => ({
-          userId, reason: `MILESTONE${hit.spend}-${period}`, type: 'AMOUNT', value: hit.reward, validDays: 30, templateCode: 'MILESTONE_VOUCHER',
-        }), failures);
-        if (rows.length < VouchersService.MILESTONE_PAGE) break;
-        cursor = rows[rows.length - 1]!.userId;
+      for (const { start, end } of periods) {
+        const period = vnMonthKey(start);
+        // Phân trang keyset theo userId: trước đây `GROUP BY ... LIMIT 1000` không ORDER BY nên khách ngoài 1000 dòng đầu
+        // không bao giờ được xét, lượt nào cũng lấy lại đúng nhóm đó. HAVING loại người dưới mốc thấp nhất ngay trong SQL
+        // để trang không bị chiếm bởi khách không đủ điều kiện; kết quả cấp không đổi vì hit chỉ có khi spent >= mốc thấp nhất.
+        let cursor = '';
+        for (;;) {
+          // Chi tiêu RÒNG: trả MỘT PHẦN vẫn để đơn ở DELIVERED với nguyên `total`, nên trừ tiền hàng + ship đã hoàn của các
+          // yêu cầu APPROVED (fullReturn=false, cùng định nghĩa LoyaltyService.partialReturnsByOrder), kẹp ở 0. Voucher mốc
+          // đã cấp KHÔNG thu hồi: coupon đã phát cho khách, chỉ lượt cấp sau mới tính theo số ròng.
+          // Chỉ đơn RETAIL khách tự đặt (đơn đại lý / CTV đặt hộ không phải chi tiêu của chính người đó, như đơn thứ 2),
+          // đã giao quá hạn đổi/trả và không còn yêu cầu đổi/trả đang xử lý (chờ duyệt, hoặc đã duyệt mà hàng chưa về kho).
+          const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
+            SELECT o."userId", GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) AS spent
+            FROM orders o
+            LEFT JOIN (
+              SELECT "orderId", SUM(COALESCE("refundAmount", 0) + "shippingRefund") AS refunded
+              FROM return_requests
+              WHERE status::text = 'APPROVED' AND "fullReturn" = false
+              GROUP BY "orderId"
+            ) rr ON rr."orderId" = o.id
+            JOIN users u ON u.id = o."userId"
+            WHERE o.status::text = 'DELIVERED'
+              AND o.type::text = 'RETAIL'
+              AND o."placedForCustomer" = false
+              AND o."createdAt" >= ${start} AND o."createdAt" < ${end}
+              AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${deliveredBefore}
+              AND NOT EXISTS (
+                SELECT 1 FROM return_requests open_rr
+                WHERE open_rr."orderId" = o.id
+                  AND (open_rr.status::text = 'REQUESTED'
+                    OR (open_rr.status::text = 'APPROVED' AND open_rr."receivedAt" IS NULL)))
+              AND o."userId" > ${cursor}
+              AND ${REAL_USER_SQL}
+            GROUP BY o."userId"
+            HAVING GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) >= ${lowestSpend}
+            ORDER BY o."userId"
+            LIMIT ${VouchersService.MILESTONE_PAGE}`;
+          const hits = rows.flatMap((r) => {
+            const spent = Number(r.spent);
+            const hit = byDescSpend.find((m) => spent >= m.spend);
+            return hit ? [{ userId: r.userId, hit }] : [];
+          });
+          granted += await this.grantInChunks('milestoneVouchers', hits, ({ userId, hit }) => ({
+            userId, reason: `MILESTONE${hit.spend}-${period}`, type: 'AMOUNT', value: hit.reward, validDays: 30, templateCode: 'MILESTONE_VOUCHER',
+          }), failures);
+          if (rows.length < VouchersService.MILESTONE_PAGE) break;
+          cursor = rows[rows.length - 1]!.userId;
+        }
       }
       if (granted) this.logger.log(`Milestone vouchers granted: ${granted}`);
     } catch (err) {
@@ -427,6 +445,12 @@ export class VouchersService {
     } finally {
       this.secondOrderRunning = false;
     }
+  }
+
+  /** returns.window_days (cùng khoá/mặc định 7 với OrdersService.requestReturn); sai kiểu hoặc âm → 7. */
+  private async returnWindowDays(): Promise<number> {
+    const v = Number(await this.config.get<number>('returns.window_days', 7));
+    return Number.isFinite(v) && v >= 0 ? v : 7;
   }
 
   private async grantSecondOrderBatches(): Promise<{ granted: number; scanned: number }> {
