@@ -148,6 +148,11 @@ export interface AdminOrderFilter {
   searchUserIds?: string[];
   /** Id đơn có SĐT người nhận (shippingAddress.phone) khớp `search` — tra trước bằng index biểu thức. */
   searchOrderIds?: string[];
+  /**
+   * Người xem bị che SĐT (seesFullOrderPhones = false): `search` chỉ khớp SĐT khi gõ đủ số, không khớp chuỗi con. Tìm theo
+   * chuỗi con thì "0901" ra/không ra đơn cho biết từng chữ số của SĐT đã che.
+   */
+  exactPhoneOnly?: boolean;
 }
 
 /** Các bộ lọc thêm của danh sách đơn admin (D1-17) cùng thứ tự sắp xếp theo ngày đặt. `storefront` là slug/subdomain gõ tay. */
@@ -161,7 +166,7 @@ export interface OrderListExtra {
 }
 
 /** Đầu vào của AdminService.adminOrderWhere/orderCsv: bộ lọc đơn, gian hàng đưa vào dạng slug chứ chưa phải id. */
-export type AdminOrderFilterInput = Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds' | 'storefrontId'> &
+export type AdminOrderFilterInput = Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds' | 'storefrontId' | 'exactPhoneOnly'> &
   Pick<OrderListExtra, 'storefront'>;
 
 /** Id không thể trùng gian hàng nào (cuid không có dấu gạch) — dùng khi slug gõ vào không khớp gian hàng. */
@@ -178,6 +183,16 @@ export function searchPhone(raw: string): string | null {
   const digits = s.replace(/\D/g, '');
   if (digits.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return null;
   return digits.replace(/^840?(\d{9})$/, '0$1').replace(/^([1-9]\d{8})$/, '0$1');
+}
+
+/**
+ * Điều kiện khớp SĐT khách cho ô tìm đơn. Người xem thấy đủ SĐT: chứa chuỗi gõ (và dạng nội địa của nó). Người xem bị che SĐT
+ * (`exactOnly`): chỉ bằng đúng SĐT nội địa 10 số sau chuẩn hoá, chuỗi ngắn hơn không khớp gì.
+ */
+export function userPhoneClauses(s: string, exactOnly: boolean): Prisma.UserWhereInput[] {
+  const phone = searchPhone(s);
+  if (exactOnly) return phone && /^0\d{9}$/.test(phone) ? [{ phone }] : [];
+  return [{ phone: { contains: escapePrismaLike(s) } }, ...(phone && phone !== s ? [{ phone: { contains: phone } }] : [])];
 }
 
 /**
@@ -249,15 +264,13 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   const s = normalizeAdminOrderSearch(f.search);
   if (s) {
     const like = escapePrismaLike(s);
-    const phone = searchPhone(s);
     const folded = escapePrismaLike(foldVietnamese(s));
     const byUser: Prisma.OrderWhereInput[] = f.searchUserIds
       ? f.searchUserIds.length > 0
         ? [{ userId: { in: f.searchUserIds } }]
         : []
       : [
-          { user: { phone: { contains: like } } },
-          ...(phone && phone !== s ? [{ user: { phone: { contains: phone } } }] : []),
+          ...userPhoneClauses(s, f.exactPhoneOnly === true).map((user) => ({ user })),
           { user: { fullName: { contains: like, mode: 'insensitive' as const } } },
           ...(folded ? [{ user: { fullNameSearch: { contains: folded } } }] : []),
         ];

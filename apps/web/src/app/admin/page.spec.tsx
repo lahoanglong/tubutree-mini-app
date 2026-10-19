@@ -138,6 +138,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'communityPending', count: 3 },
           { key: 'communityUnanswered', count: 1 },
           { key: 'invoicePending', count: 2 },
+          { key: 'payoutsToPay', count: 2 },
         ],
       };
     },
@@ -2608,6 +2609,18 @@ describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
 });
 
 describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần xử lý" (launch review D1-08, D1-17)', () => {
+  it('thẻ rút tiền đã duyệt chờ "Đã chi" mở tab Duyệt yêu cầu rút tiền', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="payoutsToPay"]')!;
+    expect(card.textContent).toContain('Lệnh rút tiền chờ chi');
+    expect(card.textContent).toContain('2');
+
+    click(card);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=payouts');
+  });
+
   const stubFeed = () => {
     const api = mockFetch({
       '/feed/admin/pending': { body: [{ id: 'p1', kind: 'SHOWCASE', title: 'Ban công', body: 'Khoe vườn', images: [], author: 'Lan', category: null, createdAt: '2026-10-17T03:00:00.000Z' }] },
@@ -2726,6 +2739,36 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     window.history.replaceState(null, '', '/admin?tab=externalClaims');
     const kho = await mount();
     expect(navItems(kho.container)).not.toContain('Tích điểm đơn sàn');
+  });
+
+  it('nút Ghim/Bỏ ghim chỉ hiện cho ADMIN: CSKH vào tab Cộng đồng không thấy nút ghim (API chỉ cho ADMIN ghim)', async () => {
+    const api = mockFetch({
+      '/feed/admin/pending': { body: [] },
+      '/feed/admin/unanswered': { body: [] },
+      '/feed/admin/published': {
+        body: { items: [{ id: 'a2', kind: 'MANUAL', title: null, excerpt: 'Chia sẻ nhỏ.', author: 'Quân', category: null, createdAt: '2026-10-16T04:00:00.000Z', isPinned: false, likeCount: 0, commentCount: 0 }], nextCursor: null },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const published = (c: HTMLElement) => [...c.querySelectorAll('button')].find((b) => b.textContent === 'Đã đăng')!;
+    const rowButtons = (c: HTMLElement) => [...c.querySelectorAll('[data-post="a2"] button')].map((b) => b.textContent);
+
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const cskh = await mount();
+    click(published(cskh.container));
+    await flush();
+    expect(rowButtons(cskh.container)).toEqual(['Ẩn']);
+    cskh.unmount();
+    mounted = [];
+
+    mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const admin = await mount();
+    click(published(admin.container));
+    await flush();
+    expect(rowButtons(admin.container)).toEqual(['Ghim', 'Ẩn']);
   });
 
   it('CSKH có mục Cộng đồng và vào được từ link ?tab=community; KHO thì không (link rơi về mục đầu)', async () => {

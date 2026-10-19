@@ -5,6 +5,7 @@ import {
   pancakeUnsyncedWhere,
   recipientPhoneVariants,
   searchPhone,
+  userPhoneClauses,
 } from './admin-order-filter';
 
 describe('searchPhone — SĐT gõ/dán ở ô tìm về dạng 0xxxxxxxxx', () => {
@@ -51,6 +52,37 @@ describe('normalizeAdminOrderSearch', () => {
     expect(buildAdminOrderWhere({ search: 'Mẹ Chồng 50%', searchUserIds: [] }).OR).toEqual(
       expect.arrayContaining([{ recipientSearch: { contains: 'me chong 50\\%' } }]),
     );
+  });
+});
+
+describe('exactPhoneOnly — người xem bị che SĐT không dò SĐT bằng chuỗi con (D2-04)', () => {
+  const userPhoneOr = (f: Parameters<typeof buildAdminOrderWhere>[0]) =>
+    ((buildAdminOrderWhere(f).OR ?? []) as { user?: { phone?: unknown } }[]).filter((c) => c.user && 'phone' in c.user).map((c) => c.user!.phone);
+
+  it('userPhoneClauses: người xem đủ quyền giữ cách cũ (chứa chuỗi gõ, thêm dạng nội địa)', () => {
+    expect(userPhoneClauses('0901', false)).toEqual([{ phone: { contains: '0901' } }]);
+    expect(userPhoneClauses('+84 901 234 567', false)).toEqual([{ phone: { contains: '+84 901 234 567' } }, { phone: { contains: '0901234567' } }]);
+  });
+
+  it('userPhoneClauses: bị che SĐT thì chỉ bằng đúng số nội địa 10 số, mọi dạng gõ đều về một số', () => {
+    for (const raw of ['0901234567', '+84 901 234 567', '84901234567', '901234567', '0901.234.567']) {
+      expect(userPhoneClauses(raw, true)).toEqual([{ phone: '0901234567' }]);
+    }
+    for (const part of ['090', '0901', '901234', '09012345678', '123456789012', 'Nguyễn']) {
+      expect(userPhoneClauses(part, true)).toEqual([]);
+    }
+  });
+
+  it('buildAdminOrderWhere (không tra trước id khách): một phần SĐT không sinh điều kiện nào trên SĐT; đủ số thì so bằng', () => {
+    expect(userPhoneOr({ search: '0901', exactPhoneOnly: true })).toEqual([]);
+    expect(userPhoneOr({ search: '0901234567', exactPhoneOnly: true })).toEqual(['0901234567']);
+    expect(userPhoneOr({ search: '0901', exactPhoneOnly: false })).toEqual([{ contains: '0901' }]);
+    expect(userPhoneOr({ search: '0901' })).toEqual([{ contains: '0901' }]);
+  });
+
+  it('các điều kiện khác của ô tìm (mã đơn, tên) không đổi khi bị che SĐT', () => {
+    const or = buildAdminOrderWhere({ search: 'Lan', exactPhoneOnly: true }).OR;
+    expect(or).toEqual(expect.arrayContaining([{ code: { contains: 'Lan', mode: 'insensitive' } }, { user: { fullName: { contains: 'Lan', mode: 'insensitive' } } }]));
   });
 });
 
