@@ -20,6 +20,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { SideDrawer } from './side-drawer';
+import { USER_ROLE_LABELS } from './users-list';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, ToneBadge, chipClass } from './ui';
 
 const REASON_MAX = 300;
@@ -261,7 +262,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <dl className="space-y-1 text-xs">
               <div><dt className="inline font-medium">Mã: </dt><dd className="inline break-all">/s/{sf.slug}</dd></div>
               <div><dt className="inline font-medium">Loại: </dt><dd className="inline">{STOREFRONT_TYPE_LABELS[sf.type]}{sf.isPartner ? ' (đối tác)' : ''}</dd></div>
-              <div><dt className="inline font-medium">Chủ: </dt><dd className="inline">{ownerLine(sf)}{sf.owner ? ` · ${sf.owner.role}` : ''}{sf.owner?.isBlocked ? ' · đang bị khoá' : ''}</dd></div>
+              <div><dt className="inline font-medium">Chủ: </dt><dd className="inline">{ownerLine(sf)}{sf.owner ? ` · ${USER_ROLE_LABELS[sf.owner.role] ?? sf.owner.role}` : ''}{sf.owner?.isBlocked ? ' · đang bị khoá' : ''}</dd></div>
               <div><dt className="inline font-medium">Tạo: </dt><dd className="inline">{formatDate(sf.createdAt)}</dd></div>
               {sf.approvedAt && <div><dt className="inline font-medium">Duyệt: </dt><dd className="inline">{formatDateTime(sf.approvedAt)}</dd></div>}
             </dl>

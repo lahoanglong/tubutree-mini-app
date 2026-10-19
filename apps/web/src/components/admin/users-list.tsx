@@ -1,7 +1,7 @@
 'use client';
 
 import type { AdminUser } from '@/lib/admin-client';
-import { pointsSummary } from '@/lib/checkout-points';
+import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
 import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_SMALL, ScrollRegion, ToneBadge } from './ui';
 
@@ -12,7 +12,7 @@ function UserPointsCell({ user }: { user: { pointsBalance: number; pointsConvert
   const pts = pointsSummary(user);
   return (
     <>
-      {pts.total}
+      {formatCount(pts.total)}
       {pts.convertedNote && <div className="text-xs text-stone-500">{pts.convertedNote}</div>}
     </>
   );

@@ -7,6 +7,14 @@ import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY } from './ui';
 
+/** Nhãn trạng thái hoàn tiền sàn ngoài cho kế toán: Đã duyệt là chờ hết thời gian giữ, Đã chi là tiền đã vào Ví Tubu của khách. */
+export const CASHBACK_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Chờ duyệt',
+  CONFIRMED: 'Đã duyệt',
+  REJECTED: 'Đã từ chối',
+  PAID: 'Đã chi',
+};
+
 /**
  * Duyệt tay hoàn tiền sàn ngoài. Trước đây trạng thái chỉ đổi qua postback của sàn, mà cron đối
  * soát thì tắt khi chưa có API key — postback rớt là giao dịch treo PENDING vĩnh viễn, khách
@@ -65,7 +73,7 @@ export function CashbackTab() {
             onClick={() => setFilter(s)}
             className={`min-h-[44px] rounded-control px-3 py-1 text-sm ${filter === s ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-700'}`}
           >
-            {s || 'Tất cả'}
+            {s ? CASHBACK_STATUS_LABELS[s] : 'Tất cả'}
           </button>
         ))}
       </div>
@@ -77,7 +85,7 @@ export function CashbackTab() {
           <div key={t.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0 break-words text-sm font-medium">{label(t)}</span>
-              <span className="text-xs text-stone-500">{t.status}</span>
+              <span data-cashback-status className="text-xs text-stone-500">{CASHBACK_STATUS_LABELS[t.status] ?? t.status}</span>
             </div>
             <div className="mt-1 text-xs text-stone-500">
               Khách: {t.user?.fullName ?? 'Khách hàng'}

@@ -143,4 +143,14 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     expect(patch.url).toContain('/admin/notification-templates/FLASH_STARTING');
     expect(JSON.parse(String(patch.init!.body))).toMatchObject({ bodyTemplate: 'Flash sale 20h tối nay', channel: 'INAPP' });
   });
+
+  // D7-24: đường dẫn trong repo không mở được với nhân viên vận hành.
+  it('D7-24: hướng dẫn đăng ký ZNS bằng chữ, không dẫn tới đường dẫn docs/ trong repo', async () => {
+    stub();
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Đăng ký mẫu ZNS trên Zalo');
+    expect(text).not.toMatch(/docs\/|GO-LIVE-KEYS|\.md/);
+  });
 });
