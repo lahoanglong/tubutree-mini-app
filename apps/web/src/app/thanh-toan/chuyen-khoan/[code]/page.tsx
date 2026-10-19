@@ -9,7 +9,7 @@ import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { BankTransferPanel } from '../../bank-transfer-panel';
+import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
 
 const TITLE = 'Quét QR để chuyển khoản';
 // Tên trang của Mini App khi chưa có QR để quét (đã trả, chưa đăng nhập).
@@ -33,6 +33,7 @@ export default function BankPaymentPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
   const [paid, setPaid] = useState(false);
+  const [panelState, setPanelState] = useState<BankPanelState>('loading');
   const detail = orderDetailHref(code);
 
   // Không làm mới thì chi tiết/danh sách đơn đọc lại từ cache và còn hiện "Chờ thanh toán" ngay sau khi khách vừa thấy "Đã nhận thanh toán".
@@ -45,6 +46,8 @@ export default function BankPaymentPage() {
     refreshOrders();
   }, [refreshOrders]);
 
+  const showQr = !paid && !!code && phase === 'authenticated' && panelState === 'ready';
+
   let body: React.ReactNode;
   if (phase === 'loading') body = <AuthLoading />;
   else if (phase === 'unavailable') body = <SessionUnavailable />;
@@ -56,6 +59,7 @@ export default function BankPaymentPage() {
         <BankTransferPanel
           order={{ code, paymentMethod: 'BANK_TRANSFER' }}
           onPaid={onPaid}
+          onState={setPanelState}
           showHeading={false}
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
@@ -82,8 +86,8 @@ export default function BankPaymentPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
       <TitleBand
-        title={paid || phase !== 'authenticated' || !code ? NEUTRAL_TITLE : TITLE}
-        subtitle={!paid && code && phase === 'authenticated' ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
+        title={showQr ? TITLE : NEUTRAL_TITLE}
+        subtitle={showQr ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
       />
       <div className="mt-2 max-md:pb-6">{body}</div>
     </main>

@@ -9,6 +9,9 @@ import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
 import { saveImage, type SaveImageResult } from '@/lib/download-image';
 import { useRemaining } from '@/lib/use-remaining';
+import { copyText } from '@/lib/copy-text';
+
+export type BankPanelState = 'loading' | 'error' | 'ready' | 'paid';
 
 /**
  * A2-02 = A6-01 (docs/audit-2026-09): web cho chọn "Chuyển khoản ngân hàng" nhưng trước đây sau
@@ -26,6 +29,7 @@ export function BankTransferPanel({
   onPaid,
   paidFooter,
   showHeading = true,
+  onState,
 }: {
   order: Pick<OrderDTO, 'code' | 'paymentMethod'>;
   onPaid?: () => void;
@@ -33,6 +37,8 @@ export function BankTransferPanel({
   paidFooter?: ReactNode;
   /** Trang riêng của đơn đã có tiêu đề "Quét QR để chuyển khoản" ở đầu trang (như PageHeader của Mini App) nên tắt tiêu đề trong khung. */
   showHeading?: boolean;
+  /** Trang chứa chỉ ghi "Quét QR" khi thật sự có QR để quét (như bank-payment.tsx của Mini App). */
+  onState?: (state: BankPanelState) => void;
 }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -54,6 +60,11 @@ export function BankTransferPanel({
   useEffect(() => {
     if (paid) onPaid?.();
   }, [paid, onPaid]);
+
+  const panelState: BankPanelState = isLoading ? 'loading' : paid ? 'paid' : data ? 'ready' : 'error';
+  useEffect(() => {
+    if (isBankTransfer) onState?.(panelState);
+  }, [isBankTransfer, panelState, onState]);
 
   if (!isBankTransfer) return null;
 
@@ -239,14 +250,13 @@ const DEADLINE_BOX = 'max-md:mx-2 max-md:mt-2 max-md:rounded-control max-md:bg-[
 /** Sao chép: nút chữ có viền từ md; ở điện thoại chỉ là icon không viền (IconButton sm của Mini App). */
 function CopyControls({ text, name }: { text: string; name: string }) {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // trình duyệt chặn clipboard: khách vẫn bôi đen chép tay được
-    }
+    // Chỉ báo "Đã sao chép" khi thật sự vào clipboard: báo sai thì khách dán số tài khoản cũ vào app ngân hàng.
+    const ok = await copyText(text);
+    setFailed(!ok);
+    setCopied(ok);
+    if (ok) setTimeout(() => setCopied(false), 2000);
   };
   return (
     <>
@@ -264,6 +274,11 @@ function CopyControls({ text, name }: { text: string; name: string }) {
       {copied && (
         <span role="status" className="sr-only md:hidden">
           Đã sao chép {name}
+        </span>
+      )}
+      {failed && (
+        <span role="alert" className="sr-only md:hidden">
+          Không thể sao chép {name}. Vui lòng sao chép thủ công.
         </span>
       )}
     </>

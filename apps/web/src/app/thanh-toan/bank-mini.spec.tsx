@@ -5,16 +5,20 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 // Màn VietQR ở điện thoại phải là Mini App (apps/miniapp/src/pages/bank-payment.tsx): tiêu đề trang, thẻ QR, các dòng kẻ,
 // nút sao chép chỉ icon, lời nhắc có icon, các nút ngoài thẻ. jsdom không có media query nên kiểm bằng lớp `max-md:`/`md:`.
 
-const mocks = vi.hoisted(() => ({ deadline: '2099-01-01T00:00:00.000Z' as string | null }));
+const mocks = vi.hoisted(() => ({ deadline: '2099-01-01T00:00:00.000Z' as string | null, qr: 'ok' as 'ok' | 'error' | 'pending' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB-9' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getBankQr: async (code: string) => ({
+  getBankQr: async (code: string) => {
+    if (mocks.qr === 'error') throw new Error('x');
+    if (mocks.qr === 'pending') return new Promise<never>(() => {});
+    return {
     orderCode: code, amount: 330000, paymentStatus: 'UNPAID', paymentDeadline: mocks.deadline,
     bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
     memo: code, qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png',
-  }),
+    };
+  },
 }));
 
 import BankPaymentPage from './chuyen-khoan/[code]/page';
@@ -28,6 +32,7 @@ const mount = async () => {
 };
 beforeEach(() => {
   mocks.deadline = '2099-01-01T00:00:00.000Z';
+  mocks.qr = 'ok';
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -96,5 +101,43 @@ describe('/thanh-toan/chuyen-khoan — bố cục như Mini App ở điện tho�
     const note = c.querySelector<HTMLElement>('[role="note"]')!;
     expect(note.parentElement!.className).toMatch(/\bmax-md:bg-\[var\(--color-status-warning-bg\)\]/);
     expect(c.querySelector('[data-bank-card]')!.contains(note)).toBe(false);
+  });
+});
+
+describe('/thanh-toan/chuyen-khoan — tiêu đề khi chưa có QR để quét', () => {
+  it('QR không tải được: h1 trung tính, không phụ đề "quét mã VietQR bên dưới"', async () => {
+    mocks.qr = 'error';
+    const c = await mount();
+    expect(c.textContent).toContain('Không tải được thông tin thanh toán.');
+    expect(c.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+    expect(c.textContent).not.toContain('quét mã VietQR bên dưới');
+  });
+
+  it('QR đang tải: h1 trung tính', async () => {
+    mocks.qr = 'pending';
+    const c = await mount();
+    expect(c.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+  });
+});
+
+describe('/thanh-toan/chuyen-khoan — sao chép ở điện thoại', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('clipboard bị chặn: báo không sao chép được, không báo "Đã sao chép"', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+    const c = await mount();
+    c.querySelector<HTMLElement>('button[aria-label="Sao chép số tài khoản"]')!.click();
+    await flush(4);
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không thể sao chép số tài khoản. Vui lòng sao chép thủ công.');
+    expect(c.textContent).not.toContain('Đã sao chép');
+  });
+
+  it('clipboard ghi được: báo "Đã sao chép" và không có lời báo lỗi', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    const c = await mount();
+    c.querySelector<HTMLElement>('button[aria-label="Sao chép số tài khoản"]')!.click();
+    await flush(4);
+    expect(c.textContent).toContain('Đã sao chép số tài khoản');
+    expect(c.querySelector('[role="alert"]')).toBeNull();
   });
 });
