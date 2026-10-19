@@ -271,7 +271,27 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     mounted.push(r);
     await flush(4);
     expect(r.container.textContent).toContain('WELCOME30');
-    expect(r.container.querySelector('button[aria-expanded]')).toBeNull();
+    // Thẻ "Thay đổi" chỉ dành cho điện thoại (md:hidden): ở máy tính vẫn không có dòng mở rộng.
+    expect(r.container.querySelector('button[aria-expanded]:not([data-testid="coupon-change"])')).toBeNull();
+  });
+
+  it('điện thoại, đã áp mã: thẻ như Mini App có chip mã, số đã giảm và chữ "Thay đổi"; bấm mở ô nhập, có nút bỏ mã', async () => {
+    state.coupons = [c('A1')];
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} appliedDiscount={30000} />);
+    mounted.push(r);
+    await flush(4);
+    const card = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-change"]')!;
+    expect(card.className).toMatch(/\bmd:hidden\b/);
+    expect(card.textContent).toContain('WELCOME30');
+    expect(card.textContent).toContain('-30.000đ');
+    expect(card.textContent).toContain('Thay đổi');
+    expect(card.textContent).not.toContain('Chọn mã');
+    expect(r.container.querySelector('#coupon-panel')).toBeNull();
+    click(card);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    expect(panel.hidden).toBe(false);
+    expect(panel.className).toMatch(/\bmd:hidden\b/);
+    expect(byText(panel, 'button', 'Bỏ mã đang áp dụng')).not.toBeNull();
   });
 
   it('nhãn của ô nhập vẫn là "Mã giảm giá" (cho trình đọc màn hình) và vùng chạm 44px', async () => {

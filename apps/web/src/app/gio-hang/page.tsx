@@ -410,6 +410,7 @@ export default function CartPage() {
             </div>
             <CouponBox
               currentCode={cart.couponCode}
+              appliedDiscount={shownDiscount}
               subtotal={selectedSubtotal}
               // Câu giải thích chỉ hiện khi thuộc phần đang hiển thị: cả giỏ, hoặc giá phần chọn đã có; chưa có thì thôi (không mượn câu của cả giỏ).
               notice={shown?.couponNotice ?? null}
