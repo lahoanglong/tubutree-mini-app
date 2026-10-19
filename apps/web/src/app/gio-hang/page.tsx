@@ -15,7 +15,7 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import BackLink from '@/components/back-link';
-import { TitleBand, CheckMark, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
+import { TitleBand, CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
 import { KeyValueRow } from '@/components/mini';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
@@ -223,14 +223,16 @@ export default function CartPage() {
         <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:grid-cols-3">
           <div className="min-w-0 md:col-span-2">
             <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-0 max-md:px-0 max-md:py-1 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleAll}
-                aria-label="Chọn tất cả sản phẩm"
-                className={miniCheckbox}
-              />
-              <CheckMark />
+              <span className={miniCheckboxWrap}>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  aria-label="Chọn tất cả sản phẩm"
+                  className={miniCheckbox}
+                />
+                <CheckMark />
+              </span>
               Chọn tất cả
             </label>
             {!freeshipReached && remainingFreeship > 0 && (
@@ -268,14 +270,16 @@ export default function CartPage() {
                     return (
                       <div key={it.id} className="flex gap-3 p-3 max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
                         <label className="relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
-                          <input
-                            type="checkbox"
-                            checked={!deselected.has(it.id)}
-                            onChange={() => toggleSelect(it.id)}
-                            aria-label={`Chọn ${it.productName} để thanh toán`}
-                            className={miniCheckbox}
-                          />
-                          <CheckMark />
+                          <span className={miniCheckboxWrap}>
+                            <input
+                              type="checkbox"
+                              checked={!deselected.has(it.id)}
+                              onChange={() => toggleSelect(it.id)}
+                              aria-label={`Chọn ${it.productName} để thanh toán`}
+                              className={miniCheckbox}
+                            />
+                            <CheckMark />
+                          </span>
                         </label>
                         <Link
                           href={`/san-pham/${it.slug}`}

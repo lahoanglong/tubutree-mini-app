@@ -111,6 +111,17 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
     expect(bar(c).textContent).toContain('Mua thêm 500.000đ để được miễn phí ship');
   });
 
+  it('dấu tick nằm trong khung 24px riêng bám đúng ô chọn (chọn tất cả và từng dòng)', async () => {
+    const c = await mount();
+    for (const input of Array.from(c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))) {
+      const box = input.parentElement!;
+      expect(box.tagName).toBe('SPAN');
+      expect(box.className).toMatch(/\brelative\b/);
+      expect(box.className).toMatch(/\bh-6\b/);
+      expect(box.querySelector('svg')).not.toBeNull();
+    }
+  });
+
   it('các khoản giảm nằm trên thanh dính, tạm tính là số đã giảm', async () => {
     state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
     const c = await mount();

@@ -56,7 +56,7 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
-import { TitleBand, CheckMark, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
+import { TitleBand, CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
 import { ProductThumb } from '@/components/mini';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
@@ -507,6 +507,7 @@ export default function CheckoutPage() {
             <AddressPicker
               addresses={addrQ.data ?? []}
               selectedId={addressId}
+              quoteOutdated={quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'}
               onSelect={chosen(setAddressId)}
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
@@ -735,14 +736,16 @@ export default function CheckoutPage() {
                 partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               }`}
             >
-              <input
-                type="checkbox"
-                checked={usePoints && !partnerPoints.disabled}
-                disabled={partnerPoints.disabled}
-                onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setUsePoints(e.target.checked))}
-                className={miniCheckbox}
-              />
-              <CheckMark />
+              <span className={miniCheckboxWrap}>
+                <input
+                  type="checkbox"
+                  checked={usePoints && !partnerPoints.disabled}
+                  disabled={partnerPoints.disabled}
+                  onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setUsePoints(e.target.checked))}
+                  className={miniCheckbox}
+                />
+                <CheckMark />
+              </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="text-forest-800">
                 {usePoints && quote
@@ -851,12 +854,14 @@ function Row({ label, value, green }: { label: string; value: string; green?: bo
 function AddressPicker({
   addresses,
   selectedId,
+  quoteOutdated,
   onSelect,
   onCreated,
   onUpdated,
 }: {
   addresses: AddressDTO[];
   selectedId: string | null;
+  quoteOutdated: boolean;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
   onUpdated: (a: AddressDTO) => void;
@@ -918,7 +923,7 @@ function AddressPicker({
                 setEditingId(a.id);
               }}
               aria-label={`Sửa địa chỉ của ${a.recipient}`}
-              className={`${ui.btnText} ${isLegacyGeo(a) ? '' : 'max-md:hidden'}`}
+              className={`${ui.btnText} ${isLegacyGeo(a) || (selectedId === a.id && quoteOutdated) ? '' : 'max-md:hidden'}`}
             >
               Sửa
             </button>

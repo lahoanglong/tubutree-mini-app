@@ -110,6 +110,17 @@ describe('/thanh-toan — khối Sản phẩm và thẻ mã', () => {
   });
 });
 
+describe('/thanh-toan — ô chọn Điểm Xanh', () => {
+  it('dấu tick nằm trong khung 24px bọc đúng ô chọn, không bám góc dòng', async () => {
+    const c = await mount();
+    const input = c.querySelector<HTMLInputElement>('[data-mini-block="points"] input[type="checkbox"]')!;
+    const box = input.parentElement!;
+    expect(box.tagName).toBe('SPAN');
+    expect(box.className).toMatch(/\brelative\b/);
+    expect(box.querySelector('svg')).not.toBeNull();
+  });
+});
+
 describe('/thanh-toan — thanh dính đáy một nút', () => {
   it('chỉ nút "Đặt hàng · số tiền" toàn chiều ngang, không có khối Tổng cộng', async () => {
     const c = await mount();
@@ -129,5 +140,11 @@ describe('/thanh-toan — địa chỉ địa giới cũ', () => {
     const btn = c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!.querySelector('button')!;
     expect(btn.disabled).toBe(true);
     expect(c.textContent).toContain('Hãy bấm Sửa ở địa chỉ đó');
+  });
+
+  it('phường sai tỉnh (địa chỉ mã mới, không phải địa giới cũ): báo giá ADDRESS_OUTDATED thì địa chỉ đang chọn vẫn có nút Sửa ở điện thoại', async () => {
+    quoteFail.error = new ApiError('Phường không thuộc tỉnh.', 400, 'ADDRESS_OUTDATED');
+    const c = await mount();
+    expect(c.querySelector('button[aria-label="Sửa địa chỉ của An"]')!.className).not.toMatch(/\bmax-md:hidden\b/);
   });
 });

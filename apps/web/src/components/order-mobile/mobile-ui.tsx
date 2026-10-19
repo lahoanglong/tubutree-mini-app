@@ -91,13 +91,16 @@ export const miniCheckbox =
 export const miniRadio =
   'h-6 w-6 shrink-0 accent-forest-600 max-md:appearance-none max-md:rounded-full max-md:border-2 max-md:border-[var(--color-border-strong)] max-md:bg-[var(--color-bg-surface)] max-md:checked:border-[var(--color-action-primary-bg)] max-md:checked:bg-[radial-gradient(circle,#fff_0_26%,var(--color-action-primary-bg)_30%)]';
 
-/** Dấu tick trắng nằm đè lên ô chọn tự vẽ; đặt NGAY SAU input trong một phần tử `relative`. */
+/** Khung 24px bọc input ô chọn + CheckMark. */
+export const miniCheckboxWrap = 'relative inline-flex h-6 w-6 flex-none';
+
+/** Dấu tick trắng nằm đè lên ô chọn tự vẽ; đặt NGAY SAU input, cả hai bọc trong `<CheckBox>`-style span `relative inline-flex h-6 w-6` (xem miniCheckboxWrap) để tick bám đúng ô. */
 export function CheckMark() {
   return (
     <Check
       aria-hidden="true"
       strokeWidth={3}
-      className="pointer-events-none absolute left-1 top-1 hidden h-4 w-4 text-[color:var(--color-action-primary-fg)] max-md:peer-checked:block"
+      className="pointer-events-none absolute inset-0 m-auto hidden h-4 w-4 text-[color:var(--color-action-primary-fg)] max-md:peer-checked:block"
     />
   );
 }
