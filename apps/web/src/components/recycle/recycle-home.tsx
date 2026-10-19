@@ -37,7 +37,9 @@ import {
   formatPoints,
   formatVnd,
   impactLine,
+  isRequestPaused,
   nextRewardProgress,
+  requestStatusText,
   ruleText,
   timelineFor,
 } from './recycle-labels';
@@ -71,6 +73,7 @@ function NoticeCard({ text }: { text: string }) {
 }
 
 function RequestsBlock({ me }: { me: WasteMeDTO }) {
+  const cfg = usePublicConfig();
   if (me.openRequests.length === 0) return null;
   return (
     <section className="space-y-2">
@@ -79,16 +82,25 @@ function RequestsBlock({ me }: { me: WasteMeDTO }) {
         {me.openRequests.map((r) => {
           const tl = timelineFor(r);
           const closed = tl ? null : closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null });
-          const subtitle =
-            me.blocked && r.status === 'RECEIVED'
-              ? 'Đang chờ Tubu xem lại'
-              : r.lines.map((l) => formatLineQty(l.itemName, l.declaredQty, l.unitLabel)).join(', ');
+          const subtitle = r.lines.map((l) => formatLineQty(l.itemName, l.declaredQty, l.unitLabel)).join(', ');
+          const paused = isRequestPaused(r, {
+            programmeEnabled: me.programmeEnabled,
+            blocked: me.blocked,
+            shipLockedAt: me.shipLockedAt,
+            cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
+          });
+          const status = requestStatusText(r, { blocked: me.blocked, paused });
           return (
             <div key={r.id} className={ui.card}>
               <RecycleLinkRow href={`/doi-rac/yeu-cau/${r.id}`} title={`${r.code} · ${METHOD_LABELS[r.method]}`} subtitle={subtitle} />
               <div className="px-4 pb-3">
                 {tl ? (
-                  <RecycleTimeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} />
+                  <div className="space-y-2">
+                    <div>
+                      <Badge tone="brand">{status}</Badge>
+                    </div>
+                    <RecycleTimeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} />
+                  </div>
                 ) : (
                   closed && <p className="text-xs text-stone-600">{closed.reason ? `${closed.label}: ${closed.reason}` : closed.label}</p>
                 )}
@@ -157,7 +169,14 @@ export function RecycleHome() {
     );
   }
   // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách (Q2).
-  if (me.eligibility !== 'OK') return <Shell><MiniAppOnlyNotice path="/doi-rac" /></Shell>;
+  if (me.eligibility !== 'OK') {
+    return (
+      <Shell>
+        <MiniAppOnlyNotice path="/doi-rac" />
+        {deskRow && <div className={ui.card}>{deskRow}</div>}
+      </Shell>
+    );
+  }
   if (me.blocked) {
     return (
       <Shell showHistory={showHistory}>
