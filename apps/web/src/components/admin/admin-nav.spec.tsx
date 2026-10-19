@@ -59,6 +59,22 @@ describe('AdminNav — "Bỏ qua tới nội dung" (D7-20)', () => {
     expect(content.getAttribute('tabindex')).toBe('-1');
     expect(document.activeElement).toBe(content);
   });
+
+  it('trang đã đặt id="admin-main" cho vùng nội dung thì dùng đúng phần tử đó dù có phần tử khác chen giữa', () => {
+    const r = render(
+      <div className="lg:flex">
+        <AdminNav groups={GROUPS} active="orders" onSelect={() => {}} />
+        <div data-testid="banner">Thông báo chen giữa</div>
+        <div id="admin-main" data-testid="content">
+          <h2>Nội dung tab</h2>
+        </div>
+      </div>,
+    );
+    mounted.push(r);
+    const content = r.container.querySelector<HTMLElement>('[data-testid="content"]')!;
+    click(r.container.querySelector('a[href="#admin-main"]'));
+    expect(document.activeElement).toBe(content);
+  });
 });
 
 // D7-21: mở thẳng tab cuối menu thì mục đang chọn nằm ngoài khung cuộn nên không thấy mình đang ở đâu.

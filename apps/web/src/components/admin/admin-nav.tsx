@@ -18,12 +18,15 @@ const SKIP_LINK_CLASS =
   'sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[110] focus:rounded-control focus:bg-stone-0 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-forest-800 focus:shadow-raised';
 
 /**
- * Vùng nội dung là phần tử anh em kế tiếp của khối menu (bố cục của trang admin). Tìm theo vị trí để không phải sửa trang
- * chủ; các phần của menu tự đánh dấu `data-admin-nav-part` để bị bỏ qua.
+ * Trang đặt `id="admin-main"` cho vùng nội dung thì nhảy thẳng tới đó. Chưa đặt thì dùng phần tử anh em kế tiếp của khối
+ * menu (bố cục hiện tại của trang admin), bỏ qua các phần của menu tự đánh dấu `data-admin-nav-part`.
  */
 function skipToContent(e: MouseEvent<HTMLAnchorElement>) {
-  let target = e.currentTarget.nextElementSibling as HTMLElement | null;
-  while (target?.hasAttribute('data-admin-nav-part')) target = target.nextElementSibling as HTMLElement | null;
+  let target = document.getElementById(SKIP_TARGET_ID);
+  if (!target) {
+    target = e.currentTarget.nextElementSibling as HTMLElement | null;
+    while (target?.hasAttribute('data-admin-nav-part')) target = target.nextElementSibling as HTMLElement | null;
+  }
   if (!target) return;
   e.preventDefault();
   if (!target.id) target.id = SKIP_TARGET_ID;
