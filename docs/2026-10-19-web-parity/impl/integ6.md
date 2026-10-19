@@ -36,7 +36,7 @@ Test đỏ trước khi code ở từng nhóm (nhãn, trang tổng, tạo yêu c
 Chưa chạy review Opus trong lần này. Điểm nên soi: quầy (số mặc định của bộ đếm, thẻ kết quả, hai bản thanh xác nhận), `isRequestPaused` khớp Mini App.
 
 ## 4. Chưa làm, cố ý để lại, chưa kiểm chứng
-- Playwright không chạy; `apps/e2e/tests/recycle.web.spec.ts` chưa cập nhật cho chữ mới (không có ca nào kiểm các chữ đã đổi).
+- Playwright không chạy; `apps/e2e/tests/recycle.web.spec.ts` đã cập nhật cho chữ mới của quầy nhận (hạn mức, bộ đếm điền sẵn, thẻ kết quả), chưa chạy được ở lane này.
 - Chưa kiểm bằng trình duyệt thật: bố cục quầy hai cột trên desktop sau khi dời ưu đãi và báo cáo, thanh dính đáy trên điện thoại.
 - Bản máy tính của thanh xác nhận quầy nằm trong thẻ yêu cầu, bản điện thoại là thanh dính; hai bản cùng nội dung nên jsdom thấy hai nút "Xác nhận đã nhận".
 

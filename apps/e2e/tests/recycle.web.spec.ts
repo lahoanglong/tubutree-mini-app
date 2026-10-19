@@ -283,16 +283,18 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
       quota: { limit: 500000, used: 125000, remaining: 375000 }, staffDailyCapRemaining: 150000 }));
     await page.goto('/doi-rac/quay');
     await expect(page.getByRole('heading', { name: 'Nhận hàng tại điểm', level: 1 })).toBeVisible();
-    await expect(page.getByText('Còn 380.000 điểm')).toBeVisible();
+    await expect(page.getByText('Còn lại 380.000 điểm')).toBeVisible();
     await page.getByLabel('Mã yêu cầu hoặc mã nhận quà').fill('tr-8k2m9');
     await page.getByRole('button', { name: 'Tra mã' }).click();
     await expect(page.getByText('Ng*** A')).toBeVisible();
-    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(page.getByText('Tối đa 5')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
     await expect(page.getByText('Điểm Tubu sẽ cộng cho khách: 5.000 điểm')).toBeVisible();
     const confirmed = api.waitForCall('POST', '/waste/desk/requests/:id/confirm');
     await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
     expect((await confirmed).body).toEqual({ lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }] });
-    await expect(page.getByText('Tubu sẽ cộng 5.000 điểm cho khách')).toBeVisible();
+    await expect(page.getByText('Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Nhận yêu cầu khác' })).toBeVisible();
   });
 
   test('quầy nhận: từ chối với lý do Khác bắt buộc ghi chú rồi gửi reject', async ({ page, api }) => {
