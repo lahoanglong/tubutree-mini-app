@@ -262,3 +262,11 @@ describe('trang gian hàng — nút chính cùng hàng với khối tên ở má
     expect(card.querySelector(':scope > div.justify-end')).toBeNull();
   });
 });
+
+describe('trang gian hàng — avatar chữ cái theo màu chủ đề chỉ từ md', () => {
+  it('màu chủ đề đi qua biến CSS, không gán backgroundColor inline đè màu xanh đậm của điện thoại', async () => {
+    const avatar = (await html()).querySelector<HTMLElement>('[data-testid="storefront-avatar"]')!;
+    expect(avatar.getAttribute('style')).not.toMatch(/background-color/);
+    expect(avatar.className).toContain('max-md:bg-[var(--color-action-primary-bg)]');
+  });
+});

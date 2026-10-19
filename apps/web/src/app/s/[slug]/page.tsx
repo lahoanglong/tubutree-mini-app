@@ -120,8 +120,8 @@ export default async function StorefrontPage({
               ) : (
                 <div
                   data-testid="storefront-avatar"
-                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:bg-[var(--color-action-primary-bg)] max-md:shadow-none md:h-20 md:w-20 sm:text-3xl"
-                  style={{ backgroundColor: themeColor }}
+                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] bg-[var(--sf-owner)] max-md:bg-[var(--color-action-primary-bg)] max-md:shadow-none md:h-20 md:w-20 sm:text-3xl"
+                  style={{ '--sf-owner': themeColor } as React.CSSProperties}
                 >
                   <span className="max-md:hidden">{sf.title.slice(0, 1).toUpperCase()}</span>
                   <Sprout className="hidden h-7 w-7 max-md:block" aria-hidden="true" />
