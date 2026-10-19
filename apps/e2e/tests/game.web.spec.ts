@@ -139,7 +139,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     expect(api.callsTo('POST', '/game/missions/REVIEW_3/claim')).toHaveLength(1);
   });
 
-  test('tab Vườn: lô đất, sổ tay, mục tiêu cộng đồng; mở lô gửi {currency: SEEDS} một lần dù bấm đúp', async ({ page, api }) => {
+  test('tab Vườn: lô đất, sổ tay, mục tiêu cộng đồng; mở lô gửi {currency: SEEDS, slot} của lô kế tiếp một lần dù bấm đúp', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh?tab=garden');
     await expect(page.getByRole('heading', { name: 'Lô đất của bạn (2/3)' })).toBeVisible();
@@ -149,7 +149,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     await expect(page.getByText('Đã mở lô đất mới 🪴')).toBeVisible();
     const calls = api.callsTo('POST', '/game/garden/unlock');
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.body).toEqual({ currency: 'SEEDS' });
+    expect(calls[0]!.body).toEqual({ currency: 'SEEDS', slot: 3 });
   });
 
   test('tưới lô tới mức thu hoạch: mở hộp chúc mừng có mã giảm giá và mã đóng góp', async ({ page, api }) => {
