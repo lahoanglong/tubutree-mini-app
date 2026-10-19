@@ -72,7 +72,10 @@ test.describe('Web khách: tài khoản', () => {
 
     await expect(page.getByRole('heading', { name: 'Sửa hồ sơ', level: 1 })).toBeVisible();
     await expect(page.getByLabel('Họ và tên')).toHaveValue('Nguyễn Văn An');
-    await expect(page.getByText('0912 345 678')).toBeVisible();
+    const narrow = (page.viewportSize()?.width ?? 1280) < 768;
+    const phone = page.getByText('0912 345 678');
+    if (narrow) await expect(phone).toBeHidden();
+    else await expect(phone).toBeVisible();
     await expect(page.getByText('dịch vụ lưu ảnh chưa được bật')).toBeVisible();
 
     const email = page.getByLabel('Email');
