@@ -12,6 +12,17 @@ export const REVIEWABLE_ORDER = {
   placedForCustomer: false,
 } as const satisfies Prisma.OrderWhereInput;
 
+const DAY_MS = 864e5;
+
+/**
+ * Đơn đã giao đã qua hạn đổi/trả (`returns.window_days`): khách không còn gửi được yêu cầu trả mới. Cùng mốc giao và cùng phép
+ * so sánh (`>` chặt) với OrderReturnsService.request; đơn cũ thiếu deliveredAt dùng updatedAt (muộn hơn mốc thật nên chỉ chậm mở).
+ */
+export function returnWindowClosed(order: { deliveredAt: Date | null; updatedAt: Date }, windowDays: number, now: Date): boolean {
+  const deliveredAt = order.deliveredAt ?? order.updatedAt;
+  return now.getTime() - deliveredAt.getTime() > windowDays * DAY_MS;
+}
+
 /**
  * Khoá advisory theo cặp (khách, sản phẩm) cho mọi lượt ghi sổ điểm đánh giá của cặp đó. Đánh giá cho hai đơn khác nhau
  * không đụng nhau ở khoá unique nên hai lượt tạo song song đều đọc sổ trống và cùng thưởng nếu không có khoá này.

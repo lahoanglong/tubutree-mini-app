@@ -109,8 +109,9 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({}),
     },
-    order: { count: jest.fn().mockResolvedValue(0) },
-    review: { groupBy: jest.fn().mockResolvedValue([]) },
+    order: { findMany: jest.fn().mockResolvedValue([]) },
+    returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+    review: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn(async (cbOrArr: unknown) => {
       if (typeof cbOrArr === 'function') return (cbOrArr as (tx: unknown) => unknown)(res);
       return [];
@@ -126,8 +127,21 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return res;
 }
 
-/** Kết quả review.groupBy theo productId: mỗi sản phẩm khác nhau khách đã đánh giá có ảnh là một nhóm. */
-const reviewedProducts = (n: number) => Array.from({ length: n }, (_, i) => ({ productId: `p${i + 1}` }));
+const DAY_MS = 864e5;
+
+/** Đơn bán lẻ đã giao `daysAgo` ngày trước, như dòng order.findMany của missionMetrics. */
+const deliveredOrder = (id: string, daysAgo: number) => {
+  const at = new Date(Date.now() - daysAgo * DAY_MS);
+  return { id, deliveredAt: at, updatedAt: at };
+};
+
+/** n đơn đã giao từ 30 ngày trước (o1..on), qua hạn đổi/trả mặc định 7 ngày. */
+const settledOrders = (n: number) => ({
+  findMany: jest.fn().mockResolvedValue(Array.from({ length: n }, (_, i) => deliveredOrder(`o${i + 1}`, 30))),
+});
+
+/** Đánh giá có ảnh của khách: mỗi dòng một sản phẩm khác nhau (p1..pn) trên đơn o1..on. */
+const reviewedProducts = (n: number) => Array.from({ length: n }, (_, i) => ({ productId: `p${i + 1}`, orderId: `o${i + 1}` }));
 
 function profile(extra: Record<string, unknown> = {}) {
   return {
@@ -1277,8 +1291,8 @@ describe('GameService.getMissions', () => {
   it('tính toán tiến trình real-time cho từng nhiệm vụ; claimed=false khi chưa nhận', async () => {
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 3 }) },
-      order: { count: jest.fn().mockResolvedValue(1) },
-      review: { groupBy: jest.fn().mockResolvedValue(reviewedProducts(2)) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(2)) },
+      order: settledOrders(2),
       user: { count: jest.fn().mockResolvedValue(0) },
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1296,24 +1310,32 @@ describe('GameService.getMissions', () => {
   // R2-ENGAGE-7: mô tả nhiệm vụ REVIEW_3 là "Viết 3 đánh giá có ảnh" nên chỉ đánh giá có ít nhất 1 ảnh được tính. Mỗi lần
   // mua được một đánh giá nên đếm theo sản phẩm khác nhau: mua cùng một sản phẩm ba lần không xong nhiệm vụ.
   it('REVIEW_3 đếm số SẢN PHẨM khác nhau khách đã đánh giá có ảnh (gom theo productId), không đếm dòng đánh giá', async () => {
-    const groupBy = jest.fn().mockResolvedValue(reviewedProducts(1));
+    const findMany = jest.fn().mockResolvedValue([
+      { productId: 'p1', orderId: 'o1' },
+      { productId: 'p1', orderId: 'o2' },
+      { productId: 'p1', orderId: 'o3' },
+    ]);
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
-      order: { count: jest.fn().mockResolvedValue(0) },
-      review: { groupBy },
+      order: settledOrders(3),
+      review: { findMany },
       user: { count: jest.fn().mockResolvedValue(0) },
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
     });
     const res = await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
-    expect(groupBy).toHaveBeenCalledWith({ by: ['productId'], where: { userId: 'u1', NOT: { images: { isEmpty: true } } } });
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', NOT: { images: { isEmpty: true } } },
+      select: { productId: true, orderId: true },
+    });
     expect(res.find((m) => m.code === 'REVIEW_3')).toMatchObject({ progress: 1, goal: 3, completed: false, claimed: false });
   });
 
   it('REVIEW_3 đủ 3 sản phẩm khác nhau → xong, chưa nhận thì nhận được', async () => {
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
-      review: { groupBy: jest.fn().mockResolvedValue(reviewedProducts(3)) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(3)) },
+      order: settledOrders(3),
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
     });
     const res = await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
@@ -1323,20 +1345,21 @@ describe('GameService.getMissions', () => {
   it('nhiệm vụ không lặp lại đã nhận mà chỉ số nay tụt dưới goal (REVIEW_3 nhận theo cách đếm dòng cũ) → vẫn xong, đủ tiến độ, đã nhận', async () => {
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
-      review: { groupBy: jest.fn().mockResolvedValue(reviewedProducts(1)) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(1)) },
+      order: settledOrders(1),
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([{ missionId: 'm3', cycleKey: '0', progress: 3, goal: 3 }]) },
     });
     const res = await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
     expect(res.find((m) => m.code === 'REVIEW_3')).toMatchObject({ progress: 3, goal: 3, completed: true, claimed: true });
     // Nhiệm vụ chưa nhận vẫn theo chỉ số thô.
-    expect(res.find((m) => m.code === 'FIRST_ORDER')).toMatchObject({ progress: 0, completed: false, claimed: false });
+    expect(res.find((m) => m.code === 'FIRST_ORDER')).toMatchObject({ progress: 1, completed: true, claimed: false });
   });
 
   it('A1-02: nhiệm vụ đã có dòng mission_progress khớp (missionId, cycleKey hiện tại) → claimed=true', async () => {
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
-      order: { count: jest.fn().mockResolvedValue(1) }, // FIRST_ORDER: raw=1, goal=1 → cycleKey '0' (không lặp lại)
+      order: settledOrders(1), // FIRST_ORDER: raw=1, goal=1 → cycleKey '0' (không lặp lại)
       user: { count: jest.fn().mockResolvedValue(0) },
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([{ missionId: 'm2', cycleKey: '0' }]) },
@@ -1351,7 +1374,7 @@ describe('GameService.getMissions', () => {
   it('nhiệm vụ lặp lại (CHECKIN_7): dòng mission_progress của chu kỳ CŨ (cycleKey 0) không đánh dấu claimed cho chu kỳ MỚI (streak 14 → cycleKey 1)', async () => {
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 14 }) },
-      order: { count: jest.fn().mockResolvedValue(0) },
+      order: settledOrders(0),
       user: { count: jest.fn().mockResolvedValue(0) },
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
       missionProgress: { findMany: jest.fn().mockResolvedValue([{ missionId: 'm1', cycleKey: '0' }]) },
@@ -1382,15 +1405,16 @@ describe('GameService.getMissions', () => {
   });
 
   it('ENGAGE-1: FIRST_ORDER chỉ đếm đơn bán lẻ ĐÃ GIAO của chính khách (không tính đơn đang xử lý / đặt hộ)', async () => {
-    const orderCount = jest.fn().mockResolvedValue(0);
+    const orderFindMany = jest.fn().mockResolvedValue([]);
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
-      order: { count: orderCount },
+      order: { findMany: orderFindMany },
       mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
     });
     await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
-    expect(orderCount).toHaveBeenCalledWith({
+    expect(orderFindMany).toHaveBeenCalledWith({
       where: { userId: 'u1', status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
+      select: { id: true, deliveredAt: true, updatedAt: true },
     });
   });
 
@@ -1406,6 +1430,93 @@ describe('GameService.getMissions', () => {
   });
 });
 
+describe('GameService — nhiệm vụ FIRST_ORDER, REVIEW_3 chỉ tính đơn đã qua hạn đổi/trả', () => {
+  const FIRST = { id: 'm2', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', goal: 1, rewardPoints: 20, isRepeatable: false, rewardCoupon: null };
+  const REVIEW3 = { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', goal: 3, rewardPoints: 15, isRepeatable: false, rewardCoupon: null };
+
+  /** order.count trả 1 như bản đếm cũ (mọi đơn DELIVERED); order.findMany trả đúng các đơn của test. */
+  function prismaWith(over: Record<string, unknown>) {
+    return makePrisma({
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
+      ...over,
+    });
+  }
+  const service = (prisma: PrismaService, overrides: Record<string, unknown> = {}) =>
+    new GameService(prisma, makeConfig(overrides), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
+
+  it('FIRST_ORDER: đơn giao 1 ngày trước, returns.window_days = 7 → không nhận được, không ghi claim, không cộng điểm', async () => {
+    const missionProgressCreate = jest.fn();
+    const pointsCreate = jest.fn();
+    const prisma = prismaWith({
+      mission: { findUnique: jest.fn().mockResolvedValue(FIRST) },
+      order: { findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 1)]) },
+      missionProgress: { create: missionProgressCreate },
+      pointsTransaction: { create: pointsCreate },
+    });
+    await expect(service(prisma, { 'returns.window_days': 7 }).claimMission('u1', 'FIRST_ORDER')).rejects.toThrow(
+      'Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.',
+    );
+    expect(missionProgressCreate).not.toHaveBeenCalled();
+    expect(pointsCreate).not.toHaveBeenCalled();
+  });
+
+  it('FIRST_ORDER: đơn giao 8 ngày trước (qua hạn 7 ngày), không có yêu cầu trả → nhận được', async () => {
+    const prisma = prismaWith({
+      mission: { findUnique: jest.fn().mockResolvedValue(FIRST) },
+      order: { findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 8)]) },
+      missionProgress: { create: jest.fn().mockResolvedValue({ id: 'mp1' }) },
+      pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
+      user: { update: jest.fn().mockResolvedValue({}) },
+    });
+    await expect(service(prisma, { 'returns.window_days': 7 }).claimMission('u1', 'FIRST_ORDER')).resolves.toMatchObject({ claimed: true });
+  });
+
+  it('FIRST_ORDER: đơn đã qua hạn nhưng đang có yêu cầu trả chờ duyệt → chưa nhận được', async () => {
+    const prisma = prismaWith({
+      mission: { findUnique: jest.fn().mockResolvedValue(FIRST) },
+      order: { findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 30)]) },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([{ orderId: 'o1' }]) },
+    });
+    await expect(service(prisma).claimMission('u1', 'FIRST_ORDER')).rejects.toThrow('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
+  });
+
+  it('cửa sổ đổi/trả đọc từ returns.window_days: đặt 0 ngày thì đơn giao 1 ngày trước đã tính', async () => {
+    const prisma = prismaWith({
+      mission: { findUnique: jest.fn().mockResolvedValue(FIRST) },
+      order: { findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 1)]) },
+      missionProgress: { create: jest.fn().mockResolvedValue({ id: 'mp1' }) },
+      pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
+      user: { update: jest.fn().mockResolvedValue({}) },
+    });
+    await expect(service(prisma, { 'returns.window_days': 0 }).claimMission('u1', 'FIRST_ORDER')).resolves.toMatchObject({ claimed: true });
+  });
+
+  it('REVIEW_3: đánh giá có ảnh của đơn còn trong hạn đổi/trả không được tính', async () => {
+    const prisma = prismaWith({
+      mission: { findUnique: jest.fn().mockResolvedValue(REVIEW3) },
+      order: {
+        findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 30), deliveredOrder('o2', 30), deliveredOrder('o3', 2)]),
+      },
+      review: {
+        findMany: jest.fn().mockResolvedValue(reviewedProducts(3)),
+      },
+    });
+    await expect(service(prisma, { 'returns.window_days': 7 }).claimMission('u1', 'REVIEW_3')).rejects.toThrow(
+      'Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.',
+    );
+  });
+
+  it('getMissions: đã có đơn nhưng còn trong hạn đổi/trả → tiến độ 0 và thẻ nói đang chờ hết hạn đổi/trả', async () => {
+    const prisma = prismaWith({
+      mission: { findMany: jest.fn().mockResolvedValue([FIRST]) },
+      order: { findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 1)]) },
+    });
+    const [first] = await service(prisma, { 'returns.window_days': 7 }).getMissions('u1');
+    expect(first).toMatchObject({ code: 'FIRST_ORDER', progress: 0, completed: false, claimed: false });
+    expect(first!.description).toMatch(/đổi\/trả/);
+  });
+});
+
 describe('GameService.claimMission', () => {
   function missionsPrisma(over: Record<string, unknown> = {}) {
     return makePrisma({
@@ -1415,7 +1526,7 @@ describe('GameService.claimMission', () => {
           .mockResolvedValue({ id: 'm2', code: 'FIRST_ORDER', goal: 1, rewardPoints: 20, isRepeatable: false, rewardCoupon: null }),
       },
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
-      order: { count: jest.fn().mockResolvedValue(1) },
+      order: settledOrders(1),
       ...over,
     });
   }
@@ -1430,7 +1541,7 @@ describe('GameService.claimMission', () => {
     const missionProgressCreate = jest.fn();
     const pointsCreate = jest.fn();
     const prisma = missionsPrisma({
-      order: { count: jest.fn().mockResolvedValue(0) }, // FIRST_ORDER goal=1, raw=0 → chưa đạt
+      order: settledOrders(0), // FIRST_ORDER goal=1, raw=0 → chưa đạt
       missionProgress: { create: missionProgressCreate },
       pointsTransaction: { create: pointsCreate },
     });
@@ -1497,7 +1608,7 @@ describe('GameService.claimMission', () => {
     });
 
     it('chưa đủ điều kiện → không đọc cấu hình hạn, không mở tx', async () => {
-      const prisma = missionsPrisma({ order: { count: jest.fn().mockResolvedValue(0) } });
+      const prisma = missionsPrisma({ order: settledOrders(0) });
       const { loyalty, pointsExpiresAt } = loyaltyWithExpiry();
       await expect(missionService(prisma, loyalty).claimMission('u1', 'FIRST_ORDER')).rejects.toBeInstanceOf(BadRequestException);
       expect(pointsExpiresAt).not.toHaveBeenCalled();
@@ -1630,7 +1741,8 @@ describe('GameService.claimMission', () => {
     const pointsCreate = jest.fn();
     const prisma = missionsPrisma({
       mission: { findUnique: jest.fn().mockResolvedValue(REVIEW_3) },
-      review: { groupBy: jest.fn().mockResolvedValue(reviewedProducts(1)) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(1)) },
+      order: settledOrders(1),
       pointsTransaction: { create: pointsCreate },
     });
     const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
@@ -1643,7 +1755,8 @@ describe('GameService.claimMission', () => {
     const missionProgressCreate = jest.fn().mockResolvedValue({ id: 'mp1' });
     const prisma = missionsPrisma({
       mission: { findUnique: jest.fn().mockResolvedValue(REVIEW_3) },
-      review: { groupBy: jest.fn().mockResolvedValue(reviewedProducts(3)) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(3)) },
+      order: settledOrders(3),
       missionProgress: { create: missionProgressCreate },
     });
     const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
@@ -1656,7 +1769,8 @@ describe('GameService.claimMission', () => {
   it('REVIEW_3 đã nhận theo cách đếm dòng cũ, nay chỉ còn một sản phẩm → báo "đã nhận" (không phải "chưa đủ điều kiện"), không mở tx', async () => {
     const prisma = missionsPrisma({
       mission: { findUnique: jest.fn().mockResolvedValue(REVIEW_3) },
-      review: { groupBy: jest.fn().mockResolvedValue(reviewedProducts(1)) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(1)) },
+      order: settledOrders(1),
       missionProgress: { findFirst: jest.fn().mockResolvedValue({ id: 'old', missionId: 'm3', cycleKey: '0' }) },
     });
     const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
