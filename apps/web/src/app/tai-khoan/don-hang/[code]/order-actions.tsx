@@ -15,6 +15,7 @@ import {
 } from '@/lib/shop-client';
 import { canCancelOrder, isReorderable, returnWindowState } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 import { invalidateBalances } from '@/lib/balances';
 import {
   EMPTY_BANK,
@@ -118,7 +119,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
   if (nothingToDo) return null;
 
   return (
-    <section aria-label="Thao tác với đơn hàng" className="mt-4 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+    <section aria-label="Thao tác với đơn hàng" className={`mt-4 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:mt-2 max-md:py-0 ${mini.band}`}>
       {cancel.isSuccess && (
         <p ref={cancelNoticeRef} tabIndex={-1} role="status" className="mb-3 text-sm font-medium text-success-fg outline-none">
           Đã hủy đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.
@@ -182,7 +183,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
           </div>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <ActionRow>
           {canCancel && !cancel.isSuccess && (
             <button
               ref={cancelTriggerRef}
@@ -191,13 +192,13 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
                 cancel.reset();
                 setConfirmCancel(true);
               }}
-              className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
+              className={`${ui.btnSecondary} border-danger-fg text-danger-fg max-md:flex-1`}
             >
               Hủy đơn
             </button>
           )}
           {canReorder && (
-            <button type="button" onClick={() => setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }))} className={ui.btnPrimary}>
+            <button type="button" onClick={() => setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }))} className={`${ui.btnPrimary} max-md:flex-1`}>
               Mua lại đơn này
             </button>
           )}
@@ -208,13 +209,13 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
                 setReturnKey((k) => k + 1);
                 setReturnOpen(true);
               }}
-              className={`${ui.btnSecondary} gap-2`}
+              className={`${ui.btnSecondary} gap-2 max-md:flex-1`}
             >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
               {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
             </button>
           )}
-        </div>
+        </ActionRow>
       )}
 
       {canRequestMore && !returnWindow.open && (
@@ -286,6 +287,41 @@ function ReturnStatus({
           <RefundDestinationControl refund={refund} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Hàng nút thao tác: từ md nằm trong thẻ như cũ; ở điện thoại dính đáy toàn chiều ngang như StickyActionBar của Mini App
+ * (Hủy đơn / Mua lại đơn này / Yêu cầu đổi trả). Thanh fixed che đáy trang nên báo qua `has-sticky-bar` + `--sticky-bar-h`
+ * để body chừa chỗ và thanh tab ẩn đi, cùng cách StickyActionBar của web làm.
+ */
+function ActionRow({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const bar = ref.current;
+    const measure = () => {
+      const fixed = bar && getComputedStyle(bar).position === 'fixed';
+      document.body.classList.toggle('has-sticky-bar', !!fixed);
+      if (fixed) root.style.setProperty('--sticky-bar-h', `${Math.ceil(bar.getBoundingClientRect().height)}px`);
+      else root.style.removeProperty('--sticky-bar-h');
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      root.style.removeProperty('--sticky-bar-h');
+      document.body.classList.remove('has-sticky-bar');
+    };
+  }, []);
+  return (
+    <div
+      ref={ref}
+      data-testid="order-action-bar"
+      className="flex flex-wrap gap-2 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:flex-nowrap max-md:border-t max-md:border-stone-200 max-md:bg-stone-0 max-md:px-4 max-md:pt-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-md:shadow-raised"
+    >
+      {children}
     </div>
   );
 }

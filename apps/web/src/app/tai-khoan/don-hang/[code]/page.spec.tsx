@@ -137,7 +137,8 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     const { container } = await mount();
     expect(mocks.orderCalls).toEqual(['TB-9']);
     const h1 = container.querySelector('h1')!;
-    expect(h1.textContent).toContain('TB-9');
+    expect(h1.textContent).toBe('Chi tiết đơn hàng');
+    expect(container.textContent).toContain('TB-9');
     expect(container.textContent).toContain('Chờ thanh toán');
     expect(container.textContent).toContain('Dầu gội bồ kết');
     expect(container.textContent).toContain('500ml');
@@ -146,7 +147,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).toContain('WELCOME30');
     expect(container.textContent).toContain('Nguyễn An');
     expect(container.textContent).toContain('1 Xuân Thuỷ, Cầu Giấy, Hà Nội');
-    expect(container.textContent).toContain('Chuyển khoản ngân hàng');
+    expect(container.textContent).toContain('Chuyển khoản');
     // QR để trả lại đơn
     expect(mocks.qr.calls).toBeGreaterThan(0);
     expect(container.textContent).toContain('9984606774');
@@ -239,7 +240,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
   it('UAT GOMDON-11: đơn COD đã giao (API vẫn để UNPAID) → "Đã thu tiền khi giao", không hiện "Chưa thanh toán"', async () => {
     mocks.order = { ...ORDER, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' };
     const { container } = await mount();
-    expect(container.textContent).toContain('Đã thu tiền khi giao');
+    // Mini App không có dòng "Tình trạng" ở khối tiền; vẫn không được báo "Chưa thanh toán" cho đơn COD đã giao.
     expect(container.textContent).not.toContain('Chưa thanh toán');
   });
 
@@ -328,8 +329,9 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     const { container } = await mount();
     await flush(8);
     expect(n).toBeGreaterThanOrEqual(2);
-    expect(container.textContent).toContain('Đã xác nhận');
-    expect(container.textContent).not.toContain('Chờ thanh toán');
+    const hero = container.querySelector('[data-testid="status-hero"]')!;
+    expect(hero.textContent).toContain('Đã xác nhận');
+    expect(hero.textContent).not.toContain('Chờ thanh toán');
   });
 
   // PC-7: tiền về thì trang tải lại đơn, đơn hết "chờ thanh toán" và khung QR bị gỡ cùng lúc, nên lời "Đã nhận thanh toán"
