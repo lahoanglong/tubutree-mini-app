@@ -207,6 +207,7 @@ export class GroupBuyService {
   private async grantAllMembers(group: GroupRow): Promise<boolean> {
     const members = await this.prisma.groupBuyMember.findMany({ where: { groupBuyId: group.id } });
     const discount = group.basePrice - group.unitPrice;
+    const terms = await this.couponTerms(group);
     // Tên sản phẩm chỉ để điền tin: tra lỗi không được chặn việc cấp mã.
     const product = await this.prisma.product
       .findUnique({ where: { id: group.productId }, select: { name: true } })
@@ -215,7 +216,7 @@ export class GroupBuyService {
     for (const m of members) {
       let granted: { code: string; endAt: Date } | null = null;
       try {
-        granted = await this.grantCoupon(group.id, m.userId, discount, group.unitPrice, group.productId);
+        granted = await this.grantCoupon(group.id, m.userId, terms, group.unitPrice, group.productId);
       } catch (e) {
         // P2002: đã cấp ở lần trước → coi như đã có, KHÔNG thông báo lại.
         if (!this.isAlreadyGranted(e)) {
@@ -384,14 +385,32 @@ export class GroupBuyService {
   }
 
   /**
-   * Mã chỉ áp cho đúng sản phẩm của nhóm (`applyTo.productIds`) và đơn tối thiểu = giá nhóm tính trên
+   * Giá nhóm tính trên biến thể rẻ nhất (giá sản phẩm), nhưng mã dùng được cho mọi biến thể của sản phẩm. Mã giảm số tiền cố
+   * định chỉ giảm 4,2% khi khách mua biến thể 430.000đ trong khi trang nhóm ghi 15%, nên cấp mã theo % kèm trần bằng đúng %
+   * đó trên biến thể đắt nhất: không biến thể nào giảm quá % đã công bố. % suy từ giá nhóm đã lưu để nhóm mở trước khi đổi
+   * config hay cấp lại qua đối soát vẫn ra cùng mức.
+   */
+  private async couponTerms(group: GroupRow): Promise<{ pct: number; maxDiscount: number }> {
+    const flatDiscount = group.basePrice - group.unitPrice;
+    if (group.basePrice <= 0 || flatDiscount <= 0) return { pct: 0, maxDiscount: flatDiscount };
+    const pct = Math.round((flatDiscount / group.basePrice) * 100);
+    const variations = await this.prisma.variation.findMany({
+      where: { productId: group.productId, isActive: true },
+      select: { retailPrice: true, salePrice: true },
+    });
+    const dearest = Math.max(group.basePrice, ...variations.map((v) => v.salePrice ?? v.retailPrice));
+    return { pct, maxDiscount: Math.max(flatDiscount, Math.round((dearest * pct) / 100)) };
+  }
+
+  /**
+   * Mã chỉ áp cho đúng sản phẩm (`applyTo.productIds`) và đơn tối thiểu = giá nhóm tính trên
    * chính dòng sản phẩm đó: "mua với giá nhóm" là giá của sản phẩm này, không phải mã giảm ~15% cho mọi
    * đơn (MONEY-4). Trước đây chỉ có minOrder trên tổng giỏ (P0-2, docs/2026-09-08-review-progress.md).
    */
   private async grantCoupon(
     groupBuyId: string,
     userId: string,
-    amount: number,
+    terms: { pct: number; maxDiscount: number },
     minOrder: number,
     productId: string,
   ): Promise<{ code: string; endAt: Date }> {
@@ -401,8 +420,9 @@ export class GroupBuyService {
     await this.prisma.coupon.create({
       data: {
         code,
-        type: 'AMOUNT',
-        value: amount,
+        type: 'PERCENT',
+        value: terms.pct,
+        maxDiscount: terms.maxDiscount,
         minOrder,
         startAt: new Date(),
         endAt: end,

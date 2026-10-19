@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { GroupBuyService } from './groupbuy.service';
+import { CouponsService } from '../coupons/coupons.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -26,6 +27,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       create: jest.fn().mockResolvedValue({}),
     },
     coupon: { create: jest.fn().mockResolvedValue({}) },
+    variation: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
   (base.groupBuy as { count?: jest.Mock }).count = jest.fn().mockResolvedValue(0);
@@ -83,7 +85,7 @@ describe('GroupBuyService — chống tự làm đủ nhóm bằng tài khoản 
     (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
     await new GroupBuyService(prisma, makeConfig({ 'groupbuy.target_size': 1 })).create('u1', 'prod1');
     const data = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
-    expect(data).toMatchObject({ type: 'AMOUNT', value: 15000, minOrder: 85000, applyTo: { productIds: ['prod1'] } });
+    expect(data).toMatchObject({ type: 'PERCENT', value: 15, maxDiscount: 15000, minOrder: 85000, applyTo: { productIds: ['prod1'] } });
   });
 });
 
@@ -154,7 +156,7 @@ describe('GroupBuyService.create', () => {
     const svc = new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 1 }));
     await svc.create('u1', 'prod1');
     expect(prisma.coupon.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ minOrder: 85000, value: 15000 }) }),
+      expect.objectContaining({ data: expect.objectContaining({ minOrder: 85000, value: 15, maxDiscount: 15000 }) }),
     );
   });
 
@@ -255,7 +257,7 @@ describe('GroupBuyService.join', () => {
     expect(r.status).toBe('SUCCESS');
     expect(prisma.coupon.create).toHaveBeenCalledTimes(3); // mỗi thành viên 1 coupon
     const c = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
-    expect(c.value).toBe(15000); // basePrice 100000 − unitPrice 85000
+    expect(c).toMatchObject({ type: 'PERCENT', value: 15, maxDiscount: 15000 }); // basePrice 100000 − unitPrice 85000
   });
 
   it('join đủ target → mã coupon TẤT ĐỊNH theo (nhóm,user) + đánh dấu couponsGrantedAt', async () => {
@@ -576,5 +578,65 @@ describe('Q8 review vòng 3 S2: nhóm đã mở trên hàng của gian hàng đ�
     const calls = (prisma.groupBuy.findMany as jest.Mock).mock.calls;
     expect(calls[0][0].where.product).toMatchObject({ isActive: true, approvalStatus: 'APPROVED' });
     expect(calls[1][0].where.product).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
+  });
+});
+
+describe('D11-05: mã mua chung giảm đúng % trên biến thể khách mua, không chỉ trên biến thể rẻ nhất', () => {
+  const variations = [
+    { retailPrice: 120000, salePrice: null },
+    { retailPrice: 430000, salePrice: null },
+  ];
+
+  async function grantedCoupon() {
+    const prisma = makePrisma();
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prod1', isActive: true, approvalStatus: 'APPROVED', basePrice: 120000, salePrice: null, name: 'X', slug: 'x', thumbnail: null,
+    });
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue(variations);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 1 })).create('u1', 'prod1');
+    return (prisma.coupon.create as jest.Mock).mock.calls[0][0].data as Record<string, unknown>;
+  }
+
+  async function discountOn(data: Record<string, unknown>, lines: { total: number }[]) {
+    const row = { id: 'c1', ...data, startAt: new Date(Date.now() - 1000), endAt: new Date(Date.now() + 864e5), usageLimit: null };
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(row) },
+      couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
+    } as unknown as PrismaService;
+    const subtotal = lines.reduce((s, l) => s + l.total, 0);
+    const r = await new CouponsService(prisma).validateAndCompute(String(data.code), 'u1', subtotal, lines.map((l) => ({ productId: 'prod1', ...l })));
+    return r.discount;
+  }
+
+  it('sản phẩm 2 biến thể 120k/430k → mua biến thể 430k được giảm 64.500đ (15%)', async () => {
+    expect(await discountOn(await grantedCoupon(), [{ total: 430000 }])).toBe(64500);
+  });
+
+  it('mua biến thể rẻ 120k vẫn giảm 18.000đ (15%)', async () => {
+    expect(await discountOn(await grantedCoupon(), [{ total: 120000 }])).toBe(18000);
+  });
+
+  it('không bao giờ giảm quá 15% giá thật của biến thể đắt nhất, kể cả mua nhiều', async () => {
+    expect(await discountOn(await grantedCoupon(), [{ total: 430000 * 5 }])).toBe(64500);
+  });
+
+  it('đối soát cấp lại mã cho nhóm cũ vẫn ra cùng mức giảm (suy % từ giá nhóm đã lưu)', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([group({ id: 'gbX', status: 'SUCCESS', basePrice: 120000, unitPrice: 102000 })]);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue(variations);
+    await new GroupBuyService(prisma, makeConfig()).reconcileSuccessfulGroups();
+    const data = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+    expect(await discountOn(data, [{ total: 430000 }])).toBe(64500);
+  });
+
+  it('sản phẩm không có biến thể đang bán → giữ mức giảm theo giá nhóm như cũ', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.target_size': 1 })).create('u1', 'prod1');
+    const data = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data as Record<string, unknown>;
+    expect(await discountOn(data, [{ total: 100000 }])).toBe(15000);
   });
 });
