@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,12 +7,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { isSellableVariation, SELLABLE_VARIATION_WHERE } from '../cart/sellable';
+import { assertStaffDailyBudget, loadStaffCouponCaps, type CouponActor } from '../admin/coupon-input-rules';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
 export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
 export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
 export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
+export const FLASH_ADMIN_SALE_MSG = 'Đợt flash sale do quản trị viên hoặc hệ thống tạo — nhân viên không sửa được, nhờ quản trị viên.';
 
 export interface FlashQuotaLine {
   flashSaleItemId: string;
@@ -108,9 +110,16 @@ export class FlashSaleService {
         variation: { isActive: true },
         flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
       },
-      include: { flashSale: { select: { endAt: true } } },
+      include: { flashSale: { select: { endAt: true, createdBy: true } } },
     });
-    const open = items.filter((it) => it.soldCount < it.quota);
+    // Người tạo đợt không mua giá flash của đợt mình (cùng luật mã giảm giá, isOwnStaffCoupon): nhân viên tự đặt giá rồi tự mua.
+    // ADMIN được miễn như với mã giảm giá; chỉ tra vai trò khi người mua thật sự là người tạo một đợt đang xét.
+    let ownSalesBlocked = false;
+    if (userId && items.some((it) => it.flashSale.createdBy === userId)) {
+      const buyer = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+      ownSalesBlocked = buyer?.role !== 'ADMIN';
+    }
+    const open = items.filter((it) => it.soldCount < it.quota && !(ownSalesBlocked && it.flashSale.createdBy === userId));
     // Cùng hai giới hạn consumeQuotas kiểm lúc đặt đơn: giỏ/báo giá tính trước để khách không bị chặn ở bước cuối
     // với một giá giỏ không bao giờ đặt được (ENGAGE-4).
     const bought = new Map<string, number>();
@@ -298,7 +307,12 @@ export class FlashSaleService {
    * khỏi khách đang xem rồi đợt xoá được như đợt chưa bắt đầu (R3-UI-5). Đổi khung giờ cũng không được làm một biến thể
    * nằm trong hai đợt trùng giờ — addItem chặn điều đó lúc thêm, ở đây chặn lúc dời giờ.
    */
-  async updateSale(id: string, dto: { title?: string; startAt?: string; endAt?: string; isActive?: boolean }) {
+  async updateSale(id: string, dto: { title?: string; startAt?: string; endAt?: string; isActive?: boolean }, actor?: CouponActor) {
+    if (actor?.staff) {
+      const sale = await this.prisma.flashSale.findUnique({ where: { id }, select: { createdBy: true } });
+      if (!sale) throw new BadRequestException('Không tìm thấy đợt flash sale.');
+      await this.assertStaffCreated(sale.createdBy);
+    }
     if (dto.startAt !== undefined || dto.endAt !== undefined) {
       const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id }, include: { items: { select: { variationId: true } } } });
       const start = dto.startAt ? new Date(dto.startAt) : current.startAt;
@@ -320,6 +334,12 @@ export class FlashSaleService {
     });
   }
 
+  /** Nhân viên chỉ đụng đợt do nhân viên tạo; đợt của quản trị viên, hệ thống hay không rõ người tạo giữ cho quản trị viên. */
+  private async assertStaffCreated(createdBy: string | null): Promise<void> {
+    const creator = createdBy ? await this.prisma.user.findUnique({ where: { id: createdBy }, select: { role: true } }) : null;
+    if (creator?.role !== 'STAFF') throw new ForbiddenException(FLASH_ADMIN_SALE_MSG);
+  }
+
   private maxSaleDays(): Promise<number> {
     return this.config.get<number>(FLASH_MAX_DURATION_KEY, FLASH_MAX_DURATION_DEFAULT_DAYS);
   }
@@ -339,9 +359,10 @@ export class FlashSaleService {
    * Xoá đợt flash sale CHƯA bắt đầu (admin): gõ nhầm tên/giờ thì tạo lại được. Đợt đã bắt đầu có thể đã có người xem giá
    * và đặt hàng nên chỉ cho tắt. Item, lượt mua và nhắc tôi xoá theo cascade.
    */
-  async deleteSale(id: string) {
+  async deleteSale(id: string, actor?: CouponActor) {
     const sale = await this.prisma.flashSale.findUnique({ where: { id }, include: { items: { select: { soldCount: true } } } });
     if (!sale) throw new BadRequestException('Không tìm thấy đợt flash sale.');
+    if (actor?.staff) await this.assertStaffCreated(sale.createdBy);
     if (sale.startAt.getTime() <= Date.now()) {
       throw new BadRequestException('Đợt flash sale đã bắt đầu, chỉ có thể tắt chứ không xoá.');
     }
@@ -371,9 +392,14 @@ export class FlashSaleService {
    *  - quota không vượt tồn kho.
    *  - variation chưa nằm trong đợt flash khác trùng khung giờ.
    */
-  async addItem(saleId: string, dto: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number }) {
+  async addItem(
+    saleId: string,
+    dto: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number },
+    actor?: CouponActor,
+  ) {
     const sale = await this.prisma.flashSale.findUnique({ where: { id: saleId } });
     if (!sale) throw new BadRequestException('Đợt flash không tồn tại.');
+    if (actor?.staff) await this.assertStaffCreated(sale.createdBy);
     const variation = await this.prisma.variation.findUnique({ where: { id: dto.variationId } });
     if (!variation) throw new BadRequestException('Variation không tồn tại.');
     const standing = variation.salePrice ?? variation.retailPrice;
@@ -398,15 +424,33 @@ export class FlashSaleService {
     });
     if (clash) throw new BadRequestException(FLASH_ITEM_CLASH_MSG);
     const perUserLimit = dto.perUserLimit ?? (await this.config.get<number>('flashsale.default_per_user_limit', 5));
-    return this.prisma.flashSaleItem.create({
-      data: { flashSaleId: saleId, variationId: dto.variationId, flashPrice: dto.flashPrice, quota: dto.quota, perUserLimit },
+    const data = { flashSaleId: saleId, variationId: dto.variationId, flashPrice: dto.flashPrice, quota: dto.quota, perUserLimit };
+    if (!actor?.staff) return this.prisma.flashSaleItem.create({ data });
+
+    // Cùng ba trần với mã do nhân viên tạo (coupon.staff_*): % mỗi đơn vị, tiền mỗi khách, tổng tiền cả ngày.
+    const caps = await loadStaffCouponCaps(this.config);
+    const perUnit = standing - dto.flashPrice;
+    const deny = (msg: string) => new BadRequestException(`${msg} Cần mức cao hơn thì nhờ quản trị viên tạo đợt.`);
+    if (perUnit * 100 > caps.maxPercent * standing) throw deny(`Nhân viên đặt giá flash giảm tối đa ${caps.maxPercent}%.`);
+    if (perUnit * perUserLimit > caps.maxAmount) {
+      throw deny(`Mỗi khách được giảm tối đa ${vnd(caps.maxAmount)} (giảm mỗi sản phẩm ${vnd(perUnit)} × ${perUserLimit} suất mỗi khách).`);
+    }
+    // Trừ vào ngân sách của người tạo đợt, không của người thêm: nhân viên được sửa đợt của nhau (assertStaffCreated) nên tính
+    // theo người thêm thì đổ item vào đợt của người khác là qua mặt trần ngày. assertStaffCreated đã bảo đảm createdBy là STAFF.
+    return this.prisma.$transaction(async (tx) => {
+      await assertStaffDailyBudget(tx, sale.createdBy!, sale.createdAt, perUnit * dto.quota, caps);
+      return tx.flashSaleItem.create({ data });
     });
   }
 
   /** Xoá item khỏi đợt flash sale (admin). Chặn xoá nếu đã phát sinh đơn (soldCount>0). */
-  async removeItem(itemId: string) {
-    const item = await this.prisma.flashSaleItem.findUnique({ where: { id: itemId }, select: { soldCount: true } });
+  async removeItem(itemId: string, actor?: CouponActor) {
+    const item = await this.prisma.flashSaleItem.findUnique({
+      where: { id: itemId },
+      select: { soldCount: true, flashSale: { select: { createdBy: true } } },
+    });
     if (!item) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
+    if (actor?.staff) await this.assertStaffCreated(item.flashSale.createdBy);
     if (item.soldCount > 0) {
       throw new BadRequestException('Không thể xoá sản phẩm đã phát sinh đơn giờ vàng. Hãy tắt đợt flash thay vì xoá.');
     }
