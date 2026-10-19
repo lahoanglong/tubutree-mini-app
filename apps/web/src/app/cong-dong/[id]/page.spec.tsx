@@ -209,6 +209,18 @@ describe('/cong-dong/[id] — hiển thị', () => {
   });
 });
 
+describe('/cong-dong/[id] — ô trả lời dính đáy', () => {
+  it('body có has-sticky-bar khi bài hiện, mất khi rời trang; main không còn đệm cứng', async () => {
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+    const { container } = await mount();
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(true);
+    expect(container.querySelector('main')!.className).not.toContain('max-md:pb-24');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+  });
+});
+
 describe('/cong-dong/[id] — thao tác', () => {
   const likeBtn = (c: HTMLElement) => c.querySelector<HTMLElement>('button[aria-pressed]')!;
 
@@ -480,5 +492,40 @@ describe('/cong-dong/[id] — lỗi hiện tại chỗ thao tác', () => {
   it('ô trả lời giới hạn 500 ký tự như API', async () => {
     const { container } = await mount();
     expect(container.querySelector<HTMLInputElement>('input[aria-label="Viết trả lời…"]')!.maxLength).toBe(500);
+  });
+});
+
+describe('/cong-dong/[id] — giao diện điện thoại như Mini App', () => {
+  it('bài và khối Trả lời là khối trắng tràn ngang không viền không bo', async () => {
+    const { container } = await mount();
+    for (const el of [container.querySelector('article')!, container.querySelector('section[aria-labelledby="answers-title"]')!]) {
+      for (const c of ['max-md:-mx-4', 'max-md:rounded-none', 'max-md:border-0', 'max-md:shadow-none']) expect(el.className).toContain(c);
+    }
+  });
+
+  it('tiêu đề câu hỏi cỡ title-sm ở điện thoại', async () => {
+    stub(POST({ kind: 'QUESTION', title: 'Rửa bình sữa thế nào?' }));
+    const { container } = await mount();
+    const h = Array.from(container.querySelectorAll('h2')).find((x) => x.textContent === 'Rửa bình sữa thế nào?')!;
+    expect(h.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+
+  it('ô Viết trả lời cố định đáy màn hình ở điện thoại, đổ bóng', async () => {
+    const { container } = await mount();
+    const form = container.querySelector('form')!;
+    for (const c of ['max-md:fixed', 'max-md:inset-x-0', 'max-md:shadow-[var(--elevation-3)]']) expect(form.className).toContain(c);
+  });
+
+  it('tiêu đề trên thanh trắng, trang bỏ đệm 48px', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+  });
+});
+
+describe('/cong-dong/[id] — tiêu đề khối như Mini App', () => {
+  it('"Trả lời (n)" cỡ title-sm ở điện thoại', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('#answers-title')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
   });
 });

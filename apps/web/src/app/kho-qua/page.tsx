@@ -27,6 +27,7 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 import { LedgerShell } from '../tai-khoan/ledger-shell';
 
 const TITLE = 'Kho quà';
@@ -113,7 +114,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
         </p>
       )}
       <div className="flex gap-2">
-        <button type="button" onClick={onCancel} className={`${ui.btnSecondary} flex-1`}>
+        <button type="button" onClick={onCancel} className={`${miniBtnSecondary} flex-1`}>
           Huỷ
         </button>
         <button type="button" onClick={confirm} disabled={redeem.isPending} className={`${ui.btnPrimary} flex-1`}>
@@ -135,7 +136,7 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
   const s = rewardCardState(reward, catalog);
   const KindIcon = KIND_ICON[reward.kind];
   return (
-    <div data-reward className={`flex flex-col gap-2.5 p-4 ${ui.card}`}>
+    <div data-reward className={`flex flex-col gap-2.5 p-4 ${miniOutline}`}>
       <div className="flex items-start gap-3">
         <span data-testid="reward-icon" className="flex h-10 w-10 flex-none items-center justify-center rounded-control bg-forest-50 text-forest-700">
           <KindIcon className="h-5 w-5" aria-hidden="true" />
@@ -219,7 +220,9 @@ function RewardsBody() {
   return (
     <div className="space-y-4 pb-12">
       <div className="space-y-1">
-        <div className="text-3xl font-bold tabular-nums text-stone-900">{points(total)}</div>
+        <div className="font-bold tabular-nums text-stone-900 md:text-3xl max-md:font-display max-md:text-[length:var(--type-display-md-size)] max-md:font-semibold max-md:leading-[var(--type-display-md-lh)]">
+          {points(total)}
+        </div>
         {c.redeemablePoints !== total && <p className="text-sm text-stone-700">{`Đổi quà dùng được ${points(c.redeemablePoints)}`}</p>}
         {rulesNote && <p className="text-xs text-stone-600">{rulesNote}</p>}
         {lockedNote && <p className="text-xs text-stone-600">{lockedNote}</p>}
@@ -229,7 +232,7 @@ function RewardsBody() {
           </p>
         )}
       </div>
-      <Link href="/kho-qua/cua-toi" className={`flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50 ${ui.card}`}>
+      <Link href="/kho-qua/cua-toi" className={`flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50 ${ui.card} max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:shadow-none`}>
         <Gift className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
         <span className="flex-1 text-sm font-semibold text-stone-900">Quà của tôi</span>
         <ChevronRight className="h-4 w-4 flex-none text-stone-500" aria-hidden="true" />

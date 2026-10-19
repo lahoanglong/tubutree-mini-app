@@ -57,7 +57,7 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(page.getByText('trong đó 119 điểm không hết hạn')).toBeVisible();
     await expect(page.getByText('Còn 2,5 triệu mua hàng để lên hạng Lộc Biếc')).toBeVisible();
     await expect(page.getByText('Miễn phí vận chuyển')).toBeVisible();
-    await expect(page.getByText('Tích điểm từ đơn hàng · TB0')).toBeVisible();
+    await expect(page.getByText('Tích điểm từ đơn hàng', { exact: true })).toBeVisible();
   });
 
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {

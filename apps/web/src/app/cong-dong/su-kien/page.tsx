@@ -11,6 +11,7 @@ import { safeMediaUrl } from '@/components/community/post-parts';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
+import { MiniBar, miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { formatCount } from '@/lib/checkout-points';
@@ -26,8 +27,10 @@ const isEventEnded = (event: Pick<CommunityEvent, 'endAt'>) => new Date(event.en
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      <PageHeader title="Sự kiện" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
+    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
+      <MiniBar>
+        <PageHeader title="Sự kiện" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
+      </MiniBar>
       <div className="mt-4 flex flex-col gap-3">{children}</div>
     </main>
   );
@@ -86,7 +89,7 @@ function EventsList({ eventsQ, onSelect }: { eventsQ: UseQueryResult<CommunityEv
           key={event.id}
           type="button"
           onClick={() => onSelect(event)}
-          className={`${ui.card} block min-h-11 w-full overflow-hidden text-left transition active:scale-[0.99]`}
+          className={`${miniCard} block min-h-11 w-full overflow-hidden text-left transition active:scale-[0.99]`}
         >
           <Cover url={event.coverUrl} />
           <span className="block p-3">
@@ -125,7 +128,7 @@ function EventEntries({
           Sự kiện
         </button>
       </div>
-      <div className={`${ui.card} overflow-hidden`}>
+      <div className={`${miniCard} overflow-hidden`}>
         <Cover url={event.coverUrl} />
         <div className="p-3">
           <h2 className="font-display text-lg font-semibold text-stone-900">{event.title}</h2>
@@ -153,7 +156,7 @@ function EventEntries({
           </div>
           {entriesQ.hasNextPage && (
             <div className="flex justify-center pt-1">
-              <button type="button" disabled={entriesQ.isFetchingNextPage} onClick={() => void entriesQ.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
+              <button type="button" disabled={entriesQ.isFetchingNextPage} onClick={() => void entriesQ.fetchNextPage()} className={`${miniBtnSecondary} min-w-40`}>
                 {entriesQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm bài dự thi'}
               </button>
             </div>

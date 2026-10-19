@@ -129,3 +129,11 @@ describe('PostCard', () => {
     expect(c.querySelectorAll('h1')).toHaveLength(0);
   });
 });
+
+describe('PostCard — giao diện điện thoại như Mini App', () => {
+  it('khối trắng tràn ngang không viền không bo không bóng dưới md', () => {
+    const cls = mount().querySelector('[data-testid="post-card"]')!.className;
+    for (const c of ['max-md:-mx-4', 'max-md:rounded-none', 'max-md:border-0', 'max-md:shadow-none']) expect(cls).toContain(c);
+  });
+});
+

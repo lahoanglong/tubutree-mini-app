@@ -21,6 +21,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { isWebRouteReady } from '@/lib/route-map';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { FeedShell } from './feed-shell';
 
 const SORTS: { key: FeedSort; label: string }[] = [
@@ -37,8 +38,10 @@ function Chip({ selected, onClick, icon: Icon, label, children, pressed = true }
       aria-label={label}
       aria-pressed={pressed ? selected : undefined}
       onClick={onClick}
-      className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium ${
-        selected ? 'border-forest-600 bg-forest-600 text-stone-0' : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50'
+      className={`tubu-hit-44 inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium max-md:min-h-9 ${
+        selected
+          ? 'border-forest-600 bg-forest-600 text-stone-0'
+          : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50 max-md:border-transparent max-md:bg-stone-100 max-md:text-stone-600'
       }`}
     >
       {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
@@ -168,94 +171,102 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     setNotice(null);
     setComposing(true);
   };
-  const iconLink = 'inline-flex h-11 w-11 items-center justify-center rounded-control bg-stone-100 text-stone-800 hover:bg-stone-200';
+  // Dưới md là nút tròn nền sage như IconButton của Mini App; từ sm thêm chữ để máy tính đoán được chức năng (nút vẫn có aria-label).
+  const iconLink =
+    'inline-flex h-11 min-w-11 items-center justify-center gap-1.5 bg-stone-100 text-stone-800 hover:bg-stone-200 max-md:rounded-full max-md:bg-sage-50 md:rounded-control sm:px-3';
+  const iconLabel = 'hidden text-sm font-medium sm:inline';
 
   return (
     <FeedShell subtitle>
       <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
 
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {isWebRouteReady('/cong-dong/xep-hang') && (
-            <Link href="/cong-dong/xep-hang" aria-label="Bảng xếp hạng" className={iconLink}>
-              <Trophy className="h-5 w-5" aria-hidden="true" />
-            </Link>
-          )}
-          {isWebRouteReady('/cong-dong/su-kien') && (
-            <Link href="/cong-dong/su-kien" aria-label="Sự kiện" className={iconLink}>
-              <PartyPopper className="h-5 w-5" aria-hidden="true" />
-            </Link>
-          )}
-        </div>
-        <button type="button" onClick={openComposer} className={ui.btnPrimary}>
-          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Đăng bài
-        </button>
-      </div>
-
-      {notice && (
-        <p role="status" className="rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800">
-          {notice}
-        </p>
-      )}
-
-      <form role="search" aria-label="Tìm kiếm" onSubmit={(e) => e.preventDefault()} className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
-        <input
-          type="search"
-          aria-label="Tìm kiếm"
-          placeholder="Tìm câu hỏi, mẹo, bài viết…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className={`${ui.field} pl-9 pr-11`}
-        />
-        {q && (
-          <button type="button" aria-label="Xoá từ khoá" onClick={() => setQ('')} className="absolute right-0 top-0 inline-flex h-11 min-h-11 w-11 items-center justify-center text-stone-700">
-            <X className="h-4 w-4" aria-hidden="true" />
+      <div className="flex flex-col gap-3 max-md:-mx-4 max-md:gap-2 max-md:bg-stone-0 max-md:px-3 max-md:pb-2 md:contents">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {isWebRouteReady('/cong-dong/xep-hang') && (
+              <Link href="/cong-dong/xep-hang" aria-label="Bảng xếp hạng" className={iconLink}>
+                <Trophy className="h-5 w-5" aria-hidden="true" />
+                <span className={iconLabel}>Bảng xếp hạng</span>
+              </Link>
+            )}
+            {isWebRouteReady('/cong-dong/su-kien') && (
+              <Link href="/cong-dong/su-kien" aria-label="Sự kiện" className={iconLink}>
+                <PartyPopper className="h-5 w-5" aria-hidden="true" />
+                <span className={iconLabel}>Sự kiện</span>
+              </Link>
+            )}
+          </div>
+          <button type="button" onClick={openComposer} className={ui.btnPrimary}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Đăng bài
           </button>
+        </div>
+
+        {notice && (
+          <p role="status" className="rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800">
+            {notice}
+          </p>
         )}
-      </form>
 
-      <div role="group" aria-label="Chọn danh mục" className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
-        <Chip selected={!category} onClick={() => setCategory(undefined)}>
-          Tất cả
-        </Chip>
-        {cats.data?.map((c) => (
-          <Chip key={c.id} selected={category === c.slug} onClick={() => setCategory(c.slug)}>
-            {`${c.icon ?? ''} ${c.name}`.trim()}
+        <form role="search" aria-label="Tìm kiếm" onSubmit={(e) => e.preventDefault()} className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="Tìm kiếm"
+            placeholder="Tìm câu hỏi, mẹo, bài viết…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className={`${ui.field} pl-9 pr-11 max-md:rounded-full max-md:border-stone-200`}
+          />
+          {q && (
+            <button type="button" aria-label="Xoá từ khoá" onClick={() => setQ('')} className="absolute right-0 top-0 inline-flex h-11 min-h-11 w-11 items-center justify-center text-stone-700">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </form>
+
+        <div role="group" aria-label="Chọn danh mục" className="flex gap-2 overflow-x-auto max-md:-mx-3 max-md:px-3 max-md:py-1 md:flex-wrap">
+          <Chip selected={!category} onClick={() => setCategory(undefined)}>
+            Tất cả
           </Chip>
-        ))}
-      </div>
+          {cats.data?.map((c) => (
+            <Chip key={c.id} selected={category === c.slug} onClick={() => setCategory(c.slug)}>
+              {`${c.icon ?? ''} ${c.name}`.trim()}
+            </Chip>
+          ))}
+        </div>
 
-      <div role="group" aria-label="Sắp xếp" className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
-        {SORTS.map((s) => (
-          <Chip key={s.key} selected={sort === s.key} onClick={() => setSort(s.key)}>
-            {s.label}
-          </Chip>
-        ))}
-        <Chip icon={HelpCircle} selected={unanswered} onClick={() => setUnanswered((v) => !v)}>
-          Chưa trả lời
-        </Chip>
-      </div>
-
-      {tag && (
-        <div>
-          <Chip
-            selected
-            pressed={false}
-            icon={Hash}
-            label="Bỏ lọc thẻ"
-            onClick={() => {
-              setTag(undefined);
-              setTagName(undefined);
-              router.replace('/cong-dong');
-            }}
-          >
-            {tagName ?? tag}
-            <X className="h-4 w-4" aria-hidden="true" />
+        <div role="group" aria-label="Sắp xếp" className="flex gap-2 overflow-x-auto max-md:-mx-3 max-md:px-3 max-md:py-1 md:flex-wrap">
+          {SORTS.map((s) => (
+            <Chip key={s.key} selected={sort === s.key} onClick={() => setSort(s.key)}>
+              {s.label}
+            </Chip>
+          ))}
+          <Chip icon={HelpCircle} selected={unanswered} onClick={() => setUnanswered((v) => !v)}>
+            Chưa trả lời
           </Chip>
         </div>
-      )}
+
+        {tag && (
+          <div>
+            <Chip
+              selected
+              pressed={false}
+              icon={Hash}
+              label="Bỏ lọc thẻ"
+              onClick={() => {
+                setTag(undefined);
+                setTagName(undefined);
+                router.replace('/cong-dong');
+              }}
+            >
+              {tagName ?? tag}
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Chip>
+          </div>
+        )}
+
+      </div>
 
       {feed.isLoading ? (
         <ListSkeleton count={4} height={110} />
@@ -275,14 +286,14 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
         )
       ) : (
         <>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 max-md:gap-2 md:grid-cols-2">
             {posts.map((post) => (
               <PostCard key={post.id} post={post} />
             ))}
           </div>
           {feed.hasNextPage && (
             <div className="flex justify-center pt-2">
-              <button type="button" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
+              <button type="button" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()} className={`${miniBtnSecondary} min-w-40`}>
                 {feed.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
               </button>
             </div>

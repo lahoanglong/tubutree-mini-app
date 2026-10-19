@@ -5,6 +5,7 @@ import { ShowerHead, TreePine } from 'lucide-react';
 import { Sheet } from '@/components/ui/sheet';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatPoints } from './format';
 
 export function TreeActions({
@@ -64,7 +65,7 @@ export function TreeActions({
         <ShowerHead className="h-5 w-5" aria-hidden="true" />
         Tưới cây (20💧)
       </button>
-      <button type="button" disabled={busy} onClick={openConfirm} className={`${ui.btnSecondary} w-full gap-2`}>
+      <button type="button" disabled={busy} onClick={openConfirm} className={`${miniBtnSecondary} w-full gap-2`}>
         <TreePine className="h-5 w-5" aria-hidden="true" />
         <span>
           Góp quỹ trồng cây
@@ -79,7 +80,7 @@ export function TreeActions({
         title="Góp quỹ trồng cây?"
         footer={
           <div className="flex gap-2">
-            <button type="button" disabled={busy} onClick={closeConfirm} className={`${ui.btnSecondary} flex-1`}>
+            <button type="button" disabled={busy} onClick={closeConfirm} className={`${miniBtnSecondary} flex-1`}>
               Huỷ
             </button>
             <button type="button" disabled={busy} onClick={() => void confirm()} className={`${ui.btnPrimary} flex-1`}>

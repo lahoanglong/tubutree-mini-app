@@ -9,7 +9,6 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
-import { ui } from '@/lib/guest-ui';
 import { EmptyState } from '@/components/empty-state';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
@@ -17,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { QrCode } from '@/components/ui/qr-code';
 import { Skeleton } from '@/components/ui/skeleton';
+import { miniOutline } from '@/components/loyalty/mini-surface';
 import { LedgerShell } from '../../tai-khoan/ledger-shell';
 
 const TITLE = 'Quà của tôi';
@@ -61,7 +61,7 @@ function RedemptionEntry({ r }: { r: GiftRedemptionDTO }) {
   if (r.giftKind === 'VOUCHER') {
     return (
       <div data-redemption>
-        <Link href="/tai-khoan/diem-xanh" className={`flex min-h-11 items-center gap-3 p-4 hover:bg-stone-50 ${ui.card}`}>
+        <Link href="/tai-khoan/diem-xanh" className={`flex min-h-11 items-center gap-3 p-4 hover:bg-stone-50 ${miniOutline}`}>
           <Ticket className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-stone-900">{r.giftName}</span>
@@ -73,7 +73,7 @@ function RedemptionEntry({ r }: { r: GiftRedemptionDTO }) {
     );
   }
   return (
-    <div data-redemption className={`space-y-2 p-4 ${ui.card}`}>
+    <div data-redemption className={`space-y-2 p-4 ${miniOutline}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="text-base font-semibold text-stone-900">{r.giftName}</div>
         {r.status === 'READY' && <Badge tone="info">Chờ nhận</Badge>}
