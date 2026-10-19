@@ -18,6 +18,9 @@ export interface WastePointPickerProps {
   now?: Date;
 }
 
+/** Thẻ khoá chỉ mờ phần chọn và tên; lý do, chỉ đường và gọi vẫn dùng được nên giữ nguyên độ đậm. */
+const DIMMED = 'opacity-[.55]';
+
 function missingItemIds(p: WastePointDTO, selectedItemIds: readonly string[]): string[] {
   return selectedItemIds.filter((id) => !p.acceptedItemIds.includes(id));
 }
@@ -49,7 +52,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
         return (
           <div
             key={p.id}
-            className={`overflow-hidden rounded-control border-[1.5px] ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-200 bg-stone-0'} ${locked ? 'opacity-[.55]' : ''}`}
+            className={`overflow-hidden rounded-control border-[1.5px] ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-200 bg-stone-0'}`}
           >
             <button
               type="button"
@@ -64,11 +67,11 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
             >
               <span
                 aria-hidden="true"
-                className={`mt-px grid h-5 w-5 flex-none place-items-center rounded-full border-2 ${selected ? 'border-forest-600' : 'border-stone-450'}`}
+                className={`mt-px grid h-5 w-5 flex-none place-items-center rounded-full border-2 ${selected ? 'border-forest-600' : 'border-stone-450'} ${locked ? DIMMED : ''}`}
               >
                 {selected && <span className="h-2.5 w-2.5 rounded-full bg-forest-600" />}
               </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <span data-point-body className={`flex min-w-0 flex-1 flex-col gap-1.5 ${locked ? DIMMED : ''}`}>
                 <span className="flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-semibold text-stone-900">{p.name}</span>
                   <Badge tone={p.kind === 'WAREHOUSE' ? 'info' : 'brand'} size="sm">
@@ -86,9 +89,9 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 <span className="flex flex-wrap gap-x-2 gap-y-1">
                   {items.map((it) =>
                     p.acceptedItemIds.includes(it.id) ? (
-                      <span key={it.id} className="text-sm text-stone-800">
+                      <Badge key={it.id} tone="neutral" size="sm">
                         {it.name}
-                      </span>
+                      </Badge>
                     ) : (
                       <span key={it.id} className="inline-flex items-center gap-1">
                         <s className="text-sm text-stone-800">{it.name}</s>
@@ -103,9 +106,11 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
             </button>
             <div className="flex flex-col gap-2 px-3 pb-3 pl-[42px]">
               {locked && (
-                <p className="text-sm text-stone-800">
-                  {p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}
-                </p>
+                <div>
+                  <span className="inline-block rounded-control bg-warning-bg px-2 py-[3px] text-xs font-semibold text-warning-fg">
+                    {p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}
+                  </span>
+                </div>
               )}
               {p.perkText && (
                 <p className="text-sm text-stone-800">

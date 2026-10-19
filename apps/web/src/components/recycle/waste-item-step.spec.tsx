@@ -41,6 +41,15 @@ describe('WasteItemStep (web)', () => {
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');
   });
+  it('trần tháng đã bớt hoặc hết: thẻ món nói lý do dưới câu trần', () => {
+    const { c } = mount({ items: [{ ...ITEM_CARTON, monthRemainingQty: 3 }, { ...ITEM_MILK, monthRemainingQty: 0 }] });
+    expect(card(c, 'Thùng carton').textContent).toContain('Tháng này còn 3 thùng');
+    expect(card(c, 'Vỏ hộp sữa').textContent).toContain('Tháng này bạn đã đủ trần cho món này');
+  });
+  it('trần tháng còn nguyên: không có dòng "Tháng này còn"', () => {
+    const { c } = mount({ items: [ITEM_CARTON] });
+    expect(c.textContent).not.toContain('Tháng này còn');
+  });
   it('bấm + gọi onChange với số mới; − về 0 gọi onChange(id, 0)', () => {
     const { c, onChange } = mount({ lines: { 'item-carton': 2 } });
     click(btn(card(c, 'Thùng carton'), 'Tăng số lượng'));
