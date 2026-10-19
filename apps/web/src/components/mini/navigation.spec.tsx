@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, useState } from 'react';
 import { click, typeInto } from '@/test-utils/dom';
 import { mount } from './harness';
 
@@ -48,15 +48,25 @@ describe('BackButton', () => {
     m.container.remove();
   });
 
-  it('có lịch sử thì lùi; không có thì về fallbackHref', () => {
-    const b = mount(<BackButton fallbackHref="/s/abc" />).container.querySelector('button')!;
+  it('đã đi qua trang trong app thì lùi; mở thẳng (kể cả từ quảng cáo ngoài, history.length 2) thì về fallbackHref', () => {
+    nav.pathname = '/san-pham/abc';
+    let bump = () => {};
+    function Host() {
+      const [, set] = useState(0);
+      bump = () => set((n) => n + 1);
+      return <BackButton fallbackHref="/s/abc" />;
+    }
+    const m = mount(<Host />);
+    const b = m.container.querySelector('button')!;
     const spy = vi.spyOn(window.history, 'length', 'get');
-    spy.mockReturnValue(3);
-    click(b);
-    expect(nav.back).toHaveBeenCalledTimes(1);
-    spy.mockReturnValue(1);
+    spy.mockReturnValue(2);
     click(b);
     expect(nav.push).toHaveBeenCalledWith('/s/abc');
+    expect(nav.back).not.toHaveBeenCalled();
+    nav.pathname = '/gio-hang';
+    act(() => bump());
+    click(m.container.querySelector('button')!);
+    expect(nav.back).toHaveBeenCalledTimes(1);
     spy.mockRestore();
   });
 });

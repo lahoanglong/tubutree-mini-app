@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/back-button.tsx (nút quay lại tròn nổi, ẩn ở 5 trang gốc)
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { isWebRootPath } from '@/lib/web-nav';
@@ -36,6 +36,15 @@ export default function BackButton({ fallbackHref = '/', className }: BackButton
   const pathname = useOptionalPathname();
   const show = !isWebRootPath(pathname);
 
+  // history.length tính cả các mục trước khi khách vào site (quảng cáo, Zalo) nên không dùng được; đếm số lần đổi đường dẫn trong app.
+  // BackButton nằm ở layout nên sống suốt phiên; mở thẳng một trang thì đếm bằng 0 và nút về fallbackHref.
+  const lastPath = useRef(pathname);
+  const inAppSteps = useRef(0);
+  if (lastPath.current !== pathname) {
+    lastPath.current = pathname;
+    inAppSteps.current += 1;
+  }
+
   useEffect(() => {
     document.body.classList.toggle('with-back-btn', show);
     return () => document.body.classList.remove('with-back-btn');
@@ -49,8 +58,8 @@ export default function BackButton({ fallbackHref = '/', className }: BackButton
       aria-label="Quay lại"
       className={className ? `tubu-press ${className}` : 'tubu-press'}
       onClick={() => {
-        // Mở thẳng trang con (share-link/thông báo) → history chỉ có một mục, back() kẹt tại chỗ.
-        if (window.history.length > 1) router ? router.back() : window.history.back();
+        // Mở thẳng trang con (share-link/thông báo/quảng cáo) → back() sẽ rời khỏi site thay vì về fallbackHref.
+        if (inAppSteps.current > 0) router ? router.back() : window.history.back();
         else router ? router.push(fallbackHref) : window.location.assign(fallbackHref);
       }}
       style={{

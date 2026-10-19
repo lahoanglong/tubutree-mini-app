@@ -45,3 +45,10 @@ describe('mini.css', () => {
     }
   });
 });
+
+describe('mini.css không đổi giao diện máy tính', () => {
+  it('ẩn nút xoá native của ô tìm chỉ trong SearchField, không phải mọi [role=search]', () => {
+    expect(css).not.toMatch(/\[role=['"]search['"]\][^{]*cancel-button/);
+    expect(css).toMatch(/\.tubu-search-field input\[type='search'\]::-webkit-search-cancel-button/);
+  });
+});

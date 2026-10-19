@@ -115,7 +115,8 @@
   outline-offset: -2px;
 }
 
-[role='search'] input[type='search']::-webkit-search-cancel-button {
+/* Chỉ trong SearchField: ô tìm của thanh đầu và trang quản trị vẫn giữ nút xoá native. */
+.tubu-search-field input[type='search']::-webkit-search-cancel-button {
   display: none;
   -webkit-appearance: none;
 }

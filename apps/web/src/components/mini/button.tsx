@@ -2,7 +2,7 @@
 
 // Nguồn: apps/miniapp/src/components/ui/button.tsx (zmp-ui Button thay bằng DOM cùng lớp zaui-btn*, CSS ở mini.css)
 import { useRef } from 'react';
-import type { AriaAttributes, CSSProperties, ReactNode } from 'react';
+import type { AriaAttributes, CSSProperties, MouseEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from './icon';
 
@@ -39,9 +39,13 @@ export function Button({
 }: ButtonProps) {
   const toneStyle = variant === 'flash' ? FLASH_STYLE : variant === 'danger' && !disabled ? DANGER_STYLE : undefined;
   const inFlight = useRef(false);
-  const handlePress = () => {
+  const handlePress = (e: MouseEvent<HTMLButtonElement>) => {
     // `loading` chỉ đúng sau khi caller render lại; hai cú chạm sát nhau vẫn thấy loading=false nên khoá đồng bộ bằng ref.
-    if (loading || inFlight.current) return;
+    // Nút không `disabled` khi loading nên phải chặn cả submit native, nếu không form gửi lần hai.
+    if (loading || inFlight.current) {
+      e.preventDefault();
+      return;
+    }
     const result: unknown = onPress?.();
     if (isThenable(result)) {
       inFlight.current = true;

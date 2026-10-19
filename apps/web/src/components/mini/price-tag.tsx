@@ -2,13 +2,20 @@
 
 // Nguồn: apps/miniapp/src/components/ui/price-tag.tsx
 import type { CSSProperties } from 'react';
-import { formatVnd } from '@/lib/format-vnd';
 import { formatVndShort } from '@/lib/browse-text';
+
+// Giá thiếu hiện "—", không phải "0đ" (0đ nghĩa là miễn phí); khớp formatVnd của Mini App.
+const MISSING_AMOUNT = '—';
+const toAmount = (v: number | null | undefined): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const formatVnd = (v: number | null | undefined): string => {
+  const n = toAmount(v);
+  return n === null ? MISSING_AMOUNT : `${n.toLocaleString('vi-VN')}đ`;
+};
 
 const SIZE_VARIANT = { sm: 'price-sm', md: 'price-md', lg: 'price-lg', xl: 'price-xl' } as const;
 
 export interface PriceTagProps {
-  value: number;
+  value: number | null | undefined;
   compareAt?: number | null;
   flash?: { price: number } | null;
   size?: keyof typeof SIZE_VARIANT;
@@ -21,7 +28,8 @@ export interface PriceTagProps {
  * khi có (đúng quy tắc flash > sale > base BE đã dùng ở giỏ hàng — không tự tính lại ở đây). */
 export function PriceTag({ value, compareAt, flash, size = 'md', tone = 'default', style, ...rest }: PriceTagProps) {
   const displayValue = flash ? flash.price : value;
-  const showCompare = typeof compareAt === 'number' && compareAt > displayValue;
+  const shown = toAmount(displayValue);
+  const showCompare = typeof compareAt === 'number' && shown !== null && compareAt > shown;
   const variant = SIZE_VARIANT[size];
   const color = tone === 'inverse' ? 'var(--color-text-inverse)' : flash ? 'var(--color-flash-fg)' : 'var(--color-text-price)';
   return (
@@ -47,12 +55,12 @@ function typeStyleFor(variant: string): CSSProperties {
 }
 
 /** `short`: dùng `formatVndShort` (50000 → "50k") cho câu chữ marketing thay vì số đầy đủ. */
-export function Money({ amount, short }: { amount: number; short?: boolean }) {
-  return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{short ? formatVndShort(amount) : formatVnd(amount)}</span>;
+export function Money({ amount, short }: { amount: number | null | undefined; short?: boolean }) {
+  return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{short && toAmount(amount) !== null ? formatVndShort(amount as number) : formatVnd(amount)}</span>;
 }
 
 const POINTS_FORMAT = new Intl.NumberFormat('vi-VN');
 
-export function Points({ value }: { value: number }) {
-  return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{`${POINTS_FORMAT.format(value)} điểm`}</span>;
+export function Points({ value }: { value: number | null | undefined }) {
+  return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{`${POINTS_FORMAT.format(toAmount(value) ?? 0)} điểm`}</span>;
 }

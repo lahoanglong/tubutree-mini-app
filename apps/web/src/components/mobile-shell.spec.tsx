@@ -24,6 +24,7 @@ vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRo
 import SiteHeader from './site-header';
 import SiteFooter from './site-footer';
 import BackLink from './back-link';
+import BackButton from './mini/back-button';
 import { PageHeader } from './ui/page-header';
 import { HomeHeader } from './home/home-header';
 import { GardenHintBubble } from './garden-hint-bubble';
@@ -63,27 +64,28 @@ describe('thanh đầu và chân trang website', () => {
 });
 
 describe('PageHeader (web) ở điện thoại', () => {
-  it('một h1, thêm nút lùi nổi như Mini App (ẩn từ md) và gắn with-back-btn lên body', () => {
+  it('một h1, chỉ còn link quay lại cho máy tính; nút lùi nổi do layout gắn một lần', () => {
     const { container } = mount(<PageHeader title="Giỏ hàng" subtitle="3 sản phẩm" backHref="/tai-khoan" />);
     expect(container.querySelectorAll('h1')).toHaveLength(1);
-    const floating = [...container.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Quay lại')!;
-    expect(floating.style.position).toBe('fixed');
-    // Style inline của nút đặt display:grid nên phải !important mới ẩn được.
-    expect(floating.className).toContain('md:!hidden');
-    expect(document.body.classList.contains('with-back-btn')).toBe(true);
+    expect(container.querySelector('button[aria-label="Quay lại"]')).toBeNull();
     const desk = container.querySelector('a[href="/tai-khoan"]')!;
     expect(desk.className).toContain('max-md:hidden');
   });
 
-  it('nút lùi nổi quay lại lịch sử; lịch sử rỗng thì về backHref', () => {
-    const { container } = mount(<PageHeader title="X" backHref="/tai-khoan" />);
-    const b = [...container.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === 'Quay lại')!;
-    Object.defineProperty(window.history, 'length', { value: 1, configurable: true });
-    click(b);
-    expect(mocks.push).toHaveBeenCalledWith('/tai-khoan');
-    Object.defineProperty(window.history, 'length', { value: 3, configurable: true });
-    click(b);
-    expect(mocks.back).toHaveBeenCalled();
+  it('layout gắn đúng một nút lùi nổi cho trang con không có backHref (như app.tsx của Mini App)', () => {
+    mocks.pathname = '/doi-rac';
+    const { container } = mount(<><PageHeader title="Đổi rác" /><BackButton className="md:!hidden" /></>);
+    const buttons = container.querySelectorAll('button[aria-label="Quay lại"]');
+    expect(buttons).toHaveLength(1);
+    const b = buttons[0] as HTMLElement;
+    expect(b.style.position).toBe('fixed');
+    expect(b.className).toContain('md:!hidden');
+    expect(document.body.classList.contains('with-back-btn')).toBe(true);
+  });
+
+  it('layout gắn nút lùi trong HideOnPortals, cạnh BottomNav', () => {
+    const layout = readFileSync(join(__dirname, '../app/layout.tsx'), 'utf8');
+    expect(layout).toMatch(/<HideOnPortals>\s*<BackButton className="md:!hidden" \/>/);
   });
 
   it('tiêu đề chừa chỗ cho nút lùi ở điện thoại, không chừa từ md', () => {
@@ -93,14 +95,12 @@ describe('PageHeader (web) ở điện thoại', () => {
 });
 
 describe('BackLink (link "← ..." ngoài PageHeader)', () => {
-  it('máy tính giữ link chữ, điện thoại thay bằng nút lùi nổi của Mini App', () => {
+  it('máy tính giữ link chữ, điện thoại dùng nút lùi nổi của layout', () => {
     const { container } = mount(<BackLink href="/tai-khoan">← Tài khoản</BackLink>);
     const a = container.querySelector('a')!;
     expect(a.textContent).toBe('← Tài khoản');
     expect(a.className).toContain('max-md:hidden');
-    const b = container.querySelector('button')!;
-    expect(b.className).toContain('md:!hidden');
-    expect(b.className).toContain('h-11');
+    expect(container.querySelector('button')).toBeNull();
   });
 });
 

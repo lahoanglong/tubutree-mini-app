@@ -26,6 +26,18 @@ beforeEach(() => {
   mocks.flash = [];
 });
 
+describe('PriceTag thiếu giá', () => {
+  it('null/undefined/NaN hiện "—" chứ không "NaNđ" hay "0đ"; Points rác hiện 0', () => {
+    expect(mount(<PriceTag value={null} />).container.textContent).toBe('—');
+    expect(mount(<PriceTag value={undefined} />).container.textContent).toBe('—');
+    expect(mount(<PriceTag value={NaN} />).container.textContent).toBe('—');
+    expect(mount(<PriceTag value={0} />).container.textContent).toBe('0đ');
+    expect(mount(<Money amount={null} />).container.textContent).toBe('—');
+    expect(mount(<Points value={NaN} />).container.textContent).toBe('0 điểm');
+    expect(mount(<Points value={null} />).container.textContent).toBe('0 điểm');
+  });
+});
+
 describe('PriceTag', () => {
   it('hiện giá đủ chữ số, giá gốc gạch khi có giảm, giá giờ vàng luôn thắng', () => {
     const c = mount(<PriceTag value={80000} compareAt={100000} />).container;

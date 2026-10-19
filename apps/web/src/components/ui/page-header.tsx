@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { ui } from '@/lib/guest-ui';
-import BackButton from '@/components/mini/back-button';
 
 export interface PageHeaderProps {
   title: string;
@@ -16,7 +15,7 @@ export interface PageHeaderProps {
 
 /**
  * Tiêu đề trang con, cùng nội dung với `PageHeader` của Mini App. Luôn có đúng một h1.
- * Dưới md vẽ như Mini App: nút lùi tròn nổi (BackButton), tiêu đề serif cỡ title-lg, dòng phụ caption, chừa 48px bên trái cho nút;
+ * Dưới md vẽ như Mini App: nút lùi tròn nổi (BackButton ở layout), tiêu đề serif cỡ title-lg, dòng phụ caption, chừa 48px bên trái cho nút;
  * từ md giữ link quay lại và tiêu đề của giao diện máy tính.
  */
 export function PageHeader({ title, subtitle, backHref, backLabel = 'Quay lại', actions, variant = 'plain' }: PageHeaderProps) {
@@ -24,12 +23,9 @@ export function PageHeader({ title, subtitle, backHref, backLabel = 'Quay lại'
   return (
     <header className={`flex items-center gap-2 ${hero ? 'rounded-card bg-forest-800 px-4 py-3' : ''}`}>
       {backHref && (
-        <>
-          <Link href={backHref} aria-label={backLabel} className={`${ui.backLink} -ml-2 w-11 justify-center max-md:hidden ${hero ? 'text-stone-0' : ''}`}>
-            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-          </Link>
-          <BackButton fallbackHref={backHref} className="h-11 md:!hidden" />
-        </>
+        <Link href={backHref} aria-label={backLabel} className={`${ui.backLink} -ml-2 w-11 justify-center max-md:hidden ${hero ? 'text-stone-0' : ''}`}>
+          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+        </Link>
       )}
       <div className={`min-w-0 flex-1 max-md:py-3 ${backHref ? 'pl-12 md:pl-0' : ''}`}>
         <h1

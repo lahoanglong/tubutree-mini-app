@@ -99,4 +99,11 @@ describe('Button', () => {
     expect(btn(c).getAttribute('aria-expanded')).toBe('true');
     expect(btn(c).getAttribute('aria-controls')).toBe('p');
   });
+
+  it('type=submit đang loading: chạm lần nữa không gửi lại form', () => {
+    const onSubmit = vi.fn((e: { preventDefault: () => void }) => e.preventDefault());
+    const c = mount(<form onSubmit={onSubmit}><Button type="submit" loading>Đặt hàng</Button></form>).container;
+    click(btn(c));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });
