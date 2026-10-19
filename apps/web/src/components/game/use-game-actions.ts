@@ -148,7 +148,7 @@ export function useGameActions({
     onError,
   });
   const unlockM = useLockedMutation({
-    mutationFn: () => unlockPlot(coreHttp),
+    mutationFn: (slot: number) => unlockPlot(coreHttp, slot),
     onSuccess: () => {
       notify('Đã mở lô đất mới 🪴', 'success');
       refresh();

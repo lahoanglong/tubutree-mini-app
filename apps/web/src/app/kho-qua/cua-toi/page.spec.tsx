@@ -68,6 +68,20 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
     expect(row.textContent).toContain('Hạn nhận 17/12/2026');
   });
 
+  it('READY: nhãn "Chờ nhận" và QR căn giữa; lượt đã nhận hoặc đã huỷ không có nhãn', async () => {
+    state.mine = [makeGiftRedemption()];
+    const c = await mount();
+    const row = entry(c, 'Gói hạt giống Tubu');
+    expect(row.textContent).toContain('Chờ nhận');
+    const center = row.querySelector<HTMLElement>('[data-testid="qr-center"]')!;
+    expect(center.className).toContain('justify-center');
+    expect(center.querySelector('[data-testid="qr"]')).not.toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.mine = [makeGiftRedemption({ id: 'f', giftName: 'Túi vải Tubu', status: 'FULFILLED', claimPoint: null, fulfilledAt: '2026-10-25T17:30:00.000Z' })];
+    expect((await mount()).textContent).not.toContain('Chờ nhận');
+  });
+
   it('CANCELLED: lý do và số điểm đã hoàn (kể cả 0), không lộ mã', async () => {
     state.mine = [
       makeGiftRedemption({ id: 'a', status: 'CANCELLED', code: 'QG-AAAAAAAA', claimPoint: null, cancelReason: 'Quá hạn nhận', refundedPoints: 25_000 }),

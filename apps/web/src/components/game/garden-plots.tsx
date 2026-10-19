@@ -20,7 +20,7 @@ export function GardenPlots({
   waterPlotVariables: string | undefined;
   onWaterPlot: (plotId: string) => void;
   unlockPending: boolean;
-  onUnlock: () => void;
+  onUnlock: (slot: number) => void;
 }) {
   const extraPlots = garden.plots.filter((p) => !p.isHome);
   return (
@@ -70,7 +70,7 @@ export function GardenPlots({
         })}
       </div>
       {garden.nextUnlock ? (
-        <button type="button" disabled={unlockPending} onClick={onUnlock} className={`${ui.btnPrimary} mt-3 w-full gap-2`}>
+        <button type="button" disabled={unlockPending} onClick={() => onUnlock(garden.nextUnlock!.slot)} className={`${ui.btnPrimary} mt-3 w-full gap-2`}>
           <LockOpen className="h-4 w-4" aria-hidden="true" />
           Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
         </button>

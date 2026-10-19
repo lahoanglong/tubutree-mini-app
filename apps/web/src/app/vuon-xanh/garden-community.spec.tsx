@@ -250,7 +250,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(getsOf('/game/garden').length).toBeGreaterThan(before);
   });
 
-  it('mở lô: nút kèm giá giọt nước, POST {currency:"SEEDS"} một lần dù chạm đúp, báo và làm mới', async () => {
+  it('mở lô: nút kèm giá giọt nước, POST {currency:"SEEDS", slot} một lần dù chạm đúp, báo và làm mới', async () => {
     let release!: () => void;
     state.hold.set('/game/garden/unlock', new Promise<void>((r) => (release = r)));
     state.posts['/game/garden/unlock'] = () => plot(4);
@@ -264,9 +264,23 @@ describe('Vườn Xanh: tab Vườn', () => {
     release();
     await flush(8);
     expect(postsOf('/game/garden/unlock')).toHaveLength(1);
-    expect(postsOf('/game/garden/unlock')[0]!.body).toEqual({ currency: 'SEEDS' });
+    expect(postsOf('/game/garden/unlock')[0]!.body).toEqual({ currency: 'SEEDS', slot: 4 });
     expect(document.body.textContent).toContain('Đã mở lô đất mới 🪴');
     expect(getsOf('/game/garden').length).toBeGreaterThan(1);
+  });
+
+  it('mở lô lỗi (danh sách lô đã đổi): báo lỗi, nút mở lại được, body vẫn {currency, slot}', async () => {
+    state.posts['/game/garden/unlock'] = () => {
+      throw new Error('Danh sách lô đất đã thay đổi, hãy tải lại trang.');
+    };
+    const c = await mount('tab=garden');
+    const b = btn(panel(c, 'Vườn'), 'Mở lô');
+    click(b);
+    await flush(8);
+    expect(document.querySelector('[role="alert"]')!.textContent).toBe('Danh sách lô đất đã thay đổi, hãy tải lại trang.');
+    expect(b.disabled).toBe(false);
+    expect(postsOf('/game/garden/unlock')).toHaveLength(1);
+    expect(postsOf('/game/garden/unlock')[0]!.body).toEqual({ currency: 'SEEDS', slot: 4 });
   });
 
   it('đã đủ lô: không còn nút mở, hiện thông báo tối đa', async () => {

@@ -147,7 +147,7 @@ function GameBody() {
             onNext={nextQuiz}
           />
 
-          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10} onSpin={handleSpin} onResult={wheelPrize.onResult} />
+          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10_000} onSpin={handleSpin} onResult={wheelPrize.onResult} />
 
           {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
           {wasteLink && (
@@ -164,7 +164,7 @@ function GameBody() {
               waterPlotVariables={waterPlotM.variables}
               onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
               unlockPending={unlockM.isPending}
-              onUnlock={() => unlockM.mutate()}
+              onUnlock={(slot) => unlockM.mutate(slot)}
             />
           )}
 
