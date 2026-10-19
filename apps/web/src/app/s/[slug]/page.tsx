@@ -75,7 +75,7 @@ export default async function StorefrontPage({
     .filter((c) => c.items.length > 0);
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0 max-md:pb-[calc(90px+var(--safe-bottom))] sm:py-8">
+    <main data-page-bleed className={`mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0 md:py-8 ${collections.length > 0 ? 'max-md:pb-[calc(90px+var(--safe-bottom))]' : ''}`}>
       {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
       <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
 
@@ -86,13 +86,13 @@ export default async function StorefrontPage({
           <img
             src={sf.coverUrl}
             alt={sf.title}
-            className="h-48 w-full object-cover max-md:h-[84px] sm:h-64"
+            className="h-48 w-full object-cover max-md:h-[84px] md:h-64"
           />
         ) : (
           // Điện thoại: dải xanh đậm phẳng như Mini App; máy tính giữ gradient theo màu chủ đề.
           <div
             data-testid="storefront-cover"
-            className="h-36 w-full bg-[linear-gradient(135deg,var(--sf-theme)_0%,var(--sf-end)_100%)] [--sf-end:var(--color-bg-inverse)] [--sf-theme:var(--sf-owner)] max-md:h-[84px] max-md:[--sf-end:var(--forest-700)] max-md:[--sf-theme:var(--forest-700)] sm:h-48"
+            className="h-36 w-full bg-[linear-gradient(135deg,var(--sf-theme)_0%,var(--sf-end)_100%)] [--sf-end:var(--color-bg-inverse)] [--sf-theme:var(--sf-owner)] max-md:h-[84px] max-md:[--sf-end:var(--forest-700)] max-md:[--sf-theme:var(--forest-700)] md:h-48"
             style={{ '--sf-owner': themeColor } as React.CSSProperties}
           />
         )}
@@ -103,9 +103,9 @@ export default async function StorefrontPage({
       {/* ── Brand Identity & Header Card ── */}
       <div
         data-testid="storefront-header"
-        className="relative -mt-16 mb-6 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card max-md:-mt-[29px] max-md:mb-0 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-4 max-md:py-0 max-md:shadow-none sm:-mt-20 sm:p-7"
+        className="relative -mt-16 mb-6 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card max-md:-mt-[29px] max-md:mb-0 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-4 max-md:py-0 max-md:shadow-none md:-mt-20 md:p-7"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 max-md:gap-0 md:flex-row md:items-start md:justify-between">
           <div className="flex items-start gap-4 max-md:flex-col max-md:gap-2">
             {/* Brand Avatar */}
             <div className="relative shrink-0">
@@ -115,12 +115,12 @@ export default async function StorefrontPage({
                   src={sf.avatarUrl}
                   alt={sf.title}
                   data-testid="storefront-avatar"
-                  className="h-16 w-16 rounded-card border-4 border-stone-0 object-cover shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:shadow-none sm:h-20 sm:w-20"
+                  className="h-16 w-16 rounded-card border-4 border-stone-0 object-cover shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:shadow-none md:h-20 md:w-20"
                 />
               ) : (
                 <div
                   data-testid="storefront-avatar"
-                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:bg-[var(--color-action-primary-bg)] max-md:shadow-none sm:h-20 sm:w-20 sm:text-3xl"
+                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:bg-[var(--color-action-primary-bg)] max-md:shadow-none md:h-20 md:w-20 sm:text-3xl"
                   style={{ backgroundColor: themeColor }}
                 >
                   <span className="max-md:hidden">{sf.title.slice(0, 1).toUpperCase()}</span>
@@ -164,13 +164,11 @@ export default async function StorefrontPage({
               )}
             </div>
           </div>
-        </div>
-
-        {collections.length > 0 && (
-          <div className="mt-4 flex justify-end max-md:mt-0">
+          {/* Điện thoại luôn có thanh dính như Mini App; máy tính chỉ khi có sản phẩm (gian hàng rỗng đã có nút riêng). */}
+          <div className={collections.length > 0 ? 'md:shrink-0' : 'md:hidden'}>
             <StorefrontAction slug={sf.slug} title={sf.title} referralCode={sf.referralCode} />
           </div>
-        )}
+        </div>
 
         {/* Bio / Slogan */}
         {sf.headerNote && (

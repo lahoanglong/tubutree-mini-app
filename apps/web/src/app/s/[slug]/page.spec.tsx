@@ -148,8 +148,8 @@ describe('trang gian hàng — trạng thái rỗng (D5-05)', () => {
     mocks.sf = { ...SF, collections: [{ id: 'c1', title: 'Nổi bật', items: [] }] };
     const box = await html();
     expect(box.textContent).toContain('Gian hàng chưa có sản phẩm nào để xem');
-    const cta = box.querySelector<HTMLAnchorElement>('a[href="/san-pham"]')!;
-    expect(cta.textContent).toContain('Xem sản phẩm trên Tubu Tree');
+    const cta = Array.from(box.querySelectorAll<HTMLAnchorElement>('a[href="/san-pham"]')).find((a) => a.textContent?.includes('Xem sản phẩm trên Tubu Tree'))!;
+    expect(cta).toBeDefined();
     expect(cta.className).toContain('min-h-11');
     expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Nổi bật');
   });
@@ -223,5 +223,42 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
     const m = await meta();
     expect(m.title).toBe('Gian hàng — Tubu Tree');
     expect(m.alternates).toBeUndefined();
+  });
+});
+
+// Ở 640-767px lớp `sm:` thắng `max-md:` (Tailwind sắp khối max-md trước sm), nên bố cục điện thoại chỉ được đổi bằng `md:`.
+describe('trang gian hàng — khổ 640-767px vẫn là bố cục điện thoại', () => {
+  it('main, bìa, thẻ đầu trang và avatar không dùng lớp sm: đè lên lớp điện thoại', async () => {
+    const box = await html();
+    const main = box.querySelector('main')!;
+    expect(main.className).toContain('max-md:pb-[calc(90px+var(--safe-bottom))]');
+    expect(main.className).not.toMatch(/(^|\s)sm:py-/);
+    const cover = box.querySelector<HTMLElement>('[data-testid="storefront-cover"]')!;
+    expect(cover.className).not.toMatch(/(^|\s)sm:h-/);
+    const card = box.querySelector<HTMLElement>('[data-testid="storefront-header"]')!;
+    expect(card.className).not.toMatch(/(^|\s)sm:(-mt|p)-/);
+    expect(box.querySelector('[data-testid="storefront-avatar"]')!.className).not.toMatch(/(^|\s)sm:(h|w)-/);
+  });
+
+  it('bìa ảnh thật cũng không bị sm:h đè lên chiều cao 84px', async () => {
+    mocks.sf = { ...SF, coverUrl: 'https://cdn.example/c.jpg' };
+    const img = (await html()).querySelector<HTMLElement>('img[src="https://cdn.example/c.jpg"]')!;
+    expect(img.className).toContain('max-md:h-[84px]');
+    expect(img.className).not.toMatch(/(^|\s)sm:h-/);
+  });
+
+  it('không có bộ sưu tập: không chừa 90px đệm đáy cho thanh dính vì không có thanh', async () => {
+    mocks.sf = { ...SF, collections: [] };
+    expect((await html()).querySelector('main')!.className).not.toContain('max-md:pb-[calc(90px');
+  });
+});
+
+describe('trang gian hàng — nút chính cùng hàng với khối tên ở máy tính (D7-35)', () => {
+  it('StorefrontAction nằm trong hàng chứa tên, không còn hàng riêng bên dưới avatar', async () => {
+    const box = await html();
+    const row = box.querySelector('h1')!.closest('div.md\\:justify-between')!;
+    expect(row.querySelector('a[href="/san-pham"]')).not.toBeNull();
+    const card = box.querySelector('[data-testid="storefront-header"]')!;
+    expect(card.querySelector(':scope > div.justify-end')).toBeNull();
   });
 });
