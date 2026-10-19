@@ -141,6 +141,8 @@ gh workflow run ops.yml -f action=set-env
 
 ## 4) Cách đặt key vào hệ thống (chuẩn cho MỌI key)
 
+> **Máy ảo GCP đã đóng** ([runbook mục 0.3 và 2](launch/deploy-rollback-runbook.md)). Cho tới khi trỏ lại ba secret `VM_HOST`, `VM_USER`, `VM_SSH_KEY`, mọi lệnh `gh workflow run ops.yml` trong tài liệu này lỗi ở bước SSH. Khi đó SSH vào VPS, sửa thẳng `/opt/tubutree/.env`, rồi tạo lại container đọc khoá đó (ví dụ `docker compose -f docker-compose.vietnix.yml up -d --no-deps api`), vì container chỉ đọc `.env` lúc khởi động.
+
 Key đi qua **2 lớp**, không bao giờ nằm trong git:
 
 1. **GitHub Secrets** (kho bí mật của repo):
@@ -207,6 +209,7 @@ gh workflow run ops.yml -f action=set-env
    Production thiếu secret thì webhook bị từ chối (401).
 
 ### Đặt vào hệ thống
+Trong lúc máy ảo GCP còn đóng (mục 4): thêm ba dòng `PANCAKE_API_KEY=`, `PANCAKE_SHOP_ID=`, `PANCAKE_WEBHOOK_SECRET=` vào `/opt/tubutree/.env` trên VPS, rồi `docker compose -f docker-compose.vietnix.yml up -d --no-deps api`. Khi đã trỏ lại GitHub Actions thì dùng các lệnh dưới.
 ```bash
 gh secret set PANCAKE_API_KEY --body "<api_key>"
 gh secret set PANCAKE_SHOP_ID --body "<shop_id>"
