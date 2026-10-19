@@ -487,6 +487,8 @@ export class OrdersService {
     const inCart = new Map<string, number>((cartRow?.items ?? []).map((ci) => [ci.variationId, ci.quantity]));
     const addSource = input.addSource ?? 'repurchase';
     const results: RepurchaseLineResult[] = [];
+    // Dòng qua được kiểm tra đọc sẵn; ghi cả loạt một lần (addItems) rồi mới chốt kết quả, để không dựng lại giỏ theo từng dòng.
+    const pending: { slot: number; line: (typeof lines)[number]; variationId: string; qty: number; want: number }[] = [];
 
     for (const line of lines) {
       const skip = (reason: RepurchaseSkipReason) =>
@@ -499,21 +501,22 @@ export class OrdersService {
       if (room <= 0) { skip('EXCEEDS_STOCK'); continue; }
       const want = requested?.get(line.id) ?? line.quantity;
       const qty = Math.min(want, room);
-      try {
-        await this.cart.addItem(userId, { variationId: v.id, quantity: qty, addSource });
-      } catch (err) {
-        // Lỗi nghiệp vụ của RIÊNG dòng này (tồn kho đổi giữa lúc đọc và ghi, SP vừa bị ẩn) → bỏ qua
-        // dòng; lỗi hạ tầng ném ra (mỗi addItem là một tx riêng nên giỏ không lệch).
-        if (err instanceof BadRequestException) { skip('EXCEEDS_STOCK'); continue; }
-        if (err instanceof NotFoundException) { skip('INACTIVE'); continue; }
-        throw err;
-      }
       inCart.set(v.id, (inCart.get(v.id) ?? 0) + qty);
-      results.push(
-        qty < want
-          ? { orderItemId: line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: qty }
-          : { orderItemId: line.id, status: 'added', addedQuantity: qty },
-      );
+      pending.push({ slot: results.length, line, variationId: v.id, qty, want });
+      results.push({ orderItemId: line.id, status: 'added', addedQuantity: qty });
+    }
+
+    if (pending.length > 0) {
+      const outcomes = await this.cart.addItems(userId, pending.map((p) => ({ variationId: p.variationId, quantity: p.qty, addSource })));
+      pending.forEach((p, i) => {
+        const outcome = outcomes[i]!;
+        // Lỗi nghiệp vụ của RIÊNG dòng này (tồn kho đổi giữa lúc đọc và ghi, SP vừa bị ẩn) → bỏ qua dòng; lỗi hạ tầng do addItems ném ra.
+        if (!outcome.ok) {
+          results[p.slot] = { orderItemId: p.line.id, status: 'skipped', reason: outcome.error === 'UNAVAILABLE' ? 'INACTIVE' : 'EXCEEDS_STOCK', addedQuantity: 0 };
+        } else if (p.qty < p.want) {
+          results[p.slot] = { orderItemId: p.line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: p.qty };
+        }
+      });
     }
     const cart = toPublicCart(await this.cart.getCart(userId));
     return { ...cart, cart, results };

@@ -967,3 +967,96 @@ describe('CartService.clearOrdered (dọn giỏ sau khi đặt cả giỏ)', () 
     expect(tx.cart.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
   });
 });
+
+describe('CartService.addItems (D9-05: mua lại cả đơn một lượt)', () => {
+  const sellable = (id: string, stock: number, over: Record<string, unknown> = {}) => ({
+    id, isActive: true, stock, product: { isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefront: null, name: 'SP' }, ...over,
+  });
+
+  function setup(variations: ReturnType<typeof sellable>[], inCart: { variationId: string; quantity: number }[] = []) {
+    const txUpsert = jest.fn().mockResolvedValue({});
+    const tx = { cartItem: { upsert: txUpsert } };
+    const transaction = jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(tx));
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
+      variation: { findMany: jest.fn().mockResolvedValue(variations) },
+      cartItem: { findMany: jest.fn().mockResolvedValue(inCart), upsert: jest.fn() },
+      $transaction: transaction,
+    } as unknown as PrismaService;
+    const analyticsSpy = { record: jest.fn(), recordMany: jest.fn().mockResolvedValue(undefined) } as unknown as AnalyticsEventsService;
+    const svc = new CartService(prisma, coupons, config, flash, analyticsSpy, combo);
+    const getCart = jest.spyOn(svc, 'getCart');
+    return { svc, prisma, tx, txUpsert, transaction, analyticsSpy, getCart };
+  }
+
+  it('3 dòng → đọc hàng/giỏ một lần, một transaction, 3 upsert + một lần ghi sự kiện, KHÔNG dựng lại giỏ', async () => {
+    const { svc, prisma, tx, txUpsert, transaction, analyticsSpy, getCart } = setup([sellable('v1', 5), sellable('v2', 5), sellable('v3', 5)]);
+    const out = await svc.addItems('u1', [
+      { variationId: 'v1', quantity: 1, addSource: 'repurchase' },
+      { variationId: 'v2', quantity: 2, addSource: 'repurchase' },
+      { variationId: 'v3', quantity: 3 },
+    ]);
+    expect(out).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+    expect(getCart).not.toHaveBeenCalled();
+    expect(prisma.variation!.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.cartItem!.findMany).toHaveBeenCalledTimes(1);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(txUpsert).toHaveBeenCalledTimes(3);
+    expect(txUpsert).toHaveBeenCalledWith({
+      where: { cartId_variationId: { cartId: 'c1', variationId: 'v2' } },
+      update: { quantity: { increment: 2 } },
+      create: { cartId: 'c1', variationId: 'v2', quantity: 2 },
+    });
+    expect(prisma.cartItem!.upsert).not.toHaveBeenCalled();
+    expect(analyticsSpy.recordMany).toHaveBeenCalledTimes(1);
+    expect(analyticsSpy.recordMany).toHaveBeenCalledWith(tx, [
+      { eventName: 'add_to_cart', userId: 'u1', platform: 'miniapp', props: { variationId: 'v1', quantity: 1, addSource: 'repurchase' } },
+      { eventName: 'add_to_cart', userId: 'u1', platform: 'miniapp', props: { variationId: 'v2', quantity: 2, addSource: 'repurchase' } },
+      { eventName: 'add_to_cart', userId: 'u1', platform: 'miniapp', props: { variationId: 'v3', quantity: 3, addSource: 'pdp' } },
+    ]);
+  });
+
+  it('cùng kiểm tra như addItem cho từng dòng: không khả dụng / vượt tồn bị báo riêng, dòng đạt vẫn ghi', async () => {
+    const { svc, txUpsert } = setup(
+      [sellable('v1', 5), sellable('v2', 5, { isActive: false }), sellable('v3', 3), sellable('v4', 5, { product: { isActive: true, approvalStatus: 'REJECTED', fulfilment: 'TUBU', storefront: null, name: 'SP' } })],
+      [{ variationId: 'v3', quantity: 2 }],
+    );
+    const out = await svc.addItems('u1', [
+      { variationId: 'v1', quantity: 1 },
+      { variationId: 'v2', quantity: 1 },
+      { variationId: 'v3', quantity: 2 },
+      { variationId: 'v4', quantity: 1 },
+      { variationId: 'gone', quantity: 1 },
+    ]);
+    expect(out).toEqual([
+      { ok: true },
+      { ok: false, error: 'UNAVAILABLE' },
+      { ok: false, error: 'STOCK' },
+      { ok: false, error: 'UNAVAILABLE' },
+      { ok: false, error: 'UNAVAILABLE' },
+    ]);
+    expect(txUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('hai dòng cùng variation: dòng sau tính cả phần dòng trước, tổng không vượt tồn', async () => {
+    const { svc, txUpsert } = setup([sellable('v1', 3)]);
+    const out = await svc.addItems('u1', [{ variationId: 'v1', quantity: 2 }, { variationId: 'v1', quantity: 2 }]);
+    expect(out).toEqual([{ ok: true }, { ok: false, error: 'STOCK' }]);
+    expect(txUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('không dòng nào đạt → không mở transaction; danh sách rỗng → không chạm DB', async () => {
+    const a = setup([sellable('v1', 0)]);
+    expect(await a.svc.addItems('u1', [{ variationId: 'v1', quantity: 1 }])).toEqual([{ ok: false, error: 'STOCK' }]);
+    expect(a.transaction).not.toHaveBeenCalled();
+    const b = setup([]);
+    expect(await b.svc.addItems('u1', [])).toEqual([]);
+    expect(b.prisma.cart!.upsert).not.toHaveBeenCalled();
+  });
+
+  it('lỗi hạ tầng trong transaction ném ra (cả loạt không ghi gì)', async () => {
+    const { svc, transaction } = setup([sellable('v1', 5)]);
+    transaction.mockRejectedValue(new Error('connection reset'));
+    await expect(svc.addItems('u1', [{ variationId: 'v1', quantity: 1 }])).rejects.toThrow('connection reset');
+  });
+});

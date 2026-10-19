@@ -26,6 +26,21 @@ import {
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
 
+const ADD_ITEM_INCLUDE = {
+  product: {
+    select: {
+      isActive: true,
+      approvalStatus: true,
+      name: true,
+      fulfilment: true,
+      storefront: {
+        select: { title: true, type: true, ordersPausedAt: true, isPartner: true, owner: { select: { role: true, isBlocked: true } } },
+      },
+    },
+  },
+} satisfies Prisma.VariationInclude;
+type AddableVariation = Prisma.VariationGetPayload<{ include: typeof ADD_ITEM_INCLUDE }>;
+
 @Injectable()
 export class CartService {
   constructor(
@@ -284,24 +299,7 @@ export class CartService {
     return { combo, ...goodsAfterComboOf(nonFlash, combo) };
   }
 
-  async addItem(userId: string, dto: AddItemDto, storefrontSlug?: string) {
-    const cartId = await this.ensureCart(userId);
-    const variation = await this.prisma.variation.findUnique({
-      where: { id: dto.variationId },
-      include: {
-        product: {
-          select: {
-            isActive: true,
-            approvalStatus: true,
-            name: true,
-            fulfilment: true,
-            storefront: {
-              select: { title: true, type: true, ordersPausedAt: true, isPartner: true, owner: { select: { role: true, isBlocked: true } } },
-            },
-          },
-        },
-      },
-    });
+  private assertSellable(variation: AddableVariation | null | undefined): AddableVariation {
     // P0 A2-03=A5-06=A6-04 (phần còn sót ngoài catalog, xem CatalogService): SP đối tác chưa
     // duyệt/bị từ chối không còn tìm thấy qua catalog/search/related/for-you, nhưng ai đã có sẵn
     // variationId (link cũ lưu trước khi bị từ chối, đơn "lên đơn hộ"...) vẫn thêm được vào giỏ
@@ -315,14 +313,27 @@ export class CartService {
     if (store && storeReason) {
       throw new BadRequestException(storeUnavailableOnAddMessage(variation.product.name, store.title, storeReason));
     }
+    return variation;
+  }
 
+  /** Vượt tồn kho khi cộng thêm `addQty` vào `currentQty` đang có trong giỏ. */
+  private assertStock(variation: AddableVariation, currentQty: number, addQty: number): void {
+    if (currentQty + addQty > variation.stock) {
+      throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
+    }
+  }
+
+  async addItem(userId: string, dto: AddItemDto, storefrontSlug?: string) {
+    const cartId = await this.ensureCart(userId);
+    const variation = await this.prisma.variation.findUnique({
+      where: { id: dto.variationId },
+      include: ADD_ITEM_INCLUDE,
+    });
+    const sellable = this.assertSellable(variation);
     const existing = await this.prisma.cartItem.findUnique({
       where: { cartId_variationId: { cartId, variationId: dto.variationId } },
     });
-    const newQty = (existing?.quantity ?? 0) + dto.quantity;
-    if (newQty > variation.stock) {
-      throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
-    }
+    this.assertStock(sellable, existing?.quantity ?? 0, dto.quantity);
 
     // Tăng ATOMIC bằng increment (không set giá trị tuyệt đối newQty) — 2 request add-to-cart
     // đồng thời (double-tap/2 tab) cho cùng variation đều đọc `existing` trước khi request kia
@@ -349,6 +360,61 @@ export class CartService {
       });
     });
     return this.getCart(userId, storefrontSlug);
+  }
+
+  /**
+   * Thêm nhiều dòng một lượt (mua lại đơn): cùng kiểm tra với addItem cho TỪNG dòng, nhưng đọc giỏ/hàng một lần, ghi các dòng đạt
+   * trong MỘT transaction và KHÔNG dựng lại giỏ (người gọi tự getCart một lần). Dòng không đạt được báo lại để người gọi bỏ qua riêng
+   * dòng đó; lỗi hạ tầng ném ra và cả loạt không ghi gì.
+   */
+  async addItems(
+    userId: string,
+    lines: { variationId: string; quantity: number; addSource?: string }[],
+  ): Promise<({ ok: true } | { ok: false; error: 'UNAVAILABLE' | 'STOCK' })[]> {
+    if (lines.length === 0) return [];
+    const cartId = await this.ensureCart(userId);
+    const variationIds = [...new Set(lines.map((l) => l.variationId))];
+    const [variations, existing] = await Promise.all([
+      this.prisma.variation.findMany({ where: { id: { in: variationIds } }, include: ADD_ITEM_INCLUDE }),
+      this.prisma.cartItem.findMany({ where: { cartId, variationId: { in: variationIds } }, select: { variationId: true, quantity: true } }),
+    ]);
+    const byId = new Map(variations.map((v) => [v.id, v]));
+    const qtyInCart = new Map(existing.map((e) => [e.variationId, e.quantity]));
+    const outcomes: ({ ok: true } | { ok: false; error: 'UNAVAILABLE' | 'STOCK' })[] = [];
+    const accepted: typeof lines = [];
+    for (const line of lines) {
+      const current = qtyInCart.get(line.variationId) ?? 0;
+      try {
+        this.assertStock(this.assertSellable(byId.get(line.variationId)), current, line.quantity);
+      } catch (err) {
+        if (err instanceof NotFoundException) { outcomes.push({ ok: false, error: 'UNAVAILABLE' }); continue; }
+        if (err instanceof BadRequestException) { outcomes.push({ ok: false, error: 'STOCK' }); continue; }
+        throw err;
+      }
+      qtyInCart.set(line.variationId, current + line.quantity);
+      accepted.push(line);
+      outcomes.push({ ok: true });
+    }
+    if (accepted.length === 0) return outcomes;
+    await this.prisma.$transaction(async (tx) => {
+      for (const line of accepted) {
+        await tx.cartItem.upsert({
+          where: { cartId_variationId: { cartId, variationId: line.variationId } },
+          update: { quantity: { increment: line.quantity } },
+          create: { cartId, variationId: line.variationId, quantity: line.quantity },
+        });
+      }
+      await this.analytics.recordMany(
+        tx,
+        accepted.map((line) => ({
+          eventName: 'add_to_cart',
+          userId,
+          platform: 'miniapp' as const,
+          props: { variationId: line.variationId, quantity: line.quantity, addSource: line.addSource ?? 'pdp' },
+        })),
+      );
+    });
+    return outcomes;
   }
 
   async updateItem(userId: string, itemId: string, quantity: number, storefrontSlug?: string) {
