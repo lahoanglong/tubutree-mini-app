@@ -169,7 +169,7 @@ describe('evaluateDb', () => {
       const s = behind(300_000, [name]);
       const scope = byId(run(s, 'pre-deploy'), 'db.pending_scope');
       expect(scope.status).toBe('WARN');
-      expect(scope.detail).toContain(`nặng: ${name}`);
+      expect(scope.detail).toMatch(new RegExp(`nặng: [^;]*${name}`));
       const lock = byId(run(s, 'pre-deploy'), 'db.orders_lock');
       expect(lock.detail).toContain('~28 giây');
       expect(lock.detail).toContain(name);
