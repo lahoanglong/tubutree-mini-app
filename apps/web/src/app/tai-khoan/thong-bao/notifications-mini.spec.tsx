@@ -71,7 +71,6 @@ afterEach(() => {
 
 describe('thông báo như Mini App (điện thoại)', () => {
   it('"Đọc tất cả" chữ xanh không gạch chân trong dải tiêu đề; ô icon nền sage', async () => {
-    mocks.list = [{ ...POINTS_READ, id: 'n9', status: 'SENT' }];
     const { container } = await mount();
     const readAll = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Đọc tất cả'))!;
     expect(readAll.closest('[data-page-bleed]')).not.toBeNull();
