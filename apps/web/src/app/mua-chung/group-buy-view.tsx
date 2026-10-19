@@ -117,7 +117,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
 
       <div className="mt-4">
         {listQ.isLoading ? (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 lg:grid-cols-3" aria-busy="true">
             <LineItemSkeleton />
             <LineItemSkeleton />
           </div>
@@ -126,7 +126,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
         ) : invited || others.length > 0 || done.length > 0 ? (
           <div className="flex flex-col gap-6">
             {(invited || others.length > 0) && (
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {invited && renderCard(invited, !invited.isOwner && !invited.joined)}
                 {others.map((g) => renderCard(g))}
               </div>
@@ -134,7 +134,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
             {done.length > 0 && (
               <section aria-label="Nhóm đã đủ người của bạn" className="flex flex-col gap-3">
                 <h2 className={ui.sectionTitle}>Nhóm đã đủ người của bạn</h2>
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{done.map((g) => renderCard(g))}</div>
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 lg:grid-cols-3">{done.map((g) => renderCard(g))}</div>
               </section>
             )}
           </div>

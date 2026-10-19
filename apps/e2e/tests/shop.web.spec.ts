@@ -1,9 +1,11 @@
+import type { Page } from '@playwright/test';
 import { expect, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
 
 /**
  * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
- * duyệt đi qua mock (fixture `api`); phần Next gọi API phía server (danh sách đầu, chân trang) không mock được nên trang
- * phải tự tải lại phía trình duyệt khi server không có dữ liệu — spec này dựa vào đúng điều đó. Host phải là localhost.
+ * duyệt đi qua mock (fixture `api`); phần Next gọi API phía server (danh sách đầu, chân trang) không mock được và trả dữ liệu
+ * thật của DB e2e đã seed, React Query coi dữ liệu đó còn tươi (staleTime 60s) nên không tải lại. `refetchStale` đẩy đồng hồ
+ * trình duyệt đi xa rồi giả lập mất/có mạng để các truy vấn đó tải lại qua mock. Host phải là localhost.
  */
 
 const product = (n: number, over: Record<string, unknown> = {}) => ({
@@ -11,6 +13,25 @@ const product = (n: number, over: Record<string, unknown> = {}) => ({
   salePrice: null, isFeatured: false, inStock: true, ...over,
 });
 const pageOf = (data: unknown[], total: number, page = 1, limit = 24) => ({ data, meta: { page, limit, total } });
+
+/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (có thể chạy trước lúc hydrate xong). */
+async function refetchStale(page: Page, api: MockApi, method: string, pattern: string) {
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => {
+        const w = window as unknown as { __tubuClockShifted?: boolean };
+        if (!w.__tubuClockShifted) {
+          w.__tubuClockShifted = true;
+          const real = Date.now.bind(Date);
+          Date.now = () => real() + 10 * 60_000;
+        }
+        window.dispatchEvent(new Event('offline'));
+        window.dispatchEvent(new Event('online'));
+      });
+      return api.callsTo(method, pattern).length;
+    })
+    .toBeGreaterThan(0);
+}
 
 function mockCatalog(api: MockApi) {
   api.get('/categories', [
@@ -27,9 +48,10 @@ test.describe('Web khách: danh mục /san-pham', () => {
     mockCatalog(api);
     api.get('/products', pageOf([product(1)], 1));
     await page.goto('/?q=dau+goi&utm_source=zalo');
-    await expect(page).toHaveURL(/\/san-pham\?q=dau\+goi&utm_source=zalo/);
+    await refetchStale(page, api, 'GET', '/products');
+    await expect(page).toHaveURL(/\/san-pham\?q=dau(\+|%20)goi&utm_source=zalo/);
     await expect(page.getByRole('heading', { level: 1, name: 'Khám phá' })).toBeVisible();
-    const call = (await api.waitForCall('GET', '/products')).query;
+    const call = api.callsTo('GET', '/products').at(-1)!.query;
     expect(call.get('q')).toBe('dau goi');
   });
 
@@ -40,6 +62,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
       return pageOf([product(1), product(2)], 2);
     });
     await page.goto('/san-pham');
+    await refetchStale(page, api, 'GET', '/categories');
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
 
     await page.getByRole('button', { name: 'Dầu gội' }).click();
@@ -144,6 +167,7 @@ test.describe('Web khách: Trang chủ /', () => {
   test('khách vãng lai: ba lưới công khai, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
     mockHome(api);
     await page.goto('/');
+    await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByRole('region', { name: 'Bán chạy' }).getByText('Bán chạy nhất')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Mới về vườn' }).getByText('Hàng mới nhất')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Dành cho bạn' })).toHaveCount(0);
@@ -171,37 +195,39 @@ test.describe('Web khách: Trang chủ /', () => {
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
 
     await page.goto('/');
+    await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByRole('link', { name: 'Thông báo, 2 chưa đọc' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Dành cho bạn' }).getByText('Gợi ý riêng')).toBeVisible();
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail.getByText('Đã mua 2 lần')).toBeVisible();
 
     await rail.getByRole('button', { name: 'Mua lại' }).click();
+    const addedCall = api.waitForCall('POST', '/cart/items');
     await page.getByRole('dialog', { name: 'Mua lại' }).getByRole('button', { name: 'Thêm vào giỏ (1)' }).click();
-    const added = (await api.waitForCall('POST', '/cart/items')).body;
+    const added = (await addedCall).body;
     expect(added).toEqual({ variationId: 'v1', quantity: 1, addSource: 'repurchase' });
     await expect(page).toHaveURL(/\/gio-hang/);
   });
 
-  test('API sản phẩm sập hẳn: một dải lỗi cấp trang, Thử lại tải lại và hiện sản phẩm', async ({ page, api }) => {
+  test('API sản phẩm sập sau khi server đã có dữ liệu: lưới giữ nguyên, không hiện dải lỗi cấp trang', async ({ page, api }) => {
+    // Dải lỗi cấp trang chỉ hiện khi cả ba lưới chưa từng có dữ liệu (home-view pageDown); trang SSR luôn mang sẵn dữ liệu thật của DB e2e nên
+    // trường hợp "sập hẳn từ đầu" chỉ kiểm được ở vitest (home-parts.spec), không dựng lại được qua mock phía trình duyệt.
     mockCatalog(api);
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
-    let down = true;
-    api.get('/products', () => (down ? reply(503, { message: 'Máy chủ đang bận' }) : pageOf([product(1, { name: 'Bán chạy nhất' })], 1, 1, 6)));
+    api.get('/products', () => reply(503, { message: 'Máy chủ đang bận' }));
     await page.goto('/');
-    const banner = page.getByRole('region', { name: 'Chưa tải được Trang chủ' });
-    await expect(banner).toBeVisible();
-    await expect(page.getByTestId('home-block-error')).toHaveCount(0);
-    down = false;
-    await banner.getByRole('button', { name: 'Thử lại' }).click();
-    await expect(page.getByText('Bán chạy nhất').first()).toBeVisible();
-    await expect(banner).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Bán chạy' })).toBeVisible();
+    await refetchStale(page, api, 'GET', '/products');
+    await expect.poll(() => api.callsTo('GET', '/products').length).toBeGreaterThanOrEqual(6);
+    await expect(page.getByRole('region', { name: 'Chưa tải được Trang chủ' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Bán chạy' })).toBeVisible();
   });
 
   test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {
     mockHome(api);
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto('/');
+    await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByText('Bán chạy nhất')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
@@ -226,6 +252,8 @@ test.describe('Web khách: trang sản phẩm', () => {
 
   function mockPdp(api: MockApi, p: { slug: string; variations: { id: string; stock: number }[] }, over: { affiliate?: boolean } = {}) {
     api.get('/flash-sales/active', []);
+    api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
+    api.get(`/products/${p.slug}/reviews/can-review`, { canReview: false });
     api.get(`/products/${p.slug}`, { variations: p.variations });
     api.get(`/products/${p.slug}/related`, []);
     api.get(`/products/${p.slug}/bought-together`, []);
@@ -269,11 +297,14 @@ test.describe('Web khách: trang sản phẩm', () => {
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123' }));
     mockPdp(api, p!);
     api.post('/group-buy', { id: 'g1' });
+    api.get('/group-buy', [group('g1')]);
+    api.get('/group-buy/g1', group('g1', { isOwner: true, joined: true }));
     await page.goto(`/san-pham/${p!.slug}`);
     await expect(page.getByRole('button', { name: 'Sao chép mã GIAM20' })).toBeVisible();
     const call = async () => {
+      const created = api.waitForCall('POST', '/group-buy');
       await page.getByRole('button', { name: /Mở nhóm mua chung/ }).click();
-      return (await api.waitForCall('POST', '/group-buy')).body;
+      return (await created).body;
     };
     expect(await call()).toEqual({ productId: p!.id });
     await expect(page).toHaveURL(/\/mua-chung\/g1(\?moi=1)?$/);
@@ -294,8 +325,9 @@ test.describe('Web khách: trang sản phẩm', () => {
     await page.getByRole('button', { name: /Đặt định kỳ/ }).click();
     const dialog = page.getByRole('dialog', { name: /Đặt định kỳ/ });
     await dialog.getByRole('button', { name: '6 tuần' }).click();
+    const created = api.waitForCall('POST', '/me/subscriptions');
     await dialog.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }).click();
-    const body = (await api.waitForCall('POST', '/me/subscriptions')).body as Record<string, unknown>;
+    const body = (await created).body as Record<string, unknown>;
     expect(body).toMatchObject({ quantity: 1, intervalWeeks: 6, addressId: 'a1', paymentMethod: 'COD' });
     expect(body).not.toHaveProperty('startDate');
     await expect(page.getByText(/Đã tạo lịch định kỳ và đơn đầu TB-1/)).toBeVisible();
@@ -344,6 +376,7 @@ test.describe('Web: yêu thích', () => {
   test('đã đăng nhập: hiện lưới sản phẩm yêu thích; danh sách rỗng thì có lối khám phá', async ({ page, api }) => {
     await signedIn(page);
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/flash-sales/active', []);
     api.get('/me/wishlist', [product(1), product(2)]);
     await page.goto('/tai-khoan/yeu-thich');
     await expect(page.getByRole('heading', { level: 1, name: 'Sản phẩm yêu thích' })).toBeVisible();
@@ -380,8 +413,9 @@ test.describe('Web: mua chung', () => {
     api.get('/group-buy', [group('g1')]);
     api.post('/group-buy/g1/join', { joined: true, currentSize: 3, status: 'OPEN' });
     await page.goto('/mua-chung');
+    const joined = api.waitForCall('POST', '/group-buy/g1/join');
     await page.getByRole('button', { name: /Tham gia mua chung/ }).click();
-    await api.waitForCall('POST', '/group-buy/g1/join');
+    await joined;
     await expect(page.getByText('Đã tham gia nhóm')).toBeVisible();
   });
 

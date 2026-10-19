@@ -45,6 +45,12 @@ function mockBuyer(api: MockApi, balances: Balances) {
     };
   });
   api.get('/orders', { data: [], meta: { page: 1, limit: 20, total: 0 } });
+  api.get('/me/loyalty', { tier: { name: 'Hạt Giống' }, pointsBalance: balances.points, pointsConvertedBalance: 0 });
+  api.get('/me/notifications', []);
+  api.get('/brand/owner/me', () => reply(404, { message: 'Không tìm thấy' }));
+  api.get('/dealer/me', { status: 'NONE', isDealer: false });
+  api.get('/me/purchased-items', { items: [], nextCursor: null });
+  api.get('/me/new-customer-offer', { isNewCustomer: false, welcomeVoucher: null });
 }
 
 test.describe('Web khách: thanh toán', () => {
@@ -84,6 +90,8 @@ test.describe('Web khách: thanh toán', () => {
 
     await expect(page.getByRole('heading', { name: 'Đặt hàng thành công!' })).toBeVisible();
     await page.getByRole('link', { name: 'Đơn của tôi' }).click();
+    await expect(page).toHaveURL(/\/tai-khoan\/don-hang/);
+    await page.locator('a[href="/tai-khoan"]:visible').first().click();
     await expect(page.getByText('220.000đ')).toBeVisible();
     await expect(page.getByText('500.000đ')).toHaveCount(0);
   });

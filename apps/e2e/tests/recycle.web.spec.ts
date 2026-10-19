@@ -149,7 +149,7 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await plus.click();
     await plus.click();
     await plus.click();
-    await expect(page.getByText('Ước tính 3.000 điểm').filter({ visible: true })).toBeVisible();
+    await expect(page.getByText('Ước tính 3.000 điểm').filter({ visible: true }).first()).toBeVisible();
     await next.click();
 
     await expect(page.getByText('Bước 2/3: Chọn cách giao')).toBeVisible();
