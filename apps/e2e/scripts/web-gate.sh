@@ -74,6 +74,9 @@ export CORS_ORIGINS="http://localhost:$E2E_WEB_PORT"
 export NODE_ENV=test
 export PORT="$E2E_API_PORT"
 export CI=1
+# Bản build cho máy chủ web (next dev chết giữa chừng khi nhiều worker song song) và log máy chủ để còn dấu vết khi chết.
+export E2E_WEB_PROD=1
+export E2E_LOG_DIR="${E2E_LOG_DIR:-$E2E_DIR/server-logs}"
 
 (
   cd "$ROOT/apps/api"

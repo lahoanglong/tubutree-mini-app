@@ -19,11 +19,29 @@ function mockSession(api: MockApi) {
 }
 
 test.describe('Web khách: cộng đồng', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+  });
+
   test('khách thấy bản xem trước khi cờ bật: chỉ đọc, chỉ có lối đăng nhập mang returnTo', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
     api.get('/config/public', { communityPublicPreview: true });
     api.get('/feed/public-preview', {
       posts: [{ id: 'p1', kind: 'TIP', title: 'Pha nước rửa chén từ vỏ bưởi', snippet: 'Vỏ bưởi ngâm giấm 2 tuần.', image: null, createdAt: NOW, author: 'Lan', badge: null, category: null, isPinned: false, likeCount: 4, commentCount: 2 }],
+    });
+    // Bản build render server bằng API thật (không có bài xem trước) và đưa mảng rỗng vào initialData của trình duyệt, staleTime 30s
+    // nên mock /feed/public-preview không được hỏi lại. Bỏ initialPreview khỏi dữ liệu RSC để trình duyệt tự tải như khi server đọc lỗi.
+    await page.route('**/cong-dong', async (route) => {
+      if (route.request().resourceType() !== 'document') return route.fallback();
+      const res = await route.fetch();
+      const body = (await res.text()).replace(/initialPreview(\\*"):\[\]/g, 'initialPreview$1:$1$$undefined$1');
+      return route.fulfill({ response: res, body });
     });
     await page.goto('/cong-dong');
     await expect(page.getByRole('heading', { name: 'Cộng đồng Vườn Tubu', level: 1 })).toBeVisible();
