@@ -5,7 +5,7 @@ import { Page, Input, useSnackbar } from 'zmp-ui';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
 import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isOutcomeUnknown } from '../services/api';
 import { useShareWithFallback } from '../components/share-sheet';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 import { useAuthStore } from '../store/auth';
@@ -66,20 +66,29 @@ export default function WalletPage() {
   // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lệnh rút (double-tap/timeout) →
   // BE không trừ ví/ tạo payout 2 lần; regenerate sau khi rút thành công (lệnh sau là lệnh mới).
   const withdrawKey = useRef(newIdempotencyKey());
+  // Có một lệnh rút chưa rõ kết quả: mở lại sheet vẫn dùng key đó cho tới khi máy chủ trả lời dứt khoát.
+  const withdrawUnresolved = useRef(false);
   const withdrawMut = useMutation({
     mutationFn: () => withdraw(Number(amount), bank, withdrawKey.current),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã gửi yêu cầu rút. Thực nhận ${formatVnd(r.net)} trong 1-3 ngày làm việc.`, type: 'success' });
       withdrawKey.current = newIdempotencyKey();
+      withdrawUnresolved.current = false;
       setWithdrawOpen(false);
       setAmount('');
       refreshAll();
     },
-    // Lỗi (kể cả server đã tạo giao dịch thật, hoặc BE báo key đã dùng với số tiền khác) →
-    // regenerate key TRƯỚC khi cho phép bấm lại, để lần thử tiếp theo (số tiền có thể đã sửa)
-    // dùng key MỚI thay vì lặp lại đúng lệnh cũ.
+    // Quá thời gian/mất mạng/5xx: máy chủ có thể đã trừ ví và tạo lệnh rút. GIỮ key để bấm lại trả đúng lệnh đó thay vì rút thêm
+    // lần nữa; chỉ đổi key khi máy chủ đã từ chối rõ ràng (4xx, kể cả "key đã dùng với số tiền khác") nên không có gì được ghi.
     onError: (e) => {
+      if (isOutcomeUnknown(e)) {
+        withdrawUnresolved.current = true;
+        refreshAll();
+        openSnackbar({ text: vi.wallet.withdrawUnknown, type: 'error' });
+        return;
+      }
       withdrawKey.current = newIdempotencyKey();
+      withdrawUnresolved.current = false;
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
@@ -161,8 +170,8 @@ export default function WalletPage() {
                   fullWidth
                   onPress={() => {
                     // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
-                    // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ).
-                    withdrawKey.current = newIdempotencyKey();
+                    // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ). Trừ khi lệnh trước chưa rõ kết quả.
+                    if (!withdrawUnresolved.current) withdrawKey.current = newIdempotencyKey();
                     setWithdrawOpen(true);
                   }}
                 >
