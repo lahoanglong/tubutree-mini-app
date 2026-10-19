@@ -16,19 +16,38 @@ Bảng commit Mini App (`07ac5aa1..13ffd242`, bỏ file đổi rác) sang file w
 | Commit đổi rác còn lại | Màn đổi rác | `/doi-rac`, `components/recycle` | Ngoài lane (integ6) |
 
 Endpoint, body, Idempotency-Key giữ nguyên, chỉ thêm `slot` vào body mở lô như Mini App.
+| 810e06c9 | Test mở lô lỗi (400 danh sách lô đã đổi): hiện `role=alert`, nút mở lại, body vẫn `{ currency:'SEEDS', slot:4 }` | `apps/web/src/app/vuon-xanh/garden-community.spec.tsx` | Từ review lượt 1 |
 
-## 2. Kiểm chứng
-```
-cd apps/web && npx vitest run
- Test Files  358 passed (358)
-      Tests  6174 passed (6174)
-cd packages/app-core && npx vitest run
- Test Files  41 passed (41)
-      Tests  489 passed (489)
-cd apps/web && npx tsc --noEmit        (không lỗi)
-cd packages/app-core && npx tsc --noEmit   (không lỗi)
-```
-Test đỏ trước khi code ở nhóm Điểm Xanh và Kho quà. Nhóm game: test sửa cùng lúc với code, chưa xác nhận đỏ riêng. Không sửa file Mini App nên không chạy lại test Mini App. Không chạy Playwright.
+Route web đã bỏ pending: lint:parity báo 0 mục pending.
 
-## 3. Câu hỏi mở
+## 2. Kiểm chứng (gate cuối, green=true)
+```
+install rc=0
+shared-types rc=0
+app-core-typecheck rc=0
+app-core-test rc=0  Test Files 41 passed (41)  Tests 489 passed (489)
+web-typecheck rc=0
+web-lint rc=0
+web-test rc=0  Test Files 358 passed (358)  Tests 6175 passed (6175)
+web-test-utc rc=0  Test Files 358 passed (358)  Tests 6175 passed (6175)
+miniapp-typecheck rc=0
+miniapp-lint rc=0
+miniapp-test rc=0  Test Files 283 passed (283)  Tests 4299 passed (4299)
+lint-vars rc=0 OK
+lint-parity rc=0 xanh (0 mục pending)
+web-build rc=0  Compiled successfully
+miniapp-build rc=0
+DONE
+```
+Test đỏ trước khi code: nhóm Điểm Xanh (3 fail), Kho quà (6 fail). Nhóm game sửa test cùng code, không có bước đỏ riêng. Test mở lô lỗi xanh ngay vì `onError` đã có; tạm bỏ `onError` thì đỏ (1 failed), đã khôi phục. Không chạy Playwright.
+
+## 3. Review
+- Lượt 1, MINOR: chưa có test cho POST mở lô lỗi 400 (đường lỗi mới do gửi `slot`). Đã sửa ở 810e06c9.
+- Lượt 2: không phát hiện. Ghi chú nhỏ: số test 6174 ở bản báo cáo cũ thiếu một test của 810e06c9 (nay 6175), chỉ là tài liệu, đã cập nhật.
+
+## 4. Chưa làm, cố ý để lại, chưa kiểm chứng
+- Không có mục bỏ dở. Không sửa file Mini App, API, file đổi rác. Nhãn lịch sử điểm, button/timeline Mini App cố ý không port (web đã có hoặc chỉ dùng cho đổi rác).
+- Chưa chạy Playwright (đúng luật lane).
+
+## 5. Câu hỏi cho chủ dự án
 Không có.
