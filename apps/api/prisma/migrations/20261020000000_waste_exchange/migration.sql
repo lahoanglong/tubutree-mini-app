@@ -586,7 +586,7 @@ INSERT INTO "notification_templates" ("id", "code", "channel", "bodyTemplate") V
   ('nt-waste-points-credited', 'WASTE_POINTS_CREDITED', 'INAPP', 'Yêu cầu {{code}} đã đếm xong. {{result}}.'),
   ('nt-waste-request-rejected', 'WASTE_REQUEST_REJECTED', 'INAPP', 'Yêu cầu {{code}} chưa được nhận: {{reason}}. Bạn xem chi tiết trong mục Đổi rác.'),
   ('nt-waste-request-expired', 'WASTE_REQUEST_EXPIRED', 'INAPP', 'Yêu cầu {{code}} đã đóng: {{detail}}.'),
-  ('nt-waste-pickup-started', 'WASTE_PICKUP_STARTED', 'INAPP', 'Đơn mua của bạn đã giao. Phần rác của yêu cầu {{code}} đang về kho Tubu, Tubu chờ tới hết ngày {{until}}.'),
+  ('nt-waste-pickup-started', 'WASTE_PICKUP_STARTED', 'INAPP', 'Đơn mua của bạn đã giao. Nếu bưu tá đã nhận túi rác của yêu cầu {{code}}, túi sẽ về kho Tubu. Tubu chờ túi tới khoảng ngày {{until}}.'),
   ('nt-waste-pickup-cancelled', 'WASTE_PICKUP_CANCELLED', 'INAPP', 'Đơn mua bị huỷ nên yêu cầu thu kèm rác {{code}} cũng đã đóng. Bạn tạo yêu cầu mới trong mục Đổi rác khi cần.'),
   ('nt-waste-points-reversed', 'WASTE_POINTS_REVERSED', 'INAPP', 'Tubu đã thu hồi {{points}} Điểm Xanh của yêu cầu {{code}}. Lý do: {{reason}}.'),
   ('nt-waste-ship-locked', 'WASTE_SHIP_LOCKED', 'INAPP', 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn. Bạn vẫn mang rác tới điểm nhận được. Yêu cầu thu kèm chưa gắn đơn (nếu có) sẽ được huỷ. Cần hỗ trợ, liên hệ Tubu Tree.'),

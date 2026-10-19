@@ -19,7 +19,7 @@ const EXPECTED: [code: string, id: string, placeholders: string[], body: string]
   ['WASTE_POINTS_CREDITED', 'nt-waste-points-credited', ['code', 'result'], 'Yêu cầu {{code}} đã đếm xong. {{result}}.'],
   ['WASTE_REQUEST_REJECTED', 'nt-waste-request-rejected', ['code', 'reason'], 'Yêu cầu {{code}} chưa được nhận: {{reason}}. Bạn xem chi tiết trong mục Đổi rác.'],
   ['WASTE_REQUEST_EXPIRED', 'nt-waste-request-expired', ['code', 'detail'], 'Yêu cầu {{code}} đã đóng: {{detail}}.'],
-  ['WASTE_PICKUP_STARTED', 'nt-waste-pickup-started', ['code', 'until'], 'Đơn mua của bạn đã giao. Phần rác của yêu cầu {{code}} đang về kho Tubu, Tubu chờ tới hết ngày {{until}}.'],
+  ['WASTE_PICKUP_STARTED', 'nt-waste-pickup-started', ['code', 'until'], 'Đơn mua của bạn đã giao. Nếu bưu tá đã nhận túi rác của yêu cầu {{code}}, túi sẽ về kho Tubu. Tubu chờ túi tới khoảng ngày {{until}}.'],
   ['WASTE_PICKUP_CANCELLED', 'nt-waste-pickup-cancelled', ['code'], 'Đơn mua bị huỷ nên yêu cầu thu kèm rác {{code}} cũng đã đóng. Bạn tạo yêu cầu mới trong mục Đổi rác khi cần.'],
   ['WASTE_POINTS_REVERSED', 'nt-waste-points-reversed', ['code', 'points', 'reason'], 'Tubu đã thu hồi {{points}} Điểm Xanh của yêu cầu {{code}}. Lý do: {{reason}}.'],
   ['WASTE_SHIP_LOCKED', 'nt-waste-ship-locked', [], 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn. Bạn vẫn mang rác tới điểm nhận được. Yêu cầu thu kèm chưa gắn đơn (nếu có) sẽ được huỷ. Cần hỗ trợ, liên hệ Tubu Tree.'],

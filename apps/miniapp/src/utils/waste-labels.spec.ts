@@ -33,7 +33,7 @@ describe('timeline 4 bước (§4.6) — current = chỉ số bước đang di�
   const t = (method: 'MAIL_IN' | 'DROP_OFF' | 'PICKUP', status: string, orderCode: string | null = null) =>
     L.timelineFor({ method, status: status as never, orderCode });
   it('nhãn từng đường', () => {
-    expect(L.TIMELINE_STEPS.MAIL_IN).toEqual(['Đã gửi', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm']);
+    expect(L.TIMELINE_STEPS.MAIL_IN).toEqual(['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm']);
     expect(L.TIMELINE_STEPS.DROP_OFF).toEqual(['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm']);
     expect(L.TIMELINE_STEPS.PICKUP).toEqual(['Đã tạo', 'Gắn vào đơn', 'Chờ kho nhận', 'Cộng điểm']);
   });
