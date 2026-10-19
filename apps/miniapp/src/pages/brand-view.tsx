@@ -23,6 +23,7 @@ import { ProductTile } from '../components/ui/product-tile';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { ScrollRow } from '../components/ui/scroll-row';
+import { safeHexColor } from '../utils/hex-color';
 
 /** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của StorePageShell. */
 const PAGE_TITLE = 'Nhãn hàng';
@@ -189,7 +190,7 @@ export default function BrandViewPage() {
             {b.promotions.map((p) => (
               <div
                 key={p.id}
-                style={{ marginBottom: 8, background: 'var(--color-promo-bg)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12, borderColor: p.themeColor ?? undefined }}
+                style={{ marginBottom: 8, background: 'var(--color-promo-bg)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12, borderColor: safeHexColor(p.themeColor) }}
               >
                 <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-promo-fg)' }}>{p.title}</Text>
                 {p.subtitle && <Text variant="caption" tone="secondary" as="div">{p.subtitle}</Text>}
