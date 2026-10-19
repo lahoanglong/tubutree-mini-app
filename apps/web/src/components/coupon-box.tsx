@@ -65,6 +65,7 @@ export function CouponBox({
   preview,
   previewKey,
   actionLabel = 'Chọn mã',
+  band = false,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -86,6 +87,8 @@ export function CouponBox({
   previewKey?: string;
   /** Chữ bên phải thẻ mã khi chưa áp mã nào: giỏ "Chọn mã", thanh toán "Xem mã" như Mini App. */
   actionLabel?: string;
+  /** Thanh toán: dải phẳng tràn ngang như các khối khác của Mini App thay vì thẻ nổi của giỏ. */
+  band?: boolean;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -138,7 +141,9 @@ export function CouponBox({
   const busy = apply.isPending || drop.isPending || disabled;
 
   return (
-    <div className="mt-3 border-t border-stone-200 pt-3 max-md:mt-0 max-md:rounded-card max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] max-md:p-3 max-md:shadow-[var(--elevation-1)]">
+    <div className={`mt-3 border-t border-stone-200 pt-3 max-md:mt-0 max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] ${
+        band ? 'max-md:p-4' : 'max-md:rounded-card max-md:p-3 max-md:shadow-[var(--elevation-1)]'
+      }`}>
       {currentCode ? (
         <div className="flex items-center justify-between rounded-control border border-dashed border-promo-solid bg-promo-bg pl-3">
           <span className="flex items-center gap-2 text-sm font-semibold text-promo-fg">
