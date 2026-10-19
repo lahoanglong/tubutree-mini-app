@@ -105,6 +105,8 @@ export const GOOD_DB: DbSnapshot = {
     'payment.bank_account_no': '0123456789012',
     'payment.bank_account_name': 'CONG TY TUBU TREE',
   },
+  membershipTiers: [1, 1.2, 1.5, 2],
+  dealerTierCount: 4,
   adminCount: 1,
   pendingAdminGrants: 0,
   znsTemplates: [

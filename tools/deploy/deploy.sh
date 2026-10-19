@@ -15,6 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vietnix.yml}"
 DEPLOY_HEALTH_TIMEOUT="${DEPLOY_HEALTH_TIMEOUT:-180}"
+# Quyết định A8: DB mới phải có hạng thành viên, bậc đại lý, nhiệm vụ nên seed-reference chạy CÓ cờ. Đặt SEED_REFERENCE_ARGS=
+# (rỗng) để bỏ cờ trên DB đã có sẵn các bảng đó; seed chỉ tạo dòng thiếu nên cả hai cách đều an toàn chạy lại.
+SEED_REFERENCE_ARGS="${SEED_REFERENCE_ARGS---with-business-defaults}"
 
 cd "$REPO_ROOT"
 # Giá trị một khoá trong .env theo cách đọc của compose: bỏ \r, bỏ dấu nháy bao quanh, bỏ chú thích ` #...` cuối dòng không nháy.
@@ -214,7 +217,8 @@ fi
 
 if [ "$RUN_SEED_REFERENCE" = 1 ]; then
   log "3b/5 Nạp dữ liệu tham chiếu (seed-reference, chỉ tạo dòng thiếu) khi API còn dừng"
-  if ! dc run --rm --no-deps api pnpm run prisma:seed:reference; then
+  # shellcheck disable=SC2086 # tách từ có chủ ý: rỗng thì không truyền gì
+  if ! dc run --rm --no-deps api pnpm run prisma:seed:reference $SEED_REFERENCE_ARGS; then
     log "ERROR: seed-reference lỗi — DỪNG. $(api_state_note) Migration đã áp nên KHÔNG quay lại image cũ. Đọc lỗi rồi chạy lại deploy.sh (đi lại đủ luồng, seed-reference an toàn chạy lại)."
     exit 2
   fi
