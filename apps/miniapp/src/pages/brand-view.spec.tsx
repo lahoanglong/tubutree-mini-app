@@ -85,6 +85,23 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     expect(screen.getByText(/Đạt doanh số 50\.000\.000đ \/ quý/)).toBeInTheDocument();
   });
 
+  it('D15-01: viền khuyến mãi chỉ nhận màu hex, mọi giá trị khác bị bỏ để không chèn được CSS', async () => {
+    const promo = (id: string, themeColor: string | null) => ({ ...BRAND.promotions[0]!, id, title: `KM ${id}`, couponCode: null, themeColor });
+    mocks.getPublicBrand.mockResolvedValue({
+      ...BRAND,
+      promotions: [
+        promo('hex', '#16a34a'),
+        promo('named', 'red'),
+        promo('inject', 'red;position:fixed;inset:0;background:url(https://evil.example/x.png)'),
+      ],
+    });
+    renderPage();
+    const card = async (id: string) => (await screen.findByText(`KM ${id}`)).parentElement!;
+    expect((await card('hex')).style.borderColor).toBe('rgb(22, 163, 74)');
+    expect((await card('named')).style.borderColor).not.toBe('red');
+    expect((await card('inject')).getAttribute('style') ?? '').not.toMatch(/position|evil|inset/);
+  });
+
   it('Theo dõi gọi followBrand theo slug', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Theo dõi/ }));

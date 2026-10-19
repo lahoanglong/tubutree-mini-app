@@ -672,14 +672,36 @@ function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean
   );
 }
 
+/** Xoá/gỡ không hoàn tác: hỏi trước, chỉ chạy khi admin đồng ý (cùng cách với xoá đợt flash sale). */
+function useDeleteConfirm() {
+  const { confirm, dialog } = useConfirm();
+  const askDelete = async (opts: { title: string; message: string; confirmLabel: string }, run: () => void) => {
+    if (await confirm({ cancelLabel: 'Giữ lại', tone: 'danger', ...opts })) run();
+  };
+  return { askDelete, dialog };
+}
+
 function DealerRow({ app: a }: { app: DealerApp }) {
   const qc = useQueryClient();
   const [tierId, setTierId] = useState('');
+  const { ask, dialog } = useConfirm();
   const review = useMutation({
-    mutationFn: (approve: boolean) =>
-      reviewDealerApp(a.id, approve, approve ? tierId.trim() || undefined : undefined, approve ? undefined : 'Không đạt yêu cầu'),
+    mutationFn: ({ approve, reason }: { approve: boolean; reason?: string }) =>
+      reviewDealerApp(a.id, approve, approve ? tierId.trim() || undefined : undefined, approve ? undefined : reason),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealers'] }),
   });
+  // Từ chối là trạng thái cuối và lý do được gửi nguyên văn cho người nộp, nên bắt admin tự viết.
+  const askReject = async () => {
+    const reason = await ask({
+      title: 'Từ chối hồ sơ đại lý',
+      message: `Từ chối hồ sơ "${a.businessName}"? Không mở lại được: người nộp phải nộp lại từ đầu và sẽ nhận lý do bạn nhập dưới đây.`,
+      confirmLabel: 'Từ chối hồ sơ',
+      cancelLabel: 'Giữ lại',
+      tone: 'danger',
+      input: { label: 'Lý do từ chối (gửi cho người nộp)', placeholder: 'Ví dụ: ảnh CCCD mặt sau bị mờ, nộp lại giúp', required: true },
+    });
+    if (reason) review.mutate({ approve: false, reason });
+  };
 
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
@@ -699,17 +721,18 @@ function DealerRow({ app: a }: { app: DealerApp }) {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />
           <button
-            onClick={() => review.mutate(true)}
+            onClick={() => review.mutate({ approve: true })}
             disabled={review.isPending || !tierId.trim()}
             title={!tierId.trim() ? 'Cần chọn bậc đại lý để duyệt' : undefined}
             className={BTN_PRIMARY}
           >
             Duyệt
           </button>
-          <button onClick={() => review.mutate(false)} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
+          <button onClick={askReject} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
         </div>
       )}
       {review.isError && <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>}
+      {dialog}
     </div>
   );
 }
@@ -1812,38 +1835,67 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   );
 }
 
+/** Hậu quả đổi vai trò, bám admin.service: nhóm việc chỉ giữ khi đích là STAFF; cờ đối tác chỉ tắt khi đích là CUSTOMER/AFFILIATE (kể cả nhân viên/admin đang sở hữu gian hàng đối tác). */
+function roleChangeConsequences(target: UserRole): string {
+  const lines: string[] = [];
+  if (target === 'STAFF') {
+    lines.push('Nếu tài khoản đã là nhân viên: giữ nguyên nhóm việc hiện có.');
+  } else {
+    lines.push('Nếu tài khoản đang là nhân viên: mất toàn bộ nhóm việc, đặt lại nhân viên không trả nhóm việc cũ.');
+  }
+  if (target === 'CUSTOMER' || target === 'AFFILIATE') {
+    lines.push(
+      'Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt cờ đối tác; gian hàng MERCHANT chuyển về CTV.',
+    );
+  } else if (target === 'DEALER') {
+    lines.push('Nếu tài khoản đã là đại lý: chỉ đổi bậc, gian hàng đối tác giữ nguyên.');
+  }
+  return lines.join('\n');
+}
+
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
 function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState('');
-  // Mặc định vai trò ít quyền nhất (KHÔNG phải ADMIN) — tránh lỡ tay cấp full-quyền cho
-  // SĐT chưa kiểm kỹ khi form chỉ dùng để tra cứu/đổi vai trò khác.
-  const [role, setRole] = useState<UserRole>('CUSTOMER');
+  // Không đặt vai trò mặc định: bất kỳ giá trị nào cũng là một lần đổi vai trò, và CUSTOMER còn gỡ
+  // nhóm việc của nhân viên, tắt cờ đối tác của đại lý. Admin phải chọn có chủ đích.
+  const [role, setRole] = useState<UserRole | ''>('');
   // DEALER bắt buộc kèm bậc (BE từ chối nếu thiếu — C-008): đại lý không bậc đặt CREDIT không bị chặn hạn mức.
   const [tierId, setTierId] = useState('');
   const needsTier = role === 'DEALER';
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const { confirm, dialog } = useConfirm();
   const mut = useMutation({
-    mutationFn: () => setUserRole(phone.trim(), role, needsTier ? tierId : undefined),
+    mutationFn: (target: UserRole) => setUserRole(phone.trim(), target, needsTier ? tierId : undefined),
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${r.previousRole} → ${r.role}` });
       setPhone('');
+      setRole('');
+      setTierId('');
       onDone();
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
   });
   const submit = async () => {
     setMsg(null);
-    if (role === 'ADMIN') {
-      const ok = await confirm({
-        title: 'Cấp quyền ADMIN',
-        message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
-        confirmLabel: 'Cấp quyền ADMIN',
-        tone: 'danger',
-      });
-      if (!ok) return;
-    }
-    mut.mutate();
+    if (!role) return;
+    const roleLabel = USER_ROLE_LABELS[role] ?? role;
+    const ok = await confirm(
+      role === 'ADMIN'
+        ? {
+            title: 'Cấp quyền ADMIN',
+            message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
+            confirmLabel: 'Cấp quyền ADMIN',
+            tone: 'danger',
+          }
+        : {
+            title: 'Đổi vai trò',
+            message: `Đổi vai trò của SĐT ${phone.trim()} sang "${roleLabel}"?\n${roleChangeConsequences(role)}`,
+            confirmLabel: 'Đổi vai trò',
+            tone: 'danger',
+          },
+    );
+    if (!ok) return;
+    mut.mutate(role);
   };
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
@@ -1859,8 +1911,9 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
           aria-label="Vai trò cần cấp"
           className={`${FIELD_CLASS} ${TOUCH_H}`}
           value={role}
-          onChange={(e) => setRole(e.target.value as UserRole)}
+          onChange={(e) => setRole(e.target.value as UserRole | '')}
         >
+          <option value="">Chọn vai trò…</option>
           {ROLES.map((r) => (
             <option key={r} value={r}>{USER_ROLE_LABELS[r] ?? r}</option>
           ))}
@@ -1868,7 +1921,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
           className={BTN_PRIMARY}
-          disabled={!phone.trim() || (needsTier && !tierId.trim()) || mut.isPending}
+          disabled={!phone.trim() || !role || (needsTier && !tierId.trim()) || mut.isPending}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >
@@ -2034,6 +2087,7 @@ function BrandsTab() {
 }
 
 function BrandRow({ brand }: { brand: AdminBrand }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
@@ -2133,7 +2187,14 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               {products.data?.map((p) => (
                 <div key={p.id} className={LIST_ITEM_CLASS}>
                   <span className="min-w-0 truncate">{p.name}</span>
-                  <button onClick={() => detach.mutate(p.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Gỡ</button>
+                  <button
+                    onClick={() => askDelete({
+                      title: 'Gỡ sản phẩm khỏi nhãn',
+                      message: `Gỡ "${p.name}" khỏi nhãn ${brand.name}? Sản phẩm không còn thuộc nhãn này cho tới khi gán lại.`,
+                      confirmLabel: 'Gỡ sản phẩm',
+                    }, () => detach.mutate(p.id))}
+                    className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+                  >Gỡ</button>
                 </div>
               ))}
               {products.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có SP. Bấm “Gán SP theo tên nhãn” để liên kết catalog.</p>}
@@ -2146,7 +2207,14 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               {promos.data?.map((pm) => (
                 <div key={pm.id} className={LIST_ITEM_CLASS}>
                   <span className="min-w-0 break-words">{pm.title}{pm.subtitle ? ` · ${pm.subtitle}` : ''}</span>
-                  <button onClick={() => delPromo.mutate(pm.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
+                  <button
+                    onClick={() => askDelete({
+                      title: 'Xoá khuyến mãi',
+                      message: `Xoá khuyến mãi "${pm.title}" của nhãn ${brand.name}? Không hoàn tác được.`,
+                      confirmLabel: 'Xoá khuyến mãi',
+                    }, () => delPromo.mutate(pm.id))}
+                    className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+                  >Xoá</button>
                 </div>
               ))}
             </div>
@@ -2161,6 +2229,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }
@@ -2233,6 +2302,7 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
 }
 
 function DealerRewardsSection() {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-dealer-rewards'], queryFn: listDealerRewards });
   const [f, setF] = useState({ type: 'TOUR', title: '', description: '', threshold: 50000000, period: 'QUARTER' });
@@ -2257,7 +2327,14 @@ function DealerRewardsSection() {
         {q.data?.map((d) => (
           <div key={d.id} className={LIST_ITEM_CLASS}>
             <span className="min-w-0 break-words">[{d.type}] {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
-            <button onClick={() => del.mutate(d.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
+            <button
+              onClick={() => askDelete({
+                title: 'Xoá chương trình thưởng đại lý',
+                message: `Xoá chương trình "${d.title}"? Các yêu cầu nhận thưởng đã gửi trước đó sẽ mất liên kết với chương trình này, không hoàn tác được.`,
+                confirmLabel: 'Xoá chương trình',
+              }, () => del.mutate(d.id))}
+              className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+            >Xoá</button>
           </div>
         ))}
         {q.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có chương trình.</p>}
@@ -2278,6 +2355,7 @@ function DealerRewardsSection() {
         <button onClick={() => create.mutate()} disabled={!f.title.trim()} className={BTN_PRIMARY}>Thêm</button>
       </div>
       {create.isError && <p className="mt-1 text-xs text-danger-fg">{(create.error as Error).message}</p>}
+      {dialog}
     </div>
   );
 }
@@ -2501,7 +2579,20 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
               <span className="min-w-0 break-words">
                 {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
               </span>
-              <button onClick={() => delItem.mutate(it.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
+              <button
+                onClick={async () => {
+                  const label = variationLabels.labelFor(it.variationId);
+                  const ok = await confirm({
+                    title: 'Xoá sản phẩm khỏi đợt',
+                    message: `Xoá "${label}" khỏi đợt "${sale.title}"? Đã bán ${it.soldCount}/${it.quota}. Không hoàn tác được.`,
+                    confirmLabel: 'Xoá sản phẩm',
+                    cancelLabel: 'Giữ lại',
+                    tone: 'danger',
+                  });
+                  if (ok) delItem.mutate(it.id);
+                }}
+                className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+              >Xoá</button>
             </div>
           ))}
           {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
@@ -2623,6 +2714,7 @@ function FaqTab() {
 }
 
 function FaqRow({ faq }: { faq: AdminFaq }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-faqs'] });
@@ -2668,7 +2760,11 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_LINK_MUTED} text-xs`}>
             {faq.isActive ? 'Ẩn' : 'Hiện'}
           </button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
+          <button
+            onClick={() => askDelete({ title: 'Xoá câu hỏi thường gặp', message: `Xoá câu hỏi "${faq.question}"? Câu trả lời này cũng không còn được nạp cho AI tư vấn. Không hoàn tác được.`, confirmLabel: 'Xoá câu hỏi' }, () => del.mutate())}
+            disabled={del.isPending}
+            className={`${BTN_LINK_DANGER} text-xs`}
+          >Xoá</button>
         </div>
       </div>
       {rowErr && <p className="mt-1 text-xs text-danger-fg">{rowErr}</p>}
@@ -2691,6 +2787,7 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
+      {dialog}
     </div>
   );
 }
@@ -2789,6 +2886,7 @@ function QuickReplyTab() {
 }
 
 function QuickReplyRow({ item }: { item: AdminQuickReply }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-quick-replies'] });
@@ -2844,7 +2942,11 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
           <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_LINK_MUTED} text-xs`}>
             {item.isActive ? 'Tắt' : 'Bật'}
           </button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
+          <button
+            onClick={() => askDelete({ title: 'Xoá mẫu tin nhanh', message: `Xoá mẫu "${item.title}"? Nếu mẫu đang dùng cho tự động trả lời trên OA thì OA không còn gửi mẫu này. Không hoàn tác được.`, confirmLabel: 'Xoá mẫu' }, () => del.mutate())}
+            disabled={del.isPending}
+            className={`${BTN_LINK_DANGER} text-xs`}
+          >Xoá</button>
         </div>
       </div>
       {rowErr && <p className="mt-1 text-xs text-danger-fg">{rowErr}</p>}
@@ -2877,6 +2979,7 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
           {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
+      {dialog}
     </div>
   );
 }
@@ -3109,6 +3212,7 @@ function AcademyTab() {
 }
 
 function CourseRow({ course }: { course: AdminCourse }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
@@ -3184,7 +3288,15 @@ function CourseRow({ course }: { course: AdminCourse }) {
             <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className={BTN_SECONDARY}>
               {course.isPublished ? 'Chuyển về nháp' : 'Đăng (publish)'}
             </button>
-            <button onClick={() => del.mutate()} disabled={del.isPending} className={BTN_DANGER_OUTLINE}>
+            <button
+              onClick={() => askDelete({
+                title: 'Xoá khoá học',
+                message: `Xoá khoá học "${course.title}" cùng ${course.lessons.length} bài học? Tiến độ học của học viên trong khoá này cũng mất. Không hoàn tác được.`,
+                confirmLabel: 'Xoá khoá học',
+              }, () => del.mutate())}
+              disabled={del.isPending}
+              className={BTN_DANGER_OUTLINE}
+            >
               Xoá khoá học
             </button>
           </div>
@@ -3265,11 +3377,13 @@ function CourseRow({ course }: { course: AdminCourse }) {
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }
 
 function LessonRow({ lesson }: { lesson: AdminLesson }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
@@ -3305,7 +3419,11 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
         </span>
         <div className="flex shrink-0 gap-1">
           <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} text-xs`}>{open ? 'Đóng' : 'Sửa'}</button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
+          <button
+            onClick={() => askDelete({ title: 'Xoá bài học', message: `Xoá bài học "${lesson.title}"? Không hoàn tác được.`, confirmLabel: 'Xoá bài học' }, () => del.mutate())}
+            disabled={del.isPending}
+            className={`${BTN_LINK_DANGER} text-xs`}
+          >Xoá</button>
         </div>
       </div>
       {del.isError && <p className="mt-1 text-xs text-danger-fg">{(del.error as Error).message}</p>}
@@ -3335,6 +3453,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           {save.isError && <p className="text-xs text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
+      {dialog}
     </div>
   );
 }
