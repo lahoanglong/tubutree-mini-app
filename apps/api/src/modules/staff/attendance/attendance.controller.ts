@@ -8,6 +8,7 @@ import type { Env } from '../../../config/env.validation';
 import { DateRangeQuery } from '../dto/staff-query.dto';
 import { parseDateRange } from '../date-range';
 import { AttendanceService, type Coords } from './attendance.service';
+import { PayrollService } from '../payroll/payroll.service';
 import { resolveZaloLocation } from './zalo-location';
 import { CheckinDto, CheckoutDto, HeartbeatDto } from './attendance.dto';
 
@@ -18,6 +19,7 @@ export class AttendanceController {
   constructor(
     private readonly attendance: AttendanceService,
     private readonly config: ConfigService<Env, true>,
+    private readonly payroll: PayrollService,
   ) {}
 
   @Get('status')
@@ -32,7 +34,17 @@ export class AttendanceController {
     @Req() req: Request,
   ) {
     const coords = await this.resolveCoords(dto);
-    return this.attendance.checkin(staffId, this.clientIp(req), { shiftId: dto.shiftId, ...coords });
+    const ip = this.clientIp(req);
+    const owner = await this.attendance.shiftOwner(dto.shiftId);
+    // Phiên mới vào tháng đã chốt/đã trả thì net không bao giờ gồm giờ công đó: chặn trước khi tạo phiên. Kiểm tháng và tạo
+    // phiên cùng khoá tháng, nên "Đã chi" không chen vào giữa. Ca của người khác vẫn bị checkin() trả 404 như cũ.
+    return this.payroll.writeInMonth(
+      staffId,
+      owner.workDate,
+      (tx) => this.attendance.checkin(staffId, ip, { shiftId: dto.shiftId, ...coords }, tx),
+      'Tháng lương đã chốt/đã trả — nhờ quản lý mở lại tháng trước khi chấm công.',
+      { recompute: false },
+    );
   }
 
   @Post('checkout')

@@ -14,6 +14,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     payrollDay: { upsert: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null) },
     payrollMonth: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     staffProfile: { findUnique: jest.fn().mockResolvedValue({ hourlyRate: 30000 }), upsert: jest.fn() },
+    attendanceSession: { count: jest.fn().mockResolvedValue(0) },
     user: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue({ role: 'STAFF', staffProfile: null }) },
     $executeRaw: jest.fn(),
   } as Record<string, unknown>;
@@ -26,6 +27,9 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return merged as unknown as PrismaService;
 }
 const mk = (p: PrismaService) => new PayrollService(p, config);
+/** recomputeDayIn là private (chỉ gọi trong khoá tháng); spec gọi thẳng với `db` giả. */
+const recomputeDay = (db: unknown, staffId: string, workDate: Date, opts: { reprice?: boolean; monthAlreadyChecked?: boolean } = {}) =>
+  (mk(db as PrismaService) as unknown as { recomputeDayIn: (...a: unknown[]) => Promise<{ gross: number; net: number }> }).recomputeDayIn(db, staffId, workDate, opts);
 
 describe('PayrollService.ensureFines', () => {
   it('có phiên trễ → tạo LATE (1 lần)', async () => {
@@ -92,7 +96,7 @@ describe('PayrollService.ensureFines', () => {
   });
 });
 
-describe('PayrollService.recomputeDay', () => {
+describe('PayrollService.recomputeDayIn', () => {
   it('upsert PayrollDay với gross/net đúng (2h × 30k = 60k)', async () => {
     const upsert = jest.fn().mockResolvedValue({});
     const prisma = makePrisma({
@@ -116,7 +120,7 @@ describe('PayrollService.recomputeDay', () => {
       payrollAdjustment: { findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       payrollDay: { upsert, findUnique: jest.fn().mockResolvedValue(null) },
     });
-    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
+    const pay = await recomputeDay(prisma, 'u1', new Date('2026-07-03'));
     expect(pay.gross).toBe(60000);
     expect(pay.net).toBe(60000);
     expect(upsert).toHaveBeenCalled();
@@ -230,7 +234,7 @@ describe('PayrollService.markPaid / finalize', () => {
  * động định giá lại cả 10 ngày đã làm xong (trả dư khi tăng, ăn bớt lương đã làm khi giảm). Chỉ
  * cần NV mở màn "Lương của tôi" là recompute chạy.
  */
-describe('PayrollService.recomputeDay — đơn giá khoá theo ngày', () => {
+describe('PayrollService.recomputeDayIn — đơn giá khoá theo ngày', () => {
   const dayWithTwoHours = (over: Record<string, unknown> = {}) =>
     makePrisma({
       shift: {
@@ -257,7 +261,7 @@ describe('PayrollService.recomputeDay — đơn giá khoá theo ngày', () => {
       payrollDay: { upsert, findUnique: jest.fn().mockResolvedValue({ hourlyRate: 25000 }) },
     });
 
-    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
+    const pay = await recomputeDay(prisma, 'u1', new Date('2026-07-03'));
 
     expect(pay.gross).toBe(50000); // 2h × 25k, KHÔNG phải 2h × 40k
     expect(upsert.mock.calls[0][0].update.hourlyRate).toBe(25000);
@@ -270,7 +274,7 @@ describe('PayrollService.recomputeDay — đơn giá khoá theo ngày', () => {
       payrollDay: { upsert, findUnique: jest.fn().mockResolvedValue(null) },
     });
 
-    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
+    const pay = await recomputeDay(prisma, 'u1', new Date('2026-07-03'));
 
     expect(pay.gross).toBe(80000);
   });
@@ -281,7 +285,7 @@ describe('PayrollService.recomputeDay — đơn giá khoá theo ngày', () => {
       payrollDay: { upsert: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ hourlyRate: 0 }) },
     });
 
-    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'));
+    const pay = await recomputeDay(prisma, 'u1', new Date('2026-07-03'));
 
     expect(pay.gross).toBe(80000);
   });
@@ -292,7 +296,7 @@ describe('PayrollService.recomputeDay — đơn giá khoá theo ngày', () => {
       payrollDay: { upsert: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ hourlyRate: 25000 }) },
     });
 
-    const pay = await mk(prisma).recomputeDay('u1', new Date('2026-07-03'), { reprice: true });
+    const pay = await recomputeDay(prisma, 'u1', new Date('2026-07-03'), { reprice: true });
 
     expect(pay.gross).toBe(80000);
   });
@@ -356,7 +360,7 @@ describe('PayrollService — tháng đã chốt là khoá, nhưng mở lại đ�
 
   it('sửa giờ ngày thuộc tháng đã CHỐT → từ chối thay vì ghi đè lệch với tổng tháng', async () => {
     const prisma = locked('FINALIZED');
-    await expect(mk(prisma).recomputeDay('u1', new Date('2026-07-03'))).rejects.toBeInstanceOf(
+    await expect(recomputeDay(prisma, 'u1', new Date('2026-07-03'))).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -653,16 +657,64 @@ describe('PayrollService.recomputeStaffMonth — không kiểm trạng thái th�
     expect(monthFindUnique).toHaveBeenCalledTimes(1);
   });
 
-  it('gọi recomputeDay TRỰC TIẾP (admin sửa giờ) → vẫn kiểm khoá tháng', async () => {
+  it('gọi recomputeDayIn không báo đã kiểm tháng → vẫn kiểm khoá tháng', async () => {
     const monthFindUnique = jest.fn().mockResolvedValue({ status: 'FINALIZED' });
     const prisma = makePrisma({
       payrollMonth: { findUnique: monthFindUnique, upsert: jest.fn() },
       payrollDay: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     });
 
-    await expect(mk(prisma).recomputeDay('u1', new Date('2026-07-03'))).rejects.toBeInstanceOf(
+    await expect(recomputeDay(prisma, 'u1', new Date('2026-07-03'))).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(monthFindUnique).toHaveBeenCalled();
+  });
+});
+
+describe('PayrollService — các đường ghi và đóng băng tháng cùng một khoá', () => {
+  const lockKeys = (p: any) => p.$executeRaw.mock.calls.flatMap((c: unknown[]) => c.slice(1));
+
+  it('reopen: chuyển OPEN và tính lại nằm trong khoá tháng, không ghi ngoài transaction', async () => {
+    const prisma = makePrisma() as any;
+    // Mock dùng chung một object cho prisma và tx nên không phân biệt được ngoài/trong transaction: kiểm thứ tự khoá trước ghi.
+    const order: string[] = [];
+    prisma.$executeRaw = jest.fn().mockImplementation(async () => order.push('lock'));
+    prisma.payrollMonth.updateMany = jest.fn().mockImplementation(async () => (order.push('reopen'), { count: 1 }));
+    prisma.payrollMonth.findUnique = jest.fn().mockImplementation(async () => (order.push('read'), null));
+    prisma.payrollMonth.upsert = jest.fn().mockResolvedValue({ status: 'OPEN' });
+    await mk(prisma).reopen('u1', 2026, 7, 'a1');
+    expect(order.slice(0, 3)).toEqual(['lock', 'reopen', 'read']);
+    expect(lockKeys(prisma)).toContain('payroll:u1:2026-7');
+  });
+
+  it('reopen tháng đang mở → 400, không tính lại', async () => {
+    const prisma = makePrisma() as any;
+    prisma.payrollMonth.updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    await expect(mk(prisma).reopen('u1', 2026, 7, 'a1')).rejects.toThrow('Tháng lương đang mở');
+    expect(prisma.payrollMonth.upsert).not.toHaveBeenCalled();
+  });
+
+  it('Chốt và Đã chi bị chặn khi còn phiên chấm công chưa đóng trong tháng, không ghi gì', async () => {
+    const prisma = makePrisma() as any;
+    prisma.attendanceSession.count = jest.fn().mockResolvedValue(1);
+    await expect(mk(prisma).finalize('u1', 2026, 7)).rejects.toThrow('phiên chấm công chưa đóng');
+    await expect(mk(prisma).markPaid('u1', 2026, 7, 'https://x/p.png', undefined, 'a1')).rejects.toThrow('phiên chấm công chưa đóng');
+    expect(prisma.payrollMonth.updateMany).not.toHaveBeenCalled();
+    expect(prisma.attendanceSession.count).toHaveBeenCalledWith({
+      where: { staffId: 'u1', checkoutAt: null, shift: { workDate: { gte: new Date('2026-07-01T00:00:00Z'), lt: new Date('2026-08-01T00:00:00Z') } } },
+    });
+  });
+
+  it('writeInMonth với recompute:false khoá và kiểm tháng nhưng không tính lại ngày', async () => {
+    const prisma = makePrisma() as any;
+    const write = jest.fn().mockResolvedValue('ok');
+    await expect(mk(prisma).writeInMonth('u1', new Date('2026-07-03'), write, undefined, { recompute: false })).resolves.toBe('ok');
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(prisma.payrollDay.upsert).not.toHaveBeenCalled();
+    expect(lockKeys(prisma)).toContain('payroll:u1:2026-7');
+
+    prisma.payrollMonth.findUnique = jest.fn().mockResolvedValue({ status: 'PAID' });
+    await expect(mk(prisma).writeInMonth('u1', new Date('2026-07-03'), write, undefined, { recompute: false })).rejects.toThrow('đã chốt/đã trả');
+    expect(write).toHaveBeenCalledTimes(1);
   });
 });
