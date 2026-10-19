@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
 import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { headingProblems, scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
+import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
 const mocks = vi.hoisted(() => ({
@@ -384,7 +384,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(group('Người bán')).toEqual(
       expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Danh mục sản phẩm', 'Đại lý & công nợ', 'Gian hàng']),
     );
-    expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ & quà đổi điểm']);
+    expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
     expect(group('Khách hàng')).toContain('Cộng đồng');
@@ -1432,6 +1432,7 @@ describe('admin/page — tab Flash Sale', () => {
     mocks.updateFlashSale.mockResolvedValue({});
     click(toggle);
     await flush();
+    await answerDialog(true);
     expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: false });
     expect(btn(container, 'Bật')).toBeTruthy();
     expect(container.textContent).toContain('Chưa có sản phẩm nào trong đợt này.');
@@ -1964,7 +1965,7 @@ describe('admin/page — tab Academy', () => {
     const save = btn(container, 'Lưu thông tin');
     expect(save.className).toContain('bg-forest-600');
     expect(save.parentElement!.className).toContain('bg-stone-50');
-    typeInto(save.parentElement!.querySelector('input[placeholder="Cover URL"]'), 'https://c.test/x.png');
+    typeInto(save.parentElement!.querySelector('input[placeholder="Ảnh bìa (URL)"]'), 'https://c.test/x.png');
     mocks.updateAcademyCourse.mockResolvedValue({});
     click(save);
     await flush();
@@ -2329,7 +2330,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Hoàn tiền sàn ngoài',
       'Thưởng đại lý',
       'Đại lý & công nợ',
-      'Duyệt yêu cầu rút tiền',
+      'Rút tiền CTV',
       'Đổi rác',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
@@ -2751,7 +2752,7 @@ describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
 });
 
 describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần xử lý" (launch review D1-08, D1-17)', () => {
-  it('thẻ rút tiền đã duyệt chờ "Đã chi" mở tab Duyệt yêu cầu rút tiền', async () => {
+  it('thẻ rút tiền đã duyệt chờ "Đã chi" mở tab Rút tiền CTV', async () => {
     const { container } = await mount();
     const card = container.querySelector('[data-inbox="payoutsToPay"]')!;
     expect(card.textContent).toContain('Lệnh rút tiền chờ chi');
@@ -2929,5 +2930,347 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     const kho = await mount();
     expect(navItems(kho.container)).not.toContain('Cộng đồng');
     expect(kho.container.querySelector('[aria-label="Mục kiểm duyệt cộng đồng"]')).toBeNull();
+  });
+});
+
+// UAT 2026-10-20 gói ui-admin-2 (D7-08/12/13/19/22/23/25, D8-10, P3 GrantRoleForm và DealerRow).
+describe('admin/page — UAT ui-admin-2', () => {
+  const typeText = (el: Element | null, v: string) => typeInto(el, v);
+  const labelOf = (root: ParentNode, text: string) =>
+    [...root.querySelectorAll('label')].find((l) => (l.textContent ?? '').replace(/\s+/g, ' ').trim().startsWith(text));
+  const configSection = (c: HTMLElement) => [...c.querySelectorAll('h2')].find((h) => h.textContent === 'Tất cả tham số (JSON)')!.parentElement!;
+  const keysShown = (c: HTMLElement) => [...configSection(c).querySelectorAll('span.break-all')].map((s) => s.textContent);
+
+  describe('D7-08: tab Cấu hình có ô tìm và nhóm theo tiền tố khoá', () => {
+    const ROWS = [
+      { key: 'affiliate.commission_rate', value: 0.08, description: 'Tỷ lệ hoa hồng', category: 'affiliate' },
+      { key: 'affiliate.hold_days', value: 10, description: 'Số ngày giữ hoa hồng', category: 'affiliate' },
+      { key: 'loyalty.earn_rate', value: 0.02, description: 'Tỷ lệ cộng điểm', category: 'loyalty' },
+      { key: 'shipping.flat_fee', value: 19000, description: 'Phí giao đồng giá', category: 'shipping' },
+      { key: 'standalone_flag', value: true, description: 'Cờ lẻ', category: 'misc' },
+    ];
+    const open = async () => {
+      mocks.config = ROWS;
+      window.history.replaceState(null, '', '/admin?tab=config');
+      return mount();
+    };
+
+    it('ô "Tìm khoá cấu hình": gõ "affiliate" thì chỉ còn các khoá affiliate.*', async () => {
+      const { container } = await open();
+      expect(keysShown(container)).toHaveLength(5);
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      expect(search).not.toBeNull();
+      typeText(search, 'affiliate');
+      await flush();
+      expect(keysShown(container)).toEqual(['affiliate.commission_rate', 'affiliate.hold_days']);
+    });
+
+    it('tìm theo mô tả, không phân biệt hoa thường và dấu; không khớp thì báo rõ', async () => {
+      const { container } = await open();
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      typeText(search, 'PHI GIAO');
+      await flush();
+      expect(keysShown(container)).toEqual(['shipping.flat_fee']);
+      typeText(search, 'không-có-khoá-này');
+      await flush();
+      expect(keysShown(container)).toEqual([]);
+      expect(configSection(container).textContent).toContain('Không có khoá nào khớp');
+    });
+
+    it('chia nhóm theo tiền tố: mỗi nhóm một tiêu đề h3 kèm số khoá, khoá không có tiền tố vào "Khác"', async () => {
+      const { container } = await open();
+      const heads = [...configSection(container).querySelectorAll('h3')].map((h) => h.textContent);
+      expect(heads).toEqual(['affiliate (2)', 'loyalty (1)', 'shipping (1)', 'Khác (1)']);
+    });
+  });
+
+  describe('D7-12: nhãn tiếng Việt thay mã thô', () => {
+    it('thông báo đổi vai trò dùng nhãn vai trò, không in STAFF → CUSTOMER', async () => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      typeText(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+      selectValue(container.querySelector('select[aria-label="Vai trò cần cấp"]'), 'CUSTOMER');
+      mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
+      click(btn(container, 'Cấp quyền'));
+      await flush();
+      await answerDialog(true);
+      const msg = para(container, 'Đã đổi 0955555555: Nhân viên → Khách hàng');
+      expect(msg).toBeDefined();
+      expect(container.textContent).not.toMatch(/STAFF|CUSTOMER/);
+    });
+
+    it('danh sách chương trình thưởng đại lý in Tour/Quà/Khác, không in [TOUR]', async () => {
+      mocks.rewards = [
+        { id: 'r1', type: 'TOUR', title: 'Tour Phú Quốc', description: null, threshold: 50000000, period: 'QUARTER', brandId: null },
+        { id: 'r2', type: 'GIFT', title: 'Bộ ly', description: null, threshold: 10000000, period: 'YEAR', brandId: null },
+        { id: 'r3', type: 'OTHER', title: 'Voucher', description: null, threshold: 5000000, period: 'YEAR', brandId: null },
+      ];
+      window.history.replaceState(null, '', '/admin?tab=brands');
+      const { container } = await mount();
+      expect(container.textContent).toContain('Tour · Tour Phú Quốc');
+      expect(container.textContent).toContain('Quà · Bộ ly');
+      expect(container.textContent).toContain('Khác · Voucher');
+      expect(container.textContent).not.toMatch(/\[(TOUR|GIFT|OTHER)\]/);
+    });
+  });
+
+  describe('D7-13: tắt flash sale đang bật phải hỏi lại', () => {
+    const SALE = {
+      id: 's1', title: 'Flash Sale cuối tuần', startAt: '2026-10-17T01:00:00.000Z', endAt: '2099-10-18T16:00:00.000Z', isActive: true,
+      items: [{ id: 'i1', variationId: 'v1', flashPrice: 99000, quota: 20, soldCount: 3, perUserLimit: 2 }],
+    };
+    it('bấm "Tắt": mở hộp xác nhận, Giữ lại thì không gọi API, Xác nhận thì mới tắt', async () => {
+      mocks.flashSales = [SALE];
+      window.history.replaceState(null, '', '/admin?tab=flashSales');
+      const { container } = await mount();
+      mocks.updateFlashSale.mockResolvedValue({});
+      click(btn(container, 'Tắt'));
+      await flush();
+      expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
+      expect(mocks.updateFlashSale).not.toHaveBeenCalled();
+      await answerDialog(false);
+      expect(mocks.updateFlashSale).not.toHaveBeenCalled();
+      click(btn(container, 'Tắt'));
+      await flush();
+      await answerDialog(true);
+      expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: false });
+    });
+
+    it('đợt đang tắt: bấm "Bật" chạy ngay, không hỏi', async () => {
+      mocks.flashSales = [{ ...SALE, isActive: false }];
+      window.history.replaceState(null, '', '/admin?tab=flashSales');
+      const { container } = await mount();
+      mocks.updateFlashSale.mockResolvedValue({});
+      click(btn(container, 'Bật'));
+      await flush();
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: true });
+    });
+  });
+
+  describe('D7-22: tab không có quyền thì URL đổi về tab thật', () => {
+    const asStaff = (perms: string[]) => {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: perms };
+    };
+    it('KE_TOAN mở ?tab=users: tab sáng là Việc cần xử lý và URL không còn ?tab=users', async () => {
+      asStaff(['KE_TOAN']);
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      await flush();
+      expect(container.querySelector('nav[aria-label="Mục quản trị"] button[aria-current="page"]')!.textContent).toBe('Việc cần xử lý');
+      expect(window.location.search).toBe('');
+    });
+    it('nhân viên chưa có nhóm việc: ?tab=users đổi thành ?tab=waste (tab đầu được phép)', async () => {
+      asStaff([]);
+      window.history.replaceState(null, '', '/admin?tab=users');
+      await mount();
+      await flush();
+      expect(window.location.search).toBe('?tab=waste');
+    });
+    it('tab được phép giữ nguyên URL và bộ lọc kèm theo', async () => {
+      asStaff(['CSKH']);
+      window.history.replaceState(null, '', '/admin?tab=orders&pancake=attention');
+      await mount();
+      await flush();
+      expect(window.location.search).toBe('?tab=orders&pancake=attention');
+    });
+  });
+
+  describe('D7-23: tên tab đúng chức năng', () => {
+    it('"Duyệt yêu cầu rút tiền" đổi thành "Rút tiền CTV"; "Nhiệm vụ & quà đổi điểm" đổi thành "Nhiệm vụ"', async () => {
+      const { container } = await mount();
+      const items = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+      expect(items).toContain('Rút tiền CTV');
+      expect(items).toContain('Nhiệm vụ');
+      expect(items).not.toContain('Duyệt yêu cầu rút tiền');
+      expect(items).not.toContain('Nhiệm vụ & quà đổi điểm');
+    });
+  });
+
+  describe('D7-19: lỗi tải có nút Thử lại', () => {
+    it('tab Cấu hình lỗi: hiện nút "Thử lại", bấm thì tải lại và dựng danh sách', async () => {
+      mocks.configFails = true;
+      window.history.replaceState(null, '', '/admin?tab=config');
+      const { container } = await mount();
+      const retry = btn(container, 'Thử lại');
+      expect(retry).toBeDefined();
+      mocks.configFails = false;
+      mocks.config = [{ key: 'shipping.flat_fee', value: 19000, description: 'Phí', category: 'shipping' }];
+      click(retry);
+      await flush();
+      expect(container.textContent).toContain('shipping.flat_fee');
+      expect(btn(container, 'Thử lại')).toBeUndefined();
+    });
+  });
+
+  describe('P3 GrantRoleForm: tra vai trò hiện tại của SĐT trước khi nêu hậu quả', () => {
+    const grant = async (phone: string, role: string) => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const r = await mount();
+      typeText(r.container.querySelector('input[placeholder^="SĐT"]'), phone);
+      selectValue(r.container.querySelector('select[aria-label="Vai trò cần cấp"]'), role);
+      click(btn(r.container, 'Cấp quyền'));
+      await flush();
+      return (document.body.querySelector('[role="alertdialog"]')?.textContent ?? '');
+    };
+    it('SĐT là ADMIN đổi sang STAFF: hộp nói rõ "Quản trị → Nhân viên" và mất toàn quyền quản trị', async () => {
+      mocks.users = [{ id: 'u7', fullName: 'Sếp', phone: '0966666666', role: 'ADMIN', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      const text = await grant('0966666666', 'STAFF');
+      expect(text).toContain('Hiện là Quản trị → đổi sang Nhân viên');
+      expect(text).toContain('mất toàn quyền quản trị');
+      expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0966666666']);
+      await answerDialog(false);
+    });
+    it('SĐT hiện là CUSTOMER đổi sang DEALER: không nhắc mất nhóm việc hay quyền quản trị', async () => {
+      mocks.users = [{ id: 'u8', fullName: 'An', phone: '0977777777', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      typeText(container.querySelector('input[placeholder^="SĐT"]'), '0977777777');
+      selectValue(container.querySelector('select[aria-label="Vai trò cần cấp"]'), 'DEALER');
+      await flush();
+      selectValue(container.querySelector('select[aria-label="Bậc đại lý"]'), 't1');
+      click(btn(container, 'Cấp quyền'));
+      await flush();
+      const text = document.body.querySelector('[role="alertdialog"]')?.textContent ?? '';
+      expect(text).toContain('Hiện là Khách hàng → đổi sang Đại lý');
+      expect(text).not.toContain('mất toàn bộ nhóm việc');
+      expect(text).not.toContain('mất toàn quyền quản trị');
+      await answerDialog(false);
+    });
+    it('không tra được SĐT: giữ câu điều kiện, gồm cả "Nếu tài khoản đang là Quản trị"', async () => {
+      const text = await grant('0955555555', 'CUSTOMER');
+      expect(text).not.toContain('Hiện là');
+      expect(text).toContain('Nếu tài khoản đang là Quản trị: mất toàn quyền quản trị');
+      expect(text).toContain('mất toàn bộ nhóm việc');
+      await answerDialog(false);
+    });
+  });
+
+  describe('P3 DealerRow: lý do từ chối không mất khi API báo lỗi', () => {
+    it('API trả lỗi thì hộp mở lại với lý do đã gõ và dòng lỗi; gửi lại được', async () => {
+      window.history.replaceState(null, '', '/admin?tab=dealers');
+      const { container } = await mount();
+      mocks.reviewDealerApp.mockRejectedValueOnce(new Error('Đơn đã được xử lý.'));
+      click(btn(container, 'Từ chối'));
+      await flush();
+      await answerDialog(true, 'Ảnh CCCD bị mờ');
+      const dialog = document.body.querySelector('[role="alertdialog"]')!;
+      expect(dialog).not.toBeNull();
+      expect(dialog.querySelector('textarea')!.value).toBe('Ảnh CCCD bị mờ');
+      expect(dialog.querySelector('[data-input-error]')!.textContent).toBe('Đơn đã được xử lý.');
+      mocks.reviewDealerApp.mockResolvedValueOnce({});
+      await answerDialog(true);
+      expect(mocks.reviewDealerApp).toHaveBeenCalledTimes(2);
+      expect(mocks.reviewDealerApp).toHaveBeenLastCalledWith('d1', false, undefined, 'Ảnh CCCD bị mờ');
+    });
+  });
+
+  describe('D7-26: bảng đơn hàng không bẻ dòng cột trạng thái và nút', () => {
+    it('tiêu đề "Trạng thái", "Chi tiết / Cập nhật", huy hiệu trạng thái và nút "Xem & Sửa" có whitespace-nowrap', async () => {
+      mocks.orders = [
+        { id: 'o1', code: 'TT1', total: 100000, status: 'SHIPPING', paymentMethod: 'COD', createdAt: '2026-10-01T03:00:00.000Z', user: { fullName: 'Khách', phone: '0900000000' } },
+      ];
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const { container } = await mount();
+      const th = (t: string) => [...container.querySelectorAll('th')].find((x) => x.textContent === t)!;
+      expect(th('Trạng thái').className).toContain('whitespace-nowrap');
+      expect(th('Chi tiết / Cập nhật').className).toContain('whitespace-nowrap');
+      expect(btn(container, 'Xem & Sửa').className).toContain('whitespace-nowrap');
+      const badges = [...container.querySelectorAll('tbody span')].filter((x) => x.textContent === 'Đang vận chuyển');
+      expect(badges.length).toBeGreaterThan(0);
+      for (const b of badges) expect(b.className).toContain('whitespace-nowrap');
+    });
+  });
+
+  describe('D7-25 / D8-10: ô nhập có nhãn nhìn thấy', () => {
+    it('voucher: mỗi ô số có nhãn "Đơn tối thiểu (đ)", "Giảm tối đa (đ)", "Tổng lượt dùng", "Lượt / khách", "Giá trị"', async () => {
+      window.history.replaceState(null, '', '/admin?tab=coupons');
+      const { container } = await mount();
+      const form = container.querySelector('[data-testid="coupon-create-form"]')!;
+      for (const t of ['Mã voucher', 'Giá trị', 'Đơn tối thiểu (đ)', 'Giảm tối đa (đ)', 'Tổng lượt dùng', 'Lượt / khách', 'Bắt đầu từ ngày', 'Hết hạn ngày']) {
+        const l = labelOf(form, t);
+        expect(l, t).toBeDefined();
+        expect(l!.querySelector('input'), t).not.toBeNull();
+      }
+    });
+
+    it('Nhãn hàng: "Ảnh bìa (URL)" thay "Cover URL", mọi ô thông tin nhãn có nhãn nhìn thấy', async () => {
+      mocks.brands = [{
+        id: 'b1', slug: 'dua', name: 'Dừa', tagline: null, logoUrl: null, coverUrl: null, story: null, origin: null,
+        certifications: [], isVerified: false, isPublished: true, followerCount: 0,
+      }];
+      window.history.replaceState(null, '', '/admin?tab=brands');
+      const { container } = await mount();
+      click(btn(container, 'Quản lý'));
+      await flush();
+      expect(container.querySelector('[placeholder="Cover URL"]')).toBeNull();
+      for (const t of ['Logo (URL)', 'Ảnh bìa (URL)', 'Tagline', 'Nguồn gốc', 'Câu chuyện thương hiệu']) {
+        expect(labelOf(container, t), t).toBeDefined();
+      }
+    });
+
+    it('FAQ: "Thứ tự hiển thị" có nhãn nhìn thấy dù ô đang mang giá trị 0', async () => {
+      window.history.replaceState(null, '', '/admin?tab=faqs');
+      const { container } = await mount();
+      const l = labelOf(container, 'Thứ tự hiển thị');
+      expect(l).toBeDefined();
+      expect((l!.querySelector('input') as HTMLInputElement).value).toBe('0');
+    });
+
+    it('form cấp quyền: ô SĐT có nhãn nhìn thấy, placeholder ngắn không bị cắt', async () => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      const l = labelOf(container, 'SĐT cần cấp quyền');
+      expect(l).toBeDefined();
+      expect(l!.querySelector('input')!.getAttribute('placeholder')!.length).toBeLessThanOrEqual(24);
+    });
+
+    it('Content Kit đã tải và đợt Flash Sale đang mở sửa: mọi ô có tên truy cập thật', async () => {
+      mocks.kit = { id: 'k1', productId: 'p1', captions: ['Caption 1'], usps: ['USP 1'], faqs: [{ q: 'Bảo quản?', a: 'Nơi khô ráo' }], videoUrls: [], updatedAt: '' };
+      window.history.replaceState(null, '', '/admin?tab=contentKit');
+      const kit = await mount();
+      typeInto(kit.container.querySelector('input[type="search"]'), 'dừa');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 320));
+      });
+      await flush();
+      click(kit.container.querySelector('button[role="option"]'));
+      click(btn(kit.container, 'Tải'));
+      await flush();
+      expect(kit.container.querySelectorAll('textarea').length).toBeGreaterThan(0);
+      expect(unnamedControls(kit.container).filter((d) => /^<(input|select|textarea)/.test(d))).toEqual([]);
+      kit.unmount();
+      mounted = [];
+
+      mocks.flashSales = [{
+        id: 's1', title: 'Flash', startAt: '2026-10-17T01:00:00.000Z', endAt: '2099-10-18T16:00:00.000Z', isActive: false,
+        items: [{ id: 'i1', variationId: 'v1', flashPrice: 99000, quota: 20, soldCount: 3, perUserLimit: 2 }],
+      }];
+      window.history.replaceState(null, '', '/admin?tab=flashSales');
+      const sale = await mount();
+      click(btn(sale.container, 'Sửa đợt'));
+      await flush();
+      expect(unnamedControls(sale.container).filter((d) => /^<(input|select|textarea)/.test(d))).toEqual([]);
+    });
+
+    const FIELD_TABS = ['dealers', 'orders', 'returns', 'dashboard', 'users', 'coupons', 'brands', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'config'];
+    it.each(FIELD_TABS)('tab %s: mọi ô nhập/chọn có tên truy cập thật (placeholder không tính)', async (tab) => {
+      mocks.brands = [{
+        id: 'b1', slug: 'dua', name: 'Dừa', tagline: null, logoUrl: null, coverUrl: null, story: null, origin: null,
+        certifications: [{ code: 'ORG', label: 'Hữu cơ', proofUrl: null, verified: false }], isVerified: false, isPublished: true, followerCount: 0,
+      }];
+      mocks.faqs = [{ id: 'f1', category: 'Vận chuyển', question: 'Ship bao lâu?', answer: '2-3 ngày', sortOrder: 2, isActive: true }];
+      mocks.quickReplies = [{ id: 'q1', category: null, title: 'Chào', content: 'Xin chào', keywords: ['chào'], isGreeting: false, sortOrder: 1, isActive: true }];
+      mocks.courses = [{
+        id: 'c1', title: 'Bán hàng', description: null, level: 'BEGINNER', sortOrder: 1, isActive: true,
+        lessons: [{ id: 'l1', title: 'Giới thiệu', contentType: 'VIDEO', videoUrl: 'https://v.test/1', body: null, sortOrder: 1 }],
+      }];
+      window.history.replaceState(null, '', `/admin?tab=${tab}`);
+      const { container } = await mount();
+      for (const label of ['Quản lý', 'Sửa']) for (const b of [...container.querySelectorAll('button')].filter((x) => x.textContent === label)) { click(b); await flush(); }
+      const unnamed = unnamedControls(container).filter((d) => /^<(input|select|textarea)/.test(d));
+      expect(unnamed).toEqual([]);
+    });
   });
 });
