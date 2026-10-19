@@ -126,6 +126,7 @@ export default function CheckoutPage() {
   const sentMethod = useRef('');
   // Bản sao của cờ đóng băng trong state: giỏ nạp lại thành rỗng thì form và nút Đặt hàng biến mất, màn giỏ trống phải còn lối gửi lại.
   const [maybePlaced, setMaybePlaced] = useState(false);
+  const [placeNotice, setPlaceNotice] = useState<'unknown' | 'previous' | null>(null);
   const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
     choiceRev.current += 1;
     fn(...args);
@@ -291,6 +292,7 @@ export default function CheckoutPage() {
       // Refresh auth store (user.walletBalance / pointsBalance dùng ở header/checkout) để UI đồng bộ.
       void useAuthStore.getState().restore().catch(() => undefined);
       orderKeys.current.reset(); // đơn sau là đơn mới
+      setPlaceNotice(null);
       clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
       if ((o.paymentMethod ?? sentMethod.current) === 'BANK_TRANSFER') {
@@ -303,6 +305,7 @@ export default function CheckoutPage() {
       if (e instanceof Error && e.message === PREVIOUS_MAYBE_PLACED) {
         unknownAttempt.current = null;
         setMaybePlaced(false);
+        setPlaceNotice('previous');
         openSnackbar({ text: PREVIOUS_MAYBE_PLACED, type: 'error' });
         return;
       }
@@ -312,6 +315,7 @@ export default function CheckoutPage() {
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
       else if (!rejectedBeforeService) unknownAttempt.current = null;
       setMaybePlaced(unknownAttempt.current !== null);
+      setPlaceNotice(isOutcomeUnknown(e) ? 'unknown' : null);
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi
       // server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) {
@@ -684,7 +688,8 @@ export default function CheckoutPage() {
             onClick={() => {
               if (m.disabled) return;
               haptic('light');
-              chosen(setPayment)(m.value);
+              // Chạm lại đúng cách đang chọn không phải là đổi lựa chọn: không được mở băng của lần đặt chưa rõ kết quả.
+              if (m.value !== payment) chosen(setPayment)(m.value);
             }}
             flex
             alignItems="center"
@@ -1030,6 +1035,23 @@ export default function CheckoutPage() {
           </>
         )}
       </Box>
+
+      {placeNotice && (
+        <Box p={4} data-testid="place-notice" role="alert" style={{ background: 'var(--color-bg-surface)' }}>
+          {placeNotice === 'unknown' ? (
+            <Text size="small">
+              Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem Đơn của tôi.
+            </Text>
+          ) : (
+            <Text size="small">
+              Nếu đơn trước chưa có trong Đơn của tôi, bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
+            </Text>
+          )}
+          <Button size="small" variant="secondary" style={{ marginTop: 8 }} onPress={() => navigate('/orders')}>
+            Đơn của tôi
+          </Button>
+        </Box>
+      )}
 
       {/* ── Sticky CTA ── */}
       <StickyActionBar

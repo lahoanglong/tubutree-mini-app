@@ -1392,6 +1392,39 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
     expect(second![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
   });
 
+  it('lỗi mạng rồi khách chạm lại đúng phương thức đang chọn: không mở băng, bấm lại gửi đúng body và key cũ, không báo PREVIOUS', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError()).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    mount();
+    await click(1);
+    const selected = within(paymentBox()).getAllByRole('radio').find((r) => r.getAttribute('aria-checked') === 'true')!;
+    fireEvent.click(selected);
+    await click(2);
+    expect(mocks.placeOrder.mock.calls[1]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
+    expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: PREVIOUS, type: 'error' });
+  });
+
+  it('lỗi mạng: khối báo cố định nói đơn có thể đã được ghi nhận và có lối sang Đơn của tôi', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError());
+    mount();
+    await click(1);
+    const notice = await screen.findByTestId('place-notice');
+    expect(notice).toHaveTextContent('Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại');
+    fireEvent.click(within(notice).getByRole('button', { name: 'Đơn của tôi' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/orders');
+  });
+
+  it('chặn PREVIOUS: khối báo cố định nói bấm lần nữa sẽ đặt đơn mới, có lối sang Đơn của tôi', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError());
+    mount();
+    await click(1);
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    fireEvent.click(await screen.findByText(/Đặt hàng · /));
+    const notice = await screen.findByTestId('place-notice');
+    await waitFor(() => expect(notice).toHaveTextContent('bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại'));
+    expect(within(notice).getByRole('button', { name: 'Đơn của tôi' })).toBeInTheDocument();
+  });
+
   it('đặt thành công sau lần chưa rõ kết quả: hết đóng băng, màn thành công hiện', async () => {
     mocks.placeOrder.mockRejectedValueOnce(networkError()).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
     mount();
