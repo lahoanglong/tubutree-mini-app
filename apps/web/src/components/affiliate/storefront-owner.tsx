@@ -22,7 +22,7 @@ const BAR = 'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg
 
 function GuestLink({ label }: { label: string }) {
   return (
-    <Link href={guestHref()} className={`${ui.btnSecondary} max-md:w-full`}>
+    <Link href={guestHref()} className={`${ui.btnSecondary} max-md:w-full max-md:border-forest-600 max-md:bg-forest-600 max-md:text-stone-0 max-md:hover:bg-forest-700`}>
       <ShoppingBag className="mr-1.5 h-4 w-4" aria-hidden="true" />
       {label}
     </Link>

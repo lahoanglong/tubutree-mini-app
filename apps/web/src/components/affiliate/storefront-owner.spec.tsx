@@ -30,6 +30,14 @@ describe('StorefrontAction', () => {
     expect(mounted.container.querySelector('button')!.className).toContain('max-md:w-full');
   });
 
+  it('khách ở điện thoại: nút Xem sản phẩm xanh đậm như Button mặc định của Mini App', () => {
+    state.ref = undefined;
+    mounted = render(<StorefrontAction slug="an" title="An" referralCode="ctv123" />);
+    const link = mounted.container.querySelector('a')!;
+    expect(link.className).toContain('max-md:bg-forest-600');
+    expect(link.className).toContain('max-md:text-stone-0');
+  });
+
   it('chủ gian hàng: nút Chia sẻ gian hàng mở sheet kèm mã giới thiệu, không có "Thêm sản phẩm"', () => {
     mounted = render(<StorefrontAction slug="an" title="An" referralCode="ctv123" />);
     expect(mounted.container.textContent).not.toContain('Thêm sản phẩm');
