@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Giỏ ở khổ điện thoại phải là Mini App (apps/miniapp/src/pages/cart.tsx): chữ, cách đếm, thẻ mã, thanh dính đáy.
 // jsdom không có media query nên chỗ chỉ-điện-thoại kiểm bằng lớp `max-md:`/`md:`.
@@ -101,6 +101,14 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
     expect(bar(c).textContent).toContain('Mua thêm 211.000đ để được miễn phí ship');
     const fill = bar(c).querySelector<HTMLElement>('[data-testid="freeship-fill"]')!;
     expect(fill.style.width).toBe('58%');
+  });
+
+  it('bỏ chọn hết: thanh dính vẫn nhắc đúng ngưỡng freeship (như StickySummary của Mini App), không "Mua thêm 0đ"', async () => {
+    state.cart = cartOf([line({ id: 'a', quantity: 1, total: 289000 }), line({ id: 'b', quantity: 1, total: 289000 })], { subtotal: 578000, freeship: true });
+    const c = await mount();
+    click(c.querySelector('input[aria-label="Chọn tất cả sản phẩm"]'));
+    await flush(3);
+    expect(bar(c).textContent).toContain('Mua thêm 500.000đ để được miễn phí ship');
   });
 
   it('các khoản giảm nằm trên thanh dính, tạm tính là số đã giảm', async () => {

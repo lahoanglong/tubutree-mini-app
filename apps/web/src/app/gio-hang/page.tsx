@@ -164,6 +164,7 @@ export default function CartPage() {
         ? 'Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn rồi thanh toán.'
         : null;
   // Thanh tiến độ freeship theo phần đang chọn như StickySummary của Mini App; có hàng gian hàng tự giao thì chỉ hiện khi phần Tubu giao > 0.
+  const barRemaining = cart ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
   const showFreeship = !!cart && (!hasMerchant || freeshipBase > 0);
   const freeshipPct = cart && cart.freeshipThreshold > 0 ? Math.min(100, Math.round((freeshipBase / cart.freeshipThreshold) * 100)) : 100;
   const showBar = !cartQ.isLoading && !cartQ.isError && !!cart && cart.items.length > 0;
@@ -490,7 +491,7 @@ export default function CartPage() {
                     ? hasMerchant
                       ? 'Phần hàng Tubu Tree giao được miễn phí ship'
                       : 'Bạn được miễn phí ship 🌿'
-                    : `Mua thêm ${formatVnd(remainingFreeship)} để được miễn phí ship${hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}`}
+                    : `Mua thêm ${formatVnd(barRemaining)} để được miễn phí ship${hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}`}
                 </div>
                 <div aria-hidden="true" className="mt-[5px] h-[5px] overflow-hidden rounded-full bg-stone-200">
                   <div
