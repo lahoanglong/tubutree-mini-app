@@ -679,3 +679,59 @@ describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)
     expect(c.querySelector('h1')!.className).toContain('max-md:pl-12');
   });
 });
+
+describe('/dai-ly — nút chính navy ở điện thoại như inkButton của Mini App', () => {
+  const INK = 'max-md:enabled:bg-[var(--color-dealer-ink)]';
+
+  it('Ghi công nợ, Lưu mẫu, Thêm vào đơn (dán đơn) đều navy', async () => {
+    await mount();
+    click(plus());
+    expect(button('Ghi công nợ').className).toContain(INK);
+    click(button('Lưu mẫu'));
+    await flush();
+    expect(Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((b) => b.textContent === 'Lưu mẫu')!.className).toContain(INK);
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Đóng"]')?.click();
+    click(button('Dán đơn'));
+    await flush();
+    expect(button('Thêm vào đơn').className).toContain(INK);
+  });
+
+  it('Gửi hồ sơ đăng ký navy', async () => {
+    setup({ '/dealer/me': { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 } });
+    await mount();
+    expect(button('Gửi hồ sơ đăng ký').className).toContain(INK);
+  });
+
+  it('Báo đã CK navy', async () => {
+    setup({ '/dealer/credit-ledger': { balance: 3_000_000, entries: [] } });
+    await mount('tab=credit');
+    expect(button('Báo đã CK').className).toContain(INK);
+  });
+
+  it('Báo cáo: thẻ doanh số quý gradient navy, thưởng và thanh tiến độ dùng màu nhấn đại lý, Yêu cầu nhận thưởng navy', async () => {
+    setup({
+      '/dealer/quarterly-report': {
+        quarter: 'Q3/2026', periodStart: '', periodEnd: '', revenue: 120_000_000, orderCount: 14, pendingRevenue: 0, pendingOrderCount: 0,
+        bonusPct: 2, bonusAmount: 2_400_000, nextTier: { min: 200_000_000, pct: 3, toNext: 80_000_000 }, tiers: [{ min: 100_000_000, pct: 2 }],
+      },
+      '/dealer/rewards': {
+        claimGraceDays: 30,
+        rewards: [{
+          id: 'rw1', type: 'TOUR', title: 'Tour', description: null, threshold: 1, period: 'QUARTER', periodKey: 'Q3/2026', periodLabel: 'Quý 3/2026',
+          isCurrentPeriod: true, volume: 1, pendingVolume: 0, achieved: true, toGo: 0, claimStatus: null, claimId: null, rejectionReason: null,
+          claimDeadline: '2026-10-30T17:00:00.000Z', canClaim: true,
+        }],
+      },
+    });
+    await mount('tab=report');
+    const hero = document.querySelector('section[aria-label="Doanh số Q3/2026"]')!;
+    expect(hero.className).toContain('max-md:from-[var(--color-dealer-ink)]');
+    expect(hero.className).toContain('max-md:to-[var(--color-dealer-ink-soft)]');
+    expect(hero.querySelector('b')!.className).toContain('max-md:text-[var(--color-dealer-accent)]');
+    expect(hero.querySelector('[role="progressbar"] > div')!.className).toContain('max-md:bg-[var(--color-dealer-accent)]');
+    expect(button('Yêu cầu nhận thưởng').className).toContain(INK);
+    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
+    expect(css).toContain('--color-dealer-ink-soft: #2e3b5e;');
+    expect(css).toContain('--color-dealer-accent: var(--forest-300);');
+  });
+});

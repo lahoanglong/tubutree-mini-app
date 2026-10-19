@@ -95,7 +95,7 @@ export function RewardsCard() {
                       setNotice(null);
                       claimMut.mutate({ rewardId: r.id, periodKey: r.periodKey });
                     }}
-                    className={`${ui.btnPrimary} flex-none`}
+                    className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}
                   >
                     {pendingKey === rowKey ? 'Đang gửi...' : 'Yêu cầu nhận thưởng'}
                   </button>

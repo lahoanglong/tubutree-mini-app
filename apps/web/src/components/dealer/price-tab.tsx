@@ -207,7 +207,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${skin.btnSecondary} flex-1`}>
           Trả trước
         </button>
-        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} max-md:bg-[var(--color-dealer-ink)] max-md:hover:bg-[var(--color-dealer-ink)] flex-1`}>
+        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}>
           {placing ? 'Đang đặt...' : 'Ghi công nợ'}
         </button>
       </div>
@@ -310,7 +310,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         onClose={() => setSaveOpen(false)}
         title="Lưu mẫu đơn"
         footer={
-          <button type="button" disabled={!tplName.trim() || saveTpl.isPending} onClick={() => saveTpl.mutate()} className={`${ui.btnPrimary} w-full`}>
+          <button type="button" disabled={!tplName.trim() || saveTpl.isPending} onClick={() => saveTpl.mutate()} className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}>
             {saveTpl.isPending ? 'Đang lưu...' : 'Lưu mẫu'}
           </button>
         }
@@ -328,7 +328,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         onClose={() => setPasteOpen(false)}
         title="Đặt nhanh — dán từ Excel/Sheet"
         footer={
-          <button type="button" disabled={!pasteText.trim() || priceQ.isLoading} onClick={applyPaste} className={`${ui.btnPrimary} w-full`}>
+          <button type="button" disabled={!pasteText.trim() || priceQ.isLoading} onClick={applyPaste} className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}>
             Thêm vào đơn
           </button>
         }

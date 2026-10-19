@@ -69,7 +69,7 @@ export function CreditTab() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
-          <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} flex-none`}>
+          <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}>
             {pay.isPending ? 'Đang gửi...' : 'Báo đã CK'}
           </button>
         </div>

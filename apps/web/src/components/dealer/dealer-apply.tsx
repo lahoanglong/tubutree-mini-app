@@ -9,6 +9,7 @@ import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { applyPitch, pendingBody } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { DealerShell, errText } from './dealer-shell';
@@ -107,7 +108,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
               {errText(mut.error)}
             </p>
           )}
-          <button type="submit" disabled={!valid || mut.isPending} className={`${ui.btnPrimary} mt-2 w-full`}>
+          <button type="submit" disabled={!valid || mut.isPending} className={`${ui.btnPrimary} ${skin.dealerInkBtn} mt-2 w-full`}>
             {mut.isPending ? 'Đang gửi...' : 'Gửi hồ sơ đăng ký'}
           </button>
         </form>

@@ -28,11 +28,11 @@ export function ReportTab() {
   return (
     <div className="grid gap-4 pb-6 lg:grid-cols-2 lg:items-start">
       <div className="flex flex-col gap-4">
-        <section aria-label={`Doanh số ${d.quarter}`} className="rounded-card bg-gradient-to-br from-stone-900 to-forest-800 p-4 text-stone-0">
+        <section aria-label={`Doanh số ${d.quarter}`} className="rounded-card bg-gradient-to-br from-stone-900 to-forest-800 p-4 text-stone-0 max-md:from-[var(--color-dealer-ink)] max-md:to-[var(--color-dealer-ink-soft)]">
           <div className="text-xs text-stone-100">Doanh số {d.quarter}</div>
           <div className="mt-0.5 text-3xl font-bold tabular-nums">{formatVnd(d.revenue)}</div>
           <div className="mt-0.5 text-xs text-stone-100">
-            {d.orderCount} đơn đã chốt · Thưởng hiện tại {d.bonusPct}% = <b className="text-promo-solid">{formatVnd(d.bonusAmount)}</b>
+            {d.orderCount} đơn đã chốt · Thưởng hiện tại {d.bonusPct}% = <b className="text-promo-solid max-md:text-[var(--color-dealer-accent)]">{formatVnd(d.bonusAmount)}</b>
           </div>
           {d.pendingRevenue > 0 && (
             <div className="mt-0.5 text-xs text-stone-100">
@@ -49,7 +49,7 @@ export function ReportTab() {
                 aria-valuenow={progress}
                 className="h-2 overflow-hidden rounded-full bg-stone-0/20"
               >
-                <div className="h-full rounded-full bg-promo-solid" style={{ width: `${progress}%` }} />
+                <div className="h-full rounded-full bg-promo-solid max-md:bg-[var(--color-dealer-accent)]" style={{ width: `${progress}%` }} />
               </div>
               <div className="mt-1.5 text-xs text-stone-100">
                 Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {d.nextTier.pct}%
