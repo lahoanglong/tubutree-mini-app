@@ -107,12 +107,14 @@ export default function EditProfilePage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      // API chỉ cho đặt ngày sinh một lần và từ chối cả khi gửi lại đúng giá trị cũ, nên đã có thì không gửi.
+      const dobToSend = !meQ.data?.dob && dob ? dob : undefined;
       try {
         const res = await updateMe({
           fullName: fullName.trim() || undefined,
           email: email.trim() || undefined,
           avatarUrl: avatarUrl ?? undefined,
-          dob: dob || undefined,
+          dob: dobToSend,
         });
         return { res, avatarSkipped: false };
       } catch (err: unknown) {
@@ -122,7 +124,7 @@ export default function EditProfilePage() {
           const res = await updateMe({
             fullName: fullName.trim() || undefined,
             email: email.trim() || undefined,
-            dob: dob || undefined,
+            dob: dobToSend,
           });
           return { res, avatarSkipped: true };
         }
@@ -262,6 +264,7 @@ export default function EditProfilePage() {
               <input
                 type="date"
                 value={dob}
+                readOnly={Boolean(meQ.data?.dob)}
                 onChange={(e) => setDob(e.target.value)}
                 style={{
                   width: '100%',
@@ -283,6 +286,11 @@ export default function EditProfilePage() {
                 Nhận mã giảm giá quà tặng vào tháng sinh nhật.
               </Text>
             </div>
+            {meQ.data?.dob ? (
+              <Text variant="caption" tone="tertiary" style={{ marginTop: 4, display: 'block' }}>
+                Ngày sinh chỉ đặt được một lần, cần chỉnh lại thì liên hệ CSKH.
+              </Text>
+            ) : null}
           </div>
 
           <Button

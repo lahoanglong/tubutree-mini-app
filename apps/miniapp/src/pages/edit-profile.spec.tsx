@@ -111,6 +111,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
   });
 
   it('lưu thành công: gửi tên/email/ngày sinh đã cắt khoảng trắng, báo thành công, đồng bộ auth store, quay lại', async () => {
+    mocks.getMe.mockResolvedValue({ ...ME, dob: null });
     renderPage();
     fireEvent.change(await screen.findByLabelText('Họ và tên'), { target: { value: '  Lan B  ' } });
     fireEvent.change(screen.getByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
@@ -134,8 +135,61 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     await screen.findByLabelText('Họ và tên');
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
     await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
-    expect(mocks.updateMe).toHaveBeenLastCalledWith({ fullName: 'Lan', email: 'lan@tubu.vn', dob: '1990-05-01' });
+    expect(mocks.updateMe).toHaveBeenLastCalledWith({ fullName: 'Lan', email: 'lan@tubu.vn', dob: undefined });
+    expect(mocks.updateMe.mock.calls[1]![0]).not.toHaveProperty('avatarUrl');
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(-1));
+  });
+
+  describe('ngày sinh chỉ đặt được một lần (API từ chối gửi lại)', () => {
+    const NOTE = 'Ngày sinh chỉ đặt được một lần, cần chỉnh lại thì liên hệ CSKH.';
+
+    it('đã có ngày sinh: lưu đổi tên không gửi dob', async () => {
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Họ và tên'), { target: { value: 'Lan C' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+      expect(mocks.updateMe.mock.calls[0]![0].fullName).toBe('Lan C');
+      expect(mocks.updateMe.mock.calls[0]![0].dob).toBeUndefined();
+    });
+
+    it('đã có ngày sinh, server chê avatarUrl: lần gửi lại cũng không có dob', async () => {
+      mocks.updateMe.mockRejectedValueOnce(new Error('avatarUrl must be a URL')).mockResolvedValueOnce({ avatarUrl: null });
+      renderPage();
+      await screen.findByLabelText('Họ và tên');
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+      expect(mocks.updateMe.mock.calls[0]![0].dob).toBeUndefined();
+      expect(mocks.updateMe.mock.calls[1]![0].dob).toBeUndefined();
+    });
+
+    it('chưa có ngày sinh, có nhập: gửi dob, cả khi gửi lại không kèm avatarUrl', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      mocks.updateMe.mockRejectedValueOnce(new Error('avatarUrl must be a URL')).mockResolvedValueOnce({ avatarUrl: null });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+      expect(mocks.updateMe.mock.calls[0]![0].dob).toBe('1991-02-03');
+      expect(mocks.updateMe.mock.calls[1]![0].dob).toBe('1991-02-03');
+    });
+
+    it('chưa có ngày sinh, không nhập: không gửi dob; ô nhập sửa được và không có câu nhắc', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      const input = (await screen.findByLabelText('Ngày sinh')) as HTMLInputElement;
+      expect(input.readOnly).toBe(false);
+      expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+      expect(mocks.updateMe.mock.calls[0]![0].dob).toBeUndefined();
+    });
+
+    it('đã có ngày sinh: ô chỉ đọc và có câu nhắc liên hệ CSKH', async () => {
+      renderPage();
+      const input = (await screen.findByLabelText('Ngày sinh')) as HTMLInputElement;
+      expect(input.readOnly).toBe(true);
+      expect(screen.getByText(NOTE)).toBeInTheDocument();
+    });
   });
 
   it('lưu lỗi khác → báo lỗi, ở lại trang', async () => {
