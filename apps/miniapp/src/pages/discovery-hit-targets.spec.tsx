@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
 vi.mock('../services/shop-api', () => ({
+  getPublicConfig: vi.fn().mockResolvedValue({ aiAdvisorEnabled: true }),
   fetchBrands: vi.fn().mockResolvedValue([{ brand: 'Tubu', count: 3 }, { brand: 'Cỏ Mềm', count: 2 }]),
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
   fetchProductsBySlugs: vi.fn().mockResolvedValue([{ id: 'id-p1', slug: 'p1', brand: 'Tubu', name: 'Xà phòng', thumbnail: null, basePrice: 45000, salePrice: null, isFeatured: false, inStock: true }]),
@@ -166,6 +167,7 @@ describe('vùng chạm >= 44px — Trang chủ / Danh mục / Tìm kiếm', () =
       </>,
     );
     await screen.findByRole('button', { name: 'Tubu' });
+    await screen.findByRole('button', { name: 'Hỏi trợ lý AI 24/7' });
     expect(container.querySelectorAll(INTERACTIVE).length).toBeGreaterThanOrEqual(8);
     expect(undersized(container)).toEqual([]);
   });

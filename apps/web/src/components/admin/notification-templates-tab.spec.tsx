@@ -112,4 +112,35 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     expect(row.textContent).toContain('ZNS lỗi -118: user not exist');
     expect(container.querySelector('[data-template="ORDER_CONFIRMED"] [data-zns-failure]')).toBeNull();
   });
+
+  it('nhân viên Marketing: chỉ thấy mẫu khuyến mãi, sửa nội dung được, không đổi kênh / mã mẫu ZNS', async () => {
+    const promo = {
+      id: 'nt-flash',
+      code: 'FLASH_STARTING',
+      channel: 'INAPP',
+      zaloTemplateId: null,
+      bodyTemplate: 'Flash sale sắp mở',
+      delivery: 'INAPP',
+      sent30d: { INAPP: 5, ZNS: 0 },
+      staffEditable: true,
+    };
+    const m = mockFetch({
+      '/admin/notification-templates/': { body: { code: 'FLASH_STARTING' } },
+      '/admin/notification-templates': { body: [...TEMPLATES.map((t) => ({ ...t, staffEditable: false })), promo] },
+    });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<NotificationTemplatesTab canEditAll={false} />);
+    await flush();
+    expect(container.querySelector('[data-template="ORDER_CONFIRMED"]')).toBeNull();
+    expect(container.textContent).toContain('Mẫu đơn hàng, tiền, đối tác chỉ quản trị viên sửa');
+    const row = container.querySelector<HTMLElement>('[data-template="FLASH_STARTING"]')!;
+    expect(row.querySelector<HTMLSelectElement>('select[name="channel"]')!.disabled).toBe(true);
+    expect(row.querySelector<HTMLInputElement>('input[name="zaloTemplateId"]')!.disabled).toBe(true);
+    typeInto(row.querySelector('textarea[name="bodyTemplate"]'), 'Flash sale 20h tối nay');
+    click(byText(row, 'button', 'Lưu'));
+    await flush();
+    const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
+    expect(patch.url).toContain('/admin/notification-templates/FLASH_STARTING');
+    expect(JSON.parse(String(patch.init!.body))).toMatchObject({ bodyTemplate: 'Flash sale 20h tối nay', channel: 'INAPP' });
+  });
 });

@@ -1,5 +1,6 @@
 import type { ClientEventName } from '@tubutree/shared-types';
 import { api } from './api';
+import { getSessionAttribution, sessionEntrySource } from '../utils/entry-source';
 
 interface QueuedEvent {
   eventId: string;
@@ -8,6 +9,7 @@ interface QueuedEvent {
   platform: 'miniapp';
   props: Record<string, unknown>;
   entrySource?: string;
+  campaign?: string;
   notificationId?: string;
   refCode?: string;
   storefrontSlug?: string;
@@ -30,16 +32,31 @@ export function trackEvent(
   props: Record<string, unknown>,
   extra?: Partial<Pick<QueuedEvent, 'entrySource' | 'notificationId' | 'refCode' | 'storefrontSlug'>>,
 ): void {
+  // Nguồn của phiên (link/QR/thẻ mở app) đi kèm MỌI sự kiện để báo cáo cắt được theo kênh; nơi gọi truyền `extra` thì ưu tiên.
+  const campaign = getSessionAttribution()?.campaign;
   queue.push({
     eventId: newEventId(),
     eventName,
     occurredAt: new Date().toISOString(),
     platform,
     props,
+    entrySource: sessionEntrySource(),
+    ...(campaign ? { campaign } : {}),
     ...extra,
   });
   if (queue.length >= MAX_BATCH) void flushEventQueue();
   ensureTimer();
+}
+
+/** Phát đúng một lần lúc mở app: kèm mã giới thiệu (`?ref=`) và `utm_medium` của link, để đếm lượt mở theo link. */
+export function trackAppOpened(): void {
+  const launch = getSessionAttribution();
+  trackEvent(
+    'app_opened',
+    'miniapp',
+    launch?.medium ? { medium: launch.medium } : {},
+    launch?.refCode ? { refCode: launch.refCode } : undefined,
+  );
 }
 
 function ensureTimer(): void {

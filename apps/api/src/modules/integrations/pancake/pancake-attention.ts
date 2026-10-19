@@ -1,4 +1,5 @@
 import type { Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import { PANCAKE_ALERT_TEMPLATE, type GomdonAlertService } from '../gomdon/gomdon-alert.service';
 
@@ -16,6 +17,8 @@ export const ATTENTION_CANCEL_AFTER_HANDOVER = 'Pancake báo HUỶ nhưng đơn 
 export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Khách trả cả đơn'];
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */
 export const ATTENTION_UNDERPAID = 'Khách chuyển thiếu';
+/** Tổng tiền đơn trên Pancake khác `order.total` (đơn bị sửa trên Pancake) — tự gỡ khi tổng trùng lại. */
+export const ATTENTION_TOTAL_MISMATCH = 'Tổng tiền Pancake lệch với Tubu';
 
 /**
  * Hàng đợi "Cần xử lý Pancake": ghi lý do lên đơn + báo ADMIN in-app (cùng cơ chế PancakeProcessor.flagAttention).
@@ -41,7 +44,7 @@ export async function flagPancakeAttention(
 export const ATTENTION_SETTLED_BY_CANCEL = [ATTENTION_PUSH_FAILED, ATTENTION_CANCEL_PENDING, ATTENTION_PAYMENT_PENDING];
 
 /** Gỡ lý do do chính chiều outbound ghi (việc đã tự xong) — không đụng lý do khác (webhook, admin). */
-export async function clearPancakeAttention(prisma: PrismaService, orderId: string, prefix: string | string[]): Promise<void> {
+export async function clearPancakeAttention(prisma: Pick<Prisma.TransactionClient, 'order'>, orderId: string, prefix: string | string[]): Promise<void> {
   const prefixes = Array.isArray(prefix) ? prefix : [prefix];
   await prisma.order.updateMany({
     where: { id: orderId, OR: prefixes.map((p) => ({ pancakeAttention: { startsWith: p } })) },

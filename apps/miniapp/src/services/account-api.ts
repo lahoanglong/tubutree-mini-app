@@ -17,6 +17,8 @@ export interface LoyaltyOverview {
   expiringPoints?: { amount: number; expiresAt: string } | null;
   /** Số tháng điểm thường hết hạn kể từ ngày nhận (cấu hình). Optional: API cũ chưa trả. */
   pointExpireMonths?: number;
+  /** Hệ số server nhân khi tích điểm (1 khi chưa có hạng, dù `tier` hiển thị hạng thấp nhất). Optional: API cũ chưa trả. */
+  earnMultiplier?: number;
   /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
   pointsTotal?: number;
   /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */
@@ -27,6 +29,8 @@ export interface LoyaltyOverview {
    * nextTier.pointsToGo tính theo số này. Optional: API cũ chưa trả.
    */
   tierPoints?: number;
+  /** Tiền mua 12 tháng (đơn đã giao, trừ phần hoàn): thước đo thật của hạng. Optional: API cũ chưa trả. */
+  spent12m?: number;
   /**
    * Điểm CHƯA đổi quà được vì đơn còn có thể bị trả hàng (đơn mới giao còn trong hạn đổi/trả, đơn
    * đang có yêu cầu đổi/trả). Optional: API cũ chưa trả.
@@ -39,7 +43,15 @@ export interface LoyaltyOverview {
   /** Điểm dùng được để đổi quà ngay = số dư − lockedPoints (≥ 0). */
   redeemablePoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
-  nextTier: { id: string; name: string; minPoints: number; minSpending?: number | null; pointsToGo: number } | null;
+  nextTier: {
+    id: string;
+    name: string;
+    minPoints: number;
+    minSpending?: number | null;
+    pointsToGo: number;
+    /** Số tiền mua còn thiếu để lên hạng này; null khi hạng không có mốc chi tiêu. Optional: API cũ chưa trả. */
+    spendingToGo?: number | null;
+  } | null;
   tiers: { id: string; name: string; minPoints: number; minSpending?: number | null; multiplier: number }[];
   /** Quy tắc tích/đổi điểm từ cấu hình để giải thích trên màn Điểm Xanh. Optional: API cũ chưa trả. */
   rates?: LoyaltyRates;
@@ -65,6 +77,12 @@ export interface CouponDTO {
   endAt: string;
   /** Mã chỉ áp cho các sản phẩm này (mã mua chung); null/thiếu = mọi sản phẩm. */
   products?: { id: string; name: string }[] | null;
+}
+
+/** Khối "Quà khách mới": khách chưa có đơn (đúng định nghĩa đơn đầu của API) kèm voucher chào mừng còn dùng được. */
+export interface NewCustomerOffer {
+  isNewCustomer: boolean;
+  welcomeVoucher: Pick<CouponDTO, 'code' | 'type' | 'value' | 'minOrder' | 'endAt'> | null;
 }
 
 export interface WalletSummary {
@@ -219,6 +237,8 @@ export const getLoyalty = () => api.get<LoyaltyOverview>('/me/loyalty').then((r)
 export const getPointsTransactions = () =>
   api.get<PointsTxn[]>('/me/points/transactions').then((r) => r.data);
 export const getCoupons = () => api.get<CouponDTO[]>('/me/coupons').then((r) => r.data);
+export const getNewCustomerOffer = async () =>
+  (await takeMeBlock('newCustomerOffer')) ?? api.get<NewCustomerOffer>('/me/new-customer-offer').then((r) => r.data);
 export const getLoyaltyRewards = () => api.get<RewardCatalogResponse>('/me/loyalty/rewards').then((r) => r.data);
 export const redeemLoyaltyReward = (rewardId: string) =>
   api
@@ -262,6 +282,11 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('MISSION')) return 'Thưởng nhiệm vụ Vườn Xanh';
   if (reason.startsWith('REVIEW_DELETE')) return 'Thu hồi điểm đánh giá đã xoá';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
+  // Hậu tố _REVERSED phải đứng trước mã ngắn hơn vì cùng khớp startsWith.
+  if (reason.startsWith('PANCAKE_CHAT_ORDER_REVERSED:')) return 'Thu hồi điểm đơn đặt qua tư vấn viên';
+  if (reason.startsWith('PANCAKE_CHAT_ORDER:')) return 'Tích điểm đơn đặt qua tư vấn viên';
+  if (reason.startsWith('MARKETPLACE_ORDER_REVERSED:')) return 'Thu hồi điểm đơn mua trên sàn';
+  if (reason.startsWith('MARKETPLACE_ORDER:')) return 'Tích điểm đơn mua trên sàn';
   return 'Điều chỉnh Điểm Xanh';
 }
 
@@ -311,14 +336,20 @@ export function checkInView(s: CheckInStatusResponse): { canCheckIn: boolean; bu
 }
 
 /**
- * % tiến độ từ SÀN điểm hạng hiện tại → ngưỡng hạng kế, theo điểm XÉT HẠNG (tierPoints) — cùng
- * con số backend dùng cho pointsToGo. Tính theo số dư (có điểm danh/POS) sẽ vẽ thanh gần đầy trong
- * khi backend không bao giờ cho lên hạng.
+ * % tiến độ lên hạng kế. Hạng có mốc chi tiêu thì đo theo TIỀN MUA 12 tháng (spent12m, cùng số backend dùng để xét hạng
+ * và tính spendingToGo); hạng không có mốc chi tiêu hoặc API cũ chưa trả spent12m thì đo theo điểm XÉT HẠNG (tierPoints).
+ * Đo theo số dư (có điểm danh/POS) sẽ vẽ thanh gần đầy trong khi backend không bao giờ cho lên hạng.
  */
 export function tierProgressPercent(ov: LoyaltyOverview): number {
   const next = ov.nextTier;
   if (!next) return 100;
-  const curMin = ov.tiers.find((t) => t.id === ov.tier?.id)?.minPoints ?? 0;
+  const curTier = ov.tiers.find((t) => t.id === ov.tier?.id);
+  if (next.minSpending != null && ov.spent12m !== undefined) {
+    const curSpend = curTier?.minSpending ?? 0;
+    if (next.minSpending <= curSpend) return 100;
+    return Math.min(100, Math.max(0, Math.round(((ov.spent12m - curSpend) / (next.minSpending - curSpend)) * 100)));
+  }
+  const curMin = curTier?.minPoints ?? 0;
   if (next.minPoints <= curMin) return 100;
   const pts = ov.tierPoints ?? ov.pointsBalance;
   return Math.min(100, Math.max(0, Math.round(((pts - curMin) / (next.minPoints - curMin)) * 100)));

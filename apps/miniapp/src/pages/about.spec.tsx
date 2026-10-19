@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
   openSnackbar: vi.fn(),
   callPhone: vi.fn(),
+  openExternal: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -22,7 +23,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/api', () => ({ api: { get: mocks.apiGet }, getErrorMessage: () => 'lỗi' }));
 vi.mock('../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../services/account-api', () => ({ requestAccountDeletion: mocks.requestAccountDeletion }));
-vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn(), callPhone: mocks.callPhone }));
+vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn(), callPhone: mocks.callPhone, openExternal: mocks.openExternal }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -33,7 +34,7 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><AboutPage /></QueryClientProvider>);
 }
 
-const SUPPORT = { hotline: '0899 149 229', email: 'tubutree@gmail.com', zaloOaName: null };
+const SUPPORT = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null };
 
 describe('Trang Về Tubu Tree (C-019)', () => {
   beforeEach(() => {
@@ -49,7 +50,7 @@ describe('Trang Về Tubu Tree (C-019)', () => {
 
   it('hotline/email lấy từ cấu hình, không còn số mẫu 1900 1234; chưa có Zalo OA thì ẩn dòng', async () => {
     renderPage();
-    expect(await screen.findByText('0899 149 229')).toBeInTheDocument();
+    expect(await screen.findByText('0984 606 774')).toBeInTheDocument();
     expect(screen.getByText('tubutree@gmail.com')).toBeInTheDocument();
     expect(screen.queryByText('Zalo OA')).toBeNull();
     expect(document.body.textContent).not.toMatch(/1900 1234|hotro@tubutree\.com/);
@@ -68,6 +69,31 @@ describe('Trang Về Tubu Tree (C-019)', () => {
     renderPage();
     expect(await screen.findByText('Tubu Tree bán những gì?')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('ZaloPay');
+  });
+
+  // D5-10: bản dự phòng đọc số từ cấu hình công khai, không còn "10.000đ", "20%", "12 tháng", "7 ngày" viết cứng.
+  it('FAQ dự phòng: câu Điểm Xanh và đổi/trả nói đúng số trong cấu hình admin đặt', async () => {
+    mocks.apiGet.mockResolvedValue({ data: [] });
+    mocks.getPublicConfig.mockResolvedValue({
+      support: SUPPORT,
+      loyalty: { earnPct: 3, vndPerPoint: 33, vndPerPointRedeem: 1_000, maxRedeemPct: 0.3, pointExpireMonths: 6 },
+      returnWindowDays: 14,
+    });
+    renderPage();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole('button', { name: /Điểm Xanh là gì/ }));
+    expect(await screen.findByText(/Mỗi đơn đã giao tích 3% tiền hàng thành Điểm Xanh\. 1 Điểm Xanh đổi 1\.000đ khi thanh toán, tối đa 30% giá trị đơn\. Điểm có hạn 6 tháng\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Chính sách đổi\/trả/ }));
+    expect(await screen.findByText(/trong vòng 14 ngày từ khi nhận/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/10\.000đ|tối đa 20%|12 tháng|7 ngày/);
+  });
+
+  it('FAQ dự phòng khi cấu hình không có số: không hiện con số mặc định thay cho số thật', async () => {
+    mocks.apiGet.mockResolvedValue({ data: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Điểm Xanh là gì/ }));
+    expect(await screen.findByText(/Mỗi đơn đã giao được tích Điểm Xanh\./)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/10\.000đ|tối đa 20%|12 tháng/);
   });
 
   it('admin để trống hết liên hệ → ẩn cả khối Hỗ trợ', async () => {
@@ -118,7 +144,7 @@ describe('Liên hệ hỗ trợ khi /config/public lỗi và gọi hotline', () 
     mocks.getPublicConfig.mockRejectedValue(new Error('429'));
     renderPage();
     expect(await screen.findByText('Hỗ trợ khách hàng')).toBeInTheDocument();
-    expect(screen.getByText('0899 149 229')).toBeInTheDocument();
+    expect(screen.getByText('0984 606 774')).toBeInTheDocument();
     expect(screen.getByText('tubutree@gmail.com')).toBeInTheDocument();
     expect(screen.queryByText('Zalo OA')).toBeNull();
   });
@@ -129,7 +155,7 @@ describe('Liên hệ hỗ trợ khi /config/public lỗi và gọi hotline', () 
     const btn = await screen.findByRole('button', { name: /Hotline/ });
     expect(btn.style.minHeight).toBe('44px');
     fireEvent.click(btn);
-    expect(mocks.callPhone).toHaveBeenCalledWith('0899 149 229');
+    expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
   });
 });
 
@@ -219,5 +245,39 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
     await waitFor(() => expect(mocks.apiGet).toHaveBeenCalledWith('/faqs'));
     expect(screen.queryByText('Tubu Tree bán những gì?')).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Câu hỏi thường gặp' })).toBeInTheDocument();
+  });
+});
+
+describe('Điều khoản & Chính sách mở bản đầy đủ trên web (D5-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT });
+    mocks.apiGet.mockResolvedValue({ data: [] });
+  });
+
+  it.each([
+    ['Điều khoản sử dụng', 'dieu-khoan'],
+    ['Chính sách bảo mật', 'bao-mat'],
+    ['Chính sách đổi trả', 'doi-tra'],
+  ])('"%s": sheet có nút "Xem bản đầy đủ trên web" mở /chinh-sach/%s', async (label, slug) => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(label) }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem bản đầy đủ trên web' }));
+    expect(mocks.openExternal).toHaveBeenCalledTimes(1);
+    expect(mocks.openExternal).toHaveBeenCalledWith(`https://app.tubutree.com/chinh-sach/${slug}`);
+  });
+
+  it('có thêm dòng "Chính sách vận chuyển" mở thẳng trang web (chưa có bản tóm tắt trong app)', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách vận chuyển/ }));
+    expect(mocks.openExternal).toHaveBeenCalledWith('https://app.tubutree.com/chinh-sach/van-chuyen');
+    expect(screen.queryByRole('button', { name: 'Đã hiểu' })).toBeNull();
+  });
+
+  it('nút "Đã hiểu" vẫn đóng sheet và không mở web', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Điều khoản sử dụng/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đã hiểu' }));
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 });

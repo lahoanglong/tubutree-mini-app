@@ -43,6 +43,22 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     expect(text).toContain('đơn từ 199.000');
   });
 
+  it('mã ẩn thẻ hộp hàng: nhãn "Ẩn · thẻ hộp hàng", "Chỉ khách mới" và số khách đã nhận (D2-03)', async () => {
+    const api = mockFetch({
+      '/admin/coupons': {
+        body: { data: [coupon({ code: 'SHOPEETHANG11', scope: 'CLAIM', newCustomerOnly: true, claimedCount: 42, redeemedCount: 9, usageLimit: 300 })], meta: { page: 1, limit: 20, total: 1 } },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    const text = r.container.textContent ?? '';
+    expect(text).toContain('Ẩn · thẻ hộp hàng');
+    expect(text).toContain('Chỉ khách mới');
+    expect(text).toContain('Đã nhận 42 · Đã dùng 9/300 lượt');
+  });
+
   it('Tắt mã: hỏi xác nhận rồi PATCH isActive=false; huỷ thì không gửi gì', async () => {
     const api = mockFetch({
       '/admin/coupons/c1': { body: coupon({ isActive: false }) },

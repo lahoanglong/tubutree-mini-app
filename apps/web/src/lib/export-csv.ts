@@ -103,6 +103,11 @@ export function generateUsersCsvString(users: AdminUser[]): string {
   return [headers.join(','), ...rows].join('\r\n');
 }
 
+/** File in thẻ QR hộp hàng: mỗi dòng một mã và link nhận mã (nhà in trộn cột url thành QR). */
+export function generateClaimCodesCsv(codes: { code: string; url: string }[]): string {
+  return [['code', 'url'].join(','), ...codes.map((c) => [escapeCsvCell(c.code), escapeCsvCell(c.url)].join(','))].join('\r\n');
+}
+
 export function downloadCsvFile(csvContent: string, filename: string): void {
   if (typeof window === 'undefined') return;
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });

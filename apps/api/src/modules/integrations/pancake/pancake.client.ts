@@ -9,6 +9,7 @@ import type {
   PancakeOrderListResponse,
   PancakeUpdateOrderBody,
   PancakeProductsResponse,
+  PancakeCategoryNode,
   PancakeProvinceDTO,
   PancakeCommuneDTO,
   PancakeGeoResponse,
@@ -109,6 +110,20 @@ export class PancakeClient {
     return data;
   }
 
+  /** Cây nhóm hàng của shop (`GET /shops/{SHOP_ID}/categories`) — để admin thấy mã/tên nhóm cần ánh xạ. */
+  async fetchCategories(): Promise<PancakeCategoryNode[]> {
+    this.assertConfigured();
+    const data = await this.getCatalog<{ success?: boolean; data?: PancakeCategoryNode[] }>(
+      `/shops/${this.shopId}/categories`,
+      { api_key: this.apiKey },
+      'đọc nhóm hàng',
+    );
+    if (!data || data.success === false || !Array.isArray(data.data)) {
+      throw new ServiceUnavailableException('Pancake không trả danh sách nhóm hàng.');
+    }
+    return data.data;
+  }
+
   /** Danh sách tỉnh/thành (geo Pancake). Dùng `new_id` ("84_VN*") cho đơn + query communes. */
   async fetchProvinces(): Promise<PancakeProvinceDTO[]> {
     this.assertConfigured();
@@ -181,6 +196,33 @@ export class PancakeClient {
       return body.data;
     } catch (err) {
       throw toPancakeError(err, 'tra cứu đơn');
+    }
+  }
+
+  /**
+   * Đơn đã cập nhật từ mốc `sinceEpochSec` của các nguồn đơn `orderSources` (kéo dự phòng đơn sàn). Tham số `updateStatus`,
+   * `startDateTime` (epoch giây) và `order_sources[]` theo Open API; chưa kiểm bằng phản hồi thật.
+   */
+  async listUpdatedOrders(opts: { sinceEpochSec: number; orderSources: string[]; page: number; pageSize: number; timeoutMs?: number }): Promise<PancakeOrderDTO[]> {
+    this.assertConfigured();
+    try {
+      const { data } = await this.http.get<PancakeOrderListResponse>(`/shops/${this.shopId}/orders`, {
+        params: {
+          api_key: this.apiKey,
+          updateStatus: 'updated_at',
+          startDateTime: opts.sinceEpochSec,
+          'order_sources[]': opts.orderSources,
+          page_size: opts.pageSize,
+          page_number: opts.page,
+        },
+        timeout: opts.timeoutMs,
+        paramsSerializer: { indexes: null },
+      });
+      const body = assertSuccess(data, 'kéo đơn đã cập nhật');
+      if (!body || !Array.isArray(body.data)) throw new PancakeApiError('Pancake không trả danh sách đơn khi kéo đơn đã cập nhật.', true);
+      return body.data;
+    } catch (err) {
+      throw toPancakeError(err, 'kéo đơn đã cập nhật');
     }
   }
 

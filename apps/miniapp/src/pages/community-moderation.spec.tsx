@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   closeEvent: vi.fn(),
   pickEventWinner: vi.fn(),
   auth: { role: 'ADMIN' as string | undefined },
+  config: { isLoaded: true, loyalty: { vndPerPoint: 10000, vndPerPointRedeem: 1000 }, community: { eventRewardMaxPoints: 1000 } } as Record<string, unknown>,
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -42,13 +43,17 @@ vi.mock('../services/feed-api', () => ({
   closeEvent: mocks.closeEvent,
   pickEventWinner: mocks.pickEventWinner,
 }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../services/api', () => ({
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  apiMediaUrl: (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `https://api.test${src}` : src),
+}));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
     const state = { user: mocks.auth.role ? { role: mocks.auth.role } : null };
     return sel ? sel(state) : state;
   },
 }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.config }));
 vi.mock('../components/image-upload', () => ({
   ImageUpload: ({ label, onChange }: { label?: string; onChange: (url: string) => void }) => (
     <button type="button" onClick={() => onChange('https://img.test/cover.jpg')}>
@@ -120,6 +125,7 @@ const goTab = (label: string) => fireEvent.click(screen.getByText(label));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.config = { isLoaded: true, loyalty: { vndPerPoint: 10000, vndPerPointRedeem: 1000 }, community: { eventRewardMaxPoints: 1000 } };
   mocks.auth.role = 'ADMIN';
   mocks.adminPendingPosts.mockResolvedValue([PENDING('a'), PENDING('b')]);
   mocks.adminApprovePost.mockResolvedValue({ ok: true });
@@ -165,6 +171,13 @@ describe('CommunityModerationPage — bài chờ duyệt', () => {
     await screen.findByText('Tiêu đề a');
     expect(container.querySelectorAll('img')).toHaveLength(1);
     expect(container.querySelector('img')!.getAttribute('src')).toBe('https://img.test/1.jpg');
+  });
+
+  it('ảnh chờ duyệt do API phục vụ (đường dẫn tương đối kèm mã v) được ghép với gốc API', async () => {
+    mocks.adminPendingPosts.mockResolvedValue([PENDING('a', { images: [`/feed/posts/a/images/0?v=${'b'.repeat(32)}`] })]);
+    const { container } = renderPage();
+    await screen.findByText('Tiêu đề a');
+    expect(container.querySelector('img')!.getAttribute('src')).toBe(`https://api.test/feed/posts/a/images/0?v=${'b'.repeat(32)}`);
   });
 
   it('Duyệt: gửi đúng id, báo đã duyệt, tải lại danh sách', async () => {
@@ -515,5 +528,27 @@ describe('CommunityModerationPage — tiêu đề, tab, vùng chạm, nhãn (C-0
     goTab('Sự kiện');
     await screen.findByText('Sự kiện e1');
     expect(container.textContent).not.toContain('🎁');
+  });
+});
+
+describe('CommunityModerationPage — gợi ý thưởng sự kiện theo cấu hình (D5-10)', () => {
+  const openEventsTab = async () => {
+    renderPage();
+    await screen.findByText('Tiêu đề a');
+    goTab('Sự kiện');
+    await screen.findByText('Sự kiện e1');
+  };
+
+  it('giá trị 1 điểm và trần thưởng lấy từ config công khai', async () => {
+    mocks.config = { isLoaded: true, loyalty: { vndPerPoint: 10000, vndPerPointRedeem: 500 }, community: { eventRewardMaxPoints: 200 } };
+    await openEventsTab();
+    expect(screen.getByText('1 điểm = 500đ, tối đa 200 điểm')).toBeInTheDocument();
+  });
+
+  it('thiếu số (API cũ, chưa tải xong): chỉ nói chung, không hiện giá trị cũ', async () => {
+    mocks.config = { isLoaded: false };
+    await openEventsTab();
+    expect(screen.getByText('Điểm Xanh thưởng cho người thắng sự kiện')).toBeInTheDocument();
+    expect(screen.queryByText(/1 điểm =/)).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   fetchProduct: vi.fn(),
   shareWithFallback: vi.fn(),
   shareLink: vi.fn(),
+  user: undefined as { referralCode: string } | undefined,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -28,9 +29,9 @@ vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValu
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
-vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
+vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink, hasOA: false, openOAChat: vi.fn() }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn() }) }));
+vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn(), user: mocks.user }) }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ data: undefined }) }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -49,6 +50,7 @@ const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const
 describe('ProductDetailPage nút Chia sẻ', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.user = undefined;
     mocks.fetchProduct.mockResolvedValue({
       id: 'id-a', slug: 'a', brand: 'Tubu', name: 'Sản phẩm a', shortDesc: 'Mô tả ngắn', description: 'Mô tả',
       images: ['https://img/1.jpg'], thumbnail: 'https://img/thumb.jpg', basePrice: 100000, salePrice: 80000,
@@ -73,6 +75,25 @@ describe('ProductDetailPage nút Chia sẻ', () => {
     expect(mocks.shareWithFallback).toHaveBeenCalledWith(
       { title: 'Sản phẩm a', description: 'Mô tả ngắn', thumbnail: 'https://img/thumb.jpg', path: '/product/a' },
       `${WEB_BASE_URL}/san-pham/a`,
+    );
+  });
+
+  it('đã có tài khoản → link chia sẻ (Zalo lẫn dán tay) mang mã giới thiệu của người chia sẻ', async () => {
+    mocks.user = { referralCode: 'ABCD1234' };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/product/a']} future={FUTURE}>
+          <Routes>
+            <Route path="/product/:slug" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: viText.product.share }));
+    expect(mocks.shareWithFallback).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/product/a?ref=ABCD1234' }),
+      `${WEB_BASE_URL}/san-pham/a?ref=ABCD1234`,
     );
   });
 });

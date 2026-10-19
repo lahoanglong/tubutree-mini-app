@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, type Coupon } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { isCouponEligible, requiresRealUser } from './coupon-scope';
+import { OWN_COUPON_MSG, isCouponEligible, isOwnStaffCoupon, requiresRealUser } from './coupon-scope';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
+import { assertFirstOrderInTx, hasPriorOrder } from '../../common/first-order';
+
+export const NEW_CUSTOMER_ONLY_MSG = 'Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.';
 
 export interface CouponResult {
   code: string;
@@ -152,6 +155,10 @@ export class CouponsService {
       const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
       if (!isRealUser(u)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
     }
+    // Chỉ để báo sớm; chốt cuối nằm trong transaction đặt đơn (redeemInTx).
+    if (coupon.newCustomerOnly && (await hasPriorOrder(this.prisma, userId))) {
+      throw new BadRequestException(NEW_CUSTOMER_ONLY_MSG);
+    }
 
     assertCouponWindow(coupon, new Date());
     const scoped = couponScopedSubtotal(coupon, subtotal, lines);
@@ -188,24 +195,32 @@ export class CouponsService {
     const byCode = new Map(rows.map((c) => [c.code, c]));
     const ids = rows.map((c) => c.id);
     const limitedIds = rows.filter((c) => c.usageLimit != null).map((c) => c.id);
-    const [user, mine, all] = await Promise.all([
-      this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true } }),
+    const claimIds = rows.filter((c) => c.scope === 'CLAIM').map((c) => c.id);
+    const [user, mine, all, claims, priorOrder] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true, role: true } }),
       ids.length
         ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { userId, couponId: { in: ids } }, _count: { _all: true } })
         : [],
       limitedIds.length
         ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: limitedIds } }, _count: { _all: true } })
         : [],
+      claimIds.length
+        ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
+        : [],
+      rows.some((c) => c.newCustomerOnly) ? hasPriorOrder(this.prisma, userId) : false,
     ]);
     const usedByUser = new Map(mine.map((g) => [g.couponId, g._count._all]));
     const totalUsed = new Map(all.map((g) => [g.couponId, g._count._all]));
+    const claimedCouponIds = new Set(claims.map((c) => c.couponId));
     const now = new Date();
     for (const code of wanted) {
       const coupon = byCode.get(code) ?? null;
       try {
         assertCouponLive(coupon);
-        if (!isCouponEligible(coupon, { id: userId, tierId: user?.tierId })) throw scopeOwnershipError(coupon);
+        if (isOwnStaffCoupon(coupon, { id: userId, role: user?.role })) throw new BadRequestException(OWN_COUPON_MSG);
+        if (!isCouponEligible(coupon, { id: userId, role: user?.role, tierId: user?.tierId, claimedCouponIds })) throw scopeOwnershipError(coupon);
         if (requiresRealUser(coupon) && !isRealUser(user)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
+        if (coupon.newCustomerOnly && priorOrder) throw new BadRequestException(NEW_CUSTOMER_ONLY_MSG);
         assertCouponWindow(coupon, now);
         const scoped = couponScopedSubtotal(coupon, subtotal, lines);
         assertPerUserLimit(coupon, usedByUser.get(coupon.id) ?? 0);
@@ -260,6 +275,13 @@ export class CouponsService {
     const coupon = await db.coupon.findUnique({ where: { code: normalizeCouponCode(code) } });
     if (!coupon) return;
     await this.assertScopeOwnership(coupon, userId, db);
+
+    if (coupon.newCustomerOnly) {
+      // Đơn (và các đơn tách cùng lần đặt) đã được ghi trong chính tx này nên không tính. Khoá đơn đầu lấy trước khoá
+      // (mã, khách) bên dưới, cùng thứ tự với khoá miễn phí giao đơn đầu của checkout.
+      const own = await db.order.findUnique({ where: { id: orderId }, select: { checkoutGroup: true } });
+      await assertFirstOrderInTx(db, userId, { orderIds: [orderId], checkoutGroup: own?.checkoutGroup }, NEW_CUSTOMER_ONLY_MSG);
+    }
 
     const limitPerUser = coupon.perUserLimit != null && coupon.perUserLimit > 0;
     if (limitPerUser) {
@@ -348,10 +370,15 @@ export class CouponsService {
    * khi được gọi từ redeem(tx) — đọc tier nhất quán với phần còn lại của tx.
    */
   private async assertScopeOwnership(
-    coupon: { scope?: string | null; scopeMeta?: unknown },
+    coupon: { id: string; scope?: string | null; scopeMeta?: unknown; createdById?: string | null },
     userId: string,
     db: Prisma.TransactionClient | PrismaService,
   ): Promise<void> {
+    let role: string | null | undefined;
+    if (coupon.createdById && coupon.createdById === userId) {
+      role = (await db.user.findUnique({ where: { id: userId }, select: { role: true } }))?.role;
+      if (isOwnStaffCoupon(coupon, { id: userId, role })) throw new BadRequestException(OWN_COUPON_MSG);
+    }
     // Chỉ TIER cần tierId — lazy-load trong cùng db/tx để đọc hạng nhất quán với
     // phần còn lại của tx (PUBLIC/USER_GROUP không tốn query thừa).
     let tierId: string | null | undefined;
@@ -359,9 +386,17 @@ export class CouponsService {
       const user = await db.user.findUnique({ where: { id: userId }, select: { tierId: true } });
       tierId = user?.tierId;
     }
+    let claimedCouponIds: Set<string> | undefined;
+    if (coupon.scope === 'CLAIM') {
+      const claim = await db.couponClaim.findUnique({
+        where: { couponId_userId: { couponId: coupon.id, userId } },
+        select: { id: true },
+      });
+      claimedCouponIds = new Set(claim ? [coupon.id] : []);
+    }
     // Quyết định eligible dùng CHUNG isCouponEligible với LoyaltyService.getAvailableCoupons
     // (list) → list & apply không lệch. Message giữ riêng theo scope cho rõ với user.
-    if (isCouponEligible(coupon, { id: userId, tierId })) return;
+    if (isCouponEligible(coupon, { id: userId, role, tierId, claimedCouponIds })) return;
     throw scopeOwnershipError(coupon);
   }
 }

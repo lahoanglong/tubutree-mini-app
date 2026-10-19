@@ -10,6 +10,9 @@ export const BATCH_PAUSE_MS = 200;
 // Dừng giữa chừng nếu chạy quá lâu: phần còn lại để đêm sau thay vì đè lên giờ cao điểm buổi sáng.
 export const MAX_RUN_MS = 90 * 60_000;
 
+/** Số ngày giữ SĐT của đơn ngoài app sau khi claim của nó về trạng thái cuối (CREDITED, VOIDED, REVERSED, LAPSED). */
+export const EXTERNAL_PHONE_AFTER_FINAL_DAYS = 7;
+
 export type RetentionTargetKey = 'analytics_events' | 'notification_logs' | 'webhook_events' | 'refresh_tokens';
 
 /** Sàn tối thiểu: lỡ đặt 0/1 ngày trong tab Cấu hình thì không xoá sạch bảng ngay đêm sau. */
@@ -26,7 +29,8 @@ export function resolveRetentionDays(target: RetentionTargetKey, raw: unknown): 
   return Math.max(minDays, Math.floor(raw));
 }
 
-type Cleanup = { table: string; where: Prisma.Sql };
+/** `set`: thay vì xoá dòng thì ghi đè cột (xoá thông tin cá nhân nhưng giữ dòng). */
+type Cleanup = { table: string; where: Prisma.Sql; set?: Prisma.Sql; label?: string };
 type RunOpts = { now?: Date; batchSize?: number; pauseMs?: number; maxRunMs?: number };
 export type RetentionResult =
   | { skipped: 'RUNNING' | 'LOCKED' }
@@ -101,9 +105,10 @@ export class DataRetentionService {
       try {
         const days = await this.days(target);
         const cutoff = new Date(now.getTime() - days * 86_400_000);
-        for (const c of this.cleanups(target, cutoff)) {
+        for (const c of this.cleanups(target, cutoff, now)) {
           const res = await this.deleteInBatches(c, batchSize, pauseMs, targetDeadline);
-          deleted[c.table] = (deleted[c.table] ?? 0) + res.count;
+          const key = c.label ?? c.table;
+          deleted[key] = (deleted[key] ?? 0) + res.count;
           if (res.truncated) truncated = true;
         }
       } catch (err) {
@@ -119,7 +124,7 @@ export class DataRetentionService {
     return resolveRetentionDays(target, await this.systemConfig.get<unknown>(configKey, defaultDays));
   }
 
-  private cleanups(target: RetentionTargetKey, cutoff: Date): Cleanup[] {
+  private cleanups(target: RetentionTargetKey, cutoff: Date, now: Date): Cleanup[] {
     switch (target) {
       case 'analytics_events':
         // Chỉ xoá khi số tổng hợp của NGÀY (giờ VN) đó đã nằm trong retention_daily_snapshot: tổng hợp theo sự kiện
@@ -136,12 +141,47 @@ export class DataRetentionService {
         ];
       case 'notification_logs':
         return [{ table: 'notification_logs', where: Prisma.sql`"sentAt" < ${cutoff}` }];
-      case 'webhook_events':
+      case 'webhook_events': {
+        // SĐT của đơn chat/điện thoại chỉ cần tới khi claim về trạng thái cuối: sau đó giữ thêm ngần này ngày (để xử lý khiếu nại) rồi xoá.
+        // Mốc là `updatedAt` của claim: claim ở trạng thái cuối không còn bị sửa nên mốc đứng yên.
+        const finalClaimCutoff = new Date(now.getTime() - EXTERNAL_PHONE_AFTER_FINAL_DAYS * 86_400_000);
         return [
           { table: 'pancake_webhook_events', where: Prisma.sql`"receivedAt" < ${cutoff}` },
           { table: 'gomdon_webhook_events', where: Prisma.sql`"receivedAt" < ${cutoff}` },
           { table: 'oa_inbound_messages', where: Prisma.sql`"createdAt" < ${cutoff}` },
+          // Cùng hạn với payload thô của webhook: SĐT người mua của đơn ngoài app không giữ lâu hơn bản gốc. Giữ dòng đơn (mã vận đơn,
+          // trạng thái, tiền hàng); claim còn chờ xử lý thì giữ SĐT vì bước ghép theo SĐT cần tới.
+          {
+            table: 'external_orders',
+            label: 'external_orders.phone',
+            set: Prisma.sql`"phone" = NULL`,
+            where: Prisma.sql`"phone" IS NOT NULL AND "updatedAt" < ${cutoff} AND NOT EXISTS (
+              SELECT 1 FROM external_points_claims c
+              WHERE c."externalOrderId" = external_orders.id AND c."state" IN ('PENDING', 'REVIEW', 'HELD_NO_MEMBER')
+            )`,
+          },
+          {
+            table: 'external_orders',
+            label: 'external_orders.phone_after_final',
+            set: Prisma.sql`"phone" = NULL`,
+            where: Prisma.sql`"phone" IS NOT NULL AND EXISTS (
+              SELECT 1 FROM external_points_claims c
+              WHERE c."externalOrderId" = external_orders.id
+                AND c."state" IN ('CREDITED', 'VOIDED', 'REVERSED', 'LAPSED') AND c."updatedAt" < ${finalClaimCutoff}
+            )`,
+          },
+          // Bản chép SĐT lúc tạo claim chat (để liên kết) theo cùng luật: bỏ khi claim đã xong 7 ngày, hoặc khi đơn đã mất SĐT.
+          {
+            table: 'external_points_claims',
+            label: 'external_points_claims.order_phone',
+            set: Prisma.sql`"orderPhone" = NULL`,
+            where: Prisma.sql`"orderPhone" IS NOT NULL AND (
+              ("state" IN ('CREDITED', 'VOIDED', 'REVERSED', 'LAPSED') AND "updatedAt" < ${finalClaimCutoff})
+              OR EXISTS (SELECT 1 FROM external_orders o WHERE o.id = external_points_claims."externalOrderId" AND o."phone" IS NULL)
+            )`,
+          },
         ];
+      }
       case 'refresh_tokens':
         return [
           {
@@ -162,8 +202,11 @@ export class DataRetentionService {
     const table = Prisma.raw(`"${c.table}"`);
     let count = 0;
     for (;;) {
-      const n = await this.prisma.$executeRaw`
-        DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`;
+      const n = c.set
+        ? await this.prisma.$executeRaw`
+            UPDATE ${table} SET ${c.set} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`
+        : await this.prisma.$executeRaw`
+            DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`;
       count += n;
       if (n < batchSize) return { count, truncated: false };
       if (Date.now() >= deadline) return { count, truncated: true };

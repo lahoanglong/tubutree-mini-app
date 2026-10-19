@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CashbackStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -9,12 +9,19 @@ import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 import type { NormalizedCashbackEvent } from './providers/cashback-provider.interface';
 import { CRON_TZ } from '../../common/cron-tz';
+import { maskPhoneKeepLast3 } from '../../common/mask-pii';
 
 /**
  * Cashback sàn ngoài (Build Spec §9, §15 cashback.*). Provider-agnostic: I/O vendor nằm ở
  * CashbackProvider; lõi này chỉ xử lý NormalizedCashbackEvent. Tubu giữ margin, user nhận
  * `merchant_user_share` (mặc định 70%). Hold `cashback.hold_days` sau confirm rồi mới về Ví.
  */
+/** Kế toán duyệt theo tên/mã đơn sàn, không cần SĐT đầy đủ của khách. */
+function maskedUser<U extends { phone: string | null }>(user: U | undefined, mask?: boolean): U | null {
+  if (!user) return null;
+  return mask && user.phone ? { ...user, phone: maskPhoneKeepLast3(user.phone) } : user;
+}
+
 @Injectable()
 export class CashbackService {
   /** Trần mỗi lượt settle — phần còn lại để lượt cron kế (chạy 30 phút/lần). */
@@ -138,7 +145,7 @@ export class CashbackService {
    * trạng thái qua API report là giao dịch nằm PENDING vĩnh viễn — khách thấy "Chờ duyệt" vô
    * thời hạn và không ai xử lý được.
    */
-  async adminListTransactions(status?: string, take = 100) {
+  async adminListTransactions(status?: string, take = 100, opts: { maskPhones?: boolean } = {}) {
     const rows = await this.prisma.cashbackTransaction.findMany({
       where: status ? { status: status as CashbackStatus } : {},
       orderBy: { confirmedAt: { sort: 'desc', nulls: 'first' } },
@@ -177,7 +184,7 @@ export class CashbackService {
     const clickMap = new Map(clicks.map((c) => [c.id, c.merchant]));
     return rows.map((r) => ({
       ...r,
-      user: userMap.get(r.userId) ?? null,
+      user: maskedUser(userMap.get(r.userId), opts.maskPhones),
       merchant: r.clickId ? (clickMap.get(r.clickId) ?? null) : null,
     }));
   }
@@ -189,9 +196,12 @@ export class CashbackService {
    *
    * Không đụng tới giao dịch đã PAID: tiền đã về Ví, không claw-back được.
    */
-  async adminReview(adminId: string, id: string, status: 'CONFIRMED' | 'REJECTED', note?: string) {
+  async adminReview(adminId: string, id: string, status: 'CONFIRMED' | 'REJECTED', note?: string, opts: { byStaff?: boolean } = {}) {
     const existing = await this.prisma.cashbackTransaction.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Không tìm thấy giao dịch cashback.');
+    if (opts.byStaff && existing.userId === adminId) {
+      throw new ForbiddenException('Không duyệt hoàn tiền của chính mình — nhờ quản trị viên.');
+    }
     if (existing.status === 'PAID') {
       throw new BadRequestException('Giao dịch đã trả về Ví — không đổi được trạng thái.');
     }
@@ -209,7 +219,7 @@ export class CashbackService {
     };
     await this.applyToExisting(existing, synthetic, status, existing.userReward);
     this.logger.warn(
-      `Admin ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
+      `${opts.byStaff ? 'Kế toán' : 'Admin'} ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
     );
     return this.prisma.cashbackTransaction.findUnique({ where: { id } });
   }

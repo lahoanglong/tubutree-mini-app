@@ -117,9 +117,10 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     await expect(page.getByText('CTV Đồng')).toBeVisible();
     await expect(page.getByText(/bonus/i)).toHaveCount(0);
 
-    // Nút "Gian hàng của tôi" trong Dashboard Affiliate
-    await expect(page.getByText('Gian hàng của tôi')).toBeVisible();
-    await page.getByText('Gian hàng của tôi').click();
+    // Lối tắt "Gian hàng" (tên đọc đầy đủ "Gian hàng của tôi") ngay dưới thẻ hoa hồng của Dashboard Affiliate
+    const storefrontShortcut = page.getByRole('button', { name: 'Gian hàng của tôi' });
+    await expect(storefrontShortcut).toBeVisible();
+    await storefrontShortcut.click();
 
     await expect(page).toHaveURL(/\/storefront/);
     await expect(page.getByText('Cửa hàng Xanh của Affiliate 1').first()).toBeVisible();

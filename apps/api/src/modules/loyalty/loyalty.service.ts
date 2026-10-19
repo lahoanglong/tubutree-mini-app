@@ -16,13 +16,18 @@ import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
+import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
 import { isRealUser } from '../../common/real-user';
+import { voucherCode } from '../vouchers/voucher-code';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
+import { pointsForGoods } from '../pricing/points-earn';
+import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from './earn-rates';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { maskPhoneOrNull } from '../../common/mask-pii';
+import { formatPoints } from '../../common/format-points';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
 /**
@@ -294,45 +299,16 @@ export class LoyaltyService {
 
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
-    // Đơn XU cũ (tạo trước khi xu gộp vào Điểm Xanh, trả bằng tín dụng tự-fund) KHÔNG tính vào chi tiêu lên hạng
-    // (mặc định) — nhất quán với việc đơn XU không sinh điểm. Đơn mới không còn đường XU: điểm quy đổi từ xu
-    // đã trừ vào orders.total nên phần đó tự không tính hạng (spec PD-3 2.6). Lật config
-    // loyalty.earn_points_on_xu=true thì đơn XU cũ lại được tính vào hạng.
-    const earnOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
-    const spendWhere: Prisma.OrderWhereInput = {
-      userId,
-      status: 'DELIVERED',
-      createdAt: { gte: since },
-      ...(earnOnXu ? {} : { paymentMethod: { not: 'XU' } }),
-    };
-    const spentAgg = await this.prisma.order.aggregate({ where: spendWhere, _sum: { total: true } });
-    // Đơn đã giao chỉ trả một phần vẫn DELIVERED với nguyên tổng tiền: trừ phần đã hoàn. Đơn sau đó trả nốt thành RETURNED nên
-    // không còn trong spendWhere, và các lần trả trước của nó không bị trừ khỏi đơn khác.
-    const partialReturns = await this.partialReturnsByOrder(userId, since);
-    let spent12m = spentAgg._sum.total ?? 0;
-    if (partialReturns.size > 0) {
-      const partiallyReturned: { id: string; total: number }[] = [];
-      for (const ids of inChunks([...partialReturns.keys()])) {
-        partiallyReturned.push(
-          ...(await this.prisma.order.findMany({ where: { ...spendWhere, id: { in: ids } }, select: { id: true, total: true } })),
-        );
-      }
-      for (const o of partiallyReturned) spent12m -= Math.min(o.total, partialReturns.get(o.id)?.refunded ?? 0);
-      spent12m = Math.max(0, spent12m);
-    }
+    const { spent12m, partialReturns } = await this.spending12m(userId, since);
 
-    // Hạng xét theo điểm ĐÃ TÍCH trong 12 tháng, KHÔNG phải số dư còn lại. Trước đây dùng
-    // `user.pointsBalance`: tiêu điểm lúc thanh toán (hoặc điểm hết hạn) kéo số dư xuống dưới
-    // mốc → hết ân hạn là bị hạ hạng, mất ×1,5 điểm + freeship. Dùng đúng loyalty currency lại
-    // bị phạt, trong khi doc-comment và FE ("từ X điểm") đều mô tả là điểm TÍCH LUỸ
-    // (P2, docs/2026-09-08-review-progress.md). Cùng cửa sổ 12 tháng với tiêu chí chi tiêu nên
-    // hạng vẫn phản ánh mức độ hoạt động gần đây, không thành hạng vĩnh viễn.
-    // CHỈ điểm từ đơn đã giao (trừ phần đơn đó bị trả/huỷ) — xem tierPoints.
+    // Hạng xét theo TIỀN MUA 12 tháng (minSpending). Điểm tích chỉ còn là thước đo cho hạng không có mốc chi tiêu:
+    // sau khi 1 điểm = 1đ và tích 2%, mốc điểm cũ (minPoints) không còn tương ứng với số tiền mua, nên không được
+    // dùng để lên hạng có mốc chi tiêu. Điểm xét hạng là điểm ĐÃ TÍCH từ đơn giao, không phải số dư (xem tierPoints).
     const earned12m = await this.tierPoints(userId, since, partialReturns);
 
     let qualified = tiers[0];
     for (const t of tiers) {
-      const byPoints = earned12m >= t.minPoints;
+      const byPoints = t.minSpending == null && earned12m >= t.minPoints;
       const bySpending = t.minSpending != null && spent12m >= t.minSpending;
       if (byPoints || bySpending) qualified = t;
     }
@@ -356,6 +332,53 @@ export class LoyaltyService {
         data: { tierId: decision.tierId, tierGraceUntil: decision.graceUntil },
       });
     }
+  }
+
+  /**
+   * Tiền mua 12 tháng của khách: tổng đơn đã giao trừ phần đã hoàn của đơn trả một phần. Dùng chung cho xét hạng
+   * (recalcTier) và tiến độ lên hạng (getOverview) để hai nơi không lệch nhau.
+   */
+  private async spending12m(userId: string, since: Date): Promise<{ spent12m: number; partialReturns: Map<string, PartialReturnSum> }> {
+    // Đơn XU cũ (tạo trước khi xu gộp vào Điểm Xanh, trả bằng tín dụng tự-fund) KHÔNG tính vào chi tiêu lên hạng
+    // (mặc định) — nhất quán với việc đơn XU không sinh điểm. Đơn mới không còn đường XU: điểm quy đổi từ xu
+    // đã trừ vào orders.total nên phần đó tự không tính hạng (spec PD-3 2.6). Lật config
+    // loyalty.earn_points_on_xu=true thì đơn XU cũ lại được tính vào hạng.
+    const earnOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
+    const spendWhere: Prisma.OrderWhereInput = {
+      userId,
+      status: 'DELIVERED',
+      createdAt: { gte: since },
+      ...(earnOnXu ? {} : { paymentMethod: { not: 'XU' } }),
+    };
+    const spentAgg = await this.prisma.order.aggregate({ where: spendWhere, _sum: { total: true } });
+    // Đơn đã giao chỉ trả một phần vẫn DELIVERED với nguyên tổng tiền: trừ phần đã hoàn. Đơn sau đó trả nốt thành RETURNED nên
+    // không còn trong spendWhere, và các lần trả trước của nó không bị trừ khỏi đơn khác.
+    const partialReturns = await this.partialReturnsByOrder(userId, since);
+    let spent12m = (spentAgg._sum.total ?? 0) + (await this.chatSpending12m(userId, since));
+    if (partialReturns.size > 0) {
+      const partiallyReturned: { id: string; total: number }[] = [];
+      for (const ids of inChunks([...partialReturns.keys()])) {
+        partiallyReturned.push(
+          ...(await this.prisma.order.findMany({ where: { ...spendWhere, id: { in: ids } }, select: { id: true, total: true } })),
+        );
+      }
+      for (const o of partiallyReturned) spent12m -= Math.min(o.total, partialReturns.get(o.id)?.refunded ?? 0);
+      spent12m = Math.max(0, spent12m);
+    }
+    return { spent12m, partialReturns };
+  }
+
+  /**
+   * Tiền hàng của đơn chat/điện thoại đã cộng điểm (claim PHONE CREDITED, tính vào xét hạng) trong 12 tháng. Claim bị đảo (REVERSED) hay
+   * chưa cộng thì không tính: hạng chỉ lên khi điểm thật đã vào sổ và xuống khi điểm bị thu hồi. Dùng tiền hàng CHỐT LÚC CỘNG
+   * (`creditedGoodsValue`), không phải tiền hàng hiện tại của đơn: nhân viên sửa đơn về sau không được làm hạng nhảy.
+   */
+  private async chatSpending12m(userId: string, since: Date): Promise<number> {
+    const claims = await this.prisma.externalPointsClaim.findMany({
+      where: { userId, kind: 'PHONE', state: 'CREDITED', countsForTier: true, creditedAt: { gte: since } },
+      select: { creditedGoodsValue: true },
+    });
+    return claims.reduce((sum, c) => sum + (c.creditedGoodsValue ?? 0), 0);
   }
 
   /**
@@ -396,9 +419,8 @@ export class LoyaltyService {
    * `ORDER_DELIVERED:<code>`, creditOrderPoints) có trong cửa sổ, LOẠI các đơn đã có dòng `ORDER_REVERSED:<code>`
    * (reverseOrderPoints — cùng refId = order.id) khi đơn bị trả/huỷ.
    *
-   * Hạng là hạng theo CHI TIÊU: seed đặt minPoints đúng bằng minSpending / loyalty.vnd_per_point
-   * (500 điểm ↔ 5 triệu, 2.000 ↔ 20 triệu, 5.000 ↔ 50 triệu), nên điểm chỉ là thước đo thay cho
-   * tiền đã mua. Bản blacklist trước đây (loại DAILY_CHECKIN/POS_OFFLINE_ORDER/ORDER_REFUND_POINTS)
+   * Hạng xét theo CHI TIÊU (spending12m); hàm này chỉ còn quyết định hạng không có mốc chi tiêu và số điểm
+   * hiển thị ở tổng quan (seed đặt minPoints = minSpending / 50 cho màn cũ). Bản blacklist trước đây (loại DAILY_CHECKIN/POS_OFFLINE_ORDER/ORDER_REFUND_POINTS)
    * vẫn đếm mọi nguồn mới thêm sau: GAME_SPIN_WIN (quay vòng quay = đổi số dư thành điểm hạng),
    * REVIEW, SEASONPASS…, và bỏ qua ORDER_REVERSED nên mua → giao → trả hàng vẫn giữ nguyên điểm hạng.
    *
@@ -424,12 +446,8 @@ export class LoyaltyService {
       },
       select: { refId: true, delta: true },
     });
-    if (delivered.length === 0) return 0;
-    const earned = delivered.reduce((s, r) => s + r.delta, 0);
-    const orderIds = [...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!id))];
-    if (orderIds.length === 0) return earned;
     const reversed: { refId: string | null }[] = [];
-    for (const ids of inChunks(orderIds)) {
+    for (const ids of inChunks([...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!id))])) {
       reversed.push(
         ...(await this.prisma.pointsTransaction.findMany({
           where: { userId, reason: { startsWith: TIER_REVERSED_PREFIX }, refId: { in: ids } },
@@ -437,6 +455,23 @@ export class LoyaltyService {
         })),
       );
     }
+    // Điểm đơn chat/điện thoại (refId = id claim) vào cùng whitelist, đảo theo dòng PANCAKE_CHAT_ORDER_REVERSED hoặc trạng thái claim.
+    const chatRows = await this.prisma.pointsTransaction.findMany({
+      where: { userId, reason: { startsWith: TIER_CHAT_PREFIX }, delta: { gt: 0 }, createdAt: { gte: since } },
+      select: { refId: true, delta: true },
+    });
+    for (const ids of inChunks([...new Set(chatRows.map((r) => r.refId).filter((id): id is string => !!id))])) {
+      reversed.push(
+        ...(await this.prisma.pointsTransaction.findMany({
+          where: { userId, reason: { startsWith: TIER_CHAT_REVERSED_PREFIX }, refId: { in: ids } },
+          select: { refId: true },
+        })),
+        // Claim chat bị đảo mà không thu hồi được điểm nào (khách đã tiêu hết) không có dòng sổ đảo: lấy trạng thái claim làm căn cứ.
+        ...(await this.prisma.externalPointsClaim.findMany({ where: { id: { in: ids }, userId, kind: 'PHONE', state: 'REVERSED' }, select: { id: true } })).map((c) => ({ refId: c.id })),
+      );
+    }
+    delivered.push(...chatRows);
+    if (delivered.length === 0) return 0;
     // Đơn đã có dòng ORDER_REVERSED thì bỏ NGUYÊN điểm giao của nó, không trừ theo delta của dòng thu hồi: reverseOrderPoints
     // chỉ thu hồi phần còn lại của lô (điểm đã hết hạn hay đã tiêu thì delta nhỏ hơn, có khi 0) nhưng đơn đã trả thì
     // chi tiêu của nó không còn thuộc hạng.
@@ -560,11 +595,11 @@ export class LoyaltyService {
     const inWindow = lock.locked - lock.lockedReturn;
     if (inWindow > 0 && lock.lockedUntil) {
       parts.push(
-        `${inWindow} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDateLabel(lock.lockedUntil)} (hết hạn đổi/trả hàng)`,
+        `${formatPoints(inWindow)} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDateLabel(lock.lockedUntil)} (hết hạn đổi/trả hàng)`,
       );
     }
     if (lock.lockedReturn > 0) {
-      parts.push(`${lock.lockedReturn} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
+      parts.push(`${formatPoints(lock.lockedReturn)} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
     }
     return parts.join('; ');
   }
@@ -594,11 +629,12 @@ export class LoyaltyService {
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
     const tierPoints = await this.tierPoints(userId, since);
+    const { spent12m } = await this.spending12m(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
-    const [vndPerPoint, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
-      this.positiveConfig('loyalty.vnd_per_point', 10000),
-      this.positiveConfig('loyalty.vnd_per_point_redeem', 1000),
+    const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
+      this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
+      this.positiveConfig('loyalty.vnd_per_point_redeem', 1),
       this.fractionConfig('loyalty.max_redeem_pct', 0.2),
       this.pointExpireMonths(),
       loadPointExpiryTxns(this.prisma, userId),
@@ -607,7 +643,7 @@ export class LoyaltyService {
 
     return {
       /** Quy tắc tích/đổi để màn Điểm Xanh giải thích đúng theo cấu hình thay vì FE tự ghi con số. */
-      rates: { vndPerPoint, vndPerPointRedeem, maxRedeemPct },
+      rates: { earnPct, vndPerPoint: Math.round(100 / earnPct), vndPerPointRedeem, maxRedeemPct },
       /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
       /** Điểm thường sắp hết hạn gần nhất (cộng các lô cùng ngày hết hạn) để khách dùng trước; null nếu không có. */
@@ -619,6 +655,8 @@ export class LoyaltyService {
       /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
       pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
       tierPoints,
+      /** Tiền mua 12 tháng: thước đo thật của hạng, `nextTier.spendingToGo` tính theo số này. */
+      spent12m,
       // Phần Điểm Xanh chưa đổi quà được vì đơn còn có thể bị trả hàng (xem lockedOrderPoints).
       lockedPoints: lock.locked,
       /** Phần khoá thuộc đơn đang có yêu cầu đổi/trả (mở khoá khi yêu cầu được xử lý, không theo ngày). */
@@ -627,6 +665,8 @@ export class LoyaltyService {
       lockedUntil: lock.lockedUntil?.toISOString() ?? null,
       redeemablePoints,
       redeemableTotal: redeemablePoints + user.pointsConvertedBalance,
+      /** Hệ số server sẽ nhân khi tích điểm: 1 khi chưa có hạng, dù `tier` bên dưới hiển thị hạng thấp nhất (xem getTierMultiplier). */
+      earnMultiplier: user.tier ? Number(user.tier.pointMultiplier) : 1,
       tier: current
         ? {
             id: current.id,
@@ -642,6 +682,7 @@ export class LoyaltyService {
             minPoints: next.minPoints,
             minSpending: next.minSpending ?? null,
             pointsToGo: Math.max(0, next.minPoints - tierPoints),
+            spendingToGo: next.minSpending != null ? Math.max(0, next.minSpending - spent12m) : null,
           }
         : null,
       tiers: tiers.map((t) => ({
@@ -664,7 +705,23 @@ export class LoyaltyService {
     });
   }
 
-  /** Coupon khả dụng cho user: PUBLIC + đúng hạng, còn hạn, chưa hết lượt cá nhân. */
+  /**
+   * Khối "Quà khách mới" ở Trang chủ: chỉ cho khách thật (cùng isRealUser với voucher chào mừng và freeship đơn đầu, nếu không
+   * khách deviceId sẽ được hứa quà server không cho) chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts), kèm
+   * voucher chào mừng nếu còn dùng được. Voucher lấy qua getAvailableCoupons nên hiện thì áp được, đúng như ví voucher.
+   */
+  async getNewCustomerOffer(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(user) || (await hasPriorOrder(this.prisma, userId))) return { isNewCustomer: false as const, welcomeVoucher: null };
+    const code = voucherCode('WELCOME', userId);
+    const voucher = (await this.getAvailableCoupons(userId)).find((c) => c.code === code);
+    return {
+      isNewCustomer: true as const,
+      welcomeVoucher: voucher ? { code: voucher.code, type: voucher.type, value: voucher.value, minOrder: voucher.minOrder, endAt: voucher.endAt } : null,
+    };
+  }
+
+  /** Coupon khả dụng cho user: PUBLIC + đúng hạng + mã CLAIM đã nhận, còn hạn, chưa hết lượt cá nhân. */
   async getAvailableCoupons(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const now = new Date();
@@ -682,6 +739,12 @@ export class LoyaltyService {
       WHERE scope = 'USER_GROUP'
         AND "scopeMeta" ->> 'userId' = ${userId}
         AND "startAt" <= ${now} AND "endAt" >= ${now}
+      UNION ALL
+      SELECT c.id FROM coupon_claims cc
+      JOIN coupons c ON c.id = cc."couponId"
+      WHERE cc."userId" = ${userId}
+        AND c.scope = 'CLAIM'
+        AND c."startAt" <= ${now} AND c."endAt" >= ${now}
     `);
     const coupons = idRows.length
       ? await this.prisma.coupon.findMany({
@@ -695,9 +758,22 @@ export class LoyaltyService {
     // Điều kiện scope dùng CHUNG isCouponEligible với CouponsService.assertScopeOwnership
     // (validate/redeem) để list & apply KHÔNG lệch (coupon hiện mà redeem fail).
     // Mã đã tắt và mã công khai giới hạn theo người (với tài khoản khách) cũng bị validateAndCompute từ chối.
+    // Mã chỉ khách mới bị từ chối khi khách đã có đơn chưa huỷ: ẩn luôn khỏi ví.
+    const claimIds = coupons.filter((c) => c.scope === 'CLAIM').map((c) => c.id);
+    const [claims, priorOrder] = await Promise.all([
+      claimIds.length
+        ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
+        : [],
+      coupons.some((c) => c.newCustomerOnly) ? hasPriorOrder(this.prisma, userId) : false,
+    ]);
+    const eligibleUser = { ...user, claimedCouponIds: new Set(claims.map((c) => c.couponId)) };
     const realUser = isRealUser(user);
     const filtered = coupons.filter(
-      (c) => c.isActive !== false && isCouponEligible(c, user) && (realUser || !requiresRealUser(c)),
+      (c) =>
+        c.isActive !== false &&
+        isCouponEligible(c, eligibleUser) &&
+        (realUser || !requiresRealUser(c)) &&
+        !(c.newCustomerOnly && priorOrder),
     );
 
     const ids = filtered.map((c) => c.id);
@@ -793,11 +869,11 @@ export class LoyaltyService {
         if (lock.locked > 0 && balance >= reward.pointsCost) {
           const usable = Math.max(0, balance - lock.locked);
           throw new BadRequestException(
-            `Bạn cần ${reward.pointsCost} Điểm Xanh dùng được để đổi ưu đãi này — hiện dùng được ${usable}/${balance} điểm: ${this.lockedPointsMessage(lock)}.`,
+            `Bạn cần ${formatPoints(reward.pointsCost)} Điểm Xanh dùng được để đổi ưu đãi này — hiện dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.lockedPointsMessage(lock)}.`,
           );
         }
         throw new BadRequestException(
-          `Bạn cần ${reward.pointsCost} Điểm Xanh để đổi ưu đãi này (hiện có ${balance} điểm).`,
+          `Bạn cần ${formatPoints(reward.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
         );
       }
 
@@ -886,7 +962,7 @@ export class LoyaltyService {
 
   /**
    * Bảng điểm 7 ngày (SystemConfig `loyalty.checkin_points`, mặc định DEFAULT_CHECKIN_POINTS).
-   * Chỉ nhận đúng 7 số nguyên 0..CHECKIN_MAX_POINTS_PER_DAY — gõ nhầm "1000" không biến nút
+   * Chỉ nhận đúng 7 số nguyên 0..CHECKIN_MAX_POINTS_PER_DAY — gõ nhầm "1000000" không biến nút
    * điểm danh thành máy in tiền; sai định dạng thì quay về bảng mặc định.
    */
   private async getCheckInPointsTable(): Promise<number[]> {
@@ -1023,7 +1099,7 @@ export class LoyaltyService {
           totalPoints,
           message:
             points > 0
-              ? `Điểm danh Ngày ${cycleDay} thành công! Nhận +${points} Điểm Xanh.`
+              ? `Điểm danh Ngày ${cycleDay} thành công! Nhận +${formatPoints(points)} Điểm Xanh.`
               : `Điểm danh Ngày ${cycleDay} thành công!`,
         };
       });
@@ -1146,7 +1222,7 @@ export class LoyaltyService {
    *  - Trần: mỗi hoá đơn `loyalty.pos_max_order_total`; mỗi ngày theo nhân viên
    *    `loyalty.pos_staff_daily_points_cap` và theo thành viên `loyalty.pos_member_daily_points_cap`.
    *    Cộng dồn + ghi chạy dưới pg_advisory_xact_lock để 2 hoá đơn song song không cùng đọc tổng cũ.
-   *  - Tỷ lệ theo loyalty.vnd_per_point × hệ số hạng (như đơn online); điểm có hạn
+   *  - Tỷ lệ theo loyalty.earn_pct × hệ số hạng (như đơn online); điểm có hạn
    *    loyalty.point_expire_months; KHÔNG tính vào xét hạng (xem tierPointsWhere).
    *  - Sổ audit: pos_point_credits (staffUserId, memberId, receiptId, orderTotal, points, note).
    */
@@ -1175,11 +1251,11 @@ export class LoyaltyService {
       throw new BadRequestException('Tài khoản thành viên đang bị khoá, không thể tích điểm.');
     }
 
-    const [maxOrderTotal, staffCap, memberCap, vndPerPoint] = await Promise.all([
+    const [maxOrderTotal, staffCap, memberCap, earnPct] = await Promise.all([
       this.positiveConfig('loyalty.pos_max_order_total', POS_DEFAULTS.maxOrderTotal),
       this.positiveConfig('loyalty.pos_staff_daily_points_cap', POS_DEFAULTS.staffDailyPoints),
       this.positiveConfig('loyalty.pos_member_daily_points_cap', POS_DEFAULTS.memberDailyPoints),
-      this.positiveConfig('loyalty.vnd_per_point', 10000),
+      this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
     ]);
     if (dto.orderTotal > maxOrderTotal) {
       throw new BadRequestException(
@@ -1188,7 +1264,7 @@ export class LoyaltyService {
     }
 
     const multiplier = member.tier ? Number(member.tier.pointMultiplier) : 1;
-    const points = Math.floor((dto.orderTotal / vndPerPoint) * multiplier);
+    const points = pointsForGoods(dto.orderTotal, earnPct, multiplier);
     if (!(points > 0)) {
       throw new BadRequestException('Hoá đơn chưa đủ giá trị để tích điểm.');
     }
@@ -1216,7 +1292,7 @@ export class LoyaltyService {
         const staffToday = staffAgg._sum.points ?? 0;
         if (staffToday + points > staffCap) {
           throw new BadRequestException(
-            `Vượt trần tích điểm tại quầy trong ngày của nhân viên (đã ${staffToday}/${staffCap} điểm). Liên hệ quản trị viên.`,
+            `Vượt trần tích điểm tại quầy trong ngày của nhân viên (đã ${formatPoints(staffToday)}/${formatPoints(staffCap)} điểm). Liên hệ quản trị viên.`,
           );
         }
         const memberAgg = await tx.posPointCredit.aggregate({
@@ -1226,7 +1302,7 @@ export class LoyaltyService {
         const memberToday = memberAgg._sum.points ?? 0;
         if (memberToday + points > memberCap) {
           throw new BadRequestException(
-            `Thành viên đã được tích ${memberToday}/${memberCap} điểm tại quầy hôm nay — vượt trần ngày. Liên hệ quản trị viên.`,
+            `Thành viên đã được tích ${formatPoints(memberToday)}/${formatPoints(memberCap)} điểm tại quầy hôm nay — vượt trần ngày. Liên hệ quản trị viên.`,
           );
         }
 
@@ -1370,14 +1446,14 @@ function inChunks<T>(items: readonly T[]): T[][] {
 
 /**
  * Bảng điểm danh 7 ngày MẶC ĐỊNH (ghi đè bằng SystemConfig `loyalty.checkin_points`).
- * Tổng 8 điểm/tuần ≈ 8.000đ/tuần (≈ 34.000đ/tháng) ở loyalty.vnd_per_point_redeem = 1.000đ —
- * tương đương điểm của ~80.000đ mua hàng/tuần. Bản WIP trả 10/15/20/25/30/40/50 = 190 điểm/tuần
+ * Tổng 8.000 điểm/tuần ≈ 8.000đ/tuần (≈ 34.000đ/tháng) ở loyalty.vnd_per_point_redeem = 1đ —
+ * tương đương điểm của 400.000đ mua hàng/tuần ở mức tích 2%. Bản WIP trả 10/15/20/25/30/40/50 nghìn = 190.000 điểm/tuần
  * ≈ 190.000đ/tuần (~9,9 triệu/năm) chỉ để bấm nút, gấp nhiều lần điểm từ mua hàng thật.
  * Điểm chỉ tiêu được khi mua (tối đa loyalty.max_redeem_pct giá trị đơn, voucher có minOrder).
  */
-export const DEFAULT_CHECKIN_POINTS: readonly number[] = Object.freeze([1, 1, 1, 1, 1, 1, 2]);
+export const DEFAULT_CHECKIN_POINTS: readonly number[] = Object.freeze([1000, 1000, 1000, 1000, 1000, 1000, 2000]);
 /** Trần cứng cho 1 ô điểm danh dù admin cấu hình gì. */
-const CHECKIN_MAX_POINTS_PER_DAY = 100;
+const CHECKIN_MAX_POINTS_PER_DAY = 100_000;
 const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm rồi 🌿';
 
 /**
@@ -1386,6 +1462,9 @@ const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm
  */
 const TIER_DELIVERED_PREFIX = 'ORDER_DELIVERED:';
 const TIER_REVERSED_PREFIX = 'ORDER_REVERSED:';
+/** Điểm đơn chat/điện thoại (external-points, claim PHONE) tính vào xét hạng; refId của cả dòng cộng lẫn dòng đảo là id claim. */
+const TIER_CHAT_PREFIX = 'PANCAKE_CHAT_ORDER:';
+const TIER_CHAT_REVERSED_PREFIX = 'PANCAKE_CHAT_ORDER_REVERSED:';
 
 /** Phần của Prisma client mà câu SQL đọc điểm đang khoá cần: this.prisma hoặc tx của caller. */
 type LockedPointsDb = Pick<Prisma.TransactionClient, '$queryRaw'>;
@@ -1409,12 +1488,12 @@ function vnDateLabel(d: Date): string {
 
 /** Trần mặc định cho tích điểm tại quầy (ghi đè bằng SystemConfig, xem creditPosPoints). */
 const POS_DEFAULTS = {
-  /** 5 triệu/hoá đơn → tối đa 500 điểm ×1 (1.000 điểm ở hạng ×2). */
+  /** 5 triệu/hoá đơn → tối đa 100.000 điểm ×1 (200.000 điểm ở hạng ×2) ở mức tích 2%. */
   maxOrderTotal: 5_000_000,
-  /** 3.000 điểm/nhân viên/ngày ≈ 30 triệu doanh thu quầy ở ×1. */
-  staffDailyPoints: 3_000,
-  /** 1.000 điểm/thành viên/ngày ≈ 10 triệu mua tại quầy ở ×1. */
-  memberDailyPoints: 1_000,
+  /** 3.000.000 điểm/nhân viên/ngày ≈ 150 triệu doanh thu quầy ở ×1. */
+  staffDailyPoints: 3_000_000,
+  /** 1.000.000 điểm/thành viên/ngày ≈ 50 triệu mua tại quầy ở ×1. */
+  memberDailyPoints: 1_000_000,
 };
 
 /** Số dòng tối đa mỗi lần admin xem sổ audit POS. */
@@ -1488,11 +1567,11 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
   {
     // FREESHIP ở checkout miễn TOÀN BỘ phí ship (coupons.service validateAndCompute bỏ qua value),
     // nên không ghi "tối đa 25k". Đơn ≥ shipping.free_threshold (200k) vốn đã freeship → minOrder
-    // 99k để voucher có ích cho đúng khoảng đơn còn phải trả phí ship (~19k) — giá 20 điểm ≈ 20.000đ.
+    // 99k để voucher có ích cho đúng khoảng đơn còn phải trả phí ship (~19k) — giá 20.000 điểm ≈ 20.000đ.
     id: 'reward-freeship',
     title: 'Voucher Miễn phí vận chuyển',
     description: 'Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop.',
-    pointsCost: 20,
+    pointsCost: 20_000,
     type: 'FREESHIP',
     value: 0,
     minOrder: 99000,
@@ -1502,7 +1581,7 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
     id: 'reward-discount-50k',
     title: 'Voucher Giảm 50.000đ',
     description: 'Giảm ngay 50.000đ cho đơn hàng từ 300.000đ',
-    pointsCost: 50,
+    pointsCost: 50_000,
     type: 'AMOUNT',
     value: 50000,
     minOrder: 300000,
@@ -1512,7 +1591,7 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
     id: 'reward-discount-100k',
     title: 'Voucher Giảm 100.000đ',
     description: 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ',
-    pointsCost: 100,
+    pointsCost: 100_000,
     type: 'AMOUNT',
     value: 100000,
     minOrder: 600000,
@@ -1522,7 +1601,7 @@ export const DEFAULT_REWARD_CATALOG: RewardCatalogItem[] = [
     id: 'reward-percent-15pct',
     title: 'Voucher Giảm 15%',
     description: 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ',
-    pointsCost: 75,
+    pointsCost: 75_000,
     type: 'PERCENT',
     value: 15,
     minOrder: 250000,

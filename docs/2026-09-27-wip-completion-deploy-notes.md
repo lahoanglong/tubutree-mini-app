@@ -339,7 +339,7 @@ Grep toàn bộ khoá mà code mới đọc chỉ ra đúng chín khoá dưới 
 
 | Khoá | Mặc định | Ai ghi vào DB prod | Seed |
 |---|---|---|---|
-| `shipping.gomdon.config` | `{"defaultWarehouse":{"name":"Fuwa3e Tubu HCM","phone":"0965573541","address":"Golf Park, 1 đường số 2","ward":"Phường Long Bình","district":"Thành phố Thủ Đức","province":"Thành phố Hồ Chí Minh"},"defaultWeightFallback":500}` | Migration 3 | createOnly |
+| `shipping.gomdon.config` | `{"defaultWarehouse":{"name":"Fuwa3e Tubu HCM","phone":"0965573541","address":"Golf Park, 1 đường số 2","ward":"Phường Long Bình","district":"Thành phố Thủ Đức","province":"Thành phố Hồ Chí Minh"},"defaultWeightFallback":500}` | Migration 3 (SĐT kho đổi thành 0899149229 bởi migration `20261018200000_launch_owner_config`) | createOnly |
 | `shipping.gomdon.recycling_enabled` | `false` | Migration 3 | createOnly |
 | `returns.window_days` | `7` | Migration 3 | createOnly |
 | `dealer.reward_claim_grace_days` | `30` (kẹp 0–366) | Migration 6 | createOnly |

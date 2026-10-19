@@ -1,4 +1,4 @@
-import { isCouponEligible } from './coupon-scope';
+import { isCouponEligible, isOwnStaffCoupon, requiresRealUser } from './coupon-scope';
 
 const user = { id: 'u1', tierId: 't1' };
 
@@ -47,5 +47,54 @@ describe('isCouponEligible (nguồn sự thật scope dùng chung list + redeem)
     expect(isCouponEligible({ scope: 'BIRTHDAY' }, user)).toBe(false);
     expect(isCouponEligible({ scope: 'INVITE' }, user)).toBe(false);
     expect(isCouponEligible({ scope: 'SOMETHING_NEW' }, user)).toBe(false);
+  });
+
+  describe('CLAIM (mã ẩn, nhận qua thẻ QR)', () => {
+    const claimed = { id: 'u1', tierId: null, claimedCouponIds: new Set(['c1']) };
+    it('khách đã nhận đúng mã → eligible', () => {
+      expect(isCouponEligible({ id: 'c1', scope: 'CLAIM' }, claimed)).toBe(true);
+    });
+    it('chưa nhận mã này (nhận mã khác, hoặc không có thông tin nhận) → KHÔNG eligible', () => {
+      expect(isCouponEligible({ id: 'c2', scope: 'CLAIM' }, claimed)).toBe(false);
+      expect(isCouponEligible({ id: 'c1', scope: 'CLAIM' }, user)).toBe(false);
+    });
+    it('thiếu id mã → KHÔNG eligible', () => {
+      expect(isCouponEligible({ scope: 'CLAIM' }, claimed)).toBe(false);
+    });
+  });
+});
+
+describe('requiresRealUser', () => {
+  it('mã công khai giới hạn theo người → cần tài khoản thật; không giới hạn → không', () => {
+    expect(requiresRealUser({ scope: 'PUBLIC', perUserLimit: 1 })).toBe(true);
+    expect(requiresRealUser({ scope: 'PUBLIC', perUserLimit: 0 })).toBe(false);
+  });
+  it('mã chỉ khách mới → luôn cần tài khoản thật (tài khoản khách tạo mới vô hạn nên luôn "mới")', () => {
+    expect(requiresRealUser({ scope: 'PUBLIC', perUserLimit: 0, newCustomerOnly: true })).toBe(true);
+    expect(requiresRealUser({ scope: 'USER_GROUP', perUserLimit: 1, newCustomerOnly: true })).toBe(true);
+  });
+  it('mã CLAIM → cần tài khoản thật', () => {
+    expect(requiresRealUser({ scope: 'CLAIM', perUserLimit: 0 })).toBe(true);
+  });
+  it('mã cá nhân/hạng không cờ khách mới → giữ như cũ (không đòi)', () => {
+    expect(requiresRealUser({ scope: 'USER_GROUP', perUserLimit: 1 })).toBe(false);
+    expect(requiresRealUser({ scope: 'TIER', perUserLimit: 1 })).toBe(false);
+  });
+});
+
+describe('mã nhân viên tự tạo (D1-05)', () => {
+  const mine = { scope: 'PUBLIC', createdById: 'u1' };
+  it('người tạo không phải quản trị viên → không dùng được mã của chính mình, kể cả mã công khai', () => {
+    expect(isOwnStaffCoupon(mine, { id: 'u1', role: 'STAFF' })).toBe(true);
+    expect(isCouponEligible(mine, { id: 'u1', role: 'STAFF' })).toBe(false);
+    expect(isCouponEligible({ ...mine, scope: 'CLAIM', id: 'c1' }, { id: 'u1', role: 'STAFF', claimedCouponIds: new Set(['c1']) })).toBe(false);
+  });
+  it('không rõ vai trò → coi như nhân viên (chặn)', () => {
+    expect(isCouponEligible(mine, { id: 'u1' })).toBe(false);
+  });
+  it('quản trị viên dùng mã mình tạo được; người khác dùng mã nhân viên tạo được; mã hệ thống không đổi', () => {
+    expect(isCouponEligible(mine, { id: 'u1', role: 'ADMIN' })).toBe(true);
+    expect(isCouponEligible(mine, { id: 'u2', role: 'CUSTOMER' })).toBe(true);
+    expect(isCouponEligible({ scope: 'PUBLIC', createdById: null }, { id: 'u1', role: 'STAFF' })).toBe(true);
   });
 });

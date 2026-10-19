@@ -43,6 +43,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
+import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 
 /**
@@ -192,7 +193,7 @@ export default function LoyaltyPage() {
   const [celebrate, setCelebrate] = useState<string | null>(null);
   useEffect(() => {
     if (!data?.tier) return;
-    const KEY = 'tubu_last_tier_min';
+    const KEY = 'tubu_last_tier_min_v2';
     let raw: string | null = null;
     try {
       raw = localStorage.getItem(KEY);
@@ -231,6 +232,7 @@ export default function LoyaltyPage() {
         <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>
+          <PointsBoostStrip placement="wallet" />
           {/* Medallion hạng */}
           <div style={{ padding: 16 }}>
             <div
@@ -298,9 +300,17 @@ export default function LoyaltyPage() {
                     />
                   </div>
                   <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng
-                    {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để
-                    lên hạng {next.name}
+                    {next.spendingToGo != null ? (
+                      <>
+                        Còn <b>{moneyShort(next.spendingToGo)}</b> mua hàng để lên hạng {next.name}
+                      </>
+                    ) : (
+                      <>
+                        Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng
+                        {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để
+                        lên hạng {next.name}
+                      </>
+                    )}
                   </Text>
                 </div>
               ) : (

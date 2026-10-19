@@ -1,3 +1,5 @@
+import { SYSTEM_SUBDOMAINS, TENANT_ROOT_DOMAIN, tenantSubdomain } from './tenant-subdomain';
+
 /**
  * URL gốc của web, dùng cho metadataBase / robots / sitemap.
  *
@@ -24,19 +26,12 @@ export function isPortalPath(pathname: string | null | undefined): boolean {
   return PORTAL_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'mail'];
-
 /**
- * Subdomain gian hàng CTV của một host, hoặc null khi là host gốc/hệ thống. Khớp quy tắc ở
- * middleware.ts, nơi `/` trên host này bị rewrite sang /s/{subdomain} (nên ?q= ở trang chủ không tới được).
+ * Subdomain gian hàng CTV của một host, hoặc null khi là host gốc/hệ thống/ngoài tên miền gốc. Cùng quy tắc với middleware.ts,
+ * nơi `/` trên host này bị rewrite sang /s/{subdomain} (nên ?q= ở trang chủ không tới được).
  */
 export function tenantSubdomainOf(host: string | null | undefined): string | null {
-  const hostname = (host ?? '').split(':')[0]!.toLowerCase();
-  const parts = hostname.split('.');
-  let sub: string | null = null;
-  if (hostname.endsWith('.localhost') && parts.length === 2) sub = parts[0]!;
-  else if (parts.length >= 3 && !hostname.endsWith('.localhost')) sub = parts[0]!;
-  return sub && !SYSTEM_SUBDOMAINS.includes(sub) ? sub : null;
+  return tenantSubdomain(host ?? '');
 }
 
 /**
@@ -48,8 +43,9 @@ export function tenantSubdomainOf(host: string | null | undefined): string | nul
  */
 export function tenantHostBootScript(): string {
   return (
-    "(function(){try{var h=location.host.split(':')[0].toLowerCase(),p=h.split('.'),s=null;" +
-    "if(/\\.localhost$/.test(h)){if(p.length===2)s=p[0]}else if(p.length>=3)s=p[0];" +
+    "(function(){try{var h=location.host.split(':')[0].toLowerCase(),s=null,r=['localhost'," +
+    `${JSON.stringify(TENANT_ROOT_DOMAIN)}],i,x,l;` +
+    "for(i=0;i<r.length;i++){x='.'+r[i];if(h.length>x.length&&h.slice(-x.length)===x){l=h.slice(0,-x.length);if(l.indexOf('.')<0)s=l;break}}" +
     `if(s&&${JSON.stringify(SYSTEM_SUBDOMAINS)}.indexOf(s)<0)document.documentElement.setAttribute('data-tenant-host','')` +
     '}catch(e){}})()'
   );

@@ -14,8 +14,8 @@ import { SeasonPassService } from '../game/season-pass.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 /**
- * PD-3 T16 — CHẶN LỖI ĐƠN VỊ xu ↔ Điểm Xanh (R1). 1 Điểm Xanh = 1.000đ, 1 xu = 1đ: đọc một giá trị xu
- * dưới tên điểm là nhân 1.000 lần (thưởng giới thiệu 5.000 xu → 5.000 điểm = 5 triệu đồng).
+ * PD-3 T16 — CHẶN LỖI ĐƠN VỊ xu ↔ Điểm Xanh (R1). Từ points-1d 1 Điểm Xanh = 1đ (trước đó 1.000đ), 1 xu = 1đ: số điểm
+ * cũ ghi vào khoá mới là chia 1.000 lần, số điểm mới ghi vào chỗ còn đọc đơn vị cũ là nhân 1.000 lần, nên mỗi khoá có max riêng.
  */
 
 const SRC_ROOT = join(__dirname, '../..');
@@ -64,12 +64,15 @@ const LEGACY_XU_KEYS = [
 
 /** Khoá tính bằng Điểm Xanh mà admin sửa được (spec mục 4 điểm 3). */
 const POINTS_NUMBER_KEYS: Record<string, { max: number }> = {
-  'referral.referrer_reward_points': { max: 100 },
-  'community.post_reward_points': { max: 20 },
-  'community.answer_reward_points': { max: 20 },
-  'community.best_answer_reward_points': { max: 20 },
-  'game.tree_points_price': { max: 500 },
+  'referral.referrer_reward_points': { max: 100_000 },
+  'community.post_reward_points': { max: 20_000 },
+  'community.answer_reward_points': { max: 20_000 },
+  'community.best_answer_reward_points': { max: 20_000 },
+  'game.tree_points_price': { max: 500_000 },
 };
+
+/** Khoá điểm không nằm trong nhóm thưởng nhưng cũng có biên (giá một lượt quay). */
+const SPIN_COST_BOUND: Record<string, { max: number }> = { 'game.spin_buy_cost_points': { max: 1_000_000 } };
 
 function configService() {
   const findUnique = jest.fn().mockResolvedValue(null);
@@ -120,9 +123,9 @@ describe('PD-3 T16 (b) + (f): khoá *_points có biên giá trị; seed nằm tr
     },
   );
 
-  it("(f) set('referral.referrer_reward_points', 5000) → 400, không ghi", async () => {
+  it("(f) set('referral.referrer_reward_points', 5_000_000) → 400, không ghi (giá trị gấp 1.000 lần)", async () => {
     const { svc, upsert } = configService();
-    await expect(svc.set('referral.referrer_reward_points', 5000, 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set('referral.referrer_reward_points', 5_000_000, 'admin')).rejects.toThrow(BadRequestException);
     expect(upsert).not.toHaveBeenCalled();
   });
 
@@ -139,7 +142,9 @@ describe('PD-3 T16 (b) + (f): khoá *_points có biên giá trị; seed nằm tr
     for (const r of rows) {
       const { svc } = configService();
       await expect(svc.set(r.key, r.value as number, 'admin')).resolves.toBeUndefined();
-      await expect(svc.set(r.key, 1_000_000, 'admin')).rejects.toThrow(BadRequestException);
+      const max = (POINTS_NUMBER_KEYS[r.key] ?? SPIN_COST_BOUND[r.key])?.max;
+      expect({ key: r.key, hasBound: max !== undefined }).toEqual({ key: r.key, hasBound: true });
+      await expect(svc.set(r.key, max! + 1, 'admin')).rejects.toThrow(BadRequestException);
     }
   });
 
@@ -150,27 +155,28 @@ describe('PD-3 T16 (b) + (f): khoá *_points có biên giá trị; seed nằm tr
     }
   });
 
-  it('OQ-11: loyalty.vnd_per_point_redeem khoá cứng 1.000 (đổi tỉ giá làm lô quy đổi mất/tăng giá trị)', async () => {
+  it('OQ-11: loyalty.vnd_per_point_redeem khoá cứng 1 (đổi tỉ giá làm lô quy đổi mất/tăng giá trị)', async () => {
     const { svc } = configService();
-    await expect(svc.set('loyalty.vnd_per_point_redeem', 1000, 'admin')).resolves.toBeUndefined();
-    await expect(svc.set('loyalty.vnd_per_point_redeem', 1, 'admin')).rejects.toThrow(BadRequestException);
-    await expect(svc.set('loyalty.vnd_per_point_redeem', 2000, 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set('loyalty.vnd_per_point_redeem', 1, 'admin')).resolves.toBeUndefined();
+    await expect(svc.set('loyalty.vnd_per_point_redeem', 1000, 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set('loyalty.vnd_per_point_redeem', 2, 'admin')).rejects.toThrow(BadRequestException);
   });
 
   it('referral.milestones_points: từ chối dạng xu cũ {bonus} và bonusPoints quá lớn; nhận dạng đúng', async () => {
     const { svc } = configService();
     await expect(svc.set('referral.milestones_points', [{ count: 3, bonus: 20000 }], 'admin')).rejects.toThrow(BadRequestException);
-    await expect(svc.set('referral.milestones_points', [{ count: 3, bonusPoints: 20000 }], 'admin')).rejects.toThrow(BadRequestException);
-    await expect(svc.set('referral.milestones_points', [{ count: 0, bonusPoints: 20 }], 'admin')).rejects.toThrow(BadRequestException);
-    await expect(svc.set('referral.milestones_points', [{ count: 3, bonusPoints: 20 }, { count: 5, bonusPoints: 40 }], 'admin')).resolves.toBeUndefined();
+    await expect(svc.set('referral.milestones_points', [{ count: 3, bonusPoints: 500_001 }], 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set('referral.milestones_points', [{ count: 0, bonusPoints: 20_000 }], 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set('referral.milestones_points', [{ count: 3, bonusPoints: 20_000 }, { count: 5, bonusPoints: 40_000 }], 'admin')).resolves.toBeUndefined();
   });
 
   it('seasonpass.tiers: từ chối type XU và POINTS quá lớn; nhận SEEDS/POINTS hợp lệ', async () => {
     const { svc } = configService();
     const tier = (premium: unknown) => [{ xp: 30, free: { type: 'SEEDS', amount: 20 }, premium }];
     await expect(svc.set('seasonpass.tiers', tier({ type: 'XU', amount: 5000 }), 'admin')).rejects.toThrow(BadRequestException);
-    await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 5000 }), 'admin')).rejects.toThrow(BadRequestException);
-    await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 5 }), 'admin')).resolves.toBeUndefined();
+    await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 100_001 }), 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 100_001 }), 'admin')).rejects.toThrow(/tối đa 100\.000 Điểm Xanh/);
+    await expect(svc.set('seasonpass.tiers', tier({ type: 'POINTS', amount: 5_000 }), 'admin')).resolves.toBeUndefined();
   });
 
   it('seed Season Pass không còn phần XU', () => {
@@ -262,11 +268,11 @@ describe('PD-3 T16 (c) (d) (e): chặn lúc chạy', () => {
     return { rewards: new RewardPointsService(prisma as never, cfg as never), createManyAndReturn, prisma };
   }
 
-  it('(c) RewardPointsService.grant(…, 20000) ném lỗi 500, không ghi', async () => {
+  it('(c) RewardPointsService.grant(…, 20.000.000) ném lỗi 500, không ghi', async () => {
     const { rewards, createManyAndReturn } = rewardsWith();
-    await expect(rewards.grant('u1', 20000, 'REFERRAL_ORDER2:x', 'REFERRAL', 'o1:o2')).rejects.toThrow(InternalServerErrorException);
+    await expect(rewards.grant('u1', 20_000_000, 'REFERRAL_ORDER2:x', 'REFERRAL', 'o1:o2')).rejects.toThrow(InternalServerErrorException);
     expect(createManyAndReturn).not.toHaveBeenCalled();
-    expect(POINTS_GRANT_HARD_MAX).toBe(2000);
+    expect(POINTS_GRANT_HARD_MAX).toBe(2_000_000);
   });
 
   it('(d) referral.milestones_points dạng cũ {bonus: 20000} → mốc bị bỏ qua (không cấp, không hiển thị)', async () => {
@@ -289,29 +295,29 @@ describe('PD-3 T16 (c) (d) (e): chặn lúc chạy', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('sự kiện cộng đồng: DTO nhận rewardPoints ≤ 1.000, từ chối 1.001 và từ chối trường rewardXu cũ', async () => {
+  it('sự kiện cộng đồng: DTO nhận rewardPoints ≤ 1.000.000, từ chối 1.000.001 và từ chối trường rewardXu cũ', async () => {
     const base = { title: 'Thi', startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-10T00:00:00Z' };
     const errs = async (extra: Record<string, unknown>) =>
       (await validate(plainToInstance(CreateEventDto, { ...base, ...extra }), { whitelist: true, forbidNonWhitelisted: true })).map(
         (e) => e.property,
       );
-    expect(await errs({ rewardPoints: 1000 })).toEqual([]);
-    expect(await errs({ rewardPoints: 1001 })).toEqual(['rewardPoints']);
+    expect(await errs({ rewardPoints: 1_000_000 })).toEqual([]);
+    expect(await errs({ rewardPoints: 1_000_001 })).toEqual(['rewardPoints']);
     expect(await errs({ rewardXu: 500000 })).toEqual(['rewardXu']);
   });
 });
 
 describe('PD-3 T16 (g): bảng thưởng cứng trong mã đúng spec mục 4', () => {
-  it('mốc doanh số CTV 50 / 200 / 600 / 2.000 điểm, tổng 2.850, mốc lớn nhất = trần một lần cấp', () => {
-    expect(CTV_MONTHLY_MILESTONES.map((m) => m.rewardPoints)).toEqual([50, 200, 600, 2000]);
-    expect(CTV_MONTHLY_MILESTONES.reduce((s, m) => s + m.rewardPoints, 0)).toBe(2850);
+  it('mốc doanh số CTV 50.000 / 200.000 / 600.000 / 2.000.000 điểm, tổng 2.850.000, mốc lớn nhất = trần một lần cấp', () => {
+    expect(CTV_MONTHLY_MILESTONES.map((m) => m.rewardPoints)).toEqual([50_000, 200_000, 600_000, 2_000_000]);
+    expect(CTV_MONTHLY_MILESTONES.reduce((s, m) => s + m.rewardPoints, 0)).toBe(2_850_000);
     expect(Math.max(...CTV_MONTHLY_MILESTONES.map((m) => m.rewardPoints))).toBe(POINTS_GRANT_HARD_MAX);
     for (const m of CTV_MONTHLY_MILESTONES) expect(m).not.toHaveProperty('rewardXu');
   });
 
-  it('nhiệm vụ gian hàng 2 / 2 / 2 / 1 / 5 điểm, tổng 12 (OQ-7)', () => {
-    expect(QUESTS.map((q) => q.rewardPoints)).toEqual([2, 2, 2, 1, 5]);
-    expect(QUESTS.reduce((s, q) => s + q.rewardPoints, 0)).toBe(12);
+  it('nhiệm vụ gian hàng 2.000 / 2.000 / 2.000 / 1.000 / 5.000 điểm, tổng 12.000 (OQ-7)', () => {
+    expect(QUESTS.map((q) => q.rewardPoints)).toEqual([2_000, 2_000, 2_000, 1_000, 5_000]);
+    expect(QUESTS.reduce((s, q) => s + q.rewardPoints, 0)).toBe(12_000);
     for (const q of QUESTS) expect(q).not.toHaveProperty('rewardXu');
   });
 });

@@ -15,6 +15,7 @@ import { createBankRefund, endCustomerPayee, recordWalletRefund } from './refund
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { distributeByWeight, remainingPointsBack, returnedGoods, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
+import { formatPoints } from '../../common/format-points';
 import { paidLineTotals } from '../affiliate/commission-base';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
 
@@ -55,8 +56,8 @@ export interface PartialReversalResult {
   referralNotices?: ReferralNotice[];
 }
 
-/** Q-03a: 1.000 xu = 1 Điểm Xanh, làm tròn lên (cùng tỉ lệ migration B quy đổi số dư). */
-const XU_PER_POINT = 1000;
+/** Từ points-1d: 1 xu = 1 Điểm Xanh = 1đ (trước đó 1.000 xu = 1 điểm). */
+const XU_PER_POINT = 1;
 
 /**
  * Đơn đã giao có tiền thật để hoàn khi trả hàng: trả trước đã PAID (Ví/chuyển khoản/ZaloPay/VNPAY), hoặc COD (tài xế đã
@@ -262,7 +263,7 @@ export class OrderReversalService {
       const revoked = await revokeReferralRewardForOrder(tx, order);
       if (revoked?.shortfall) {
         this.logger.warn(
-          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
+          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${formatPoints(revoked.revoked)} điểm, thiếu ${formatPoints(revoked.shortfall)} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
       referralNotices = revoked?.notices ?? [];
@@ -511,7 +512,7 @@ export class OrderReversalService {
       });
       if (revoked?.shortfall) {
         this.logger.warn(
-          `Thu hồi một phần thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
+          `Thu hồi một phần thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${formatPoints(revoked.revoked)} điểm, thiếu ${formatPoints(revoked.shortfall)} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
       result.referralNotices = revoked?.notices ?? [];
@@ -632,7 +633,7 @@ export class OrderReversalService {
   }
 
   /**
-   * PD-3 (spec 6.2): hoàn đơn XU cũ bằng ceil(total/1000) Điểm Xanh lô CONVERTED (không hết hạn).
+   * PD-3 (spec 6.2): hoàn đơn XU cũ bằng đúng tổng đơn tính theo Điểm Xanh lô CONVERTED (không hết hạn).
    * Guard một lần là PAID→REFUNDED của caller; khoá `points_transactions_converted_refund_unique`
    * là lớp hai (dòng đã có → không cộng, không làm hỏng tx).
    */

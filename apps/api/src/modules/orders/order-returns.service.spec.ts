@@ -372,6 +372,7 @@ describe('refundNote — khách được báo số tiền và nơi nhận (D2)',
       ' Tubu sẽ chuyển khoản 60.000đ về Techcombank ••• 5678 trong 1-3 ngày làm việc, miễn phí.',
     );
     expect(refundNote(null, null, 18)).toBe(' Đã hoàn 18 Điểm Xanh.');
+    expect(refundNote(null, null, 7000)).toBe(' Đã hoàn 7.000 Điểm Xanh.');
     expect(refundNote(null, null)).toBe('');
   });
 });

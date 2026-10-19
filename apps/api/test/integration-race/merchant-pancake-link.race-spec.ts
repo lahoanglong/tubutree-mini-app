@@ -178,6 +178,25 @@ describe('Merchant Pancake link (real Postgres)', () => {
     await expect(merchant.checkPancakeVariation(b.owner.id, tubu.code)).resolves.toMatchObject({ pancakeId: tubu.code });
   });
 
+  it.each([[12], [0], [null]])(
+    '(l) A3: liên kết "Tubu giao hộ" xoá %% hoa hồng CTV của biến thể (hàng đối tác không ăn %% cũ); gỡ liên kết trả đúng %% lúc liên kết (%s)',
+    async (rate) => {
+      const tubu = await tubuProduct();
+      await prisma.variation.update({ where: { id: tubu.variation.id }, data: { affiliateRate: rate } });
+      const a = await merchantStore();
+      const p = await requestLink(a.owner, tubu.code);
+      await approveShown(p.id);
+      const rateOf = async () => (await prisma.variation.findUniqueOrThrow({ where: { id: tubu.variation.id } })).affiliateRate;
+      expect(await rateOf()).toBeNull();
+      expect(await prisma.merchantPancakeLink.findFirstOrThrow({ where: { productId: p.id } })).toMatchObject({ affiliateRateCaptured: true });
+
+      await prisma.variation.update({ where: { id: tubu.variation.id }, data: { affiliateRate: 15 } });
+      await admin.unlinkMerchantProduct('admin-it', p.id, 'Hết hợp tác');
+      const back = await rateOf();
+      expect(back === null ? null : Number(back)).toBe(rate);
+    },
+  );
+
   it('(c) admin "Gỡ liên kết" chồng với đối tác ngừng bán → biến thể về gốc đúng một lần, không còn liên kết mở, đối tác được báo', async () => {
     for (let round = 0; round < 4; round++) {
       const tubu = await tubuProduct();

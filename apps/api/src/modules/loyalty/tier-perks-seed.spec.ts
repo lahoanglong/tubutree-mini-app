@@ -197,7 +197,9 @@ describe('migration _pd1_review_wording: "Điểm Xanh" cho quyền lợi tích 
     expect(parsed.map((p) => p.name).sort()).toEqual(TIERS.map((t) => t.name).sort());
   });
 
-  const goalSeed = /id: 'cg-cangio-2026',\s+title: '([^']+)',\s+region: '([^']+)'/.exec(seedSrc);
+  // Mốc mẫu nằm ở reference-data/garden.ts (dùng chung cho seed.ts và seed-reference.ts).
+  const gardenSrc = readFileSync(join(PRISMA_DIR, 'reference-data/garden.ts'), 'utf-8');
+  const goalSeed = /id: 'cg-cangio-2026',\s+title: '([^']+)',\s+region: '([^']+)'/.exec(gardenSrc);
 
   it('seed mốc cộng đồng không nêu địa điểm trồng hay "phủ xanh" (không có quy trình trồng thật)', () => {
     expect(goalSeed).not.toBeNull();

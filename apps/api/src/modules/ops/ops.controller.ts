@@ -28,7 +28,7 @@ export class OpsController {
   ) {}
 
   /** Trang chủ "Việc cần xử lý": số việc ở từng hàng đợi — nhân viên chỉ thấy việc thuộc nhóm của mình. */
-  @AllowStaff('CSKH', 'KHO')
+  @AllowStaff('CSKH', 'KHO', 'MARKETING', 'KE_TOAN')
   @Get('inbox')
   getInbox(@CurrentUser() user: JwtPayload) {
     return this.inbox.counts({ role: user.role, staffPermissions: user.staffPermissions });

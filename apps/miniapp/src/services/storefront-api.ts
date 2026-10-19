@@ -23,15 +23,26 @@ export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'it
 export interface Storefront {
   id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
   type: 'CTV' | 'BRAND' | 'MERCHANT'; isPartner?: boolean; title: string; headerNote: string | null;
+  /** Mã giới thiệu của chủ gian hàng CTV (API trả ở trang công khai; null với gian hàng khác). */
+  referralCode?: string | null;
   ownerTier: { name: string; emoji: string } | null;
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;
   warehouseAddress?: string | null; warehouseCity?: string | null; warehouseDistrict?: string | null; warehouseWard?: string | null; warehousePhone?: string | null;
+  /** Admin đã duyệt gian hàng: chỉ khi đó mới có nhãn "CTV tuyển chọn". */
+  approved?: boolean;
+  /** Cờ link subdomain; tắt thì `subdomain`/`customDomain` luôn null và chỉ dùng /s/<slug>. */
+  subdomainEnabled?: boolean;
   collections: StorefrontCollection[];
 }
 // GET /storefront/me KHÔNG trả ownerTier (chỉ trang công khai getPublicBySlug mới tính bậc) —
 // loại field này khỏi view chỉnh sửa để type khớp đúng response thật.
-export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> { isPublished: boolean; collections: StorefrontCollectionEdit[]; }
+export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> {
+  isPublished: boolean;
+  /** Lý do khách không thấy gian hàng dù đã đăng (bị gỡ, chủ không còn là CTV…); null khi khách thấy bình thường. */
+  publicHiddenReason?: string | null;
+  collections: StorefrontCollectionEdit[];
+}
 export interface PickerProduct {
   id: string; name: string; slug: string; thumbnail: string | null; brand: string;
   basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number; maxAffiliateRate: number;

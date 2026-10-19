@@ -30,14 +30,14 @@ describe('AdminEngagementController — nhiệm vụ & quà đổi điểm (ENGA
     ['mô tả quá dài', { description: 'x'.repeat(301) }],
     ['điểm âm', { rewardPoints: -1 }],
     ['điểm lẻ', { rewardPoints: 1.5 }],
-    ['điểm quá lớn', { rewardPoints: 501 }],
+    ['điểm quá lớn', { rewardPoints: 500_001 }],
     ['đổi mục tiêu (goal quyết định chu kỳ nhận lại, không cho sửa)', { goal: 3 }],
   ])('UpdateMissionDto từ chối: %s', (_label, body) => {
     expect(validateSync(plainToInstance(UpdateMissionDto, body), { whitelist: true, forbidNonWhitelisted: true }).length).toBeGreaterThan(0);
   });
 
   it('UpdateMissionDto nhận sửa tiêu đề/mô tả/điểm thưởng', () => {
-    const dto = plainToInstance(UpdateMissionDto, { title: ' Mua đơn đầu ', description: 'Mô tả', rewardPoints: 40 });
+    const dto = plainToInstance(UpdateMissionDto, { title: ' Mua đơn đầu ', description: 'Mô tả', rewardPoints: 40_000 });
     expect(validateSync(dto, { whitelist: true, forbidNonWhitelisted: true })).toEqual([]);
     expect(dto.title).toBe('Mua đơn đầu');
   });
@@ -77,7 +77,7 @@ describe('AdminEngagementService', () => {
     const rows = await make({ pointsTransaction: { groupBy } }).rewardCatalog(new Date('2026-10-14T00:00:00Z'));
     expect(rows).toHaveLength(DEFAULT_REWARD_CATALOG.length);
     const ship = rows.find((r) => r.id === 'reward-freeship')!;
-    expect(ship).toMatchObject({ pointsCost: 20, redeemedCount: 12, redeemed30d: 3 });
+    expect(ship).toMatchObject({ pointsCost: 20_000, redeemedCount: 12, redeemed30d: 3 });
     expect(rows.find((r) => r.id === 'reward-discount-50k')).toMatchObject({ redeemedCount: 0, redeemed30d: 0 });
     expect(groupBy.mock.calls[1][0].where.createdAt).toEqual({ gte: new Date('2026-09-14T00:00:00Z') });
   });

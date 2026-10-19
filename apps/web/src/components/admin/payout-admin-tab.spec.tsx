@@ -170,3 +170,28 @@ describe('Thuế TNCN trên lệnh rút và báo cáo tháng (SELLER-11)', () =>
     expect(container.textContent).toContain('thuế đã khấu trừ 760.000');
   });
 });
+
+// D1-05: kế toán chi lệnh đã duyệt; duyệt/từ chối là việc của ADMIN (API chặn 403, màn không hiện nút).
+describe('PayoutAdminTab — nhân viên kế toán (canReview=false)', () => {
+  it('lệnh REQUESTED: không có nút Duyệt/Từ chối, ghi rõ chờ quản trị viên duyệt', () => {
+    const { container } = mount(<PayoutRow payout={payout()} canReview={false} />);
+    expect(byText(container, 'button', 'Duyệt')).toBeNull();
+    expect(byText(container, 'button', 'Từ chối')).toBeNull();
+    expect(container.querySelector('input[aria-label="Ghi chú / lý do"]')).toBeNull();
+    expect(container.textContent).toContain('Chờ quản trị viên duyệt');
+  });
+
+  it('lệnh APPROVED: vẫn bấm được "Đã chuyển khoản" kèm mã giao dịch', () => {
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} canReview={false} />);
+    expect(byText(container, 'button', 'Đã chuyển khoản')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')).not.toBeNull();
+  });
+
+  it('mặc định lọc lệnh đã duyệt chờ chuyển khoản (APPROVED), không phải hàng chờ duyệt', async () => {
+    const api = mockFetch(LIST);
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mount(<PayoutAdminTab canReview={false} />);
+    await flush();
+    expect(api.calls.find((c) => !c.url.includes('/pit-report'))!.url).toContain('status=APPROVED');
+  });
+});

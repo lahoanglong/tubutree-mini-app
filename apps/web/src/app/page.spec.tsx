@@ -1,13 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// @vitest-environment jsdom
 // C-025 (A1-014): trang chủ web nhận ?q= (từ ô tìm kiếm ở header) và chuyển cho GET /products?q=.
 
-const mocks = vi.hoisted(() => ({ getProductsPage: vi.fn(), getBrands: vi.fn(), redirect: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getProductsPage: vi.fn(), getBrands: vi.fn(), getCategories: vi.fn(), redirect: vi.fn() }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProductsPage: mocks.getProductsPage,
   getBrands: mocks.getBrands,
+  getCategories: mocks.getCategories,
 }));
 vi.mock('next/navigation', () => ({
   redirect: (url: string) => {
@@ -22,6 +24,11 @@ const PRODUCT = {
   id: 'p1', slug: 'dau-goi', brand: 'Tubu', name: 'Dầu gội bồ kết', thumbnail: null, basePrice: 200000,
   salePrice: null, isFeatured: false, inStock: true,
 };
+const CATEGORIES = [
+  { id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4 },
+  { id: 'c-trong', parentId: null, name: 'Danh mục trống', slug: 'trong', image: null, sortOrder: 2, productCount: 0 },
+  { id: 'c-xa', parentId: null, name: 'Xà phòng', slug: 'xa-phong', image: null, sortOrder: 3, productCount: 2 },
+];
 const pageOf = (data: unknown[], total = data.length, page = 1) => ({ data, meta: { page, limit: 24, total } });
 const render = async (sp: Record<string, string | string[] | undefined>) =>
   renderToStaticMarkup(await HomePage({ searchParams: Promise.resolve(sp) }));
@@ -30,6 +37,7 @@ beforeEach(() => {
   mocks.getProductsPage.mockReset().mockResolvedValue(pageOf([PRODUCT]));
   mocks.redirect.mockReset();
   mocks.getBrands.mockReset().mockResolvedValue([{ brand: 'Tubu', count: 3 }, { brand: 'A&B', count: 1 }]);
+  mocks.getCategories.mockReset().mockResolvedValue(CATEGORIES);
 });
 
 describe('HomePage — tìm kiếm', () => {
@@ -179,5 +187,77 @@ describe('ProductCard — nhãn hết hàng (BUYERWEB-9)', () => {
     const { inStock: _drop, ...noFlag } = PRODUCT;
     mocks.getProductsPage.mockResolvedValue(pageOf([noFlag]));
     expect(await render({})).not.toContain('Hết hàng');
+  });
+});
+
+describe('HomePage — ảnh thẻ sản phẩm (D6-12)', () => {
+  it('4 thẻ đầu tải ngay với fetchpriority=high, các thẻ sau tải lười', async () => {
+    const products = Array.from({ length: 7 }, (_, i) => ({ ...PRODUCT, id: `p${i}`, slug: `sp-${i}`, thumbnail: `https://cdn.example/${i}.jpg` }));
+    mocks.getProductsPage.mockResolvedValue(pageOf(products));
+    const imgs = [...(await render({})).matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+    expect(imgs).toHaveLength(7);
+    expect(imgs.map((i) => /loading="(\w+)"/.exec(i)?.[1])).toEqual(['eager', 'eager', 'eager', 'eager', 'lazy', 'lazy', 'lazy']);
+    expect(imgs.map((i) => /fetchPriority="(\w+)"/i.exec(i)?.[1])).toEqual(['high', 'high', 'high', 'high', undefined, undefined, undefined]);
+  });
+});
+
+// D7 việc 1: khách mới vào trang chủ phải thấy lối vào theo danh mục ngay dưới hero, và cam kết chỉ còn một hàng.
+describe('HomePage — hàng danh mục và hàng cam kết (D7)', () => {
+  it('trang chủ không dùng lời hứa tuyệt đối "100%"', async () => {
+    expect(await render({})).not.toContain('100%');
+  });
+
+  it('hàng danh mục liệt kê danh mục còn hàng, bỏ danh mục trống, mỗi liên kết ≥ 44px', async () => {
+    const out = await render({});
+    expect(out).toContain('aria-label="Mua theo danh mục"');
+    expect(out).toMatch(/<a [^>]*min-h-11[^>]*href="\/\?category=c-goi#san-pham"[^>]*>Dầu gội/);
+    expect(out).toContain('href="/?category=c-xa#san-pham"');
+    expect(out).not.toContain('Danh mục trống');
+    expect(out.indexOf('Mua theo danh mục')).toBeGreaterThan(out.indexOf('<h1'));
+    expect(out.indexOf('Mua theo danh mục')).toBeLessThan(out.indexOf('Cam kết của Tubu Tree'));
+  });
+
+  it('không có danh mục nào còn hàng (hoặc API cũ không trả): không vẽ hàng danh mục', async () => {
+    mocks.getCategories.mockResolvedValue([CATEGORIES[1]]);
+    expect(await render({})).not.toContain('Mua theo danh mục');
+    mocks.getCategories.mockResolvedValue([]);
+    expect(await render({})).not.toContain('Mua theo danh mục');
+  });
+
+  it('?category=<id thật> gọi API đúng danh mục, đánh dấu danh mục đang chọn và giữ nhãn hàng trong liên kết phân trang', async () => {
+    mocks.getProductsPage.mockResolvedValue(pageOf(Array.from({ length: 24 }, (_, i) => ({ ...PRODUCT, id: `p${i}`, slug: `s${i}` })), 45));
+    const out = await render({ category: 'c-goi', brand: 'Tubu' });
+    expect(mocks.getProductsPage).toHaveBeenLastCalledWith({ brand: 'Tubu', category: 'c-goi' });
+    expect(out).toMatch(/<a [^>]*aria-current="true"[^>]*>Dầu gội/);
+    expect(out).toContain('href="/?brand=Tubu&amp;category=c-goi&amp;page=2#san-pham"');
+  });
+
+  it('?category lạ hoặc lặp lại: bỏ qua, không đẩy chuỗi tuỳ ý xuống API', async () => {
+    await render({ category: 'khong-co' });
+    expect(mocks.getProductsPage).toHaveBeenLastCalledWith({});
+    await render({ category: ['c-xa', 'c-goi'] });
+    expect(mocks.getProductsPage).toHaveBeenLastCalledWith({ category: 'c-xa' });
+  });
+
+  it('trang lọc theo danh mục không cho lập chỉ mục (trùng nội dung catalog), trang gốc vẫn như cũ', async () => {
+    expect(await generateMetadata({ searchParams: Promise.resolve({ category: 'c-goi' }) })).toEqual({ robots: { index: false, follow: true } });
+    expect(await generateMetadata({ searchParams: Promise.resolve({}) })).toEqual({ alternates: { canonical: '/' } });
+    expect(await render({ category: 'c-goi' })).not.toContain('rel="canonical"');
+  });
+
+  it('ba cam kết nằm trên một hàng ở mọi cỡ màn hình, vẫn giữ đủ ba cam kết', async () => {
+    const out = await render({});
+    const section = /<section aria-labelledby="cam-ket"[\s\S]*?<\/section>/.exec(out)?.[0] ?? '';
+    expect(section).toContain('grid-cols-3');
+    expect(section).not.toContain('grid-cols-1');
+    expect(section.match(/<h3/g)).toHaveLength(3);
+    expect(section).toContain('Đổi Trả 7 Ngày');
+  });
+
+  it('API danh mục lỗi không làm hỏng trang chủ: hiện lưới sản phẩm, bỏ hàng danh mục', async () => {
+    mocks.getCategories.mockRejectedValue(new Error('down'));
+    const out = await render({});
+    expect(out).toContain('Dầu gội bồ kết');
+    expect(out).not.toContain('Mua theo danh mục');
   });
 });

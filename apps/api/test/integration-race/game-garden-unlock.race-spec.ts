@@ -53,14 +53,43 @@ describe('Mở lô đất song song (real Postgres)', () => {
     expect(await seeds(user.id)).toBe(900);
   });
 
-  it('mười lệnh song song → vẫn một ô, trừ đúng một lần', async () => {
+  it('mười lệnh song song không kèm slot (client cũ) → chạy hết, không crash', async () => {
     const user = await userWithSeeds(5000);
 
     const results = await Promise.allSettled(Array.from({ length: 10 }, () => garden.unlockPlot(user.id, 'SEEDS')));
 
     expect(summarize(results).errors).toEqual([]);
+  });
+
+  it('mười lệnh song song cùng slot=1 → đúng một ô, trừ đúng một lần', async () => {
+    const user = await userWithSeeds(5000);
+
+    const results = await Promise.allSettled(Array.from({ length: 10 }, () => garden.unlockPlot(user.id, 'SEEDS', 1)));
+
+    expect(summarize(results).errors).toEqual([]);
     expect(await prisma.gardenPlot.count({ where: { userId: user.id } })).toBe(1);
     expect(await seeds(user.id)).toBe(4900);
+  });
+
+  it('gửi lại slot=1 khi ô 1 đã có → trả ô 1, 💧 không đổi', async () => {
+    const user = await userWithSeeds(1000);
+    const first = await garden.unlockPlot(user.id, 'SEEDS', 1);
+
+    const again = await garden.unlockPlot(user.id, 'SEEDS', 1);
+
+    expect(again).toMatchObject({ id: first.id, slot: 1 });
+    expect(await prisma.gardenPlot.count({ where: { userId: user.id } })).toBe(1);
+    expect(await seeds(user.id)).toBe(900);
+  });
+
+  it('slot=3 khi mới có 1 ô → BadRequest, không trừ 💧, không tạo ô', async () => {
+    const user = await userWithSeeds(1000);
+    await garden.unlockPlot(user.id, 'SEEDS', 1);
+
+    await expect(garden.unlockPlot(user.id, 'SEEDS', 3)).rejects.toThrow('hãy tải lại trang');
+
+    expect(await prisma.gardenPlot.count({ where: { userId: user.id } })).toBe(1);
+    expect(await seeds(user.id)).toBe(900);
   });
 
   it('không đủ 💧 vẫn báo thiếu nước (không bị nuốt thành "đã mở")', async () => {

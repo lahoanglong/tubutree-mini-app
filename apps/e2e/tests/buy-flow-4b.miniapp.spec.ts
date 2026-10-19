@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect, makeOrder, type MockApi, type MockContext } from './support/mock-api';
+import { test, expect, makeOrder, publicConfig, type MockApi, type MockContext } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { BINH_SUA, SHIPPING_CODE, SUBSCRIPTION_DAY_MONTH, XA_PHONG, catalogHandler, mockDiscovery, toCard } from './support/discovery-mocks';
 import { eventsNamed, flushEvents } from './support/events';
@@ -78,6 +78,8 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
 
   test('A2-33: không còn "Khám phá vườn"; thẻ AI/Mua chung nằm dưới các lưới SP; "Tìm sản phẩm" mở ô tìm đã focus', async ({ page, api }) => {
     mockDiscovery(api);
+    // Thẻ AI chỉ hiện khi server bật trợ lý; ca này kiểm vị trí của chính thẻ đó.
+    api.get('/config/public', publicConfig({ aiAdvisorEnabled: true }));
     await page.goto('/');
     const newest = page.getByRole('region', { name: 'Mới về vườn' });
     await expect(newest).toBeVisible({ timeout: 15_000 });

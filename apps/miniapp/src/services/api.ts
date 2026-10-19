@@ -1,6 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { LoginResponse } from '@tubutree/shared-types';
 import { vi } from '../i18n/vi';
+import type { FirstTouch } from './first-touch';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api';
 const TIMEOUT_MS = 15_000;
@@ -196,18 +197,20 @@ export async function loginZaloMiniApp(
   zaloAccessToken: string,
   phoneToken?: string,
   referralCode?: string,
+  firstTouch?: FirstTouch,
 ): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>('/auth/zalo-mini-app', {
     code,
     accessToken: zaloAccessToken,
     phoneToken,
     referralCode,
+    firstTouch,
   });
   return data;
 }
 
-export async function loginGuest(deviceId: string, referralCode?: string): Promise<LoginResponse> {
-  const { data } = await api.post<LoginResponse>('/auth/guest', { deviceId, referralCode });
+export async function loginGuest(deviceId: string, referralCode?: string, firstTouch?: FirstTouch): Promise<LoginResponse> {
+  const { data } = await api.post<LoginResponse>('/auth/guest', { deviceId, referralCode, firstTouch });
   return data;
 }
 

@@ -78,7 +78,7 @@ export interface CreatePostInput {
   eventId?: string;
 }
 
-// Sự kiện cộng đồng (Pha 4 Task 4) — thử thách có hạn + thưởng Điểm Xanh cho người thắng (1 điểm = 1.000đ).
+// Sự kiện cộng đồng (Pha 4 Task 4) — thử thách có hạn + thưởng Điểm Xanh cho người thắng (1 điểm = 1đ).
 export interface CommunityEvent {
   id: string;
   title: string;
@@ -115,6 +115,28 @@ export const getFeed = (
     tag?: string;
   } = {},
 ) => api.get<FeedPage>('/feed', { params }).then((r) => r.data);
+
+/**
+ * Một bài trong phần xem trước công khai (GET /feed/public-preview, khi cờ community.public_preview bật): chỉ trường công
+ * khai, không avatar, không id người đăng, không cờ của người xem; `author` là tên gọi, `snippet` là đoạn đầu đã che
+ * số điện thoại/email.
+ */
+export interface FeedPreviewItem {
+  id: string;
+  kind: FeedPostKind;
+  title: string | null;
+  snippet: string;
+  image: string | null;
+  createdAt: string;
+  author: string;
+  badge: 'EXPERT' | null;
+  category: { slug: string; name: string; icon: string | null } | null;
+  isPinned: boolean;
+  likeCount: number;
+  commentCount: number;
+}
+export const getFeedPublicPreview = () =>
+  api.get<{ posts: FeedPreviewItem[] }>('/feed/public-preview').then((r) => r.data);
 
 export const getPost = (id: string) => api.get<FeedItem>(`/feed/${id}`).then((r) => r.data);
 

@@ -38,7 +38,11 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
         findMany: jest.fn().mockResolvedValue(opts.admins ?? [{ id: 'admin1' }]),
       },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue(opts.entries ?? [{ delta: 200_000 }]), create: ledgerCreate },
+      dealerCreditLedger: {
+        findMany: jest.fn().mockResolvedValue(opts.entries ?? [{ delta: 200_000 }]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: (opts.entries ?? [{ delta: 200_000 }]).reduce((a, e) => a + e.delta, 0) } }),
+        create: ledgerCreate,
+      },
     };
     const notifications = { notify };
     const svc = new DealerService(prisma as unknown as PrismaService, makeConfig(), notifications as never);
@@ -89,7 +93,10 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]) },
+      dealerCreditLedger: {
+        findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 200_000 } }),
+      },
     } as unknown as PrismaService;
     const svc = new DealerService(prisma, makeConfig());
     await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
@@ -123,6 +130,15 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     const svc = new DealerService(prisma as unknown as PrismaService, makeConfig(), notifications as never);
     return { svc, prisma, ledgerCreate, aggregate, findFirst, notify };
   }
+
+  it('Kế toán ghi nhận (byStaff): ghi chú sổ công nợ ghi nhãn "Kế toán" + id; ADMIN vẫn là "Admin"', async () => {
+    const kt = build({ debt: 500_000 });
+    await kt.svc.adminRecordCreditPayment('kt1', 'd1', 100_000, { byStaff: true });
+    expect((kt.ledgerCreate.mock.calls[0]![0] as { data: { note: string } }).data.note).toMatch(/^Kế toán kt1 xác nhận/);
+    const ad = build({ debt: 500_000 });
+    await ad.svc.adminRecordCreditPayment('admin1', 'd1', 100_000);
+    expect((ad.ledgerCreate.mock.calls[0]![0] as { data: { note: string } }).data.note).toMatch(/^Admin admin1 xác nhận/);
+  });
 
   it('số tiền <= dư nợ → tạo dòng PAYMENT delta ÂM đúng bằng amount, ghi rõ admin + bankRef + note, báo đại lý', async () => {
     const { svc, ledgerCreate, notify } = build({ debt: 500_000 });
@@ -216,6 +232,7 @@ describe('DealerCreditAdminController (POST /api/admin/dealers/:userId/credit-pa
     const svc = { adminRecordCreditPayment: jest.fn().mockResolvedValue({ balance: 0, entries: [] }) };
     await new DealerCreditAdminController(svc as never).recordPayment(
       'admin1',
+      'ADMIN',
       'd1',
       { amount: 100_000, bankRef: 'FT1', note: 'x' },
       'idem-1',
@@ -224,6 +241,7 @@ describe('DealerCreditAdminController (POST /api/admin/dealers/:userId/credit-pa
       note: 'x',
       bankRef: 'FT1',
       idempotencyKey: 'idem-1',
+      byStaff: false,
     });
   });
 
@@ -269,7 +287,10 @@ describe('DealerService.reportCreditPayment — báo admin (đặc tả notifyAd
     const prisma = {
       user,
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
-      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]) },
+      dealerCreditLedger: {
+        findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 200_000 } }),
+      },
     } as unknown as PrismaService;
     const svc = new DealerService(prisma, makeConfig(), opts.wired === false ? undefined : ({ notify } as never));
     return { svc, user, notify };

@@ -1,12 +1,12 @@
 export const ONBOARDING_SNOOZE_KEY = 'tubu_onboarding_snooze_until';
 export const ONBOARDING_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** `?s=` (gian hàng CTV) hoặc `?ref=` (mã giới thiệu) ở search hay hash của URL. */
+/** `?s=` (gian hàng CTV), `?ref=` (mã giới thiệu) hoặc `?claim=` (thẻ QR hộp hàng, có sheet nhận ưu đãi riêng) ở search hay hash. */
 export function hasPartnerLinkParams(...urlParts: string[]): boolean {
   return urlParts.some((part) => {
     const query = part.includes('?') ? part.slice(part.indexOf('?') + 1) : part.replace(/^[#?]/, '');
     const params = new URLSearchParams(query);
-    return params.has('s') || params.has('ref');
+    return params.has('s') || params.has('ref') || params.has('claim');
   });
 }
 

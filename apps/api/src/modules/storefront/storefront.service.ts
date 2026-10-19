@@ -4,10 +4,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/storefront-sales';
+import { hasAffiliateAccess } from '../affiliate/affiliate-access';
+import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
 import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
+import { decodeServedImage } from '../../common/served-image';
+import { assertStorefrontImagesAllowed, isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
+import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
+import { isStorefrontApproved, ownerHiddenReason, publicStorefrontWhere } from './storefront-visibility';
+import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
@@ -52,13 +59,21 @@ export class StorefrontService {
     return Math.min(pct, max);
   }
 
+  private async visibilityOptions() {
+    const [roles, requireApproval] = await Promise.all([this.affiliate.commissionEligibleRoles(), isStorefrontApprovalRequired(this.config)]);
+    return { eligibleRoles: [...roles], requireApproval };
+  }
+
   async getOrCreateMine(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (user.role !== 'AFFILIATE' && user.role !== 'ADMIN') {
+    const canCreate = user.role === 'AFFILIATE' || user.role === 'ADMIN';
+    // CTV được duyệt lên đại lý giữ gian hàng CTV (D3-03): mở lại được, nhưng đại lý không tạo gian hàng CTV mới.
+    if (!canCreate && user.role !== 'DEALER') {
       throw new BadRequestException('Chỉ CTV mới tạo được gian hàng.');
     }
     const existing = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'CTV' } });
     if (existing) return existing;
+    if (!canCreate) throw new BadRequestException('Chỉ CTV mới tạo được gian hàng.');
     try {
       return await this.prisma.storefront.create({
         data: {
@@ -87,6 +102,7 @@ export class StorefrontService {
     const sf = await this.prisma.storefront.findFirst({
       where: { ownerUserId: userId, type: 'CTV' },
       include: {
+        owner: { select: { role: true, isBlocked: true, referralCode: true } },
         collections: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -116,9 +132,16 @@ export class StorefrontService {
       },
     });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
+    const { owner, ...rest } = sf;
+    const subdomainEnabled = await isStorefrontSubdomainEnabled(this.config);
     // SELLER-15: builder đánh dấu món khách không thấy (cùng điều kiện lọc của trang công khai) thay vì hiện như bình thường.
     return {
-      ...sf,
+      ...withSubdomainFlag(rest, subdomainEnabled),
+      // Nút Chia sẻ của builder dựng link /s/<slug>?ref=<mã> từ đây, cùng cách trang công khai trả mã (SELLER-4).
+      referralCode: owner?.referralCode ?? null,
+      approved: isStorefrontApproved(sf),
+      // Chủ vẫn xem và sửa được gian hàng đang ẩn với khách; dòng này nói vì sao.
+      publicHiddenReason: ownerHiddenReason(sf, owner, await this.visibilityOptions()),
       collections: sf.collections.map((c) => ({
         ...c,
         items: c.items.map((i) => ({ ...i, hiddenReason: buyerHiddenReason(i) })),
@@ -148,6 +171,9 @@ export class StorefrontService {
     },
   ) {
     const sf = await this.assertOwnedStorefront(userId);
+    assertStorefrontImagesAllowed(dto, sf);
+    // Builder gửi lại subdomain đang lưu mỗi lần bấm Lưu: không đổi thì bỏ qua, không kiểm từ khoá/trùng và không ghi lại.
+    if (dto.subdomain && dto.subdomain.trim().toLowerCase() === sf.subdomain) dto.subdomain = undefined;
     if (dto.subdomain) {
       const sub = normalizeSubdomain(dto.subdomain);
       // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-
@@ -173,17 +199,23 @@ export class StorefrontService {
 
   async publishMine(userId: string, isPublished: boolean) {
     const sf = await this.assertOwnedStorefront(userId);
-    return this.prisma.storefront.update({
-      where: { id: sf.id },
-      data: { isPublished, publishedAt: isPublished ? new Date() : null },
-    });
+    if (isPublished) await assertCanPublish(this.prisma, sf);
+    try {
+      return await this.prisma.storefront.update({
+        where: { id: sf.id, ...(isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) },
+        data: { isPublished, publishedAt: isPublished ? new Date() : null },
+      });
+    } catch (err) {
+      if (isPublished && isLostToTakeDown(err)) throw takenDownError(null);
+      throw err;
+    }
   }
 
   async pickerProducts(userId: string, q: { search?: string; page?: number; limit?: number }) {
-    // Guardrail §9: picker trả maxAffiliateRate (% hoa hồng) → CHỈ CTV/Admin được gọi,
-    // không lộ % hoa hồng cho khách thường.
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
-    if (user.role !== 'AFFILIATE' && user.role !== 'ADMIN') {
+    // Guardrail §9: picker trả maxAffiliateRate (% hoa hồng) → CHỈ CTV/Admin và đại lý còn gian hàng CTV hay hoa hồng
+    // (hasAffiliateAccess, D3-03) được gọi, không lộ % hoa hồng cho khách thường.
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true, role: true } });
+    if (!(await hasAffiliateAccess(this.prisma, user))) {
       throw new BadRequestException('Chỉ CTV mới xem được danh sách sản phẩm để thêm vào gian hàng.');
     }
     const take = Math.min(q.limit ?? 20, 50);
@@ -201,25 +233,22 @@ export class StorefrontService {
       skip,
       select: {
         id: true, name: true, slug: true, thumbnail: true, brand: true,
-        basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true,
+        basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, storefrontId: true,
         // CHỈ tính maxAffiliateRate trên variation đang bán (isActive) — variation ngừng bán
         // không được tính vào, tránh hiện %HH cao hơn thực tế CTV có thể đạt được.
         variations: { where: { isActive: true }, select: { affiliateRate: true } },
       },
     });
+    const defaultPct = await loadDefaultRate(this.config);
     return products.map((p) => {
-      const { variations, ...rest } = p;
-      return {
-        ...rest,
-        maxAffiliateRate: variations.reduce(
-          (m, v) => Math.max(m, v.affiliateRate ? Number(v.affiliateRate) : 0), 0,
-        ),
-      };
+      const { variations, storefrontId, ...rest } = p;
+      return { ...rest, maxAffiliateRate: maxResolvedRate(variations, { storefrontId }, defaultPct) };
     });
   }
 
   async getPublicBySlug(identifier: string) {
     const clean = identifier.trim().toLowerCase();
+    const visible = publicStorefrontWhere(await this.visibilityOptions());
     const sf = await this.prisma.storefront.findFirst({
       where: {
         // insensitive để gian hàng tạo TRƯỚC bản vá (slug in hoa) vẫn mở được mà không phải
@@ -229,7 +258,7 @@ export class StorefrontService {
           { subdomain: { equals: clean, mode: 'insensitive' } },
           { customDomain: { equals: clean, mode: 'insensitive' } },
         ],
-        isPublished: true,
+        ...visible,
       },
       include: {
         owner: { select: { referralCode: true } },
@@ -267,14 +296,15 @@ export class StorefrontService {
       // SELLER-4: mã giới thiệu lấy từ chủ gian hàng, không suy từ slug/subdomain trên URL (subdomain riêng không phải mã).
       referralCode: sf.type === 'CTV' ? (sf.owner?.referralCode ?? null) : null,
       ownerTier,
-      subdomain: sf.subdomain,
-      customDomain: sf.customDomain,
+      ...withSubdomainFlag({ subdomain: sf.subdomain, customDomain: sf.customDomain }, await isStorefrontSubdomainEnabled(this.config)),
       type: sf.type,
       isPartner: isPartnerStore(sf),
+      // Tick xanh và nhãn "CTV tuyển chọn" chỉ dành cho gian hàng admin đã duyệt, dù cờ duyệt lần đầu bật hay tắt.
+      approved: isStorefrontApproved(sf),
       title: sf.title,
       headerNote: sf.headerNote,
-      avatarUrl: sf.avatarUrl,
-      coverUrl: sf.coverUrl,
+      avatarUrl: publicStorefrontImage(sf.id, 'avatar', sf.avatarUrl),
+      coverUrl: publicStorefrontImage(sf.id, 'cover', sf.coverUrl),
       theme: sf.theme,
       themeColor: sf.themeColor ?? '#16a34a',
       // Kho gửi hàng chỉ có ở gian hàng đối tác tự giao; gian hàng CTV có thể còn dữ liệu cũ nhập nhầm (SELLER-8).
@@ -325,12 +355,26 @@ export class StorefrontService {
    */
   async getPublicList() {
     const stores = await this.prisma.storefront.findMany({
-      where: { isPublished: true },
+      where: publicStorefrontWhere(await this.visibilityOptions()),
       select: { slug: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
       take: 500,
     });
     return stores;
+  }
+
+  /** Byte ảnh base64 của gian hàng khách đang thấy; ảnh URL thường không qua đây (JSON trả thẳng URL). */
+  async getPublicImage(id: string, kind: string, version: unknown): Promise<{ mime: string; data: Buffer; versionOk: boolean }> {
+    const notFound = () => new NotFoundException('Không tìm thấy ảnh.');
+    if (!isStorefrontImageKind(kind)) throw notFound();
+    const sf = await this.prisma.storefront.findFirst({
+      where: { id, ...publicStorefrontWhere(await this.visibilityOptions()) },
+      select: { id: true, avatarUrl: true, coverUrl: true },
+    });
+    const image = kind === 'avatar' ? sf?.avatarUrl : sf?.coverUrl;
+    const decoded = decodeServedImage(image);
+    if (!sf || !image || !decoded) throw notFound();
+    return { ...decoded, versionOk: matchesStorefrontImageVersion(version, sf.id, kind, image) };
   }
 
   async getPublicByHost(host: string) {
@@ -453,7 +497,8 @@ export class StorefrontService {
     const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
     if (!category) throw new BadRequestException('Danh mục không tồn tại.');
     const products = await this.prisma.product.findMany({
-      where: { categoryIds: { has: categoryId }, isActive: true, affiliateBlocked: false },
+      // Như picker (SELLER-15, D3-16): món đối tác chờ duyệt/bị từ chối vào gian hàng thì khách không thấy.
+      where: { categoryIds: { has: categoryId }, isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' },
       orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
       take: 8,
       select: { id: true },

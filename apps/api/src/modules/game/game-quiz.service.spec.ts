@@ -18,7 +18,7 @@ function prisma(over: Record<string, unknown> = {}) {
       upsert: jest.fn().mockResolvedValue({}),
       create: jest.fn().mockResolvedValue({ userId: 'u1', totalSeeds: 0 }),
     },
-    gameQuiz: { findUnique: jest.fn().mockResolvedValue(QUIZ), findMany: jest.fn().mockResolvedValue([QUIZ]) },
+    gameQuiz: { findUnique: jest.fn().mockResolvedValue(QUIZ), findMany: jest.fn().mockResolvedValue([QUIZ]), count: jest.fn().mockResolvedValue(1) },
     gameQuizAttempt: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -102,7 +102,7 @@ describe('GameQuizService.ensureProfile (C1)', () => {
         update: jest.fn().mockResolvedValue({}),
         upsert: jest.fn().mockResolvedValue({}),
       },
-      gameQuiz: { findUnique: jest.fn().mockResolvedValue(QUIZ), findMany: jest.fn().mockResolvedValue([QUIZ]) },
+      gameQuiz: { findUnique: jest.fn().mockResolvedValue(QUIZ), findMany: jest.fn().mockResolvedValue([QUIZ]), count: jest.fn().mockResolvedValue(1) },
       gameQuizAttempt: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -127,5 +127,97 @@ describe('GameQuizService.ensureProfile (C1)', () => {
     const p = prismaNoProfile();
     await expect(new GameQuizService(p, cfg()).getTodayQuiz('u-new')).resolves.toBeDefined();
     expect((p.gameProfile.create as jest.Mock)).toHaveBeenCalledTimes(1);
+  });
+});
+
+// D4-009: trước đây findMany không orderBy nên mỗi ngày DB trả đúng vài câu đầu tiên → quiz lặp từng ngày.
+describe('GameQuizService.getTodayQuiz — bộ câu trong ngày xoay vòng, thứ tự xác định', () => {
+  afterEach(() => jest.useRealTimers());
+
+  const bankOf = (n: number) => Array.from({ length: n }, (_, i) => ({ ...QUIZ, id: `q${String(i).padStart(2, '0')}` }));
+  function withBank(n: number, done: string[] = []) {
+    const bank = bankOf(n);
+    const findMany = jest.fn(async ({ skip = 0, take }: { skip?: number; take: number }) => bank.slice(skip, skip + take));
+    return {
+      findMany,
+      p: prisma({
+        gameQuiz: { findUnique: jest.fn(), count: jest.fn().mockResolvedValue(n), findMany },
+        gameQuizAttempt: { findMany: jest.fn().mockResolvedValue(done.map((quizId) => ({ quizId }))), count: jest.fn().mockResolvedValue(0), create: jest.fn() },
+      }),
+    };
+  }
+  const ids = async (p: PrismaService, at: string, over: Record<string, unknown> = {}) => {
+    jest.useFakeTimers().setSystemTime(new Date(at));
+    return (await new GameQuizService(p, cfg(over)).getTodayQuiz('u1')).map((q) => q.id);
+  };
+
+  it('cùng một ngày gọi nhiều lần (kể cả user khác) ra cùng bộ câu, đúng game.quiz_daily_count, lấy theo thứ tự id', async () => {
+    const { p, findMany } = withBank(12);
+
+    const first = await ids(p, '2026-10-17T03:00:00Z');
+    const again = await ids(p, '2026-10-17T14:00:00Z');
+
+    expect(first).toHaveLength(5);
+    expect(again).toEqual(first);
+    expect(findMany.mock.calls[0]![0]).toMatchObject({ orderBy: { id: 'asc' }, take: 5 });
+  });
+
+  it('hai ngày liền nhau không lặp câu nào; xoay hết ngân hàng sau một vòng; mỗi câu xuất hiện đều nhau', async () => {
+    const { p } = withBank(12);
+    const seen = new Map<string, number>();
+    let prev: string[] = [];
+    for (let day = 0; day < 12; day++) {
+      const today = await ids(p, new Date(Date.UTC(2026, 9, 1 + day, 3)).toISOString());
+      expect(today).toHaveLength(5);
+      expect(new Set(today).size).toBe(5);
+      expect(today.filter((id) => prev.includes(id))).toEqual([]);
+      for (const id of today) seen.set(id, (seen.get(id) ?? 0) + 1);
+      prev = today;
+    }
+    expect([...seen.keys()].sort()).toEqual(bankOf(12).map((q) => q.id));
+    expect(new Set(seen.values())).toEqual(new Set([5]));
+  });
+
+  it('cửa sổ vắt qua cuối ngân hàng thì nối lại từ đầu, không thiếu không trùng', async () => {
+    const { p, findMany } = withBank(7);
+    // Tìm ngày có offset vắt qua cuối: lặp tới khi findMany phải gọi lần hai.
+    let wrapped: string[] | null = null;
+    for (let day = 0; day < 7 && !wrapped; day++) {
+      findMany.mockClear();
+      const today = await ids(p, new Date(Date.UTC(2026, 9, 1 + day, 3)).toISOString());
+      if (findMany.mock.calls.length === 2) wrapped = today;
+    }
+    expect(wrapped).not.toBeNull();
+    expect(wrapped).toHaveLength(5);
+    expect(new Set(wrapped).size).toBe(5);
+  });
+
+  it('câu đã làm hôm nay biến khỏi danh sách nhưng KHÔNG kéo thêm câu ngoài bộ của hôm nay', async () => {
+    const at = '2026-10-17T03:00:00Z';
+    const full = await ids(withBank(12).p, at);
+    const partial = await ids(withBank(12, [full[0]!, full[1]!]).p, at);
+
+    expect(partial).toEqual(full.slice(2));
+  });
+
+  it('ngân hàng ít hơn số câu/ngày → trả cả ngân hàng một lần; ngân hàng rỗng → []', async () => {
+    expect((await ids(withBank(3).p, '2026-10-17T03:00:00Z')).sort()).toEqual(['q00', 'q01', 'q02']);
+    expect(await ids(withBank(0).p, '2026-10-17T03:00:00Z')).toEqual([]);
+  });
+
+  it('đổi ngày theo giờ Việt Nam: 23:59 và 00:00 giờ VN là hai bộ câu khác nhau', async () => {
+    const { p } = withBank(12);
+
+    const lateNight = await ids(p, '2026-10-17T16:59:00Z');
+    const afterMidnight = await ids(p, '2026-10-17T17:00:00Z');
+    const sameDayMorning = await ids(p, '2026-10-17T00:00:00Z');
+
+    expect(afterMidnight).not.toEqual(lateNight);
+    expect(sameDayMorning).toEqual(lateNight);
+  });
+
+  it('game.quiz_daily_count đổi số câu trong bộ', async () => {
+    const { p } = withBank(12);
+    expect(await ids(p, '2026-10-17T03:00:00Z', { 'game.quiz_daily_count': 3 })).toHaveLength(3);
   });
 });

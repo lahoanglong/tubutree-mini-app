@@ -70,7 +70,7 @@ export interface CtvMilestone {
   id: string;
   title: string;
   threshold: number;
-  /** Điểm Xanh (1 điểm = 1.000đ khi đổi). Trước PD-3 là xu: 50.000 / 200.000 / 600.000 / 2.000.000. */
+  /** Điểm Xanh (1 điểm = 1đ). Cùng số với bản xu cũ trước PD-3: 50.000 / 200.000 / 600.000 / 2.000.000. */
   rewardPoints: number;
   description: string;
 }
@@ -80,28 +80,28 @@ export const CTV_MONTHLY_MILESTONES: CtvMilestone[] = [
     id: 'milestone-3m',
     title: 'Mốc Khởi Động 3 Triệu',
     threshold: 3_000_000,
-    rewardPoints: 50,
+    rewardPoints: 50_000,
     description: 'Đạt 3.000.000đ doanh số đã chốt trong tháng',
   },
   {
     id: 'milestone-10m',
     title: 'Mốc Tăng Tốc 10 Triệu',
     threshold: 10_000_000,
-    rewardPoints: 200,
+    rewardPoints: 200_000,
     description: 'Đạt 10.000.000đ doanh số đã chốt trong tháng',
   },
   {
     id: 'milestone-30m',
     title: 'Mốc Bứt Phá 30 Triệu',
     threshold: 30_000_000,
-    rewardPoints: 600,
+    rewardPoints: 600_000,
     description: 'Đạt 30.000.000đ doanh số đã chốt trong tháng',
   },
   {
     id: 'milestone-80m',
     title: 'Mốc Đỉnh Cao 80 Triệu',
     threshold: 80_000_000,
-    rewardPoints: 2_000,
+    rewardPoints: 2_000_000,
     description: 'Đạt 80.000.000đ doanh số đã chốt trong tháng',
   },
 ];

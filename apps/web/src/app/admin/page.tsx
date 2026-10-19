@@ -76,6 +76,8 @@ import {
   type RecyclingFilter,
   type PancakeFilter,
   type InvoiceFilter,
+  type OrderListExtra,
+  orderExtraFilters,
   downloadOrdersCsv,
   downloadUsersCsv,
   getOpsAccess,
@@ -91,6 +93,7 @@ import {
 } from '@/components/admin/pancake-attention';
 import { PancakeSyncBadge, PancakeSyncPanel } from '@/components/admin/pancake-sync';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
+import { ClaimCampaignPanel } from '@/components/admin/claim-campaign-panel';
 import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
 import { ReturnRow } from '@/components/admin/return-request-row';
@@ -101,6 +104,7 @@ import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
+import { StorefrontsTab } from '@/components/admin/storefronts-tab';
 import { MerchantFulfilmentTab } from '@/components/admin/merchant-fulfilment-tab';
 import { NotificationTemplatesTab } from '@/components/admin/notification-templates-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
@@ -109,7 +113,8 @@ import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel'
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
-import { OrderInvoicePanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
+import { OrderExtraFilters } from '@/components/admin/order-extra-filters';
+import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
 import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
 import { ReviewsTab } from '@/components/admin/reviews-tab';
@@ -132,12 +137,19 @@ import {
   ToneBadge,
 } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
+import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import { RefillTab } from '@/components/admin/refill-tab';
+import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
+import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
+import { ProductCategoriesTab } from '@/components/admin/product-categories-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
+import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
+import { ExternalClaimsTab } from '@/components/admin/external-claims-tab';
+import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
@@ -156,11 +168,17 @@ type Tab =
   | 'dashboard'
   | 'dealers'
   | 'dealerClaims'
+  | 'dealerAccounts'
   | 'dealerPrices'
+  | 'commissionRates'
+  | 'productCategories'
   | 'engagement'
+  | 'community'
   | 'payouts'
   | 'customerRefunds'
   | 'orders'
+  | 'externalOrders'
+  | 'externalClaims'
   | 'returns'
   | 'users'
   | 'config'
@@ -173,12 +191,14 @@ type Tab =
   | 'quickReplies'
   | 'notificationTemplates'
   | 'merchantProducts'
+  | 'storefronts'
   | 'merchantFulfilment'
   | 'cashback'
   | 'posCredits'
   | 'reviews'
   | 'subscriptions'
-  | 'analytics';
+  | 'analytics'
+  | 'reports';
 /**
  * Mục quản trị theo nhóm việc (ADMINOPS-13): trước đây là một dải 24 tab cuộn ngang. Khoá `k` giữ nguyên để link cũ
  * (`/admin?tab=orders&pancake=attention`...) vẫn mở đúng chỗ.
@@ -190,12 +210,15 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'inbox', label: 'Việc cần xử lý' },
       { k: 'dashboard', label: 'Tổng quan KPI' },
       { k: 'analytics', label: 'Retention & North-star' },
+      { k: 'reports', label: 'Báo cáo' },
     ],
   },
   {
     label: 'Đơn hàng & giao vận',
     items: [
       { k: 'orders', label: 'Đơn hàng' },
+      { k: 'externalOrders', label: 'Đơn ngoài app' },
+      { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
       { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
     ],
   },
@@ -212,9 +235,13 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'dealers', label: 'Đại lý' },
       { k: 'dealerClaims', label: 'Thưởng đại lý' },
+      { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
+      { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
+      { k: 'productCategories', label: 'Danh mục sản phẩm' },
       { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+      { k: 'storefronts', label: 'Gian hàng' },
       { k: 'brands', label: 'Nhãn hàng' },
     ],
   },
@@ -223,6 +250,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'users', label: 'Người dùng' },
       { k: 'reviews', label: 'Đánh giá' },
+      { k: 'community', label: 'Cộng đồng' },
       { k: 'subscriptions', label: 'Gói định kỳ' },
       { k: 'posCredits', label: 'Tích điểm tại quầy' },
       { k: 'refill', label: 'Đổi vỏ chai' },
@@ -264,8 +292,10 @@ const DEFAULT_TAB: Tab = 'inbox';
  */
 const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['refill'],
-  CSKH: ['inbox', 'orders', 'returns', 'users', 'quickReplies'],
+  CSKH: ['inbox', 'orders', 'externalOrders', 'externalClaims', 'returns', 'users', 'quickReplies', 'community'],
   KHO: ['inbox', 'orders', 'returns'],
+  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
+  KE_TOAN: ['inbox', 'orders', 'externalClaims', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
 function staffTabs(perms: readonly string[]): Set<Tab> {
   const out = new Set<Tab>(STAFF_TABS.BASE);
@@ -309,7 +339,8 @@ export default function AdminPage() {
   const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
-  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number } | null>(null);
+  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter } | null>(null);
+  const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
   const [consignmentSeed, setConsignmentSeed] = useState(0);
   const role = user?.role;
@@ -371,8 +402,30 @@ export default function AdminPage() {
       setReturnsSeed({ filter: k === 'returnsToReceive' ? 'TO_RECEIVE' : 'REQUESTED', n: Date.now() });
       return setTab('returns');
     }
+    if (k === 'communityPending' || k === 'communityUnanswered') {
+      setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : 'pending', n: Date.now() });
+      return setTab('community');
+    }
+    if (k === 'invoicePending') {
+      setOrdersRecycling('');
+      setOrdersPancake('');
+      setOrderSeed({ search: '', n: Date.now(), invoice: 'pending' });
+      setTabState('orders');
+      return writeUrlState('orders', '');
+    }
     const target: Record<
-      Exclude<InboxKey, 'pancakeAttention' | 'pancakeUnsynced' | 'gomdonAttention' | 'returnsPending' | 'returnsToReceive' | 'consignmentPending'>,
+      Exclude<
+        InboxKey,
+        | 'pancakeAttention'
+        | 'pancakeUnsynced'
+        | 'gomdonAttention'
+        | 'returnsPending'
+        | 'returnsToReceive'
+        | 'consignmentPending'
+        | 'communityPending'
+        | 'communityUnanswered'
+        | 'invoicePending'
+      >,
       Tab
     > = {
       customerRefunds: 'customerRefunds',
@@ -384,6 +437,7 @@ export default function AdminPage() {
       dealerClaims: 'dealerClaims',
       payouts: 'payouts',
       refillPending: 'refill',
+      externalPoints: 'externalClaims',
     };
     setTab(target[k]);
   };
@@ -431,22 +485,30 @@ export default function AdminPage() {
           groups={groups}
           active={active}
           onSelect={setTab}
-          badge={(k) => (isAdmin && k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
+          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
-          {active === 'dealerClaims' && <DealerClaimsTab />}
+          {active === 'dealerClaims' && <DealerClaimsTab canReview={isAdmin} />}
+          {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
+          {active === 'commissionRates' && <CommissionRatesTab />}
+          {active === 'productCategories' && <ProductCategoriesTab />}
           {active === 'engagement' && <EngagementTab />}
-          {active === 'payouts' && <PayoutAdminTab />}
-          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} />}
+          {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
+          {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
+          {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
+          {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
+          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}
           {active === 'orders' && (
             <OrdersTab
               key={orderSeed?.n ?? 0}
               initialSearch={orderSeed?.search}
+              initialInvoice={orderSeed?.invoice}
               isAdmin={isAdmin}
+              canFinance={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KE_TOAN')}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
               recycling={ordersRecycling}
               onRecyclingChange={onRecyclingFilterChange}
@@ -474,6 +536,7 @@ export default function AdminPage() {
           {active === 'attendance' && <AttendanceTab />}
           {active === 'coupons' && <CouponsTab />}
           {active === 'brands' && <BrandsTab />}
+          {active === 'storefronts' && <StorefrontsTab />}
           {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
           {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} isAdmin={isAdmin} />}
           {active === 'flashSales' && <FlashSalesTab />}
@@ -481,8 +544,9 @@ export default function AdminPage() {
           {active === 'contentKit' && <ContentKitTab />}
           {active === 'academy' && <AcademyTab />}
           {active === 'quickReplies' && <QuickReplyTab />}
-          {active === 'notificationTemplates' && <NotificationTemplatesTab />}
+          {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab />}
+          {active === 'reports' && <ReportsTab sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
         </div>
       </div>
     </main>
@@ -871,26 +935,32 @@ function OrdersTab({
   pancake,
   onPancakeChange,
   isAdmin = true,
+  canFinance = true,
   canWarehouse = true,
   initialSearch,
+  initialInvoice,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
   pancake: PancakeFilter | '';
   onPancakeChange: (p: PancakeFilter | '') => void;
   isAdmin?: boolean;
+  /** Tiền đơn (Đã nhận tiền, hoá đơn VAT, công nợ đại lý, CSV) — API mở cho ADMIN và nhân viên KE_TOAN. */
+  canFinance?: boolean;
   /** Thao tác kho (đẩy lại Pancake, xử lý Pancake/thu gom) — API chỉ mở cho ADMIN và nhân viên KHO. */
   canWarehouse?: boolean;
   initialSearch?: string;
+  initialInvoice?: InvoiceFilter;
 }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [searchInput, setSearchInput] = useState(initialSearch ?? '');
   const [search, setSearch] = useState(initialSearch ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [invoice, setInvoice] = useState<InvoiceFilter | ''>('');
+  const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [extra, setExtra] = useState<OrderListExtra>({});
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
@@ -898,7 +968,7 @@ function OrdersTab({
   const badRange = !!from && !!to && from > to;
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to],
+    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to, extra],
     queryFn: () =>
       listOrders(
         page,
@@ -910,6 +980,7 @@ function OrdersTab({
         pancake || undefined,
         from || undefined,
         to || undefined,
+        extra,
       ),
     enabled: !badRange,
   });
@@ -925,6 +996,7 @@ function OrdersTab({
         pancake: pancake || undefined,
         from: from || undefined,
         to: to || undefined,
+        ...orderExtraFilters(extra),
       });
       setExportMsg({ ok: true, text: `Đã tải ${r.filename} — mọi đơn khớp bộ lọc, không chỉ trang đang xem.` });
     } catch (e) {
@@ -1002,7 +1074,7 @@ function OrdersTab({
             <option value="RETURNED">Đã trả hàng</option>
           </select>
 
-          {isAdmin && (
+          {canFinance && (
             <button
               type="button"
               onClick={() => void exportAll()}
@@ -1063,6 +1135,15 @@ function OrdersTab({
           </p>
         )}
       </div>
+
+      <OrderExtraFilters
+        value={extra}
+        onChange={(v) => {
+          setPage(1);
+          setExpandedId(null);
+          setExtra(v);
+        }}
+      />
 
       {/* Bộ lọc thu gom tái chế (Gomdon) */}
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu gom tái chế">
@@ -1275,7 +1356,7 @@ function OrdersTab({
                       {isExpanded && !narrow && (
                         <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
-                            <OrderDetailBody o={o} isAdmin={isAdmin} canWarehouse={canWarehouse} />
+                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} />
                           </td>
                         </tr>
                       )}
@@ -1297,7 +1378,7 @@ function OrdersTab({
               {PAYMENT_METHOD_LABELS[expandedOrder.paymentMethod] ?? expandedOrder.paymentMethod} · {formatDateTime(expandedOrder.createdAt)}
             </span>
           </div>
-          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canWarehouse={canWarehouse} />
+          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} />
         </SideDrawer>
       )}
 
@@ -1356,7 +1437,7 @@ function OrderRecipientLine({ order: o }: { order: AdminOrder }) {
 }
 
 /** Chi tiết + thao tác một đơn — mở rộng trong bảng trên máy tính, trong ngăn kéo trên điện thoại. */
-function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin: boolean; canWarehouse: boolean }) {
+function OrderDetailBody({ o, isAdmin, canFinance, canWarehouse }: { o: AdminOrder; isAdmin: boolean; canFinance: boolean; canWarehouse: boolean }) {
   return (
     <div className="space-y-3">
       <OrderPaymentSummary order={o} isAdmin={isAdmin} />
@@ -1406,18 +1487,19 @@ function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin:
         </div>
       )}
 
-      {isAdmin && <OrderInvoicePanel order={o} />}
+      {canFinance && <OrderInvoicePanel order={o} />}
+      {isAdmin && <OrderReferralPanel order={o} />}
 
       {canWarehouse && <RecyclingPanel order={o} />}
 
       {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
-      {isAdmin && <DealerPaymentPanel order={o} />}
+      {canFinance && <DealerPaymentPanel order={o} />}
 
       {/* Sổ công nợ đại lý (mọi đơn ĐẠI LÝ, không riêng đơn ghi công nợ) — A5-09. */}
-      {isAdmin && <DealerCreditPanel order={o} />}
+      {canFinance && <DealerCreditPanel order={o} />}
 
       {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
-      <OrderStatusActions order={o} canConfirmPayment={isAdmin} canResync={isAdmin} />
+      <OrderStatusActions order={o} canConfirmPayment={canFinance} canResync={isAdmin} canRecordLate={isAdmin} />
 
       <OrderStatusHistory order={o} />
     </div>
@@ -1867,6 +1949,7 @@ function CouponsTab() {
       <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
+    <ClaimCampaignPanel />
     <CouponList />
     </div>
   );
@@ -2849,7 +2932,7 @@ function ContentKitEditor({
         value={usps}
         onChange={(e) => setUsps(e.target.value)}
         rows={3}
-        placeholder={'Nguyên liệu tự nhiên 100%'}
+        placeholder={'Nguyên liệu tự nhiên'}
         className={`mb-3 ${INPUT_CLASS}`}
       />
 

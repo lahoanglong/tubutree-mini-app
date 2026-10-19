@@ -13,6 +13,7 @@ import {
   assertIdentifierAvailable,
   recordReleasedIdentifiers,
 } from '../storefront/identifier-validation';
+import { assertStorefrontImagesAllowed } from '../storefront/storefront-images';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { notifyAdmins } from '../../common/notify-admins';
@@ -27,6 +28,8 @@ import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
 import { isPartnerStore, lockStoreOwner, storeHasPayouts } from './partner-store';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
+import { DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED, isStorefrontSubdomainEnabled, withSubdomainFlag } from '../storefront/storefront-config';
+import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from '../storefront/storefront-publish';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
 const MAX_CREATE_STORE_RETRY = 5;
@@ -304,6 +307,12 @@ export class MerchantService {
     return store;
   }
 
+  /** Bản gian hàng gửi ra cổng: cờ subdomain tắt thì không kèm subdomain/tên miền riêng (xem withSubdomainFlag). */
+  async presentStore<T extends { subdomain?: string | null; customDomain?: string | null }>(store: T) {
+    const enabled = this.config ? await isStorefrontSubdomainEnabled(this.config) : DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED;
+    return withSubdomainFlag(store, enabled);
+  }
+
   async getOrCreateStore(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role !== 'AFFILIATE' && user.role !== 'DEALER' && user.role !== 'ADMIN') {
@@ -369,8 +378,8 @@ export class MerchantService {
               ownerUserId: userId,
               title: `Gian hàng của ${user.fullName ?? 'Đối tác'}`,
               themeColor: '#16a34a',
-              isPublished: true,
-              publishedAt: new Date(),
+              isPublished: false,
+              publishedAt: null,
               collections: {
                 create: {
                   title: 'Sản phẩm nổi bật',
@@ -410,6 +419,7 @@ export class MerchantService {
     const cooldownDays =
       (await this.config?.get<number>('storefront.identifier_cooldown_days', DEFAULT_IDENTIFIER_COOLDOWN_DAYS)) ??
       DEFAULT_IDENTIFIER_COOLDOWN_DAYS;
+    assertStorefrontImagesAllowed(dto, store);
     const partner = isPartnerStore(store);
     if ((dto.shippingFee !== undefined || dto.freeShipFrom !== undefined) && !partner) {
       throw new BadRequestException('Phí giao hàng chỉ áp dụng cho gian hàng đối tác tự giao hàng.');
@@ -444,12 +454,22 @@ export class MerchantService {
       if (key !== 'title' && typeof v === 'string' && v.trim() === '') (updateData as Record<string, unknown>)[key] = null;
     }
 
-    if (dto.isPublished !== undefined) {
-      updateData.isPublished = dto.isPublished;
-      updateData.publishedAt = dto.isPublished ? new Date() : null;
+    // Cổng /merchant luôn gửi lại isPublished kèm mọi lần lưu: chỉ lúc đổi trạng thái mới kiểm điều kiện đăng và đụng tới mốc đăng,
+    // không thì gian hàng cũ chưa có sản phẩm không lưu nổi tên, và gian hàng đang bị gỡ mất mốc đăng mà admin cần để đăng lại.
+    const publishing = dto.isPublished === true && !store.isPublished;
+    const unpublishing = dto.isPublished === false && store.isPublished;
+    if (publishing) {
+      await assertCanPublish(this.prisma, store);
+      updateData.isPublished = true;
+      updateData.publishedAt = new Date();
+    } else if (unpublishing) {
+      updateData.isPublished = false;
+      updateData.publishedAt = null;
     }
 
-    if (dto.subdomain !== undefined) {
+    // Cổng gửi lại cả subdomain đang lưu mỗi lần bấm Lưu: giá trị không đổi thì không kiểm lại, kẻo gian hàng cũ có subdomain nay
+    // thuộc từ khoá cấm không lưu nổi trường khác.
+    if (dto.subdomain !== undefined && dto.subdomain.trim().toLowerCase() !== store.subdomain) {
       const cleanSub = normalizeSubdomain(dto.subdomain);
       // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-
       // với-subdomain, cho phép CTV chiếm subdomain trùng SLUG của gian hàng khác (P0-1,
@@ -462,7 +482,7 @@ export class MerchantService {
     if (dto.customDomain !== undefined) {
       if (dto.customDomain.trim() === '') {
         updateData.customDomain = null; // xoá tên miền riêng
-      } else {
+      } else if (dto.customDomain.trim().toLowerCase() !== store.customDomain) {
         // Trước đây KHÔNG có validate/kiểm trùng nào cho customDomain — ghi thẳng chuỗi bất kỳ,
         // kể cả trùng subdomain/slug của gian hàng khác (P0-1).
         const cleanDomain = normalizeCustomDomain(dto.customDomain);
@@ -482,23 +502,36 @@ export class MerchantService {
     );
 
     const newTitle = typeof updateData.title === 'string' ? updateData.title : null;
-    if (!newTitle || newTitle === store.title) {
-      return this.prisma.storefront.update({ where: { id: store.id }, data: updateData });
+    const where = { id: store.id, ...(dto.isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) };
+    try {
+      if (!newTitle || newTitle === store.title) {
+        return await this.prisma.storefront.update({ where, data: updateData });
+      }
+      // Tên nhãn của sản phẩm tự đăng chép từ tên gian hàng lúc đăng: đổi tên gian hàng thì đổi theo (R2-MERCHANT-7).
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.storefront.update({ where, data: updateData }),
+        this.prisma.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitle } }),
+      ]);
+      return updated;
+    } catch (err) {
+      if (dto.isPublished && isLostToTakeDown(err)) throw takenDownError(null);
+      throw err;
     }
-    // Tên nhãn của sản phẩm tự đăng chép từ tên gian hàng lúc đăng: đổi tên gian hàng thì đổi theo (R2-MERCHANT-7).
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.storefront.update({ where: { id: store.id }, data: updateData }),
-      this.prisma.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitle } }),
-    ]);
-    return updated;
   }
 
   async publishStore(userId: string, isPublished: boolean) {
     const store = await this.getOrCreateStore(userId);
-    return this.prisma.storefront.update({
-      where: { id: store.id },
-      data: { isPublished, publishedAt: isPublished ? new Date() : null },
-    });
+    if (Boolean(store.isPublished) === isPublished) return store;
+    if (isPublished) await assertCanPublish(this.prisma, store);
+    try {
+      return await this.prisma.storefront.update({
+        where: { id: store.id, ...(isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) },
+        data: { isPublished, publishedAt: isPublished ? new Date() : null },
+      });
+    } catch (err) {
+      if (isPublished && isLostToTakeDown(err)) throw takenDownError(null);
+      throw err;
+    }
   }
 
   /**

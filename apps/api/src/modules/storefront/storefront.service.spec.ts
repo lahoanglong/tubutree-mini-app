@@ -1,17 +1,19 @@
 import 'reflect-metadata';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { StorefrontService } from './storefront.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 
 const config = {
-  get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
+  get: async <T>(k: string, fb?: T): Promise<T> => (k === 'storefront.require_approval' ? false : fb) as T,
 } as unknown as SystemConfigService;
 
 // Mặc định không có bậc (null) — test nào cần assert huy hiệu bậc tự override qua tham số thứ 3.
 const affiliate = {
   getPublicTier: async () => null,
+  commissionEligibleRoles: async () => new Set(['AFFILIATE', 'DEALER']),
 } as unknown as AffiliateService;
 
 function makePrisma(over: Record<string, any> = {}) {
@@ -72,6 +74,26 @@ describe('StorefrontService.getOrCreateMine', () => {
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', role: 'CUSTOMER', referralCode: 'L' });
     const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.getOrCreateMine('u1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  // D3-03: CTV được duyệt lên đại lý giữ gian hàng CTV; mở lại được, nhưng đại lý không tạo gian hàng CTV mới
+  // (mô hình bán lẻ online của đại lý chưa chốt, Q1).
+  it('đại lý đang có gian hàng CTV: trả gian hàng đó, không tạo mới', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'd1', role: 'DEALER', referralCode: 'D', fullName: 'D' });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', type: 'CTV', isPartner: true });
+    const sf = await new StorefrontService(prisma, config, affiliate).getOrCreateMine('d1');
+    expect(sf.id).toBe('s1');
+    expect(prisma.storefront.findFirst).toHaveBeenCalledWith({ where: { ownerUserId: 'd1', type: 'CTV' } });
+    expect(prisma.storefront.create).not.toHaveBeenCalled();
+  });
+
+  it('đại lý chưa có gian hàng CTV: không tạo, báo như trước', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'd1', role: 'DEALER', referralCode: 'D', fullName: 'D' });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(null);
+    await expect(new StorefrontService(prisma, config, affiliate).getOrCreateMine('d1')).rejects.toThrow('Chỉ CTV mới tạo được gian hàng.');
+    expect(prisma.storefront.create).not.toHaveBeenCalled();
   });
 });
 
@@ -154,8 +176,67 @@ describe('StorefrontService.updateMine/publishMine', () => {
     expect(r.subdomain).toBe('pure-green');
   });
 
-  it('publish set isPublished + publishedAt', async () => {
+  it('gửi lại đúng subdomain đang lưu (builder luôn gửi kèm): không kiểm từ khoá hay trùng, không ghi lại, vẫn lưu được trường khác', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1', subdomain: 'admin' });
+    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await svc.updateMine('u1', { subdomain: ' Admin ', title: 'Shop mới' });
+    expect(prisma.storefront.findFirst).toHaveBeenCalledTimes(1);
+    expect((prisma.storefront.update as jest.Mock).mock.calls[0][0].data).toEqual({ title: 'Shop mới' });
+  });
+
+  it('đổi sang subdomain khác vẫn bị kiểm từ khoá hệ thống', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1', subdomain: 'lan-xanh' });
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.updateMine('u1', { subdomain: 'admin' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.storefront.update).not.toHaveBeenCalled();
+  });
+
+  describe('ảnh đại diện và ảnh bìa chỉ kiểm khi đổi', () => {
+    const SVG = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    const update = async (stored: Record<string, unknown>, dto: Record<string, string>) => {
+      const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+      (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1', ...stored });
+      (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+      const result = new StorefrontService(prisma, config, affiliate).updateMine('u1', dto);
+      return { prisma, result };
+    };
+
+    it('gian hàng cũ lưu ảnh http hoặc SVG: chỉ đổi tên, client gửi lại đúng hai ảnh cũ vẫn lưu được', async () => {
+      const { prisma, result } = await update(
+        { avatarUrl: 'http://old.example/a.png', coverUrl: SVG },
+        { title: 'Tên mới', avatarUrl: 'http://old.example/a.png', coverUrl: SVG },
+      );
+      await expect(result).resolves.toMatchObject({ title: 'Tên mới' });
+      expect(prisma.storefront.update).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['avatarUrl', 'http://other.example/b.png'],
+      ['coverUrl', 'http://other.example/b.png'],
+      ['avatarUrl', 'http://169.254.169.254/x'],
+      ['coverUrl', SVG],
+      ['avatarUrl', 'javascript:alert(1)'],
+      ['coverUrl', 'https://u:p@evil.vn/a.png'],
+    ])('đổi %s sang giá trị không an toàn (%s) → 400, không ghi', async (field, value) => {
+      const { prisma, result } = await update({ avatarUrl: 'http://old.example/a.png', coverUrl: 'http://old.example/c.png' }, { [field]: value });
+      await expect(result).rejects.toBeInstanceOf(BadRequestException);
+      await expect(result).rejects.toThrow(field);
+      expect(prisma.storefront.update).not.toHaveBeenCalled();
+    });
+
+    it('đổi sang https, base64 raster hoặc chuỗi rỗng (xoá ảnh) vẫn được', async () => {
+      for (const value of ['https://res.cloudinary.com/x/a.jpg', `data:image/png;base64,${'A'.repeat(64)}`, '']) {
+        const { result } = await update({ avatarUrl: 'http://old.example/a.png' }, { avatarUrl: value });
+        await expect(result).resolves.toBeDefined();
+      }
+    });
+  });
+
+  it('publish set isPublished + publishedAt', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() }, storefrontItem: { count: jest.fn().mockResolvedValue(2) } });
     (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });
     (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
     const svc = new StorefrontService(prisma, config, affiliate);
@@ -324,7 +405,8 @@ describe('StorefrontService.applyTemplate', () => {
     const r = await svc.applyTemplate('u1', 'cat1');
 
     expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0]).toEqual({
-      where: { categoryIds: { has: 'cat1' }, isActive: true, affiliateBlocked: false },
+      // D3-16: như picker — món đối tác chờ duyệt/bị từ chối không lọt vào gian hàng mà khách không thấy.
+      where: { categoryIds: { has: 'cat1' }, isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' },
       orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
       take: 8,
       select: { id: true },
@@ -528,6 +610,44 @@ describe('StorefrontService.pickerProducts', () => {
   });
 });
 
+describe('StorefrontService.pickerProducts — huy hiệu theo luật hoa hồng thực', () => {
+  it('NULL: hàng Tubu hiện mặc định 8%, hàng đối tác 0; hàng đối tác có % riêng hiện % đó', async () => {
+    const prisma = makePrisma({
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
+      product: { findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', name: 'Tubu', storefrontId: null, variations: [{ affiliateRate: null }] },
+        { id: 'p2', name: 'Đối tác', storefrontId: 'sf1', variations: [{ affiliateRate: null }] },
+        { id: 'p3', name: 'Đối tác có %', storefrontId: 'sf1', variations: [{ affiliateRate: '5' }] },
+      ]) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).pickerProducts('u1', {});
+    expect(r.map((p) => p.maxAffiliateRate)).toEqual([8, 0, 5]);
+    expect(r.every((p) => !('storefrontId' in p))).toBe(true);
+  });
+});
+
+describe('StorefrontService.pickerProducts cho đại lý (D3-03)', () => {
+  const picker = (role: string, trace: { storefront?: boolean; commission?: boolean }) => {
+    const prisma = makePrisma({
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      commission: { findFirst: jest.fn().mockResolvedValue(trace.commission ? { id: 'c1' } : null) },
+    });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(trace.storefront ? { id: 's1' } : null);
+    return new StorefrontService(prisma, config, affiliate).pickerProducts('u1', {});
+  };
+
+  it('đại lý có gian hàng CTV hoặc có hoa hồng xem được danh sách', async () => {
+    await expect(picker('DEALER', { storefront: true })).resolves.toEqual([]);
+    await expect(picker('DEALER', { commission: true })).resolves.toEqual([]);
+  });
+
+  it('đại lý thuần và khách thường vẫn không xem được % hoa hồng', async () => {
+    await expect(picker('DEALER', {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(picker('CUSTOMER', { storefront: true, commission: true })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
 describe('StorefrontService.getStats', () => {
   it('đọc doanh thu/đơn/sản phẩm từ SQL gộp (không nạp đơn về Node), hoa hồng từ bảng Commission', async () => {
     const queryRaw = jest.fn()
@@ -597,7 +717,7 @@ describe('StorefrontService.getPublicList', () => {
     const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.getPublicList();
     expect(findMany.mock.calls[0]?.[0]).toEqual({
-      where: { isPublished: true },
+      where: expect.objectContaining({ isPublished: true, takenDownAt: null }),
       select: { slug: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
       take: 500,
@@ -611,7 +731,7 @@ describe('StorefrontService.getPublicBySlug', () => {
   it('gian hàng CTV trả mã giới thiệu của chủ; gian hàng khác không trả', async () => {
     const row = { id: 's1', slug: 'abcd1234', subdomain: 'lan-xanh', title: 'Shop', isPublished: true, collections: [], owner: { referralCode: 'ABCD1234' } };
     const ctv = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...row, type: 'CTV', ownerUserId: 'u9' }) } });
-    const affiliateTier = { getPublicTier: jest.fn().mockResolvedValue(null) } as never;
+    const affiliateTier = { getPublicTier: jest.fn().mockResolvedValue(null), commissionEligibleRoles: async () => new Set(['AFFILIATE']) } as never;
     expect((await new StorefrontService(ctv, config, affiliateTier).getPublicBySlug('lan-xanh')).referralCode).toBe('ABCD1234');
     const brand = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...row, type: 'MERCHANT' }) } });
     expect((await new StorefrontService(brand, config, affiliateTier).getPublicBySlug('lan-xanh')).referralCode).toBeNull();
@@ -817,7 +937,7 @@ describe('StorefrontService.getPublicBySlug', () => {
         id: 's1', slug: 'linh', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u1', collections: [],
       }) },
     });
-    const svc = new StorefrontService(prisma, config, { getPublicTier } as unknown as AffiliateService);
+    const svc = new StorefrontService(prisma, config, { getPublicTier, commissionEligibleRoles: async () => new Set(['AFFILIATE']) } as unknown as AffiliateService);
     const r = await svc.getPublicBySlug('linh');
     expect(r.ownerTier).toEqual({ name: 'Bạc', emoji: '🌳' });
     expect(getPublicTier).toHaveBeenCalledWith('u1');
@@ -830,7 +950,7 @@ describe('StorefrontService.getPublicBySlug', () => {
         id: 's1', slug: 'shop', title: 'Shop', isPublished: true, type: 'MERCHANT', ownerUserId: 'u1', collections: [],
       }) },
     });
-    const svc = new StorefrontService(prisma, config, { getPublicTier } as unknown as AffiliateService);
+    const svc = new StorefrontService(prisma, config, { getPublicTier, commissionEligibleRoles: async () => new Set(['AFFILIATE']) } as unknown as AffiliateService);
     const r = await svc.getPublicBySlug('shop');
     expect(r.ownerTier).toBeNull();
     expect(getPublicTier).not.toHaveBeenCalled();
@@ -934,5 +1054,231 @@ describe('StorefrontService.getPublicByHost', () => {
     const { svc } = mk();
     const err = await svc.getPublicByHost('a'.repeat(253)).catch((e) => e);
     expect(err).not.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('StorefrontService — gian hàng khách được thấy (D3-02)', () => {
+  const configWith = (over: Record<string, unknown>) =>
+    ({ get: async <T>(k: string, fb?: T): Promise<T> => (k in over ? (over[k] as T) : k === 'storefront.require_approval' ? (false as T) : (fb as T)) }) as unknown as SystemConfigService;
+  const sfRow = { id: 's1', slug: 'linh', title: 'Shop', isPublished: true, type: 'CTV', isPartner: false, approvedAt: null, ownerUserId: 'u1', collections: [], owner: { referralCode: 'LINH' } };
+
+  it('trang công khai chỉ tra gian hàng đã đăng, chưa bị gỡ, chủ không bị khoá và (CTV) còn thuộc vai trò hưởng hoa hồng', async () => {
+    const findFirst = jest.fn().mockResolvedValue(sfRow);
+    const svc = new StorefrontService(makePrisma({ storefront: { findFirst } }), config, affiliate);
+    await svc.getPublicBySlug('linh');
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where.isPublished).toBe(true);
+    expect(where.takenDownAt).toBeNull();
+    expect(where.AND).toContainEqual({ OR: [{ ownerUserId: null }, { owner: { isBlocked: false } }] });
+    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
+  });
+
+  it('vai trò hưởng hoa hồng lấy từ cấu hình: bớt DEALER thì CTV là đại lý cũng ẩn', async () => {
+    const findFirst = jest.fn().mockResolvedValue(sfRow);
+    const only = { getPublicTier: async () => null, commissionEligibleRoles: async () => new Set(['AFFILIATE']) } as unknown as AffiliateService;
+    await new StorefrontService(makePrisma({ storefront: { findFirst } }), config, only).getPublicBySlug('linh');
+    expect(findFirst.mock.calls[0][0].where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'ADMIN'] } } }] });
+  });
+
+  it('cờ storefront.require_approval bật: thêm điều kiện đã duyệt; tắt: không', async () => {
+    const off = jest.fn().mockResolvedValue(sfRow);
+    await new StorefrontService(makePrisma({ storefront: { findFirst: off } }), config, affiliate).getPublicBySlug('linh');
+    expect(JSON.stringify(off.mock.calls[0][0].where)).not.toContain('approvedAt');
+    const on = jest.fn().mockResolvedValue(sfRow);
+    await new StorefrontService(makePrisma({ storefront: { findFirst: on } }), configWith({ 'storefront.require_approval': true }), affiliate).getPublicBySlug('linh');
+    expect(on.mock.calls[0][0].where.AND).toContainEqual({ OR: [{ approvedAt: { not: null } }, { type: { not: 'CTV' } }, { isPartner: true }] });
+  });
+
+  it('chuỗi "false" không bật cờ duyệt (chỉ đúng boolean true)', async () => {
+    const findFirst = jest.fn().mockResolvedValue(sfRow);
+    await new StorefrontService(makePrisma({ storefront: { findFirst } }), configWith({ 'storefront.require_approval': 'false' }), affiliate).getPublicBySlug('linh');
+    expect(JSON.stringify(findFirst.mock.calls[0][0].where)).not.toContain('approvedAt');
+  });
+
+  it('sitemap (getPublicList) dùng cùng điều kiện: gian hàng bị gỡ/chủ bị khoá/CTV bị hạ không lọt vào', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await new StorefrontService(makePrisma({ storefront: { findMany } }), config, affiliate).getPublicList();
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.takenDownAt).toBeNull();
+    expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
+  });
+
+  it('trả cờ approved để web chỉ hiện tick xanh và "CTV tuyển chọn" khi đã duyệt (CTV chưa duyệt: false; đối tác: true)', async () => {
+    const ctv = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(sfRow) } });
+    expect((await new StorefrontService(ctv, config, affiliate).getPublicBySlug('linh')).approved).toBe(false);
+    const approved = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...sfRow, approvedAt: new Date() }) } });
+    expect((await new StorefrontService(approved, config, affiliate).getPublicBySlug('linh')).approved).toBe(true);
+    const merchant = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...sfRow, type: 'MERCHANT', isPartner: true }) } });
+    expect((await new StorefrontService(merchant, config, affiliate).getPublicBySlug('linh')).approved).toBe(true);
+  });
+
+  describe('getMine: chủ vẫn xem được gian hàng của mình, kèm dòng giải thích khi khách không thấy', () => {
+    const mine = (over: Record<string, unknown>, owner = { role: 'AFFILIATE', isBlocked: false }) =>
+      makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...sfRow, collections: [], owner, ...over }) } });
+
+    it('CTV hợp lệ: không có lý do ẩn, và không lộ object owner', async () => {
+      const sf = await new StorefrontService(mine({}), config, affiliate).getMine('u1');
+      expect(sf.publicHiddenReason).toBeNull();
+      expect(sf).not.toHaveProperty('owner');
+    });
+
+    it('CTV bị hạ về khách thường: vẫn trả gian hàng, kèm lý do ẩn', async () => {
+      const sf = await new StorefrontService(mine({}, { role: 'CUSTOMER', isBlocked: false }), config, affiliate).getMine('u1');
+      expect(sf.id).toBe('s1');
+      expect(sf.publicHiddenReason).toContain('CTV');
+    });
+
+    it('bị admin gỡ đăng: lý do của admin hiện cho chủ', async () => {
+      const sf = await new StorefrontService(mine({ isPublished: false, takenDownAt: new Date(), takenDownReason: 'Dùng ảnh người khác' }), config, affiliate).getMine('u1');
+      expect(sf.publicHiddenReason).toContain('Dùng ảnh người khác');
+    });
+  });
+
+  describe('publishMine', () => {
+    const mk = (row: Record<string, unknown>, itemCount: number) => {
+      const update = jest.fn().mockImplementation(({ data }) => ({ id: 's1', ...data }));
+      const prisma = makePrisma({
+        storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1', takenDownAt: null, takenDownReason: null, ...row }), update },
+        storefrontItem: { count: jest.fn().mockResolvedValue(itemCount) },
+      });
+      return { svc: new StorefrontService(prisma, config, affiliate), update };
+    };
+
+    it('đang bị admin gỡ: chủ không tự đăng lại được (403 kèm lý do)', async () => {
+      const { svc, update } = mk({ takenDownAt: new Date(), takenDownReason: 'Ảnh vi phạm' }, 3);
+      const err = await svc.publishMine('u1', true).catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as Error).message).toContain('Ảnh vi phạm');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('chưa có sản phẩm nào: chưa đăng được', async () => {
+      const { svc, update } = mk({}, 0);
+      await expect(svc.publishMine('u1', true)).rejects.toThrow('ít nhất 1 sản phẩm');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('có sản phẩm: đăng, và lệnh ghi chỉ chạy khi gian hàng chưa bị gỡ (admin gỡ chen giữa không bị ghi đè)', async () => {
+      const { svc, update } = mk({}, 1);
+      const r = await svc.publishMine('u1', true);
+      expect(r.isPublished).toBe(true);
+      expect(update.mock.calls[0][0].where).toEqual({ id: 's1', takenDownAt: null });
+    });
+
+    it('gỡ đăng (isPublished false) luôn được, kể cả khi đang bị admin gỡ hoặc rỗng', async () => {
+      const { svc, update } = mk({ takenDownAt: new Date() }, 0);
+      const r = await svc.publishMine('u1', false);
+      expect(r.isPublished).toBe(false);
+      expect(r.publishedAt).toBeNull();
+      expect(update).toHaveBeenCalled();
+    });
+
+    it('lệnh ghi trượt vì admin vừa gỡ giữa chừng (P2025) → 403 thay vì 500', async () => {
+      const { svc, update } = mk({}, 1);
+      update.mockRejectedValue(Object.assign(new Prisma.PrismaClientKnownRequestError('x', { code: 'P2025', clientVersion: 'x' })));
+      await expect(svc.publishMine('u1', true)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+});
+
+describe('link subdomain theo cờ storefront.subdomain_enabled (D3-11)', () => {
+  const flagConfig = (on: boolean) => ({ get: async <T>(k: string, fb?: T) => (k === 'storefront.subdomain_enabled' ? on : fb) }) as unknown as SystemConfigService;
+  const row = {
+    id: 's1', slug: 'abcd1234', subdomain: 'lan-xanh', customDomain: 'lanxanh.vn', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9',
+    collections: [], owner: { referralCode: 'ABCD1234', role: 'AFFILIATE', isBlocked: false },
+  };
+
+  it('cờ tắt (mặc định): trang công khai không lộ subdomain và tên miền riêng', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('abcd1234');
+    expect(r.subdomain).toBeNull();
+    expect(r.customDomain).toBeNull();
+    expect(r.subdomainEnabled).toBe(false);
+    expect(JSON.stringify(r)).not.toContain('lan-xanh');
+    expect(JSON.stringify(r)).not.toContain('lanxanh.vn');
+  });
+
+  it('cờ bật: trang công khai trả subdomain và tên miền riêng', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const r = await new StorefrontService(prisma, flagConfig(true), affiliate).getPublicBySlug('abcd1234');
+    expect(r.subdomain).toBe('lan-xanh');
+    expect(r.customDomain).toBe('lanxanh.vn');
+    expect(r.subdomainEnabled).toBe(true);
+  });
+
+  it('cờ tắt: builder của chủ cũng không nhận subdomain, và biết cờ đang tắt', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const sf = await new StorefrontService(prisma, config, affiliate).getMine('u9');
+    expect(sf.subdomain).toBeNull();
+    expect(sf.customDomain).toBeNull();
+    expect(sf.subdomainEnabled).toBe(false);
+  });
+
+  it('cờ bật: builder của chủ nhận subdomain', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const sf = await new StorefrontService(prisma, flagConfig(true), affiliate).getMine('u9');
+    expect(sf.subdomain).toBe('lan-xanh');
+    expect(sf.subdomainEnabled).toBe(true);
+  });
+
+  it('builder của chủ nhận mã giới thiệu để chia sẻ link /s/<slug>?ref=, không lộ thêm gì về chủ', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const sf = await new StorefrontService(prisma, config, affiliate).getMine('u9');
+    expect(sf.referralCode).toBe('ABCD1234');
+    expect(sf).not.toHaveProperty('owner');
+  });
+});
+
+describe('ảnh gian hàng trong JSON công khai (D3-10)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 's1', slug: 'abcd1234', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9', collections: [],
+    owner: { referralCode: 'ABCD1234', role: 'AFFILIATE', isBlocked: false }, avatarUrl: null, coverUrl: null, ...over,
+  });
+
+  it('ảnh đại diện và ảnh bìa base64 được thay bằng đường dẫn tới endpoint ảnh: JSON công khai không chứa base64', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row({ avatarUrl: PNG, coverUrl: PNG })) } });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('abcd1234');
+    expect(r.avatarUrl).toMatch(/^\/storefront\/image\/s1\/avatar\?v=[0-9a-f]{32}$/);
+    expect(r.coverUrl).toMatch(/^\/storefront\/image\/s1\/cover\?v=[0-9a-f]{32}$/);
+    expect(JSON.stringify(r)).not.toContain('base64');
+  });
+
+  it('URL https giữ nguyên', async () => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row({ avatarUrl: 'https://cdn.x/a.jpg' })) } });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('abcd1234');
+    expect(r.avatarUrl).toBe('https://cdn.x/a.jpg');
+    expect(r.coverUrl).toBeNull();
+  });
+
+  describe('getPublicImage', () => {
+    const svc = (found: unknown) => {
+      const findFirst = jest.fn().mockResolvedValue(found);
+      return { findFirst, svc: new StorefrontService(makePrisma({ storefront: { findFirst } }), config, affiliate) };
+    };
+
+    it('chỉ tìm trong gian hàng khách đang thấy (gỡ đăng, chủ bị khoá… thì ảnh cũng không phục vụ)', async () => {
+      const { findFirst, svc: s } = svc({ id: 's1', avatarUrl: PNG, coverUrl: null });
+      await s.getPublicImage('s1', 'avatar', 'x');
+      expect(findFirst.mock.calls[0][0].where).toMatchObject({ id: 's1', isPublished: true, takenDownAt: null });
+    });
+
+    it('trả byte và loại ảnh; mã v khớp nội dung thì versionOk', async () => {
+      const { svc: s } = svc({ id: 's1', avatarUrl: PNG, coverUrl: null });
+      const version = (await new StorefrontService(makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row({ avatarUrl: PNG })) } }), config, affiliate).getPublicBySlug('abcd1234')).avatarUrl!.split('v=')[1];
+      const ok = await s.getPublicImage('s1', 'avatar', version);
+      expect(ok.mime).toBe('image/png');
+      expect(ok.data.length).toBeGreaterThan(0);
+      expect(ok.versionOk).toBe(true);
+      expect((await s.getPublicImage('s1', 'avatar', 'sai')).versionOk).toBe(false);
+      expect((await s.getPublicImage('s1', 'avatar', undefined)).versionOk).toBe(false);
+    });
+
+    it('không có gian hàng, không có ảnh, ảnh không phải base64 phục vụ được, loại ảnh lạ: 404', async () => {
+      await expect(svc(null).svc.getPublicImage('s1', 'avatar', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+      await expect(svc({ id: 's1', avatarUrl: null, coverUrl: null }).svc.getPublicImage('s1', 'avatar', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+      await expect(svc({ id: 's1', avatarUrl: 'https://cdn.x/a.jpg', coverUrl: null }).svc.getPublicImage('s1', 'avatar', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+      await expect(svc({ id: 's1', avatarUrl: PNG, coverUrl: null }).svc.getPublicImage('s1', 'banner', 'x')).rejects.toThrow('Không tìm thấy ảnh');
+    });
   });
 });

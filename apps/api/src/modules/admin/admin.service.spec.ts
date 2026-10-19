@@ -312,68 +312,146 @@ describe('AdminService.reviewDealerApplication', () => {
 
 describe('AdminService.importDealerPrices (import bảng giá đại lý theo bậc)', () => {
   function importPrisma(over: Record<string, unknown> = {}) {
-    const base = {
+    const base: Record<string, unknown> = {
       dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
-      // Bug 1 fix: 1 findMany cho toàn bộ SKU (thay vì findUnique/dòng).
       variation: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'SKU-1', dealerPrices: { t0: 99000 } }]),
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', sku: 'SKU-1', name: '500ml', retailPrice: 200_000, dealerPrices: { t0: 99000 }, product: { name: 'Nước rửa chén' } },
+        ]),
         update: jest.fn().mockResolvedValue({}),
       },
-      dealerPriceHistory: { create: jest.fn().mockResolvedValue({}) },
-      // Ghi theo lô: mỗi lô 1 $transaction([...]) — mock chỉ cần resolve, vì .update()/.create()
-      // đã được gọi (ghi nhận bởi jest.fn) ngay lúc XÂY mảng đối số truyền vào $transaction.
-      $transaction: jest.fn().mockResolvedValue([]),
+      dealerPriceHistory: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      ...over,
     };
-    return { ...base, ...over } as unknown as PrismaService;
+    base.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => fn(base));
+    return base as unknown as PrismaService;
   }
+  const m = (prisma: PrismaService) => prisma as unknown as Record<string, Record<string, jest.Mock>> & { $queryRaw: jest.Mock };
+  // Trần chiết khấu đại lý (dealer.max_discount_pct, phân số): sàn giá sỉ = giá lẻ × (1 − trần), không dưới 10%.
+  const dealerConfig = (maxDiscount?: unknown) =>
+    ({ get: jest.fn(async (key: string, fb: unknown) => (key === 'dealer.max_discount_pct' && maxDiscount !== undefined ? maxDiscount : fb)) }) as unknown as SystemConfigService;
+  const mkDealer = (prisma: PrismaService, maxDiscount?: unknown) => mkAdmin(prisma, { config: dealerConfig(maxDiscount) });
 
   it('bậc đại lý không tồn tại → BadRequest', async () => {
     const prisma = importPrisma({ dealerTier: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(mkAdmin(prisma).importDealerPrices('admin1', 'bad', [{ sku: 'SKU-1', price: 100000 }])).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 'bad', { csv: 'SKU-1,100000' })).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('import hợp lệ → MERGE giá vào dealerPrices[tierId] + ghi DealerPriceHistory (old→new)', async () => {
-    const prisma = importPrisma();
-    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [{ sku: 'SKU-1', price: 180000 }]);
-    expect(r).toMatchObject({ tierId: 't1', updated: 1, notFound: [] });
-    const upd = (prisma.variation.update as jest.Mock).mock.calls[0][0];
-    expect(upd.where).toEqual({ id: 'v1' });
-    expect(upd.data.dealerPrices).toEqual({ t0: 99000, t1: 180000 }); // merge, không mất bậc khác
-    const hist = (prisma.dealerPriceHistory.create as jest.Mock).mock.calls[0][0].data;
-    expect(hist).toMatchObject({ variationId: 'v1', tierId: 't1', oldPrice: null, newPrice: 180000, changedBy: 'admin1' });
-  });
+  it.each(['185.000', '185,000', '185000', '185 000', '185.000đ'])(
+    'giá kiểu Việt Nam "%s" → ghi 185.000đ (MERGE vào dealerPrices[tierId]) + lịch sử old→new, khoá dòng trước khi đọc',
+    async (price) => {
+      const prisma = importPrisma();
+      const r = await mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: `sku;giá\nSKU-1;${price}` });
+      expect(r).toEqual({ tierId: 't1', updated: 1, unchanged: 0, notFound: [], skipped: 0 });
+      const upd = m(prisma).variation!.update!.mock.calls[0][0];
+      expect(upd).toEqual({ where: { id: 'v1' }, data: { dealerPrices: { t0: 99000, t1: 185_000 } } });
+      expect(m(prisma).dealerPriceHistory!.createMany!.mock.calls[0][0].data).toEqual([
+        { variationId: 'v1', sku: 'SKU-1', tierId: 't1', oldPrice: null, newPrice: 185_000, changedBy: 'admin1' },
+      ]);
+      expect(m(prisma).$queryRaw.mock.calls[0][0].join('?')).toContain('ORDER BY "id" FOR NO KEY UPDATE');
+    },
+  );
 
-  it('SKU không tồn tại → vào notFound, không update', async () => {
-    const prisma = importPrisma({
-      variation: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
-    });
-    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [{ sku: 'SKU-X', price: 100000 }]);
-    expect(r.updated).toBe(0);
-    expect(r.notFound).toEqual(['SKU-X']);
-    expect(prisma.variation.update).not.toHaveBeenCalled();
-  });
-
-  it('giá không đổi → bỏ qua (không update/không ghi history thừa)', async () => {
+  it('CSV tách bằng dấu phẩy mà giá "240,000" (Excel tách thành 3 ô) → 240.000đ, không phải 240đ', async () => {
     const prisma = importPrisma({
       variation: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'SKU-1', dealerPrices: { t1: 150000 } }]),
+        findMany: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'SKU-1', name: '1L', retailPrice: 300_000, dealerPrices: null, product: { name: 'Nước giặt' } }]),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    });
+    await mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,240,000' });
+    expect(m(prisma).variation!.update!.mock.calls[0][0].data.dealerPrices.t1).toBe(240_000);
+  });
+
+  it.each([
+    ['giá mơ hồ 185.5', 'SKU-1,185.5'],
+    ['giá có phần lẻ 185.000,00', 'SKU-1;185.000,00'],
+    ['ngoài khoảng: 185 (gõ thiếu số 0)', 'SKU-1,185'],
+    ['ngoài khoảng: cao hơn giá lẻ', 'SKU-1,250000'],
+    ['SKU lặp', 'SKU-1,180000\nSKU-1,180000'],
+  ])('%s → 400, không ghi dòng nào', async (_l, csv) => {
+    const prisma = importPrisma();
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { csv })).rejects.toThrow('Chưa ghi dòng nào');
+    expect(m(prisma).variation!.update).not.toHaveBeenCalled();
+    expect(m(prisma).dealerPriceHistory!.createMany).not.toHaveBeenCalled();
+  });
+
+  it('giá lẻ 200.000, trần chiết khấu 45%: "25.000" (gõ thay cho 125.000) → 400 kèm lý do sàn; 110.000 ghi được; trần 95% thì sàn 10%', async () => {
+    const prisma = importPrisma();
+    await expect(mkDealer(prisma).previewDealerPrices('t1', { csv: 'SKU-1,25.000' })).resolves.toMatchObject({
+      canApply: false,
+      rows: [{ status: 'OUT_OF_RANGE', message: expect.stringContaining('thấp hơn sàn 110.000đ') }],
+    });
+    await expect(mkDealer(prisma, 0.45).importDealerPrices('admin1', 't1', { csv: 'SKU-1,25.000' })).rejects.toThrow('Chưa ghi dòng nào');
+    await expect(mkDealer(prisma, 0.45).importDealerPrices('admin1', 't1', { csv: 'SKU-1,109.999' })).rejects.toThrow('Chưa ghi dòng nào');
+    expect(m(prisma).variation!.update).not.toHaveBeenCalled();
+    expect((await mkDealer(prisma, 0.45).importDealerPrices('admin1', 't1', { csv: 'SKU-1,110.000' })).updated).toBe(1);
+    expect((await mkDealer(importPrisma(), 0.95).importDealerPrices('admin1', 't1', { csv: 'SKU-1,20.000' })).updated).toBe(1);
+  });
+
+  it('dòng hợp lệ + 1 dòng lỗi → không ghi cả dòng hợp lệ', async () => {
+    const prisma = importPrisma({
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', sku: 'SKU-1', name: 'A', retailPrice: 200_000, dealerPrices: null, product: { name: 'A' } },
+          { id: 'v2', sku: 'SKU-2', name: 'B', retailPrice: 100_000, dealerPrices: null, product: { name: 'B' } },
+        ]),
         update: jest.fn(),
       },
     });
-    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [{ sku: 'SKU-1', price: 150000 }]);
-    expect(r.updated).toBe(0);
-    expect(prisma.variation.update).not.toHaveBeenCalled();
-    expect(prisma.dealerPriceHistory.create).not.toHaveBeenCalled();
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,180.000\nSKU-2,1.25' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(m(prisma).variation!.update).not.toHaveBeenCalled();
   });
 
-  it('giá <= 0 hoặc sku rỗng → bỏ dòng lỗi (không update)', async () => {
+  it('SKU không tồn tại bỏ qua và đếm vào skipped; giá không đổi cũng vào skipped', async () => {
+    const prisma = importPrisma({
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', sku: 'SKU-1', name: 'A', retailPrice: 200_000, dealerPrices: { t1: 150000 }, product: { name: 'A' } },
+          { id: 'v2', sku: 'SKU-2', name: 'B', retailPrice: 200_000, dealerPrices: { t1: 150000 }, product: { name: 'B' } },
+        ]),
+        update: jest.fn(),
+      },
+    });
+    const r = await mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,150000\nSKU-2,160000\nSKU-X,100000' });
+    expect(r).toEqual({ tierId: 't1', updated: 1, unchanged: 1, notFound: ['SKU-X'], skipped: 2 });
+    expect(m(prisma).variation!.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('chỉ có dòng không đổi → 400 "Không có giá nào cần đổi"', async () => {
+    const prisma = importPrisma({
+      variation: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'v1', sku: 'SKU-1', name: 'A', retailPrice: 200_000, dealerPrices: { t1: 150000 }, product: { name: 'A' } }]),
+        update: jest.fn(),
+      },
+    });
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { csv: 'SKU-1,150.000' })).rejects.toThrow('Không có giá nào cần đổi');
+  });
+
+  it('rows JSON (API cũ) đi chung đường kiểm: giá lẻ/âm là lỗi, không ghi', async () => {
     const prisma = importPrisma();
-    const r = await mkAdmin(prisma).importDealerPrices('admin1', 't1', [
-      { sku: '', price: 100000 },
-      { sku: 'SKU-1', price: 0 },
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: 'SKU-1', price: 185.5 }] })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mkDealer(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: '', price: 100000 }] })).rejects.toBeInstanceOf(BadRequestException);
+    expect(m(prisma).variation!.update).not.toHaveBeenCalled();
+    const ok = await mkDealer(prisma).importDealerPrices('admin1', 't1', { rows: [{ sku: 'SKU-1', price: 180_000 }] });
+    expect(ok.updated).toBe(1);
+  });
+
+  it('xem trước: phân loại từng dòng, không ghi, không trả id nội bộ', async () => {
+    const prisma = importPrisma();
+    const p = await mkDealer(prisma).previewDealerPrices('t1', { csv: 'SKU-1,185.000\nSKU-X,1\nSKU-1,1' });
+    expect(p.rows.map((r) => [r.line, r.status])).toEqual([
+      [1, 'DUPLICATE'],
+      [2, 'NOT_FOUND'],
+      [3, 'DUPLICATE'],
     ]);
-    expect(r.updated).toBe(0);
-    expect(prisma.variation.update).not.toHaveBeenCalled();
+    const p2 = await mkDealer(prisma).previewDealerPrices('t1', { csv: 'SKU-1,185.000' });
+    expect(p2.rows[0]).toMatchObject({ status: 'OK', price: 185_000, currentPrice: null, retailPrice: 200_000, productName: 'Nước rửa chén' });
+    expect(p2.rows[0]).not.toHaveProperty('variationId');
+    expect(p2.canApply).toBe(true);
+    expect(m(prisma).variation!.update).not.toHaveBeenCalled();
+    expect(m(prisma).$queryRaw).not.toHaveBeenCalled();
   });
 });
 
@@ -733,6 +811,18 @@ describe('AdminService.createCoupon — chặn giá trị gõ nhầm (ADMINOPS-8
     await ok.p;
     expect(ok.create).toHaveBeenCalled();
   });
+
+  // Mã chung in trên thẻ bị đăng lên nhóm mạng xã hội: không có tổng lượt thì số lượt nhận và tiền giảm không có trần.
+  it('scope=CLAIM thiếu Tổng lượt nhận hoặc < 1 → 400, không tạo; có tổng lượt thì được', async () => {
+    for (const over of [{ scope: 'CLAIM' }, { scope: 'CLAIM', usageLimit: null }, { scope: 'CLAIM', usageLimit: 0 }]) {
+      const { create, p } = run(over);
+      await expect(p).rejects.toThrow('Tổng lượt nhận');
+      expect(create).not.toHaveBeenCalled();
+    }
+    const ok = run({ scope: 'CLAIM', usageLimit: 300 });
+    await ok.p;
+    expect(ok.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ scope: 'CLAIM', usageLimit: 300 }) }));
+  });
 });
 
 describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
@@ -772,6 +862,65 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(out.meta.total).toBe(1);
   });
 
+  it('D2-03: tạo mã ẩn (CLAIM) chỉ khách mới → ghi đúng scope và cờ; mặc định cờ tắt', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { create } });
+    await mkAdmin(prisma).createCoupon({
+      ...couponBase,
+      endAt: '2099-12-31T00:00:00.000Z',
+      code: 'SHOPEE',
+      scope: 'CLAIM',
+      usageLimit: 300,
+      newCustomerOnly: true,
+    });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ scope: 'CLAIM', newCustomerOnly: true }) }));
+    await mkAdmin(prisma).createCoupon({ ...couponBase, endAt: '2099-12-31T00:00:00.000Z' });
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ newCustomerOnly: false }) }));
+  });
+
+  it('D2-03: danh sách mặc định ẩn mã thuộc lô thẻ (hàng nghìn mã, xem ở bảng lô); tìm theo mã thì vẫn thấy', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({ coupon: { findMany, count: jest.fn().mockResolvedValue(0) }, couponRedemption: { groupBy: jest.fn() } });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20 });
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ scope: { not: 'USER_GROUP' }, batch: null });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SHOPEE-AB' });
+    expect(findMany.mock.calls[1][0].where.batch).toBeUndefined();
+  });
+
+  it('listCoupons: nhân viên chỉ thấy mã lô do chính mình tạo (cả khi tìm theo từ khoá); ADMIN không bị lọc', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = makePrisma({ coupon: { findMany, count }, couponRedemption: { groupBy: jest.fn() } });
+    const staff = { id: 's1', staff: true };
+    const own = { OR: [{ batch: null }, { createdById: 's1' }] };
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SHOPEE11-' }, staff);
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ code: { contains: 'SHOPEE11-' }, ...own });
+    expect(findMany.mock.calls[0][0].where.batch).toBeUndefined();
+    expect(count.mock.calls[0][0].where).toMatchObject(own);
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20 }, staff);
+    expect(findMany.mock.calls[1][0].where).toMatchObject({ batch: null, ...own });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SHOPEE11-' }, { id: 'a1', staff: false });
+    expect(findMany.mock.calls[2][0].where.OR).toBeUndefined();
+    expect(findMany.mock.calls[2][0].where.batch).toBeUndefined();
+  });
+
+  it('D2-03: mã CLAIM trả kèm số khách đã nhận (đếm coupon_claims); mã khác không đếm', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'c1', code: 'SHOPEE', scope: 'CLAIM', isActive: true },
+      { id: 'c2', code: 'SALE10', scope: 'PUBLIC', isActive: true },
+    ]);
+    const claimGroupBy = jest.fn().mockResolvedValue([{ couponId: 'c1', _count: { _all: 4 } }]);
+    const prisma = makePrisma({
+      coupon: { findMany, count: jest.fn().mockResolvedValue(2) },
+      couponRedemption: { groupBy: jest.fn().mockResolvedValue([{ couponId: 'c1', _count: { _all: 2 } }]) },
+      couponClaim: { groupBy: claimGroupBy },
+    });
+    const out = await mkAdmin(prisma).listCoupons({ page: 1, limit: 20 });
+    expect(claimGroupBy).toHaveBeenCalledWith({ by: ['couponId'], where: { couponId: { in: ['c1'] } }, _count: { _all: true } });
+    expect(out.data[0]).toMatchObject({ code: 'SHOPEE', redeemedCount: 2, claimedCount: 4 });
+    expect(out.data[1]).toMatchObject({ code: 'SALE10', redeemedCount: 0, claimedCount: null });
+  });
+
   it('updateCoupon: tắt mã (isActive=false) ghi đúng trường', async () => {
     const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', startAt: new Date('2026-01-01'), endAt: new Date('2026-12-31'), usedCount: 0 });
     const update = jest.fn().mockResolvedValue({ id: 'c1', isActive: false });
@@ -787,6 +936,31 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     await expect(mkAdmin(prisma).updateCoupon('c1', { endAt: '2026-05-01T00:00:00.000Z' })).rejects.toThrow('Ngày kết thúc phải sau ngày bắt đầu.');
     await expect(mkAdmin(prisma).updateCoupon('c1', { usageLimit: 3 })).rejects.toThrow('đã được dùng 5 lượt');
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('updateCoupon: mã CLAIM (mã chung hoặc mã thuộc lô thẻ) không được bỏ Tổng lượt nhận hay đặt < 1 → 400; mã công khai thì bỏ được', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'c1' });
+    const row = (over: Record<string, unknown>) => ({
+      id: 'c1',
+      code: 'SHOPEE',
+      startAt: new Date('2026-01-01'),
+      endAt: new Date('2099-12-31'),
+      usageLimit: 300,
+      batch: null,
+      ...over,
+    });
+    for (const over of [{ scope: 'CLAIM' }, { scope: 'CLAIM', batch: 'SHOPEE11', usageLimit: 1 }, { scope: 'PUBLIC', batch: 'SHOPEE11' }]) {
+      const prisma = makePrisma({
+        coupon: { findUnique: jest.fn().mockResolvedValue(row(over)), update },
+        couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+      });
+      await expect(mkAdmin(prisma).updateCoupon('c1', { usageLimit: null })).rejects.toThrow('Tổng lượt nhận');
+      await expect(mkAdmin(prisma).updateCoupon('c1', { usageLimit: 0 })).rejects.toThrow('Tổng lượt nhận');
+    }
+    expect(update).not.toHaveBeenCalled();
+    const prisma = makePrisma({ coupon: { findUnique: jest.fn().mockResolvedValue(row({ scope: 'PUBLIC' })), update } });
+    await mkAdmin(prisma).updateCoupon('c1', { usageLimit: null });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usageLimit: null } });
   });
 
   it('updateCoupon: mã không tồn tại → 404', async () => {
@@ -1186,6 +1360,37 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
     expect(admin.N!.allowedTransitions).toEqual(['PACKED', 'CANCELLED']);
   });
 
+  it('Kế toán (B18): thấy đơn nhưng không nút trạng thái nào, có nút Đã nhận tiền, SĐT che còn 3 số cuối; ADMIN/CSKH thấy đủ', async () => {
+    const orders = [
+      {
+        code: 'K',
+        status: 'PENDING_PAYMENT',
+        user: { id: 'u1', phone: '0912345678', fullName: 'Khách A' },
+        shippingAddress: { recipient: 'B', phone: '0987654321', address: 'Hà Nội' },
+        note: 'gọi 0912 345 678 trước, CK FT26270123456789 số tiền 12.500.000đ',
+        endCustomerKey: '0933444555',
+        recyclingNote: 'liên hệ 0944 555 666',
+      },
+    ];
+    const kt = await list(orders, [], { role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+    expect(kt.K).toMatchObject({
+      allowedTransitions: [],
+      canConfirmPayment: true,
+      user: { phone: '*******678', fullName: 'Khách A' },
+      shippingAddress: { phone: '*******321', recipient: 'B', address: 'Hà Nội' },
+    });
+    const ktRow = kt.K as unknown as { note: string; endCustomerKey: string; recyclingNote: string };
+    expect(ktRow.note).not.toContain('0912');
+    expect(ktRow.note).toContain('FT26270123456789');
+    expect(ktRow.note).toContain('12.500.000đ');
+    expect(ktRow.endCustomerKey).toBe('*******555');
+    expect(ktRow.recyclingNote).not.toContain('0944');
+    for (const viewer of [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: ['CSKH'] }]) {
+      const full = await list(orders, [], viewer);
+      expect(full.K).toMatchObject({ user: { phone: '0912345678' }, shippingAddress: { phone: '0987654321' }, endCustomerKey: '0933444555' });
+    }
+  });
+
   it('trả deliveredEffectsAt để màn admin biết đơn DELIVERED nào chưa xong việc sau giao (nút chạy lại)', async () => {
     const done = new Date('2026-10-02T00:00:00.000Z');
     const by = (await list([
@@ -1436,7 +1641,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, { pancakeCode: 'PK-1' });
-    expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'shell' }, data: { productId: 'p1' } });
+    expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'shell' }, data: { productId: 'p1', affiliateRate: null } });
     // R4-PARTNER-6: CAS gồm cả mã đang xin liên kết, đối tác đổi mã giữa lúc admin xem và bấm thì duyệt trượt.
     const casWhere = (prisma.product.updateMany as jest.Mock).mock.calls[0][0].where;
     expect(casWhere).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: product.pancakeLinkCode });
@@ -1508,7 +1713,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, { pancakeCode: ' PK-B ' });
       expect(res).toMatchObject({ id: 'p1' });
       expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-B' });
-      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
       expect(unsentWarnings()).toEqual([]);
     });
 
@@ -1519,7 +1724,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       const { prisma, updateMany, variationUpdateMany, linkCreate } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(false));
       await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, seen)).resolves.toMatchObject({ id: 'p1' });
       expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-B' });
-      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
       expect(linkCreate).toHaveBeenCalledTimes(1);
       const msgs = unsentWarnings();
       expect(msgs).toHaveLength(1);
@@ -1557,7 +1762,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       it('xác nhận mà không gửi sản phẩm đã xem → chuyển sản phẩm hiện đang giữ mã, cảnh báo nêu sản phẩm bị chuyển', async () => {
         const { prisma, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(true));
         await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-B' });
-        expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+        expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
         const msgs = unsentWarnings();
         expect(msgs).toHaveLength(1);
         expect(msgs[0]).toContain('admin-1');
@@ -1822,7 +2027,7 @@ describe('AdminService.reviewMerchantProduct — dòng chờ duyệt lần đầ
       await expect(
         mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-B', takeoverProductId: value, updatedAt: loadedAt.toISOString() }),
       ).resolves.toMatchObject({ id: 'p1' });
-      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1', affiliateRate: null } });
       expect(takeoverWarnings()).toHaveLength(1);
     });
 
@@ -1912,6 +2117,31 @@ describe('AdminService.listDealerApplications — thứ tự createdAt theo tham
  * C-024 / Q-06: đơn chuyển khoản lẻ (khách hoặc CTV lên đơn hộ) trước đây không có cách nào ghi nhận
  * "đã nhận tiền" ngoài webhook Pancake — webhook không tới là đơn kẹt PENDING_PAYMENT mãi.
  */
+describe('AdminService.orderStatusHistory — che SĐT theo người xem (B18)', () => {
+  const svcFor = () =>
+    mkAdmin(
+      makePrisma({
+        order: { findFirst: jest.fn().mockResolvedValue({ id: 'o1', code: 'TB-1' }) },
+        orderStatusHistory: {
+          findMany: jest.fn().mockResolvedValue([{ id: 'h1', actorId: 's1', note: 'gọi 0912 345 678 · Mã GD FT26270123456789', toStatus: 'CONFIRMED' }]),
+        },
+        user: { findMany: jest.fn().mockResolvedValue([{ id: 's1', fullName: 'NV', phone: '0901234567' }]) },
+      }),
+    );
+
+  it('Kế toán: SĐT trong ghi chú và của người thao tác bị che; ADMIN/CSKH thấy nguyên', async () => {
+    const kt = await svcFor().orderStatusHistory('TB-1', { role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+    expect(kt.history[0]!.note).not.toContain('0912');
+    expect(kt.history[0]!.note).toContain('FT26270123456789');
+    expect(kt.history[0]!.actor).toMatchObject({ phone: '*******567' });
+    for (const viewer of [undefined, { role: 'STAFF', staffPermissions: ['CSKH'] }]) {
+      const full = await svcFor().orderStatusHistory('TB-1', viewer);
+      expect(full.history[0]!.note).toBe('gọi 0912 345 678 · Mã GD FT26270123456789');
+      expect(full.history[0]!.actor).toMatchObject({ phone: '0901234567' });
+    }
+  });
+});
+
 describe('AdminService.confirmOrderPayment', () => {
   function make(order: Record<string, unknown> | null, outcome = 'PAID') {
     const prisma = makePrisma({
@@ -1961,6 +2191,53 @@ describe('AdminService.confirmOrderPayment', () => {
     });
     expect(res).toMatchObject({ ok: true, alreadyPaid: false });
     expect(res.order).toMatchObject({ id: 'o1', paymentStatus: 'PAID' });
+  });
+
+  it('Kế toán xác nhận: ghi nhãn "Kế toán" vào lịch sử; đơn của chính mình bị chặn, không lật PAID', async () => {
+    const { svc, orderStatus } = make(bankOrder({ userId: 'u-other' }));
+    await svc.confirmOrderPayment('kt-1', 'TB-1', { bankRef: 'FT1' }, { byStaff: true });
+    expect(orderStatus.markPaid).toHaveBeenCalledWith('o1', { actorType: 'ADMIN', actorId: 'kt-1', note: 'Kế toán xác nhận · Mã GD FT1' });
+    const own = make(bankOrder({ userId: 'kt-1' }));
+    await expect(own.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/của chính mình/);
+    expect(own.orderStatus.markPaid).not.toHaveBeenCalled();
+    const admin = make(bankOrder({ userId: 'admin-1' }));
+    await expect(admin.svc.confirmOrderPayment('admin-1', 'TB-1', {})).resolves.toMatchObject({ ok: true });
+  });
+
+  it('Kế toán: đơn CTV đặt hộ có SĐT khách cuối hoặc người nhận trùng SĐT của mình → 403, không lật PAID', async () => {
+    for (const over of [{ endCustomerKey: '0911222333' }, { shippingAddress: { recipient: 'A', phone: '+84 911 222 333' } }]) {
+      const m = make(bankOrder({ userId: 'ctv-1', ...over }));
+      (m.prisma as unknown as { user: { findUnique: jest.Mock } }).user = { findUnique: jest.fn().mockResolvedValue({ phone: '0911222333' }) };
+      await expect(m.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/của chính mình/);
+      expect(m.orderStatus.markPaid).not.toHaveBeenCalled();
+    }
+  });
+
+  it('Kế toán: đơn trả về (cả nhánh ALREADY_PAID 200 và PAID mới) che SĐT; ADMIN thấy đủ', async () => {
+    const pii = { userId: 'u9', user: { id: 'u9', phone: '0912345678', fullName: 'A' }, endCustomerKey: '0933444555', shippingAddress: { recipient: 'B', phone: '0987654321' } };
+    for (const [outcome, paid] of [['ALREADY_PAID', true], ['PAID', false]] as const) {
+      const base = bankOrder(paid ? { paymentStatus: 'PAID', status: 'CONFIRMED', ...pii } : { ...pii });
+      const kt = make(base, outcome);
+      const k = await kt.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true });
+      expect(k.order).toMatchObject({ user: { phone: '*******678' }, endCustomerKey: '*******555', shippingAddress: { phone: '*******321', recipient: 'B' } });
+      const ad = make(base, outcome);
+      const a = await ad.svc.confirmOrderPayment('admin-1', 'TB-1', {});
+      expect(a.order).toMatchObject({ user: { phone: '0912345678' }, endCustomerKey: '0933444555', shippingAddress: { phone: '0987654321' } });
+    }
+  });
+
+  it('Kế toán: đơn đã huỷ/trả → 403 trước markPaid; đơn bị huỷ giữa chừng (CLOSED) → 403, không tạo khoản hoàn; ADMIN vẫn ghi được', async () => {
+    for (const status of ['CANCELLED', 'RETURNED']) {
+      const m = make(bankOrder({ status, userId: 'u9' }), 'CLOSED');
+      await expect(m.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/quản trị viên/);
+      expect(m.orderStatus.markPaid).not.toHaveBeenCalled();
+    }
+    const race = make(bankOrder({ userId: 'u9' }), 'CLOSED');
+    await expect(race.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/vừa bị huỷ/);
+    const createMany = (race.prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock } }).orderCustomerRefund.createMany;
+    expect(createMany).not.toHaveBeenCalled();
+    const admin = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    await expect(admin.svc.confirmOrderPayment('admin-1', 'TB-1', {})).resolves.toMatchObject({ latePayment: true });
   });
 
   it('bấm lại / admin khác đã bấm → 200 alreadyPaid, không lỗi', async () => {
@@ -2086,5 +2363,236 @@ describe('AdminService.getDealerPriceHistory — sổ lịch sử giá đại l�
       newPrice: 190000,
     });
     expect(res.meta.total).toBe(1);
+  });
+});
+
+describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
+  const base = {
+    code: 'VIP1',
+    type: 'AMOUNT' as const,
+    value: 50_000,
+    usageLimit: 100,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2099-12-31T00:00:00.000Z',
+    scope: 'PUBLIC' as const,
+  };
+  const staff = { id: 's1', staff: true };
+  const admin = { id: 'a1', staff: false };
+  const cfg = (values: Record<string, unknown> = {}) =>
+    ({ get: jest.fn(async (k: string, fb: unknown) => (k in values ? values[k] : fb)) }) as unknown as SystemConfigService;
+  const creating = (over: Record<string, unknown> = {}, actor = staff, config = cfg()) => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1', code: 'VIP1' });
+    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }) } });
+    return { create, p: mkAdmin(prisma, { config }).createCoupon({ ...base, ...over } as never, actor) };
+  };
+
+  it.each([
+    ['% vượt trần 30%', { type: 'PERCENT', value: 40, maxDiscount: 50_000 }, 'tối đa 30%'],
+    ['% không có Giảm tối đa', { type: 'PERCENT', value: 20, maxDiscount: undefined }, 'Giảm tối đa'],
+    ['% có Giảm tối đa vượt 100.000đ', { type: 'PERCENT', value: 20, maxDiscount: 150_000 }, '100.000'],
+    ['số tiền vượt 100.000đ', { type: 'AMOUNT', value: 150_000, minOrder: 500_000 }, '100.000'],
+    ['không có Tổng lượt dùng', { usageLimit: undefined }, 'Tổng lượt'],
+  ])('nhân viên tạo mã %s → 403, không ghi', async (_label, over, msg) => {
+    const { create, p } = creating(over);
+    await expect(p).rejects.toThrow(ForbiddenException);
+    await expect(creating(over).p).rejects.toThrow(msg as string);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên tạo mã trong trần → ghi người tạo', async () => {
+    const { create, p } = creating({ type: 'PERCENT', value: 30, maxDiscount: 100_000 });
+    await p;
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ createdById: 's1', updatedById: 's1' }) }));
+  });
+
+  it('trần mặc định khi chưa cấu hình: 30%, 100.000đ, 10.000.000đ/ngày, 1.000 lượt', async () => {
+    const { loadStaffCouponCaps } = await import('./coupon-input-rules');
+    await expect(loadStaffCouponCaps(cfg())).resolves.toEqual({ maxPercent: 30, maxAmount: 100_000, maxUsage: 1000, dailyBudget: 10_000_000 });
+  });
+
+  it('trần đọc từ cấu hình coupon.staff_max_percent / coupon.staff_max_amount_vnd', async () => {
+    const config = cfg({ 'coupon.staff_max_percent': 10, 'coupon.staff_max_amount_vnd': 30_000 });
+    await expect(creating({ type: 'PERCENT', value: 15, maxDiscount: 20_000 }, staff, config).p).rejects.toThrow('tối đa 10%');
+    await expect(creating({ value: 40_000 }, staff, config).p).rejects.toThrow('30.000');
+    await creating({ value: 30_000 }, staff, config).p;
+  });
+
+  it('quản trị viên không bị trần nhân viên; vẫn ghi người tạo', async () => {
+    const { create, p } = creating({ type: 'AMOUNT', value: 500_000, minOrder: 1_000_000, usageLimit: undefined }, admin, config);
+    await p;
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ createdById: 'a1' }) }));
+  });
+
+  it('nhân viên không tạo mã cá nhân cho chính mình', async () => {
+    const { create, p } = creating({ scope: 'USER_GROUP', scopeMeta: { userId: 's1' } });
+    await expect(p).rejects.toBeInstanceOf(ForbiddenException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên tạo mã: ghi sổ người tạo', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    await creating().p;
+    expect(warn.mock.calls.map((c) => String(c[0])).some((m) => m.includes('s1') && m.includes('VIP1'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('nhân viên tạo mã quá 1.000 lượt (coupon.staff_max_usage) → 403', async () => {
+    const { create, p } = creating({ value: 10_000, usageLimit: 1001 });
+    await expect(p).rejects.toThrow('1.000 lượt');
+    expect(create).not.toHaveBeenCalled();
+    await expect(creating({ value: 10_000, usageLimit: 21 }, staff, cfg({ 'coupon.staff_max_usage': 20 })).p).rejects.toThrow('20 lượt');
+  });
+
+  describe('ngân sách mã theo ngày của nhân viên', () => {
+    const rawValues = (m: unknown) => (m as jest.Mock).mock.calls.flatMap((c: unknown[]) => c.slice(1));
+    const budgetCreate = (over: Record<string, unknown>, used: number, actor = staff, config = cfg()) => {
+      const create = jest.fn().mockResolvedValue({ id: 'c1', code: 'VIP1' });
+      const prisma = makePrisma({
+        coupon: { create },
+        $queryRaw: jest.fn().mockResolvedValue([{ used: BigInt(used) }]),
+      });
+      return { create, prisma: prisma as unknown as Record<string, jest.Mock>, p: mkAdmin(prisma, { config }).createCoupon({ ...base, ...over } as never, actor) };
+    };
+
+    it.each([
+      ['giảm tiền: giá trị × lượt', { type: 'AMOUNT', value: 50_000, usageLimit: 100 }],
+      ['giảm %: Giảm tối đa × lượt', { type: 'PERCENT', value: 20, maxDiscount: 100_000, usageLimit: 50 }],
+      ['freeship: trần tiền nhân viên (100.000đ) × lượt', { type: 'FREESHIP', value: 0, usageLimit: 50 }],
+    ])('%s (5.000.000đ): hôm nay đã phát 5.000.000đ → được; 6.000.000đ → 400 nói còn bao nhiêu', async (_label, over) => {
+      const ok = budgetCreate(over, 5_000_000);
+      await ok.p;
+      expect(ok.create).toHaveBeenCalled();
+      expect(rawValues(ok.prisma.$executeRaw)).toContain('coupon.staff_budget:s1');
+      expect(rawValues(ok.prisma.$queryRaw)).toContain('s1');
+
+      const over1 = budgetCreate(over, 6_000_000);
+      await expect(over1.p).rejects.toBeInstanceOf(BadRequestException);
+      await expect(budgetCreate(over, 6_000_000).p).rejects.toThrow(/còn 4\.000\.000đ.*nhờ quản trị viên tạo/);
+      expect(over1.create).not.toHaveBeenCalled();
+    });
+
+    it('ngân sách đọc từ coupon.staff_daily_budget_vnd', async () => {
+      const config = cfg({ 'coupon.staff_daily_budget_vnd': 1_000_000 });
+      await expect(budgetCreate({ value: 50_000, usageLimit: 21 }, 0, staff, config).p).rejects.toThrow('còn 1.000.000đ');
+      await budgetCreate({ value: 50_000, usageLimit: 20 }, 0, staff, config).p;
+    });
+
+    it('quản trị viên không bị ngân sách: không khoá, không cộng', async () => {
+      const { create, prisma, p } = budgetCreate({ value: 500_000, minOrder: 1_000_000, usageLimit: 100_000 }, 1_000_000_000, admin);
+      await p;
+      expect(create).toHaveBeenCalled();
+      expect(rawValues(prisma.$executeRaw)).not.toContain('coupon.staff_budget:a1');
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sửa mã', () => {
+    const row = (over: Record<string, unknown> = {}) => ({
+      id: 'c1',
+      code: 'VIP1',
+      type: 'AMOUNT',
+      value: 50_000,
+      maxDiscount: null,
+      usageLimit: 100,
+      scope: 'PUBLIC',
+      scopeMeta: null,
+      batch: null,
+      startAt: new Date('2026-01-01'),
+      endAt: new Date('2099-01-01'),
+      createdById: 's2',
+      ...over,
+    });
+    const editing = (coupon: Record<string, unknown>, creatorRole: string | null, data: Record<string, unknown>, actor = staff) => {
+      const update = jest.fn().mockResolvedValue({ id: 'c1' });
+      const prisma = makePrisma({
+        coupon: { findUnique: jest.fn().mockResolvedValue(coupon), update },
+        couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+        user: { findMany: jest.fn().mockResolvedValue(creatorRole ? [{ id: coupon.createdById, role: creatorRole }] : []) },
+      });
+      return { update, p: mkAdmin(prisma, { config: cfg() }).updateCoupon('c1', data as never, actor) };
+    };
+
+    it('nhân viên sửa mã do nhân viên tạo → được, ghi người sửa', async () => {
+      const { update, p } = editing(row(), 'STAFF', { isActive: false });
+      await p;
+      expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isActive: false, updatedById: 's1' } });
+    });
+
+    it.each([
+      ['mã quản trị viên tạo', row({ createdById: 'a1' }), 'ADMIN'],
+      ['mã hệ thống / mã cũ (không rõ người tạo)', row({ createdById: null }), null],
+    ])('nhân viên không sửa %s (không bật lại mã quản trị viên đã tắt) → 403', async (_label, coupon, role) => {
+      const { update, p } = editing(coupon, role, { isActive: true });
+      await expect(p).rejects.toBeInstanceOf(ForbiddenException);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('nhân viên không bỏ Tổng lượt dùng (kết quả phải còn trong trần)', async () => {
+      const { update, p } = editing(row(), 'STAFF', { usageLimit: null });
+      await expect(p).rejects.toThrow('Tổng lượt');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('mã nhân viên tạo đã vượt trần mới (trần vừa hạ) → nhân viên không bật lại được', async () => {
+      const { update, p } = editing(row({ value: 300_000, minOrder: 1_000_000 }), 'STAFF', { isActive: true });
+      await expect(p).rejects.toThrow('100.000');
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('nhân viên không gia hạn mã cá nhân của chính mình', async () => {
+      const { update, p } = editing(row({ scope: 'USER_GROUP', scopeMeta: { userId: 's1' } }), 'STAFF', { endAt: '2099-06-01T00:00:00.000Z' });
+      await expect(p).rejects.toBeInstanceOf(ForbiddenException);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('nhân viên tắt mã nhân viên tạo đã vượt trần mới → được (tắt là thao tác an toàn)', async () => {
+      const { update, p } = editing(row({ value: 300_000, minOrder: 1_000_000 }), 'STAFF', { isActive: false });
+      await p;
+      expect(update).toHaveBeenCalled();
+    });
+
+    describe('tăng tổng lượt: tính phần chênh vào ngân sách ngày tạo mã của người tạo', () => {
+      const created = new Date('2026-10-17T03:00:00.000Z');
+      const raising = (data: Record<string, unknown>, used: number, coupon = row({ createdAt: created })) => {
+        const update = jest.fn().mockResolvedValue({ id: 'c1' });
+        const prisma = makePrisma({
+          coupon: { findUnique: jest.fn().mockResolvedValue(coupon), update },
+          couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+          user: { findMany: jest.fn().mockResolvedValue([{ id: 's2', role: 'STAFF' }]) },
+          $queryRaw: jest.fn().mockResolvedValue([{ used: BigInt(used) }]),
+        }) as unknown as Record<string, jest.Mock>;
+        return { update, prisma, p: mkAdmin(prisma as never, { config: cfg() }).updateCoupon('c1', data as never, staff) };
+      };
+      const values = (m: jest.Mock) => m.mock.calls.flatMap((c: unknown[]) => c.slice(1));
+
+      it('100 → 200 lượt × 50.000đ = thêm 5.000.000đ: ngày tạo đã phát 5.000.000đ → được', async () => {
+        const { update, prisma, p } = raising({ usageLimit: 200 }, 5_000_000);
+        await p;
+        expect(update).toHaveBeenCalled();
+        expect(values(prisma.$executeRaw!)).toContain('coupon.staff_budget:s2');
+        expect(values(prisma.$queryRaw!)).toEqual(expect.arrayContaining(['s2', new Date('2026-10-16T17:00:00.000Z'), new Date('2026-10-17T17:00:00.000Z')]));
+      });
+
+      it('đã phát 6.000.000đ → 400, không ghi', async () => {
+        const { update, p } = raising({ usageLimit: 200 }, 6_000_000);
+        await expect(p).rejects.toThrow(/còn 4\.000\.000đ/);
+        expect(update).not.toHaveBeenCalled();
+      });
+
+      it('giảm tổng lượt hay chỉ gia hạn: không đụng ngân sách', async () => {
+        for (const data of [{ usageLimit: 50 }, { endAt: '2099-06-01T00:00:00.000Z' }]) {
+          const { update, prisma, p } = raising(data, 1_000_000_000);
+          await p;
+          expect(update).toHaveBeenCalled();
+          expect(prisma.$queryRaw).not.toHaveBeenCalled();
+        }
+      });
+    });
+
+    it('quản trị viên sửa mọi mã, ghi người sửa', async () => {
+      const { update, p } = editing(row({ createdById: null }), null, { usageLimit: null }, admin);
+      await p;
+      expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usageLimit: null, updatedById: 'a1' } });
+    });
   });
 });

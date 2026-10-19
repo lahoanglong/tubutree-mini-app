@@ -326,7 +326,7 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
   });
 
   it('chưa gắn OA vẫn có đường liên hệ thật: gọi hotline', async () => {
-    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0899 149 229', email: null, zaloOaName: null } });
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0984 606 774', email: null, zaloOaName: null } });
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
     renderPage();
     expect(await screen.findByRole('button', { name: /Gọi hotline/ })).toBeInTheDocument();
@@ -532,6 +532,23 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
     fireEvent.click(buttons[buttons.length - 1]!);
     await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', undefined));
+  });
+
+  it.each([
+    ['còn hạn', 3_600_000, true],
+    ['quá hạn (cron sắp huỷ)', -60_000, false],
+  ])('đơn chuyển khoản chờ tiền %s: nút "Thanh toán ngay" theo hạn', async (_label, offsetMs, shown) => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      paymentDeadline: new Date(Date.now() + offsetMs).toISOString(),
+      manualHandling: false,
+    });
+    renderPage();
+    await screen.findByRole('button', { name: 'Hủy đơn' });
+    expect(screen.queryByRole('button', { name: 'Thanh toán ngay' }) !== null).toBe(shown);
   });
 
   it('đã duyệt trả một phần: hiện số tiền, dòng trả, trạng thái nhận hàng và cho trả thêm', async () => {

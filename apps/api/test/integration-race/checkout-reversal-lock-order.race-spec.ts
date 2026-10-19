@@ -25,7 +25,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { OrdersService } from '../../src/modules/orders/orders.service';
-import { createOrder, createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
+import { createOrder, createUser, deleteItData, randCode, pinConfig, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const PRICE = 100_000;
 const FLASH_PRICE = 50_000;
@@ -52,6 +52,8 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
   const CONFIG_KEYS = ['loyalty.vnd_per_point_redeem', 'loyalty.max_redeem_pct', 'returns.window_days'];
   let savedConfig: { key: string; value: unknown }[] = [];
   const created = { userIds: [] as string[], productIds: [] as string[], flashSaleIds: [] as string[] };
+
+  let restoreRedeem: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -91,7 +93,7 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
     returns = moduleRef.get(OrderReturnsService);
     savedConfig = await prisma.systemConfig.findMany({ where: { key: { in: CONFIG_KEYS } } });
     // Phải có trước lần get() đầu (SystemConfigService cache 60s).
-    await setConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
+    restoreRedeem = await pinConfig(prisma, 'loyalty.vnd_per_point_redeem', 1000);
     await setConfig(prisma, 'loyalty.max_redeem_pct', 0.2);
     await setConfig(prisma, 'returns.window_days', 7);
     admin = await createUser(prisma, { role: 'ADMIN' });
@@ -99,6 +101,7 @@ describe('Đặt đơn tiêu điểm ‖ đảo tiền đơn trước của cùn
   });
 
   afterAll(async () => {
+    await restoreRedeem?.();
     if (prisma) {
       await deleteItData(prisma, created);
       await prisma.systemConfig.deleteMany({ where: { key: { in: CONFIG_KEYS.filter((k) => !savedConfig.some((c) => c.key === k)) } } });

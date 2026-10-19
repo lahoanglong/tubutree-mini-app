@@ -145,6 +145,42 @@ describe('Pancake "Hoàn một phần" (15) cho đơn đã duyệt trả trên T
     }
   });
 
+  it('(d) admin bấm "Đã nhận hàng về" xong ngay sau khi webhook 15 đọc danh sách yêu cầu trả → gỡ hết nhắc, không kẹt nhắc lúc duyệt', async () => {
+    const { admin, order, req } = await approvedPartialReturn();
+    let received: Promise<unknown> | undefined;
+    // Chèn đúng khe CI từng bắt được: webhook đã đọc "chưa nhận", admin bấm nhận và commit trước khi webhook ghi.
+    const returnRequest = new Proxy(prisma.returnRequest, {
+      get(target, key) {
+        if (key !== 'findMany') return Reflect.get(target, key) as unknown;
+        return async (args: Parameters<typeof prisma.returnRequest.findMany>[0]) => {
+          const rows = await target.findMany(args);
+          received ??= returns.markReceived(admin.id, req.id);
+          await received;
+          return rows;
+        };
+      },
+    });
+    const racing = new Proxy(prisma, {
+      get(target, key) {
+        if (key === 'returnRequest') return returnRequest;
+        const value = Reflect.get(target, key) as unknown;
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    const racingProc = new PancakeProcessor(
+      racing,
+      moduleRef.get(NotificationsService),
+      moduleRef.get(OrderStatusService),
+      alerts as never,
+    ) as unknown as typeof proc;
+
+    await racingProc.onStatusUpdated({ id: order.pancakeOrderId, status: 15 });
+
+    expect(received).toBeDefined();
+    expect((await prisma.returnRequest.findUniqueOrThrow({ where: { id: req.id } })).receivedAt).not.toBeNull();
+    expect((await orderRow(order.id)).pancakeAttention).toBeNull();
+  });
+
   it('(c) đơn không có yêu cầu trả nào trên Tubu → lời cũ: kiểm tra hàng, hoàn tay phần bị trả', async () => {
     const user = await createUser(prisma);
     const order = await createOrder(prisma, { userId: user.id, status: 'DELIVERED', pancakeOrderId: `pk-${randCode(8)}` });

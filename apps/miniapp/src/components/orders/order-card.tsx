@@ -2,7 +2,8 @@ import { useId } from 'react';
 import { Package } from 'lucide-react';
 import { vi } from '../../i18n/vi';
 import type { OrderView } from '../../services/shop-api';
-import { formatDate } from '../../utils/format';
+import { formatDate, formatDateTime } from '../../utils/format';
+import { canPayOrderNow, showsPaymentDeadline } from '../../utils/refund-rules';
 import { STATUS_TONE, buyerStatusLabel, isReorderable, orderUnitCount } from '../../utils/order-status';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -16,17 +17,20 @@ export interface OrderCardProps {
   onOpen: () => void;
   /** Có = hiện nút "Mua lại" cho đơn đã xong. */
   onReorder?: () => void;
+  /** Có = hiện nút "Thanh toán ngay" (+ hạn) cho đơn chuyển khoản đang chờ tiền; dẫn tới màn chuyển khoản của đơn. */
+  onPay?: () => void;
 }
 
 /** Thẻ đơn trong tab Đơn hàng (spec 4a.2): ảnh SP đầu (join theo variationId), số món, tổng tiền,
- * trạng thái, nút Mua lại (A2-05).
+ * trạng thái, nút Mua lại (A2-05), nút Thanh toán ngay + hạn ở đơn chờ chuyển khoản (D7 #2).
  *
  * Vỏ thẻ KHÔNG tương tác: nút mở đơn là nút mã đơn (`.tubu-tile-link`, `::after` phủ cả thẻ — cùng cách
  * ProductTile), "Mua lại" là anh em của nó nổi lên bằng z-index. Trước đây vỏ là `role="button"` chứa nút
  * "Mua lại" nên trình đọc màn hình không tới được nút con (axe nested-interactive). */
-export function OrderCard({ order: o, onOpen, onReorder }: OrderCardProps) {
+export function OrderCard({ order: o, onOpen, onReorder, onPay }: OrderCardProps) {
   const first = o.items[0];
   const canReorder = onReorder !== undefined && isReorderable(o.status);
+  const canPay = onPay !== undefined && canPayOrderNow(o);
   // Tên truy cập = "Đơn <mã>"; món, ngày và tổng tiền là mô tả truy cập của nút.
   const summaryId = useId();
   return (
@@ -87,6 +91,23 @@ export function OrderCard({ order: o, onOpen, onReorder }: OrderCardProps) {
         </div>
         <PriceTag value={o.total} size="sm" />
       </div>
+      {canPay && (
+        <div data-testid="order-card-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          {showsPaymentDeadline(o) ? (
+            <Text variant="caption" tone="tertiary" as="span">
+              {vi.orders.payBy(formatDateTime(o.paymentDeadline))}
+            </Text>
+          ) : (
+            <span />
+          )}
+          {/* Như "Mua lại": nổi trên lớp phủ của nút mở đơn, vùng trống cạnh nút vẫn mở chi tiết đơn. */}
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <Button size="md" onPress={onPay} style={{ minWidth: 0 }}>
+              {vi.orders.payNow}
+            </Button>
+          </div>
+        </div>
+      )}
       {canReorder && (
         <div data-testid="order-card-actions" style={{ display: 'flex', justifyContent: 'flex-end' }}>
           {/* Nổi trên lớp phủ của nút mở đơn; chỉ bọc đúng nút nên vùng trống cạnh nút vẫn mở chi tiết đơn. */}

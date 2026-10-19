@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog, TrendingUp, Plus, Check,
+  Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog, TrendingUp, Plus, Check, Share2, ImagePlus,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -33,6 +33,7 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { ImageUpload } from '../components/image-upload';
+import { ShareSheet } from '../components/share-sheet';
 import { isPartnerStore } from '../utils/partner-store';
 
 const TEMPLATE_TITLE = 'Bắt đầu nhanh với 1 mẫu có sẵn';
@@ -201,6 +202,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
@@ -227,6 +230,18 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     onSuccess: () => { haptic('medium'); openSnackbar({ text: vi.storefront.published, type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const unpublishMut = useMutation({
+    mutationFn: () => publishStorefront(false),
+    onSuccess: () => {
+      haptic('medium');
+      setConfirmUnpublish(false);
+      openSnackbar({ text: vi.storefront.unpublished, type: 'success' });
+      void refresh();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  // API từ chối đăng gian hàng chưa có sản phẩm; chặn ngay ở nút để CTV biết cần làm gì thay vì nhận lỗi.
+  const itemCount = sf.collections.reduce((n, c) => n + c.items.length, 0);
   // Tạo bộ sưu tập phải có TÊN do CTV đặt: trước đây mọi bộ đều tên "Bộ sưu tập mới" và
   // không sửa/xoá được (dù API đã có sẵn) — bấm nhầm 2-3 lần là gian hàng công khai có 3 mục
   // trùng tên vĩnh viễn (P1-6 audit mạch lạc CTV).
@@ -292,8 +307,20 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           </Badge>
         </div>
         <Text variant="caption" tone="tertiary" as="div">
-          {sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/${sf.slug}`}
+          {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
         </Text>
+        {sf.isPublished && (
+          <Text variant="caption" tone="tertiary" as="div">{vi.storefront.webRefreshNote}</Text>
+        )}
+        {sf.publicHiddenReason && (
+          <div
+            data-testid="hidden-reason"
+            role="status"
+            style={{ marginTop: 8, padding: '8px 12px', background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}
+          >
+            <Text variant="caption" as="div" style={{ color: 'var(--color-status-warning-fg)' }}>{sf.publicHiddenReason}</Text>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <Button variant="secondary" icon={UserRoundCog} style={{ flex: 1 }} onPress={() => setProfileOpen(true)}>
             {vi.storefront.editProfile}
@@ -302,6 +329,11 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             Cấu hình
           </Button>
         </div>
+        {sf.isPublished && (
+          <Button variant="secondary" icon={EyeOff} fullWidth style={{ marginTop: 8 }} onPress={() => setConfirmUnpublish(true)}>
+            {vi.storefront.unpublish}
+          </Button>
+        )}
       </div>
 
       {/* Hồ sơ gian hàng — đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ
@@ -317,11 +349,22 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         <div
           style={{
             height: 84,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
             background: sf.coverUrl
               ? `center/cover no-repeat url(${sf.coverUrl})`
               : 'linear-gradient(135deg, var(--sage-100), var(--forest-100))',
           }}
-        />
+        >
+          {!sf.coverUrl && (
+            <>
+              <Icon icon={ImagePlus} size="sm" tone="brand" />
+              <Text variant="caption" tone="brand">{vi.storefront.addCover}</Text>
+            </>
+          )}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12 }}>
           <div
             style={{
@@ -436,6 +479,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       <QuestSection />
 
       <StickyActionBar
+        summary={!sf.isPublished && itemCount === 0 ? <Text variant="caption" tone="secondary" as="div">{vi.storefront.publishNeedsProduct}</Text> : undefined}
         secondary={
           <Button
             variant="secondary"
@@ -454,11 +498,37 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           </Button>
         }
         primary={
-          <Button fullWidth loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
-            {vi.storefront.publish}
-          </Button>
+          sf.isPublished ? (
+            <Button fullWidth icon={Share2} onPress={() => setShareOpen(true)}>
+              {vi.storefront.shareStore}
+            </Button>
+          ) : (
+            <Button fullWidth disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
+              {vi.storefront.publish}
+            </Button>
+          )
         }
       />
+
+      <ShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        slug={sf.slug}
+        title={sf.title}
+        referralCode={sf.referralCode ?? null}
+        thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
+      />
+
+      <BottomSheet open={confirmUnpublish} onClose={() => setConfirmUnpublish(false)} title={vi.storefront.unpublishConfirm} description={vi.storefront.unpublishHint}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <Button variant="secondary" style={{ flex: 1 }} onPress={() => setConfirmUnpublish(false)}>
+            {vi.common.cancel}
+          </Button>
+          <Button variant="danger" style={{ flex: 1 }} loading={unpublishMut.isPending} onPress={() => unpublishMut.mutate()}>
+            {vi.storefront.unpublish}
+          </Button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet open={!!pickerCol} onClose={() => setPickerCol(null)} title={vi.storefront.addProduct}>
         {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
@@ -862,11 +932,14 @@ function MerchantConfigSheet({
 
   // Kho/hotline chỉ có nghĩa với gian hàng tự giao (D4); chuỗi rỗng = xoá (BE đổi '' thành null).
   const selfFulfils = isPartnerStore(sf);
+  // Chỉ gửi subdomain khi người dùng đã đổi: API kiểm từ khoá và trùng tên mỗi khi nhận subdomain.
+  const typedSubdomain = form.subdomain.trim().toLowerCase();
+  const subdomainChanged = typedSubdomain !== '' && typedSubdomain !== (sf.subdomain ?? '');
   const saveMut = useMutation({
     mutationFn: () =>
       updateStorefront({
         title: form.title.trim() || undefined,
-        subdomain: form.subdomain.trim() ? form.subdomain.trim().toLowerCase() : undefined,
+        subdomain: sf.subdomainEnabled && subdomainChanged ? form.subdomain.trim().toLowerCase() : undefined,
         themeColor: form.themeColor,
         ...(selfFulfils && {
           warehouseAddress: form.warehouseAddress.trim(),
@@ -899,18 +972,20 @@ function MerchantConfigSheet({
           <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </Field>
 
-        <div>
-          <Field label="Subdomain riêng">
-            <Input
-              placeholder="vd: brand1"
-              value={form.subdomain}
-              onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
-            />
-          </Field>
-          <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-            URL: {form.subdomain ? `${form.subdomain}.tubutree.com` : 'ten-ban.tubutree.com'}
-          </Text>
-        </div>
+        {sf.subdomainEnabled && (
+          <div>
+            <Field label="Subdomain riêng">
+              <Input
+                placeholder="vd: brand1"
+                value={form.subdomain}
+                onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
+              />
+            </Field>
+            <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+              URL: {form.subdomain ? `${form.subdomain}.tubutree.com` : 'ten-ban.tubutree.com'}
+            </Text>
+          </div>
+        )}
 
         <div>
           <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 2 }}>Màu sắc thương hiệu</Text>

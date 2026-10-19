@@ -8,6 +8,7 @@ import AddToCart from '@/components/add-to-cart';
 import { PdpPrice } from '@/components/flash-price';
 import { PdpSelectionProvider } from '@/components/pdp-selection';
 import ProductGallery from '@/components/product-gallery';
+import ShareButton from '@/components/share-button';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
 import { ui } from '@/lib/guest-ui';
@@ -59,16 +60,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <ProductGallery images={images} name={product.name} />
         <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
         <div>
-          {product.brandSlug ? (
-            <Link
-              href={`/brand/${encodeURIComponent(product.brandSlug)}`}
-              className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 underline"
-            >
-              {product.brand}
-            </Link>
-          ) : (
-            <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            {product.brandSlug ? (
+              <Link
+                href={`/brand/${encodeURIComponent(product.brandSlug)}`}
+                className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 underline"
+              >
+                {product.brand}
+              </Link>
+            ) : (
+              <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
+            )}
+            <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
+          </div>
           <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
           <PdpPrice product={product} />
           {unavailableText ? (

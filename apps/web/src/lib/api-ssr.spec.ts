@@ -144,3 +144,22 @@ describe('getProductsPage — trang catalog kèm tổng số (BUYERWEB-7)', () =
     await expect(getProductsPage()).resolves.toEqual({ data: [], meta: { page: 1, limit: 24, total: 0 } });
   });
 });
+
+describe('getStorefront — ảnh do chính API phục vụ (D3-10)', () => {
+  it('đường dẫn tương đối API (ảnh base64 đã tách khỏi JSON) được ghép với gốc API công khai để thẻ img và thẻ chia sẻ dùng được', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, {
+      slug: 'x', avatarUrl: '/storefront/image/s1/avatar?v=abc', coverUrl: '/storefront/image/s1/cover?v=def',
+    })));
+    await expect(getStorefront('x')).resolves.toMatchObject({
+      avatarUrl: 'http://localhost:3001/api/storefront/image/s1/avatar?v=abc',
+      coverUrl: 'http://localhost:3001/api/storefront/image/s1/cover?v=def',
+    });
+  });
+
+  it('URL tuyệt đối, đường dẫn // và giá trị rỗng giữ nguyên', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { slug: 'x', avatarUrl: 'https://cdn.example/a.jpg', coverUrl: null })));
+    await expect(getStorefront('x')).resolves.toMatchObject({ avatarUrl: 'https://cdn.example/a.jpg', coverUrl: null });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { slug: 'x', avatarUrl: '//cdn.example/a.jpg' })));
+    await expect(getStorefront('x')).resolves.toMatchObject({ avatarUrl: '//cdn.example/a.jpg' });
+  });
+});

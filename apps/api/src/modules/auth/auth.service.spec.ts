@@ -6,6 +6,7 @@ import type { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import type { ZaloService } from './zalo.service';
 import type { RbacService } from '../staff/rbac/rbac.service';
+import type { VouchersService } from '../vouchers/vouchers.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
@@ -217,6 +218,97 @@ describe('AuthService.loginWithZaloMiniApp (phone)', () => {
   });
 });
 
+describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedAt) cho điểm đơn chat', () => {
+  function mk(existing: Record<string, unknown> | null, owner: Record<string, unknown> | null, zaloPhone: string | null, grant: Record<string, unknown> | null = null) {
+    const update = jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => ({ ...USER, ...(existing ?? {}), ...data }));
+    // Thứ tự findUnique: theo zaloId (user), rồi phoneIfFree tra chủ của SĐT.
+    const findUnique = jest.fn().mockImplementation(({ where }: { where: Record<string, unknown> }) => (where['zaloId'] ? existing : owner));
+    const roleGrant = { findFirst: jest.fn().mockResolvedValue(grant) };
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique, update, create: jest.fn() }, roleGrant } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue(zaloPhone) } as unknown as ZaloService;
+    return { svc: new AuthService(prisma, jwt, config, zalo, mkRbac()), update, roleGrant };
+  }
+
+  it('Zalo trả đúng số đang lưu: chỉ làm mới phoneVerifiedAt', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567', phoneVerifiedAt: new Date('2025-01-01') }, null, '0901234567');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    const data = update.mock.calls[0][0].data;
+    expect(data).toEqual({ phoneVerifiedAt: expect.any(Date) });
+    expect(data.phoneVerifiedAt.getTime()).toBeGreaterThan(Date.now() - 5000);
+  });
+
+  it('Zalo trả số khác và số mới chưa thuộc ai: đổi sang số mới kèm mốc xác minh (số cũ bị nhà mạng cấp lại)', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update.mock.calls[0][0].data).toEqual({ phone: '0987654321', phoneVerifiedAt: expect.any(Date) });
+  });
+
+  it('Zalo trả số đã thuộc tài khoản khác: giữ nguyên số và mốc, không đổi gì', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, { id: 'other' }, '0987654321');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('chưa có số, Zalo trả số tự do: lưu số kèm mốc xác minh', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: null }, null, '0901234567');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update.mock.calls[0][0].data).toEqual({ phone: '0901234567', phoneVerifiedAt: expect.any(Date) });
+  });
+
+  it('không gửi phoneToken: không đụng SĐT hay mốc xác minh', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, null);
+    await svc.loginWithZaloMiniApp('c', 'at');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['tài khoản STAFF', { role: 'STAFF' }, null],
+    ['tài khoản ADMIN', { role: 'ADMIN' }, null],
+    ['số cũ hoặc số mới đang có grant quyền', {}, { phone: '0901234567' }],
+  ])('đổi số bị chặn: %s chỉ ghi log, không đổi số và không đổi mốc xác minh', async (_name, patch, grant) => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567', phoneVerifiedAt: new Date('2026-01-01'), ...patch }, null, '0987654321', grant);
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản bị khoá: đăng nhập bị từ chối, không đổi số', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567', isBlocked: true }, null, '0987654321');
+    await expect(svc.loginWithZaloMiniApp('c', 'at', 'pt')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('số cũ trùng số Zalo trả (tài khoản STAFF): vẫn làm mới mốc xác minh, không đổi số', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', role: 'STAFF', phone: '0901234567' }, null, '0901234567');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update.mock.calls[0][0].data).toEqual({ phoneVerifiedAt: expect.any(Date) });
+  });
+
+  it('tài khoản CUSTOMER không bị chặn: kiểm grant theo cả số cũ lẫn số mới trong một truy vấn', async () => {
+    const { svc, roleGrant } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(roleGrant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { phone: { in: ['0901234567', '0987654321'] }, revokedAt: null } }));
+  });
+
+  it('số mới bị người khác lấy giữa lúc kiểm và lúc ghi (P2002): vẫn đăng nhập, giữ số cũ', async () => {
+    const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
+    update.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+    const r = await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(r.accessToken).toBe('access-jwt');
+  });
+
+  it('user mới có SĐT: tạo kèm phoneVerifiedAt', async () => {
+    const create = jest.fn().mockResolvedValue({ ...USER, phone: '0901234567' });
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue('0901234567') } as unknown as ZaloService;
+    await new AuthService(prisma, jwt, config, zalo, mkRbac()).loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(create.mock.calls[0][0].data).toMatchObject({ phone: '0901234567', phoneVerifiedAt: expect.any(Date) });
+  });
+});
+
 // ── A7-01: ensurePhoneForCurrentUser (không bao giờ âm thầm đổi user) ─────────────────────────
 /**
  * Fake Prisma đủ đầy để chạy thật mergeGuestInto() (không chỉ mock trả sẵn kết quả) — mô phỏng
@@ -337,6 +429,7 @@ function makeGuestMergeFixture(opts: {
       }),
     },
     cartItem: {},
+    roleGrant: { findFirst: jest.fn(async () => null) },
     address: {
       count: jest.fn(async ({ where }: { where: { userId: string; isDefault: boolean } }) =>
         addresses.filter((a) => a.userId === where.userId && a.isDefault === where.isDefault).length,
@@ -439,10 +532,10 @@ function makeGuestMergeFixture(opts: {
   };
 }
 
-function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>) {
+function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>, vouchers?: VouchersService) {
   const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
   const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
-  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac());
+  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac(), undefined, vouchers);
 }
 
 describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm thầm đổi user)', () => {
@@ -508,6 +601,22 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
     await expect(svc.ensurePhoneForCurrentUser('real1', 'code', 'at')).rejects.toBeInstanceOf(ConflictException);
     // Không có gộp/đổi nào xảy ra — user vẫn y nguyên.
     expect(fixture.state.users.get('real1')!.zaloId).toBe('z-real-old');
+  });
+
+  it('gộp khách vào user thật: số Zalo vừa bị tài khoản khác lấy (P2002) thì bỏ qua phần số, lần gộp vẫn thành công', async () => {
+    const TARGET = { id: 'target1', zaloId: 'z-real-existing', fullName: 'Người Thật', phone: '0933333333', avatarUrl: null, role: 'CUSTOMER', isBlocked: false, pointsBalance: 0, walletBalance: 0, coinsBalance: 0, cashbackPending: 0, referralCode: 'RT1' };
+    const fixture = makeGuestMergeFixture({ guest: GUEST, target: TARGET });
+    const realUpdate = (fixture.prisma as unknown as { user: { update: jest.Mock } }).user.update;
+    const impl = realUpdate.getMockImplementation()!;
+    realUpdate.mockImplementation(async (args: { data: Record<string, unknown> }) => {
+      if (args.data['phone'] !== undefined) throw new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+      return impl(args);
+    });
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue('0944444444') };
+    const res = await makeEnsurePhoneSvc(fixture, zalo).ensurePhoneForCurrentUser('guest1', 'code', 'at', 'ptoken');
+    expect(res.user.id).toBe('target1');
+    expect(fixture.state.users.get('target1')!.phone).toBe('0933333333');
+    expect(fixture.state.users.get('guest1')!.mergedIntoId).toBe('target1');
   });
 
   describe('khách + zaloId/SĐT đã thuộc một user THẬT khác có từ trước → GỘP (không mất giỏ/địa chỉ/điểm/đơn của khách)', () => {
@@ -668,6 +777,185 @@ describe('AuthService — ghi nhận người giới thiệu lúc đăng ký (re
   });
 });
 
+describe('AuthService — nguồn chạm đầu (firstTouch*) ghi MỘT lần lúc tạo tài khoản', () => {
+  const FIRST_TOUCH = { source: 'Shopee', campaign: 'card-2610', at: new Date().toISOString() };
+
+  function svcWith(user: Record<string, jest.Mock>, zalo: Record<string, jest.Mock> = {}) {
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    return new AuthService(prisma, jwt, config, zalo as unknown as ZaloService, mkRbac());
+  }
+  const echoCreate = () => jest.fn().mockImplementation(({ data }) => ({ id: 'newuser', role: 'CUSTOMER', ...data }));
+  const noUser = () => jest.fn().mockResolvedValue(null);
+
+  describe('khách mới (loginAsGuest)', () => {
+    it('nguồn hợp lệ → ghi nguồn (chữ thường), chiến dịch và thời điểm chạm vào dòng tạo', async () => {
+      const create = echoCreate();
+      const svc = svcWith({ findUnique: noUser(), create });
+      await svc.loginAsGuest('dev12345', undefined, FIRST_TOUCH);
+      const data = create.mock.calls[0][0].data;
+      expect(data.firstTouchSource).toBe('shopee');
+      expect(data.firstTouchCampaign).toBe('card-2610');
+      expect(data.firstTouchAt).toEqual(new Date(FIRST_TOUCH.at));
+    });
+
+    it.each([
+      ['nguồn có ký tự lạ', { source: 'x y;drop' }],
+      ['nguồn quá dài', { source: 'a'.repeat(41) }],
+      ['không phải object', 'shopee'],
+      ['mảng', ['shopee']],
+      ['null', null],
+      ['chạm đầu đã quá 90 ngày (bản lưu cũ trên máy)', { source: 'shopee', at: new Date(Date.now() - 91 * 86_400_000).toISOString() }],
+    ])('giá trị bẩn (%s) → bỏ, vẫn đăng nhập được và không ghi cột nguồn nào', async (_label, raw) => {
+      const create = echoCreate();
+      const svc = svcWith({ findUnique: noUser(), create });
+      const res = await svc.loginAsGuest('dev12345', undefined, raw);
+      expect(res.accessToken).toBe('jwt');
+      const data = create.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('firstTouchSource');
+      expect(data).not.toHaveProperty('firstTouchCampaign');
+      expect(data).not.toHaveProperty('firstTouchAt');
+    });
+
+    it('chiến dịch bẩn → chỉ bỏ chiến dịch, nguồn vẫn ghi', async () => {
+      const create = echoCreate();
+      const svc = svcWith({ findUnique: noUser(), create });
+      await svc.loginAsGuest('dev12345', undefined, { source: 'tiktok', campaign: 'a b!' });
+      const data = create.mock.calls[0][0].data;
+      expect(data.firstTouchSource).toBe('tiktok');
+      expect(data.firstTouchCampaign).toBeNull();
+    });
+
+    it('khách ĐÃ có: không tạo lại và không ghi đè gì (không update/updateMany nào)', async () => {
+      const create = echoCreate();
+      const update = jest.fn();
+      const updateMany = jest.fn();
+      const existing = { ...USER, firstTouchSource: 'oa', firstTouchCampaign: null, firstTouchAt: new Date('2026-10-01') };
+      const svc = svcWith({ findUnique: jest.fn().mockResolvedValue(existing), create, update, updateMany });
+      await svc.loginAsGuest('dev12345', undefined, FIRST_TOUCH);
+      expect(create).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Mini App Zalo (loginWithZaloMiniApp)', () => {
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }), resolvePhoneNumber: jest.fn() };
+
+    it('tài khoản mới → ghi nguồn chạm đầu', async () => {
+      const create = echoCreate();
+      const svc = svcWith({ findUnique: noUser(), create }, zalo);
+      await svc.loginWithZaloMiniApp('c', 'at', undefined, undefined, FIRST_TOUCH);
+      expect(create.mock.calls[0][0].data.firstTouchSource).toBe('shopee');
+    });
+
+    it('tạo lại không kèm SĐT sau P2002 cũng mang nguồn chạm đầu', async () => {
+      const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+      const create = jest
+        .fn()
+        .mockRejectedValueOnce(p2002)
+        .mockImplementation(({ data }) => ({ id: 'newuser', role: 'CUSTOMER', ...data }));
+      const svc = svcWith(
+        { findUnique: noUser(), create },
+        { getUserInfo: zalo.getUserInfo, resolvePhoneNumber: jest.fn().mockResolvedValue('0901234567') },
+      );
+      await svc.loginWithZaloMiniApp('c', 'at', 'ptoken', undefined, FIRST_TOUCH);
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(create.mock.calls[1][0].data.firstTouchSource).toBe('shopee');
+    });
+
+    it('tài khoản ĐÃ có (đã có nguồn) → không ghi đè, update chỉ chứa tên/avatar/SĐT', async () => {
+      const update = jest.fn().mockImplementation(({ data }) => ({ ...USER, ...data }));
+      const existing = { ...USER, fullName: 'Tên cũ', firstTouchSource: 'oa', firstTouchAt: new Date('2026-10-01') };
+      const svc = svcWith({ findUnique: jest.fn().mockResolvedValue(existing), update, create: jest.fn() }, zalo);
+      await svc.loginWithZaloMiniApp('c', 'at', undefined, undefined, FIRST_TOUCH);
+      for (const call of update.mock.calls) {
+        expect(Object.keys(call[0].data).filter((k) => k.startsWith('firstTouch'))).toEqual([]);
+      }
+    });
+
+    it('tài khoản ĐÃ có nhưng chưa có nguồn (có trước tính năng) → cũng không ghi: chạm này không phải chạm đầu của họ', async () => {
+      const update = jest.fn().mockImplementation(({ data }) => ({ ...USER, ...data }));
+      const existing = { ...USER, fullName: 'Tên cũ', firstTouchSource: null };
+      const svc = svcWith({ findUnique: jest.fn().mockResolvedValue(existing), update, create: jest.fn() }, zalo);
+      await svc.loginWithZaloMiniApp('c', 'at', undefined, undefined, FIRST_TOUCH);
+      for (const call of update.mock.calls) {
+        expect(Object.keys(call[0].data).filter((k) => k.startsWith('firstTouch'))).toEqual([]);
+      }
+    });
+  });
+
+  describe('Web (loginWithZaloOAuth)', () => {
+    it('tài khoản mới → ghi nguồn chạm đầu', async () => {
+      const create = echoCreate();
+      const zalo = {
+        exchangeOAuthCode: jest.fn().mockResolvedValue('tok'),
+        getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z9', name: 'W' }),
+      };
+      const svc = svcWith({ findUnique: noUser(), create }, zalo);
+      await svc.loginWithZaloOAuth('code', 'verifier', undefined, { source: 'fb', campaign: 'live-1' });
+      const data = create.mock.calls[0][0].data;
+      expect(data.firstTouchSource).toBe('fb');
+      expect(data.firstTouchCampaign).toBe('live-1');
+    });
+  });
+
+  describe('gộp khách vào tài khoản đã có (ensurePhone)', () => {
+    const GUEST = {
+      id: 'guest1',
+      zaloId: 'guest_dev1',
+      fullName: 'Khách',
+      phone: null,
+      avatarUrl: null,
+      role: 'CUSTOMER',
+      pointsBalance: 0,
+      pointsConvertedBalance: 0,
+      walletBalance: 0,
+      cashbackPending: 0,
+      referralCode: 'RG1',
+    };
+    const TARGET = { ...GUEST, id: 'target1', zaloId: 'z-real', fullName: 'Thật', referralCode: 'RT1' };
+    const touch = (source: string | null) => ({
+      firstTouchSource: source,
+      firstTouchCampaign: source ? 'c1' : null,
+      firstTouchAt: source ? new Date('2026-10-05T00:00:00.000Z') : null,
+    });
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real', name: 'Thật' }), resolvePhoneNumber: jest.fn() };
+
+    async function merge(guestSource: string | null, targetSource: string | null) {
+      const fixture = makeGuestMergeFixture({ guest: { ...GUEST, ...touch(guestSource) }, target: { ...TARGET, ...touch(targetSource) } });
+      const svc = makeEnsurePhoneSvc(fixture, zalo);
+      await svc.ensurePhoneForCurrentUser('guest1', 'code', 'at');
+      return fixture.state.users;
+    }
+
+    it('tài khoản đích còn trống + khách có nguồn → đích nhận nguồn của khách', async () => {
+      const users = await merge('shopee', null);
+      expect(users.get('target1')).toMatchObject({
+        firstTouchSource: 'shopee',
+        firstTouchCampaign: 'c1',
+        firstTouchAt: new Date('2026-10-05T00:00:00.000Z'),
+      });
+    });
+
+    it('tài khoản đích ĐÃ có nguồn → giữ nguyên, không bị khách ghi đè', async () => {
+      const users = await merge('shopee', 'oa');
+      expect(users.get('target1')).toMatchObject({ firstTouchSource: 'oa', firstTouchCampaign: 'c1' });
+    });
+
+    it('cả hai đều trống → đích vẫn trống', async () => {
+      const users = await merge(null, null);
+      expect(users.get('target1')!.firstTouchSource).toBeNull();
+    });
+
+    it('dòng khách giữ nguyên nguồn của nó (không bị xoá khi gộp)', async () => {
+      const users = await merge('shopee', null);
+      expect(users.get('guest1')!.firstTouchSource).toBe('shopee');
+    });
+  });
+});
+
 describe('AuthService — chặn user bị khoá (isBlocked) lấy token', () => {
   it('refresh(): user.isBlocked=true → Unauthorized, KHÔNG cấp refresh token mới (dù token cũ đã bị revoke)', async () => {
     const { svc, prisma, create, updateMany } = makeService();
@@ -749,5 +1037,87 @@ describe('isMergeBusy — lỗi gộp trả 503 "đang bận" thay vì lộ lỗ
     expect(isMergeBusy(known('P2002', 'Unique constraint failed'))).toBe(false);
     expect(isMergeBusy(new ConflictException('Tài khoản đã bị khoá'))).toBe(false);
     expect(isMergeBusy('40P01')).toBe(false);
+  });
+});
+
+// D2-07a: voucher chào mừng cấp ngay khi tài khoản thật được tạo (cron mỗi giờ vẫn là lưới).
+describe('AuthService — voucher chào mừng ngay khi tạo tài khoản thật (D2-07a)', () => {
+  const noUser = () => jest.fn().mockResolvedValue(null);
+  const echoCreate = () => jest.fn().mockImplementation(({ data }) => ({ id: 'newuser', role: 'CUSTOMER', ...data }));
+
+  function svcWith(user: Record<string, jest.Mock>, zalo: Record<string, jest.Mock>, vouchers?: Partial<VouchersService>) {
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    return new AuthService(prisma, jwt, config, zalo as unknown as ZaloService, mkRbac(), undefined, vouchers as VouchersService);
+  }
+  const miniZalo = () => ({
+    getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-new', name: 'A' }),
+    resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+  });
+  const grantMock = (impl?: () => Promise<boolean>) => ({ grantWelcomeNow: jest.fn(impl ?? (async () => true)) });
+
+  it('Mini App: tài khoản Zalo mới → cấp cho đúng id vừa tạo, trước khi trả token', async () => {
+    const vouchers = grantMock();
+    const res = await svcWith({ findUnique: noUser(), create: echoCreate() }, miniZalo(), vouchers).loginWithZaloMiniApp('c', 'at');
+    expect(res.accessToken).toBe('jwt');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledTimes(1);
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser', { becameRealNow: true });
+  });
+
+  it('Mini App: cấp lỗi (DB, thông báo) không làm rớt đăng nhập; cron giờ sau vẫn cấp', async () => {
+    const vouchers = grantMock(async () => {
+      throw new Error('db down');
+    });
+    const res = await svcWith({ findUnique: noUser(), create: echoCreate() }, miniZalo(), vouchers).loginWithZaloMiniApp('c', 'at');
+    expect(res.accessToken).toBe('jwt');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledTimes(1);
+  });
+
+  it('Mini App: tài khoản Zalo đã có → không cấp ở đường đăng nhập lại', async () => {
+    const vouchers = grantMock();
+    const existing = { id: 'u9', role: 'CUSTOMER', zaloId: 'z-new', fullName: 'A', phone: null, avatarUrl: null };
+    await svcWith({ findUnique: jest.fn().mockResolvedValue(existing), create: jest.fn() }, miniZalo(), vouchers).loginWithZaloMiniApp('c', 'at');
+    expect(vouchers.grantWelcomeNow).not.toHaveBeenCalled();
+  });
+
+  it('khách vãng lai (loginAsGuest) không bao giờ được cấp', async () => {
+    const vouchers = grantMock();
+    await svcWith({ findUnique: noUser(), create: echoCreate() }, {}, vouchers).loginAsGuest('dev12345');
+    expect(vouchers.grantWelcomeNow).not.toHaveBeenCalled();
+  });
+
+  it('Web OAuth: tài khoản Zalo mới → cấp cho id vừa tạo', async () => {
+    const vouchers = grantMock();
+    const zalo = { exchangeOAuthCode: jest.fn().mockResolvedValue('tok'), getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z9', name: 'W' }) };
+    await svcWith({ findUnique: noUser(), create: echoCreate() }, zalo, vouchers).loginWithZaloOAuth('code', 'verifier');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('newuser', { becameRealNow: true });
+  });
+
+  it('không có VouchersService (test dựng tay) → đăng nhập vẫn chạy', async () => {
+    const res = await svcWith({ findUnique: noUser(), create: echoCreate() }, miniZalo()).loginWithZaloMiniApp('c', 'at');
+    expect(res.accessToken).toBe('jwt');
+  });
+
+  it('khách vãng lai nâng cấp tại chỗ lên tài khoản Zalo thật (ensurePhone) → cấp cho chính dòng đó', async () => {
+    const vouchers = grantMock();
+    const guest = { id: 'guest1', zaloId: 'guest_dev1', fullName: 'Khách', phone: null, avatarUrl: null, role: 'CUSTOMER', referralCode: 'RG1' };
+    const fixture = makeGuestMergeFixture({ guest });
+    const zalo = {
+      getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-new-real', name: 'Long' }),
+      resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+    };
+    await makeEnsurePhoneSvc(fixture, zalo, vouchers as unknown as VouchersService).ensurePhoneForCurrentUser('guest1', 'code', 'at');
+    expect(vouchers.grantWelcomeNow).toHaveBeenCalledWith('guest1', { becameRealNow: true });
+  });
+
+  it('gộp khách vào tài khoản có sẵn (ensurePhone) → không cấp thêm (tài khoản đích đã qua đường đăng ký)', async () => {
+    const vouchers = grantMock();
+    const guest = { id: 'guest1', zaloId: 'guest_dev1', fullName: 'Khách', phone: null, avatarUrl: null, role: 'CUSTOMER', referralCode: 'RG1' };
+    const target = { ...guest, id: 'target1', zaloId: 'z-real', referralCode: 'RT1' };
+    const fixture = makeGuestMergeFixture({ guest, target });
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real', name: 'Thật' }), resolvePhoneNumber: jest.fn().mockResolvedValue(null) };
+    await makeEnsurePhoneSvc(fixture, zalo, vouchers as unknown as VouchersService).ensurePhoneForCurrentUser('guest1', 'code', 'at');
+    expect(vouchers.grantWelcomeNow).not.toHaveBeenCalled();
   });
 });

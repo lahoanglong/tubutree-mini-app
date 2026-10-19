@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   restore: vi.fn(),
   authStatus: 'authenticated' as 'authenticated' | 'idle' | 'error' | 'loading',
   notifications: [] as { status: string }[],
+  getPublicConfig: vi.fn(async () => ({})),
+}));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getPublicConfig: mocks.getPublicConfig,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -133,5 +138,53 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /^Ví Tubu$/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/wallet', { state: { from: '/profile' } });
+  });
+});
+
+describe('Lối vào Trợ lý AI ở hub Cá nhân theo công tắc AI', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+  });
+
+  it('server báo bật → có mục Trợ lý AI 24/7', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: true });
+    renderPage();
+    expect(await screen.findByText('Trợ lý AI 24/7')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['server báo tắt', () => mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: false })],
+    ['không tải được cấu hình', () => mocks.getPublicConfig.mockRejectedValue(new Error('mạng'))],
+  ])('%s → ẩn mục Trợ lý AI, các mục khác vẫn còn', async (_name, arrange) => {
+    arrange();
+    renderPage();
+    expect(await screen.findByText('Câu chuyện thương hiệu')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    expect(screen.queryByText('Trợ lý AI 24/7')).toBeNull();
+    expect(screen.getByText('Mua chung nhóm')).toBeInTheDocument();
+  });
+});
+
+describe('Lối vào Tích điểm đơn sàn (nhóm Tài sản)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+  });
+
+  it('ẩn khi cờ tích điểm đơn sàn tắt hoặc API cũ chưa trả', async () => {
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByText('Tích điểm đơn sàn')).toBeNull();
+  });
+
+  it('hiện và đi tới /points/scan khi cờ bật', async () => {
+    mocks.getPublicConfig.mockImplementation(async () => ({ loyalty: { marketplaceClaimEnabled: true, earnPct: 2, vndPerPoint: 50 } }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Tích điểm đơn sàn'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/points/scan', undefined);
   });
 });

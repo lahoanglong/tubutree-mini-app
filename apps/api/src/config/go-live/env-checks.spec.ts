@@ -302,4 +302,23 @@ describe('evaluateEnv', () => {
     });
     it('khác nhau thì PASS', () => expect(status({}, 'env.webhook_secrets_distinct')).toBe('PASS'));
   });
+
+  describe('AI tư vấn', () => {
+    it('đủ URL và KEY → PASS', () => {
+      expect(status({}, 'env.ai_advisor')).toBe('PASS');
+    });
+    it('thiếu một trong URL/KEY → WARN', () => {
+      expect(status({ ANTIGRAVITY_GATEWAY_KEY: '' }, 'env.ai_advisor')).toBe('WARN');
+      expect(status({ ANTIGRAVITY_GATEWAY_URL: '' }, 'env.ai_advisor')).toBe('WARN');
+    });
+    it('chưa provider nào → WARN (Mini App ẩn lối vào)', () => {
+      expect(status({ ANTIGRAVITY_GATEWAY_URL: '', ANTIGRAVITY_GATEWAY_KEY: '' }, 'env.ai_advisor')).toBe('WARN');
+    });
+    it('tắt chủ ý bằng AI_ADVISOR_ENABLED=false → PASS dù chưa cấu hình', () => {
+      expect(status({ AI_ADVISOR_ENABLED: 'false', ANTIGRAVITY_GATEWAY_URL: '', ANTIGRAVITY_GATEWAY_KEY: '' }, 'env.ai_advisor')).toBe('PASS');
+    });
+    it('AI_ADVISOR_PROVIDER chọn provider chưa đủ khoá → WARN', () => {
+      expect(status({ AI_ADVISOR_PROVIDER: 'deepseek' }, 'env.ai_advisor')).toBe('WARN');
+    });
+  });
 });

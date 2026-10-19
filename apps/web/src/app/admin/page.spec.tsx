@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
-import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
@@ -127,6 +127,9 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'returnsPending', count: 1 },
           { key: 'returnsToReceive', count: 2 },
           { key: 'refillPending', count: 0 },
+          { key: 'communityPending', count: 3 },
+          { key: 'communityUnanswered', count: 1 },
+          { key: 'invoicePending', count: 2 },
         ],
       };
     },
@@ -346,12 +349,16 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cấu hình & tích hợp',
     ]);
     const items = [...nav.querySelectorAll('button')];
-    expect(items).toHaveLength(30);
+    expect(items).toHaveLength(38);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
-    expect(group('Người bán')).toContain('Lịch sử giá đại lý');
+    expect(group('Người bán')).toEqual(
+      expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Danh mục sản phẩm', 'Đại lý & công nợ', 'Gian hàng']),
+    );
     expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ & quà đổi điểm']);
+    expect(group('Tổng quan')).toContain('Báo cáo');
+    expect(group('Khách hàng')).toContain('Cộng đồng');
     const current = items.find((b) => b.getAttribute('aria-current') === 'page')!;
     expect(current.textContent).toBe('Việc cần xử lý');
     expect(current.className).toContain('bg-forest-100');
@@ -587,14 +594,14 @@ describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
     act(() => banner.click());
     await flush();
     expect(window.location.search).toBe('?tab=orders&pancake=attention');
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'attention', undefined, undefined);
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'attention', undefined, undefined, {});
     const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Cần xử lý Pancake'))!;
     expect(chip.getAttribute('aria-pressed')).toBe('true');
     expect(chip.textContent).toBe('Cần xử lý Pancake (3)');
     act(() => chip.click());
     await flush();
     expect(window.location.search).toBe('?tab=orders');
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined);
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined, {});
   });
 
   it('đơn bị gắn cờ: huy hiệu ở dòng, chi tiết hiện lý do; "Đã xử lý" qua hộp xác nhận rồi gửi ghi chú', async () => {
@@ -2100,6 +2107,92 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
   });
 });
 
+// D1-05: marketing và kế toán là nhân viên (STAFF) có nhóm việc riêng, không cấp ADMIN. Mục ẩn chỉ là giao diện; API tự chặn.
+describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
+  const navItems = (c: HTMLElement) =>
+    [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+  const asStaff = (perms: string[]) => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: perms };
+  };
+
+  it('MARKETING: voucher, flash sale, nội dung, cộng đồng, báo cáo — không có đơn hàng, tiền, người dùng, cấu hình', async () => {
+    asStaff(['MARKETING']);
+    const { container } = await mount();
+    expect(navItems(container)).toEqual([
+      'Việc cần xử lý',
+      'Báo cáo',
+      'Cộng đồng',
+      'Đổi vỏ chai',
+      'Voucher',
+      'Flash Sale',
+      'Câu hỏi thường gặp',
+      'Content Kit CTV',
+      'Academy',
+      'Mẫu thông báo',
+    ]);
+    expect(mocks.refundsCalls).toBe(0);
+  });
+
+  it('KE_TOAN (B18): đơn hàng, báo cáo, đối soát, hoàn tiền khách và sàn ngoài, thưởng và công nợ đại lý, rút tiền — không có voucher, người dùng, cấu hình, hoa hồng', async () => {
+    asStaff(['KE_TOAN']);
+    const { container } = await mount();
+    expect(navItems(container)).toEqual([
+      'Việc cần xử lý',
+      'Báo cáo',
+      'Đơn hàng',
+      'Tích điểm đơn sàn',
+      'Đơn đối tác & đối soát',
+      'Hoàn tiền khách',
+      'Hoàn tiền sàn ngoài',
+      'Thưởng đại lý',
+      'Đại lý & công nợ',
+      'Duyệt yêu cầu rút tiền',
+      'Đổi vỏ chai',
+    ]);
+    expect(mocks.refundsCalls).toBeGreaterThan(0);
+  });
+
+  it('KE_TOAN ở tab Đơn hàng: có Xuất CSV và nút "Đã nhận tiền", KHÔNG có nút trạng thái nào (huỷ, đóng gói…) hay thao tác kho', async () => {
+    const unpaid = {
+      id: 'o11',
+      code: 'TB11',
+      status: 'PENDING_PAYMENT',
+      total: 250000,
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      fulfiller: 'TUBU',
+      createdAt: '2026-10-14T01:00:00.000Z',
+      items: [],
+      allowedTransitions: [],
+      canConfirmPayment: true,
+    };
+    asStaff(['KE_TOAN']);
+    mocks.orders = [unpaid];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!.click());
+    await flush();
+    const labels = [...container.querySelectorAll('button')].map((b) => b.textContent ?? '');
+    expect(labels.some((l) => l.includes('Xuất CSV'))).toBe(true);
+    expect(labels).toContain('Đã nhận tiền');
+    for (const bad of ['Hủy đơn', 'Đã đóng gói', 'Giao vận', 'Đã giao hàng', 'Xác nhận']) expect(labels).not.toContain(bad);
+    expect(labels.some((l) => l.includes('Đẩy lại Pancake'))).toBe(false);
+  });
+
+  it('KE_TOAN mở link ?tab=config hay ?tab=coupons: rơi về mục đầu, không hiện cấu hình', async () => {
+    asStaff(['KE_TOAN']);
+    for (const tab of ['config', 'coupons', 'users', 'commissionRates']) {
+      window.history.replaceState(null, '', `/admin?tab=${tab}`);
+      const r = await mount();
+      expect(r.container.textContent).not.toContain('Tất cả tham số');
+      expect(r.container.querySelector('nav[aria-label="Mục quản trị"] button[aria-current="page"]')!.textContent).toBe('Việc cần xử lý');
+      r.unmount();
+      mounted = [];
+    }
+  });
+});
+
 describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {
   it('thẻ có việc hiện số và mở đúng hàng đợi; mục đang trống gom thành chip', async () => {
     const { container } = await mount();
@@ -2185,7 +2278,7 @@ describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian
     typeInto(dates[0]!, '2026-10-01');
     typeInto(dates[1]!, '2026-10-14');
     await flush();
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'unsynced', '2026-10-01', '2026-10-14');
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'unsynced', '2026-10-01', '2026-10-14', {});
     click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV'))!);
     await flush();
     expect(mocks.downloadOrders).toHaveBeenCalledWith({
@@ -2200,6 +2293,36 @@ describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian
     expect(container.textContent).toContain('mọi đơn khớp bộ lọc, không chỉ trang đang xem');
   });
 
+  it('bộ lọc loại đơn / thanh toán / thứ tự gửi xuống danh sách và file CSV (CSV không nhận thứ tự)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const sel = (label: string) => container.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+    selectValue(sel('Lọc đơn theo loại đơn'), 'dealer');
+    selectValue(sel('Lọc đơn theo tình trạng thanh toán'), 'UNPAID');
+    selectValue(sel('Thứ tự sắp xếp theo ngày đặt'), 'asc');
+    await flush();
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined, {
+      kind: 'dealer',
+      payment: 'UNPAID',
+      order: 'asc',
+    });
+    click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV'))!);
+    await flush();
+    const sent = mocks.downloadOrders.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(sent).toMatchObject({ kind: 'dealer', payment: 'UNPAID' });
+    expect(sent).not.toHaveProperty('order');
+  });
+
+  it('đổi bộ lọc mới đưa danh sách về trang 1', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    mocks.orders = Array.from({ length: 3 }, (_, i) => ({ ...merchantOrder, id: `o${i}`, code: `TF${i}` }));
+    const { container } = await mount();
+    selectValue(container.querySelector<HTMLSelectElement>('select[aria-label="Lọc đơn theo nền tảng đặt"]'), 'web');
+    await flush();
+    expect(mocks.listOrders.mock.calls.at(-1)![0]).toBe(1);
+    expect(mocks.listOrders.mock.calls.at(-1)![9]).toEqual({ platform: 'web' });
+  });
+
   it('khoảng ngày ngược: báo lỗi, không gọi API với khoảng đó, khoá nút xuất', async () => {
     window.history.replaceState(null, '', '/admin?tab=orders');
     const { container } = await mount();
@@ -2208,7 +2331,7 @@ describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian
     typeInto(dates[1]!, '2026-10-01');
     await flush();
     expect(container.textContent).toContain('Ngày bắt đầu phải trước ngày kết thúc.');
-    expect(mocks.listOrders).not.toHaveBeenCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, '2026-10-14', '2026-10-01');
+    expect(mocks.listOrders).not.toHaveBeenCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, '2026-10-14', '2026-10-01', {});
     const exp = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV')) as HTMLButtonElement;
     expect(exp.disabled).toBe(true);
   });
@@ -2308,7 +2431,8 @@ describe('admin/page — chi tiết người dùng (ADMINOPS-11)', () => {
     expect(text).toContain('Khoá tài khoản');
     expect(text).toContain('bom hàng');
     const boxes = [...dialog.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
-    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+    // CSKH, Kho, Marketing, Kế toán (D1-05).
+    expect(boxes.map((b) => b.checked)).toEqual([true, false, false, false]);
   });
 
   it('Xuất CSV người dùng tải mọi người khớp tìm kiếm qua API', async () => {
@@ -2418,5 +2542,145 @@ describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
     expect(rows[0]!.querySelector('[data-order-recipient]')!.textContent).toBe('Nhận: Nguyễn Thị Mẹ Chồng · 0911222333');
     expect(rows[1]!.querySelector('[data-order-recipient]')).toBeNull();
     expect(rows[2]!.querySelector('[data-order-recipient]')).toBeNull();
+  });
+});
+
+describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần xử lý" (launch review D1-08, D1-17)', () => {
+  const stubFeed = () => {
+    const api = mockFetch({
+      '/feed/admin/pending': { body: [{ id: 'p1', kind: 'SHOWCASE', title: 'Ban công', body: 'Khoe vườn', images: [], author: 'Lan', category: null, createdAt: '2026-10-17T03:00:00.000Z' }] },
+      '/feed/admin/unanswered': { body: [{ id: 'q1', title: 'Cây khô lá', excerpt: 'Khô lá', createdAt: '2026-10-15T03:00:00.000Z', author: 'Bình', category: null, waitingHours: 52 }] },
+      '/feed/admin/published': { body: { items: [], nextCursor: null } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    return api;
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  const navItems = (c: HTMLElement) => [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+  const activeChip = (c: HTMLElement) => c.querySelector('[role="group"][aria-label="Mục kiểm duyệt cộng đồng"] [aria-pressed="true"]')!.textContent;
+
+  it('thẻ bài chờ duyệt mở tab Cộng đồng ở danh sách chờ duyệt', async () => {
+    stubFeed();
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="communityPending"]')!;
+    expect(card.textContent).toContain('3');
+    expect(card.textContent).toContain('Bài cộng đồng chờ duyệt');
+
+    click(card);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=community');
+    expect(activeChip(container)).toBe('Chờ duyệt');
+    expect(container.textContent).toContain('Ban công');
+  });
+
+  it('thẻ câu hỏi chưa ai trả lời mở thẳng danh sách "Chưa trả lời"', async () => {
+    stubFeed();
+    const { container } = await mount();
+
+    click(container.querySelector('[data-inbox="communityUnanswered"]')!);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=community');
+    expect(activeChip(container)).toBe('Chưa trả lời');
+    expect(container.textContent).toContain('Cây khô lá');
+  });
+
+  it('thẻ hoá đơn VAT chờ xuất mở tab Đơn hàng với bộ lọc "VAT chờ xuất" đã chọn', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="invoicePending"]')!;
+    expect(card.textContent).toContain('Hoá đơn VAT chờ xuất');
+
+    click(card);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=orders');
+    expect(mocks.listOrders.mock.lastCall![5]).toBe('pending');
+    expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn yêu cầu hoá đơn VAT"] [aria-selected="true"]')!.textContent).toContain('VAT chờ xuất');
+  });
+
+  it('mục Đơn ngoài app: ADMIN và CSKH mở được từ link ?tab=externalOrders (ADMIN có nút xem payload), KHO thì không', async () => {
+    const api = mockFetch({
+      '/admin/external-orders/sources': { body: { sources: [], truncated: false } },
+      '/admin/external-orders?': {
+        body: {
+          data: [{ id: 'x1', pancakeOrderId: '910001', source: 'MARKETPLACE', channel: 'shopee', sourceKey: '-3|a|-3', trackingCode: 'SPXVN0123456789', trackingCodes: [], marketplaceOrderSn: null, phone: null, goodsValue: 1000, pancakeStatus: 3, status: 'DELIVERED', pancakeUpdatedAt: null, deliveredAt: null, firstSeenAt: '2026-10-13T08:31:00.000Z' }],
+          meta: { page: 1, limit: 20, total: 1 },
+        },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    window.history.replaceState(null, '', '/admin?tab=externalOrders');
+    const admin = await mount();
+    expect(navItems(admin.container)).toContain('Đơn ngoài app');
+    expect(admin.container.querySelector('h2')!.textContent).toBe('Đơn ngoài app');
+    expect([...admin.container.querySelectorAll('button')].some((b) => b.textContent === 'Xem payload Pancake')).toBe(true);
+    admin.unmount();
+    mounted = [];
+
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=externalOrders');
+    const cskh = await mount();
+    expect(navItems(cskh.container)).toContain('Đơn ngoài app');
+    expect(cskh.container.querySelector('h2')!.textContent).toBe('Đơn ngoài app');
+    expect([...cskh.container.querySelectorAll('button')].some((b) => b.textContent === 'Xem payload Pancake')).toBe(false);
+    cskh.unmount();
+    mounted = [];
+
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=externalOrders');
+    const kho = await mount();
+    expect(navItems(kho.container)).not.toContain('Đơn ngoài app');
+    expect(kho.container.textContent).not.toContain('Nguồn đã thấy');
+  });
+
+  it('mục Tích điểm đơn sàn: ADMIN, CSKH và KE_TOAN (chỉ xem) mở được; KHO thì không; khoá hộp việc externalPoints mở đúng tab', async () => {
+    const api = mockFetch({
+      '/admin/external-claims/attempts?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+      '/admin/external-claims?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    window.history.replaceState(null, '', '/admin?tab=externalClaims');
+    const admin = await mount();
+    expect(navItems(admin.container)).toContain('Tích điểm đơn sàn');
+    expect(admin.container.querySelector('h2')!.textContent).toBe('Tích điểm đơn sàn');
+    admin.unmount();
+    mounted = [];
+
+    for (const perms of [['CSKH'], ['KE_TOAN']]) {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: perms };
+      window.history.replaceState(null, '', '/admin?tab=externalClaims');
+      const r = await mount();
+      expect(navItems(r.container)).toContain('Tích điểm đơn sàn');
+      expect(r.container.querySelector('h2')!.textContent).toBe('Tích điểm đơn sàn');
+      r.unmount();
+      mounted = [];
+    }
+
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=externalClaims');
+    const kho = await mount();
+    expect(navItems(kho.container)).not.toContain('Tích điểm đơn sàn');
+  });
+
+  it('CSKH có mục Cộng đồng và vào được từ link ?tab=community; KHO thì không (link rơi về mục đầu)', async () => {
+    stubFeed();
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const cskh = await mount();
+    expect(navItems(cskh.container)).toContain('Cộng đồng');
+    expect(cskh.container.querySelector('h2')!.textContent).toBe('Cộng đồng');
+    cskh.unmount();
+    mounted = [];
+
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const kho = await mount();
+    expect(navItems(kho.container)).not.toContain('Cộng đồng');
+    expect(kho.container.querySelector('[aria-label="Mục kiểm duyệt cộng đồng"]')).toBeNull();
   });
 });

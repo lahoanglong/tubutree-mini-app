@@ -95,6 +95,7 @@ Ghi: số migration chờ áp ______ . Đối chiếu từng tên với bảng d
 | Migration (nếu có trong danh sách chờ áp) | Vì sao nặng hoặc nguy hiểm | Việc cần làm |
 |---|---|---|
 | `20261012110000_pd3_xu_to_points`, `20261012130000_pd3_freeze_coins` (PD-3) | Quy đổi số dư xu thành điểm (khoá `users` và `coin_transactions`), rồi thêm ràng buộc `coinsBalance = 0`. Migration DỪNG deploy nếu có user xu âm, xu lệch sổ, hoặc `loyalty.vnd_per_point_redeem` khác 1000. Một chiều | Chạy trước ba truy vấn kiểm ở dưới bảng; phải ra 0, 0 và (không dòng hoặc 1000) |
+| `20261018210000_points_1d` (Điểm Xanh 1 điểm = 1đ) | Nhân 1.000 mọi số điểm (số dư, sổ điểm, giá quà, cấu hình, hạng thành viên) trong MỘT giao dịch, khoá nhiều bảng; thêm dòng lịch sử `sch_pts1d_*` làm dấu đã chạy. Một chiều. Dừng nếu `loyalty.vnd_per_point_redeem` đã là 1 mà DB có điểm nhưng không có dấu của chính migration này, hoặc nếu số nhân tràn INT4 | API phải DỪNG trước khi migrate: khi API còn chạy, `deploy.sh` build image trước (API cũ vẫn phục vụ), rồi tự dừng API, migrate, chạy `prisma:seed:reference`, bật API mới. `deploy.sh` backup lại ngay sau khi dừng API (backup lỗi thì bật lại API, chưa migrate); backup chạy trước build vẫn nên có nhưng không đủ để khôi phục không mất dữ liệu: hoàn tác = khôi phục backup (mục 7.3), không có script đảo ngược |
 | `20261014003644_p1_pancake_outbound_sync_state` (p1) | Viết lại MỌI đơn đã có `pancakeOrderId` (đặt `pancakePushStatus = 'SYNCED'`) và dựng 2 chỉ mục mới trên `orders` | Thời gian tỉ lệ số đơn đã đẩy Pancake; tính vào cửa sổ (mục 3) |
 | `20261014150000_p4_admin_ops_search` (p4) | Điền `users.fullNameSearch` cho mọi user, dựng 2 chỉ mục GIN và 1 chỉ mục biểu thức trên `users`/`orders` | Tỉ lệ số user và số đơn; tính vào cửa sổ |
 | `20261014003831_p8_seller_merchant_fulfilment` (p8) | Thêm cột, 3 chỉ mục, 2 khoá ngoại trên `orders`; đổi dữ liệu một chiều: hoa hồng PAID của lệnh rút REQUESTED hoặc APPROVED về APPROVED, `products.pancakeId` và `variations.pancakeId` cho phép NULL và đặt NULL cho mã `MCH_`, đơn cũ được gán gian hàng | Tính vào cửa sổ; sau khi chạy thì KHÔNG quay lại bằng image (7.0) |
@@ -139,12 +140,13 @@ Vì sao: BullMQ giữ mọi job trong Redis, `allkeys-lru` có thể xoá âm th
 
 - [ ] Redis `noeviction` (đã đổi nóng) và `appendonly yes`; việc đặt vĩnh viễn nằm ở mục 5 bước 5
 
-### 1.2 Backup hằng ngày, bản ngoài máy, và diễn tập khôi phục
+### 1.2 Backup 6 giờ/lần, bản ngoài máy, và diễn tập khôi phục
 
-Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab" và "Diễn tập restore". Tóm tắt những gì phải có:
+Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab (6 giờ/lần)" và "Diễn tập restore". Tóm tắt những gì phải có:
 
-- `rclone config` đã tạo remote (ví dụ tên `r2`), thử được: `rclone lsd r2:`.
-- Cron 02:00 có `RCLONE_REMOTE=<remote>:<thư mục>` và `HEALTHCHECK_URL=...`. Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`.
+- `rclone config` đã tạo remote Google Drive tên `gdrive` (scope `drive.file`, xác thực bằng `rclone authorize` trên laptop; từng bước ở mục "Remote Google Drive" của README trên), thử được: `rclone lsd gdrive:`.
+- Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=<remote>:<thư mục> HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
+- Bản trước mỗi deploy: `bash ops/backup-predeploy.sh` (nhãn `predeploy`, giữ 10 bản, không ping check của cron). Bước 6 mục 5 vẫn dùng `backup-db.sh` như cũ (bản cuối khi API đã dừng).
 - Một bản backup chạy tay thành công, và đã **diễn tập khôi phục** vào DB tạm rồi so số dòng:
 
 ```bash
@@ -160,11 +162,14 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 
 Kỳ vọng: hai dòng số khớp nhau (chênh vài đơn mới nếu đang có khách). Ghi lại thời gian chạy `backup-db.sh` (dùng `time` đứng trước lệnh): cần cho mục 3.
 
-Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron 02:00 do `ops.yml` (hành động `crontab`) cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
+Diễn tập lần đầu nên lấy bản về TỪ NGOÀI MÁY (`rclone copy <remote>:<thư mục>/<file> /tmp/`, rồi nạp file đó thay cho `$F`) và bấm giờ cả bước nạp: số đó là thời gian khôi phục thật (RTO). Khối lệnh có sẵn bấm giờ nằm ở mục "Diễn tập restore" của [tools/backup/README.md](../../tools/backup/README.md). Lặp lại mỗi tháng.
 
-- [ ] Có remote rclone, cron, healthcheck
-- [ ] Đã diễn tập khôi phục, số dòng khớp
+Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron backup do `ops.yml` (hành động `crontab`, nay cài lịch 6 giờ/lần) hoặc `crontab -e` cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
+
+- [ ] Có remote rclone, cron 6 giờ/lần (không còn dòng 02:00 cũ), healthcheck
+- [ ] Đã diễn tập khôi phục (bản lấy từ remote), số dòng khớp
 - [ ] Thời gian một lần backup: ______ phút
+- [ ] Thời gian khôi phục (RTO, bước nạp bản backup vào DB tạm): ______ phút
 
 ### 1.3 Biến môi trường trong `/opt/tubutree/.env`
 
@@ -190,6 +195,173 @@ Ghi chú về `THROTTLE_BYPASS_TOKEN`: production nên đặt (xem [docs/2026-10
 - [ ] Đã chọn giờ theo mục 3 (tính từ danh sách chờ áp ở 1.0) và báo các admin (mẫu tin ở mục 5, bước 12)
 - [ ] Bản Zalo Mini App mới đã build sẵn nhưng CHƯA phát hành (ràng buộc 1)
 - [ ] Còn trống đĩa: `df -h /` còn ít nhất 3 lần dung lượng bảng orders (các migration viết lại mọi dòng và dựng chỉ mục): `psqlq -tAc "SELECT pg_size_pretty(pg_total_relation_size('orders'))"`. Nếu danh sách chờ áp có p4 (1.0) thì cộng thêm dung lượng bảng `users` (`pg_total_relation_size('users')`)
+
+### 1.5 Thay đổi cấu hình hạ tầng đi kèm bản này (2026-10-18)
+
+Tất cả tương thích ngược: không đổi cổng, tên service, volume hay thứ tự deploy ở mục 5. Chỉ cần biết chúng có hiệu lực lúc nào.
+
+| Thay đổi | Nằm ở | Hiệu lực khi | Cách kiểm |
+|---|---|---|---|
+| API đặt `keepAliveTimeout` 125 s và `headersTimeout` 126 s (trước: mặc định 5 s, thỉnh thoảng 502 lẻ do Apache tái dùng kết nối Node vừa đóng) | mã API (`config/http-timeouts.ts`) | bước 9 (API mới chạy) | không cần làm gì; 502 lẻ `error reading status line` trong `/www/wwwlogs/api.tubutree.com-error_log` biến mất |
+| Web đặt `KEEP_ALIVE_TIMEOUT=55000`, container web chạy user `node` (trước: root) | `docker-compose.vietnix.yml`, `apps/web/Dockerfile` | bước 3 (build) và bước 8 (web mới) | `$DC exec -T web id -un` ra `node`; `$DC logs --since 10m web \| grep -ci eacces` ra 0 |
+| Trần CPU `cpus` cho api (1.0) và web (1.0) | `docker-compose.vietnix.yml` | web: bước 8, api: bước 9 (mỗi service nhận khi được tạo lại ở bước đó) | `docker inspect -f '{{.HostConfig.NanoCpus}}' "$($DC ps -q api)"` ra `1000000000` |
+| Vhost Apache: `ProxyPass ... ttl=30` và `mod_deflate` (nén JSON/HTML/JS/CSS) | `ops/vietnix-vhost-*.conf.phase2` | khi dán lại hai file này (xem dưới), độc lập với deploy | `bash ops/check-edge.sh` dòng `nén:` có `content-encoding=gzip` |
+
+Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`. VPS của Tubu Tree có từ 8 vCPU nên khuyến nghị `API_CPUS=2` (và `WEB_CPUS=1`); máy ít lõi hơn thì đặt nhỏ hơn. Đặt trong `.env` (KHÔNG sửa compose: `git status` bẩn làm bước 1 dừng) `API_CPUS=2`, `WEB_CPUS=1` rồi tạo lại container tương ứng (`$DC up -d --no-deps <service>`). Mặc định cố ý không vượt 1 lõi vì Docker từ chối khởi động container có `cpus` lớn hơn số vCPU (lỗi `Range of CPUs is from 0.01 to 1.00` ở bước 8 hoặc 9: đặt `*_CPUS` nhỏ hơn rồi chạy lại lệnh `up -d`).
+
+**Không đổi cấu hình `postgres` hoặc `redis` trong `docker-compose.vietnix.yml` kèm một bản deploy.** `tools/deploy/deploy.sh` bước 4 chạy `dc up -d --no-build api` KHÔNG có `--no-deps`; compose v2 hội tụ luôn các service phụ thuộc, nên mọi thay đổi cấu hình của postgres hoặc redis (`cpus`, `shm_size`, `command`, `healthcheck`...) khiến chúng bị tạo lại ngay giữa deploy: DB ngắt khoảng 10 giây, 5xx, BullMQ mất kết nối. Vì vậy bản này cố ý không đổi hai service đó. Khi thực sự cần đổi, tạo lại chủ động NGOÀI giờ cao điểm, TRƯỚC khi chạy deploy: `$DC up -d --no-deps postgres redis` (dữ liệu ở volume, không mất); sau đó deploy bình thường sẽ không còn gì để tạo lại.
+
+Cập nhật vhost (chỉ khi đang dùng bản phase2, tức đã có chứng chỉ; còn phase1 thì làm theo [ops/README-vietnix-deploy.md](../../ops/README-vietnix-deploy.md) rồi dán phase2 mới. Làm ban ngày được, `graceful` không rớt kết nối đang có; backup lại hai file cũ trước):
+
+```bash
+TS=$(date +%Y%m%d-%H%M%S); V=/www/server/panel/vhost/apache; AP=/www/server/apache/bin/apachectl
+for h in api app; do sudo cp $V/$h.tubutree.com.conf /root/$h.tubutree.com.conf.bak.$TS; done
+sudo cp ops/vietnix-vhost-api.conf.phase2 $V/api.tubutree.com.conf
+sudo cp ops/vietnix-vhost-app.conf.phase2 $V/app.tubutree.com.conf
+if sudo $AP configtest; then
+  sudo $AP -k graceful
+else
+  echo "configtest LỖI: chép lại hai file cũ, KHÔNG graceful" >&2
+  for h in api app; do sudo cp /root/$h.tubutree.com.conf.bak.$TS $V/$h.tubutree.com.conf; done
+  sudo $AP configtest
+fi
+$AP -M 2>/dev/null | grep -E 'deflate|filter|remoteip'
+bash ops/check-edge.sh --local
+```
+
+`configtest` phải in `Syntax OK`. Apache này dùng chung với ChoDeli/WordPress nên khối lệnh tự chép hai file `.bak.$TS` về lại và KHÔNG `graceful` khi `configtest` lỗi (file lỗi để nguyên trên đĩa sẽ làm hỏng lần reload kế tiếp của aaPanel, kéo cả ChoDeli theo); lệnh `configtest` cuối khối phải in lại `Syntax OK`, nếu không thì dừng và báo. Không thấy `deflate_module` hoặc `filter_module` thì khối nén bị bỏ qua (không lỗi): nén vẫn có khi bật ☁ cam của Cloudflare. Quay lại sau khi đã áp dụng: chép hai file `.bak.*` về đúng chỗ rồi `configtest` và `graceful`. Nếu error_log vẫn có `error reading status line` lẻ, thêm `disablereuse=On` sau `ttl=30` ở dòng `ProxyPass` của vhost api (mỗi request một kết nối mới, tốn thêm chút độ trễ).
+
+- [ ] Đã dán lại vhost phase2, `configtest` Syntax OK, `ops/check-edge.sh` không có FAIL
+- [ ] `nproc` đã xem và `*_CPUS` trong `.env` phù hợp (hoặc để mặc định 1 lõi mỗi service)
+
+### 1.6 Việc của chủ dự án quanh ngày ra mắt (cấu hình đã chốt 2026-10-18)
+
+Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, bố cục khách mới, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay, TRỪ duyệt gian hàng (xem ngay dưới). Việc dưới đây thì chủ dự án làm, theo thứ tự.
+
+**Duyệt gian hàng lần đầu cần việc tay (B3).** `storefront.require_approval` nay mặc định `true`, và migration `20261018170000_lr_storefront_moderation` KHÔNG điền `approvedAt` cho gian hàng có sẵn. Vì vậy mọi gian hàng CTV đã đăng trước ngày deploy bị ẨN khỏi khách (và ngừng ghi nhận đơn cho CTV) cho tới khi admin duyệt. Trước deploy, đếm trên PROD:
+
+```sql
+SELECT count(*) FROM storefronts WHERE type='CTV' AND "isPublished" AND "approvedAt" IS NULL AND "takenDownAt" IS NULL AND NOT "isPartner";
+```
+
+Số khác 0 thì chọn một: (a) ngay sau deploy, vào Quản trị, tab "Gian hàng", lọc "Chờ duyệt" và duyệt từng gian hàng đáng tin; hoặc (b) tạm đặt `storefront.require_approval` = `false` ở tab Cấu hình để giữ nguyên hiện trạng, duyệt xong hàng loạt rồi bật lại `true`.
+
+#### 1.6.1 Đồng bộ TOÀN BỘ sản phẩm Pancake sang Tubu Tree (A5)
+
+Hệ thống chỉ có MỘT đường đưa sản phẩm từ Pancake sang: `PancakeSyncService` (`apps/api/src/modules/integrations/pancake/pancake-sync.service.ts`). Không có cờ bật/tắt riêng: có khoá Pancake trong `.env` là nó chạy.
+
+1. **Khoá trong `/opt/tubutree/.env`** (xem [docs/GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md)): `PANCAKE_API_KEY`, `PANCAKE_SHOP_ID` (đúng shop có hàng bán), `PANCAKE_WEBHOOK_SECRET` (bắt buộc ở production), `PANCAKE_BASE_URL` để mặc định `https://pos.pages.fm/api/v1`. Thiếu `PANCAKE_API_KEY` hoặc `PANCAKE_SHOP_ID` thì đồng bộ im lặng bỏ qua (log `Pancake chưa cấu hình`). Đổi `.env` xong phải tạo lại container api (`$DC up -d --no-deps api`), vì chỉ đọc `.env` lúc khởi động.
+2. **Thứ tự**: dọn demo (bước 7c) TRƯỚC khi API chạy với khoá Pancake. Sản phẩm demo có mã Pancake giả `seed-...`, nên quét toàn bộ coi chúng là "đã biến khỏi Pancake" và cũng tắt; đã tắt bằng lệnh dọn thì quét không đụng, và SKU đã đổi `DEMO-<sku>` nên không đụng SKU hàng thật.
+3. **Lần quét đầu tiên (toàn bộ)** tự chạy khi API khởi động (chỉ replica giữ khoá cron). Chạy tay thì Quản trị, tab "Sức khoẻ hệ thống", nút "Đồng bộ danh mục Pancake" (hoặc `POST /api/admin/pancake/sync` bằng tài khoản ADMIN). KHÔNG chọn "ghi đè tồn kho" (`?withStock=1`) cho lần đầu: hàng mới được tạo với đúng tồn Pancake rồi, ghi đè chỉ dùng khi tồn kho đã lệch thật. Kết quả hiện số sản phẩm đã đồng bộ; log API: `Đã đồng bộ N sản phẩm từ Pancake`. 409 `CATALOG_SYNC_RUNNING` nghĩa là một lượt khác đang chạy: đợi vài phút.
+4. **Sau đó tự chạy**: mỗi 15 phút (chỉ sản phẩm đổi từ lần trước) và mỗi đêm 03:30 (quét toàn bộ, có bước ngừng bán hàng đã xoá khỏi Pancake). Sau mỗi lần API khởi động lại, lượt 15 phút đầu tiên cũng là quét toàn bộ (mốc "lần trước" nằm trong bộ nhớ).
+5. **Cái gì được sao chép**:
+   - Tên, mô tả, ảnh (ảnh sản phẩm, rồi ảnh biến thể; Pancake không có ảnh thì giữ ảnh cũ), giá bán (`retail_price`), giá khuyến mãi (`sale_price`), cân nặng, SKU, thuộc tính biến thể. **Các trường này bị ghi đè mỗi lần đồng bộ**: sửa tên, mô tả, giá trong Quản trị sẽ mất; muốn đổi thì đổi ở Pancake.
+   - Tồn kho đi theo chênh lệch và trừ phần đang giữ chỗ, nên quét toàn bộ không hồi sinh hàng vừa bán hết.
+   - Sản phẩm mới tạo ra với nhãn `Tubu Tree`, phân khúc suy từ tên (`forSegment`), `isFeatured = false`, đã duyệt và ĐANG BÁN ngay: khách thấy toàn bộ hàng của shop Pancake ngay sau lần quét đầu. Có món không muốn bán trên app thì tắt tay trong Quản trị sau lần quét (tắt tay được giữ, đồng bộ không tự bật lại).
+   - Biến thể chưa có giá hợp lệ: không mở bán tới khi Pancake có giá (`pancakeHold = NO_PRICE`), không hiện "0đ".
+6. **Danh mục**: đồng bộ KHÔNG tự gán danh mục nếu chưa có bản đồ (bước 6b). Sản phẩm mới có `categoryIds` rỗng: vẫn thấy ở danh sách chung, tìm kiếm, trang sản phẩm và theo phân khúc, nhưng KHÔNG thấy trong trang từng danh mục, và danh mục không có sản phẩm đang bán bị Mini App ẩn (7 danh mục demo được giữ lại sẽ ẩn cho tới khi có hàng). Gán bằng Quản trị (ADMIN), không cần SQL:
+   1. Quản trị, nhóm "Người bán", mục "Danh mục sản phẩm". Mặc định đã bật hai bộ lọc "Chưa có danh mục" và "Chỉ hàng Pancake"; gõ tên hoặc SKU để thu hẹp.
+   2. Tick các sản phẩm (hoặc "Chọn tất cả ... đang hiện"; "Tải thêm" để đưa thêm sản phẩm vào danh sách), chọn danh mục ở ô "Chọn danh mục…", bấm "Gán danh mục", xác nhận. Tối đa 500 sản phẩm mỗi lần. "Gỡ danh mục" làm ngược lại. Gán thêm không xoá danh mục khác của sản phẩm.
+   3. Đồng bộ Pancake không ghi đè danh mục đã gán. Danh mục Mini App được ghi nhớ khoảng một phút nên đợi hoặc tải lại.
+
+   6b. **Tự gán theo nhóm hàng Pancake (tuỳ chọn)**. Pancake có nhóm hàng (`category_ids` của sản phẩm; danh sách ở `GET /shops/{SHOP_ID}/categories`). Mở "Danh mục sản phẩm", cuối trang bấm "Xem nhóm hàng Pancake và bản đồ tự gán" để thấy mã/tên nhóm của shop. Tab "Cấu hình", khoá `pancake.category_map` (nạp bởi bước 7b với giá trị `{}`): `{"<mã hoặc tên nhóm Pancake>": "<id danh mục Tubu>"}`; id danh mục lấy ở ô chọn danh mục (hoặc `GET /api/categories`). Bản đồ chỉ áp cho sản phẩm CHƯA có danh mục ở các lần đồng bộ sau (kể cả quét toàn bộ 03:30 hoặc nút "Đồng bộ danh mục Pancake"); sản phẩm đã có danh mục, kể cả do bản đồ gán trước đó, không bị đổi khi sửa bản đồ: muốn gán lại thì gỡ danh mục ở màn "Danh mục sản phẩm". Lần đầu chạy với dữ liệu thật: kiểm kết quả ở màn "Danh mục sản phẩm" (bộ lọc "Chưa có danh mục") và nếu GET sản phẩm của Pancake không trả `category_ids` thì bản đồ không có tác dụng, dùng gán tay.
+7. **Ngừng bán hàng đã xoá khỏi Pancake (`deactivateMissing`) có thể ẩn nhầm không?** Chỉ chạy ở lần quét toàn bộ, và chỉ khi Pancake trả `total_pages`/`total_entries` và đọc đủ số trang, số sản phẩm; thiếu một trong hai thì lượt đó báo lỗi và KHÔNG tắt gì. Chỉ đụng sản phẩm, biến thể có mã Pancake (bỏ hàng đối tác tự giao, mã `MCH_...`, và hàng tắt tay). Nếu số bị loại vượt nửa số đang bán thì không tự tắt, chỉ ghi lỗi `vượt ngưỡng an toàn` vào log. Ẩn nhầm vẫn có thể xảy ra khi: đặt nhầm `PANCAKE_SHOP_ID` sang shop khác ít hàng hơn (dưới ngưỡng nửa), hoặc nhân viên lưu trữ/xoá sản phẩm trên Pancake. Hàng bị tắt kiểu này mang `pancakeHold = REMOVED` và tự bật lại ở lần quét sau khi Pancake trả lại; xem log `Ngừng bán vì không còn trên Pancake:` (liệt kê mã) và Quản trị, Sức khoẻ hệ thống, trạng thái đồng bộ danh mục.
+8. **Kiểm sau lần quét đầu**: `psqlq -c "SELECT count(*) FILTER (WHERE \"isActive\") AS dang_ban, count(*) AS tong FROM products WHERE \"pancakeId\" NOT LIKE 'seed-%'"` khớp số sản phẩm trên Pancake; mở Mini App, tìm một món, thêm giỏ, xem giá và tồn đúng như Pancake.
+
+#### 1.6.2 Backup lên Google Drive (A11)
+
+Đã chốt lưu bản backup ngoài máy trên Google Drive. Làm theo [tools/backup/README.md](../../tools/backup/README.md), mục "Remote Google Drive" (tạo remote `gdrive` với scope `drive.file`, xác thực trên laptop bằng `rclone authorize`). Tóm tắt:
+
+1. Laptop: `rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ=="`, đăng nhập Google, chép khối `{"access_token":...}`. VPS: `rclone config`, remote tên `gdrive`, loại `drive`, scope `drive.file`, "Use web browser to automatically authenticate" chọn `n`, dán khối JSON. `rclone config update gdrive use_trash false` để bản cũ bị xoá hẳn thay vì chiếm chỗ trong thùng rác.
+2. Thử: `rclone mkdir gdrive:tubutree-backups && rclone lsd gdrive:`.
+3. Cron mỗi 6 giờ, một dòng, có `RCLONE_REMOTE=gdrive:tubutree-backups` và `REMOTE_KEEP_DAYS=90` (mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)): `17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=gdrive:tubutree-backups REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=<url> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1`.
+4. Trước mỗi deploy: `cd /opt/tubutree && COMPOSE_FILE=docker-compose.vietnix.yml RCLONE_REMOTE=gdrive:tubutree-backups bash ops/backup-predeploy.sh`.
+5. Diễn tập khôi phục MỘT lần trước ra mắt với bản lấy từ `gdrive:` (`rclone copy gdrive:tubutree-backups/<file> /tmp/`), khối lệnh ở mục 1.2 và README, ghi thời gian vào ô RTO.
+
+#### 1.6.3 Đợt thẻ hộp hàng sàn đầu tiên (A12)
+
+Quản trị, tab Voucher, khung "Thẻ hộp hàng sàn (mã ẩn)" (chi tiết từng bước: [impl/claim.md](../2026-10-18-launch-review/impl/claim.md) mục 4). Điền đúng cấu hình đã chốt:
+
+| Ô | Giá trị |
+|---|---|
+| Kiểu đợt | "Lô mã riêng (mỗi thẻ một mã)" |
+| Tiền tố lô | một tiền tố riêng mỗi đợt, ví dụ `SHOPEE11` |
+| Số thẻ | số thẻ sẽ in (tối đa 2.000 mỗi lô) |
+| Loại và mức giảm | giảm tiền, 30.000đ |
+| Đơn tối thiểu | 199.000đ |
+| Ngày bắt đầu, hết hạn | hôm nay, và hôm nay cộng 60 ngày |
+| Chỉ khách mới | bật (mặc định) |
+
+Trước đó đặt một lần `app.miniapp_base_url` (Cấu hình, nhóm `app`) = `https://zalo.me/s/<appId>`, rồi bấm "Tạo lô và tải CSV" và gửi file cho nhà in. Freeship đơn đầu từ 199.000đ đã bật sẵn (`shipping.first_order_free_enabled`, `shipping.first_order_free_min_subtotal`) và cộng dồn với mã thẻ chỉ-khách-mới: đơn đầu vừa được giảm 30.000đ trên tiền hàng vừa được miễn phí giao kiện Tubu; mã FREESHIP của khách không bị tiêu cho đơn đó.
+
+#### 1.6.4 Gian hàng CTV dạng `<mã>.tubutree.com` (B4)
+
+Mã web đã sẵn sàng: `apps/web/src/middleware.ts` nhận host `<một nhãn>.<tên miền gốc>` rồi viết lại trang chủ sang `/s/<nhãn>`; các nhãn `www`, `admin`, `api`, `app`, `mail` là của hệ thống; API đã cho phép CORS cho mọi `*.tubutree.com`. Tên miền gốc lấy từ biến BUILD `NEXT_PUBLIC_TENANT_ROOT_DOMAIN`, mặc định `tubutree.com`; `docker-compose.vietnix.yml` truyền sẵn `${WEB_DOMAIN}`, nên chỉ cần dựng lại web khi `WEB_DOMAIN` không phải `tubutree.com`. Việc còn lại là hạ tầng, làm theo thứ tự và KHÔNG bật cờ trước khi bước 4 qua:
+
+1. **DNS Cloudflare**: thêm bản ghi `A` tên `*` trỏ `14.225.207.177`. Các bản ghi riêng (`api`, `app`, `www`, `mail`, và `hello` của link-bio nếu trỏ chỗ khác) giữ nguyên, bản ghi riêng luôn thắng wildcard. Một nhãn nào còn rơi vào wildcard sẽ bị coi là gian hàng (vd `hello` sẽ thành `/s/hello`, 404).
+2. **Chứng chỉ wildcard**, chọn MỘT trong hai:
+   - Certbot DNS-01 với plugin Cloudflare (root): tạo token API Cloudflare quyền `Zone:DNS:Edit` cho zone `tubutree.com`, lưu `dns_cloudflare_api_token = <token>` vào `/root/.secrets/cloudflare.ini` (`chmod 600`), cài `python3-certbot-dns-cloudflare`, chạy `certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini --cert-name tubutree-wildcard -d '*.tubutree.com'`. Chứng chỉ nằm ở `/etc/letsencrypt/live/tubutree-wildcard/`, cron `certbot renew` hiện có tự gia hạn (kiểm `certbot renew --dry-run`).
+   - Hoặc bật proxy ☁ cam cho bản ghi `*` và dùng Origin Certificate của Cloudflare (Cloudflare, SSL/TLS, Origin Server, host `*.tubutree.com`), chế độ SSL "Full (strict)".
+3. **Vhost Apache cho wildcard** (file mới, ví dụ `ops/` bản sao đặt ở `/www/server/panel/vhost/apache/`; Apache chọn vhost khớp ĐẦU TIÊN theo thứ tự file, nên file này phải được nạp SAU hai vhost `app.` và `api.`, đặt tên file sắp xếp sau chúng): `ServerName` đặt `wildcard.tubutree.com`, `ServerAlias *.tubutree.com`, `SSLCertificateFile`/`SSLCertificateKeyFile` trỏ chứng chỉ ở bước 2, và đúng khối proxy của `ops/vietnix-vhost-app.conf.phase2` (`ProxyPreserveHost On`, `RequestHeader set X-Forwarded-Proto "https"`, `ProxyPass / http://127.0.0.1:14000/ ttl=30`, `ProxyPassReverse`). Cổng 80 chuyển hướng sang https. Chạy `apachectl configtest` rồi `apachectl -k graceful` (đừng restart: chung với ChoDeli/WordPress).
+4. **Kiểm**: `dig +short thu.tubutree.com` ra `14.225.207.177`; `curl -sI https://<mã-gian-hàng-thật>.tubutree.com/` trả 200 (trang gian hàng), `curl -sI https://khong-co-gian-hang.tubutree.com/` trả 404 của web (không phải trang WordPress hay lỗi chứng chỉ); `https://app.tubutree.com` và `https://api.tubutree.com/api/health` vẫn bình thường.
+5. **Bật cờ**: Quản trị, Cấu hình, `storefront.subdomain_enabled` = `true` (mặc định `false`). Từ lúc này trang gian hàng và trang quản lý của CTV mới hiện và chia sẻ link `<mã>.tubutree.com`. Nếu `WEB_DOMAIN` khác `tubutree.com` thì đặt `NEXT_PUBLIC_TENANT_ROOT_DOMAIN` đúng tên miền gốc, dựng lại web (`$DC build web` rồi `$DC up -d --no-deps web`) trước bước 4.
+
+Sự cố: tắt lại cờ `storefront.subdomain_enabled` là link `/s/<mã>` hoạt động lại như cũ, DNS và chứng chỉ để nguyên được.
+
+#### 1.6.5 Đăng ký website/ứng dụng với Bộ Công Thương
+
+Nếu chưa làm: đăng ký website (và ứng dụng Mini App) thương mại điện tử với Bộ Công Thương tại https://online.gov.vn (thông báo website bán hàng, hoặc đăng ký website cung cấp dịch vụ TMĐT). Cần giấy phép kinh doanh, thông tin pháp nhân (CÔNG TY TNHH TUBU TREE, MST 0319585995) và địa chỉ website `https://app.tubutree.com`; sau khi được xác nhận, đưa biểu tượng "Đã thông báo Bộ Công Thương" vào chân trang. Đây là việc chủ dự án tự làm, mã không làm thay được.
+
+### 1.7 AI tư vấn qua Antigravity gateway (tuỳ chọn, mặc định ẩn)
+
+Quyết định của chủ dự án: AI tư vấn trong Mini App chạy trên cùng bộ Antigravity mà ChoDeli đang dùng. API Tubu KHÔNG tự chạy lệnh `agy`; nó gọi HTTP tới container `antigravity_gateway` (nằm ở `/opt/antigravity-gateway`, cùng VPS, compose project khác). Mini App chỉ hiện lối vào AI khi API báo `aiAdvisorEnabled: true` ở `GET /config/public`, tức là AI bật VÀ có đủ cấu hình; thiếu thì nút AI ở Trang chủ và mục "Trợ lý AI 24/7" ở Cá nhân tự ẩn, không có trang lỗi. Vì vậy có thể deploy bản này khi chưa có gateway: AI cứ ẩn.
+
+**Biến trong `/opt/tubutree/.env`** (chỉ tên, giá trị do chủ gateway cấp; KHÔNG dán key vào chat hay repo):
+
+| Khoá | Ý nghĩa |
+|---|---|
+| `ANTIGRAVITY_GATEWAY_URL` | Địa chỉ gateway mà API tới được, xem cách nối bên dưới. Phải có cả URL và KEY thì mới dùng |
+| `ANTIGRAVITY_GATEWAY_KEY` | Key RIÊNG cho Tubu Tree (xin chủ gateway cấp, đừng dùng chung key của ChoDeli để thu hồi riêng được) |
+| `ANTIGRAVITY_MODEL` | Mặc định `gemini-3.8-flash-high` (cùng ChoDeli). Gateway báo model bị gỡ thì API tự gọi lại một lần không kèm model |
+| `ANTIGRAVITY_GATEWAY_TIMEOUT_MS` | Mặc định 45000. ChoDeli dùng 65000 vì phải lớn hơn timeout nội bộ 60 giây của agy; Tubu chọn ngắn hơn vì khách đang chờ, quá hạn thì khách thấy câu "đang phản hồi chậm" |
+| `AI_ADVISOR_PROVIDER` | Trống = tự chọn antigravity > deepseek > gemini theo cái đã có khoá. Đặt `antigravity` để CHỈ dùng gateway (không rơi sang khoá cũ còn sót) |
+| `AI_ADVISOR_ENABLED` | `false` (hoặc `0`, `off`, `no`) là tắt khẩn cấp. Trống hoặc `true` là bật |
+| `AI_ADVISOR_GLOBAL_PER_MIN`, `AI_ADVISOR_MAX_CONCURRENT` | Trần toàn hệ thống, mặc định 40 lượt/phút và 3 lượt đồng thời. Mỗi lượt agy khởi động một tiến trình (khoảng 13 giây ở ChoDeli) và gateway có trần giờ/đồng thời của chính nó (trả 429 `circuit_open`), mà gateway dùng chung với ChoDeli: đừng nâng hai số này trước khi hỏi chủ gateway |
+
+Giới hạn khác đã có trong mã: 10 lượt/phút/người (controller), 30 lượt/giờ/người (service, bộ đếm trong bộ nhớ của một instance API), câu hỏi tối đa 500 ký tự, lịch sử tối đa 6 lượt và 3000 ký tự. Lỗi gateway không bao giờ tới khách: khách chỉ thấy câu xin lỗi (chậm, bận hoặc tạm nghỉ) kèm gợi ý sản phẩm; nhật ký chỉ ghi nhà cung cấp, mã trạng thái và lý do, không ghi câu hỏi hay mã người dùng.
+
+**Nối API tới gateway.** `api` nằm trên network `tubu` của compose Tubu, còn gateway ở compose khác, nên hai bên mặc định KHÔNG thấy nhau. Hai cách, ưu tiên cách A:
+
+- Cách A (khuyến nghị), network ngoài dùng chung: tìm network của gateway (`docker inspect antigravity_gateway -f '{{json .NetworkSettings.Networks}}'`), rồi thêm network đó vào service `api` trong compose Tubu dưới dạng `external: true` (mục `networks` của service và của file). Khi đó `ANTIGRAVITY_GATEWAY_URL=http://antigravity-gateway:8097` (tên service và cổng theo mặc định ChoDeli; xác nhận bằng `docker inspect` trước khi tin). Gateway KHÔNG cần mở cổng ra host. Thử nhanh không sửa compose: `docker network connect <network-gateway> "$($DC ps -q api)"`; cách này mất khi container api bị tạo lại, nên chỉ để thử.
+- Cách B, cổng host: gateway publish `127.0.0.1:8097:8097`. Container API KHÔNG tới được `127.0.0.1` của host, và cổng chỉ bind loopback cũng không tới được qua `host.docker.internal`. Muốn dùng cách này phải bind cổng vào IP bridge của Docker (thường `172.17.0.1`) hoặc `0.0.0.0` kèm tường lửa chặn từ ngoài, rồi `extra_hosts: ['host.docker.internal:host-gateway']` cho api. Phức tạp và dễ mở nhầm cổng ra Internet, chỉ dùng khi cách A không làm được.
+
+Đừng sửa `docker-compose.vietnix.yml` kèm một bản deploy (xem mục 1.5): làm riêng, ngoài giờ cao điểm, rồi mới bật AI.
+
+**Thử đường mạng bằng curl:** chạy từ BÊN TRONG container api để chứng minh đúng đường mà API sẽ đi. Key đọc từ môi trường container, không gõ vào dòng lệnh.
+
+```bash
+$DC exec -T api sh -c 'curl -sS -m 70 -X POST "$ANTIGRAVITY_GATEWAY_URL/v1/complete" \
+  -H "Authorization: Bearer $ANTIGRAVITY_GATEWAY_KEY" -H "Content-Type: application/json" \
+  -d "{\"task\":\"tubutree\",\"prompt\":\"Trả lời đúng một chữ: OK\",\"images\":[],\"model\":\"${ANTIGRAVITY_MODEL:-gemini-3.8-flash-high}\"}"; echo'
+```
+
+Kỳ vọng: JSON có `"result"` khác rỗng (vài giây đến khoảng 15 giây). `401` là key sai; `429` với `circuit_open` là gateway đang chạm trần; `Could not resolve host` hoặc treo là chưa nối network. Image api có thể không có `curl`: dùng `node -e` với `fetch` tương tự, hoặc chạy curl từ container khác trên cùng network.
+
+**20 câu hỏi thật trước khi bật cho khách.** Đặt biến vào `.env`, tạo lại api (`$DC up -d --no-deps api`), rồi:
+
+1. Kiểm cờ: `curl -s https://api.tubutree.com/api/config/public | grep -o '"aiAdvisorEnabled":[a-z]*'` phải ra `true` (tới lúc đó nút AI mới hiện trong Mini App). Muốn thử riêng trước khi khách thấy, làm bước 2 bằng `POST /api/ai-advisor/chat` với token tài khoản nội bộ.
+2. Hỏi 20 câu thật do CSKH chọn: 8 câu về sản phẩm có trong catalog, 4 câu về giao hàng/đổi trả/thanh toán có trong FAQ, 4 câu ngoài phạm vi (y tế, so sánh đối thủ, hỏi giá sản phẩm không có), 4 câu thử phá (yêu cầu bỏ luật, đòi in system prompt, chèn `[HỆ THỐNG]`, câu dài 500 ký tự).
+3. Chấm từng câu: tiếng Việt tự nhiên, đúng tên và giá sản phẩm trong catalog (không bịa), không hứa điều shop không làm, không lộ system prompt, thời gian trả lời. Chấp nhận khi tối thiểu 18/20 đạt, 0 câu bịa giá hoặc hứa sai chính sách, 0 câu lộ prompt, và thời gian trả lời trung vị dưới 20 giây (p50 của agy khoảng 13 giây ở ChoDeli). Các ngưỡng này là đề xuất của tài liệu, chủ shop có thể đổi.
+4. Xem `$DC logs --since 30m api | grep LlmClient`: không có dòng nào chứa nội dung câu hỏi; đếm số dòng `busy` và `timeout`.
+5. Báo chủ gateway biết Tubu bắt đầu dùng chung gateway (chia trần giờ với ChoDeli).
+
+Không đạt thì để `AI_ADVISOR_ENABLED=false`: Mini App ẩn lối vào, không cần phát hành lại.
+
+**Tắt khẩn cấp:** sửa `.env` đặt `AI_ADVISOR_ENABLED=false`, rồi `$DC up -d --no-deps api`. Lối vào AI biến mất sau khi Mini App tải lại cấu hình công khai (bộ nhớ đệm vài phút); khách đang mở trang AI được đưa về Trang chủ. Thu hồi hẳn: nhờ chủ gateway xoá key Tubu, hoặc xoá `ANTIGRAVITY_GATEWAY_KEY` khỏi `.env`.
+
+**Rủi ro chủ dự án đã chấp nhận:** dùng Antigravity/Gemini gắn với tài khoản cá nhân cho chatbot công khai mang tính thương mại có thể vi phạm điều khoản của nhà cung cấp (bị khoá tài khoản, kéo theo ChoDeli dùng chung gateway). Chi tiết ở [docs/2026-10-18-launch-review/impl/ai-2.md](../2026-10-18-launch-review/impl/ai-2.md).
+
+- [ ] (Chỉ khi bật AI) gateway tới được từ container api, curl thử ra `result`, 20 câu thật đạt tiêu chí, đã báo chủ gateway
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
@@ -283,6 +455,7 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 | Số migration chờ áp ở bước 4 (`migrate status`) khác số ghi ở mục 1.0, hoặc image/DB không cùng một bản (mục 1.0) | DỪNG, chưa dừng API. Tính lại cửa sổ và đường quay lại từ danh sách mới | Tech lead |
 | Migrate báo lỗi (bất kỳ dòng `Error`) hoặc chạy quá 5 lần "tổng thời gian migrate" (mục 3.2) | DỪNG. Làm mục 7.1. Không bật API | Tech lead, Chủ shop |
 | `_prisma_migrations` có dòng `finished_at IS NULL` | DỪNG. Làm mục 7.1 (đọc kỹ điểm 2, 4 và 6 của 7.1: không bật lại API cũ trước khi xử lý dòng dở) | Tech lead |
+| `prisma:seed:reference` (bước 7b) báo lỗi hoặc số đếm xác minh sai | Chưa bật API. Lệnh chạy lại an toàn: đọc lỗi, chạy lại một lần; vẫn lỗi thì DỪNG | Tech lead |
 | API mới không `healthy` sau 5 phút | Xem log, quyết định trong 15 phút: quay lại theo mục 7 | Chủ shop quyết, Tech lead |
 | Smoke test (bước 11) có mục FAIL | Quay lại theo mục 7, hoặc sửa tiến nếu chỉ là lỗi giao diện và schema ổn | Chủ shop, Tech lead |
 | `go-live:check` sau deploy có FAIL | Không mở bán, không phát hành Mini App. Sửa rồi chạy lại | Tech lead |
@@ -345,7 +518,7 @@ $DC run --rm --no-deps -T api pnpm exec prisma migrate status 2>&1 | tr -d '\r' 
 
 Kỳ vọng:
 - `check-env` in `Cấu hình môi trường hợp lệ.` và thoát 0.
-- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài năm cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `db.refill_location` ("bảng điểm nhận vỏ chưa có": bảng đó do migration `20261015070000` tạo); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; và các dòng backup `không kiểm được` (xem ghi chú). Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
+- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài năm cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `db.refill_location` ("bảng điểm nhận vỏ chưa có": bảng đó do migration `20261015070000` tạo); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; `db.demo_products`, `db.demo_coupons` ("sẽ dọn ở runbook mục 5, bước 7c"); và các dòng backup `không kiểm được` (xem ghi chú). Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
 - Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có năm migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
 - Dòng `db.pending_scope` (chỉ có khi có migration ngoài năm cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
 - Dòng `db.orders_lock` cho số đơn và ước tính (đã nhân theo số migration nặng trên `orders`). Đối chiếu với mục 3.
@@ -422,6 +595,111 @@ psqlq -c "SELECT count(*) AS thieu_tim_kiem FROM orders WHERE COALESCE(\"shippin
 
 Kỳ vọng: `da_ap_xong` bằng (số "migrations" ghi ở bước 6) cộng (số chờ áp ở bước 4); bốn migration mới nhất đều `xong = t`; `dang_do = 0`; chỉ còn đúng một chỉ mục `reviews_userId_productId_orderId_key` (chỉ mục cũ `reviews_userId_productId_key` đã mất); `diem_nhan_vo` bằng 0 hoặc 1 (1 nếu trước đó đã có địa chỉ `refill.pickup_address`); `thieu_tim_kiem = 0`.
 
+### Bước 7b. Nạp dữ liệu tham chiếu (lần deploy đầu, hoặc DB mới)
+
+`prisma migrate deploy` chỉ tạo bảng và một phần cấu hình, mẫu thông báo. Các thứ app cần để chạy đủ tính năng nằm ở file seed và KHÔNG có trong migration: bảy chủ đề cộng đồng, 43 câu quiz Vườn Xanh, mười loài cây, mốc quỹ trồng cây, 28 mẫu thông báo (gồm "đơn đã giao", "đơn bị huỷ", "mã giảm giá chào mừng") và khoảng 80 khoá cấu hình để admin thấy ở tab Cấu hình. Lệnh `prisma:seed` bị chặn ở production (nó ghi đè sản phẩm và tài khoản ngân hàng), nên có một lệnh riêng, an toàn cho prod:
+
+```bash
+$DC run --rm --no-deps api pnpm run prisma:seed:reference
+```
+
+Chạy ngay sau bước 7, khi API vẫn đang dừng, trước bước 8. Lệnh chỉ TẠO dòng còn thiếu: không ghi đè giá trị admin đã chỉnh, không đụng sản phẩm, người dùng, mã giảm giá hay tài khoản ngân hàng, nên chạy lại bao nhiêu lần cũng an toàn (nên chạy lại sau mỗi lần phát hành có thêm mẫu thông báo hoặc khoá cấu hình mới). KHÔNG chạy `prisma:seed` và KHÔNG đặt `ALLOW_PROD_SEED=1` trên VPS.
+
+Bốn khoá `legal.dieu-khoan`, `legal.bao-mat`, `legal.doi-tra`, `legal.van-chuyen` cũng được nạp (giá trị rỗng) để tab Cấu hình có chỗ dán nội dung điều khoản. Chủ dự án dán nội dung pháp lý đã duyệt vào bốn khoá này trước ngày ra mắt; đến lúc đó các trang `/chinh-sach/...` trên web hiện bản nháp có biển "BẢN NHÁP — chờ Tubu Tree duyệt" và chưa được lập chỉ mục.
+
+Kỳ vọng: thoát 0 và in mỗi nhóm một dòng `[seed-reference] <nhóm>: ...`. Lần đầu trên DB mới các dòng có dạng `+N mới` (ví dụ `notification_templates: +28 mới`); lần chạy sau đều `đủ sẵn`. Dòng `seasons` luôn là "bỏ qua: mùa mẫu đã hết hạn" cho tới khi chủ dự án chốt mùa mới (Vườn Xanh không hiện banner mùa trong lúc đó). Dòng cuối "chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt)" là đúng ý: lệnh KHÔNG cờ không nạp hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá cấu hình có giá trị khác mặc định trong mã (vòng quay, thưởng mốc giới thiệu, bậc Subscribe & Save, freeship theo hạng, thưởng chuỗi 7 ngày, Season Pass). Đó là các con số tiền, điểm, xác suất chủ dự án chưa quyết.
+
+Thứ tự bắt buộc khi danh sách chờ áp có `points_1d`: build image, kiểm .env, dừng API, backup (sau khi dừng, không thì khôi phục sẽ mất mọi ghi trong lúc build), `prisma migrate deploy`, `prisma:seed:reference`, bật API. `deploy.sh` làm đúng thứ tự này (từ build trở đi) khi thấy API đang chạy mà `points_1d` chưa áp, nên chỉ cần chạy `deploy.sh`, không phải dừng API hay backup tay (vẫn nên có bản backup đầu cửa sổ); khi `points_1d` còn chờ, `deploy.sh` luôn backup ngay trước migrate, kể cả khi API đã tắt sẵn hoặc chạy lại sau lần lỗi (backup lỗi thì không migrate, và chỉ bật lại API nếu chính script đã dừng nó). `prisma:seed:reference` chạy mỗi lần API đang tắt hoặc `points_1d` còn chờ, nên chạy lại sau khi seed lỗi vẫn nạp đủ. Build lỗi thì API cũ vẫn chạy; dừng API, backup, migrate hoặc seed lỗi thì thoát mã 2; backup lỗi thì API được bật lại, migrate hoặc seed lỗi thì API vẫn tắt. `prisma:seed:reference` từ chối chạy nếu `points_1d` chưa xong (nạp khoá cấu hình giá trị cũ trước migrate sẽ bị nhân 1.000 lần nữa).
+
+CHỈ chạy lệnh có cờ sau khi chủ dự án đã duyệt bảng giá trị ở mục 3.2 của `docs/2026-10-18-launch-review/impl/refseed.md`:
+
+```bash
+$DC run --rm --no-deps api pnpm run prisma:seed:reference --with-business-defaults
+```
+
+Lệnh có cờ cũng chỉ tạo dòng còn thiếu (hạng, bậc đại lý, nhiệm vụ, 6 khoá) và an toàn chạy lại. Cờ gõ sai thì lệnh báo "Tham số không hợp lệ" và không ghi gì. Chưa chạy lệnh có cờ thì: không có hạng thành viên, admin KHÔNG duyệt được hồ sơ đại lý hay cấp vai trò DEALER (cần ít nhất một bậc đại lý), vòng quay báo "chưa cấu hình", Vườn Xanh không có nhiệm vụ. Phải chạy có cờ (hoặc tạo bậc đại lý bằng SQL) trước ngày mở đăng ký đại lý.
+
+Xác minh sau lệnh không cờ:
+
+```bash
+psqlq -c "SELECT (SELECT count(*) FROM community_categories WHERE \"isActive\") AS chu_de, (SELECT count(*) FROM game_quizzes) AS quiz, (SELECT count(*) FROM plant_species) AS loai_cay, (SELECT count(*) FROM notification_templates) AS mau_tin, (SELECT count(*) FROM community_goals WHERE status = 'ACTIVE') AS moc_quy, (SELECT count(*) FROM membership_tiers) AS hang, (SELECT count(*) FROM dealer_tiers) AS bac_dai_ly, (SELECT count(*) FROM missions) AS nhiem_vu"
+```
+
+Kỳ vọng: `chu_de ≥ 7`, `quiz ≥ 43`, `loai_cay ≥ 10`, `mau_tin ≥ 100`, `moc_quy = 1`. Lệnh này chỉ tạo dòng thiếu nên số thấp hơn mức trên mới là lỗi: chạy lại lệnh một lần, vẫn thấp thì DỪNG. Số CAO HƠN không phải lỗi: trên DB bản thử cũ (đã từng chạy `prisma:seed`) `quiz` có thể là 49 (kèm 6 quiz thương hiệu cũ) và `mau_tin` hơn 100. DB mới hoàn toàn thì `quiz = 43`, `mau_tin = 100`. Với ba cột cuối: DB mới hoàn toàn sau lệnh không cờ là `hang = 0`, `bac_dai_ly = 0`, `nhiem_vu = 0` (đúng ý, xem trên); sau lệnh có cờ là `hang ≥ 4`, `bac_dai_ly ≥ 4`, `nhiem_vu ≥ 4`; trên DB bản thử cũ ba cột này đã là 4 từ trước do seed cũ nạp sẵn.
+
+Trên DB bản thử cũ, kiểm thêm chủ đề cộng đồng cây cảnh của bản đầu còn bật (lệnh này chỉ tạo dòng thiếu nên không ẩn chúng; trên DB mới không có dòng nào):
+
+```bash
+psqlq -c "SELECT slug, name FROM community_categories WHERE \"isActive\" AND slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Có dòng nào thì ẩn bằng SQL (chưa có màn admin; chỉ ẩn khỏi danh sách chọn và lọc, không xoá nên bài đã đăng giữ nguyên nhãn cũ):
+
+```bash
+psqlq -c "UPDATE community_categories SET \"isActive\" = false WHERE slug IN ('cham-soc','sau-benh','phoi-canh','khoe-vuon')"
+```
+
+Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng và bậc đại lý chưa có màn sửa (sửa bằng SQL, lần chạy sau không ghi đè).
+
+### Bước 7c. Dọn dữ liệu demo (API vẫn đang dừng)
+
+Migration `20260616000000_demo_catalog_multibrand` nạp vào MỌI DB mới 44 sản phẩm và 48 biến thể demo (giá giả, khách đặt được, đơn đẩy sang Pancake sẽ lỗi) cùng 3 mã giảm giá công khai còn hạn tới 31/12/2026 mà chủ dự án chưa duyệt: `WELCOME30` (giảm 30.000đ cho đơn từ 199.000đ, 1 lượt mỗi khách, không giới hạn tổng), `FREESHIP` (đơn từ 99.000đ, 3 lượt mỗi khách), `XANH10` (giảm 10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt mỗi khách). Bản thử trên VPS đã áp migration này từ tháng 6, nên dữ liệu đó có thể đang nằm trên PROD; DB dựng mới chắc chắn có. Làm bước này ở mọi lần deploy cho tới khi `db.demo_products` và `db.demo_coupons` đều PASS. Chạy lại an toàn: không còn gì để đổi thì không đổi gì.
+
+DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng tên do seed tạo: id khác, hạn tới 01/01/2027, cùng điều kiện như trên. Lệnh dọn và go-live check coi chúng là mã demo (nhận theo mã và điều kiện), xem trước ghi `[do seed tạo]`. DB như vậy còn dữ liệu demo khác mà lệnh này KHÔNG dọn: nhiệm vụ (`missions`), câu đố (`game_quizzes`), merchant hoàn tiền (`cashback_merchants`), mục tiêu cộng đồng, mùa giải, loài cây, cấp đại lý, mẫu thông báo do `prisma/seed.ts` tạo. Thấy `[do seed tạo]` ở mục 4 thì báo tech lead rà các bảng đó ở Quản trị trước khi mở bán.
+
+1. Xem trước (không ghi gì):
+
+   ```bash
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo 2>&1 | tee .demo-cleanup-preview.txt
+   ```
+
+   Lệnh đi qua `tee` nên mã thoát là của `tee`: đọc chữ in ra, không dựa vào mã thoát. Kỳ vọng: dòng bắt đầu bằng `DB:` là `DB: postgres:5432/<tên DB PROD>` (pnpm in vài dòng tiêu đề trước dòng đó); mục 1 và 2 nêu số sản phẩm, biến thể sẽ tắt (DB mới: 44 và 48); mục 3 nêu những dòng đang trỏ tới hàng demo (đơn, giỏ, đánh giá, gian hàng, giờ vàng): chúng giữ nguyên, chỉ để biết; mục 4 nêu 3 mã và trạng thái; mục 5 nêu danh mục nào sẽ trống. Dán kết quả vào nhóm chat.
+   - In câu "DB này không có dữ liệu demo" (thay cho kế hoạch) nghĩa là không còn sản phẩm, biến thể hay mã demo nào (kể cả mã do seed tạo): sang bước 8.
+   - DB chỉ còn mã do seed tạo (mục 1 và 2 báo `tìm thấy 0/44`, `0/48`, mục 4 có `[do seed tạo]`): lệnh vẫn in kế hoạch, làm tiếp điểm 2 và 3 để quyết các mã đó.
+   - Mục 4 có dòng `[ĐIỀU KIỆN ĐÃ SỬA so với bản demo …]`: đúng là dòng migration tạo nhưng ai đó đã sửa điều kiện (vd WELCOME30 lên 50.000đ để dùng thật). Lệnh vẫn coi là mã demo và `--coupons=expire` vẫn tắt. Hỏi chủ shop: là mã thật thì thêm `--keep-coupon=<mã>` ở điểm 3 và `GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ở bước 10.
+   - Mục 4 có dòng `KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác`: mã đó không phải bản demo (chủ shop tạo hoặc đã sửa điều kiện), lệnh dọn không tắt nó dù có `--coupons=expire`. Chủ shop mở Quản trị, Mã giảm giá, xem điều kiện: giữ thì go-live bước 10 ra WARN nêu đúng tên mã đó; không giữ thì tắt tay ở Quản trị.
+   Điểm dừng: dòng `DB:` không phải DB PROD; hoặc mục 3 có `dòng đơn hàng` lớn hơn 0 mà chưa ai biết đó là đơn gì (khách thật đặt hàng demo: báo chủ shop trước khi tắt); hoặc mục 1 có `KIỂM TAY TRƯỚC KHI APPLY` (sản phẩm demo có người sửa sau khi nạp). Với dòng cuối: đưa danh sách tên cho chủ shop. Không ai dùng các sản phẩm đó làm hàng thật thì làm tiếp; có thì chưa chạy `--apply`, báo tech lead (lệnh dọn không bỏ qua từng sản phẩm).
+
+2. Về 3 mã: chủ dự án đã chốt (A4, 2026-10-18) GIỮ CẢ BA (`WELCOME30`, `FREESHIP`, `XANH10`) cho đợt ra mắt, nên làm đúng lệnh (c) ở điểm 3, KHÔNG thêm `--coupons=expire` (mặc định `--coupons=keep` đã giữ cả ba; `--keep-coupon` chỉ dùng kèm `--coupons=expire`, và `--coupons=expire --keep-coupon=WELCOME30,FREESHIP,XANH10` cũng cho kết quả giống hệt). Hai phương án (a) tắt cả ba và (b) giữ một phần chỉ dùng nếu chủ dự án đổi ý sau này. Lưu ý đã được chủ dự án chấp nhận: hệ thống tự tặng mỗi khách mới một mã chào mừng riêng 30.000đ cho đơn từ 199.000đ (cấu hình `voucher.welcome_amount`, `voucher.welcome_min_order`); giữ thêm `WELCOME30` thì khách mới được giảm chào mừng hai lần, mỗi mã một đơn. Mã demo nào ngoài ba mã này (nếu bản xem trước báo) vẫn phải được quyết như cũ.
+
+3. Thực hiện (một transaction: lỗi thì không đổi gì). Trước khi chạy: `ls .demo-cleanup-apply.txt` phải báo không có file. Có file (của lần deploy trước) thì đổi tên nó (`mv .demo-cleanup-apply.txt .demo-cleanup-apply.$(date +%Y%m%d%H%M).txt`), KHÔNG để `tee` ghi đè: file đó chứa khối hoàn tác. Chọn đúng một dòng theo quyết định ở điểm 2 (đã chốt: dòng (c)). `--expect-db` bắt buộc: lệnh so với tên DB mà API đang nối, khác nhau thì in `--expect-db=… khác DB đang nối (…)`, không làm gì; khi đó dừng, kiểm lại `.env`.
+
+   ```bash
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" --coupons=expire 2>&1 | tee .demo-cleanup-apply.txt                          # (a)
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" --coupons=expire --keep-coupon=WELCOME30 2>&1 | tee .demo-cleanup-apply.txt  # (b) giữ WELCOME30
+   $DC run --rm --no-deps -T api pnpm run prisma:cleanup-demo -- --apply --expect-db="$PGDB" 2>&1 | tee .demo-cleanup-apply.txt                                           # (c) ĐÃ CHỐT: giữ cả ba mã
+   ```
+
+   Kỳ vọng: in lại kế hoạch, rồi `Đã tắt 44 sản phẩm, 48 biến thể; đổi 48 SKU sang DEMO-<sku>; đã tắt N mã giảm giá.` (N = 3 với (a), 2 với (b), 0 với (c)). Sản phẩm, biến thể chỉ bị tắt, không bị xoá; đơn, đánh giá cũ vẫn mở được. SKU demo đổi thành `DEMO-<sku>` (vd `DEMO-FUWA-DW-1L`) để hàng thật trên Pancake cùng SKU đồng bộ được (SKU là duy nhất trong DB). Cuối kết quả có khối `-- HOÀN TÁC` (các câu SQL đưa đúng những dòng vừa đổi về như cũ, gồm hạn cũ của từng mã); file `.demo-cleanup-apply.txt` giữ khối đó, không xoá, không ghi đè file này. Kiểm chạy lại: dùng đúng lệnh vừa chạy nhưng `tee` sang file KHÁC, vd thay `tee .demo-cleanup-apply.txt` bằng `tee .demo-cleanup-rerun.txt`. Kết quả phải in `Đã tắt 0 sản phẩm, 0 biến thể` và `-- HOÀN TÁC: lần chạy này không đổi dòng nào.` Lỡ tee lần chạy lại vào `.demo-cleanup-apply.txt` thì khối hoàn tác thật đã mất: báo tech lead ngay (hoàn tác khi đó phải dựng tay từ bản xem trước `.demo-cleanup-preview.txt`).
+
+   Nhìn nhanh (go-live check ở bước 10 mới là phép đối chiếu đúng danh sách):
+
+   ```bash
+   psqlq -c "SELECT count(*) FILTER (WHERE \"isActive\") AS demo_dang_ban, count(*) AS demo_tong FROM products WHERE \"pancakeId\" LIKE 'seed-%'"
+   psqlq -c "SELECT code, \"isActive\", \"endAt\" FROM coupons WHERE code IN ('WELCOME30','FREESHIP','XANH10') ORDER BY code"
+   ```
+
+   Kỳ vọng: `demo_dang_ban = 0`; ba mã đúng như quyết định ở điểm 2.
+
+   Sau bước này khách không còn thấy hay mua được hàng demo ở: catalog, tìm kiếm, trang sản phẩm, danh mục, trang nhãn, gian hàng, sitemap, yêu thích, giờ vàng (đang chạy và sắp tới, nút "Nhắc tôi"), mua chung (danh sách và nút tham gia), giỏ và thanh toán, các tin nhắc (giờ vàng bắt đầu, giảm giá cho người yêu thích, nhắc mua lại, mời đánh giá, giỏ bỏ quên), chip sản phẩm trên bài cộng đồng cũ. Đã biết, chưa sửa (không ai mua được hàng demo qua các chỗ này):
+   - Ví mã của khách vẫn liệt kê mã mua chung đã cấp cho sản phẩm demo (nếu bản thử từng có nhóm thành công); mã không dùng được vì sản phẩm không vào giỏ được.
+   - Lịch sử đơn vẫn hiện dòng hàng demo của đơn cũ, ghi "ngừng bán"; gói định kỳ trên hàng demo báo ngừng bán ở kỳ sau (mục 3 của bản xem trước nêu số gói, CSKH xử lý tay).
+   - API `GET /products/<slug>/reviews` vẫn trả đánh giá cũ của sản phẩm demo; trang sản phẩm đã 404 nên khách không tới đó.
+   - Trần số nhóm mua chung mở mỗi khách (`groupbuy.max_open_per_user`) chỉ đếm nhóm trên hàng đang bán. Nếu sau này bật lại một sản phẩm đã tắt, các nhóm cũ còn hạn của nó hiện lại, và một khách có thể tạm vượt trần cho tới khi các nhóm đó hết hạn (tối đa `groupbuy.window_hours`).
+   - Trang nhãn, yêu thích, bài cộng đồng (gắn sản phẩm khi đăng) và lời nhắc CTV chỉ lọc `isActive`, chưa lọc trạng thái duyệt: không ảnh hưởng hàng demo (đã tắt), là việc riêng cho hàng đối tác chờ duyệt.
+
+   Lỡ tay (vd tắt nhầm mã chủ shop muốn giữ): một mã thì bật lại và sửa hạn ở Quản trị, Mã giảm giá, lấy hạn cũ trong khối `-- HOÀN TÁC` của `.demo-cleanup-apply.txt`. Cần đưa cả sản phẩm, biến thể về (Quản trị không có nút bật lại hàng kho Tubu): chỉ tech lead làm, chạy nguyên khối từ `BEGIN;` tới `COMMIT;` trong file đó:
+
+   ```bash
+   sed -n '/^BEGIN;$/,/^COMMIT;$/p' .demo-cleanup-apply.txt > .demo-cleanup-undo.sql
+   cat .demo-cleanup-undo.sql      # đọc lại trước khi chạy
+   psqlq -v ON_ERROR_STOP=1 < .demo-cleanup-undo.sql
+   ```
+
+   Nếu từ lúc dọn tới lúc hoàn tác, đồng bộ Pancake đã tạo biến thể thật mang SKU gốc (vd `FUWA-DW-1L`), câu gỡ tiền tố `DEMO-` vấp ràng buộc unique của `variations.sku`: psql báo `duplicate key value violates unique constraint "variations_sku_key"`, và vì `ON_ERROR_STOP=1` cả khối dừng trước `COMMIT`, không dòng nào đổi (an toàn). Khi đó tech lead xử lý tay: bỏ câu `UPDATE "variations" SET "sku" = substr(...)` khỏi `.demo-cleanup-undo.sql` (biến thể demo giữ tiền tố `DEMO-`, hàng thật giữ SKU gốc) rồi chạy lại, hoặc gỡ tiền tố riêng cho từng biến thể không trùng.
+
+   Không khôi phục bản backup ở bước 6 để hoàn tác bước này: dump đó có trước migration ở bước 7, khôi phục là lùi cả lần deploy (xem mục rollback).
+
 ### Bước 8. Bật web mới
 
 ```bash
@@ -460,7 +738,7 @@ Ghi giờ kết thúc: khách đã đặt hàng được lại từ lúc này. T
 $DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
 ```
 
-Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). Dán kết quả vào nhóm chat.
+Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (ba mã `WELCOME30`, `FREESHIP`, `XANH10` luôn được tính là đã duyệt vì chủ dự án giữ chúng cho đợt ra mắt, không cần đặt gì; mã demo khác mà chủ shop duyệt giữ thì chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.
 
 Một FAIL sửa được ngay mà không cần quay lại: `db.refill_location` ("chưa có điểm nhận vỏ nào"). Migration `20261015070000` chỉ chuyển địa chỉ cũ `refill.pickup_address` thành điểm đầu tiên khi địa chỉ đó đã có; PROD chưa từng điền thì bảng rỗng và khách không có chỗ mang vỏ tới. Thêm ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ rồi chạy lại lệnh trên. Các FAIL khác về cấu hình (`db.bank_account`, `db.admin_user`...) cũng sửa ở Quản trị hoặc `.env` rồi chạy lại; chỉ FAIL migration hoặc API không lên mới là lý do cân nhắc quay lại (mục 7).
 
@@ -479,6 +757,8 @@ curl -s -o /dev/null -w 'gomdon-webhook-khong-token %{http_code}\n' -X POST http
 $DC exec -T redis redis-cli config get maxmemory-policy
 $DC logs --since 10m api | grep -iE 'chạy cron|error' | head
 ```
+
+Một lệnh thay cho phần `curl` đầu: `bash ops/check-edge.sh --local` (trên máy chủ) in `OK`/`WARN`/`FAIL` cho health, nén, cache, chứng chỉ, đĩa, container `unhealthy` và bản backup mới nhất; không được có `FAIL` (xem `--help`).
 
 Kỳ vọng: `health` có `"db":"up","redis":"up"`; `config/public` 200; `web` 200; hai webhook không kèm token đều trả **401** (chứng tỏ đường vào tồn tại và từ chối người lạ; không gửi dữ liệu thật); Redis `noeviction`; log có đúng một dòng `Instance ... chạy cron.` và không có `error` lặp.
 
@@ -507,10 +787,23 @@ Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã 
 
 ### Bước 14. Theo dõi 24 giờ
 
-- [ ] Sáng hôm sau: `tail /var/log/tubutree-backup.log` thấy backup 02:00 thành công, `rclone ls <remote>:<thư mục> | tail -3` thấy file mới, healthcheck xanh.
+- [ ] Sau tối đa 6 giờ: `tail /var/log/tubutree-backup.log` thấy backup theo cron thành công (không có dòng `WARN`), `rclone ls <remote>:<thư mục> | tail -3` thấy file mới, healthcheck xanh.
 - [ ] Chạy lại `go-live:check` (không kèm `--phase`).
 - [ ] Màn Sức khoẻ hệ thống: không còn dòng đỏ tồn quá 1 giờ.
 - [ ] Làm [pilot-order-playbook.md](pilot-order-playbook.md) (đơn thử thật) trước khi mở bán rộng.
+
+### Bước 15. Bắt payload thật của đơn ngoài app (làm ngay sau khi lên bản mới, không chặn deploy)
+
+Lưu ý B6/B9 (chủ dự án đọc trước khi lên bản): (a) từ lúc deploy, `pancake.external_capture_enabled` (mặc định `true`) lưu các đơn Pancake không đặt trong app vào `external_orders` KÈM SĐT đầy đủ của người mua; (b) khi bật B9 (`loyalty.chat_order_points_enabled`), bước bù `backfillChatClaims` (`apps/api/src/modules/external-points/external-chat.claim.ts`) tạo claim cho các đơn chat đã lưu trong vòng `loyalty.marketplace_claim_max_age_days` ngày gần nhất (mặc định 60), nên chủ dự án quyết số ngày này trước khi bật. Ngoài ra migration `20261018180000` đặt `coupons.createdAt` bằng thời điểm migrate cho mọi mã có sẵn (ngân sách ngày của nhân viên tính theo cột này).
+
+Từ bản này API lưu mọi đơn Pancake không đặt trong app (đơn sàn Shopee/Lazada/TikTok, đơn chat, đơn gọi điện) vào bảng `external_orders` và hiện ở tab "Đơn ngoài app". Chưa cộng điểm cho đơn nào. Cách nhận biết đơn đang theo tên field trong tài liệu Pancake POS, CHƯA đối chiếu với payload webhook thật, nên cần vài đơn thật để chốt. Cờ `pancake.external_capture_enabled` (tab Cấu hình, nhóm pancake) mặc định bật; đặt `false` nếu cần dừng lưu đơn ngay.
+
+1. Tạo (hoặc chờ có) ít nhất: 1 đơn Shopee, 1 đơn Lazada, 1 đơn TikTok, 1 đơn CSKH qua Facebook hoặc Zalo, 1 đơn gọi điện, 1 đơn đặt trong app, và 1 đơn bán tại quầy nếu quầy dùng Pancake POS. Theo dõi từng đơn tới khi đã giao; thêm 1 đơn bị hoàn và 1 đơn bị huỷ.
+2. Mở tab "Đơn ngoài app" ở web admin (ADMIN, hoặc CSKH để chỉ xem). Đơn mỗi loại phải xuất hiện, mã vận đơn và SĐT (đã che) đúng, "Tiền hàng" khớp số trên Pancake. "Tiền hàng: chưa tính được" nghĩa là payload thiếu hoặc lệch số, ghi lại đơn đó.
+3. Xem bảng "Nguồn đã thấy" cùng tab: mỗi dòng là một khoá `order_sources | account | marketplace_id` kèm số đơn và loại đang xếp. Đơn sàn phải ra "Đơn sàn · shopee/lazada/tiktok". Khoá của đơn chat hoặc điện thoại đang ra "Chưa biết nguồn" là bình thường: chép khoá đó vào `pancake.order_source_map`, mục `chatSources` (tab Cấu hình). Chỉ chép khoá của nguồn chat/điện thoại thật; khoá của quầy (nếu quầy dùng Pancake) thì KHÔNG chép, để không cộng điểm hai lần sau này. Đơn sàn có `marketplace_id` khác -3, -4, -9 thì thêm vào `marketplaceIds` (ví dụ `{"-3":"shopee","-4":"lazada","-9":"tiktok"}`). Đơn đã lưu trước khi sửa bản đồ giữ loại cũ cho tới khi Pancake gửi cập nhật mới của chính đơn đó.
+4. Lấy payload thô để làm dữ liệu kiểm thử: nút "Xem payload Pancake" chỉ cho bản đã lọc (không có SĐT, tên, địa chỉ, ghi chú, vì bảng này không bị xoá theo hạn như log webhook). Payload đầy đủ lấy từ `pancake_webhook_events.rawPayload` (còn trong 90 ngày, chỉ khi chủ dự án cho phép đọc PROD) hoặc `GET /orders/{id}`; chép nội dung, XOÁ tên, SĐT, địa chỉ rồi lưu vào `apps/api/test/fixtures/pancake/<tên-mô-tả>.json` (bỏ chữ `synthetic` trong tên file, đây là file thật). Chỉ làm khi chủ dự án cho phép đọc dữ liệu PROD. Chụp thêm `GET /orders/{id}` của cùng đơn từ Pancake để so.
+5. Việc cần xác nhận bằng payload thật (ghi kết quả vào nhóm chat): (a) Pancake có gửi webhook cho đơn sàn không, và có gửi lại khi đơn đã giao hoặc hoàn không; (b) mã vận đơn nằm ở field nào (`partner.extend_code`, `tracking_number`, `order_number_vtp`, `invoice_info_list[].order_sn`); (c) `status_history[].updated_at` theo giờ nào (bản này đọc là giờ Việt Nam +07:00); (d) đơn app có mang `custom_id` hoặc tag `MINIAPP`/`WEB` không (nếu không, đơn app chưa khớp có thể bị lưu nhầm là đơn ngoài); (e) quầy có dùng Pancake POS không.
+6. Rồi giao cho agent: sửa `pancake.order_source_map` nếu cần và viết test ánh xạ theo fixture thật.
 
 ## 6. Gọi ai và khi nào
 
@@ -547,6 +840,7 @@ cat .pending-migrations
 
 - p8 (`20261014003831_p8_seller_merchant_fulfilment`) đổi hoa hồng PAID của lệnh rút REQUESTED hoặc APPROVED về APPROVED, cho `products.pancakeId` và `variations.pancakeId` cho phép NULL và đặt NULL cho mã `MCH_`: code cũ khai báo cột này là chuỗi bắt buộc và duy nhất nên đọc các dòng đó bị lỗi.
 - PD-3 quy đổi số dư xu về 0 và thêm ràng buộc `coinsBalance = 0`: code cũ vẫn ghi xu sẽ bị từ chối, và số dư xu đã bị đổi thành điểm không tự quay lại.
+- `20261018210000_points_1d` nhân 1.000 mọi số điểm: image cũ đọc số điểm theo đơn vị cũ nên giá quà, trần và số dư sai nghiêm trọng. Hoàn tác = khôi phục backup trước migrate (7.3); không quay image, không có script đảo ngược.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
 
 Vì vậy: danh sách chờ áp có migration ngoài năm cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.

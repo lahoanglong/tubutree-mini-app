@@ -1,11 +1,18 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
+import type { JwtPayload } from '@tubutree/shared-types';
 import { Throttle } from '@nestjs/throttler';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
+import { AllowStaff, COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
+import { EVENT_REWARD_MAX_POINTS } from './community-limits';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
@@ -50,9 +57,9 @@ export class CreateEventDto {
   @OptionalNotNull() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
-  // Điểm Xanh (1 điểm = 1.000đ). Trần 1.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
+  // Điểm Xanh (1 điểm = 1đ). Trần 1.000.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
   // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
-  @OptionalNotNull() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(EVENT_REWARD_MAX_POINTS) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;
@@ -80,6 +87,14 @@ export class CommunityFeedController {
     return this.feed.getCategories();
   }
 
+  // Xem trước công khai cho khách chưa đăng nhập (cờ community.public_preview, tắt thì 404). Literal path: khai TRƯỚC @Get(':id').
+  @Public()
+  @PublicCache('USER_CONTENT')
+  @Get('public-preview')
+  publicPreview() {
+    return this.feed.publicPreview();
+  }
+
   // Literal path (leaderboard) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
   @Get('leaderboard')
   leaderboard() {
@@ -87,13 +102,31 @@ export class CommunityFeedController {
   }
 
   // Admin (literal paths) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
+  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn/ghim, báo cáo) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop;
+  // sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
   @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/pending')
   adminPending() {
     return this.feed.adminPending();
   }
 
   @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
+  @Get('admin/published')
+  adminPublished(@Query() query: CursorPageQuery) {
+    return this.feed.adminPublished(query.take ? Number(query.take) : undefined, query.cursor);
+  }
+
+  @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
+  @Get('admin/unanswered')
+  adminUnanswered() {
+    return this.feed.adminUnanswered();
+  }
+
+  @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/reports')
   adminReports() {
     return this.feed.adminReports();
@@ -146,6 +179,40 @@ export class CommunityFeedController {
   @Post('events/:id/winner')
   pickWinner(@Param('id') id: string, @Body() dto: PickWinnerDto) {
     return this.feed.pickWinner(id, dto.userId);
+  }
+
+  /**
+   * Ảnh base64 của bài (danh sách/chi tiết trả đường dẫn này thay vì nhúng nguyên văn). Công khai về mặt route vì thẻ img không
+   * gửi được token, nhưng nhận ra người xem nếu có Bearer: quyền xem theo trạng thái bài nằm ở service. Cache chỉ ở trình
+   * duyệt (`private`, như ảnh minh chứng đổi trả) để bài bị gỡ không còn nằm ở CDN dùng chung: vĩnh viễn khi mã `v` khớp
+   * nội dung ảnh hiện tại, 5 phút khi `v` sai/thiếu (URL không gắn với nội dung); bài chưa/không còn hiển thị thì không
+   * lưu. helmet đặt Cross-Origin-Resource-Policy: same-origin mặc định; miniapp và web khác origin nạp ảnh bằng thẻ img nên
+   * route này phải mở cross-origin. Khai báo TRƯỚC `@Get(':id')` cho cùng nhóm route cố định.
+   */
+  // Một trang feed là 20 ảnh tải bằng thẻ img, không có token nên đếm theo IP: mức chung 300/phút làm khách chung IP (CGNAT)
+  // bị 429 và vỡ ảnh. Chỉ nâng riêng cho route này.
+  @Throttle({ default: { limit: 1200, ttl: 60_000 } })
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('posts/:id/images/:index')
+  async image(
+    @Param('id') id: string,
+    @Param('index', ParseIntPipe) index: number,
+    @Query('v') version: unknown,
+    @CurrentUser() user: JwtPayload | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { mime, data, isPublic, versionOk } = await this.feed.getImage(id, index, user, version);
+    res.set({
+      'Cache-Control': !isPublic
+        ? 'private, no-store'
+        : versionOk
+          ? 'private, max-age=31536000, immutable'
+          : 'private, max-age=300',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(data, { type: mime });
   }
 
   @Get(':id')
@@ -219,24 +286,36 @@ export class CommunityFeedController {
   }
 
   @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/approve')
   approve(@Param('id') id: string) {
     return this.feed.approvePost(id);
   }
 
   @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/reject')
   reject(@Param('id') id: string, @Body() dto: RejectPostDto) {
     return this.feed.rejectPost(id, dto?.reason);
   }
 
+  /** Ẩn bài đã đăng kèm lý do (tác giả được báo). `DELETE /feed/:id` vẫn dành cho chủ bài và ADMIN. */
   @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
+  @Post('admin/:id/hide')
+  hide(@Param('id') id: string, @Body() dto: RejectPostDto) {
+    return this.feed.hidePost(id, dto?.reason);
+  }
+
+  @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/reports/:id/resolve')
   resolveReport(@Param('id') id: string) {
     return this.feed.resolveReport(id);
   }
 
   @Roles('ADMIN')
+  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/pin')
   pin(@Param('id') id: string, @Body() body: PinDto) {
     return this.feed.pinPost(id, body?.pinned !== false);

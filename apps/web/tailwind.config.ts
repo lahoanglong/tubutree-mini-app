@@ -62,10 +62,10 @@ const legacyV1Colors = {
   },
 };
 
-// Màu khuyến mãi theo token --color-promo-* (tokens.css). Đọc thẳng từ clay của preset để không lệch
+// Màu khuyến mãi theo token --color-promo-* (tokens.css). Đọc thẳng từ orange (cam logo) của preset để không lệch
 // hex, và đặt tên riêng vì `clay-*` của web bị khối legacy ghi đè (xem chú thích trên).
-const presetClay = (tailwindPreset.theme?.extend?.colors as unknown as { clay: Record<number, string> }).clay;
-const promo = { fg: presetClay[700]!, bg: presetClay[50]!, solid: presetClay[600]! };
+const presetOrange = (tailwindPreset.theme?.extend?.colors as unknown as { orange: Record<number, string> }).orange;
+const promo = { fg: presetOrange[800]!, bg: presetOrange[50]!, solid: presetOrange[500]! };
 
 // Màu trạng thái (lỗi/cảnh báo/thành công/thông tin) theo token --color-status-* của tokens.css. Preset không
 // có tên cho nhóm này, và các thang `red/amber/green/emerald` của Tailwind không thuộc DS v2 nên trang

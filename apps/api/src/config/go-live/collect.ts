@@ -7,6 +7,7 @@ import { Queue } from 'bullmq';
 import { COD_MAX_PER_ORDER } from '../../modules/checkout/checkout-split';
 import { parseCronBackup, type BackupSnapshot } from './backup-checks';
 import { CONFIG_KEYS_OF_INTEREST, type DbSnapshot } from './db-checks';
+import { collectDemoData } from './demo-data-checks';
 import { EXPECTED_QUEUES, type QueueSnapshot, type RedisSnapshot } from './redis-checks';
 import { describeError } from './secrets';
 import type { Env } from './types';
@@ -75,6 +76,7 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         pendingAdminGrants: await count('role_grants', `"role" = 'ADMIN' AND "revokedAt" IS NULL`),
         znsTemplates,
         codMaxPerOrder: COD_MAX_PER_ORDER,
+        demoData: (await exists('products')) && (await exists('coupons')) ? await collectDemoData(tx) : undefined,
       } satisfies DbSnapshot;
     },
     { timeout: 30_000, maxWait: 10_000 },

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { safeAreaPadX } from '@/lib/safe-area';
 import { INPUT_CLASS } from './ui';
 
 export interface ConfirmOptions {
@@ -13,7 +14,18 @@ export interface ConfirmOptions {
   /** danger = thao tác không hoàn tác được (huỷ đơn, từ chối rút tiền...): nút xác nhận màu đỏ. */
   tone?: 'default' | 'danger';
   /** Có thì hộp thoại kèm ô nhập lý do (dùng qua `ask`, thay cho window.prompt). */
-  input?: { label: string; placeholder?: string; maxLength?: number; required?: boolean };
+  input?: {
+    label: string;
+    placeholder?: string;
+    maxLength?: number;
+    required?: boolean;
+    /** Trả câu lỗi (hiện dưới ô, khoá nút xác nhận) hoặc null khi hợp lệ. */
+    validate?: (text: string) => string | null;
+    /** Nội dung điền sẵn khi mở lại hộp sau một lỗi từ máy chủ. */
+    initial?: string;
+    /** Lỗi từ máy chủ hiện ngay trong hộp (mở lại hộp để người dùng sửa). */
+    error?: string;
+  };
 }
 
 const DEFAULT_INPUT_MAX = 500;
@@ -72,10 +84,11 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const acceptRef = useRef<HTMLButtonElement>(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(options.input?.initial ?? '');
   const danger = options.tone === 'danger';
   const input = options.input;
-  const blocked = !!input?.required && text.trim().length === 0;
+  const invalid = input?.validate?.(text) ?? null;
+  const blocked = (!!input?.required && text.trim().length === 0) || invalid !== null;
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -107,6 +120,7 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
       data-confirm-backdrop
       onClick={() => onAnswer(false)}
       className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-900/40 p-4 sm:items-center"
+      style={safeAreaPadX('1rem')}
     >
       <div
         role="alertdialog"
@@ -138,6 +152,11 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
               onChange={(e) => setText(e.target.value)}
               className={`${INPUT_CLASS} w-full`}
             />
+            {(invalid ?? input.error) && (
+              <p role="alert" data-input-error className="mt-1 text-xs text-danger-fg">
+                {invalid ?? input.error}
+              </p>
+            )}
           </div>
         )}
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

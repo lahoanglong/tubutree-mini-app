@@ -6,6 +6,7 @@ import { NAV_TABS, isRootPath, type NavTab } from './nav-config';
 import { Icon } from './ui/icon';
 import { Text } from './ui/text';
 import { CountBadge } from './ui/cart-badge';
+import { GardenHintBubble } from './garden-hint-bubble';
 
 /**
  * Tab bar 5 tab (spec 4a.1): Trang chủ · Danh mục · Vườn Xanh (nút tròn nổi giữa) · Đơn hàng
@@ -42,6 +43,7 @@ export default function BottomNav() {
         zIndex: 100,
       }}
     >
+      <GardenHintBubble onGardenTab={pathname === '/game'} />
       {NAV_TABS.map((t) => {
         const active = pathname === t.path;
         const count = t.badge === 'active-orders' ? activeOrders : 0;

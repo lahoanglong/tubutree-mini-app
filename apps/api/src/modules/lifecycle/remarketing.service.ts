@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate } from '../../common/vn-time';
+import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 
 /** Khung giờ nhắc giỏ bỏ quên — admin-config-rules so chéo hai khoá này (và mặc định) lúc ghi. */
 export const CART_ABANDON_MIN_HOURS_KEY = 'remarketing.cart_abandon_min_hours';
@@ -55,9 +56,10 @@ export class RemarketingService {
       const carts = await this.prisma.cart.findMany({
         where: {
           updatedAt: { lte: new Date(now - minH * 3600e3), gte: new Date(now - maxH * 3600e3) },
-          items: { some: {} },
+          // Giỏ chỉ còn hàng ngừng bán: nhắc thì khách mở giỏ chỉ thấy "đã ngừng bán".
+          items: { some: { variation: SELLABLE_VARIATION_WHERE } },
         },
-        include: { items: { include: { variation: { include: { product: true } } } } },
+        include: { items: { where: { variation: SELLABLE_VARIATION_WHERE }, include: { variation: { include: { product: true } } } } },
         take: 200,
       });
 

@@ -2,6 +2,16 @@
 
 import { apiDownload, apiFetch } from './client-api';
 import type { GomdonAlertView } from './recycling';
+import type {
+  AdminExternalAttemptListResponse,
+  AdminExternalClaimListResponse,
+  AdminAttachAttemptResponse,
+  AdminExternalClaimAttentionFilter,
+  AdminExternalClaimDetail,
+  AdminExternalClaimRow,
+  AdminReverseClaimResponse,
+  ExternalClaimState,
+} from '@tubutree/shared-types';
 
 export interface DealerApp {
   id: string;
@@ -81,6 +91,9 @@ export interface AdminOrder {
   pointsUsed?: number;
   /** true = CTV lên đơn hộ khách cuối: tiền huỷ/trả hoàn cho khách cuối, không hoàn cho CTV (OrderReversalService.refundEndCustomer). */
   placedForCustomer?: boolean;
+  /** CTV được ghi công / gian hàng giới thiệu — có thì chi tiết đơn tải khối "Giới thiệu & hoa hồng". */
+  referrerUserId?: string | null;
+  storefrontId?: string | null;
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
@@ -373,8 +386,31 @@ export const markReturnReceived = (id: string) =>
   apiFetch<AdminReturnRequest>(`/admin/return-requests/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
 
 // ── Nhập giá đại lý B2B & số lượng bán ngoài ──
+export type DealerPriceImportStatus = 'OK' | 'UNCHANGED' | 'NOT_FOUND' | 'INVALID' | 'OUT_OF_RANGE' | 'DUPLICATE';
+export interface DealerPricePreview {
+  tierId: string;
+  rows: {
+    line: number;
+    sku: string;
+    input: string;
+    status: DealerPriceImportStatus;
+    price: number | null;
+    currentPrice: number | null;
+    retailPrice: number | null;
+    productName: string | null;
+    variationName: string | null;
+    message: string | null;
+  }[];
+  counts: Record<DealerPriceImportStatus, number>;
+  blocking: number;
+  canApply: boolean;
+}
+/** Xem trước bảng giá sỉ: BE đọc số tiền kiểu Việt Nam (185.000, 240,000), kiểm sàn chiết khấu đại lý và giá lẻ, không ghi gì. */
+export const previewDealerPrices = (tierId: string, csv: string) =>
+  apiFetch<DealerPricePreview>('/admin/dealer-prices/import/preview', { method: 'POST', body: { tierId, csv } });
+/** Còn dòng lỗi thì BE trả 400 và không ghi dòng nào; `skipped` = dòng không đổi + SKU không khớp. */
 export const importDealerPrices = (tierId: string, csv: string) =>
-  apiFetch<{ updated: number; skipped: number; notFound: string[] }>('/admin/dealer-prices/import', {
+  apiFetch<{ updated: number; unchanged: number; skipped: number; notFound: string[] }>('/admin/dealer-prices/import', {
     method: 'POST',
     body: { tierId, csv },
   });
@@ -416,6 +452,26 @@ export type RecyclingFilter = 'attention' | 'all';
 export type InvoiceFilter = 'pending' | 'issued' | 'all';
 /** attention = hàng đợi "Cần xử lý Pancake"; unsynced = đơn còn trong kho mà chưa lên Pancake. */
 export type PancakeFilter = 'attention' | 'unsynced';
+/** retail = đơn lẻ; ctv = có mã người giới thiệu; dealer = đơn đại lý; ctv_assisted = CTV lên đơn hộ; storefront = qua gian hàng. */
+export type OrderKind = 'retail' | 'ctv' | 'dealer' | 'ctv_assisted' | 'storefront';
+export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
+export type OrderListPlatform = 'miniapp' | 'web';
+/** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
+export interface OrderListExtra {
+  kind?: OrderKind;
+  payment?: OrderPaymentFilter;
+  platform?: OrderListPlatform;
+  referrerUserId?: string;
+  storefront?: string;
+  order?: 'asc' | 'desc';
+}
+/** Bộ lọc cho file CSV: bỏ thứ tự sắp xếp (file xuất không nhận `order`, API từ chối tham số lạ). */
+export const orderExtraFilters = ({ order: _order, ...filters }: OrderListExtra) => filters;
+const orderExtraQuery = (extra: OrderListExtra = {}) =>
+  (Object.entries(extra) as [string, string | undefined][])
+    .filter(([, v]) => v)
+    .map(([k, v]) => `&${k}=${encodeURIComponent(v!)}`)
+    .join('');
 export const listOrders = (
   page = 1,
   status?: string,
@@ -426,11 +482,12 @@ export const listOrders = (
   pancake?: PancakeFilter,
   from?: string,
   to?: string,
+  extra?: OrderListExtra,
 ) =>
   apiFetch<Page<AdminOrder>>(
     `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
       recycling ? `&recycling=${recycling}` : ''
-    }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`,
+    }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}${orderExtraQuery(extra)}`,
   );
 /** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
 export const countInvoicePending = () =>
@@ -660,7 +717,10 @@ export interface CreateCouponInput {
   endAt: string;
   usageLimit?: number;
   perUserLimit?: number;
-  scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+  /** CLAIM = mã ẩn của thẻ hộp hàng: chỉ vào ví khách đã quét link `?claim=`. */
+  scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE' | 'CLAIM';
+  /** Chỉ khách chưa có đơn nào (trừ đơn huỷ) dùng được. */
+  newCustomerOnly?: boolean;
 }
 export const createCoupon = (input: CreateCouponInput) =>
   apiFetch('/admin/coupons', { method: 'POST', body: input });
@@ -680,6 +740,9 @@ export interface AdminCoupon {
   isActive: boolean;
   /** Số lượt đã dùng (đếm theo đơn đã đặt bằng mã, đã trừ đơn huỷ/trả được hoàn mã). */
   redeemedCount: number;
+  newCustomerOnly?: boolean;
+  /** Mã CLAIM: số khách đã nhận vào ví; mã khác: null. */
+  claimedCount?: number | null;
 }
 export type CouponStatusFilter = '' | 'active' | 'inactive' | 'expired';
 export async function listCoupons(params: { page: number; limit: number; q?: string; status?: CouponStatusFilter }) {
@@ -690,6 +753,58 @@ export async function listCoupons(params: { page: number; limit: number; q?: str
 }
 export const updateCoupon = (id: string, patch: { isActive?: boolean; endAt?: string; usageLimit?: number | null }) =>
   apiFetch<AdminCoupon>(`/admin/coupons/${id}`, { method: 'PATCH', body: patch });
+
+/** Lô mã in thẻ hộp hàng sàn (D2-03): mỗi mã một lượt nhận, một lượt dùng. */
+export interface CouponBatchInput {
+  prefix: string;
+  quantity: number;
+  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
+  value: number;
+  minOrder?: number;
+  maxDiscount?: number;
+  startAt: string;
+  endAt: string;
+  newCustomerOnly?: boolean;
+}
+export interface CouponBatchCode {
+  code: string;
+  /** Link in vào QR (URL gốc Mini App + `?claim=`). */
+  url: string;
+  claimed: boolean;
+  used: boolean;
+  isActive: boolean;
+}
+export interface CouponBatchCodes {
+  batch: string;
+  /** null = chưa đặt `app.miniapp_base_url`: link trong file là đường dẫn tương đối, chưa in được. */
+  claimUrlBase: string | null;
+  codes: CouponBatchCode[];
+}
+export interface CouponBatchSummary {
+  batch: string;
+  /** false = lô do người khác tạo: nhân viên không xem/tải được mã (API trả 403). */
+  mine: boolean;
+  total: number;
+  claimed: number;
+  used: number;
+  active: number;
+  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
+  value: number;
+  minOrder: number | null;
+  maxDiscount: number | null;
+  newCustomerOnly: boolean;
+  startAt: string;
+  endAt: string;
+}
+export const createCouponBatch = (input: CouponBatchInput) =>
+  apiFetch<CouponBatchCodes & { created: number }>('/admin/coupon-batches', { method: 'POST', body: input });
+export const listCouponBatches = () => apiFetch<CouponBatchSummary[]>('/admin/coupon-batches');
+/** Link gốc Mini App (app.miniapp_base_url) để in QR mã chung; null = chưa đặt. */
+export const getCouponClaimUrlBase = () => apiFetch<{ claimUrlBase: string | null }>('/admin/coupon-batches/claim-url-base');
+export const getCouponBatchCodes = (batch: string) =>
+  apiFetch<CouponBatchCodes>(`/admin/coupon-batches/${encodeURIComponent(batch)}/codes`);
+export const setCouponBatchActive = (batch: string, isActive: boolean) =>
+  apiFetch<{ batch: string; updated: number }>(`/admin/coupon-batches/${encodeURIComponent(batch)}`, { method: 'PATCH', body: { isActive } });
 
 // ── Nhãn hàng (storefront Lớp 3) ──
 export interface BrandCert {
@@ -944,6 +1059,8 @@ export interface AdminNotificationTemplate {
   /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
   znsFailed30d?: number;
   znsLastError?: { text: string; at: string } | null;
+  /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
+  staffEditable?: boolean;
 }
 export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
 export const updateNotificationTemplate = (
@@ -1501,6 +1618,11 @@ export interface OrderExportFilter {
   /** 'YYYY-MM-DD' theo giờ VN, tính cả hai đầu. */
   from?: string;
   to?: string;
+  kind?: OrderKind;
+  payment?: OrderPaymentFilter;
+  platform?: OrderListPlatform;
+  referrerUserId?: string;
+  storefront?: string;
 }
 function orderFilterParams(f: OrderExportFilter): URLSearchParams {
   const q = new URLSearchParams();
@@ -1533,17 +1655,23 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
-  | 'refillPending';
+  | 'refillPending'
+  | 'communityPending'
+  | 'communityUnanswered'
+  | 'invoicePending'
+  | 'externalPoints';
 export interface OpsInbox {
   generatedAt: string;
   items: { key: InboxKey; count: number }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
 
-export type StaffPermission = 'CSKH' | 'KHO';
+export type StaffPermission = 'CSKH' | 'KHO' | 'MARKETING' | 'KE_TOAN';
 export const STAFF_PERMISSION_LABELS: Record<StaffPermission, string> = {
-  CSKH: 'CSKH — đơn, đổi trả, người dùng, mẫu tin nhanh',
+  CSKH: 'CSKH — đơn, đổi trả, người dùng, mẫu tin nhanh, kiểm duyệt cộng đồng',
   KHO: 'Kho — trạng thái đơn, đẩy lại Pancake, vận đơn thu gom, nhận hàng trả',
+  MARKETING: 'Marketing — voucher, flash sale, FAQ, Content Kit, Academy, mẫu thông báo, kiểm duyệt cộng đồng, báo cáo nguồn khách',
+  KE_TOAN: 'Kế toán — xem đơn và xác nhận Đã nhận tiền, hoá đơn VAT, công nợ đại lý, chi thưởng đại lý đã duyệt, duyệt hoàn tiền sàn ngoài, hoàn tiền khách, chi lệnh rút đã duyệt, đối soát đối tác, báo cáo, CSV tài chính',
 };
 export interface OpsAccess {
   role: string;
@@ -1849,3 +1977,98 @@ export const listDealerPriceHistory = (sku: string | undefined, page = 1, limit 
   apiFetch<Page<DealerPriceChange>>(
     `/admin/dealer-prices/history?page=${page}&limit=${limit}${sku ? `&sku=${encodeURIComponent(sku)}` : ''}`,
   );
+
+export type ExternalOrderSource = 'MARKETPLACE' | 'CHAT' | 'UNKNOWN';
+export type ExternalOrderStatus = 'OPEN' | 'DELIVERED' | 'RETURNING' | 'RETURNED' | 'CANCELLED' | 'PARTIAL_RETURN' | 'DELETED';
+
+/** Đơn Pancake ngoài app (đơn sàn, chat, điện thoại). SĐT đã che ở API. */
+export interface ExternalOrder {
+  id: string;
+  pancakeOrderId: string;
+  source: ExternalOrderSource;
+  channel: string | null;
+  sourceKey: string;
+  trackingCode: string | null;
+  trackingCodes: string[];
+  marketplaceOrderSn: string | null;
+  phone: string | null;
+  goodsValue: number | null;
+  pancakeStatus: number | null;
+  status: ExternalOrderStatus;
+  pancakeUpdatedAt: string | null;
+  deliveredAt: string | null;
+  firstSeenAt: string;
+  /** Chỉ có ở màn chi tiết và chỉ khi người xem là ADMIN. */
+  lastPayload?: unknown;
+}
+
+export interface ExternalOrderSourceRow {
+  sourceKey: string;
+  orderSources: string;
+  account: string;
+  marketplaceId: string;
+  total: number;
+  bySource: Partial<Record<ExternalOrderSource, number>>;
+  lastSeenAt: string | null;
+  currentKind: ExternalOrderSource | 'APP';
+  currentChannel: string | null;
+}
+
+export const listExternalOrders = (
+  f: { q?: string; source?: ExternalOrderSource; status?: ExternalOrderStatus },
+  page = 1,
+  limit = 20,
+) => {
+  const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (f.q) qs.set('q', f.q);
+  if (f.source) qs.set('source', f.source);
+  if (f.status) qs.set('status', f.status);
+  return apiFetch<Page<ExternalOrder>>(`/admin/external-orders?${qs.toString()}`);
+};
+export const getExternalOrder = (id: string) => apiFetch<ExternalOrder>(`/admin/external-orders/${encodeURIComponent(id)}`);
+export const listExternalOrderSources = () =>
+  apiFetch<{ sources: ExternalOrderSourceRow[]; truncated: boolean }>('/admin/external-orders/sources');
+
+// ── Tích điểm đơn sàn bằng mã vận đơn (B6 bước 2) ──
+export type {
+  AdminAttachAttemptResponse,
+  AdminExternalClaimAttentionFilter,
+  AdminExternalClaimDetail,
+  AdminExternalClaimEvent,
+  AdminExternalClaimRow,
+  AdminExternalAttemptRow,
+  AdminReverseClaimResponse,
+  ExternalClaimState,
+} from '@tubutree/shared-types';
+
+export const listExternalClaims = (f: { state?: ExternalClaimState; q?: string; attention?: AdminExternalClaimAttentionFilter }, page = 1, limit = 20) => {
+  const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (f.state) qs.set('state', f.state);
+  if (f.q) qs.set('q', f.q);
+  if (f.attention) qs.set('attention', f.attention);
+  return apiFetch<AdminExternalClaimListResponse>(`/admin/external-claims?${qs.toString()}`);
+};
+export const getExternalClaim = (id: string) => apiFetch<AdminExternalClaimDetail>(`/admin/external-claims/${encodeURIComponent(id)}`);
+export const listExternalClaimAttempts = (page = 1, limit = 20) =>
+  apiFetch<AdminExternalAttemptListResponse>(`/admin/external-claims/attempts?page=${page}&limit=${limit}`);
+export const approveExternalClaim = (id: string, note?: string) =>
+  apiFetch<{ id: string; state: 'PENDING' }>(`/admin/external-claims/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    ...(note ? { body: { note } } : {}),
+  });
+export const voidExternalClaim = (id: string, reason: string, reopen: boolean) =>
+  apiFetch<{ id: string; state: 'VOIDED' }>(`/admin/external-claims/${encodeURIComponent(id)}/${reopen ? 'void-and-reopen' : 'void'}`, {
+    method: 'POST',
+    body: { reason },
+  });
+export const reverseExternalClaim = (id: string, reason: string) =>
+  apiFetch<AdminReverseClaimResponse>(`/admin/external-claims/${encodeURIComponent(id)}/reverse`, { method: 'POST', body: { reason } });
+export const attachExternalClaimAttempt = (id: string, pancakeOrderId: string, note?: string) =>
+  apiFetch<AdminAttachAttemptResponse>(`/admin/external-claims/attempts/${encodeURIComponent(id)}/attach`, {
+    method: 'POST',
+    body: { pancakeOrderId, note },
+  });
+export const keepExternalClaimPoints = (id: string, note: string) =>
+  apiFetch<{ id: string }>(`/admin/external-claims/${encodeURIComponent(id)}/keep-points`, { method: 'POST', body: { note } });
+export const rejectExternalClaimAttempt = (id: string, note?: string) =>
+  apiFetch(`/admin/external-claims/attempts/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { note } });

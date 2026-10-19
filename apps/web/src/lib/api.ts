@@ -1,4 +1,5 @@
 import { formatVnd } from './format-vnd';
+import { DEFAULT_LEGAL_VARS, type LegalVars } from './legal';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
 // NEXT_PUBLIC_* bị inline lúc build nên chỉ dùng làm fallback.
 const BASE =
@@ -185,8 +186,31 @@ export async function getBrands(): Promise<BrandCount[]> {
   return fetchList<BrandCount>('/brands', 600, (json) => json as BrandCount[]);
 }
 
+/**
+ * Ảnh do chính API phục vụ (ảnh gian hàng base64) về JSON dưới dạng đường dẫn tương đối API. Ghép với gốc API CÔNG KHAI cho
+ * thẻ img và thẻ chia sẻ (không dùng API_BASE_URL: giá trị đó có thể là địa chỉ nội bộ giữa các container mà trình duyệt không tới được).
+ */
+const PUBLIC_API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
+export function publicMediaUrl<T extends string | null | undefined>(src: T): T | string {
+  return typeof src === 'string' && src.startsWith('/') && !src.startsWith('//') ? `${PUBLIC_API_BASE}${src}` : src;
+}
+
+export interface CategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  /** Số sản phẩm đang bán; API cũ chưa trả thì thiếu. */
+  productCount?: number;
+}
+export async function getCategories(): Promise<CategoryItem[]> {
+  return fetchList<CategoryItem>('/categories', 600, (json) => json as CategoryItem[]);
+}
+
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
-  return fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
+  const sf = await fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
+  if (!sf) return sf;
+  return { ...sf, ...(sf.avatarUrl !== undefined && { avatarUrl: publicMediaUrl(sf.avatarUrl) }), ...(sf.coverUrl !== undefined && { coverUrl: publicMediaUrl(sf.coverUrl) }) };
 }
 
 /** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Lỗi API: xem fetchList. */
@@ -232,6 +256,10 @@ export interface StorefrontDetail {
   customDomain?: string | null;
   type?: string | null;
   isPartner?: boolean;
+  /** Admin đã duyệt gian hàng (tick xanh, "CTV tuyển chọn"). API cũ chưa trả thì coi như chưa duyệt. */
+  approved?: boolean;
+  /** Cờ link `<tên>.tubutree.com`: tắt (hoặc API cũ chưa trả) thì không hiện URL subdomain. */
+  subdomainEnabled?: boolean;
   title: string;
   headerNote?: string | null;
   avatarUrl?: string | null;
@@ -302,10 +330,14 @@ export interface SupportContact {
   email: string;
   /** Chỉ có khi admin đã cấu hình tên Zalo OA; chưa có OA thì không có trường (Q-17: ẩn). */
   zaloOaName?: string;
+  /** Kênh cộng đồng của chủ shop; chỉ có khoá nào admin đã nhập link https. */
+  community?: { zaloGroupUrl?: string; facebookUrl?: string; tiktokUrl?: string };
 }
 
+const httpsOnly = (v: unknown): string | undefined => (typeof v === 'string' && /^https:\/\//.test(v.trim()) ? v.trim() : undefined);
+
 /** Khớp giá trị mặc định của API (system-config.controller: support.hotline / support.email). */
-export const DEFAULT_SUPPORT: SupportContact = { hotline: '0899 149 229', email: 'tubutree@gmail.com' };
+export const DEFAULT_SUPPORT: SupportContact = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
 
 /**
  * Hotline/email do admin cấu hình (GET /config/public → support). Chân trang nằm trên MỌI trang
@@ -316,16 +348,55 @@ export async function getPublicSupport(): Promise<SupportContact> {
   try {
     const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
     if (!res.ok) return DEFAULT_SUPPORT;
-    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null } };
+    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown } };
+    const community = Object.fromEntries(
+      (['zaloGroupUrl', 'facebookUrl', 'tiktokUrl'] as const).flatMap((k) => {
+        const u = httpsOnly(json.community?.[k]);
+        return u ? [[k, u]] : [];
+      }),
+    );
     const zaloOaName = json.support?.zaloOaName?.trim();
     return {
       hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,
       email: json.support?.email?.trim() || DEFAULT_SUPPORT.email,
       ...(zaloOaName ? { zaloOaName } : {}),
+      ...(Object.keys(community).length ? { community } : {}),
     };
   } catch {
     return DEFAULT_SUPPORT;
   }
+}
+
+export interface LegalDoc {
+  /** Markdown admin đã nhập; null = chưa nhập, trang dùng bản nháp mặc định. */
+  content: string | null;
+  vars: LegalVars;
+}
+
+/** 0 hợp lệ (freeship mọi đơn, hạn đổi trả 0 ngày); null, rỗng, sai kiểu, âm thì mặc định. */
+function nonNegativeOr(v: unknown, fallback: number): number {
+  if (typeof v !== 'number' && typeof v !== 'string') return fallback;
+  if (typeof v === 'string' && v.trim() === '') return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/**
+ * Nội dung trang /chinh-sach/[loai] (GET /config/legal/:loai). 404 (API bản cũ chưa có endpoint) coi như admin chưa nhập.
+ * Lỗi tạm thời thì ném: ISR giữ bản đã render thay vì thay nội dung đã duyệt bằng bản nháp.
+ */
+export async function getLegalDoc(loai: string): Promise<LegalDoc> {
+  const json = await fetchDetail<{ content?: unknown; vars?: { returnWindowDays?: unknown; freeshipThreshold?: unknown } }>(
+    `/config/legal/${encodeURIComponent(loai)}`,
+    300,
+  );
+  return {
+    content: typeof json?.content === 'string' && json.content.trim() !== '' ? json.content : null,
+    vars: {
+      returnWindowDays: nonNegativeOr(json?.vars?.returnWindowDays, DEFAULT_LEGAL_VARS.returnWindowDays),
+      freeshipThreshold: nonNegativeOr(json?.vars?.freeshipThreshold, DEFAULT_LEGAL_VARS.freeshipThreshold),
+    },
+  };
 }
 
 export { formatVnd };

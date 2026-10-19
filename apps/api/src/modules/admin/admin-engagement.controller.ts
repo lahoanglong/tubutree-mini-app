@@ -8,8 +8,8 @@ import { OptionalNotNull } from '../../common/decorators/optional-not-null.decor
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
-/** Trần điểm thưởng một nhiệm vụ: quà rẻ nhất trong danh mục đổi điểm giá 20 điểm, nhiệm vụ seed thưởng 20–50. */
-export const MISSION_REWARD_POINTS_MAX = 500;
+/** Trần điểm thưởng một nhiệm vụ: quà rẻ nhất trong danh mục đổi điểm giá 20.000 điểm, nhiệm vụ seed thưởng 15.000–50.000. */
+export const MISSION_REWARD_POINTS_MAX = 500_000;
 
 export class UpdateMissionDto {
   @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80) title?: string;

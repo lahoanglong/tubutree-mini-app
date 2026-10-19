@@ -1,15 +1,19 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
-import { CommissionStatus, Prisma, type PayoutStatus } from '@prisma/client';
+import { CommissionStatus, Prisma, type PayoutStatus, type UserRole } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
+import type { Env } from '../../config/env.validation';
+import { hashIp } from '../../common/ip-hash';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -47,7 +51,7 @@ import {
   type VnMonth,
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
-import { VN_OFFSET_MS } from '../../common/vn-time';
+import { VN_OFFSET_MS, vnDateKey } from '../../common/vn-time';
 import { paidLineTotals } from './commission-base';
 import { consignmentLinkedSql } from '../merchant/consignment-link-sql';
 import { forBuyer } from '../orders/buyer-order-fields';
@@ -55,6 +59,11 @@ import { totalChangedError, totalChangedMessage } from '../checkout/total-change
 
 import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
+import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from './commission-eligibility';
+import { loadDefaultRate, resolveVariationRate } from './commission-rate';
+import { loadPublicVisibility } from '../storefront/public-visibility';
+import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
+import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -78,7 +87,7 @@ function blockedCtvPaymentMethods(total: number): Partial<Record<'COD' | 'BANK_T
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
- * Commission: rate theo từng variation (variation.affiliateRate). Vòng đời:
+ * Commission: rate theo từng variation (variation.affiliateRate), chưa đặt thì mức mặc định `affiliate.default_rate_pct`. Vòng đời:
  * PENDING (đặt) → LOCKED (DELIVERED) → APPROVED (sau hold_days) → PAID (payout).
  */
 export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
@@ -103,11 +112,13 @@ export class AffiliateService {
     @Optional() private readonly notifications?: NotificationsService,
     // @Optional cùng lý do; AffiliateModule import FlashSaleModule (affiliate.module.spec.ts giữ việc nối này).
     @Optional() private readonly flashSale?: FlashSaleService,
+    // @Optional: ConfigModule là global nên app thật luôn có; test dựng trực tiếp không truyền thì hashIp dùng khoá dev.
+    @Optional() private readonly env?: ConfigService<Env, true>,
   ) {}
 
   async register(userId: string, termsVersion?: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (user.role === 'DEALER' || user.role === 'ADMIN' || user.role === 'STAFF') {
+    if (!canRegisterAsAffiliate(user.role)) {
       throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
     }
     const data: Prisma.UserUpdateInput = {};
@@ -135,9 +146,13 @@ export class AffiliateService {
   async getMe(userId: string, now: Date = new Date()) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const monthRevenue = await this.confirmedRevenue(this.prisma, userId, vnMonthBounds(now));
+    const access = await affiliateAccess(this.prisma, user);
 
     return {
-      isAffiliate: user.role === 'AFFILIATE' || user.role === 'ADMIN',
+      isAffiliate: access.hasAccess,
+      canRegister: canRegisterAsAffiliate(user.role),
+      canOrderForCustomer: canPlaceOrderForCustomer(user.role),
+      canOpenStorefront: access.canOpenStorefront,
       referralCode: user.referralCode,
       walletBalance: user.walletBalance,
       personalTaxId: user.personalTaxId,
@@ -149,7 +164,8 @@ export class AffiliateService {
   /**
    * Ghi "chạm" giới thiệu (attribution last-touch persistent §quyết-định). Khi khách (đã đăng nhập)
    * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 7 — Q-31).
-   * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình.
+   * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình / mã không phải của CTV-đại lý
+   * (findEligibleReferrer): link chia sẻ của khách thường không được đè chạm CTV còn hạn.
    */
   async recordTouch(
     userId: string,
@@ -157,22 +173,12 @@ export class AffiliateService {
     now: Date = new Date(),
   ): Promise<{ ok: boolean }> {
     if (!dto.referralCode) return { ok: false };
-    // P0 FIX (audit A5-01, 2026-09-27): User.referralCode LUÔN lưu chữ HOA (auth.service.ts sinh
-    // bằng toUpperCase — mirror resolveReferrerId ở đó). Gian hàng CTV mở TRONG ZALO dùng slug làm
-    // referralCode (storefront.service.ts sinh slug = referralCode.toLowerCase(); miniapp
-    // storefront-view.tsx/app.tsx forward thẳng slug đó, KHÔNG hoa hoá lại) → so khớp CHÍNH XÁC
-    // trước đây luôn trượt (Postgres phân biệt hoa/thường), referrer luôn null, CTV bán qua gian
-    // hàng trong Zalo không bao giờ được ghi hoa hồng. Chuẩn hoá NGAY TẠI LỚP SO KHỚP này — không
-    // dựa vào việc mọi nơi gọi (kể cả các luồng tương lai) tự nhớ hoa hoá trước khi gửi lên.
-    const ref = await this.prisma.user.findUnique({
-      where: { referralCode: dto.referralCode.toUpperCase() },
-      select: { id: true },
-    });
-    if (!ref || ref.id === userId) return { ok: false };
+    const referrerUserId = await this.findEligibleReferrer(dto.referralCode, userId);
+    if (!referrerUserId) return { ok: false };
     const days = await this.config.get<number>('affiliate.attribution_days', 7);
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const data = {
-      referrerUserId: ref.id,
+      referrerUserId,
       storefrontSlug: dto.storefrontSlug ?? null,
       kind: dto.kind ?? 'ctv',
       expiresAt,
@@ -195,6 +201,42 @@ export class AffiliateService {
       props: { kind: dto.kind ?? 'ctv' },
     });
     return { ok: true };
+  }
+
+  /**
+   * Người được ghi công theo mã giới thiệu (chạm, đơn hàng): có tài khoản mang mã, khác người mua, và thuộc vai trò hưởng hoa
+   * hồng. Mã khách thường (`?ref=` ở nút chia sẻ sản phẩm, mua chung) → null, để không đè chạm CTV còn hạn hay chủ gian hàng
+   * CTV mà khách đang mua (checkout/attribution.ts). Chương trình "giới thiệu bạn bè" không đi qua đây: nó dùng
+   * User.referredById gán lúc tạo tài khoản (auth.service.ts resolveReferrerId).
+   *
+   * P0 A5-01: User.referralCode luôn lưu HOA (auth.service.ts sinh bằng toUpperCase) mà gian hàng CTV mở trong Zalo gửi slug
+   * viết thường làm mã (storefront.service.ts slug = referralCode.toLowerCase()); Postgres so khớp phân biệt hoa/thường nên
+   * phải chuẩn hoá ngay tại lớp so khớp này, không dựa vào nơi gọi.
+   */
+  async findEligibleReferrer(referralCode: string, buyerId: string): Promise<string | null> {
+    const ref = await this.prisma.user.findUnique({
+      where: { referralCode: referralCode.toUpperCase() },
+      select: { id: true, role: true, isBlocked: true },
+    });
+    // Tài khoản bị khoá không ghi công đơn mới; hoa hồng đã tạo cho đơn cũ giữ nguyên.
+    if (!ref || ref.id === buyerId || ref.isBlocked) return null;
+    return (await this.commissionEligibleRoles()).has(ref.role) ? ref.id : null;
+  }
+
+  /** Người dùng (chủ gian hàng CTV, người của "chạm") có thuộc vai trò được ghi công đơn không — checkout/attribution.ts. */
+  async isCommissionEligible(userId: string): Promise<boolean> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true } });
+    return !!u && !u.isBlocked && (await this.commissionEligibleRoles()).has(u.role);
+  }
+
+  /** Điều kiện khách thấy một gian hàng (storefront/storefront-visibility.ts) tính từ cấu hình hiện hành. */
+  storefrontVisibility(): Promise<PublicVisibilityOptions> {
+    return loadPublicVisibility(this.config);
+  }
+
+  /** Vai trò được ghi công đơn và hưởng hoa hồng (khoá `affiliate.commission_eligible_roles`, mặc định CTV + đại lý). */
+  async commissionEligibleRoles(): Promise<ReadonlySet<UserRole>> {
+    return sanitizeEligibleRoles(await this.config.get<unknown>(COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES));
   }
 
   /** Lấy "chạm" còn hạn của khách (fallback attribution khi phiên đã mất). */
@@ -225,14 +267,30 @@ export class AffiliateService {
   }
 
   /** Track click (web redirect /r/:shortCode). Trả target để redirect. */
-  async trackClick(shortCode: string, visitorId: string, ipHash: string) {
+  async trackClick(shortCode: string, visitorId: string, ipHash: string, dedupeDay?: string) {
     const link = await this.prisma.affiliateLink.findUnique({ where: { shortCode } });
     if (!link) return null;
     await this.prisma.$transaction([
       this.prisma.affiliateLink.update({ where: { id: link.id }, data: { clicks: { increment: 1 } } }),
-      this.prisma.affiliateClick.create({ data: { shortCode, visitorId, ipHash } }),
+      this.prisma.affiliateClick.create({ data: { shortCode, visitorId, ipHash, ...(dedupeDay ? { dedupeDay } : {}) } }),
     ]);
     return { targetType: link.targetType, targetId: link.targetId };
+  }
+
+  /**
+   * Lượt mở link CTV từ phía khách (route công khai, không có userId). Khách chưa biết là ai nên "người xem" là mã HMAC của IP
+   * (khoá của máy chủ, xem common/ip-hash.ts); IP thô không lưu. Mỗi (mã link, IP băm, ngày giờ VN) đếm một lần: khoá duy nhất của affiliate_clicks chặn lần thứ hai, và
+   * giao dịch hoàn tác luôn cả phần +1 clicks nên không cần đọc bảng (đang đánh dấu @deprecated, chỉ ghi).
+   */
+  async recordLinkClick(shortCode: string, ip: string, now: Date = new Date()): Promise<{ counted: boolean }> {
+    const ipHash = hashIp(ip, this.env?.get('JWT_ACCESS_SECRET', { infer: true }), 'affiliate-click');
+    try {
+      const target = await this.trackClick(shortCode, ipHash, ipHash, vnDateKey(now));
+      return { counted: target !== null };
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return { counted: false };
+      throw err;
+    }
   }
 
   async dashboard(userId: string, now: Date = new Date()) {
@@ -494,10 +552,10 @@ export class AffiliateService {
     return Math.round(gross * Math.min(pct, 1));
   }
 
-  /** Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng. */
+  /** Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng (canPlaceOrderForCustomer). */
   private async customerOrderPlacer(ctvId: string) {
     const ctv = await this.prisma.user.findUniqueOrThrow({ where: { id: ctvId } });
-    if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
+    if (!canPlaceOrderForCustomer(ctv.role)) {
       throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
     }
     return ctv;
@@ -827,12 +885,18 @@ export class AffiliateService {
     // Chặn tự-giới-thiệu (referrer == buyer) TRỪ đơn CTV "lên đơn hộ khách"
     // (placedForCustomer=true) — đó là nghiệp vụ hợp lệ: CTV hưởng hoa hồng cho đơn hộ.
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
+    // Chỉ CTV/đại lý (affiliate.commission_eligible_roles) hưởng hoa hồng: khách thường chia sẻ link chỉ được thưởng điểm giới
+    // thiệu (theo User.referredById, không theo đơn). Xét vai trò lúc đặt đơn — CTV lên đại lý (D3-03) vẫn hưởng. Đơn lên hộ
+    // khách cũng xét: route lên đơn hộ cho cả ADMIN dùng, admin lên hộ không ăn hoa hồng.
+    const referrer = await db.user.findUnique({ where: { id: order.referrerUserId }, select: { role: true } });
+    if (!referrer || !(await this.commissionEligibleRoles()).has(referrer.role)) return;
 
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({
       where: { id: { in: variationIds } },
-      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
+      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true, storefrontId: true } } },
     });
+    const defaultPct = await loadDefaultRate(this.config);
     const ownConsignment = await this.ownConsignmentVariationIds(order.id, order.referrerUserId, db);
     // Sản phẩm bị chặn affiliate (product.affiliateBlocked) → rate=0, KHÔNG tính hoa hồng cho
     // dòng hàng đó, dù link/CTV nào đã trót chia sẻ trước khi bị chặn (mirror storefront/brand
@@ -843,11 +907,13 @@ export class AffiliateService {
     const rateMap = new Map(
       variations.map((v) => [
         v.id,
-        v.product?.affiliateBlocked || ownConsignment.has(v.id)
-          ? 0
-          : v.affiliateRate
-            ? Number(v.affiliateRate)
-            : 0,
+        resolveVariationRate({
+          explicit: v.affiliateRate,
+          blocked: !!v.product?.affiliateBlocked,
+          partnerProduct: !!v.product?.storefrontId,
+          ownConsignment: ownConsignment.has(v.id),
+          defaultPct,
+        }),
       ]),
     );
 
@@ -1246,7 +1312,7 @@ export class AffiliateService {
    */
   private async effectiveHoldDays(): Promise<number> {
     const [holdDays, returnWindowDays] = await Promise.all([
-      this.config.get<number>('affiliate.hold_days', 20),
+      this.config.get<number>('affiliate.hold_days', 10),
       this.config.get<number>('returns.window_days', 7),
     ]);
     return Math.max(Number(holdDays) || 0, Number(returnWindowDays) || 0);
@@ -1653,7 +1719,12 @@ export class AffiliateService {
   }
 
   /** Xác nhận đã chuyển khoản: APPROVED → PAID (ghi mã giao dịch NH / ghi chú). */
-  async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string } = {}) {
+  async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string; byStaff?: boolean } = {}) {
+    if (opts.byStaff) {
+      const own = await this.prisma.payout.findUnique({ where: { id }, select: { userId: true } });
+      if (!own) throw new NotFoundException('Không tìm thấy lệnh rút.');
+      if (own.userId === adminId) throw new ForbiddenException('Không xác nhận chi lệnh rút của chính mình — nhờ quản trị viên.');
+    }
     const paidAt = new Date();
     const res = await this.prisma.$transaction(async (tx) => {
       const flipped = await tx.payout.updateMany({

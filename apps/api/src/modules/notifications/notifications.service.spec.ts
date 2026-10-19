@@ -166,3 +166,97 @@ describe('NotificationsService.notify', () => {
     );
   });
 });
+
+describe('NotificationsService.notify — gộp tin theo cửa sổ thời gian (dedupeWithinMs)', () => {
+  const NOW = new Date('2026-10-17T10:00:00.000Z');
+  beforeEach(() => jest.useFakeTimers().setSystemTime(NOW));
+  afterEach(() => jest.useRealTimers());
+
+  function build(seen: { id: string } | null, seenInTx: { id: string } | null = seen) {
+    const findFirst = jest.fn().mockResolvedValue(seenInTx);
+    const quickFindFirst = jest.fn().mockResolvedValue(seen);
+    const create = jest.fn().mockResolvedValue({ id: 'log-1' });
+    const tx = { $executeRaw: jest.fn().mockResolvedValue(1), notificationLog: { findFirst, create } };
+    const transaction = jest.fn((fn: (t: typeof tx) => unknown) => fn(tx));
+    const templateFind = jest.fn().mockResolvedValue({ code: 'C', channel: 'INAPP', bodyTemplate: 'x', zaloTemplateId: null });
+    const { prisma } = makePrisma({
+      notificationTemplate: { findUnique: templateFind },
+      notificationLog: { create: jest.fn(), findFirst: quickFindFirst, findMany: jest.fn(), updateMany: jest.fn() },
+      $transaction: transaction,
+    });
+    const svc = new NotificationsService(prisma, { sendTemplate: jest.fn() } as unknown as ZnsClient, makeAnalytics());
+    return { svc, findFirst, quickFindFirst, create, transaction, templateFind };
+  }
+
+  it('đã có tin cùng khoá trong cửa sổ → không ghi tin thứ hai', async () => {
+    const { svc, quickFindFirst, create } = build({ id: 'old' });
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'post-activity:p1', dedupeWithinMs: 3_600_000 });
+
+    expect(quickFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'u1',
+          channel: 'INAPP',
+          payload: { path: ['dedupeKey'], equals: 'post-activity:p1' },
+          sentAt: { gte: new Date('2026-10-17T09:00:00.000Z') },
+        }),
+      }),
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('chưa có tin nào trong cửa sổ (tin cũ hơn cửa sổ không tính) → ghi tin mới kèm khoá', async () => {
+    const { svc, create } = build(null);
+
+    await svc.notify('u1', 'C', { a: 'b' }, { dedupeKey: 'post-activity:p1', dedupeWithinMs: 3_600_000 });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u1', templateCode: 'C', channel: 'INAPP', payload: { body: 'x', data: { a: 'b' }, dedupeKey: 'post-activity:p1' } }),
+    });
+  });
+
+  it('không có dedupeWithinMs → hành vi cũ: khoá chặn vĩnh viễn, không lọc theo thời gian', async () => {
+    const { svc, findFirst } = build(null);
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'referral:abc' });
+
+    expect(findFirst.mock.calls[0][0].where).not.toHaveProperty('sentAt');
+  });
+
+  it.each([0, -5, Number.NaN])('dedupeWithinMs = %s không phải cửa sổ hợp lệ → chặn vĩnh viễn như khi bỏ trống', async (ms) => {
+    const { svc, quickFindFirst, findFirst } = build(null);
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'referral:abc', dedupeWithinMs: ms });
+
+    expect(quickFindFirst.mock.calls[0][0].where).not.toHaveProperty('sentAt');
+    expect(findFirst.mock.calls[0][0].where).not.toHaveProperty('sentAt');
+  });
+
+  it('đọc nhanh thấy tin trong cửa sổ → trả về luôn: không mở transaction, không khoá advisory, không tra template/khách', async () => {
+    const { svc, transaction, templateFind, create } = build({ id: 'old' });
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'post-activity:p1', dedupeWithinMs: 3_600_000 });
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(templateFind).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đọc nhanh chưa thấy nhưng lượt song song vừa ghi xong → kiểm lại trong transaction, vẫn không ghi hai tin', async () => {
+    const { svc, transaction, create } = build(null, { id: 'just-written' });
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'post-activity:p1', dedupeWithinMs: 3_600_000 });
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('khoá vĩnh viễn (không cửa sổ) cũng đọc nhanh trước khi mở transaction', async () => {
+    const { svc, transaction } = build({ id: 'old' });
+
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'referral:abc' });
+
+    expect(transaction).not.toHaveBeenCalled();
+  });
+});

@@ -52,6 +52,8 @@ function build(
     combo?: { computeForStorefront: jest.Mock }; // override ComboService
     validateAndCompute?: jest.Mock; // override coupons.validateAndCompute
     getActiveTouch?: jest.Mock; // override affiliate.getActiveTouch (attribution 3 ngày)
+    findEligibleReferrer?: jest.Mock; // override affiliate.findEligibleReferrer (mã CTV/đại lý → id, còn lại null)
+    isCommissionEligible?: jest.Mock; // override affiliate.isCommissionEligible (chủ gian hàng / người của chạm đủ vai trò)
     createCommissionForOrder?: jest.Mock; // override affiliate.createCommissionForOrder
     cartData?: unknown; // override giỏ (test checkout tập con)
     flashSale?: { consumeQuotas: jest.Mock; resolveEffective: jest.Mock }; // override FlashSaleService
@@ -178,6 +180,9 @@ function build(
   const affiliate = {
     createCommissionForOrder: opts.createCommissionForOrder ?? jest.fn().mockResolvedValue(undefined),
     getActiveTouch: opts.getActiveTouch ?? jest.fn().mockResolvedValue(null),
+    findEligibleReferrer: opts.findEligibleReferrer ?? jest.fn().mockResolvedValue(null),
+    isCommissionEligible: opts.isCommissionEligible ?? jest.fn().mockResolvedValue(true),
+    storefrontVisibility: jest.fn().mockResolvedValue({ eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false }),
     notifyCommissionCreated: jest.fn().mockResolvedValue(undefined),
   } as unknown as AffiliateService;
   // combo mặc định: không giảm (override qua opts.combo cho test combo).
@@ -418,6 +423,19 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
     expect(orderCreate.mock.calls[0][0].data.referrerUserId).toBeNull();
   });
 
+  it('chủ gian hàng CTV không đủ vai trò (vd ADMIN) → bỏ qua, xét chạm còn hạn; người của chạm cũng không đủ → không ai', async () => {
+    const getActiveTouch = jest.fn().mockResolvedValue({ referrerUserId: 'ctv9', storefrontSlug: null, kind: 'ctv' });
+    const isCommissionEligible = jest.fn(async (id: string) => id === 'ctv9');
+    const a = build({ stockCount: 1, getActiveTouch, isCommissionEligible, storefront: SF_CTV });
+    await a.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
+    expect(a.orderCreate.mock.calls[0][0].data.referrerUserId).toBe('ctv9');
+    expect(isCommissionEligible).toHaveBeenCalledWith('ctv-lan');
+
+    const b = build({ stockCount: 1, getActiveTouch, isCommissionEligible: jest.fn().mockResolvedValue(false), storefront: SF_CTV });
+    await b.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
+    expect(b.orderCreate.mock.calls[0][0].data.referrerUserId).toBeNull();
+  });
+
   it('storefrontSlug null khi không truyền', async () => {
     const { svc, orderCreate } = build({ stockCount: 1 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
@@ -446,12 +464,13 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
   // là referralCode viết THƯỜNG (storefront.service.ts sinh slug = referralCode.toLowerCase()),
   // trong khi User.referralCode luôn lưu HOA — resolveReferrer tra khớp phân biệt hoa/thường nên
   // referrer luôn null, CTV không bao giờ được ghi nhận hoa hồng cho khách mua ngay trong Zalo.
+  // Hoa hoá mã nằm ở AffiliateService.findEligibleReferrer (affiliate.service.spec), dùng chung với recordTouch.
   it('P0 A5-01: referralCode viết THƯỜNG (từ slug gian hàng mở trong Zalo) vẫn khớp User.referralCode viết HOA', async () => {
     const getActiveTouch = jest.fn().mockResolvedValue(null);
-    const { svc, prisma, orderCreate } = build({ stockCount: 1, getActiveTouch });
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'ctv9', referralCode: 'ABCD1234' });
+    const findEligibleReferrer = jest.fn().mockResolvedValue('ctv9');
+    const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch, findEligibleReferrer });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', referralCode: 'abcd1234' } as never);
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'ABCD1234' } });
+    expect(findEligibleReferrer).toHaveBeenCalledWith('abcd1234', 'u1');
     expect(orderCreate.mock.calls[0][0].data.referrerUserId).toBe('ctv9');
   });
 });
@@ -711,7 +730,7 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as Error).message).toBe(
-      'Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1000 điểm: 800 điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong. Vui lòng tải lại trang thanh toán.',
+      'Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1.000 điểm: 800 điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong. Vui lòng tải lại trang thanh toán.',
     );
   });
 
@@ -721,6 +740,13 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
     await expect(
       svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 500 } as never),
     ).rejects.toThrow('Số điểm Xanh không đủ (hiện có 100 điểm).');
+  });
+
+  it('placeOrder: lô quy đổi đổi giữa chừng → số điểm trong câu báo khách có dấu chấm nghìn', async () => {
+    const { svc } = build({ pointsBalance: 1000, pointsConvertedBalance: 200_000, pointsUsedConverted: 123_456, decCount: 0 });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 123_456 } as never),
+    ).rejects.toThrow('đơn này cần 123.456 điểm');
   });
 
   it('placeOrder không dùng điểm → KHÔNG khoá dòng user, KHÔNG đọc phần khoá trong tx', async () => {
@@ -1899,5 +1925,176 @@ describe('CheckoutService — không lộ trường nội bộ cho khách (R3-ME
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.items[0]!.fulfiller).toEqual({ kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A' });
     expect(JSON.stringify(q)).not.toContain('u-a');
+  });
+});
+
+describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
+  const SMALL = {
+    items: [{ id: 'l1', variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 100000, quantity: 1, total: 100000 }],
+    subtotal: 100000, discount: 0, freeship: false, couponCode: null,
+  };
+  const BASE_CONFIG: Record<string, unknown> = { 'shipping.free_threshold': 200000, 'shipping.flat_fee_below_threshold': 19000 };
+  const config = (extra: Record<string, unknown> = {}) => {
+    const values = { ...BASE_CONFIG, ...extra };
+    return { get: jest.fn().mockImplementation(async (k: string, fb?: unknown) => (k in values ? values[k] : fb)) };
+  };
+  // Mặc định hệ thống nay BẬT từ 199k; các ca dưới dùng đơn 100k nên ghim ngưỡng 0 để kiểm cơ chế, ngưỡng mặc định có ca riêng.
+  const ON = { 'shipping.first_order_free_enabled': true, 'shipping.first_order_free_min_subtotal': 0 };
+  const OFF = { 'shipping.first_order_free_enabled': false };
+
+  function setup(
+    opts: { config?: { get: jest.Mock }; user?: unknown; priorOrders?: Array<unknown>; cartData?: unknown; validateAndCompute?: jest.Mock } = {},
+  ) {
+    const systemConfig = opts.config ?? config();
+    const b = build({
+      cartData: opts.cartData ?? SMALL,
+      pricing: new PricingService(systemConfig as never),
+      systemConfig,
+      validateAndCompute: opts.validateAndCompute,
+    });
+    const user = opts.user === undefined ? { phone: '0912345678', zaloId: 'z1' } : opts.user;
+    (b.prisma.user.findUnique as jest.Mock).mockImplementation(async (args: { select?: Record<string, boolean> }) =>
+      args?.select?.zaloId && args.select.phone ? user : null,
+    );
+    // Lần đọc "đã có đơn chưa" theo thứ tự gọi: báo giá, compute lúc đặt, rồi lần kiểm trong tx.
+    const queue = [...(opts.priorOrders ?? [])];
+    const findFirst = jest.fn().mockImplementation(async () => (queue.length ? queue.shift() : null));
+    (b.prisma as unknown as { order: Record<string, unknown> }).order.findFirst = findFirst;
+    return { ...b, findFirst, systemConfig };
+  }
+  const firstOrderLocks = (executeRaw: jest.Mock) =>
+    executeRaw.mock.calls.filter((c) => (c[0] as TemplateStringsArray).join('?').includes('pg_advisory_xact_lock') && c[1] === 'first-order');
+
+  it('mặc định BẬT từ 199k: đơn đầu 100k chưa đạt ngưỡng mặc định → phí giao như cũ, không miễn', async () => {
+    const { svc } = setup();
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(19000);
+    expect(q.firstOrderShipWaived).toBe(0);
+  });
+
+  it('TẮT tường minh: phí giao như cũ (19k), không đọc đơn cũ, không khoá', async () => {
+    const { svc, orderCreate, findFirst, executeRaw } = setup({ config: config(OFF) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(19000);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(orderCreate.mock.calls[0][0].data.shippingFee).toBe(19000);
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(firstOrderLocks(executeRaw)).toHaveLength(0);
+  });
+
+  it('bật + khách thật chưa có đơn: phí giao 0 ở báo giá và lúc đặt; trong tx khoá first-order rồi kiểm lại (bỏ qua chính đơn đang tạo)', async () => {
+    const { svc, orderCreate, findFirst, executeRaw } = setup({ config: config(ON) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(0);
+    expect(q.total).toBe(100000);
+    expect(q.firstOrderShipWaived).toBe(19000);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: 100000 } as never);
+    expect(orderCreate.mock.calls[0][0].data.shippingFee).toBe(0);
+    expect(orderCreate.mock.calls[0][0].data.total).toBe(100000);
+    expect(firstOrderLocks(executeRaw)).toHaveLength(1);
+    expect(findFirst.mock.calls.at(-1)![0].where).toMatchObject({ userId: 'u1', status: { not: 'CANCELLED' }, id: { notIn: ['o1'] } });
+  });
+
+  it('bật nhưng đã có đơn trước → phí giao như cũ', async () => {
+    const { svc } = setup({ config: config(ON), priorOrders: [{ id: 'o0' }, { id: 'o0' }] });
+    expect((await svc.quote('u1', { addressId: 'addr1' } as never)).shippingFee).toBe(19000);
+  });
+
+  it('bật nhưng khách vãng lai (chưa xác thực) → phí giao như cũ', async () => {
+    const { svc } = setup({ config: config(ON), user: { phone: null, zaloId: 'guest_dev1' } });
+    expect((await svc.quote('u1', { addressId: 'addr1' } as never)).shippingFee).toBe(19000);
+  });
+
+  it('bật với ngưỡng 150k, đơn đầu 100k → chưa đạt ngưỡng, phí giao như cũ', async () => {
+    const { svc } = setup({ config: config({ ...ON, 'shipping.first_order_free_min_subtotal': 150000 }) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(19000);
+    expect(q.firstOrderShipWaived).toBe(0);
+  });
+
+  it('mã freeship trên đơn đầu đã miễn phí giao → mã không miễn thêm gì: không tính là đã áp, không tiêu lượt', async () => {
+    const { svc, coupons } = setup({
+      config: config(ON),
+      cartData: { ...SMALL, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shippingFee).toBe(0);
+    expect(q.couponApplied).toBe(false);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+
+  it('đơn khác của khách vừa ghi xong giữa lúc tính giá và lúc ghi đơn → kiểm trong tx từ chối, không ghi lượt mã', async () => {
+    // compute lúc đặt chưa thấy đơn nào (null), lần kiểm trong tx dưới khoá thấy đơn vừa ghi.
+    const { svc, coupons } = setup({
+      config: config(ON),
+      priorOrders: [null, { id: 'o-other' }],
+      cartData: { ...SMALL, couponCode: 'GIAM10' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 10000, freeship: false }),
+    });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow(
+      'Ưu đãi miễn phí giao hàng đơn đầu',
+    );
+    expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+});
+
+describe('CheckoutService.placeOrder — chạm đầu của khách trên order_placed (props)', () => {
+  const placedEvent = (analytics: AnalyticsEventsService) =>
+    (analytics.record as jest.Mock).mock.calls.map((c) => c[1]).find((e) => e.eventName === 'order_placed');
+
+  it('mang nguồn và chiến dịch chạm đầu của khách đặt đơn', async () => {
+    const { svc, prisma, analytics } = build();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: null,
+      firstTouchSource: 'card-2610', firstTouchCampaign: 'hop-hang',
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const e = placedEvent(analytics);
+    expect(e.props).toMatchObject({ firstTouchSource: 'card-2610', firstTouchCampaign: 'hop-hang' });
+    // Phong bì (entrySource/campaign) là nguồn của PHIÊN ở sự kiện client; đơn không có phiên nên không được điền vào đó.
+    expect(e.entrySource).toBeUndefined();
+    expect(e.campaign).toBeUndefined();
+  });
+
+  it('khách chưa có nguồn (tài khoản cũ) → null, đơn vẫn đặt được', async () => {
+    const { svc, analytics } = build();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(placedEvent(analytics).props).toMatchObject({ firstTouchSource: null, firstTouchCampaign: null });
+  });
+});
+
+// D3-18: đơn khách tự mua qua gian hàng mang nguồn `storefront`, tách khỏi `ctv_assisted` (đơn CTV lên hộ, do affiliate.service ghi).
+describe('CheckoutService.placeOrder: nguồn của đơn (Order.source)', () => {
+  const placedSource = (analytics: AnalyticsEventsService) =>
+    (analytics.record as jest.Mock).mock.calls.map((c) => c[1]).find((e) => e.eventName === 'order_placed').props.orderSource;
+
+  it('đặt qua gian hàng (khách tự mua) → source "storefront", sự kiện order_placed cùng nhãn', async () => {
+    const { svc, orderCreate, analytics } = build({ stockCount: 1, storefront: SF_CTV });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
+    expect(orderCreate.mock.calls[0][0].data.source).toBe('storefront');
+    expect(placedSource(analytics)).toBe('storefront');
+  });
+
+  it('gian hàng nhãn hàng/đối tác cũng là "storefront" (chỉ có CTV lên đơn hộ mới là ctv_assisted)', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1, storefront: SF_BRAND });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
+    expect(orderCreate.mock.calls[0][0].data.source).toBe('storefront');
+  });
+
+  it('định danh gian hàng không khớp (không ghi công) → không phải "storefront"', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1, storefront: SF_BRAND });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'shop-gia-mao' } as never);
+    expect(orderCreate.mock.calls[0][0].data.source).toBe('checkout');
+  });
+
+  it('không qua gian hàng: giỏ hàng → "checkout", chọn dòng mua ngay → "buy_now"', async () => {
+    const full = build();
+    await full.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(full.orderCreate.mock.calls[0][0].data.source).toBe('checkout');
+    const picked = build({ cartData: { items: [{ id: 'i1', variationId: 'v1', productId: 'p1', productName: 'A', variationName: 'VA', unitPrice: 100, quantity: 1, total: 100 }], subtotal: 100, discount: 0, freeship: false, couponCode: null } });
+    await picked.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i1'] } as never);
+    expect(picked.orderCreate.mock.calls[0][0].data.source).toBe('buy_now');
   });
 });

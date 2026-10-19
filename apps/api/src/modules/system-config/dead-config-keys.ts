@@ -9,6 +9,7 @@
  * mà chưa được liệt kê).
  */
 export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
+  'loyalty.vnd_per_point': 'Tích điểm đơn Mini App tính theo phần trăm tiền hàng: đọc "loyalty.earn_pct" (2 = 2%), 1 điểm = 1đ.',
   'loyalty.welcome_voucher_amount': 'Mã giảm giá chào mừng đọc từ "voucher.welcome_amount".',
   'loyalty.welcome_voucher_min_order': 'Đơn tối thiểu của mã giảm giá chào mừng đọc từ "voucher.welcome_min_order".',
   'affiliate.product_rate_source': 'Tỉ lệ hoa hồng đọc từ từng biến thể sản phẩm, không có công tắc chọn nguồn.',

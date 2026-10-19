@@ -109,6 +109,15 @@ describe('CustomerRefundsTab — danh sách', () => {
     expect(container.querySelector('button[aria-label*="Chép SĐT"]')).toBeNull();
   });
 
+  it('SĐT đã bị che (Kế toán): vẫn hiện số che, không có nút chép', async () => {
+    const api = mockFetch(LIST([refund({ phone: '*******678' })]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    expect(container.textContent ?? '').toContain('*******678');
+    expect(container.querySelector('button[aria-label*="Chép SĐT"]')).toBeNull();
+  });
+
   it('dòng WALLET: "Đã hoàn vào ví", không có thao tác chuyển khoản', async () => {
     const api = mockFetch(
       LIST([refund({ method: 'WALLET', status: 'COMPLETED', customerUserId: 'u9', completedAt: '2026-10-01T03:00:05.000Z' })]),
@@ -468,6 +477,16 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(api.pays()).toHaveLength(0);
   });
 
+  it('lớp nền hộp xác nhận chừa inset trái/phải của tai thỏ, không nhỏ hơn lề 1rem sẵn có', async () => {
+    stub({ list: () => [refund()] });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    await openDialog(container);
+    const backdrop = document.querySelector<HTMLElement>('[data-confirm-backdrop]')!;
+    expect(backdrop.style.paddingLeft).toBe('max(1rem, env(safe-area-inset-left, 0px))');
+    expect(backdrop.style.paddingRight).toBe('max(1rem, env(safe-area-inset-right, 0px))');
+  });
+
   it('Huỷ / Escape / bấm nền: đóng hộp, không gửi gì, mở lại thì ô nhập trống', async () => {
     const api = stub({ list: () => [refund()] });
     const { container } = mount(<CustomerRefundsTab />);
@@ -622,6 +641,31 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     click(accept(d));
     await flush();
     expect(JSON.parse(String(api.pays()[0]!.init?.body))).toEqual({ bankRef: 'FT9' });
+  });
+
+  it('nhân viên Kế toán: khoản khách chưa có tài khoản → không có ô nhập tài khoản, nhờ quản trị viên nhập, không gửi', async () => {
+    const api = stub({ list: () => [refund({ kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED' })] });
+    const { container } = mount(<CustomerRefundsTab isAdmin={false} />);
+    await flush();
+    click(byText(container, 'button', 'Bắt đầu chuyển khoản'));
+    await flush(1);
+    const d = confirmDialog()!;
+    expect(d.querySelector('[name="accountNumber"]')).toBeNull();
+    expect(d.textContent).toContain('Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập');
+    expect(accept(d).disabled).toBe(true);
+    click(accept(d));
+    await flush();
+    expect(api.claims()).toHaveLength(0);
+  });
+
+  it('nhân viên Kế toán: khoản khách cuối đơn CTV chưa có tài khoản → không xác nhận được, nhờ quản trị viên', async () => {
+    const api = stub({ list: () => [refund({ kind: 'END_CUSTOMER', userId: null })] });
+    const { container } = mount(<CustomerRefundsTab isAdmin={false} />);
+    await flush();
+    const d = await openDialog(container);
+    expect(d.textContent).toContain('Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập');
+    expect(accept(d).disabled).toBe(true);
+    expect(api.pays()).toHaveLength(0);
   });
 
   it('BUYERMINI-7: tiền về muộn chưa có tài khoản → hộp "Bắt đầu chuyển khoản" yêu cầu nhập tài khoản khách cung cấp và gửi kèm', async () => {

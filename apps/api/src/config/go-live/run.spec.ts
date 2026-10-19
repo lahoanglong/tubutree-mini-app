@@ -36,7 +36,7 @@ describe('runGoLiveCheck', () => {
     expect(results.filter((r) => r.status === 'FAIL')).toEqual([]);
     expect(exitCodeFor(results)).toBe(0);
     const groups = new Set(results.map((r) => r.group));
-    expect(groups).toEqual(new Set(['Cấu hình lõi', 'Zalo', 'Pancake', 'Gomdon', 'ZaloPay', 'Accesstrade', 'Ảnh (Cloudinary)', 'Báo động vận hành', 'Cơ sở dữ liệu', 'Redis', 'Hàng đợi BullMQ', 'Backup']));
+    expect(groups).toEqual(new Set(['Cấu hình lõi', 'Zalo', 'Pancake', 'Gomdon', 'ZaloPay', 'Accesstrade', 'Ảnh (Cloudinary)', 'AI tư vấn', 'Báo động vận hành', 'Cơ sở dữ liệu', 'Redis', 'Hàng đợi BullMQ', 'Backup']));
   });
 
   it('mỗi nhóm nằm liền một khối để bảng không lặp tiêu đề', async () => {

@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
@@ -7,6 +7,7 @@ import { getNotifications } from '../services/account-api';
 import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
 import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -14,7 +15,10 @@ import { CategoryGrid } from '../components/catalog/category-grid';
 import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
 import { HomeExtras } from '../components/home/home-extras';
-import { HomeBlockError } from '../components/home/home-block-error';
+import { NewCustomerGift } from '../components/home/new-customer-gift';
+import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
+import { HomeBlockError, HomeBlockErrorSuppressed } from '../components/home/home-block-error';
+import { HomePageError } from '../components/home/home-page-error';
 import { HomeHeader } from '../components/home/home-header';
 import { HomeSection, type SectionQuery } from '../components/home/home-section';
 import { useBlockQuery } from '../components/home/use-block-query';
@@ -32,7 +36,7 @@ const FEATURED_FETCH_LIMIT = SECTION_LIMIT * 2;
 
 /**
  * Trang chủ (spec 5b.1) — DS v2 toàn trang. Thứ tự khối theo khách cũ/mới (`homeBlockOrder`):
- * khách cũ thấy "Mua lại" ngay dưới ô tìm; khách mới ưu tiên Flash + Bán chạy + Danh mục.
+ * khách cũ thấy "Mua lại" ngay dưới ô tìm; khách mới ưu tiên Flash + Bán chạy + Danh mục, kèm khối "Quà khách mới".
  * Lưới SP đầu tiên nằm trong 5 khối đầu (trước đây là khối thứ 11 — A2-32). Ngoại lệ chấp nhận: khách cũ
  * chưa có "Dành cho bạn" thì lưới SP đầu tiên là "Bán chạy" ở khối thứ 6.
  * Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
@@ -53,6 +57,9 @@ export default function HomePage() {
   const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
   const purchased = useBlockQuery(purchasedRaw);
   const kind = useHomeCustomerKind(authed, userId, purchasedRaw);
+  // Bố cục mới cho khách mới (D7 việc 1) đi sau cờ cấu hình, mặc định tắt: cấu hình chưa về hay lỗi thì giữ thứ tự cũ.
+  const publicConfig = usePublicConfig();
+  const newCustomerLayout = publicConfig.isLoaded && publicConfig.homeNewCustomerLayout === true;
 
   // useBlockQuery: tải lại khi đang lỗi (Thử lại, kéo làm mới) không được đổi khối lỗi thành khung chờ (React Query v5).
   const bestSellers = useBlockQuery(
@@ -82,6 +89,11 @@ export default function HomePage() {
     data: featured.data ? { data: dedupeAgainst(featured.data.data, forYouIds).slice(0, SECTION_LIMIT) } : undefined,
   };
 
+  // API sập hẳn: cả ba lưới SP công khai đều lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi của kệ.
+  // Chỉ một phần lỗi thì vẫn là thẻ lỗi từng khối (thử lại đúng khối đó).
+  const publicGrids = [bestSellers, featured, newest];
+  const pageDown = publicGrids.every((b) => b.isError && b.data === undefined);
+
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchShell />,
     // Lỗi thật → khối lỗi + Thử lại; 404 = API cũ chưa có endpoint → ẩn như trước (kệ này vốn tuỳ chọn).
@@ -91,7 +103,13 @@ export default function HomePage() {
       ) : (
         <PurchasedRail source="home_rail" />
       ),
-    orderStrip: <OrderStrip />,
+    // Khách mới: ô này rỗng và "Quà khách mới" phải là khối đầu sau ô tìm, nên dải đi cùng khối welcome; khách cũ thấy dải ngay sau dải đơn.
+    orderStrip: (
+      <>
+        <OrderStrip />
+        {kind === 'returning' && <PointsBoostStrip placement="home" />}
+      </>
+    ),
     flash: (
       <>
         <FlashSale />
@@ -125,6 +143,14 @@ export default function HomePage() {
       <HomeSection title={vi.home.newArrivals} query={newest} listSource="home_newest" limit={SECTION_LIMIT} seeAllTo="/browse?sort=newest" />
     ),
     extras: <HomeExtras />,
+    // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
+    welcome:
+      kind === 'new' ? (
+        <>
+          <NewCustomerGift />
+          <PointsBoostStrip placement="home" omitPlain />
+        </>
+      ) : null,
   };
 
   return (
@@ -132,11 +158,22 @@ export default function HomePage() {
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={() => refreshHomeQueries(qc)} />
       <HomeHeader unreadCount={unreadCount} />
-      {homeBlockOrder(kind).map((id) => (
-        <div key={id} data-home-block={id}>
-          {blocks[id]}
-        </div>
-      ))}
+      <HomeBlockErrorSuppressed.Provider value={pageDown}>
+        {homeBlockOrder(kind, newCustomerLayout).map((id) => (
+          <Fragment key={id}>
+            <div data-home-block={id}>{blocks[id]}</div>
+            {pageDown && id === 'search' && (
+              <div data-home-block="pageError">
+                <HomePageError
+                  error={bestSellers.error}
+                  retrying={publicGrids.some((b) => b.isFetching)}
+                  onRetry={() => refreshHomeQueries(qc)}
+                />
+              </div>
+            )}
+          </Fragment>
+        ))}
+      </HomeBlockErrorSuppressed.Provider>
     </Page>
   );
 }

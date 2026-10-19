@@ -104,7 +104,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         const m = CTV_MONTHLY_MILESTONES.find((x) => x.threshold === t.min);
         expect(t.milestoneRewardPoints).toBe(m!.rewardPoints);
       }
-      expect(res.allTiers.map((t) => t.milestoneRewardPoints)).toEqual([null, 50, 200, 600, 2000]);
+      expect(res.allTiers.map((t) => t.milestoneRewardPoints)).toEqual([null, 50_000, 200_000, 600_000, 2_000_000]);
       expect(CTV_TIERS.map((t) => t.min)).toEqual([0, 3_000_000, 10_000_000, 30_000_000, 80_000_000]);
     });
   });
@@ -139,7 +139,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expect(res.currentRevenue).toBe(12_000_000);
       // Doanh số chờ chốt hiển thị riêng, KHÔNG cộng vào điều kiện nhận thưởng.
       expect(res.pendingRevenue).toBe(40_000_000);
-      expect(res.holdDays).toBe(20);
+      expect(res.holdDays).toBe(10);
       expect(res.milestones).toHaveLength(CTV_MONTHLY_MILESTONES.length);
       expect(findMany.mock.calls[0][0].where).toEqual({ userId: 'ctv-1', monthKey: { in: ['2026-09', '2026-08'] } });
 
@@ -205,16 +205,16 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       const res = await svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP);
 
-      expect(res).toMatchObject({ success: true, rewardPoints: 50, monthKey: '2026-09' });
+      expect(res).toMatchObject({ success: true, rewardPoints: 50_000, monthKey: '2026-09' });
       expect(res).not.toHaveProperty('rewardXu');
-      expect(res.message).toContain('50 Điểm Xanh');
+      expect(res.message).toContain('50.000 Điểm Xanh');
       expect(res.message).not.toMatch(/xu/i);
       expect(tx.ctvMilestoneClaim.create).toHaveBeenCalledWith({
-        data: { userId: 'ctv-1', milestoneId: 'milestone-3m', monthKey: '2026-09', rewardXu: 0, rewardPoints: 50, revenue: 5_000_000 },
+        data: { userId: 'ctv-1', milestoneId: 'milestone-3m', monthKey: '2026-09', rewardXu: 0, rewardPoints: 50_000, revenue: 5_000_000 },
       });
       expect(rewards.grant).toHaveBeenCalledWith(
         'ctv-1',
-        50,
+        50_000,
         'CTV_MILESTONE:milestone-3m:2026-09',
         'AFFILIATE_MILESTONE',
         'claim-1',
@@ -327,7 +327,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expect(ok).toHaveLength(1);
       expect(failed).toHaveLength(1);
       expect(failed[0]!.reason).toBeInstanceOf(BadRequestException);
-      expect(state.pointsBalance).toBe(2_000);
+      expect(state.pointsBalance).toBe(2_000_000);
       expect(state.ledger.reduce((s, d) => s + d, 0)).toBe(state.pointsBalance);
       expect(state.walletBalance).toBe(0);
     });

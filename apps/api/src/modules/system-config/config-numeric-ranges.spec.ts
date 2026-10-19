@@ -69,7 +69,7 @@ describe('khoá cấu hình dạng số có luật khoảng (R3-UI-4)', () => {
   });
 
   // Khoá phân số 0–1 mà seed là 0 (không yêu cầu mức giảm tối thiểu): số lẻ là giá trị hợp lệ.
-  const FRACTION_KEYS = new Set(['flashsale.min_discount_pct']);
+  const FRACTION_KEYS = new Set(['flashsale.min_discount_pct', 'loyalty.earn_pct']);
 
   it('khoá mặc định là số nguyên không nhận số thực (1,5 ngày, 0,5 giờ…)', async () => {
     const service = makeService();
@@ -93,5 +93,55 @@ describe('khoá cấu hình dạng số có luật khoảng (R3-UI-4)', () => {
       expect(await accepts(service, configKey, minDays)).toBe(true);
       expect(await accepts(service, configKey, minDays - 1)).toBe(false);
     }
+  });
+});
+
+describe('khoá cấu hình tích điểm đơn chat (B9)', () => {
+  const service = makeService();
+  const setOk = async (key: string, value: unknown): Promise<boolean> => {
+    try {
+      await service.set(key, value as never, 'admin-it');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it('hai cờ chỉ nhận đúng boolean', async () => {
+    for (const key of ['loyalty.chat_order_points_enabled', 'loyalty.chat_order_require_carrier']) {
+      expect(await setOk(key, true)).toBe(true);
+      expect(await setOk(key, false)).toBe(true);
+      expect(await setOk(key, 'false')).toBe(false);
+      expect(await setOk(key, 0)).toBe(false);
+    }
+  });
+
+  it('tỉ lệ chat nhận null hoặc 0.1 đến 20, từ chối ngoài khoảng', async () => {
+    const key = 'loyalty.chat_order_earn_pct';
+    expect(await setOk(key, null)).toBe(true);
+    expect(await setOk(key, 2)).toBe(true);
+    expect(await setOk(key, 0)).toBe(false);
+    expect(await setOk(key, 21)).toBe(false);
+    expect(await setOk(key, '2')).toBe(false);
+  });
+
+  it('trần tháng, ngưỡng duyệt, số ngày giữ có khoảng và là số nguyên', async () => {
+    expect(await accepts(service, 'loyalty.chat_order_monthly_points_cap', 200_000)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_order_monthly_points_cap', 0)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_order_review_above_vnd', 5_000_000)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_order_review_above_vnd', -1)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 30)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 0)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_unclaimed_hold_days', 1.5)).toBe(false);
+  });
+
+  it('hai khoá thêm có khoảng; staff_map chỉ nhận object { id: userId }', async () => {
+    expect(await accepts(service, 'loyalty.chat_phone_verified_max_days', 180)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_phone_verified_max_days', 0)).toBe(false);
+    expect(await accepts(service, 'loyalty.chat_order_creator_monthly_points', 1_000_000)).toBe(true);
+    expect(await accepts(service, 'loyalty.chat_order_creator_monthly_points', -5)).toBe(false);
+    expect(await setOk('pancake.staff_map', { 'pc-1': 'user-1' })).toBe(true);
+    expect(await setOk('pancake.staff_map', [])).toBe(false);
+    expect(await setOk('pancake.staff_map', { 'pc-1': 5 })).toBe(false);
   });
 });

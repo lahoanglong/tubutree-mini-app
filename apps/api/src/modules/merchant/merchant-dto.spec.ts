@@ -171,3 +171,12 @@ describe('Huỷ phiếu đối soát cần lý do (R4-PARTNER-4)', () => {
     await expect(run(CancelMerchantPayoutDto, { reason: '  Lập nhầm kỳ  ' })).resolves.toMatchObject({ reason: 'Lập nhầm kỳ' });
   });
 });
+
+describe('DTO gian hàng đối tác: ảnh đại diện và ảnh bìa', () => {
+  it.each(['avatarUrl', 'coverUrl'])('%s chỉ kiểm là chuỗi và độ dài; việc kiểm https nằm ở service, chỉ khi giá trị đổi', async (field) => {
+    await expect(run(UpdateMerchantStoreDto, { [field]: 'http://old.example/a.png' })).resolves.toBeDefined();
+    await expect(run(UpdateMerchantStoreDto, { [field]: '' })).resolves.toBeDefined();
+    expect(await message(UpdateMerchantStoreDto, { [field]: 123 })).toContain(field);
+    expect(await message(UpdateMerchantStoreDto, { [field]: 'a'.repeat(1_500_001) })).toContain(field);
+  });
+});

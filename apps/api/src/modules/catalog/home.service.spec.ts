@@ -20,15 +20,20 @@ function setup() {
   const purchased = { list: jest.fn().mockResolvedValue({ items: [], nextCursor: null }) };
   const subs = { list: jest.fn().mockResolvedValue([]) };
   const notifications = { listForUser: jest.fn().mockResolvedValue([{ id: 'n1' }]) };
-  const svc = new HomeService(catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never);
-  return { svc, catalog, flashSale, orders, purchased, subs, notifications };
+  // Mặc định cấu hình là bảng rỗng: mọi khoá rơi về mặc định trong mã của buildPublicConfig.
+  const config = { get: jest.fn(async (_key: string, fallback?: unknown) => fallback) };
+  const loyalty = { getNewCustomerOffer: jest.fn().mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null }) };
+  const svc = new HomeService(
+    catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
+  );
+  return { svc, catalog, flashSale, orders, purchased, subs, notifications, config, loyalty };
 }
 
 describe('HomeService.getPublic', () => {
-  it('gộp đủ 6 khối, dùng đúng tham số lẻ của Home', async () => {
+  it('gộp đủ 7 khối (kèm cấu hình công khai), dùng đúng tham số lẻ của Home', async () => {
     const { svc, catalog } = setup();
     const r = await svc.getPublic(1000);
-    expect(Object.keys(r).sort()).toEqual(['bestSellers', 'brands', 'categories', 'featured', 'flashActive', 'newest']);
+    expect(Object.keys(r).sort()).toEqual(['bestSellers', 'brands', 'categories', 'featured', 'flashActive', 'newest', 'publicConfig']);
     const calls = catalog.list.mock.calls.map(([q]) => ({ sort: q.sort, limit: q.limit, page: q.page }));
     expect(calls).toEqual(
       expect.arrayContaining([
@@ -109,6 +114,34 @@ describe('HomeService.getPublic', () => {
     expect(orders.list).not.toHaveBeenCalled();
     expect(flashSale.listUpcoming).not.toHaveBeenCalled();
     expect(catalog.getForYou).not.toHaveBeenCalled();
+  });
+});
+
+// D2-07b: khối "Quà khách mới" cần cấu hình công khai và ưu đãi của khách mà không thêm request lẻ khi mở Trang chủ (C-037).
+describe('HomeService — số liệu cho khối Quà khách mới', () => {
+  it('khối publicConfig đúng bằng GET /config/public (cùng hàm dựng), và lỗi thì chỉ khối đó null', async () => {
+    const { svc, config } = setup();
+    const r = await svc.getPublic(1000);
+    expect(r.publicConfig).toMatchObject({
+      freeshipThreshold: 200000,
+      newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 }, firstOrderFreeShip: { enabled: true, minSubtotal: 199000 } },
+      homeNewCustomerLayout: true,
+    });
+    config.get.mockRejectedValue(new Error('db down'));
+    const degraded = await svc.getPublic(1000 + 30_000);
+    expect(degraded.publicConfig).toBeNull();
+    expect(degraded.bestSellers).not.toBeNull();
+  });
+
+  it('khối newCustomerOffer của user: gọi đúng userId, lỗi thì chỉ khối đó null', async () => {
+    const { svc, loyalty } = setup();
+    const r = await svc.getForUser('u1');
+    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1');
+    expect(r.newCustomerOffer).toEqual({ isNewCustomer: true, welcomeVoucher: null });
+    loyalty.getNewCustomerOffer.mockRejectedValue(new Error('boom'));
+    const failed = await svc.getForUser('u1');
+    expect(failed.newCustomerOffer).toBeNull();
+    expect(failed.forYou).toEqual([{ id: 'fy' }]);
   });
 });
 

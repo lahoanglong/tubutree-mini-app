@@ -58,7 +58,7 @@ describe('Partial unique indexes after migrate deploy (real Postgres)', () => {
       expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toContain(name);
       expect(report.present).toContain(name);
     }
-    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(20);
+    expect(KNOWN_PARTIAL_UNIQUE_INDEXES).toHaveLength(23);
   });
 
   it('a schema whose tables lack the conditional indexes (what db push leaves behind) is reported as missing all of them', async () => {

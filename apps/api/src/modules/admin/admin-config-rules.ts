@@ -8,6 +8,12 @@ import {
   CART_ABANDON_MIN_HOURS_KEY,
 } from '../lifecycle/remarketing.service';
 import { FLASH_MAX_DISCOUNT_DEFAULT, FLASH_MAX_DISCOUNT_KEY } from '../flash-sale/flash-sale.service';
+import {
+  STAFF_COUPON_DAILY_BUDGET_KEY,
+  STAFF_COUPON_MAX_AMOUNT_KEY,
+  STAFF_COUPON_MAX_PERCENT_KEY,
+  STAFF_COUPON_MAX_USAGE_KEY,
+} from './coupon-input-rules';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -17,11 +23,12 @@ import { FLASH_MAX_DISCOUNT_DEFAULT, FLASH_MAX_DISCOUNT_KEY } from '../flash-sal
  */
 
 /** Trần 1 ô điểm danh — trùng CHECKIN_MAX_POINTS_PER_DAY ở loyalty.service.ts. */
-const CHECKIN_MAX_POINTS = 100;
+const CHECKIN_MAX_POINTS = 100_000;
 /** Trùng POS_ORDER_TOTAL_HARD_MAX (dto/loyalty-staff.dto.ts) và @Min(1000) của orderTotal. */
 const POS_ORDER_TOTAL_MIN = 1000;
 const POS_ORDER_TOTAL_MAX = 1_000_000_000;
-const POS_POINTS_CAP_MAX = 10_000_000;
+// Giữ dưới INT4 (cột points là INTEGER): 1 tỷ điểm ≈ 50 tỷ đồng doanh thu quầy mỗi ngày, đã là không giới hạn thực tế.
+const POS_POINTS_CAP_MAX = 1_000_000_000;
 /** Cân nặng mặc định mỗi sản phẩm (gram) cho vận đơn Gomdon — 1g..50kg. */
 const GOMDON_WEIGHT_MAX = 50_000;
 const VN_PHONE = /^(0|\+84)\d{9,10}$/;
@@ -198,11 +205,19 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'loyalty.pos_staff_daily_points_cap': (k, v) => assertIntInRange(k, v, 1, POS_POINTS_CAP_MAX, 'điểm'),
   'loyalty.pos_member_daily_points_cap': (k, v) => assertIntInRange(k, v, 1, POS_POINTS_CAP_MAX, 'điểm'),
   [PENDING_PAYMENT_TTL_KEY]: (k, v) => assertIntInRange(k, v, MIN_TTL_HOURS, MAX_TTL_HOURS, 'giờ'),
+  [STAFF_COUPON_MAX_PERCENT_KEY]: (k, v) => assertIntInRange(k, v, 1, 100, '%'),
+  [STAFF_COUPON_MAX_AMOUNT_KEY]: (k, v) => assertIntInRange(k, v, 1000, 100_000_000, 'đ'),
+  [STAFF_COUPON_MAX_USAGE_KEY]: (k, v) => assertIntInRange(k, v, 1, 100_000, 'lượt'),
+  [STAFF_COUPON_DAILY_BUDGET_KEY]: (k, v) => assertIntInRange(k, v, 0, 1_000_000_000, 'đ'),
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */
 export function hasAdminConfigRule(key: string): boolean {
   return key in RULES || key in PAIR_OF;
+}
+
+export function adminConfigRuleKeys(): string[] {
+  return [...Object.keys(RULES), ...Object.keys(PAIR_OF)];
 }
 
 /**

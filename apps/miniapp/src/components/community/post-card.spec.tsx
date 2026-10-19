@@ -69,6 +69,18 @@ describe('PostCard — ảnh bìa (ENGAGE-7)', () => {
     renderCard(withImages(1));
     expect(screen.queryByText(/ảnh nữa/)).toBeNull();
   });
+
+  it('ảnh bìa do API phục vụ (đường dẫn tương đối) được ghép với gốc API cho thẻ img', () => {
+    const { container } = renderCard({ ...POST, images: ['/feed/posts/p1/images/0?v=abc123'], imageCount: 2 });
+    expect(container.querySelector('img')!.getAttribute('src')).toBe('http://localhost:3001/api/feed/posts/p1/images/0?v=abc123');
+  });
+
+  it('API cũ còn trả ảnh nhúng (data URL) hoặc URL tuyệt đối: giữ nguyên', () => {
+    const dataUrl = 'data:image/jpeg;base64,QUJD';
+    expect(renderCard({ ...POST, images: [dataUrl], imageCount: 1 }).container.querySelector('img')!.getAttribute('src')).toBe(dataUrl);
+    const https = 'https://res.cloudinary.com/demo/a.jpg';
+    expect(renderCard({ ...POST, images: [https], imageCount: 1 }).container.querySelector('img')!.getAttribute('src')).toBe(https);
+  });
 });
 
 describe('PostCard — hành vi giữ nguyên khi chuyển DS v2', () => {
@@ -92,6 +104,18 @@ describe('PostCard — hành vi giữ nguyên khi chuyển DS v2', () => {
     renderCard({ ...POST, bestCommentId: 'cm1' });
     expect(screen.getByText(byPlain('Đã có câu trả lời hay'))).toBeInTheDocument();
     expect(screen.getByText(/Hỏi đáp/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['HARVEST', 'Thu hoạch'],
+    ['SPECIES', 'Sưu tập loài'],
+    ['MILESTONE', 'Mốc cộng đồng'],
+    ['MANUAL', 'Chia sẻ'],
+  ] as const)('loại bài hệ thống %s: nhãn "%s" đi cùng icon nét, không emoji (D7-6)', (kind, label) => {
+    renderCard({ ...POST, kind, title: null });
+    const el = screen.getByText(label);
+    expect(el.textContent).toBe(label);
+    expect(el.querySelector('svg')).not.toBeNull();
   });
 
   it('huy hiệu chuyên gia chỉ hiện khi badge = EXPERT', () => {
@@ -166,6 +190,87 @@ describe('PostCard — bàn phím, vùng chạm, biểu tượng (C-076, C-113)'
   it('không dùng emoji làm biểu tượng cho avatar, nhãn loại bài, chuyên gia, like, bình luận, câu trả lời hay', () => {
     const { container } = renderCard({ ...POST, badge: 'EXPERT', liked: true, bestCommentId: 'cm1' });
     expect(container.textContent).not.toMatch(/[💚🤍💬✅🌱🌿❓💡]/u);
+  });
+});
+
+describe('PostCard — hàng tác giả gọn (D7 #8)', () => {
+  const LONG = 'Nguyễn Thị Thanh Hương Trần Lê Bảo Châu Phạm Minh Anh';
+
+  it('tên tác giả một dòng, cắt bằng "…"; huy hiệu nằm dòng dưới cùng dòng thời gian, không chen cạnh tên', () => {
+    renderCard({ ...POST, author: LONG, badge: 'EXPERT', authorLevel: 3 });
+    const name = screen.getByText(LONG);
+    expect(name.style.whiteSpace).toBe('nowrap');
+    expect(name.style.overflow).toBe('hidden');
+    expect(name.style.textOverflow).toBe('ellipsis');
+    const expert = screen.getByText(/Chuyên gia Tubu/);
+    const rank = screen.getByText(/Cây/);
+    const time = screen.getByText(/3 giờ trước/);
+    expect(name.contains(expert)).toBe(false);
+    expect(name.parentElement).not.toBe(expert.parentElement);
+    // Cùng một hàng với dòng thời gian (hàng này tự xuống dòng khi chật).
+    expect(expert.parentElement).toBe(time.parentElement);
+    expect(rank.parentElement).toBe(time.parentElement);
+    expect(time.parentElement!.style.flexWrap).toBe('wrap');
+  });
+
+  it('khối chữ của hàng tác giả được phép co (minWidth 0) để tên dài cắt "…" thay vì đẩy tràn thẻ', () => {
+    renderCard({ ...POST, author: LONG });
+    expect(screen.getByText(LONG).parentElement!.style.minWidth).toBe('0px');
+  });
+});
+
+describe('PostCard — hashtag (D7 #8)', () => {
+  const LONG_TAG = 'cach-lam-nuoc-rua-chen-sinh-hoc-tu-vo-trai-cay-tai-nha-cho-gia-dinh';
+
+  it('hashtag dài: chip có maxWidth và nhãn cắt bằng "…" (không tràn mép phải)', () => {
+    renderCard({ ...POST, tags: [{ slug: LONG_TAG, name: LONG_TAG }] });
+    const label = screen.getByText(LONG_TAG);
+    expect(label.style.overflow).toBe('hidden');
+    expect(label.style.textOverflow).toBe('ellipsis');
+    const chip = label.closest('button') as HTMLElement;
+    expect(chip.style.maxWidth).toBe('100%');
+    expect(label.closest('button')!.parentElement!.style.maxWidth).toBe('60%');
+  });
+
+  it('hashtag trùng với thẻ sản phẩm gắn kèm (theo tên hoặc slug, bỏ dấu và dấu cách) thì bỏ; hashtag khác vẫn giữ', () => {
+    renderCard({
+      ...POST,
+      productTags: [{ slug: 'nuoc-rua-chen', name: 'Nước rửa chén sinh học', thumbnail: null, salePrice: 79_000, basePrice: 89_000 }],
+      tags: [
+        { slug: 'nuoc-rua-chen-sinh-hoc', name: 'nước rửa chén sinh học' },
+        { slug: 'nuoc-rua-chen', name: 'nuoc rua chen' },
+        { slug: 'da-nhay-cam', name: 'da nhạy cảm' },
+      ],
+    });
+    expect(screen.queryByText('nước rửa chén sinh học')).toBeNull();
+    expect(screen.queryByText('nuoc rua chen')).toBeNull();
+    expect(screen.getByText('da nhạy cảm')).toBeInTheDocument();
+    // Thẻ sản phẩm vẫn còn.
+    expect(screen.getByText('Nước rửa chén sinh học')).toBeInTheDocument();
+  });
+
+  it('mọi hashtag đều trùng thẻ sản phẩm → không dựng hàng hashtag trống', () => {
+    const { container } = renderCard({
+      ...POST,
+      productTags: [{ slug: 'xa-phong', name: 'Xà phòng', thumbnail: null, salePrice: null, basePrice: 20_000 }],
+      tags: [{ slug: 'xa-phong', name: 'xà phòng' }],
+    });
+    expect(container.querySelector('button.tubu-hit-44')).toBeNull();
+  });
+
+  it('bài không có thẻ sản phẩm: giữ nguyên mọi hashtag', () => {
+    renderCard({ ...POST, tags: [{ slug: 'a', name: 'xanh' }, { slug: 'b', name: 'sạch' }] });
+    expect(screen.getByText('xanh')).toBeInTheDocument();
+    expect(screen.getByText('sạch')).toBeInTheDocument();
+  });
+
+  it('hashtag ngắn chỉ là một đoạn của tên sản phẩm (vd "chén") KHÔNG bị coi là trùng', () => {
+    renderCard({
+      ...POST,
+      productTags: [{ slug: 'nuoc-rua-chen', name: 'Nước rửa chén sinh học', thumbnail: null, salePrice: null, basePrice: 89_000 }],
+      tags: [{ slug: 'chen', name: 'chén' }],
+    });
+    expect(screen.getByText('chén')).toBeInTheDocument();
   });
 });
 

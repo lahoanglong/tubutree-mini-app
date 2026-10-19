@@ -163,14 +163,19 @@ export function CouponList() {
             <li key={c.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-mono font-semibold text-stone-900">{c.code}</span>
-                <ToneBadge tone={st.tone}>{st.label}</ToneBadge>
+                <div className="flex flex-wrap gap-1">
+                  {c.scope === 'CLAIM' && <ToneBadge tone="neutral">Ẩn · thẻ hộp hàng</ToneBadge>}
+                  {c.newCustomerOnly && <ToneBadge tone="info">Chỉ khách mới</ToneBadge>}
+                  <ToneBadge tone={st.tone}>{st.label}</ToneBadge>
+                </div>
               </div>
               <p className="mt-1 text-stone-700">
                 {couponValue(c)}
                 {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
               </p>
               <p className="mt-0.5 text-xs text-stone-500">
-                {formatDate(c.startAt)} – {formatDate(c.endAt)} · Đã dùng {c.redeemedCount}
+                {formatDate(c.startAt)} – {formatDate(c.endAt)}
+                {c.claimedCount != null ? ` · Đã nhận ${c.claimedCount}` : ''} · Đã dùng {c.redeemedCount}
                 {c.usageLimit != null ? `/${c.usageLimit}` : ''} lượt · {c.perUserLimit > 0 ? `${c.perUserLimit} lượt/khách` : 'không giới hạn/khách'}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -28,6 +28,19 @@
 -- lại B): chọn user có dòng XU_MIGRATION_ROLLBACK và coinsBalance > 0, id dòng sổ và refType riêng
 -- (không đụng khoá *_xu_migration_key), rồi thêm lại users_coins_frozen. Làm qua review riêng.
 
+-- points-1d (migration 20261018210000) đã nhân 1.000 mọi số điểm và đặt loyalty.vnd_per_point_redeem = 1: công thức hoàn
+-- tác dưới đây trả coinsBefore theo 1 điểm = 1.000đ nên sẽ trả sai gấp 1.000 lần. Dừng trước khi động vào gì.
+DO $$
+DECLARE
+  redeem JSONB;
+BEGIN
+  SELECT "value" INTO redeem FROM "system_configs" WHERE "key" = 'loyalty.vnd_per_point_redeem';
+  IF (FOUND AND jsonb_typeof(redeem) = 'number' AND (redeem #>> '{}')::numeric = 1)
+     OR EXISTS (SELECT 1 FROM "system_config_history" WHERE "id" = 'sch_pts1d_' || md5('loyalty.vnd_per_point_redeem') AND "changedBy" = 'migration:points_1d') THEN
+    RAISE EXCEPTION 'PD-3 rollback: points-1d đã chạy (mọi điểm đã nhân 1.000); không dùng file này nữa. Hoàn tác = khôi phục backup chụp ngay trước khi chạy migration points_1d (tools/backup/restore-db.sh), rồi mới xem xét hoàn tác PD-3';
+  END IF;
+END $$;
+
 ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_coins_frozen";
 
 DO $$

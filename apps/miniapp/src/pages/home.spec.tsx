@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   fetchCategories: vi.fn(),
   fetchPurchasedItems: vi.fn(),
   getNotifications: vi.fn(),
+  getPublicConfig: vi.fn(),
+  getNewCustomerOffer: vi.fn(),
   auth: { status: 'authenticated' as 'authenticated' | 'guest', user: { id: 'u1' } as { id: string } | null },
   onRefresh: undefined as undefined | (() => Promise<unknown> | void),
 }));
@@ -28,8 +30,9 @@ vi.mock('../services/shop-api', () => ({
   fetchPurchasedItems: mocks.fetchPurchasedItems,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
+  getPublicConfig: mocks.getPublicConfig,
 }));
-vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications }));
+vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications, getNewCustomerOffer: mocks.getNewCustomerOffer }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
 }));
@@ -50,6 +53,16 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import HomePage from './home';
 import { homeBlockOrder } from '../components/home/home-blocks';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
+
+const PUBLIC_CONFIG = {
+  freeshipThreshold: 350_000,
+  subscribeDiscountPct: 0.17,
+  affiliateWalletMultiplier: 1,
+  affiliateMinWithdrawBank: 50_000,
+  cashbackHoldDays: 30,
+  loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
+  homeNewCustomerLayout: false,
+};
 
 const card = (id: string, name: string) => ({
   id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true,
@@ -87,6 +100,8 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     mocks.fetchBrands.mockResolvedValue([]);
     mocks.fetchCategories.mockResolvedValue([]);
     mocks.getNotifications.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue(PUBLIC_CONFIG);
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null });
   });
 
   it('khách mới: thứ tự khối "new" (Bán chạy + Danh mục trước Dành cho bạn), kệ Mua lại + dải đơn giữ ô 2-3', async () => {
@@ -181,6 +196,45 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(await within(screen.getByRole('region', { name: 'Bán chạy' })).findByText('Bán chạy nhất')).toBeInTheDocument();
     expect(mocks.fetchProducts.mock.calls.length).toBe(callsBefore + 1);
     expect(screen.queryByRole('button', { name: /^Thử lại/ })).toBeNull();
+  });
+
+  it('D7-7: API sập hẳn (cả 3 lưới SP lỗi) → MỘT dải lỗi cấp trang + một nút "Thử lại", không còn thẻ lỗi từng khối; thử lại xong thì dải biến mất', async () => {
+    mocks.fetchPurchasedItems.mockRejectedValue(new Error('boom'));
+    mocks.fetchForYou.mockRejectedValue(new Error('boom'));
+    let down = true;
+    mocks.fetchProducts.mockImplementation(async (params: { sort?: string }) => {
+      if (down) throw new Error('boom');
+      return params.sort === 'best_seller' ? PAGE([card('bs', 'Bán chạy nhất')]) : PAGE([card('f2', 'Chỉ nổi bật')]);
+    });
+    const { qc } = renderHome();
+    await waitFor(() => {
+      for (const key of [['products', 'home-best-seller'], ['products', 'home-featured'], ['products', 'home-newest']]) {
+        expect(qc.getQueryState(key)?.status).toBe('error');
+      }
+    });
+    const strip = await screen.findByTestId('home-page-error');
+    expect(within(strip).getByText('Chưa tải được Trang chủ')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Thử lại/ })).toHaveLength(1);
+    expect(screen.queryAllByTestId('home-block-error')).toHaveLength(0);
+    expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
+    // Dải nằm ngay dưới ô tìm, không ở cuối trang.
+    expect(blockOrder().slice(0, 2)).toEqual(['search', 'pageError']);
+
+    down = false;
+    await userEvent.setup().click(within(strip).getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByText('Bán chạy nhất')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('home-page-error')).toBeNull());
+  });
+
+  it('D7-7: chỉ MỘT phần lỗi (còn khối khác tải được) → vẫn là thẻ lỗi từng khối, không có dải lỗi cấp trang', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.fetchProducts.mockImplementation(async (params: { sort?: string }) => {
+      if (params.sort === 'best_seller') throw new Error('boom');
+      return PAGE([card('f2', 'Chỉ nổi bật')]);
+    });
+    renderHome();
+    await screen.findByRole('button', { name: 'Thử lại Bán chạy' });
+    expect(screen.queryByTestId('home-page-error')).toBeNull();
   });
 
   it('C-084: "Tubu chọn cho bạn" lỗi → khối lỗi, "Thử lại" gọi lại đúng danh sách nổi bật', async () => {
@@ -373,6 +427,61 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(qc.isFetching()).toBe(0);
   });
 
+  // D2-07b + D7 việc 1: khối "Quà khách mới" và cờ bố cục home.new_customer_layout (mặc định bật ở API).
+  describe('khối "Quà khách mới" và cờ home.new_customer_layout', () => {
+    it('cờ tắt (mặc định): giữ thứ tự cũ của khách mới, khối Quà khách mới đứng ngay sau Danh mục', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      expect(await screen.findByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
+      expect(blockOrder()).toEqual([...homeBlockOrder('new', false)]);
+      expect(blockOrder().slice(0, 7)).toEqual(['search', 'purchased', 'orderStrip', 'flash', 'bestSellers', 'categories', 'welcome']);
+      expect(block('welcome')).toContainElement(screen.getByRole('region', { name: 'Quà khách mới' }));
+    });
+
+    it('cờ bật: sau khi cấu hình về, Quà khách mới rồi Danh mục lên trước giờ vàng', async () => {
+      mocks.getPublicConfig.mockResolvedValue({ ...PUBLIC_CONFIG, homeNewCustomerLayout: true });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('new', true)]));
+      expect(blockOrder().slice(0, 6)).toEqual(['search', 'purchased', 'orderStrip', 'welcome', 'categories', 'flash']);
+      expect(await screen.findByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
+    });
+
+    it('cấu hình công khai chưa về hoặc lỗi → bố cục cũ (không đổi thứ tự khi chưa chắc)', async () => {
+      mocks.getPublicConfig.mockRejectedValue(new Error('boom'));
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      await screen.findByRole('region', { name: 'Bán chạy' });
+      expect(blockOrder()).toEqual([...homeBlockOrder('new', false)]);
+    });
+
+    it('khách cũ: bố cục khách cũ kể cả khi cờ bật, và không có khối Quà khách mới', async () => {
+      mocks.getPublicConfig.mockResolvedValue({ ...PUBLIC_CONFIG, homeNewCustomerLayout: true });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+      renderHome();
+      await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('returning')]));
+      await screen.findByRole('region', { name: 'Dành cho bạn' });
+      expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+    });
+
+    it('khách cũ đã được nhớ từ lần trước: ngay từ khung hình đầu không mount khối, không gọi API ưu đãi khách mới', async () => {
+      localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+      renderHome();
+      await screen.findByRole('region', { name: 'Dành cho bạn' });
+      expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
+    });
+
+    it('khách mới nhưng đã có đơn chờ giao (API: không còn là khách mới) → không hiện khối', async () => {
+      mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false, welcomeVoucher: null });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      renderHome();
+      await screen.findByRole('region', { name: 'Bán chạy' });
+      await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
+      expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+    });
+  });
+
   describe('thứ tự khối không nhảy sau khung hình đầu (khách cũ mở lạnh)', () => {
     const RETURNING = [...homeBlockOrder('returning')];
     const NEW = [...homeBlockOrder('new')];
@@ -523,3 +632,49 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Tubu Tree' })).toBeInTheDocument();
   });
 });
+
+describe('HomePage: dải "Mua trong Mini App tích nhiều hơn" không đổi bố cục khối', () => {
+  const loyalty = (claim: boolean) => ({ vndPerPoint: 50, vndPerPointRedeem: 1_000, earnPct: 2, marketplaceEarnPct: 1, marketplaceClaimEnabled: claim });
+  const setup = (opts: { claim: boolean; layout: boolean }) => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.auth.status = 'authenticated';
+    mocks.auth.user = { id: 'u1' };
+    mocks.fetchProducts.mockResolvedValue(PAGE([card('f1', 'Sản phẩm')]));
+    mocks.fetchForYou.mockResolvedValue([]);
+    mocks.fetchBrands.mockResolvedValue([]);
+    mocks.fetchCategories.mockResolvedValue([]);
+    mocks.getNotifications.mockResolvedValue([]);
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null });
+    mocks.getPublicConfig.mockResolvedValue({ ...PUBLIC_CONFIG, loyalty: loyalty(opts.claim), homeNewCustomerLayout: opts.layout });
+  };
+
+  it.each([
+    { claim: true, layout: false },
+    { claim: true, layout: true },
+    { claim: false, layout: false },
+    { claim: false, layout: true },
+  ])('khách mới (claim=$claim, layout=$layout): thứ tự khối giữ nguyên, dải nằm trong khối Quà khách mới, không trong dải đơn', async (opts) => {
+    setup(opts);
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    const { qc } = renderHome();
+    await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
+    await screen.findByRole('region', { name: 'Bán chạy' });
+    await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('new', opts.layout)]));
+    await waitFor(() => expect(block('welcome').querySelector('[data-testid="points-boost"]') !== null).toBe(opts.claim));
+    expect(block('orderStrip').querySelector('[data-testid="points-boost"]')).toBeNull();
+    if (opts.layout) expect(blockOrder().slice(0, 4)).toEqual(['search', 'purchased', 'orderStrip', 'welcome']);
+    if (opts.claim) expect(block('welcome')).toHaveTextContent('tích gấp đôi');
+  });
+
+  it.each([true, false])('khách cũ (claim=%s): thứ tự khối giữ nguyên; dải nằm ngay sau dải đơn, khối welcome không có', async (claim) => {
+    setup({ claim, layout: true });
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+    renderHome();
+    await waitFor(() => expect(blockOrder()).toEqual([...homeBlockOrder('returning', true)]));
+    await waitFor(() => expect(within(block('orderStrip')).queryByTestId('points-boost') !== null).toBe(true));
+    expect(block('orderStrip')).toHaveTextContent(claim ? 'tích gấp đôi' : 'Tích 2% tiền hàng thành Điểm Xanh khi mua trong Mini App');
+    expect(document.querySelector('[data-home-block="welcome"]')).toBeNull();
+  });
+});
+

@@ -34,6 +34,22 @@ describe('safeEvidenceImage', () => {
     });
   });
 
+  // D6-05: ảnh bài cộng đồng chờ duyệt cũng đi đường riêng, không nhúng base64 trong hàng chờ.
+  it('đường dẫn ảnh bài cộng đồng (/feed/posts/:id/images/:i?v=) → ghép gốc API', () => {
+    const feedRef = '/feed/posts/cmpost123/images/1?v=0123456789abcdef0123456789abcdef';
+    expect(safeEvidenceImage(feedRef)).toEqual({ src: `http://localhost:3001/api${feedRef}`, href: `http://localhost:3001/api${feedRef}` });
+  });
+
+  it.each([
+    '/feed/posts/p1/images/0',
+    '/feed/posts/p1/images/0?v=ZZZ',
+    '/feed/posts/../admin/users?v=0123456789abcdef',
+    '/feed/admin/pending',
+    '/feed/posts/p1/images/0?v=0123456789abcdef&x=1',
+  ])('từ chối đường dẫn feed lạ %s', (url) => {
+    expect(safeEvidenceImage(url)).toBeNull();
+  });
+
   it.each([
     '/returns/../admin/users',
     '/admin/users',

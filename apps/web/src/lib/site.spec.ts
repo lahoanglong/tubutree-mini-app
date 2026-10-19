@@ -67,6 +67,18 @@ describe('NEXT_PUBLIC_SITE_URL lúc build', () => {
   });
 });
 
+describe('Dockerfile nhận tên miền gốc của gian hàng', () => {
+  it('khai ARG/ENV NEXT_PUBLIC_TENANT_ROOT_DOMAIN trước bước build (middleware nhúng giá trị lúc build)', () => {
+    const dockerfile = repoFile('apps/web/Dockerfile');
+    const arg = dockerfile.indexOf('ARG NEXT_PUBLIC_TENANT_ROOT_DOMAIN');
+    const env = dockerfile.indexOf('ENV NEXT_PUBLIC_TENANT_ROOT_DOMAIN=$NEXT_PUBLIC_TENANT_ROOT_DOMAIN');
+    const build = dockerfile.indexOf('RUN pnpm --filter @tubutree/web build');
+    expect(arg).toBeGreaterThan(-1);
+    expect(env).toBeGreaterThan(arg);
+    expect(build).toBeGreaterThan(env);
+  });
+});
+
 describe('isPortalPath', () => {
   it('nhận /admin, /merchant và cây con; không nhận trang khách (kể cả /brand/[slug] công khai)', async () => {
     const { isPortalPath } = await loadSite();
@@ -86,7 +98,7 @@ describe('tenantSubdomainOf', () => {
     expect(tenantSubdomainOf('ctv-an.tubutree.com')).toBe('ctv-an');
     expect(tenantSubdomainOf('Ctv-An.tubutree.com:3000')).toBe('ctv-an');
     expect(tenantSubdomainOf('ctv-an.localhost:3000')).toBe('ctv-an');
-    for (const h of ['tubutree.com', 'app.tubutree.com', 'www.tubutree.com', 'admin.tubutree.com', 'api.tubutree.com', 'mail.tubutree.com', 'localhost:3000', 'localhost', '', null, undefined]) {
+    for (const h of ['tubutree.com', 'app.tubutree.com', 'www.tubutree.com', 'admin.tubutree.com', 'api.tubutree.com', 'mail.tubutree.com', 'localhost:3000', 'localhost', 'tubutree-web-git-main-x.vercel.app', 'ctv-an.example.com', '', null, undefined]) {
       expect(tenantSubdomainOf(h), String(h)).toBeNull();
     }
   });
@@ -99,7 +111,7 @@ describe('tenantHostBootScript', () => {
   const HOSTS = [
     'ctv-an.tubutree.com', 'ctv-an.tubutree.com:3000', 'CTV-AN.Tubutree.Com', 'ctv-an.localhost:3112', 'a.b.tubutree.com',
     'tubutree.com', 'app.tubutree.com', 'www.tubutree.com', 'admin.tubutree.com', 'api.tubutree.com', 'mail.tubutree.com',
-    'app.localhost:3112', 'localhost:3112', 'localhost', '',
+    'tubutree-web-git-main-x.vercel.app', 'ctv-an.example.com', 'ctv-an.nottubutree.com', 'app.localhost:3112', 'localhost:3112', 'localhost', '',
   ];
   const run = (script: string, host: string) => {
     const attrs: string[] = [];

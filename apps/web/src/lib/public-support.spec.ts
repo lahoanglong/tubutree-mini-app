@@ -12,8 +12,8 @@ afterEach(() => {
 // Hotline/email ở footer lấy từ GET /config/public (admin đổi được), nhưng footer không bao giờ
 // được trống hay làm sập trang chủ khi API hỏng — luôn rơi về thông tin liên hệ mặc định.
 describe('getPublicSupport', () => {
-  it('mặc định là hotline 0899 149 229 và tubutree@gmail.com', () => {
-    expect(DEFAULT_SUPPORT).toEqual({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
+  it('mặc định là hotline 0984 606 774 và tubutree@gmail.com', () => {
+    expect(DEFAULT_SUPPORT).toEqual({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
   });
 
   it('lấy hotline và email admin đã cấu hình', async () => {
@@ -45,5 +45,17 @@ describe('getPublicSupport', () => {
     await expect(getPublicSupport()).resolves.toMatchObject({ zaloOaName: 'Tubu Tree' });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support: { zaloOaName: '  ' } })));
     expect((await getPublicSupport()).zaloOaName).toBeUndefined();
+  });
+
+  it('đọc link kênh cộng đồng: bỏ link rỗng và link không phải https', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        res(200, { community: { zaloGroupUrl: 'https://zalo.me/g/a', facebookUrl: 'http://facebook.com/x', tiktokUrl: null } }),
+      ),
+    );
+    expect((await getPublicSupport()).community).toEqual({ zaloGroupUrl: 'https://zalo.me/g/a' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { community: { eventRewardMaxPoints: 1000 } })));
+    expect((await getPublicSupport()).community).toBeUndefined();
   });
 });

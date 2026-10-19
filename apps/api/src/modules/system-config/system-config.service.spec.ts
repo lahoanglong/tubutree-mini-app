@@ -274,7 +274,7 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
   it.each([
     ['shipping.flat_fee_below_threshold', 19_000, [-19_000, 1_000_001, 1.5]],
     ['shipping.free_threshold', 200_000, [-1, 50_000_001]],
-    ['loyalty.vnd_per_point', 10_000, [1, 999, 0, 1_000_001]],
+    ['loyalty.earn_pct', 2, [0, 0.05, 20.5, 100, -1]],
     ['wallet.withdraw_fee', 3_000, [-100_000, 100_001]],
     ['wallet.withdraw_min', 100_000, [-1, 100_000_001]],
     ['affiliate.min_withdraw_bank', 50_000, [-1]],
@@ -310,6 +310,11 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
       ['cá độ', 'vay nong'],
       ['casino', [''], ['   '], [1], [{ w: 'x' }], ['x'.repeat(61)], Array.from({ length: 301 }, (_, i) => `t${i}`)],
     ],
+    // Vai trò hưởng hoa hồng CTV: rỗng là không ai hưởng, sai tên vai trò là âm thầm về mặc định — chặn ngay lúc ghi.
+    ['affiliate.commission_eligible_roles', ['AFFILIATE', 'DEALER'], [[], 'AFFILIATE', ['CTV'], ['AFFILIATE', 1], { AFFILIATE: true }]],
+    // Cờ gian hàng: chuỗi "false" hay số 0 mà lọt vào thì đọc ra tắt âm thầm, nên chỉ nhận boolean ngay lúc ghi.
+    ['storefront.require_approval', true, ['true', 'false', 1, 0, null, {}]],
+    ['storefront.subdomain_enabled', false, ['true', 'false', 1, 0, null, []]],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
     const ok = mk(fine);
     await ok.svc.set(key, fine as never, 'admin1');
@@ -414,5 +419,144 @@ describe('SystemConfigService.set — mốc bắt đầu đối soát giao hộ 
     expect(upsert).not.toHaveBeenCalled();
     await service.set('merchant.consignment_settle_from', '2026-11-01T00:00:00+07:00', 'admin1');
     expect(upsert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SystemConfigService.set — nội dung điều khoản/chính sách (D5-01)', () => {
+  const keys = ['legal.dieu-khoan', 'legal.bao-mat', 'legal.doi-tra', 'legal.van-chuyen'];
+
+  it('hệ thống biết bốn khoá này dù DB chưa có dòng (admin ghi được lần đầu)', () => {
+    for (const key of keys) expect(SystemConfigService.hasWriteRule(key)).toBe(true);
+  });
+
+  it('chỉ nhận chuỗi: object/số/null bị từ chối, không ghi gì', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '' } });
+    const service = new SystemConfigService(prisma);
+    for (const bad of [{ a: 1 }, 5, ['x'], true]) {
+      await expect(service.set('legal.doi-tra', bad, 'admin1')).rejects.toThrow(BadRequestException);
+    }
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('chặn nội dung quá dài (50.000 ký tự) để một lần dán nhầm không làm nặng mọi trang chính sách', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '' } });
+    const service = new SystemConfigService(prisma);
+    await expect(service.set('legal.bao-mat', 'a'.repeat(50_001), 'admin1')).rejects.toThrow(BadRequestException);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('nhận markdown tiếng Việt và chuỗi rỗng (rỗng = dùng lại bản nháp mặc định)', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '' } });
+    const service = new SystemConfigService(prisma);
+    await service.set('legal.dieu-khoan', '# Điều khoản\n\n- Mục 1', 'admin1');
+    await service.set('legal.dieu-khoan', '', 'admin1');
+    expect(upsert).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SystemConfigService.set — điểm uy tín cộng đồng và thưởng chuỗi 7 ngày (seed-reference nạp các khoá này)', () => {
+  function mk() {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it.each([
+    ['community.rep_post', 5, [-1, 101, 2.5]],
+    ['community.rep_answer', 2, [-2, 101, 0.5]],
+    ['community.rep_best', 10, [-10, 101, 1.5]],
+    ['community.daily_rep_cap', 30, [-1, 1001, 30.5]],
+  ] as const)('%s: nhận %d và 0, từ chối %j', async (key, fine, badValues) => {
+    for (const ok of [fine, 0]) {
+      const good = mk();
+      await good.svc.set(key, ok, 'admin1');
+      expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+    for (const v of badValues) {
+      const bad = mk();
+      await expect(bad.svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(bad.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('community.rep_thresholds: nhận 4 mốc tăng dần bắt đầu từ 0; từ chối sai số mốc, mốc đầu khác 0, không tăng dần, số lẻ/âm/chuỗi', async () => {
+    const good = mk();
+    await good.svc.set('community.rep_thresholds', [0, 50, 200, 500], 'admin1');
+    expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    const bads: unknown[] = [[0, 50, 200], [0, 50, 200, 500, 900], [10, 50, 200, 500], [0, 200, 50, 500], [0, 50, 50, 500], [0, 50, 200.5, 500], [0, -5, 200, 500], [0, '50', 200, 500], [0, 50, 200, 2_000_000], { 0: 0 }];
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set('community.rep_thresholds', bad as number[], 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('game.streak_7_bonus: nhận { seeds } và bản seed { seeds, free_spins }; từ chối seeds âm/lẻ/quá lớn/thiếu và free_spins sai', async () => {
+    for (const ok of [{ seeds: 20 }, { seeds: 10, free_spins: 1 }, { seeds: 0 }]) {
+      const good = mk();
+      await good.svc.set('game.streak_7_bonus', ok, 'admin1');
+      expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+    const bads: object[] = [{ seeds: -1 }, { seeds: 10.5 }, { seeds: 10_001 }, {}, { seeds: '20' }, { seeds: 10, free_spins: -1 }, { seeds: 10, free_spins: 1.5 }, { seeds: 10, free_spins: 101 }, []];
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set('game.streak_7_bonus', bad, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('SystemConfigService.set — freeship đơn đầu và link Mini App cho thẻ hộp hàng (D2-08, D2-03)', () => {
+  function mk() {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it.each([
+    ['shipping.first_order_free_enabled', [true, false], ['true', 'false', 1, 0, null]],
+    ['pancake.total_mismatch_check', [true, false], ['true', 'false', 1, 0, null]],
+    ['shipping.first_order_free_min_subtotal', [0, 99000], [-1, 99000.5, 50_000_001, '99000']],
+    ['home.new_customer_layout', [true, false], ['true', 'false', 1, 0, null]],
+    ['community.public_preview', [true, false], ['true', 'false', 1, 0, null]],
+    ['community.zalo_group_url', ['', 'https://zalo.me/g/abcxyz', 'https://www.zalo.me/g/abc'], ['http://zalo.me/g/a', 'https://evil.com/zalo.me', 'https://zalo.me.evil.com/g', 'https://facebook.com@evil.com/x', 'zalo.me/g/a', ' https://zalo.me/g/a', 5, null]],
+    ['community.facebook_url', ['', 'https://www.facebook.com/tubutree', 'https://fb.com/tubutree', 'https://m.facebook.com/tubutree'], ['https://notfacebook.com/x', 'javascript:alert(1)', 'https://facebook.com:8080/x']],
+    ['community.tiktok_url', ['', 'https://www.tiktok.com/@tubutree', 'https://vt.tiktok.com/abc'], ['https://tiktok.com.cn/x', 'ftp://tiktok.com/x']],
+    ['dealer.review_hours', [1, 24, 720], [0, -1, 1.5, 721, '24', null]],
+    ['app.miniapp_base_url', ['', 'https://zalo.me/s/1234567890', 'https://zalo.me/s/1234567890/'], ['zalo.me/s/123', 'http://zalo.me/s/123', 'https://zalo.me/s/1 23', 'https://zalo.me/s/123?x=1', 5]],
+  ] as const)('%s: nhận %j, từ chối %j', async (key, goods, bads) => {
+    for (const ok of goods) {
+      const good = mk();
+      await good.svc.set(key, ok, 'admin1');
+      expect(good.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set(key, bad as never, 'admin1')).rejects.toThrow(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('SystemConfigService.set — mặc định hoa hồng không vượt trần', () => {
+  const svc = (values: Record<string, unknown>) => {
+    const { prisma } = makePrisma({ findUnique: jest.fn(async ({ where }: { where: { key: string } }) => (where.key in values ? { value: values[where.key] } : null)) });
+    return new SystemConfigService(prisma);
+  };
+
+  it('affiliate.default_rate_pct lớn hơn max_rate_pct hiện hành → 400', async () => {
+    await expect(svc({ 'affiliate.max_rate_pct': 10 }).set('affiliate.default_rate_pct', 12, 'a')).rejects.toThrow('vượt trần 10%');
+    await expect(svc({ 'affiliate.max_rate_pct': 10 }).set('affiliate.default_rate_pct', 10, 'a')).resolves.toBeUndefined();
+  });
+
+  it('hạ max_rate_pct xuống dưới mức mặc định đang áp → 400', async () => {
+    await expect(svc({ 'affiliate.default_rate_pct': 8 }).set('affiliate.max_rate_pct', 5, 'a')).rejects.toThrow('thấp hơn mức mặc định 8%');
+    await expect(svc({}).set('affiliate.max_rate_pct', 8, 'a')).resolves.toBeUndefined();
   });
 });

@@ -5,6 +5,10 @@ import { AdminUsersController } from './admin-users.controller';
 import { UserBlockService } from './user-block.service';
 import { AdminEngagementController } from './admin-engagement.controller';
 import { AdminEngagementService } from './admin-engagement.service';
+import { AdminCouponBatchController } from './admin-coupon-batch.controller';
+import { AdminCouponBatchService } from './admin-coupon-batch.service';
+import { AdminReportsController } from './admin-reports.controller';
+import { AdminReportsService } from './admin-reports.service';
 import { CatalogModule } from '../catalog/catalog.module';
 import { OrdersModule } from '../orders/orders.module';
 import { StaffModule } from '../staff/staff.module';
@@ -15,7 +19,7 @@ import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 
 @Module({
   imports: [CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
-  controllers: [AdminController, AdminUsersController, AdminEngagementController],
-  providers: [AdminService, UserBlockService, AdminEngagementService],
+  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminCouponBatchController, AdminReportsController],
+  providers: [AdminService, UserBlockService, AdminEngagementService, AdminCouponBatchService, AdminReportsService],
 })
 export class AdminModule {}

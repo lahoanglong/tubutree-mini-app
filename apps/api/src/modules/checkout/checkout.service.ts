@@ -13,7 +13,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { CartService } from '../cart/cart.service';
 import { CouponsService } from '../coupons/coupons.service';
-import { PricingService, tierDiscountPctOf } from '../pricing/pricing.service';
+import {
+  FIRST_ORDER_FREESHIP_TAKEN_MSG,
+  firstOrderFreeShipFrom,
+  firstOrderShippingFee,
+  PricingService,
+  tierDiscountPctOf,
+} from '../pricing/pricing.service';
+import { assertFirstOrderInTx } from '../../common/first-order';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
@@ -29,6 +36,7 @@ import {
   type FlashQuotaOutcome,
 } from '../flash-sale/flash-sale.service';
 import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
+import { formatPoints } from '../../common/format-points';
 import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
@@ -253,6 +261,8 @@ export class CheckoutService {
       pointsPartnerNote: computed.pointsPartnerNote,
       pointsNotice: computed.pointsNotice,
       shippingFee: computed.shippingFee,
+      // Phần phí giao miễn nhờ freeship đơn đầu (D2-08), 0 khi không áp.
+      firstOrderShipWaived: computed.firstOrderShipWaived,
       total: computed.total,
       pointsEarned: computed.pointsEarned,
       pointsBalance: user.pointsBalance,
@@ -372,7 +382,8 @@ export class CheckoutService {
     // WALLET thanh toán ngay (đơn CONFIRMED + PAID).
     const paid = paymentMethod === 'WALLET';
     const status = paymentMethod === 'COD' || paid ? 'CONFIRMED' : 'PENDING_PAYMENT';
-    const orderSource = storefrontSlug ? 'ctv_assisted' : dto.itemIds?.length ? 'buy_now' : 'checkout';
+    // 'ctv_assisted' dành riêng cho đơn CTV lên hộ khách (affiliate.service); khách tự mua qua gian hàng là 'storefront'.
+    const orderSource = storefrontSlug ? 'storefront' : dto.itemIds?.length ? 'buy_now' : 'checkout';
     const codes: string[] = [];
     while (codes.length < computed.shipments.length) {
       const next = await generateUniqueOrderCode(this.prisma, 'RETAIL');
@@ -527,10 +538,10 @@ export class CheckoutService {
             if (lock.locked > 0 && balance >= usedStandard) {
               const usable = Math.max(0, balance - lock.locked);
               throw new BadRequestException(
-                `Đơn này dùng ${usedStandard} Điểm Xanh nhưng hiện bạn chỉ dùng được ${usable}/${balance} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
+                `Đơn này dùng ${formatPoints(usedStandard)} Điểm Xanh nhưng hiện bạn chỉ dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
               );
             }
-            throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${balance} điểm).`);
+            throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${formatPoints(balance)} điểm).`);
           }
           // Sổ điểm theo từng đơn: huỷ một đơn của lần đặt bị tách chỉ hoàn đúng phần điểm của đơn đó.
           for (const [i, shipment] of computed.shipments.entries()) {
@@ -561,7 +572,7 @@ export class CheckoutService {
           });
           if (!conv.applied) {
             throw new BadRequestException(
-              `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${computed.pointsUsedConverted} điểm). Vui lòng tải lại trang thanh toán.`,
+              `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${formatPoints(computed.pointsUsedConverted)} điểm). Vui lòng tải lại trang thanh toán.`,
             );
           }
         }
@@ -580,6 +591,10 @@ export class CheckoutService {
               insufficientMessage: 'Số dư Ví Tubu không đủ.',
             });
           }
+        }
+        if (computed.firstOrderShipWaived > 0) {
+          // Hai lần đặt song song cùng tính là đơn đầu: kiểm lại dưới khoá first-order (trước khoá mã, cùng thứ tự CouponsService).
+          await assertFirstOrderInTx(tx, userId, { orderIds: created.map((o) => o.id), checkoutGroup }, FIRST_ORDER_FREESHIP_TAKEN_MSG);
         }
         // B4: redeem coupon ATOMIC trong cùng tx — chống race usageLimit/perUserLimit khi 2 đơn
         // đồng thời cùng dùng 1 mã (đặc biệt voucher giới thiệu usageLimit=1). Nếu hết lượt
@@ -618,6 +633,8 @@ export class CheckoutService {
               pointsUsed: order.pointsUsed,
               pointsUsedConverted: order.pointsUsedConverted,
               orderSource,
+              firstTouchSource: user.firstTouchSource ?? null,
+              firstTouchCampaign: user.firstTouchCampaign ?? null,
             },
           });
           if (paid) {
@@ -904,7 +921,8 @@ export class CheckoutService {
     let freeshipSaved = 0;
     if (withShipping && [...results.values()].some((r) => !(r instanceof BadRequestException) && r.freeship)) {
       const groups = groupByFulfiller(cart.items);
-      const terms = await this.shipmentTerms(groups, groups.map((g) => groupSubtotal(g.lines)), user.tierId, true);
+      const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+      const terms = await this.shipmentTerms(groups, groups.map((g) => groupSubtotal(g.lines)), user.tierId, true, firstOrderFrom);
       freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
     }
 
@@ -1104,7 +1122,9 @@ export class CheckoutService {
       );
       throw new InternalServerErrorException('Không tính được số tiền của đơn hàng. Vui lòng thử lại sau hoặc liên hệ Tubu Tree.');
     }
-    const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship);
+    const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+    const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship, firstOrderFrom);
+    const firstOrderShipWaived = terms.reduce((s, t) => s + t.firstOrderWaived, 0);
     // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ hết) → giảm 0đ; mã
     // freeship chỉ miễn phí giao kiện Tubu, nên giỏ toàn hàng gian hàng tự giao hoặc kiện Tubu đã miễn phí giao thì không
     // được gì. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
@@ -1156,6 +1176,7 @@ export class CheckoutService {
         redeemablePoints,
         lockedPoints,
         shippingFee,
+        firstOrderShipWaived,
         total,
         pointsEarned,
         shipments,
@@ -1174,7 +1195,9 @@ export class CheckoutService {
     subtotals: number[],
     tierId: string | null,
     freeship: boolean,
-  ): Promise<{ shippingFee: number; commissionPct: number | null; freeshipWaived: number }[]> {
+    /** Ngưỡng freeship đơn đầu của khách (firstOrderFreeShipFrom), null = không áp. */
+    firstOrderFrom: number | null = null,
+  ): Promise<{ shippingFee: number; commissionPct: number | null; freeshipWaived: number; firstOrderWaived: number }[]> {
     const merchantIds = groups.flatMap((g) => (g.fulfiller.kind === 'MERCHANT' ? [g.fulfiller.storefrontId] : []));
     const [stores, defaultFee, defaultPct] = merchantIds.length
       ? await Promise.all([
@@ -1187,11 +1210,13 @@ export class CheckoutService {
         ])
       : [[], DEFAULT_MERCHANT_SHIPPING_FEE, DEFAULT_MERCHANT_COMMISSION_PCT];
     const byId = new Map(stores.map((sf) => [sf.id, sf]));
-    const out: { shippingFee: number; commissionPct: number | null; freeshipWaived: number }[] = [];
+    const out: { shippingFee: number; commissionPct: number | null; freeshipWaived: number; firstOrderWaived: number }[] = [];
     for (const [i, g] of groups.entries()) {
       if (g.fulfiller.kind !== 'MERCHANT') {
-        const fee = await this.pricing.calcShippingFee({ subtotal: subtotals[i]!, tierId });
-        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0 });
+        const base = await this.pricing.calcShippingFee({ subtotal: subtotals[i]!, tierId });
+        // Freeship đơn đầu miễn trước mã freeship: mã chỉ "miễn được" phần còn lại, nên không bị tiêu cho đơn đã miễn phí giao.
+        const fee = firstOrderShippingFee(base, subtotals[i]!, firstOrderFrom);
+        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0, firstOrderWaived: base - fee });
         continue;
       }
       const sf = byId.get(g.fulfiller.storefrontId);
@@ -1201,6 +1226,7 @@ export class CheckoutService {
         shippingFee: freeByShop ? 0 : sf?.shippingFee ?? defaultFee,
         commissionPct: sf?.commissionPct != null ? Number(sf.commissionPct) : defaultPct,
         freeshipWaived: 0,
+        firstOrderWaived: 0,
       });
     }
     return out;

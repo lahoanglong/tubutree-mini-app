@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { NotificationsService } from './notifications.service';
+import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ZnsClient } from '../integrations/zns/zns.client';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -108,6 +109,11 @@ describe('seed mẫu thông báo', () => {
     expect(templates.filter((t) => /xu cũ/iu.test(t.bodyTemplate)).map((t) => t.code)).toEqual(['XU_CONVERTED']);
   });
 
+  it('mẫu nhân viên Marketing sửa được đều có trong seed (gõ sai mã thì quyền sửa vô tác dụng)', () => {
+    const codes = new Set(seededTemplates().map((t) => t.code));
+    expect([...MARKETING_TEMPLATE_CODES].filter((c) => !codes.has(c))).toEqual([]);
+  });
+
   it('id và code không trùng nhau (upsert theo id, code là unique ở DB)', () => {
     expect(new Set(templates.map((t) => t.id)).size).toBe(templates.length);
     expect(byCode.size).toBe(templates.length);
@@ -155,6 +161,10 @@ describe('seed mẫu thông báo', () => {
       'SUBSCRIPTION_ORDER_FAILED',
       'PRICE_DROP_ALERT',
       'COMMUNITY_POST_REJECTED',
+      // Launch review D4-006/D4-022: tin tương tác bài và tin ẩn bài, chỉ có trên prod qua migration.
+      'COMMUNITY_POST_LIKED',
+      'COMMUNITY_POST_COMMENTED',
+      'COMMUNITY_POST_HIDDEN',
       'REFILL_APPROVED',
       'REFILL_REJECTED',
       // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.

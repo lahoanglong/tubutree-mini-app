@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { isRealUser } from '../../common/real-user';
+import { hasPriorOrder } from '../../common/first-order';
+import { pointsForGoods } from './points-earn';
+import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from '../loyalty/earn-rates';
 
 export interface ShippingInput {
   subtotal: number; // sau giảm giá hàng (chưa gồm ship)
@@ -18,6 +22,38 @@ export async function freeShipThreshold(config: Pick<SystemConfigService, 'get'>
   const overrides = await config.get<Record<string, number> | null>('shipping.tier_freeship_overrides', {});
   const tier = (overrides ?? {})[tierId];
   return typeof tier === 'number' ? Math.min(tier, global) : global;
+}
+
+export const FIRST_ORDER_FREESHIP_ENABLED_KEY = 'shipping.first_order_free_enabled';
+export const FIRST_ORDER_FREESHIP_MIN_KEY = 'shipping.first_order_free_min_subtotal';
+export const FIRST_ORDER_FREESHIP_ENABLED_DEFAULT = true;
+export const FIRST_ORDER_FREESHIP_MIN_DEFAULT = 199_000;
+
+/**
+ * Freeship đơn đầu (D2-08): ngưỡng tiền hàng kiện Tubu để đơn đầu của khách được miễn phí giao, null = không áp. Chỉ khách thật
+ * (cùng luật voucher chào mừng: tài khoản deviceId mới tạo vô hạn) chưa có đơn nào ngoài đơn huỷ (common/first-order.ts).
+ * Mặc định bật từ 199.000đ; chỉ đọc DB khi cờ bật. Giỏ (thanh tiến độ) và checkout cùng dùng hàm này.
+ */
+export async function firstOrderFreeShipFrom(
+  config: Pick<SystemConfigService, 'get'> | undefined,
+  prisma: Pick<PrismaService, 'user' | 'order'>,
+  userId: string,
+): Promise<number | null> {
+  if (!config || (await config.get<boolean>(FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_ENABLED_DEFAULT)) !== true) return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+  if (!isRealUser(user)) return null;
+  if (await hasPriorOrder(prisma, userId)) return null;
+  const min: unknown = await config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT);
+  return typeof min === 'number' && Number.isFinite(min) && min >= 0 ? min : null;
+}
+
+/** Lần đặt khác của khách vừa ghi đơn đầu giữa lúc báo giá và lúc ghi đơn này (kiểm trong tx đặt đơn). */
+export const FIRST_ORDER_FREESHIP_TAKEN_MSG =
+  'Ưu đãi miễn phí giao hàng đơn đầu đã dùng cho đơn khác của bạn. Vui lòng tải lại trang thanh toán để xem phí giao mới.';
+
+/** Phí giao kiện Tubu sau freeship đơn đầu: 0 khi có ngưỡng và tiền hàng của kiện đạt ngưỡng. */
+export function firstOrderShippingFee(fee: number, subtotal: number, freeFrom: number | null): number {
+  return freeFrom != null && subtotal >= freeFrom ? 0 : fee;
 }
 
 /**
@@ -40,8 +76,8 @@ export function calcTierDiscount(goodsValue: number, discountPct: number): numbe
  * Quy tắc (Build Spec §0.7, §6.6, §15):
  *  - Đơn ≥ shipping.free_threshold (200k) → freeship; ngược lại flat_fee (19k).
  *  - Hạng có override (Lộc Biếc freeship ≥99k, Đại Thụ/Cổ Thụ freeship toàn shop).
- *  - 10.000đ chi tiêu = 1 điểm × multiplier theo hạng.
- *  - 1 điểm = 1.000đ khi trừ, tối đa 20% giá trị đơn.
+ *  - Tích loyalty.earn_pct (2%) tiền hàng sau giảm giá, không gồm ship, × multiplier theo hạng.
+ *  - 1 điểm = 1đ khi trừ, tối đa 20% giá trị đơn.
  */
 @Injectable()
 export class PricingService {
@@ -57,9 +93,8 @@ export class PricingService {
 
   /** Điểm tích cho giá trị hàng (đã trừ giảm giá), nhân multiplier hạng. */
   async calcPointsEarned(goodsValue: number, tierMultiplier = 1): Promise<number> {
-    const vndPerPoint = await this.config.get<number>('loyalty.vnd_per_point', 10000);
-    if (vndPerPoint <= 0) return 0;
-    return Math.floor((goodsValue / vndPerPoint) * tierMultiplier);
+    const earnPct = await this.config.get<number>(EARN_PCT_KEY, DEFAULT_EARN_PCT);
+    return pointsForGoods(goodsValue, earnPct, tierMultiplier);
   }
 
   /** Số VND tối đa có thể trừ bằng điểm cho 1 đơn. */
@@ -75,10 +110,10 @@ export class PricingService {
     orderValue: number,
   ): Promise<{ pointsUsed: number; discount: number }> {
     const [vndPerPointRedeem, maxValue] = await Promise.all([
-      this.config.get<number>('loyalty.vnd_per_point_redeem', 1000),
+      this.config.get<number>('loyalty.vnd_per_point_redeem', 1),
       this.calcMaxRedeemableValue(orderValue),
     ]);
-    // Guard chia 0/âm (mirror calcPointsEarned's vndPerPoint guard): misconfig hoặc orderValue=0
+    // Guard chia 0/âm (mirror calcPointsEarned's earnPct guard): misconfig hoặc orderValue=0
     // → tránh NaN lan vào pointsUsed/discount rồi vào tx tạo đơn (Prisma nhận NaN có thể lỗi khó hiểu).
     if (vndPerPointRedeem <= 0) return { pointsUsed: 0, discount: 0 };
     const maxPointsByValue = Math.floor(maxValue / vndPerPointRedeem);
@@ -101,7 +136,7 @@ export class PricingService {
     orderValue: number,
   ): Promise<{ pointsUsed: number; pointsUsedStandard: number; pointsUsedConverted: number; discount: number }> {
     const none = { pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 };
-    const vnd = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1000);
+    const vnd = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1);
     if (!(vnd > 0) || !(orderValue > 0) || !(pointsToUse > 0)) return none;
     const std = await this.resolvePointsRedemption(pointsToUse, Math.max(0, standardUsable), orderValue);
     const s = std.pointsUsed;

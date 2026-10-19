@@ -50,6 +50,14 @@ describe('AccountDeletionService — gian hàng đối tác của chủ', () => 
     expect(anonymize).not.toHaveBeenCalled();
   });
 
+  it('còn Điểm Xanh quy đổi: câu báo chặn xoá tài khoản có dấu chấm nghìn', async () => {
+    const { svc, tx } = build([]);
+    (tx.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', role: 'CUSTOMER', walletBalance: 0, pointsConvertedBalance: 7000, cashbackPending: 0 });
+    const err = await svc.process('req-1', 'admin-1').then(() => null, (e: unknown) => e);
+    const body = (err as BadRequestException).getResponse() as { blockers: { code: string; message: string }[] };
+    expect(body.blockers).toContainEqual({ code: 'CONVERTED_POINTS', message: 'còn 7.000 Điểm Xanh không hết hạn chưa dùng' });
+  });
+
   it('không vướng mắc: ẩn danh; khoá tư vấn chủ và phiếu đi trước khoá dòng gian hàng', async () => {
     const { svc, calls, anonymize } = build([]);
     await expect(svc.process('req-1', 'admin-1')).resolves.toMatchObject({ alreadyProcessed: false });

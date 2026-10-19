@@ -33,6 +33,8 @@ vi.mock('../store/auth', () => {
   const state = { status: 'authenticated', user: { id: 'u1' } };
   return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
 });
+const boost = vi.hoisted(() => ({ cfg: { isLoaded: false } as { isLoaded: boolean; loyalty?: Record<string, unknown> } }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => boost.cfg }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../components/qr-code', () => ({
@@ -128,25 +130,25 @@ describe('LoyaltyPage — thẻ hạng', () => {
 });
 
 describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (ENGAGE-21)', () => {
-  const RATES = { vndPerPoint: 10_000, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 };
+  const RATES = { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 };
 
-  it('nói rõ cứ 10.000đ = 1 điểm và 1 điểm = 1.000đ khi dùng, lấy từ cấu hình API', async () => {
+  it('nói rõ tích bao nhiêu % tiền hàng và 1 điểm = 1.000đ khi dùng, lấy từ cấu hình API', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
     renderPage();
-    expect(await screen.findByText('Cứ 10.000đ mua hàng = 1 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Tích 2% tiền hàng thành Điểm Xanh')).toBeInTheDocument();
     expect(screen.getByText('1 điểm = 1.000đ khi dùng ở bước thanh toán (tối đa 20% giá trị đơn)')).toBeInTheDocument();
   });
 
-  it('tỷ lệ cấu hình khác thì chữ đổi theo, không hardcode 10.000đ', async () => {
-    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: { ...RATES, vndPerPoint: 12_000 } });
+  it('tỷ lệ cấu hình khác thì chữ đổi theo, không hardcode 2%', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: { ...RATES, earnPct: 3, vndPerPoint: 33 } });
     renderPage();
-    expect(await screen.findByText('Cứ 12.000đ mua hàng = 1 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Tích 3% tiền hàng thành Điểm Xanh')).toBeInTheDocument();
   });
 
   it('dòng "còn X điểm" kèm số tiền mua hàng tương ứng', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
     renderPage();
-    expect(await screen.findByText(/tương đương khoảng 12,5 triệu mua hàng/)).toBeInTheDocument();
+    expect(await screen.findByText(/tương đương khoảng 62\.500đ mua hàng/)).toBeInTheDocument();
   });
 
   it('danh sách hạng quy mốc ra tiền mua hàng 12 tháng', async () => {
@@ -163,7 +165,7 @@ describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (EN
   it('API cũ chưa trả rates → không hiện dòng giải thích, danh sách hạng vẫn theo điểm', async () => {
     renderPage();
     await screen.findByText(/Tích điểm ×1/);
-    expect(screen.queryByText(/Cứ .* mua hàng = 1 điểm/)).toBeNull();
+    expect(screen.queryByText(/Tích .* tiền hàng thành Điểm Xanh/)).toBeNull();
     expect(screen.getByText(/từ 2\.500 điểm tích luỹ/)).toBeInTheDocument();
   });
 });
@@ -431,11 +433,19 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
     renderPage();
     await screen.findByText(/Tích điểm ×1\.2/);
     expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
-    expect(localStorage.getItem('tubu_last_tier_min')).toBe('2500');
+    expect(localStorage.getItem('tubu_last_tier_min_v2')).toBe('2500');
+  });
+
+  it('mốc lưu trước đợt đổi ngưỡng điểm (khoá cũ) bị bỏ qua: không chúc mừng giả', async () => {
+    localStorage.setItem('tubu_last_tier_min', '0');
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: TIER2, nextTier: null });
+    renderPage();
+    await screen.findByText(/Tích điểm ×1\.2/);
+    expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
   });
 
   it('mốc cũ thấp hơn hạng hiện tại: chúc mừng kèm quyền lợi, "Tuyệt vời!" đóng lại', async () => {
-    localStorage.setItem('tubu_last_tier_min', '0');
+    localStorage.setItem('tubu_last_tier_min_v2', '0');
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: TIER2, nextTier: null });
     renderPage();
     expect(await screen.findByText('Chúc mừng lên hạng Lộc Biếc!')).toBeInTheDocument();
@@ -446,7 +456,7 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
   });
 
   it('mốc cũ bằng hạng hiện tại: không chúc mừng', async () => {
-    localStorage.setItem('tubu_last_tier_min', '0');
+    localStorage.setItem('tubu_last_tier_min_v2', '0');
     renderPage();
     await screen.findByText(/Tích điểm ×1 /);
     expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
@@ -482,5 +492,23 @@ describe('LoyaltyPage — thẻ mã giảm giá (R6-BUYER-12)', () => {
     renderPage();
     expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
     expect(screen.getByText('Giảm 5%')).toBeInTheDocument();
+  });
+});
+
+describe('LoyaltyPage — dải "Mua trong Mini App tích gấp đôi"', () => {
+  const ON = { isLoaded: true, loyalty: { earnPct: 2, vndPerPoint: 50, marketplaceEarnPct: 1, marketplaceClaimEnabled: true } };
+
+  it('cờ tích đơn sàn bật: dải nằm trên thẻ hạng; tắt: không có', async () => {
+    boost.cfg = ON;
+    const { unmount } = renderPage();
+    const strip = await screen.findByTestId('points-boost');
+    expect(strip).toHaveTextContent('Mua trong Mini App: tích gấp đôi');
+    expect(strip.compareDocumentPosition(await screen.findByText(/Tích điểm ×/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    unmount();
+    boost.cfg = { isLoaded: true, loyalty: { ...ON.loyalty, marketplaceClaimEnabled: false } };
+    renderPage();
+    await screen.findByText(/Tích điểm ×/);
+    expect(screen.queryByTestId('points-boost')).toBeNull();
+    boost.cfg = { isLoaded: false };
   });
 });

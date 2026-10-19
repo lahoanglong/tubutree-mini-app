@@ -360,6 +360,17 @@ describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường 
     expect(mocks.getReferral).toHaveBeenCalledTimes(1);
   });
 
+  it('mốc thưởng giới thiệu: còn bao nhiêu bạn thì ghi bấy nhiêu; đã đủ hoặc vượt mốc (âm) thì ẩn dòng, không in "Mời thêm -2 bạn"', async () => {
+    stubLoaded();
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Mời thêm 3 bạn để nhận 50 điểm')).toBeInTheDocument();
+    unmount();
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 7 });
+    renderPage();
+    await screen.findByText('Mời bạn — nhận Điểm Xanh');
+    expect(screen.queryByText(/Mời thêm/)).toBeNull();
+  });
+
   it('mẹo dưới ví nói đúng việc Ví làm được: trả cả đơn hàng, miễn phí, thay vì rút có phí', async () => {
     stubLoaded();
     renderPage();

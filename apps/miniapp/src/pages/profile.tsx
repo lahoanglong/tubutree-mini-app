@@ -2,7 +2,7 @@ import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
   Heart, MapPin, Leaf, Wallet, Users, Pencil,
-  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Recycle, Sparkles, BookOpen, BadgePercent, type LucideIcon,
+  Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Recycle, Sparkles, BookOpen, BadgePercent, ScanLine, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getNotifications, getWallet } from '../services/account-api';
@@ -21,6 +21,8 @@ import { Heading, Text } from '../components/ui/text';
 import { getOwnedBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
+import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
+import { vi } from '../i18n/vi';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
@@ -54,6 +56,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
     items: [
       { Icon: Leaf, label: 'Hạng thành viên & Điểm Xanh', to: '/loyalty' },
       { Icon: Wallet, label: 'Ví Tubu', to: '/wallet' },
+      { Icon: ScanLine, label: vi.externalPoints.menuLabel, to: '/points/scan', hint: vi.externalPoints.menuHint },
     ],
   },
   {
@@ -124,7 +127,10 @@ export default function ProfilePage() {
     : dealerQ.data?.status === 'PENDING'
       ? { Icon: Store, label: 'Hồ sơ đại lý', to: '/dealer', hint: 'Đang chờ duyệt' }
       : { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' };
-  const withDealer = MENU.map((s) =>
+  const aiEnabled = useAiAdvisorEnabled();
+  const cfg = usePublicConfig();
+  const claimEnabled = cfg.loyalty?.marketplaceClaimEnabled === true;
+  const withDealer = MENU.map((s) => ({ ...s, items: s.items.filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (claimEnabled || it.to !== '/points/scan')) })).map((s) =>
     s.group === 'Hợp tác'
       ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
       : s,

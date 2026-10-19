@@ -3,7 +3,9 @@ import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
+import { maskPhoneKeepLast3, maskPhoneLikeRuns } from '../../common/mask-pii';
 import { OPEN_REFUND_FOR_EXPORT } from '../orders/refund-queue';
+import { orderPlatformLabel, orderSourceLabel } from './order-channel';
 
 /** Số dòng đọc mỗi lượt khi xuất CSV: đủ lớn để nhanh, đủ nhỏ để không giữ cả bảng trong bộ nhớ. */
 export const EXPORT_BATCH = 500;
@@ -37,9 +39,9 @@ export function csvText(value: string | null | undefined): string {
 class EncodedCell {
   constructor(readonly encoded: string) {}
 }
-const text = (value: string | null | undefined) => new EncodedCell(csvText(value));
+export const text = (value: string | null | undefined) => new EncodedCell(csvText(value));
 
-const row = (cells: unknown[]) => `${cells.map((c) => (c instanceof EncodedCell ? c.encoded : csvCell(c))).join(',')}\r\n`;
+export const row = (cells: unknown[]) => `${cells.map((c) => (c instanceof EncodedCell ? c.encoded : csvCell(c))).join(',')}\r\n`;
 
 const ORDER_STATUS: Record<string, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
@@ -108,6 +110,12 @@ export const ORDER_CSV_HEADERS = [
   'Ngày giao',
   'Thu gom tái chế',
   'Ghi chú',
+  // Cột nguồn nằm cuối để bảng tính kế toán đang tham chiếu cột theo vị trí không bị lệch.
+  'Nền tảng',
+  'Nguồn đơn',
+  'CTV giới thiệu',
+  'SĐT CTV',
+  'Gian hàng',
 ];
 
 const ORDER_SELECT = {
@@ -124,6 +132,10 @@ const ORDER_SELECT = {
   shippingFee: true,
   pointsUsed: true,
   total: true,
+  platform: true,
+  source: true,
+  referrerUserId: true,
+  storefront: { select: { title: true } },
   shippingCode: true,
   shippingPartner: true,
   pancakeOrderId: true,
@@ -140,16 +152,19 @@ const ORDER_SELECT = {
 } satisfies Prisma.OrderSelect;
 
 type ExportOrder = Prisma.OrderGetPayload<{ select: typeof ORDER_SELECT }>;
+type Referrer = { fullName: string | null; phone: string | null };
 
-function orderRow(o: ExportOrder): string {
+function orderRow(o: ExportOrder, referrers: ReadonlyMap<string, Referrer>, maskPhones: boolean): string {
+  const referrer = o.referrerUserId ? referrers.get(o.referrerUserId) : undefined;
   const addr = (o.shippingAddress ?? {}) as { recipient?: string; phone?: string };
+  const phone = (p: string | null | undefined) => (maskPhones ? text(maskPhoneKeepLast3(p)) : text(p));
   return row([
     o.code,
     formatVnDateTime(o.createdAt),
     o.user?.fullName ?? 'Khách lẻ',
-    text(o.user?.phone),
+    phone(o.user?.phone),
     addr.recipient ?? '',
-    text(addr.phone),
+    phone(addr.phone),
     o.type === 'DEALER' ? 'Đại lý' : 'Bán lẻ',
     o.fulfiller === 'MERCHANT' ? `Gian hàng tự giao: ${o.fulfillerStorefront?.title ?? ''}` : 'Kho Tubu',
     PAYMENT_METHOD[o.paymentMethod] ?? o.paymentMethod,
@@ -166,15 +181,34 @@ function orderRow(o: ExportOrder): string {
     text(o.pancakeOrderId),
     o.deliveredAt ? formatVnDateTime(o.deliveredAt) : '',
     o.hasRecyclingPickup ? ['Có', o.gomdonStatus ?? '', o.gomdonPartnerCode ?? ''].filter(Boolean).join(' · ') : '',
-    o.note ?? '',
+    maskPhones && o.note ? maskPhoneLikeRuns(o.note) : (o.note ?? ''),
+    orderPlatformLabel(o.platform),
+    orderSourceLabel(o.source),
+    referrer?.fullName ?? '',
+    phone(referrer?.phone),
+    o.storefront?.title ?? '',
   ]);
+}
+
+/** Tên và SĐT CTV của cả lô trong một câu truy vấn (Order.referrerUserId không có quan hệ Prisma). */
+export async function loadReferrers(prisma: PrismaService, orders: readonly { referrerUserId?: string | null }[]) {
+  const ids = [...new Set(orders.flatMap((o) => (o.referrerUserId ? [o.referrerUserId] : [])))];
+  if (ids.length === 0) return new Map<string, Referrer>();
+  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true, phone: true } });
+  return new Map(users.map((u) => [u.id, { fullName: u.fullName, phone: u.phone }]));
 }
 
 /**
  * Lần lượt từng lô theo con trỏ (createdAt giảm dần, id làm mốc), đẩy ra từng đoạn CSV — không dựng cả file trong
  * bộ nhớ và không giới hạn số dòng. Cùng `where` với danh sách đơn đang lọc (AdminService.adminOrderWhere).
+ * `maskPhones`: người xuất không phải quản trị viên (kế toán) chỉ thấy 3 số cuối SĐT khách, người nhận, CTV — đối soát
+ * tiền không cần SĐT đầy đủ, file CSV dễ bị chuyển tiếp ra ngoài.
  */
-export async function* orderCsvChunks(prisma: PrismaService, where: Prisma.OrderWhereInput): AsyncGenerator<string> {
+export async function* orderCsvChunks(
+  prisma: PrismaService,
+  where: Prisma.OrderWhereInput,
+  opts: { maskPhones?: boolean } = {},
+): AsyncGenerator<string> {
   yield row(ORDER_CSV_HEADERS);
   let cursor: string | undefined;
   for (;;) {
@@ -186,7 +220,8 @@ export async function* orderCsvChunks(prisma: PrismaService, where: Prisma.Order
       select: ORDER_SELECT,
     });
     if (batch.length === 0) return;
-    yield batch.map(orderRow).join('');
+    const referrers = await loadReferrers(prisma, batch);
+    yield batch.map((o) => orderRow(o, referrers, opts.maskPhones === true)).join('');
     if (batch.length < EXPORT_BATCH) return;
     cursor = batch[batch.length - 1]!.id;
   }

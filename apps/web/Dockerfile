@@ -22,9 +22,11 @@ RUN pnpm --filter @tubutree/shared-types build
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_ZALO_APP_ID
 ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_TENANT_ROOT_DOMAIN
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_ZALO_APP_ID=$NEXT_PUBLIC_ZALO_APP_ID
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_TENANT_ROOT_DOMAIN=$NEXT_PUBLIC_TENANT_ROOT_DOMAIN
 ENV NEXT_STANDALONE=1
 
 # Thiếu App ID thì bundle bị nhúng chuỗi rỗng: build vẫn xanh nhưng mọi nút đăng nhập Zalo trên web đều hỏng. Dừng ở đây
@@ -49,8 +51,15 @@ ENV PORT=3000
 
 # Standalone output (rooted ở monorepo) + static assets.
 # (web hiện không có thư mục public/ — thêm COPY public nếu sau này có.)
-COPY --from=builder /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+
+# Không chạy bằng root. Web ghi ra đĩa ở hai chỗ: .next/cache (Data Cache của fetch) và .next/server/app (ISR ghi lại
+# trang tĩnh khi revalidate). Thư mục thuộc root thì mọi lần ghi lỗi EACCES (log đầy cảnh báo, trang nào cũng gọi API lại).
+# .next/server/app đã thuộc node nhờ COPY --chown ở trên; .next/cache không nằm trong standalone nên tạo ở đây, và chỉ chown
+# đúng thư mục này (chown -R lên cả .next sẽ nhân đôi layer của mọi file đã COPY).
+RUN mkdir -p apps/web/.next/cache && chown node:node apps/web/.next/cache
+USER node
 
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

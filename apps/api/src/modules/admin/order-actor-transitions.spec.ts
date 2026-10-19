@@ -1,4 +1,4 @@
-import { actorAllowedTransitions, actorTransitionBlock } from './order-actor-transitions';
+import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones } from './order-actor-transitions';
 
 const onPancake = { fulfiller: 'TUBU', pancakeOrderId: 'pk1' };
 const notOnPancake = { fulfiller: 'TUBU', pancakeOrderId: null };
@@ -38,5 +38,22 @@ describe('chuyển trạng thái tay theo người bấm (R2-ADMINOPS-2)', () =>
 
   it('người bấm không phải ADMIN/STAFF thì không đổi được gì', () => {
     expect(actorAllowedTransitions({ role: 'CUSTOMER' }, onPancake, [...all])).toEqual([]);
+  });
+
+  it('KE_TOAN (B18) xem đơn và xác nhận tiền nhưng KHÔNG có bất kỳ nút trạng thái nào; MARKETING cũng không', () => {
+    for (const p of ['KE_TOAN', 'MARKETING']) {
+      expect(actorAllowedTransitions({ role: 'STAFF', staffPermissions: [p] }, onPancake, [...all, 'CONFIRMED', 'RETURNED'] as never)).toEqual([]);
+    }
+    expect(actorTransitionBlock({ role: 'STAFF', staffPermissions: ['KE_TOAN'] }, onPancake, 'CANCELLED')?.kind).toBe('FORBIDDEN');
+    expect(actorAllowedTransitions({ role: 'STAFF', staffPermissions: ['KE_TOAN', 'KHO'] }, onPancake, [...all])).toEqual(['PACKED']);
+  });
+
+  it('SĐT đầy đủ chỉ cho ADMIN, CSKH, KHO; Kế toán/Marketing/khách thấy che', () => {
+    expect(seesFullOrderPhones({ role: 'ADMIN' })).toBe(true);
+    expect(seesFullOrderPhones({ role: 'STAFF', staffPermissions: ['CSKH'] })).toBe(true);
+    expect(seesFullOrderPhones({ role: 'STAFF', staffPermissions: ['KE_TOAN', 'KHO'] })).toBe(true);
+    expect(seesFullOrderPhones({ role: 'STAFF', staffPermissions: ['KE_TOAN'] })).toBe(false);
+    expect(seesFullOrderPhones({ role: 'STAFF', staffPermissions: [] })).toBe(false);
+    expect(seesFullOrderPhones({ role: 'CUSTOMER' })).toBe(false);
   });
 });

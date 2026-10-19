@@ -53,6 +53,9 @@ import { FulfilOrdersTab } from './fulfil-orders-tab';
 import { SettlementTab } from './settlement-tab';
 import { MerchantReturnsSection } from './merchant-returns';
 import { CreateProductModal, EditProductModal, MerchantProductPrice } from './product-form';
+import { ImageUrlField } from './image-url-field';
+import { ProductThumb } from './product-thumb';
+import { RowMenu } from './row-menu';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -290,7 +293,7 @@ export default function MerchantPage() {
               </span>
             )}
           </div>
-          {store?.subdomain && !restricted && (
+          {store?.subdomain && store.subdomainEnabled !== false && !restricted && (
             <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-stone-500">
               <span>Đường dẫn gian hàng riêng:</span>
               <a
@@ -308,7 +311,7 @@ export default function MerchantPage() {
         {store && !restricted && (
           <div className="flex items-center gap-2">
             <Link
-              href={`/s/${store.subdomain || store.slug}`}
+              href={`/s/${store.subdomainEnabled !== false && store.subdomain ? store.subdomain : store.slug}`}
               target="_blank"
               className={`inline-flex items-center gap-1.5 rounded-control border border-stone-450 bg-stone-0 px-4 py-2 text-xs font-semibold text-stone-700 transition hover:border-forest-600 hover:bg-forest-50 hover:text-forest-800 ${TOUCH_H}`}
             >
@@ -475,6 +478,7 @@ function StoreSettingsTab({
   const [title, setTitle] = useState(store.title ?? '');
   const [headerNote, setHeaderNote] = useState(store.headerNote ?? '');
   const [subdomain, setSubdomain] = useState(store.subdomain ?? '');
+  const subdomainOn = store.subdomainEnabled !== false;
   const [themeColor, setThemeColor] = useState(store.themeColor ?? DEFAULT_THEME_COLOR);
   const [coverUrl, setCoverUrl] = useState(store.coverUrl ?? '');
   const [avatarUrl, setAvatarUrl] = useState(store.avatarUrl ?? '');
@@ -495,11 +499,13 @@ function StoreSettingsTab({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
+    const typedSubdomain = subdomain.trim().toLowerCase();
     mut.mutate({
       title: title.trim(),
-      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống là không đổi.
+      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống hay giữ nguyên là không đổi, vì API kiểm
+      // từ khoá và trùng tên mỗi khi nhận subdomain.
       headerNote: headerNote.trim(),
-      subdomain: subdomain.trim() || undefined,
+      subdomain: subdomainOn && typedSubdomain && typedSubdomain !== (store.subdomain ?? '') ? typedSubdomain : undefined,
       themeColor,
       coverUrl: coverUrl.trim(),
       avatarUrl: avatarUrl.trim(),
@@ -523,21 +529,23 @@ function StoreSettingsTab({
           />
         </div>
 
-        <div>
-          <label htmlFor="merchant-store-subdomain" className="block text-xs font-medium text-stone-700">Subdomain riêng biệt</label>
-          <div className="mt-1 flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-50 px-3 py-2 text-sm focus-within:border-forest-600 focus-within:bg-stone-0 sm:min-h-[36px]">
-            <span className="text-stone-500">https://</span>
-            <input
-              id="merchant-store-subdomain"
-              value={subdomain}
-              onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
-              placeholder="ten-thuong-hieu"
-              className="min-w-0 flex-1 bg-transparent px-1 font-semibold text-forest-700"
-            />
-            <span className="text-stone-500">.tubutree.com</span>
+        {subdomainOn && (
+          <div>
+            <label htmlFor="merchant-store-subdomain" className="block text-xs font-medium text-stone-700">Subdomain riêng biệt</label>
+            <div className="mt-1 flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-50 px-3 py-2 text-sm focus-within:border-forest-600 focus-within:bg-stone-0 sm:min-h-[36px]">
+              <span className="text-stone-500">https://</span>
+              <input
+                id="merchant-store-subdomain"
+                value={subdomain}
+                onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
+                placeholder="ten-thuong-hieu"
+                className="min-w-0 flex-1 bg-transparent px-1 font-semibold text-forest-700"
+              />
+              <span className="text-stone-500">.tubutree.com</span>
+            </div>
+            <p className="mt-1 text-xs text-stone-500">Chỉ dùng chữ thường a-z, số 0-9 và dấu gạch ngang (độ dài 3-30 ký tự).</p>
           </div>
-          <p className="mt-1 text-xs text-stone-500">Chỉ dùng chữ thường a-z, số 0-9 và dấu gạch ngang (độ dài 3-30 ký tự).</p>
-        </div>
+        )}
 
         <div>
           <span id="merchant-store-theme-color" className="block text-xs font-medium text-stone-700">Màu chủ đạo giao diện (Theme Color)</span>
@@ -566,32 +574,26 @@ function StoreSettingsTab({
             value={headerNote}
             onChange={(e) => setHeaderNote(e.target.value)}
             rows={2}
-            placeholder="Ví dụ: Sản phẩm chăm sóc cơ thể thiên nhiên 100% từ nông sản Việt..."
+            placeholder="Ví dụ: Sản phẩm chăm sóc cơ thể thiên nhiên từ nông sản Việt..."
             className={MERCHANT_INPUT}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="merchant-store-avatar-url" className="block text-xs font-medium text-stone-700">URL Logo thương hiệu</label>
-            <input
-              id="merchant-store-avatar-url"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder="https://..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
-          <div>
-            <label htmlFor="merchant-store-cover-url" className="block text-xs font-medium text-stone-700">URL Ảnh bìa (Cover Banner)</label>
-            <input
-              id="merchant-store-cover-url"
-              value={coverUrl}
-              onChange={(e) => setCoverUrl(e.target.value)}
-              placeholder="https://..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
+          <ImageUrlField
+            id="merchant-store-avatar-url"
+            label="URL Logo thương hiệu"
+            value={avatarUrl}
+            onChange={setAvatarUrl}
+            shape="avatar"
+          />
+          <ImageUrlField
+            id="merchant-store-cover-url"
+            label="URL Ảnh bìa (Cover Banner)"
+            value={coverUrl}
+            onChange={setCoverUrl}
+            shape="cover"
+          />
         </div>
 
         <div className="flex items-center gap-3 rounded-control border border-stone-200 bg-stone-50 p-3">
@@ -672,7 +674,7 @@ function StoreSettingsTab({
                 </div>
                 <div className="min-w-0 flex-1 pt-7">
                   <p className="truncate text-xs font-bold text-stone-900">{title || 'Tên gian hàng'}</p>
-                  <p className="truncate text-[10px] text-stone-500">{subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com'}</p>
+                  <p className="truncate text-[10px] text-stone-500">{subdomainOn ? (subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com') : `/s/${store.slug}`}</p>
                 </div>
               </div>
 
@@ -1129,8 +1131,13 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                   return (
                     <tr key={p.id} className="hover:bg-stone-50/50">
                       <td className="px-3 py-2.5">
-                        <div className="font-semibold text-stone-900">{p.name}</div>
-                        {p.shortDesc && <div className="line-clamp-1 text-xs text-stone-500">{p.shortDesc}</div>}
+                        <div className="flex items-center gap-3">
+                          <ProductThumb product={p} />
+                          <div className="min-w-0">
+                            <div className="font-semibold text-stone-900">{p.name}</div>
+                            {p.shortDesc && <div className="line-clamp-1 text-xs text-stone-500">{p.shortDesc}</div>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 font-semibold text-forest-700"><MerchantProductPrice product={p} /></td>
                       <td className="px-3 py-2.5 text-xs text-stone-600">{p.variations?.[0]?.stock ?? '—'}</td>
@@ -1162,35 +1169,24 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                         {formatDate(p.createdAt)}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex flex-wrap justify-end gap-2">
-                          <button type="button" onClick={() => setEditing(p)} className={`${BTN_SMALL} inline-flex items-center gap-1`}>
-                            <Pencil className="h-3 w-3" aria-hidden="true" />
-                            <span>Sửa</span>
-                          </button>
-                          {p.isActive === false ? (
-                            <button
-                              type="button"
-                              disabled={activeMut.isPending}
-                              onClick={() => activeMut.mutate({ id: p.id, active: true })}
-                              className={BTN_SMALL}
-                            >
-                              Mở bán lại
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={activeMut.isPending}
-                              onClick={() => {
-                                if (window.confirm(`Ngừng bán ${p.name}? Khách sẽ không đặt được sản phẩm này nữa.`)) {
-                                  activeMut.mutate({ id: p.id, active: false });
-                                }
-                              }}
-                              className={`${BTN_LINK_DANGER} text-xs`}
-                            >
-                              Ngừng bán
-                            </button>
-                          )}
-                        </div>
+                        <RowMenu
+                          label={`Thao tác với ${p.name}`}
+                          items={[
+                            { label: 'Sửa', onSelect: () => setEditing(p) },
+                            p.isActive === false
+                              ? { label: 'Mở bán lại', disabled: activeMut.isPending, onSelect: () => activeMut.mutate({ id: p.id, active: true }) }
+                              : {
+                                  label: 'Ngừng bán',
+                                  tone: 'danger',
+                                  disabled: activeMut.isPending,
+                                  onSelect: () => {
+                                    if (window.confirm(`Ngừng bán ${p.name}? Khách sẽ không đặt được sản phẩm này nữa.`)) {
+                                      activeMut.mutate({ id: p.id, active: false });
+                                    }
+                                  },
+                                },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );
@@ -1222,22 +1218,28 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                 q.data.resellProducts.map((p) => (
                   <tr key={p.id}>
                     <td className="px-3 py-2.5">
-                      <div className="font-semibold text-stone-900">{p.name}</div>
+                      <div className="flex items-center gap-3">
+                        <ProductThumb product={p} />
+                        <div className="min-w-0 font-semibold text-stone-900">{p.name}</div>
+                      </div>
                     </td>
                     <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(p.basePrice)}</td>
                     <td className="px-3 py-2.5 text-right">
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`Gỡ sản phẩm ${p.name} khỏi gian hàng?`)) {
-                            removeMut.mutate(p.id);
-                          }
-                        }}
-                        disabled={removeMut.isPending}
-                        className={`${BTN_LINK_DANGER} gap-1 text-xs`}
-                      >
-                        <Trash2 className="h-3 w-3" aria-hidden="true" />
-                        <span>{removeMut.isPending ? 'Đang gỡ…' : 'Gỡ khỏi shop'}</span>
-                      </button>
+                      <RowMenu
+                        label={`Thao tác với ${p.name}`}
+                        items={[
+                          {
+                            label: removeMut.isPending ? 'Đang gỡ…' : 'Gỡ khỏi shop',
+                            tone: 'danger',
+                            disabled: removeMut.isPending,
+                            onSelect: () => {
+                              if (window.confirm(`Gỡ sản phẩm ${p.name} khỏi gian hàng?`)) {
+                                removeMut.mutate(p.id);
+                              }
+                            },
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))

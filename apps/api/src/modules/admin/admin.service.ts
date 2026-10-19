@@ -12,7 +12,7 @@ import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
-import { actorAllowedTransitions, actorTransitionBlock, type OrderActor } from './order-actor-transitions';
+import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, recordLatePaymentRefund } from '../orders/refund-queue';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
@@ -26,18 +26,30 @@ import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
+  NO_SUCH_STOREFRONT_ID,
   normalizeAdminOrderSearch,
   recipientPhoneVariants,
   searchPhone,
-  type AdminOrderFilter,
+  type AdminOrderFilterInput,
   type InvoiceFilter,
+  type OrderListExtra,
   type PancakeFilter,
   type RecyclingFilter,
 } from './admin-order-filter';
 import { orderCsvChunks, userCsvChunks } from './admin-export';
+import { GMV_ORDER_WHERE, REVENUE_ORDER_SQL, REVENUE_ORDER_WHERE } from './admin-revenue';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
+import {
+  DEALER_PRICE_CSV_MAX_ROWS,
+  classifyDealerPrices,
+  DEALER_MAX_DISCOUNT_KEY,
+  DEFAULT_DEALER_MAX_DISCOUNT,
+  dealerPriceRowsFromJson,
+  parseDealerPriceCsv,
+  publicPreview,
+} from './dealer-price-import';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../common/admin-roster';
@@ -57,10 +69,24 @@ import {
   MERCHANT_PRODUCT_EDIT_STALE,
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
-import { maskPhone } from '../../common/mask-pii';
+import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
+import { isStaffOwnOrder } from '../../common/staff-own-order';
+import {
+  actorLabel,
+  actorUserId,
+  assertClaimUsageLimit,
+  assertCouponInput,
+  assertNotOwnCoupon,
+  assertStaffCouponCaps,
+  assertStaffCreatedCoupons,
+  assertStaffDailyBudget,
+  loadStaffCouponCaps,
+  staffCouponExposure,
+  SYSTEM_ACTOR,
+  type CouponActor,
+  type StaffCouponCaps,
+} from './coupon-input-rules';
 
-/** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
-const COUPON_PERCENT_NEEDS_CAP = 50;
 
 function reviewConflict(code: string, message: string) {
   return new ConflictException({ statusCode: 409, error: 'Conflict', code, message });
@@ -112,6 +138,29 @@ function pancakeCodeChanged(current: string | null) {
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
  * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
  */
+/** Che SĐT khách/người nhận và số dạng SĐT trong ghi chú/cảnh báo của một dòng danh sách đơn (người xem không phải ADMIN/CSKH/KHO). */
+function maskOrderPhones<
+  T extends {
+    user?: { phone: string | null } | null;
+    shippingAddress?: unknown;
+    note?: string | null;
+    endCustomerKey?: string | null;
+    recyclingNote?: string | null;
+    gomdonAlerts?: { message: string }[];
+  },
+>(o: T): T {
+  const addr = o.shippingAddress && typeof o.shippingAddress === 'object' ? (o.shippingAddress as Record<string, unknown>) : null;
+  return {
+    ...o,
+    ...(o.user ? { user: { ...o.user, phone: o.user.phone ? maskPhoneKeepLast3(o.user.phone) : o.user.phone } } : {}),
+    ...(addr ? { shippingAddress: { ...addr, ...(typeof addr.phone === 'string' ? { phone: maskPhoneKeepLast3(addr.phone) } : {}) } } : {}),
+    ...(o.note ? { note: maskVnPhonesInText(o.note) } : {}),
+    ...(o.endCustomerKey ? { endCustomerKey: maskPhoneKeepLast3(o.endCustomerKey) } : {}),
+    ...(o.recyclingNote ? { recyclingNote: maskVnPhonesInText(o.recyclingNote) } : {}),
+    ...(o.gomdonAlerts ? { gomdonAlerts: o.gomdonAlerts.map((a) => ({ ...a, message: maskVnPhonesInText(a.message) })) } : {}),
+  };
+}
+
 function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
   return (
     o.type !== 'DEALER' &&
@@ -186,7 +235,7 @@ export class AdminService {
    *
    * Có bảng mà không có đường đọc thì vẫn phải vào DB bằng SQL mỗi lần cần tra.
    */
-  async orderStatusHistory(orderCode: string) {
+  async orderStatusHistory(orderCode: string, viewer: OrderActor = { role: 'ADMIN' }) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: orderCode }, { code: orderCode }] },
       select: { id: true, code: true },
@@ -205,9 +254,17 @@ export class AdminService {
         })
       : [];
     const actorMap = new Map(actors.map((a) => [a.id, a]));
+    const full = seesFullOrderPhones(viewer);
     return {
       orderCode: order.code,
-      history: rows.map((r) => ({ ...r, actor: r.actorId ? (actorMap.get(r.actorId) ?? null) : null })),
+      history: rows.map((r) => {
+        const actor = r.actorId ? (actorMap.get(r.actorId) ?? null) : null;
+        return {
+          ...r,
+          note: !full && r.note ? maskVnPhonesInText(r.note) : r.note,
+          actor: !full && actor ? { ...actor, phone: actor.phone ? maskPhoneKeepLast3(actor.phone) : actor.phone } : actor,
+        };
+      }),
     };
   }
 
@@ -575,8 +632,9 @@ export class AdminService {
     if (user.role !== 'STAFF') {
       throw new BadRequestException('Chỉ gán nhóm việc cho tài khoản Nhân viên (STAFF) — cấp vai trò nhân viên trước.');
     }
+    // So và ghi sổ theo tập đã sắp xếp: thứ tự lưu là thứ tự STAFF_PERMISSIONS, không trùng thứ tự chữ cái.
     const before = [...user.staffPermissions].sort().join(',');
-    const after = perms.join(',');
+    const after = [...perms].sort().join(',');
     if (before === after) return { id: userId, staffPermissions: perms, changed: false };
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: userId }, data: { staffPermissions: perms } }),
@@ -673,13 +731,9 @@ export class AdminService {
   static readonly DETAIL_TAKE = 30;
 
   async getDashboardStats() {
-    const open: Prisma.OrderWhereInput = { status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] } };
-    // COD của đơn gian hàng tự giao do đối tác thu, không phải Tubu (đối soát trừ phí sàn từ phía đối tác).
-    const collected: Prisma.OrderWhereInput = {
-      status: { notIn: ['CANCELLED', 'RETURNED'] },
-      paymentStatus: { not: 'REFUNDED' },
-      OR: [{ paymentStatus: 'PAID' }, { status: 'DELIVERED', paymentMethod: 'COD', fulfiller: { not: 'MERCHANT' } }],
-    };
+    // Định nghĩa "doanh thu" dùng chung với báo cáo theo ngày × kênh (admin-revenue.ts) để hai nơi không bao giờ lệch nhau.
+    const open = GMV_ORDER_WHERE;
+    const collected = REVENUE_ORDER_WHERE;
     const [
       totalOrders,
       pendingOrders,
@@ -715,11 +769,7 @@ export class AdminService {
       this.prisma.$queryRaw<{ all_refunds: bigint | null; on_collected: bigint | null }[]>`
         SELECT
           SUM(r."refundAmount" + r."shippingRefund") AS all_refunds,
-          SUM(r."refundAmount" + r."shippingRefund") FILTER (
-            WHERE o.status NOT IN ('CANCELLED', 'RETURNED')
-              AND o."paymentStatus" <> 'REFUNDED'
-              AND (o."paymentStatus" = 'PAID' OR (o.status = 'DELIVERED' AND o."paymentMethod" = 'COD' AND o.fulfiller <> 'MERCHANT'))
-          ) AS on_collected
+          SUM(r."refundAmount" + r."shippingRefund") FILTER (WHERE ${REVENUE_ORDER_SQL}) AS on_collected
         FROM return_requests r
         JOIN orders o ON o.id = r."orderId"
         WHERE r.status = 'APPROVED'`,
@@ -803,8 +853,8 @@ export class AdminService {
   }
 
   /** File CSV mọi đơn khớp bộ lọc (admin-export.ts đọc theo lô). */
-  async orderCsv(f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>): Promise<AsyncGenerator<string>> {
-    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f));
+  async orderCsv(f: AdminOrderFilterInput, opts: { maskPhones?: boolean } = {}): Promise<AsyncGenerator<string>> {
+    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f), opts);
   }
 
   userCsv(search?: string): AsyncGenerator<string> {
@@ -812,12 +862,28 @@ export class AdminService {
   }
 
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */
-  async adminOrderWhere(f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>): Promise<Prisma.OrderWhereInput> {
-    const [searchUserIds, searchOrderIds] = await Promise.all([
+  async adminOrderWhere(f: AdminOrderFilterInput): Promise<Prisma.OrderWhereInput> {
+    const { storefront, ...filter } = f;
+    const [searchUserIds, searchOrderIds, storefrontId] = await Promise.all([
       this.findSearchUserIds(f.search),
       this.findSearchOrderIds(f.search),
+      this.findStorefrontId(storefront),
     ]);
-    return buildAdminOrderWhere({ ...f, searchUserIds, searchOrderIds });
+    return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, ...(storefrontId ? { storefrontId } : {}) });
+  }
+
+  /**
+   * Slug hoặc subdomain gian hàng → id. Gõ không khớp gian hàng nào thì trả id không thể trùng ai (danh sách rỗng): bỏ lọc
+   * sẽ hiện mọi đơn như thể đã lọc xong.
+   */
+  private async findStorefrontId(raw?: string): Promise<string | undefined> {
+    const s = raw?.trim().toLowerCase();
+    if (!s) return undefined;
+    const row = await this.prisma.storefront.findFirst({
+      where: { OR: [{ slug: { equals: s, mode: 'insensitive' } }, { subdomain: { equals: s, mode: 'insensitive' } }] },
+      select: { id: true },
+    });
+    return row?.id ?? NO_SUCH_STOREFRONT_ID;
   }
 
   /**
@@ -837,12 +903,13 @@ export class AdminService {
     from?: string,
     to?: string,
     viewer: OrderActor = { role: 'ADMIN' },
+    { order = 'desc', ...extra }: OrderListExtra = {},
   ) {
-    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to });
+    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to, ...extra });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: order },
         ...skipTake(page, limit),
         include: {
           items: true,
@@ -894,6 +961,14 @@ export class AdminService {
         canRecordLatePayment: canAdminRecordLatePayment(o) && !lateRecorded.has(o.id),
       };
     });
+    if (!seesFullOrderPhones(viewer)) {
+      return paginated(
+        data.map((o) => maskOrderPhones(o)),
+        page,
+        limit,
+        total,
+      );
+    }
     return paginated(data, page, limit, total);
   }
 
@@ -939,12 +1014,25 @@ export class AdminService {
    * hay hai admin bấm cùng lúc chỉ lật một lần; ai bấm, lúc nào, mã giao dịch nằm ở order_status_history.
    * Đơn đại lý đi đường riêng (DealerService.confirmDealerOrderPayment) vì phải loại đơn ghi công nợ.
    */
-  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string; amount?: number } = {}) {
+  async confirmOrderPayment(
+    adminId: string,
+    idOrCode: string,
+    dto: { bankRef?: string; note?: string; amount?: number } = {},
+    opts: { byStaff?: boolean } = {},
+  ) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, type: true, paymentMethod: true, total: true, status: true },
+      select: { id: true, code: true, userId: true, endCustomerKey: true, shippingAddress: true, type: true, paymentMethod: true, total: true, status: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    // Nhân viên tự đặt hàng rồi tự bấm "Đã nhận tiền" là lấy hàng không trả tiền: đơn của chính mình nhờ quản trị viên.
+    if (opts.byStaff && (await isStaffOwnOrder(this.prisma, adminId, order))) {
+      throw new ForbiddenException('Không xác nhận đã nhận tiền cho đơn của chính mình (kể cả đơn đặt hộ bằng SĐT của bạn) — nhờ quản trị viên.');
+    }
+    // Tiền về muộn của đơn đã huỷ/trả sinh khoản hoàn LATE_PAYMENT (khách chọn Ví là nhận tiền ngay) nên cần ADMIN, không tự ghi tự chi.
+    if (opts.byStaff && (order.status === 'CANCELLED' || order.status === 'RETURNED')) {
+      throw new ForbiddenException(`Đơn ${order.code} đã huỷ/trả — ghi nhận tiền về muộn cần quản trị viên.`);
+    }
     if (order.type === 'DEALER') {
       throw new BadRequestException(
         `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
@@ -972,9 +1060,11 @@ export class AdminService {
     const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'ADMIN',
       actorId: adminId,
-      note: ['Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+      note: [opts.byStaff ? 'Kế toán xác nhận' : 'Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
     });
     if (outcome === 'CLOSED') {
+      // Đơn bị huỷ/trả giữa chừng: nhân viên không tạo khoản hoàn.
+      if (opts.byStaff) throw new ForbiddenException(`Đơn ${order.code} vừa bị huỷ/trả — ghi nhận tiền về muộn cần quản trị viên.`);
       // D2: tiền về sau khi đơn đã huỷ/trả → không "hồi sinh" đơn, ghi khoản hoàn vào hàng đợi Hoàn tiền khách (cùng
       // đường webhook Pancake/ZaloPay); khách chọn Ví hay ngân hàng. Đơn đã có khoản tiền về muộn (webhook hay admin
       // khác ghi, mã GD gõ khác) thì không tạo khoản thứ hai.
@@ -985,7 +1075,7 @@ export class AdminService {
           amount: received,
           source: 'ADMIN',
           refKey: ADMIN_LATE_PAYMENT_REF,
-          note: ['Admin ghi nhận tiền về muộn', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+          note: [`${opts.byStaff ? 'Kế toán' : 'Admin'} ghi nhận tiền về muộn`, bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
         },
       );
       this.logger.warn(`Admin ${adminId} ghi nhận tiền về muộn ${received}đ cho đơn đã đóng ${order.code}` + (bankRef ? ` (mã GD ${bankRef})` : ''));
@@ -1015,6 +1105,10 @@ export class AdminService {
       );
     }
     const alreadyPaid = outcome === 'ALREADY_PAID';
+    const fresh = await this.prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
+    });
     return {
       ok: true,
       alreadyPaid,
@@ -1022,10 +1116,8 @@ export class AdminService {
       message: alreadyPaid
         ? `Đơn ${order.code} đã được ghi nhận thanh toán trước đó.`
         : `Đã xác nhận nhận tiền đơn ${order.code}.`,
-      order: await this.prisma.order.findUniqueOrThrow({
-        where: { id: order.id },
-        include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
-      }),
+      // Kế toán không có đường lấy SĐT đầy đủ qua đây (nhánh ALREADY_PAID trả 200 cho mọi đơn đã PAID).
+      order: opts.byStaff ? maskOrderPhones(fresh) : fresh,
     };
   }
 
@@ -1272,36 +1364,29 @@ export class AdminService {
     endAt: string;
     usageLimit?: number;
     perUserLimit?: number;
-    scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE';
+    scope: 'PUBLIC' | 'TIER' | 'USER_GROUP' | 'BIRTHDAY' | 'INVITE' | 'CLAIM';
     // DTO (RequiredScopeMeta) đã bắt buộc đúng field khi scope=TIER/USER_GROUP trước khi tới đây.
     scopeMeta?: { tierId?: string; userId?: string };
-  }) {
+    newCustomerOnly?: boolean;
+  }, actor: CouponActor = SYSTEM_ACTOR) {
     const startAt = new Date(data.startAt);
     const endAt = new Date(data.endAt);
-    if (endAt <= startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
-    if (endAt <= new Date()) throw new BadRequestException('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được.');
-    if (data.type !== 'FREESHIP' && data.value <= 0) throw new BadRequestException('Mức giảm phải lớn hơn 0.');
-    if (data.type === 'PERCENT' && data.value >= COUPON_PERCENT_NEEDS_CAP && !data.maxDiscount) {
-      throw new BadRequestException(`Mã giảm từ ${COUPON_PERCENT_NEEDS_CAP}% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.`);
-    }
-    if (data.type === 'AMOUNT' && data.minOrder && data.value >= data.minOrder) {
-      throw new BadRequestException(
-        `Mức giảm ${formatVnd(data.value)} phải nhỏ hơn đơn tối thiểu ${formatVnd(data.minOrder)} — không thì đơn ở mức tối thiểu được giảm hết tiền hàng. ` +
-          'Kiểm tra lại số 0 của hai ô.',
-      );
-    }
+    assertCouponInput({ ...data, startAt, endAt });
+    const staffCaps = actor.staff ? await loadStaffCouponCaps(this.config) : null;
+    if (staffCaps) assertStaffCouponCaps(data, staffCaps);
     // isCouponEligible so đúng id: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được.
     const tierId = data.scope === 'TIER' ? data.scopeMeta?.tierId : undefined;
     if (tierId && !(await this.prisma.membershipTier.findUnique({ where: { id: tierId }, select: { id: true } }))) {
       throw new BadRequestException(`Hạng thành viên "${tierId}" không tồn tại — mã tạo ra sẽ không ai dùng được.`);
     }
     const ownerId = data.scope === 'USER_GROUP' ? data.scopeMeta?.userId : undefined;
+    assertNotOwnCoupon(actor, ownerId);
     if (ownerId && !(await this.prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } }))) {
       throw new BadRequestException(`Không tìm thấy người dùng "${ownerId}" — mã cá nhân tạo ra sẽ không ai dùng được.`);
     }
     const code = normalizeCouponCode(data.code);
     try {
-      return await this.prisma.coupon.create({
+      const write = (db: Prisma.TransactionClient | PrismaService) => db.coupon.create({
         data: {
           code,
           type: data.type,
@@ -1316,8 +1401,19 @@ export class AdminService {
           // Trước đây KHÔNG ghi scopeMeta → coupon scope TIER/USER_GROUP tạo ra fail-closed ở MỌI
           // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
           scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
+          newCustomerOnly: data.newCustomerOnly ?? false,
+          createdById: actorUserId(actor),
+          updatedById: actorUserId(actor),
         },
       });
+      const created = staffCaps
+        ? await this.prisma.$transaction(async (tx) => {
+            await assertStaffDailyBudget(tx, actor.id, new Date(), staffCouponExposure(data, staffCaps), staffCaps);
+            return write(tx);
+          })
+        : await write(this.prisma);
+      this.logger.warn(`${actorLabel(actor)} tạo mã giảm giá ${code}: ${JSON.stringify(data)}`);
+      return created;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException(`Mã ${code} đã tồn tại.`);
@@ -1328,14 +1424,18 @@ export class AdminService {
 
   /**
    * Danh sách mã cho tab Voucher (ADMINOPS-8). Mặc định ẩn voucher cá nhân sinh tự động (USER_GROUP:
-   * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó.
+   * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó, và mã thuộc lô thẻ hộp hàng
+   * (xem theo lô ở AdminCouponBatchService) trừ khi tìm theo mã.
    */
-  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }) {
+  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }, actor: CouponActor = SYSTEM_ACTOR) {
     const now = new Date();
     const keyword = q.q ? normalizeCouponCode(q.q) : '';
     const where: Prisma.CouponWhereInput = {
       ...(keyword ? { code: { contains: escapePrismaLike(keyword) } } : {}),
       ...(q.scope ? { scope: q.scope as Prisma.CouponWhereInput['scope'] } : keyword ? {} : { scope: { not: 'USER_GROUP' } }),
+      ...(keyword ? {} : { batch: null }),
+      // Tìm theo mã bỏ lọc lô; nhân viên chỉ được thấy mã lô do chính mình tạo, không thì dò `q=-` là lộ cả mã thẻ của lô khác để đem nhận.
+      ...(actor.staff ? { OR: [{ batch: null }, { createdById: actor.id }] } : {}),
       ...(q.status === 'active' ? { isActive: true, endAt: { gte: now } } : {}),
       ...(q.status === 'inactive' ? { isActive: false } : {}),
       ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
@@ -1350,8 +1450,16 @@ export class AdminService {
       ? await this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: ids } }, _count: { _all: true } })
       : [];
     const used = new Map(grouped.map((g) => [g.couponId, g._count._all]));
+    const claimIds = rows.filter((r) => r.scope === 'CLAIM').map((r) => r.id);
+    const claimed = new Map(
+      claimIds.length
+        ? (
+            await this.prisma.couponClaim.groupBy({ by: ['couponId'], where: { couponId: { in: claimIds } }, _count: { _all: true } })
+          ).map((g) => [g.couponId, g._count._all])
+        : [],
+    );
     return paginated(
-      rows.map((r) => ({ ...r, redeemedCount: used.get(r.id) ?? 0 })),
+      rows.map((r) => ({ ...r, redeemedCount: used.get(r.id) ?? 0, claimedCount: r.scope === 'CLAIM' ? claimed.get(r.id) ?? 0 : null })),
       q.page,
       q.limit,
       total,
@@ -1359,9 +1467,26 @@ export class AdminService {
   }
 
   /** Sửa nhanh mã đang chạy: tắt/bật, gia hạn/rút ngắn, đổi tổng lượt. Không sửa giá trị (tạo mã mới). */
-  async updateCoupon(id: string, data: { isActive?: boolean; endAt?: string; usageLimit?: number | null }) {
+  async updateCoupon(
+    id: string,
+    data: { isActive?: boolean; endAt?: string; usageLimit?: number | null },
+    actor: CouponActor = SYSTEM_ACTOR,
+  ) {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
     if (!coupon) throw new NotFoundException('Không tìm thấy mã giảm giá.');
+    if (coupon.scope === 'USER_GROUP') assertNotOwnCoupon(actor, (coupon.scopeMeta as { userId?: string } | null)?.userId);
+    let raise = 0;
+    let staffCaps: StaffCouponCaps | null = null;
+    if (actor.staff) {
+      await assertStaffCreatedCoupons(this.prisma, [coupon.createdById]);
+      const turningOffOnly = data.isActive === false && data.endAt === undefined && data.usageLimit === undefined;
+      if (!turningOffOnly) {
+        staffCaps = await loadStaffCouponCaps(this.config);
+        const usageLimit = data.usageLimit !== undefined ? data.usageLimit : coupon.usageLimit;
+        assertStaffCouponCaps({ ...coupon, usageLimit }, staffCaps);
+        raise = staffCouponExposure({ ...coupon, usageLimit }, staffCaps) - staffCouponExposure(coupon, staffCaps);
+      }
+    }
     const patch: Prisma.CouponUpdateInput = {};
     if (data.isActive !== undefined) patch.isActive = data.isActive;
     if (data.endAt !== undefined) {
@@ -1370,6 +1495,7 @@ export class AdminService {
       patch.endAt = endAt;
     }
     if (data.usageLimit !== undefined) {
+      assertClaimUsageLimit(coupon, data.usageLimit);
       if (data.usageLimit !== null) {
         const redeemed = await this.prisma.couponRedemption.count({ where: { couponId: id } });
         if (data.usageLimit < redeemed) {
@@ -1378,94 +1504,87 @@ export class AdminService {
       }
       patch.usageLimit = data.usageLimit;
     }
-    const updated = await this.prisma.coupon.update({ where: { id }, data: patch });
-    this.logger.warn(`Admin cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
+    const by = actorUserId(actor);
+    if (by) patch.updatedById = by;
+    const updated =
+      staffCaps && raise > 0
+        ? await this.prisma.$transaction(async (tx) => {
+            await assertStaffDailyBudget(tx, coupon.createdById!, coupon.createdAt, raise, staffCaps);
+            return tx.coupon.update({ where: { id }, data: patch });
+          })
+        : await this.prisma.coupon.update({ where: { id }, data: patch });
+    this.logger.warn(`${actorLabel(actor)} cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
     return updated;
   }
 
   // ── Import bảng giá đại lý theo bậc (§ back-office "admin Excel giá") ──
+  /** Xem trước một lần nhập giá sỉ (CSV "sku,giá" hoặc rows JSON) cho một bậc: không ghi gì. */
+  async previewDealerPrices(tierId: string, input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
+    await this.assertDealerTier(tierId);
+    const maxDiscount = await this.config.get<unknown>(DEALER_MAX_DISCOUNT_KEY, DEFAULT_DEALER_MAX_DISCOUNT);
+    return publicPreview(await classifyDealerPrices(this.prisma, tierId, this.dealerPriceRows(input), { maxDiscount }));
+  }
+
   /**
-   * Nhập/đè giá đại lý cho 1 BẬC (tierId) từ danh sách {sku, price}.
-   * Ghi vào Variation.dealerPrices[tierId] (MERGE, không mất bậc khác) + lưu DealerPriceHistory
-   * (old→new, ai đổi) để truy vết. Bỏ qua dòng lỗi (sku rỗng/giá ≤ 0), gom SKU không tồn tại.
+   * Nhập/đè giá đại lý cho 1 BẬC: ghi Variation.dealerPrices[tierId] (MERGE, không mất bậc khác) + DealerPriceHistory (old→new,
+   * ai đổi). Một transaction, khoá các biến thể theo id, phân loại lại lúc ghi: còn dòng sai định dạng / dưới sàn chiết khấu
+   * đại lý (dealerPriceFloor) hay trên giá lẻ / SKU lặp → 400, không ghi dòng nào. SKU không khớp bỏ qua và trả lại;
+   * `skipped` = dòng không đổi + không khớp.
    */
-  async importDealerPrices(adminId: string, tierId: string, rows: { sku: string; price: number }[]) {
+  async importDealerPrices(adminId: string, tierId: string, input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
+    await this.assertDealerTier(tierId);
+    const parsed = this.dealerPriceRows(input);
+    const maxDiscount = await this.config.get<unknown>(DEALER_MAX_DISCOUNT_KEY, DEFAULT_DEALER_MAX_DISCOUNT);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const preview = await classifyDealerPrices(tx, tierId, parsed, { lock: true, maxDiscount });
+        if (!preview.canApply) {
+          throw new BadRequestException(
+            preview.blocking > 0
+              ? `Có ${preview.blocking} dòng lỗi (giá không đọc được, thấp hơn sàn chiết khấu đại lý hoặc cao hơn giá lẻ, SKU lặp) — sửa file rồi xem trước lại. Chưa ghi dòng nào.`
+              : 'Không có giá nào cần đổi.',
+          );
+        }
+        const changes = preview.rows.filter((r) => r.status === 'OK');
+        for (const r of changes) {
+          await tx.variation.update({ where: { id: r.variationId! }, data: { dealerPrices: { ...r.dealerPrices, [tierId]: r.price! } } });
+        }
+        await tx.dealerPriceHistory.createMany({
+          data: changes.map((r) => ({
+            variationId: r.variationId!,
+            sku: r.sku,
+            tierId,
+            oldPrice: r.currentPrice,
+            newPrice: r.price!,
+            changedBy: adminId,
+          })),
+        });
+        this.logger.log(`Admin ${adminId} nhập giá sỉ bậc ${tierId}: đổi ${changes.length}, không đổi ${preview.counts.UNCHANGED}, không khớp ${preview.counts.NOT_FOUND}.`);
+        const notFound = preview.rows.filter((r) => r.status === 'NOT_FOUND').map((r) => r.sku);
+        return {
+          tierId,
+          updated: changes.length,
+          unchanged: preview.counts.UNCHANGED,
+          notFound,
+          skipped: preview.counts.UNCHANGED + notFound.length,
+        };
+      },
+      { timeout: 60_000 },
+    );
+  }
+
+  private async assertDealerTier(tierId: string) {
     const tier = await this.prisma.dealerTier.findUnique({ where: { id: tierId } });
     if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
+  }
 
-    // 1) Chuẩn hoá + validate TỪNG dòng trước (giữ nguyên logic cũ: sku rỗng/giá không hữu
-    // hạn/giá <= 0 → bỏ) — bước này không đụng DB.
-    const validRows: { sku: string; price: number }[] = [];
-    for (const row of rows ?? []) {
-      const sku = String(row?.sku ?? '').trim();
-      const price = Math.round(Number(row?.price));
-      if (!sku || !Number.isFinite(price) || price <= 0) continue; // bỏ dòng lỗi
-      validRows.push({ sku, price });
+  private dealerPriceRows(input: { csv?: string; rows?: { sku?: unknown; price?: unknown }[] }) {
+    const rows = input.csv ? parseDealerPriceCsv(input.csv) : dealerPriceRowsFromJson(input.rows ?? []);
+    if (rows.length === 0) throw new BadRequestException('Không có dòng giá nào — dán 2 cột "sku,giá".');
+    if (rows.length > DEALER_PRICE_CSV_MAX_ROWS) {
+      throw new BadRequestException(`Tối đa ${DEALER_PRICE_CSV_MAX_ROWS} dòng mỗi lần nhập (file có ${rows.length} dòng) — chia nhỏ file.`);
     }
-
-    // 2) Bug 1 (N+1 nghiêm trọng): trước đây findUnique() + 1 $transaction RIÊNG cho TỪNG dòng —
-    // vài trăm/nghìn dòng = vài nghìn round-trip DB tuần tự → timeout/treo connection pool.
-    // Nay MỘT findMany cho toàn bộ SKU, tra cứu qua Map, rồi ghi theo LÔ cố định bên dưới.
-    const skus = [...new Set(validRows.map((r) => r.sku))];
-    const variations = skus.length
-      ? await this.prisma.variation.findMany({ where: { sku: { in: skus } } })
-      : [];
-    const variationBySku = new Map(variations.map((v) => [v.sku, v]));
-    // dealerPrices hiện tại theo variationId — cập nhật DẦN trong vòng lặp bên dưới để 2 dòng
-    // trùng SKU trong cùng file import (dòng sau đè dòng trước) thấy đúng giá của dòng liền
-    // trước, không dùng snapshot cũ nạp 1 lần từ DB.
-    const currentPrices = new Map<string, Record<string, number>>(
-      variations.map((v) => [v.id, (v.dealerPrices as Record<string, number> | null) ?? {}]),
-    );
-
-    const notFound: string[] = [];
-    const pending: { variationId: string; sku: string; oldPrice: number | null; newPrice: number }[] = [];
-    for (const { sku, price } of validRows) {
-      const v = variationBySku.get(sku);
-      if (!v) {
-        notFound.push(sku);
-        continue;
-      }
-      const current = currentPrices.get(v.id) ?? {};
-      const oldPrice = typeof current[tierId] === 'number' ? current[tierId] : null;
-      if (oldPrice === price) continue; // không đổi → không ghi lịch sử thừa
-      currentPrices.set(v.id, { ...current, [tierId]: price });
-      pending.push({ variationId: v.id, sku, oldPrice, newPrice: price });
-    }
-
-    // 3) Ghi theo LÔ cố định — MỘT $transaction duy nhất cho cả BATCH_SIZE dòng (update + create
-    // gộp chung), không phải 1 $transaction/dòng như trước.
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-      const batch = pending.slice(i, i + BATCH_SIZE);
-      await this.prisma.$transaction([
-        ...batch.map((w) =>
-          this.prisma.variation.update({
-            where: { id: w.variationId },
-            data: { dealerPrices: currentPrices.get(w.variationId) },
-          }),
-        ),
-        ...batch.map((w) =>
-          this.prisma.dealerPriceHistory.create({
-            data: {
-              variationId: w.variationId,
-              sku: w.sku,
-              tierId,
-              oldPrice: w.oldPrice,
-              newPrice: w.newPrice,
-              changedBy: adminId,
-            },
-          }),
-        ),
-      ]);
-    }
-
-    return {
-      tierId,
-      updated: pending.length,
-      notFound,
-      skipped: (rows?.length ?? 0) - pending.length - notFound.length,
-    };
+    return rows;
   }
 
   /** Lịch sử đổi giá đại lý (mới nhất trước), lọc theo biến thể hoặc SKU, kèm tên sản phẩm, bậc và người đổi. */
