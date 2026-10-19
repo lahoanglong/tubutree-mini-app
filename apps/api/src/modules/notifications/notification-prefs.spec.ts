@@ -20,7 +20,7 @@ function setup(user: Record<string, unknown> | null) {
       findUniqueOrThrow: jest.fn().mockResolvedValue(user),
       update,
     },
-    notificationLog: { create },
+    notificationLog: { create, count: jest.fn().mockResolvedValue(0) },
   } as unknown as PrismaService;
   const sendTemplate = jest.fn().mockResolvedValue({ ok: true });
   const analytics = { recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
