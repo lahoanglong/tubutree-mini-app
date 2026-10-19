@@ -106,7 +106,7 @@ export default async function StorefrontPage({
         className="relative -mt-16 mb-6 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card max-md:-mt-[29px] max-md:mb-0 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-4 max-md:py-0 max-md:shadow-none sm:-mt-20 sm:p-7"
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-4 max-md:flex-col max-md:gap-2">
             {/* Brand Avatar */}
             <div className="relative shrink-0">
               {sf.avatarUrl ? (

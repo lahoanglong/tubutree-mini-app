@@ -109,6 +109,7 @@ describe('trang gian hàng — kiểu Mini App ở điện thoại', () => {
     const avatar = box.querySelector<HTMLElement>('[data-testid="storefront-avatar"]')!;
     expect(avatar.className).toContain('max-md:h-[58px]');
     expect(avatar.className).toContain('max-md:rounded-full');
+    expect(avatar.parentElement!.parentElement!.className).toContain('max-md:flex-col');
   });
 
   it('dải cam kết chỉ cho máy tính; tiêu đề bộ sưu tập không thanh màu, không đếm sản phẩm ở điện thoại', async () => {
