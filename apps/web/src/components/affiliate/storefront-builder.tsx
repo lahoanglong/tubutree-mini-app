@@ -17,6 +17,8 @@ import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/s
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { phoneBrandText, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
+import { cssUrl } from '@/lib/safe-color';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
 import { ContentKitSheet, StorefrontShareSheet } from './storefront-share';
@@ -196,17 +198,17 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
               </div>
             )}
             <div className="mt-3 flex gap-2">
-              <button type="button" className={`${ui.btnSecondary} flex-1`} onClick={() => setProfileOpen(true)}>
+              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setProfileOpen(true)}>
                 <UserRoundCog className="mr-1.5 h-4 w-4" aria-hidden="true" />
                 Sửa hồ sơ
               </button>
-              <button type="button" className={`${ui.btnSecondary} flex-1`} onClick={() => setConfigOpen(true)}>
+              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setConfigOpen(true)}>
                 <Settings className="mr-1.5 h-4 w-4" aria-hidden="true" />
                 Cấu hình
               </button>
             </div>
             {sf.isPublished && (
-              <button type="button" className={`${ui.btnSecondary} mt-2 w-full`} onClick={() => setConfirmUnpublish(true)}>
+              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} mt-2 w-full`} onClick={() => setConfirmUnpublish(true)}>
                 <EyeOff className="mr-1.5 h-4 w-4" aria-hidden="true" />
                 Gỡ đăng
               </button>
@@ -222,20 +224,20 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
           >
             <div
               data-testid="profile-cover"
-              className="flex h-24 items-center justify-center gap-1.5 bg-forest-50 bg-cover bg-center"
-              style={sf.coverUrl ? { backgroundImage: `url(${sf.coverUrl})` } : undefined}
+              className="flex h-24 items-center justify-center gap-1.5 bg-forest-50 bg-cover bg-center max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]"
+              style={sf.coverUrl ? { backgroundImage: cssUrl(sf.coverUrl) } : undefined}
             >
               {!sf.coverUrl && (
                 <>
                   <ImagePlus className="h-4 w-4 text-forest-700" aria-hidden="true" />
-                  <span className="text-xs font-semibold text-forest-700">Thêm ảnh bìa</span>
+                  <span className="text-xs font-semibold text-forest-700 max-md:font-normal">Thêm ảnh bìa</span>
                 </>
               )}
             </div>
             <div className="flex items-center gap-2.5 p-3">
               <div
                 className="-mt-7 h-12 w-12 shrink-0 rounded-full border-2 border-stone-0 bg-stone-200 bg-cover bg-center"
-                style={sf.avatarUrl ? { backgroundImage: `url(${sf.avatarUrl})` } : undefined}
+                style={sf.avatarUrl ? { backgroundImage: cssUrl(sf.avatarUrl) } : undefined}
               />
               <div className={`min-w-0 flex-1 text-sm ${sf.headerNote ? 'text-stone-900' : 'text-stone-600'}`}>
                 {sf.headerNote || 'Ảnh đại diện, ảnh bìa và lời nhắn là thứ khách nhìn thấy đầu tiên.'}
@@ -245,7 +247,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
           </button>
 
           {sf.collections.map((col) => (
-            <section key={col.id} aria-label={col.title} className={`${ui.card} p-4`}>
+            <section key={col.id} aria-label={col.title} className={`${ui.card} ${phoneFlatCard} p-4`}>
               <div className="mb-1 flex items-center gap-1">
                 <div className="min-w-0 flex-1">
                   <h2 className={ui.sectionTitle}>{col.title}</h2>
@@ -256,7 +258,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                         {col.comboDiscountPct != null ? ` ${col.comboDiscountPct}%` : ''}
                       </Badge>
                     )}
-                    <Badge tone="neutral" size="sm">
+                    <Badge tone="neutral" size="sm" className="max-md:hidden">
                       {LAYOUT_LABEL[col.layout] ?? LAYOUT_LABEL.GRID}
                     </Badge>
                   </div>
@@ -306,7 +308,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                           {it.note ? `“${it.note}”` : 'Thêm lý do giới thiệu'}
                         </button>
                         {slug && (
-                          <button type="button" className={ui.btnText} onClick={() => setKitSlug(slug)}>
+                          <button type="button" className={`${ui.btnText} ${phoneBrandText}`} onClick={() => setKitSlug(slug)}>
                             Nội dung
                           </button>
                         )}
@@ -335,16 +337,16 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         {!sf.isPublished && itemCount === 0 && <p className="mb-2 text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
         <div className="mx-auto flex max-w-5xl gap-2">
           {sf.isPublished ? (
-            <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} flex-1`}>
+            <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} flex-1`}>
               Xem trước
             </Link>
           ) : (
-            <button type="button" className={`${ui.btnSecondary} flex-1`} onClick={() => notify('Gian hàng đang là nháp — bấm "Lưu & Đăng" để khách xem được.', true)}>
+            <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => notify('Gian hàng đang là nháp — bấm "Lưu & Đăng" để khách xem được.', true)}>
               Xem trước
             </button>
           )}
           {sf.isPublished ? (
-            <button type="button" className={`${ui.btnPrimary} flex-1`} onClick={() => setShareOpen(true)}>
+            <button type="button" className={`${ui.btnPrimary} min-w-0 flex-1 max-md:overflow-hidden max-md:whitespace-nowrap`} onClick={() => setShareOpen(true)}>
               <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Chia sẻ gian hàng
             </button>

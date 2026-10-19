@@ -9,3 +9,11 @@ export function safeHexColor(value: unknown): string | undefined {
   const v = value.trim();
   return HEX.test(v) ? v : undefined;
 }
+
+/**
+ * `url("...")` an toàn cho ảnh nền lấy từ dữ liệu người dùng: ngoặc kép quanh URL và mã hoá ký tự phá chuỗi (`"`, `\`, xuống dòng)
+ * để URL lạ không thoát khỏi `url()` (như StorePageShell của Mini App).
+ */
+export function cssUrl(url: string): string {
+  return `url("${url.replace(/["\\\r\n]/g, encodeURIComponent)}")`;
+}

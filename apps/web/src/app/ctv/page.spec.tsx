@@ -387,7 +387,12 @@ describe('/ctv — bảng điều khiển', () => {
   it('lối sang /hoc-vien chỉ hiện khi route web đã sẵn sàng', async () => {
     const { container } = mount();
     await flush();
-    expect(container.querySelector('a[href="/hoc-vien"]')).not.toBeNull();
+    const academy = container.querySelector('a[href="/hoc-vien"]')!;
+    expect(academy).not.toBeNull();
+    // Chữ như Mini App (vi.academy.entry / entryHint), nút phụ nền nhạt không viền ở điện thoại.
+    expect(academy.textContent).toBe('CTV Academy');
+    expect(academy.nextElementSibling!.textContent).toBe('Khoá học đào tạo dành cho CTV');
+    expect(academy.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
   });
 });
 

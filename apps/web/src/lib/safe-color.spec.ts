@@ -35,3 +35,12 @@ describe('safeHexColor', () => {
     expect(safeHexColor(123 as never)).toBeUndefined();
   });
 });
+
+describe('cssUrl', () => {
+  it('bọc ngoặc kép và mã hoá ký tự phá chuỗi', async () => {
+    const { cssUrl } = await import('./safe-color');
+    expect(cssUrl('https://cdn.example/a.jpg')).toBe('url("https://cdn.example/a.jpg")');
+    expect(cssUrl('https://x/a");background:red;("')).toBe('url("https://x/a%22);background:red;(%22")');
+    expect(cssUrl('a\\b\nc')).toBe('url("a%5Cb%0Ac")');
+  });
+});

@@ -10,6 +10,7 @@ import { coreHttp } from '@/lib/core-http';
 import { invalidateBalances } from '@/lib/balances';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { phoneFlatCard } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { formatPoints, milestoneStatusText, monthLabel, revenueRuleText } from './milestone-copy';
@@ -132,7 +133,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   );
 
   return (
-    <section aria-label="Thưởng mốc doanh số tháng" className={`${ui.card} p-4`}>
+    <section aria-label="Thưởng mốc doanh số tháng" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-2 flex items-center gap-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control bg-forest-50">
           <Trophy className="h-5 w-5 text-forest-600" aria-hidden="true" />

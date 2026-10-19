@@ -6,3 +6,6 @@ export const phoneSecondary =
 
 /** Nút chữ xanh đậm không gạch chân (Xem tất cả, Nội dung...) như `Text variant="label" tone="brand"` của Mini App. Ghép sau `ui.btnText`. */
 export const phoneBrandText = 'max-md:text-[var(--color-text-brand)] max-md:no-underline';
+
+/** Thẻ phẳng của `Card` Mini App: không viền, đổ bóng elevation-1. Ghép sau `ui.card`. */
+export const phoneFlatCard = 'max-md:border-0 max-md:shadow-[var(--elevation-1)]';
