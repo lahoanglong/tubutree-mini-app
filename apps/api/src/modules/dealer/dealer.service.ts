@@ -166,6 +166,7 @@ export class DealerService {
       where: { userId },
       _sum: { delta: true },
     });
+    const rules = await this.orderRules();
     return {
       isDealer: user.role === 'DEALER',
       status: application?.status ?? 'NONE',
@@ -174,6 +175,12 @@ export class DealerService {
       reviewedAt: application?.reviewedAt ?? null,
       tier: tier ? { id: tier.id, name: tier.name, creditLimit: tier.creditLimit } : null,
       currentDebt: creditAgg._sum.delta ?? 0,
+      // Màn đặt đơn cần các số này để báo phí giao và mức tối thiểu trước khi đại lý bấm đặt.
+      orderRules: {
+        minOrderValue: rules.minOrder,
+        freeShipThreshold: rules.freeShipFrom,
+        shippingFee: rules.feeBelow,
+      },
     };
   }
 
@@ -442,7 +449,7 @@ export class DealerService {
           code: 'DEALER_CREDIT_OVERDUE',
           message:
             `Bạn còn nợ đơn ngày ${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()} đã quá hạn thanh toán (${paymentTerms}). ` +
-            'Vui lòng thanh toán công nợ trước khi đặt thêm đơn ghi nợ, hoặc chọn thanh toán trả trước.',
+            'Vui lòng thanh toán công nợ trước khi đặt thêm đơn ghi công nợ, hoặc chọn thanh toán trả trước.',
         });
       }
       return; // đơn nợ cũ nhất còn dư chưa tới hạn thì các đơn sau (mới hơn) cũng chưa tới hạn

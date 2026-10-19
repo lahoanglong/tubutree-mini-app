@@ -193,3 +193,22 @@ describe('DealerService.placeOrder — khoá mua chịu khi nợ đơn quá hạ
     expect(orderCreate).not.toHaveBeenCalled();
   });
 });
+
+describe('DealerService.getMe — luật đơn sỉ trả kèm để màn đại lý báo trước phí giao và mức tối thiểu', () => {
+  it('trả orderRules mặc định: tối thiểu 3 triệu, miễn phí giao từ 5 triệu, phí dưới ngưỡng bằng phí phẳng đơn lẻ', async () => {
+    const { prisma } = build({ unitPrice: 1 });
+    const me = await new DealerService(prisma, makeConfig()).getMe('d1');
+    expect(me.orderRules).toEqual({ minOrderValue: 3_000_000, freeShipThreshold: 5_000_000, shippingFee: 19_000 });
+  });
+
+  it('theo khoá cấu hình đã đặt', async () => {
+    const { prisma } = build({ unitPrice: 1 });
+    const cfg = {
+      'dealer.min_order_value_vnd': 2_000_000,
+      'dealer.free_ship_threshold_vnd': 6_000_000,
+      'dealer.shipping_fee_below_threshold_vnd': 30_000,
+    };
+    const me = await new DealerService(prisma, makeConfig(cfg)).getMe('d1');
+    expect(me.orderRules).toEqual({ minOrderValue: 2_000_000, freeShipThreshold: 6_000_000, shippingFee: 30_000 });
+  });
+});

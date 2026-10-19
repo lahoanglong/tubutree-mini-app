@@ -4,11 +4,19 @@ import { formatVnd } from '../utils/format';
 
 export type DealerStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
 
+export interface DealerOrderRules {
+  minOrderValue: number;
+  freeShipThreshold: number;
+  shippingFee: number;
+}
+
 export interface DealerMe {
   isDealer: boolean;
   status: DealerStatus;
   tier: { id: string; name: string; creditLimit: number } | null;
   currentDebt: number;
+  /** Luật đơn sỉ do server cấu hình; thiếu thì màn đặt đơn không tự tính phí/tối thiểu. */
+  orderRules?: DealerOrderRules;
   /** Lý do admin từ chối hồ sơ gần nhất (chỉ có khi status REJECTED). */
   rejectionReason?: string | null;
 }
