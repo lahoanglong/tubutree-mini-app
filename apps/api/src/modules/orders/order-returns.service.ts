@@ -410,7 +410,7 @@ export class OrderReturnsService {
         await tx.orderStatusHistory.create({
           data: { orderId: order.id, fromStatus: 'DELIVERED', toStatus: 'RETURNED', actorType: 'ADMIN', actorId: adminId, note: note ?? null },
         });
-        const reversed = await this.reversal.reverseFinancials(tx, order, { destination, restock: false, returnRequestId: id });
+        const reversed = await this.reversal.reverseFinancials(tx, order, { destination, restock: false, returnRequestId: id, standardPointsExpiresAt });
         money = reversed.refund;
         referralNotices = reversed.referralNotices ?? [];
       } else {

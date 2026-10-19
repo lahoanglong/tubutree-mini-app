@@ -43,6 +43,7 @@ import {
   appendAttentionReason,
   clearPancakeAttention,
   flagPancakeAttention,
+  removeAttentionReasonsByPrefix,
 } from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
@@ -210,6 +211,13 @@ export class OrderStatusService {
           this.logger.warn(`Gọi lại DELIVERED cho đơn ${order.code}: việc sau giao vẫn lỗi (${err instanceof Error ? err.message : err}) — cron sẽ chạy lại.`),
         );
       }
+      // Huỷ/trả lặp lại: lần trước có thể đã commit nhưng đảo điểm/hoa hồng lỗi (người gọi nhận lỗi và gọi lại). Hai việc này
+      // idempotent nên chạy lại là đủ; xếp lệnh huỷ Pancake và báo khách đã đi ở lần đầu, không làm lại. Vẫn lỗi thì ném tiếp
+      // để webhook được thử lại thay vì coi như xong.
+      if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
+        const { failure } = await this.reverseClosedOrderEffects(order);
+        if (failure !== null) throw failure;
+      }
       return order;
     }
     if (opts.onlyIfUnpaid && order.paymentStatus !== 'UNPAID') return order;
@@ -263,6 +271,12 @@ export class OrderStatusService {
             }).filter(([, v]) => v !== undefined),
           )
         : {};
+
+    // Hạn của điểm thường hoàn lại đọc NGOÀI tx (không giữ kết nối tx trong lúc chờ cấu hình); đơn không dùng điểm thường thì bỏ qua.
+    const standardPointsExpiresAt =
+      (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && order.pointsUsed > order.pointsUsedConverted
+        ? await this.loyalty.pointsExpiresAt(new Date())
+        : undefined;
 
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
     // chỉ 1 bên thắng (count===1), bên thua bail êm để không chạy side-effect 2 lần.
@@ -331,9 +345,14 @@ export class OrderStatusService {
 
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
         const withholdCod = opts.withholdCodRefund === true && order.paymentMethod === 'COD' && from === 'DELIVERED' && targetStatus === 'RETURNED';
-        reversed = withholdCod
-          ? await this.reversal.reverseFinancials(tx, order, { withholdCodRefund: true })
-          : await this.reversal.reverseFinancials(tx, order);
+        const reversalOpts = {
+          ...(withholdCod ? { withholdCodRefund: true } : {}),
+          ...(standardPointsExpiresAt ? { standardPointsExpiresAt } : {}),
+        };
+        reversed =
+          Object.keys(reversalOpts).length > 0
+            ? await this.reversal.reverseFinancials(tx, order, reversalOpts)
+            : await this.reversal.reverseFinancials(tx, order);
         // Cùng tx: ghi sau commit mà chết giữa chừng thì đơn đã RETURNED, không tiền hoàn, và không ai biết phải kiểm.
         if (withholdCod) {
           const prior = await partialReturnTotals(tx, order.id);
@@ -383,15 +402,19 @@ export class OrderStatusService {
     // Side-effect điểm/hoa hồng — idempotent qua unique index riêng, an toàn để NGOÀI tx. Crash/lỗi giữa chừng sau commit
     // (retry thấy status đã bằng targetStatus) không còn mất việc: DELIVERED chỉ có mốc deliveredEffectsAt khi mọi việc sau
     // giao xong, thiếu mốc thì lần gọi DELIVERED lặp hoặc DeliveredEffectsResyncCron chạy lại (resyncDeliveredEffects). Phần
-    // tiền trả trước (Điểm Xanh lô quy đổi) vẫn KHÔNG nằm ở đây mà hoàn trong tx ở reverseFinancials.
+    // tiền trả trước và điểm đã dùng (Điểm Xanh lô quy đổi và lô thường) vẫn KHÔNG nằm ở đây mà hoàn trong tx ở reverseFinancials.
     if (targetStatus === 'DELIVERED') {
       await this.runDeliveredEffects(order);
     }
     let standardPointsBack = 0;
     let receivedBack = 0;
+    // Lỗi đảo điểm/hoa hồng không được chặn xếp lệnh huỷ Pancake, báo merchant, báo khách ở dưới (đơn đã CANCELLED, lần gọi lại
+    // không còn đi đường này): ghi nhận rồi ném SAU CÙNG để người gọi biết mà thử lại (nhánh idempotent ở đầu hàm).
+    let closedEffectsFailure: unknown = null;
     if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
-      standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
-      await this.affiliate.reverseCommissionsForOrder(order.id);
+      const done = await this.reverseClosedOrderEffects(order);
+      standardPointsBack = done.standardPointsBack;
+      closedEffectsFailure = done.failure;
       await this.settleClosedOrderAlerts(order);
     }
     // Tin huỷ mặc định (ORDER_CANCELLED) mang refund_note nên nói luôn khoản hoàn số tiền khách chuyển thiếu; mẫu tin khác
@@ -435,7 +458,30 @@ export class OrderStatusService {
       .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, notifyData)
       .catch(() => undefined);
 
+    if (closedEffectsFailure !== null) throw closedEffectsFailure;
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+  }
+
+  /**
+   * Đảo điểm tích + điểm thường còn lại và hoa hồng của đơn đã huỷ/trả. Hai việc độc lập (mỗi việc idempotent theo dòng sổ riêng) nên
+   * việc này lỗi không bỏ việc kia; lỗi đầu tiên trả về cho người gọi quyết định ném, kèm log để lộ ra ngay.
+   */
+  private async reverseClosedOrderEffects(order: Pick<Order, 'id' | 'code'>): Promise<{ standardPointsBack: number; failure: unknown }> {
+    let standardPointsBack = 0;
+    let failure: unknown = null;
+    try {
+      standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
+    } catch (err) {
+      failure ??= err;
+      this.logger.error(`Đảo điểm của đơn ${order.code} sau khi huỷ/trả lỗi: ${err instanceof Error ? err.message : err} — gọi lại setStatus cùng trạng thái để làm nốt.`);
+    }
+    try {
+      await this.affiliate.reverseCommissionsForOrder(order.id);
+    } catch (err) {
+      failure ??= err;
+      this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi huỷ/trả lỗi: ${err instanceof Error ? err.message : err} — gọi lại setStatus cùng trạng thái để làm nốt.`);
+    }
+    return { standardPointsBack, failure };
   }
 
   /**
@@ -662,7 +708,9 @@ export class OrderStatusService {
   private async settleClosedOrderAlerts(order: Pick<Order, 'id' | 'code'>): Promise<void> {
     try {
       await resolveGomdonAlertKinds(this.prisma, order.id, [GOMDON_ALERT_KIND.GOODS_RETURNED]);
-      await clearPancakeAttention(this.prisma, order.id, [
+      // Chỉ gỡ đúng các lý do đã có kết cục: hàng còn ghi thêm lý do khác (vd COD chờ Kế toán đối soát, vừa ghi cùng tx lật
+      // trạng thái) thì phải ở lại.
+      await removeAttentionReasonsByPrefix(this.prisma, order.id, [
         ATTENTION_CANCEL_AFTER_HANDOVER,
         ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
         PANCAKE_RETURNING_PREFIX,

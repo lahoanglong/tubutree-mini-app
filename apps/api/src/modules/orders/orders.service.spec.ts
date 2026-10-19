@@ -22,7 +22,11 @@ jest.mock('../wallet/wallet-ledger.service', () => ({
   ),
 }));
 
-const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
+const POINTS_EXPIRES_AT = new Date('2027-10-20T00:00:00.000Z');
+const loyalty = {
+  reverseOrderPoints: jest.fn().mockResolvedValue(undefined),
+  pointsExpiresAt: jest.fn().mockResolvedValue(POINTS_EXPIRES_AT),
+} as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
@@ -254,6 +258,26 @@ describe('OrdersService.cancel', () => {
       }),
     );
     expect(coinCreate).not.toHaveBeenCalled();
+  });
+
+  // D12-02: hoàn điểm thường sau commit mà lỗi (đứt DB, SIGTERM) thì bấm huỷ lại bị chặn bởi "đã CANCELLED" → khách mất điểm vĩnh viễn.
+  it('đơn dùng 20.000 Điểm Xanh thường → hoàn trong CÙNG tx huỷ (ORDER_REFUND_POINTS, lô STANDARD, có hạn), kể cả khi reverseOrderPoints sau commit ném lỗi', async () => {
+    (loyalty.reverseOrderPoints as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+    const { svc, pointsInsert, userUpdate } = makeService({ ...baseOrder, status: 'CONFIRMED', pointsUsed: 20000, pointsUsedConverted: 0 });
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('P2024');
+    expect(pointsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ userId: 'u1', delta: 20000, lot: 'STANDARD', reason: 'ORDER_REFUND_POINTS:TUBU1', refType: 'ORDER', refId: 'o1', expiresAt: POINTS_EXPIRES_AT })],
+      }),
+    );
+    expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { pointsBalance: { increment: 20000 } } }));
+  });
+
+  it('đơn không dùng điểm thường → không đọc cấu hình hạn điểm, không ghi dòng hoàn điểm', async () => {
+    const { svc, pointsInsert } = makeService({ ...baseOrder, status: 'CONFIRMED', pointsUsed: 0, pointsUsedConverted: 0 });
+    await svc.cancel('u1', 'TUBU1');
+    expect(loyalty.pointsExpiresAt as jest.Mock).not.toHaveBeenCalled();
+    expect(pointsInsert).not.toHaveBeenCalled();
   });
 
   it('hủy XU race THUA (count=0) → KHÔNG hoàn xu, KHÔNG ghi sổ cái', async () => {

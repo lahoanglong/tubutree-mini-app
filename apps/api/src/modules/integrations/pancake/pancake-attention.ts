@@ -78,3 +78,26 @@ export async function removeAttentionReason(tx: Pick<Prisma.TransactionClient, '
     data: rest.length > 0 ? { pancakeAttention: rest.join(ATTENTION_SEPARATOR) } : { pancakeAttention: null, pancakeAttentionAt: null },
   });
 }
+
+/**
+ * Gỡ mọi lý do bắt đầu bằng một trong các tiền tố khỏi hàng cần xử lý, giữ lý do khác (clearPancakeAttention xoá cả hàng khi lý do
+ * ĐẦU khớp). Đọc rồi ghi có điều kiện theo đúng giá trị đã đọc, nên lý do vừa được ghi chen giữa không bị ghi đè; thua thì đọc lại.
+ */
+export async function removeAttentionReasonsByPrefix(
+  db: Pick<Prisma.TransactionClient, 'order'>,
+  orderId: string,
+  prefixes: string[],
+): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    if (!row?.pancakeAttention) return;
+    const all = row.pancakeAttention.split(ATTENTION_SEPARATOR);
+    const rest = all.filter((part) => !prefixes.some((prefix) => part.startsWith(prefix)));
+    if (rest.length === all.length) return;
+    const r = await db.order.updateMany({
+      where: { id: orderId, pancakeAttention: row.pancakeAttention },
+      data: rest.length > 0 ? { pancakeAttention: rest.join(ATTENTION_SEPARATOR) } : { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+    if (r.count === 1) return;
+  }
+}

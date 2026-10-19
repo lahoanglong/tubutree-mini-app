@@ -304,8 +304,11 @@ function reverseHarness(order: ReverseOrder, opts: { reversed?: unknown; deliver
   const updateMany = jest.fn(async (_args: { where: unknown; data: unknown }) => ({ count: opts.decCount ?? 1 }));
   const tx = { $queryRaw: queryRaw, pointsTransaction: { findFirst, findMany, create }, user: { update, updateMany } };
   const txn = jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx));
+  // Lần xem trước ngoài tx (đơn không có điểm tích): cùng sổ với lần re-check trong tx, nhưng không đụng chuỗi findFirst của tx.
+  const preCheck = jest.fn(async () => opts.reversed ?? null);
   const prisma = {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+    pointsTransaction: { findFirst: preCheck },
     $transaction: txn,
   } as unknown as PrismaService;
   return { prisma, txn, calls, lockSql, queryRaw, findFirst, findMany, create, update, updateMany };
@@ -348,6 +351,45 @@ describe('LoyaltyService.reverseOrderPoints (idempotent)', () => {
     expect(txn).toHaveBeenCalledTimes(1);
     // 2 create: ORDER_REVERSED + ORDER_REFUND_POINTS
     expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  // D12-02: tx huỷ (OrderReversalService) đã hoàn điểm thường rồi ghi ORDER_REFUND_POINTS; lần chạy này chỉ còn thu hồi điểm tích.
+  describe('điểm thường đã hoàn trong tx huỷ (dòng ORDER_REFUND_POINTS có sẵn)', () => {
+    const refundRow = { id: 'tx-refund', reason: 'ORDER_REFUND_POINTS:C1' };
+
+    it('đơn đã giao có điểm tích → vẫn thu hồi điểm tích (ORDER_REVERSED), KHÔNG hoàn điểm thường lần hai, trả về 0', async () => {
+      const { prisma, create, update, updateMany } = reverseHarness({ ...order, pointsUsed: 20 }, { reversed: refundRow });
+      const back = await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+      expect(back).toBe(0);
+      expect(create.mock.calls.map((c) => c[0].data.reason)).toEqual(['ORDER_REVERSED:C1']);
+      expect(update).not.toHaveBeenCalled();
+      expect(updateMany).toHaveBeenCalledWith({ where: { id: 'u1', pointsBalance: { gte: 50 } }, data: { pointsBalance: { decrement: 50 } } });
+    });
+
+    it('đơn chưa từng cộng điểm tích → không còn gì để làm, không ghi dòng nào', async () => {
+      const { prisma, create, update, updateMany } = reverseHarness({ ...order, pointsUsed: 20 }, { reversed: refundRow, delivered: null });
+      const back = await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+      expect(back).toBe(0);
+      expect(create).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('đơn không có điểm tích và điểm thường đã hoàn → không khoá dòng user, không đọc cấu hình hạn điểm (webhook lặp không tốn tài nguyên)', async () => {
+      const get = jest.fn(async <T>(_k: string, fb?: T) => fb as T);
+      const { prisma, calls, create } = reverseHarness({ ...order, pointsEarned: 0, pointsUsed: 20 }, { reversed: refundRow });
+      const back = await new LoyaltyService(prisma, { get } as unknown as SystemConfigService).reverseOrderPoints('o1');
+      expect(back).toBe(0);
+      expect(calls).not.toContain('lock');
+      expect(get).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('dòng ORDER_REVERSED đã có → xong cả hai, không ghi gì', async () => {
+      const { prisma, create } = reverseHarness({ ...order, pointsUsed: 20 }, { reversed: { id: 'tx-rev', reason: 'ORDER_REVERSED:C1' } });
+      expect(await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1')).toBe(0);
+      expect(create).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -355,6 +355,10 @@ export class OrdersService {
     // khách liên hệ CSKH); không hỏi được Pancake thì cũng dừng ("Kho chưa phản hồi…") — webhook "Đã gửi hàng" có thể
     // chưa về, huỷ lúc này là hoàn tiền cho hàng đang ở hãng.
     const pancakeDecision = await this.orderStatus?.precheckPancakeCancel(order, 'CUSTOMER');
+    // Điểm thường khách đã tiêu hoàn trong tx huỷ (cùng commit với lần lật CANCELLED): hoàn sau commit mà lỗi thì bấm huỷ lại bị
+    // chặn bởi "đã huỷ" và khách mất điểm vĩnh viễn. Hạn của điểm hoàn đọc ngoài tx để không giữ kết nối trong lúc chờ cấu hình.
+    const standardPointsExpiresAt =
+      order.pointsUsed > order.pointsUsedConverted ? await this.loyalty.pointsExpiresAt(new Date()) : undefined;
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
@@ -390,7 +394,7 @@ export class OrdersService {
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
       // trong docs/2026-09-08-review-progress.md). Hoàn tiền quyết bằng guard PAID→REFUNDED
       // trong reverseFinancials (DB quyết, không phải paymentStatus của bản đọc).
-      reversed = await this.reversal.reverseFinancials(tx, current, { destination });
+      reversed = await this.reversal.reverseFinancials(tx, current, { destination, ...(standardPointsExpiresAt ? { standardPointsExpiresAt } : {}) });
       return true;
     }).catch(async (err: unknown) => {
       // Pancake đã huỷ đơn ở bước trên mà tx này không huỷ được (vừa PAID/giao vận, hay lỗi DB): để lại dấu cho CSKH; lỗi trả khách giữ nguyên.
