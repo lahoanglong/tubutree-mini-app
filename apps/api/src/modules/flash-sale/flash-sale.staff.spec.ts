@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { FlashSaleService } from './flash-sale.service';
+import { priceFlashLine } from './flash-line-price';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -16,8 +17,8 @@ const STAFF = { id: 'm1', staff: true };
 const ADMIN = { id: 'a1', staff: false };
 
 /** Đợt do `createdBy` tạo; người tạo có vai trò `creatorRole`. Giá niêm yết 100.000đ, tồn 1.000. */
-function setup(opts: { createdBy?: string | null; creatorRole?: 'STAFF' | 'ADMIN'; used?: number; price?: number } = {}) {
-  const { createdBy = 'm1', creatorRole = 'STAFF', used = 0, price = 100_000 } = opts;
+function setup(opts: { createdBy?: string | null; creatorRole?: 'STAFF' | 'ADMIN'; used?: number; exposure?: number; price?: number } = {}) {
+  const { createdBy = 'm1', creatorRole = 'STAFF', used = 0, exposure = 0, price = 100_000 } = opts;
   const sale = {
     id: 's1',
     createdBy,
@@ -42,7 +43,7 @@ function setup(opts: { createdBy?: string | null; creatorRole?: 'STAFF' | 'ADMIN
       delete: jest.fn().mockResolvedValue({}),
     },
     $executeRaw: jest.fn().mockResolvedValue(1),
-    $queryRaw: jest.fn().mockResolvedValue([{ used: BigInt(used) }]),
+    $queryRaw: jest.fn().mockResolvedValue([{ used: BigInt(used), exposure: BigInt(exposure) }]),
     $transaction: jest.fn(),
   } as any;
   prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
@@ -114,6 +115,34 @@ describe('FlashSaleService.addItem — nhân viên (D2-01)', () => {
     const queryValues = prisma.$queryRaw.mock.calls.flatMap((c: unknown[]) => c.slice(1));
     expect(queryValues).toContain('m1');
     expect(queryValues).not.toContain('m2');
+  });
+
+  it('trần 100.000đ tính theo ĐƠN: tổng mức giảm tối đa của các sản phẩm flash cùng người tạo, cùng khung giờ, không theo từng dòng', async () => {
+    // Giá gốc 200.000đ: dòng này giảm 25% = 50.000đ × 1 suất (trong trần dòng) nhưng các dòng khác đang chạy đã có 60.000đ → một đơn mua đủ
+    // các dòng được giảm 110.000đ.
+    const over = setup({ exposure: 60_000, price: 200_000 });
+    const call = () => over.svc().addItem('s1', { variationId: 'v1', flashPrice: 150_000, quota: 5, perUserLimit: 1 }, STAFF);
+    await expect(call()).rejects.toBeInstanceOf(BadRequestException);
+    await expect(call()).rejects.toThrow(/Một đơn.*100\.000đ.*60\.000đ.*50\.000đ.*nhờ quản trị viên/);
+    expect(over.prisma.flashSaleItem.create).not.toHaveBeenCalled();
+
+    const ok = setup({ exposure: 50_000, price: 200_000 });
+    await ok.svc().addItem('s1', { variationId: 'v1', flashPrice: 150_000, quota: 5, perUserLimit: 1 }, STAFF);
+    expect(ok.prisma.flashSaleItem.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('trần theo đơn đọc coupon.staff_max_amount_vnd và khoá theo người tạo để hai lần thêm song song không cùng lọt', async () => {
+    const { prisma, svc } = setup({ exposure: 20_000 });
+    await expect(
+      svc(cfg({ 'coupon.staff_max_amount_vnd': 60_000 })).addItem('s1', { variationId: 'v1', flashPrice: 70_000, quota: 5, perUserLimit: 1 }, STAFF),
+    ).resolves.toBeDefined();
+    const lockKeys = prisma.$executeRaw.mock.calls.flatMap((c: unknown[]) => c.slice(1));
+    expect(lockKeys).toContain('flash.staff_order_cap:m1');
+    // 20.000 + 30.000 = 50.000 ≤ 60.000 ở trên; 31.000 + 30.000 = 61.000 thì vượt.
+    const tight = setup({ exposure: 31_000 });
+    await expect(
+      tight.svc(cfg({ 'coupon.staff_max_amount_vnd': 60_000 })).addItem('s1', { variationId: 'v1', flashPrice: 70_000, quota: 5, perUserLimit: 1 }, STAFF),
+    ).rejects.toThrow(/60\.000đ/);
   });
 
   it('ADMIN thêm item giảm 90%, quota lớn, perUserLimit lớn vẫn được; không khoá, không tính ngân sách', async () => {
@@ -191,8 +220,12 @@ describe('FlashSaleService.resolveEffective — người tạo đợt không đ�
     return new FlashSaleService(prisma, cfg(), notifications, lifecycle);
   };
 
-  it('người mua chính là người tạo đợt → không có giá flash (tính giá thường)', async () => {
-    expect((await svcWith('m1').resolveEffective(['v1'], NOW, 'm1')).has('v1')).toBe(false);
+  it('người mua chính là người tạo đợt → không có giá flash (tính giá thường), kèm lý do để app báo cho họ', async () => {
+    const offer = (await svcWith('m1').resolveEffective(['v1'], NOW, 'm1')).get('v1');
+    expect(offer).toMatchObject({ ownSale: true, allowance: 0 });
+    const priced = priceFlashLine(100_000, 1, offer);
+    expect(priced).toMatchObject({ unitPrice: 100_000, flash: null });
+    expect(priced.flashLimitNotice).toBe('Bạn tạo sale này nên không mua được giá flash.');
   });
 
   it('khách khác vẫn có giá flash; tra không theo người mua (trang chủ) không đổi', async () => {
@@ -205,6 +238,8 @@ describe('FlashSaleService.resolveEffective — người tạo đợt không đ�
   });
 
   it('không tra được vai trò của người tạo thì coi như nhân viên: vẫn không có giá flash', async () => {
-    expect((await svcWith('m1', null).resolveEffective(['v1'], NOW, 'm1')).has('v1')).toBe(false);
+    const priced = priceFlashLine(100_000, 1, (await svcWith('m1', null).resolveEffective(['v1'], NOW, 'm1')).get('v1'));
+    expect(priced.flash).toBeNull();
+    expect(priced.unitPrice).toBe(100_000);
   });
 });

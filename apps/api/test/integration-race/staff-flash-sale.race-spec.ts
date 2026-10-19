@@ -145,6 +145,42 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     expect(await prisma.flashSaleItem.count({ where: { flashSaleId: s.id } })).toBe(1);
   });
 
+  it('trần 100.000đ theo ĐƠN: dòng thứ hai của cùng người tạo vượt tổng thì bị chặn, hai lần thêm song song chỉ một lọt, nhân viên khác không bị ảnh hưởng', async () => {
+    const m1 = await staffUser();
+    const m2 = await staffUser();
+    const s1 = await sale(m1.id);
+    const s1b = await sale(m1.id);
+    const s2 = await sale(m2.id);
+    const [a, b, c, d] = await variations(4);
+    const actor = (id: string) => ({ id, staff: true });
+    // giảm 20.000đ × 4 suất mỗi khách = 80.000đ
+    await flash.addItem(s1.id, { variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 4 }, actor(m1.id));
+    // thêm 20.000đ × 2 = 40.000đ: 120.000đ > 100.000đ
+    await expect(flash.addItem(s1.id, { variationId: b!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id))).rejects.toThrow(/Một đơn mua đủ/);
+    // cùng khung giờ nhưng đợt khác của cùng người tạo cũng cộng dồn
+    await expect(flash.addItem(s1b.id, { variationId: b!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id))).rejects.toThrow(/Một đơn mua đủ/);
+    // nhân viên khác có trần riêng
+    await flash.addItem(s2.id, { variationId: b!, flashPrice: 80_000, quota: 10, perUserLimit: 5 }, actor(m2.id));
+    // hai lần thêm song song, mỗi lần 20.000đ × 2 = 40.000đ: còn 20.000đ nên cả hai đều vượt → không lần nào lọt
+    const r = summarize(
+      await Promise.allSettled([
+        flash.addItem(s1.id, { variationId: c!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+        flash.addItem(s1b.id, { variationId: d!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+      ]),
+    );
+    expect(r.fulfilled).toHaveLength(0);
+    expect(await prisma.flashSaleItem.count({ where: { flashSaleId: { in: [s1.id, s1b.id] } } })).toBe(1);
+    // đúng phần còn lại thì được; thêm lần hai song song 10.000đ × 2 : chỉ một lọt
+    const r2 = summarize(
+      await Promise.allSettled([
+        flash.addItem(s1.id, { variationId: c!, flashPrice: 90_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+        flash.addItem(s1b.id, { variationId: d!, flashPrice: 90_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+      ]),
+    );
+    expect(r2.fulfilled).toHaveLength(1);
+    expect(r2.errors[0]).toContain('Một đơn mua đủ');
+  });
+
   it('người tạo đợt mua: không có giá flash; khách khác có', async () => {
     const staff = await staffUser();
     const customer = await createUser(prisma, { role: 'CUSTOMER', phone: `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`, zaloId: `z-${randCode(8)}` });
@@ -155,7 +191,7 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     });
     created.flashSaleIds.push(s.id);
     await prisma.flashSaleItem.create({ data: { flashSaleId: s.id, variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 2 } });
-    expect((await flash.resolveEffective([a!], new Date(), staff.id)).has(a!)).toBe(false);
+    expect((await flash.resolveEffective([a!], new Date(), staff.id)).get(a!)).toMatchObject({ ownSale: true, allowance: 0 });
     expect((await flash.resolveEffective([a!], new Date(), customer.id)).get(a!)).toMatchObject({ flashPrice: 80_000, allowance: 2 });
   });
 

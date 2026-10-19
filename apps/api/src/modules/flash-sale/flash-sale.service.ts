@@ -51,6 +51,8 @@ export interface EffectivePrice {
   allowance?: number;
   quotaLeft?: number;
   perUserLeft?: number;
+  /** Người mua là người tạo đợt (không phải ADMIN): allowance = 0 và giá thường, giữ dòng này để giỏ nói lý do thay vì lặng lẽ bỏ giá. */
+  ownSale?: boolean;
 }
 
 /**
@@ -119,7 +121,8 @@ export class FlashSaleService {
       const buyer = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
       ownSalesBlocked = buyer?.role !== 'ADMIN';
     }
-    const open = items.filter((it) => it.soldCount < it.quota && !(ownSalesBlocked && it.flashSale.createdBy === userId));
+    const isOwn = (it: (typeof items)[number]) => ownSalesBlocked && it.flashSale.createdBy === userId;
+    const open = items.filter((it) => it.soldCount < it.quota && !isOwn(it));
     // Cùng hai giới hạn consumeQuotas kiểm lúc đặt đơn: giỏ/báo giá tính trước để khách không bị chặn ở bước cuối
     // với một giá giỏ không bao giờ đặt được (ENGAGE-4).
     const bought = new Map<string, number>();
@@ -144,6 +147,20 @@ export class FlashSaleService {
         entry.allowance = Math.min(entry.quotaLeft, entry.perUserLeft);
       }
       map.set(it.variationId, entry);
+    }
+    for (const it of items) {
+      if (it.soldCount >= it.quota || !isOwn(it)) continue;
+      map.set(it.variationId, {
+        flashPrice: it.flashPrice,
+        itemId: it.id,
+        endAt: it.flashSale.endAt,
+        soldCount: it.soldCount,
+        quota: it.quota,
+        quotaLeft: it.quota - it.soldCount,
+        perUserLeft: 0,
+        allowance: 0,
+        ownSale: true,
+      });
     }
     return map;
   }
@@ -441,8 +458,39 @@ export class FlashSaleService {
     // theo người thêm thì đổ item vào đợt của người khác là qua mặt trần ngày. assertStaffCreated đã bảo đảm createdBy là STAFF.
     return this.prisma.$transaction(async (tx) => {
       await assertStaffDailyBudget(tx, sale.createdBy!, sale.createdAt, perUnit * dto.quota, caps);
+      await this.assertStaffOrderCap(tx, { ...sale, createdBy: sale.createdBy! }, perUnit * perUserLimit, caps.maxAmount);
       return tx.flashSaleItem.create({ data });
     });
+  }
+
+  /**
+   * Trần mỗi đơn của nhân viên (coupon.staff_max_amount_vnd) áp cho CẢ ĐƠN, không cho từng dòng: một khách mua đủ mọi sản
+   * phẩm flash của các đợt cùng người tạo đang chạy cùng lúc, mỗi sản phẩm đủ số suất mỗi khách, được giảm bằng tổng của
+   * (giá gốc − giá flash) × suất mỗi khách. Tính cả dòng quản trị viên thêm vào đợt của nhân viên vì chưa lưu được người thêm
+   * dòng; đợt đã tắt vẫn tính vì nhân viên bật lại được. Gộp theo người tạo (không toàn hệ thống) để nhân viên này không
+   * chiếm hết trần của nhân viên khác; khoá theo người tạo để hai lần thêm song song không cùng lọt.
+   */
+  private async assertStaffOrderCap(
+    tx: Prisma.TransactionClient,
+    sale: { createdBy: string; startAt: Date; endAt: Date },
+    added: number,
+    maxAmount: number,
+  ): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`flash.staff_order_cap:${sale.createdBy}`}))`;
+    const from = new Date(Math.max(sale.startAt.getTime(), Date.now()));
+    const rows = await tx.$queryRaw<{ exposure: bigint | number | null }[]>`
+      SELECT COALESCE(SUM(GREATEST(COALESCE(v."salePrice", v."retailPrice") - fsi."flashPrice", 0)::bigint * fsi."perUserLimit"), 0)::bigint AS exposure
+      FROM "flash_sale_items" fsi
+      JOIN "flash_sales" fs ON fs."id" = fsi."flashSaleId"
+      JOIN "variations" v ON v."id" = fsi."variationId"
+      WHERE fs."createdBy" = ${sale.createdBy} AND fs."startAt" < ${sale.endAt} AND fs."endAt" > ${from}`;
+    const existing = Number(rows[0]?.exposure ?? 0);
+    if (existing + added > maxAmount) {
+      throw new BadRequestException(
+        `Một đơn mua đủ các sản phẩm flash của nhân viên này cùng khung giờ chỉ được giảm tối đa ${vnd(maxAmount)}: ` +
+          `các sản phẩm đang có đã giảm tới ${vnd(existing)}, sản phẩm này thêm ${vnd(added)}. Cần mức cao hơn thì nhờ quản trị viên tạo đợt.`,
+      );
+    }
   }
 
   /** Xoá item khỏi đợt flash sale (admin). Chặn xoá nếu đã phát sinh đơn (soldCount>0). */
