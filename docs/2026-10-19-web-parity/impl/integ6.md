@@ -37,7 +37,11 @@ E2E_SCOPE=web apps/e2e/scripts/web-gate.sh tests/recycle.web.spec.ts --project="
 Test đỏ trước khi code ở từng nhóm (nhãn, trang tổng, tạo yêu cầu, chi tiết, quầy). Mini App không bị sửa file nào nên test Mini App không chạy lại.
 
 ## 3. Review
-Chưa chạy review Opus trong lần này. Điểm nên soi: quầy (số mặc định của bộ đếm, thẻ kết quả, hai bản thanh xác nhận), `isRequestPaused` khớp Mini App.
+Ba lượt review Opus đã chạy trên lane này.
+- Lượt 1: chữ hạn mức cũ và vòng lặp +5 cũ trong `recycle.web.spec.ts`; đã sửa ở 88026daf.
+- Lượt 2: spec lỗi strict-mode vì tóm tắt của thanh xác nhận xuất hiện hai lần; đã sửa bằng `.filter({ visible: true })` ở 7dc95e31.
+- Lượt 3: không có phát hiện nghiêm trọng; còn lại là sửa chữ mục này.
+Điểm vẫn nên soi: số mặc định của bộ đếm quầy, thẻ kết quả, `isRequestPaused` khớp Mini App.
 
 ## 4. Chưa làm, cố ý để lại, chưa kiểm chứng
 - Chưa kiểm bằng trình duyệt thật: bố cục quầy hai cột trên desktop sau khi dời ưu đãi và báo cáo, thanh dính đáy trên điện thoại.
