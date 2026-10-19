@@ -1929,7 +1929,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [checking, setChecking] = useState(false);
   const { confirm, dialog } = useConfirm();
   const mut = useMutation({
-    mutationFn: (target: UserRole) => setUserRole(phone.trim(), target, needsTier ? tierId : undefined),
+    mutationFn: (v: { phone: string; role: UserRole; tierId?: string }) => setUserRole(v.phone, v.role, v.tierId),
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${roleLabel(r.previousRole)} → ${roleLabel(r.role)}` });
       setPhone('');
@@ -1942,26 +1942,28 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const submit = async () => {
     setMsg(null);
     if (!role) return;
+    // Chụp giá trị lúc bấm: hộp xác nhận và lệnh đổi phải nói về cùng một SĐT dù ô nhập có bị sửa giữa chừng.
+    const target = { phone: phone.trim(), role, tierId: needsTier ? tierId : undefined };
     setChecking(true);
-    const current = await lookupRoleByPhone(phone);
+    const current = await lookupRoleByPhone(target.phone);
     setChecking(false);
     const ok = await confirm(
       role === 'ADMIN'
         ? {
             title: 'Cấp quyền ADMIN',
-            message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
+            message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${target.phone}?`,
             confirmLabel: 'Cấp quyền ADMIN',
             tone: 'danger',
           }
         : {
             title: 'Đổi vai trò',
-            message: `Đổi vai trò của SĐT ${phone.trim()} sang "${roleLabel(role)}"?\n${roleChangeConsequences(role, current)}`,
+            message: `Đổi vai trò của SĐT ${target.phone} sang "${roleLabel(target.role)}"?\n${roleChangeConsequences(target.role, current)}`,
             confirmLabel: 'Đổi vai trò',
             tone: 'danger',
           },
     );
     if (!ok) return;
-    mut.mutate(role);
+    mut.mutate(target);
   };
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
@@ -1973,6 +1975,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
               className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
               placeholder="SĐT, vd 0912345678"
               value={phone}
+              disabled={checking}
               onChange={(e) => setPhone(e.target.value)}
             />
           </Field>
@@ -1982,6 +1985,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
             aria-label="Vai trò cần cấp"
             className={`${FIELD_CLASS} ${TOUCH_H}`}
             value={role}
+            disabled={checking}
             onChange={(e) => setRole(e.target.value as UserRole | '')}
           >
             <option value="">Chọn vai trò…</option>
@@ -2008,8 +2012,8 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** Bỏ dấu, hoa/thường để ô tìm khớp "phi giao" với "Phí giao". `đ` không tách dấu được nên đổi tay. */
-const foldSearch = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+/** Bỏ dấu, hoa/thường để ô tìm khớp "phi giao" với "Phí giao". `đ`/`Đ` không tách dấu được nên đổi tay, trước khi hạ chữ thường. */
+const foldSearch = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
 const CONFIG_OTHER_GROUP = 'Khác';
 
 /** Nhóm theo tiền tố trước dấu chấm đầu tiên (`affiliate.`, `loyalty.`…); khoá không có tiền tố gom vào "Khác", đứng cuối. */
@@ -2028,8 +2032,9 @@ function ConfigTab() {
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
   const [search, setSearch] = useState('');
   const needle = foldSearch(search.trim());
-  const shown = (q.data ?? []).filter((c) => !needle || foldSearch(`${c.key} ${c.description ?? ''}`).includes(needle));
-  const groups = groupConfigRows(shown);
+  const matches = (c: ConfigRow) => !needle || foldSearch(`${c.key} ${c.description ?? ''}`).includes(needle);
+  const groups = groupConfigRows(q.data ?? []);
+  const shownCount = (q.data ?? []).filter(matches).length;
   if (q.isError) return <LoadError message="Không tải được danh sách cấu hình." onRetry={() => void q.refetch()} />;
   return (
     <div className="space-y-4">
@@ -2050,16 +2055,19 @@ function ConfigTab() {
         />
         <div className="mt-3 space-y-4">
           {groups.map((g) => (
-            <section key={g.name} className="space-y-2">
+            <section key={g.name} hidden={!g.rows.some(matches)} className="space-y-2">
               <h3 className="font-display text-xs font-semibold uppercase tracking-wide text-stone-600">
-                {g.name} ({g.rows.length})
+                {g.name} ({g.rows.filter(matches).length})
               </h3>
               {g.rows.map((c) => (
-                <ConfigItem key={`${c.key}:${JSON.stringify(c.value)}`} row={c} onSaved={() => qc.invalidateQueries({ queryKey: ['admin-config'] })} />
+                // Ẩn bằng hidden thay vì gỡ khỏi cây: JSON đang sửa dở nằm trong state của ConfigItem, gỡ ra là mất.
+                <div key={`${c.key}:${JSON.stringify(c.value)}`} hidden={!matches(c)}>
+                  <ConfigItem row={c} onSaved={() => qc.invalidateQueries({ queryKey: ['admin-config'] })} />
+                </div>
               ))}
             </section>
           ))}
-          {needle && groups.length === 0 && <p className="text-sm text-stone-500">Không có khoá nào khớp &quot;{search.trim()}&quot;.</p>}
+          {needle && shownCount === 0 && <p className="text-sm text-stone-500">Không có khoá nào khớp &quot;{search.trim()}&quot;.</p>}
         </div>
       </div>
     </div>

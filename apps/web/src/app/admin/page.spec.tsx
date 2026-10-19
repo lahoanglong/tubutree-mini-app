@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   setUserRole: vi.fn(),
   reviewDealerApp: vi.fn(),
   listUsersArgs: [] as unknown[][],
+  listUsersGate: null as Promise<void> | null,
   blockUser: vi.fn(),
   unblockUser: vi.fn(),
   createCoupon: vi.fn(),
@@ -216,6 +217,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     }),
     listUsers: async (...args: unknown[]) => {
       mocks.listUsersArgs.push(args);
+      if (mocks.listUsersGate) await mocks.listUsersGate;
       return { data: mocks.users, meta: { total: 45, page: 1, limit: 20 } };
     },
     setUserRole: (...args: unknown[]) => mocks.setUserRole(...args),
@@ -2939,7 +2941,8 @@ describe('admin/page — UAT ui-admin-2', () => {
   const labelOf = (root: ParentNode, text: string) =>
     [...root.querySelectorAll('label')].find((l) => (l.textContent ?? '').replace(/\s+/g, ' ').trim().startsWith(text));
   const configSection = (c: HTMLElement) => [...c.querySelectorAll('h2')].find((h) => h.textContent === 'Tất cả tham số (JSON)')!.parentElement!;
-  const keysShown = (c: HTMLElement) => [...configSection(c).querySelectorAll('span.break-all')].map((s) => s.textContent);
+  const keysShown = (c: HTMLElement) =>
+    [...configSection(c).querySelectorAll('span.break-all')].filter((s) => !s.closest('[hidden]')).map((s) => s.textContent);
 
   describe('D7-08: tab Cấu hình có ô tìm và nhóm theo tiền tố khoá', () => {
     const ROWS = [
@@ -2975,6 +2978,40 @@ describe('admin/page — UAT ui-admin-2', () => {
       await flush();
       expect(keysShown(container)).toEqual([]);
       expect(configSection(container).textContent).toContain('Không có khoá nào khớp');
+    });
+
+    it('chữ Đ hoa trong mô tả vẫn khớp khi gõ không dấu: "diem xanh" ra khoá có "Trần Điểm Xanh"', async () => {
+      mocks.config = [
+        ...ROWS,
+        { key: 'loyalty.monthly_cap', value: 100, description: 'Trần Điểm Xanh mỗi tháng', category: 'loyalty' },
+        { key: 'order.min_total', value: 1, description: 'Đơn tối thiểu', category: 'order' },
+      ];
+      window.history.replaceState(null, '', '/admin?tab=config');
+      const { container } = await mount();
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      typeText(search, 'diem xanh');
+      await flush();
+      expect(keysShown(container)).toEqual(['loyalty.monthly_cap']);
+      typeText(search, 'Điểm Xanh');
+      await flush();
+      expect(keysShown(container)).toEqual(['loyalty.monthly_cap']);
+      typeText(search, 'don toi');
+      await flush();
+      expect(keysShown(container)).toEqual(['order.min_total']);
+    });
+
+    it('giá trị đang sửa dở chưa Lưu không mất khi lọc rồi xoá ô tìm', async () => {
+      const { container } = await open();
+      const field = () => container.querySelector<HTMLInputElement>('input[aria-label="affiliate.commission_rate"]');
+      typeText(field(), '0.5');
+      await flush();
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      typeText(search, 'loyalty');
+      await flush();
+      expect(keysShown(container)).toEqual(['loyalty.earn_rate']);
+      typeText(search, '');
+      await flush();
+      expect(field()?.value).toBe('0.5');
     });
 
     it('chia nhóm theo tiền tố: mỗi nhóm một tiêu đề h3 kèm số khoá, khoá không có tiền tố vào "Khác"', async () => {
@@ -3121,6 +3158,27 @@ describe('admin/page — UAT ui-admin-2', () => {
       expect(text).toContain('mất toàn quyền quản trị');
       expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0966666666']);
       await answerDialog(false);
+    });
+    it('khoá ô SĐT trong lúc tra vai trò để hộp xác nhận và lệnh đổi cùng một số', async () => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      const phoneInput = () => container.querySelector<HTMLInputElement>('input[placeholder^="SĐT"]')!;
+      typeText(phoneInput(), '0966666666');
+      selectValue(container.querySelector('select[aria-label="Vai trò cần cấp"]'), 'STAFF');
+      let release!: () => void;
+      mocks.listUsersGate = new Promise<void>((r) => { release = r; });
+      try {
+        click(btn(container, 'Cấp quyền'));
+        await flush();
+        expect(phoneInput().disabled).toBe(true);
+        expect(container.querySelector<HTMLSelectElement>('select[aria-label="Vai trò cần cấp"]')!.disabled).toBe(true);
+      } finally {
+        mocks.listUsersGate = null;
+        release();
+      }
+      await flush();
+      await answerDialog(false);
+      expect(phoneInput().disabled).toBe(false);
     });
     it('SĐT hiện là CUSTOMER đổi sang DEALER: không nhắc mất nhóm việc hay quyền quản trị', async () => {
       mocks.users = [{ id: 'u8', fullName: 'An', phone: '0977777777', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
