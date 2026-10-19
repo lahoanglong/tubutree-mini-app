@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
@@ -667,8 +669,10 @@ describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)
     const c = await mount();
     const main = c.querySelector('main')!;
     expect(main.className).toContain('max-md:bg-[var(--color-dealer-bg)]');
-    expect(main.style.getPropertyValue('--color-dealer-ink')).toBe('#1f2a44');
-    expect(main.style.getPropertyValue('--color-dealer-bg')).toBe('#f4f6f9');
+    expect(main.hasAttribute('data-dealer-theme')).toBe(true);
+    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
+    expect(css).toContain('--color-dealer-ink: #1f2a44;');
+    expect(css).toContain('--color-dealer-bg: #f4f6f9;');
     expect(c.querySelector('section[aria-label="Tổng quan đại lý"]')!.className).toContain('max-md:bg-[var(--color-dealer-ink)]');
     expect(button('Dán đơn').className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(c.querySelector('li .font-bold')!.className).toContain('max-md:text-[var(--color-dealer-ink)]');
