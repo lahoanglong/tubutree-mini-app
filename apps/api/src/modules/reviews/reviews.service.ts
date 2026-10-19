@@ -48,6 +48,11 @@ export type CanReviewResult =
       reason: 'ALL_REVIEWED' | null;
       /** Đánh giá MỚI lúc này có được cộng Điểm Xanh không (chỉ đánh giá đầu tiên của cặp khách-sản phẩm được thưởng). */
       rewardAvailable: boolean;
+      /**
+       * Vì sao `rewardAvailable` là false, để FE nói đúng: ALREADY_KEPT = khách đang giữ thưởng của sản phẩm này; RETURNED =
+       * mọi đơn còn lại đã có dòng trả được duyệt cho sản phẩm này (khách chưa nhận thưởng nào); NO_ORDER = hết đơn để viết mới.
+       */
+      rewardUnavailableReason: 'ALREADY_KEPT' | 'RETURNED' | 'NO_ORDER' | null;
       /** Số lần mua đã nhận có sản phẩm này. */
       purchaseCount: number;
       reviewableOrders: { orderId: string; code: string; deliveredAt: Date | null }[];
@@ -98,12 +103,17 @@ export class ReviewsService {
     }));
     // Chỉ để FE nói đúng về điểm: máy chủ vẫn quyết định thưởng lúc tạo (createFirst, cùng rewardAlreadyKept). Hết đơn để
     // viết mới, hay mọi đơn còn lại đều đã bị trả sản phẩm này, thì không có đánh giá mới nào để thưởng.
-    const rewardAvailable =
-      reviewableOrders.some((o) => !returned(o.orderId)) && !(await this.rewardAlreadyKept(this.prisma, userId, product));
+    const hasFreshOrder = reviewableOrders.some((o) => !returned(o.orderId));
+    // Đã giữ thưởng thì câu "đã nhận" luôn đúng, nên xét trước lý do "đã trả".
+    const kept = reviewableOrders.length > 0 && (await this.rewardAlreadyKept(this.prisma, userId, product));
+    const rewardUnavailableReason: 'ALREADY_KEPT' | 'RETURNED' | 'NO_ORDER' | null =
+      reviewableOrders.length === 0 ? 'NO_ORDER' : kept ? 'ALREADY_KEPT' : hasFreshOrder ? null : 'RETURNED';
+    const rewardAvailable = rewardUnavailableReason === null;
     return {
       canReview: reviewableOrders.length > 0,
       reason: reviewableOrders.length > 0 ? null : 'ALL_REVIEWED',
       rewardAvailable,
+      rewardUnavailableReason,
       purchaseCount: purchases.length,
       reviewableOrders,
       myReviews: mine.map((r) => ({ ...r, orderCode: codeOf.get(r.orderId) ?? null })),

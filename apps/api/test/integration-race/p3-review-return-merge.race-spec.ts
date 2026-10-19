@@ -171,7 +171,7 @@ describe('Đánh giá sau trả hàng và gộp phiên khách (real Postgres)', 
       expect(await balance(user.id)).toBe(0);
 
       const o2 = await deliveredOrder(user.id, a.v, 1);
-      expect(await reviews.canReview(user.id, a.p.slug)).toMatchObject({ canReview: true, rewardAvailable: false });
+      expect(await reviews.canReview(user.id, a.p.slug)).toMatchObject({ canReview: true, rewardAvailable: false, rewardUnavailableReason: 'ALREADY_KEPT' });
       expect((await review(user.id, a.p.slug, o2.order.id)).pointsEarned).toBe(0);
     });
   });
@@ -186,7 +186,7 @@ describe('Đánh giá sau trả hàng và gộp phiên khách (real Postgres)', 
       expect((await prisma.order.findUniqueOrThrow({ where: { id: o1.order.id } })).status).toBe('DELIVERED');
 
       const can = await reviews.canReview(user.id, a.p.slug);
-      expect(can).toMatchObject({ canReview: true, rewardAvailable: false });
+      expect(can).toMatchObject({ canReview: true, rewardAvailable: false, rewardUnavailableReason: 'RETURNED' });
       expect((await review(user.id, a.p.slug, o1.order.id)).pointsEarned).toBe(0);
     });
 
