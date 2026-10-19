@@ -235,7 +235,8 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     api.get('/orders/me/returns', []);
 
     await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
-    await expect(page.getByRole('heading', { name: 'Đơn hàng #TUBU2026101900004', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Chi tiết đơn hàng', level: 1 })).toBeVisible();
+    await expect(page.getByText('TUBU2026101900004').first()).toBeVisible();
     await expect(page.getByText('Giao lúc 10:00 03/10/2026')).toBeVisible();
     await expect(page.getByText('Đã cộng +50 Điểm Xanh vào tài khoản')).toBeVisible();
     const pdf = page.getByRole('link', { name: 'Tải PDF' });
