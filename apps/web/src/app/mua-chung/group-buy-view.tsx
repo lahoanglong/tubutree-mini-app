@@ -181,8 +181,8 @@ function GroupCard({
         : `Tham gia mua chung (−${g.discountPct}%)`;
 
   return (
-    <article className={`${ui.card} flex flex-col p-3`}>
-      {invitedBanner && <p className="mb-1.5 text-xs font-semibold text-forest-700">Bạn được mời vào nhóm này</p>}
+    <article className={`${ui.card} flex flex-col p-3 max-md:border-0 max-md:shadow-[var(--elevation-1)]`}>
+      {invitedBanner && <p className="mb-1.5 text-xs font-semibold text-forest-700 max-md:text-[length:var(--type-caption-size)]">Bạn được mời vào nhóm này</p>}
       <div className="flex gap-3">
         <Link
           href={productHref}
@@ -199,17 +199,17 @@ function GroupCard({
           )}
         </Link>
         <div className="min-w-0 flex-1">
-          <Link href={productHref} className="block truncate text-sm font-semibold text-stone-900 hover:underline">
+          <Link href={productHref} className="block truncate text-sm font-semibold text-stone-900 hover:underline max-md:text-[length:var(--type-body-sm-size)]">
             {g.product.name}
           </Link>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-semibold text-forest-700">{formatVnd(g.unitPrice)}</span>
-            <span className="text-xs text-stone-600 line-through">{formatVnd(g.basePrice)}</span>
+            <span className="text-sm font-semibold text-forest-700 max-md:text-[length:var(--type-body-sm-size)]">{formatVnd(g.unitPrice)}</span>
+            <span className="text-xs text-stone-600 line-through max-md:text-[length:var(--type-caption-size)]">{formatVnd(g.basePrice)}</span>
             <Badge tone="promo" size="sm">
               −{g.discountPct}%
             </Badge>
           </div>
-          <p className="text-xs text-stone-600">
+          <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)]">
             {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </p>
         </div>
@@ -218,12 +218,12 @@ function GroupCard({
         <ProgressBar value={g.currentSize} max={g.targetSize} />
       </div>
       {g.status !== 'SUCCESS' && (
-        <p className="mt-1.5 text-xs text-stone-700">{`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}</p>
+        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}</p>
       )}
       {g.status === 'SUCCESS' && member ? (
         <>
           {g.couponCode && (
-            <p className="mt-1.5 text-xs text-stone-700">
+            <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">
               Mã của bạn: <span className="font-bold text-forest-700">{g.couponCode}</span> · chọn trong “Chọn mã” ở giỏ hàng, dùng trong 30 ngày.
             </p>
           )}

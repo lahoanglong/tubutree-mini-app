@@ -17,8 +17,8 @@ export function BrandStoryView() {
     <main className="mx-auto max-w-5xl pb-8">
       <div className="px-4 pt-6">
         <h1 className={ui.pageTitle}>Hành trình nguyên liệu</h1>
-        <p className="mt-3 leading-relaxed text-stone-700">
-          Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ.
+        <p className="mt-3 leading-relaxed text-stone-700 max-md:mt-0 max-md:text-[length:var(--type-body-md-size)] max-md:leading-normal max-md:text-[var(--color-text-secondary)]">
+          Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ 🌿
         </p>
       </div>
 
