@@ -4,12 +4,13 @@
 import type { CSSProperties } from 'react';
 import { formatVndShort } from '@/lib/browse-text';
 
+const POINTS_FORMAT = new Intl.NumberFormat('vi-VN');
 // Giá thiếu hiện "—", không phải "0đ" (0đ nghĩa là miễn phí); khớp formatVnd của Mini App.
 const MISSING_AMOUNT = '—';
 const toAmount = (v: number | null | undefined): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const formatVnd = (v: number | null | undefined): string => {
   const n = toAmount(v);
-  return n === null ? MISSING_AMOUNT : `${n.toLocaleString('vi-VN')}đ`;
+  return n === null ? MISSING_AMOUNT : `${POINTS_FORMAT.format(n)}đ`;
 };
 
 const SIZE_VARIANT = { sm: 'price-sm', md: 'price-md', lg: 'price-lg', xl: 'price-xl' } as const;
@@ -59,7 +60,6 @@ export function Money({ amount, short }: { amount: number | null | undefined; sh
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{short && toAmount(amount) !== null ? formatVndShort(amount as number) : formatVnd(amount)}</span>;
 }
 
-const POINTS_FORMAT = new Intl.NumberFormat('vi-VN');
 
 export function Points({ value }: { value: number | null | undefined }) {
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{`${POINTS_FORMAT.format(toAmount(value) ?? 0)} điểm`}</span>;
