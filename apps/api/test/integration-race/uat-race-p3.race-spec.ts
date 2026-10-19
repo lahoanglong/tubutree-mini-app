@@ -6,6 +6,8 @@ import type { PancakeClient } from '../../src/modules/integrations/pancake/panca
 import { PancakeApiError } from '../../src/modules/integrations/pancake/pancake-outbound';
 import { GameEconomyService } from '../../src/modules/game/game-economy.service';
 import { PayrollService } from '../../src/modules/staff/payroll/payroll.service';
+import { AttendanceService } from '../../src/modules/staff/attendance/attendance.service';
+import { AdminAttendanceController } from '../../src/modules/staff/attendance/admin-attendance.controller';
 import type { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import type { SeasonPassService } from '../../src/modules/game/season-pass.service';
 import type { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
@@ -175,22 +177,31 @@ describe('UAT race p3 (real Postgres)', () => {
   describe('D4-03 bảng lương: recompute tồn đọng không ghi đè tháng đã PAID', () => {
     const config = { get: async (_k: string, d: unknown) => d } as unknown as SystemConfigService;
 
-    /** Bọc prisma (và tx của $transaction) sao cho lần đọc điều chỉnh lương đầu tiên của ngày dừng lại tới khi `hold` xong. */
-    function holdAfterAdjustmentRead(real: PrismaService, onRead: () => Promise<void>): PrismaService {
+    /**
+     * Bọc prisma (và tx của $transaction) sao cho lần gọi `model.method` ĐẦU TIÊN thoả `match` dừng lại sau khi đọc xong,
+     * chạy `onRead` (có thể chờ) rồi mới trả kết quả cho bên gọi.
+     */
+    function holdAfterRead(
+      real: PrismaService,
+      model: string,
+      method: string,
+      match: (args: unknown) => boolean,
+      onRead: () => Promise<void>,
+    ): PrismaService {
       let fired = false;
       const wrap = (db: object): object =>
         new Proxy(db, {
           get(target, prop) {
             const t = target as Record<string | symbol, unknown>;
-            if (prop === 'payrollAdjustment') {
-              const delegate = t.payrollAdjustment as Record<string, unknown>;
+            if (prop === model) {
+              const delegate = t[model] as Record<string, unknown>;
               return new Proxy(delegate, {
                 get(dt, dp) {
                   const v = dt[dp as string];
-                  if (dp === 'findMany') {
-                    return async (args: { select?: { amount?: boolean } }) => {
+                  if (dp === method) {
+                    return async (args: unknown) => {
                       const out = await (v as (a: unknown) => Promise<unknown>).call(dt, args);
-                      if (!fired && args?.select?.amount) {
+                      if (!fired && match(args)) {
                         fired = true;
                         await onRead();
                       }
@@ -212,6 +223,24 @@ describe('UAT race p3 (real Postgres)', () => {
           },
         });
       return wrap(real) as PrismaService;
+    }
+
+    const holdAfterAdjustmentRead = (real: PrismaService, onRead: () => Promise<void>) =>
+      holdAfterRead(real, 'payrollAdjustment', 'findMany', (a) => Boolean((a as { select?: { amount?: boolean } })?.select?.amount), onRead);
+    const holdAfterMonthCheck = (real: PrismaService, onRead: () => Promise<void>) =>
+      holdAfterRead(real, 'payrollMonth', 'findUnique', () => true, onRead);
+
+    async function staffWithApprovedDay(day: Date) {
+      const s = await createUser(prisma, { role: 'STAFF' });
+      await prisma.staffProfile.create({ data: { userId: s.id, hourlyRate: 30_000 } });
+      const iso = (h: number) => new Date(`${day.toISOString().slice(0, 10)}T${String(h).padStart(2, '0')}:00:00.000Z`);
+      const shift = await prisma.shift.create({
+        data: { staffId: s.id, workDate: day, startAt: iso(1), endAt: iso(9), status: 'APPROVED' },
+      });
+      const session = await prisma.attendanceSession.create({
+        data: { shiftId: shift.id, staffId: s.id, checkinAt: iso(1), checkoutAt: iso(9), checkinLat: 0, checkinLng: 0, checkinIp: '1.1.1.1' },
+      });
+      return { s, shift, session, iso };
     }
 
     it('nhân viên mở "Lương của tôi" (đọc cũ) trong lúc admin trừ 100.000đ rồi bấm "Đã chi" → tháng PAID giữ net đã chi', async () => {
@@ -263,6 +292,82 @@ describe('UAT race p3 (real Postgres)', () => {
       expect(month.net).toBe(140_000);
       expect(month.totalFines).toBe(100_000);
       expect(dayRow.net).toBe(140_000);
+    });
+
+    /**
+     * Các đường GHI dữ liệu đầu vào của tháng (khoản điều chỉnh, phiên chấm công) phải kiểm khoá tháng và ghi trong
+     * CÙNG khoá với markPaid. Bất biến kiểm: net đã chi khớp dữ liệu đầu vào còn lại trong DB (không có khoản mồ côi).
+     */
+    it('admin A trừ 100.000đ bị dừng ngay sau lần kiểm tháng, admin B bấm "Đã chi" → net PAID khớp các khoản điều chỉnh trong DB', async () => {
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      const day = new Date('2026-08-10T00:00:00.000Z');
+      const { s } = await staffWithApprovedDay(day);
+      const svc = new PayrollService(prisma, config);
+      expect((await svc.recomputeStaffMonth(s.id, 2026, 8)).net).toBe(240_000);
+
+      let aRead!: () => void;
+      const aReadDone = new Promise<void>((r) => (aRead = r));
+      let bDone!: () => void;
+      const bFinished = new Promise<void>((r) => (bDone = r));
+      const hooked = holdAfterMonthCheck(prisma, async () => {
+        aRead();
+        await Promise.race([bFinished, sleep(2500)]);
+      });
+      const adjustRun = new PayrollService(hooked, config).adjust(s.id, day, 100_000, 'phạt thử', admin.id).then(
+        () => 'OK',
+        (e: Error) => `ERR ${e.message}`,
+      );
+      await aReadDone;
+      try {
+        await svc.markPaid(s.id, 2026, 8, 'https://example.test/proof.png', undefined, admin.id);
+      } finally {
+        bDone();
+      }
+      const adjustResult = await adjustRun;
+
+      const month = await prisma.payrollMonth.findUniqueOrThrow({ where: { staffId_year_month: { staffId: s.id, year: 2026, month: 8 } } });
+      const manual = await prisma.payrollAdjustment.findMany({ where: { staffId: s.id, type: 'MANUAL' } });
+      const deducted = manual.reduce((sum, a) => sum + a.amount, 0);
+      expect({ status: month.status, net: month.net, adjustResult }).toEqual({
+        status: 'PAID',
+        net: 240_000 - deducted,
+        adjustResult,
+      });
+      if (adjustResult !== 'OK') expect(manual).toHaveLength(0);
+    });
+
+    it('admin A sửa giờ ra phiên (còn 4 giờ) bị dừng ngay sau lần kiểm tháng, admin B bấm "Đã chi" → net PAID khớp giờ của phiên trong DB', async () => {
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      const day = new Date('2026-09-10T00:00:00.000Z');
+      const { s, session, iso } = await staffWithApprovedDay(day);
+      const svc = new PayrollService(prisma, config);
+      expect((await svc.recomputeStaffMonth(s.id, 2026, 9)).net).toBe(240_000);
+
+      let aRead!: () => void;
+      const aReadDone = new Promise<void>((r) => (aRead = r));
+      let bDone!: () => void;
+      const bFinished = new Promise<void>((r) => (bDone = r));
+      const hooked = holdAfterMonthCheck(prisma, async () => {
+        aRead();
+        await Promise.race([bFinished, sleep(2500)]);
+      });
+      const ctrl = new AdminAttendanceController(new AttendanceService(hooked, config), new PayrollService(hooked, config));
+      const editRun = ctrl.editSession(session.id, { checkoutAt: iso(5).toISOString() }).then(
+        () => 'OK',
+        (e: Error) => `ERR ${e.message}`,
+      );
+      await aReadDone;
+      try {
+        await svc.markPaid(s.id, 2026, 9, 'https://example.test/proof.png', undefined, admin.id);
+      } finally {
+        bDone();
+      }
+      const editResult = await editRun;
+
+      const month = await prisma.payrollMonth.findUniqueOrThrow({ where: { staffId_year_month: { staffId: s.id, year: 2026, month: 9 } } });
+      const saved = await prisma.attendanceSession.findUniqueOrThrow({ where: { id: session.id } });
+      const hours = ((saved.checkoutAt as Date).getTime() - saved.checkinAt.getTime()) / 3_600_000;
+      expect({ status: month.status, net: month.net, editResult }).toEqual({ status: 'PAID', net: hours * 30_000, editResult });
     });
   });
 });

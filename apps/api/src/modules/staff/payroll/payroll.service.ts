@@ -29,10 +29,10 @@ export class PayrollService {
   ) {}
 
   /**
-   * Mọi thao tác ghi bảng lương của MỘT tháng (tính lại ngày/tháng, chốt, đã chi) chạy tuần tự dưới khoá advisory theo
-   * (nhân viên, năm, tháng), và đọc dữ liệu NGAY TRONG khoá. Trước đây recompute đọc ca/điều chỉnh rồi upsert không điều
-   * kiện: nhân viên mở "Lương của tôi" trước khi admin trừ tiền + bấm "Đã chi" thì recompute chậm ghi đè net đã chi bằng
-   * số tính từ dữ liệu cũ, còn tháng đã PAID nên không ai tính lại nữa.
+   * Mọi thao tác ghi bảng lương của MỘT tháng (tính lại ngày/tháng, chốt, đã chi, và ghi dữ liệu đầu vào như khoản điều
+   * chỉnh, phiên chấm công) chạy tuần tự dưới khoá advisory theo (nhân viên, năm, tháng), và đọc dữ liệu NGAY TRONG khoá.
+   * Không khoá thì một recompute đọc dữ liệu cũ có thể ghi đè net của tháng vừa được chốt/đã chi, và một khoản ghi đã qua
+   * kiểm tháng OPEN vẫn có thể lọt vào tháng vừa thành PAID.
    */
   private withMonthLock<T>(staffId: string, year: number, month: number, fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
     const key = `payroll:${staffId}:${year}-${month}`;
@@ -78,9 +78,8 @@ export class PayrollService {
     amount: number,
     reason: string,
   ) {
-    // Pre-check nhanh + guard thật là unique index (shiftId, type) — 2 request recompute
-    // song song (vd 2 tab mở /staff/payroll) đều có thể đọc "chưa có phạt" trước khi request
-    // đầu commit; P2002 chặn tạo trùng, tránh trừ phạt 2 lần.
+    // Khoá tháng (withMonthLock) là thứ tuần tự hoá các lượt tạo phạt; unique index (shiftId, type) chỉ là chốt chặn cuối.
+    // skipDuplicates (ON CONFLICT DO NOTHING) để vi phạm unique không làm hỏng transaction của khoá tháng.
     const existing = await db.payrollAdjustment.findFirst({ where: { shiftId, type } });
     if (existing) {
       // Số tiền phạt huỷ ca = 1 GIỜ CÔNG, tức phụ thuộc đơn giá. Trước đây tạo một lần rồi
@@ -91,12 +90,10 @@ export class PayrollService {
       }
       return;
     }
-    try {
-      await db.payrollAdjustment.create({ data: { staffId, workDate, type, amount, reason, shiftId } });
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return;
-      throw err;
-    }
+    await db.payrollAdjustment.createMany({
+      data: [{ staffId, workDate, type, amount, reason, shiftId }],
+      skipDuplicates: true,
+    });
   }
 
   /**
@@ -169,16 +166,22 @@ export class PayrollService {
   }
 
   /**
-   * Ném lỗi nếu tháng chứa `workDate` đã chốt/đã trả.
-   *
-   * Public để nơi GHI dữ liệu chấm công gọi được TRƯỚC khi ghi: nếu chỉ chặn ở recomputeDay
-   * (chạy SAU lần ghi và không nằm chung transaction) thì phiên đã đổi trong DB rồi API mới trả
-   * 400 — quản lý tưởng thất bại, còn dữ liệu thì đã lệch.
+   * Ghi dữ liệu đầu vào của một ngày công (phiên chấm công, khoản điều chỉnh) CÙNG khoá tháng với recompute/chốt/đã chi:
+   * kiểm tháng chưa chốt, ghi, rồi tính lại ngày trong một transaction. Kiểm tháng ngoài khoá thì markPaid chen vào giữa
+   * và dữ liệu mới nằm trong tháng PAID mà net không phản ánh. Tháng đã chốt/đã trả thì ném 400 trước khi ghi gì.
    */
-  async assertMonthEditable(staffId: string, workDate: Date): Promise<void> {
-    if (await this.isMonthLocked(staffId, workDate)) {
-      throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.');
-    }
+  async writeInMonth<T>(
+    staffId: string,
+    workDate: Date,
+    write: (tx: Prisma.TransactionClient) => Promise<T>,
+    lockedMessage = 'Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.',
+  ): Promise<T> {
+    return this.withMonthLock(staffId, workDate.getUTCFullYear(), workDate.getUTCMonth() + 1, async (tx) => {
+      if (await this.isMonthLocked(staffId, workDate, tx)) throw new BadRequestException(lockedMessage);
+      const out = await write(tx);
+      await this.recomputeDayIn(tx, staffId, workDate, { monthAlreadyChecked: true });
+      return out;
+    });
   }
 
   /** Tháng chứa `workDate` đã FINALIZED/PAID chưa (theo mốc VN — workDate là midnight UTC của date-key VN). */
@@ -422,60 +425,54 @@ export class PayrollService {
     opts: { allowDuplicate?: boolean } = {},
   ) {
     await this.assertStaffMember(staffId, true);
-    if (await this.isMonthLocked(staffId, workDate)) {
-      throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.');
-    }
     // Chống gửi trùng: unique (shiftId, type) không áp cho MANUAL vì shiftId là NULL, mà Postgres
     // coi mỗi NULL là một giá trị riêng. findFirst() dưới đây chỉ là HEURISTIC — KHÔNG phải
     // constraint DB thật — nên hai request gần nhau (double-click, retry mạng khi gửi khoản trừ
     // 500.000) có thể ĐỀU đọc "chưa có" trước khi request đầu commit, rồi cả hai cùng tạo → trừ
     // một triệu thay vì 500.000.
     //
-    // Khoá advisory theo (staffId, workDate, type) TRONG transaction — mirror pattern
-    // pg_advisory_xact_lock ở coupons.service.ts (redeemInTx, khoá theo couponId+userId): request
-    // thứ 2 phải đợi tới khi request 1 COMMIT xong mới được chạy tiếp bên trong lock, lúc đó
-    // findFirst đọc được bản ghi vừa tạo và trả 409 thay vì tạo thêm.
+    // Khoá tháng (advisory, trong transaction) bao cả phạm vi (staffId, workDate): request thứ 2 phải đợi tới khi
+    // request 1 COMMIT xong, lúc đó findFirst đọc được bản ghi vừa tạo và trả 409 thay vì tạo thêm.
     //
     // Trùng thì BÁO, không nuốt: hai khoản phạt giống hệt trong cùng ngày có thể đều hợp lệ (đi trễ hai ca), nên
     // admin cần biết lần gửi thứ hai chưa được ghi và gửi lại kèm allowDuplicate nếu đó thật là khoản thứ hai.
-    const lockKey = `${staffId}:${workDate.toISOString()}:MANUAL`;
-    const duplicate = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-      if (!opts.allowDuplicate) {
-        const recent = await tx.payrollAdjustment.findFirst({
-          where: {
-            staffId,
-            workDate,
-            type: 'MANUAL',
-            amount,
-            reason,
-            createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
-          },
-          select: { id: true, createdAt: true },
-          orderBy: { createdAt: 'desc' },
+    await this.writeInMonth(
+      staffId,
+      workDate,
+      async (tx) => {
+        if (!opts.allowDuplicate) {
+          const recent = await tx.payrollAdjustment.findFirst({
+            where: {
+              staffId,
+              workDate,
+              type: 'MANUAL',
+              amount,
+              reason,
+              createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
+            },
+            select: { id: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (recent) {
+            const kind = amount > 0 ? `trừ ${formatVnd(amount)}` : `thưởng ${formatVnd(-amount)}`;
+            throw new ConflictException({
+              statusCode: 409,
+              error: 'Conflict',
+              code: PAYROLL_ADJUST_DUPLICATE,
+              message:
+                `Đã có khoản ${kind} giống hệt (cùng ngày, cùng lý do "${reason}") vừa ghi lúc ${formatVnDateTime(recent.createdAt)} — ` +
+                'lần gửi này CHƯA được ghi. Nếu đây thật là khoản thứ hai, xác nhận ghi thêm.',
+              adjustmentId: recent.id,
+            });
+          }
+        }
+
+        await tx.payrollAdjustment.create({
+          data: { staffId, workDate, type: 'MANUAL', amount, reason, createdBy: adminId },
         });
-        if (recent) return recent;
-      }
-
-      await tx.payrollAdjustment.create({
-        data: { staffId, workDate, type: 'MANUAL', amount, reason, createdBy: adminId },
-      });
-      return null;
-    });
-    if (duplicate) {
-      const kind = amount > 0 ? `trừ ${formatVnd(amount)}` : `thưởng ${formatVnd(-amount)}`;
-      throw new ConflictException({
-        statusCode: 409,
-        error: 'Conflict',
-        code: PAYROLL_ADJUST_DUPLICATE,
-        message:
-          `Đã có khoản ${kind} giống hệt (cùng ngày, cùng lý do "${reason}") vừa ghi lúc ${formatVnDateTime(duplicate.createdAt)} — ` +
-          'lần gửi này CHƯA được ghi. Nếu đây thật là khoản thứ hai, xác nhận ghi thêm.',
-        adjustmentId: duplicate.id,
-      });
-    }
-
-    await this.recomputeDay(staffId, workDate);
+      },
+      'Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.',
+    );
     return { adjusted: true };
   }
 }
