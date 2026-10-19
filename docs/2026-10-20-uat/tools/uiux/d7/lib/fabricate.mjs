@@ -3,7 +3,56 @@
 //   normal : danh sách 4 phần tử, văn bản vừa phải
 //   empty  : danh sách object ở độ sâu <= 2 rỗng, đếm = 0 (các mảng chuỗi như images giữ nguyên)
 //   long   : danh sách object ở độ sâu <= 1 dài 28 phần tử, tên/mô tả dài, số tiền lớn ở phần tử đầu
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { artUri } from './art.mjs';
+
+// Trường status kiểu `string` trần: lấy giá trị thật từ enum Prisma theo endpoint, để thấy UI có map nhãn
+// tiếng Việt cho giá trị thật hay lộ enum (bản gốc luôn trả 'ACTIVE', không có trong enum nào).
+const PRISMA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../../apps/api/prisma/schema.prisma');
+const ENUMS = {};
+try {
+  const src = fs.readFileSync(PRISMA, 'utf8');
+  for (const m of src.matchAll(/^enum (\w+) \{([\s\S]*?)\}/gm)) ENUMS[m[1]] = m[2].split('\n').map((l) => l.trim().split(/\s+/)[0]).filter((w) => /^[A-Z_]+$/.test(w));
+} catch {
+  /* không có schema thì giữ hành vi cũ */
+}
+const STATUS_BY_PATH = [
+  [/^\/admin\/(orders|dashboard)/, 'OrderStatus'],
+  [/^\/admin\/dealer-applications/, 'DealerStatus'],
+  [/^\/admin\/return-requests/, 'ReturnStatus'],
+  [/^\/admin\/payouts/, 'PayoutStatus'],
+  [/^\/admin\/customer-refunds/, 'CustomerRefundStatus'],
+  [/^\/admin\/cashback/, 'CashbackStatus'],
+  [/^\/admin\/external-orders/, 'ExternalOrderStatus'],
+  [/^\/admin\/dealer-reward-claims/, 'DealerRewardClaimStatus'],
+  [/^\/admin\/merchant-fulfilment\/payouts/, 'MerchantPayoutStatus'],
+  [/^\/admin\/merchant-products/, 'ProductApprovalStatus'],
+  [/^\/feed\/admin/, 'FeedPostStatus'],
+  [/^\/admin\/waste\/requests/, 'WasteRequestStatus'],
+  [/^\/admin\/account-deletion/, 'AccountDeletionRequestStatus'],
+  [/^\/admin\/(shifts|staff\/shifts)/, 'ShiftStatus'],
+  [/^\/admin\/payroll/, 'PayrollMonthStatus'],
+];
+const KEY_ENUM = { paymentmethod: 'PaymentMethod', role: 'UserRole', userrole: 'UserRole' };
+function realKeyEnum(key, seedPath, i) {
+  const k = key.toLowerCase();
+  let name = KEY_ENUM[k] ?? null;
+  if (!name && k === 'type' && /^\/admin\/(orders|dashboard)/.test(seedPath)) name = 'OrderType';
+  const v = name && ENUMS[name];
+  return v && v.length ? v[i % v.length] : null;
+}
+function realStatus(key, seedPath, i) {
+  const k = key.toLowerCase();
+  let name = null;
+  if (k === 'paymentstatus') name = 'PaymentStatus';
+  else if (k === 'invoicestatus') name = 'InvoiceStatus';
+  else if (k === 'approvalstatus') name = 'ProductApprovalStatus';
+  else if (k === 'status' || k === 'tostatus' || k === 'fromstatus') name = STATUS_BY_PATH.find(([re]) => re.test(seedPath))?.[1] ?? null;
+  const v = name && ENUMS[name];
+  return v && v.length ? v[i % v.length] : null;
+}
 
 const NOW = Date.parse('2026-10-09T08:00:00+07:00');
 const DAY = 86_400_000;
@@ -98,7 +147,9 @@ export function createFabricator({ state = 'normal', seed = 'x' } = {}) {
       return new Date(t).toISOString();
     }
     if (/(month|period)/.test(k)) return '2026-09';
-    if (k.includes('status')) return 'ACTIVE';
+    if (k.includes('status')) return realStatus(key, seed, i + ctx.depth) ?? 'ACTIVE';
+    const ke = realKeyEnum(key, seed, i);
+    if (ke) return ke;
     if (/(type|kind|method|role|provider|source|channel|platform)/.test(k)) return pick(['RETAIL', 'COD', 'WALLET'], i);
     if (/(color|colour)/.test(k)) return '#2E7D4F';
     if (/(currency)/.test(k)) return 'VND';

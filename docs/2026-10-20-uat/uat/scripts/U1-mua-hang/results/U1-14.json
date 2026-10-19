@@ -1,0 +1,390 @@
+{
+  "id": "U1-14",
+  "browser": "chromium",
+  "role": "Khách mới / khách đã có 1 đơn hạng Mầm Xanh",
+  "journey": "FREESHIP: chồng lên freeship đơn đầu (không được gì) và dùng cho đơn thường dưới ngưỡng",
+  "steps": "(a) khách mới giỏ 199.000đ gõ FREESHIP → thanh toán → đặt COD; (b) khách đã có 1 đơn, giỏ FUWA-DW-1L 120.000đ: thanh toán không mã (xem phí) rồi gõ FREESHIP → đặt COD",
+  "expected": "(a) mã giữ nhưng báo \"không giảm thêm\" (đơn đã miễn phí giao), đơn KHÔNG ghi couponCode, không tốn lượt FREESHIP; (b) không mã: phí 19.000đ (120k < 200k); có FREESHIP: phí 0, tổng 120.000đ, DB 1 lượt FREESHIP",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "(a) báo giá: couponApplied=false + couponNotice",
+      "ok": true,
+      "detail": {
+        "couponApplied": false,
+        "couponNotice": "Mã chưa được áp dụng cho đơn này: Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó."
+      }
+    },
+    {
+      "name": "(a) ship 0 nhờ freeship đơn đầu, tổng 199.000đ",
+      "ok": true
+    },
+    {
+      "name": "(a) DB: đơn không ghi couponCode, không có lượt FREESHIP",
+      "ok": true
+    },
+    {
+      "name": "(b) không mã: phí 19.000đ, tổng 139.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfgdi0700jd14pjg56vd2mq"
+            ],
+            "subtotal": 120000,
+            "discount": 0,
+            "shippingFee": 19000,
+            "total": 139000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 120000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 19000,
+        "firstOrderShipWaived": 0,
+        "total": 139000,
+        "pointsEarned": 2400,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfgdi0700jd14pjg56vd2mq",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 197,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "(b) FREESHIP: phí 0, tổng 120.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfgdi0700jd14pjg56vd2mq"
+            ],
+            "subtotal": 120000,
+            "discount": 0,
+            "shippingFee": 0,
+            "total": 120000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 120000,
+        "discount": 0,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 120000,
+        "pointsEarned": 2400,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfgdi0700jd14pjg56vd2mq",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 197,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "(b) DB: couponCode FREESHIP, shippingFee 0, total 120000, 1 lượt",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "áp mã FREESHIP",
+      "data": {
+        "status": 201,
+        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã FREESHIP",
+        "couponCode": "FREESHIP",
+        "discount": 0,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 199000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": "Mã chưa được áp dụng cho đơn này: Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó.",
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 19000,
+        "total": 199000,
+        "pointsEarned": 3980
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-14a-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101938333",
+        "button": "Đặt hàng · 199.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-14a-placed.png"
+    },
+    {
+      "label": "(a) snackbar áp FREESHIP",
+      "data": "zi_check_circle_solid\nĐã áp dụng mã FREESHIP"
+    },
+    {
+      "label": "(a) SQL đơn",
+      "data": {
+        "id": "cmvfgdgey00ib14pjn32v98ro",
+        "code": "TUBU2026101938333",
+        "userId": "u1_c14a_gdb6r95",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "paymentStatus": "UNPAID",
+        "subtotal": 199000,
+        "discount": 0,
+        "couponDiscount": 0,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 199000,
+        "pointsEarned": 3980,
+        "pointsUsed": 0,
+        "couponCode": null,
+        "pancakeOrderId": "9200004",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-19T16:12:36.826Z",
+        "items": [
+          {
+            "sku": "FUWA-DW-1L",
+            "quantity": 1,
+            "unitPrice": 120000,
+            "total": 120000,
+            "paidTotal": 120000,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 1,
+            "unitPrice": 79000,
+            "total": 79000,
+            "paidTotal": 79000,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [],
+        "ledger": []
+      }
+    },
+    {
+      "label": "(b) đơn đầu qua API",
+      "data": {
+        "code": "TUBU2026101948202",
+        "total": 225000
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 120000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 19000,
+        "firstOrderShipWaived": 0,
+        "total": 139000,
+        "pointsEarned": 2400
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-14b-nocoupon-checkout.png"
+    },
+    {
+      "label": "áp mã FREESHIP",
+      "data": {
+        "status": 201,
+        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã FREESHIP",
+        "couponCode": "FREESHIP",
+        "discount": 0,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 120000,
+        "discount": 0,
+        "couponApplied": true,
+        "couponNotice": null,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 120000,
+        "pointsEarned": 2400
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-14b-freeship-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101963213",
+        "button": "Đặt hàng · 120.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-14b-freeship-placed.png"
+    },
+    {
+      "label": "(b) SQL đơn",
+      "data": {
+        "id": "cmvfgdomn00k314pjlpapxorv",
+        "code": "TUBU2026101963213",
+        "userId": "u1_c14b_gdhvkw6",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "paymentStatus": "UNPAID",
+        "subtotal": 120000,
+        "discount": 0,
+        "couponDiscount": 0,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 120000,
+        "pointsEarned": 2400,
+        "pointsUsed": 0,
+        "couponCode": "FREESHIP",
+        "pancakeOrderId": "9200006",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-19T16:12:47.471Z",
+        "items": [
+          {
+            "sku": "FUWA-DW-1L",
+            "quantity": 1,
+            "unitPrice": 120000,
+            "total": 120000,
+            "paidTotal": 120000,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [
+          {
+            "code": "FREESHIP",
+            "usedCount": 0,
+            "usageLimit": null
+          }
+        ],
+        "ledger": []
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:12:52.049Z"
+}

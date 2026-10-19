@@ -25,7 +25,7 @@ const REAL_GET = [
 ];
 
 /** Trong chế độ lỗi/loading vẫn để các GET này chạy bình thường để cô lập dữ liệu chính của trang. */
-const KEEP_OK = ['/me', '/config/public', '/orders/active-count'];
+const KEEP_OK = ['/me', '/config/public', '/orders/active-count', '/admin/ops/access'];
 
 function compile(pattern) {
   const keys = [];

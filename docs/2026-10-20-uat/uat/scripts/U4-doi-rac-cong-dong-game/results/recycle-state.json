@@ -1,0 +1,202 @@
+{
+  "retDealer": {
+    "id": "cmvfg8f2f0014hoebpv7fk5sb",
+    "code": "TR-5SGCJ",
+    "method": "DROP_OFF",
+    "status": "OPEN",
+    "pointId": "cmvfg8bas000mhoebrp2tgp9d",
+    "estimatedPoints": 5000,
+    "estimatedDrops": 0,
+    "trackingCode": null,
+    "carrier": null,
+    "lines": [
+      {
+        "item": "wi-bubble-wrap",
+        "qty": 2
+      },
+      {
+        "item": "wi-carton",
+        "qty": 3
+      }
+    ]
+  },
+  "retWarehouseCreate": {
+    "status": 201,
+    "body": {
+      "id": "cmvfg8hwl001fhoeb6z8jdt1f",
+      "code": "TR-RKRFX",
+      "method": "DROP_OFF",
+      "status": "OPEN",
+      "closeReason": null,
+      "createdAt": "2026-10-19T16:08:45.478Z",
+      "expiresAt": "2026-10-26T16:08:45.475Z",
+      "estimatedPoints": 6000,
+      "pointsAwarded": null,
+      "pointName": "Kho Tubu Tree HCM",
+      "orderCode": null,
+      "lines": [
+        {
+          "itemId": "wi-milk-carton",
+          "itemName": "Vỏ hộp sữa sạch",
+          "unitLabel": "vỏ",
+          "unitsPerPoint": 5,
+          "pointsPerGroup": 1000,
+          "dropsPerUnit": 0,
+          "gramsPerUnit": null,
+          "declaredQty": 12,
+          "receivedQty": null,
+          "shortfallReason": null,
+          "pointsAwarded": null
+        },
+        {
+          "itemId": "wi-tubu-bottle",
+          "itemName": "Vỏ chai, hộp Tubu Tree",
+          "unitLabel": "vỏ",
+          "unitsPerPoint": 1,
+          "pointsPerGroup": 2000,
+          "dropsPerUnit": 2,
+          "gramsPerUnit": null,
+          "declaredQty": 2,
+          "receivedQty": null,
+          "shortfallReason": null,
+          "pointsAwarded": null
+        }
+      ],
+      "point": {
+        "id": "cmvfg8bah000hhoebm7hp8m2q",
+        "kind": "WAREHOUSE",
+        "name": "Kho Tubu Tree HCM",
+        "addressLine": "12 Nguyễn Huệ",
+        "communeName": "Phường Sài Gòn",
+        "provinceName": "Thành phố Hồ Chí Minh",
+        "phone": "0281234567",
+        "openingHours": {}
+      },
+      "pointAvailable": true,
+      "carrier": null,
+      "trackingCode": null,
+      "inTransitAt": null,
+      "receivedAt": null,
+      "completedAt": null,
+      "closedAt": null,
+      "rejectionReason": null,
+      "rejectionNote": null,
+      "dropsAwarded": null,
+      "impactGrams": null,
+      "reversedPoints": null,
+      "reversalReason": null,
+      "editable": true,
+      "cancellable": true,
+      "orderId": null
+    }
+  },
+  "retWarehouse": {
+    "id": "cmvfg8hwl001fhoeb6z8jdt1f",
+    "code": "TR-RKRFX",
+    "method": "DROP_OFF",
+    "status": "OPEN",
+    "pointId": "cmvfg8bah000hhoebm7hp8m2q",
+    "estimatedPoints": 6000,
+    "estimatedDrops": 4,
+    "trackingCode": null,
+    "carrier": null,
+    "lines": [
+      {
+        "item": "wi-milk-carton",
+        "qty": 12
+      },
+      {
+        "item": "wi-tubu-bottle",
+        "qty": 2
+      }
+    ]
+  },
+  "retMail": {
+    "id": "cmvfg8ju2001thoeb7p44kpxd",
+    "code": "TR-42RNG",
+    "method": "MAIL_IN",
+    "status": "IN_TRANSIT",
+    "pointId": "cmvfg8bah000hhoebm7hp8m2q",
+    "estimatedPoints": 15000,
+    "estimatedDrops": 0,
+    "trackingCode": "GHTKUATWASTE0001",
+    "carrier": "GHTK",
+    "lines": [
+      {
+        "item": "wi-carton",
+        "qty": 15
+      }
+    ]
+  },
+  "newEdit": {
+    "id": "cmvfg8ka10021hoeb1ukpebq3",
+    "code": "TR-6QJMR",
+    "method": "DROP_OFF",
+    "status": "OPEN",
+    "closeReason": null,
+    "createdAt": "2026-10-19T16:08:48.553Z",
+    "expiresAt": "2026-10-26T16:08:48.550Z",
+    "estimatedPoints": 2000,
+    "pointsAwarded": null,
+    "pointName": "Đại lý Xanh Quận 3",
+    "orderCode": null,
+    "lines": [
+      {
+        "itemId": "wi-carton",
+        "itemName": "Thùng carton cũ",
+        "unitLabel": "thùng",
+        "unitsPerPoint": 1,
+        "pointsPerGroup": 1000,
+        "dropsPerUnit": 0,
+        "gramsPerUnit": null,
+        "declaredQty": 2,
+        "receivedQty": null,
+        "shortfallReason": null,
+        "pointsAwarded": null
+      }
+    ],
+    "point": {
+      "id": "cmvfg8bas000mhoebrp2tgp9d",
+      "kind": "PARTNER",
+      "name": "Đại lý Xanh Quận 3",
+      "addressLine": "45 Võ Văn Tần",
+      "communeName": "Phường Tân Định",
+      "provinceName": "Thành phố Hồ Chí Minh",
+      "phone": "0909000111",
+      "openingHours": {}
+    },
+    "pointAvailable": true,
+    "carrier": null,
+    "trackingCode": null,
+    "inTransitAt": null,
+    "receivedAt": null,
+    "completedAt": null,
+    "closedAt": null,
+    "rejectionReason": null,
+    "rejectionNote": null,
+    "dropsAwarded": null,
+    "impactGrams": null,
+    "reversedPoints": null,
+    "reversalReason": null,
+    "editable": true,
+    "cancellable": true,
+    "orderId": null
+  },
+  "newOpen": [
+    {
+      "status": 201,
+      "id": "cmvfg8m34002mhoeb2t2gd1ta",
+      "code": "TR-YBFNG"
+    },
+    {
+      "status": 201,
+      "id": "cmvfg8m3a002shoeb2nj7v54k",
+      "code": "TR-CYWXS"
+    },
+    {
+      "status": 201,
+      "id": "cmvfg8m3h002yhoeby6qqkeiu",
+      "code": "TR-3BBMV"
+    }
+  ]
+}

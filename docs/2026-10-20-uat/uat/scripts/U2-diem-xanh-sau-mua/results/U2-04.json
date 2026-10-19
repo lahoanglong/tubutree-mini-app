@@ -1,0 +1,78 @@
+{
+  "id": "U2-04",
+  "title": "Điểm chờ: đơn vừa giao bị khoá tới hết cửa sổ đổi/trả 7 ngày; lùi mốc giao 8 ngày → dùng được",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:23:14.058Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "/me/loyalty: lockedPoints gồm điểm đơn vừa giao, redeemable = số dư − khoá",
+      "ok": true,
+      "detail": {
+        "locked": 4480,
+        "redeemable": 0,
+        "bal": 4480
+      }
+    },
+    {
+      "name": "lockedUntil = giao + 7 ngày",
+      "ok": true,
+      "detail": {
+        "lockedUntil": "2026-10-26T16:22:29.676Z",
+        "expect": "2026-10-26T16:22:29.676Z"
+      }
+    },
+    {
+      "name": "báo giá: redeemablePoints = số dư − khoá; điểm dùng ≤ phần dùng được",
+      "ok": true,
+      "detail": {
+        "redeemablePoints": 0,
+        "lockedPoints": 4480,
+        "pointsUsed": 0
+      }
+    },
+    {
+      "name": "sau hết cửa sổ: lockedPoints 0, redeemable = số dư",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "name": "SQL: số dư không đổi khi mở khoá (khoá chỉ là phép đọc), = SUM sổ",
+      "ok": true,
+      "detail": {
+        "before": 4480,
+        "after": 4480,
+        "stdSum": 4480
+      }
+    }
+  ],
+  "evidence": {
+    "đơn mới giao": {
+      "code": "TUBU2026101980251",
+      "pointsEarned": 3980,
+      "deliveredAt": "2026-10-19T16:22:29.676Z"
+    },
+    "/me/loyalty trước": {
+      "pointsBalance": 4480,
+      "lockedPoints": 4480,
+      "redeemablePoints": 0,
+      "lockedUntil": "2026-10-26T16:22:29.676Z"
+    },
+    "màn /loyalty (khoá)": {
+      "shot": "shots/U2-diem-xanh-sau-mua/U2-04-loyalty-locked.png",
+      "lines": []
+    },
+    "/me/loyalty sau lùi 8 ngày": {
+      "pointsBalance": 4480,
+      "lockedPoints": 0,
+      "redeemablePoints": 4480
+    },
+    "job resyncPending": {
+      "scanned": 0,
+      "repaired": 0,
+      "failed": 0
+    },
+    "màn /loyalty (mở)": "shots/U2-diem-xanh-sau-mua/U2-04-loyalty-unlocked.png"
+  }
+}

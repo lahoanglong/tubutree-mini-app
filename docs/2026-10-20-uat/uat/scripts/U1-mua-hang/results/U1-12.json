@@ -1,0 +1,120 @@
+{
+  "id": "U1-12",
+  "browser": "chromium",
+  "role": "Khách mới / khách quay lại",
+  "journey": "Mã thẻ sai điều kiện: đơn dưới 199k, giỏ chỉ hàng giờ vàng, khách cũ gõ mã thẻ ở giỏ",
+  "steps": "(a) khách mới giỏ 194.000đ (COBOTE-DC-50 + SOK-RC-1KG) gõ mã thẻ; (b) khách mới giỏ chỉ BHN-HN-500 giờ vàng 195k×2 gõ mã thẻ; (c) uat_returning gõ một mã thẻ chưa ai nhận",
+  "expected": "(a) \"Đơn tối thiểu 199.000đ để dùng mã này.\" (b) lời báo hàng giờ vàng không tính vào đơn tối thiểu (c) \"Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.\" và mã KHÔNG bị khách cũ giữ (0 dòng coupon_claims); giỏ không gắn mã",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "(a) báo \"Đơn tối thiểu 199.000đ để dùng mã này.\"",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "body": {
+          "message": "Đơn tối thiểu 199.000đ để dùng mã này.",
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "snack": "zi_close_circle_solid\nĐơn tối thiểu 199.000đ để dùng mã này.",
+        "message": "Đơn tối thiểu 199.000đ để dùng mã này."
+      }
+    },
+    {
+      "name": "(b) báo hàng giờ vàng không tính",
+      "ok": true,
+      "detail": "Đơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ."
+    },
+    {
+      "name": "(c) báo chỉ khách mới",
+      "ok": true,
+      "detail": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree."
+    },
+    {
+      "name": "(c) DB: khách cũ không giữ được thẻ (claims không đổi)",
+      "ok": true,
+      "detail": {
+        "before": {
+          "code": "HOPSAN-ED4SEYDE",
+          "usedCount": 0,
+          "usageLimit": 1,
+          "perUserLimit": 1,
+          "endAt": "2026-12-18T15:27:52.028Z",
+          "isActive": true,
+          "redemptions": 0,
+          "claims": 1
+        },
+        "after": {
+          "code": "HOPSAN-ED4SEYDE",
+          "usedCount": 0,
+          "usageLimit": 1,
+          "perUserLimit": 1,
+          "endAt": "2026-12-18T15:27:52.028Z",
+          "isActive": true,
+          "redemptions": 0,
+          "claims": 1
+        }
+      }
+    },
+    {
+      "name": "(c) giỏ không gắn mã",
+      "ok": true,
+      "detail": {
+        "couponCode": null
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "(a) 194k",
+      "data": {
+        "status": 400,
+        "body": {
+          "message": "Đơn tối thiểu 199.000đ để dùng mã này.",
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "snack": "zi_close_circle_solid\nĐơn tối thiểu 199.000đ để dùng mã này.",
+        "message": "Đơn tối thiểu 199.000đ để dùng mã này."
+      }
+    },
+    {
+      "label": "(a) ảnh",
+      "data": "shots/U1-mua-hang/U1-12a-card-min-order.png"
+    },
+    {
+      "label": "(b) chỉ hàng giờ vàng 390k",
+      "data": {
+        "status": 400,
+        "body": {
+          "message": "Đơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ.",
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "snack": "zi_close_circle_solid\nĐơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ.",
+        "message": "Đơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ."
+      }
+    },
+    {
+      "label": "(c) khách cũ",
+      "data": {
+        "status": 400,
+        "body": {
+          "message": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.",
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "snack": "zi_close_circle_solid\nMã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.",
+        "message": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree."
+      }
+    },
+    {
+      "label": "(c) ảnh",
+      "data": "shots/U1-mua-hang/U1-12c-card-returning.png"
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:12:06.745Z"
+}

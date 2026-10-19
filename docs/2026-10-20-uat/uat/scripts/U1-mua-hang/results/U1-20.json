@@ -1,0 +1,191 @@
+{
+  "id": "U1-20",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Chuyển thiếu tiền rồi chuyển bù",
+  "steps": "(a) Đơn A 199.000đ → chuyển 100.000đ (đúng nội dung) → xem màn QR + chi tiết đơn + thông báo → chuyển bù 99.000đ; (b) đơn B: chuyển 100.000đ → quét lại mã QR trên màn (chuyển đúng số QR ghi)",
+  "expected": "Sau 100k: đơn vẫn PENDING_PAYMENT/UNPAID, admin có pancakeAttention \"Khách chuyển thiếu…\"; khách được báo đã nhận 100.000đ, còn thiếu 99.000đ; màn QR (nơi khách đang đứng) và mã VietQR đổi sang số còn thiếu 99.000đ, khớp lời thông báo \"chuyển thêm phần còn thiếu\"; sau 99k: PAID, attention xoá; (b) quét lại QR không làm khách chuyển dư",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+    {
+      "name": "DB: vẫn PENDING_PAYMENT/UNPAID",
+      "ok": true
+    },
+    {
+      "name": "DB: admin thấy \"Khách chuyển thiếu\" (pancakeAttention)",
+      "ok": true,
+      "detail": "Khách chuyển thiếu: Pancake ghi nhận 100.000đ/199.000đ, còn thiếu 99.000đ — chưa xác nhận thanh toán. Liên hệ khách chuyển thêm, hoặc huỷ đơn để hoàn số đã nhận."
+    },
+    {
+      "name": "khách được báo đã nhận một phần / còn thiếu bao nhiêu",
+      "ok": true
+    },
+    {
+      "name": "màn QR + VietQR đổi sang số còn thiếu 99.000đ",
+      "ok": false,
+      "detail": {
+        "amount": 199000,
+        "emv": "199000"
+      }
+    },
+    {
+      "name": "sau chuyển bù: CONFIRMED/PAID, attention xoá",
+      "ok": true,
+      "detail": {
+        "status": "CONFIRMED",
+        "ps": "PAID",
+        "att": null
+      }
+    },
+    {
+      "name": "(b) quét lại QR không làm khách chuyển dư",
+      "ok": false,
+      "detail": [
+        {
+          "kind": "OVERPAYMENT",
+          "amount": 100000,
+          "status": "UNVERIFIED",
+          "refKey": "PANCAKE:paid:299000"
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "label": "đặt đơn chuyển khoản",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101949885",
+        "button": "Đặt hàng · 199.000đ",
+        "total": 199000
+      }
+    },
+    {
+      "label": "chuyển 100k",
+      "data": {
+        "event": {
+          "id": "cmvfgq0dp013i14pjkwxgczsk",
+          "status": "PROCESSED",
+          "error": null,
+          "attempts": 1
+        },
+        "after": {
+          "code": "TUBU2026101949885",
+          "total": 199000,
+          "status": "PENDING_PAYMENT",
+          "paymentStatus": "UNPAID",
+          "paidAt": null,
+          "pancakeAttention": "Khách chuyển thiếu: Pancake ghi nhận 100.000đ/199.000đ, còn thiếu 99.000đ — chưa xác nhận thanh toán. Liên hệ khách chuyển thêm, hoặc huỷ đơn để hoàn số đã nhận."
+        }
+      }
+    },
+    {
+      "label": "ảnh màn QR sau chuyển thiếu",
+      "data": "shots/U1-mua-hang/U1-20-bank-short-qr.png"
+    },
+    {
+      "label": "ảnh chi tiết đơn sau chuyển thiếu",
+      "data": "shots/U1-mua-hang/U1-20-bank-short-order.png"
+    },
+    {
+      "label": "SQL đơn sau 100k",
+      "data": {
+        "status": "PENDING_PAYMENT",
+        "paymentStatus": "UNPAID",
+        "pancakeAttention": "Khách chuyển thiếu: Pancake ghi nhận 100.000đ/199.000đ, còn thiếu 99.000đ — chưa xác nhận thanh toán. Liên hệ khách chuyển thêm, hoặc huỷ đơn để hoàn số đã nhận.",
+        "pancakePaidReported": 100000
+      }
+    },
+    {
+      "label": "thông báo cho khách sau chuyển thiếu",
+      "data": [
+        {
+          "templateCode": "ORDER_UNDERPAID",
+          "channel": "INAPP",
+          "status": "SENT",
+          "payload": {
+            "body": "Tubu đã nhận 100.000đ cho đơn TUBU2026101949885, còn thiếu 99.000đ (tổng 199.000đ). Vui lòng chuyển thêm phần còn thiếu với nội dung TUBU2026101949885. Nếu đơn bị huỷ, Tubu sẽ hoàn lại số tiền đã nhận.",
+            "data": {
+              "paid": "100.000đ",
+              "total": "199.000đ",
+              "missing": "99.000đ",
+              "order_code": "TUBU2026101949885"
+            }
+          },
+          "text": "{\"body\":\"Tubu đã nhận 100.000đ cho đơn TUBU2026101949885, còn thiếu 99.000đ (tổng 199.000đ). Vui lòng chuyển thêm phần còn thiếu với nội dung TUBU2026101949885. Nếu đơn bị huỷ, Tubu sẽ hoàn lại số tiền đã nhận.\",\"data\":{\"paid\":\"100.000đ\",\"total\":\"199.000đ\",\"missing\":\"99.000đ\",\"order_code\":\"TUBU20261"
+        }
+      ]
+    },
+    {
+      "label": "màn QR/chi tiết đơn có nhắc khoản thiếu?",
+      "data": {
+        "qr": null,
+        "order": [
+          "Chờ thanh toán",
+          "Chờ thanh toán"
+        ]
+      }
+    },
+    {
+      "label": "GET /payments/bank-qr sau 100k",
+      "data": {
+        "amount": 199000,
+        "emvAmount": "199000",
+        "pancakePaidReported": 100000
+      }
+    },
+    {
+      "label": "chuyển bù 99k",
+      "data": {
+        "event": {
+          "id": "cmvfgq6wp013y14pjajoisze0",
+          "status": "PROCESSED",
+          "error": null,
+          "attempts": 1
+        },
+        "bankPaymentTotal": 199000,
+        "after": {
+          "code": "TUBU2026101949885",
+          "total": 199000,
+          "status": "CONFIRMED",
+          "paymentStatus": "PAID",
+          "paidAt": "2026-10-19T16:22:31.112Z",
+          "pancakeAttention": null
+        }
+      }
+    },
+    {
+      "label": "đặt đơn chuyển khoản",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101949225",
+        "button": "Đặt hàng · 199.000đ",
+        "total": 199000
+      }
+    },
+    {
+      "label": "(b) quét lại QR sau khi đã chuyển 100k",
+      "data": {
+        "qrAmount": 199000,
+        "bankPaymentTotal": 299000,
+        "status": "CONFIRMED",
+        "ps": "PAID",
+        "refunds": [
+          {
+            "kind": "OVERPAYMENT",
+            "amount": 100000,
+            "status": "UNVERIFIED",
+            "refKey": "PANCAKE:paid:299000"
+          }
+        ],
+        "customerNotices": [
+          "ORDER_UNDERPAID",
+          "ORDER_CONFIRMED"
+        ]
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:22:38.456Z"
+}

@@ -1,0 +1,3170 @@
+{
+ "at": "2026-10-19T15:07:01.692Z",
+ "tokenMatrix": [
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#1C1A16",
+   "bgHex": "#F6F4EF",
+   "ratio": 15.81
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-bg-surface",
+   "fgHex": "#1C1A16",
+   "bgHex": "#FFFFFF",
+   "ratio": 17.37
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#1C1A16",
+   "bgHex": "#F2F5EC",
+   "ratio": 15.76
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--stone-100",
+   "fgHex": "#1C1A16",
+   "bgHex": "#EFEBE2",
+   "ratio": 14.6
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--stone-200",
+   "fgHex": "#1C1A16",
+   "bgHex": "#E0DACB",
+   "ratio": 12.46
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--forest-50",
+   "fgHex": "#1C1A16",
+   "bgHex": "#EEF4EF",
+   "ratio": 15.57
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--forest-100",
+   "fgHex": "#1C1A16",
+   "bgHex": "#D6E6DA",
+   "ratio": 13.39
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--sage-100",
+   "fgHex": "#1C1A16",
+   "bgHex": "#E3EBD8",
+   "ratio": 14.18
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#EAF4EC",
+   "ratio": 15.43
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#FFF4E0",
+   "ratio": 15.94
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#FBEAE8",
+   "ratio": 14.92
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#E8F0F7",
+   "ratio": 15.09
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#EFEBE2",
+   "ratio": 14.6
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-promo-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#FDF1DE",
+   "ratio": 15.56
+  },
+  {
+   "fg": "--color-text-primary",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#1C1A16",
+   "bgHex": "#E0DACB",
+   "ratio": 12.46
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#5A544A",
+   "bgHex": "#F6F4EF",
+   "ratio": 6.82
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-bg-surface",
+   "fgHex": "#5A544A",
+   "bgHex": "#FFFFFF",
+   "ratio": 7.5
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#5A544A",
+   "bgHex": "#F2F5EC",
+   "ratio": 6.8
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--stone-100",
+   "fgHex": "#5A544A",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.3
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--stone-200",
+   "fgHex": "#5A544A",
+   "bgHex": "#E0DACB",
+   "ratio": 5.38
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--forest-50",
+   "fgHex": "#5A544A",
+   "bgHex": "#EEF4EF",
+   "ratio": 6.72
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--forest-100",
+   "fgHex": "#5A544A",
+   "bgHex": "#D6E6DA",
+   "ratio": 5.78
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--sage-100",
+   "fgHex": "#5A544A",
+   "bgHex": "#E3EBD8",
+   "ratio": 6.12
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#EAF4EC",
+   "ratio": 6.66
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#FFF4E0",
+   "ratio": 6.88
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#FBEAE8",
+   "ratio": 6.44
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#E8F0F7",
+   "ratio": 6.51
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.3
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-promo-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#FDF1DE",
+   "ratio": 6.71
+  },
+  {
+   "fg": "--color-text-secondary",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#5A544A",
+   "bgHex": "#E0DACB",
+   "ratio": 5.38
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#6E675B",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.09
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-bg-surface",
+   "fgHex": "#6E675B",
+   "bgHex": "#FFFFFF",
+   "ratio": 5.59
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#6E675B",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.07
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--stone-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.7
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--stone-200",
+   "fgHex": "#6E675B",
+   "bgHex": "#E0DACB",
+   "ratio": 4.01
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--forest-50",
+   "fgHex": "#6E675B",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.01
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--forest-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.31
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--sage-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#E3EBD8",
+   "ratio": 4.57
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#EAF4EC",
+   "ratio": 4.97
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.13
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FBEAE8",
+   "ratio": 4.8
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#E8F0F7",
+   "ratio": 4.86
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.7
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-promo-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.01
+  },
+  {
+   "fg": "--color-text-tertiary",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#6E675B",
+   "bgHex": "#E0DACB",
+   "ratio": 4.01
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#6E675B",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.09
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-bg-surface",
+   "fgHex": "#6E675B",
+   "bgHex": "#FFFFFF",
+   "ratio": 5.59
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#6E675B",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.07
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--stone-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.7
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--stone-200",
+   "fgHex": "#6E675B",
+   "bgHex": "#E0DACB",
+   "ratio": 4.01
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--forest-50",
+   "fgHex": "#6E675B",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.01
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--forest-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.31
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--sage-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#E3EBD8",
+   "ratio": 4.57
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#EAF4EC",
+   "ratio": 4.97
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.13
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FBEAE8",
+   "ratio": 4.8
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#E8F0F7",
+   "ratio": 4.86
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.7
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-promo-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.01
+  },
+  {
+   "fg": "--color-text-disabled",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#6E675B",
+   "bgHex": "#E0DACB",
+   "ratio": 4.01
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#245E3E",
+   "bgHex": "#F6F4EF",
+   "ratio": 6.96
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-bg-surface",
+   "fgHex": "#245E3E",
+   "bgHex": "#FFFFFF",
+   "ratio": 7.65
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#245E3E",
+   "bgHex": "#F2F5EC",
+   "ratio": 6.94
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--stone-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.43
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--stone-200",
+   "fgHex": "#245E3E",
+   "bgHex": "#E0DACB",
+   "ratio": 5.49
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--forest-50",
+   "fgHex": "#245E3E",
+   "bgHex": "#EEF4EF",
+   "ratio": 6.86
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--forest-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#D6E6DA",
+   "ratio": 5.9
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--sage-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#E3EBD8",
+   "ratio": 6.24
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#EAF4EC",
+   "ratio": 6.79
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FFF4E0",
+   "ratio": 7.02
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FBEAE8",
+   "ratio": 6.57
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#E8F0F7",
+   "ratio": 6.64
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.43
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-promo-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FDF1DE",
+   "ratio": 6.85
+  },
+  {
+   "fg": "--color-text-brand",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#245E3E",
+   "bgHex": "#E0DACB",
+   "ratio": 5.49
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#245E3E",
+   "bgHex": "#F6F4EF",
+   "ratio": 6.96
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-bg-surface",
+   "fgHex": "#245E3E",
+   "bgHex": "#FFFFFF",
+   "ratio": 7.65
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#245E3E",
+   "bgHex": "#F2F5EC",
+   "ratio": 6.94
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--stone-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.43
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--stone-200",
+   "fgHex": "#245E3E",
+   "bgHex": "#E0DACB",
+   "ratio": 5.49
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--forest-50",
+   "fgHex": "#245E3E",
+   "bgHex": "#EEF4EF",
+   "ratio": 6.86
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--forest-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#D6E6DA",
+   "ratio": 5.9
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--sage-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#E3EBD8",
+   "ratio": 6.24
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#EAF4EC",
+   "ratio": 6.79
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FFF4E0",
+   "ratio": 7.02
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FBEAE8",
+   "ratio": 6.57
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#E8F0F7",
+   "ratio": 6.64
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.43
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-promo-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FDF1DE",
+   "ratio": 6.85
+  },
+  {
+   "fg": "--color-text-link",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#245E3E",
+   "bgHex": "#E0DACB",
+   "ratio": 5.49
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#6E675B",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.09
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-bg-surface",
+   "fgHex": "#6E675B",
+   "bgHex": "#FFFFFF",
+   "ratio": 5.59
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#6E675B",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.07
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--stone-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.7
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--stone-200",
+   "fgHex": "#6E675B",
+   "bgHex": "#E0DACB",
+   "ratio": 4.01
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--forest-50",
+   "fgHex": "#6E675B",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.01
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--forest-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.31
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--sage-100",
+   "fgHex": "#6E675B",
+   "bgHex": "#E3EBD8",
+   "ratio": 4.57
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#EAF4EC",
+   "ratio": 4.97
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.13
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FBEAE8",
+   "ratio": 4.8
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#E8F0F7",
+   "ratio": 4.86
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.7
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-promo-bg",
+   "fgHex": "#6E675B",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.01
+  },
+  {
+   "fg": "--color-text-price-compare",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#6E675B",
+   "bgHex": "#E0DACB",
+   "ratio": 4.01
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#2F7A48",
+   "bgHex": "#F6F4EF",
+   "ratio": 4.78
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-bg-surface",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FFFFFF",
+   "ratio": 5.25
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#2F7A48",
+   "bgHex": "#F2F5EC",
+   "ratio": 4.76
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--stone-100",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.41
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--stone-200",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E0DACB",
+   "ratio": 3.77
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--forest-50",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EEF4EF",
+   "ratio": 4.71
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--forest-100",
+   "fgHex": "#2F7A48",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.05
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--sage-100",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E3EBD8",
+   "ratio": 4.29
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EAF4EC",
+   "ratio": 4.66
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FFF4E0",
+   "ratio": 4.82
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FBEAE8",
+   "ratio": 4.51
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E8F0F7",
+   "ratio": 4.56
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.41
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-promo-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FDF1DE",
+   "ratio": 4.71
+  },
+  {
+   "fg": "--color-text-success",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E0DACB",
+   "ratio": 3.77
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#8A5300",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.76
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-bg-surface",
+   "fgHex": "#8A5300",
+   "bgHex": "#FFFFFF",
+   "ratio": 6.33
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#8A5300",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.74
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--stone-100",
+   "fgHex": "#8A5300",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.32
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--stone-200",
+   "fgHex": "#8A5300",
+   "bgHex": "#E0DACB",
+   "ratio": 4.54
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--forest-50",
+   "fgHex": "#8A5300",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.67
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--forest-100",
+   "fgHex": "#8A5300",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.88
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--sage-100",
+   "fgHex": "#8A5300",
+   "bgHex": "#E3EBD8",
+   "ratio": 5.17
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#EAF4EC",
+   "ratio": 5.62
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.81
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#FBEAE8",
+   "ratio": 5.44
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#E8F0F7",
+   "ratio": 5.5
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.32
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-promo-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.67
+  },
+  {
+   "fg": "--color-text-warning",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#8A5300",
+   "bgHex": "#E0DACB",
+   "ratio": 4.54
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#B3362F",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.48
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-bg-surface",
+   "fgHex": "#B3362F",
+   "bgHex": "#FFFFFF",
+   "ratio": 6.03
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#B3362F",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.46
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--stone-100",
+   "fgHex": "#B3362F",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.06
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--stone-200",
+   "fgHex": "#B3362F",
+   "bgHex": "#E0DACB",
+   "ratio": 4.32
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--forest-50",
+   "fgHex": "#B3362F",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.4
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--forest-100",
+   "fgHex": "#B3362F",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.65
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--sage-100",
+   "fgHex": "#B3362F",
+   "bgHex": "#E3EBD8",
+   "ratio": 4.92
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#EAF4EC",
+   "ratio": 5.35
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.53
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#FBEAE8",
+   "ratio": 5.17
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#E8F0F7",
+   "ratio": 5.23
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.06
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-promo-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.4
+  },
+  {
+   "fg": "--color-text-danger",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#B3362F",
+   "bgHex": "#E0DACB",
+   "ratio": 4.32
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#2F7A48",
+   "bgHex": "#F6F4EF",
+   "ratio": 4.78
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FFFFFF",
+   "ratio": 5.25
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#2F7A48",
+   "bgHex": "#F2F5EC",
+   "ratio": 4.76
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--stone-100",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.41
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--stone-200",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E0DACB",
+   "ratio": 3.77
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--forest-50",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EEF4EF",
+   "ratio": 4.71
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--forest-100",
+   "fgHex": "#2F7A48",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.05
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--sage-100",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E3EBD8",
+   "ratio": 4.29
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EAF4EC",
+   "ratio": 4.66
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FFF4E0",
+   "ratio": 4.82
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FBEAE8",
+   "ratio": 4.51
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E8F0F7",
+   "ratio": 4.56
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#EFEBE2",
+   "ratio": 4.41
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#2F7A48",
+   "bgHex": "#FDF1DE",
+   "ratio": 4.71
+  },
+  {
+   "fg": "--color-status-success-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#2F7A48",
+   "bgHex": "#E0DACB",
+   "ratio": 3.77
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#8A5300",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.76
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#8A5300",
+   "bgHex": "#FFFFFF",
+   "ratio": 6.33
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#8A5300",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.74
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--stone-100",
+   "fgHex": "#8A5300",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.32
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--stone-200",
+   "fgHex": "#8A5300",
+   "bgHex": "#E0DACB",
+   "ratio": 4.54
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--forest-50",
+   "fgHex": "#8A5300",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.67
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--forest-100",
+   "fgHex": "#8A5300",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.88
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--sage-100",
+   "fgHex": "#8A5300",
+   "bgHex": "#E3EBD8",
+   "ratio": 5.17
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#EAF4EC",
+   "ratio": 5.62
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.81
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#FBEAE8",
+   "ratio": 5.44
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#E8F0F7",
+   "ratio": 5.5
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.32
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#8A5300",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.67
+  },
+  {
+   "fg": "--color-status-warning-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#8A5300",
+   "bgHex": "#E0DACB",
+   "ratio": 4.54
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#B3362F",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.48
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#B3362F",
+   "bgHex": "#FFFFFF",
+   "ratio": 6.03
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#B3362F",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.46
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--stone-100",
+   "fgHex": "#B3362F",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.06
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--stone-200",
+   "fgHex": "#B3362F",
+   "bgHex": "#E0DACB",
+   "ratio": 4.32
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--forest-50",
+   "fgHex": "#B3362F",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.4
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--forest-100",
+   "fgHex": "#B3362F",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.65
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--sage-100",
+   "fgHex": "#B3362F",
+   "bgHex": "#E3EBD8",
+   "ratio": 4.92
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#EAF4EC",
+   "ratio": 5.35
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.53
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#FBEAE8",
+   "ratio": 5.17
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#E8F0F7",
+   "ratio": 5.23
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.06
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#B3362F",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.4
+  },
+  {
+   "fg": "--color-status-danger-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#B3362F",
+   "bgHex": "#E0DACB",
+   "ratio": 4.32
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#2E6391",
+   "bgHex": "#F6F4EF",
+   "ratio": 5.77
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#2E6391",
+   "bgHex": "#FFFFFF",
+   "ratio": 6.34
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#2E6391",
+   "bgHex": "#F2F5EC",
+   "ratio": 5.75
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--stone-100",
+   "fgHex": "#2E6391",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.33
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--stone-200",
+   "fgHex": "#2E6391",
+   "bgHex": "#E0DACB",
+   "ratio": 4.55
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--forest-50",
+   "fgHex": "#2E6391",
+   "bgHex": "#EEF4EF",
+   "ratio": 5.69
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--forest-100",
+   "fgHex": "#2E6391",
+   "bgHex": "#D6E6DA",
+   "ratio": 4.89
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--sage-100",
+   "fgHex": "#2E6391",
+   "bgHex": "#E3EBD8",
+   "ratio": 5.18
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#2E6391",
+   "bgHex": "#EAF4EC",
+   "ratio": 5.63
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#2E6391",
+   "bgHex": "#FFF4E0",
+   "ratio": 5.82
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#2E6391",
+   "bgHex": "#FBEAE8",
+   "ratio": 5.45
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#2E6391",
+   "bgHex": "#E8F0F7",
+   "ratio": 5.51
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#2E6391",
+   "bgHex": "#EFEBE2",
+   "ratio": 5.33
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#2E6391",
+   "bgHex": "#FDF1DE",
+   "ratio": 5.68
+  },
+  {
+   "fg": "--color-status-info-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#2E6391",
+   "bgHex": "#E0DACB",
+   "ratio": 4.55
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#5A544A",
+   "bgHex": "#F6F4EF",
+   "ratio": 6.82
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#5A544A",
+   "bgHex": "#FFFFFF",
+   "ratio": 7.5
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#5A544A",
+   "bgHex": "#F2F5EC",
+   "ratio": 6.8
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--stone-100",
+   "fgHex": "#5A544A",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.3
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--stone-200",
+   "fgHex": "#5A544A",
+   "bgHex": "#E0DACB",
+   "ratio": 5.38
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--forest-50",
+   "fgHex": "#5A544A",
+   "bgHex": "#EEF4EF",
+   "ratio": 6.72
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--forest-100",
+   "fgHex": "#5A544A",
+   "bgHex": "#D6E6DA",
+   "ratio": 5.78
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--sage-100",
+   "fgHex": "#5A544A",
+   "bgHex": "#E3EBD8",
+   "ratio": 6.12
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#EAF4EC",
+   "ratio": 6.66
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#FFF4E0",
+   "ratio": 6.88
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#FBEAE8",
+   "ratio": 6.44
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#E8F0F7",
+   "ratio": 6.51
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.3
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#5A544A",
+   "bgHex": "#FDF1DE",
+   "ratio": 6.71
+  },
+  {
+   "fg": "--color-status-neutral-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#5A544A",
+   "bgHex": "#E0DACB",
+   "ratio": 5.38
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#7A4300",
+   "bgHex": "#F6F4EF",
+   "ratio": 7.26
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#7A4300",
+   "bgHex": "#FFFFFF",
+   "ratio": 7.98
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#7A4300",
+   "bgHex": "#F2F5EC",
+   "ratio": 7.24
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--stone-100",
+   "fgHex": "#7A4300",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.71
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--stone-200",
+   "fgHex": "#7A4300",
+   "bgHex": "#E0DACB",
+   "ratio": 5.73
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--forest-50",
+   "fgHex": "#7A4300",
+   "bgHex": "#EEF4EF",
+   "ratio": 7.16
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--forest-100",
+   "fgHex": "#7A4300",
+   "bgHex": "#D6E6DA",
+   "ratio": 6.16
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--sage-100",
+   "fgHex": "#7A4300",
+   "bgHex": "#E3EBD8",
+   "ratio": 6.52
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#EAF4EC",
+   "ratio": 7.09
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#FFF4E0",
+   "ratio": 7.33
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#FBEAE8",
+   "ratio": 6.86
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#E8F0F7",
+   "ratio": 6.93
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.71
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#FDF1DE",
+   "ratio": 7.15
+  },
+  {
+   "fg": "--color-promo-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#7A4300",
+   "bgHex": "#E0DACB",
+   "ratio": 5.73
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#7A4300",
+   "bgHex": "#F6F4EF",
+   "ratio": 7.26
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#7A4300",
+   "bgHex": "#FFFFFF",
+   "ratio": 7.98
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#7A4300",
+   "bgHex": "#F2F5EC",
+   "ratio": 7.24
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--stone-100",
+   "fgHex": "#7A4300",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.71
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--stone-200",
+   "fgHex": "#7A4300",
+   "bgHex": "#E0DACB",
+   "ratio": 5.73
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--forest-50",
+   "fgHex": "#7A4300",
+   "bgHex": "#EEF4EF",
+   "ratio": 7.16
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--forest-100",
+   "fgHex": "#7A4300",
+   "bgHex": "#D6E6DA",
+   "ratio": 6.16
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--sage-100",
+   "fgHex": "#7A4300",
+   "bgHex": "#E3EBD8",
+   "ratio": 6.52
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#EAF4EC",
+   "ratio": 7.09
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#FFF4E0",
+   "ratio": 7.33
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#FBEAE8",
+   "ratio": 6.86
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#E8F0F7",
+   "ratio": 6.93
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.71
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#7A4300",
+   "bgHex": "#FDF1DE",
+   "ratio": 7.15
+  },
+  {
+   "fg": "--color-flash-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#7A4300",
+   "bgHex": "#E0DACB",
+   "ratio": 5.73
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#B07A00",
+   "bgHex": "#F6F4EF",
+   "ratio": 3.39
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-bg-surface",
+   "fgHex": "#B07A00",
+   "bgHex": "#FFFFFF",
+   "ratio": 3.73
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#B07A00",
+   "bgHex": "#F2F5EC",
+   "ratio": 3.38
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--stone-100",
+   "fgHex": "#B07A00",
+   "bgHex": "#EFEBE2",
+   "ratio": 3.14
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--stone-200",
+   "fgHex": "#B07A00",
+   "bgHex": "#E0DACB",
+   "ratio": 2.68
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--forest-50",
+   "fgHex": "#B07A00",
+   "bgHex": "#EEF4EF",
+   "ratio": 3.34
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--forest-100",
+   "fgHex": "#B07A00",
+   "bgHex": "#D6E6DA",
+   "ratio": 2.88
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--sage-100",
+   "fgHex": "#B07A00",
+   "bgHex": "#E3EBD8",
+   "ratio": 3.04
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#B07A00",
+   "bgHex": "#EAF4EC",
+   "ratio": 3.31
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#B07A00",
+   "bgHex": "#FFF4E0",
+   "ratio": 3.42
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#B07A00",
+   "bgHex": "#FBEAE8",
+   "ratio": 3.2
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#B07A00",
+   "bgHex": "#E8F0F7",
+   "ratio": 3.24
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#B07A00",
+   "bgHex": "#EFEBE2",
+   "ratio": 3.14
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-promo-bg",
+   "fgHex": "#B07A00",
+   "bgHex": "#FDF1DE",
+   "ratio": 3.34
+  },
+  {
+   "fg": "--color-rating",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#B07A00",
+   "bgHex": "#E0DACB",
+   "ratio": 2.68
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#1B4B31",
+   "bgHex": "#F6F4EF",
+   "ratio": 9.11
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#1B4B31",
+   "bgHex": "#FFFFFF",
+   "ratio": 10.01
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#1B4B31",
+   "bgHex": "#F2F5EC",
+   "ratio": 9.08
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--stone-100",
+   "fgHex": "#1B4B31",
+   "bgHex": "#EFEBE2",
+   "ratio": 8.42
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--stone-200",
+   "fgHex": "#1B4B31",
+   "bgHex": "#E0DACB",
+   "ratio": 7.18
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--forest-50",
+   "fgHex": "#1B4B31",
+   "bgHex": "#EEF4EF",
+   "ratio": 8.97
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--forest-100",
+   "fgHex": "#1B4B31",
+   "bgHex": "#D6E6DA",
+   "ratio": 7.72
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--sage-100",
+   "fgHex": "#1B4B31",
+   "bgHex": "#E3EBD8",
+   "ratio": 8.17
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#1B4B31",
+   "bgHex": "#EAF4EC",
+   "ratio": 8.89
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#1B4B31",
+   "bgHex": "#FFF4E0",
+   "ratio": 9.19
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#1B4B31",
+   "bgHex": "#FBEAE8",
+   "ratio": 8.6
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#1B4B31",
+   "bgHex": "#E8F0F7",
+   "ratio": 8.7
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#1B4B31",
+   "bgHex": "#EFEBE2",
+   "ratio": 8.42
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#1B4B31",
+   "bgHex": "#FDF1DE",
+   "ratio": 8.97
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#1B4B31",
+   "bgHex": "#E0DACB",
+   "ratio": 7.18
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#245E3E",
+   "bgHex": "#F6F4EF",
+   "ratio": 6.96
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-bg-surface",
+   "fgHex": "#245E3E",
+   "bgHex": "#FFFFFF",
+   "ratio": 7.65
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#245E3E",
+   "bgHex": "#F2F5EC",
+   "ratio": 6.94
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--stone-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.43
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--stone-200",
+   "fgHex": "#245E3E",
+   "bgHex": "#E0DACB",
+   "ratio": 5.49
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--forest-50",
+   "fgHex": "#245E3E",
+   "bgHex": "#EEF4EF",
+   "ratio": 6.86
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--forest-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#D6E6DA",
+   "ratio": 5.9
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--sage-100",
+   "fgHex": "#245E3E",
+   "bgHex": "#E3EBD8",
+   "ratio": 6.24
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#EAF4EC",
+   "ratio": 6.79
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FFF4E0",
+   "ratio": 7.02
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FBEAE8",
+   "ratio": 6.57
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#E8F0F7",
+   "ratio": 6.64
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#EFEBE2",
+   "ratio": 6.43
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-promo-bg",
+   "fgHex": "#245E3E",
+   "bgHex": "#FDF1DE",
+   "ratio": 6.85
+  },
+  {
+   "fg": "--color-action-ghost-fg",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#245E3E",
+   "bgHex": "#E0DACB",
+   "ratio": 5.49
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#86B293",
+   "bgHex": "#F6F4EF",
+   "ratio": 2.17
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-bg-surface",
+   "fgHex": "#86B293",
+   "bgHex": "#FFFFFF",
+   "ratio": 2.39
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#86B293",
+   "bgHex": "#F2F5EC",
+   "ratio": 2.16
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--stone-100",
+   "fgHex": "#86B293",
+   "bgHex": "#EFEBE2",
+   "ratio": 2.01
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--stone-200",
+   "fgHex": "#86B293",
+   "bgHex": "#E0DACB",
+   "ratio": 1.71
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--forest-50",
+   "fgHex": "#86B293",
+   "bgHex": "#EEF4EF",
+   "ratio": 2.14
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--forest-100",
+   "fgHex": "#86B293",
+   "bgHex": "#D6E6DA",
+   "ratio": 1.84
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--sage-100",
+   "fgHex": "#86B293",
+   "bgHex": "#E3EBD8",
+   "ratio": 1.95
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#86B293",
+   "bgHex": "#EAF4EC",
+   "ratio": 2.12
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#86B293",
+   "bgHex": "#FFF4E0",
+   "ratio": 2.19
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#86B293",
+   "bgHex": "#FBEAE8",
+   "ratio": 2.05
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#86B293",
+   "bgHex": "#E8F0F7",
+   "ratio": 2.07
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#86B293",
+   "bgHex": "#EFEBE2",
+   "ratio": 2.01
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-promo-bg",
+   "fgHex": "#86B293",
+   "bgHex": "#FDF1DE",
+   "ratio": 2.14
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#86B293",
+   "bgHex": "#E0DACB",
+   "ratio": 1.71
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-bg-canvas",
+   "fgHex": "#9E978A",
+   "bgHex": "#F6F4EF",
+   "ratio": 2.64
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-bg-surface",
+   "fgHex": "#9E978A",
+   "bgHex": "#FFFFFF",
+   "ratio": 2.9
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-bg-subtle",
+   "fgHex": "#9E978A",
+   "bgHex": "#F2F5EC",
+   "ratio": 2.63
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--stone-100",
+   "fgHex": "#9E978A",
+   "bgHex": "#EFEBE2",
+   "ratio": 2.44
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--stone-200",
+   "fgHex": "#9E978A",
+   "bgHex": "#E0DACB",
+   "ratio": 2.08
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--forest-50",
+   "fgHex": "#9E978A",
+   "bgHex": "#EEF4EF",
+   "ratio": 2.6
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--forest-100",
+   "fgHex": "#9E978A",
+   "bgHex": "#D6E6DA",
+   "ratio": 2.23
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--sage-100",
+   "fgHex": "#9E978A",
+   "bgHex": "#E3EBD8",
+   "ratio": 2.37
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-status-success-bg",
+   "fgHex": "#9E978A",
+   "bgHex": "#EAF4EC",
+   "ratio": 2.57
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-status-warning-bg",
+   "fgHex": "#9E978A",
+   "bgHex": "#FFF4E0",
+   "ratio": 2.66
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-status-danger-bg",
+   "fgHex": "#9E978A",
+   "bgHex": "#FBEAE8",
+   "ratio": 2.49
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-status-info-bg",
+   "fgHex": "#9E978A",
+   "bgHex": "#E8F0F7",
+   "ratio": 2.52
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-status-neutral-bg",
+   "fgHex": "#9E978A",
+   "bgHex": "#EFEBE2",
+   "ratio": 2.44
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-promo-bg",
+   "fgHex": "#9E978A",
+   "bgHex": "#FDF1DE",
+   "ratio": 2.6
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#9E978A",
+   "bgHex": "#E0DACB",
+   "ratio": 2.08
+  }
+ ],
+ "inverse": [
+  {
+   "fg": "--color-action-primary-fg",
+   "bg": "--color-action-primary-bg",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#245E3E",
+   "ratio": 7.65
+  },
+  {
+   "fg": "--color-action-primary-fg",
+   "bg": "--color-action-primary-bg-pressed",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#1B4B31",
+   "ratio": 10.01
+  },
+  {
+   "fg": "--color-action-danger-fg",
+   "bg": "--color-action-danger-bg",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#B3362F",
+   "ratio": 6.03
+  },
+  {
+   "fg": "--color-promo-solid-fg",
+   "bg": "--color-promo-solid-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#E38E1E",
+   "ratio": 6.75
+  },
+  {
+   "fg": "--color-flash-solid-fg",
+   "bg": "--color-flash-solid-bg",
+   "fgHex": "#1C1A16",
+   "bgHex": "#E38E1E",
+   "ratio": 6.75
+  },
+  {
+   "fg": "--color-text-inverse",
+   "bg": "--color-bg-inverse",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#1C1A16",
+   "ratio": 17.37
+  },
+  {
+   "fg": "--color-text-inverse",
+   "bg": "--color-bg-scrim",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#73716D",
+   "ratio": 4.86
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-action-secondary-bg",
+   "fgHex": "#1B4B31",
+   "bgHex": "#EEF4EF",
+   "ratio": 8.97
+  },
+  {
+   "fg": "--color-action-secondary-fg",
+   "bg": "--color-action-secondary-bg-pressed",
+   "fgHex": "#1B4B31",
+   "bgHex": "#D6E6DA",
+   "ratio": 7.72
+  },
+  {
+   "fg": "--color-text-inverse",
+   "bg": "--color-dealer-ink",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#1F2A44",
+   "ratio": 14.26
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-dealer-ink",
+   "fgHex": "#86B293",
+   "bgHex": "#1F2A44",
+   "ratio": 5.98
+  },
+  {
+   "fg": "--color-dealer-accent",
+   "bg": "--color-dealer-ink-soft",
+   "fgHex": "#86B293",
+   "bgHex": "#2E3B5E",
+   "ratio": 4.62
+  },
+  {
+   "fg": "--forest-200",
+   "bg": "--color-action-primary-bg",
+   "fgHex": "#B1CFB9",
+   "bgHex": "#245E3E",
+   "ratio": 4.55
+  },
+  {
+   "fg": "--forest-100",
+   "bg": "--color-action-primary-bg",
+   "fgHex": "#D6E6DA",
+   "bgHex": "#245E3E",
+   "ratio": 5.9
+  },
+  {
+   "fg": "--color-action-primary-fg-disabled",
+   "bg": "--color-action-primary-bg-disabled",
+   "fgHex": "#9E978A",
+   "bgHex": "#E0DACB",
+   "ratio": 2.08
+  }
+ ],
+ "borders": [
+  {
+   "token": "--color-border-subtle",
+   "hex": "#E0DACB",
+   "onSurface": 1.39,
+   "onCanvas": 1.27
+  },
+  {
+   "token": "--color-border-default",
+   "hex": "#CBC5B8",
+   "onSurface": 1.72,
+   "onCanvas": 1.56
+  },
+  {
+   "token": "--color-border-strong",
+   "hex": "#938B7E",
+   "onSurface": 3.37,
+   "onCanvas": 3.06
+  },
+  {
+   "token": "--color-border-focus",
+   "hex": "#245E3E",
+   "onSurface": 7.65,
+   "onCanvas": 6.96
+  },
+  {
+   "token": "--stone-300",
+   "hex": "#CBC5B8",
+   "onSurface": 1.72,
+   "onCanvas": 1.56
+  },
+  {
+   "token": "--stone-400",
+   "hex": "#9E978A",
+   "onSurface": 2.9,
+   "onCanvas": 2.64
+  },
+  {
+   "token": "--stone-450",
+   "hex": "#938B7E",
+   "onSurface": 3.37,
+   "onCanvas": 3.06
+  }
+ ],
+ "stylePairs": [
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/flash-sale.tsx",
+   "line": 225,
+   "tag": "div",
+   "fgSrc": "style.color",
+   "fg": "var(--color-action-secondary-fg)",
+   "fgHex": "#6F8F7D",
+   "bgHex": "#EEF4EF",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": false,
+   "size": 12,
+   "weight": 600,
+   "large": false,
+   "opacity": 0.6,
+   "ratio": 3.2,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/flash-sale.tsx",
+   "line": 225,
+   "tag": "div",
+   "fgSrc": "style.color",
+   "fg": "var(--color-action-primary-fg)",
+   "fgHex": "#A7BFB2",
+   "bgHex": "#245E3E",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": false,
+   "size": 12,
+   "weight": 600,
+   "large": false,
+   "opacity": 0.6,
+   "ratio": 3.9,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/game/season-pass.tsx",
+   "line": 108,
+   "tag": "Text",
+   "fgSrc": "style.color",
+   "fg": "var(--honey-600)",
+   "fgHex": "#96650A",
+   "bgHex": "#EFEBE2",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": true,
+   "size": 13,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 4.24,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/game/season-pass.tsx",
+   "line": 116,
+   "tag": "Text",
+   "fgSrc": "style.color",
+   "fg": "var(--honey-600)",
+   "fgHex": "#96650A",
+   "bgHex": "#EFEBE2",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": true,
+   "size": 13,
+   "weight": 600,
+   "large": false,
+   "opacity": 1,
+   "ratio": 4.24,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 43,
+   "tag": "Star",
+   "fgSrc": "style.color",
+   "fg": "var(--color-rating)",
+   "fgHex": "#B07A00",
+   "bgHex": "#F6F4EF",
+   "bgKnown": false,
+   "bgGuess": "canvas",
+   "inherited": false,
+   "size": 14,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 3.39,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 43,
+   "tag": "Star",
+   "fgSrc": "style.color",
+   "fg": "var(--color-rating)",
+   "fgHex": "#B07A00",
+   "bgHex": "#FFFFFF",
+   "bgKnown": false,
+   "bgGuess": "surface",
+   "inherited": false,
+   "size": 14,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 3.73,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 258,
+   "tag": "Star",
+   "fgSrc": "style.color",
+   "fg": "var(--color-rating)",
+   "fgHex": "#B07A00",
+   "bgHex": "#FFFFFF",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": true,
+   "size": 14,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 3.73,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 492,
+   "tag": "button",
+   "fgSrc": "style.color",
+   "fg": "var(--color-rating)",
+   "fgHex": "#B07A00",
+   "bgHex": "#F6F4EF",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": false,
+   "size": 14,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 3.39,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 492,
+   "tag": "button",
+   "fgSrc": "style.color",
+   "fg": "var(--stone-200)",
+   "fgHex": "#E0DACB",
+   "bgHex": "#F6F4EF",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": false,
+   "size": 14,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 1.27,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/ui/product-tile.tsx",
+   "line": 183,
+   "tag": "span",
+   "fgSrc": "style.color",
+   "fg": "var(--color-rating)",
+   "fgHex": "#B07A00",
+   "bgHex": "#FFFFFF",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": true,
+   "size": 11,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 3.73,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/brand-view.tsx",
+   "line": 111,
+   "tag": "Badge",
+   "fgSrc": "style.color",
+   "fg": "var(--color-text-inverse)",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#EAF4EC",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": false,
+   "size": 12,
+   "weight": 600,
+   "large": false,
+   "opacity": 1,
+   "ratio": 1.13,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/staff.tsx",
+   "line": 204,
+   "tag": "button",
+   "fgSrc": "style.color",
+   "fg": "var(--color-text-inverse)",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#F6F4EF",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": false,
+   "size": 13,
+   "weight": 400,
+   "large": false,
+   "opacity": 1,
+   "ratio": 1.1,
+   "need": 4.5
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/storefront-view.tsx",
+   "line": 80,
+   "tag": "Badge",
+   "fgSrc": "style.color",
+   "fg": "var(--color-text-inverse)",
+   "fgHex": "#FFFFFF",
+   "bgHex": "#EAF4EC",
+   "bgKnown": true,
+   "bgGuess": null,
+   "inherited": false,
+   "size": 12,
+   "weight": 600,
+   "large": false,
+   "opacity": 1,
+   "ratio": 1.13,
+   "need": 4.5
+  }
+ ],
+ "lightUnknown": [
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/onboarding.tsx",
+   "line": 287,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.8
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 43,
+   "fg": "var(--stone-200)",
+   "opacity": 1,
+   "noAncestorBg": true
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/affiliate.tsx",
+   "line": 195,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/affiliate.tsx",
+   "line": 198,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.9
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/affiliate.tsx",
+   "line": 325,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.85
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/affiliate.tsx",
+   "line": 328,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/affiliate.tsx",
+   "line": 1060,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/affiliate.tsx",
+   "line": 1063,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.8,
+   "noAncestorBg": true
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/brand-story.tsx",
+   "line": 65,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/brand-story.tsx",
+   "line": 66,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.92
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/brand-story.tsx",
+   "line": 80,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.92
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 150,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 153,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.8
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 245,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.7
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 248,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 253,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.7
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 256,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 262,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.7
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 923,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.7
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 926,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 929,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.7
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 933,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.7
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 962,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 0.85
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/profile.tsx",
+   "line": 225,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/profile.tsx",
+   "line": 244,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/staff.tsx",
+   "line": 190,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  },
+  {
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/staff.tsx",
+   "line": 227,
+   "fg": "var(--color-text-inverse)",
+   "opacity": 1
+  }
+ ],
+ "unresolved": [
+  [
+   "inherit",
+   9
+  ]
+ ],
+ "twPairs": [
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/account-deletion-panel.tsx",
+   "line": 196,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-11 rounded-control bg-danger-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/config-item.tsx",
+   "line": 81,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] shrink-0 rounded-control bg-forest-600 px-3 py-1 text-sm text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-s…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/customer-refund-paid-dialog.tsx",
+   "line": 355,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] rounded-control bg-warning-fg px-4 text-sm font-medium text-stone-0 hover:brightness-90 disabled:cursor-not-allowed disabled:bg…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/dealer-claims-tab.tsx",
+   "line": 259,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "  rounded-control bg-info-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-50…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/gomdon-config-card.tsx",
+   "line": 255,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:t…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/loyalty-config-card.tsx",
+   "line": 212,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:t…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/order-detail-extras.tsx",
+   "line": 311,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] rounded-control bg-forest-600 px-4 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-sto…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/payout-admin-tab.tsx",
+   "line": 377,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "  rounded-control bg-info-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-50…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/pos-screen.tsx",
+   "line": 161,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "  rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-5…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/pos-screen.tsx",
+   "line": 240,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] w-full rounded-control bg-forest-600 px-4 py-2.5 text-sm font-semibold text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 d…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/ui.tsx",
+   "line": 80,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "  rounded-control bg-forest-600 px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone…"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/ui.tsx",
+   "line": 96,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 12,
+   "snippet": "  rounded-control bg-warning-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/ui.tsx",
+   "line": 103,
+   "prefix": "disabled",
+   "text": "stone-500",
+   "bg": "stone-200",
+   "ratio": 4.01,
+   "need": 4.5,
+   "size": 12,
+   "snippet": "  rounded-control bg-forest-600 px-3 py-1 text-xs font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500"
+  }
+ ],
+ "twLoose": [
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/confirm-dialog.tsx",
+   "line": 178,
+   "prefix": "(base)",
+   "text": "stone-0",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 1,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] rounded-control px-4 text-sm font-medium text-stone-0 disabled:cursor-not-allowed disabled:opacity-50  "
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/confirm-dialog.tsx",
+   "line": 178,
+   "prefix": "(base)",
+   "text": "stone-0",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 1.1,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "min-h-[44px] rounded-control px-4 text-sm font-medium text-stone-0 disabled:cursor-not-allowed disabled:opacity-50  "
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/dealer-price-history-tab.tsx",
+   "line": 74,
+   "prefix": "(base)",
+   "text": "stone-400",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 2.9,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "text-stone-400"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/dealer-price-history-tab.tsx",
+   "line": 74,
+   "prefix": "(base)",
+   "text": "stone-400",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 2.64,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "text-stone-400"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/reviews-tab.tsx",
+   "line": 96,
+   "prefix": "(base)",
+   "text": "honey-500",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 3.73,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "fill-current text-honey-500"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/reviews-tab.tsx",
+   "line": 96,
+   "prefix": "(base)",
+   "text": "honey-500",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 3.39,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "fill-current text-honey-500"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/reviews-tab.tsx",
+   "line": 96,
+   "prefix": "(base)",
+   "text": "stone-450",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 3.37,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "text-stone-450"
+  },
+  {
+   "zone": "web-admin",
+   "file": "apps/web/src/components/admin/reviews-tab.tsx",
+   "line": 96,
+   "prefix": "(base)",
+   "text": "stone-450",
+   "bg": "(không rõ: trắng/canvas)",
+   "ratio": 3.06,
+   "need": 4.5,
+   "size": 14,
+   "snippet": "text-stone-450"
+  }
+ ]
+}

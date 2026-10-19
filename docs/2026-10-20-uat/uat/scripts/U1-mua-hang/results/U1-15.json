@@ -1,0 +1,238 @@
+{
+  "id": "U1-15",
+  "browser": "chromium",
+  "role": "Khách quay lại hạng Mầm Xanh (đã có đơn)",
+  "journey": "XANH10: dưới đơn tối thiểu 250k; đơn lớn chạm trần 50k",
+  "steps": "(a) giỏ 199.000đ gõ XANH10; (b) giỏ VIS-SR-50 460k + FUWA-BT-500 135k = 595.000đ gõ XANH10 → COD",
+  "expected": "(a) \"Đơn tối thiểu 250.000đ để dùng mã này.\" (b) 10% = 59.500đ kẹp trần 50.000đ; tổng 545.000đ; DB couponDiscount 50000; điểm 2% × 545.000 = 10.900",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "(a) \"Đơn tối thiểu 250.000đ để dùng mã này.\"",
+      "ok": true,
+      "detail": "Đơn tối thiểu 250.000đ để dùng mã này."
+    },
+    {
+      "name": "(b) giảm 50.000đ (trần), ship 0, tổng 545.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfgdvaw00m414pjdxu3riap",
+              "cmvfgdvbe00mc14pj2jiltk5b"
+            ],
+            "subtotal": 595000,
+            "discount": 50000,
+            "shippingFee": 0,
+            "total": 545000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 595000,
+        "discount": 50000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 545000,
+        "pointsEarned": 10900,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfgdvaw00m414pjdxu3riap",
+            "variationId": "cmqfv2cky0003zxpl45lh4ggm",
+            "productId": "p-visante-serum",
+            "productName": "Serum dưỡng ẩm Visante",
+            "variationName": "50ml",
+            "slug": "serum-duong-am-visante",
+            "thumbnail": null,
+            "unitPrice": 460000,
+            "quantity": 1,
+            "stock": 30,
+            "weight": 130,
+            "total": 460000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          },
+          {
+            "id": "cmvfgdvbe00mc14pj2jiltk5b",
+            "variationId": "cmqfv2cmq0011zxpl67fkxph0",
+            "productId": "p-fuwa-bottle",
+            "productName": "Nước rửa bình sữa Fuwa3e",
+            "variationName": "500ml",
+            "slug": "nuoc-rua-binh-sua-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 135000,
+            "quantity": 1,
+            "stock": 130,
+            "weight": 540,
+            "total": 135000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "(b) điểm dự kiến 10.900",
+      "ok": true,
+      "detail": 10900
+    },
+    {
+      "name": "(b) DB: couponDiscount 50000, total 545000, pointsEarned 10900",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "(a)",
+      "data": {
+        "status": 400,
+        "body": {
+          "message": "Đơn tối thiểu 250.000đ để dùng mã này.",
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "snack": "zi_close_circle_solid\nĐơn tối thiểu 250.000đ để dùng mã này.",
+        "message": "Đơn tối thiểu 250.000đ để dùng mã này."
+      }
+    },
+    {
+      "label": "áp mã XANH10",
+      "data": {
+        "status": 201,
+        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã XANH10",
+        "couponCode": "XANH10",
+        "discount": 50000,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 595000,
+        "discount": 50000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 545000,
+        "pointsEarned": 10900
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-15b-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101982315",
+        "button": "Đặt hàng · 545.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-15b-placed.png"
+    },
+    {
+      "label": "(b) SQL đơn",
+      "data": {
+        "id": "cmvfge04a00mw14pj2y5xs57t",
+        "code": "TUBU2026101982315",
+        "userId": "u1_c15_gds5uvj",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "paymentStatus": "UNPAID",
+        "subtotal": 595000,
+        "discount": 50000,
+        "couponDiscount": 50000,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 545000,
+        "pointsEarned": 10900,
+        "pointsUsed": 0,
+        "couponCode": "XANH10",
+        "pancakeOrderId": "9200008",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-19T16:13:02.362Z",
+        "items": [
+          {
+            "sku": "FUWA-BT-500",
+            "quantity": 1,
+            "unitPrice": 135000,
+            "total": 135000,
+            "paidTotal": 123655,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "VIS-SR-50",
+            "quantity": 1,
+            "unitPrice": 460000,
+            "total": 460000,
+            "paidTotal": 421345,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [
+          {
+            "code": "XANH10",
+            "usedCount": 0,
+            "usageLimit": null
+          }
+        ],
+        "ledger": []
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:13:05.206Z"
+}

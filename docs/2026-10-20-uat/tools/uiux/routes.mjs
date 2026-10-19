@@ -1,6 +1,8 @@
-// Bảng route + persona + trạng thái cho bộ chụp màn hình A4. Nguồn route: apps/miniapp/src/components/app.tsx
+// Bản chép cho phiên UAT 2026-10-20 từ scripts/uiux/routes.mjs. Nguồn route: apps/miniapp/src/components/app.tsx
 // (react-router) và apps/web/src/app/**/page.tsx (Next App Router).
-const ALL = ['normal', 'empty', 'loading', 'error', 'long'];
+// Khác bản gốc: ALL bỏ 'long', thêm 'offline'; thêm các <Route> app.tsx mà bản gốc thiếu (group-buy/:id, points/scan,
+// hai route chuyển hướng /refill và /subscriptions).
+const ALL = ['normal', 'empty', 'loading', 'error', 'offline'];
 
 export const ADMIN_TABS = [
   'dashboard', 'dealers', 'dealerClaims', 'payouts', 'orders', 'returns', 'cashback', 'posCredits', 'users',
@@ -17,7 +19,9 @@ export function miniappRoutes({ product, brand }) {
     r('browse', '/browse'),
     r('browse-search', '/browse?q=nuoc', 'customer', ['normal', 'empty']),
     r('product-detail', `/product/${product}`),
+    r('product-notfound', '/product/khong-ton-tai-uat', 'customer', ['normal']),
     r('cart', '/cart'),
+    r('cart-empty-suggest', '/cart', 'customer-emptycart', ['normal']),
     r('checkout', '/checkout'),
     r('bank-payment', '/bank-payment/TUBU26100901'),
     r('orders', '/orders'),
@@ -30,6 +34,7 @@ export function miniappRoutes({ product, brand }) {
     r('post-detail', '/feed/post-1'),
     r('ai-advisor', '/ai-advisor'),
     r('group-buy', '/group-buy'),
+    r('group-buy-detail', '/group-buy/gb-1'),
     r('recycle', '/recycle'),
     r('recycle-rules', '/recycle/rules'),
     r('recycle-new', '/recycle/new'),
@@ -44,6 +49,7 @@ export function miniappRoutes({ product, brand }) {
     r('profile', '/profile'),
     r('loyalty', '/loyalty'),
     r('wallet', '/wallet'),
+    r('points-scan', '/points/scan'),
     r('addresses', '/addresses'),
     r('notifications', '/notifications'),
     r('affiliate', '/affiliate', 'ctv'),
@@ -65,6 +71,8 @@ export function miniappRoutes({ product, brand }) {
     r('staff', '/staff', 'staff'),
     r('my-payroll', '/my-payroll', 'staff'),
     r('not-found', '/khong-ton-tai', 'customer', ['normal']),
+    r('refill-redirect', '/refill', 'customer', ['normal']),
+    r('subscriptions-redirect', '/subscriptions', 'customer', ['normal']),
   ];
 }
 

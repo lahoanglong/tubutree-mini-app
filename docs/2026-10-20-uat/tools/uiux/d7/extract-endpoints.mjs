@@ -185,7 +185,7 @@ function visitFile(sf) {
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
       // miniapp: api.get<T>(url) ; web: apiFetch<T>(url, { method })
-      if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'api' && HTTP.has(callee.name.text)) {
+      if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && (callee.expression.text === 'api' || callee.expression.text === 'http') && HTTP.has(callee.name.text)) {
         const method = callee.name.text;
         const url = urlPattern(node.arguments[0]);
         let type = null;
@@ -215,7 +215,9 @@ function visitFile(sf) {
 
 for (const sf of program.getSourceFiles()) {
   if (sf.isDeclarationFile) continue;
-  if (!files.includes(sf.fileName.replace(/\//g, path.sep)) && !files.includes(sf.fileName)) continue;
+  // Bản D7: quét thêm client dùng chung packages/app-core/src/api (http.get<T>) mà web import (nhân sự, ca, lương).
+  const shared = /packages\/app-core\/src\/api\//.test(sf.fileName) && !/\.spec\.ts$/.test(sf.fileName);
+  if (!shared && !files.includes(sf.fileName.replace(/\//g, path.sep)) && !files.includes(sf.fileName)) continue;
   visitFile(sf);
 }
 

@@ -1,0 +1,123 @@
+{
+  "id": "U1-16",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Mã hết hạn / hết lượt / ngừng áp dụng / sai hạng / không tồn tại báo đúng chữ",
+  "steps": "Admin tạo qua POST /admin/coupons: U1EXP (lùi endAt về hôm qua), U1ONE (usageLimit 1, khách khác đã dùng), U1OFF (PATCH isActive=false), U1TIER (scope TIER CO_THU); khách mới giỏ 199k lần lượt gõ từng mã + U1KHONGCO",
+  "expected": "U1EXP \"Mã giảm giá đã hết hạn hoặc chưa hiệu lực.\"; U1ONE \"Mã giảm giá đã hết lượt sử dụng.\"; U1OFF \"Mã giảm giá đã ngừng áp dụng.\"; U1TIER \"Mã chỉ áp dụng cho hạng thành viên khác.\"; U1KHONGCO \"Mã giảm giá không tồn tại.\"; giỏ không gắn mã",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "U1EXPFNSV → \"Mã giảm giá đã hết hạn hoặc chưa hiệu lực.\" (API + snackbar)",
+      "ok": true,
+      "detail": {
+        "message": "Mã giảm giá đã hết hạn hoặc chưa hiệu lực.",
+        "snack": "Mã giảm giá đã hết hạn hoặc chưa hiệu lực."
+      }
+    },
+    {
+      "name": "U1ONEFNSV → \"Mã giảm giá đã hết lượt sử dụng.\" (API + snackbar)",
+      "ok": true,
+      "detail": {
+        "message": "Mã giảm giá đã hết lượt sử dụng.",
+        "snack": "Mã giảm giá đã hết lượt sử dụng."
+      }
+    },
+    {
+      "name": "U1OFFFNSV → \"Mã giảm giá đã ngừng áp dụng.\" (API + snackbar)",
+      "ok": true,
+      "detail": {
+        "message": "Mã giảm giá đã ngừng áp dụng.",
+        "snack": "Mã giảm giá đã ngừng áp dụng."
+      }
+    },
+    {
+      "name": "U1TIERFNSV → \"Mã chỉ áp dụng cho hạng thành viên khác.\" (API + snackbar)",
+      "ok": true,
+      "detail": {
+        "message": "Mã chỉ áp dụng cho hạng thành viên khác.",
+        "snack": "Mã chỉ áp dụng cho hạng thành viên khác."
+      }
+    },
+    {
+      "name": "U1KHONGCO → \"Mã giảm giá không tồn tại.\" (API + snackbar)",
+      "ok": true,
+      "detail": {
+        "message": "Mã giảm giá không tồn tại.",
+        "snack": "Mã giảm giá không tồn tại."
+      }
+    },
+    {
+      "name": "giỏ không gắn mã nào",
+      "ok": true,
+      "detail": {
+        "couponCode": null
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "khách khác dùng hết U1ONE",
+      "data": {
+        "order": "TUBU2026101987070",
+        "coupon": {
+          "code": "U1ONEFNSV",
+          "usedCount": 1,
+          "usageLimit": 1,
+          "perUserLimit": 1,
+          "endAt": "2026-10-29T16:14:19.711Z",
+          "isActive": true,
+          "redemptions": 1,
+          "claims": 0
+        }
+      }
+    },
+    {
+      "label": "U1EXPFNSV",
+      "data": {
+        "status": 400,
+        "message": "Mã giảm giá đã hết hạn hoặc chưa hiệu lực.",
+        "snackbar": "Mã giảm giá đã hết hạn hoặc chưa hiệu lực."
+      }
+    },
+    {
+      "label": "U1ONEFNSV",
+      "data": {
+        "status": 400,
+        "message": "Mã giảm giá đã hết lượt sử dụng.",
+        "snackbar": "Mã giảm giá đã hết lượt sử dụng."
+      }
+    },
+    {
+      "label": "U1OFFFNSV",
+      "data": {
+        "status": 400,
+        "message": "Mã giảm giá đã ngừng áp dụng.",
+        "snackbar": "Mã giảm giá đã ngừng áp dụng."
+      }
+    },
+    {
+      "label": "U1TIERFNSV",
+      "data": {
+        "status": 400,
+        "message": "Mã chỉ áp dụng cho hạng thành viên khác.",
+        "snackbar": "Mã chỉ áp dụng cho hạng thành viên khác."
+      }
+    },
+    {
+      "label": "U1KHONGCO",
+      "data": {
+        "status": 400,
+        "message": "Mã giảm giá không tồn tại.",
+        "snackbar": "Mã giảm giá không tồn tại."
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-16-coupon-errors.png"
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:14:33.251Z"
+}

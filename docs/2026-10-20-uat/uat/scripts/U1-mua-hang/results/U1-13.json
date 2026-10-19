@@ -1,0 +1,431 @@
+{
+  "id": "U1-13",
+  "browser": "chromium",
+  "role": "Khách mới (voucher chào mừng cấp lúc tạo tài khoản)",
+  "journey": "Voucher chào mừng ở đơn 1, WELCOME30 ở đơn 2 (luật A4: chấp nhận giảm hai lần), WELCOME30 lần 2 bị chặn",
+  "steps": "Đơn 1: giỏ 199.000đ → chọn \"Quà chào mừng thành viên mới\" từ ví → COD. Đơn 2: giỏ 210.000đ (FUWA-LD-2L) → gõ WELCOME30 → COD. Đơn 3: giỏ 210.000đ → gõ WELCOME30",
+  "expected": "Đơn 1: giảm 30.000đ, ship 0 (freeship đơn đầu), tổng 169.000đ. Đơn 2: giảm 30.000đ, không còn freeship đơn đầu → tiền hàng 210k ≥ 200k ngưỡng chung → ship 0, tổng 180.000đ. Đơn 3: \"Bạn đã dùng hết lượt cho mã này.\" DB: WELCOME-<id> usedCount 1/1, WELCOME30 1 lượt của khách",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "đơn 1: áp voucher chào mừng",
+      "ok": true,
+      "detail": "WELCOME-U1_C13_GCT7EUY"
+    },
+    {
+      "name": "đơn 1: giảm 30.000đ, ship 0, tổng 169.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfgcvgx00en14pjcxlc7ru0",
+              "cmvfgcvhd00ev14pj3vihaq4p"
+            ],
+            "subtotal": 199000,
+            "discount": 30000,
+            "shippingFee": 0,
+            "total": 169000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 199000,
+        "discount": 30000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 19000,
+        "total": 169000,
+        "pointsEarned": 3380,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfgcvgx00en14pjcxlc7ru0",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 199,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          },
+          {
+            "id": "cmvfgcvhd00ev14pj3vihaq4p",
+            "variationId": "cmqfv3q67002fcgcoxpqsxpb4",
+            "productId": "p-fuwa-glass",
+            "productName": "Nước lau kính enzyme Fuwa3e",
+            "variationName": "500ml",
+            "slug": "nuoc-lau-kinh-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 79000,
+            "quantity": 1,
+            "stock": 169,
+            "weight": 540,
+            "total": 79000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "DB đơn 1: couponCode WELCOME-…, total 169000, redemption 1",
+      "ok": true
+    },
+    {
+      "name": "đơn 2: WELCOME30 áp được (khách mới giảm lần hai — A4)",
+      "ok": true
+    },
+    {
+      "name": "đơn 2: giảm 30.000đ, ship 0 (210k ≥ 200k), tổng 180.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfgd20100fv14pjqn6b4lj7"
+            ],
+            "subtotal": 210000,
+            "discount": 30000,
+            "shippingFee": 0,
+            "total": 180000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 210000,
+        "discount": 30000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 180000,
+        "pointsEarned": 3600,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfgd20100fv14pjqn6b4lj7",
+            "variationId": "cmqfuw9k2000bw1vfnqnknvfc",
+            "productId": "p-fuwa-laundry",
+            "productName": "Nước giặt sinh học Fuwa3e",
+            "variationName": "2L",
+            "slug": "nuoc-giat-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 210000,
+            "quantity": 1,
+            "stock": 150,
+            "weight": 2100,
+            "total": 210000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "DB đơn 2: WELCOME30, couponDiscount 30000, total 180000",
+      "ok": true
+    },
+    {
+      "name": "đơn 3: \"Bạn đã dùng hết lượt cho mã này.\"",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "body": {
+          "message": "Bạn đã dùng hết lượt cho mã này.",
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "snack": "zi_close_circle_solid\nBạn đã dùng hết lượt cho mã này.",
+        "message": "Bạn đã dùng hết lượt cho mã này."
+      }
+    },
+    {
+      "name": "DB: WELCOME30 đúng 1 lượt của khách",
+      "ok": true,
+      "detail": {
+        "n": 1
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "cấp voucher chào mừng",
+      "data": {
+        "lane": 1,
+        "job": "VouchersService.grantWelcomeNow",
+        "ms": 818,
+        "result": true
+      }
+    },
+    {
+      "label": "áp mã Quà chào mừng thành viên mới",
+      "data": {
+        "status": 201,
+        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã WELCOME-U1_C13_GCT7EUY",
+        "couponCode": "WELCOME-U1_C13_GCT7EUY",
+        "discount": 30000,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 199000,
+        "discount": 30000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 19000,
+        "total": 169000,
+        "pointsEarned": 3380
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-13-o1-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101928741",
+        "button": "Đặt hàng · 169.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-13-o1-placed.png"
+    },
+    {
+      "label": "SQL đơn 1",
+      "data": {
+        "id": "cmvfgd0di00ff14pj65hppgao",
+        "code": "TUBU2026101928741",
+        "userId": "u1_c13_gct7euy",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "paymentStatus": "UNPAID",
+        "subtotal": 199000,
+        "discount": 30000,
+        "couponDiscount": 30000,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 169000,
+        "pointsEarned": 3380,
+        "pointsUsed": 0,
+        "couponCode": "WELCOME-U1_C13_GCT7EUY",
+        "pancakeOrderId": "9200002",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-19T16:12:16.038Z",
+        "items": [
+          {
+            "sku": "FUWA-DW-1L",
+            "quantity": 1,
+            "unitPrice": 120000,
+            "total": 120000,
+            "paidTotal": 101910,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 1,
+            "unitPrice": 79000,
+            "total": 79000,
+            "paidTotal": 67090,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [
+          {
+            "code": "WELCOME-U1_C13_GCT7EUY",
+            "usedCount": 1,
+            "usageLimit": 1
+          }
+        ],
+        "ledger": []
+      }
+    },
+    {
+      "label": "áp mã WELCOME30",
+      "data": {
+        "status": 201,
+        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã WELCOME30",
+        "couponCode": "WELCOME30",
+        "discount": 30000,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 210000,
+        "discount": 30000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 180000,
+        "pointsEarned": 3600
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-13-o2-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101966976",
+        "button": "Đặt hàng · 180.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-13-o2-placed.png"
+    },
+    {
+      "label": "SQL đơn 2",
+      "data": {
+        "id": "cmvfgd77b00gf14pjth66z2kq",
+        "code": "TUBU2026101966976",
+        "userId": "u1_c13_gct7euy",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "paymentStatus": "UNPAID",
+        "subtotal": 210000,
+        "discount": 30000,
+        "couponDiscount": 30000,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 180000,
+        "pointsEarned": 3600,
+        "pointsUsed": 0,
+        "couponCode": "WELCOME30",
+        "pancakeOrderId": "9200003",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-19T16:12:24.888Z",
+        "items": [
+          {
+            "sku": "FUWA-LD-2L",
+            "quantity": 1,
+            "unitPrice": 210000,
+            "total": 210000,
+            "paidTotal": 180000,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [
+          {
+            "code": "WELCOME30",
+            "usedCount": 0,
+            "usageLimit": null
+          }
+        ],
+        "ledger": []
+      }
+    },
+    {
+      "label": "đơn 3: WELCOME30 lần 2",
+      "data": {
+        "status": 400,
+        "body": {
+          "message": "Bạn đã dùng hết lượt cho mã này.",
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "snack": "zi_close_circle_solid\nBạn đã dùng hết lượt cho mã này.",
+        "message": "Bạn đã dùng hết lượt cho mã này."
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:12:30.050Z"
+}

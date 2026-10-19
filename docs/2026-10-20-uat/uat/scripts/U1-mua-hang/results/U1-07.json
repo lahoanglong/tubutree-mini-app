@@ -1,0 +1,303 @@
+{
+  "id": "U1-07",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Duyệt, tìm kiếm (có dấu/không dấu), lọc, sắp xếp",
+  "steps": "/browse → gõ \"mat ong\" → bấm \"Tìm “mat ong”\"; xoá → chọn danh mục \"Tẩy rửa sinh học\"; xoá danh mục → sắp xếp \"Giá tăng\"; Bộ lọc → \"Dưới 100k\" → \"Xem N sản phẩm\"",
+  "expected": "Tìm không dấu ra \"Mật ong rừng nguyên chất BH.Nong\"; danh mục chỉ ra SP thuộc danh mục đó (đối chiếu DB); \"Giá tăng\" theo giá bán tăng dần; lọc \"Dưới 100k\" chỉ ra SP giá < 100.000đ; số đếm khớp danh sách",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+    {
+      "name": "tìm không dấu \"mat ong\" ra Mật ong rừng nguyên chất BH.Nong",
+      "ok": true,
+      "detail": [
+        "Mật ong rừng nguyên chất BH.Nong"
+      ]
+    },
+    {
+      "name": "kết quả hiện trên màn",
+      "ok": true
+    },
+    {
+      "name": "danh mục: tập SP = DB (SP đang bán của danh mục)",
+      "ok": true,
+      "detail": {
+        "api": 6,
+        "db": 6
+      }
+    },
+    {
+      "name": "Giá tăng: giá đang bán (salePrice ?? basePrice, giá khách thấy) không giảm qua trang 1",
+      "ok": false,
+      "detail": [
+        "Nước rửa tay sinh học Fuwa3e 89000 > Cà phê sữa hoà tan Le Plateau (hộp 12) 75000",
+        "Cà phê phin giấy Le Plateau (hộp 10) 95000 > Son dưỡng gấc Visante 79000",
+        "Dầu dưỡng tóc bồ kết Pơ Lang 125000 > Dầu dừa ép lạnh Sokfram 110000",
+        "Dầu gội bạc hà mát lạnh Hector 135000 > Dầu gừng massage Pơ Lang 115000",
+        "Granola ngũ cốc hạt Sokfram 140000 > Sữa rửa mặt than tre Hector 119000",
+        "Xịt khoáng hoa hồng Pơ Lang 145000 > Nước tắm gội thảo dược cho bé Cobote 132000"
+      ]
+    },
+    {
+      "name": "lọc Dưới 100k: mọi SP giá < 100.000đ",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "số trên nút \"Xem N sản phẩm\" = total API",
+      "ok": true,
+      "detail": {
+        "seeText": "Xem 13 sản phẩm",
+        "total": 13
+      }
+    },
+    {
+      "name": "không lỗi API",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "evidence": [
+    {
+      "label": "GET /products tìm \"mat ong\"",
+      "data": {
+        "query": {
+          "page": "1",
+          "limit": "30",
+          "q": "mat ong"
+        },
+        "names": [
+          "Mật ong rừng nguyên chất BH.Nong"
+        ]
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-07-search.png"
+    },
+    {
+      "label": "danh mục Tẩy rửa sinh học: API vs DB",
+      "data": {
+        "query": {
+          "page": "1",
+          "limit": "30",
+          "category": "cat-cleaning"
+        },
+        "api": [
+          "Nước giặt sinh học Fuwa3e",
+          "Nước lau kính enzyme Fuwa3e",
+          "Nước lau sàn enzyme Fuwa3e",
+          "Nước rửa bình sữa Fuwa3e",
+          "Nước rửa chén sinh học Fuwa3e",
+          "Nước rửa tay sinh học Fuwa3e"
+        ],
+        "db": [
+          "Nước giặt sinh học Fuwa3e",
+          "Nước lau kính enzyme Fuwa3e",
+          "Nước lau sàn enzyme Fuwa3e",
+          "Nước rửa bình sữa Fuwa3e",
+          "Nước rửa chén sinh học Fuwa3e",
+          "Nước rửa tay sinh học Fuwa3e"
+        ]
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-07-category.png"
+    },
+    {
+      "label": "sắp xếp Giá tăng (trang 1)",
+      "data": {
+        "query": {
+          "page": "1",
+          "limit": "30",
+          "sort": "price_asc"
+        },
+        "list": [
+          {
+            "name": "Mặt nạ rau má phục hồi Visante",
+            "basePrice": 25000,
+            "salePrice": null,
+            "price": 25000
+          },
+          {
+            "name": "Gạo lứt huyết rồng Sokfram",
+            "basePrice": 75000,
+            "salePrice": null,
+            "price": 75000
+          },
+          {
+            "name": "Phấn rôm thảo dược Cobote",
+            "basePrice": 79000,
+            "salePrice": null,
+            "price": 79000
+          },
+          {
+            "name": "Nước lau kính enzyme Fuwa3e",
+            "basePrice": 79000,
+            "salePrice": null,
+            "price": 79000
+          },
+          {
+            "name": "Trà thảo mộc thanh nhiệt BH.Nong",
+            "basePrice": 85000,
+            "salePrice": null,
+            "price": 85000
+          },
+          {
+            "name": "Dầu tràm cho bé Cobote",
+            "basePrice": 89000,
+            "salePrice": null,
+            "price": 89000
+          },
+          {
+            "name": "Nước rửa tay sinh học Fuwa3e",
+            "basePrice": 89000,
+            "salePrice": null,
+            "price": 89000
+          },
+          {
+            "name": "Cà phê sữa hoà tan Le Plateau (hộp 12)",
+            "basePrice": 89000,
+            "salePrice": 75000,
+            "price": 75000
+          },
+          {
+            "name": "Tiêu đen Chư Sê BH.Nong",
+            "basePrice": 95000,
+            "salePrice": null,
+            "price": 95000
+          },
+          {
+            "name": "Cà phê phin giấy Le Plateau (hộp 10)",
+            "basePrice": 95000,
+            "salePrice": null,
+            "price": 95000
+          },
+          {
+            "name": "Son dưỡng gấc Visante",
+            "basePrice": 95000,
+            "salePrice": 79000,
+            "price": 79000
+          },
+          {
+            "name": "Lăn khử mùi thiên nhiên Hector",
+            "basePrice": 99000,
+            "salePrice": null,
+            "price": 99000
+          },
+          {
+            "name": "Bột rau má nguyên chất Sokfram",
+            "basePrice": 99000,
+            "salePrice": null,
+            "price": 99000
+          },
+          {
+            "name": "Dầu massage cho bé Cobote",
+            "basePrice": 109000,
+            "salePrice": null,
+            "price": 109000
+          },
+          {
+            "name": "Tinh dầu sả chanh Pơ Lang",
+            "basePrice": 110000,
+            "salePrice": null,
+            "price": 110000
+          },
+          {
+            "name": "Hạt chia Úc Sokfram",
+            "basePrice": 115000,
+            "salePrice": null,
+            "price": 115000
+          }
+        ],
+        "inversions": [
+          "Nước rửa tay sinh học Fuwa3e 89000 > Cà phê sữa hoà tan Le Plateau (hộp 12) 75000",
+          "Cà phê phin giấy Le Plateau (hộp 10) 95000 > Son dưỡng gấc Visante 79000",
+          "Dầu dưỡng tóc bồ kết Pơ Lang 125000 > Dầu dừa ép lạnh Sokfram 110000",
+          "Dầu gội bạc hà mát lạnh Hector 135000 > Dầu gừng massage Pơ Lang 115000",
+          "Granola ngũ cốc hạt Sokfram 140000 > Sữa rửa mặt than tre Hector 119000",
+          "Xịt khoáng hoa hồng Pơ Lang 145000 > Nước tắm gội thảo dược cho bé Cobote 132000"
+        ]
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-07-sort-price-asc.png"
+    },
+    {
+      "label": "lọc Dưới 100k",
+      "data": {
+        "button": "Xem 13 sản phẩm",
+        "query": {
+          "page": "1",
+          "limit": "30",
+          "sort": "price_asc",
+          "maxPrice": "100000"
+        },
+        "total": 13,
+        "items": [
+          {
+            "name": "Mặt nạ rau má phục hồi Visante",
+            "price": 25000
+          },
+          {
+            "name": "Gạo lứt huyết rồng Sokfram",
+            "price": 75000
+          },
+          {
+            "name": "Phấn rôm thảo dược Cobote",
+            "price": 79000
+          },
+          {
+            "name": "Nước lau kính enzyme Fuwa3e",
+            "price": 79000
+          },
+          {
+            "name": "Trà thảo mộc thanh nhiệt BH.Nong",
+            "price": 85000
+          },
+          {
+            "name": "Dầu tràm cho bé Cobote",
+            "price": 89000
+          },
+          {
+            "name": "Nước rửa tay sinh học Fuwa3e",
+            "price": 89000
+          },
+          {
+            "name": "Cà phê sữa hoà tan Le Plateau (hộp 12)",
+            "price": 75000
+          },
+          {
+            "name": "Tiêu đen Chư Sê BH.Nong",
+            "price": 95000
+          },
+          {
+            "name": "Cà phê phin giấy Le Plateau (hộp 10)",
+            "price": 95000
+          },
+          {
+            "name": "Son dưỡng gấc Visante",
+            "price": 79000
+          },
+          {
+            "name": "Lăn khử mùi thiên nhiên Hector",
+            "price": 99000
+          },
+          {
+            "name": "Bột rau má nguyên chất Sokfram",
+            "price": 99000
+          }
+        ]
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-07-filter-under-100k.png"
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:07:43.771Z"
+}

@@ -1,0 +1,495 @@
+[
+  {
+    "id": "U4-05",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Đổi rác: mang tới đại lý (carton + nilon)",
+    "steps": "/recycle → \"Đổi rác ngay\" → carton +3, nilon +2 → Tiếp tục → \"Mang tới điểm nhận\" → \"Chọn điểm nhận\" → Đại lý Xanh Quận 3 → \"Chọn điểm này\" → tick đồng ý → \"Tạo yêu cầu\"",
+    "expected": "Tạo yêu cầu OPEN mã TR-xxxxx tại đại lý, ước tính 3×1.000 + 2×1.000 = 5.000 điểm (bảng ×1.000); chưa cộng điểm vào sổ",
+    "actual": "Tạo TR-5SGCJ OPEN tại đại lý, ước tính 5000 điểm, lines [{\"item\":\"wi-bubble-wrap\",\"qty\":2},{\"item\":\"wi-carton\",\"qty\":3}].",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-05-step1.png",
+      "shots/U4-doi-rac-cong-dong-game/U4-05-created.png",
+      "SQL waste_requests → {\"id\":\"cmvfg8f2f0014hoebpv7fk5sb\",\"code\":\"TR-5SGCJ\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvfg8bas000mhoebrp2tgp9d\",\"estimatedPoints\":5000,\"estimatedDrops\":0,\"trackingCode\":null,\"carrier\":null,\"lines\":[{\"item\":\"wi-bubble-wrap\",\"qty\":2},{\"item\":\"wi-ca…"
+    ],
+    "checks": [
+      {
+        "name": "Bước 1 hiện \"Ước tính 5.000 điểm\"",
+        "ok": true
+      },
+      {
+        "name": "Đại lý chọn được (đủ món)",
+        "ok": true
+      },
+      {
+        "name": "POST /waste/requests → 201",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "code": "TR-5SGCJ"
+        }
+      },
+      {
+        "name": "DB: OPEN, DROP_OFF, điểm = đại lý, ước tính 5.000",
+        "ok": true,
+        "detail": {
+          "id": "cmvfg8f2f0014hoebpv7fk5sb",
+          "code": "TR-5SGCJ",
+          "method": "DROP_OFF",
+          "status": "OPEN",
+          "pointId": "cmvfg8bas000mhoebrp2tgp9d",
+          "estimatedPoints": 5000,
+          "estimatedDrops": 0,
+          "trackingCode": null,
+          "carrier": null,
+          "lines": [
+            {
+              "item": "wi-bubble-wrap",
+              "qty": 2
+            },
+            {
+              "item": "wi-carton",
+              "qty": 3
+            }
+          ]
+        }
+      },
+      {
+        "name": "Mã dạng TR-XXXXX",
+        "ok": true,
+        "detail": "TR-5SGCJ"
+      },
+      {
+        "name": "Sổ điểm: chưa có dòng RECYCLE (chỉ cộng khi nơi nhận xác nhận)",
+        "ok": true,
+        "detail": {
+          "n": 0
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-06",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Đổi rác: chọn sai điểm nhận cho hộp sữa + vỏ chai Tubu",
+    "steps": "/recycle/new: hộp sữa +12, vỏ chai Tubu +2 → Tiếp tục → Mang tới điểm nhận → Chọn điểm nhận → bấm Đại lý Xanh Quận 3; gọi thẳng POST /waste/requests pointId=đại lý",
+    "expected": "Thẻ đại lý ghi \"Không nhận\" cạnh hộp sữa và vỏ chai Tubu, ô đại lý bị khoá, nút \"Chọn điểm này\" tắt; API trả 409, không tạo yêu cầu",
+    "actual": "UI khoá đại lý (\"Điểm này không nhận…\"); API → 409 \"Điểm nhận này không nhận: Vỏ hộp sữa sạch\" / 409.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-06-wrong-point.png",
+      "POST /waste/requests {pointId: đại lý, milk 10} → 409 Điểm nhận này không nhận: Vỏ hộp sữa sạch",
+      "SELECT count(*) FROM waste_requests WHERE userId=uat_returning: 2 → 2"
+    ],
+    "checks": [
+      {
+        "name": "Thẻ đại lý ghi \"Không nhận\" cạnh hộp sữa và vỏ chai Tubu",
+        "ok": true,
+        "detail": "Đại lý Xanh Quận 3 Đại lý 45 Võ Văn Tần, Phường Tân Định, Thành phố Hồ Chí Minh Đang đóng Thùng carton cũ Nilon chống sốc Vỏ hộp sữa sạch Không nhận Vỏ chai, hộp Tubu Tree Không nhận"
+      },
+      {
+        "name": "Ô chọn đại lý bị khoá (aria-disabled=true)",
+        "ok": true,
+        "detail": "true"
+      },
+      {
+        "name": "Bấm đại lý: nút \"Chọn điểm này\" vẫn tắt",
+        "ok": true
+      },
+      {
+        "name": "Chọn kho HCMC: nút \"Chọn điểm này\" bật",
+        "ok": true
+      },
+      {
+        "name": "API hộp sữa tại đại lý → 409",
+        "ok": true,
+        "detail": {
+          "status": 409,
+          "msg": "Điểm nhận này không nhận: Vỏ hộp sữa sạch"
+        }
+      },
+      {
+        "name": "API vỏ chai Tubu tại đại lý → 409",
+        "ok": true,
+        "detail": {
+          "status": 409,
+          "msg": "Điểm nhận này không nhận: Vỏ chai, hộp Tubu Tree"
+        }
+      },
+      {
+        "name": "DB: không thêm yêu cầu",
+        "ok": true,
+        "detail": {
+          "before": 2,
+          "after": 2
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-07",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Đổi rác: hộp sữa + vỏ chai Tubu mang tới kho HCMC",
+    "steps": "Tiếp U4-06: chọn \"Kho Tubu Tree HCM\" → \"Chọn điểm này\" → tick đồng ý → \"Tạo yêu cầu\"",
+    "expected": "Tạo yêu cầu OPEN tại kho, ước tính floor(12/5)×1.000 + 2×2.000 = 6.000 điểm, 4 giọt nước",
+    "actual": "TR-RKRFX OPEN tại kho, ước tính 6000 điểm, 4 giọt.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-07-created-warehouse.png",
+      "SQL → {\"id\":\"cmvfg8hwl001fhoeb6z8jdt1f\",\"code\":\"TR-RKRFX\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvfg8bah000hhoebm7hp8m2q\",\"estimatedPoints\":6000,\"estimatedDrops\":4,\"trackingCode\":null,\"carrier\":null,\"lines\":[{\"item\":\"wi-milk-carton\",\"qty\":12},{\"item\":\"wi-t…"
+    ],
+    "checks": [
+      {
+        "name": "POST /waste/requests → 201",
+        "ok": true,
+        "detail": {
+          "status": 201
+        }
+      },
+      {
+        "name": "DB: OPEN tại kho, 6.000 điểm, 4 giọt",
+        "ok": true,
+        "detail": {
+          "id": "cmvfg8hwl001fhoeb6z8jdt1f",
+          "code": "TR-RKRFX",
+          "method": "DROP_OFF",
+          "status": "OPEN",
+          "pointId": "cmvfg8bah000hhoebm7hp8m2q",
+          "estimatedPoints": 6000,
+          "estimatedDrops": 4,
+          "trackingCode": null,
+          "carrier": null,
+          "lines": [
+            {
+              "item": "wi-milk-carton",
+              "qty": 12
+            },
+            {
+              "item": "wi-tubu-bottle",
+              "qty": 2
+            }
+          ]
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-08",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Đổi rác: gửi kiện về kho (MAIL_IN) + nhập mã vận đơn",
+    "steps": "API preview MAIL_IN carton 10 (dưới tối thiểu) và tạo thiếu 2 ô đồng ý; UI /recycle/new carton +15 → \"Gửi về kho Tubu HCM\" → tick 3 ô → Tạo yêu cầu → nhập Hãng \"GHTK\", Mã vận đơn → \"Đã gửi\"",
+    "expected": "Dưới 15.000 điểm: chặn BELOW_MIN; thiếu đồng ý: 400; đủ: yêu cầu OPEN 15.000 điểm; nhập vận đơn → IN_TRANSIT, lưu mã",
+    "actual": "Preview carton 10 → BELOW_MIN; thiếu đồng ý → 400; TR-42RNG tạo 15.000 điểm, sau \"Đã gửi\" status=IN_TRANSIT.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-08-mailin-created.png",
+      "shots/U4-doi-rac-cong-dong-game/U4-08-mailin-tracking.png",
+      "POST /waste/preview MAIL_IN carton10 → blocks [{\"code\":\"BELOW_MIN\",\"missingPoints\":5000}]",
+      "SQL → {\"id\":\"cmvfg8ju2001thoeb7p44kpxd\",\"code\":\"TR-42RNG\",\"method\":\"MAIL_IN\",\"status\":\"IN_TRANSIT\",\"pointId\":\"cmvfg8bah000hhoebm7hp8m2q\",\"estimatedPoints\":15000,\"estimatedDrops\":0,\"trackingCode\":\"GHTKUATWASTE0001\",\"carrier\":\"GHTK\",\"lines\":[{\"item\":\"wi-carton\",\"qty\":…"
+    ],
+    "checks": [
+      {
+        "name": "Preview carton 10 MAIL_IN → block BELOW_MIN thiếu 5.000",
+        "ok": true,
+        "detail": [
+          {
+            "code": "BELOW_MIN",
+            "missingPoints": 5000
+          }
+        ]
+      },
+      {
+        "name": "Tạo MAIL_IN thiếu 2 ô đồng ý → 400",
+        "ok": true,
+        "detail": {
+          "status": 400,
+          "msg": "Bạn cần đồng ý quy tắc đóng gói và cam kết đã trả đủ cước để gửi về kho"
+        }
+      },
+      {
+        "name": "UI tạo MAIL_IN → 201",
+        "ok": true,
+        "detail": {
+          "status": 201
+        }
+      },
+      {
+        "name": "DB: OPEN, MAIL_IN, kho, 15.000 điểm",
+        "ok": true,
+        "detail": {
+          "id": "cmvfg8ju2001thoeb7p44kpxd",
+          "code": "TR-42RNG",
+          "method": "MAIL_IN",
+          "status": "OPEN",
+          "pointId": "cmvfg8bah000hhoebm7hp8m2q",
+          "estimatedPoints": 15000,
+          "estimatedDrops": 0,
+          "trackingCode": null,
+          "carrier": null,
+          "lines": [
+            {
+              "item": "wi-carton",
+              "qty": 15
+            }
+          ]
+        }
+      },
+      {
+        "name": "PUT tracking → 200",
+        "ok": true,
+        "detail": 200
+      },
+      {
+        "name": "DB: IN_TRANSIT, carrier GHTK, mã vận đơn lưu",
+        "ok": true,
+        "detail": {
+          "id": "cmvfg8ju2001thoeb7p44kpxd",
+          "code": "TR-42RNG",
+          "method": "MAIL_IN",
+          "status": "IN_TRANSIT",
+          "pointId": "cmvfg8bah000hhoebm7hp8m2q",
+          "estimatedPoints": 15000,
+          "estimatedDrops": 0,
+          "trackingCode": "GHTKUATWASTE0001",
+          "carrier": "GHTK",
+          "lines": [
+            {
+              "item": "wi-carton",
+              "qty": 15
+            }
+          ]
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-09",
+    "role": "KHÁCH (uat_new)",
+    "journey": "Đổi rác: sửa món của yêu cầu",
+    "steps": "API tạo DROP_OFF đại lý carton 2; UI /recycle/r/:id → \"Sửa món\" → carton +2 → \"Lưu thay đổi\"; sửa yêu cầu MAIL_IN đã có vận đơn (PATCH)",
+    "expected": "Yêu cầu OPEN được sửa: carton 4, ước tính 4.000, có sự kiện REQUEST_EDITED; yêu cầu đã nhập vận đơn không sửa được (409)",
+    "actual": "UI sửa → carton 4, 4000 điểm; sửa yêu cầu đã gửi kiện → 409 \"Yêu cầu này không còn sửa được\".",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-09-edited.png",
+      "SQL waste_requests → {\"id\":\"cmvfg8ka10021hoeb1ukpebq3\",\"code\":\"TR-6QJMR\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvfg8bas000mhoebrp2tgp9d\",\"estimatedPoints\":4000,\"estimatedDrops\":0,\"trackingCode\":null,\"carrier\":nu…; waste_events REQUEST_EDITED=1"
+    ],
+    "checks": [
+      {
+        "name": "Tạo DROP_OFF carton 2 → 201",
+        "ok": true,
+        "detail": {
+          "status": 201
+        }
+      },
+      {
+        "name": "PATCH /waste/requests/:id → 200",
+        "ok": true,
+        "detail": 200
+      },
+      {
+        "name": "DB: carton 4, ước tính 4.000",
+        "ok": true,
+        "detail": {
+          "id": "cmvfg8ka10021hoeb1ukpebq3",
+          "code": "TR-6QJMR",
+          "method": "DROP_OFF",
+          "status": "OPEN",
+          "pointId": "cmvfg8bas000mhoebrp2tgp9d",
+          "estimatedPoints": 4000,
+          "estimatedDrops": 0,
+          "trackingCode": null,
+          "carrier": null,
+          "lines": [
+            {
+              "item": "wi-carton",
+              "qty": 4
+            }
+          ]
+        }
+      },
+      {
+        "name": "waste_events: có REQUEST_EDITED",
+        "ok": true,
+        "detail": {
+          "n": 1
+        }
+      },
+      {
+        "name": "Sửa MAIL_IN đã có vận đơn → 409",
+        "ok": true,
+        "detail": {
+          "status": 409,
+          "msg": "Yêu cầu này không còn sửa được"
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-10",
+    "role": "KHÁCH (uat_new, uat_returning)",
+    "journey": "Đổi rác: huỷ yêu cầu",
+    "steps": "UI /recycle/r/:id (yêu cầu U4-09) → \"Huỷ yêu cầu\" → \"Xác nhận huỷ\"; API huỷ yêu cầu MAIL_IN đang IN_TRANSIT",
+    "expected": "Yêu cầu OPEN → CANCELLED, trả lại phần trần đã giữ; yêu cầu đã gửi kiện không huỷ được (409)",
+    "actual": "UI huỷ → CANCELLED; pointsMonthRemaining=60000; huỷ yêu cầu đã gửi kiện → 409 \"Yêu cầu này không còn huỷ được\".",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-10-cancelled.png"
+    ],
+    "checks": [
+      {
+        "name": "POST cancel → 200",
+        "ok": true,
+        "detail": 200
+      },
+      {
+        "name": "DB: CANCELLED",
+        "ok": true,
+        "detail": "CANCELLED"
+      },
+      {
+        "name": "Preview: còn đủ 60.000 điểm tháng (phần giữ đã trả)",
+        "ok": true,
+        "detail": 60000
+      },
+      {
+        "name": "Huỷ MAIL_IN IN_TRANSIT → 409",
+        "ok": true,
+        "detail": {
+          "status": 409,
+          "msg": "Yêu cầu này không còn huỷ được"
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-11",
+    "role": "KHÁCH (uat_new)",
+    "journey": "Đổi rác: trần ngày, trần tháng, tối đa 3 yêu cầu mở",
+    "steps": "Preview DROP_OFF carton 11 tại đại lý; preview MAIL_IN carton 30 + vỏ chai 20; preview vỏ chai 21; tạo 3 yêu cầu (kho carton 1, đại lý nilon 1, đại lý carton 1) rồi yêu cầu thứ 4",
+    "expected": "Carton/ngày 10 → ITEM_DAY_CAP; 70.000 > 60.000 điểm/tháng → POINTS_MONTH_CAP; vỏ chai/tháng 20 → ITEM_MONTH_CAP; yêu cầu thứ 4 → 409 MAX_OPEN",
+    "actual": "day=ITEM_DAY_CAP, month=POINTS_MONTH_CAP,NEED_PROVINCE, item month=ITEM_MONTH_CAP,NEED_PROVINCE; thứ 4 → 409 \"Bạn đang có 3 yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm\".",
+    "evidence": [
+      "preview blocks: {\"day\":[{\"code\":\"ITEM_DAY_CAP\",\"itemId\":\"wi-carton\"}],\"month\":[{\"code\":\"POINTS_MONTH_CAP\",\"pointsRemaining\":60000},{\"code\":\"NEED_PROVINCE\"}],\"bottle\":[{\"code\":\"ITEM_MONTH_CAP\",\"itemId\":\"wi-tubu-bottle\"},{\"code\":\"NEED_PROVINCE\"}]}",
+      "SQL count yêu cầu mở uat_new = 3"
+    ],
+    "checks": [
+      {
+        "name": "carton 11 DROP_OFF → ITEM_DAY_CAP",
+        "ok": true,
+        "detail": [
+          {
+            "code": "ITEM_DAY_CAP",
+            "itemId": "wi-carton"
+          }
+        ]
+      },
+      {
+        "name": "70.000 điểm MAIL_IN → POINTS_MONTH_CAP",
+        "ok": true,
+        "detail": {
+          "est": 70000,
+          "blocks": [
+            {
+              "code": "POINTS_MONTH_CAP",
+              "pointsRemaining": 60000
+            },
+            {
+              "code": "NEED_PROVINCE"
+            }
+          ]
+        }
+      },
+      {
+        "name": "vỏ chai 21 → ITEM_MONTH_CAP",
+        "ok": true,
+        "detail": [
+          {
+            "code": "ITEM_MONTH_CAP",
+            "itemId": "wi-tubu-bottle"
+          },
+          {
+            "code": "NEED_PROVINCE"
+          }
+        ]
+      },
+      {
+        "name": "3 yêu cầu đầu → 201",
+        "ok": true,
+        "detail": [
+          {
+            "status": 201,
+            "id": "cmvfg8m34002mhoeb2t2gd1ta",
+            "code": "TR-YBFNG"
+          },
+          {
+            "status": 201,
+            "id": "cmvfg8m3a002shoeb2nj7v54k",
+            "code": "TR-CYWXS"
+          },
+          {
+            "status": 201,
+            "id": "cmvfg8m3h002yhoeby6qqkeiu",
+            "code": "TR-3BBMV"
+          }
+        ]
+      },
+      {
+        "name": "yêu cầu thứ 4 → 409 tối đa 3",
+        "ok": true,
+        "detail": {
+          "status": 409,
+          "msg": "Bạn đang có 3 yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm"
+        }
+      },
+      {
+        "name": "DB: đúng 3 yêu cầu mở",
+        "ok": true,
+        "detail": {
+          "n": 3
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-12",
+    "role": "KHÁCH chưa có SĐT (uat_new_nophone), khách vãng lai",
+    "journey": "Đổi rác: chỉ người có tài khoản + SĐT tham gia",
+    "steps": "GET /waste/me và POST /waste/requests bằng uat_new_nophone; POST /auth/guest rồi POST /waste/requests; Mini App mở /recycle bằng guest",
+    "expected": "NEED_PHONE / GUEST, tạo yêu cầu → 403; khách vãng lai thấy thẻ xin đăng nhập",
+    "actual": "nophone NEED_PHONE, tạo → 403 \"Bạn cần chia sẻ số điện thoại để dùng Đổi rác lấy quà.\"; guest tạo → 403.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-12-guest-recycle.png"
+    ],
+    "checks": [
+      {
+        "name": "nophone: eligibility NEED_PHONE",
+        "ok": true,
+        "detail": "NEED_PHONE"
+      },
+      {
+        "name": "nophone: tạo → 403",
+        "ok": true,
+        "detail": {
+          "status": 403,
+          "msg": "Bạn cần chia sẻ số điện thoại để dùng Đổi rác lấy quà."
+        }
+      },
+      {
+        "name": "guest: tạo → 403",
+        "ok": true,
+        "detail": {
+          "guestLogin": 200,
+          "status": 403
+        }
+      },
+      {
+        "name": "guest: trang /recycle mời đăng nhập, không có nút \"Đổi rác ngay\"",
+        "ok": true,
+        "detail": "Đổi rác lấy quà Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác Chia sẻ số điện thoại"
+      }
+    ],
+    "status": "PASS"
+  }
+]

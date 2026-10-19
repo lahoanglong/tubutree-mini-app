@@ -47,7 +47,7 @@ export function loadEndpoints(file) {
   const raw = JSON.parse(fs.readFileSync(path.join(here, '..', 'generated', file), 'utf8'));
   const list = [];
   for (const e of raw) {
-    const p = e.path.replace(/:p\d+$/, '').replace(/\/+$/, '') || '/';
+    const p = e.path.replace(/(?<!\/):p\d+$/, '').replace(/\/+$/, '') || '/'; // UAT: chỉ bỏ `:pN` dính đuôi (query nối biến), giữ `/:p0` là tham số path
     list.push({ ...e, path: p, ...compile(p) });
   }
   return list;
@@ -113,7 +113,8 @@ export class ApiRouter {
    * @param {(ctx)=>any} [o.curated]  fixture tay: trả undefined để rơi xuống bước sau
    * @param {boolean} [o.web]
    */
-  constructor({ state, session, endpoints, curated, web = false, hostAllow = ['localhost', '127.0.0.1'] }) {
+  constructor({ state, session, endpoints, curated, web = false, hostAllow = ['localhost', '127.0.0.1'], products = [] }) {
+    this.products = products;
     this.state = state;
     this.session = session;
     this.endpoints = endpoints;
@@ -244,7 +245,7 @@ export class ApiRouter {
     }
     if (hit && hit.e.schema.k !== 'any') {
       const { fab } = createFabricator({ state: this.state, seed: p });
-      return send(200, fab(hit.e.schema, '', { depth: 0, index: 0, parentKey: '', path: [] }), 'fab');
+      return send(200, realism(p, fab(hit.e.schema, '', { depth: 0, index: 0, parentKey: '', path: [] }), this.products), 'fab');
     }
     this.unmocked.add(`GET ${p}`);
     return send(404, { statusCode: 404, error: 'UIUX_UNMOCKED', message: `[uiux] chưa mock GET ${p}` }, 'unmocked');
@@ -260,6 +261,59 @@ export class ApiRouter {
     for (const r of this.pending) r.abort('aborted').catch(() => undefined);
     this.pending.clear();
   }
+}
+
+// UAT: dữ liệu giả của đơn/thanh toán dựng theo kiểu TS cho ra tổ hợp không thể có (manualHandling luôn true, 68 món,
+// "Nhãn xanh" là tên ngân hàng, mọi khối hoàn tiền cùng lúc) nên che mất nút "Thanh toán ngay" và làm rối chi tiết đơn.
+// Sửa cho nhất quán theo luật đã chốt (tài khoản nhận Techcombank 8386790906) để chấm đúng các màn mua lõi.
+const FUTURE = () => new Date(Date.now() + 20 * 3_600_000).toISOString();
+function fixOrder(o, i, products) {
+  const st = ['PENDING_PAYMENT', 'SHIPPING', 'DELIVERED', 'CANCELLED'][i % 4];
+  const p0 = products[i % products.length];
+  const p1 = products[(i + 1) % products.length];
+  const items = [p0, p1].slice(0, i % 2 === 0 ? 2 : 1).map((p, k) => {
+    const unit = p.salePrice ?? p.basePrice;
+    const qty = k + 1;
+    return { id: `oi-${i}-${k}`, variationId: `var-${p.id}`, productName: p.name, productSlug: p.slug, variationName: 'Chai 500ml', unitPrice: unit, quantity: qty, total: unit * qty, backorderedQty: 0, thumbnail: p.thumbnail, reviewable: st === 'DELIVERED' };
+  });
+  const subtotal = items.reduce((a, b) => a + b.total, 0);
+  const ship = subtotal >= 199000 ? 0 : 19000;
+  Object.assign(o, {
+    type: 'RETAIL',
+    status: st,
+    paymentMethod: i === 0 ? 'BANK_TRANSFER' : 'COD',
+    paymentStatus: st === 'DELIVERED' ? 'PAID' : 'UNPAID',
+    manualHandling: false,
+    paymentDeadline: st === 'PENDING_PAYMENT' ? FUTURE() : null,
+    canCancel: st === 'PENDING_PAYMENT',
+    items,
+    subtotal,
+    discount: 0, couponDiscount: 0, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0,
+    couponCode: null, groupCouponCode: null,
+    shippingFee: ship,
+    total: subtotal + ship,
+    pointsEarned: Math.floor(subtotal * 0.02 * 1.2),
+    invoiceStatus: 'NOT_REQUESTED', invoiceUrl: null,
+    siblings: [],
+    fulfilment: { kind: 'TUBU', name: 'Tubu Tree', phone: '0984606774' },
+    shippingPartner: st === 'SHIPPING' || st === 'DELIVERED' ? 'GHN' : null,
+    shippingCode: st === 'SHIPPING' || st === 'DELIVERED' ? `GHN${7000 + i}` : null,
+    shippingStatus: st === 'SHIPPING' ? 'delivering' : st === 'DELIVERED' ? 'delivered' : null,
+    shippingHistory: st === 'SHIPPING' || st === 'DELIVERED' ? o.shippingHistory : [],
+    deliveredAt: st === 'DELIVERED' ? o.deliveredAt : null,
+    hasRecyclingPickup: false, recyclingNote: null, note: null,
+    pointsReturnReversed: false,
+  });
+  return o;
+}
+export function realism(p, json, products) {
+  if (!json || typeof json !== 'object' || !products?.length) return json;
+  if (p === '/orders' && Array.isArray(json.data)) json.data.forEach((o, i) => fixOrder(o, i, products));
+  else if (/^\/orders\/[^/]+$/.test(p) && json.code && Array.isArray(json.items)) fixOrder(json, 0, products);
+  else if (/^\/payments\/bank-qr\//.test(p)) {
+    Object.assign(json, { amount: 798000, paymentStatus: 'UNPAID', paymentDeadline: FUTURE(), memo: json.orderCode ?? 'TUBU26100901', bank: { bin: '970407', name: 'Techcombank', accountNo: '8386790906', accountName: 'CONG TY TNHH TUBU TREE' } });
+  } else if (/^\/orders\/me\/(refunds|returns)$/.test(p)) return Array.isArray(json) ? [] : { ...json, data: [] };
+  return json;
 }
 
 function safeJson(s) {

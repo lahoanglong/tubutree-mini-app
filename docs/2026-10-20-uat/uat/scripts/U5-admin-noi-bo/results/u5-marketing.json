@@ -1,0 +1,70 @@
+[
+  {
+    "id": "U5-30",
+    "role": "MARKETING",
+    "journey": "Tạo lô thẻ hộp hàng sàn (Voucher → Thẻ hộp hàng sàn)",
+    "steps": "Tiền tố UATL5, 5 thẻ, Giảm tiền 30.000đ, đơn tối thiểu 199.000đ, hết hạn hôm nay+60 ngày, \"Chỉ khách mới\" → \"Tạo lô và tải CSV\"; khách mới (uat_new_nophone, 0 đơn) áp 1 mã vào giỏ 237.000đ, khách cũ áp mã khác",
+    "expected": "Luật đã chốt: 30.000đ, đơn từ 199.000đ, hạn 60 ngày, chỉ khách mới, mỗi thẻ một mã (usageLimit 1, perUserLimit 1); file CSV tải về có 5 mã; createdById = uat_marketing; khách cũ bị từ chối",
+    "actual": "POST coupon-batches → 201; DB 5 mã {\"code\":\"UATL5986-6A89SWF9\",\"type\":\"AMOUNT\",\"value\":30000,\"minOrder\":199000,\"usageLimit\":1,\"perUserLimit\":1,\"newCustomerOnly\":true,\"createdById\":\"uat_marketing\",\"startAt\":\"2026-10-19T16:12:46.832Z\",\"e…; hạn còn 60 ngày; CSV 5 dòng mã. Khách mới (uat_new_nophone, 0 đơn) áp UATL5986-6A89SWF9 → 201; khách cũ áp UATL5986-8HAJ7786 → 400 Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.. Gợi ý form: \"Bỏ trống = 30 ngày\"",
+    "evidence": "shots/U5-admin-noi-bo/coupon-batch-marketing-1440.png, shots/U5-admin-noi-bo/coupon-batch-UATL5986.csv; SQL coupons WHERE code LIKE 'UATL5986-%'",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:12:50.317Z"
+  },
+  {
+    "id": "U5-31",
+    "role": "MARKETING",
+    "journey": "Tạo voucher vượt trần trên form web",
+    "steps": "Form \"Tạo voucher\": (a) % giảm 31, giảm tối đa 50.000, 100 lượt; (b) % giảm 30, giảm tối đa 100.001; (c) Giảm tiền 100.001đ; (d) Giảm tiền 50.000đ, 1.001 lượt",
+    "expected": "Cả 4 lần: API 403, form hiện lý do \"Nhân viên tạo mã giảm tối đa…/Giảm tối đa…/Tổng lượt dùng… không quá…\", không mã nào vào DB",
+    "actual": "UATP31299126: 403, DB=không, \"Nhân viên tạo mã giảm tối đa 30%. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\" | UATMX299126: 403, DB=không, \"Giảm tối đa của mã do nhân viên tạo không quá 100.000đ. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\" | UATAM299126: 403, DB=không, \"Nhân viên tạo mã giảm tối đa 100.000đ. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\" | UATUS299126: 403, DB=không, \"Tổng lượt dùng của mã do nhân viên tạo không quá 1.000 lượt. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\"",
+    "evidence": "shots/U5-admin-noi-bo/coupon-cap-form-marketing-1440.png; SQL SELECT code FROM coupons WHERE code IN (…)",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:11:44.060Z"
+  },
+  {
+    "id": "U5-32",
+    "role": "MARKETING (so với ADMIN)",
+    "journey": "Trần mã nhân viên qua API: mọi cạnh, ngân sách 10 triệu/ngày, sửa mã của ADMIN, tự dùng mã mình tạo",
+    "steps": "POST /admin/coupons bằng token marketing: thiếu Giảm tối đa, thiếu Tổng lượt, đúng trần 30%/100.000đ/10 lượt, đúng phần ngân sách còn lại, vượt thêm 1 mã, lô thẻ AMOUNT 100.001; PATCH mã ADMIN; marketing áp mã mình tạo; ADMIN tạo 50%/300.000đ/2.000 lượt",
+    "expected": "Thiếu trường → 403; đúng trần → 201; đúng phần còn lại → 201, thêm 1 mã → 400 \"Vượt ngân sách…\"; lô vượt trần → 403; sửa mã ADMIN → 403; tự áp mã mình → bị chặn; ADMIN không bị trần → 201",
+    "actual": "Đã dùng hôm nay trước ca: 2350000đ → còn 7650000đ (mã đúng phần còn lại: 95625đ × 80 lượt). thieuMax=403 \"Mã giảm % do nhân viên tạo phải có Giảm tối đa (không quá 100.000đ). Cần mức cao hơn thì n…\"; thieuLuot=403 \"Mã do nhân viên tạo phải có Tổng lượt dùng. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\"; dungTran=201; dungNganSach=201; vuotNganSach=400 \"Vượt ngân sách mã giảm giá của nhân viên ngày 19/10/2026 (10.000.000đ/người/ngày): phần nà…\"; loVuotTran=403 \"Nhân viên tạo mã giảm tối đa 100.000đ. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\"; adminKhongTran=201; suaMaAdmin=403 \"Mã do quản trị viên hoặc hệ thống tạo — nhân viên không sửa được, nhờ quản trị viên.\"; tuDungMaMinh=400 \"Mã do chính bạn tạo ở trang quản trị — không dùng cho đơn của mình.\"",
+    "evidence": "API POST/PATCH /admin/coupons, /admin/coupon-batches, POST /cart/coupon; SQL tổng mức giảm có thể phát ra trong ngày VN của uat_marketing (cùng công thức assertStaffDailyBudget)",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:12:50.423Z"
+  },
+  {
+    "id": "U5-33",
+    "role": "MARKETING",
+    "journey": "Sửa mẫu thông báo khuyến mãi (WELCOME_VOUCHER) trên web",
+    "steps": "Tab \"Mẫu thông báo\": thêm lần lượt \"STK 1903 1234 5678\", \"xem https://khuyenmai-la.vn/x\", \"hạn 31/12/2026\", \"gọi 0901 234 567\" → Lưu; rồi thêm \" Mua ngay!\" → Lưu; trả nội dung cũ → Lưu",
+    "expected": "4 lần đầu bị chặn 400 kèm lý do, DB giữ nguyên; lần sửa hợp lệ 200 và DB đổi; trả lại 200 và DB về đúng nội dung cũ; marketing chỉ thấy mẫu khuyến mãi (không thấy ORDER_*)",
+    "actual": "8 số viết tách: 400 \"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể…\" DB giữ nguyên | link ngoài: 400 \"Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link \"h…\" DB giữ nguyên | ngày đủ: 400 \"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể…\" DB giữ nguyên | SĐT viết tách: 400 \"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể…\" DB giữ nguyên | hợp lệ: 200 \"Đã lưu.\" DB ĐỔI | trả lại: 200 \"Đã lưu.\" DB giữ nguyên. Marketing thấy 24 mẫu, có ORDER_CONFIRMED: false",
+    "evidence": "shots/U5-admin-noi-bo/template-blocked-marketing-1440.png, shots/U5-admin-noi-bo/template-restored-marketing-1440.png; SQL notification_templates.bodyTemplate WHERE code='WELCOME_VOUCHER' sau mỗi lần Lưu",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:12:54.174Z"
+  },
+  {
+    "id": "U5-34",
+    "role": "MARKETING (so với ADMIN)",
+    "journey": "Sửa mẫu đơn hàng/tiền bằng API",
+    "steps": "PATCH /admin/notification-templates/ORDER_CANCELLED và ORDER_AWAITING_PAYMENT bằng token marketing; ADMIN thêm \"STK 8386790906\" vào ORDER_AWAITING_PAYMENT rồi trả lại",
+    "expected": "Marketing → 403 (chỉ ADMIN sửa mẫu đơn/tiền); ADMIN được ghi số tài khoản thật vào mẫu (luật chặn dãy số chỉ áp cho nhân viên), trả lại đúng nội dung cũ",
+    "actual": "Marketing ORDER_CANCELLED → 403 \"Mẫu thông báo đơn hàng, tiền, đối tác và vận hành chỉ quản trị viên sửa.\"; ORDER_AWAITING_PAYMENT → 403. ADMIN thêm STK → 200 (DB có STK: true); trả lại → 200, DB khớp bản cũ: true",
+    "evidence": "API PATCH /admin/notification-templates/:code; SQL notification_templates",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:12:54.210Z"
+  },
+  {
+    "id": "U5-35",
+    "role": "MARKETING",
+    "journey": "Flash sale: marketing đặt giá giảm 90% (đường vòng trần mã)",
+    "steps": "POST /admin/flash-sales (marketing) → thêm món COBOTE-PW-100 (79.000đ) giá 7.900đ, quota 150 (≤ tồn kho), mỗi khách 150; ADMIN xoá đợt sau khi đo",
+    "expected": "Trần đã chốt cho nhân viên là 30%/100.000đ mỗi đơn, 10 triệu/ngày: món giảm 90% × 150 suất (10,7 triệu giảm, một khách mua cả 150) phải bị chặn hoặc cần ADMIN",
+    "onError": "FAIL",
+    "actual": "Tạo đợt → 201; thêm món 7.900đ (giảm 90%) quota 150, mỗi khách 150 → 201 ; DB {\"flashPrice\":7900,\"quota\":150,\"perUserLimit\":150}; mức giảm có thể phát ra 10.665.000đ; xoá đợt (admin) → 200",
+    "evidence": "API POST /admin/flash-sales, /admin/flash-sales/:id/items; SQL flash_sale_items. Trùng D2-01 (docs/2026-10-20-uat/D2-auth-pii.md)",
+    "verdict": "FAIL",
+    "note": "D2-01",
+    "at": "2026-10-19T16:13:09.637Z"
+  }
+]

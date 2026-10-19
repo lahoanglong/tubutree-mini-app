@@ -1,0 +1,30 @@
+{
+  "_note": "Danh mục địa giới GIẢ dạng Pancake hệ mới 2 cấp (84_VN*). Đủ để tạo địa chỉ và đặt đơn; không phải danh mục thật của Pancake.",
+  "provinces": [
+    { "id": "79", "new_id": "84_VN79", "name": "Thành phố Hồ Chí Minh" },
+    { "id": "01", "new_id": "84_VN01", "name": "Thành phố Hà Nội" },
+    { "id": "48", "new_id": "84_VN48", "name": "Thành phố Đà Nẵng" },
+    { "id": "92", "new_id": "84_VN92", "name": "Thành phố Cần Thơ" }
+  ],
+  "communes": {
+    "84_VN79": [
+      { "id": "84_VN7926734", "name": "Phường Sài Gòn" },
+      { "id": "84_VN7926743", "name": "Phường Bến Thành" },
+      { "id": "84_VN7926758", "name": "Phường Tân Định" },
+      { "id": "84_VN7927139", "name": "Phường Xuân Hòa" },
+      { "id": "84_VN7927259", "name": "Phường Thủ Đức" }
+    ],
+    "84_VN01": [
+      { "id": "84_VN0100004", "name": "Phường Ba Đình" },
+      { "id": "84_VN0100070", "name": "Phường Hoàn Kiếm" },
+      { "id": "84_VN0100160", "name": "Phường Cầu Giấy" }
+    ],
+    "84_VN48": [
+      { "id": "84_VN4820194", "name": "Phường Hải Châu" },
+      { "id": "84_VN4820245", "name": "Phường Sơn Trà" }
+    ],
+    "84_VN92": [
+      { "id": "84_VN9231117", "name": "Phường Ninh Kiều" }
+    ]
+  }
+}

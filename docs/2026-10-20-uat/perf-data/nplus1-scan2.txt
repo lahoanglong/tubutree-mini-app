@@ -1,0 +1,31 @@
+modules/cart/cart.service.ts:462 | await this.coupons.validateAndCompute(code, userId, cart.subtotal, cart.items.map((l) => ({ productI
+      462: await this.coupons.validateAndCompute(code, userId, cart.subtotal, cart.items.map((l) => ({ productId: l.productId, total: l.total
+modules/checkout/checkout.service.ts:665 | await this.cart.removeItems(userId, cart.items.map((l) => l.id), tx);
+      665: await this.cart.removeItems(userId, cart.items.map((l) => l.id), tx);
+modules/checkout/checkout.service.ts:667 | await this.cart.clearOrdered(userId, [...cart.items, ...cart.unavailableItems].map((l) => l.id), tx)
+      667: await this.cart.clearOrdered(userId, [...cart.items, ...cart.unavailableItems].map((l) => l.id), tx);
+modules/loyalty/loyalty.service.ts:455 | for (const ids of inChunks([...new Set(delivered.map((r) => r.refId).filter((id): id is string => !!
+      457: ...(await this.prisma.pointsTransaction.findMany({
+modules/loyalty/loyalty.service.ts:468 | for (const ids of inChunks([...new Set(chatRows.map((r) => r.refId).filter((id): id is string => !!i
+      470: ...(await this.prisma.pointsTransaction.findMany({
+      475: ...(await this.prisma.externalPointsClaim.findMany({ where: { id: { in: ids }, userId, kind: 'PHONE', state: 'REVERSED' }, select:
+modules/loyalty/loyalty.service.ts:475 | ...(await this.prisma.externalPointsClaim.findMany({ where: { id: { in: ids }, userId, kind: 'PHONE'
+      475: ...(await this.prisma.externalPointsClaim.findMany({ where: { id: { in: ids }, userId, kind: 'PHONE', state: 'REVERSED' }, select:
+modules/loyalty/loyalty.service.ts:797 | (await this.prisma.product.findMany({ where: { id: { in: scopedIds } }, select: { id: true, name: tr
+      797: (await this.prisma.product.findMany({ where: { id: { in: scopedIds } }, select: { id: true, name: true } })).map((p) => [
+modules/merchant/merchant-terms-history.ts:52 | (await tx.storefrontTermsHistory.groupBy({ by: ['storefrontId'], where: { storefrontId: { in: ids } 
+      52: (await tx.storefrontTermsHistory.groupBy({ by: ['storefrontId'], where: { storefrontId: { in: ids } } })).map((r) => r.storefrontI
+modules/ops/ops-email.service.ts:126 | return resolveOpsEmailConfig(Object.fromEntries(OPS_EMAIL_KEYS.map((k) => [k, this.config.get(k, { i
+      126: return resolveOpsEmailConfig(Object.fromEntries(OPS_EMAIL_KEYS.map((k) => [k, this.config.get(k, { infer: true })])));
+modules/ops/ops-health.service.ts:297 | PANCAKE_STATUSES.map((status) =>
+      298: this.prisma.pancakeWebhookEvent.findFirst({ where: { status }, orderBy: { receivedAt: 'desc' }, select: { receivedAt: true } }),
+modules/ops/ops-health.service.ts:395 | GOMDON_STATUSES.map((status) =>
+      396: this.prisma.gomdonWebhookEvent.findFirst({ where: { status }, orderBy: { receivedAt: 'desc' }, select: { receivedAt: true } }),
+modules/orders/order-returns.service.ts:332 | const rows = await this.prisma.returnRequest.findMany({ where: { id: { in: ids.map((r) => r.id) } },
+      332: const rows = await this.prisma.returnRequest.findMany({ where: { id: { in: ids.map((r) => r.id) } }, select: RETURN_LIST_SELECT })
+modules/waste-exchange/catalog/waste-admin-points.service.ts:252 | itemsBefore = (await tx.wastePointItem.findMany({ where: { pointId: id }, select: { itemId: true } }
+      252: itemsBefore = (await tx.wastePointItem.findMany({ where: { pointId: id }, select: { itemId: true } })).map((r) => r.itemId).sort()
+modules/waste-exchange/catalog/waste-admin-points.service.ts:450 | const usage = await this.prisma.wastePointUsage.findMany({ where: { monthKey: vnMonthKey(now), point
+      450: const usage = await this.prisma.wastePointUsage.findMany({ where: { monthKey: vnMonthKey(now), pointId: { in: rows.map((r) => r.id
+modules/waste-exchange/core/waste-hold.service.ts:235 | const links = new Set((await tx.wastePointItem.findMany({ where: { pointId }, select: { itemId: true
+      235: const links = new Set((await tx.wastePointItem.findMany({ where: { pointId }, select: { itemId: true } })).map((l) => l.itemId));

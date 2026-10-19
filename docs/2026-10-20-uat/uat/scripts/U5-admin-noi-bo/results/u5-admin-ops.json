@@ -1,0 +1,57 @@
+[
+  {
+    "id": "U5-40",
+    "role": "ADMIN",
+    "journey": "Cấu hình: đổi một khoá tiền rồi đổi lại",
+    "steps": "Tab Cấu hình, khoá affiliate.min_withdraw_bank: gõ \"abc\" → Lưu; gõ 60000 → Lưu → hộp \"Xác nhận đổi cấu hình tiền/điểm\" → Lưu thay đổi; CTV rút 56.000đ (dưới mức mới) qua API; đổi lại 50000",
+    "expected": "JSON sai báo lỗi, không gọi API; đổi 60000 có hộp xác nhận tiền, DB = 60000, system_config_history ghi người đổi; mức mới có hiệu lực ngay (API đọc lại); đổi lại DB = 50000, lịch sử thêm dòng",
+    "actual": "Lỗi khi chạy ca: locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n  - waiting for getByRole('alertdialog') to be visible\n",
+    "evidence": "",
+    "verdict": "FAIL",
+    "at": "2026-10-19T16:22:44.067Z"
+  },
+  {
+    "id": "U5-41",
+    "role": "ADMIN (CSKH chỉ xem)",
+    "journey": "Khoá rồi mở khoá tài khoản (tab Người dùng)",
+    "steps": "CSKH mở tab Người dùng tìm 0901000005 (không có nút Khoá); ADMIN tìm 0901000005 → \"Khoá\" → lý do → \"Khoá tài khoản\"; user dùng token cũ gọi /me, đổi refresh token; ADMIN \"Mở khoá\"; user gọi lại",
+    "expected": "CSKH không có nút Khoá; khoá: users.isBlocked=true, blockedById=uat_admin, có dòng user_admin_events; token cũ và refresh đều bị từ chối; mở khoá: isBlocked=false, user gọi /me 200",
+    "actual": "CSKH: 0 nút Khoá/Mở khoá. Khoá → 200; DB {\"isBlocked\":true,\"blockedById\":\"uat_admin\",\"blockedReason\":\"UAT: thử khoá tài khoản nghi farm voucher\"}; token cũ /me → 401; refresh → 401. Mở khoá → 200; DB isBlocked=false; /me sau 5,5 giây → 200. user_admin_events: [{\"kind\":\"UNBLOCK\",\"actorId\":\"uat_admin\",\"reason\":null},{\"kind\":\"BLOCK\",\"actorId\":\"uat_admin\",\"reason\":\"UAT: thử khoá tài khoản nghi farm voucher\"}]",
+    "evidence": "shots/U5-admin-noi-bo/users-cskh-view-1440.png, shots/U5-admin-noi-bo/users-admin-blocked-1440.png; SQL users.isBlocked/blockedById + user_admin_events WHERE userId='uat_ctv_pending'",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:22:52.445Z"
+  },
+  {
+    "id": "U5-42",
+    "role": "ADMIN",
+    "journey": "Đổi vai trò theo SĐT (CUSTOMER → CTV → CUSTOMER)",
+    "steps": "Tab Người dùng, khối \"Cấp / đổi vai trò theo SĐT\": 0901000011 + \"CTV\" → Cấp quyền; rồi \"Khách hàng\" → Cấp quyền",
+    "expected": "users.role AFFILIATE rồi CUSTOMER; mỗi lần một dòng user_admin_events (from → to, actor uat_admin); thông báo hiện vai trò cũ → mới",
+    "actual": "CTV: 201, DB AFFILIATE, \"Đã đổi 0901000011: CUSTOMER → AFFILIATE\". Khách hàng: 201, DB CUSTOMER, \"Đã đổi 0901000011: AFFILIATE → CUSTOMER\". user_admin_events: [{\"kind\":\"ROLE\",\"fromValue\":\"AFFILIATE\",\"toValue\":\"CUSTOMER\",\"actorId\":\"uat_admin\"},{\"kind\":\"ROLE\",\"fromValue\":\"CUSTOMER\",\"toValue\":\"AFFILIATE\",\"actorId\":\"uat_admin\"}]",
+    "evidence": "shots/U5-admin-noi-bo/users-role-admin-1440.png; SQL users.role + user_admin_events WHERE userId='uat_brand'",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:23:07.041Z"
+  },
+  {
+    "id": "U5-43",
+    "role": "KẾ TOÁN (so với ADMIN)",
+    "journey": "Xuất CSV đơn hàng (tab Đơn hàng → \"Xuất CSV (Excel)\")",
+    "steps": "KẾ TOÁN và ADMIN mỗi người bấm \"Xuất CSV (Excel)\" không lọc; đếm dòng, đọc 3 cột SĐT (khách, người nhận, CTV) và cột Ghi chú",
+    "expected": "Số dòng = số đơn trong DB; file của kế toán chỉ còn 3 số cuối mọi SĐT (B19, admin.controller.ts:496-498), file của ADMIN đầy đủ; tổng cột \"Tổng tiền (VNĐ)\" = SUM(total)",
+    "actual": "Cột SĐT: SĐT khách, SĐT người nhận, SĐT CTV. KẾ TOÁN: 13 dòng, SĐT đầy đủ 0, SĐT che 27 (vd *******006 | *******006 | ), tổng tiền 14095000. ADMIN: 13 dòng, đầy đủ 27, che 0 (vd 0901000006 | 0901000006 | ), tổng tiền 14095000. DB: 13 đơn, SUM(total) 14095000",
+    "evidence": "shots/U5-admin-noi-bo/orders-export-ketoan.csv, shots/U5-admin-noi-bo/orders-export-admin.csv; SQL SELECT COUNT(*), SUM(total) FROM orders",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:23:10.829Z"
+  },
+  {
+    "id": "U5-44",
+    "role": "KẾ TOÁN",
+    "journey": "Báo cáo doanh thu hôm nay (tab Báo cáo)",
+    "steps": "KẾ TOÁN mở tab Báo cáo; GET /admin/reports/revenue cho hôm nay; tự tính bằng SQL: đơn theo ngày đặt giờ VN, doanh thu = tổng đơn đã thu tiền (PAID, hoặc COD đã giao) trừ hoàn một phần đã duyệt",
+    "expected": "Số đơn, đơn huỷ/trả, doanh thu, GMV của API = SQL (luật \"Doanh thu tính theo ngày đặt đơn\")",
+    "actual": "API: {\"orders\":12,\"cancelled\":2,\"paidOrders\":4,\"gross\":1451000,\"partialRefund\":95000,\"revenue\":1356000,\"gmv\":11768000}. SQL: {\"orders\":12,\"cancelled\":2,\"paidOrders\":4,\"gross\":1451000,\"partialRefund\":95000,\"gmv\":11768000,\"revenue\":1356000} · khớp",
+    "evidence": "shots/U5-admin-noi-bo/reports-ketoan-1440.png; GET /admin/reports/revenue?from=2026-10-19&to=2026-10-19; SQL tự tính (điều kiện REVENUE_ORDER_SQL, apps/api/src/modules/admin/admin-revenue.ts:16-20)",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:23:12.342Z"
+  }
+]

@@ -1,0 +1,80 @@
+{
+  "id": "U1-09",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Giỏ: tăng/giảm số lượng, xoá dòng",
+  "steps": "Giỏ có FUWA-GL-500×1 + SOK-RC-1KG×1 → \"Tăng số lượng\" FUWA-GL-500 → \"Giảm số lượng\" → \"Xoá\" SOK-RC-1KG",
+  "expected": "Mỗi thao tác gọi PATCH/DELETE thật, DB cart_items đổi theo; tạm tính trên màn = tổng DB (79k×n + 75k)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "tăng: FUWA-GL-500 = 2 trong DB",
+      "ok": true
+    },
+    {
+      "name": "tạm tính 233.000đ (79k×2+75k)",
+      "ok": true,
+      "detail": "233.000đ"
+    },
+    {
+      "name": "giảm: FUWA-GL-500 = 1 trong DB",
+      "ok": true,
+      "detail": [
+        {
+          "sku": "FUWA-GL-500",
+          "quantity": 1
+        },
+        {
+          "sku": "SOK-RC-1KG",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "name": "xoá: chỉ còn FUWA-GL-500×1 trong DB",
+      "ok": true
+    },
+    {
+      "name": "tạm tính 79.000đ",
+      "ok": true,
+      "detail": "79.000đ"
+    }
+  ],
+  "evidence": [
+    {
+      "label": "sau tăng",
+      "data": {
+        "db": [
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 2
+          },
+          {
+            "sku": "SOK-RC-1KG",
+            "quantity": 1
+          }
+        ],
+        "ui": "233.000đ"
+      }
+    },
+    {
+      "label": "sau xoá",
+      "data": {
+        "db": [
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 1
+          }
+        ],
+        "ui": "79.000đ"
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-09-cart-edit.png"
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:06:18.699Z"
+}

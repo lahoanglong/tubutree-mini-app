@@ -5,6 +5,7 @@ const REF = 'TUBU2410';
 
 const BASE_USERS = {
   'customer-new': { id: 'u-new', role: 'CUSTOMER', fullName: 'Lê Thu Trang', phone: '0901234567', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
+  'customer-emptycart': { id: 'u-cus', role: 'CUSTOMER', fullName: 'Nguyễn Thị Hoa', phone: '0901234567', pointsBalance: 1280, walletBalance: 350000, coinsBalance: 80000, tierId: 'tier-2' },
   customer: { id: 'u-cus', role: 'CUSTOMER', fullName: 'Nguyễn Thị Hoa', phone: '0901234567', pointsBalance: 1280, walletBalance: 350000, coinsBalance: 80000, tierId: 'tier-2' },
   ctv: { id: 'u-ctv', role: 'AFFILIATE', fullName: 'Trần Văn Minh', phone: '0912345678', pointsBalance: 420, walletBalance: 1250000, coinsBalance: 20000 },
   dealer: { id: 'u-dealer', role: 'DEALER', fullName: 'Cửa hàng Xanh Tươi', phone: '0987654321', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
@@ -63,7 +64,8 @@ export function makeCurated({ persona, products }) {
       if (path === '/orders/active-count') return { count: returning && state !== 'empty' ? 2 : 0 };
       if (path === '/me/purchased-items' && (!returning || state === 'empty')) return { items: [], nextCursor: null };
       if (path === '/cart') {
-        lastCart = state === 'empty' ? cartFrom(products, 0) : cartFrom(products, state === 'long' ? 12 : 3);
+        // UAT: 'customer-emptycart' = giỏ rỗng nhưng catalog bình thường, để thấy kệ gợi ý dưới giỏ trống.
+        lastCart = state === 'empty' || persona === 'customer-emptycart' ? cartFrom(products, 0) : cartFrom(products, state === 'long' ? 12 : 3);
         return lastCart;
       }
       if (path === '/me/addresses') {

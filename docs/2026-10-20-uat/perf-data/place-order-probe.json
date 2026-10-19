@@ -1,0 +1,82 @@
+[
+ {
+  "K": 1,
+  "addSqlAtK": 33,
+  "addMsAtK": 56,
+  "quoteStatus": 201,
+  "quoteSql": 21,
+  "placeStatus": 201,
+  "placeMs": 93,
+  "placeSql": 47,
+  "repeated": [
+   "x3 COMMIT",
+   "x3 BEGIN",
+   "x2 SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"p",
+   "x2 SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".",
+   "x2 INSERT INTO \"public\".\"analytics_events\" (\"id\",\"eventId\",\"eventName\",\"occurredAt\",\"receivedAt\",\"userId\",\"anonym",
+   "x2 SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orde",
+   "x2 SELECT \"public\".\"orders\".\"id\", \"public\".\"orders\".\"code\", \"public\".\"orders\".\"idempotencyKey\", \"public\".\"orders\"",
+   "x2 SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\" FROM \"public\".\"users\" WHERE "
+  ]
+ },
+ {
+  "K": 4,
+  "addSqlAtK": 28,
+  "addMsAtK": 165,
+  "quoteStatus": 201,
+  "quoteSql": 18,
+  "placeStatus": 201,
+  "placeMs": 323,
+  "placeSql": 54,
+  "repeated": [
+   "x4 SELECT $2 FROM ONLY \"public\".\"orders\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+   "x4 UPDATE \"variations\" SET \"stock\" = \"stock\" - $1, \"reservedStock\" = \"reservedStock\" + $2 WHERE \"id\" = $3 AND \"st",
+   "x3 COMMIT",
+   "x3 BEGIN",
+   "x2 SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"p",
+   "x2 SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".",
+   "x2 INSERT INTO \"public\".\"analytics_events\" (\"id\",\"eventId\",\"eventName\",\"occurredAt\",\"receivedAt\",\"userId\",\"anonym",
+   "x2 SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orde"
+  ]
+ },
+ {
+  "K": 8,
+  "addSqlAtK": 28,
+  "addMsAtK": 77,
+  "quoteStatus": 201,
+  "quoteSql": 18,
+  "placeStatus": 201,
+  "placeMs": 443,
+  "placeSql": 62,
+  "repeated": [
+   "x8 SELECT 1 FROM ONLY \"public\".\"orders\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+   "x8 UPDATE \"variations\" SET \"stock\" = \"stock\" - $1, \"reservedStock\" = \"reservedStock\" + $2 WHERE \"id\" = $3 AND \"st",
+   "x3 COMMIT",
+   "x3 BEGIN",
+   "x2 SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"p",
+   "x2 SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".",
+   "x2 INSERT INTO \"public\".\"analytics_events\" (\"id\",\"eventId\",\"eventName\",\"occurredAt\",\"receivedAt\",\"userId\",\"anonym",
+   "x2 SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orde"
+  ]
+ },
+ {
+  "K": 12,
+  "addSqlAtK": 28,
+  "addMsAtK": 22,
+  "quoteStatus": 201,
+  "quoteSql": 18,
+  "placeStatus": 201,
+  "placeMs": 113,
+  "placeSql": 70,
+  "repeated": [
+   "x12 SELECT 1 FROM ONLY \"public\".\"orders\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+   "x12 UPDATE \"variations\" SET \"stock\" = \"stock\" - $1, \"reservedStock\" = \"reservedStock\" + $2 WHERE \"id\" = $3 AND \"st",
+   "x3 COMMIT",
+   "x3 BEGIN",
+   "x2 SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"p",
+   "x2 SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".",
+   "x2 INSERT INTO \"public\".\"analytics_events\" (\"id\",\"eventId\",\"eventName\",\"occurredAt\",\"receivedAt\",\"userId\",\"anonym",
+   "x2 SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orde"
+  ]
+ }
+]

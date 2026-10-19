@@ -1,0 +1,110 @@
+{
+  "id": "U1-19",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Chuyển đủ tiền, đúng nội dung → đơn tự xác nhận, màn QR tự đổi",
+  "steps": "Đơn chuyển khoản 199.000đ, giữ màn QR mở → bank-webhook.mjs <mã> 199000 (nội dung = mã đơn) → chờ màn tự làm mới (4 giây/lần)",
+  "expected": "Màn đổi sang \"Đã nhận thanh toán!\"; DB CONFIRMED/PAID, paidAt có, pancakeAttention null; không có dòng hoàn tiền",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "màn tự đổi \"Đã nhận thanh toán!\"",
+      "ok": true
+    },
+    {
+      "name": "DB: CONFIRMED/PAID, paidAt có, không cần xử lý",
+      "ok": true
+    },
+    {
+      "name": "DB: không có dòng hoàn tiền",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "đặt đơn chuyển khoản",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101908988",
+        "button": "Đặt hàng · 199.000đ",
+        "total": 199000
+      }
+    },
+    {
+      "label": "giả chuyển khoản",
+      "data": {
+        "matched": true,
+        "event": {
+          "id": "cmvfgn8y300xt14pj7ab9nhyr",
+          "status": "PROCESSED",
+          "error": null,
+          "attempts": 1
+        },
+        "after": {
+          "code": "TUBU2026101908988",
+          "total": 199000,
+          "status": "CONFIRMED",
+          "paymentStatus": "PAID",
+          "paidAt": "2026-10-19T16:20:13.906Z",
+          "pancakeAttention": null
+        }
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-19-bank-paid.png"
+    },
+    {
+      "label": "SQL đơn",
+      "data": {
+        "id": "cmvfgn7k900xj14pj11rcd80z",
+        "code": "TUBU2026101908988",
+        "userId": "u1_d19_gn4t0hv",
+        "status": "CONFIRMED",
+        "paymentMethod": "BANK_TRANSFER",
+        "paymentStatus": "PAID",
+        "subtotal": 199000,
+        "discount": 0,
+        "couponDiscount": 0,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 199000,
+        "pointsEarned": 3980,
+        "pointsUsed": 0,
+        "couponCode": null,
+        "pancakeOrderId": "9200015",
+        "paidAt": "2026-10-19T16:20:13.906Z",
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-19T16:20:11.913Z",
+        "items": [
+          {
+            "sku": "FUWA-DW-1L",
+            "quantity": 1,
+            "unitPrice": 120000,
+            "total": 120000,
+            "paidTotal": 120000,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 1,
+            "unitPrice": 79000,
+            "total": 79000,
+            "paidTotal": 79000,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [],
+        "ledger": []
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:20:19.138Z"
+}

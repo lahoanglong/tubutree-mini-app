@@ -1,0 +1,84 @@
+{
+  "id": "U1-02",
+  "browser": "chromium",
+  "role": "Khách mới chưa đăng nhập Zalo (tài khoản khách theo deviceId)",
+  "journey": "Mở link thẻ khi Zalo chưa đăng nhập → sheet mời đăng nhập → đăng nhập Zalo → mã tự vào ví",
+  "steps": "Mở /?claim=<mã>&src=shopee với user guest (app tự gọi /auth/guest thật) → sheet → bấm \"Đăng nhập bằng Zalo\" (bộ khung giả kết quả Zalo + nâng cấp tại chỗ như ensurePhoneForCurrentUser:295-311)",
+  "expected": "Trước đăng nhập: sheet \"Đăng nhập Zalo để nhận ưu đãi\", KHÔNG gọi /coupons/claim, mã giữ trên máy; sau đăng nhập: tự gọi claim, sheet \"Bạn nhận được ưu đãi\", 1 dòng coupon_claims thuộc chính tài khoản đã nâng cấp",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "tiêu đề \"Đăng nhập Zalo để nhận ưu đãi\"",
+      "ok": true,
+      "detail": "Đăng nhập Zalo để nhận ưu đãi"
+    },
+    {
+      "name": "không gọi /coupons/claim khi còn là khách",
+      "ok": true
+    },
+    {
+      "name": "mã giữ trên máy (tubu_pending_claim)",
+      "ok": true
+    },
+    {
+      "name": "sau đăng nhập app tự gọi POST /coupons/claim → 201",
+      "ok": true,
+      "detail": 201
+    },
+    {
+      "name": "tiêu đề \"Bạn nhận được ưu đãi\"",
+      "ok": true,
+      "detail": "Bạn nhận được ưu đãi"
+    },
+    {
+      "name": "DB: mã thuộc đúng tài khoản đã nâng cấp (cùng id khách)",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "sheet khi là khách",
+      "data": {
+        "title": "Đăng nhập Zalo để nhận ưu đãi",
+        "text": "Ưu đãi từ thẻ trong hộp hàng dành cho tài khoản Zalo. Đăng nhập một chạm, ưu đãi tự vào ví của bạn."
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-02-claim-need-login.png"
+    },
+    {
+      "label": "tài khoản khách vừa tạo bởi /auth/guest thật",
+      "data": {
+        "id": "cmvffx1rf001r14pj8jl0g69f",
+        "zaloId": "guest_d_11ed0271-33a0-484c-b112-4a4432b056f2",
+        "phone": null
+      }
+    },
+    {
+      "label": "sheet sau đăng nhập",
+      "data": {
+        "title": "Bạn nhận được ưu đãi",
+        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-C55UYH7Y đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 18/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-02-claim-after-login.png"
+    },
+    {
+      "label": "SQL coupon_claims của mã",
+      "data": [
+        {
+          "userId": "cmvffx1rf001r14pj8jl0g69f",
+          "code": "HOPSAN-C55UYH7Y"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Phần Zalo phía server (getUserInfo/resolvePhoneNumber) do bộ khung giả; nhánh gộp vào tài khoản Zalo có sẵn không thử được (README giới hạn 1)."
+  ],
+  "ranAt": "2026-10-19T15:59:55.788Z"
+}

@@ -10,6 +10,21 @@ const BASE_USERS = {
   dealer: { id: 'u-dealer', role: 'DEALER', fullName: 'Cửa hàng Xanh Tươi', phone: '0987654321', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
   staff: { id: 'u-staff', role: 'STAFF', fullName: 'Phạm Quốc Anh', phone: '0933000111', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
   admin: { id: 'u-admin', role: 'ADMIN', fullName: 'Admin Tubu', phone: '0931813126', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
+  'staff-cskh': { id: 'u-st-cskh', role: 'STAFF', fullName: 'Võ Ngọc Lan', phone: '0933000112', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
+  'staff-ketoan': { id: 'u-st-kt', role: 'STAFF', fullName: 'Đặng Hữu Phước', phone: '0933000113', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
+  'staff-marketing': { id: 'u-st-mkt', role: 'STAFF', fullName: 'Lê Thu Trang', phone: '0933000114', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
+  'staff-kho': { id: 'u-st-kho', role: 'STAFF', fullName: 'Phạm Quốc Anh', phone: '0933000115', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
+  'staff-none': { id: 'u-st-none', role: 'STAFF', fullName: 'Nhân viên mới', phone: '0933000116', pointsBalance: 0, walletBalance: 0, coinsBalance: 0 },
+};
+
+/** Nhóm quyền nhân viên theo persona (GET /admin/ops/access); khớp StaffPermission ở apps/web/src/lib/admin-client.ts. */
+export const STAFF_PERMS = {
+  staff: ['CSKH'],
+  'staff-cskh': ['CSKH'],
+  'staff-ketoan': ['KE_TOAN'],
+  'staff-marketing': ['MARKETING'],
+  'staff-kho': ['KHO'],
+  'staff-none': [],
 };
 
 export const PERSONAS = Object.keys(BASE_USERS);
@@ -17,7 +32,8 @@ export const PERSONAS = Object.keys(BASE_USERS);
 export function makeSession(persona) {
   const base = BASE_USERS[persona] ?? BASE_USERS.customer;
   const user = { zaloId: null, email: null, avatarUrl: artUri(base.fullName, 'avatar'), tierId: null, referralCode: REF, ...base };
-  const me = { id: user.id, fullName: user.fullName, email: null, avatarUrl: user.avatarUrl, dob: null, onboarded: true, segments: ['skincare'] };
+  // GET /me thật trả cả số dư (users.service.ts getMe → serialize(user)); thiếu walletBalance thì /tai-khoan web sập vì mock.
+  const me = { ...user, pointsConvertedBalance: 0, email: null, dob: null, onboarded: true, segments: ['skincare'] };
   return { persona, user, me };
 }
 
@@ -60,6 +76,11 @@ export function makeCurated({ persona, products }) {
   return (ctx) => {
     const { method, path, state } = ctx;
     if (method === 'GET') {
+      if (path === '/admin/ops/access') {
+        const u = BASE_USERS[persona] ?? BASE_USERS.customer;
+        if (u.role !== 'ADMIN' && u.role !== 'STAFF') return { __status: 403, body: { statusCode: 403, message: 'Forbidden' } };
+        return { role: u.role, staffPermissions: STAFF_PERMS[persona] ?? [] };
+      }
       if (path === '/orders/active-count') return { count: returning && state !== 'empty' ? 2 : 0 };
       if (path === '/me/purchased-items' && (!returning || state === 'empty')) return { items: [], nextCursor: null };
       if (path === '/cart') {

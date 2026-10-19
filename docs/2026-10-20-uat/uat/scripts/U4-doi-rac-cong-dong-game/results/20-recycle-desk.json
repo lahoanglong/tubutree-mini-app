@@ -1,0 +1,443 @@
+[
+  {
+    "id": "U4-13",
+    "role": "NHÂN VIÊN quầy (uat_staff) → KHÁCH (uat_returning)",
+    "journey": "Quầy kho HCMC nhận hàng, nhận thiếu, cộng điểm theo bảng",
+    "steps": "/recycle (có dòng \"Nhận hàng tại điểm\") → /recycle/desk → nhập mã TR- của U4-07 → \"Tra mã\" → hộp sữa giảm 12 → 8, lý do \"Bẩn\" → \"Xác nhận đã nhận\"",
+    "expected": "Điểm theo số thực nhận: floor(8/5)×1.000 + 2×2.000 = 5.000 điểm, +4 giọt; sổ có đúng 1 dòng RECYCLE:<mã> +5.000 hạn 12 tháng; số dư = trước + 5.000 = SUM(delta); khách nhận tin WASTE_POINTS_CREDITED",
+    "actual": "TR-RKRFX: 5000 điểm, 4 giọt; sổ 34400 → 39400 (SUM 39400); tin: \"Yêu cầu TR-RKRFX đã đếm xong. Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước.\".",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-13-desk-short.png",
+      "shots/U4-doi-rac-cong-dong-game/U4-13-desk-done.png",
+      "SQL points_transactions reason=RECYCLE:TR-RKRFX → [{\"delta\":5000,\"lot\":\"STANDARD\",\"expiresAt\":\"2027-10-19T16:08:54.141Z\"}]",
+      "SQL users.pointsBalance 34400 → 39400, SUM(delta STANDARD) = 39400"
+    ],
+    "checks": [
+      {
+        "name": "/recycle của nhân viên có dòng \"Nhận hàng tại điểm\"",
+        "ok": true
+      },
+      {
+        "name": "Tra mã → 200",
+        "ok": false
+      },
+      {
+        "name": "Thanh dưới: \"Điểm Tubu sẽ cộng cho khách: 5.000 điểm\"",
+        "ok": true
+      },
+      {
+        "name": "POST confirm → 2xx, pointsAwarded 5.000, drops 4",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "body": "{\"requestId\":\"cmvfg8hwl001fhoeb6z8jdt1f\",\"code\":\"TR-RKRFX\",\"status\":\"COMPLETED\",\"pointsAwarded\":5000,\"dropsAwarded\":4,\"quota\":null,\"staffDailyCapRemaining\":995000}"
+        }
+      },
+      {
+        "name": "Thẻ xong: \"Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách\"",
+        "ok": true,
+        "detail": "Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách Yêu cầu TR-RKRFX của Lại*** đã xong Còn được xác nhận hôm nay: 995.000 điểm Nhận yêu cầu khác"
+      },
+      {
+        "name": "DB yêu cầu: COMPLETED, 5.000 điểm, hộp sữa nhận 8 lý do DIRTY",
+        "ok": true,
+        "detail": {
+          "code": "TR-RKRFX",
+          "status": "COMPLETED",
+          "pointsAwarded": 5000,
+          "dropsAwarded": 4,
+          "confirmedByUserId": "uat_staff",
+          "lines": [
+            {
+              "item": "wi-milk-carton",
+              "declared": 12,
+              "received": 8,
+              "reason": "DIRTY",
+              "pts": 1000
+            },
+            {
+              "item": "wi-tubu-bottle",
+              "declared": 2,
+              "received": 2,
+              "reason": null,
+              "pts": 4000
+            }
+          ]
+        }
+      },
+      {
+        "name": "SQL: đúng 1 dòng RECYCLE:<mã> delta 5.000",
+        "ok": true,
+        "detail": [
+          {
+            "delta": 5000,
+            "reason": "RECYCLE:TR-RKRFX",
+            "refType": "RECYCLE",
+            "refId": "cmvfg8hwl001fhoeb6z8jdt1f",
+            "lot": "STANDARD",
+            "expiresAt": "2027-10-19T16:08:54.141Z"
+          }
+        ]
+      },
+      {
+        "name": "SQL: hạn điểm ≈ 12 tháng",
+        "ok": true,
+        "detail": "2027-10-19T16:08:54.141Z"
+      },
+      {
+        "name": "SQL: số dư = trước + 5.000 = SUM(delta)",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 34400,
+            "ledgerSum": 34400,
+            "rows": 1
+          },
+          "after": {
+            "balance": 39400,
+            "ledgerSum": 39400,
+            "rows": 2
+          }
+        }
+      },
+      {
+        "name": "game_profiles.totalSeeds +4",
+        "ok": true,
+        "detail": {
+          "seedsBefore": 0,
+          "seedsAfter": 4
+        }
+      },
+      {
+        "name": "notification_logs: WASTE_POINTS_CREDITED \"Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước\"",
+        "ok": true,
+        "detail": [
+          "Yêu cầu TR-RKRFX đã đếm xong. Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước."
+        ]
+      }
+    ],
+    "status": "FAIL"
+  },
+  {
+    "id": "U4-14",
+    "role": "Chủ đại lý (uat_ctv, OWNER điểm PARTNER) → KHÁCH (uat_returning)",
+    "journey": "Đại lý nhận carton + nilon, trừ hạn mức điểm của đại lý",
+    "steps": "/recycle/desk bằng uat_ctv → tra mã TR- của U4-05 → giữ nguyên số khai → \"Xác nhận đã nhận\"",
+    "expected": "Cộng 5.000 điểm cho khách (sổ RECYCLE:<mã>, số dư = SUM); hạn mức đại lý dùng 5.000/200.000, còn 195.000 hiện trên thẻ",
+    "actual": "TR-5SGCJ: +5.000; sổ 39400 → 44400; hạn mức đại lý dùng 5000.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-14-dealer-done.png",
+      "SQL waste_point_usage.pointsUsed = 5000; users.pointsBalance 39400 → 44400 = SUM 44400"
+    ],
+    "checks": [
+      {
+        "name": "Tra mã → 200",
+        "ok": false
+      },
+      {
+        "name": "POST confirm → 2xx, 5.000 điểm, quota còn 195.000",
+        "ok": true,
+        "detail": "{\"requestId\":\"cmvfg8f2f0014hoebpv7fk5sb\",\"code\":\"TR-5SGCJ\",\"status\":\"COMPLETED\",\"pointsAwarded\":5000,\"dropsAwarded\":0,\"quota\":{\"limit\":200000,\"used\":5000,\"remaining\":195000},\"staffDailyCapRemaining\":995000}"
+      },
+      {
+        "name": "Thẻ xong ghi \"Hạn mức còn lại: 195.000 điểm\"",
+        "ok": true,
+        "detail": "Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách Yêu cầu TR-5SGCJ của Lại*** đã xong Hạn mức còn lại: 195.000 điểm Nhận yêu cầu khác"
+      },
+      {
+        "name": "SQL: 1 dòng RECYCLE:<mã> +5.000",
+        "ok": true,
+        "detail": [
+          {
+            "delta": 5000,
+            "reason": "RECYCLE:TR-5SGCJ",
+            "refType": "RECYCLE",
+            "refId": "cmvfg8f2f0014hoebpv7fk5sb",
+            "lot": "STANDARD",
+            "expiresAt": "2027-10-19T16:08:55.191Z"
+          }
+        ]
+      },
+      {
+        "name": "SQL: số dư = trước + 5.000 = SUM(delta)",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 39400,
+            "ledgerSum": 39400,
+            "rows": 2
+          },
+          "after": {
+            "balance": 44400,
+            "ledgerSum": 44400,
+            "rows": 3
+          }
+        }
+      },
+      {
+        "name": "SQL waste_point_usage đại lý = 5.000",
+        "ok": true,
+        "detail": {
+          "pointsUsed": 5000
+        }
+      }
+    ],
+    "status": "FAIL"
+  },
+  {
+    "id": "U4-15",
+    "role": "NHÂN VIÊN quầy (uat_staff) → KHÁCH (uat_returning)",
+    "journey": "Kho nhận kiện gửi về (MAIL_IN) theo mã TR- trên kiện",
+    "steps": "/recycle/desk → tra mã TR- của U4-08 (IN_TRANSIT) → đủ 15 thùng → \"Xác nhận đã nhận\"",
+    "expected": "Cộng 15.000 điểm (sổ RECYCLE:<mã>, số dư = SUM); yêu cầu COMPLETED; trần tháng của khách còn 60.000 − 25.000 = 35.000",
+    "actual": "TR-42RNG: COMPLETED, +15000; sổ 44400 → 59400; trần tháng còn 35000.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-15-mailin-done.png",
+      "SQL RECYCLE:TR-42RNG → 15000; balance 59400 = SUM 59400"
+    ],
+    "checks": [
+      {
+        "name": "Tra mã → 200",
+        "ok": false
+      },
+      {
+        "name": "POST confirm (match parcelCode) → 2xx, 15.000 điểm",
+        "ok": true,
+        "detail": "{\"requestId\":\"cmvfg8ju2001thoeb7p44kpxd\",\"code\":\"TR-42RNG\",\"status\":\"COMPLETED\",\"pointsAwarded\":15000,\"dropsAwarded\":0,\"quota\":null,\"staffDailyCapRemaining\":980000}"
+      },
+      {
+        "name": "DB: COMPLETED",
+        "ok": true,
+        "detail": "COMPLETED"
+      },
+      {
+        "name": "SQL: 1 dòng +15.000; số dư = trước + 15.000 = SUM",
+        "ok": true,
+        "detail": {
+          "rows": [
+            {
+              "delta": 15000,
+              "reason": "RECYCLE:TR-42RNG",
+              "refType": "RECYCLE",
+              "refId": "cmvfg8ju2001thoeb7p44kpxd",
+              "lot": "STANDARD",
+              "expiresAt": "2027-10-19T16:08:56.190Z"
+            }
+          ],
+          "before": {
+            "balance": 44400,
+            "ledgerSum": 44400,
+            "rows": 3
+          },
+          "after": {
+            "balance": 59400,
+            "ledgerSum": 59400,
+            "rows": 4
+          }
+        }
+      },
+      {
+        "name": "Trần tháng còn 35.000",
+        "ok": true,
+        "detail": 35000
+      }
+    ],
+    "status": "FAIL"
+  },
+  {
+    "id": "U4-16",
+    "role": "NHÂN VIÊN quầy (uat_staff)",
+    "journey": "Bấm xác nhận lần hai (mạng chập chờn) không cộng đôi",
+    "steps": "POST /waste/desk/requests/<U4-15>/confirm lần 2 cùng số liệu; lần 3 với số khác (14)",
+    "expected": "Lần 2 trả lại kết quả cũ, sổ vẫn 1 dòng, số dư không đổi; số khác → 409",
+    "actual": "lần 2 → 201; số khác → 409 \"Yêu cầu đã được xác nhận với số liệu khác\"; sổ 1 dòng, số dư 59400 → 59400.",
+    "evidence": [
+      "SQL count RECYCLE:TR-42RNG = 1; balance 59400 = SUM 59400"
+    ],
+    "checks": [
+      {
+        "name": "Lần 2 → 2xx, pointsAwarded 15.000",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "pts": 15000
+        }
+      },
+      {
+        "name": "Số khác → 409",
+        "ok": true,
+        "detail": {
+          "status": 409,
+          "msg": "Yêu cầu đã được xác nhận với số liệu khác"
+        }
+      },
+      {
+        "name": "SQL: vẫn 1 dòng, số dư không đổi",
+        "ok": true,
+        "detail": {
+          "rows": 1,
+          "before": {
+            "balance": 59400,
+            "ledgerSum": 59400,
+            "rows": 4
+          },
+          "after": {
+            "balance": 59400,
+            "ledgerSum": 59400,
+            "rows": 4
+          }
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-17",
+    "role": "NHÂN VIÊN quầy (uat_staff) → KHÁCH (uat_new)",
+    "journey": "Quầy từ chối cả yêu cầu (hàng ướt)",
+    "steps": "/recycle/desk → tra mã yêu cầu kho của uat_new (carton 2) → \"Từ chối cả yêu cầu\" → chọn \"Ướt\" → \"Từ chối yêu cầu\"",
+    "expected": "REJECTED, không cộng điểm (sổ không đổi), khách nhận tin WASTE_REQUEST_REJECTED \"hàng bị ướt\"",
+    "actual": "TR-YBFNG → REJECTED/WET; sổ 0 → 0; tin \"Yêu cầu TR-YBFNG chưa được nhận: hàng bị ướt. Bạn xem chi tiết trong mục Đổi rác.\".",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-17-rejected.png"
+    ],
+    "checks": [
+      {
+        "name": "Tra mã → 200",
+        "ok": false
+      },
+      {
+        "name": "POST reject → 2xx",
+        "ok": true,
+        "detail": 201
+      },
+      {
+        "name": "DB: REJECTED / WET",
+        "ok": true,
+        "detail": {
+          "status": "REJECTED",
+          "rejectionReason": "WET"
+        }
+      },
+      {
+        "name": "Sổ điểm uat_new không đổi",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 0,
+            "ledgerSum": 0,
+            "rows": 0
+          },
+          "after": {
+            "balance": 0,
+            "ledgerSum": 0,
+            "rows": 0
+          }
+        }
+      },
+      {
+        "name": "Tin WASTE_REQUEST_REJECTED \"hàng bị ướt\"",
+        "ok": true,
+        "detail": [
+          "Yêu cầu TR-YBFNG chưa được nhận: hàng bị ướt. Bạn xem chi tiết trong mục Đổi rác."
+        ]
+      }
+    ],
+    "status": "FAIL"
+  },
+  {
+    "id": "U4-18",
+    "role": "Chủ đại lý, NHÂN VIÊN, KHÁCH",
+    "journey": "Quyền tra/xác nhận ở quầy",
+    "steps": "uat_ctv tra mã yêu cầu ở kho; uat_staff tra mã yêu cầu ở đại lý; khách uat_new gọi /waste/desk/lookup và confirm; uat_ctv confirm yêu cầu kho",
+    "expected": "Mỗi người chỉ thấy yêu cầu của điểm mình (404 \"Không tìm thấy mã\"); khách bị 403; đại lý không xác nhận được yêu cầu kho",
+    "actual": "đại lý→kho 404; kho→đại lý 404; khách tra 403, xác nhận 403; đại lý xác nhận kho 403.",
+    "evidence": [
+      "{\"a\":[404,\"Không tìm thấy mã\"],\"b\":[404,\"Không tìm thấy mã\"],\"cu\":[403,\"Bạn chưa được gắn với điểm nhận nào đang hoạt động\"],\"cc\":[403,\"Bạn không phải người ở điểm nhận này\"],\"dc\":[403,\"Chỉ nhân viên hoặc quản trị viên mới làm được thao tác này.\"]}"
+    ],
+    "checks": [
+      {
+        "name": "Đại lý tra mã của kho → 404",
+        "ok": true,
+        "detail": {
+          "status": 404,
+          "msg": "Không tìm thấy mã"
+        }
+      },
+      {
+        "name": "Nhân viên kho tra mã của đại lý → 404",
+        "ok": true,
+        "detail": {
+          "status": 404,
+          "msg": "Không tìm thấy mã"
+        }
+      },
+      {
+        "name": "Khách tra mã → 403",
+        "ok": true,
+        "detail": {
+          "status": 403,
+          "msg": "Bạn chưa được gắn với điểm nhận nào đang hoạt động"
+        }
+      },
+      {
+        "name": "Khách xác nhận → 403",
+        "ok": true,
+        "detail": {
+          "status": 403,
+          "msg": "Bạn không phải người ở điểm nhận này"
+        }
+      },
+      {
+        "name": "Đại lý xác nhận yêu cầu kho → 403",
+        "ok": true,
+        "detail": {
+          "status": 403,
+          "msg": "Chỉ nhân viên hoặc quản trị viên mới làm được thao tác này."
+        }
+      },
+      {
+        "name": "Sổ uat_new vẫn 0",
+        "ok": true,
+        "detail": {
+          "balance": 0,
+          "ledgerSum": 0,
+          "rows": 0
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-19",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Đổi rác: Thu kèm đơn mua (PICKUP) + chữ \"khoảng ngày\"",
+    "steps": "GET /waste/me laneFlags; POST /waste/requests method PICKUP; xem mẫu tin WASTE_PICKUP_STARTED",
+    "expected": "Đường Thu kèm đơn cần Gomdon (chưa có văn bản, cờ waste.lane_pickup_enabled tắt) nên không mở; mẫu tin giữ chữ \"khoảng ngày\"",
+    "actual": "Không chạy được hành trình Thu kèm đơn: lane không có Gomdon (GOMDON_* rỗng) nên computeWastePublicFlags trả pickup=false; tạo PICKUP → 409 \"Cách giao này đang tạm tắt, hãy chọn cách khác\". Mẫu tin giữ chữ \"khoảng ngày\": có.",
+    "evidence": [
+      "laneFlags {\"dropoff\":true,\"mailin\":true,\"pickup\":false}; POST PICKUP → 409 Cách giao này đang tạm tắt, hãy chọn cách khác",
+      "notification_templates WASTE_PICKUP_STARTED: \"Đơn mua của bạn đã giao. Nếu bưu tá đã nhận túi rác của yêu cầu {{code}}, túi sẽ về kho Tubu. Tubu chờ túi tới khoảng ngày {{until}}.\""
+    ],
+    "checks": [
+      {
+        "name": "Mẫu WASTE_PICKUP_STARTED có chữ \"khoảng ngày\"",
+        "ok": true,
+        "detail": "Đơn mua của bạn đã giao. Nếu bưu tá đã nhận túi rác của yêu cầu {{code}}, túi sẽ về kho Tubu. Tubu chờ túi tới khoảng ngày {{until}}."
+      },
+      {
+        "name": "Lane đóng: laneFlags.pickup=false, tạo PICKUP bị chặn",
+        "ok": true,
+        "detail": {
+          "flags": {
+            "dropoff": true,
+            "mailin": true,
+            "pickup": false
+          },
+          "status": 409
+        }
+      }
+    ],
+    "status": "BLOCKED"
+  }
+]

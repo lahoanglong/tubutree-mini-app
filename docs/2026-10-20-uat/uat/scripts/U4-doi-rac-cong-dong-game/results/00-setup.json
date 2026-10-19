@@ -1,0 +1,232 @@
+[
+  {
+    "id": "U4-01",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Đổi rác khi chương trình tắt",
+    "steps": "waste.enabled=false (mặc định mẫu). Mini App mở /recycle; gọi GET /waste/me, POST /waste/requests",
+    "expected": "Thẻ \"Chương trình đang tạm dừng\"; API tạo yêu cầu bị chặn 403, không ghi dòng waste_requests",
+    "actual": "programmeEnabled=false; tạo yêu cầu → 403 \"Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.\"; UI hiện thẻ tạm dừng.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-01-recycle-paused.png",
+      "POST /waste/requests → 403 Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.",
+      "SELECT count(*) FROM waste_requests → 0"
+    ],
+    "checks": [
+      {
+        "name": "DB: waste.enabled = false",
+        "ok": true,
+        "detail": {
+          "value": false
+        }
+      },
+      {
+        "name": "GET /waste/me → programmeEnabled=false",
+        "ok": true,
+        "detail": {
+          "status": 200,
+          "programmeEnabled": false
+        }
+      },
+      {
+        "name": "POST /waste/requests → 403",
+        "ok": true,
+        "detail": {
+          "status": 403,
+          "message": "Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên."
+        }
+      },
+      {
+        "name": "DB: không có waste_requests",
+        "ok": true,
+        "detail": {
+          "n": 0
+        }
+      },
+      {
+        "name": "Mini App /recycle: hiện \"Chương trình đang tạm dừng\"",
+        "ok": true
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-02",
+    "role": "KHÁCH (uat_returning), ADMIN",
+    "journey": "Thể lệ đổi rác (/recycle/rules)",
+    "steps": "Mở /recycle/rules khi waste.rules_text rỗng; admin PUT /admin/config waste.rules_text = bản nháp thể lệ; mở lại trang",
+    "expected": "Rỗng: \"Thể lệ đang được cập nhật\". Sau khi admin lưu: trang hiện đúng văn bản (gồm câu hộp sữa/vỏ chai chỉ kho HCMC, đại lý chỉ carton + nilon)",
+    "actual": "Trước: text=null, UI \"Thể lệ đang được cập nhật\". Sau: /waste/rules trả 4735 ký tự, UI hiện đúng câu về điểm nhận.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-02-rules-empty.png",
+      "shots/U4-doi-rac-cong-dong-game/U4-02-rules-text.png"
+    ],
+    "checks": [
+      {
+        "name": "GET /waste/rules khi rỗng → text null",
+        "ok": true,
+        "detail": {
+          "text": null
+        }
+      },
+      {
+        "name": "UI rỗng: \"Thể lệ đang được cập nhật\"",
+        "ok": true
+      },
+      {
+        "name": "GET /waste/rules sau khi lưu = văn bản admin",
+        "ok": true,
+        "detail": {
+          "len": 4735,
+          "want": 4735
+        }
+      },
+      {
+        "name": "UI hiện câu hộp sữa/vỏ chai chỉ kho HCMC",
+        "ok": true
+      },
+      {
+        "name": "UI hiện câu đại lý chỉ nhận carton và nilon",
+        "ok": true
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-03",
+    "role": "ADMIN",
+    "journey": "Bật đổi rác: đăng ký kho HCMC và đại lý (checklist mục 2)",
+    "steps": "PUT waste.enabled=true; POST /admin/waste/points WAREHOUSE (4 món, SĐT kho); POST /admin/storefronts/:id/partner (gian hàng uatctv); POST /admin/waste/points PARTNER (carton + nilon, hạn mức 200.000); thêm OWNER uat_ctv; PATCH ACTIVE; khách GET /waste/points",
+    "expected": "Kho ACTIVE nhận 4 món; đại lý ACTIVE chỉ nhận carton + nilon; khách thấy 2 điểm với acceptedItemIds đúng",
+    "actual": "Kho cmvfg8bah000hhoebm7hp8m2q nhận wi-carton,wi-bubble-wrap,wi-milk-carton,wi-tubu-bottle; đại lý cmvfg8bas000mhoebrp2tgp9d nhận wi-carton,wi-bubble-wrap.",
+    "evidence": [
+      "SQL waste_points ⨝ waste_point_items → WAREHOUSE/ACTIVE: wi-bubble-wrap,wi-carton,wi-milk-carton,wi-tubu-bottle | PARTNER/ACTIVE: wi-bubble-wrap,wi-carton"
+    ],
+    "checks": [
+      {
+        "name": "POST WAREHOUSE → 201",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "body": "{\"id\":\"cmvfg8bah000hhoebm7hp8m2q\",\"kind\":\"WAREHOUSE\",\"name\":\"Kho Tubu Tree HCM\",\"addressLine\":\"12 Nguyễn Huệ\",\"provinceCode\":\"79\",\"provinceName\":\"Thành phố Hồ Chí Minh\",\"communeCode\":\"84_VN7926734\",\"c…"
+        }
+      },
+      {
+        "name": "POST /admin/storefronts/:id/partner → 2xx",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "body": "{\"id\":\"cmvferwxq000m13zt6ljfmzbs\",\"isPartner\":true}"
+        }
+      },
+      {
+        "name": "POST PARTNER → 201 (PENDING)",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "st": "PENDING"
+        }
+      },
+      {
+        "name": "Thêm OWNER uat_ctv → 200",
+        "ok": true,
+        "detail": {
+          "status": 200
+        }
+      },
+      {
+        "name": "PATCH đại lý ACTIVE → 200",
+        "ok": true,
+        "detail": {
+          "status": 200,
+          "st": "ACTIVE"
+        }
+      },
+      {
+        "name": "Khách thấy kho, nhận 4 món",
+        "ok": true,
+        "detail": {
+          "id": "cmvfg8bah000hhoebm7hp8m2q",
+          "accepted": [
+            "wi-carton",
+            "wi-bubble-wrap",
+            "wi-milk-carton",
+            "wi-tubu-bottle"
+          ]
+        }
+      },
+      {
+        "name": "Khách thấy đại lý, chỉ carton + nilon",
+        "ok": true,
+        "detail": {
+          "id": "cmvfg8bas000mhoebrp2tgp9d",
+          "accepted": [
+            "wi-carton",
+            "wi-bubble-wrap"
+          ]
+        }
+      },
+      {
+        "name": "DB waste_points: 2 điểm ACTIVE",
+        "ok": true,
+        "detail": [
+          {
+            "kind": "WAREHOUSE",
+            "status": "ACTIVE",
+            "name": "Kho Tubu Tree HCM",
+            "items": [
+              "wi-bubble-wrap",
+              "wi-carton",
+              "wi-milk-carton",
+              "wi-tubu-bottle"
+            ]
+          },
+          {
+            "kind": "PARTNER",
+            "status": "ACTIVE",
+            "name": "Đại lý Xanh Quận 3",
+            "items": [
+              "wi-bubble-wrap",
+              "wi-carton"
+            ]
+          }
+        ]
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-04",
+    "role": "ADMIN",
+    "journey": "Guard món của đại lý khi đăng ký/sửa điểm nhận",
+    "steps": "PATCH /admin/waste/points/<đại lý> itemIds += wi-milk-carton, wi-tubu-bottle; rồi trả về carton + nilon",
+    "expected": "Luật đã chốt: đại lý chỉ nhận carton + nilon, nên API từ chối gắn hộp sữa / vỏ chai Tubu cho điểm PARTNER",
+    "actual": "PATCH → 200; DB đại lý nhận wi-bubble-wrap,wi-carton,wi-milk-carton,wi-tubu-bottle; khách thấy đại lý nhận wi-carton,wi-bubble-wrap,wi-milk-carton,wi-tubu-bottle.",
+    "evidence": [
+      "PATCH /admin/waste/points/cmvfg8bas000mhoebrp2tgp9d {itemIds:[carton,bubble,milk,tubu]} → 200",
+      "SELECT array_agg(\"itemId\") FROM waste_point_items WHERE \"pointId\"=đại lý → wi-bubble-wrap,wi-carton,wi-milk-carton,wi-tubu-bottle",
+      "trả lại carton + nilon → 200, DB wi-bubble-wrap,wi-carton"
+    ],
+    "checks": [
+      {
+        "name": "API từ chối gắn hộp sữa/vỏ chai cho đại lý (4xx)",
+        "ok": false,
+        "detail": {
+          "status": 200
+        }
+      },
+      {
+        "name": "DB: đại lý vẫn chỉ carton + nilon",
+        "ok": false,
+        "detail": {
+          "items": [
+            "wi-bubble-wrap",
+            "wi-carton",
+            "wi-milk-carton",
+            "wi-tubu-bottle"
+          ]
+        }
+      }
+    ],
+    "status": "FAIL"
+  }
+]

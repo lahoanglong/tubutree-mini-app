@@ -1,0 +1,193 @@
+{
+ "label": "test",
+ "at": "2026-10-19T15:06:37.058Z",
+ "base": "http://127.0.0.1:3229/api",
+ "slug": "arabica-cau-dat-le-plateau",
+ "out": [
+  {
+   "name": "home",
+   "method": "GET",
+   "path": "/home",
+   "role": "pub",
+   "status": 200,
+   "bytes": 8388,
+   "rows": null,
+   "sqlCold": null,
+   "sqlWarm": 0,
+   "sqlWarmAll": [
+    0,
+    0,
+    0
+   ],
+   "distinct": 0,
+   "p50": 1.2,
+   "p95": 2.4,
+   "min": 0.7,
+   "max": 2.5,
+   "firstMs": 18,
+   "sql": []
+  },
+  {
+   "name": "home-me",
+   "method": "GET",
+   "path": "/home/me",
+   "role": "cust",
+   "status": 200,
+   "bytes": 6007,
+   "rows": null,
+   "sqlCold": null,
+   "sqlWarm": 23,
+   "sqlWarmAll": [
+    24,
+    23,
+    23
+   ],
+   "distinct": 23,
+   "p50": 5.5,
+   "p95": 7.7,
+   "min": 4.7,
+   "max": 7.7,
+   "firstMs": 23.6,
+   "sql": [
+    {
+     "calls": 1,
+     "rows": 2,
+     "ms": 0.013,
+     "q": "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"public\".\"order_items\".\"productName\", \"public\".\"order_items\".\"productSlug\", \"public\".\"order_items\".\"variationName\", \"public\".\"order_items\".\"unitPrice\", \"public\".\"order_items\".\"quantity\", \"public\".\"order_items\".\"total\", \"public\".\"order_items\".\"paidTotal\", \"public\".\"order_items\".\"pointsDiscoun"
+    },
+    {
+     "calls": 1,
+     "rows": 2,
+     "ms": 0.016,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"images\", \"public\".\"products\".\"isActive\", \"public\".\"products\".\"approvalStatus\"::text FROM \"public\".\"products\" WHERE \"public\".\"products\".\"id\" IN ($1,$2) OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.007,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"name\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"slug\" FROM \"public\".\"products\" WHERE \"public\".\"products\".\"id\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 34,
+     "ms": 0.142,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"brandId\", \"public\".\"products\".\"affiliateBlocked\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"nameSearch\", \"public\".\"products\".\"description\", \"public\".\"products\".\"shortDesc"
+    },
+    {
+     "calls": 1,
+     "rows": 2,
+     "ms": 0.011,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"stock\", \"public\".\"variations\".\"isActive\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"productId\" FROM \"public\".\"variations\" WHERE \"public\".\"variations\".\"id\" IN ($1,$2) OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.02,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"attributes\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"dealerPrices\", \"public\".\"variations\".\"affiliateRate\", \"public\".\"variations\".\"stock\", \"public\".\"variations"
+    },
+    {
+     "calls": 1,
+     "rows": 4,
+     "ms": 0.01,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"productId\" FROM \"public\".\"variations\" WHERE \"public\".\"variations\".\"id\" IN ($1,$2,$3,$4) OFFSET $5"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.006,
+     "q": "SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" <> CAST($2::text AS \"public\".\"OrderStatus\")) LIMIT $3 OFFSET $4"
+    },
+    {
+     "calls": 1,
+     "rows": 4,
+     "ms": 0.017,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE \"public\".\"products\".\"id\" IN ($1,$2,$3,$4) OFFSET $5"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0,
+     "q": "COMMIT"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.033,
+     "q": "SELECT oi.\"variationId\" AS \"variationId\", COUNT(DISTINCT o.id)::int AS \"timesBought\", MAX(o.\"createdAt\") AS \"lastPurchasedAt\" FROM order_items oi JOIN orders o ON o.id = oi.\"orderId\" JOIN variations v ON v.id = oi.\"variationId\" JOIN products p ON p.id = v.\"productId\" WHERE o.\"userId\" = $1 AND o.status::text = $3 AND v.\"isActive\" = $4 AND p.\"isActive\" = $5 AND p.\"approvalStatus\"::text = $6 GROUP BY"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"brand_follows\".\"id\", \"public\".\"brand_follows\".\"brandId\" FROM \"public\".\"brand_follows\" WHERE \"public\".\"brand_follows\".\"userId\" = $1 OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.044,
+     "q": "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" IN (CAST($2::text AS \"public\".\"OrderStatus\"),CAST($3::text AS \"public\".\"OrderStatus\"),CAST($4::text AS \"public\".\"OrderStatus\"),CAST($5::text AS \"public\".\"OrderStatus\"))) OFFSET $6) AS \"sub\""
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.009,
+     "q": "SELECT COUNT(*) FROM (SELECT \"public\".\"subscriptions\".\"id\" FROM \"public\".\"subscriptions\" WHERE (\"public\".\"subscriptions\".\"userId\" = $1 AND \"public\".\"subscriptions\".\"status\" = $2) OFFSET $3) AS \"sub\""
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.019,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND $4=$5) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.041,
+     "q": "SELECT \"public\".\"orders\".\"id\", \"public\".\"orders\".\"code\", \"public\".\"orders\".\"idempotencyKey\", \"public\".\"orders\".\"pancakeOrderId\", \"public\".\"orders\".\"userId\", \"public\".\"orders\".\"type\"::text, \"public\".\"orders\".\"status\"::text, \"public\".\"orders\".\"subtotal\", \"public\".\"orders\".\"discount\", \"public\".\"orders\".\"couponDiscount\", \"public\".\"orders\".\"comboDiscount\", \"public\".\"orders\".\"tierDiscount\", \"public\".\"or"
+    },
+    {
+     "calls": 1,
+     "rows": 3,
+     "ms": 0.011,
+     "q": "SELECT \"public\".\"notification_logs\".\"id\", \"public\".\"notification_logs\".\"userId\", \"public\".\"notification_logs\".\"templateCode\", \"public\".\"notification_logs\".\"channel\", \"public\".\"notification_logs\".\"payload\", \"public\".\"notification_logs\".\"status\", \"public\".\"notification_logs\".\"error\", \"public\".\"notification_logs\".\"sentAt\" FROM \"public\".\"notification_logs\" WHERE (\"public\".\"notification_logs\".\"userId\" "
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.058,
+     "q": "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flashPrice\", \"public\".\"flash_sale_items\".\"quota\", \"public\".\"flash_sale_items\".\"soldCount\", \"public\".\"flash_sale_items\".\"perUserLimit\" FROM \"public\".\"flash_sale_items\" LEFT JOIN \"public\".\"flash_sales\" AS \"orderby_1\" ON (\"orderby_1\".\"id\") = (\"pub"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "BEGIN"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.011,
+     "q": "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" = CAST($2::text AS \"public\".\"OrderStatus\")) OFFSET $3) AS \"sub\""
+    },
+    {
+     "calls": 1,
+     "rows": 38,
+     "ms": 0.06,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"attributes\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"dealerPrices\", \"public\".\"variations\".\"affiliateRate\", \"public\".\"variations\".\"stock\", \"public\".\"variations"
+    },
+    {
+     "calls": 1,
+     "rows": 4,
+     "ms": 0.05,
+     "q": "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"variationId\" FROM \"public\".\"order_items\" LEFT JOIN \"public\".\"orders\" AS \"orderby_1\" ON (\"orderby_1\".\"id\") = (\"public\".\"order_items\".\"orderId\") LEFT JOIN \"public\".\"orders\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"order_items\".\"orderId\") WHERE (\"j1\".\"userId\" = $1 AND (\"j1\".\"id\" IS NOT NULL)) ORDER BY \"orderby_1\".\"createdAt\" DESC LIMIT $2 OFFSET "
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.024,
+     "q": "SELECT \"public\".\"subscriptions\".\"id\", \"public\".\"subscriptions\".\"userId\", \"public\".\"subscriptions\".\"variationId\", \"public\".\"subscriptions\".\"quantity\", \"public\".\"subscriptions\".\"intervalWeeks\", \"public\".\"subscriptions\".\"addressId\", \"public\".\"subscriptions\".\"status\", \"public\".\"subscriptions\".\"paymentMethod\"::text, \"public\".\"subscriptions\".\"nextRunAt\", \"public\".\"subscriptions\".\"retryCount\", \"public\".\""
+    }
+   ]
+  }
+ ]
+}

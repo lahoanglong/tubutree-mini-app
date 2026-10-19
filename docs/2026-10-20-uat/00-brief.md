@@ -27,7 +27,7 @@
 
 - Postgres 16 chạy thẳng (không Docker): `docs/2026-10-20-uat/tools/pg-native.sh start|stop|createdb <port> [db]`. Cụm 25432 có DB `tubutree_uat` (đã migrate + `seed.ts` + `seed-reference.ts --with-business-defaults`). User `tubu`, không mật khẩu, `127.0.0.1` (không `localhost`).
 - Redis: container `tubu-uat-redis` cổng 26379 (db 0 cho API UAT chính; lane khác dùng db 1–9).
-- Cổng dành cho phiên UAT: API 3221, web 3222, miniapp 3223; lane UAT dùng 3231–3299; Postgres tạm 25433–25499 và 25541–25549 (race).
+- Cổng dành cho phiên UAT: API 3221, web 3222, miniapp 3223; lane UAT dùng 3231–3299; Postgres tạm 25433–25499 và 25541–25599 (race; phiên web không dùng 255xx).
 - `apps/api/.env` của worktree trỏ `tubutree_uat` @25432, Redis 26379/0, `PORT=3221`.
 - Playwright Mini App chỉ chạy với `E2E_SCOPE=miniapp`. `npx playwright test` trần tự bật API + web theo `apps/api/.env`.
 - Web (Next) dùng host `localhost`, không `127.0.0.1` (middleware đọc subdomain gian hàng).
