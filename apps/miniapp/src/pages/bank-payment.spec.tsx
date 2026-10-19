@@ -1,6 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { AxiosError } from 'axios';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -193,7 +194,7 @@ describe('Thanh toán chuyển khoản: hạn thanh toán (BUYERMINI-8)', () => 
   beforeEach(() => vi.clearAllMocks());
 
   it('có hạn → nói rõ chuyển trước giờ nào và quá hạn đơn tự huỷ', async () => {
-    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: '2026-10-14T03:00:00.000Z' });
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: new Date(Date.now() + 3_600_000).toISOString() });
     renderPage();
     const note = await screen.findByRole('note');
     expect(note).toHaveTextContent(/Vui lòng chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}\. Quá hạn đơn sẽ tự huỷ/);
@@ -300,10 +301,12 @@ describe('Thanh toán chuyển khoản: đếm ngược hạn thanh toán (D5-02
     expect(el.closest('[role="status"], [role="alert"]')).toBeNull();
   });
 
-  it('quá hạn: nói thẳng "Đã quá hạn chuyển khoản" thay vì đồng hồ về 0', async () => {
+  it('quá hạn: nói thẳng "quá hạn chuyển khoản" thay vì đồng hồ về 0 (và không còn QR, D14-02)', async () => {
     mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: '2026-10-17T09:00:00Z' });
     renderPage();
-    expect(await screen.findByTestId('payment-countdown')).toHaveTextContent('Đã quá hạn chuyển khoản');
+    expect(await screen.findByText(/Đơn đã quá hạn chuyển khoản/)).toBeInTheDocument();
+    expect(screen.queryByTestId('payment-countdown')).toBeNull();
+    expect(screen.queryByAltText('VietQR')).toBeNull();
   });
 
   it('API không trả hạn: giữ nguyên, không có đồng hồ (không bịa hạn)', async () => {
@@ -311,5 +314,83 @@ describe('Thanh toán chuyển khoản: đếm ngược hạn thanh toán (D5-02
     renderPage();
     await screen.findByText(/Giữ nguyên nội dung/);
     expect(screen.queryByTestId('payment-countdown')).toBeNull();
+  });
+});
+
+// D14-02: đơn bị huỷ/quá hạn khi khách đang ở màn QR.
+describe('Thanh toán chuyển khoản: đơn bị huỷ hoặc quá hạn khi đang xem QR (D14-02)', () => {
+  const CANCELLED = 'Đơn đã hủy/trả, không thể thanh toán.';
+  const apiError = (status: number, message = CANCELLED) =>
+    new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+      status, statusText: '', headers: {}, config: {} as never, data: { message },
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockReset();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('lần dò sau bị 400 "đơn đã huỷ": ẩn QR, số tài khoản và số tiền, hiện lý do và lối về chi tiết đơn', async () => {
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(apiError(400));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    expect(await screen.findByText(CANCELLED)).toBeInTheDocument();
+    expect(screen.queryByAltText('VietQR')).toBeNull();
+    expect(screen.queryByText('0123456789')).toBeNull();
+    expect(screen.queryByText(/Đang chờ thanh toán/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Tôi đã chuyển khoản/ })).toBeNull();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem đơn hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/order/TT001', { replace: true });
+  });
+
+  it('bấm Kiểm tra mà máy chủ trả 400 nghiệp vụ: báo đúng lý do của máy chủ, không báo lỗi mạng', async () => {
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(apiError(400));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: CANCELLED, type: 'error', position: 'top' });
+  });
+
+  it('gặp 400 thì dừng dò nền (không gọi máy chủ mỗi 4 giây nữa)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(apiError(400));
+    renderPage();
+    const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    await tick(0);
+    await tick(4_000);
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(2);
+    await tick(30_000);
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi 5xx hoặc mạng khi dò nền: vẫn giữ QR và tiếp tục dò', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(apiError(503, 'x'));
+    renderPage();
+    const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    await tick(0);
+    await tick(4_000);
+    await tick(4_000);
+    expect(mocks.getBankQr.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByAltText('VietQR')).toBeInTheDocument();
+  });
+
+  it('mở link của đơn đã huỷ: hiện lý do máy chủ và lối xem đơn, không có nút Thử lại vô ích', async () => {
+    mocks.getBankQr.mockRejectedValue(apiError(400));
+    renderPage();
+    expect(await screen.findByText(CANCELLED)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Xem đơn hàng' })).toBeInTheDocument();
+  });
+
+  it('quá hạn chuyển khoản theo giờ máy: ẩn QR và số tài khoản, nói rõ đã quá hạn', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: new Date(Date.now() - 60_000).toISOString() });
+    renderPage();
+    expect(await screen.findByText(/đã quá hạn/i)).toBeInTheDocument();
+    expect(screen.queryByAltText('VietQR')).toBeNull();
+    expect(screen.queryByText('0123456789')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Xem đơn hàng' })).toBeInTheDocument();
   });
 });

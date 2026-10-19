@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { getBankQr } from '../services/payment-api';
+import { getErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { formatDateTime } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
@@ -21,18 +23,30 @@ const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // của h1, hình dáng vẫn do Text quyết định. Hai trạng thái chỉ có khung chờ/lỗi dùng h1 ẩn (SR_ONLY) cho đủ tiêu đề.
 const H1_RESET_MT12 = { margin: '12px 0 0', font: 'inherit' } as const;
 
+/**
+ * Máy chủ từ chối hẳn (đơn đã huỷ/trả, không có đơn...): dò lại hay bấm Thử lại không ra kết quả khác. 408 và 429 là
+ * tạm thời nên không tính; lỗi mạng/5xx cũng không, khách vẫn đang chờ tiền về và QR phải còn đó.
+ */
+function isFinalRejection(error: unknown): boolean {
+  if (!isAxiosError(error)) return false;
+  const status = error.response?.status;
+  return status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
+const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
+
 export default function BankPaymentPage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
 
   const qc = useQueryClient();
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching, error } = useQuery({
     queryKey: ['bank-qr', code],
     queryFn: () => getBankQr(code!),
     enabled: !!code,
     // Tự dò trạng thái: Pancake/Bank đối soát chuyển khoản → webhook lật PAID; FE poll mỗi 4s.
-    refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' ? false : 4000),
+    refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' || isFinalRejection(q.state.error) ? false : 4000),
   });
 
   const remaining = useRemaining(data?.paymentDeadline);
@@ -86,9 +100,9 @@ export default function BankPaymentPage() {
           position: 'top',
         });
       }
-    } catch {
+    } catch (err) {
       openSnackbar({
-        text: 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        text: isFinalRejection(err) ? getErrorMessage(err) : 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
         type: 'error',
         position: 'top',
       });
@@ -115,6 +129,28 @@ export default function BankPaymentPage() {
               <Skeleton height={16} />
             </Box>
           </Box>
+        </Box>
+      </Page>
+    );
+  }
+
+  const rejected = isFinalRejection(error);
+  const closedMessage = data?.paymentStatus === 'PAID' ? null : rejected ? getErrorMessage(error) : remaining.expired ? EXPIRED_MESSAGE : null;
+  if (closedMessage) {
+    return (
+      <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
+        <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
+        <Box style={{ textAlign: 'center', padding: '56px 24px' }}>
+          <Icon icon={TriangleAlert} tone="danger" style={{ margin: '0 auto' }} />
+          <Text bold size="large" style={{ marginTop: 12 }}>
+            Đơn không còn chờ chuyển khoản
+          </Text>
+          <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
+            {closedMessage}
+          </Text>
+          <Button fullWidth onPress={() => navigate(`/order/${code}`, { replace: true })} style={{ marginTop: 24 }}>
+            Xem đơn hàng
+          </Button>
         </Box>
       </Page>
     );
@@ -220,12 +256,8 @@ export default function BankPaymentPage() {
             {/* Không phải vùng đọc tự động: đồng hồ đổi mỗi 15 giây, đọc lại liên tục sẽ làm phiền người dùng trình đọc màn hình. */}
             {remaining.text && (
               <div data-testid="payment-countdown" style={{ marginTop: 6 }}>
-                <Text
-                  size="small"
-                  bold
-                  style={{ color: remaining.expired ? 'var(--color-text-danger)' : 'var(--color-status-warning-fg)' }}
-                >
-                  {remaining.expired ? 'Đã quá hạn chuyển khoản' : `${remaining.text} để chuyển khoản`}
+                <Text size="small" bold style={{ color: 'var(--color-status-warning-fg)' }}>
+                  {`${remaining.text} để chuyển khoản`}
                 </Text>
               </div>
             )}
