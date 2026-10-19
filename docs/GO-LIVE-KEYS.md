@@ -119,7 +119,7 @@ Web khách (`https://app.tubutree.com`) chỉ có **một** cách đăng nhập 
 9. Kiểm **trạng thái ứng dụng**: nếu ứng dụng còn ở chế độ phát triển thì thường chỉ tài khoản Zalo đã thêm làm người phát triển/thử nghiệm mới đăng nhập được. Chuyển sang trạng thái công khai trước khi mở cho khách.
 10. `ZALO_APP_ID` phải có **trước khi build web**: web nhúng `NEXT_PUBLIC_ZALO_APP_ID` vào bản dựng (không đọc lúc chạy). Docker build của web **dừng với lỗi** nếu giá trị này rỗng (chỉ bản thử không dùng Zalo mới đặt `ALLOW_EMPTY_ZALO_APP_ID=1` trong `.env` để bỏ qua; khi đó trang đăng nhập hiện thông báo "chưa cấu hình" thay cho nút). Đổi App ID thì phải **build lại web**:
    ```bash
-   cd ~/tubutree && docker compose -f docker-compose.prod.yml up -d --build web
+   cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps --build web
    ```
 11. Kiểm sau deploy: mở `https://app.tubutree.com/dang-nhap`, bấm **Đăng nhập với Zalo**, trình duyệt phải sang `oauth.zaloapp.com` với đúng `app_id`, đăng nhập xong quay lại `app.tubutree.com`. Checklist đầy đủ: `docs/2026-10-review/UAT-ZALO.md` mục 12.
 
@@ -181,7 +181,7 @@ Key đi qua **2 lớp**, không bao giờ nằm trong git:
    ```bash
    # cách 1: đẩy 1 commit bất kỳ lên main → CI xanh → tự deploy (rebuild container, nạp .env)
    # cách 2 (không cần commit): SSH vào VPS Vietnix, tạo lại container api để nạp .env
-   cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d api
+   cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps api
    ```
 4. **Kiểm tra đã nhận key (không lộ giá trị):**
    ```bash

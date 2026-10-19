@@ -37,14 +37,14 @@
 5. Sau duyệt → lấy **App ID, Key1, Key2** ở phần *Thông tin ứng dụng / Khóa bí mật*.
 6. Set vào `.env` với `ZALOPAY_ENDPOINT=https://openapi.zalopay.vn/v2`.
 
-## 2. Điền vào `.env` prod (trên VM, cạnh docker-compose.prod.yml)
+## 2. Điền vào `.env` prod (trên VPS Vietnix, `/opt/tubutree/.env`, cạnh `docker-compose.vietnix.yml`)
 ```env
 ZALOPAY_APP_ID=<App ID>
 ZALOPAY_KEY1=<Key1>
 ZALOPAY_KEY2=<Key2>
 ZALOPAY_ENDPOINT=https://openapi.zalopay.vn/v2   # prod; sandbox: https://sb-openapi.zalopay.vn/v2
 ```
-Restart API: `docker compose -f docker-compose.prod.yml up -d api`.
+Tạo lại container API để nạp `.env`: `cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps api`. Không dùng file compose khác trong thư mục này: hai file khác nhau về cổng, giới hạn RAM/CPU và Redis, đổi file làm API mất cổng mà Apache đang trỏ vào. `--no-deps` để postgres và redis không bị tạo lại giữa giờ bán.
 
 ## 3. Nghiệm thu (Definition of Done)
 - [ ] `POST /api/payments/zalopay/create` trả `order_url` + `zp_trans_token` (không còn 503).
