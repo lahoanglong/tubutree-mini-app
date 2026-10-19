@@ -32,7 +32,7 @@ export default async function HomePage() {
   const [bestSellers, featured, newest] = grids.map((g) => (g.status === 'fulfilled' ? g.value : undefined));
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-4 sm:py-6">
+    <main className="mx-auto max-w-6xl px-4 py-4 max-md:py-0 sm:py-6">
       <h1 className="sr-only font-display">Tubu Tree — {homeText.seoTitle}</h1>
       <HomeView initial={{ bestSellers, featured, newest, categories, brands }} />
     </main>

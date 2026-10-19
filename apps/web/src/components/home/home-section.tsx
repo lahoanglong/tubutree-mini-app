@@ -42,14 +42,14 @@ export function HomeSection({ title, query, limit, seeAllTo, priority = false }:
     return <HomeBlockError title={title} error={query.error} onRetry={query.refetch} retrying={query.isFetching} />;
   }
   return (
-    <section aria-label={title} className="py-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="font-display text-lg font-semibold text-stone-900">{title}</h2>
+    <section aria-label={title} className="py-2 max-md:pb-0 max-md:pt-4">
+      <div className={`mb-2 flex items-center justify-between gap-2 ${seeAllTo ? 'max-md:mb-0' : ''}`}>
+        <h2 className="font-display text-lg font-semibold text-stone-900 max-md:text-base">{title}</h2>
         {seeAllTo && (
           <Link
             href={seeAllTo}
             aria-label={homeText.seeAllLabel(title)}
-            className="inline-flex min-h-11 flex-none items-center px-1 text-sm font-semibold text-forest-700"
+            className="inline-flex min-h-11 flex-none items-center px-1 text-sm font-semibold text-forest-700 max-md:text-[length:var(--type-label-size)]"
           >
             {homeText.seeAll}
           </Link>
