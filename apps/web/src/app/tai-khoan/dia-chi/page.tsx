@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPin, Plus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
@@ -9,7 +9,10 @@ import { createAddress, deleteAddress, getAddresses, updateAddress, type Address
 import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import BackLink from '@/components/back-link';
+import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
+
+/** ActionLink của Mini App: chữ 14px/600 xanh (Xóa đỏ), không gạch chân. */
+const LINK_MINI = 'max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
 
 const NOTICE_MS = 4000;
 
@@ -131,7 +134,14 @@ export default function AddressBookPage() {
       {addresses.length > 0 && (
         <ul className="space-y-3">
           {addresses.map((a) => (
-            <li key={a.id} className={`p-4 ${ui.card}`}>
+            <li
+              key={a.id}
+              className={`p-4 ${ui.card} ${
+                a.isDefault
+                  ? 'max-md:border-[1.5px] max-md:border-[color:var(--color-action-primary-bg)] max-md:shadow-none'
+                  : mini.card
+              }`}
+            >
               {editingId === a.id ? (
                 <AddressForm
                   title="Sửa địa chỉ"
@@ -148,7 +158,7 @@ export default function AddressBookPage() {
               ) : (
                 <>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="min-w-0 break-words font-semibold text-stone-900">
+                    <span className="min-w-0 break-words font-semibold text-stone-900 max-md:text-sm">
                       {a.recipient} · {a.phone}
                     </span>
                     {a.isDefault && (
@@ -198,7 +208,7 @@ export default function AddressBookPage() {
                           setEditingId(a.id);
                         }}
                         aria-label={`Sửa địa chỉ của ${a.recipient}`}
-                        className={ui.btnText}
+                        className={`${ui.btnText} ${LINK_MINI}`}
                       >
                         Sửa
                       </button>
@@ -208,9 +218,9 @@ export default function AddressBookPage() {
                           onClick={() => makeDefault.mutate(a.id)}
                           disabled={makeDefault.isPending}
                           aria-label={`Đặt địa chỉ của ${a.recipient} làm mặc định`}
-                          className={ui.btnText}
+                          className={`${ui.btnText} ${LINK_MINI}`}
                         >
-                          Đặt làm mặc định
+                          Đặt mặc định
                         </button>
                       )}
                       <button
@@ -224,7 +234,7 @@ export default function AddressBookPage() {
                           setConfirmId(a.id);
                         }}
                         aria-label={`Xóa địa chỉ của ${a.recipient}`}
-                        className={`${ui.btnText} text-danger-fg`}
+                        className={`${ui.btnText} text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
                       >
                         Xóa
                       </button>
@@ -259,9 +269,10 @@ export default function AddressBookPage() {
                 setEditingId(null);
                 setAdding(true);
               }}
-              className={`${ui.btnPrimary} w-full sm:w-auto`}
+              className={`${ui.btnPrimary} w-full gap-2 sm:w-auto max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]`}
             >
-              + Thêm địa chỉ mới
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Thêm địa chỉ mới
             </button>
           )
         )}
@@ -272,12 +283,9 @@ export default function AddressBookPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <BackLink href="/tai-khoan">
-        ← Tài khoản
-      </BackLink>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>Sổ địa chỉ</h1>
-      <div className="mt-4">{children}</div>
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <TitleBand title="Sổ địa chỉ" backHref="/tai-khoan" backLabel="Tài khoản" />
+      <div className="mt-4 max-md:px-4">{children}</div>
     </main>
   );
 }

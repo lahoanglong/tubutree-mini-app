@@ -69,7 +69,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(a?.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Ftai-khoan%2Fdia-chi');
   });
 
-  it('liệt kê địa chỉ, đánh dấu mặc định, chỉ địa chỉ chưa mặc định mới có nút "Đặt làm mặc định"', async () => {
+  it('liệt kê địa chỉ, đánh dấu mặc định, chỉ địa chỉ chưa mặc định mới có nút "Đặt mặc định"', async () => {
     const c = await mount();
     const items = Array.from(c.querySelectorAll('ul > li'));
     expect(items).toHaveLength(2);
@@ -84,7 +84,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     mocks.list = [];
     const c = await mount();
     expect(c.textContent).toContain('Bạn chưa lưu địa chỉ nào');
-    expect(btn(c, '+ Thêm địa chỉ mới')).toBeDefined();
+    expect(btn(c, 'Thêm địa chỉ mới')).toBeDefined();
   });
 
   it('không tải được: báo lỗi và có nút Thử lại', async () => {
@@ -171,7 +171,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
     await flush(4);
     expect(mocks.remove).toHaveBeenCalledTimes(2);
-    expect(document.activeElement).toBe(btn(c, '+ Thêm địa chỉ mới'));
+    expect(document.activeElement).toBe(btn(c, 'Thêm địa chỉ mới'));
   });
 
   it('xoá xong rồi đặt mặc định thất bại: thông báo đã xóa biến mất, chỉ còn lỗi', async () => {
@@ -216,7 +216,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
 
   it('thêm mới: gọi POST và đóng form', async () => {
     const c = await mount();
-    click(btn(c, '+ Thêm địa chỉ mới')!);
+    click(btn(c, 'Thêm địa chỉ mới')!);
     await flush(2);
     expect(c.querySelector('form[aria-label="Thêm địa chỉ mới"]')).not.toBeNull();
     click(btn(c, 'Hủy')!);
